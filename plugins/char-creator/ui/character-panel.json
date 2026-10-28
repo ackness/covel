@@ -79,7 +79,14 @@
                     "component": "Badge",
                     "props": {
                       "label": {
-                        "$item": "value/type"
+                        "$map": {
+                          "$item": "value/type"
+                        },
+                        "labels": {
+                          "player": "Player",
+                          "npc": "NPC",
+                          "companion": "Companion"
+                        }
                       },
                       "color": "blue"
                     }

@@ -26,6 +26,9 @@
       },
       {
         "component": "Text",
+        "visible": {
+          "$state": "/world/definition/evolution/prompt"
+        },
         "props": {
           "content": {
             "$state": "/world/definition/evolution/prompt"
@@ -34,12 +37,400 @@
         }
       },
       {
-        "component": "JsonView",
+        "component": "Grid",
+        "visible": {
+          "$state": "/world/definition/kind",
+          "eq": "phases"
+        },
         "props": {
-          "value": {
-            "$state": "/world/definition"
+          "cols": 2
+        },
+        "children": [
+          {
+            "component": "Text",
+            "props": {
+              "content": "Phases",
+              "variant": "muted",
+              "size": "xs"
+            }
+          },
+          {
+            "component": "TagList",
+            "props": {
+              "tags": {
+                "$state": "/world/definition/phases"
+              }
+            }
+          },
+          {
+            "component": "Text",
+            "props": {
+              "content": "Cycle",
+              "variant": "muted",
+              "size": "xs"
+            }
+          },
+          {
+            "component": "Text",
+            "props": {
+              "content": {
+                "$state": "/world/definition/cycleLabel"
+              },
+              "size": "sm"
+            }
+          },
+          {
+            "component": "Text",
+            "props": {
+              "content": "Starts at",
+              "variant": "muted",
+              "size": "xs"
+            }
+          },
+          {
+            "component": "Row",
+            "props": {
+              "gap": "xs"
+            },
+            "children": [
+              {
+                "component": "Text",
+                "props": {
+                  "content": {
+                    "$concat": [
+                      {
+                        "$state": "/world/definition/cycleLabel"
+                      },
+                      " ",
+                      {
+                        "$state": "/world/definition/initial/cycle"
+                      },
+                      " ·"
+                    ]
+                  },
+                  "size": "sm"
+                }
+              },
+              {
+                "component": "Row",
+                "repeat": {
+                  "statePath": "/world/definition/phases"
+                },
+                "visible": {
+                  "$index": true,
+                  "eq": {
+                    "$state": "/world/definition/initial/phase"
+                  }
+                },
+                "children": [
+                  {
+                    "component": "Text",
+                    "props": {
+                      "content": {
+                        "$item": ""
+                      },
+                      "size": "sm"
+                    }
+                  }
+                ]
+              }
+            ]
           }
-        }
+        ]
+      },
+      {
+        "component": "Grid",
+        "visible": {
+          "$state": "/world/definition/kind",
+          "eq": "calendar"
+        },
+        "props": {
+          "cols": 2
+        },
+        "children": [
+          {
+            "component": "Text",
+            "props": {
+              "content": "Era",
+              "variant": "muted",
+              "size": "xs"
+            }
+          },
+          {
+            "component": "Text",
+            "props": {
+              "content": {
+                "$state": "/world/definition/calendar/era"
+              },
+              "size": "sm"
+            }
+          },
+          {
+            "component": "Text",
+            "props": {
+              "content": "Months in a year",
+              "variant": "muted",
+              "size": "xs"
+            }
+          },
+          {
+            "component": "Text",
+            "props": {
+              "content": {
+                "$count": {
+                  "$state": "/world/definition/calendar/months"
+                }
+              },
+              "size": "sm"
+            }
+          },
+          {
+            "component": "Text",
+            "props": {
+              "content": "Hours in a day",
+              "variant": "muted",
+              "size": "xs"
+            }
+          },
+          {
+            "component": "Text",
+            "props": {
+              "content": {
+                "$state": "/world/definition/calendar/hoursPerDay"
+              },
+              "size": "sm"
+            }
+          },
+          {
+            "component": "Text",
+            "visible": {
+              "$state": "/world/definition/calendar/weekdays"
+            },
+            "props": {
+              "content": "Days of the week",
+              "variant": "muted",
+              "size": "xs"
+            }
+          },
+          {
+            "component": "TagList",
+            "visible": {
+              "$state": "/world/definition/calendar/weekdays"
+            },
+            "props": {
+              "tags": {
+                "$state": "/world/definition/calendar/weekdays"
+              }
+            }
+          },
+          {
+            "component": "Text",
+            "props": {
+              "content": "Starts at",
+              "variant": "muted",
+              "size": "xs"
+            }
+          },
+          {
+            "component": "Text",
+            "props": {
+              "content": {
+                "$concat": [
+                  {
+                    "$state": "/world/definition/calendar/era"
+                  },
+                  " ",
+                  {
+                    "$state": "/world/definition/initial/year"
+                  },
+                  " · ",
+                  {
+                    "$state": "/world/definition/initial/month"
+                  },
+                  "/",
+                  {
+                    "$state": "/world/definition/initial/day"
+                  },
+                  " ",
+                  {
+                    "$format": "number",
+                    "value": {
+                      "$state": "/world/definition/initial/hour"
+                    },
+                    "options": {
+                      "minimumIntegerDigits": 2
+                    }
+                  },
+                  ":",
+                  {
+                    "$format": "number",
+                    "value": {
+                      "$state": "/world/definition/initial/minute"
+                    },
+                    "options": {
+                      "minimumIntegerDigits": 2
+                    }
+                  }
+                ]
+              },
+              "size": "sm"
+            }
+          }
+        ]
+      },
+      {
+        "component": "Grid",
+        "props": {
+          "cols": 2
+        },
+        "children": [
+          {
+            "component": "Text",
+            "props": {
+              "content": "Time moves",
+              "variant": "muted",
+              "size": "xs"
+            }
+          },
+          {
+            "component": "Text",
+            "props": {
+              "content": {
+                "$map": {
+                  "$state": "/world/definition/evolution/mode"
+                },
+                "labels": {
+                  "forward": "Forward",
+                  "backward": "Backward",
+                  "bidirectional": "Forward or backward, as the story goes",
+                  "random": "Jumps at random"
+                }
+              },
+              "size": "sm"
+            }
+          },
+          {
+            "component": "Text",
+            "visible": {
+              "$state": "/world/definition/kind",
+              "eq": "phases"
+            },
+            "props": {
+              "content": "Default per turn, in phases",
+              "variant": "muted",
+              "size": "xs"
+            }
+          },
+          {
+            "component": "Text",
+            "visible": {
+              "$state": "/world/definition/kind",
+              "eq": "calendar"
+            },
+            "props": {
+              "content": "Default per turn, in minutes",
+              "variant": "muted",
+              "size": "xs"
+            }
+          },
+          {
+            "component": "Text",
+            "props": {
+              "content": {
+                "$format": "number",
+                "value": {
+                  "$state": "/world/definition/evolution/defaultStep"
+                }
+              },
+              "size": "sm"
+            }
+          },
+          {
+            "component": "Text",
+            "visible": {
+              "$state": "/world/definition/kind",
+              "eq": "phases"
+            },
+            "props": {
+              "content": "Most per turn, in phases",
+              "variant": "muted",
+              "size": "xs"
+            }
+          },
+          {
+            "component": "Text",
+            "visible": {
+              "$state": "/world/definition/kind",
+              "eq": "calendar"
+            },
+            "props": {
+              "content": "Most per turn, in minutes",
+              "variant": "muted",
+              "size": "xs"
+            }
+          },
+          {
+            "component": "Text",
+            "props": {
+              "content": {
+                "$format": "number",
+                "value": {
+                  "$state": "/world/definition/evolution/maxStep"
+                }
+              },
+              "size": "sm"
+            }
+          },
+          {
+            "component": "Text",
+            "visible": {
+              "$state": "/world/definition/evolution/mode",
+              "eq": "random"
+            },
+            "props": {
+              "content": "Random range",
+              "variant": "muted",
+              "size": "xs"
+            }
+          },
+          {
+            "component": "Row",
+            "visible": {
+              "$state": "/world/definition/evolution/mode",
+              "eq": "random"
+            },
+            "props": {
+              "gap": "xs"
+            },
+            "children": [
+              {
+                "component": "Text",
+                "props": {
+                  "content": {
+                    "$state": "/world/definition/evolution/randomRange/min"
+                  },
+                  "size": "sm"
+                }
+              },
+              {
+                "component": "Text",
+                "props": {
+                  "content": "to",
+                  "size": "sm"
+                }
+              },
+              {
+                "component": "Text",
+                "props": {
+                  "content": {
+                    "$state": "/world/definition/evolution/randomRange/max"
+                  },
+                  "size": "sm"
+                }
+              }
+            ]
+          }
+        ]
       }
     ]
   }

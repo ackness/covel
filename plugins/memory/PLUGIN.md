@@ -1,6 +1,6 @@
 ---
 kind: core
-version: 0.0.41
+version: 0.0.42
 displayName: Story Memory
 description: >-
   Shows what the story remembers, including plot, scene, relationships, and hero

@@ -34,7 +34,7 @@ At the start, it guides you through creating the player character. It gives you 
 **What you will see**
 
 - The character form at the start. The first field is the character's name. Up to three more fields follow, taken from the text or choice attributes the world defines for characters. Numeric attributes are not filled in on the form. They use the world's default values.
-- A list of characters in the "Characters" tab on the right. Each character is an expandable card with a portrait. The alias is shown under the name. The cards are read-only.
+- A list of characters in the "Characters" tab on the right. Each character is an expandable card with a portrait. The alias is shown under the name. The cards are read-only. The type badge shows "Player", "NPC" or "Companion" in the UI language; a type the world defines itself is shown as the world writes it.
 
 **When it is on**: on by default (`kind: core`). You can turn it off on the session-prep screen. Traditional Story, Dialogue Mode and Low Cost all include it.
 
@@ -98,7 +98,7 @@ Gives the world its own calendar. After each turn of the story ends, it judges f
 **What you will see**
 
 - The "World Time" panel: the current time.
-- The "Time rules" panel: how time works in this world. You can see it before the first turn.
+- The "Time rules" panel: how time works in this world. You can see it before the first turn. It lists the phases or the calendar, where time starts, which way it moves, and how far it moves in a turn by default and at most.
 - A line in the status summary: "World time: ...".
 - Type `/time` to see the current world time. It only reads the time. It does not call a model and does not advance the turn. If the story has not started yet, it says the time has not been recorded.
 

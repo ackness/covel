@@ -1,4 +1,5 @@
 import { labelText } from "@covel/plugin-handlers-utils";
+import { attributeLabel } from "../../lib/attributes.js";
 import {
   isDifficulty,
   isModifier,
@@ -47,6 +48,23 @@ function outcomeLabel(ctx, outcome) {
     "critical-failure": labelText(ctx, "Critical failure"),
   };
   return labels[outcome];
+}
+
+/**
+ * "Turn N" in every language the plugin ships, for the check log. The log
+ * names a turn by its number; the turn's row ID stays in `turnId` for code.
+ *
+ * @param {RecorderContext} ctx
+ * @param {number} turn
+ */
+function turnLabel(ctx, turn) {
+  const label = labelText(ctx, "Turn {turn}");
+  const fill = (text) => text.replaceAll("{turn}", String(turn));
+  return typeof label === "string"
+    ? fill(label)
+    : Object.fromEntries(
+        Object.entries(label).map(([language, text]) => [language, fill(text)]),
+      );
 }
 
 /**
@@ -102,11 +120,22 @@ export default async function handler(ctx) {
 
   // The turn's block already lists every earlier check, one per sequence number.
   const firstSeq = previousChecks.length + 1;
+  const turn = Number.isInteger(ctx.logicalTurn) ? ctx.logicalTurn : undefined;
   const entries = records.map((record, index) => {
     const presentation = OUTCOME_PRESENTATION[record.outcome];
     return {
       ...record,
+      ...(record.attribute
+        ? {
+            attributeLabel: attributeLabel(
+              ctx.world,
+              record.attribute,
+              ctx.locale,
+            ),
+          }
+        : {}),
       turnId: ctx.turnId,
+      ...(turn === undefined ? {} : { turn, turnLabel: turnLabel(ctx, turn) }),
       seq: firstSeq + index,
       outcomeLabel: outcomeLabel(ctx, record.outcome),
       outcomeColor: presentation.color,

@@ -40,7 +40,7 @@ When the player character does something with a risk of failing, such as picking
 ### What you will see
 
 - A check block in the story text: the action, the calculation, and the result, for example `14 + 4 = 18 vs DC 12`. Critical successes and critical failures are highlighted.
-- A "Check Log" panel on the right, listing every check. The panel has two quick buttons, "Roll d20" and "Roll 2d6".
+- A "Check Log" panel on the right, listing every check with its turn number and the attribute used (by the world's name for it). The panel has two quick buttons, "Roll d20" and "Roll 2d6".
 - You can roll dice yourself by typing `/roll` in the input box. `/roll 2d6` rolls two six-sided dice. If you do not write a dice expression, it rolls `1d20`. `/r` is a short form. Dice are written as `NdM`: 1 to 100 dice at a time, each with 2 to 1000 sides.
 
 Dice you roll yourself are shown as a result only. They do not change the checks in the story.
@@ -174,9 +174,9 @@ It has no settings you can change.
 
 ### What world authors can preset
 
-| Data           | File              | Notes                                                                                                                         |
-| -------------- | ----------------- | ----------------------------------------------------------------------------------------------------------------------------- |
-| Starting items | `data/items.yaml` | Things the player starts with. `quantity` is a number. Currency gets the tag `currency`, and worn items get `equipped: true`. |
+| Data           | File              | Notes                                                                                                                                                                                      |
+| -------------- | ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Starting items | `data/items.yaml` | Things the player starts with. `quantity` is a number. Players see the tags, so write them in the world's language, and give currency a tag that says so. Worn items get `equipped: true`. |
 
 Keep the list short. Items gained during play are recorded automatically. For how to write them, see [Starting content](../recipes/starting-content.md).
 

@@ -65,17 +65,17 @@ pluginPolicy:
   quantity: 30
   description: 镇上通用的铜钱。
   tags:
-    - currency
+    - 货币
 - id: storm-lantern
   name: 防风灯
   quantity: 1
   description: 一盏带罩的油灯，油够烧一夜。
   tags:
-    - tool
+    - 工具
   equipped: true
 ```
 
-- 钱用 `currency` 这个标签标出来。
+- 标签会显示给玩家，用世界的语言写。钱加一个表示货币的标签，这里是 `货币`。
 - `equipped: true` 表示主角正拿着或穿着它。
 - 列表保持简短。游玩中得到的东西会自动记入行囊。
 

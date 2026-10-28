@@ -60,8 +60,18 @@
                       },
                       {
                         "component": "Text",
+                        "visible": { "$item": "value/updatedAt" },
                         "props": {
-                          "content": { "$item": "value/updatedAt" },
+                          "content": {
+                            "$format": "date",
+                            "value": { "$item": "value/updatedAt" },
+                            "options": {
+                              "month": "2-digit",
+                              "day": "2-digit",
+                              "hour": "2-digit",
+                              "minute": "2-digit"
+                            }
+                          },
                           "size": "xs",
                           "variant": "muted"
                         }

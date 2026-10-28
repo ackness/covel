@@ -19,30 +19,76 @@ afterEach(() => {
   __clearAllPluginDataForTest();
 });
 
-it("shows authored time rules before any clock has been committed", async () => {
+function showDefinition(definition: Record<string, unknown>) {
   setActiveSession("before-story");
   loadPluginDataForSession("before-story", "world-time", "definitions", [
-    {
-      key: "world",
-      value: {
-        id: "world",
-        definition: {
-          kind: "phases",
-          name: "Tidal calendar",
-          phases: ["High", "Low"],
-          evolution: { prompt: "Wait for the tide to travel." },
-        },
-      },
-    },
+    { key: "world", value: { id: "world", definition } },
   ]);
   render(<PluginPanel pluginId="world-time" spec={definitionSpec} />);
-  expect((await screen.findAllByText("Tidal calendar")).length).toBeGreaterThan(
-    0,
-  );
-  expect(
-    screen.getAllByText("Wait for the tide to travel.").length,
-  ).toBeGreaterThan(0);
+}
+
+it("summarizes authored phase rules before any clock has been committed", async () => {
+  showDefinition({
+    kind: "phases",
+    name: "Tidal calendar",
+    cycleLabel: "Tide cycle",
+    phases: ["Rising tide", "High tide", "Falling tide"],
+    initial: { cycle: 2, phase: 1 },
+    evolution: {
+      mode: "forward",
+      defaultStep: 1,
+      maxStep: 16,
+      prompt: "Wait for the tide to travel.",
+    },
+  });
+  expect(await screen.findByText("Tidal calendar")).toBeTruthy();
+  // The author's prompt is shown once, not again inside a raw field dump.
+  expect(screen.getAllByText("Wait for the tide to travel.")).toHaveLength(1);
+  for (const phase of ["Rising tide", "High tide", "Falling tide"])
+    expect(screen.getAllByText(phase).length).toBeGreaterThan(0);
+  expect(screen.getByText("Tide cycle 2 ·")).toBeTruthy();
+  // The starting phase is named once in the tag list and once at the start.
+  expect(screen.getAllByText("High tide")).toHaveLength(2);
+  expect(screen.getByText("Forward")).toBeTruthy();
+  expect(screen.getByText("Default per turn, in phases")).toBeTruthy();
+  expect(screen.getByText("16")).toBeTruthy();
+  expect(screen.queryByText("Default per turn, in minutes")).toBeNull();
+  expect(screen.queryByText("Months in a year")).toBeNull();
+  expect(screen.queryByText("Random range")).toBeNull();
+  for (const key of ["kind", "initial", "defaultStep", "maxStep", "evolution"])
+    expect(screen.queryByText(new RegExp(`^${key}\\b`))).toBeNull();
   expect(screen.queryByText("Time appears when the story starts.")).toBeNull();
+});
+
+it("summarizes authored calendar rules with the start and step limits", async () => {
+  showDefinition({
+    kind: "calendar",
+    name: "Station time",
+    calendar: {
+      era: "Station Year",
+      months: [{ name: "Duskmonth", days: 30 }],
+      hoursPerDay: 24,
+      minutesPerHour: 60,
+    },
+    initial: { year: 1, month: 1, day: 1, hour: 6, minute: 4 },
+    evolution: {
+      mode: "random",
+      defaultStep: 10,
+      maxStep: 240,
+      randomRange: { min: -30, max: 90 },
+    },
+  });
+  expect(await screen.findByText("Station time")).toBeTruthy();
+  expect(screen.getByText("Station Year")).toBeTruthy();
+  expect(screen.getByText("Months in a year")).toBeTruthy();
+  expect(screen.getByText("Station Year 1 · 1/1 06:04")).toBeTruthy();
+  expect(screen.getByText("Jumps at random")).toBeTruthy();
+  expect(screen.getByText("Most per turn, in minutes")).toBeTruthy();
+  expect(screen.getByText("240")).toBeTruthy();
+  expect(screen.getByText("-30")).toBeTruthy();
+  expect(screen.getByText("90")).toBeTruthy();
+  expect(screen.queryByText("Days of the week")).toBeNull();
+  expect(screen.queryByText("Phases")).toBeNull();
 });
 
 it("explains the default calendar when no definition was imported", () => {

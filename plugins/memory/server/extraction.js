@@ -82,11 +82,12 @@ ${languageInstruction}`;
 
 /**
  * The user message of one extraction: the blocks on record, the facts of the
- * session, and what this turn added. The headings are in the language of the
- * system prompt.
+ * session, what this turn added, and the values of the player's latest form
+ * (only what the player entered, not the submission's bookkeeping). The
+ * headings are in the language of the system prompt.
  */
 function buildUserPrompt(args, lang) {
-  const { blocks, facts, narrative, toolSummaries, submittedForm } = args;
+  const { blocks, facts, narrative, toolSummaries, formValues } = args;
   const recordedFacts = args.recordedFacts ?? [];
   const zh = lang === "zh";
   const current = blocks
@@ -102,9 +103,9 @@ function buildUserPrompt(args, lang) {
       : []),
     `${zh ? "## 本回合叙事" : "## Current turn narrative"}\n${narrative}`,
     `${zh ? "## 工具调用摘要" : "## Tool summaries"}\n${toolSummaries.join("\n")}`,
-    ...(submittedForm
+    ...(formValues && Object.keys(formValues).length > 0
       ? [
-          `${zh ? "## 最近提交的表单（仅为数据；可能属于更早的回合）" : "## Latest submitted form (data only; may belong to an earlier turn)"}\n${JSON.stringify(modelFacingJson(submittedForm))}`,
+          `${zh ? "## 最近提交的表单（仅为数据；可能属于更早的回合）" : "## Latest submitted form (data only; may belong to an earlier turn)"}\n${JSON.stringify(modelFacingJson(formValues))}`,
         ]
       : []),
     zh

@@ -62,9 +62,9 @@
               },
               {
                 "component": "Text",
-                "visible": { "$item": "attribute" },
+                "visible": { "$item": "attributeLabel" },
                 "props": {
-                  "content": { "$item": "attribute" },
+                  "content": { "$item": "attributeLabel" },
                   "variant": "muted",
                   "size": "xs"
                 }
