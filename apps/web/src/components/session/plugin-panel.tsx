@@ -14,6 +14,7 @@ import {
   type StateStore,
 } from "@json-render/react";
 import { covelRegistry } from "@/lib/catalog.js";
+import { useLiveActionHandlers } from "@/lib/json-render-handlers.js";
 import { PluginSurfaceBoundary } from "@/components/error-boundary.js";
 import {
   usePluginJobs,
@@ -172,8 +173,6 @@ function PluginPanelView({
   jobs: ReturnType<typeof usePluginJobs>;
   sessionId?: string;
 }) {
-  const interactionLockedRef = useRef(interactionLocked);
-  interactionLockedRef.current = interactionLocked;
   const { t, i18n } = useTranslation();
   const activeLocale = i18n.resolvedLanguage ?? i18n.language;
   const namespace =
@@ -482,6 +481,18 @@ function PluginPanelView({
   const handlers = explicitHandlers
     ? { ...defaultHandlers, ...explicitHandlers }
     : defaultHandlers;
+  // A locked interaction does nothing; the lock and the handlers stay current.
+  const actionHandlers = useLiveActionHandlers(
+    Object.fromEntries(
+      Object.entries(handlers).map(([name, handler]) => [
+        name,
+        async (params: Record<string, unknown>) => {
+          if (interactionLocked) return;
+          await handler(params);
+        },
+      ]),
+    ),
+  );
 
   if (spec.webview && typeof spec.webview === "object") {
     const webview = spec.webview as { html?: unknown; height?: number };
@@ -637,15 +648,7 @@ function PluginPanelView({
         <JSONUIProvider
           registry={covelRegistry}
           store={stateStore}
-          handlers={Object.fromEntries(
-            Object.entries(handlers).map(([name, handler]) => [
-              name,
-              async (params: Record<string, unknown>) => {
-                if (interactionLockedRef.current) return;
-                await handler(params);
-              },
-            ]),
-          )}
+          handlers={actionHandlers}
           directives={covelDirectives}
         >
           <Renderer spec={flatSpec} registry={covelRegistry} />

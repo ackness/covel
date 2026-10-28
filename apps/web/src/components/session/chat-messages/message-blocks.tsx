@@ -8,6 +8,7 @@ import { JSONUIProvider, Renderer } from "@json-render/react";
 import { emitToast } from "@/lib/toast-channel.js";
 import { nestedToFlat } from "@json-render/core";
 import { covelRegistry } from "@/lib/catalog.js";
+import { useLiveActionHandlers } from "@/lib/json-render-handlers.js";
 import { covelDirectives } from "@/lib/json-render-directives.js";
 import { PluginSurfaceBoundary } from "@/components/error-boundary.js";
 import { messageToSpec, messageToSpecDisabled } from "@/lib/message-to-spec.js";
@@ -370,6 +371,7 @@ export function MessageBlockRenderer({
       initialFormState,
     ],
   );
+  const actionHandlers = useLiveActionHandlers(handlers);
 
   if (!spec) {
     return (
@@ -393,7 +395,7 @@ export function MessageBlockRenderer({
       <JSONUIProvider
         registry={covelRegistry}
         initialState={initialFormState}
-        handlers={handlers}
+        handlers={actionHandlers}
         directives={covelDirectives}
         onStateChange={handleStateChange}
       >

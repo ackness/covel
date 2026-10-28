@@ -239,7 +239,7 @@ Web 客户端只发送它的请求用得到的供应商的密钥：
 **流程。**
 
 1. 玩家添加了本机或局域网的模型地址，并且服务端在 `/api/health` 报告 `deployment.modelRelay` 时，浏览器用一个页面内随机生成的通道号打开 `GET /api/model-relay/stream`（SSE），并在模型请求里用 `X-Model-Relay` 带上同一个通道号。
-2. 服务端为这个请求的 `GatewayOptions` 附上该通道的中继（`apps/server/src/middleware/per-request-llm.ts`），网关把它复制进每个服务商配置。交给后台任务的凭据也带着它（见 [Provider keys](#provider-keys)）。
+2. 服务端为这个请求的 `GatewayOptions` 附上该通道的中继（`apps/server/src/middleware/per-request-llm.ts`）。运行时的 agent 适配器和 function 网关均保留它，覆盖开局、流式叙事及插件调用，再由网关复制进每个服务商配置。交给后台任务的凭据也带着它（见 [Provider keys](#provider-keys)）。
 3. 只有同时满足四个条件，`postJson` / `getJson` 才改走中继：宿主是共享形态；配置里带着中继；服务商登记表把这个配置标为 `relayable`，也就是地址来自玩家这次请求，并且没有附带服务端自己的密钥或请求头（服务端环境变量里的密钥、`llm.toml` 里的密钥和请求头）；`baseUrl` 是本机或局域网地址（`isLocalNetworkBaseUrl`，`packages/shared/src/utils/local-network.ts`：回环地址、私有地址段、`100.64.0.0/10`、IPv6 本地地址，以及 `.local`、`.lan`、`.internal`、`.home.arpa`、`.localhost` 结尾的名字）。其余请求照旧经过 SSRF 检查和钉住的连接。走中继的请求，服务端自己不连接这个地址。上传文件的 `postFormData` 不走中继。
 4. 服务端通过流把请求（URL、方法、请求头、JSON 正文）交给浏览器。浏览器分几次 POST 回状态和响应头、正文分块、结束或失败（`/api/model-relay/requests/:id/*`），服务端把它们拼成一个流式的 `Response`（`apps/server/src/model-relay/registry.ts`）。
 

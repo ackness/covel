@@ -9,7 +9,7 @@ Some terms used throughout this page:
 - **World package**: a folder that holds `world.yaml`, `WORLD.md`, and optional data, characters and images.
 - **Source**: one data source in a world package. Usually a file. For media, it is a directory.
 - **Descriptor**: an optional file (`data/world.data.yaml`) that changes how a conventional file is read, or adds a file outside the conventions. Most worlds do not need it.
-- **Session**: one game that a player starts with this world. The world package's data is copied into the session when the session is created. After that, each session changes on its own.
+- **Session**: one game that a player starts with this world. The world package's data is copied into the session when the session is created. After that, each session changes on its own. Saves in browser-private mode work the same way ([Browser-private workspace](./api.md#browser-private-workspace)).
 
 ## World Package
 

@@ -34,6 +34,7 @@ import type {
 import type {
   SlotOverridesInput,
   CapabilityOverridePolicy,
+  ProviderRelay,
 } from "@covel/ai-provider";
 
 interface GatewayTextInput {
@@ -62,6 +63,7 @@ interface GatewayTextInput {
 }
 
 interface GatewayTextOptions {
+  relay?: ProviderRelay;
   apiKeys?: Record<string, string>;
   envApiKeys?: Record<string, string>;
   traceId?: string;
@@ -81,6 +83,7 @@ export interface GatewayLike {
   resolveSlot(
     presetId: string | undefined,
     options?: {
+      relay?: ProviderRelay;
       apiKeys?: Record<string, string>;
       envApiKeys?: Record<string, string>;
       slotOverrides?: SlotOverridesInput;
@@ -132,6 +135,8 @@ export interface GatewayLike {
 }
 
 export interface GatewayAdapterConfig {
+  /** Request-scoped browser transport for the player's local model endpoints. */
+  readonly relay?: ProviderRelay;
   /** API keys from the request (e.g., from X-Provider-Keys header). */
   readonly apiKeys?: Record<string, string>;
   /**
@@ -163,17 +168,39 @@ export function createGatewayAdapter(
   gateway: GatewayLike,
   config?: GatewayAdapterConfig,
 ): LLMAdapter {
+  // Built once so every gateway call carries the same request-scoped options;
+  // a new option cannot be dropped at one call site.
+  const requestOptions = {
+    apiKeys: config?.apiKeys,
+    ...(config?.relay ? { relay: config.relay } : {}),
+    ...(config?.envApiKeys ? { envApiKeys: config.envApiKeys } : {}),
+    ...(config?.slotOverrides ? { slotOverrides: config.slotOverrides } : {}),
+    ...(config?.capabilityOverridePolicy
+      ? { capabilityOverridePolicy: config.capabilityOverridePolicy }
+      : {}),
+  };
+  const callOptions = (
+    params: Parameters<LLMAdapter["generate"]>[0],
+  ): GatewayTextOptions => ({
+    ...requestOptions,
+    traceId: config?.traceId,
+    ...(params.maxOutputTokens !== undefined
+      ? { parameterOverrides: { maxOutputTokens: params.maxOutputTokens } }
+      : {}),
+    ...(params.signal ? { signal: params.signal } : {}),
+    ...(params.onQueueStart ? { onQueueStart: params.onQueueStart } : {}),
+    ...(params.requestBudget ? { requestBudget: params.requestBudget } : {}),
+    ...(params.onTargetAttempt
+      ? { onTargetAttempt: params.onTargetAttempt }
+      : {}),
+    ...(params.onProviderRequest
+      ? { onProviderRequest: params.onProviderRequest }
+      : {}),
+  });
   const resolveSlot = (slot?: string) => {
     try {
       return gateway.resolveSlot(slot, {
-        apiKeys: config?.apiKeys,
-        ...(config?.envApiKeys ? { envApiKeys: config.envApiKeys } : {}),
-        ...(config?.slotOverrides
-          ? { slotOverrides: config.slotOverrides }
-          : {}),
-        ...(config?.capabilityOverridePolicy
-          ? { capabilityOverridePolicy: config.capabilityOverridePolicy }
-          : {}),
+        ...requestOptions,
         fallbackTag: "text",
       });
     } catch {
@@ -230,35 +257,7 @@ export function createGatewayAdapter(
             ? { promptCacheKey: params.promptCacheKey }
             : {}),
         },
-        {
-          apiKeys: config?.apiKeys,
-          ...(config?.envApiKeys ? { envApiKeys: config.envApiKeys } : {}),
-          traceId: config?.traceId,
-          ...(config?.slotOverrides
-            ? { slotOverrides: config.slotOverrides }
-            : {}),
-          ...(config?.capabilityOverridePolicy
-            ? { capabilityOverridePolicy: config.capabilityOverridePolicy }
-            : {}),
-          ...(params.maxOutputTokens !== undefined
-            ? {
-                parameterOverrides: {
-                  maxOutputTokens: params.maxOutputTokens,
-                },
-              }
-            : {}),
-          ...(params.signal ? { signal: params.signal } : {}),
-          ...(params.onQueueStart ? { onQueueStart: params.onQueueStart } : {}),
-          ...(params.requestBudget
-            ? { requestBudget: params.requestBudget }
-            : {}),
-          ...(params.onTargetAttempt
-            ? { onTargetAttempt: params.onTargetAttempt }
-            : {}),
-          ...(params.onProviderRequest
-            ? { onProviderRequest: params.onProviderRequest }
-            : {}),
-        },
+        callOptions(params),
       );
 
       return {
@@ -309,35 +308,7 @@ export function createGatewayAdapter(
             ? { promptCacheKey: params.promptCacheKey }
             : {}),
         },
-        {
-          apiKeys: config?.apiKeys,
-          ...(config?.envApiKeys ? { envApiKeys: config.envApiKeys } : {}),
-          traceId: config?.traceId,
-          ...(config?.slotOverrides
-            ? { slotOverrides: config.slotOverrides }
-            : {}),
-          ...(config?.capabilityOverridePolicy
-            ? { capabilityOverridePolicy: config.capabilityOverridePolicy }
-            : {}),
-          ...(params.maxOutputTokens !== undefined
-            ? {
-                parameterOverrides: {
-                  maxOutputTokens: params.maxOutputTokens,
-                },
-              }
-            : {}),
-          ...(params.signal ? { signal: params.signal } : {}),
-          ...(params.onQueueStart ? { onQueueStart: params.onQueueStart } : {}),
-          ...(params.requestBudget
-            ? { requestBudget: params.requestBudget }
-            : {}),
-          ...(params.onTargetAttempt
-            ? { onTargetAttempt: params.onTargetAttempt }
-            : {}),
-          ...(params.onProviderRequest
-            ? { onProviderRequest: params.onProviderRequest }
-            : {}),
-        },
+        callOptions(params),
       )) {
         if (event.type === "tool-argument-delta") {
           yield { type: "tool-argument-delta" as const };

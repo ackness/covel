@@ -37,16 +37,17 @@ vi.mock("react-force-graph-2d", () => ({ default: () => null }));
 
 afterEach(cleanup);
 
+const spec = {
+  alwaysRender: true,
+  view: {
+    component: "Button",
+    props: { label: "Run action" },
+    on: { click: { action: "testAction", params: { value: "clicked" } } },
+  },
+};
+
 it("blocks locked actions, including callbacks retained before locking, and resumes on unlock", async () => {
   const action = vi.fn();
-  const spec = {
-    alwaysRender: true,
-    view: {
-      component: "Button",
-      props: { label: "Run action" },
-      on: { click: { action: "testAction", params: { value: "clicked" } } },
-    },
-  };
   const props = { pluginId: "test", spec, handlers: { testAction: action } };
   const { rerender } = render(<PluginPanel {...props} />);
   const retainedHandler = captured.handlers!.testAction!;
@@ -68,4 +69,28 @@ it("blocks locked actions, including callbacks retained before locking, and resu
   expect(button.closest("[inert]")).toBeNull();
   fireEvent.click(button);
   await waitFor(() => expect(action).toHaveBeenCalledTimes(2));
+});
+
+it("runs the handlers of the latest render, not the ones it mounted with", async () => {
+  const mounted = vi.fn();
+  const latest = vi.fn();
+  const { rerender } = render(
+    <PluginPanel
+      pluginId="test"
+      spec={spec}
+      handlers={{ testAction: mounted }}
+    />,
+  );
+  rerender(
+    <PluginPanel
+      pluginId="test"
+      spec={spec}
+      handlers={{ testAction: latest }}
+    />,
+  );
+  fireEvent.click(screen.getByRole("button", { name: "Run action" }));
+  await waitFor(() =>
+    expect(latest).toHaveBeenCalledWith({ value: "clicked" }),
+  );
+  expect(mounted).not.toHaveBeenCalled();
 });

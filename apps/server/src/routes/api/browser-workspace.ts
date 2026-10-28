@@ -17,6 +17,7 @@ import {
   RevisionConflictError,
   SessionRecordScopeConflictError,
   exportSessionCheckpoint,
+  isInitialBrowserCheckpoint,
   replaceSessionFromCheckpoint,
   validateBrowserCheckpoint,
   type BrowserCheckpoint,
@@ -45,6 +46,19 @@ interface WorkspaceHead {
   actionId: string;
   readonly commits: Map<string, SessionCommit>;
   checkpoint: BrowserCheckpoint;
+}
+
+function newHead(
+  incarnation: string,
+  checkpoint: BrowserCheckpoint,
+): WorkspaceHead {
+  return {
+    incarnation,
+    revision: checkpoint.revision,
+    actionId: checkpoint.actionId,
+    commits: new Map(),
+    checkpoint,
+  };
 }
 
 function hasDurableJobs(checkpoint: BrowserCheckpoint): boolean {
@@ -211,6 +225,8 @@ export function createBrowserWorkspaceRoutes(
         400,
       );
     }
+    // A save that has never adopted a server commit initializes the mirror.
+    const initialize = isInitialBrowserCheckpoint(checkpoint);
 
     return withLockedSessionMutation({
       c,
@@ -305,6 +321,26 @@ export function createBrowserWorkspaceRoutes(
                 errorBody("World not found", { code: "world_not_found" }),
                 404,
               );
+            }
+            if (initialize) {
+              if (checkpoint.session.worldId !== live.worldId) {
+                return c.json(
+                  errorBody("Initialization world does not match the session", {
+                    code: "invalid_checkpoint_scope",
+                  }),
+                  400,
+                );
+              }
+              // POST /sessions has already resolved dependencies, imported the
+              // world's data, and run lifecycle hooks. The empty browser seed
+              // only establishes a revision; downloading the first commit must
+              // retain all that initialized state. Retries keep the same head.
+              if (!head) cache.set(sessionId, newHead(incarnation, checkpoint));
+              return c.json({
+                ok: true,
+                revision: checkpoint.revision,
+                reconcileRequired: true,
+              });
             }
             const admittedCheckpoint = {
               ...checkpoint,
@@ -486,13 +522,7 @@ export function createBrowserWorkspaceRoutes(
             );
             c.get("uiSlots")?.clearSession(sessionId);
             c.get("uiSlots")?.invalidateSession(sessionId);
-            cache.set(sessionId, {
-              incarnation,
-              revision: checkpoint.revision,
-              actionId: checkpoint.actionId,
-              commits: new Map(),
-              checkpoint,
-            });
+            cache.set(sessionId, newHead(incarnation, checkpoint));
             scheduleMemoryIngest(c.get("memorySystem"), sessionId);
             return c.json({ ok: true, revision: checkpoint.revision });
           });

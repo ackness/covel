@@ -317,6 +317,8 @@ SqliteStore、MemoryStore 和 PgStore（都在 Node 上）用同一种办法：
 
 浏览器私有的持久化有意放在 `DataStore` 之外。IndexedDB 的事务和 schema 生命周期由 Dexie 管理，代码在 `apps/web/src/services/storage/browser-vault.ts`。
 
+新存档先通过[首次同步](./api.md#浏览器私有工作区)下载服务端初始化的完整 checkpoint，再原子保存插件集合、开局状态和世界数据；初始化下载失败沿用 pending commit 恢复，不分开保存各个领域。
+
 **写入。**
 
 - 一份 checkpoint 和它那条紧凑的“动作幂等”记录在同一个 `rw` 事务里提交。

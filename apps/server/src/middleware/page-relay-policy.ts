@@ -16,9 +16,11 @@ export function localModelRelayPagePolicy(enabled: boolean): MiddlewareHandler {
     if (!enabled || c.res.status !== 200) return;
     if (!(c.res.headers.get("content-type") ?? "").startsWith("text/html"))
       return;
+    // Hono's c.res setter copies the previous response's headers onto the
+    // replacement, so drop the static file's length from the previous one.
+    c.header("content-length", undefined);
     const html = await c.res.text();
     const headers = new Headers(c.res.headers);
-    headers.delete("content-length");
     c.res = new Response(withLocalModelRelayConnect(html), {
       status: 200,
       headers,

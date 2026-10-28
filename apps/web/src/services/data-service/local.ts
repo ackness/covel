@@ -14,7 +14,10 @@ import type {
   SessionRecord as StoreSessionRecord,
   WorldRecord as StoreWorldRecord,
 } from "@covel/store/browser-sync";
-import { BROWSER_CHECKPOINT_SCHEMA_VERSION } from "@covel/store/browser-sync";
+import {
+  BROWSER_CHECKPOINT_SCHEMA_VERSION,
+  initialBrowserCheckpointActionId,
+} from "@covel/store/browser-sync";
 import type { SessionStatus } from "../api.js";
 import type {
   MessageRecord,
@@ -246,16 +249,9 @@ function initialCheckpoint(
     jobStatus: [],
     runtimeExports: [],
     revision: 1,
-    actionId: `local:create:${session.id}`,
+    actionId: initialBrowserCheckpointActionId(session.id),
     committedAt,
   });
-}
-
-function isFreshLocalCheckpoint(checkpoint: BrowserCheckpoint): boolean {
-  return (
-    checkpoint.revision === 1 &&
-    checkpoint.actionId === `local:create:${checkpoint.sessionId}`
-  );
 }
 
 export class LocalDataService implements DataService {
@@ -856,7 +852,7 @@ export class LocalDataService implements DataService {
       await api.getSession(serverSessionId, { silentErrors: true });
     } catch (err) {
       if (!isNotFound(err)) throw err;
-      const created = await api.createSession(
+      await api.createSession(
         serverWorldId,
         serverSessionId,
         [...session.activePlugins],
@@ -878,34 +874,16 @@ export class LocalDataService implements DataService {
             ).excluded
           : [],
       );
-      // Only a never-hydrated local session needs the server to resolve its
-      // initial setup band. When rebuilding an ephemeral mirror after a server
-      // restart, the browser checkpoint is already authoritative and must not
-      // be reset to the newly created server session's empty clock.
-      if (isFreshLocalCheckpoint(checkpoint)) {
-        checkpoint = await this.mutateCheckpointNow(
-          sessionId,
-          "server-clock",
-          (current) => ({
-            ...current,
-            session: {
-              ...current.session,
-              phase: created.phase,
-              completedPlayerTurns: created.completedPlayerTurns,
-              setupRuntimes: created.setupRuntimes,
-            },
-          }),
-        );
-      }
     }
 
+    // The server keeps its initialization for a new save (revision 1), with
+    // world data and resolved dependencies. Established saves restore their own.
     const uploaded = await api.uploadBrowserCheckpoint(serverSessionId, {
       ...checkpoint,
       world: serverCheckpointWorld(world),
     });
     if (uploaded.reconcileRequired) {
-      // The verified mirror retained detached writes while admitting only our
-      // local inputs/settings. Download that combined state before any action.
+      // Adopt initialization or retained detached writes before any action.
       const actionId = `hydrate:${checkpoint.revision}`;
       await vault.stagePendingCommit(sessionId, actionId);
       await this.commitFromServerNow(sessionId, actionId);

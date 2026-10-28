@@ -31,10 +31,10 @@ Covel is an AI RPG framework and playable studio where NPC relationships, lore, 
 
 ## Two ways to play
 
-|                                 Stage mode (visual novel)                                  |                                      Story mode (text)                                       |
-| :----------------------------------------------------------------------------------------: | :------------------------------------------------------------------------------------------: |
-|                   ![Stage mode](./.assets/images/readme/stage-mode.png)                    |                     ![Story mode](./.assets/images/readme/text-mode.png)                     |
-| Backdrops, sprites, and typewriter dialog; scene art resolves and generates as you explore | Classic narrated turns with suggested actions, inline forms, and the per-turn agent timeline |
+|                                                Stage mode (visual novel)                                                |                                                     Story mode (text)                                                      |
+| :---------------------------------------------------------------------------------------------------------------------: | :------------------------------------------------------------------------------------------------------------------------: |
+| ![Stage mode in Harukaze Academy: backdrop, character sprites, and dialogue](./.assets/images/readme/stage-mode.en.png) |            ![Story mode in Emberback Relay: narration and quest log](./.assets/images/readme/text-mode.en.png)             |
+|               Backdrops, sprites, and typewriter dialog; scene art resolves and generates as you explore                | Narrated turns with suggested actions and inline forms; the default plugins update panels such as the quest log every turn |
 
 Worlds declare their default (`defaultViewMode: stage`); you can switch any time in-session.
 
@@ -42,7 +42,6 @@ Worlds declare their default (`defaultViewMode: stage`); you can switch any time
 
 |                          Panel                           |                            Book                            |                               Stage                                |
 | :------------------------------------------------------: | :--------------------------------------------------------: | :----------------------------------------------------------------: |
-| ![Panel scheme](./.assets/images/readme/style-panel.png) |   ![Book scheme](./.assets/images/readme/style-book.png)   |      ![Stage scheme](./.assets/images/readme/style-stage.png)      |
 | App-like: icon rail, tagged option cards, a status strip | Reading-first: serif prose, numbered options, margin notes | Scene-first: full-bleed art, the cast on stage, key-capped options |
 
 A style scheme changes structure as well as colour — where navigation sits, how options are drawn, what the session does with world art. Pick one in **Settings → Appearance**; the earlier themes live on as colourways of a fourth, Classic. Schemes are theme packages, so you can save your own or import someone else's ([guide](./docs/recipes/themes.md)). Plugin UI follows whichever scheme is active without knowing about it.
@@ -90,8 +89,6 @@ plugins and world packs may use their own versions.
 
 ## World packs make a setting playable
 
-![AI world builder configuring a portable world pack](./.assets/images/readme/world-package-builder.png)
-
 A world pack is the portable content layer. `world.yaml` describes identity, locales, presentation, character attributes and the desired plugin composition. `WORLD.md` provides canonical lore. `data/world.data.yaml` maps typed sources into world metadata, characters, lorebook entries, media indexes, or plugin-owned namespaces.
 
 ```text
@@ -132,19 +129,15 @@ Players, world authors, and plugin authors can follow the [i18n guide](./docs/re
 
 ## Debug every turn end to end
 
-![Trace inspector with a narrator runtime and LLM request expanded](./.assets/images/readme/debug-trace.png)
-
-The built-in Trace Inspector groups execution by session and turn, then exposes each runtime and every flow, LLM, tool, message, block, state, and hook event. Expand a runtime to see its call sequence, token counts, timings, tool arguments, and results; open an event to inspect request metadata, prompt messages, available tool definitions, and the raw payload. Separate Session Data and Cost views make the same workspace useful for gameplay QA, plugin authoring, and provider-cost analysis.
+Every turn ends with an **Execution · N runtimes** row below the story: expand it to check each runtime's result and timing. For the full picture, open **Debugger** in the sidebar. The built-in Trace Inspector there groups execution by session and turn, then exposes each runtime and every flow, LLM, tool, message, block, state, and hook event. Expand a runtime to see its call sequence, token counts, timings, tool arguments, and results; open an event to inspect request metadata, prompt messages, available tool definitions, and the raw payload. Separate Session Data and Cost views make the same workspace useful for gameplay QA, plugin authoring, and provider-cost analysis.
 
 ## Every roll leaves a receipt
 
-![Relationship and gear changes posting into the turn; the status strip shows the current objective and pack, with the quest log open alongside](./.assets/images/readme/rpg-systems.png)
+![Dice checks and scene actions alongside equipped items in the inventory](./.assets/images/readme/rpg-systems.en.png)
 
 A risky action resolves against dice rolled **before** the narrator writes, so the outcome cannot be retconned to fit the prose — and the arithmetic posts inline: `19 + 2 = 21 vs DC 16`. Quest progress, gear changes, and affinity shifts land in the turn the same way, then accumulate into their own panels. Dice, quests, inventory, and affinity are four separate plugins; a world seeds the opening quests, starting gear, and initial affinity, or ships without any of them.
 
 ## What persists between turns
-
-![Core memory panel](./.assets/images/readme/memory-panel.png)
 
 Open a side panel mid-play and you are reading the state carried forward from the world pack and this session: core memory (running plot, current scene, player state), the NPC relationship graph, the world codex, and the on-stage cast. World authors can seed characters, rules, quests, items, affinity, and media; plugins keep that state evolving as you play, then feed the relevant parts back into later turns.
 
@@ -187,8 +180,6 @@ Open <http://localhost:5173> — debug tooling lives at `/debug`. For personal u
 
 ## Worlds in the box
 
-![World select](./.assets/images/readme/select-world.png)
-
 - **Mistport: The Riftide Chronicle** (雾港・裂潮纪) — the traditional-story demo: a dark-fantasy investigation. Its custom plugin pack, bilingual lore, investigation memory, cast blueprints, rules, and portraits show how a world can specialize the framework without forking it.
 - **Harukaze Academy** (遥风学园) — the stage-mode demo: a school ensemble romance. Dialogue policy, character relationships, memory blocks, transparent sprites, and day/night scene registries turn the same kernel into a visual novel.
 - **Emberback Relay** — written in English (`en-US` is the default) to show how one world can carry several languages, with a Chinese edition. It is a science-fiction frontier mystery in traditional-story mode. A lonely relay on a tidally locked world receives a distress call in your own voice from seventy-two hours ahead. It also has seeded quests, inventory, affinity, rules, character blueprints, portraits, and five check attributes.
@@ -211,6 +202,7 @@ Share your work by submitting a directory-entry PR to [covel-plugins](https://gi
 - [Design principles](./docs/internals/design-principles.md) — what belongs in the kernel and what belongs in a plugin
 - [Architecture & turn pipeline](./docs/internals/flow.md) — how a turn flows through trigger → schedule → runtimes → commit
 - [World data](./docs/reference/world-data.md) and [collections](./docs/ship/collections.md) — author a world pack and ship it with its plugins
+- [Gameplay and screenshot acceptance](./docs/en/internals/e2e-testing.md#accepting-local-model-relay-on-desktop-and-deployed-web) — before a release, replay desktop and deployed-relay sessions with default plugins and a restart, then refresh these README images
 - Reference: [plugin contract](./docs/reference/plugins.md) · [extension points](./docs/reference/extension-points.md) · [tools](./docs/reference/tools.md) · [HTTP API](./docs/reference/api.md) · [full doc index](./docs/README.md)
 
 pnpm workspaces + Turborepo · ESM-only · TypeScript strict · React 19 + Hono + Drizzle. Repo layout and package list → [`AGENTS.md`](./AGENTS.md#monorepo-structure).

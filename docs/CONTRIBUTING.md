@@ -81,6 +81,8 @@ rm palette.png
 git add -f .assets/images/demo.gif   # .assets/ is ignored
 ```
 
+README 里的静态截图（`.assets/images/readme/`）取自真实游玩，取景、尺寸和隐私要求见[截图与 README 更新](./internals/e2e-testing.md#截图与-readme-更新)。
+
 ## 开发规范
 
 ### 代码风格

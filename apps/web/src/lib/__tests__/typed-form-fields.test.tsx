@@ -184,6 +184,58 @@ it("submits untouched zero defaults and edited values with their original types"
   expect(submitted).toHaveBeenCalledTimes(2);
 });
 
+it("unlocks a streamed form after execution and uses the current submission handler", async () => {
+  const initialSubmit = vi.fn(async () => {});
+  const submit = vi.fn(async () => {});
+  const props = {
+    msg: { ...message, turnId: "turn" },
+    block,
+    submitted: false,
+    onSendMessage: vi.fn(),
+    onSubmitBlock: vi.fn(),
+  };
+  const view = render(
+    <MessageBlockRenderer
+      {...props}
+      executing={true}
+      onSubmitInteraction={initialSubmit}
+    />,
+  );
+  view.rerender(
+    <MessageBlockRenderer
+      {...props}
+      executing={false}
+      onSubmitInteraction={submit}
+    />,
+  );
+  fireEvent.change(screen.getByRole("textbox", { name: "Notes" }), {
+    target: { value: "Keep this draft" },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Save" }));
+  await waitFor(() =>
+    expect(submit).toHaveBeenCalledWith("form", "turn", "allocation", "form", {
+      points: 0,
+      ready: false,
+      notes: "Keep this draft",
+    }),
+  );
+  expect(initialSubmit).not.toHaveBeenCalled();
+  view.rerender(
+    <MessageBlockRenderer
+      {...props}
+      executing={true}
+      onSubmitInteraction={submit}
+    />,
+  );
+  expect(
+    (screen.getByRole("textbox", { name: "Notes" }) as HTMLTextAreaElement)
+      .value,
+  ).toBe("Keep this draft");
+  expect(screen.getByRole("button", { name: "Save" }).matches(":disabled")).toBe(
+    true,
+  );
+});
+
 it.each(["turn", "handler"])(
   "rejects a form missing its %s without sending chat or losing edits",
   async (missing) => {
