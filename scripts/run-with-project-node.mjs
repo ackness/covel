@@ -1,6 +1,8 @@
+import { execFileSync } from "node:child_process";
 import path from "node:path";
 import process from "node:process";
 import { spawnCommand } from "./lib/command-shim.mjs";
+import { requireProjectNode } from "./lib/project-node.mjs";
 
 const [command, ...args] = process.argv.slice(2);
 if (!command) {
@@ -9,6 +11,18 @@ if (!command) {
   );
   process.exit(1);
 }
+
+// Hooks run from the repository; a command outside a checkout has no pin.
+let repoRoot;
+try {
+  repoRoot = execFileSync("git", ["rev-parse", "--show-toplevel"], {
+    encoding: "utf8",
+    stdio: ["ignore", "pipe", "ignore"],
+  }).trim();
+} catch {
+  repoRoot = undefined;
+}
+if (repoRoot) requireProjectNode(repoRoot, "pre-commit");
 
 // Propagate the Node selected by mise to CLI shims and their descendants.
 const env = { ...process.env };
