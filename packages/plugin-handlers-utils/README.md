@@ -1,6 +1,6 @@
 # @covel/plugin-handlers-utils
 
-Public ESM helpers and entry types for Covel plugin authors. Requires Node.js 26+.
+Public ESM helpers and entry types for Covel plugin authors. Requires Node.js 26.12.1 or a later 26.x release.
 
 ```js
 import { optionalString, makeProposal } from "@covel/plugin-handlers-utils";
