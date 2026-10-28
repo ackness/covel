@@ -154,7 +154,7 @@ Open a side panel mid-play and you are reading the state carried forward from th
 
 Open **[demo.covel.cc](https://demo.covel.cc/)**, the official public trial, and bring your own API key. Your saves and keys stay in your browser; the server keeps only the temporary copies it needs in memory and never writes your keys to disk, a database or its logs. A notice at the top links to the exact open-source commit the trial runs, deployed automatically from this repository.
 
-It is a trial on a free instance: it sleeps after 15 minutes without visitors (the next visit takes about a minute), generated images are lost when it restarts, and saves cannot be exported yet, so keep important progress in the desktop app. Use a separate key with a spending limit. What lives where and who could see your key: [Play on a public trial](./docs/en/start/hosted-trial.md). Run your own: [Deploy a trial on Render](./docs/en/start/deploy-render.md).
+It is a trial on a free instance: it sleeps after 15 minutes without visitors (the next visit takes about a minute), generated images are lost when it restarts, and saves cannot be exported yet, so keep important progress in the desktop app. Create a temporary API key just for the trial, with a spending limit, and delete or rotate it at your provider when you finish: we do our best to protect your data, but the key still passes through the server. What lives where and who could see your key: [Play on a public trial](./docs/en/start/hosted-trial.md). Run your own: [Deploy a trial on Render](./docs/en/start/deploy-render.md).
 
 ### Play
 

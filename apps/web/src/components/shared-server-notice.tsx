@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { ShieldCheck, X } from "lucide-react";
+import { KeyRound, ShieldCheck, X } from "lucide-react";
 import { getSharedServerInfo } from "@/services/api/health.js";
 import { SHARED_SERVER_DOCS_PAGE, docsPageUrl } from "@/lib/docs-links.js";
 
@@ -62,6 +62,13 @@ export function SharedServerNotice() {
           <p className="text-sm font-medium">{t("sharedServer.title")}</p>
           <p className="mt-0.5 text-muted-foreground">
             {t("sharedServer.body")}
+          </p>
+          <p className="mt-1 flex items-start gap-1.5 font-medium">
+            <KeyRound
+              aria-hidden="true"
+              className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary"
+            />
+            <span>{t("sharedServer.keyAdvice")}</span>
           </p>
           <p className="mt-1 flex flex-wrap gap-x-4 gap-y-1">
             <a

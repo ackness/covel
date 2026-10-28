@@ -2601,6 +2601,7 @@
     "learnMore": "How your data and keys are handled",
     "source": "Source code (open source, deployed automatically)",
     "sourceAt": "Source code: running {{commit}} (open source, deployed automatically)",
-    "dismiss": "Dismiss"
+    "dismiss": "Dismiss",
+    "keyAdvice": "Create a temporary API key just for this trial, ideally with a spending limit. We do our best to protect your data, but please delete or rotate the key at your provider when you finish."
   }
 }

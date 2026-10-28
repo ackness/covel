@@ -1,4 +1,11 @@
-import { BookOpen, Check, Globe, MessageSquare, Settings2 } from "lucide-react";
+import {
+  BookOpen,
+  Check,
+  Globe,
+  KeyRound,
+  MessageSquare,
+  Settings2,
+} from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button.js";
 import { PingButton } from "@/components/shared/ping-button.js";
@@ -6,6 +13,7 @@ import { formatSlotLabel, type ResolvedSlot } from "@/hooks/use-slot-config.js";
 import { useLocalePreference } from "@/hooks/useLocalePreference.js";
 import { localeDefinitions } from "@/i18n/catalog-registry.js";
 import { localeOptionLabel } from "@/i18n/locale-option-label.js";
+import { getSharedServerInfo } from "@/services/api/health.js";
 
 /**
  * The first step: every interface language, each written in its own
@@ -73,8 +81,21 @@ export function ModelStep({
 }: SettingsActionProps & { slots: ResolvedSlot[] }) {
   const { t } = useTranslation();
   const credentialReady = slots.some((slot) => slot.hasCredentials === true);
+  const sharedServer = getSharedServerInfo() !== null;
   return (
     <div className="space-y-4">
+      {sharedServer && (
+        <p
+          role="note"
+          className="flex items-start gap-2 rounded-(--radius-card) border border-primary/20 bg-primary/5 p-3 text-xs leading-relaxed"
+        >
+          <KeyRound
+            className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary"
+            aria-hidden
+          />
+          <span>{t("sharedServer.keyAdvice")}</span>
+        </p>
+      )}
       <section className="rounded-(--radius-card) border border-border p-4 space-y-3">
         <p className="text-sm font-medium" role="status">
           {t(

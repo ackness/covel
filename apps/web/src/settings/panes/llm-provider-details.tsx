@@ -130,8 +130,11 @@ export function ProviderDetails({
       />
 
       {sharedServer && (
-        <p className="text-[11px] text-muted-foreground">
-          {t("settings.keysLocalDesc")}{" "}
+        <p
+          role="note"
+          className="rounded-(--radius-control) border border-primary/20 bg-primary/5 px-2.5 py-2 text-[11px] leading-relaxed text-foreground"
+        >
+          {t("sharedServer.keyAdvice")} {t("settings.keysLocalDesc")}{" "}
           <a
             href={docsPageUrl(SHARED_SERVER_DOCS_PAGE, i18n.language)}
             target="_blank"

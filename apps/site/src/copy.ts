@@ -230,7 +230,7 @@ const en = {
       "Downloads could not be listed. Find available files on GitHub Releases.",
     releases: "All releases & checksums",
     trial:
-      "Not ready to install? Play the web trial at demo.covel.cc: your saves and API key stay in your browser.",
+      "Not ready to install? Play the web trial at demo.covel.cc with a temporary API key: your saves and key stay in your browser.",
     copy: "Copy link",
     copied: "Link copied",
     copyFailed: "Copy unavailable. Right-click the download link to copy it.",
@@ -414,7 +414,7 @@ const zh: Copy = {
     unavailable: "暂时无法列出下载文件，请前往 GitHub Releases 查看可用版本。",
     releases: "全部版本与校验文件",
     trial:
-      "还不想安装？在 demo.covel.cc 直接用浏览器玩，存档和 API 密钥都留在你的浏览器里。",
+      "还不想安装？在 demo.covel.cc 用一个临时 API 密钥直接在浏览器里玩，存档和密钥都留在你的浏览器里。",
     copy: "复制链接",
     copied: "链接已复制",
     copyFailed: "无法自动复制，请右键下载链接并复制链接地址。",

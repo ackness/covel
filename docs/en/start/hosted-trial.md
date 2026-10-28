@@ -50,10 +50,10 @@ A trial cannot export or import a full save yet. Do not keep important progress 
 | The hosting platform (for example Render) | In theory       | HTTPS is decrypted at the platform's proxy                                                                                                                                                                                                                   |
 | Anyone who can use your computer          | Yes             | The key is stored in plain text in the browser                                                                                                                                                                                                               |
 
-So we suggest that you:
+We do our best to protect your data, but the key still has to pass through the server. So please:
 
-- Use a separate key with a spending limit, not your main key.
-- When you stop playing, delete the key in settings, or revoke it in the provider's console.
+- Create a temporary key just for the trial, with a spending limit, not your main key. The trial's notice, the model step of the guide and each provider's key form remind you of this.
+- When you finish, delete or rotate that key in the provider's console. Deleting it in Settings only stops this browser from keeping it; the key itself still works.
 - After playing on a public computer, clear this site's data in the browser.
 
 ## How to check
