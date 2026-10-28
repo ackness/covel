@@ -21,6 +21,7 @@
 | Deployment form | 部署形态 | 桌面客户端、自部署网页版、官方网页版。不是 `DEPLOYMENT_TIER`。 |
 | Edition | 语言版本 | 世界的一种语言：`defaultLocale`，以及根目录里每个 `world.<locale>.yaml` 或 `WORLD.<locale>.md` 的语言。 |
 | Kernel | 内核 |  |
+| Local model relay | 本地模型中继 | 共享形态的服务端经玩家浏览器访问玩家电脑或局域网上的模型。见[安全边界](../internals/security.md#local-model-relay)。 |
 | Official web app | 官方网页版 |  |
 | Pack | 玩法包 |  |
 | PluginType | 插件类型 |  |

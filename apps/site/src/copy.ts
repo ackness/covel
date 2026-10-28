@@ -152,8 +152,9 @@ const en = {
         body: "The installer is not signed, so Microsoft Defender SmartScreen stops it the first time. Click “More info”, then “Run anyway”. If the browser holds the download back, choose “Keep” in its download list first.",
       },
     },
+    trial: "Play in your browser",
     secondary: "View source",
-    note: "macOS (Apple silicon) and Windows x64 · MIT licensed",
+    note: "macOS (Apple silicon) and Windows x64, or play in the browser with your own API key · MIT licensed",
   },
   pillars: foundationsEn,
   rack: {
@@ -228,6 +229,8 @@ const en = {
     unavailable:
       "Downloads could not be listed. Find available files on GitHub Releases.",
     releases: "All releases & checksums",
+    trial:
+      "Not ready to install? Play the web trial at demo.covel.cc with a temporary API key: your saves and key stay in your browser.",
     copy: "Copy link",
     copied: "Link copied",
     copyFailed: "Copy unavailable. Right-click the download link to copy it.",
@@ -334,8 +337,9 @@ const zh: Copy = {
         body: "安装包没有签名，Microsoft Defender SmartScreen 第一次运行时会拦截。点“更多信息”，再点“仍要运行”。如果浏览器拦下了下载，先在下载列表里选择“保留”。",
       },
     },
+    trial: "在浏览器里玩",
     secondary: "查看源码",
-    note: "macOS（Apple 芯片）和 Windows x64 · MIT 许可",
+    note: "macOS（Apple 芯片）和 Windows x64，也可以自带 API 密钥在浏览器里玩 · MIT 许可",
   },
   pillars: foundationsZh,
   rack: {
@@ -409,6 +413,8 @@ const zh: Copy = {
     loading: "正在获取最新版本…",
     unavailable: "暂时无法列出下载文件，请前往 GitHub Releases 查看可用版本。",
     releases: "全部版本与校验文件",
+    trial:
+      "还不想安装？在 demo.covel.cc 用一个临时 API 密钥直接在浏览器里玩，存档和密钥都留在你的浏览器里。",
     copy: "复制链接",
     copied: "链接已复制",
     copyFailed: "无法自动复制，请右键下载链接并复制链接地址。",

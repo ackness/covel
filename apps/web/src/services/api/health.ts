@@ -12,6 +12,8 @@ export interface ServerHealth {
   /** The server's deployment form and, when configured, its build's source. */
   deployment?: {
     form?: "personal" | "browser-private" | "hosted";
+    /** Models on the player's computer or local network go through this browser. */
+    modelRelay?: boolean;
     source?: { repository?: string; commit?: string };
   };
   storage?: {
@@ -38,6 +40,7 @@ export interface ServerHealth {
 
 let operatorTokenRequired: boolean | undefined;
 let sharedServer: SharedServerInfo | null = null;
+let modelRelay = false;
 
 /**
  * A shared server that keeps players' saves in their own browsers: the
@@ -113,7 +116,16 @@ export async function fetchServerHealth(): Promise<ServerHealth> {
     operatorTokenRequired = health.operatorTokenRequired;
   }
   sharedServer = sharedServerFrom(health);
+  modelRelay = health.deployment?.modelRelay === true;
   return health;
+}
+
+/**
+ * True when the server reaches models on the player's computer or local
+ * network through this browser (the local model relay).
+ */
+export function isModelRelaySupported(): boolean {
+  return modelRelay;
 }
 
 /**

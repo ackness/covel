@@ -50,6 +50,8 @@ import { seedAndReconcileWorlds } from "./world-seed-reconcile.js";
 import { createWorldFileWatcher } from "./world-file-watcher.js";
 import { mountApiRoutes } from "./host-routes.js";
 import { createPerRequestLlmMiddleware } from "./middleware/per-request-llm.js";
+import { createModelRelayRegistry } from "./model-relay/registry.js";
+import { localModelRelayPagePolicy } from "./middleware/page-relay-policy.js";
 import { createRequestBodyLimitMiddleware } from "./middleware/request-body-limit.js";
 import { createOriginGuardMiddleware } from "./middleware/origin-guard.js";
 import { createHostGuardMiddleware } from "./middleware/host-guard.js";
@@ -138,8 +140,16 @@ const QUIET_LOG_PATHS = new Set<string>(
 const honoLogger = logger((message) =>
   console.log(redactSensitiveQueryParamsInText(message)),
 );
+/**
+ * The local model relay's answer posts: a streamed model answer arrives as
+ * many small posts, which would flood the log. The relay stream itself and
+ * failures still show in the model call's own errors.
+ */
+const RELAY_ANSWER_PATH =
+  /^\/api\/model-relay\/requests\/[^/]+\/(head|chunk|end)$/;
 app.use("*", async (c, next) => {
-  if (QUIET_LOG_PATHS.has(c.req.path)) return next();
+  if (QUIET_LOG_PATHS.has(c.req.path) || RELAY_ANSWER_PATH.test(c.req.path))
+    return next();
   return honoLogger(c, next);
 });
 app.use("*", secureHeaders());
@@ -306,11 +316,15 @@ async function initializeServer(): Promise<void> {
     });
     const memoryEmbed = createMemoryEmbed({ ai, apiKeys });
     const memoryIndex = createMemoryIndexControl({ store, ai, apiKeys });
+    // One relay registry per process: the browser's channel and the model
+    // calls made for it meet here.
+    const modelRelay = createModelRelayRegistry();
     const perRequestLlm = createPerRequestLlmMiddleware({
       ai,
       envApiKeys: apiKeys,
       defaultLlmAdapter: llmAdapter,
       defaultPluginGateway: pluginGateway,
+      modelRelay,
     });
     // ── Seed worlds ──────────────────────────────────────────────────
     // User worlds use the same resolved directory as the install API, even
@@ -367,12 +381,24 @@ async function initializeServer(): Promise<void> {
     }
 
     // ── Mount routes ─────────────────────────────────────────────────
-    mountApiRoutes(app, { api, ai, store, apiKeys, externalApiKeys });
+    mountApiRoutes(app, {
+      api,
+      ai,
+      store,
+      apiKeys,
+      externalApiKeys,
+      modelRelay,
+    });
 
     // ── Static file serving (production) ─────────────────────────────
     if (env.serveStatic) {
       const root = env.staticDir;
       app.use("/*", pluginFrameHeaders());
+      // The local model relay's connect sources, on shared hosts only.
+      app.use(
+        "/*",
+        localModelRelayPagePolicy(hostProfile.credentials.modelRelay),
+      );
       app.use("/*", serveStatic({ root }));
       app.get("*", serveStatic({ root, path: "/index.html" }));
     }

@@ -2067,6 +2067,9 @@
     "chooseWorld": "Choose a world",
     "testBindings": "Review and test existing models ({{count}} roles)",
     "languageExperimental": "experimental",
+    "languageTitle": "Choose your language",
+    "languageDesc": "The interface switches as soon as you choose, and you can change it later in Settings. Stories use the language editions a world provides, which may differ from the interface language.",
+    "continue": "Continue",
     "credentialsMissing": "Add credentials for the configured models",
     "credentialsMissingHint": "Your model bindings are saved. Enter a provider API key before starting, or test the connection directly if your local service does not need a key.",
     "testBindings_one": "Review and test existing models ({{count}} role)",
@@ -2598,6 +2601,10 @@
     "learnMore": "How your data and keys are handled",
     "source": "Source code (open source, deployed automatically)",
     "sourceAt": "Source code: running {{commit}} (open source, deployed automatically)",
-    "dismiss": "Dismiss"
+    "dismiss": "Dismiss",
+    "localEndpoint": "This public server only calls public HTTPS addresses; use an address that starts with https://. A model on your computer or local network can use 127.0.0.1, localhost or a LAN address, which your browser relays.",
+    "localRelay": "This address is on your computer or local network, so your browser relays the model requests: keep the page open while you play, and let the model server accept {{origin}} through CORS (for Ollama, set OLLAMA_ORIGINS={{origin}}). Your browser may ask whether this site may access your device or local network.",
+    "localHttp": "Browsers do not let this HTTPS page reach a plain-http address on your local network. Serve the model over HTTPS on your network, or forward it on this computer through 127.0.0.1 or localhost.",
+    "keyAdvice": "Create a temporary API key just for this trial, ideally with a spending limit. We do our best to protect your data, but please delete or rotate the key at your provider when you finish."
   }
 }

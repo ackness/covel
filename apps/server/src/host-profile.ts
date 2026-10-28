@@ -142,6 +142,12 @@ export interface HostProfile {
     readonly capabilityOverrides: "full" | "restrict-only";
     /** Passed to `@covel/ai-provider` at start. */
     readonly provider: ProviderHostPolicy;
+    /**
+     * A model on the player's computer or local network is reached through
+     * the player's browser (`/api/model-relay`). On wherever the server
+     * cannot reach that network itself: the shared forms.
+     */
+    readonly modelRelay: boolean;
   };
   /** What the server keeps, and who decides how long. */
   readonly retention: {
@@ -351,6 +357,7 @@ export function deriveHostProfile(
         localNetwork: personal,
         sessionlessCommunityWires: personal,
       },
+      modelRelay: !personal,
     },
     retention: {
       playerServerSettings: personal,

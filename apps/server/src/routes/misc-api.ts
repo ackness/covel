@@ -33,6 +33,7 @@ import {
 import { readJsonBody, errorBody } from "../api-error.js";
 import { modelParameters } from "./misc-api/model-parameters.js";
 import { hasServerRuntimeJobCredentials } from "../runtime-job-readiness.js";
+import { getRequestLlmOptions } from "../request-llm-context.js";
 import {
   parseProviderKeys,
   parseSlotOverrides,
@@ -269,9 +270,11 @@ export function createMiscApiRoutes(
         provider,
         apiKeys,
       );
+      // The browser relays a model list from the player's own machine.
+      const relay = getRequestLlmOptions()?.relay;
       const models = await listProtocolModels(
         resolution.protocol,
-        resolution.config,
+        relay ? { ...resolution.config, relay } : resolution.config,
         provider,
         AbortSignal.timeout(MODEL_LIST_TIMEOUT_MS),
       );
@@ -449,9 +452,11 @@ export function createMiscApiRoutes(
       }
     }, 30_000);
 
+    const relay = getRequestLlmOptions()?.relay;
     const gatewayOptions: import("@covel/ai-provider").GatewayOptions = {
       apiKeys: requestApiKeys,
       signal: abort.signal,
+      ...(relay ? { relay } : {}),
       allowFallback: false,
       // One request: a retried probe would report a later answer and the
       // time of the waits as the model's own.

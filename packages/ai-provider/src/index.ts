@@ -83,6 +83,11 @@ export {
   readResponseJson,
 } from "./adapters/http/response.js";
 export {
+  isRelayableBaseUrl,
+  type ProviderRelay,
+  type ProviderRelayRequest,
+} from "./adapters/http/model-relay.js";
+export {
   classifyProviderFailure,
   type ProviderFailure,
   type ProviderFailureKind,

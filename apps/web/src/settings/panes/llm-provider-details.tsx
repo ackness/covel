@@ -14,7 +14,11 @@ import { Button } from "@/components/ui/button.js";
 import { PingButton } from "@/components/shared/ping-button.js";
 import { isDesktopApp } from "@/lib/desktop-bridge.js";
 import { SHARED_SERVER_DOCS_PAGE, docsPageUrl } from "@/lib/docs-links.js";
-import { getSharedServerInfo } from "@/services/api/health.js";
+import { sharedServerEndpointNote } from "@/lib/local-network-url.js";
+import {
+  getSharedServerInfo,
+  isModelRelaySupported,
+} from "@/services/api/health.js";
 import { LlmKeysPane } from "./LlmKeysPane.js";
 import type { ProviderCatalogEntry } from "./llm-provider-catalog.js";
 import { ProtocolSelect } from "./llm-provider-dialogs.js";
@@ -64,6 +68,9 @@ export function ProviderDetails({
   const localProfile = provider.localProfile;
   const committedBaseUrl = localProfile?.baseUrl ?? provider.baseUrl;
   const baseUrl = useSettingDraft(committedBaseUrl, provider.id);
+  const endpointNote = sharedServer
+    ? sharedServerEndpointNote(baseUrl.draft, isModelRelaySupported())
+    : undefined;
 
   const commitBaseUrl = () => {
     if (localProfile && !baseUrl.conflict) {
@@ -130,8 +137,11 @@ export function ProviderDetails({
       />
 
       {sharedServer && (
-        <p className="text-[11px] text-muted-foreground">
-          {t("settings.keysLocalDesc")}{" "}
+        <p
+          role="note"
+          className="rounded-(--radius-control) border border-primary/20 bg-primary/5 px-2.5 py-2 text-[11px] leading-relaxed text-foreground"
+        >
+          {t("sharedServer.keyAdvice")} {t("settings.keysLocalDesc")}{" "}
           <a
             href={docsPageUrl(SHARED_SERVER_DOCS_PAGE, i18n.language)}
             target="_blank"
@@ -168,6 +178,20 @@ export function ProviderDetails({
             className="w-full border border-border bg-background px-2 py-1.5 font-mono text-xs outline-none read-only:bg-muted/30 read-only:text-muted-foreground focus:ring-1 focus:ring-primary"
           />
         </label>
+        {endpointNote && (
+          <p
+            role="note"
+            className={`rounded-(--radius-control) border px-2.5 py-2 text-[11px] leading-relaxed text-foreground ${endpointNote === "relay" ? "border-primary/20 bg-primary/5" : "border-amber-500/30 bg-amber-500/10"}`}
+          >
+            {endpointNote === "relay"
+              ? t("sharedServer.localRelay", {
+                  origin: window.location.origin,
+                })
+              : endpointNote === "lan-http"
+                ? t("sharedServer.localHttp")
+                : t("sharedServer.localEndpoint")}
+          </p>
+        )}
         {baseUrl.conflict && <SettingsDraftConflict onReload={baseUrl.reset} />}
         <ProtocolSelect
           provider={provider.provider}

@@ -275,6 +275,13 @@ const ROUTES: Record<string, RouteAccess> = {
   "GET /api/config/raw/:name": needs("host.files"),
   "PUT /api/config/raw/:name": needs("host.files"),
   "GET /api/app-update/latest": needs("host.config"),
+  // ── Local model relay: the browser's own channel ID is the credential,
+  // and only a shared host (`credentials.modelRelay`) answers. ─────────
+  "GET /api/model-relay/stream": PUBLIC,
+  "POST /api/model-relay/requests/:id/head": PUBLIC,
+  "POST /api/model-relay/requests/:id/chunk": PUBLIC,
+  "POST /api/model-relay/requests/:id/end": PUBLIC,
+  "POST /api/model-relay/requests/:id/fail": PUBLIC,
 };
 
 /** The code the probe profile answers an action with. */

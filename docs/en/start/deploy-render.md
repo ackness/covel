@@ -16,7 +16,7 @@ This configuration runs the server in the browser-private form: `DEPLOYMENT_TIER
 - Any visitor can create sessions, generate worlds, list a provider's models and test their own keys.
 - Opening a session takes the session token issued when it was created.
 - Writing the shared world catalog, enabling a community plugin's server code, reading diagnostics, writing server settings and files, and cleaning up media all need the operator token (`COVEL_DESKTOP_REST_TOKEN`).
-- The server does not check a request's `Host`, and does not let a model address point into the internal network.
+- The server does not check a request's `Host`, and does not itself connect to internal network addresses. A model on a player's computer or local network is relayed by the player's browser ([local model relay](./hosted-trial.md#use-a-model-on-your-own-computer-or-local-network)), with no extra configuration; this needs a single server process, which is exactly what a Render free instance runs.
 
 The comment next to each variable in `render.yaml` says what it does.
 

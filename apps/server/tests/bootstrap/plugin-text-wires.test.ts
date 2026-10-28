@@ -58,6 +58,39 @@ describe("text wires of a plugin entry", () => {
     expect(invoked).toHaveLength(6);
   });
 
+  it("never hands plugin code the local model relay", async () => {
+    const seen: unknown[] = [];
+    registerNamespaced(
+      "acme",
+      {
+        text: [
+          {
+            ...wire,
+            id: "peek",
+            async generateText(config) {
+              seen.push(config);
+              return wire.generateText(config, { model: "m", messages: [] });
+            },
+          },
+        ],
+      },
+      (dispose) => disposers.push(dispose),
+    );
+    const relay = { fetch: async () => new Response() };
+    await getTextWire("acme/peek")!.generateText(
+      {
+        baseUrl: "http://127.0.0.1:3425/v1",
+        apiKey: "k",
+        relay,
+        relayable: true,
+      },
+      { model: "m", messages: [] },
+    );
+    expect(seen).toEqual([
+      { baseUrl: "http://127.0.0.1:3425/v1", apiKey: "k" },
+    ]);
+  });
+
   it.each([
     [{ text: {} }, /text wires must be an array/],
     [{ text: [{ id: "x", generateText() {} }] }, /streamText: function/],

@@ -23,7 +23,7 @@ import {
 } from "../download.js";
 import { Downloads } from "../components/Downloads.js";
 import { PREVIEW_ART } from "../preview-copy.js";
-import { RELEASES_URL } from "../links.js";
+import { RELEASES_URL, TRIAL_URL } from "../links.js";
 
 beforeEach(() => {
   window.localStorage.clear();
@@ -52,7 +52,10 @@ const hero = () => within(document.getElementById("top")!);
 
 // Exercise the actual pre-paint script, which React tests do not load.
 const themeBootstrap = new DOMParser()
-  .parseFromString(readFileSync(path.resolve("index.html"), "utf8"), "text/html")
+  .parseFromString(
+    readFileSync(path.resolve("index.html"), "utf8"),
+    "text/html",
+  )
   .querySelector("script")?.textContent;
 
 function restoreTheme(storage: Pick<Storage, "getItem"> = localStorage) {
@@ -101,23 +104,26 @@ describe("visitor preferences", () => {
     }
   });
 
-  it.each(LANGS)("remembers %s on a return visit without a language URL", (lang) => {
-    let app = render(<App />);
-    fireEvent.click(screen.getByRole("combobox"));
-    fireEvent.click(
-      screen.getByRole("option", {
-        name: lang === "zh" ? "简体中文" : "English",
-      }),
-    );
-    app.unmount();
-    window.history.replaceState(null, "", "/");
-    app = render(<App />);
-    expect(screen.getByRole("heading", { level: 1 }).textContent).toContain(
-      COPY[lang].hero.lead,
-    );
-    expect(localStorage.getItem("covel-site:lang")).toBe(lang);
-    app.unmount();
-  });
+  it.each(LANGS)(
+    "remembers %s on a return visit without a language URL",
+    (lang) => {
+      let app = render(<App />);
+      fireEvent.click(screen.getByRole("combobox"));
+      fireEvent.click(
+        screen.getByRole("option", {
+          name: lang === "zh" ? "简体中文" : "English",
+        }),
+      );
+      app.unmount();
+      window.history.replaceState(null, "", "/");
+      app = render(<App />);
+      expect(screen.getByRole("heading", { level: 1 }).textContent).toContain(
+        COPY[lang].hero.lead,
+      );
+      expect(localStorage.getItem("covel-site:lang")).toBe(lang);
+      app.unmount();
+    },
+  );
 });
 
 describe("showcase site", () => {
@@ -165,6 +171,20 @@ describe("showcase site", () => {
     fireEvent.pointerDown(document.body);
     expect(picker.getAttribute("aria-expanded")).toBe("false");
     expect(document.activeElement).toBe(picker);
+  });
+
+  it("links the browser trial from the hero and the downloads section", () => {
+    render(<App />);
+    expect(
+      hero()
+        .getByRole("link", { name: COPY.en.hero.trial })
+        .getAttribute("href"),
+    ).toBe(TRIAL_URL);
+    expect(
+      within(document.getElementById("downloads")!)
+        .getByRole("link", { name: COPY.en.downloads.trial })
+        .getAttribute("href"),
+    ).toBe(TRIAL_URL);
   });
 
   it("keeps quick navigation and separate creation paths", () => {

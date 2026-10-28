@@ -4,18 +4,18 @@
 
 [English](./README.md) · **简体中文**
 
-[![Version](https://img.shields.io/badge/version-v0.0.52-8b5cf6)](./docs/CHANGELOG.md#0052---2026-10-16)
+[![Version](https://img.shields.io/badge/version-v0.0.53-8b5cf6)](./docs/CHANGELOG.md#0053---2026-10-28)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
 [![Stage](https://img.shields.io/badge/stage-early--access-orange)](./docs/CHANGELOG.md)
 [![Ask DeepWiki](https://img.shields.io/badge/Ask-DeepWiki-0b7285?logo=readthedocs&logoColor=white)](https://deepwiki.com/ackness/covel)
 
 [![Covel 演示：世界列表、会话与舞台模式 —— 更多内容见 covel.cc](./.assets/images/demo.gif)](https://covel.cc/)
 
-**[▶ 在 covel.cc 观看完整演示](https://covel.cc/)**
+**[▶ 在 covel.cc 观看完整演示](https://covel.cc/)** · **[🎮 在 demo.covel.cc 直接用浏览器玩](https://demo.covel.cc/)** · **[📖 文档](https://covel.cc/docs/)**
 
 Covel 是一套 AI RPG 框架，也是一间可以直接游玩的工作室：NPC 关系、世界典籍、任务、行囊、记忆、舞台调度和媒体都会随回合演化。它有三层清晰分工：**内核提供原语与编排**，**插件提供行为**，**世界包提供设定、资源与默认插件组合**。
 
-> **当前源码版本：v0.0.52**，早期阶段。API、世界数据和插件 manifest 可能随版本变化。当前二进制面向 macOS Apple Silicon 与 Windows x64，尚未签名，macOS 构建也未公证；每个发布附带 `SHA256SUMS.txt`，可用来核对下载文件。v0.0.52 修改了插件 manifest 和世界包格式，升级前请阅读[破坏性变更](./docs/CHANGELOG.md#breaking-changes-in-v0052)与[升级说明](./docs/CHANGELOG.md#upgrade-notes-for-v0052)。**v0.0.51 及更早版本创建的 SQLite 或 PostgreSQL 数据库，v0.0.52 启动时会拒绝使用，必须重建**（会话不会迁移；浏览器私有存档不受影响）。更早版本还需遵循 [v0.0.51 升级说明](./docs/CHANGELOG.md#upgrade-notes-for-v0051)、[v0.0.50 破坏性变更](./docs/CHANGELOG.md#breaking-changes-in-v0050)与[升级说明](./docs/CHANGELOG.md#upgrade-notes-for-v0050)、[v0.0.49 升级说明](./docs/CHANGELOG.md#upgrade-notes-for-v0049)与 [v0.0.48 破坏性变更说明](./docs/CHANGELOG.md#breaking-changes-and-upgrade-notes-for-v0048)；从 v0.0.42 之前的版本升级还需遵循 [v0.0.42 升级指南](./docs/internals/upgrade-0.0.42.md)。升级前请保留完整备份，开发数据不会自动迁移。
+> **当前源码版本：v0.0.53**，早期阶段。API、世界数据和插件 manifest 可能随版本变化。当前二进制面向 macOS Apple Silicon 与 Windows x64，尚未签名，macOS 构建也未公证；每个发布附带 `SHA256SUMS.txt`，可用来核对下载文件。v0.0.53 的桌面版后端改用随包的 Electron 运行时，要求 macOS 13.5 及以上；源码和 Docker 部署需要 Node 26.12.1。升级前请阅读[破坏性变更](./docs/CHANGELOG.md#breaking-changes-in-v0053)与[升级说明](./docs/CHANGELOG.md#upgrade-notes-for-v0053)。从 v0.0.51 及更早版本升级，还需遵循 v0.0.52 的[破坏性变更](./docs/CHANGELOG.md#breaking-changes-in-v0052)与[升级说明](./docs/CHANGELOG.md#upgrade-notes-for-v0052)：**v0.0.51 及更早版本创建的 SQLite 或 PostgreSQL 数据库，v0.0.52 及以后的版本启动时会拒绝使用，必须重建**（会话不会迁移；浏览器私有存档不受影响）。更早版本还需遵循 [v0.0.51 升级说明](./docs/CHANGELOG.md#upgrade-notes-for-v0051)、[v0.0.50 破坏性变更](./docs/CHANGELOG.md#breaking-changes-in-v0050)与[升级说明](./docs/CHANGELOG.md#upgrade-notes-for-v0050)、[v0.0.49 升级说明](./docs/CHANGELOG.md#upgrade-notes-for-v0049)与 [v0.0.48 破坏性变更说明](./docs/CHANGELOG.md#breaking-changes-and-upgrade-notes-for-v0048)；从 v0.0.42 之前的版本升级还需遵循 [v0.0.42 升级指南](./docs/internals/upgrade-0.0.42.md)。升级前请保留完整备份，开发数据不会自动迁移。
 
 ## 亮点
 
@@ -148,9 +148,15 @@ worlds/my-world/data/rules/core.ja.yaml
 
 ## 快速开始
 
+### 在浏览器里玩
+
+打开官方的公开体验站 **[demo.covel.cc](https://demo.covel.cc/)**，填上你自己的 API 密钥就能玩。存档和密钥保存在你的浏览器里；服务器只在内存里临时保留运行需要的副本，不会把密钥写入磁盘、数据库或日志。页面顶部的提示链接到体验站正在运行的那个开源提交，它由本仓库自动部署。
+
+这是跑在免费实例上的体验站：15 分钟没人访问就休眠（之后第一次打开要等一分钟左右），服务器重启后生成的图片会丢失，目前也不能导出存档，重要进度请用桌面版。请专门为体验创建一个临时 API 密钥并设好消费上限，体验结束后到服务商后台删除或轮换它：我们已尽力保护你的数据，但密钥毕竟要经过服务器。数据存在哪里、谁可能看到你的密钥，见[在公开体验站上玩](./docs/start/hosted-trial.md)；自己部署一个，见[在 Render 上部署体验站](./docs/start/deploy-render.md)。
+
 ### 直接玩
 
-从 [Releases](https://github.com/ackness/covel/releases) 下载 **macOS Apple Silicon（macOS 13.5 及以上）** 或 **Windows x64** 安装包。首次进入世界选择页会显示引导：在“配置服务商与模型”中添加连接和模型、测试连接，在“用途分配”中检查模型绑定，再选世界、确认玩法包并开始游戏。已有配置可以直接沿用。
+从 [Releases](https://github.com/ackness/covel/releases) 下载 **macOS Apple Silicon（macOS 13.5 及以上）** 或 **Windows x64** 安装包。首次进入世界选择页会显示引导：先选择界面语言，再在“配置服务商与模型”中添加连接和模型、测试连接，在“用途分配”中检查模型绑定，再选世界、确认玩法包并开始游戏。已有配置可以直接沿用。
 
 可以先跳过引导浏览世界，但生成剧情前需要完成模型配置；以后可在世界选择页点击“新手引导”重看。游戏可能先要求创建角色或完成开场选择，之后再输入行动推进故事。
 

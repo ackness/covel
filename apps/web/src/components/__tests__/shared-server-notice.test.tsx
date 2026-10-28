@@ -31,6 +31,10 @@ it("explains where saves and keys go and links the docs and the running source",
   render(<SharedServerNotice />);
   expect(screen.getByText("This is a public Covel trial")).toBeTruthy();
   expect(
+    screen.getByText(/Create a temporary API key just for this trial/)
+      .textContent,
+  ).toContain("delete or rotate the key at your provider");
+  expect(
     screen
       .getByRole("link", { name: "How your data and keys are handled" })
       .getAttribute("href"),

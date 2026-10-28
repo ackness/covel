@@ -182,6 +182,7 @@ describe("the access table", () => {
     expect(p.credentials).toEqual({
       capabilityOverrides: "full",
       provider: PERSONAL_PROVIDER_HOST_POLICY,
+      modelRelay: false,
     });
     expect(p.retention).toEqual({
       playerServerSettings: true,
@@ -239,6 +240,8 @@ describe("the access table", () => {
     expect(p.credentials).toEqual({
       capabilityOverrides: "full",
       provider: { localNetwork: false, sessionlessCommunityWires: false },
+      // A model on the player's machine goes through their browser.
+      modelRelay: true,
     });
     expect(p.retention.playerServerSettings).toBe(false);
     // With the operator token configured, the operator reaches every entry.
@@ -289,6 +292,7 @@ describe("the access table", () => {
       expect(p.credentials).toEqual({
         capabilityOverrides: "restrict-only",
         provider: { localNetwork: false, sessionlessCommunityWires: false },
+        modelRelay: true,
       });
       expect(p.retention.playerServerSettings).toBe(false);
       expect(p.isOperatorToken("operator-secret")).toBe(true);

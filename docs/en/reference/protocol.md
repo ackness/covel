@@ -601,10 +601,11 @@ A failed commit holds back the "execution completed" step, and the client shows 
 
 ### SSE frame format by channel
 
-| Channel                  | Frame shape                                                    | How the client subscribes                                                                                                                                                                                                       | File                                               |
-| ------------------------ | -------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------- |
-| `POST /api/actions`      | data-only (`data: <SseEnvelope JSON>`, **no `event:` header**) | `fetch()` + `ReadableStream`. Scan the `data:` lines, parse the JSON, then check `envelope.type`                                                                                                                                | `apps/web/src/services/api/actions.ts: sendAction` |
-| `GET /api/events/stream` | Named events (`event: <type>\ndata: <ProtocolEvent JSON>`)     | `fetch` reads the stream (`readSseStream`) and dispatches by the `event:` header. An event with no handler is silently dropped. `EventSource` with a query-string token is used only by clients that cannot set request headers | `apps/web/src/services/subscription.ts`            |
+| Channel                       | Frame shape                                                                                                 | How the client subscribes                                                                                                                                                                                                       | File                                               |
+| ----------------------------- | ----------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------- |
+| `POST /api/actions`           | data-only (`data: <SseEnvelope JSON>`, **no `event:` header**)                                              | `fetch()` + `ReadableStream`. Scan the `data:` lines, parse the JSON, then check `envelope.type`                                                                                                                                | `apps/web/src/services/api/actions.ts: sendAction` |
+| `GET /api/events/stream`      | Named events (`event: <type>\ndata: <ProtocolEvent JSON>`)                                                  | `fetch` reads the stream (`readSseStream`) and dispatches by the `event:` header. An event with no handler is silently dropped. `EventSource` with a query-string token is used only by clients that cannot set request headers | `apps/web/src/services/subscription.ts`            |
+| `GET /api/model-relay/stream` | Named events `ready` / `request` / `cancel`, plus a comment line every 15 seconds; not part of `CovelEvent` | `fetch` reads the stream (`readSseStream`); the `X-Model-Relay` request header carries the page's relay channel ID. Opened only on a shared form                                                                                | `apps/web/src/services/model-relay.ts`             |
 
 **How a subscription stream connects**
 
@@ -752,6 +753,8 @@ Details of `publish-failed`:
 - The `POST /api/actions` stream that triggered this turn still closes normally with `execution.completed`, and it carries `resync: true`.
 
 Like `system.connected` and `system.heartbeat`, this frame **has no `id:` header**. So it does not change the `lastEventId` of `EventSource`.
+
+**The local model relay stream.** This stream belongs to no session and is not part of the event bus: it hands the browser the model requests that the server needs to send to the player's computer or local network, and the browser answers with `POST /api/model-relay/requests/:id/*`. For the format of the events and the answers, see the [API reference](./api.md#local-model-relay-1); for the security boundary, see [Security boundaries](../internals/security.md#local-model-relay).
 
 ### Forwarded runtime internal events (`/api/actions` forwards them, included in `CovelEvent`)
 

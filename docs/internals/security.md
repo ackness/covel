@@ -20,7 +20,7 @@
 宿主配置有三种形态：
 
 - **personal**：`self` 档位，数据存在服务端。桌面客户端、自己部署给自己用的网页版、`pnpm dev` 都是它。路由不要令牌，只有桌面壳设了启动令牌时，配置和文件接口要它。网络边界是回环监听加上 Host 检查。
-- **browser-private**：`self` 档位、`NODE_ENV=production`、实际存储是 MemoryStore。玩家数据存在各自的浏览器里，服务端只有临时副本。谁都可以创建会话、生成世界，用自己的密钥列出和测试模型；会话要 owner token；其余超出单个玩家自己的操作都要 operator token。公开体验站用这个形态，部署步骤见[在 Render 上部署体验站](../start/deploy-render.md)，玩家看到的说明见[在公开体验站上玩](../start/hosted-trial.md)。
+- **browser-private**：`self` 档位、`NODE_ENV=production`、实际存储是 MemoryStore。玩家数据存在各自的浏览器里，服务端只有临时副本。谁都可以创建会话、生成世界，用自己的密钥列出和测试模型；会话要 owner token；其余超出单个玩家自己的操作都要 operator token。玩家电脑或局域网上的模型经[本地模型中继](#local-model-relay)由浏览器访问。公开体验站用这个形态，部署步骤见[在 Render 上部署体验站](../start/deploy-render.md)，玩家看到的说明见[在公开体验站上玩](../start/hosted-trial.md)。
 - **hosted**：`demo` / `commercial`，见 [Hosted auth](#hosted-auth)。
 
 每条路由说明自己要做哪些“动作”，宿主配置决定每种形态怎样回答。表里的 operator 指 operator token（`COVEL_DESKTOP_REST_TOKEN`），可以放在 `Authorization: Bearer`、`X-Session-Token` 或 `?session_token=` 里；“operator（Bearer）”只认 `Authorization: Bearer`。“桌面令牌”指设置了 `COVEL_DESKTOP_REST_TOKEN` 时要带上它，没设置时开放。
@@ -232,6 +232,43 @@ Web 客户端只发送它的请求用得到的供应商的密钥：
 
 文件权限和浏览器的同源策略能挡住其他系统用户和其他网站。它们挡不住以该用户身份运行的代码，其中就包括已批准的社区插件（见 [Community plugin code](#community-plugin-code)）。
 
+## Local model relay
+
+共享形态（browser-private 和托管档位）的服务端访问不到玩家的电脑和局域网，所以玩家电脑或局域网上的模型地址由玩家的浏览器转发，叫作本地模型中继。宿主配置的 `credentials.modelRelay` 决定是否提供；personal 形态不提供，它自己就能访问本机和局域网。玩家看到的说明见[在公开体验站上玩](../start/hosted-trial.md#用自己电脑或局域网里的模型)。
+
+**流程。**
+
+1. 玩家添加了本机或局域网的模型地址，并且服务端在 `/api/health` 报告 `deployment.modelRelay` 时，浏览器用一个页面内随机生成的通道号打开 `GET /api/model-relay/stream`（SSE），并在模型请求里用 `X-Model-Relay` 带上同一个通道号。
+2. 服务端为这个请求的 `GatewayOptions` 附上该通道的中继（`apps/server/src/middleware/per-request-llm.ts`），网关把它复制进每个服务商配置。交给后台任务的凭据也带着它（见 [Provider keys](#provider-keys)）。
+3. 只有同时满足四个条件，`postJson` / `getJson` 才改走中继：宿主是共享形态；配置里带着中继；服务商登记表把这个配置标为 `relayable`，也就是地址来自玩家这次请求，并且没有附带服务端自己的密钥或请求头（服务端环境变量里的密钥、`llm.toml` 里的密钥和请求头）；`baseUrl` 是本机或局域网地址（`isLocalNetworkBaseUrl`，`packages/shared/src/utils/local-network.ts`：回环地址、私有地址段、`100.64.0.0/10`、IPv6 本地地址，以及 `.local`、`.lan`、`.internal`、`.home.arpa`、`.localhost` 结尾的名字）。其余请求照旧经过 SSRF 检查和钉住的连接。走中继的请求，服务端自己不连接这个地址。上传文件的 `postFormData` 不走中继。
+4. 服务端通过流把请求（URL、方法、请求头、JSON 正文）交给浏览器。浏览器分几次 POST 回状态和响应头、正文分块、结束或失败（`/api/model-relay/requests/:id/*`），服务端把它们拼成一个流式的 `Response`（`apps/server/src/model-relay/registry.ts`）。
+
+**谁能用一个通道。**
+
+- 通道号是唯一的凭据：32 字节随机数，只在页面内存里，只放在请求头里，不进 URL、日志、trace 或检查点。服务端的中继对象只在闭包里引用它，序列化配置时不会带出来。
+- 一个请求只能把模型调用交给它自己点名的通道；回答只被接受给该通道发出的请求号。
+- 这几条路由在宿主配置里是公开的（不检查 operator 或 owner token），由通道号保护。跨站写入照常被 Origin 检查拒绝。
+
+**浏览器愿意做什么**（`apps/web/src/services/model-relay.ts`）。
+
+- 只请求玩家在这个浏览器里添加的服务商地址：协议、主机和端口相同，路径在该地址的路径之下，并且仍然是本机或局域网地址。路径里带编码的分隔符（`%2F`、`%5C`、`%2E`）的请求拒绝。`http://[::1]` 拒绝，因为页面策略只能写出 `127.0.0.1` 和 `localhost`。
+- 只用 GET 和 POST，`credentials: "omit"`、`redirect: "error"`、`referrerPolicy: "no-referrer"`，并去掉 cookie、host、origin、referer 等请求头。
+- 局域网里的普通 http 地址一律拒绝：浏览器的混合内容规则不允许 HTTPS 页面访问它们，页面 CSP 也只放开了本机的 http。
+- 不满足条件的请求只回答失败，不会发出。
+- 在允许的范围内，服务端可以对这个地址发任何 GET 或 POST，等同于拿到 API 密钥的服务端能调用那家服务商的任何接口。所以玩家应当把地址写到具体的 API 路径（例如 `http://localhost:11434/v1`），让模型服务的管理接口留在范围之外。
+
+**上限。** 每个通道最多 16 个进行中的请求；请求正文 16 MiB，回答 64 MiB（网络路径的上限更高，见 [Response size ceiling](#response-size-ceiling)）；每个分块还受 1 MiB 请求体上限约束；回答头最多等 15 分钟；模型调用最多等 10 秒让通道连上。打开通道和事件流一样按 IP 限流（`RATE_LIMIT_RPM`），每个进程最多 512 个通道，超出时 `503 model_relay_busy`。一个通道只有一条流：同一个通道号再连一次，旧的流被关闭，正在进行的请求失败。服务端拒绝格式不对的状态行和响应头（`400 model_relay_invalid_answer`），浏览器的失败说明在进入日志前被压成一行。
+
+**多实例。** 通道只在打开它的那个进程里。多实例部署时，模型请求必须到达持有该通道的实例，否则得到“浏览器没有连接”的错误。
+
+**不进中继的东西。**
+
+- 服务端自己配置的模型地址和密钥：没有 `relayable` 标记的配置照旧走 SSRF 检查，所以共享形态上它们像以前一样连不上本机地址，也不会出现在玩家浏览器收到的请求里。
+- 插件的 wire：交给插件代码的服务商配置去掉了中继（`apps/server/src/routes/api/bootstrap/plugin-wires.ts`），插件代码碰不到玩家的浏览器。
+- 按地址缓存的结论：同一个本机地址在每个玩家那里是不同的机器，所以中继请求不使用 embedding 维度缓存和“加密推理被拒绝”的缓存。
+
+**桌面窗口和 personal 形态。** 中继在这里完全关闭：路由回答 `404`，不发 `X-Model-Relay`，页面策略不加本机的 http，本机和局域网的模型照旧由服务端直接访问。
+
 ## 桌面窗口
 
 桌面窗口启用 `contextIsolation` 和 `sandbox`，关闭 `nodeIntegration`，不启用子 frame 的 Node 集成。Electron 45 的沙箱 preload 不提供 Node 模块 shim 或 `Buffer`；桥接代码只使用 Electron 提供的沙箱 API。`preload.ts` 通过 `contextBridge` 暴露 `window.covelIpc`：应用元信息、只允许白名单通道的 `invoke` 和 `on`；订阅回调拿不到 Electron 事件对象。
@@ -339,7 +376,7 @@ default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-sr
 
 - **脚本**只能是应用自己的文件：没有内联脚本，没有内联事件处理器，没有 `eval`，没有远程脚本。构建出的页面只有一个外部模块脚本，没有任何内联内容（Zod 被配置成不去探测 `eval`，见 `apps/web/src/lib/zod-config.ts`）。
 - **框架**（frame）只限本源。应用创建的唯一一个 frame 是下面说的插件 frame 宿主。
-- `connect-src` 允许本源、`blob:`、`data:` 和 `https:`。应用 JavaScript 用 HTTPS 下载玩家导入的图片；CSS 的图片和字体请求不使用这条规则。
+- `connect-src` 允许本源、`blob:`、`data:` 和 `https:`。应用 JavaScript 用 HTTPS 下载玩家导入的图片；CSS 的图片和字体请求不使用这条规则。共享形态的服务端在送出页面时，再加上本机的 `http://127.0.0.1:*` 和 `http://localhost:*`，留给[本地模型中继](#local-model-relay)（`withLocalModelRelayConnect`，`packages/shared/src/utils/page-policy.ts`）。构建出的页面、personal 形态和桌面窗口都没有这两项，也从不放开整个 `http:`。
 - 没有浏览器插件（`object-src 'none'`）。
 - `base-uri` 和 `form-action` 固定为本源。
 - `style-src` 保留了 `'unsafe-inline'`：React 的 `style` 属性、主题系统注入的规则和导入的主题 CSS 都需要它。去掉它是另外一步工作。

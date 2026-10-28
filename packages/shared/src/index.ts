@@ -252,6 +252,15 @@ export {
   trimTrailingSlashes,
 } from "./utils/provider-defaults.js";
 export type { BuiltinProviderConnection } from "./utils/provider-defaults.js";
+export {
+  isLocalNetworkBaseUrl,
+  isLoopbackHostUrl,
+} from "./utils/local-network.js";
+export {
+  LOCAL_MODEL_RELAY_CONNECT_SOURCES,
+  PAGE_CONNECT_SOURCES,
+  withLocalModelRelayConnect,
+} from "./utils/page-policy.js";
 
 // ── Environment Registry ──────────────────────────────────────────
 export * from "./env/index.js";

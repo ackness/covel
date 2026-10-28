@@ -6,7 +6,7 @@ import type {
   EmbeddingModelIdentity,
   VectorTarget,
 } from "@covel/store";
-import { trimTrailingSlashes } from "@covel/shared";
+import { isLocalNetworkBaseUrl, trimTrailingSlashes } from "@covel/shared";
 import { supportsVector } from "@covel/store/vector";
 import type { AiStack } from "./ai-setup.js";
 import { getRequestLlmOptions } from "./request-llm-context.js";
@@ -163,11 +163,14 @@ export function createEmbeddingLockHelper(opts: {
     }
     if (!target) return null;
     const modelId = embeddingModelIdentity(target);
-    let dim = dimCache.get(modelId);
+    // A relayed endpoint is a different machine for every player: probe it
+    // each time instead of sharing one player's answer with the others.
+    const shared = !(options.relay && isLocalNetworkBaseUrl(target.baseUrl));
+    let dim = shared ? dimCache.get(modelId) : undefined;
     if (dim === undefined) {
       try {
         dim = await probeDimension(ai, options, target);
-        dimCache.set(modelId, dim);
+        if (shared) dimCache.set(modelId, dim);
       } catch (error) {
         console.warn(
           `[embedding-lock] embed probe failed: ${error instanceof Error ? error.message : String(error)}`,

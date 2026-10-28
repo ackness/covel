@@ -7,6 +7,8 @@ import {
 } from "@covel/shared";
 import type { FormData as UndiciFormData } from "undici";
 import { ProviderBaseUrlError } from "../../errors.js";
+import { providerHostPolicy } from "../../host-policy.js";
+import { isRelayableBaseUrl, type ProviderRelay } from "./model-relay.js";
 import type { ProviderConfig } from "../../types.js";
 import { outboundFetch } from "../../outbound-network.js";
 import {
@@ -37,10 +39,61 @@ function assertAllowedBaseUrl(
     throw new ProviderBaseUrlError("Provider error: baseUrl is required.");
   }
   if (!validateBaseUrl(baseUrl)) {
+    // On a shared host a player's own gateway (127.0.0.1, a LAN address) is
+    // the usual cause: say why the server cannot reach it and what works.
+    const sharedHost = !providerHostPolicy().localNetwork;
+    const explanation = !sharedHost
+      ? ""
+      : isRelayableBaseUrl(baseUrl)
+        ? " This is a shared server: it reaches an endpoint on your computer or local network only through the local model relay in your browser, and no relay was connected for this request. Keep the page open and try again, and check that the model server allows this site through CORS."
+        : " This is a shared server and it sends model requests to public addresses itself, over HTTPS only. Use a public HTTPS endpoint; an endpoint on your computer or local network (127.0.0.1, localhost, a private address or a .local name) goes through your browser instead.";
     throw new ProviderBaseUrlError(
-      `Provider error: baseUrl "${baseUrl}" is not allowed. Only public HTTPS endpoints are permitted (private/internal IPs are blocked).`,
+      `Provider error: baseUrl "${baseUrl}" is not allowed. Only public HTTPS endpoints are permitted (private/internal IPs are blocked).${explanation}`,
     );
   }
+}
+
+/**
+ * The player's browser, when this request goes to an endpoint on their
+ * computer or network that they chose themselves (`relayable`: no server-owned
+ * credential attached) and the host is shared. A personal host reaches such
+ * an endpoint itself.
+ */
+function relayFor(config: ProviderConfig): ProviderRelay | undefined {
+  return config.relay &&
+    config.relayable === true &&
+    !providerHostPolicy().localNetwork &&
+    isRelayableBaseUrl(config.baseUrl)
+    ? config.relay
+    : undefined;
+}
+
+type Transport = (url: string, init: RequestInit) => Promise<Response>;
+
+/**
+ * How this request leaves the server: through the relay for an endpoint on
+ * the player's computer, otherwise over the network after the SSRF guard.
+ */
+function transportFor(config: ProviderConfig): {
+  readonly send: Transport;
+  readonly baseUrl: string;
+} {
+  const relay = relayFor(config);
+  if (!relay) {
+    assertAllowedBaseUrl(config.baseUrl);
+    return { send: pinnedFetch, baseUrl: config.baseUrl };
+  }
+  // relayFor accepted this URL, so it is a non-empty string.
+  const baseUrl = config.baseUrl as string;
+  const send: Transport = (url, init) =>
+    relay.fetch({
+      url,
+      method: init.method === "GET" ? "GET" : "POST",
+      headers: { ...(init.headers as Record<string, string> | undefined) },
+      ...(typeof init.body === "string" ? { body: init.body } : {}),
+      ...(init.signal ? { signal: init.signal } : {}),
+    });
+  return { send, baseUrl };
 }
 
 /**
@@ -68,7 +121,7 @@ export async function postJson(
   overrideHeaders?: Record<string, string>,
   options?: { retry?: boolean },
 ): Promise<Response> {
-  assertAllowedBaseUrl(config.baseUrl);
+  const { send, baseUrl } = transportFor(config);
 
   const headers: Record<string, string> = {
     "content-type": "application/json",
@@ -79,9 +132,9 @@ export async function postJson(
 
   const url =
     typeof path === "string"
-      ? buildProviderUrl(config.baseUrl, path)
+      ? buildProviderUrl(baseUrl, path)
       : (() => {
-          const endpoint = new URL(config.baseUrl);
+          const endpoint = new URL(baseUrl);
           endpoint.pathname =
             trimTrailingSlashes(endpoint.pathname) + path.append;
           return endpoint.toString();
@@ -112,7 +165,7 @@ export async function postJson(
         effectiveSignal?.throwIfAborted();
         return rejectRedirect(
           await awaitLlmRequest(
-            pinnedFetch(url, {
+            send(url, {
               method: "POST",
               headers,
               body: serializedBody,
@@ -236,7 +289,7 @@ export async function getJson(
   signal?: AbortSignal,
   overrideHeaders?: Record<string, string>,
 ): Promise<Response> {
-  assertAllowedBaseUrl(config.baseUrl);
+  const { send, baseUrl } = transportFor(config);
 
   const headers: Record<string, string> = {
     ...(config.apiKey ? { authorization: `Bearer ${config.apiKey}` } : {}),
@@ -244,7 +297,7 @@ export async function getJson(
     ...overrideHeaders,
   };
 
-  const url = buildProviderUrl(config.baseUrl, path);
+  const url = buildProviderUrl(baseUrl, path);
   const scope = config.requestBudget
     ? createLlmRequestScope({
         budget: config.requestBudget,
@@ -261,7 +314,7 @@ export async function getJson(
       });
     return rejectRedirect(
       await awaitLlmRequest(
-        pinnedFetch(url, {
+        send(url, {
           method: "GET",
           headers,
           redirect: "manual",
@@ -282,6 +335,11 @@ export async function postFormData(
   body: UndiciFormData,
   signal?: AbortSignal,
 ): Promise<Response> {
+  if (relayFor(config)) {
+    throw new ProviderBaseUrlError(
+      `Provider error: baseUrl "${config.baseUrl}" is on your computer, and file uploads cannot go through the local model relay. Use a public HTTPS endpoint for this model.`,
+    );
+  }
   assertAllowedBaseUrl(config.baseUrl);
 
   const url = buildProviderUrl(config.baseUrl, path);

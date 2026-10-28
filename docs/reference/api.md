@@ -536,6 +536,18 @@ curl -X DELETE http://localhost:3001/api/sessions/<sessionId>
 | ---- | ------------- | -------- |
 | GET  | `/api/health` | 健康检查 |
 
+### 本地模型中继
+
+| 方法 | 路径                                  | 描述                               |
+| ---- | ------------------------------------- | ---------------------------------- |
+| GET  | `/api/model-relay/stream`             | 浏览器的中继通道（SSE）            |
+| POST | `/api/model-relay/requests/:id/head`  | 浏览器转回一个请求的状态码和响应头 |
+| POST | `/api/model-relay/requests/:id/chunk` | 浏览器转回一段响应正文             |
+| POST | `/api/model-relay/requests/:id/end`   | 浏览器告知正文结束                 |
+| POST | `/api/model-relay/requests/:id/fail`  | 浏览器告知这个请求失败             |
+
+只有共享形态的服务端回答这组端点，详见[本地模型中继](#本地模型中继-1)。
+
 ### 世界管理
 
 <!-- prettier-ignore -->
@@ -1608,6 +1620,7 @@ fork 和社区插件的授权：
 | `bootId`                                  | 服务器启动 ID（UUID）。每次重启都会变，可以用它发现服务器重启过。                                                                                                                                                                  |
 | `operatorTokenRequired`                   | 管理请求是否校验运维 token。除 personal 形态外都是 `true`：browser-private 形态和 `demo` / `commercial`。                                                                                                                          |
 | `deployment.form`                         | 宿主配置的形态：`personal` / `browser-private` / `hosted`。规则见[安全边界](../internals/security.md#host-profile)。                                                                                                               |
+| `deployment.modelRelay`                   | 服务端是否经玩家浏览器访问玩家电脑或局域网上的模型（[本地模型中继](#本地模型中继-1)）。personal 形态是 `false`，共享形态是 `true`。                                                                                                |
 | `deployment.source`                       | 这个构建来自哪份源代码，只在运营者配置了时出现。`repository` 是 `COVEL_SOURCE_REPOSITORY` 的 `https` 地址；`commit` 是 `COVEL_SOURCE_COMMIT`，没设置时取 Render 的 `RENDER_GIT_COMMIT`，必须是 7–40 位十六进制。不合格的值不返回。 |
 | `storage.data.backend`                    | 服务端当前的数据存储后端：`memory` / `sqlite` / `pg`，默认 `sqlite`。                                                                                                                                                              |
 | `storage.data.frontendMode`               | 前端数据模式。`local`：数据存在浏览器的 BrowserVault 里。`remote`：数据经服务端 API 存在服务端。                                                                                                                                   |
@@ -1618,6 +1631,39 @@ fork 和社区插件的授权：
 | `vector.modelCount` / `vector.tableCount` | 已注册的 embedding 模型数量，以及对应的物理表数量（每个模型一张表）。                                                                                                                                                              |
 
 Web 设置页根据 `operatorTokenRequired` 决定是否显示“运维访问”页。`deployment.form` 不是 `personal`、并且 `storage.data.frontendMode` 是 `local` 时，Web 页面顶部显示公开体验站的提示，链接到[在公开体验站上玩](../start/hosted-trial.md)和 `deployment.source`。顶层的 `vector` 与 `storage.vector` 是同一份数据。
+
+### 本地模型中继
+
+共享形态的服务端访问不到玩家的电脑和局域网，模型地址在那里时，请求由玩家的浏览器转发。规则和安全边界见[安全边界](../internals/security.md#local-model-relay)。
+
+**通道号。** 浏览器为每个页面生成一个随机通道号（32–128 个 `A-Z a-z 0-9 _ -` 字符），放在 `X-Model-Relay` 请求头里：
+
+- 这组端点的每个请求都必须带它，缺失或格式不对返回 `400 model_relay_channel_required`。
+- 模型请求（和 `X-Provider-Keys` 一起）也带它。服务端只把这个请求里、地址在本机或局域网上的模型调用交给它点名的通道。
+- personal 形态的服务端对这组端点返回 `404 model_relay_unavailable`，也不使用这个请求头。
+
+#### `GET /api/model-relay/stream`
+
+SSE。先发一个 `ready` 事件，之后每 15 秒发一行注释保持连接。事件：
+
+| 事件      | `data`                                                                                   |
+| --------- | ---------------------------------------------------------------------------------------- |
+| `ready`   | `{}`                                                                                     |
+| `request` | `{ "type": "request", "id", "url", "method": "GET" \| "POST", "headers": {…}, "body"? }` |
+| `cancel`  | `{ "type": "cancel", "id" }`：服务端不再需要这个请求的回答                               |
+
+同一个通道号重新连接时，新连接替换原来的连接，服务端关闭原来的流，原连接上还没回答完的请求失败。打开这条流和事件流一样按 IP 限流（`RATE_LIMIT_RPM`，超出时 `429`）；每个进程最多 512 个通道，超出时返回 `503 model_relay_busy`。
+
+#### `POST /api/model-relay/requests/:id/head|chunk|end|fail`
+
+浏览器按顺序回答一个请求：
+
+- `head`：JSON `{ "status": 200–599, "statusText"?, "headers": { … } }`，最多 100 个响应头。
+- `chunk`：`application/octet-stream` 的一段正文，每次不超过 1 MiB。
+- `end`：正文结束。
+- `fail`：JSON `{ "message" }`（1–500 字符）。服务端把它作为 `Local model relay: <message>` 错误交给模型调用。
+
+成功返回 `204`。请求号不属于这个通道时返回 `404 model_relay_request_unknown`；顺序不对返回 `409 model_relay_out_of_order`；状态行或响应头格式不对（响应头名不是 HTTP token，值或 `statusText` 里有换行等控制字符）返回 `400`，平台仍拒绝构造这个响应时返回 `400 model_relay_invalid_answer`，这两种情况下请求都会失败；回答超过 64 MiB 返回 `413 model_relay_too_large`，服务端同时发出 `cancel`。
 
 ### 世界管理
 
@@ -4945,6 +4991,7 @@ SSE 流已经打开之后，动作仍可能在开始前被拒绝。这时流里�
 | Header                   | 说明                                                                  |
 | ------------------------ | --------------------------------------------------------------------- |
 | `X-Provider-Keys`        | base64(JSON) 的模型服务商密钥。不入库，每次请求都要带                 |
+| `X-Model-Relay`          | 共享形态上这个浏览器的中继通道号，见[本地模型中继](#本地模型中继-1)   |
 | `X-Plugin-User-Settings` | base64(JSON) 的玩家插件设置 `{ [pluginId]: { [settingKey]: value } }` |
 
 `X-Plugin-User-Settings` 的处理：

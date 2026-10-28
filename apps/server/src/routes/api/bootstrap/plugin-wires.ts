@@ -25,6 +25,26 @@ function hasWireShape(value: unknown, method: string): value is { id: string } {
 }
 
 /**
+ * A wire's arguments without the local model relay. The first argument is the
+ * slot's resolved config; its `relay` reaches the player's browser and is
+ * for the framework's own provider requests, never for plugin code.
+ */
+function forWire<T extends readonly unknown[]>(args: T): T {
+  const [config, ...rest] = args;
+  if (!config || typeof config !== "object") return args;
+  if (!("relay" in config) && !("relayable" in config)) return args;
+  const {
+    relay: _relay,
+    relayable: _relayable,
+    ...clean
+  } = config as {
+    relay?: unknown;
+    relayable?: unknown;
+  };
+  return [clean, ...rest] as unknown as T;
+}
+
+/**
  * Register entry-provided wires under the `<pluginId>/<wireId>` namespace.
  * Every wire carries its plugin as owner, so it serves only sessions in which
  * that plugin is active. Each call runs with the slot's endpoint, which the
@@ -113,8 +133,10 @@ export function registerNamespaced(
       const namespaced = {
         ...wire,
         id: `${pluginId}/${wire.id}`,
-        [group.method]: (...args: unknown[]) =>
-          call(args, () => Reflect.apply(method, wire, args) as unknown),
+        [group.method]: (...raw: unknown[]) => {
+          const args = forWire(raw);
+          return call(args, () => Reflect.apply(method, wire, args) as unknown);
+        },
       };
       register(namespaced.id, () => group.register(namespaced as never, owner));
     }
@@ -135,8 +157,12 @@ function namespacedTextWire(
   return {
     ...wire,
     id,
-    generateText: (...args) => call(args, () => wire.generateText(...args)),
-    async *streamText(...args) {
+    generateText: (...raw) => {
+      const args = forWire(raw);
+      return call(args, () => wire.generateText(...args));
+    },
+    async *streamText(...raw) {
+      const args = forWire(raw);
       const stream = await call(args, () => wire.streamText(...args));
       const iterator = stream[Symbol.asyncIterator]();
       let done = false;
@@ -156,14 +182,18 @@ function namespacedTextWire(
     },
     ...(typeof generateObject === "function"
       ? {
-          generateObject: (...args) =>
-            call(args, () => Reflect.apply(generateObject, wire, args)),
+          generateObject: (...raw) => {
+            const args = forWire(raw);
+            return call(args, () => Reflect.apply(generateObject, wire, args));
+          },
         }
       : {}),
     ...(typeof listModels === "function"
       ? {
-          listModels: (...args) =>
-            call(args, () => Reflect.apply(listModels, wire, args)),
+          listModels: (...raw) => {
+            const args = forWire(raw);
+            return call(args, () => Reflect.apply(listModels, wire, args));
+          },
         }
       : {}),
   };

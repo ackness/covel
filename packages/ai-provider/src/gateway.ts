@@ -1252,6 +1252,7 @@ export function createGateway(deps: GatewayDependencies) {
         : {}),
       requestBudget: options?.requestBudget ?? config.requestBudget,
       ...(options?.transportRetry === false ? { transportRetry: false } : {}),
+      ...(options?.relay ? { relay: options.relay } : {}),
       ...(requestTarget && options?.onProviderRequest
         ? {
             requestObservation: {

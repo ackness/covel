@@ -1,8 +1,62 @@
-import { BookOpen, Globe, MessageSquare, Settings2 } from "lucide-react";
+import {
+  BookOpen,
+  Check,
+  Globe,
+  KeyRound,
+  MessageSquare,
+  Settings2,
+} from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button.js";
 import { PingButton } from "@/components/shared/ping-button.js";
 import { formatSlotLabel, type ResolvedSlot } from "@/hooks/use-slot-config.js";
+import { useLocalePreference } from "@/hooks/useLocalePreference.js";
+import { localeDefinitions } from "@/i18n/catalog-registry.js";
+import { localeOptionLabel } from "@/i18n/locale-option-label.js";
+import { getSharedServerInfo } from "@/services/api/health.js";
+
+/**
+ * The first step: every interface language, each written in its own
+ * language, so a player who cannot read the detected one still finds theirs.
+ * Choosing one switches the interface at once.
+ */
+export function LanguageStep() {
+  const { t } = useTranslation();
+  const { locale, setLocale } = useLocalePreference();
+  return (
+    <fieldset className="space-y-2">
+      <legend className="sr-only">{t("onboarding.language")}</legend>
+      {localeDefinitions.map((definition) => {
+        const selected = definition.code === locale;
+        return (
+          <label
+            key={definition.code}
+            lang={definition.code}
+            className={`flex cursor-pointer items-center justify-between gap-3 rounded-(--radius-card) border p-3 text-sm transition-colors has-focus-visible:ring-2 has-focus-visible:ring-ring ${selected ? "border-primary bg-primary/5 font-medium" : "border-border hover:bg-muted/40"}`}
+          >
+            <input
+              type="radio"
+              name="onboarding-language"
+              value={definition.code}
+              checked={selected}
+              onChange={() => setLocale(definition.code)}
+              className="sr-only"
+            />
+            <span>
+              {localeOptionLabel(
+                definition,
+                t("onboarding.languageExperimental", "experimental"),
+              )}
+            </span>
+            {selected && (
+              <Check className="h-4 w-4 shrink-0 text-primary" aria-hidden />
+            )}
+          </label>
+        );
+      })}
+    </fieldset>
+  );
+}
 
 export function WelcomeStep() {
   const { t } = useTranslation();
@@ -27,8 +81,21 @@ export function ModelStep({
 }: SettingsActionProps & { slots: ResolvedSlot[] }) {
   const { t } = useTranslation();
   const credentialReady = slots.some((slot) => slot.hasCredentials === true);
+  const sharedServer = getSharedServerInfo() !== null;
   return (
     <div className="space-y-4">
+      {sharedServer && (
+        <p
+          role="note"
+          className="flex items-start gap-2 rounded-(--radius-card) border border-primary/20 bg-primary/5 p-3 text-xs leading-relaxed"
+        >
+          <KeyRound
+            className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary"
+            aria-hidden
+          />
+          <span>{t("sharedServer.keyAdvice")}</span>
+        </p>
+      )}
       <section className="rounded-(--radius-card) border border-border p-4 space-y-3">
         <p className="text-sm font-medium" role="status">
           {t(
