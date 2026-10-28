@@ -391,13 +391,14 @@ export function warnWhenCheckpointNearLimit(
 export async function uploadBrowserCheckpoint(
   sessionId: string,
   checkpoint: BrowserCheckpoint,
+  options?: { initialize?: boolean },
 ): Promise<{
   ok: true;
   revision: number;
   unchanged?: boolean;
   reconcileRequired?: boolean;
 }> {
-  const body = JSON.stringify({ checkpoint });
+  const body = JSON.stringify({ checkpoint, ...options });
   warnWhenCheckpointNearLimit(sessionId, body);
   return request(
     `/api/sessions/${encodeURIComponent(sessionId)}/browser-checkpoint`,

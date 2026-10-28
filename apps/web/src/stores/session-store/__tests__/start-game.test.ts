@@ -19,6 +19,7 @@ const api = vi.hoisted(() => ({
   getWorld: vi.fn(),
   updateWorld: vi.fn(),
   uploadBrowserCheckpoint: vi.fn(),
+  fetchBrowserCommit: vi.fn(),
 }));
 const hydration = vi.hoisted(() => ({
   hydratePluginDataForUiSpecs: vi.fn(),
@@ -230,7 +231,29 @@ describe("startGameSession bootstrap order", () => {
         .mockRejectedValueOnce(new ApiError(404, "/api/sessions/local", ""))
         .mockResolvedValue(session);
       api.createSession.mockResolvedValue({ ...session, phase: "playing" });
-      api.uploadBrowserCheckpoint.mockResolvedValue({ ok: true });
+      api.uploadBrowserCheckpoint.mockImplementation(
+        async (_id, _checkpoint, options) => ({
+          ok: true,
+          ...(options?.initialize ? { reconcileRequired: true } : {}),
+        }),
+      );
+      api.fetchBrowserCommit.mockImplementation(
+        async (id, actionId, baseRevision) => {
+          const current = await vault.getLatestCheckpoint(id);
+          if (!current) throw new Error("missing checkpoint");
+          return {
+            baseRevision,
+            revision: baseRevision + 1,
+            actionId,
+            checkpoint: {
+              ...current,
+              revision: baseRevision + 1,
+              actionId,
+              session: { ...current.session, phase: "playing" },
+            },
+          };
+        },
+      );
       const dispatch = vi.fn((action: { type: string }) => {
         if (action.type !== "SET_SESSION") return;
         const uploaded = api.uploadBrowserCheckpoint.mock.calls.at(-1)?.[1];

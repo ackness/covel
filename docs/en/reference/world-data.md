@@ -11,6 +11,8 @@ Some terms used throughout this page:
 - **Descriptor**: an optional file (`data/world.data.yaml`) that changes how a conventional file is read, or adds a file outside the conventions. Most worlds do not need it.
 - **Session**: one game that a player starts with this world. The world package's data is copied into the session when the session is created. After that, each session changes on its own.
 
+Browser-private mode retains this starting data too: its first sync downloads the initialized server state instead of replacing it with an empty save. Later restores do not reimport starting content; see [Browser-private workspace](./api.md#browser-private-workspace).
+
 ## World Package
 
 **The smallest world package** has two files:

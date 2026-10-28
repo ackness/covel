@@ -9,7 +9,7 @@
 [![Stage](https://img.shields.io/badge/stage-early--access-orange)](./docs/CHANGELOG.md)
 [![Ask DeepWiki](https://img.shields.io/badge/Ask-DeepWiki-0b7285?logo=readthedocs&logoColor=white)](https://deepwiki.com/ackness/covel)
 
-[![Covel 演示：世界列表、会话与舞台模式 —— 更多内容见 covel.cc](./.assets/images/demo.gif)](https://covel.cc/)
+[![Covel 实际游玩：遥风学园的舞台对话](./.assets/images/readme/stage-mode.png)](https://covel.cc/)
 
 **[▶ 在 covel.cc 观看完整演示](https://covel.cc/)** · **[🎮 在 demo.covel.cc 直接用浏览器玩](https://demo.covel.cc/)** · **[📖 文档](https://covel.cc/docs/)**
 
@@ -31,10 +31,9 @@ Covel 是一套 AI RPG 框架，也是一间可以直接游玩的工作室：NPC
 
 ## 两种玩法
 
-|                 舞台模式（视觉小说）                 |                      叙事模式（文字）                       |
-| :--------------------------------------------------: | :---------------------------------------------------------: |
-| ![舞台模式](./.assets/images/readme/stage-mode.png)  |     ![叙事模式](./.assets/images/readme/text-mode.png)      |
-| 背景、立绘与打字机对话；场景美术随探索自动解析与生成 | 经典叙事回合，内嵌行动建议与表单，每回合的 agent 时间线可见 |
+页首是遥风学园的**舞台模式**：世界包背景、角色立绘与打字机对话。下图是余烬岭的**叙事模式**：正文、行动建议与任务日志，默认插件随回合更新。
+
+![余烬岭的叙事、行动建议与任务日志](./.assets/images/readme/text-mode.png)
 
 世界声明自己的默认档（`defaultViewMode: stage`），游戏中可随时切换。
 
@@ -42,7 +41,6 @@ Covel 是一套 AI RPG 框架，也是一间可以直接游玩的工作室：NPC
 
 |                         面板                         |                        书卷                         |                         舞台                         |
 | :--------------------------------------------------: | :-------------------------------------------------: | :--------------------------------------------------: |
-| ![面板方案](./.assets/images/readme/style-panel.png) | ![书卷方案](./.assets/images/readme/style-book.png) | ![舞台方案](./.assets/images/readme/style-stage.png) |
 |      应用式：图标导航、带标签的选项卡片、状态条      |       阅读优先：宋体正文、编号选项、页边批注        |       场景优先：场景图铺满、在场角色、键帽选项       |
 
 风格方案改的不只是配色，还有结构：导航放在哪、选项怎么画、会话怎样使用世界美术。在**设置 → 外观**里选一套；原来的几套主题成了第四种风格「经典」下的配色。方案就是主题包，可以另存为自己的，也可以导入别人的（[指南](./docs/recipes/themes.md)）。插件界面不需要知道当前是哪套方案，会自动跟随。
@@ -88,8 +86,6 @@ plugins/npc-graph/
 
 ## 世界包让设定真正可玩
 
-![AI 世界构筑器正在配置可移植世界包](./.assets/images/readme/world-package-builder.png)
-
 世界包是可移植的内容层。`world.yaml` 描述身份、语言、呈现方式、角色属性和期望的插件组合；`WORLD.md` 保存权威世界观；`data/world.data.yaml` 把类型化 source 映射到世界 metadata、角色、资料库、媒体索引或插件自己的 namespace。
 
 ```text
@@ -130,19 +126,17 @@ worlds/my-world/data/rules/core.ja.yaml
 
 ## 端到端调试每个回合
 
-![追踪检查器展开了叙事 runtime 与 LLM 请求](./.assets/images/readme/debug-trace.png)
+先在正文下方展开执行详情，确认这一回合各个任务的结果与耗时，再按需进入调试页。
 
 内置追踪检查器先按会话与回合组织完整执行链，再展开每个 runtime 以及流程、LLM、工具、消息、块、状态和 hook 事件。展开 runtime 可以检查调用顺序、token、耗时、工具参数与结果；点开单个事件还能查看请求元数据、提示消息、可用工具定义和原始载荷。独立的会话数据与成本视图，让同一套工作区同时服务游戏 QA、插件开发和模型成本分析。
 
 ## 每一次判定都有回执
 
-![好感与装备变动落在这一回合里；状态条显示当前目标和行囊，右侧是任务日志](./.assets/images/readme/rpg-systems.png)
+![本回合的骰子判定、好感变化与图鉴更新，右侧是默认任务日志](./.assets/images/readme/rpg-systems.png)
 
 有风险的行动，判定用的骰子在叙事**动笔之前**就已经掷好，结果不会被行文倒推改写 —— 算式直接落在正文里：`19 + 2 = 21 vs DC 16`。任务推进、装备变动、好感升降也以同样方式回执在这一回合里，再沉淀进各自的面板。骰子、任务、行囊、好感是四个独立插件；世界包预置开局任务、初始装备与初始好感，也可以一个都不装。
 
 ## 回合之间延续了什么
-
-![核心记忆面板](./.assets/images/readme/memory-panel.png)
 
 游戏中随手打开侧栏，看到的是世界包与当前会话共同延续的状态：核心记忆（进行中的剧情、当前场景、主角状态）、NPC 关系图谱、世界典籍与在场角色。世界作者可以预置角色、规则、任务、物品、好感和媒体；插件让这些状态随游玩继续演化，再把相关部分带入后续回合。
 
@@ -185,8 +179,6 @@ pnpm dev                            # web :5173 + server :3001（SQLite）
 
 ## 内置世界
 
-![选择世界](./.assets/images/readme/select-world.png)
-
 - **雾港・裂潮纪（Mistport: The Riftide Chronicle）** —— 传统叙事模式的示范，黑暗奇幻调查。自定义插件组合、中英双语世界观、调查记忆、角色蓝图、规则与立绘，展示世界如何在不 fork 框架的前提下形成自己的玩法。
 - **遥风学园（Harukaze Academy）** —— 舞台模式的示范，校园群像恋爱。对话策略、角色关系、题材记忆、透明立绘与日夜场景注册表，把同一套内核组合成视觉小说。
 - **Emberback Relay** —— 为英文玩家写的世界，默认语言为英文（`en-US`），用来展示多语言，另带中文版。传统叙事模式的科幻边境悬疑。潮汐锁定星球上的孤独中继站，收到一段来自七十二小时后、由玩家自己发出的求救。另有预置任务、行囊、好感、规则、角色蓝图、立绘与五项判定属性。
@@ -205,6 +197,7 @@ pnpm dev                            # web :5173 + server :3001（SQLite）
 
 ## 开发
 
+- [真实游玩与截图验收](./docs/internals/e2e-testing.md#桌面版与部署版的本机模型中继验收) —— 复测桌面版、部署版中继、默认插件与重启恢复，并更新展示图
 - [插件编写指南](./docs/plugins/essentials.md) —— 从这里开始；[`plugins/`](./plugins/) 下的内置插件都是可运行的参考
 - [设计原则](./docs/internals/design-principles.md) —— 什么该进内核，什么该交给插件
 - [架构与回合管线](./docs/internals/flow.md) —— 一个回合如何流经触发 → 调度 → runtime → 提交

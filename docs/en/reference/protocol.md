@@ -6,6 +6,8 @@ It is for three kinds of readers: people who write their own client, people who 
 
 The type definitions are in `packages/shared/src/types/protocol.ts`.
 
+Browser-private mode restores the server workspace before sending an action. A new save first retains the server's resolved plugin set; later restarts keep the saved set. See [Browser-private workspace](./api.md#browser-private-workspace) for the sync sequence.
+
 ## Architecture overview
 
 All communication falls into three groups:

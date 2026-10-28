@@ -34,6 +34,7 @@ import type {
 import type {
   SlotOverridesInput,
   CapabilityOverridePolicy,
+  ProviderRelay,
 } from "@covel/ai-provider";
 
 interface GatewayTextInput {
@@ -62,6 +63,7 @@ interface GatewayTextInput {
 }
 
 interface GatewayTextOptions {
+  relay?: ProviderRelay;
   apiKeys?: Record<string, string>;
   envApiKeys?: Record<string, string>;
   traceId?: string;
@@ -81,6 +83,7 @@ export interface GatewayLike {
   resolveSlot(
     presetId: string | undefined,
     options?: {
+      relay?: ProviderRelay;
       apiKeys?: Record<string, string>;
       envApiKeys?: Record<string, string>;
       slotOverrides?: SlotOverridesInput;
@@ -132,6 +135,8 @@ export interface GatewayLike {
 }
 
 export interface GatewayAdapterConfig {
+  /** Request-scoped browser transport for the player's local model endpoints. */
+  readonly relay?: ProviderRelay;
   /** API keys from the request (e.g., from X-Provider-Keys header). */
   readonly apiKeys?: Record<string, string>;
   /**
@@ -166,6 +171,7 @@ export function createGatewayAdapter(
   const resolveSlot = (slot?: string) => {
     try {
       return gateway.resolveSlot(slot, {
+        ...(config?.relay ? { relay: config.relay } : {}),
         apiKeys: config?.apiKeys,
         ...(config?.envApiKeys ? { envApiKeys: config.envApiKeys } : {}),
         ...(config?.slotOverrides
@@ -232,6 +238,7 @@ export function createGatewayAdapter(
         },
         {
           apiKeys: config?.apiKeys,
+          ...(config?.relay ? { relay: config.relay } : {}),
           ...(config?.envApiKeys ? { envApiKeys: config.envApiKeys } : {}),
           traceId: config?.traceId,
           ...(config?.slotOverrides
@@ -311,6 +318,7 @@ export function createGatewayAdapter(
         },
         {
           apiKeys: config?.apiKeys,
+          ...(config?.relay ? { relay: config.relay } : {}),
           ...(config?.envApiKeys ? { envApiKeys: config.envApiKeys } : {}),
           traceId: config?.traceId,
           ...(config?.slotOverrides

@@ -2,7 +2,7 @@
 
 This page explains how to run the browser end-to-end tests (Playwright) locally, how to write a new spec, and which player flows to check by hand before a release. It is written for contributors who change the Covel source.
 
-The tests run on your own machine and do not need Docker. Docker is used only to start PostgreSQL.
+Automated tests run locally without Docker. PostgreSQL tests and the deployment relay acceptance procedure below use Docker.
 
 ## Quick Start
 
@@ -260,6 +260,56 @@ Record the results at the end: the model actually used, the build version, the r
 > A real-model case skipped in the default E2E run does not count as real-model verification. An API that returns success is not a substitute for going through the whole flow on the page. After release, download the artifacts and check the version, the resources and the startup result.
 
 For the full release steps, see the [release checklist](./desktop-packaging.md#release-checklist).
+
+## Accepting Local Model Relay on Desktop and Deployed Web
+
+Use this procedure to retest a deployed Covel instance calling a model on the player's computer. A successful connection test is only the first step: character creation, narration, and default plugins must actually run. Use separate test saves; model calls incur usage charges.
+
+### Prepare the Environments
+
+1. Record the tested commit and build version. Build the production desktop artifact following [desktop packaging](./desktop-packaging.md), and start it with an isolated test data directory.
+2. Build the web deployment from `docker/Dockerfile` with the settings in `render.yaml`, especially `NODE_ENV=production`, `STORE_BACKEND=memory`, `DEPLOYMENT_TIER=self`, and static page serving. Apply the same memory limit and publish the port only on host loopback. Keep a permission-restricted temporary environment file outside the repository; do not mount personal configuration directories.
+3. Open the page and verify `/api/health` reports `browser-private`, `modelRelay: true`, `memory`, and frontend `local`. Desktop should report `personal` and does not need browser relay.
+4. Start the local model gateway. In Covel settings, choose the actual protocol, Base URL, and model, and bind every needed purpose, including story, plugin, and memory. Enter credentials only in settings. For Magpie origin permission and gateway keys, see [Magpie browser setup](../start/hosted-trial.md#magpie).
+5. Test model listing and the connection separately. Verify the same loopback port is unreachable inside the container but reachable from the browser; host networking or a proxy must not bypass the relay.
+
+Local Docker verifies the deployment configuration and whose loopback address is used. It does not replace checks for browser permissions, certificates, reverse proxies, and cold starts on the live HTTPS site. Test those separately after the deployed version updates.
+
+### Play and Restart
+
+1. Create a new world session and wait for the plugin plan to load. Keep the world's default pack and check that automatically added dependencies remain enabled. Manually enabling dependencies first does not count as passing the default flow.
+2. Start the adventure and complete setup forms and character creation. Check execution details for model configuration errors, missing dependencies, or failed tasks.
+3. Wait for opening narration and plugin settlement. Complete at least two player turns: one quick reply and one free-text message. Have the story explicitly change a quest or item, then check its panel, character state, and turn record. HTTP 200 and a successful tool call do not prove persistence.
+4. From browser network traffic, extract only model request paths, status codes, and destination addresses. Actual model requests should reach the player's loopback address. Cover ordinary generation, streamed narration, and model calls from function plugins. Do not export a HAR containing request headers.
+5. Wait for settlement, restart the Docker container, and reopen the same save. Verify story, characters, plugin selection, and data are restored, then complete a third player turn. For desktop, quit and relaunch the same production artifact with the same test data directory.
+6. Check failure recovery separately: invalid test credentials should produce an authentication error; an unapproved origin should produce a browser access failure. Correct the configuration and retry without duplicate story commits or turn increments. Do not change existing user credentials or revoke existing permissions for this test.
+
+### Save Reusable Results
+
+Record only the commit, app and browser versions, model protocol and name, anonymous test scenario, pass/fail, error categories, and coverage gaps. Use `<test-data-dir>` for personal absolute paths, `<test-origin>` for origins, and `<gateway-key>` for credentials; do not save their real replacements.
+
+Do not record keys, tokens, authentication headers, environment file contents, browser storage exports, or screenshots containing them. Before sharing logs or screenshots, remove personal paths, account information, and real session identifiers. Keep raw debug artifacts in ignored `debugs/`; do not upload them with documentation or a PR.
+
+<!-- prettier-ignore -->
+| Check | Pass criteria |
+| --- | --- |
+| Production desktop artifact | Setup, two turns, and a third turn after restart complete |
+| Docker deployment profile | Correct health response; container cannot reach the player's loopback port |
+| Browser relay | Real gameplay requests reach the player's machine; streaming works |
+| Default plugins | Dependencies remain enabled, tasks succeed, and panel data survives restoration |
+| Failure recovery | Recognizable errors, successful retry after correction, no duplicate commits |
+| Live site follow-up | HTTPS, permissions, proxy, and cold-start results recorded separately |
+| Evidence privacy | No personal paths, keys, tokens, or request headers |
+
+### Screenshots and README updates
+
+1. Capture real acceptance saves using fictional character details. Emberback works for text play and Harukaze Academy for stage play. Complete a player turn and confirm that default plugins settle successfully first.
+2. Use a **1600 × 1000 CSS-pixel viewport, 100% zoom, and device scale 1**. Use the dark **Panel** scheme and Simplified Chinese UI for feature images. Exclude browser chrome, native window borders, and extension overlays.
+3. Use the same save for text, quests and dice, memory, execution details, and inventory. For style comparisons, keep the same passage and side panel while switching Panel, Book, and Stage; Book may use light mode. Stage images show actual backgrounds, sprites, and fully revealed dialogue.
+4. Wait for models, fonts, images, and transitions before capturing. Frame through normal navigation, panel selection, and scrolling; do not rewrite the DOM, story, or execution status to manufacture success. If the builder image only shows a creative brief, say that no world has been generated yet.
+5. Select distinctive images for the README, each showing a different product capability. Omit empty forms, ordinary lists, and repeated views; keep other captures as local acceptance evidence. Replace the selected images under `.assets/images/readme/`, remove unreferenced old images, and update references, alt text, and descriptions in both READMEs. Keep each PNG below 3 MiB. Inspect dimensions, legibility, framing, and privacy for every image, then run documentation checks. Replace an outdated demo entry image with a current gameplay capture.
+
+Record the capture's commit, scene, turn, theme, and viewport. If an image includes a key, personal path, or account detail, reframe it and do not commit the original.
 
 ## Troubleshooting
 

@@ -41,11 +41,14 @@ async function seed(target: DataStore, metadata?: Record<string, unknown>) {
   });
 }
 
-async function upload(checkpoint: unknown): Promise<Response> {
+async function upload(
+  checkpoint: unknown,
+  initialize?: boolean,
+): Promise<Response> {
   return app.request(`/api/sessions/${SESSION_ID}/browser-checkpoint`, {
     method: "PUT",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ checkpoint }),
+    body: JSON.stringify({ checkpoint, initialize }),
   });
 }
 
@@ -71,6 +74,60 @@ beforeEach(async () => {
 });
 
 describe("browser-private workspace exchange", () => {
+  it("adopts initialized world data and dependencies without overwriting them", async () => {
+    const browser = createMemoryStore();
+    await seed(browser);
+    const initial = await exportSessionCheckpoint(browser, SESSION_ID, {
+      revision: 1,
+      actionId: `local:create:${SESSION_ID}`,
+    });
+    await store.updateSession(SESSION_ID, {
+      activePlugins: ["consumer", "provider"],
+    });
+    await store.setPluginData({
+      id: "initial-item",
+      sessionId: SESSION_ID,
+      pluginId: "provider",
+      namespace: "items",
+      key: "radio",
+      value: { quantity: 1 },
+      createdAt: "2026-08-25T00:00:00.000Z",
+      updatedAt: "2026-08-25T00:00:00.000Z",
+    });
+
+    for (let attempt = 0; attempt < 2; attempt++) {
+      expect(await (await upload(initial, true)).json()).toMatchObject({
+        ok: true,
+        revision: 1,
+        reconcileRequired: true,
+      });
+    }
+    const response = await app.request(
+      `/api/sessions/${SESSION_ID}/browser-commit`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ actionId: "hydrate:1", baseRevision: 1 }),
+      },
+    );
+    expect(response.status).toBe(200);
+    const commit = (await response.json()) as SessionCommit;
+    expect(commit.checkpoint.session.activePlugins).toEqual([
+      "consumer",
+      "provider",
+    ]);
+    expect(commit.checkpoint.pluginData).toContainEqual(
+      expect.objectContaining({
+        key: "radio",
+        value: { quantity: 1 },
+      }),
+    );
+    expect(commit.checkpoint.session.metadata).not.toHaveProperty(
+      "ownerTokenHash",
+    );
+    expect((await upload({ ...initial, revision: 2 }, true)).status).toBe(400);
+  });
+
   async function queuedCheckpoint(): Promise<BrowserCheckpoint> {
     const browser = createMemoryStore();
     await seed(browser);

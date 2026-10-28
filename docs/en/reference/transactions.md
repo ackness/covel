@@ -317,6 +317,8 @@ SqliteStore, MemoryStore, and PgStore (all running on Node) use the same method:
 
 Browser-private persistence is kept deliberately outside `DataStore`. Dexie manages the IndexedDB transactions and the schema lifecycle. The code is in `apps/web/src/services/storage/browser-vault.ts`.
 
+A new save downloads the complete initialized checkpoint through [initial sync](./api.md#browser-private-workspace), then atomically saves its plugin set, setup state, and world data. A failed initialization download uses pending-commit recovery rather than saving domains separately.
+
 **Writes.**
 
 - A checkpoint and its compact "action idempotency" record are committed in the same `rw` transaction.

@@ -677,9 +677,11 @@ These two endpoints are the internal sync protocol of the web `LocalDataService`
 - They are available only in the browser-private profile, which uses `STORE_BACKEND=memory`.
 - Authentication is the same as for other session endpoints: it uses the owner token.
 
+When a new local save first creates its server mirror, the `browser-checkpoint` body includes `initialize: true`. This accepts only an initial checkpoint with revision `1`, actionId `local:create:<sessionId>`, and the same world as the created session. The server retains the resolved plugin set, setup state, and all imported world data, returning `reconcileRequired: true`; the client downloads `browser-commit` before starting gameplay. Repeated initialization does not overwrite data. Established saves omit this flag after a restart and retain authority over their selection and data.
+
 | Method | Path                                   | Description                                                                            |
 | ------ | -------------------------------------- | -------------------------------------------------------------------------------------- |
-| PUT    | `/api/sessions/:id/browser-checkpoint` | Body `{ checkpoint }`. Replaces the temporary MemoryStore workspace in one transaction |
+| PUT    | `/api/sessions/:id/browser-checkpoint` | Body `{ checkpoint, initialize? }`. Replaces the temporary MemoryStore workspace in one transaction |
 | POST   | `/api/sessions/:id/browser-commit`     | Body `{ actionId, baseRevision }`. Exports the next full checkpoint                    |
 
 - `browser-checkpoint` rejects an outdated revision. It also rejects a fork where the revision is the same but the head is different.

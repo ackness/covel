@@ -677,9 +677,11 @@ curl -X DELETE http://localhost:3001/api/sessions/<sessionId>
 - 只在 `STORE_BACKEND=memory` 的浏览器私有配置（browser-private profile）下可用。
 - 鉴权和其他会话端点一样，使用 owner token。
 
+新建本地存档第一次建立服务端镜像时，`browser-checkpoint` body 带 `initialize: true`。它只接受 revision 为 `1`、actionId 为 `local:create:<sessionId>` 的初始 checkpoint，并要求世界与已创建会话一致。服务器保留创建会话时解析的插件集合、开局状态及全部世界初始数据，返回 `reconcileRequired: true`；客户端下载 `browser-commit` 后才开始游戏。重复初始化不会覆盖数据。已有存档重启恢复时不传该标记，仍以浏览器里的集合和数据为准。
+
 | 方法 | 路径                                   | 描述                                                         |
 | ---- | -------------------------------------- | ------------------------------------------------------------ |
-| PUT  | `/api/sessions/:id/browser-checkpoint` | body `{ checkpoint }`；事务性地替换临时 MemoryStore 工作区   |
+| PUT  | `/api/sessions/:id/browser-checkpoint` | body `{ checkpoint, initialize? }`；事务性地替换临时 MemoryStore 工作区   |
 | POST | `/api/sessions/:id/browser-commit`     | body `{ actionId, baseRevision }`；导出下一版完整 checkpoint |
 
 - `browser-checkpoint` 拒绝过期的 revision，也拒绝 revision 相同但 head 不同的分叉。

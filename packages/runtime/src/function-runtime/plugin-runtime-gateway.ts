@@ -34,6 +34,7 @@ import {
 import type {
   CapabilityOverridePolicy,
   SlotOverridesInput,
+  ProviderRelay,
 } from "@covel/ai-provider";
 import type { ZodType } from "zod";
 import type { GatewayAdapterConfig } from "../llm/gateway-llm-adapter.js";
@@ -43,6 +44,7 @@ import type { GatewayAdapterConfig } from "../llm/gateway-llm-adapter.js";
  * Mirrors `GatewayOptions` (apiKeys / traceId / signal / slotOverrides) through the structural surface used by function runtimes.
  */
 interface FullGatewayOptions {
+  relay?: ProviderRelay;
   requestBudget?: LLMRequestBudget;
   apiKeys?: Record<string, string>;
   /** Server-env keys — origin-gated by the gateway, unlike apiKeys. */
@@ -242,6 +244,7 @@ export function createPluginRuntimeGateway(
   config?: PluginRuntimeGatewayConfig,
 ): PluginRuntimeGateway {
   const commonOptions = () => ({
+    ...(config?.relay ? { relay: config.relay } : {}),
     ...(config?.apiKeys ? { apiKeys: config.apiKeys } : {}),
     ...(config?.envApiKeys ? { envApiKeys: config.envApiKeys } : {}),
     ...(config?.traceId ? { traceId: config.traceId } : {}),

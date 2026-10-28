@@ -1,10 +1,22 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import type {
   FormIssue,
   InteractionSubmitResult,
 } from "@/stores/session-store/types.js";
 import { useTranslation } from "react-i18next";
-import { JSONUIProvider, Renderer } from "@json-render/react";
+import {
+  JSONUIProvider,
+  Renderer,
+  useActions,
+  type ActionProviderProps,
+} from "@json-render/react";
 import { emitToast } from "@/lib/toast-channel.js";
 import { nestedToFlat } from "@json-render/core";
 import { covelRegistry } from "@/lib/catalog.js";
@@ -397,10 +409,26 @@ export function MessageBlockRenderer({
         directives={covelDirectives}
         onStateChange={handleStateChange}
       >
+        <MessageActionHandlers handlers={handlers} />
         <Renderer spec={spec} registry={covelRegistry} />
       </JSONUIProvider>
     </fieldset>
   );
+}
+
+/** JSONUIProvider treats handlers as initial values; keep live guards current. */
+function MessageActionHandlers({
+  handlers,
+}: {
+  handlers: NonNullable<ActionProviderProps["handlers"]>;
+}) {
+  const { registerHandler } = useActions();
+  useLayoutEffect(() => {
+    for (const [name, handler] of Object.entries(handlers)) {
+      registerHandler(name, handler);
+    }
+  }, [handlers, registerHandler]);
+  return null;
 }
 
 /** Build the json-render state tree that backs bound `/form/<name>` fields. */

@@ -73,9 +73,34 @@ beforeEach(() => {
     phase: "playing",
     completedPlayerTurns: 0,
     setupRuntimes: {},
+    activePlugins: [],
   });
   api.deleteSession.mockResolvedValue(undefined);
-  api.uploadBrowserCheckpoint.mockResolvedValue({ ok: true, revision: 1 });
+  api.uploadBrowserCheckpoint.mockImplementation(
+    async (_id, checkpoint, options) => ({
+      ok: true,
+      revision: checkpoint.revision,
+      ...(options?.initialize ? { reconcileRequired: true } : {}),
+    }),
+  );
+  api.fetchBrowserCommit.mockImplementation(
+    async (sessionId, actionId, baseRevision) => {
+      const current = await vault.getLatestCheckpoint(sessionId);
+      if (!current) throw new Error("missing checkpoint");
+      const created = await api.createSession.mock.results.at(-1)?.value;
+      return {
+        baseRevision,
+        revision: baseRevision + 1,
+        actionId,
+        checkpoint: {
+          ...current,
+          revision: baseRevision + 1,
+          actionId,
+          session: { ...current.session, ...created, id: sessionId },
+        },
+      };
+    },
+  );
 });
 
 afterEach(async () => {
@@ -672,13 +697,14 @@ describe("LocalDataService browser-authoritative sync", () => {
       expect.objectContaining({
         sessionId: "sess-1",
         profile: "browser-private",
-        revision: 2,
+        revision: 1,
         session: expect.objectContaining({
-          phase: "playing",
+          phase: "setup",
           completedPlayerTurns: 0,
           setupRuntimes: {},
         }),
       }),
+      { initialize: true },
     );
     await expect(vault.getLatestCheckpoint("sess-1")).resolves.toMatchObject({
       revision: 2,
@@ -688,6 +714,46 @@ describe("LocalDataService browser-authoritative sync", () => {
         setupRuntimes: {},
       },
     });
+  });
+
+  it("keeps resolved dependencies in the first browser checkpoint and after restart", async () => {
+    const service = await serviceWithWorld();
+    await service.createSession("world-1", "sess-1", ["consumer"], "en-US");
+    api.createSession.mockResolvedValueOnce({
+      id: "sess-1",
+      phase: "playing",
+      completedPlayerTurns: 0,
+      setupRuntimes: {},
+      activePlugins: ["consumer", "provider"],
+    });
+
+    await service.syncToServer("sess-1");
+
+    await expect(service.getSession("sess-1")).resolves.toMatchObject({
+      activePlugins: ["consumer", "provider"],
+    });
+    await expect(vault.getLatestCheckpoint("sess-1")).resolves.toMatchObject({
+      session: {
+        metadata: {
+          pluginSelection: { requested: ["consumer"], excluded: [] },
+        },
+      },
+    });
+
+    // A replacement server has a different catalogue. The established browser
+    // selection must stay authoritative rather than adopting new defaults.
+    await service.syncToServer("sess-1");
+    await expect(service.getSession("sess-1")).resolves.toMatchObject({
+      activePlugins: ["consumer", "provider"],
+    });
+    expect(api.createSession).toHaveBeenLastCalledWith(
+      "world-1",
+      "sess-1",
+      ["consumer", "provider"],
+      "en-US",
+      undefined,
+      [],
+    );
   });
 
   it("uploads a locale-resolved server world without downgrading browser i18n", async () => {
@@ -716,6 +782,7 @@ describe("LocalDataService browser-authoritative sync", () => {
           description: "雾中港口",
         }),
       }),
+      { initialize: true },
     );
     await expect(vault.getWorld("localized-world")).resolves.toMatchObject({
       name: { "zh-CN": "雾港", "en-US": "Mistport" },
@@ -807,6 +874,7 @@ describe("LocalDataService browser-authoritative sync", () => {
     expect(api.uploadBrowserCheckpoint).toHaveBeenCalledWith(
       "session_underscore",
       expect.objectContaining({ sessionId: "session_underscore" }),
+      { initialize: true },
     );
   });
 
@@ -954,7 +1022,7 @@ describe("LocalDataService browser-authoritative sync", () => {
     const reloadedService = new LocalDataService(vault);
     await reloadedService.syncToServer("sess-1");
 
-    expect(api.fetchBrowserCommit).toHaveBeenCalledTimes(2);
+    expect(api.fetchBrowserCommit).toHaveBeenCalledTimes(3);
     expect(api.uploadBrowserCheckpoint).toHaveBeenLastCalledWith(
       "sess-1",
       expect.objectContaining({

@@ -182,7 +182,10 @@ export function createBrowserWorkspaceRoutes(
     if (wrongProfile) return wrongProfile;
     const guard = await resolveSessionParam(c);
     if (!guard.ok) return guard.response;
-    const parsed = await readJsonBody<{ checkpoint?: unknown }>(c);
+    const parsed = await readJsonBody<{
+      checkpoint?: unknown;
+      initialize?: unknown;
+    }>(c);
     if (parsed instanceof Response) return parsed;
 
     let checkpoint;
@@ -200,6 +203,21 @@ export function createBrowserWorkspaceRoutes(
       return c.json(errorBody(message, { code: "invalid_checkpoint" }), 400);
     }
     const sessionId = c.req.param("id");
+    const initialize = parsed.body.initialize === true;
+    if (
+      (parsed.body.initialize !== undefined &&
+        typeof parsed.body.initialize !== "boolean") ||
+      (initialize &&
+        (checkpoint.revision !== 1 ||
+          checkpoint.actionId !== `local:create:${sessionId}`))
+    ) {
+      return c.json(
+        errorBody("Initialization requires a fresh local checkpoint", {
+          code: "invalid_checkpoint",
+        }),
+        400,
+      );
+    }
     if (
       checkpoint.sessionId !== sessionId ||
       checkpoint.profile !== "browser-private"
@@ -318,6 +336,33 @@ export function createBrowserWorkspaceRoutes(
                   )
                 : null,
             };
+            if (initialize) {
+              if (checkpoint.session.worldId !== live.worldId) {
+                return c.json(
+                  errorBody("Initialization world does not match the session", {
+                    code: "invalid_checkpoint_scope",
+                  }),
+                  400,
+                );
+              }
+              // POST /sessions has already resolved dependencies, imported the
+              // world's data, and run lifecycle hooks. The empty browser seed
+              // only establishes a revision; downloading the first commit must
+              // retain all that initialized state. Retries keep the same head.
+              if (!head)
+                cache.set(sessionId, {
+                  incarnation,
+                  revision: checkpoint.revision,
+                  actionId: checkpoint.actionId,
+                  commits: new Map(),
+                  checkpoint,
+                });
+              return c.json({
+                ok: true,
+                revision: checkpoint.revision,
+                reconcileRequired: true,
+              });
+            }
             if (
               head &&
               (hasDurableJobs(checkpoint) ||
