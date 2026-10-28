@@ -31,10 +31,10 @@ Covel is an AI RPG framework and playable studio where NPC relationships, lore, 
 
 ## Two ways to play
 
-|                                              Stage mode (visual novel)                                               |                                                     Story mode (text)                                                      |
-| :------------------------------------------------------------------------------------------------------------------: | :------------------------------------------------------------------------------------------------------------------------: |
-| ![Stage mode in Harukaze Academy: backdrop, character sprites, and dialogue](./.assets/images/readme/stage-mode.en.png) | ![Story mode in Emberback Relay: narration and quest log](./.assets/images/readme/text-mode.en.png) |
-|              Backdrops, sprites, and typewriter dialog; scene art resolves and generates as you explore              | Narrated turns with suggested actions and inline forms; the default plugins update panels such as the quest log every turn |
+|                                                Stage mode (visual novel)                                                |                                                     Story mode (text)                                                      |
+| :---------------------------------------------------------------------------------------------------------------------: | :------------------------------------------------------------------------------------------------------------------------: |
+| ![Stage mode in Harukaze Academy: backdrop, character sprites, and dialogue](./.assets/images/readme/stage-mode.en.png) |            ![Story mode in Emberback Relay: narration and quest log](./.assets/images/readme/text-mode.en.png)             |
+|               Backdrops, sprites, and typewriter dialog; scene art resolves and generates as you explore                | Narrated turns with suggested actions and inline forms; the default plugins update panels such as the quest log every turn |
 
 Worlds declare their default (`defaultViewMode: stage`); you can switch any time in-session.
 
