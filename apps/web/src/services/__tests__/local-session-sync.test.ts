@@ -2,6 +2,7 @@ import "fake-indexeddb/auto";
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { BrowserVault } from "../storage/browser-vault.js";
+import { isInitialBrowserCheckpoint } from "@covel/store/browser-sync";
 import { ApiError } from "../api/request.js";
 import type {
   BrowserCheckpoint,
@@ -76,13 +77,13 @@ beforeEach(() => {
     activePlugins: [],
   });
   api.deleteSession.mockResolvedValue(undefined);
-  api.uploadBrowserCheckpoint.mockImplementation(
-    async (_id, checkpoint, options) => ({
-      ok: true,
-      revision: checkpoint.revision,
-      ...(options?.initialize ? { reconcileRequired: true } : {}),
-    }),
-  );
+  api.uploadBrowserCheckpoint.mockImplementation(async (_id, checkpoint) => ({
+    ok: true,
+    revision: checkpoint.revision,
+    ...(isInitialBrowserCheckpoint(checkpoint)
+      ? { reconcileRequired: true }
+      : {}),
+  }));
   api.fetchBrowserCommit.mockImplementation(
     async (sessionId, actionId, baseRevision) => {
       const current = await vault.getLatestCheckpoint(sessionId);
@@ -704,7 +705,6 @@ describe("LocalDataService browser-authoritative sync", () => {
           setupRuntimes: {},
         }),
       }),
-      { initialize: true },
     );
     await expect(vault.getLatestCheckpoint("sess-1")).resolves.toMatchObject({
       revision: 2,
@@ -782,7 +782,6 @@ describe("LocalDataService browser-authoritative sync", () => {
           description: "雾中港口",
         }),
       }),
-      { initialize: true },
     );
     await expect(vault.getWorld("localized-world")).resolves.toMatchObject({
       name: { "zh-CN": "雾港", "en-US": "Mistport" },
@@ -874,7 +873,6 @@ describe("LocalDataService browser-authoritative sync", () => {
     expect(api.uploadBrowserCheckpoint).toHaveBeenCalledWith(
       "session_underscore",
       expect.objectContaining({ sessionId: "session_underscore" }),
-      { initialize: true },
     );
   });
 

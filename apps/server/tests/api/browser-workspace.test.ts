@@ -41,14 +41,22 @@ async function seed(target: DataStore, metadata?: Record<string, unknown>) {
   });
 }
 
-async function upload(
-  checkpoint: unknown,
-  initialize?: boolean,
-): Promise<Response> {
+async function upload(checkpoint: unknown): Promise<Response> {
   return app.request(`/api/sessions/${SESSION_ID}/browser-checkpoint`, {
     method: "PUT",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ checkpoint, initialize }),
+    body: JSON.stringify({ checkpoint }),
+  });
+}
+
+async function commit(
+  actionId: string,
+  baseRevision: number,
+): Promise<Response> {
+  return app.request(`/api/sessions/${SESSION_ID}/browser-commit`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ actionId, baseRevision }),
   });
 }
 
@@ -96,36 +104,30 @@ describe("browser-private workspace exchange", () => {
     });
 
     for (let attempt = 0; attempt < 2; attempt++) {
-      expect(await (await upload(initial, true)).json()).toMatchObject({
+      expect(await (await upload(initial)).json()).toMatchObject({
         ok: true,
         revision: 1,
         reconcileRequired: true,
       });
     }
-    const response = await app.request(
-      `/api/sessions/${SESSION_ID}/browser-commit`,
-      {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ actionId: "hydrate:1", baseRevision: 1 }),
-      },
-    );
+    const response = await commit("hydrate:1", 1);
     expect(response.status).toBe(200);
-    const commit = (await response.json()) as SessionCommit;
-    expect(commit.checkpoint.session.activePlugins).toEqual([
+    const hydrated = (await response.json()) as SessionCommit;
+    expect(hydrated.checkpoint.session.activePlugins).toEqual([
       "consumer",
       "provider",
     ]);
-    expect(commit.checkpoint.pluginData).toContainEqual(
+    expect(hydrated.checkpoint.pluginData).toContainEqual(
       expect.objectContaining({
         key: "radio",
         value: { quantity: 1 },
       }),
     );
-    expect(commit.checkpoint.session.metadata).not.toHaveProperty(
+    expect(hydrated.checkpoint.session.metadata).not.toHaveProperty(
       "ownerTokenHash",
     );
-    expect((await upload({ ...initial, revision: 2 }, true)).status).toBe(400);
+    // Once adopted, the initial save is stale and cannot initialize again.
+    expect((await upload(initial)).status).toBe(409);
   });
 
   async function queuedCheckpoint(): Promise<BrowserCheckpoint> {
@@ -210,12 +212,7 @@ describe("browser-private workspace exchange", () => {
         reconcileRequired: true,
       });
       expect(await store.listMessages(SESSION_ID)).toHaveLength(1);
-      const requestCommit = () =>
-        app.request(`/api/sessions/${SESSION_ID}/browser-commit`, {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ actionId: "hydrate:2", baseRevision: 2 }),
-        });
+      const requestCommit = () => commit("hydrate:2", 2);
       const committed = await (await requestCommit()).json();
       expect(committed).toMatchObject({
         revision: 3,
@@ -333,12 +330,7 @@ describe("browser-private workspace exchange", () => {
       createdAt: "2026-08-25T00:00:02.000Z",
     });
 
-    const request = () =>
-      app.request(`/api/sessions/${SESSION_ID}/browser-commit`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ actionId: "turn-1", baseRevision: 1 }),
-      });
+    const request = () => commit("turn-1", 1);
     const first = await request();
     const firstCommit = (await first.json()) as SessionCommit;
     const replay = await request();

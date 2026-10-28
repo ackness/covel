@@ -8,6 +8,8 @@ export {
   RevisionConflictError,
   applySessionCommit,
   assertPersistenceProfile,
+  initialBrowserCheckpointActionId,
+  isInitialBrowserCheckpoint,
   isPersistenceProfile,
   validateBrowserCheckpoint,
   validateSessionCommit,

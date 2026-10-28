@@ -5,6 +5,7 @@ import type { SessionRecord, WorldRecord } from "@/services/api.js";
 import { ApiError } from "@/services/api/request.js";
 import { LocalDataService } from "@/services/data-service/local.js";
 import { BrowserVault } from "@/services/storage/browser-vault.js";
+import { isInitialBrowserCheckpoint } from "@covel/store/browser-sync";
 import { createSessionWorkspace } from "@/services/data-service/workspace.js";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -232,9 +233,11 @@ describe("startGameSession bootstrap order", () => {
         .mockResolvedValue(session);
       api.createSession.mockResolvedValue({ ...session, phase: "playing" });
       api.uploadBrowserCheckpoint.mockImplementation(
-        async (_id, _checkpoint, options) => ({
+        async (_id, checkpoint) => ({
           ok: true,
-          ...(options?.initialize ? { reconcileRequired: true } : {}),
+          ...(isInitialBrowserCheckpoint(checkpoint)
+            ? { reconcileRequired: true }
+            : {}),
         }),
       );
       api.fetchBrowserCommit.mockImplementation(

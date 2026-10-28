@@ -677,12 +677,12 @@ These two endpoints are the internal sync protocol of the web `LocalDataService`
 - They are available only in the browser-private profile, which uses `STORE_BACKEND=memory`.
 - Authentication is the same as for other session endpoints: it uses the owner token.
 
-When a new local save first creates its server mirror, the `browser-checkpoint` body includes `initialize: true`. This accepts only an initial checkpoint with revision `1`, actionId `local:create:<sessionId>`, and the same world as the created session. The server retains the resolved plugin set, setup state, and all imported world data, returning `reconcileRequired: true`; the client downloads `browser-commit` before starting gameplay. Repeated initialization does not overwrite data. Established saves omit this flag after a restart and retain authority over their selection and data.
+When a new local save first creates its server mirror, it uploads the initial checkpoint: revision `1`, actionId `local:create:<sessionId>`. The server treats that checkpoint as initialization. It requires the same world as the created session, keeps the resolved plugin set, setup state, and all imported world data instead of overwriting them with the initial checkpoint, and returns `reconcileRequired: true`; the client downloads `browser-commit` before starting gameplay. Uploading the initial checkpoint again does not overwrite data. Established saves have a revision above `1` and keep authority over their plugin selection and data after a restart.
 
-| Method | Path                                   | Description                                                                                                                                                        |
-| ------ | -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| PUT    | `/api/sessions/:id/browser-checkpoint` | Body `{ checkpoint, initialize? }`. Replaces the temporary MemoryStore workspace in one transaction; with `initialize: true`, keeps the server's initialized state |
-| POST   | `/api/sessions/:id/browser-commit`     | Body `{ actionId, baseRevision }`. Exports the next full checkpoint                                                                                                |
+| Method | Path                                   | Description                                                                                                                                         |
+| ------ | -------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| PUT    | `/api/sessions/:id/browser-checkpoint` | Body `{ checkpoint }`. Replaces the temporary MemoryStore workspace in one transaction; the initial checkpoint keeps the server's initialized state |
+| POST   | `/api/sessions/:id/browser-commit`     | Body `{ actionId, baseRevision }`. Exports the next full checkpoint                                                                                 |
 
 - `browser-checkpoint` rejects an outdated revision. It also rejects a fork where the revision is the same but the head is different.
 - `browser-commit` is idempotent for a repeated `actionId`, and returns the same commit.
@@ -690,18 +690,18 @@ When a new local save first creates its server mirror, the `browser-checkpoint` 
 
 #### Validation and errors
 
-| Status code | `code`                             | When                                                                                                                                                                                                      |
-| ----------- | ---------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 400         | `invalid_checkpoint`               | The checkpoint structure is not valid, including duplicate message IDs in `checkpoint.messages`; `initialize` is not a boolean, or `initialize: true` comes with a checkpoint that is not the initial one |
-| 400         | `invalid_checkpoint_scope`         | The checkpoint's `sessionId` does not match `:id` in the path, or `profile` is not `browser-private`; on initialization, the world differs from the created session's                                     |
-| 400         | `session_record_scope_conflict`    | The global record ID of a snapshot, a pending record, or a world import ledger already belongs to another session                                                                                         |
-| 401         | `operator_token_required`          | An ordinary owner refers, through a checkpoint, to a world the server does not have yet (see "Shared deployments" below)                                                                                  |
-| 401         | —                                  | The owner of the session changed while the request was queued                                                                                                                                             |
-| 409         | `browser_private_profile_required` | The server's storage is not MemoryStore                                                                                                                                                                   |
-| 409         | `unsupported_browser_mutation`     | When a durable detached job exists, the upload deletes or rewrites the execution domain, or changes the session identity                                                                                  |
-| 409         | `world_deleting`                   | The original world or the target world is being deleted                                                                                                                                                   |
-| 409         | —                                  | No checkpoint has been uploaded yet, a revision conflict, the session instance changed, or the session is being deleted                                                                                   |
-| 413         | —                                  | The `browser-checkpoint` request body is over 64 MiB                                                                                                                                                      |
+| Status code | `code`                             | When                                                                                                                                                                    |
+| ----------- | ---------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 400         | `invalid_checkpoint`               | The checkpoint structure is not valid, including duplicate message IDs in `checkpoint.messages`                                                                         |
+| 400         | `invalid_checkpoint_scope`         | The checkpoint's `sessionId` does not match `:id` in the path, or `profile` is not `browser-private`; the initial checkpoint's world differs from the created session's |
+| 400         | `session_record_scope_conflict`    | The global record ID of a snapshot, a pending record, or a world import ledger already belongs to another session                                                       |
+| 401         | `operator_token_required`          | An ordinary owner refers, through a checkpoint, to a world the server does not have yet (see "Shared deployments" below)                                                |
+| 401         | —                                  | The owner of the session changed while the request was queued                                                                                                           |
+| 409         | `browser_private_profile_required` | The server's storage is not MemoryStore                                                                                                                                 |
+| 409         | `unsupported_browser_mutation`     | When a durable detached job exists, the upload deletes or rewrites the execution domain, or changes the session identity                                                |
+| 409         | `world_deleting`                   | The original world or the target world is being deleted                                                                                                                 |
+| 409         | —                                  | No checkpoint has been uploaded yet, a revision conflict, the session instance changed, or the session is being deleted                                                 |
+| 413         | —                                  | The `browser-checkpoint` request body is over 64 MiB                                                                                                                    |
 
 Validation rules:
 

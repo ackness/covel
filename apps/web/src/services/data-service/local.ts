@@ -14,7 +14,10 @@ import type {
   SessionRecord as StoreSessionRecord,
   WorldRecord as StoreWorldRecord,
 } from "@covel/store/browser-sync";
-import { BROWSER_CHECKPOINT_SCHEMA_VERSION } from "@covel/store/browser-sync";
+import {
+  BROWSER_CHECKPOINT_SCHEMA_VERSION,
+  initialBrowserCheckpointActionId,
+} from "@covel/store/browser-sync";
 import type { SessionStatus } from "../api.js";
 import type {
   MessageRecord,
@@ -246,16 +249,9 @@ function initialCheckpoint(
     jobStatus: [],
     runtimeExports: [],
     revision: 1,
-    actionId: `local:create:${session.id}`,
+    actionId: initialBrowserCheckpointActionId(session.id),
     committedAt,
   });
-}
-
-function isFreshLocalCheckpoint(checkpoint: BrowserCheckpoint): boolean {
-  return (
-    checkpoint.revision === 1 &&
-    checkpoint.actionId === `local:create:${checkpoint.sessionId}`
-  );
 }
 
 export class LocalDataService implements DataService {
@@ -880,15 +876,12 @@ export class LocalDataService implements DataService {
       );
     }
 
-    // A new save adopts the server's complete initialization, including world
-    // data and resolved dependencies. Established saves restore their own data.
-    const uploaded = await api.uploadBrowserCheckpoint(
-      serverSessionId,
-      { ...checkpoint, world: serverCheckpointWorld(world) },
-      ...(isFreshLocalCheckpoint(checkpoint)
-        ? ([{ initialize: true }] as const)
-        : []),
-    );
+    // The server keeps its initialization for a new save (revision 1), with
+    // world data and resolved dependencies. Established saves restore their own.
+    const uploaded = await api.uploadBrowserCheckpoint(serverSessionId, {
+      ...checkpoint,
+      world: serverCheckpointWorld(world),
+    });
     if (uploaded.reconcileRequired) {
       // Adopt initialization or retained detached writes before any action.
       const actionId = `hydrate:${checkpoint.revision}`;
