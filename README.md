@@ -33,7 +33,7 @@ Covel is an AI RPG framework and playable studio where NPC relationships, lore, 
 
 |                                              Stage mode (visual novel)                                               |                                                     Story mode (text)                                                      |
 | :------------------------------------------------------------------------------------------------------------------: | :------------------------------------------------------------------------------------------------------------------------: |
-| ![Stage mode in Harukaze Academy: backdrop, character sprites, and dialogue](./.assets/images/readme/stage-mode.png) | ![Story mode in Emberback Relay: narration, suggested actions, and a plugin panel](./.assets/images/readme/text-mode.png)  |
+| ![Stage mode in Harukaze Academy: backdrop, character sprites, and dialogue](./.assets/images/readme/stage-mode.en.png) | ![Story mode in Emberback Relay: narration and quest log](./.assets/images/readme/text-mode.en.png) |
 |              Backdrops, sprites, and typewriter dialog; scene art resolves and generates as you explore              | Narrated turns with suggested actions and inline forms; the default plugins update panels such as the quest log every turn |
 
 Worlds declare their default (`defaultViewMode: stage`); you can switch any time in-session.
@@ -133,7 +133,7 @@ Every turn ends with an **Execution · N runtimes** row below the story: expand 
 
 ## Every roll leaves a receipt
 
-![A turn's dice checks, affinity changes, and codex updates in Emberback Relay](./.assets/images/readme/rpg-systems.png)
+![Dice checks and scene actions alongside equipped items in the inventory](./.assets/images/readme/rpg-systems.en.png)
 
 A risky action resolves against dice rolled **before** the narrator writes, so the outcome cannot be retconned to fit the prose — and the arithmetic posts inline: `19 + 2 = 21 vs DC 16`. Quest progress, gear changes, and affinity shifts land in the turn the same way, then accumulate into their own panels. Dice, quests, inventory, and affinity are four separate plugins; a world seeds the opening quests, starting gear, and initial affinity, or ships without any of them.
 
