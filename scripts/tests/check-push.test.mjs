@@ -302,3 +302,39 @@ test("a Turbo cache directory set by the caller is kept", (t) => {
     new Set([cache]),
   );
 });
+
+test("refuses to run on a Node other than the one mise.toml pins", (t) => {
+  const probe = fixture(t);
+  probe.commit("committed");
+  probe.commitFiles(
+    { "mise.toml": '[tools]\npnpm = "12.14.0"\nnode = "0.0.1"\n' },
+    "pin another node",
+  );
+
+  const result = probe.run();
+  assert.equal(result.status, 1);
+  assert.match(
+    result.stderr,
+    new RegExp(
+      `Node ${process.versions.node.replaceAll(".", "\\.")} is running this check, but mise\\.toml pins Node 0\\.0\\.1`,
+    ),
+  );
+  assert.match(result.stderr, /mise install/);
+  assert.deepEqual(probe.calls(), []);
+});
+
+test("runs normally on the Node that mise.toml pins", (t) => {
+  const probe = fixture(t);
+  probe.commit("committed");
+  probe.commitFiles(
+    { "mise.toml": `[tools]\nnode = "${process.versions.node}"\n` },
+    "pin this node",
+  );
+
+  const result = probe.run();
+  assert.equal(result.status, 0, result.stderr);
+  assert.deepEqual(
+    probe.calls().map(({ args }) => args),
+    expectedCommands,
+  );
+});

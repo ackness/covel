@@ -231,13 +231,21 @@ describe("the world record is the source of truth", () => {
       await editDimensions(5);
       const available = async () =>
         (await (await app.request("/api/worlds/pkg")).json()).updateAvailable;
-      await writeFile(filename, "first");
+      // The digest reuses its hash while size and mtime match, and same-size
+      // writes can share one coarse file-time tick, so give each a new mtime.
+      let mtime = Date.now() - 60_000;
+      const write = async (content: string) => {
+        await writeFile(filename, content);
+        mtime += 2_000;
+        await utimes(filename, new Date(mtime), new Date(mtime));
+      };
+      await write("first");
       expect(await available()).toBe(true);
       await app.request("/api/worlds/pkg/restore-package", json({}));
       expect(await available()).toBe(false);
-      await writeFile(filename, "other");
+      await write("other");
       expect(await available()).toBe(true);
-      await writeFile(filename, "first");
+      await write("first");
       expect(await available()).toBe(false);
       await rm(filename);
       expect(await available()).toBe(true);
