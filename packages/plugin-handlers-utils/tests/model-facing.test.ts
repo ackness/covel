@@ -46,6 +46,58 @@ describe("modelFacingJson", () => {
     expect(modelFacingJson(record)).toEqual(record);
   });
 
+  it("keeps a UUID that links one part of the value to another, everywhere it appears", () => {
+    const ada = "33333333-3333-4333-8333-333333333333";
+    const bo = "44444444-4444-4444-8444-444444444444";
+    const turn = "250873f9-1cb1-4afa-981b-f7b77ba4a920";
+    const worldIR = {
+      entities: [
+        { id: ada, type: "character", name: "Ada" },
+        { id: bo, type: "character", name: "Bo" },
+        { id: "brass-key", type: "item", name: "Brass key" },
+      ],
+      relations: [{ from: ada, to: bo, type: "trusts" }],
+      events: [
+        {
+          type: "inventory_change",
+          participantIds: [ada, "brass-key"],
+          attributes: { holder: ada },
+        },
+        { type: "meeting", participantIds: [ada, bo], turnId: turn },
+      ],
+      statements: [{ subjectIds: [bo], text: "Bo keeps the ferry log." }],
+    };
+
+    // The turn is named nowhere else, so its UUID is still bookkeeping.
+    expect(modelFacingJson(worldIR)).toEqual({
+      ...worldIR,
+      events: [
+        worldIR.events[0],
+        { type: "meeting", participantIds: [ada, bo] },
+      ],
+    });
+    expect(modelHiddenPaths(worldIR)).toEqual([
+      { path: "events[1].turnId", reason: "uuid" },
+    ]);
+  });
+
+  it("drops a UUID id that nothing else in the value names", () => {
+    const ada = "33333333-3333-4333-8333-333333333333";
+    // A session ID never links: it goes whatever it holds.
+    expect(
+      modelFacingJson({ entities: [{ id: ada, name: "Ada" }], sessionId: ada }),
+    ).toEqual({ entities: [{ name: "Ada" }] });
+    // A record that repeats its own ID links nothing.
+    expect(modelFacingJson({ id: ada, name: ada, title: "Ada" })).toEqual({
+      name: ada,
+      title: "Ada",
+    });
+    // A reference counts only inside the value that is projected.
+    const rows = [{ id: ada }, { ownerId: ada }];
+    expect(modelFacingJson(rows)).toEqual(rows);
+    expect(rows.map((row) => modelFacingJson(row))).toEqual([{}, {}]);
+  });
+
   it("returns values that are not records as they are", () => {
     expect(modelFacingJson("2026-10-06T08:51:22.123Z")).toBe(
       "2026-10-06T08:51:22.123Z",
@@ -57,14 +109,16 @@ describe("modelFacingJson", () => {
 
 describe("modelHiddenPaths", () => {
   it("names exactly the properties that modelFacingJson leaves out, with the reason", () => {
-    const uuid = "0b9f6c0e-3d1a-4a7e-9c55-1f2e3d4c5b6a";
     const record = {
       id: "npc-lin-yao",
       date: "1943-06-01T08:00:00Z",
       lookedAt: "the bronze door",
-      fields: { diedAt: "1943-06-01T08:00:00Z", mentorId: uuid },
+      fields: {
+        diedAt: "1943-06-01T08:00:00Z",
+        mentorId: "0b9f6c0e-3d1a-4a7e-9c55-1f2e3d4c5b6a",
+      },
       log: [{ note: "kept" }, { timestamp: "2026-10-06T08:51:22Z" }],
-      allies: [{ id: uuid, name: "Mara" }],
+      allies: [{ id: "6d1c2b3a-4e5f-4a6b-8c7d-9e0f1a2b3c4d", name: "Mara" }],
       sessionId: "any",
     };
     expect(modelHiddenPaths(record)).toEqual([
