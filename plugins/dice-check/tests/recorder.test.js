@@ -27,13 +27,18 @@ function makeCtx({
   existingMessage = null,
   dice = [14, 6, 20],
   tabletopReceipt = undefined,
+  logicalTurn = undefined,
+  world = undefined,
 } = {}) {
   return {
     pluginId: "dice-check",
     runtimeId: "dice-check/recorder",
     messages,
+    locale: "zh-CN",
     sessionId: "sess-1",
     turnId: "turn-7",
+    ...(logicalTurn === undefined ? {} : { logicalTurn }),
+    ...(world === undefined ? {} : { world }),
     triggerEvent: noTriggerEvent ? undefined : { topic: TOPIC, data },
     inputs: {
       ...(dice === null
@@ -150,6 +155,101 @@ describe("dice-check recorder handler", () => {
     });
   });
 
+  it("names the check's turn by its number in every shipped language, keeping the turn ID for code", async () => {
+    const ctx = makeCtx({ data: { checks: [VALID_CHECK] }, logicalTurn: 7 });
+
+    const result = await handler(ctx);
+
+    const checksRow = result.effects.pluginData.find(
+      (r) => r.namespace === "checks",
+    );
+    expect(checksRow.key).toBe("turn-7-1");
+    expect(checksRow.value).toMatchObject({
+      turnId: "turn-7",
+      turn: 7,
+      turnLabel: { en: "Turn 7", zh: "第 7 回合" },
+    });
+  });
+
+  it("gives no turn label when the host gives no logical turn", async () => {
+    const result = await handler(makeCtx({ data: { checks: [VALID_CHECK] } }));
+
+    const check = result.effects.pluginData.find(
+      (r) => r.namespace === "checks",
+    ).value;
+    expect(check).not.toHaveProperty("turn");
+    expect(check).not.toHaveProperty("turnLabel");
+  });
+
+  it("shows the world's name of the attribute a receipt gives by id or by name", async () => {
+    const world = {
+      characters: [],
+      characterSchema: {
+        attributes: [
+          {
+            id: "agility",
+            name: "敏捷",
+            type: "number",
+            category: "abilities",
+            min: 0,
+            max: 5,
+          },
+          { id: "trust", name: "信任", type: "number", category: "social" },
+        ],
+      },
+    };
+    const labelOf = async (attribute) => {
+      const result = await handler(
+        makeCtx({ data: { checks: [{ ...VALID_CHECK, attribute }] }, world }),
+      );
+      const check = result.effects.pluginData.find(
+        (r) => r.namespace === "checks",
+      ).value;
+      // The receipt's own text stays on record.
+      expect(check.attribute).toBe(attribute);
+      // The message block shows the same label as the log.
+      expect(
+        result.effects.pluginData.find((r) => r.namespace === "message").value
+          .checks[0].attributeLabel,
+      ).toBe(check.attributeLabel);
+      return check.attributeLabel;
+    };
+
+    expect(await labelOf("agility")).toBe("敏捷");
+    expect(await labelOf("Agility")).toBe("敏捷");
+    expect(await labelOf("敏捷")).toBe("敏捷");
+    expect(await labelOf("trust")).toBe("信任");
+    // Text that names no attribute of the world is shown as written.
+    expect(await labelOf("运气")).toBe("运气");
+  });
+
+  it("resolves an attribute name written in several languages for the session", async () => {
+    const world = {
+      characters: [],
+      characterSchema: {
+        attributes: [
+          {
+            id: "agility",
+            name: { "zh-CN": "敏捷", "en-US": "Agility" },
+            type: "number",
+            category: "abilities",
+            max: 5,
+          },
+        ],
+      },
+    };
+    const result = await handler(
+      makeCtx({
+        data: { checks: [{ ...VALID_CHECK, attribute: "Agility" }] },
+        world,
+      }),
+    );
+    expect(
+      result.effects.pluginData.find((r) => r.namespace === "checks").value
+        .attributeLabel,
+    ).toBe("敏捷");
+  });
+
   it("records a zero-modifier receipt without an attribute label", async () => {
     const ctx = makeCtx({
       data: {
@@ -178,6 +278,7 @@ describe("dice-check recorder handler", () => {
       outcome: "success",
     });
     expect(check).not.toHaveProperty("attribute");
+    expect(check).not.toHaveProperty("attributeLabel");
     const message = result.effects.pluginData.find(
       (row) => row.namespace === "message",
     ).value;

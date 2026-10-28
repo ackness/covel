@@ -66,6 +66,7 @@ export function LlmKeysPane({
   const openLlmTomlFile = useOpenLlmToml();
 
   const isConfigured = state.llmConfig?.configured ?? false;
+  const desktop = isDesktopApp();
   const envOverrides = state.llmConfig?.envKeyOverrides ?? [];
   const [priceMultipliers, setPriceMultipliersLocal] = useState<
     Record<string, number>
@@ -126,7 +127,6 @@ export function LlmKeysPane({
   ];
 
   if (keyEntries.length === 0) {
-    const desktop = isDesktopApp();
     return (
       <div className="border border-dashed border-border p-4 space-y-3 text-xs">
         <div className="flex items-start gap-2">
@@ -169,9 +169,11 @@ export function LlmKeysPane({
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
           <Info className="w-3 h-3" />
           <span>
-            {isConfigured
-              ? t("settings.keysConfiguredDesc")
-              : t("settings.keysLocalDesc")}
+            {!isConfigured
+              ? t("settings.keysLocalDesc")
+              : desktop
+                ? t("settings.keysConfiguredDesktopDesc")
+                : t("settings.keysConfiguredDesc")}
           </span>
         </div>
       )}

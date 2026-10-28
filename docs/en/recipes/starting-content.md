@@ -65,17 +65,17 @@ Create `data/items.yaml`:
   quantity: 30
   description: 镇上通用的铜钱。
   tags:
-    - currency
+    - 货币
 - id: storm-lantern
   name: 防风灯
   quantity: 1
   description: 一盏带罩的油灯，油够烧一夜。
   tags:
-    - tool
+    - 工具
   equipped: true
 ```
 
-- Money is marked with the `currency` tag.
+- Players see the tags, so write them in the world's language. Mark money with a tag that says it is currency, here `货币`.
 - `equipped: true` means the protagonist is holding or wearing the item.
 - Keep the list short. Things gained during play are recorded in the inventory automatically.
 

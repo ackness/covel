@@ -45,14 +45,17 @@ function makeCase(): { dir: string; from: string; to: string } {
 /** Every file under `root` with its contents, to compare before and after. */
 function snapshot(root: string): Record<string, string> {
   const files: Record<string, string> = {};
+  // Keys use `/` on every platform, as the expected trees do.
+  const key = (file: string) =>
+    path.relative(root, file).split(path.sep).join("/");
   const walk = (dir: string): void => {
     for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
       const file = path.join(dir, entry.name);
       if (entry.isDirectory()) {
-        files[`${path.relative(root, file)}/`] = "";
+        files[`${key(file)}/`] = "";
         walk(file);
       } else {
-        files[path.relative(root, file)] = fs.readFileSync(file, "utf-8");
+        files[key(file)] = fs.readFileSync(file, "utf-8");
       }
     }
   };

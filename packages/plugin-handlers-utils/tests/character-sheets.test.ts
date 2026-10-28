@@ -62,9 +62,10 @@ describe("characterSheetSegments", () => {
 
   it("filters nested bookkeeping from player and NPC sheets while retaining semantic ids", () => {
     const uuid = "06d6a521-f8a9-4a02-8fb9-81029b3113dd";
+    const turnId = "5e4d3c2b-1a09-4f8e-9d7c-6b5a49382716";
     const bookkeeping = {
       sessionId: "private-session",
-      turnId: uuid,
+      turnId,
       updatedAt: "2026-10-07T00:00:00Z",
     };
     const fields = {
@@ -82,6 +83,7 @@ describe("characterSheetSegments", () => {
     const rendered = characterSheetSegments(cast, { profiles: true })[0]!
       .content;
     expect(rendered).not.toContain(uuid);
+    expect(rendered).not.toContain(turnId);
     expect(rendered).not.toContain("private-session");
     expect(rendered).not.toContain("updatedAt");
     expect(rendered).toContain("guild-scholar");

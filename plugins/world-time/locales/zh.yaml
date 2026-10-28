@@ -32,3 +32,21 @@ messages:
   Afternoon: 下午
   Evening: 夜晚
   Time: 时间
+  Phases: 时段
+  Cycle: 周期
+  Starts at: 起点
+  Era: 纪年
+  Months in a year: 每年月数
+  Hours in a day: 每天小时数
+  Days of the week: 星期
+  Time moves: 时间流向
+  Forward: 向前
+  Backward: 倒流
+  Forward or backward, as the story goes: 随叙事向前或倒流
+  Jumps at random: 随机跳转
+  Default per turn, in phases: 每回合默认推进的时段数
+  Default per turn, in minutes: 每回合默认推进的分钟数
+  Most per turn, in phases: 每回合最多推进的时段数
+  Most per turn, in minutes: 每回合最多推进的分钟数
+  Random range: 随机范围
+  to: 至

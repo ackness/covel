@@ -1,4 +1,5 @@
-import { pickLocaleText, resolveI18nText } from "@covel/plugin-handlers-utils";
+import { pickLocaleText } from "@covel/plugin-handlers-utils";
+import { attributeName, checkAttributes } from "../../lib/attributes.js";
 import { DIFFICULTY_DCS, MODIFIER_LIMIT } from "../../lib/check-rules.js";
 import { rememberPool } from "../../lib/turn-pool.js";
 
@@ -59,42 +60,28 @@ function signed(value) {
   return value > 0 ? `+${value}` : `${value}`;
 }
 
-/** Attribute names may be I18nText; the schema carries no per-locale files. */
-function nameOf(name, locale) {
-  return (name ? resolveI18nText(name, locale) : undefined) ?? "";
-}
-
 /**
- * The player character's check attributes with the modifier each converts
- * to: `round((value - min) / (max - min) * MODIFIER_LIMIT)`. The narrative
- * reads the modifier here instead of guessing one from a bare value — a 2/5
- * is +4, not +2.
- *
- * A check attribute is a number in the `abilities` category with a declared
- * maximum, the same attributes `tabletop-rules` offers for point buy and its
- * check panel. Health and other meters (`stats`) and relationships (`social`)
- * are not listed, so the narrative does not roll against them. That package
- * converts the same way (`checkModifier` in its `lib/rules.js`); change both
- * together.
+ * The player character's check attributes (`checkAttributes` in
+ * `lib/attributes.js`) with the modifier each converts to:
+ * `round((value - min) / (max - min) * MODIFIER_LIMIT)`. The narrative reads
+ * the modifier here instead of guessing one from a bare value — a 2/5 is +4,
+ * not +2. `tabletop-rules` converts the same way (`checkModifier` in its
+ * `lib/rules.js`); change both together.
  */
 function playerModifiers(world, locale) {
   const player = world?.characters?.find((c) => c.type === "player");
-  const attributes = world?.characterSchema?.attributes;
-  if (!player?.fields || !Array.isArray(attributes)) return [];
+  if (!player?.fields) return [];
   const lines = [];
-  for (const attr of attributes) {
-    if (attr.type !== "number" || attr.category !== "abilities") continue;
-    if (typeof attr.max !== "number") continue;
+  for (const attr of checkAttributes(world)) {
     const value = player.fields[attr.id];
     if (typeof value !== "number") continue;
     const min = typeof attr.min === "number" ? attr.min : 0;
-    if (attr.max <= min) continue;
     const modifier = Math.round(
       ((Math.min(Math.max(value, min), attr.max) - min) / (attr.max - min)) *
         MODIFIER_LIMIT,
     );
     lines.push({
-      name: nameOf(attr.name, locale),
+      name: attributeName(attr, locale),
       value,
       min,
       max: attr.max,

@@ -60,6 +60,15 @@ jobs:
           publish=false
           release_tag=""
 
+          # The jobs run this run's release and CI steps on the resolved
+          # source. A commit with other versions of them may lack the scripts
+          # those steps call, so it is built by its own workflow.
+          if [[ "$commit" != "$GITHUB_SHA" ]] &&
+            ! git diff --quiet "$GITHUB_SHA" "$commit" -- .github/workflows/release.yml .github/workflows/ci.yml; then
+            echo "::error::$INPUT_TAG has other release or CI workflows than the commit this run uses. Run the workflow from that ref: gh workflow run release.yml --ref $INPUT_TAG"
+            exit 1
+          fi
+
           if [[ "$EVENT_NAME" == "push" ]]; then
             publish=true
             release_tag="$EVENT_TAG"

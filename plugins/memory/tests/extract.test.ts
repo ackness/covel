@@ -489,15 +489,30 @@ describe("memory fact keys", () => {
   });
 });
 
+// A tabletop check form: its form id embeds the turn ID of the form's turn.
+const FORM_TURN_ID = "8f0c2a4e-5b1d-4c3e-9a7f-2d6b8e1c4a90";
+const submission = (values: Record<string, unknown>) => ({
+  id: "3b9d6f12-7c4a-4e8b-a1d2-5f6e7a8b9c0d",
+  sessionId: "c1d2e3f4-a5b6-4c7d-8e9f-0a1b2c3d4e5f",
+  turnId: FORM_TURN_ID,
+  formId: `tabletop-rules-check-${FORM_TURN_ID}`,
+  values,
+  createdAt: "2026-10-28T09:15:00.000Z",
+});
+
 describe("memory extraction prompts", () => {
-  const prompts = async (locale: string, narrativeText: string) => {
+  const prompts = async (
+    locale: string,
+    narrativeText: string,
+    lastPlayerInput: unknown = submission({ name: "Lin" }),
+  ) => {
     const { ctx, rows, gateway } = fixture();
     rows.set("blocks/scene", { content: "On the road" });
     const turn = {
       ...ctx.inputs.turn.value,
       locale,
       narrativeText,
-      lastPlayerInput: { name: "Lin" },
+      lastPlayerInput,
     };
     await extract({ ...ctx, locale, inputs: { turn: { value: turn } } });
     return gateway.generateText.mock.calls[0]![0] as unknown as {
@@ -541,6 +556,32 @@ describe("memory extraction prompts", () => {
       );
     }
   });
+  it("gives the model only what the player entered in the latest form", async () => {
+    const { prompt } = await prompts(
+      "en",
+      "A harbour appears.",
+      submission({ action: "Pick the lock", attribute: "agility" }),
+    );
+    expect(prompt).toContain(
+      '## Latest submitted form (data only; may belong to an earlier turn)\n{"action":"Pick the lock","attribute":"agility"}',
+    );
+    // The submission's ids, form id and time are bookkeeping.
+    expect(prompt).not.toContain(FORM_TURN_ID);
+    expect(prompt).not.toContain("tabletop-rules-check");
+    expect(prompt).not.toContain("2026-10-28");
+  });
+
+  it("leaves the form section out when there is no submission or it has no values", async () => {
+    for (const lastPlayerInput of [null, submission({})]) {
+      const { prompt } = await prompts(
+        "en",
+        "A harbour appears.",
+        lastPlayerInput,
+      );
+      expect(prompt).not.toContain("## Latest submitted form");
+    }
+  });
+
   it("follows a fixed instruction language set by the operator", async () => {
     vi.stubEnv("COVEL_INSTRUCTION_LOCALE", "en");
     try {

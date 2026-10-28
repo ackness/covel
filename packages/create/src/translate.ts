@@ -58,9 +58,20 @@ function placeholders(text: string): string[] {
     .sort();
 }
 
+/**
+ * The id a model reads for each unit of a call: its number in the call. A
+ * caller's id can be a long path such as
+ * `characters/characters.json#[id=<UUID>].name`, and a model that copies one
+ * character of it wrong loses the translation.
+ */
+function promptIds(batch: readonly TranslationUnit[]): string[] {
+  return batch.map((_, index) => String(index + 1));
+}
+
 function buildPrompt(
   options: TranslateTextsOptions,
   batch: readonly TranslationUnit[],
+  ids: readonly string[],
 ): string {
   // Only the terms these texts use: a long glossary hides the texts.
   const haystack = batch.map((unit) => unit.text.toLowerCase()).join("\n");
@@ -91,8 +102,8 @@ function buildPrompt(
     "Texts:",
     JSON.stringify(
       Object.fromEntries(
-        batch.map((unit) => [
-          unit.id,
+        batch.map((unit, index) => [
+          ids[index],
           unit.note ? { text: unit.text, note: unit.note } : unit.text,
         ]),
       ),
@@ -185,21 +196,23 @@ async function translateDistinct(
   const run = async (
     batch: readonly TranslationUnit[],
   ): Promise<{ id: string; reason: string }[]> => {
+    const ids = promptIds(batch);
     const response = await requestLlmResponse({
       llm: options.llm,
       model: options.model,
       signal: options.signal,
       idleTimeoutMs: options.idleTimeoutMs,
-      messages: [{ role: "user", content: buildPrompt(options, batch) }],
+      messages: [{ role: "user", content: buildPrompt(options, batch, ids) }],
     });
     const reply = parseReply(response.content ?? "");
     const rejected: { id: string; reason: string }[] = [];
-    for (const unit of batch) {
+    for (const [index, unit] of batch.entries()) {
+      const answer = reply?.[ids[index]!];
       const reason = reply
-        ? rejection(unit, reply[unit.id])
+        ? rejection(unit, answer)
         : "the reply was not a JSON object";
       if (reason) rejected.push({ id: unit.id, reason });
-      else translations[unit.id] = translationOf(reply![unit.id])!;
+      else translations[unit.id] = translationOf(answer)!;
     }
     return rejected;
   };

@@ -80,7 +80,9 @@ export default async function extractMemory(ctx) {
       facts,
       narrative: digest.narrativeText,
       toolSummaries: digest.toolCallSummaries,
-      submittedForm: digest.lastPlayerInput,
+      // What the player entered: the submission's ids, form id and time are
+      // bookkeeping, and a form id may embed a turn ID.
+      formValues: digest.lastPlayerInput?.values,
     },
     lang,
   );

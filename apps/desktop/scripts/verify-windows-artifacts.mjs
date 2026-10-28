@@ -303,11 +303,16 @@ async function runArtifact(kind, artifact, version, evidence) {
       ),
     );
     const session = await browser.newBrowserCDPSession();
-    await session.send("Browser.close");
+    // Electron can exit before acknowledging Browser.close, as on macOS. The
+    // native exit is authoritative; never leave a CDP reply as an unbounded await.
+    let closeError;
+    void session.send("Browser.close").catch((error) => {
+      closeError = error;
+    });
     const result = await waitForExit(completed, 15_000);
     assert.ok(
       result,
-      "Shipped app and its sidecar must exit within 15 seconds",
+      `Shipped app and its sidecar must exit within 15 seconds${closeError ? ` (Browser.close: ${closeError.message})` : ""}`,
     );
     assert.equal(result.code, 0, `Native observer failed: ${output}`);
     assert.equal(

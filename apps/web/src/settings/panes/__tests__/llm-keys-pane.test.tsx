@@ -12,7 +12,10 @@ import { emitToast } from "@/lib/toast-channel.js";
 import { LlmKeysPane } from "../LlmKeysPane.js";
 
 const sessionMocks = vi.hoisted(() => ({
-  llmConfig: undefined as { envKeyOverrides?: string[] } | undefined,
+  llmConfig: undefined as
+    | { configured?: boolean; envKeyOverrides?: string[] }
+    | undefined,
+  desktop: false,
 }));
 
 const storeMocks = vi.hoisted(() => {
@@ -73,7 +76,7 @@ vi.mock("@/components/shared/ping-button.js", () => ({
   PingButton: () => <span data-testid="ping" />,
 }));
 vi.mock("@/lib/desktop-bridge.js", () => ({
-  isDesktopApp: () => false,
+  isDesktopApp: () => sessionMocks.desktop,
   openLlmToml: vi.fn(),
 }));
 
@@ -81,6 +84,7 @@ describe("LlmKeysPane", () => {
   beforeEach(async () => {
     storeMocks.reset();
     sessionMocks.llmConfig = undefined;
+    sessionMocks.desktop = false;
     vi.mocked(setProviderPriceMultipliers).mockReset();
     vi.mocked(emitToast).mockReset();
     await i18n.changeLanguage("en-US");
@@ -107,6 +111,20 @@ describe("LlmKeysPane", () => {
       screen.getByText(i18n.t("settings.keyOverriddenByEnv")),
     ).toBeDefined();
   });
+
+  it.each([
+    [false, "settings.keysConfiguredDesc", ".env.llm"],
+    [true, "settings.keysConfiguredDesktopDesc", "keys.env"],
+  ])(
+    "names the key file of this kind of app (desktop: %s)",
+    (desktop, description, file) => {
+      sessionMocks.desktop = desktop;
+      sessionMocks.llmConfig = { configured: true };
+      render(<LlmKeysPane providerId="proxy" />);
+      const intro = screen.getByText(i18n.t(description));
+      expect(intro.textContent).toContain(file);
+    },
+  );
 
   it("restores the confirmed price and reports a rejected save once", async () => {
     vi.mocked(setProviderPriceMultipliers).mockRejectedValueOnce(

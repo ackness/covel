@@ -112,9 +112,9 @@
                   },
                   {
                     "component": "Text",
-                    "visible": { "$item": "value/attribute" },
+                    "visible": { "$item": "value/attributeLabel" },
                     "props": {
-                      "content": { "$item": "value/attribute" },
+                      "content": { "$item": "value/attributeLabel" },
                       "variant": "muted",
                       "size": "xs"
                     }
@@ -123,8 +123,9 @@
               },
               {
                 "component": "Text",
+                "visible": { "$item": "value/turnLabel" },
                 "props": {
-                  "content": { "$item": "value/turnId" },
+                  "content": { "$item": "value/turnLabel" },
                   "variant": "muted",
                   "size": "xs"
                 }
