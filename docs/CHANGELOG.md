@@ -47,6 +47,7 @@ Verified while preparing this release, on Linux x64: `pnpm check`, every Vitest 
 - **The website opens in dark mode by default.** Manually selected themes and languages are remembered across refreshes and return visits; the saved theme is applied before the first paint.
 - **The homepage separates play experiences from shared features.** Its fourth scene now presents Emberback Relay’s survival sandbox; multilingual support has its own feature panel.
 - **Stable dependencies and development tools are refreshed.** Updates follow the repository's release waiting period and include pnpm, Vitest, Playwright, and the tools scaffold. See the dependency policy in [Package boundaries](../internals/packages.md).
+- **The author SDK requires Node 26.12.1, like the host.** `@covel/plugin-handlers-utils` now declares `engines.node` `>=26.12.1 <27`, the same minimum as the repository, CI and the Docker image, which includes the October 2026 security fixes. Plugin projects on an earlier Node 26 release should move to 26.12.1.
 
 ### Fixed
 
