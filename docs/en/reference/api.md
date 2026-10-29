@@ -3723,7 +3723,18 @@ Returns an index of the framework's capabilities. Third-party developers, extern
       "reservedNamespaces": ["_runtime_jobs", "_logs"],
       "writePaths": [
         "builtin-tool:plugin-data-set",
-        "function-output:pluginData[]"
+        "function-output:pluginData[]",
+        "function-ctx.pluginData.update",
+        "local-tool:withPendingProposals(plugin.data.update)",
+        "plugin-rpc:context.store.setPluginData",
+        "management-api:PUT /api/sessions/:id/plugin-data/:pluginId/:namespace/:key"
+      ]
+    },
+    "proposals": {
+      "pluginDataTypes": [
+        "plugin.data",
+        "plugin.data.batch",
+        "plugin.data.update"
       ]
     },
     "worldData": {
@@ -3746,6 +3757,12 @@ Returns an index of the framework's capabilities. Third-party developers, extern
 
 > [!NOTE]
 > **Values of `triggerTypes`**: the only trigger types available are `auto` / `manual` / `event`. `triggerTypes` lists all three. The cadence of an `auto` runtime is written in `schedule.every` and given in `trigger.every` of the runtime summary. For details, see [reference/plugins.md → Runtime grouped fields](./plugins.md#runtime-field-groups).
+
+**Plugin-data write paths.** `pluginData.writePaths` lists every way plugin data is written, and `proposals.pluginDataTypes` lists the proposal types that write plugin data:
+
+- Operation-based writes have two paths: `function-ctx.pluginData.update` in a function runtime, and `plugin.data.update` submitted by a plugin's local tool through `withPendingProposals`. Both produce a `plugin.data.update` proposal, which applies its operations to the stored value inside the commit transaction. See [Transactions · Operation-based writes](./transactions.md#operation-based-writes-plugindataupdate).
+- Paths that produce proposals (builtin tools, `function-output:pluginData[]`, `function-ctx.pluginData.*`, a local tool's `withPendingProposals`) are checked at commit against the plugin's declared [datasets](./plugins.md#datasets-contributesdatasets): operation kinds and the record schema. A violation is refused with `code: "dataset-violation"`.
+- `plugin-rpc:context.store.setPluginData` and `management-api:PUT …` are direct writes outside the commit pipeline. They skip the dataset checks and do not read the current value. World data import skips the dataset checks too (see [World Data · Companion plugin data](./world-data.md#companion-plugin-data)).
 
 #### `GET /api/plugins`
 

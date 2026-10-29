@@ -72,6 +72,17 @@ export interface PluginDataDeletePayload {
   readonly key: string;
 }
 
+/**
+ * Operations against one plugin-data key. The commit applies them to the
+ * latest stored value inside the commit transaction; see
+ * `docs/reference/transactions.md`.
+ */
+export interface PluginDataUpdatePayload {
+  readonly namespace: string;
+  readonly key: string;
+  readonly ops: readonly import("@covel/plugin-handlers-utils").DataOp[];
+}
+
 export interface CharacterUpsertPayload {
   readonly id: string;
   readonly name: string;
@@ -151,6 +162,7 @@ export interface ProposalPayloadMap {
   "plugin.data": PluginDataPayload;
   "plugin.data.batch": PluginDataBatchPayload;
   "plugin.data.delete": PluginDataDeletePayload;
+  "plugin.data.update": PluginDataUpdatePayload;
   "character.upsert": CharacterUpsertPayload;
   "character.schema.set": CharacterSchemaSetPayload;
   "dimension.initialize": import("@covel/plugin-handlers-utils/dimensions").DimensionInitializePayload;
@@ -199,6 +211,7 @@ export const PROPOSAL_TYPES = [
   "plugin.data",
   "plugin.data.batch",
   "plugin.data.delete",
+  "plugin.data.update",
   "character.upsert",
   "character.schema.set",
   "dimension.initialize",

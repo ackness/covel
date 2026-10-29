@@ -136,6 +136,37 @@ describe("proposal payload schemas", () => {
   });
 });
 
+describe("plugin.data.update payload", () => {
+  const payload = (ops: unknown) => ({ namespace: "wallet", key: "gold", ops });
+
+  it("accepts a valid op list", () => {
+    expect(
+      checkProposalPayload(
+        "plugin.data.update",
+        payload([
+          { op: "inc", path: "/gold", by: 2, max: 10, onBound: "clamp" },
+          { op: "upsertItem", path: "/items", key: "id", value: { id: "a" } },
+        ]),
+      ),
+    ).toMatchObject({ ok: true });
+  });
+
+  it.each([
+    ["an empty list", []],
+    ["more than 64 ops", Array.from({ length: 65 }, () => ({ op: "delete" }))],
+    ["an unknown op", [{ op: "swap", value: 1 }]],
+    ["a non-finite by", [{ op: "inc", by: Number.POSITIVE_INFINITY }]],
+    ["a NaN by", [{ op: "inc", by: Number.NaN }]],
+  ])("rejects %s", (_label, ops) => {
+    expect(
+      checkProposalPayload("plugin.data.update", payload(ops)),
+    ).toMatchObject({
+      ok: false,
+      error: expect.stringMatching(/^plugin\.data\.update: invalid payload/),
+    });
+  });
+});
+
 describe("finalizeExecution checks every proposal before it commits", () => {
   it.each([
     [

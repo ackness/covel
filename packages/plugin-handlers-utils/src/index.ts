@@ -458,6 +458,7 @@ export type {
 export {
   overlayPluginDataValue,
   overlayPluginDataRows,
+  type PluginDataOverlayRow,
 } from "./proposal-overlay.js";
 
 export { compareText } from "./compare-text.js";

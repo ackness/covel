@@ -257,6 +257,9 @@ describe("npc-graph core plugin write-read-inject path", () => {
           delete: async () => {
             throw new Error("rag-retriever must not delete plugin data");
           },
+          update: async () => {
+            throw new Error("rag-retriever must not update plugin data");
+          },
         },
       });
       if (!("outcome" in recalled) || recalled.outcome !== "success")

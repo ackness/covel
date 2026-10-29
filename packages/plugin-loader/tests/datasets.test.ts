@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   discoverPluginAt,
   loadPluginDefinition,
+  loadRuntime,
   validatePluginFiles,
 } from "../src/index.js";
 import {
@@ -234,6 +235,40 @@ describe("contributes.datasets load", () => {
       }
     },
   );
+
+  it("hands the shared schema documents to every loaded runtime", async () => {
+    const dir = await plugin(
+      { datasets: { journal: { schema: "./schemas/journal.json" } } },
+      { "schemas/journal.json": journalSchema },
+      ["a", "b"],
+    );
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const discovery = (await discoverPluginAt(dir))!;
+    const definition = await loadPluginDefinition(discovery);
+    const names = definition.manifests.map((m) => m.manifest.name);
+    expect(names).toHaveLength(2);
+    for (const name of names) {
+      const loaded = await loadRuntime(discovery, name, undefined, definition);
+      expect(loaded.datasetSchemas).toBe(
+        definition.packageManifest.datasetSchemas,
+      );
+      expect(loaded.datasetSchemas).toEqual({ journal: journalSchema });
+    }
+  });
+
+  it("leaves datasetSchemas off a runtime of a package without datasets", async () => {
+    const dir = await plugin({}, {}, ["a"]);
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const discovery = (await discoverPluginAt(dir))!;
+    const definition = await loadPluginDefinition(discovery);
+    const loaded = await loadRuntime(
+      discovery,
+      definition.manifests[0]!.manifest.name,
+      undefined,
+      definition,
+    );
+    expect(loaded).not.toHaveProperty("datasetSchemas");
+  });
 
   it("names a missing schema file", async () => {
     const dir = await plugin(declared, {});

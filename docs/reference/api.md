@@ -3723,7 +3723,18 @@ runtime 报告失败时，它的原始错误保留在 `result.runtimeResults` �
       "reservedNamespaces": ["_runtime_jobs", "_logs"],
       "writePaths": [
         "builtin-tool:plugin-data-set",
-        "function-output:pluginData[]"
+        "function-output:pluginData[]",
+        "function-ctx.pluginData.update",
+        "local-tool:withPendingProposals(plugin.data.update)",
+        "plugin-rpc:context.store.setPluginData",
+        "management-api:PUT /api/sessions/:id/plugin-data/:pluginId/:namespace/:key"
+      ]
+    },
+    "proposals": {
+      "pluginDataTypes": [
+        "plugin.data",
+        "plugin.data.batch",
+        "plugin.data.update"
       ]
     },
     "worldData": {
@@ -3746,6 +3757,12 @@ runtime 报告失败时，它的原始错误保留在 `result.runtimeResults` �
 
 > [!NOTE]
 > **`triggerTypes` 的取值范围**：可用的触发类型只有 `auto` / `manual` / `event` 三种，`triggerTypes` 把它们全部列出。`auto` runtime 的节奏写在 `schedule.every`，runtime 摘要的 `trigger.every` 里给出。详见 [reference/plugins.md → Runtime 分组字段](./plugins.md#runtime-分组字段)。
+
+**插件数据写入路径。** `pluginData.writePaths` 列出插件数据的全部写入方式，`proposals.pluginDataTypes` 列出写插件数据的 proposal 类型：
+
+- 操作式写入有两条路径：function runtime 的 `function-ctx.pluginData.update`，以及插件本地工具通过 `withPendingProposals` 提交的 `plugin.data.update`。两者都产生 `plugin.data.update` proposal，在提交事务里对当前存的值应用操作。见[事务 · 操作式写入](./transactions.md#操作式写入plugindataupdate)。
+- 产生 proposal 的路径（内置工具、`function-output:pluginData[]`、`function-ctx.pluginData.*`、本地工具的 `withPendingProposals`）在提交时按插件声明的[数据集](./plugins.md#数据集contributesdatasets)检查操作种类和记录 schema，违反时以 `code: "dataset-violation"` 拒绝。
+- `plugin-rpc:context.store.setPluginData` 和 `management-api:PUT …` 是不经过提交流水线的直接写入，不做数据集检查，也不读当前值；世界数据导入同样不受数据集检查（见 [World Data · 配套插件数据](./world-data.md#配套插件数据)）。
 
 #### `GET /api/plugins`
 

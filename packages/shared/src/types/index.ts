@@ -234,6 +234,7 @@ export type {
   PluginDataPayload,
   PluginDataBatchPayload,
   PluginDataDeletePayload,
+  PluginDataUpdatePayload,
   CharacterUpsertPayload,
   CharacterSchemaSetPayload,
   LorebookUpsertPayload,

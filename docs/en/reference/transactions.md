@@ -92,6 +92,8 @@ Usage is simple: put the writes that must succeed or fail together into `fn`, an
 - `rejects a nested withTransaction with a clear error instead of deadlocking`
 - `recovers and accepts a fresh withTransaction after a nested rejection`
 
+`contract/suites/plugin-data-suite.ts` also checks the read-modify-write that operation-based writes rely on: a write is read back on the same transaction, a write of a failed savepoint is not visible afterwards, and a nested value round-trips unchanged.
+
 A new storage backend **must** pass this suite.
 
 ## Versioned plugin-data batch CAS
@@ -506,6 +508,39 @@ await store.withTransaction(async (tx) => {
 });
 // Flush buffered notifications only after COMMIT; discard them on rollback.
 ```
+
+### Operation-based writes (plugin.data.update)
+
+A plugin can submit a list of operations against one plugin-data key instead of a computed value. A function runtime calls `ctx.pluginData.update(namespace, key, ops)`; a tool uses `makeProposal(ctx, now, "plugin.data.update", { namespace, key, ops })`. The operation kinds and their meaning are the `ops` of [plugin datasets](./plugins.md#datasets-contributesdatasets).
+
+**Read-modify-write in the commit transaction.** At commit, the `plugin.data.update` handler reads the key's stored value inside the commit transaction, applies the operations in order with `applyDataOps`, and writes the result back:
+
+- When the result is absent (for example the last operation is `delete`), an existing row is deleted; without a row nothing happens, and the commit still succeeds.
+- When the result is present, every `MediaRef` in the **result** is checked against the session and canonicalized, then the result is checked against the size limit of one value and then against the dataset rules (below) before it is written. The payload check before commit sees only the operations, and a reference can be assembled across operations or by changing the stored value, so the result is checked again. The rewrite keeps the row's ID and `createdAt`.
+- In-execution overlay reads (a runtime reading its own uncommitted writes) project the operations with the same `applyDataOps`. So what a runtime reads equals what the commit stores.
+
+**All or nothing per proposal.** When any operation of the list fails, the whole proposal is rejected and the key keeps its value. A rejected proposal follows the commit-unit rules above: next to a successful story only its optional unit is dropped, and an execution without a story rolls back as a whole. The handler never throws for a data problem; only a store error throws, and it rolls the whole execution back like any other write.
+
+**Error codes.** A rejection sets `CommitResult.code` to one of:
+
+| `code`                                                                | Cause                                                                                                                                                                                | Shape of `error`                                                                                                         |
+| --------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------ |
+| `data-op-rejected`                                                    | An operation fails against the current value, for example an `inc` past its `min`                                                                                                    | `plugin.data.update: inc result is outside the allowed range (op 0, out-of-bounds)`, with a path as `(op 1 at /gold, …)` |
+| `dataset-violation`                                                   | The write breaks a declared dataset: an operation kind that is not allowed, a result that does not match the record schema, or a schema document that is missing or does not compile | `plugin.data.update: dataset inventory: operation kind append is not allowed`                                            |
+| `media-not-found` / `media-ownership-invalid` / `media-mime-mismatch` | A `MediaRef` in the result names an asset that does not exist, that the session does not reference, or whose MIME type differs                                                       | `plugin.data.update: session … has no reference to media …`                                                              |
+
+A missing namespace or key, and an empty or invalid operation list, are rejected by the payload check before the handler runs, with `code` `proposal-invalid`. Rejections for a reserved namespace and the size limit happen in the handler and carry `error` without a `code`.
+
+**Dataset checks.** When a plugin declares a namespace in `contributes.datasets`, **every** plugin-data proposal of that plugin into the namespace is checked:
+
+- Each operation kind of a `plugin.data.update` must be in the dataset's `ops`. A whole-value write (`plugin.data` and each item of `plugin.data.batch`) counts as `set`, and `plugin.data.delete` counts as `delete`.
+- When the result is present, the written value is validated against the dataset's record schema, and the first 3 errors are reported.
+- When the host did not capture the dataset's schema document, every write is refused (`dataset schema of <ns> is unavailable`) instead of let through.
+- A namespace without a dataset gets none of these checks. The `key` field is not checked at commit.
+
+**Relies on per-session commit serialization.** The read-modify-write is correct because the commits of one session are serialized by the session lock, which is distributed across PostgreSQL processes (see the action-level plugin-rpc lock boundary above). Two executions that each prepare `inc +1` and commit one after the other add both. Writers outside the session lock do not read the current value and can overwrite it: the management API `PUT` of plugin data and the immediate writes of a plugin action RPC.
+
+**Suspension write baseline.** The write baseline recorded when a suspension is saved (`takenUnder.writes`) includes a `plugin.data.update` only when its operations contain `set` or `delete`. An update of relative operations only (`merge`, `inc`, array operations) applies to the latest value at commit and cannot put back a stale whole value, so it is left out.
 
 ## World Data import
 

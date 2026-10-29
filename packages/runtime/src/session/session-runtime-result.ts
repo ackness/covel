@@ -82,6 +82,8 @@ export interface RuntimeCommitOptions {
   readonly deferPostCommit?: (fn: () => Promise<void>) => void;
   /** Media store the MediaRefs of every proposal are checked against. */
   readonly mediaStore?: MediaOwnershipStore;
+  /** Declared dataset rules every plugin-data write is checked against. */
+  readonly datasetPolicy?: import("../commit/commit-plugin-data.js").DatasetPolicyResolver;
 }
 
 /** Proposals ready to persist, plus the ones already rejected on the way. */
@@ -359,6 +361,7 @@ async function persistProposals(
     {
       preStateCommitApplied,
       ...(opts?.mediaStore ? { mediaStore: opts.mediaStore } : {}),
+      ...(opts?.datasetPolicy ? { datasetPolicy: opts.datasetPolicy } : {}),
     },
   );
   const commitResults = await pipeline.commitAll(

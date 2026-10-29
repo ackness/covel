@@ -233,4 +233,95 @@ describe.skipIf(!isolatedUrl)("commit pipeline on real PG (bug6)", () => {
     expect(await store.listMessages(sessionA)).toHaveLength(1);
     expect(await store.listMessages(sessionB)).toHaveLength(1);
   });
+
+  describe("plugin.data.update", () => {
+    const update = (
+      sessionId: string,
+      key: string,
+      ops: Extract<
+        ProposalBody,
+        { type: "plugin.data.update" }
+      >["payload"]["ops"],
+    ) =>
+      makeProposal(
+        {
+          type: "plugin.data.update",
+          payload: { namespace: "wallet", key, ops },
+        },
+        globalThis.crypto.randomUUID(),
+        sessionId,
+      );
+    const value = async (sessionId: string, key: string) =>
+      (await store.getPluginData(sessionId, SOURCE.pluginId, "wallet", key))
+        ?.value;
+
+    it("commits inc and upsertItem", async () => {
+      const sessionId = "pg-update-ops";
+      await seedSession(store, sessionId);
+      const results = await createCommitPipeline(store).commitAll([
+        update(sessionId, "purse", [
+          { op: "inc", path: "/gold", by: 3 },
+          {
+            op: "upsertItem",
+            path: "/items",
+            key: "id",
+            value: { id: "a", qty: 1, note: null },
+          },
+        ]),
+        update(sessionId, "purse", [
+          { op: "inc", path: "/gold", by: -1.5 },
+          {
+            op: "upsertItem",
+            path: "/items",
+            key: "id",
+            value: { id: "a", qty: 2 },
+          },
+        ]),
+      ]);
+      expect(results.every((r) => r.committed)).toBe(true);
+      expect(await value(sessionId, "purse")).toEqual({
+        gold: 1.5,
+        items: [{ id: "a", qty: 2, note: null }],
+      });
+    });
+
+    it("sums two sequential commitAll calls with inc on one key", async () => {
+      const sessionId = "pg-update-sum";
+      await seedSession(store, sessionId);
+      const pipeline = createCommitPipeline(store);
+      await pipeline.commitAll([
+        update(sessionId, "gold", [{ op: "inc", by: 1 }]),
+      ]);
+      await pipeline.commitAll([
+        update(sessionId, "gold", [{ op: "inc", by: 1 }]),
+      ]);
+      expect(await value(sessionId, "gold")).toBe(2);
+    });
+
+    it("leaves the row of a rejected op list while its siblings commit", async () => {
+      const sessionId = "pg-update-reject";
+      await seedSession(store, sessionId);
+      const pipeline = createCommitPipeline(store);
+      await pipeline.commitAll([
+        update(sessionId, "gold", [{ op: "set", value: 1 }]),
+      ]);
+      const results = await pipeline.commitAll([
+        update(sessionId, "other", [{ op: "append", value: "x" }]),
+        update(sessionId, "gold", [{ op: "inc", by: -5, min: 0 }]),
+        makeProposal(
+          {
+            type: "narrative.append",
+            payload: { content: "sibling", kind: "story" },
+          },
+          "pg-update-reject-msg",
+          sessionId,
+        ),
+      ]);
+      expect(results.map((r) => r.committed)).toEqual([true, false, true]);
+      expect(results[1]).toMatchObject({ code: "data-op-rejected" });
+      expect(await value(sessionId, "gold")).toBe(1);
+      expect(await value(sessionId, "other")).toEqual(["x"]);
+      expect(await store.listMessages(sessionId)).toHaveLength(1);
+    });
+  });
 });

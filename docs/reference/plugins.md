@@ -893,7 +893,7 @@ namespace 声明 `search` 之后，它的记录进入框架的记忆检索（[`m
 - 插件 runtime 通过 `ctx.pluginData.list("_hidden.facts")` 读取。
 - 扩展点、模型工具、`io.selfData` 和公共 API 都读不到它。
 - 揭示应该通过本回合的 runtime 输出完成，详见 [World Data · 隐藏数据](./world-data.md#隐藏数据visibility-hidden)。
-- 插件自己的代码（function runtime 的 `ctx.pluginData.set`、插件本地工具产生的 `plugin.data` 提案）也可以写入自己的 `_hidden.<namespace>`，用于在剧情中追加隐藏内容。写入总是归属提案来源的插件，碰不到其他插件的隐藏数据。
+- 插件自己的代码（function runtime 的 `ctx.pluginData.set` / `ctx.pluginData.update`、插件本地工具产生的 `plugin.data` / `plugin.data.update` 提案）也可以写入自己的 `_hidden.<namespace>`，用于在剧情中追加隐藏内容。写入总是归属提案来源的插件，碰不到其他插件的隐藏数据。
 - REST 接口和内置的 `plugin-data-set` / `plugin-data-set-batch` 工具不能写任何 `_` 开头的命名空间。
 
 ## 提示词与记忆扩展
@@ -1108,13 +1108,23 @@ contributes:
 - **与 `contributes.data` 的关系。** 同一个名字同时出现在 `data` 和 `datasets` 里时，两边的 `schema` 必须指向同一个文件：一个 namespace 只有一份 schema。`data` 仍管世界包导入，数据集管 namespace 里的记录。
 - 没有声明数据集的 namespace，行为和以前一样。
 
-当前只做静态检查：加载、`pnpm validate:plugin` 和安装都会读取并解析每个数据集的 schema 文件（缺文件、JSON 不合法、路径越出包根会报错），并检查 `key`——当 schema 顶层有 `properties` 时，`key` 必须是其中的属性，并且列在顶层 `required` 里。顶层没有 `properties`（只写 `$ref`、`allOf` 等）的 schema 跳过这项检查。提交时按 `schema` 和 `ops` 校验写入的功能尚未提供，所以目前声明还不会限制写入。
+加载、`pnpm validate:plugin` 和安装都会读取并解析每个数据集的 schema 文件（缺文件、JSON 不合法、路径越出包根会报错），并检查 `key`——当 schema 顶层有 `properties` 时，`key` 必须是其中的属性，并且列在顶层 `required` 里。顶层没有 `properties`（只写 `$ref`、`allOf` 等）的 schema 跳过这项检查。
+
+提交时，插件写入自己声明的数据集 namespace 的每一条 proposal 都按声明校验：
+
+- **操作种类。** `plugin.data.update` 里每个操作的种类都必须在 `ops` 里。整值写入（`ctx.pluginData.set`、`plugin.data`、`plugin.data.batch` 的每一项）算作 `set`，删除（`plugin.data.delete`）算作 `delete`。所以 `ops` 里没有 `set` 的数据集，不能用 `set` 整个覆盖。
+- **记录 schema。** 写入后的值（对 `plugin.data.update` 是应用操作之后的结果）必须满足 `schema`。
+- 违反任何一条，这条 proposal 以 `code: "dataset-violation"` 被拒，按提交单元规则处理。宿主没有拿到 schema 文档时，写入一律被拒，不会放过。
+- `key` 在提交时不检查。
+- 不经过提交流水线的写入不做这些检查：世界数据的导入和同步（按 source 的 `schema` 校验，见 [World Data · 配套插件数据](./world-data.md#配套插件数据)）、plugin action RPC 的 `context.store.setPluginData`，以及管理 API 的 `PUT`。
+
+详见[事务 · 操作式写入](./transactions.md#操作式写入plugindataupdate)。
 
 ### 保留的数据命名空间
 
 所有以 `_` 开头的 namespace 都保留给内核。
 
-- 插件不能通过通用的 plugin-data API 或 proposal 写入或删除它们，包括没见过的 `_` 名字和旧的 `_memory`。
+- 插件不能通过通用的 plugin-data API 或 proposal（`set`、`update`、`delete` 都一样）写入或删除它们，包括没见过的 `_` 名字和旧的 `_memory`。
 - `_hidden.<namespace>` 存放 `visibility: hidden` 的世界数据，以及插件在剧情中追加的隐藏内容。只有所属插件的 runtime 能读，也只有所属插件自己的代码能写。
 - 插件日志通过受限的 logger API 产生。业务数据使用 `blocks`、`definitions` 这样的普通名字。
 - `__kernel:<subsystem>` 是另一种 owner 分区，插件绑定的读取接口访问不到它。

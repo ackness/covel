@@ -21,7 +21,7 @@ import {
   overlayPluginDataRows,
   overlayPluginDataValue,
 } from "../proposal-overlay.js";
-import { tool } from "@covel/plugin-handlers-utils";
+import { tool, type JsonValue } from "@covel/plugin-handlers-utils";
 import type { ToolModule } from "../types.js";
 
 /** Minimal read-only store interface for plugin data operations. */
@@ -226,6 +226,14 @@ function createPluginDataGetTool(store: PluginDataStore): ToolModule {
       if (!isModelReadableNamespace(params.namespace))
         return { found: false, namespace: params.namespace, key: params.key };
       const targetPlugin = context.pluginId;
+      const record = await store.getPluginData(
+        context.sessionId,
+        targetPlugin,
+        params.namespace,
+        params.key,
+      );
+      // Buffered writes of this execution, including operation lists applied
+      // on top of the stored value.
       const pending = overlayPluginDataValue(
         (context.pendingProposals ?? []).filter(
           (p) => p.sessionId === context.sessionId,
@@ -233,34 +241,20 @@ function createPluginDataGetTool(store: PluginDataStore): ToolModule {
         targetPlugin,
         params.namespace,
         params.key,
+        record
+          ? { exists: true, value: record.value as JsonValue }
+          : { exists: false },
       );
-      if (pending.hit) {
-        if (pending.deleted) {
-          return { found: false, namespace: params.namespace, key: params.key };
-        }
-        return {
-          found: true,
-          namespace: params.namespace,
-          key: params.key,
-          value: pending.value,
-          updatedAt: new Date().toISOString(),
-        };
-      }
-      const record = await store.getPluginData(
-        context.sessionId,
-        targetPlugin,
-        params.namespace,
-        params.key,
-      );
-      if (!record) {
+      if (!pending.exists) {
         return { found: false, namespace: params.namespace, key: params.key };
       }
       return {
         found: true,
-        namespace: record.namespace,
-        key: record.key,
-        value: record.value,
-        updatedAt: record.updatedAt,
+        namespace: params.namespace,
+        key: params.key,
+        value: pending.value,
+        updatedAt:
+          pending.hit || !record ? new Date().toISOString() : record.updatedAt,
       };
     },
   });
@@ -313,6 +307,7 @@ function createPluginDataListTool(store: PluginDataStore): ToolModule {
         ),
         targetPlugin,
         params.namespace,
+        records,
       )) {
         // The plugin's own code may buffer writes to its hidden buckets.
         if (!isModelReadableNamespace(namespace)) continue;

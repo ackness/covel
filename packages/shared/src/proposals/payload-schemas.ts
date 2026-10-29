@@ -13,6 +13,7 @@
  */
 
 import { z } from "zod";
+import { dataOpsSchema } from "@covel/plugin-handlers-utils";
 import type { ProposalPayloadMap, ProposalType } from "../types/proposal.js";
 import { mediaRefSchema } from "../types/media.js";
 import {
@@ -51,6 +52,11 @@ export const proposalPayloadSchemas = {
     items: z.array(pluginDataItemSchema).min(1),
   }),
   "plugin.data.delete": z.object({ namespace: nonEmpty, key: nonEmpty }),
+  "plugin.data.update": z.object({
+    namespace: nonEmpty,
+    key: nonEmpty,
+    ops: dataOpsSchema,
+  }),
   "character.upsert": characterUpsertPayloadSchema,
   "character.schema.set": characterSchemaSetPayloadSchema,
   // The dimension handler applies the full schemas itself: an invalid update

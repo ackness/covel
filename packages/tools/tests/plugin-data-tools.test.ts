@@ -21,7 +21,7 @@ function createMockStore() {
         _pluginId: string,
         namespace: string,
         key: string,
-      ) => ({
+      ): Promise<PluginDataRow | null> => ({
         namespace,
         key,
         value: { saved: true },
@@ -493,5 +493,92 @@ describe("plugin-data reads see this loop's own pending writes", () => {
         { ...ctx(), pendingProposals: getPendingProposals(result) },
       ),
     ).toMatchObject({ count: 2, items: [stored[0], pending] });
+  });
+
+  it("projects a pending plugin.data.update over the stored row in get and list", async () => {
+    const context = ctx();
+    const stored = {
+      namespace: "entries",
+      key: "alpha",
+      value: { coins: 5, tags: ["a"] },
+      updatedAt: "2026-09-06T00:00:00.000Z",
+    };
+    store.getPluginData.mockResolvedValue(stored);
+    store.listPluginData.mockResolvedValue([stored]);
+    const update = (ops: unknown): Proposal =>
+      ({
+        id: crypto.randomUUID(),
+        type: "plugin.data.update",
+        sessionId: context.sessionId,
+        turnId: context.turnId,
+        source: { pluginId: context.pluginId, runtimeId: context.runtimeId },
+        timestamp: "2026-09-19T00:00:00.000Z",
+        payload: { namespace: "entries", key: "alpha", ops },
+      }) as Proposal;
+    const pendingProposals = [
+      update([
+        { op: "inc", path: "/coins", by: -2, min: 0 },
+        { op: "append", path: "/tags", value: "b" },
+      ]),
+      // Fails against the projected value, so the overlay skips it.
+      update([{ op: "inc", path: "/coins", by: -10, min: 0 }]),
+    ];
+    const projected = { coins: 3, tags: ["a", "b"] };
+    expect(
+      await findByName(tools, "plugin-data-get").execute(
+        { namespace: "entries", key: "alpha" },
+        { ...context, pendingProposals },
+      ),
+    ).toMatchObject({ found: true, value: projected });
+    expect(
+      await findByName(tools, "plugin-data-list").execute(
+        { namespace: "entries" },
+        { ...context, pendingProposals },
+      ),
+    ).toMatchObject({
+      count: 1,
+      items: [{ namespace: "entries", key: "alpha", value: projected }],
+    });
+    // Without a pending write the stored row and its timestamp come back.
+    expect(
+      await findByName(tools, "plugin-data-get").execute(
+        { namespace: "entries", key: "alpha" },
+        context,
+      ),
+    ).toEqual({ found: true, ...stored });
+    expect(stored.value).toEqual({ coins: 5, tags: ["a"] });
+  });
+
+  it("starts a pending plugin.data.update on an absent key from nothing", async () => {
+    const context = ctx();
+    store.getPluginData.mockResolvedValue(null);
+    store.listPluginData.mockResolvedValue([]);
+    const pendingProposals = [
+      {
+        id: "update",
+        type: "plugin.data.update",
+        sessionId: context.sessionId,
+        turnId: context.turnId,
+        source: { pluginId: context.pluginId, runtimeId: context.runtimeId },
+        timestamp: "2026-09-19T00:00:00.000Z",
+        payload: {
+          namespace: "entries",
+          key: "fresh",
+          ops: [{ op: "inc", by: 2 }],
+        },
+      } as Proposal,
+    ];
+    expect(
+      await findByName(tools, "plugin-data-get").execute(
+        { namespace: "entries", key: "fresh" },
+        { ...context, pendingProposals },
+      ),
+    ).toMatchObject({ found: true, value: 2 });
+    expect(
+      await findByName(tools, "plugin-data-list").execute(
+        {},
+        { ...context, pendingProposals },
+      ),
+    ).toMatchObject({ count: 1, items: [{ key: "fresh", value: 2 }] });
   });
 });

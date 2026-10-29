@@ -96,6 +96,10 @@ import {
 } from "./dimension-finalization.js";
 import { droppedUpstream, settleDroppedInputs } from "./commit-dependencies.js";
 import { flushPostCommit } from "./post-commit-fanout.js";
+import {
+  datasetPolicyResolver,
+  type DatasetSchemas,
+} from "./commit-plugin-data.js";
 
 /**
  * Manifests resolve output kind, capabilities, scope, the persistent
@@ -248,6 +252,13 @@ export interface FinalizeExecutionArgs {
    * callers / tests) ⇒ export values are published without media processing.
    */
   readonly mediaStore?: MediaOwnershipStore;
+  /**
+   * Compiled dataset record schemas by plugin id, then namespace, captured
+   * with the runtimes. Every plugin-data write into a namespace a runtime of
+   * its package declares in `datasets` is checked against them; a declared
+   * dataset without a schema here refuses every write.
+   */
+  readonly datasetSchemas?: DatasetSchemas;
 }
 
 export interface FinalizeExecutionOutcome {
@@ -710,6 +721,7 @@ export async function finalizeExecution(
     }
   };
 
+  const datasetPolicy = datasetPolicyResolver(runtimes, args.datasetSchemas);
   const commitOpts = (
     result: FinalizableResult,
     deferPostCommit?: (fn: () => Promise<void>) => void,
@@ -732,6 +744,7 @@ export async function finalizeExecution(
       : {}),
     ...(args.proposalGuard ? { proposalGuard: args.proposalGuard } : {}),
     ...(args.mediaStore ? { mediaStore: args.mediaStore } : {}),
+    ...(datasetPolicy ? { datasetPolicy } : {}),
     ...(deferPostCommit ? { deferPostCommit } : {}),
   });
   const kindOf = (result: FinalizableResult): string =>

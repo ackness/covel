@@ -24,6 +24,8 @@ import { createEventBus } from "@covel/events";
 import type { TurnEmitter } from "../src/trace/turn-emitter.js";
 import { finalizeExecution } from "../src/commit/finalize-execution.js";
 import { createHookPipeline } from "../src/hooks/pipeline.js";
+import type { LoadedRuntime } from "@covel/shared/plugin-runtime";
+import { commitExecution, executeTurn } from "../src/index.js";
 
 const SESSION_ID = "sess-finalize";
 const TURN_ID = "turn-finalize";
@@ -1280,5 +1282,289 @@ describe("finalizeExecution — dependents of a dropped runtime", () => {
       });
       expect(rows.at(-1)?.state).toBe("failed");
     }
+  });
+});
+
+describe("finalizeExecution — plugin.data.update", () => {
+  const manual = () => ({
+    executionId: crypto.randomUUID(),
+    origin: "manual" as const,
+    countPolicy: "none" as const,
+  });
+  const update = (
+    runtimeId: string,
+    ops: readonly import("@covel/shared").DataOp[],
+  ): Proposal => ({
+    id: crypto.randomUUID(),
+    type: "plugin.data.update",
+    source: { pluginId: runtimeId, runtimeId },
+    sessionId: SESSION_ID,
+    turnId: TURN_ID,
+    payload: { namespace: "wallet", key: "gold", ops },
+    timestamp: new Date().toISOString(),
+  });
+  const withProposals = (
+    result: ReturnType<typeof makeResult>,
+    proposals: readonly Proposal[],
+  ) => ({ ...result, pendingProposals: proposals });
+  const seedGold = async (store: DataStore, pluginId: string, value: number) =>
+    store.setPluginData({
+      id: crypto.randomUUID(),
+      sessionId: SESSION_ID,
+      pluginId,
+      namespace: "wallet",
+      key: "gold",
+      value,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    });
+  const gold = async (store: DataStore, pluginId: string) =>
+    (await store.getPluginData(SESSION_ID, pluginId, "wallet", "gold"))?.value;
+
+  it("drops an auxiliary runtime whose op list is rejected and keeps the story and siblings", async () => {
+    const store = createMemoryStore();
+    await savePendingTurn(store);
+    await seedGold(store, "aux", 1);
+    const outcome = await finalizeExecution({
+      executionContext: manual(),
+      store,
+      sessionId: SESSION_ID,
+      runtimes: [
+        makeRuntime("story", "story"),
+        makeRuntime("aux"),
+        makeRuntime("sibling"),
+      ],
+      results: [
+        makeResult("story", { narrativeOutput: "The till rings." }),
+        withProposals(makeResult("aux"), [
+          update("aux", [{ op: "inc", by: -2, min: 0 }]),
+        ]),
+        withProposals(makeResult("sibling"), [
+          update("sibling", [{ op: "inc", by: 3 }]),
+        ]),
+      ],
+      turnIds: [TURN_ID],
+    });
+    expect(outcome).toMatchObject({
+      status: "committed",
+      isolatedRuntimes: [{ runtimeId: "aux", error: expect.any(String) }],
+    });
+    expect(outcome.failedProposals).toEqual([
+      expect.objectContaining({ code: "data-op-rejected" }),
+    ]);
+    expect(await gold(store, "aux")).toBe(1);
+    expect(await gold(store, "sibling")).toBe(3);
+    expect(await store.listMessages(SESSION_ID)).toHaveLength(1);
+  });
+
+  it("rolls the whole execution back on the same failure without a story", async () => {
+    const store = createMemoryStore();
+    await savePendingTurn(store);
+    await seedGold(store, "aux", 1);
+    const outcome = await finalizeExecution({
+      executionContext: manual(),
+      store,
+      sessionId: SESSION_ID,
+      runtimes: [makeRuntime("aux"), makeRuntime("sibling")],
+      results: [
+        withProposals(makeResult("sibling"), [
+          update("sibling", [{ op: "inc", by: 3 }]),
+        ]),
+        withProposals(makeResult("aux"), [
+          update("aux", [{ op: "inc", by: -2, min: 0 }]),
+        ]),
+      ],
+      turnIds: [TURN_ID],
+    });
+    expect(outcome.status).toBe("failed");
+    expect(await gold(store, "aux")).toBe(1);
+    expect(await gold(store, "sibling")).toBeUndefined();
+    expect(await commitStatusOf(store)).toBe("failed");
+  });
+
+  it.each([
+    {
+      label: "does not compile",
+      schema: { type: "invalid" },
+      ops: [{ op: "inc", by: 1 }] as const,
+    },
+    {
+      // An async validator returns a Promise, which must not read as success.
+      label: "is asynchronous",
+      schema: { $async: true, type: "number" },
+      ops: [{ op: "set", value: "rich" }] as const,
+    },
+  ])(
+    "drops an auxiliary runtime whose dataset schema $label and keeps the story",
+    async ({ schema, ops }) => {
+      const store = createMemoryStore();
+      await savePendingTurn(store);
+      await seedGold(store, "aux", 1);
+      const outcome = await finalizeExecution({
+        executionContext: manual(),
+        store,
+        sessionId: SESSION_ID,
+        runtimes: [
+          makeRuntime("story", "story"),
+          {
+            ...makeRuntime("aux"),
+            datasets: {
+              wallet: {
+                namespace: "wallet",
+                ops: ["inc", "set"],
+                schema: "schemas/wallet.json",
+              },
+            },
+          },
+        ],
+        datasetSchemas: { aux: { wallet: schema } },
+        results: [
+          makeResult("story", { narrativeOutput: "The till rings." }),
+          withProposals(makeResult("aux"), [update("aux", ops)]),
+        ],
+        turnIds: [TURN_ID],
+      });
+      expect(outcome).toMatchObject({
+        status: "committed",
+        isolatedRuntimes: [{ runtimeId: "aux", error: expect.any(String) }],
+      });
+      expect(outcome.failedProposals).toEqual([
+        expect.objectContaining({ code: "dataset-violation" }),
+      ]);
+      expect(await gold(store, "aux")).toBe(1);
+      expect(await store.listMessages(SESSION_ID)).toHaveLength(1);
+      expect(await commitStatusOf(store)).toBe("committed");
+    },
+  );
+
+  describe("through executeTurn and commitExecution", () => {
+    const wallet = (extra: Partial<RuntimeManifest> = {}): RuntimeManifest => ({
+      name: "bank/main",
+      pluginId: "bank",
+      description: "bank",
+      runtimeType: "function",
+      stage: "narrative",
+      trigger: { type: "auto" },
+      ...extra,
+    });
+    const session = async () => {
+      const store = createMemoryStore();
+      await store.createSession({
+        id: SESSION_ID,
+        locale: "en-US",
+        status: "active",
+        phase: "playing",
+        setupRuntimes: {},
+        activePlugins: ["bank"],
+        completedPlayerTurns: 0,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      });
+      return store;
+    };
+    const turn = (turnId: string) => ({
+      sessionId: SESSION_ID,
+      turnId,
+      logicalTurnId: `logical-${turnId}`,
+      playerMessage: "Deposit",
+      origin: "manual" as const,
+    });
+    const commit = (
+      store: DataStore,
+      execution: Awaited<ReturnType<typeof executeTurn>>,
+    ) =>
+      commitExecution({
+        store,
+        execution,
+        completion: {
+          kind: "turn",
+          turnId: execution.result.turnId,
+          durationMs: 1,
+        },
+      });
+
+    it("keeps both of two inc +1 prepared before either commits (no lost update)", async () => {
+      const store = await session();
+      await seedGold(store, "bank", 10);
+      const runtime = wallet();
+      const loadRuntime = async (
+        manifest: RuntimeManifest,
+      ): Promise<LoadedRuntime> => ({
+        manifest,
+        promptTemplate: "",
+        handler: async (ctx) => {
+          await ctx.pluginData!.update("wallet", "gold", [
+            { op: "inc", by: 1 },
+          ]);
+          expect(await ctx.pluginData!.get("wallet", "gold")).toBe(11);
+          return { outcome: "success" as const, value: {} };
+        },
+      });
+      const deps = { store, loadRuntime, llm: { generate: vi.fn() } };
+      const first = await executeTurn(turn("t1"), [runtime], deps);
+      const second = await executeTurn(turn("t2"), [runtime], deps);
+      expect(await gold(store, "bank")).toBe(10);
+      expect((await commit(store, first)).status).toBe("committed");
+      expect((await commit(store, second)).status).toBe("committed");
+      expect(await gold(store, "bank")).toBe(12);
+    });
+
+    it("carries the captured dataset schemas to the commit handler", async () => {
+      const store = await session();
+      const schema = {
+        type: "object",
+        properties: { amount: { type: "integer", minimum: 0 } },
+        required: ["amount"],
+      };
+      const runtime = wallet({
+        datasets: {
+          wallet: {
+            namespace: "wallet",
+            schema: "./wallet.json",
+            ops: ["set", "inc"],
+          },
+        },
+      });
+      const datasetSchemas = { wallet: schema };
+      let ops: readonly import("@covel/shared").DataOp[] = [];
+      const loadRuntime = async (
+        manifest: RuntimeManifest,
+      ): Promise<LoadedRuntime> => ({
+        manifest,
+        promptTemplate: "",
+        datasetSchemas,
+        handler: async (ctx) => {
+          await ctx.pluginData!.update("wallet", "gold", ops);
+          return { outcome: "success" as const, value: {} };
+        },
+      });
+      const deps = { store, loadRuntime, llm: { generate: vi.fn() } };
+
+      ops = [{ op: "set", value: { amount: 5 } }];
+      const valid = await executeTurn(turn("t1"), [runtime], deps);
+      expect(valid.commit.datasetSchemas?.bank?.wallet).toBe(schema);
+      expect((await commit(store, valid)).status).toBe("committed");
+      expect(await gold(store, "bank")).toEqual({ amount: 5 });
+
+      ops = [{ op: "set", value: { amount: -1 } }];
+      const invalid = await commit(
+        store,
+        await executeTurn(turn("t2"), [runtime], deps),
+      );
+      expect(invalid.status).toBe("failed");
+      expect(invalid.failedProposals).toEqual([
+        expect.objectContaining({ code: "dataset-violation" }),
+      ]);
+
+      ops = [{ op: "merge", value: { amount: 1 } }];
+      const refused = await commit(
+        store,
+        await executeTurn(turn("t3"), [runtime], deps),
+      );
+      expect(refused.failedProposals[0]?.error).toMatch(
+        /operation kind merge is not allowed/,
+      );
+      expect(await gold(store, "bank")).toEqual({ amount: 5 });
+    });
   });
 });

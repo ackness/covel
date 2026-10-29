@@ -208,6 +208,19 @@ export interface PluginDataWriter extends PluginDataReader {
   set(namespace: string, key: string, value: unknown): Promise<void>;
   /** Delete a row explicitly. */
   delete(namespace: string, key: string): Promise<void>;
+  /**
+   * Submit operations against one key instead of a computed value. The
+   * operations apply at commit to the latest stored value, so concurrent
+   * relative changes (such as two `inc`s) both land. The call applies them to
+   * the current view first and throws when they fail there (for example an
+   * `inc` below its `min`), so nothing is buffered. It returns nothing; read
+   * the key again for the new value.
+   */
+  update(
+    namespace: string,
+    key: string,
+    ops: readonly import("./data-ops.js").DataOp[],
+  ): Promise<void>;
 }
 
 /**

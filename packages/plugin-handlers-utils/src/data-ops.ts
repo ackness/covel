@@ -545,6 +545,17 @@ export function applyDataOps(
   current: DataOpsCurrent,
   ops: readonly DataOp[],
 ): DataOpsResult {
+  // Buffered proposals come from plugin code, so the list itself may be malformed.
+  if (!Array.isArray(ops)) {
+    return {
+      ok: false,
+      error: {
+        code: "invalid-op",
+        opIndex: 0,
+        message: "operations must be an array",
+      },
+    };
+  }
   let state: State = current.exists ? current.value : undefined;
   for (const [opIndex, op] of ops.entries()) {
     try {

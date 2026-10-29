@@ -28,19 +28,26 @@ function validatorFor(schema: Readonly<Record<string, unknown>>) {
 
 /**
  * Validate a runtime output against a JSON Schema.
+ *
+ * Throws, like an uncompilable schema, when the schema is asynchronous
+ * (`$async: true`): its validator returns a Promise, which a synchronous
+ * check would otherwise read as success.
  */
 export function validateOutput(
   output: unknown,
   schema: Readonly<Record<string, unknown>>,
 ): ValidationResult {
-  const ajv = validatorFor(schema);
-  const valid = ajv.validate(schema, output) as boolean;
+  // `compile` caches by schema object identity, like `validate`.
+  const validate = validatorFor(schema).compile(schema);
+  if ("$async" in validate && validate.$async) {
+    throw new Error("asynchronous schemas ($async) are not supported");
+  }
 
-  if (valid) {
+  if (validate(output)) {
     return { valid: true };
   }
 
-  const rawErrors = (ajv.errors ?? []) as Array<{
+  const rawErrors = (validate.errors ?? []) as Array<{
     instancePath?: string;
     message?: string;
   }>;

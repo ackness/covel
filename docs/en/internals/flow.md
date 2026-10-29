@@ -313,7 +313,7 @@ Ordering rules for the main loop:
 - Runtimes that do not depend on each other run in parallel. When they tie, `name` gives a stable order.
 - A runtime in a dependency cycle, and everything downstream of it, is marked `skipped: dependency-cycle` for this turn. It does not fall back to running in an arbitrary order.
 
-**Proposal types** (all go through the commit chain, defined by `ProposalPayloadMap` in `packages/shared/src/types/proposal.ts`): `narrative.append`, `interaction.request`, `event.emit`, `ui.render`, `asset.generate`, `plugin.data` / `plugin.data.batch` / `plugin.data.delete`, `character.schema.set`, `character.upsert`, `dimension.initialize`, `dimension.update`, `lorebook.upsert`.
+**Proposal types** (all go through the commit chain, defined by `ProposalPayloadMap` in `packages/shared/src/types/proposal.ts`): `narrative.append`, `interaction.request`, `event.emit`, `ui.render`, `asset.generate`, `plugin.data` / `plugin.data.batch` / `plugin.data.delete` / `plugin.data.update`, `character.schema.set`, `character.upsert`, `dimension.initialize`, `dimension.update`, `lorebook.upsert`.
 
 **Plugin dependencies and choosing providers**: four things decide which plugins a session enables: the player's explicit `requested` / `excluded` lists, the authorization state, core declarations, and the versioned `provides` / `requires`.
 

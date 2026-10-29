@@ -666,3 +666,23 @@ describe("dataOpSchema / dataOpsSchema", () => {
     ).toBe(false);
   });
 });
+
+describe("applyDataOps with a malformed operation list", () => {
+  it.each([null, undefined, "set", 3, { op: "set", value: 1 }])(
+    "returns invalid-op instead of throwing for %j",
+    (ops) => {
+      const result = applyDataOps(
+        { exists: false },
+        ops as unknown as Parameters<typeof applyDataOps>[1],
+      );
+      expect(result).toEqual({
+        ok: false,
+        error: {
+          code: "invalid-op",
+          opIndex: 0,
+          message: "operations must be an array",
+        },
+      });
+    },
+  );
+});
