@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { createMemoryStore } from "@covel/store/memory";
-import type { RuntimeManifest } from "@covel/shared";
+import type { RuntimeManifest, RuntimeResult } from "@covel/shared";
+import { AiProviderError } from "@covel/ai-provider";
 import type { FunctionHandler } from "@covel/shared/plugin-runtime";
 import { z } from "zod";
 import { tool } from "@covel/tools";
@@ -13,6 +14,7 @@ import { createHookPipeline } from "../src/hooks/pipeline.js";
 import { createPluginFaultLatch } from "../src/faults/plugin-fault-latch.js";
 import { saveAutoSnapshot } from "../src/snapshot/auto-snapshot.js";
 import { PluginServiceRegistry } from "../src/plugin-services.js";
+import { LLMRetryError } from "../src/retry/retry-common.js";
 
 const p: RuntimeManifest = {
   pluginId: "p",
@@ -373,5 +375,150 @@ it.each(["throw", "timeout", "veto"] as const)(
           ?.kind,
       ).toBe("neutral");
     }
+  },
+);
+
+it("counts a function runtime's own deadline that cancelled a pending child agent", async () => {
+  const store = await fixture();
+  const latch = createPluginFaultLatch();
+  const parent: RuntimeManifest = {
+    pluginId: "p",
+    name: "p/parent",
+    description: "parent",
+    stage: "narrative",
+    runtimeType: "function",
+    trigger: { type: "auto" },
+    timeoutMs: 20,
+  };
+  const child: RuntimeManifest = {
+    pluginId: "p",
+    name: "p/child",
+    description: "child",
+    stage: "narrative",
+    trigger: { type: "manual" },
+  };
+  const stops: Array<string | undefined> = [];
+  for (const turnId of ["first", "second", "third"]) {
+    expect(latch.isLatched("s", "p")).toBe(false);
+    const execution = await executeTurn(
+      { sessionId: "s", turnId, playerMessage: "go", origin: "player" },
+      [parent, child],
+      {
+        store,
+        pluginFaults: latch,
+        onRuntimeComplete: async (info) => {
+          if (info.runtimeId === child.name) stops.push(info.stopReason);
+        },
+        loadRuntime: async (manifest) => ({
+          manifest,
+          promptTemplate: "Return {}.",
+          handler: async (ctx) => {
+            // The model never answers: the parent's deadline cancels the child.
+            await ctx.recursiveCall({
+              manualTrigger: { runtimeId: child.name },
+            });
+            return { outcome: "success" as const, value: {} };
+          },
+        }),
+        llm: { generate: () => new Promise<never>(() => {}) },
+      },
+    );
+    expect(execution.commit.results).toMatchObject([
+      { runtimeId: parent.name, status: "failed", fault: "timeout" },
+    ]);
+    const outcome = await commitExecution({
+      store,
+      execution,
+      completion: { kind: "turn", turnId, durationMs: 0 },
+    });
+    latch.recordExecution({
+      sessionId: "s",
+      logicalKey: turnId,
+      results: execution.commit.results,
+      outcome,
+      exempt: new Set(),
+    });
+  }
+  expect(stops).toEqual(["cancelled", "cancelled", "cancelled"]);
+  expect(latch.isLatched("s", "p")).toBe(true);
+});
+
+it.each(["direct", "wrapped", "plain"] as const)(
+  "does not latch on a %s provider exception after a hook rewrites the error text",
+  async (mode) => {
+    const store = await fixture();
+    const latch = createPluginFaultLatch();
+    const hookPipeline = createHookPipeline();
+    hookPipeline.register({
+      id: "translate-error",
+      event: "PostRuntime",
+      handler: async (_context: unknown, payload: unknown) => {
+        const { result } = payload as { result: RuntimeResult };
+        return {
+          action: "continue" as const,
+          replace: { result: { ...result, error: "service unavailable" } },
+        };
+      },
+    });
+    const providerError = () =>
+      new AiProviderError({
+        code: "PROVIDER_ERROR",
+        provider: "remote",
+        model: "m",
+        message: "upstream 503",
+        retriable: true,
+      });
+    const thrown = () =>
+      mode === "direct"
+        ? providerError()
+        : mode === "wrapped"
+          ? new LLMRetryError({
+              reason: "transient-error",
+              attempts: 2,
+              cause: providerError(),
+            })
+          : new Error("plugin bug");
+    for (const turnId of ["first", "second", "third"]) {
+      const execution = await executeTurn(
+        { sessionId: "s", turnId, playerMessage: "go", origin: "player" },
+        [{ ...p, tools: undefined }],
+        {
+          store,
+          pluginFaults: latch,
+          hookPipeline,
+          loadRuntime: async (manifest) => ({
+            manifest,
+            promptTemplate: "",
+            handler: async () => {
+              throw thrown();
+            },
+          }),
+          llm: {
+            generate: async () => {
+              throw new Error("no model");
+            },
+          },
+        },
+      );
+      expect(execution.commit.results).toMatchObject([
+        { status: "failed", error: "service unavailable" },
+      ]);
+      expect(execution.result.runtimeResults[0]?.fault).toBe(
+        mode === "plain" ? "runtime" : undefined,
+      );
+      const outcome = await commitExecution({
+        store,
+        execution,
+        completion: { kind: "turn", turnId, durationMs: 0 },
+      });
+      latch.recordExecution({
+        sessionId: "s",
+        logicalKey: turnId,
+        results: execution.commit.results,
+        outcome,
+        exempt: new Set(),
+      });
+    }
+    expect(latch.isLatched("s", "p")).toBe(mode === "plain");
   },
 );

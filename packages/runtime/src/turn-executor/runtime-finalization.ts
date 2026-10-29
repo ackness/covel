@@ -30,6 +30,14 @@ import {
   throwIfTurnExecutionAborted,
 } from "./turn-control.js";
 
+/** The exception behind a failure once retry wrappers are peeled off. */
+function unwrapRetryCause(cause: unknown): unknown {
+  let current = cause;
+  for (let depth = 0; depth < 8 && current instanceof LLMRetryError; depth++)
+    current = current.cause;
+  return current;
+}
+
 type FinalizationDeps = Pick<
   TurnExecutorDeps,
   "hookPipeline" | "turnControl" | "onRuntimeComplete" | "eventBus" | "emitter"
@@ -90,6 +98,10 @@ export async function finalizeRuntimeResult(
   } = {},
 ): Promise<RuntimeResult> {
   result = withAgentFailureTarget(result, options.lastTarget);
+  // Provider provenance belongs to the original exception, so it is read here,
+  // before a PostRuntime hook can sanitize or translate the error text.
+  const providerThrown =
+    unwrapRetryCause(options.cause) instanceof AiProviderError;
   const preHookOutput = result.output;
   let finalized = await runPostRuntimeHook(
     {
@@ -230,10 +242,7 @@ export async function finalizeRuntimeResult(
     options.cause !== undefined &&
     !signal?.aborted
   ) {
-    const cause =
-      options.cause instanceof LLMRetryError
-        ? options.cause.cause
-        : options.cause;
+    const cause = unwrapRetryCause(options.cause);
     finalized = {
       ...finalized,
       errorKind: classifyProviderFailure(cause).kind,
@@ -289,7 +298,7 @@ export async function finalizeRuntimeResult(
   }
   // A thrown agent-loop exit carries its stop reason on the error. It
   // describes this failure only: a success a hook produced gets none.
-  const thrownStop = stopOf(options.cause);
+  const thrownStop = stopOf(options.cause, result.runId);
   if (finalized.status === "failed" && thrownStop)
     finalized = { ...finalized, stop: thrownStop };
   // Derive this after hooks and stop attribution; provider errorKind also
@@ -323,6 +332,7 @@ export async function finalizeRuntimeResult(
       )
         finalized = { ...finalized, fault: "runtime" };
       else if (
+        !providerThrown &&
         !finalized.failureTarget &&
         !finalized.error?.startsWith("[provider:")
       ) {

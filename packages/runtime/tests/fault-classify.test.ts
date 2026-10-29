@@ -155,7 +155,7 @@ describe("self-caused runtime attribution", () => {
   ])("$name", async ({ cause, stop, extra, abort, setup, expected }) => {
     const controller = new AbortController();
     if (abort) controller.abort(new RuntimeTimeoutError("parent timeout"));
-    if (cause && stop) tagStop(cause, stop);
+    if (cause && stop) tagStop(cause, stop, "run");
     const result = await finalizeRuntimeResult(
       { turnControl: { executionSignal: controller.signal } },
       { ...manifest, ...(setup ? { stage: "setup" as const } : {}) },
@@ -168,6 +168,51 @@ describe("self-caused runtime attribution", () => {
       { cause },
     );
     expect(result.fault).toBe(expected);
+  });
+});
+
+describe("stop tags are scoped to the run that made them", () => {
+  const input = {
+    sessionId: "s",
+    turnId: "turn",
+    playerMessage: "",
+    origin: "player" as const,
+  };
+  it("keeps a child's cancellation off the parent whose deadline caused it", async () => {
+    // The parent's deadline abort reaches the child it awaits as the same
+    // error object, and the child's loop tags it cancelled by the parent.
+    const shared = new RuntimeTimeoutError("parent deadline");
+    tagStop(
+      shared,
+      { reason: "cancelled", cancelledBy: "parent" },
+      "child-run",
+    );
+
+    const parent = await finalizeRuntimeResult(
+      {},
+      manifest,
+      input,
+      faultResult({ runId: "parent-run", error: shared.message }),
+      { cause: shared },
+    );
+    expect(parent.stop).toBeUndefined();
+    expect(parent.fault).toBe("timeout");
+
+    const controller = new AbortController();
+    controller.abort(shared);
+    const child = await finalizeRuntimeResult(
+      { turnControl: { executionSignal: controller.signal } },
+      { ...manifest, name: "p/child" },
+      input,
+      faultResult({
+        runId: "child-run",
+        runtimeId: "p/child",
+        error: shared.message,
+      }),
+      { cause: shared },
+    );
+    expect(child.stop).toEqual({ reason: "cancelled", cancelledBy: "parent" });
+    expect(child.fault).toBeUndefined();
   });
 });
 
