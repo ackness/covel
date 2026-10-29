@@ -140,6 +140,14 @@ describe("provider failure scope", () => {
         locale: "en-US",
         createdAt: "2026-10-16T00:00:00Z",
         updatedAt: "2026-10-16T00:00:00Z",
+        seats: [
+          {
+            id: "main",
+            controller: "human",
+            role: "player",
+            characters: "auto",
+          },
+        ],
         setupRuntimes: {
           "fixture/plugin": {
             state: "pending",

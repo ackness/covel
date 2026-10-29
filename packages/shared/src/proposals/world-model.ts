@@ -3,7 +3,10 @@ import type { CharacterRecord } from "../types/character-record.js";
 import type { CharacterSchemaRecord } from "../types/world-model.js";
 import type { Proposal } from "../types/proposal.js";
 import { characterSchemaSchema } from "../schemas/world.js";
-import { buildFieldsZodFromSchema } from "@covel/plugin-handlers-utils";
+import {
+  buildFieldsZodFromSchema,
+  type Seat,
+} from "@covel/plugin-handlers-utils";
 import { materializeCharacterUpsert } from "./character-upsert.js";
 import {
   characterLabel,
@@ -36,6 +39,8 @@ export interface WorldModelView {
   readonly characters: readonly CharacterRecord[];
   readonly dimensions: import("@covel/plugin-handlers-utils/dimensions").DimensionSnapshot;
   readonly dimensionProviderPluginId?: string;
+  /** The session's seats, read-only; proposals never change them. */
+  readonly seats: readonly Seat[];
 }
 
 export const characterSchemaSetPayloadSchema = characterSchemaSchema.omit({
@@ -136,11 +141,14 @@ function assertCharacterNamesFree(
     );
 }
 
-export function validateWorldModel(view: WorldModelView): void {
+/** Validation reads the characters and their schema, never the seats. */
+type ValidatedWorldModel = Omit<WorldModelView, "seats">;
+
+export function validateWorldModel(view: ValidatedWorldModel): void {
   validateWithNameKeys(view, memoizedNameKey());
 }
 
-function validateWithNameKeys(view: WorldModelView, keyOf: NameKey): void {
+function validateWithNameKeys(view: ValidatedWorldModel, keyOf: NameKey): void {
   const allowedTypes = new Set([
     "player",
     ...(view.characterSchema?.types ?? ["npc", "companion"]),
@@ -149,21 +157,23 @@ function validateWithNameKeys(view: WorldModelView, keyOf: NameKey): void {
     ? buildFieldsZodFromSchema(view.characterSchema)
     : null;
   const owners = characterNameOwners(view.characters, keyOf);
-  let players = 0;
   for (const character of view.characters) {
     if (!allowedTypes.has(character.type))
       throw new Error(`Unknown character type: ${character.type}`);
-    if (character.type === "player" && ++players > 1)
-      throw new Error("A session may have at most one player character");
     if (fields) fields.parse(character.fields ?? {});
     assertCharacterNamesFree(view.characters, owners, character, keyOf);
   }
 }
 
-/** The same domain validation runs for commit and execution-local reads. */
+/**
+ * The same domain validation runs for commit and execution-local reads. The
+ * seats are carried through as given: no proposal writes them, and a caller
+ * that only validates characters may leave them out.
+ */
 export function materializeWorldModel(
-  base: Omit<WorldModelView, "dimensions"> & {
+  base: Omit<WorldModelView, "dimensions" | "seats"> & {
     readonly dimensions?: WorldModelView["dimensions"];
+    readonly seats?: WorldModelView["seats"];
   },
   proposals: readonly Proposal[],
   sessionId: string,
@@ -173,6 +183,7 @@ export function materializeWorldModel(
   let state: WorldModelView = structuredClone({
     ...base,
     dimensions: base.dimensions ?? {},
+    seats: base.seats ?? [],
   });
   const keyOf = memoizedNameKey();
   for (const proposal of proposals) {

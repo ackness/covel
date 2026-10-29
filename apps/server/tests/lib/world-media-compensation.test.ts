@@ -182,6 +182,14 @@ it.each(["memory", "sqlite"] as const)(
         status: "active",
         phase: "playing",
         setupRuntimes: {},
+        seats: [
+          {
+            id: "main",
+            controller: "human",
+            role: "player",
+            characters: "auto",
+          },
+        ],
         locale: "en",
         completedPlayerTurns: 0,
         activePlugins: [],
@@ -336,6 +344,14 @@ it.each(["memory", "sqlite"] as const)(
         status: "active",
         phase: "playing",
         setupRuntimes: {},
+        seats: [
+          {
+            id: "main",
+            controller: "human",
+            role: "player",
+            characters: "auto",
+          },
+        ],
         locale: "en",
         completedPlayerTurns: 0,
         activePlugins: [],
@@ -402,6 +418,9 @@ it.each([
       status: "active",
       phase: "playing",
       setupRuntimes: {},
+      seats: [
+        { id: "main", controller: "human", role: "player", characters: "auto" },
+      ],
       locale: "en",
       completedPlayerTurns: 0,
       activePlugins: [],

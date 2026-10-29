@@ -29,6 +29,9 @@ const firstCheckpoint: BrowserCheckpoint = {
     phase: "playing",
     completedPlayerTurns: 1,
     setupRuntimes: {},
+    seats: [
+      { id: "main", controller: "human", role: "player", characters: "auto" },
+    ],
   },
   world: null,
   messages: [],
@@ -98,6 +101,34 @@ describe("browser-authoritative persistence contract", () => {
         session: { ...firstCheckpoint.session, phase: undefined },
       }),
     ).toThrow("session.phase");
+    expect(() =>
+      validateBrowserCheckpoint({
+        ...firstCheckpoint,
+        session: { ...firstCheckpoint.session, seats: undefined },
+      }),
+    ).toThrow("session.seats");
+    expect(() =>
+      validateBrowserCheckpoint({
+        ...firstCheckpoint,
+        session: {
+          ...firstCheckpoint.session,
+          seats: [
+            {
+              id: "a",
+              controller: "human",
+              role: "player",
+              characters: "auto",
+            },
+            {
+              id: "b",
+              controller: "human",
+              role: "player",
+              characters: "auto",
+            },
+          ],
+        },
+      }),
+    ).toThrow("session.seats");
     expect(() =>
       validateBrowserCheckpoint({
         ...firstCheckpoint,

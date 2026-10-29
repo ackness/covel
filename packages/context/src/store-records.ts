@@ -18,6 +18,7 @@ export interface SessionRecord {
   readonly phase: "setup" | "playing";
   readonly completedPlayerTurns: number;
   readonly setupRuntimes: Readonly<Record<string, unknown>>;
+  readonly seats: readonly import("@covel/shared").Seat[];
   readonly locale: string;
   readonly activePlugins: readonly string[];
   readonly metadata?: Readonly<Record<string, unknown>>;

@@ -146,6 +146,14 @@ it("uses request embedding settings and keys for probes and detached work withou
         phase: "playing",
         completedPlayerTurns: 0,
         setupRuntimes: {},
+        seats: [
+          {
+            id: "main",
+            controller: "human",
+            role: "player",
+            characters: "auto",
+          },
+        ],
         activePlugins: [],
         createdAt: now,
         updatedAt: now,

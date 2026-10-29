@@ -121,6 +121,9 @@ describe("GET /api/ui-specs — multi-dir plugin discovery", () => {
     await store.createSession({
       phase: "playing",
       setupRuntimes: {},
+      seats: [
+        { id: "main", controller: "human", role: "player", characters: "auto" },
+      ],
       metadata: {
         approvalScopeNonce: globalThis.crypto.randomUUID(),
         sessionIncarnationNonce: globalThis.crypto.randomUUID(),

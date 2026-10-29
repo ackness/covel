@@ -554,15 +554,16 @@ An agent's side effects come only from its tools. What the model can write is de
 
 #### Turn information in the handler context
 
-| Field                            | Meaning                                                                                                                                                                                                                                                                     |
-| -------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `ctx.playerMessage`              | The text of the current input, as a string                                                                                                                                                                                                                                  |
-| `ctx.logicalTurn`                | The scheduler's logical turn: the number of committed main-loop player turns, plus one. It is in the context of function handlers and plugin tools. Setup, the opening continuation, and the first player message are all turn 1. `startTurn` and `every` also count by it. |
-| `turnNumber` in the tool context | The number of player messages recorded in the session, including the form submission during setup                                                                                                                                                                           |
-| `ctx.session.lastPlayerInput`    | The most recent `PlayerInputSubmission \| null` when the source execution starts. It includes `id/sessionId/turnId/formId/values/createdAt`.                                                                                                                                |
-| `ctx.execution.origin`           | Why this execution runs: `player`, `continuation`, `manual`, `background`, `recursive`, or `resume`                                                                                                                                                                         |
-| `ctx.execution.sourceTurnId`     | When a committed turn is retried, the ID of that turn. Use it as a key so a retry reuses the earlier rolls and reveals instead of drawing again                                                                                                                             |
-| `ctx.recursionDepth`             | `0` for a top-level execution, one more for each level of `ctx.recursiveCall`                                                                                                                                                                                               |
+| Field                            | Meaning                                                                                                                                                                                                                                                                                                                               |
+| -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ctx.playerMessage`              | The text of the current input, as a string                                                                                                                                                                                                                                                                                            |
+| `ctx.logicalTurn`                | The scheduler's logical turn: the number of committed main-loop player turns, plus one. It is in the context of function handlers and plugin tools. Setup, the opening continuation, and the first player message are all turn 1. `startTurn` and `every` also count by it.                                                           |
+| `turnNumber` in the tool context | The number of player messages recorded in the session, including the form submission during setup                                                                                                                                                                                                                                     |
+| `ctx.session.lastPlayerInput`    | The most recent `PlayerInputSubmission \| null` when the source execution starts. It includes `id/sessionId/turnId/formId/values/createdAt`.                                                                                                                                                                                          |
+| `ctx.execution.origin`           | Why this execution runs: `player`, `continuation`, `manual`, `background`, `recursive`, or `resume`                                                                                                                                                                                                                                   |
+| `ctx.execution.sourceTurnId`     | When a committed turn is retried, the ID of that turn. Use it as a key so a retry reuses the earlier rolls and reveals instead of drawing again                                                                                                                                                                                       |
+| `ctx.recursionDepth`             | `0` for a top-level execution, one more for each level of `ctx.recursiveCall`                                                                                                                                                                                                                                                         |
+| `ctx.world.seats`                | The session's [seats](./world-model.md#seats), read-only. The character the player plays now is the SDK's `currentCharacterOf(primarySeat(seats), ctx.world.characters, seats)`; `seatCharacterIds` gives the characters bound to one seat. Guards, tools (`context.world`) and extension providers (`ctx.world`) read the same seats |
 
 `ctx.session.lastPlayerInput` may come from an earlier turn. Having this record does not mean that a form was submitted in this turn.
 
@@ -782,6 +783,7 @@ The character schema, the characters, and the world record belong to the kernel'
 - Legal upstream proposals in these domains, and the proposals this runtime has already buffered, are visible to later reads.
 - Writes go through proposals, and they are validated together at commit time.
 - `ctx.world.dimensions` is different. It is a snapshot of the current public values published by a provider, and it follows the separate freezing rules in [Dynamic dimensions](#dynamic-dimensions) below.
+- `ctx.world.seats` holds the session's seats, frozen as well. No proposal changes them; the player switches the current character through the [switch endpoint](./api.md#session-seats), and it applies from the next turn.
 
 **Finding a character by name.** Besides `name`, a character can have `aliases` (other names for the same person).
 
@@ -794,7 +796,7 @@ The rules are in [Aliases and name resolution](./world-model.md#aliases-and-name
 
 **Character types and schema.**
 
-- A character type is an open string declared in the schema. `player` is a reserved type, and each session has at most one.
+- A character type is an open string declared in the schema. `player` is a reserved type, and a session can have several. To find the character the player plays now, use `currentCharacterOf` (see [seats](./world-model.md#seats)), not `find(type === "player")`.
 - Character fields follow the attributes of the CharacterSchema.
 - The proposal that changes the schema is `character.schema.set`. Its payload contains `types` and `attributes` directly. The kernel increments the version.
 

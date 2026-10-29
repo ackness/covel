@@ -35,6 +35,7 @@ Each English term has only one Chinese term. The Chinese docs, the UI text, and 
 | Roleplay notes | 扮演说明 | What the world author writes in the `blueprint` field of a character record to tell the narrative how to play the character; read by Character Profiles. Not the character itself. |
 | Runtime | runtime | Kept in English. It means one execution unit in a manifest, not the general word "runtime". |
 | Runtime manifest | runtime 清单 |  |
+| Seat | 座位 | Who plays in a session, in which role, and which characters they control (`session.seats`). |
 | Segment | 提示词段 |  |
 | Server-scoped setting | 服务端设置 | A setting with `scope: "server"`. All other settings are per-device settings. |
 | Session | 会话 |  |
@@ -249,6 +250,12 @@ The internal execution structure that the loader compiles from a runtime the aut
 Internal fields are not the author format. They cannot be copied into `PLUGIN.md`.
 
 See: [plugin field reference](./plugins.md), [rules to know when writing plugins](../plugins/essentials.md).
+
+## Seat
+
+A place in a session: who sits there (a human or nobody), in which role (player, host or spectator), which characters they control, and which one they play now. Seats are stored in the session record's `seats`. A new session has one human player seat that binds every character of type `player`. The story follows the current character of the primary seat.
+
+See: [World Model: seats](./world-model.md#seats), [HTTP API](./api.md#session-seats).
 
 ## Segment
 

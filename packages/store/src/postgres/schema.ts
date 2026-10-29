@@ -94,6 +94,11 @@ export const sessions = pgTable("sessions", {
   phase: text("phase").notNull().default("setup"),
   completedPlayerTurns: integer("completed_player_turns").notNull().default(0),
   setupRuntimes: jsonb("setup_runtimes").notNull().default({}),
+  seats: jsonb("seats")
+    .notNull()
+    .default([
+      { id: "main", controller: "human", role: "player", characters: "auto" },
+    ]),
 });
 
 // ── Turn Results ────────────────────────────────────────────────

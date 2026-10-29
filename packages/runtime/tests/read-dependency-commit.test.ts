@@ -149,6 +149,9 @@ async function run(
     status: "active",
     phase: "playing",
     setupRuntimes: {},
+    seats: [
+      { id: "main", controller: "human", role: "player", characters: "auto" },
+    ],
     activePlugins: [...new Set(runtimes.map((runtime) => runtime.pluginId))],
     completedPlayerTurns: 1,
     createdAt: timestamp,

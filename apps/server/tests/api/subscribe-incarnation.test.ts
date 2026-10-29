@@ -25,6 +25,9 @@ function session(): SessionRecord {
     phase: "playing",
     locale: "en-US",
     setupRuntimes: {},
+    seats: [
+      { id: "main", controller: "human", role: "player", characters: "auto" },
+    ],
     completedPlayerTurns: 0,
     activePlugins: [],
     metadata: { sessionIncarnationNonce: crypto.randomUUID() },

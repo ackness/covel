@@ -2,6 +2,7 @@ import { sortByCursorAsc } from "../common/pagination.js";
 import { SESSION_SCOPED_TABLES } from "../table-registry.js";
 import { mergeSessionPatch } from "../types.js";
 import { SessionAlreadyExistsError } from "../errors.js";
+import { requireSeats } from "../common/mappers/session-mappers.js";
 import {
   deleteArrayRowsBySession,
   deleteMapRowsBySession,
@@ -16,6 +17,7 @@ export function createSessionMethods(state: MemoryState): MemoryStoreMethods {
       if (state.sessions.has(session.id)) {
         throw new SessionAlreadyExistsError(session.id);
       }
+      requireSeats(session.seats);
       state.sessions.set(session.id, session);
     },
 
@@ -26,6 +28,7 @@ export function createSessionMethods(state: MemoryState): MemoryStoreMethods {
     async updateSession(id, patch) {
       const existing = state.sessions.get(id);
       if (!existing) return;
+      if ("seats" in patch) requireSeats(patch.seats);
       state.sessions.set(id, mergeSessionPatch(existing, patch));
     },
 

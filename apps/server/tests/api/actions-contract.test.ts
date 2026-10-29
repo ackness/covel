@@ -121,6 +121,9 @@ describe("POST /api/actions — action type contract ", () => {
       locale: "zh-CN",
       phase: "playing",
       setupRuntimes: {},
+      seats: [
+        { id: "main", controller: "human", role: "player", characters: "auto" },
+      ],
       metadata: {
         approvalScopeNonce: globalThis.crypto.randomUUID(),
         sessionIncarnationNonce: globalThis.crypto.randomUUID(),
@@ -599,6 +602,9 @@ describe("POST /api/actions — action type contract ", () => {
       locale: "zh-CN",
       phase: "playing",
       setupRuntimes: {},
+      seats: [
+        { id: "main", controller: "human", role: "player", characters: "auto" },
+      ],
       metadata: {
         approvalScopeNonce: globalThis.crypto.randomUUID(),
         sessionIncarnationNonce: globalThis.crypto.randomUUID(),

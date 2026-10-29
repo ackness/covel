@@ -554,15 +554,16 @@ Agent 的副作用只来自工具：模型能写什么，以 `agent.tools` 白�
 
 #### handler 上下文里的回合信息
 
-| 字段                          | 含义                                                                                                                                                                  |
-| ----------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `ctx.playerMessage`           | 当前输入的文本字符串                                                                                                                                                  |
-| `ctx.logicalTurn`             | 调度器的逻辑回合：已提交的主循环玩家回合数加一。函数 handler 和插件工具的上下文里都有。setup、开场续写和第一条玩家消息同为第 1 回合，`startTurn` / `every` 也按它计数 |
-| 工具上下文的 `turnNumber`     | 会话里已记录的玩家消息数，包括 setup 的表单提交                                                                                                                       |
-| `ctx.session.lastPlayerInput` | 源执行开始时最近的一条 `PlayerInputSubmission \| null`，包含 `id/sessionId/turnId/formId/values/createdAt`                                                            |
-| `ctx.execution.origin`        | 这次执行因何而起：`player`、`continuation`、`manual`、`background`、`recursive` 或 `resume`                                                                           |
-| `ctx.execution.sourceTurnId`  | 重试一个已提交的回合时，是那个回合的 ID。用它做键，重试时复用上次的掷骰和揭示，不重新抽                                                                               |
-| `ctx.recursionDepth`          | 顶层执行是 `0`，`ctx.recursiveCall` 每嵌套一层加一                                                                                                                    |
+| 字段                          | 含义                                                                                                                                                                                                                                                         |
+| ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `ctx.playerMessage`           | 当前输入的文本字符串                                                                                                                                                                                                                                         |
+| `ctx.logicalTurn`             | 调度器的逻辑回合：已提交的主循环玩家回合数加一。函数 handler 和插件工具的上下文里都有。setup、开场续写和第一条玩家消息同为第 1 回合，`startTurn` / `every` 也按它计数                                                                                        |
+| 工具上下文的 `turnNumber`     | 会话里已记录的玩家消息数，包括 setup 的表单提交                                                                                                                                                                                                              |
+| `ctx.session.lastPlayerInput` | 源执行开始时最近的一条 `PlayerInputSubmission \| null`，包含 `id/sessionId/turnId/formId/values/createdAt`                                                                                                                                                   |
+| `ctx.execution.origin`        | 这次执行因何而起：`player`、`continuation`、`manual`、`background`、`recursive` 或 `resume`                                                                                                                                                                  |
+| `ctx.execution.sourceTurnId`  | 重试一个已提交的回合时，是那个回合的 ID。用它做键，重试时复用上次的掷骰和揭示，不重新抽                                                                                                                                                                      |
+| `ctx.recursionDepth`          | 顶层执行是 `0`，`ctx.recursiveCall` 每嵌套一层加一                                                                                                                                                                                                           |
+| `ctx.world.seats`             | 会话的[座位](./world-model.md#座位)，只读。玩家当前扮演的角色是 SDK 的 `currentCharacterOf(primarySeat(seats), ctx.world.characters, seats)`；`seatCharacterIds` 给出一个座位绑定的角色。guard、工具（`context.world`）和扩展提供者（`ctx.world`）读到同一份 |
 
 `ctx.session.lastPlayerInput` 可能来自更早的回合。有这条记录不等于本回合提交了表单。
 
@@ -782,6 +783,7 @@ homepage: https://example.com/tidefall
 - 这些领域里合法的上游 proposals，以及本 runtime 已经缓冲的 proposals，对后续的读取可见。
 - 写入通过 proposals，在提交时统一校验。
 - `ctx.world.dimensions` 不一样：它是提供者发布的公共当前值快照，遵守下面[动态维度](#动态维度)里单独的冻结规则。
+- `ctx.world.seats` 是会话的座位，同样冻结。proposal 不改它，玩家用[切换接口](./api.md#会话座位)换当前角色，下一回合生效。
 
 **按名字找角色。** 角色除 `name` 外可以有 `aliases`（同一个人的其他叫法）。
 
@@ -794,7 +796,7 @@ homepage: https://example.com/tidefall
 
 **角色类型和 schema。**
 
-- 角色类型是 schema 里声明的开放字符串。`player` 是保留的类型，每个会话最多一个。
+- 角色类型是 schema 里声明的开放字符串。`player` 是保留的类型，一个会话可以有多个。要找玩家正在扮演的角色，用 `currentCharacterOf`（见[座位](./world-model.md#座位)），不要用 `find(type === "player")`。
 - 角色字段遵守 CharacterSchema 的 attributes。
 - 修改 schema 的 proposal 是 `character.schema.set`，payload 直接包含 `types` 和 `attributes`，版本由内核递增。
 

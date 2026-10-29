@@ -33,6 +33,9 @@ describe("ToolExecutor + core plugin pending proposals + commit pipeline", () =>
       phase: "setup",
       completedPlayerTurns: 0,
       setupRuntimes: {},
+      seats: [
+        { id: "main", controller: "human", role: "player", characters: "auto" },
+      ],
       activePlugins: ["world-init"],
       metadata: { _dimensionProviderPluginId: "world-init" },
       createdAt: new Date().toISOString(),

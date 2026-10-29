@@ -23,6 +23,9 @@ async function createTestApp() {
     phase: "playing",
     completedPlayerTurns: 0,
     setupRuntimes: {},
+    seats: [
+      { id: "main", controller: "human", role: "player", characters: "auto" },
+    ],
     metadata: {
       ownerTokenHash: hashSessionOwnerToken(OWNER_TOKEN),
       sessionIncarnationNonce: globalThis.crypto.randomUUID(),

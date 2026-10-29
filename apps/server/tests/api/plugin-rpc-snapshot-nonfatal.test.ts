@@ -48,6 +48,9 @@ describe("auto-snapshot failure is non-fatal to a committed turn", () => {
       locale: "zh-CN",
       phase: "playing",
       setupRuntimes: {},
+      seats: [
+        { id: "main", controller: "human", role: "player", characters: "auto" },
+      ],
       metadata: {
         approvalScopeNonce: globalThis.crypto.randomUUID(),
         sessionIncarnationNonce: globalThis.crypto.randomUUID(),
@@ -111,6 +114,14 @@ describe("auto-snapshot failure is non-fatal to a committed turn", () => {
         locale: "zh-CN",
         phase: "playing",
         setupRuntimes: {},
+        seats: [
+          {
+            id: "main",
+            controller: "human",
+            role: "player",
+            characters: "auto",
+          },
+        ],
         metadata: {
           approvalScopeNonce: globalThis.crypto.randomUUID(),
           sessionIncarnationNonce: globalThis.crypto.randomUUID(),

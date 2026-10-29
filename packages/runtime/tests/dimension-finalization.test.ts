@@ -54,6 +54,9 @@ async function setup(create: () => DataStore = createMemoryStore) {
     phase: "playing",
     completedPlayerTurns: 0,
     setupRuntimes: {},
+    seats: [
+      { id: "main", controller: "human", role: "player", characters: "auto" },
+    ],
     activePlugins: ["owner", "story"],
     metadata: { _dimensionProviderPluginId: "owner" },
     locale: "en-US",

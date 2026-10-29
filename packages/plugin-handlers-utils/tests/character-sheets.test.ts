@@ -30,6 +30,7 @@ describe("characterSheetSegments", () => {
   it("returns one turn-volatile segment for the providing plugin, so the sheets follow the history", () => {
     const [segment, ...rest] = characterSheetSegments([player, npc], {
       profiles: true,
+      currentCharacterId: player.id,
     });
 
     expect(rest).toEqual([]);
@@ -80,8 +81,10 @@ describe("characterSheetSegments", () => {
       character({ id: uuid, name: "Player", type: "player", fields }),
       character({ id: "npc-guide", name: "Guide", type: "npc", fields }),
     ];
-    const rendered = characterSheetSegments(cast, { profiles: true })[0]!
-      .content;
+    const rendered = characterSheetSegments(cast, {
+      profiles: true,
+      currentCharacterId: uuid,
+    })[0]!.content;
     expect(rendered).not.toContain(uuid);
     expect(rendered).not.toContain(turnId);
     expect(rendered).not.toContain("private-session");
@@ -90,9 +93,9 @@ describe("characterSheetSegments", () => {
     expect(rendered).toContain("1943-06-01T08:00:00Z");
     expect(fields.nested).toMatchObject(bookkeeping);
     expect(
-      characterSheetSegments([
-        character({ ...player, id: "player-scholar" }),
-      ])[0]!.content,
+      characterSheetSegments([character({ ...player, id: "player-scholar" })], {
+        currentCharacterId: "player-scholar",
+      })[0]!.content,
     ).toContain('"id": "player-scholar"');
   });
 
@@ -103,7 +106,7 @@ describe("characterSheetSegments", () => {
         { ...npc, aliases: ["Bran", "Old Hale"] },
         character({ name: "Wren", type: "npc" }),
       ],
-      { profiles: true },
+      { profiles: true, currentCharacterId: player.id },
     );
     expect(segment!.content).toContain('"aliases": [\n    "the apprentice"');
     expect(segment!.content).toContain(
@@ -114,9 +117,11 @@ describe("characterSheetSegments", () => {
   });
 
   it("leaves the profiles out unless asked, and gives no segment without a character to show", () => {
-    expect(characterSheetSegments([player, npc])[0]!.content).not.toContain(
-      "<character-profiles>",
-    );
+    expect(
+      characterSheetSegments([player, npc], {
+        currentCharacterId: player.id,
+      })[0]!.content,
+    ).not.toContain("<character-profiles>");
     expect(characterSheetSegments([npc])).toEqual([]);
     expect(characterSheetSegments([], { profiles: true })).toEqual([]);
   });
@@ -158,6 +163,7 @@ describe("characterSheetSegments", () => {
     ];
     const [segment] = characterSheetSegments(cast, {
       profiles: true,
+      currentCharacterId: "char-Aria",
       schema,
     });
 
@@ -210,5 +216,34 @@ describe("characterSheetSegments", () => {
       locale: "zh-Hant-TW",
     });
     expect(traditional!.content).toContain("(profiles not shown: ");
+  });
+  it("shows the current character's sheet and lists the other player characters with their tag", () => {
+    const second = character({
+      name: "Corin",
+      type: "player",
+      description: "A smuggler.",
+    });
+    const [segment] = characterSheetSegments([player, second, npc], {
+      profiles: true,
+      currentCharacterId: second.id,
+    });
+
+    expect(segment!.content).toContain('"name": "Corin"');
+    expect(segment!.content).not.toContain('"name": "Aria"');
+    expect(segment!.content).toContain(
+      "- Aria [player] | A lamp keeper's apprentice.",
+    );
+    expect(segment!.content).not.toContain("- Corin [player]");
+  });
+
+  it("shows no sheet without a current character, and none for an ID no character has", () => {
+    const profilesOnly = characterSheetSegments([player, npc], {
+      profiles: true,
+    })[0]!.content;
+    expect(profilesOnly).not.toContain("<player-character>");
+    expect(profilesOnly).toContain("- Aria [player]");
+    expect(
+      characterSheetSegments([player, npc], { currentCharacterId: "gone" }),
+    ).toEqual([]);
   });
 });

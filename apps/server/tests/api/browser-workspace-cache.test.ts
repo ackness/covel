@@ -67,6 +67,9 @@ async function setup() {
       phase: "playing",
       completedPlayerTurns: 0,
       setupRuntimes: {},
+      seats: [
+        { id: "main", controller: "human", role: "player", characters: "auto" },
+      ],
       activePlugins: [],
       locale: "zh-CN",
       metadata: {

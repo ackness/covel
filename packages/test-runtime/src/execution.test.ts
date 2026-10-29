@@ -120,6 +120,9 @@ async function createSessionStore() {
     phase: "playing",
     completedPlayerTurns: 0,
     setupRuntimes: {},
+    seats: [
+      { id: "main", controller: "human", role: "player", characters: "auto" },
+    ],
     activePlugins: [PLUGIN_ID],
     createdAt: now,
     updatedAt: now,

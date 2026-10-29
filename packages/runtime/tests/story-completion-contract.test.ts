@@ -52,6 +52,9 @@ async function run(
     phase: "playing",
     completedPlayerTurns: 0,
     setupRuntimes: {},
+    seats: [
+      { id: "main", controller: "human", role: "player", characters: "auto" },
+    ],
     activePlugins: [manifest.pluginId],
     createdAt: now,
     updatedAt: now,
@@ -253,6 +256,9 @@ describe("story completion contract", () => {
       phase: "playing",
       completedPlayerTurns: 0,
       setupRuntimes: {},
+      seats: [
+        { id: "main", controller: "human", role: "player", characters: "auto" },
+      ],
       activePlugins: runtimes.map((runtime) => runtime.pluginId),
       createdAt: now,
       updatedAt: now,

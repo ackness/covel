@@ -1,3 +1,4 @@
+import { currentCharacterField } from "@covel/context";
 import { snapshotPlayerInput } from "./turn-digest.js";
 import type {
   PlayerInputSubmission,
@@ -35,6 +36,8 @@ export interface TurnSessionMeta {
   /** `completedPlayerTurns + 1`, frozen for the execution. */
   readonly logicalTurn: number;
   readonly characters: readonly TurnSessionCharacter[];
+  /** The primary seat's current character; absent when no seat binds one. */
+  readonly currentCharacterId?: string;
   readonly lastPlayerInput: PlayerInputSubmission | null;
   readonly lastFormValues: Record<string, unknown> | undefined;
 }
@@ -181,6 +184,7 @@ export async function loadTurnSessionState(args: {
       logicalTurn:
         input.detachedStage?.sourceLogicalTurn ?? completedPlayerTurns + 1,
       characters: sessionCharacters,
+      ...currentCharacterField(session?.seats ?? [], sessionCharacters),
       lastPlayerInput,
       lastFormValues: lastPlayerInput?.values,
     },

@@ -4,6 +4,8 @@ import Dexie from "dexie";
 
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { BROWSER_CHECKPOINT_SCHEMA_VERSION } from "@covel/store/browser-sync";
+import { replaceSessionFromCheckpoint } from "@covel/store";
+import { createMemoryStore } from "@covel/store/memory";
 import type {
   BrowserCheckpoint,
   SessionCommit,
@@ -34,6 +36,9 @@ function checkpoint(
       phase: "playing",
       completedPlayerTurns: revision,
       setupRuntimes: {},
+      seats: [
+        { id: "main", controller: "human", role: "player", characters: "auto" },
+      ],
       locale: "zh-CN",
       activePlugins: [],
       createdAt: now,
@@ -341,6 +346,47 @@ describe("BrowserVault session commits", () => {
     expect(
       (await vault.getLatestCheckpoint("session-a"))?.pluginData,
     ).toHaveLength(1);
+  });
+});
+
+describe("BrowserVault seats", () => {
+  it("keeps the session's seats through save, reopen and MemoryStore hydration", async () => {
+    const seats = [
+      {
+        id: "lead",
+        controller: "human" as const,
+        role: "player" as const,
+        characters: ["char-ada", "char-lin"],
+        currentCharacterId: "char-lin",
+      },
+      {
+        id: "table",
+        controller: "empty" as const,
+        role: "host" as const,
+        characters: "auto" as const,
+      },
+    ];
+    const saved = checkpoint("session-a", 1, "turn-1");
+    await vault.applySessionCommit(
+      commit({ ...saved, session: { ...saved.session, seats } }),
+    );
+    vault.close();
+
+    const reopened = new BrowserVault({
+      dbName: `covel-browser-vault-test-${databaseNumber}`,
+    });
+    const restored = await reopened.getLatestCheckpoint("session-a");
+    reopened.close();
+    expect(restored?.session.seats).toEqual(seats);
+
+    // The server's transient workspace is hydrated from this checkpoint.
+    const memory = createMemoryStore();
+    try {
+      await replaceSessionFromCheckpoint(memory, restored!);
+      expect((await memory.getSession("session-a"))?.seats).toEqual(seats);
+    } finally {
+      await memory.close();
+    }
   });
 });
 

@@ -637,6 +637,7 @@ curl -X DELETE http://localhost:3001/api/sessions/<sessionId>
 | DELETE | `/api/sessions/:id`                      | 删除会话                                           |
 | GET    | `/api/sessions/:id/memory-index`         | 记忆索引用的向量模型，以及它是否还是当前配置的模型 |
 | POST   | `/api/sessions/:id/memory-index/rebuild` | 用当前配置的向量模型重建记忆索引                   |
+| PATCH  | `/api/sessions/:id/seats/:seatId`        | 切换座位当前扮演的角色，见[会话座位](#会话座位)    |
 
 #### 会话身份 `incarnation`
 
@@ -993,6 +994,29 @@ setup runtime 挂起等玩家回答时，这次尝试不占重试次数。挂起
 | 400    | `confirm_required` | `waive` 的 body 缺少 `{ confirm: true }`                                                           |
 | 404    | —                  | 会话不存在                                                                                         |
 | 409    | —                  | 目标不是 `blocked`（例如 `done{completed}`、`pending`）；`error` 里说明只有 blocked 才能重试或跳过 |
+
+### 会话座位
+
+会话记录的 `seats` 是会话的[座位](./world-model.md#座位)：谁在玩、以什么身份、控制哪些角色。新会话有一个默认座位 `[{ "id": "main", "controller": "human", "role": "player", "characters": "auto" }]`，它绑定所有 `type: player` 的角色。
+
+| 方法  | 路径                              | 描述                   |
+| ----- | --------------------------------- | ---------------------- |
+| PATCH | `/api/sessions/:id/seats/:seatId` | 切换座位当前扮演的角色 |
+
+请求体只能是 `{ "currentCharacterId": "<角色 id>" }`，其他字段返回 400。
+
+- 鉴权和其他会话端点一样（owner token）。
+- 写入持有会话锁，和回合串行，从下一回合起生效。不发事件。
+- 会话处于 `active` 或 `paused` 时可以切换。
+- 成功时返回 `200 { "seats": [...] }`，是写入后的全部座位。
+
+| 状态码 | `code`                   | 什么时候                                        |
+| ------ | ------------------------ | ----------------------------------------------- |
+| 400    | `invalid_body`           | 请求体不是 `{ currentCharacterId }`             |
+| 404    | `session_not_found`      | 会话不存在                                      |
+| 404    | `seat_not_found`         | 会话里没有这个座位                              |
+| 409    | `seat_not_human`         | 座位不是由人控制的（`controller` 不是 `human`） |
+| 409    | `seat_character_unbound` | 角色不存在，或者没有绑定在这个座位上            |
 
 ### 玩家交互
 
@@ -2408,6 +2432,14 @@ SSE。先发一个 `ready` 事件，之后每 15 秒发一行注释保持连接�
   "phase": "setup",
   "completedPlayerTurns": 0,
   "setupRuntimes": {},
+  "seats": [
+    {
+      "id": "main",
+      "controller": "human",
+      "role": "player",
+      "characters": "auto"
+    }
+  ],
   "activePlugins": ["pregame", "narrator", "codex"],
   "createdAt": "2025-01-15T10:00:00.000Z",
   "updatedAt": "2025-01-15T10:00:00.000Z",
@@ -2433,6 +2465,7 @@ SSE。先发一个 `ready` 事件，之后每 15 秒发一行注释保持连接�
 | `phase`                | `'setup' \| 'playing'`                           | 会话处在开局准备还是正式游玩。激活集里有 setup runtime 时初始为 `setup`，否则为 `playing`；全部 setup runtime 完成后变成 `playing`                                                                                                                                             |
 | `completedPlayerTurns` | number                                           | 已提交的正式玩家回合数。setup 阶段的交互不计入；同一回合不会被重复计数                                                                                                                                                                                                         |
 | `setupRuntimes`        | `Record<runtimeId, SetupRuntimeState>`           | 每个 setup runtime 的状态。见下表                                                                                                                                                                                                                                              |
+| `seats`                | `Seat[]`                                         | 会话的座位。新会话是一个绑定所有玩家角色的人类玩家座位，见[会话座位](#会话座位)                                                                                                                                                                                                |
 
 `worldDataNotices` 只在创建会话的响应里返回，服务器不保存；刷新页面后，这些提示就不见了。
 
@@ -2563,6 +2596,8 @@ SSE。先发一个 `ready` 事件，之后每 15 秒发一行注释保持连接�
 
 - 不是合法枚举值时返回 400。
 - `ended` 是终态，不能再改回 `active` / `paused`（返回 `409 session_ended`）。
+
+`seats` 不能用这个 PATCH 修改，切换当前角色用 [`PATCH /api/sessions/:id/seats/:seatId`](#会话座位)。
 
 `phase`、`completedPlayerTurns` 与 `setupRuntimes` 不能用 PATCH 修改，它们由服务端在回合提交时维护：
 

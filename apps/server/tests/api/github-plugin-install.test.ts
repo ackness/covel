@@ -231,6 +231,9 @@ describe("GitHub plugin installation", () => {
       id: "hook-session",
       phase: "playing",
       setupRuntimes: {},
+      seats: [
+        { id: "main", controller: "human", role: "player", characters: "auto" },
+      ],
       status: "active",
       completedPlayerTurns: 0,
       activePlugins: [],

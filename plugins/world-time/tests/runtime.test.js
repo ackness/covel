@@ -49,6 +49,9 @@ async function fixture({
     status: "active",
     phase: "playing",
     setupRuntimes: {},
+    seats: [
+      { id: "main", controller: "human", role: "player", characters: "auto" },
+    ],
     completedPlayerTurns: 0,
     activePlugins: ["world-time", "story"],
     createdAt: now,

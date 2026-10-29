@@ -409,7 +409,12 @@ async function executeTurnImpl(
               deps.worldModelReads ?? deps.store,
               input.sessionId,
             )
-          : { characterSchema: null, characters: [], dimensions: {} },
+          : {
+              characterSchema: null,
+              characters: [],
+              dimensions: {},
+              seats: [],
+            },
         signal:
           getTurnExecutionSignal(deps.turnControl) ??
           new AbortController().signal,

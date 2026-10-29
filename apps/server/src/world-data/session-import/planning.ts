@@ -916,18 +916,6 @@ export async function buildImportPlan(options: {
     }
   }
 
-  const players = merged.filter(
-    (write) => write.kind === "character" && write.record.type === "player",
-  );
-  if (players.length > 1) {
-    diagnostics.push({
-      level: "error",
-      sourceId: players[1]!.source.id,
-      path: players[1]!.source.descriptor.path,
-      message: "A session may have at most one player character",
-      hint: "Keep only one player record across the world's character sources.",
-    });
-  }
   return {
     writes: merged,
     diagnostics,

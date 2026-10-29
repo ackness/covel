@@ -107,6 +107,14 @@ if (pgAvailable) {
         phase: "playing",
         status: "active",
         setupRuntimes: {},
+        seats: [
+          {
+            id: "main",
+            controller: "human",
+            role: "player",
+            characters: "auto",
+          },
+        ],
         completedPlayerTurns: 0,
         metadata: {},
         locale: "en-US",

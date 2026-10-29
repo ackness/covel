@@ -149,6 +149,9 @@ describe("POST /api/actions — steer/abort targets the executing turn, not a qu
       status: "active",
       activePlugins: [PLUGIN_ID],
       setupRuntimes: {},
+      seats: [
+        { id: "main", controller: "human", role: "player", characters: "auto" },
+      ],
       completedPlayerTurns: 1,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
@@ -247,6 +250,9 @@ describe("POST /api/actions — steer/abort targets the executing turn, not a qu
       locale: "zh-CN",
       activePlugins: [PLUGIN_ID],
       setupRuntimes: {},
+      seats: [
+        { id: "main", controller: "human", role: "player", characters: "auto" },
+      ],
       completedPlayerTurns: 1,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
@@ -335,6 +341,9 @@ describe("POST /api/actions — steer/abort targets the executing turn, not a qu
     await store.createSession({
       phase: "playing",
       setupRuntimes: {},
+      seats: [
+        { id: "main", controller: "human", role: "player", characters: "auto" },
+      ],
       metadata: {
         approvalScopeNonce: globalThis.crypto.randomUUID(),
         sessionIncarnationNonce: globalThis.crypto.randomUUID(),

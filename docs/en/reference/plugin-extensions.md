@@ -30,6 +30,8 @@ A function runtime that changes its own data can submit a list of operations ins
 
 `ctx.recursiveCall` is for [nested calls within one package](./plugins.md#nested-calls-ctxrecursivecall). Use a service to request a result from another package, or an event to trigger its follow-up work.
 
+The session's seats (who is playing and which characters they control) belong to no plugin, so you never ask another plugin for them through a service or an input. Function runtimes, guards, tools (`context.world`) and extension providers (`ctx.world`) all read the same read-only copy on `world.seats`. Derive the character the player acts as with the SDK's `primarySeat`, `currentCharacterOf` and `seatCharacterIds`; the rules are in [Seats](./world-model.md#seats). Plugins cannot write seats; the player switches the current character through the [switch endpoint](./api.md#session-seats).
+
 ### Services are only for function runtimes
 
 Function runtime handlers and agent guards can use `ctx.services`. The framework does not expose every public service to every agent. If an agent needs the result of a service, it has two options:

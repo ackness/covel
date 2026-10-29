@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { characterSchemaRecordSchema } from "@covel/shared";
+import { characterSchemaRecordSchema, seatsSchema } from "@covel/shared";
 import {
   characters,
   createdRow,
@@ -63,6 +63,7 @@ const sessionState = z.looseObject({
   phase: z.enum(["setup", "playing"]),
   completedPlayerTurns: z.number().int().nonnegative(),
   setupRuntimes: z.record(z.string(), setupRuntimeState),
+  seats: seatsSchema,
   locale: nonEmptyString,
   activePlugins: z.array(z.string()),
   runtimeModelOverrides: z.record(z.string(), z.string()).optional(),

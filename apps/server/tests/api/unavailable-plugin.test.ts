@@ -87,6 +87,9 @@ beforeEach(async () => {
     status: "active",
     phase: "playing",
     setupRuntimes: {},
+    seats: [
+      { id: "main", controller: "human", role: "player", characters: "auto" },
+    ],
     completedPlayerTurns: 1,
     activePlugins: ["steady", "dependent"],
     locale: "en-US",

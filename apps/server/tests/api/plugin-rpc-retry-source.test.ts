@@ -104,6 +104,9 @@ describe("plugin-rpc retry source commit gate", () => {
       locale: "en-US",
       completedPlayerTurns: 1,
       setupRuntimes: {},
+      seats: [
+        { id: "main", controller: "human", role: "player", characters: "auto" },
+      ],
       activePlugins: [pluginId],
       metadata: {
         approvalScopeNonce: "approval",

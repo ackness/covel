@@ -79,6 +79,9 @@ describe("GET /api/ui-specs — registry snapshot", () => {
     await store.createSession({
       phase: "playing",
       setupRuntimes: {},
+      seats: [
+        { id: "main", controller: "human", role: "player", characters: "auto" },
+      ],
       id: sessionId,
       status: "active",
       locale: "zh-CN",

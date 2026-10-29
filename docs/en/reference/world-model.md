@@ -13,6 +13,8 @@ A plugin reads the World Model through four entry points:
 | `ctx.world.characters`      | Characters                                    |
 | `ctx.world.dimensions`      | The current values of dimensions              |
 
+`ctx.world.seats` sits beside them: the session's seats (who plays and which characters they control), read-only. It is session state, not part of the World Model; see [Seats](#seats).
+
 These entry points are read-only. To write, use a proposal (a request that says "I want to change this", which the kernel validates and then saves in one batch).
 
 - Characters and the character schema: within the same execution, a runtime that runs earlier can propose valid changes, and the runtime that is running can also read changes it has not saved yet.
@@ -25,7 +27,7 @@ For which fields exist and who manages each part, see [plugin contracts](./plugi
 A world package can declare a `characterSchema` in `world.yaml`. When a session is created, it is copied into the session.
 
 - It contains `types` (character types) and `attributes` (attributes).
-- `player` is a reserved type, and each game has at most one. Other types are declared by the schema.
+- `player` is a reserved type meaning "a character the player can play". A game can have several. Other types are declared by the schema. Which one the player plays right now is decided by the [seats](#seats).
 - A character's `fields` are validated against the current schema.
 - The proposal that changes the schema is `character.schema.set`. Its content is `{types, attributes}`, and the kernel increments the version.
 
@@ -41,7 +43,7 @@ Some boundaries:
 
 Validation when an AI generates a world:
 
-- When a world is created, before the added characters are accepted, the **whole group** of characters is validated against the generated `characterSchema`: character types, attribute constraints, and only one player.
+- When a world is created, before the added characters are accepted, the **whole group** of characters is validated against the generated `characterSchema`: character types and attribute constraints.
 - When a world is edited, all characters are validated against the merged schema. It is not enough to check only the new ones.
 
 ### Aliases and name resolution
@@ -116,6 +118,55 @@ The save rule has not changed: two non-player characters can share a name (looku
 
 > [!IMPORTANT]
 > The `characters` table has an `aliases` column. The server creates tables but does not change them. So a SQLite or PostgreSQL development database created before aliases were added lacks this column, and reading characters reports `no such column: aliases`. Back it up following the [migration notes](./env-registry.md#plugin-extension-development-data), then switch to a new database file (for PostgreSQL, rebuild the schema). Characters in a browser-private save have no aliases, and they are read as usual.
+
+## Seats
+
+A seat describes who plays, in which role, and which characters they control. The seats are stored in the `seats` field of the session record. The kernel owns them, and they are saved with snapshots, forks and browser saves.
+
+| Field                | Meaning                                                                         |
+| -------------------- | ------------------------------------------------------------------------------- |
+| `id`                 | The seat's ID within the session. The switch endpoint names the seat by it      |
+| `controller`         | Who sits there: `human` (the person at this machine) or `empty`. AI comes later |
+| `role`               | `player`, `host` or `spectator`                                                 |
+| `characters`         | The bound characters: `"auto"`, or a list of character IDs                      |
+| `currentCharacterId` | Optional. The character the seat currently plays                                |
+
+**The default seat**: every new session has one seat, `{ id: "main", controller: "human", role: "player", characters: "auto" }`. Single-player play is the same as before.
+
+**Binding** is derived when it is read, never written:
+
+- `"auto"` binds every character of type `player`, in the order of the character list, leaving out the characters another seat lists explicitly.
+- An explicit list binds the characters on it that still exist, in list order.
+- Creating a player character (a character-creation plugin, a world import, `create-character`) needs no seat write: the next read binds it to the `"auto"` seat.
+
+Every write checks these rules: seat IDs are unique; at most one seat uses `"auto"`; a character ID appears in one seat's list only, and only once in it.
+
+**The current character** of a seat is its `currentCharacterId` while that character is bound to the seat and exists, otherwise the first bound character, otherwise none. When the current character is deleted, the seat falls back to the first bound one.
+
+**The primary seat** is the first seat with `controller: "human"` and `role: "player"`. The story follows its current character:
+
+- `<player-character>` and `{{ player.character }}` in the prompt are that character (see [prompt structure](./prompt-structure.md#writing-that-keeps-the-system-prompt-unchanged)).
+- `{{ characters.npcs }}` and `<character-profiles>` leave out only that character. The other characters the player controls are listed with their `[player]` tag.
+- The `PostContextAssembly` payload names it in `currentCharacterId` (see [hooks](./hooks.md)).
+- The player status in the game view shows it.
+
+A plugin reads the same rule through three SDK helpers:
+
+```js
+import { currentCharacterOf, primarySeat } from "@covel/plugin-handlers-utils";
+
+const player = currentCharacterOf(
+  primarySeat(ctx.world.seats),
+  ctx.world.characters,
+  ctx.world.seats,
+);
+```
+
+`seatCharacterIds(seat, characters, seats)` returns the IDs of the characters bound to one seat.
+
+**Switching the current character**: `PATCH /api/sessions/:id/seats/:seatId` with the body `{ "currentCharacterId": "…" }`. The character must be bound to that seat, and a human must control the seat. It applies from the next turn. See [API](./api.md#session-seats). The game view has no switch control yet.
+
+The bundled plugins that still use `find(type === "player")` (inventory, checks, memory, character creation and others) act on the first player character when there are several, until they move to seats.
 
 ## Dynamic dimension snapshot
 

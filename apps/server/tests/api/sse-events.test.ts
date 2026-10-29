@@ -36,6 +36,9 @@ describe("SSE Events", () => {
     await busStore.createSession({
       phase: "playing",
       setupRuntimes: {},
+      seats: [
+        { id: "main", controller: "human", role: "player", characters: "auto" },
+      ],
       metadata: {
         approvalScopeNonce: globalThis.crypto.randomUUID(),
         sessionIncarnationNonce: globalThis.crypto.randomUUID(),
@@ -145,6 +148,14 @@ describe("SSE Events", () => {
       await store.createSession({
         phase: "playing",
         setupRuntimes: {},
+        seats: [
+          {
+            id: "main",
+            controller: "human",
+            role: "player",
+            characters: "auto",
+          },
+        ],
         metadata: {
           approvalScopeNonce: globalThis.crypto.randomUUID(),
           sessionIncarnationNonce: globalThis.crypto.randomUUID(),

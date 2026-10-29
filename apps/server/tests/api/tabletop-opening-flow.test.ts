@@ -144,6 +144,14 @@ for (const community of [false, true]) {
           status: "active",
           phase: "setup",
           setupRuntimes: {},
+          seats: [
+            {
+              id: "main",
+              controller: "human",
+              role: "player",
+              characters: "auto",
+            },
+          ],
           completedPlayerTurns: 0,
           activePlugins: [
             "pregame",
@@ -327,6 +335,9 @@ it("does not publish a character form or create a player after schema initializa
       status: "active",
       phase: "setup",
       setupRuntimes: {},
+      seats: [
+        { id: "main", controller: "human", role: "player", characters: "auto" },
+      ],
       completedPlayerTurns: 0,
       activePlugins: ["pregame", "world-init", "char-creator", "narrator"],
       locale: "en-US",

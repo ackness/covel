@@ -21,6 +21,9 @@ async function makeStore(completedPlayerTurns: number) {
     phase: completedPlayerTurns === 0 ? "setup" : "playing",
     completedPlayerTurns,
     setupRuntimes: {},
+    seats: [
+      { id: "main", controller: "human", role: "player", characters: "auto" },
+    ],
     locale: "zh-CN",
     activePlugins: [],
     createdAt: now,

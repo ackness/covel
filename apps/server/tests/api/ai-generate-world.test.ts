@@ -908,6 +908,14 @@ protocol = "openai-chat-v1"
         phase: "playing",
         completedPlayerTurns: 0,
         setupRuntimes: {},
+        seats: [
+          {
+            id: "main",
+            controller: "human",
+            role: "player",
+            characters: "auto",
+          },
+        ],
         activePlugins: ["world-init", "memory"],
         createdAt: now,
         updatedAt: now,
@@ -1028,6 +1036,14 @@ protocol = "openai-chat-v1"
         status: "active",
         phase: "playing",
         setupRuntimes: {},
+        seats: [
+          {
+            id: "main",
+            controller: "human",
+            role: "player",
+            characters: "auto",
+          },
+        ],
         locale: "en-US",
         activePlugins: ["world-init", pluginId],
         completedPlayerTurns: 0,

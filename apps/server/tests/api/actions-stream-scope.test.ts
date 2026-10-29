@@ -116,6 +116,9 @@ describe("POST /api/actions — event forwarding is scoped to the lock tenure", 
     await store.createSession({
       phase: "playing",
       setupRuntimes: {},
+      seats: [
+        { id: "main", controller: "human", role: "player", characters: "auto" },
+      ],
       metadata: {
         approvalScopeNonce: globalThis.crypto.randomUUID(),
         sessionIncarnationNonce: globalThis.crypto.randomUUID(),
@@ -256,6 +259,14 @@ describe("action observation cannot own business finalization", () => {
           approvalScopeNonce: crypto.randomUUID(),
         },
         setupRuntimes: {},
+        seats: [
+          {
+            id: "main",
+            controller: "human",
+            role: "player",
+            characters: "auto",
+          },
+        ],
         activePlugins: [RUNTIME_ID],
         completedPlayerTurns: 1,
         createdAt: new Date().toISOString(),

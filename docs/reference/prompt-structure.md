@@ -313,8 +313,8 @@ runtime 的 `agent` 分组可以声明两种请求偏好：
 
 常用变量：
 
-- `player.message`、`player.lastFormValues`、`player.character`。
-- `characters.npcs`：全部非玩家角色的档案。每行是 `姓名 [类型] | description | fields`，角色有别名时姓名后面跟 `(aka 别名, …)`。description 和 fields 各截到 400 字符，合计约 8000 字符，超出的角色只列姓名。不含 id，模型按姓名或别名用 `get-character` 查询。把它放进正文，模型就不必为每个出场人物各调一次 `get-character`。
+- `player.message`、`player.lastFormValues`、`player.character`。`player.character` 是主座位的当前角色（见[座位](./world-model.md#座位)），没有时为空。
+- `characters.npcs`：除当前角色以外全部角色的档案，玩家控制的其他角色带着 `[player]` 标签。每行是 `姓名 [类型] | description | fields`，角色有别名时姓名后面跟 `(aka 别名, …)`。description 和 fields 各截到 400 字符，合计约 8000 字符，超出的角色只列姓名。不含 id，模型按姓名或别名用 `get-character` 查询。把它放进正文，模型就不必为每个出场人物各调一次 `get-character`。
 - `session.id`、`session.turnNumber`。
 - `inputs.<pluginId>.<runtimeId>.<field>`。
 - `world.name`、`world.description`、`world.tags`、`world.lore`、`world.schema`、`world.entries`、`world.dimensions`。`world.lore` 是整篇正文，包括[只给叙事者的部分](./world-data.md#只给叙事者的正文narrator-only)，但不含那两行标记。
@@ -329,11 +329,20 @@ runtime 的 `agent` 分组可以声明两种请求偏好：
 想让 system prompt 逐回合不变的 runtime，在正文里只写块名，由插件 entry 提供回合级的提示段，内容进入[回合上下文](#回合上下文)：
 
 ```js
-import { characterSheetSegments } from "@covel/plugin-handlers-utils";
+import {
+  characterSheetSegments,
+  currentCharacterOf,
+  primarySeat,
+} from "@covel/plugin-handlers-utils";
 
 covel.provideExtension("prompt.segment@1", "character-sheets", {
   handler: (_input, ctx) =>
     characterSheetSegments(ctx.world.characters, {
+      currentCharacterId: currentCharacterOf(
+        primarySeat(ctx.world.seats),
+        ctx.world.characters,
+        ctx.world.seats,
+      )?.id,
       profiles: true,
       locale: ctx.locale,
       schema: ctx.world.characterSchema,
@@ -341,8 +350,8 @@ covel.provideExtension("prompt.segment@1", "character-sheets", {
 });
 ```
 
-- `<player-character>` 是玩家角色卡，和 `player.character` 是同一份 JSON。
-- `profiles: true` 时再加 `<character-profiles>`，行格式和 `characters.npcs` 相同。
+- `<player-character>` 是 `currentCharacterId` 这个角色的角色卡，也就是玩家当前扮演的角色，和 `player.character` 是同一份 JSON。不传 `currentCharacterId` 就没有这一块。
+- `profiles: true` 时再加 `<character-profiles>`，行格式和 `characters.npcs` 相同，只跳过当前角色。
 - `locale` 决定“未列出档案”那一行用中文还是 English，和正文的语言一致。
 - `schema` 让声明了 min / max 的数值属性带上量程（`"might": "2/5"`）。否则模型只看到一个光秃秃的数字，分不清 2/5 和 2/100。
 

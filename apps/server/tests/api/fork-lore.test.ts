@@ -161,6 +161,33 @@ describe.each(["memory", "sqlite"])("fork lore on %s", (backend) => {
     },
   );
 
+  it("captures the seats in a snapshot and restores them in a fork and a checkpoint transfer", async () => {
+    const seats = [
+      {
+        id: "main",
+        controller: "human" as const,
+        role: "player" as const,
+        characters: "auto" as const,
+        currentCharacterId: "char-lin",
+      },
+    ];
+    await store.updateSession("parent", { seats });
+    const snapshot = await capture();
+    expect(snapshot.payload.session.seats).toEqual(seats);
+    await store.updateSession("parent", {
+      seats: [{ ...seats[0]!, currentCharacterId: "char-ada" }],
+    });
+    const child = await fork(snapshot);
+    expect((await store.getSession(child.sessionId))?.seats).toEqual(seats);
+    const checkpoint = await exportSessionCheckpoint(store, child.sessionId, {
+      revision: 1,
+      actionId: "fork-seats-transfer",
+    });
+    expect(checkpoint.session.seats).toEqual(seats);
+    await replaceSessionFromCheckpoint(store, checkpoint);
+    expect((await store.getSession(child.sessionId))?.seats).toEqual(seats);
+  });
+
   it("restores a persisted lore field while minting independent child authority", async () => {
     const payload = makeSnapshotPayload();
     const snapshot = makeSnapshot({

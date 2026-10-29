@@ -108,6 +108,9 @@ describe.skipIf(!isolatedUrl)("read dependencies on real PG", () => {
       status: "active",
       phase: "playing",
       setupRuntimes: {},
+      seats: [
+        { id: "main", controller: "human", role: "player", characters: "auto" },
+      ],
       activePlugins: [PLUGIN],
       completedPlayerTurns: 1,
       metadata: {

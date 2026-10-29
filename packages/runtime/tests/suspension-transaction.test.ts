@@ -34,6 +34,14 @@ describe("function suspension transaction", () => {
         status: "active",
         phase: "playing",
         setupRuntimes: {},
+        seats: [
+          {
+            id: "main",
+            controller: "human",
+            role: "player",
+            characters: "auto",
+          },
+        ],
         activePlugins: ["probe"],
         completedPlayerTurns: 0,
         createdAt: timestamp,

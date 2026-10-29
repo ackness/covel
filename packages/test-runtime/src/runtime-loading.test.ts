@@ -82,6 +82,9 @@ describe("test-runtime runtime loading helpers", () => {
       phase: "playing",
       completedPlayerTurns: 0,
       setupRuntimes: {},
+      seats: [
+        { id: "main", controller: "human", role: "player", characters: "auto" },
+      ],
       activePlugins: ["lifecycle-probe"],
       createdAt: now,
       updatedAt: now,

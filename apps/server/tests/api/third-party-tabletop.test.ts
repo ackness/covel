@@ -275,6 +275,9 @@ export default async function (ctx) {
       status: "active",
       phase: "setup",
       setupRuntimes: {},
+      seats: [
+        { id: "main", controller: "human", role: "player", characters: "auto" },
+      ],
       completedPlayerTurns: 0,
       activePlugins: ["core-fixture", "narrator"],
       locale: "en-US",

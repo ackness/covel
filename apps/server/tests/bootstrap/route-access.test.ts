@@ -80,6 +80,7 @@ const ROUTES: Record<string, RouteAccess> = {
   "DELETE /api/sessions/:id/plugins/:pluginId": SESSION,
   "GET /api/sessions/:id/memory-index": SESSION,
   "POST /api/sessions/:id/memory-index/rebuild": SESSION,
+  "PATCH /api/sessions/:id/seats/:seatId": SESSION,
   "GET /api/sessions/:id/state": SESSION,
   "GET /api/sessions/:id/state-patches": SESSION,
   "GET /api/sessions/:id/messages": SESSION,
@@ -341,6 +342,9 @@ beforeAll(async () => {
     status: "active",
     phase: "playing",
     setupRuntimes: {},
+    seats: [
+      { id: "main", controller: "human", role: "player", characters: "auto" },
+    ],
     completedPlayerTurns: 0,
     locale: "en-US",
     activePlugins: [],
