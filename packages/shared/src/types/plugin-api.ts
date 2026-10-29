@@ -1,3 +1,4 @@
+import type { DefaultViewMode } from "../schemas/view-mode.js";
 /** Canonical HTTP DTOs for plugin discovery and session plugin state. */
 
 import type { EffectiveTurnCompletion } from "../scheduling/normalize.js";
@@ -150,6 +151,10 @@ export interface PluginDetail extends Omit<PluginSummary, "runtimes"> {
   >;
   readonly declaredPluginDataNamespaces: readonly string[];
   readonly ui: {
+    readonly view: readonly {
+      readonly runtimeId?: string;
+      readonly path: string;
+    }[];
     readonly right: readonly {
       readonly runtimeId?: string;
       readonly path: string;
@@ -221,7 +226,7 @@ export interface PluginPack {
    * The view a world made for this pack opens new sessions in. The world
    * generator writes it into the world's `defaultViewMode`.
    */
-  readonly defaultViewMode?: "stage" | "parsed";
+  readonly defaultViewMode?: DefaultViewMode;
 }
 
 /** A world's `pluginPolicy`, as the session preparation screen uses it. */

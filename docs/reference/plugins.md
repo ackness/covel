@@ -134,7 +134,8 @@ Extract facts supported by runtime-inputs.narrative.value, then call save-facts.
 | `settings` | 玩家配置项，运行时通过 `ctx.userSettings` 读取 |
 | `data` | 本插件数据 namespace 的 schema、version、accepts、search |
 | `datasets` | 本插件拥有的带类型数据集：名字即 namespace，写 schema、key、ops，见[数据集](#数据集contributesdatasets) |
-| `ui` | 包根相对的 `right/message` UI spec 路径 |
+| `ui` | 包根相对的 `right/message/view` UI spec 路径 |
+| `ui.view` | 包根相对的完整故事栏视图 spec 路径；声明与授权见[插件视图](./ui-panels.md#插件视图) |
 | `worldProjections` | 世界数据投影声明 |
 | `prompt` | 静态提示词段 |
 
@@ -920,7 +921,7 @@ namespace 声明 `search` 之后，它的记录进入框架的记忆检索（[`m
 **世界和玩法包怎样给出初始请求。**
 
 - 世界的 `pluginPolicy` 用 `preset` 选一个内置玩法包，用 `plus` 加上自己要的插件，见[插件选择](./world-data.md#插件选择pluginpolicy)。玩法包使用 `requested/recommended`。初始的显式请求是 `preset` 玩法包的 `requested` 加上 `plus`。
-- 内置玩法包（`packs/builtin.yaml`）还可以写 `defaultViewMode`（`stage` 或 `parsed`）。AI 创建世界时选了这个玩法包，生成的世界就带上这个 `defaultViewMode`。框架不按玩法包的 ID 做判断：AI 创建世界的选项就是这份目录里的全部玩法包，见 [`GET /api/framework/authoring`](./api.md#get-apiframeworkauthoring) 的 `packs`。
+- 内置玩法包（`packs/builtin.yaml`）还可以写 `defaultViewMode`（`stage`、`parsed` 或 `plugin:<pluginId>:<viewId>`；桥接视图先请求玩家授权）。AI 创建世界时选了这个玩法包，生成的世界就带上这个 `defaultViewMode`。框架不按玩法包的 ID 做判断：AI 创建世界的选项就是这份目录里的全部玩法包，见 [`GET /api/framework/authoring`](./api.md#get-apiframeworkauthoring) 的 `packs`。
 - 推荐项不自动启用，也不会覆盖玩家的显式排除。
 - `GET /api/worlds/:id/plugin-plan` 的 `defaultPluginIds` 是初始的显式请求。准备页和创建端再用同一个解析器计算活动集合。
 - 这个接口返回的各 `requested` 和 `defaultPluginIds` 只含已安装的插件。世界或玩法包请求了但没有安装的插件列在 `missing` 里，由准备页提示，不进入创建请求。

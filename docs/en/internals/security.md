@@ -388,7 +388,7 @@ Theme CSS is untrusted content. Themes share the settings document, and CSP does
 
 ### Plugin HTML
 
-A plugin's `webview` HTML is code that the player has approved. But it must never reach the origin the application runs on: the settings and provider keys in `localStorage`, the cookies, and the API with the player's session token. It runs in a second-level frame, below the application page.
+A plugin's `webview` HTML runs in a browser sandbox. It must never reach the origin the application runs on: the settings and provider keys in `localStorage`, the cookies, and the API with the player's session token. It runs in a second-level frame, below the application page.
 
 1. **The frame host** is `/plugin-frame.html`, a static file in the Web build (`apps/web/public/plugin-frame.html`). It is the same for every plugin and every session.
 
@@ -483,3 +483,5 @@ The application ships its own fonts (`@fontsource-variable/*`, SIL OFL 1.1), and
 - A world translation stream that is already open (`routes/api/worlds/translate.ts`) uses the same sanitized error content, and does not change its HTTP status. The reasons a translation is rejected are reported (no translation, the reply is not JSON, a placeholder was changed). Unexpected storage or provider errors are not reported.
 - The causes are all recorded in the server log.
 - These changes do not mean that every trace, game content, or log output has been sanitized.
+
+A `bridge: session` view in `contributes.ui.view` can additionally read a validated, bounded session projection with hidden keys removed. Mounting requires explicit player consent for the capability, bound to the plugin ID and the content hash of the spec plus HTML, regardless of source. A world default cannot bypass consent. SettingsStore saves consent on this device; the view bar menu can revoke it. This read capability adds no page write API. See [Plugin views](../reference/ui-panels.md#plugin-views) for scope and limits.

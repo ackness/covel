@@ -333,6 +333,14 @@ export {
   uiMapDirectiveSchema,
   type PluginUiSpecIssue,
 } from "./schemas/ui-spec.js";
+export {
+  PLUGIN_VIEW_ID_PATTERN,
+  parsePluginViewMode,
+  pluginViewMode,
+  viewModeSchema,
+  type PluginViewMode,
+  type DefaultViewMode,
+} from "./schemas/view-mode.js";
 
 // ── World Schemas ───────────────────────────────────────────────
 export {

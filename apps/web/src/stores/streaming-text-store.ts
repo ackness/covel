@@ -4,21 +4,25 @@ type Listener = () => void;
 
 const textByMessageId = new Map<string, string>();
 const listenersByMessageId = new Map<string, Set<Listener>>();
-const globalListeners = new Set<Listener>();
+export interface StreamingTextChange {
+  readonly messageId: string;
+  readonly type: "append" | "reset" | "complete";
+}
+const globalListeners = new Set<(change: StreamingTextChange) => void>();
 
-function notify(messageId: string): void {
+function notify(messageId: string, type: StreamingTextChange["type"]): void {
   for (const listener of listenersByMessageId.get(messageId) ?? []) listener();
-  for (const listener of globalListeners) listener();
+  for (const listener of globalListeners) listener({ messageId, type });
 }
 
-/** Append text and return true when this is the stream's first chunk. */
+/** Append text and return true for the first chunk after creation or reset. */
 export function appendStreamingText(messageId: string, delta: string): boolean {
-  const first = !textByMessageId.has(messageId);
+  const first = !textByMessageId.get(messageId);
   textByMessageId.set(
     messageId,
     (textByMessageId.get(messageId) ?? "") + delta,
   );
-  notify(messageId);
+  notify(messageId, "append");
   return first;
 }
 
@@ -26,9 +30,15 @@ export function getStreamingText(messageId: string): string | undefined {
   return textByMessageId.get(messageId);
 }
 
+/** A discarded draft starts a new text generation on the same placeholder. */
+export function resetStreamingText(messageId: string): void {
+  textByMessageId.set(messageId, "");
+  notify(messageId, "reset");
+}
+
 export function clearStreamingText(messageId: string): void {
   if (!textByMessageId.delete(messageId)) return;
-  notify(messageId);
+  notify(messageId, "complete");
 }
 
 export function clearStreamingTextsForTurn(turnId: string): void {
@@ -61,7 +71,9 @@ export function subscribeToStreamingText(
 }
 
 /** Imperative high-frequency signal for sticky-bottom scrolling. */
-export function subscribeToStreamingChanges(listener: Listener): () => void {
+export function subscribeToStreamingChanges(
+  listener: (change: StreamingTextChange) => void,
+): () => void {
   globalListeners.add(listener);
   return () => globalListeners.delete(listener);
 }

@@ -369,7 +369,7 @@ A world package does not have to use every capability. Let the genre decide the 
 
 These fields change only how the world is shown. You can leave all of them out.
 
-- `defaultViewMode`: the default way to show the session the first time it is played. Write `stage` (full-screen stage mode, see [ui-panels.md](./ui-panels.md#stage-mode-stage-view)) or `parsed`. It is only the starting value. Once the player switches the view at the top of the page, the player's choice wins.
+- `defaultViewMode`: the default way to show the session the first time it is played. Write `stage` (full-screen stage mode, see [ui-panels.md](./ui-panels.md#stage-mode-stage-view)), `parsed` or `plugin:<pluginId>:<viewId>` ([Plugin views](./ui-panels.md#plugin-views); bridge views request consent first). It is only the starting value. Once the player switches the view at the top of the page, the player's choice wins.
 - `version`, `author`, `license`, `homepage`: the version and author information of the world package. The fields, limits and translation rules are the same as for plugins. See [author information](./plugins.md#author-information). They show only on the world card. They do not go into session data or the prompt.
 - `cover`, `accentColor`, `themeMusic`: the cover, the accent color, and the music on the world list. See the end of the [Background Music](#background-music) section.
 

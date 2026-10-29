@@ -348,14 +348,15 @@ export type { HookEventName, HookEnforce, HookDeclaration } from "./hooks.js";
  * UI slot type — where plugin UI contributions appear in the frontend.
  * - `right`: Right sidebar panel tabs (status panels, dashboards)
  * - `message`: Inline blocks in the chat message area
+ * - `view`: Full-column pages replacing the story column
  */
-export type UISlotType = "right" | "message";
+export type UISlotType = "right" | "message" | "view";
 
 /**
  * UI contribution spec — declares which JSON files a plugin contributes
  * to each UI slot. Mirrors the tools declaration pattern.
  *
- * Paths are relative to the plugin/runtime root directory.
+ * Paths are relative to the package root directory.
  * Each JSON spec declares a catalog view or a sandboxed HTML webview.
  */
 export interface UISpec {
@@ -363,6 +364,8 @@ export interface UISpec {
   readonly right?: readonly string[];
   /** Message area block specs. */
   readonly message?: readonly string[];
+  /** Full-column view specs. */
+  readonly view?: readonly string[];
 }
 
 // ── Slash commands ──────────────────────────────────────────────

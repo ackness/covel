@@ -103,7 +103,7 @@
 ```
 session 建立 → GET /api/ui-specs?sessionId=<id>
   → server 按会话激活集（session plugin scope）过滤
-  → { right: [...], message: [...], diagnostics: [...] }
+  → { right: [...], message: [...], view: [...], diagnostics: [...] }
   → 按 right[] 动态生成 Tab（icon + label）
   → 每个 Tab 对应一个 json-render Renderer
   → pluginData[pluginId][namespace] 注入为 state
@@ -212,9 +212,11 @@ contributes:
       - ./ui/my-panel.json
 ```
 
-本页说的 `ui.right`、`ui.message` 都是指 `contributes.ui` 下的键。只支持这两个位置；舞台决策区通过右侧面板的 `surfaces` 选择。清单里的其他位置（包括已删除的 `left`）在加载时被忽略并记入日志，`pnpm validate:plugin` 则报未知字段错误。
+本页说的 `ui.right`、`ui.message`、`ui.view` 都是指 `contributes.ui` 下的键。支持这三个位置；舞台决策区通过右侧面板的 `surfaces` 选择。清单里的其他位置（包括已删除的 `left`）在加载时被忽略并记入日志，`pnpm validate:plugin` 则报未知字段错误。
 
 ### JSON Spec 格式
+
+`description` 是可选的可翻译说明。`bridge: "session"` 仅供 `ui.view` 的 `webview` 使用，读取范围与授权见[插件视图](#插件视图)。
 
 ```json
 {
@@ -661,7 +663,7 @@ guide 分析叙事 → `generate-guide` 写入 `plugin_data[message]`
 它是第四种呈现方式，`viewMode: "stage"`，和 `parsed` / `detailed` / `raw` 并列，在头部的 `GameViewHeader` 里切换。进入舞台后，消息区的三件东西（`ChatMessages`、`PendingDraftsBar`、`MessageComposer`）整个换成全屏舞台，`GameViewHeader` 保留。
 
 - **渲染条件**：`viewMode === "stage" && (session.phase === "playing" || hasSubmittedForm(...))`。角色创建表单仍在原来的消息流里完成。提交后立刻进入舞台，第一段叙事到达之前显示“生成中”的状态。
-- **初值**：世界包 `world.yaml` 顶层写 `defaultViewMode: stage`（进入 `WorldRecord.metadata.defaultViewMode`），会话**第一次挂载**时就进舞台。玩家在头部切换之后，以玩家的选择为准；这个选择不保存。见 [world-data.md](./world-data.md#world-package)。
+- **初值**：世界包 `world.yaml` 顶层写 `defaultViewMode: stage`（进入 `WorldRecord.metadata.defaultViewMode`），会话**第一次挂载**时就进舞台。玩家在头部切换之后，以玩家的选择为准；这个选择不保存。初值也可为 `parsed` 或 `plugin:<pluginId>:<viewId>`；桥接视图先请求授权，见下节。见 [world-data.md](./world-data.md#world-package)。
 
 ### 层级与数据源
 
@@ -728,6 +730,79 @@ guide 分析叙事 → `generate-guide` 写入 `plugin_data[message]`
 - **表单模态**：舞台的对话框只接选项和自由文本。所以消息里出现还没提交的 **form 类** interaction block 时（`extractPendingFormMessages`），舞台弹出一个 `Dialog`，用 `MessageBlockRenderer` 让玩家填写。提交后自动关闭。
 
 实现位置：`apps/web/src/components/session/stage/`（`StageView.tsx` 负责组装，另有 `Stage{Backdrop,Sprites,Hud,Dialog,Choices}.tsx`、`stage-selectors.ts` 和 `use-typewriter.ts`）。
+
+## 插件视图
+
+插件视图占据完整的故事栏。玩家从顶部“插件视图”菜单选择当前会话已启用插件提供的页面；页面上方的宿主栏显示视图名和插件名。“返回默认视图”按钮由宿主绘制，头部和视图栏各有一个，执行中也可用，插件无法隐藏它。
+
+在根 `PLUGIN.md` 中声明 spec 文件：
+
+```yaml
+contributes:
+  ui:
+    view: [./ui/story-view.json]
+```
+
+```json
+{
+  "id": "story",
+  "label": "Story reader",
+  "description": "Read the current story",
+  "webview": { "entry": "./story-view.html" },
+  "bridge": "session"
+}
+```
+
+源文件使用英文，翻译放在 `locales/<locale>.yaml` 的 `messages` 中。示例见 [session-view-probe](../../tests/third-party/session-view-probe/README.md)。
+
+- `id` 和 `label` 必填。`id` 匹配 `^[a-z][a-z0-9-]{0,63}$`，同一插件内唯一；重复时保留第一份，后面的写进诊断。
+- `view` 与 `webview` 二选一。可选 `icon`、`description`、`dataSource`、`emptyState`、`alwaysRender`。没有数据源的声明式页面可用 `alwaysRender: true`。
+- 不允许 `surfaces`、`group`、`groupLabel`、`groupOrder`、`shortLabel`、`navTarget`；这些字段只负责面板和舞台路由。
+- 模式名为 `plugin:<pluginId>:<viewId>`，例如 `plugin:session-view-probe:story`。世界和玩法包的 `defaultViewMode` 接受这个格式，也接受 `parsed` 和 `stage`；`detailed` 和 `raw` 只供作者手动选择。
+- 视图列表加载时先显示宿主默认界面。视图缺失、插件停用、请求失败或渲染出错时回退。宿主默认值只有两种：世界默认值恰为 `stage` 时用舞台，否则用 `parsed`。插件视图永远不作为回退目标。请求暂时失败后仍保留玩家的选择，后续成功加载可以恢复；渲染失败则切回宿主默认值并提示。
+- 视图选择只存在当前挂载中，不按会话保存。插件视图不进入沉浸舞台模式，也不显示宿主输入框。
+
+### 读取会话前的授权
+
+只有 `contributes.ui.view` 中的 `webview` 可以声明 `bridge: "session"`。玩家同意前不挂载这个页面，也不发送任何会话投影。世界默认选择了它时同样先弹出授权提示，并在下面显示 `parsed` / `stage`。
+
+授权能力为“读取会话”，绑定插件 ID 和整份已加载 spec（含内联 HTML）的 SHA-256 内容哈希。记录通过 SettingsStore 保存在本设备，键为 `ui.pluginViewConsent.<pluginId>.<hash>.session`。spec 或 HTML 改变后重新请求授权；在视图栏的“视图权限”菜单里点“撤销故事读取授权”可以撤销，并返回默认视图。授权独立于服务端代码审批，适用于所有来源的插件。
+
+### SessionProjection（版本 1）
+
+授权后的页面从 `window.covel` 的状态对象读取 `session` 字段，也可用 `window.covel.subscribe` 订阅变化。下表是该字段的内容。它不重复顶层的 `locale` 和 `theme`。
+
+<!-- prettier-ignore -->
+| 字段 | 内容 |
+| --- | --- |
+| `version` | 固定为 `1` |
+| `phase` | `setup` 或 `playing` |
+| `turn` | 已提交的玩家回合数 `completedPlayerTurns` |
+| `executing` | 是否正在执行 |
+| `messages[]` | `{ seq, role, text, truncated? }`。仅包含 `kind === "story"` 的 assistant 消息和不带 block 的 user 消息。`seq` 是首次观测时分配的稳定正整数，宿主淘汰旧消息或补载历史时不重新编号 |
+| `streaming` | `{ seq, text }` 或 `null`。`stream_` 占位消息只在这里出现，不进入 `messages`；最终故事消息沿用占位消息的序号 |
+| `pending[]` | `{ seq, block }`。宿主仍等待玩家回答的交互；`seq` 是同一消息的稳定序号，block 去掉隐藏字段 |
+| `characters[]` | 公开角色的 `id`、`name`、`type`，可选 `aliases`、`description`、`fields`；其余角色字段不传 |
+| `slots[]` | `{ slot, key?, value }`，宿主已经显示的内核 UI 槽位值；媒体引用保持不透明对象 |
+
+序号只在当前会话桥接实例中有效，按首次观测分配，不复用。补载的旧历史会获得新的序号；页面按数组顺序显示消息，不能按 `seq` 排序。
+
+投影不包含消息 `id`、`turnId`、`requestId`、`runtimeId`、时间戳、非故事的内部消息、推理、执行步骤、插件数据行、设置、供应商密钥或会话令牌。投影构造不读 `plugin_data`。角色的公开 `id` 是角色关联标识，不是消息元数据。
+
+嵌套值递归移除所有 `_` 开头的键，以及 `hidden`、`concealed`、`turnId`、`requestId`、`runtimeId`、`sessionId`、`timestamp`、`createdAt`、`updatedAt`、`uuid`；超过 8 层的值变成 `null`。投影在宿主校验，失败时不发送并只记录一次警告。
+
+<!-- prettier-ignore -->
+| 内容 | 上限与处理 |
+| --- | --- |
+| 消息窗口 | 最近 200 条，消息文本合计最多 256 KiB，先移除最旧的消息 |
+| 单条消息文本 | 32 KiB，截断后带 `truncated: true` |
+| 流式文本 | 64 KiB |
+| 角色 | 最多 100 个，每个序列化后最多 8 KiB，超过时跳过 |
+| 待答交互 | 最多 8 个，每个 block 序列化后最多 16 KiB，过大的替换为 `{ truncated: true }` |
+
+KiB 按 UTF-8 字节计算。状态变化推送完整投影；流式文本用 `{ type: "stream", seq, append }` 合并推送，间隔 100 ms，结束时立即补齐尾部。完整推送也带当时的流式全文，供页面重新同步。叙事重置会使旧追加基线失效，下一次推送用完整文本替换旧草稿；即使替换文本在 100 ms 内超过旧文本长度，也不会拼接旧前缀。正常完成仍会补齐最后一段文本。
+
+**此版本的会话桥只读。** 不新增 `submitAction`、表单提交、中止或打开面板能力。原有 `invokeRuntime`、`invokePluginAction`、`invokeCommand`、`emitEvent`、`setUiState` 保持原样。图片只传引用，不传字节或 blob URL，因此示例页不显示图片；也不提供输入框。HTML 仍为单文件，页面未连接时没有握手超时回退，但宿主返回按钮一直可用。
 
 ## 组件 Catalog
 

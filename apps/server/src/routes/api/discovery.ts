@@ -102,7 +102,7 @@ export function buildFrameworkCapabilities(
         inputInjectKinds: inputInjectDeclSchema.options.map(
           (option) => option.shape.kind.value,
         ),
-        uiSlots: ["right", "message"],
+        uiSlots: ["right", "message", "view"],
       },
       scheduling: {
         effectsPolicy: resolveEffectsPolicy(),

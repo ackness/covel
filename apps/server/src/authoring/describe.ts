@@ -1,3 +1,4 @@
+import type { DefaultViewMode } from "@covel/shared";
 /**
  * The authoring surface of the installed version: which world data a world
  * may supply, which plugin receives it, and how to declare and write it.
@@ -92,7 +93,7 @@ export interface AuthoringPack {
   readonly requested: readonly string[];
   readonly recommended: readonly string[];
   /** The view a world made for this pack opens new sessions in. */
-  readonly defaultViewMode?: "stage" | "parsed";
+  readonly defaultViewMode?: DefaultViewMode;
 }
 
 /** Destinations the kernel owns; no plugin has to be active for them. */

@@ -14,7 +14,11 @@ function namespaceKey(pluginId: string, namespace: string): string {
 
 function collectSpecNamespaces(specs: api.UISpecsResponse): PluginNamespace[] {
   const namespaces = new Map<string, PluginNamespace>();
-  for (const entry of [...specs.right, ...(specs.message ?? [])]) {
+  for (const entry of [
+    ...specs.right,
+    ...(specs.message ?? []),
+    ...(specs.view ?? []),
+  ]) {
     for (const spec of entry.specs) {
       const namespace = spec.dataSource?.namespace;
       if (!namespace) continue;

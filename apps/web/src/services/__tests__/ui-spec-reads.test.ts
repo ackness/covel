@@ -47,3 +47,25 @@ it("allows a failed read to be retried", async () => {
   await expect(fetchUiSpecs("s", "a")).resolves.toEqual({ right: [] });
   expect(mocks.request).toHaveBeenCalledTimes(2);
 });
+
+it("preserves view entries in the client response", async () => {
+  const response: import("../api/plugin-data.js").UISpecsResponse = {
+    right: [],
+    message: [],
+    view: [
+      {
+        pluginId: "p",
+        specs: [
+          {
+            id: "reader",
+            label: "Reader",
+            bridge: "session",
+            webview: { html: "<p>Reader</p>" },
+          },
+        ],
+      },
+    ],
+  };
+  mocks.request.mockResolvedValue(response);
+  await expect(fetchUiSpecs("s", "p")).resolves.toEqual(response);
+});

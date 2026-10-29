@@ -43,6 +43,9 @@ export interface UISlotSpec {
   id?: string;
   label: unknown;
   shortLabel?: unknown;
+  description?: unknown;
+  bridge?: "session";
+  alwaysRender?: boolean;
   icon?: string;
   group?: string;
   groupLabel?: unknown;
@@ -65,7 +68,7 @@ export interface UISlotEntry {
 export interface UiSpecDiagnostic {
   pluginId: string;
   runtimeId: string;
-  slot: "right" | "message";
+  slot: "right" | "message" | "view";
   specIndex: number;
   specId?: string;
   issues: { path: string; message: string; code: string }[];
@@ -74,6 +77,7 @@ export interface UiSpecDiagnostic {
 export interface UISpecsResponse {
   right: UISlotEntry[];
   message?: UISlotEntry[];
+  view?: UISlotEntry[];
   /** Specs dropped from the slots above because they failed validation. */
   diagnostics?: UiSpecDiagnostic[];
 }

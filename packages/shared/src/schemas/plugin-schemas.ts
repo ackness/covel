@@ -665,6 +665,12 @@ const pluginEventDeclSchema = z
 /** `contributes.ui`: package-relative paths of UI spec files, by placement. */
 export const pluginUiPathsSchema = z
   .object({
+    view: z
+      .array(z.string().min(1))
+      .describe(
+        "Paths of UI specs for full-column views the player can switch to.",
+      )
+      .optional(),
     right: z
       .array(z.string().min(1))
       .describe("Paths of UI specs for right-panel tabs.")

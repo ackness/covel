@@ -976,6 +976,14 @@
         "ui": {
           "type": "object",
           "properties": {
+            "view": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1
+              },
+              "description": "Paths of UI specs for full-column views the player can switch to."
+            },
             "right": {
               "type": "array",
               "items": {

@@ -1,3 +1,4 @@
+import { viewModeSchema } from "./view-mode.js";
 import { z } from "zod";
 import type {
   ActionRequestValidation,
@@ -391,7 +392,7 @@ export const pluginPackSchema = z
     tags: z.array(z.string()),
     reason: i18nTextSchema.optional(),
     source: z.enum(["builtin", "world"]),
-    defaultViewMode: z.enum(["stage", "parsed"]).optional(),
+    defaultViewMode: viewModeSchema.optional(),
   })
   .strict();
 

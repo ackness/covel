@@ -229,3 +229,72 @@ describe("connectPluginBridge", () => {
     connection.bridge.close();
   });
 });
+
+it("posts only nonempty stream appends with a positive integer sequence", async () => {
+  const connection = connect();
+  await connection.next();
+  connection.bridge.pushStream(0, "bad");
+  connection.bridge.pushStream(1.5, "bad");
+  connection.bridge.pushStream(3, "");
+  connection.bridge.pushStream(3, "ab");
+  expect(await connection.next()).toEqual({
+    type: "stream",
+    seq: 3,
+    append: "ab",
+  });
+  expect(connection.received).toHaveLength(2);
+  connection.bridge.close();
+});
+
+it("the page bridge merges appends and ignores the stream lane without consented session state", async () => {
+  const { runInNewContext } = await import("node:vm");
+  let listener: ((event: unknown) => void) | undefined;
+  const page: {
+    covel?: {
+      getState(): Record<string, unknown>;
+      subscribe(listener: (state: unknown) => void): void;
+    };
+  } = {};
+  const parent = {};
+  const port = {
+    start: vi.fn(),
+    onmessage: undefined as ((event: { data: unknown }) => void) | undefined,
+  };
+  const source = pluginFrameDocument("").match(
+    /<script>([\s\S]*?)<\/script>/,
+  )?.[1];
+  runInNewContext(source!, {
+    window: page,
+    parent,
+    document: {},
+    addEventListener: (_: string, callback: typeof listener) => {
+      listener = callback;
+    },
+  });
+  listener?.({
+    source: parent,
+    data: { type: "covel:connect" },
+    ports: [port],
+  });
+  const notify = vi.fn();
+  page.covel?.subscribe(notify);
+  notify.mockClear();
+  port.onmessage?.({ data: { type: "stream", seq: 1, append: "private" } });
+  expect(page.covel?.getState()).toEqual({});
+  expect(notify).not.toHaveBeenCalled();
+  port.onmessage?.({
+    data: {
+      type: "state",
+      value: { session: { version: 1, streaming: { seq: 2, text: "a" } } },
+    },
+  });
+  port.onmessage?.({ data: { type: "stream", seq: 2, append: "b" } });
+  expect(page.covel?.getState()).toMatchObject({
+    session: { streaming: { seq: 2, text: "ab" } },
+  });
+  port.onmessage?.({ data: { type: "stream", seq: 3, append: "c" } });
+  expect(page.covel?.getState()).toMatchObject({
+    session: { streaming: { seq: 3, text: "c" } },
+  });
+  expect(notify).toHaveBeenCalledTimes(3);
+});

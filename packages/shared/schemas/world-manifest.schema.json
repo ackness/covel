@@ -383,9 +383,16 @@
       "description": "World defaults for plugin settings, keyed `pluginId → settingKey → value`. Resolution order: player override, then this value, then the plugin's own default."
     },
     "defaultViewMode": {
-      "type": "string",
-      "enum": ["stage", "parsed"],
-      "description": "Initial view for new sessions. `stage` is the fullscreen visual-novel stage. The player's own choice wins once made."
+      "anyOf": [
+        {
+          "type": "string",
+          "enum": ["stage", "parsed"]
+        },
+        {
+          "type": "string"
+        }
+      ],
+      "description": "Initial view: stage, parsed or plugin:<pluginId>:<viewId>. The player's own choice wins. Session bridge views require consent."
     },
     "cover": {
       "type": "string",

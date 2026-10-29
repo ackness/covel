@@ -388,7 +388,7 @@ default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-sr
 
 ### Plugin HTML
 
-插件的 `webview` HTML 是玩家批准过的代码，但它绝不能碰到应用所在的源：`localStorage` 里的设置和供应商密钥、cookie，以及带着玩家会话令牌的 API。它运行在应用页面往下的第二层 frame 里。
+插件的 `webview` HTML 在浏览器沙箱运行，它绝不能碰到应用所在的源：`localStorage` 里的设置和供应商密钥、cookie，以及带着玩家会话令牌的 API。它运行在应用页面往下的第二层 frame 里。
 
 1. **frame 宿主**是 `/plugin-frame.html`，Web 构建里的一个静态文件（`apps/web/public/plugin-frame.html`），对所有插件和会话都是同一个。
 
@@ -483,3 +483,5 @@ default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-sr
 - 已经打开的世界翻译流（`routes/api/worlds/translate.ts`）使用同样清理过的错误内容，不改变它的 HTTP 状态。翻译被拒的原因会报告（没有译文、回复不是 JSON、占位符被改动）；意外的存储或供应商错误不会报告。
 - 原因都记在服务端日志里。
 - 这些改动并不表示所有 trace、游戏内容或日志输出面都做了清理。
+
+`contributes.ui.view` 的 `bridge: session` 另可读取经过校验、裁剪和去除隐藏键的会话投影。挂载前必须逐项取得玩家同意，绑定插件 ID 与 spec + HTML 的内容哈希，所有来源一视同仁；世界默认视图不能绕过。授权通过本设备 SettingsStore 保存，视图栏菜单可撤销。这个只读能力不增加页面写入接口；范围与限制见[插件视图](../reference/ui-panels.md#插件视图)。

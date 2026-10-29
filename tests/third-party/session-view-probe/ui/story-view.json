@@ -1,0 +1,8 @@
+{
+  "id": "story",
+  "label": "Story reader",
+  "webview": {
+    "entry": "./story-view.html"
+  },
+  "bridge": "session"
+}

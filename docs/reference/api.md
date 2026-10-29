@@ -1524,7 +1524,7 @@ fork 和社区插件的授权：
     }
   ],
   "message": [...],
-  "left": [...],
+  "view": [...],
   "diagnostics": []
 }
 ```
@@ -1538,6 +1538,8 @@ fork 和社区插件的授权：
 - 一个 spec 校验失败，**不会影响整个响应**：只把它从所在的 slot 里去掉。
 - 失败原因写在顶层的 `diagnostics[]` 里，每项是 `{ pluginId, runtimeId, slot, specIndex, specId?, issues[{ path, message, code }] }`，说明是哪个插件、哪个字段、什么问题。文件读不出来（不存在、不是 JSON、指向插件目录以外）也写在这里；`code` 都是 `invalid`。
 - 带 `sessionId` 时，`diagnostics` 只包含该会话已激活的插件。
+
+`view` 始终为数组（可以为空），项为 `{ pluginId, specs }`。仅列出当前会话活跃插件的视图；同一插件重复的视图 ID 保留第一份，其余报告 `slot: "view"` 诊断。这里只读取 JSON 和 HTML，不导入插件代码，不需要服务端代码审批。读取会话的玩家授权在浏览器挂载前单独处理，见[插件视图](./ui-panels.md#插件视图)。
 
 **开发热重载**：`POST /api/plugins/:id/reload` 重新加载一个社区插件。
 

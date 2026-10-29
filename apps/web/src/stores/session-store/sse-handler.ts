@@ -13,6 +13,7 @@ import * as api from "@/services/api";
 import type { DataService } from "@/services/data-service.js";
 import {
   appendStreamingText,
+  resetStreamingText,
   clearStreamingText,
   clearStreamingTextsForTurn,
 } from "@/stores/streaming-text-store.js";
@@ -325,7 +326,7 @@ export function createSseEventHandler(
           deps.deltaBufferRef.current.delete(
             `${turnId ?? "unknown"}_${runtimeId}`,
           );
-          clearStreamingText(`stream_${turnId ?? "unknown"}_${runtimeId}`);
+          resetStreamingText(`stream_${turnId ?? "unknown"}_${runtimeId}`);
         }
         if (delta && deltaKind === "story") {
           queueNarrativeDelta(deps, { turnId, runtimeId, pluginId, delta });

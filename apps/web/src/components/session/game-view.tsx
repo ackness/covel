@@ -1,3 +1,9 @@
+import { parsePluginViewMode } from "@covel/shared";
+import { usePluginViews } from "./game-view/use-plugin-views.js";
+import { PluginViewHost } from "./plugin-view-host.js";
+import { usePluginViewConsent } from "./plugin-view-consent.js";
+import { Button } from "@/components/ui/button.js";
+import { emitToast } from "@/lib/toast-channel.js";
 import { SessionDimensionsPanel } from "./session-dimensions-panel.js";
 import { useCallback, useMemo, useState, useRef, useEffect } from "react";
 import { useTranslation } from "react-i18next";
@@ -123,7 +129,7 @@ export function GameView({
     submittedBlockIds,
     submittedBlockValues,
   } = state;
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const recoveryNoticeVisible = executionRecoveryNoticeVisible(
     state.executionRecovery,
   );
@@ -147,7 +153,18 @@ export function GameView({
     llmConfig,
   );
 
-  const [viewMode, setViewMode] = useGameViewMode(world);
+  const pluginViews = usePluginViews(session.id, sessionPlugins, i18n.language);
+  const viewConsent = usePluginViewConsent(pluginViews.views);
+  const [viewMode, setViewMode, viewInfo] = useGameViewMode(
+    world,
+    pluginViews,
+    viewConsent.isAllowed,
+  );
+  const activePluginView = pluginViews.views.find(
+    (entry) => entry.mode === viewMode,
+  );
+  const consentEntry = viewInfo.consentView;
+  const [savingViewConsent, setSavingViewConsent] = useState(false);
   // Full-screen stage: collapse both studio rails + hide the session header so
   // the stage fills the viewport. Session-memory only (no persistence).
   const [immersive, setImmersive] = useState(false);
@@ -519,6 +536,8 @@ export function GameView({
                 world={world}
                 executing={executing}
                 viewMode={viewMode}
+                pluginViews={pluginViews.views}
+                hostDefaultMode={viewInfo.hostDefault}
                 isLeftCollapsed={leftCollapsed}
                 isRightCollapsed={rightCollapsed}
                 onViewModeChange={handleViewModeChange}
@@ -609,7 +628,66 @@ export function GameView({
             onRun={onBeginAdventure}
             onOpenSettings={settings.openWithKey}
           />
-          {stageActive ? (
+          {consentEntry && (
+            <Dialog
+              open={viewConsent.ready(consentEntry)}
+              onOpenChange={(open) => {
+                if (!open) handleViewModeChange(viewInfo.hostDefault);
+              }}
+            >
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>
+                    {t("session.viewConsentTitle", {
+                      label: consentEntry.label,
+                    })}
+                  </DialogTitle>
+                  <DialogDescription>
+                    {t("session.viewConsentDescription", {
+                      plugin: consentEntry.pluginName,
+                    })}
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="flex justify-end gap-2">
+                  <Button
+                    variant="outline"
+                    onClick={() => handleViewModeChange(viewInfo.hostDefault)}
+                  >
+                    {t("session.viewConsentDecline")}
+                  </Button>
+                  <Button
+                    disabled={savingViewConsent}
+                    onClick={() => {
+                      setSavingViewConsent(true);
+                      void viewConsent
+                        .grant(consentEntry)
+                        .catch(() =>
+                          emitToast("error", t("settings.saveFailed")),
+                        )
+                        .finally(() => setSavingViewConsent(false));
+                    }}
+                  >
+                    {t("session.viewConsentAllow")}
+                  </Button>
+                </div>
+              </DialogContent>
+            </Dialog>
+          )}
+          {activePluginView && parsePluginViewMode(viewMode) ? (
+            <PluginViewHost
+              key={activePluginView.mode}
+              entry={activePluginView}
+              sessionId={session.id}
+              sessionBridgeAllowed={viewConsent.isAllowed(activePluginView)}
+              onFallback={() => handleViewModeChange(viewInfo.hostDefault)}
+              onRevoke={() => {
+                handleViewModeChange(viewInfo.hostDefault);
+                void viewConsent
+                  .revoke(activePluginView)
+                  .catch(() => emitToast("error", t("settings.saveFailed")));
+              }}
+            />
+          ) : stageActive ? (
             <StageView
               recoveryTurnId={recoveryTurnId}
               composerDraft={{ value: inputValue, onChange: setInputValue }}
@@ -653,7 +731,13 @@ export function GameView({
                 sessionPlugins={sessionPlugins}
                 submittedBlockIds={submittedBlockIds}
                 submittedBlockValues={submittedBlockValues}
-                viewMode={viewMode}
+                viewMode={
+                  viewMode === "detailed" ||
+                  viewMode === "raw" ||
+                  viewMode === "stage"
+                    ? viewMode
+                    : "parsed"
+                }
                 onSendMessage={onSendMessage}
                 onSubmitBlock={onSubmitBlock}
                 onSubmitInteraction={onSubmitInteraction}
