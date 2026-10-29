@@ -590,7 +590,7 @@ describe("public plugin services", () => {
       input.value = 999;
       expect(context.callerPluginId).toBe("consumer");
       expect(context).not.toHaveProperty("store");
-      expect(context).not.toHaveProperty("pluginData");
+      expect(Object.keys(context.pluginData).sort()).toEqual(["get", "list"]);
       return value;
     });
     registry.register("provider", {

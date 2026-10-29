@@ -55,14 +55,10 @@ export interface ExtensionPluginDataRecord {
 }
 
 export interface PluginExtensionContext extends PluginServiceContext {
-  readonly world: import("../proposals/world-model.js").WorldModelView;
-  readonly sessionId: string;
   readonly locale: string;
   /** The provider plugin's translations for the session's language. */
   readonly messages?: import("../utils/plugin-messages.js").PluginMessages;
   readonly turnId?: string;
-  /** Detached copies, shaped as `ctx.pluginData` of a function handler. */
-  readonly pluginData: import("@covel/plugin-handlers-utils").PluginDataReader;
 }
 
 export interface PluginExtensionDefinition<I = unknown, O = unknown> {

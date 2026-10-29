@@ -457,6 +457,13 @@ export async function createPluginRuntimeContext({
     signal: handlerAbort.signal,
     gateway: revocable.gateway,
     utils: revocable.utils,
+    reads: {
+      locale: input.locale,
+      world,
+      store: deps.store,
+      visibility: pluginDataVisibility,
+      writeBuffer,
+    },
   });
   const services = serviceClient
     ? makeRevocableCapability(serviceClient, isRevoked, "services")

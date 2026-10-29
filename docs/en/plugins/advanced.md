@@ -217,6 +217,13 @@ There are two ways to let other code call yours:
 - The registered name must match the manifest.
 - Fixed fragments in `contributes.prompt` are registered by Covel automatically, so you do not need to declare them as extensions.
 
+A service handler can read its provider's own non-hidden data. It cannot write:
+
+```js
+const item = await ctx.pluginData.get("items", key);
+return { item };
+```
+
 For the inputs and outputs of each extension point, how several providers are combined, and how errors are handled, see [Plugin extensions and communication](../reference/plugin-extensions.md) and the [Extension point reference](../reference/extension-points.md).
 
 > [!IMPORTANT]

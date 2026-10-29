@@ -217,6 +217,13 @@ Authoring examples match their schemas.
 - 注册的名字必须和清单一致。
 - `contributes.prompt` 里的固定片段由 Covel 自动注册，不用再声明成扩展。
 
+服务 handler 可以读取提供者自己的非隐藏数据，不能写入：
+
+```js
+const item = await ctx.pluginData.get("items", key);
+return { item };
+```
+
 每个扩展点的输入、输出、多个提供者怎样合并、出错时怎样处理，见[插件扩展与通信](../reference/plugin-extensions.md)和[扩展点参考](../reference/extension-points.md)。
 
 > [!IMPORTANT]

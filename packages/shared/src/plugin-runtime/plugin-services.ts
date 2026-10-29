@@ -28,6 +28,12 @@ export interface PluginServiceClient {
 /** Services compute values; the calling runtime owns persistent effects. */
 export interface PluginServiceContext {
   readonly callerPluginId: string;
+  readonly sessionId: string;
+  readonly locale?: string;
+  /** Detached, read-only access to the provider's own non-hidden data. */
+  readonly pluginData: import("@covel/plugin-handlers-utils").PluginDataReader;
+  readonly world: import("../proposals/world-model.js").WorldModelView;
+  readonly getOwnSettings: () => Readonly<Record<string, unknown>>;
   readonly signal: AbortSignal;
   readonly gateway?: PluginRuntimeGateway;
   readonly utils?: PluginRuntimeUtils;
