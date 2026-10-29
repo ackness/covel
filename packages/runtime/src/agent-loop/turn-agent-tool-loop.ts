@@ -1224,6 +1224,16 @@ async function runAgentToolLoopWithinBudget(
         : undefined;
   if (finalizerExit && finalizerEligible()) {
     loop.enter("finalizing");
+    // The reserve stops the loop before its pre-step drain, so an
+    // interjection queued during the last step would reach the player only
+    // after this turn's answer. The finalizer reads it instead, and the
+    // context budget protects it as a user message of this turn.
+    if (finalizerExit === "deadline" && profile.steering) {
+      for (const steer of deps.turnControl?.drainSteering?.() ?? []) {
+        messages.push({ role: "user", content: steer });
+        currentTurnUserMessages += 1;
+      }
+    }
     const answer = await runFinalizer(loop.steps + 1);
     if (answer) {
       finalContent =

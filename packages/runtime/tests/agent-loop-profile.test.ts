@@ -154,7 +154,8 @@ describe("the loop core under a profile", () => {
     };
     const result = await runLoop({
       llm,
-      manifest: story({ loopProfile: { stream: false } }),
+      // g3: a story that stops streaming also rejects truncated text.
+      manifest: story({ loopProfile: { stream: false, truncation: "reject" } }),
       deps: { toolExecutor: undefined, onDelta },
     });
     expect(onDelta).not.toHaveBeenCalled();
@@ -320,6 +321,56 @@ describe("the deadline reserve (vi)", () => {
       reason: "deadline",
       finalizer: true,
     });
+  });
+
+  it("hands a story's finalizer the interjection queued during the last step", async () => {
+    // The player interjects during the fourth step. The reserve then stops
+    // the loop before the next pre-step drain, so the finalizer must merge
+    // the queued message itself.
+    const interjection = "Wait, I draw my sword first.";
+    let toolSteps = 0;
+    const llm = clockedLLM({
+      stepMs: 4_000,
+      finalMs: 500,
+      step: (n) => {
+        toolSteps = n + 1;
+        return toolCall("mark", { note: `n${n}` }, `tc-${n}`, "scratch");
+      },
+    });
+    let delivered = false;
+    const drainSteering = vi.fn(() => {
+      if (toolSteps < 4 || delivered) return [];
+      delivered = true;
+      return [interjection];
+    });
+    const result = await runLoop({
+      llm,
+      maxSteps: 20,
+      timeoutMs: 20_000,
+      manifest: story({
+        tools: { plugin: ["mark"] },
+        loopProfile: { finalizer: { deadlineReserveMs: 5_000 } },
+      }),
+      deps: { turnControl: { drainSteering } },
+    });
+    expect(result.stop).toEqual({ reason: "deadline", finalizer: true });
+    expect(llm.requests.filter((r) => r.tools)).toHaveLength(4);
+    const finalizer = llm.requests.at(-1)!;
+    expect(finalizer.tools).toBeUndefined();
+    const messages = finalizer.messages as {
+      role: string;
+      content: unknown;
+    }[];
+    const steerAt = messages.findIndex(
+      (m) => m.role === "user" && m.content === interjection,
+    );
+    expect(steerAt).toBeGreaterThan(-1);
+    // It precedes the request for this turn's narrative.
+    const askAt = messages.findIndex(
+      (m) =>
+        m.role === "system" && String(m.content).includes(WRITE_STORY_TEXT),
+    );
+    expect(askAt).toBeGreaterThan(steerAt);
   });
 
   it("keeps stepping to the real deadline while the finalizer is not eligible", async () => {

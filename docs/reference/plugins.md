@@ -735,10 +735,10 @@ Agent 循环怎么跑由一个 profile 决定：文字是否流式显示给玩�
 
 - `profile: story` 要求 `io.visibility: story`。
 - 最终取值为 `true` 的 `stream` 或 `steering` 要求 `io.visibility: story`：只有故事写叙事流、读玩家的插话。
-- `truncation: accept` 要求最终的 `stream` 为 `true`：只保留玩家边写边读过的正文。
+- 最终取值为 `accept` 的 `truncation` 要求最终的 `stream` 为 `true`：只保留玩家边写边读过的正文。所以故事写 `stream: false` 时也要写 `truncation: reject`。
 - `finalizer.deadlineReserveMs` 是非负整数，并且小于 `timeoutMs`（没写时按默认时限比较）。
 
-**时限前的收尾（`deadlineReserveMs`）。** 剩余时间少于这个值、而且这时一段文字就能完成 runtime（没有未完成的 `requireToolUse` 或显式完成要求，最终输出也不是来自完成工具），并且至少还剩 3 秒写答案，循环就不再开始新的一步，改为关掉工具要最终答案。写出了答案，runtime 成功，结束原因是 `deadline`，并带 `finalizer: true`。没写出答案时仍按超时失败。实际使用的值最多是 `timeoutMs` 的一半；剩余时间按排队和流式输出顺延后的时限计算。条件不满足时循环照常走到真正的时限。
+**时限前的收尾（`deadlineReserveMs`）。** 剩余时间少于这个值、而且这时一段文字就能完成 runtime（没有未完成的 `requireToolUse` 或显式完成要求，最终输出也不是来自完成工具），并且至少还剩 3 秒写答案，循环就不再开始新的一步，改为关掉工具要最终答案。profile 开了 `steering` 时，上一步期间排队的玩家插话先并入对话，收尾请求能读到。写出了答案，runtime 成功，结束原因是 `deadline`，并带 `finalizer: true`。没写出答案时仍按超时失败。实际使用的值最多是 `timeoutMs` 的一半；剩余时间按排队和流式输出顺延后的时限计算。条件不满足时循环照常走到真正的时限。
 
 ### 作者信息
 

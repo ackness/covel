@@ -114,6 +114,18 @@ describe("authored agent.loop profile keys", () => {
       "agent.loop.truncation",
     ],
     [
+      "g3: a story with stream off that keeps the inherited truncation",
+      { stream: false },
+      "story",
+      "agent.loop.stream",
+    ],
+    [
+      "g3: a story profile with stream off and truncation omitted",
+      { profile: "story", stream: false },
+      "story",
+      "agent.loop.stream",
+    ],
+    [
       "g4: a reserve not below the written limit",
       { timeoutMs: 60_000, finalizer: { deadlineReserveMs: 60_000 } },
       undefined,
@@ -208,6 +220,12 @@ describe("compiled loopProfile", () => {
       { preset: "actor", truncation: "accept" },
       "system",
       "loopProfile.truncation",
+    ],
+    [
+      "g3: a story with stream off and truncation omitted",
+      { stream: false },
+      "story",
+      "loopProfile.stream",
     ],
     [
       "g4: a reserve not below the limit",
