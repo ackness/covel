@@ -367,11 +367,24 @@ describe("cross-field rules", () => {
     expect(error).toContain("cannot require contract scene-cast@1");
     expect((await validate(story)).stderr).toContain(`${file}: requires:`);
 
+    const inlineRuntime = {
+      ...storyRuntime,
+      function: { handler: "./handler.js" },
+    };
     const inline = await plugin({
       requires: ["scene-cast@1"],
-      runtime: storyRuntime,
+      runtime: inlineRuntime,
     });
-    expect((await validate(inline)).status).toBe(1);
+    const inlineResult = await validate(inline);
+    expect(inlineResult.status).toBe(1);
+    expect(inlineResult.stderr).toContain(
+      `${path.join(inline, "PLUGIN.md")}: requires:`,
+    );
+    expect(inlineResult.stderr).toContain(
+      "cannot require contract scene-cast@1",
+    );
+    const inlineControl = await plugin({ runtime: inlineRuntime });
+    expect((await validate(inlineControl)).status).toBe(0);
 
     const system = await plugin(
       { requires: ["scene-cast@1"] },

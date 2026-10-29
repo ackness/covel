@@ -531,6 +531,9 @@ describe("HTTP API e2e: haruka academy chat mode", () => {
         worldId: "haruka-academy",
         locale: "zh-CN",
         plugins: ["chat-mode-narrator"],
+        // Unrelated setup plugins (character form, pregame, world schema)
+        // would hold the opening back; this session starts with the narrator.
+        excludedPlugins: ["char-creator", "pregame", "world-init"],
       }),
     });
     expect(createRes.status, await createRes.clone().text()).toBe(201);
@@ -546,7 +549,42 @@ describe("HTTP API e2e: haruka academy chat mode", () => {
     ])
       expect(created.activePlugins).not.toContain(absent);
 
-    await startPlaying(sessionId);
+    expect(
+      registry
+        .getActiveRuntimes(sessionId)
+        .filter((runtime) => runtime.stage === "setup")
+        .map((runtime) => runtime.name),
+    ).toEqual([]);
+    const startRes = await app.request("/api/actions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        requestId: "req-haruka-chat-no-stage-start",
+        type: "start_session",
+        sessionId,
+        payload: {},
+      }),
+    });
+    expect(startRes.status, await startRes.clone().text()).toBe(200);
+    const startEvents = await drainActionStream(startRes);
+    expect(startEvents.map((event) => event.type)).not.toContain(
+      "error.occurred",
+    );
+    expect(
+      startEvents.find((event) => event.type === "execution.completed"),
+    ).toMatchObject({ payload: { committed: true } });
+    expect((await store.getSession(sessionId))?.phase).toBe("playing");
+    const narratorMessages = async () =>
+      (await store.listTurnMessages(sessionId)).filter(
+        (message) => message.sourceRuntimeId === "chat-mode-narrator",
+      );
+    // The opening is told without the stage, before any player message.
+    const opening = await narratorMessages();
+    expect(opening).toHaveLength(1);
+    expect(opening[0]?.content.trim().length).toBeGreaterThan(0);
+
+    const turnsBefore =
+      (await store.getSession(sessionId))?.completedPlayerTurns ?? 0;
     const actionRes = await app.request("/api/actions", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -569,10 +607,15 @@ describe("HTTP API e2e: haruka academy chat mode", () => {
       rows.find((row) => row.runtimeId === "chat-mode-narrator")?.status,
     ).toBe("success");
     expect(rows.filter((row) => row.status === "failed")).toEqual([]);
-    const stories = (await store.listTurnMessages(sessionId)).filter(
-      (message) => message.sourceRuntimeId === "chat-mode-narrator",
+    const stories = await narratorMessages();
+    expect(stories).toHaveLength(2);
+    expect(stories[1]?.content.trim().length).toBeGreaterThan(0);
+    expect(stories[1]?.content).toContain("神代澪");
+    expect(
+      events.find((event) => event.type === "execution.completed"),
+    ).toMatchObject({ payload: { committed: true } });
+    expect((await store.getSession(sessionId))?.completedPlayerTurns).toBe(
+      turnsBefore + 1,
     );
-    expect(stories).toHaveLength(1);
-    expect((await store.getSession(sessionId))?.completedPlayerTurns).toBe(1);
   });
 });
