@@ -505,7 +505,7 @@ curl -N -X POST http://localhost:3001/api/actions \
 
 ### 10. 提交玩家交互（如果 Turn 返回了 pendingInputs）
 
-回合有时会停下来等玩家回答，比如让你在几个选项里选一个。这时把答案作为 `submit_actions` 里的一个行动提交：选项用 `say`，表单和确认框用 `act`。`turnId` 和 `interactionId` 来自上一条 SSE 流。
+回合有时会停下来等玩家回答，比如让你在几个选项里选一个。这时把答案作为 `submit_actions` 里的一个行动提交，`kind` 用交互声明的 `actionKind`；没有声明时，选项用 `say`，表单和确认框用 `act`。`turnId` 和 `interactionId` 来自上一条 SSE 流。
 
 ```bash
 curl -N -X POST http://localhost:3001/api/actions \
@@ -2959,18 +2959,18 @@ SSE。先发一个 `ready` 事件，之后每 15 秒发一行注释保持连接�
 
 **回答交互的行动:**
 
-| 字段                        | 类型                                       | 说明                                      |
-| --------------------------- | ------------------------------------------ | ----------------------------------------- |
-| `kind`                      | string                                     | 选项用 `say`，表单和确认框用 `act`        |
-| `interaction.turnId`        | string                                     | 产生该交互的 Turn ID                      |
-| `interaction.interactionId` | string                                     | 交互 ID，来自 Turn 输出的 `pendingInputs` |
-| `interaction.type`          | `"form"` \| `"choice"` \| `"confirmation"` | 交互类型                                  |
-| `fields`                    | object                                     | 玩家输入的值                              |
-| `seatId`、`actorId`         | string                                     | 可选，规则同其他行动                      |
+| 字段                        | 类型                                       | 说明                                                                  |
+| --------------------------- | ------------------------------------------ | --------------------------------------------------------------------- |
+| `kind`                      | string                                     | 交互声明的 `actionKind`；没有声明时选项用 `say`，表单和确认框用 `act` |
+| `interaction.turnId`        | string                                     | 产生该交互的 Turn ID                                                  |
+| `interaction.interactionId` | string                                     | 交互 ID，来自 Turn 输出的 `pendingInputs`                             |
+| `interaction.type`          | `"form"` \| `"choice"` \| `"confirmation"` | 交互类型                                                              |
+| `fields`                    | object                                     | 玩家输入的值                                                          |
+| `seatId`、`actorId`         | string                                     | 可选，规则同其他行动                                                  |
 
 - 回答不带 `text`：服务端用交互的叙事模板填出文字。
 - 一次提交里的所有回答必须属于同一个 `turnId`；可以和普通行动混在一起。
-- 回答按它的 `kind` 校验身份，所以旁观者不能回答表单（`action_kind_not_allowed`）。
+- 回答按它的 `kind` 校验身份，所以旁观者不能回答表单（`action_kind_not_allowed`）。`kind` 必须是已提交的交互声明的类型（或它的默认类型），否则是 `invalid_action`。
 - 行动只接受上表的字段。来源插件、字段定义和模板只从已提交的交互里读取。
 
 **三种交互类型的 fields 格式：**
@@ -5163,7 +5163,7 @@ id: example-epoch:2
 | `interaction` | object | 否     | 回答哪个交互，见[玩家交互](#玩家交互)                                     |
 
 - 客户端不能发 `source`：服务端一律设为 `player`。
-- 一次最多 8 个行动，文字总长不超过 100 000 个字符。
+- 一次最多 8 个行动，文字总长不超过 100 000 个字符。交互回答填出的文字也算在内：服务端在锁内填好回答后再查一次总长，超过时以 `invalid_action` 拒绝，什么都不保存。
 
 基础类型：
 
@@ -5190,7 +5190,7 @@ id: example-epoch:2
 | 4 | 这局的目录里有这个类型 | 409 | `unknown_action_kind` |
 | 5 | 座位身份能提交这个类型 | 409 | `action_kind_not_allowed` |
 | 6 | `actorId` 绑定在这个座位上；不以角色进行的类型不能带 | 409 | `actor_not_bound` |
-| 7 | 文字规则；回答交互时类型要对、不带文字；所有回答属于同一个回合 | 400 | `invalid_action` |
+| 7 | 文字规则；回答交互时类型是交互声明的类型、不带文字；所有回答属于同一个回合 | 400 | `invalid_action` |
 | 8 | `fields` 符合插件类型的 schema；基础类型不接受 `fields`（回答交互除外） | 400 | `invalid_action_fields` |
 
 之后，回答交互的行动交给交互提交流程，它的错误码见[玩家交互](#玩家交互)。
@@ -5202,12 +5202,13 @@ id: example-epoch:2
 - **单人输入原样保留。** 所有行动来自同一个玩家座位，座位最多绑定一个角色，行动以当前角色（或不以角色）进行，并且都是不带 `fields` 的 `say`、`command` 或交互回答时，渲染结果就是各行动的文字，用换行连起来。单人游戏的提示词因此和以前一字不差。
 - **其他情况标出角色和类型。** 每个行动写成 `【<角色名>·<类型名>】<文字>`（英文会话是 `[<角色名> · <类型名>] <文字>`）；不以角色进行时是 `【<类型名>】<文字>`。例如第二个角色说话是 `【Scout·说】等等我。`，主持人写旁白是 `【旁白】雨下起来了。`。
 - 基础类型的名称在框架提示词文件 [`prompts/server/action-labels.md`](../../prompts/server/action-labels.md) 里，按会话语言选；插件类型用它的 `display.label`。
-- 只写角色名，从不写 ID。没有文字的行动（`advance`、不回显的交互回答）不渲染，所以只有 `advance` 的提交不追加玩家消息。
+- 插件类型总会渲染，没有文字也一样：类型名说明玩家做了什么，`fields` 以 JSON 跟在文字后面。例如 `【Hero·让过】`、`【Hero·施法】{"spell":"light"}`。
+- 只写角色名，从不写 ID。基础类型和交互回答没有文字时（`advance`、不回显的交互回答）不渲染，所以只有 `advance` 的提交不追加玩家消息。
 
 **保存。** 玩家消息和回合一起提交：
 
 - prompt 历史（`turn_messages`）保存渲染后的文字，所以之后的回合看到谁做了什么。
-- 聊天消息的 `content` 保存原文（各行动的文字用换行连起来），`metadata.actions` 保存解析后的行动（某个行动的 `fields` 超过 4 KB 时省略它）。消息 API 把它作为 `actions` 返回，见[消息历史](#消息历史-1)。
+- 聊天消息的 `content` 保存原文（各行动的文字用换行连起来；没有任何文字时，例如只有一个不带文字的插件类型，保存渲染后的文字），`metadata.actions` 保存解析后的行动（某个行动的 `fields` 超过 4 KB 时省略它）。消息 API 把它作为 `actions` 返回，见[消息历史](#消息历史-1)。
 
 **重试。** 回合失败时，`execution.retry` 给出的是带着解析后行动（填好了 `seatId` 和 `actorId`）的 `submit_actions`；回答过交互的回合给出的是 `retry_turn`（见上）。
 

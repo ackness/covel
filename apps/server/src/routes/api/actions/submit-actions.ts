@@ -12,7 +12,8 @@
  *   5. the seat's role may submit it (`action_kind_not_allowed`, 409);
  *   6. the actor is bound to the seat, or absent for a kind without one
  *      (`actor_not_bound`, 409);
- *   7. the kind's text rule (`invalid_action`, 400);
+ *   7. the kind's text rule, and for an interaction answer the kind its
+ *      committed interaction declares (`invalid_action`, 400);
  *   8. the fields match the kind (`invalid_action_fields`, 400).
  *
  * Interaction answers then go through the interaction submitter, which keeps
@@ -56,6 +57,17 @@ export interface ResolveActionsInput {
   readonly seats: readonly Seat[];
   readonly characters: readonly SeatCharacter[];
   readonly kinds: readonly ActionKindDescriptor[];
+  /**
+   * The kinds the answered interactions declare, by `interactionKey`. An
+   * interaction missing here takes its type's default; the interaction
+   * submitter refuses one that was never committed.
+   */
+  readonly interactionKinds?: ReadonlyMap<string, string>;
+}
+
+/** The key of one committed interaction in `interactionKinds`. */
+export function interactionKey(turnId: string, interactionId: string): string {
+  return `${turnId}\0${interactionId}`;
 }
 
 function resolveSeat(
@@ -117,12 +129,17 @@ function resolveActor(
 function checkText(
   request: TurnActionRequest,
   descriptor: ActionKindDescriptor,
+  input: ResolveActionsInput,
   position: string,
 ): void {
   const invalid = (problem: string) =>
     new ActionValidationError(`${position}: ${problem}`, "invalid_action", 400);
   if (request.interaction) {
-    const expected = interactionActionKind(request.interaction.type);
+    const { turnId, interactionId, type } = request.interaction;
+    const expected = interactionActionKind(
+      type,
+      input.interactionKinds?.get(interactionKey(turnId, interactionId)),
+    );
     if (request.kind !== expected)
       throw invalid(
         `an answer to a ${request.interaction.type} is submitted as kind ${expected}`,
@@ -209,7 +226,7 @@ export function resolveSubmittedActions(
         409,
       );
     const actorId = resolveActor(request, descriptor, input, seat, position);
-    checkText(request, descriptor, position);
+    checkText(request, descriptor, input, position);
     checkFields(request, descriptor, position);
     return {
       seatId: seat.id,

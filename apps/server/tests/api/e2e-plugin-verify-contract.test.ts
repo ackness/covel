@@ -12,7 +12,7 @@ const script = fileURLToPath(
 );
 
 describe("e2e plugin verification CLI HTTP contract", () => {
-  it("enables plugins, submits a form, and reads the current session view", async ({
+  it("enables plugins, submits a form, plays a turn, and reads the current session view", async ({
     signal,
   }) => {
     const requests: Array<{ method: string; path: string; body: unknown }> = [];
@@ -172,7 +172,9 @@ describe("e2e plugin verification CLI HTTP contract", () => {
           `http://127.0.0.1:${address.port}/api`,
           "--no-log",
           "--turns",
-          "0",
+          "1",
+          "--player-message",
+          "Look around.",
           "--enable-plugins",
           "contract-plugin",
           "--form-values",
@@ -182,7 +184,8 @@ describe("e2e plugin verification CLI HTTP contract", () => {
       );
 
       expect(fixtureErrors).toEqual([]);
-      expect(actionCount).toBe(2);
+      // Setup's two submissions, then one playing-phase turn.
+      expect(actionCount).toBe(3);
       // Sessions start from the world's preset pack plus its required plugins.
       expect(requests).toContainEqual({
         method: "POST",
@@ -217,6 +220,15 @@ describe("e2e plugin verification CLI HTTP contract", () => {
               },
             ],
           },
+        }),
+      });
+      expect(requests).toContainEqual({
+        method: "POST",
+        path: "/api/actions",
+        body: expect.objectContaining({
+          sessionId: "contract-session",
+          type: "submit_actions",
+          payload: { actions: [{ kind: "say", text: "Look around." }] },
         }),
       });
       expect(requests).toContainEqual({

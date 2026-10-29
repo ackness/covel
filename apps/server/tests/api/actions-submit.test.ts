@@ -71,6 +71,17 @@ const whisperKind: ActionKindDescriptor = {
   },
 };
 
+/** A plugin kind taken without text and without fields. */
+const passKind: ActionKindDescriptor = {
+  kind: `${WHISPER_PACK}/pass`,
+  source: "plugin",
+  pluginId: WHISPER_PACK,
+  roles: ["player"],
+  text: "none",
+  actor: true,
+  display: { label: { en: "passes", zh: "让过" } },
+};
+
 function narratorEntry(loaded: LoadedRuntime): PluginRegistryEntry {
   return {
     id: loaded.manifest.pluginId,
@@ -112,7 +123,7 @@ function whisperEntry(): PluginRegistryEntry {
         `---\n${JSON.stringify({ id: WHISPER_PACK, kind: "plugin", description: "Whispers" })}\n---\n`,
         `${WHISPER_PACK}/PLUGIN.md`,
       ),
-      actionKinds: [whisperKind],
+      actionKinds: [whisperKind, passKind],
     },
     manifests: [],
     loadedRuntimes: new Map(),
@@ -440,7 +451,7 @@ describe("submit_actions", () => {
     });
     expect(completed(events)).toMatchObject({ committed: true });
     expect((await journalRows()).map((message) => message.content)).toEqual([
-      "[Hero · whispers] Psst.",
+      '[Hero · whispers] Psst. {"target":"Guide"}',
     ]);
     expect((await userRows())[0]?.metadata).toMatchObject({
       actions: [
@@ -452,6 +463,95 @@ describe("submit_actions", () => {
         },
       ],
     });
+  });
+
+  it("records a plugin kind taken without text, and refuses its resend", async () => {
+    const input = {
+      actions: [{ kind: passKind.kind }],
+      inputMessageId: "pass-1",
+    };
+    const events = await submit(input);
+    expect(completed(events)).toMatchObject({ committed: true });
+    const resolved: TurnAction = {
+      seatId: "main",
+      kind: passKind.kind,
+      actorId: "hero",
+      source: "player",
+    };
+    // The model reads the label; the chat row shows it and keeps the action.
+    expect(userMessages.at(-1)).toBe("[Hero · passes]");
+    expect((await journalRows()).map((message) => message.content)).toEqual([
+      "[Hero · passes]",
+    ]);
+    expect(await userRows()).toMatchObject([
+      {
+        id: "pass-1",
+        content: "[Hero · passes]",
+        metadata: { actions: [resolved] },
+      },
+    ]);
+    const listed = (await (
+      await app.request(`/api/sessions/${SESSION_ID}/messages`)
+    ).json()) as { items: Array<{ role: string; actions?: unknown }> };
+    expect(listed.items.find((item) => item.role === "user")?.actions).toEqual([
+      resolved,
+    ]);
+
+    // The same input again is refused before another turn runs.
+    const calls = userMessages.length;
+    const resent = await submit(input);
+    expect(resent.at(-1)).toMatchObject({
+      type: "error.occurred",
+      payload: { code: "input_already_committed" },
+    });
+    expect(userMessages).toHaveLength(calls);
+    expect(await userRows()).toHaveLength(1);
+  });
+
+  it("refuses a submission whose texts and answers together pass the limit, storing nothing", async () => {
+    await store.appendTurnMessage({
+      id: "ask-long",
+      sessionId: SESSION_ID,
+      turnId: "ask-long-turn",
+      sourceType: "runtime",
+      sourcePluginId: NARRATOR,
+      role: "assistant",
+      content: "",
+      order: 5,
+      createdAt: AT,
+      pendingInput: [
+        {
+          interactionId: "story",
+          type: "form",
+          title: "Story",
+          submitLabel: "Go",
+          fields: [{ type: "textarea", name: "story", label: "Story" }],
+          narrativeTemplate: "{{story}}",
+        },
+      ],
+    });
+    const calls = userMessages.length;
+    const events = await submit({
+      actions: [
+        { kind: "say", text: "a".repeat(60_000) },
+        {
+          kind: "act",
+          interaction: {
+            turnId: "ask-long-turn",
+            interactionId: "story",
+            type: "form",
+          },
+          fields: { story: "b".repeat(60_000) },
+        },
+      ],
+    });
+    expect(events.map((event) => event.type)).toEqual(["error.occurred"]);
+    expect(events[0]).toMatchObject({ payload: { code: "invalid_action" } });
+    expect(userMessages).toHaveLength(calls);
+    expect(await store.listPlayerInputs(SESSION_ID)).toEqual([]);
+    expect(await userRows()).toEqual([]);
+    expect(await journalRows()).toEqual([]);
+    expect(await store.listTurnResults(SESSION_ID)).toEqual([]);
   });
 
   describe("interaction answers", () => {
@@ -481,6 +581,20 @@ describe("submit_actions", () => {
             prompt: "Which way?",
             choices: [{ id: "left", label: "Left" }],
             narrativeTemplate: "I go {{selectedLabel}}.",
+          },
+          {
+            interactionId: "stance",
+            type: "choice",
+            prompt: "How do you stand?",
+            choices: [{ id: "firm", label: "Firm" }],
+            narrativeTemplate: "I stand {{selectedLabel}}.",
+            actionKind: "act",
+          },
+          {
+            interactionId: "yield",
+            type: "confirmation",
+            prompt: "Give way?",
+            actionKind: passKind.kind,
           },
         ],
       });
@@ -564,6 +678,73 @@ describe("submit_actions", () => {
       const response = await post({ actions: [{ ...choice, kind: "act" }] });
       expect(response.status).toBe(400);
       expect(await response.json()).toMatchObject({ code: "invalid_action" });
+    });
+
+    it("takes the kind a committed interaction declares instead of the default", async () => {
+      await seedInteractions();
+      const stance = {
+        interaction: {
+          turnId: "ask-turn",
+          interactionId: "stance",
+          type: "choice",
+        },
+        fields: { selectedId: "firm", selectedLabel: "Firm" },
+      };
+      const yieldAnswer = {
+        kind: passKind.kind,
+        interaction: {
+          turnId: "ask-turn",
+          interactionId: "yield",
+          type: "confirmation",
+        },
+        fields: { confirmed: true },
+      };
+      // The type's default no longer fits a choice declared as `act`.
+      const refused = await post({ actions: [{ ...stance, kind: "say" }] });
+      expect(refused.status).toBe(400);
+      expect(await refused.json()).toMatchObject({ code: "invalid_action" });
+      expect(await store.listPlayerInputs(SESSION_ID)).toEqual([]);
+
+      const events = await submit({
+        actions: [{ ...stance, kind: "act" }, yieldAnswer],
+      });
+      expect(completed(events)).toMatchObject({ committed: true });
+      expect((await userRows())[0]?.metadata).toMatchObject({
+        actions: [
+          { kind: "act", interaction: { interactionId: "stance" } },
+          {
+            kind: passKind.kind,
+            actorId: "hero",
+            interaction: { interactionId: "yield" },
+          },
+        ],
+      });
+    });
+
+    it("checks a declared plugin kind against the answering seat's role", async () => {
+      await seedInteractions();
+      await setSeats([
+        MAIN,
+        { id: "host", controller: "human", role: "host", characters: [] },
+      ]);
+      const response = await post({
+        actions: [
+          {
+            seatId: "host",
+            kind: passKind.kind,
+            interaction: {
+              turnId: "ask-turn",
+              interactionId: "yield",
+              type: "confirmation",
+            },
+            fields: { confirmed: true },
+          },
+        ],
+      });
+      expect(response.status).toBe(409);
+      expect(await response.json()).toMatchObject({
+        code: "action_kind_not_allowed",
+      });
     });
   });
 
@@ -700,6 +881,7 @@ describe("GET /api/sessions/:id/action-kinds", () => {
       "advance",
       "command",
       whisperKind.kind,
+      passKind.kind,
     ]);
     expect(body.kinds[0]).toMatchObject({
       source: "framework",
@@ -707,13 +889,13 @@ describe("GET /api/sessions/:id/action-kinds", () => {
       text: "required",
       actor: true,
     });
-    expect(body.kinds.at(-1)).toEqual(whisperKind);
+    expect(body.kinds.slice(-2)).toEqual([whisperKind, passKind]);
     expect(body.seats).toEqual([
       {
         seatId: "main",
         role: "player",
         controller: "human",
-        allowed: ["say", "act", "command", whisperKind.kind],
+        allowed: ["say", "act", "command", whisperKind.kind, passKind.kind],
       },
       {
         seatId: "host",

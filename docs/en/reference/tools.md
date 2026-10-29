@@ -296,16 +296,19 @@ A form that a manual runtime opens through the plugin's UI works the same way. T
 
 Plugins can use the SDK's `fillNarrativeTemplate(template, values)` for a preview. The submitted `filledNarrative` uses this same function: missing values become empty strings, duplicate full stops at placeholder boundaries are merged, and field text is preserved. Within one agent execution, successful tool results with the same `interactionId` show only the last successful form or choice. A failed call does not replace it.
 
-| Argument          | Type        | Required | Description                                           |
-| ----------------- | ----------- | -------- | ----------------------------------------------------- |
-| formId            | string      | ✓        | Unique ID of the form                                 |
-| title             | string      | ✓        | Form title                                            |
-| fields            | FormField[] | ✓        | List of form fields                                   |
-| submitLabel       | string      | ✓        | Text on the submit button                             |
-| narrativeTemplate | string      | ✓        | Narrative template, with `{{fieldName}}` placeholders |
-| validation        | object      |          | `{ name, data? }`, see below                          |
-| submitBehavior    | object      |          | `{ echoFilledNarrative? }`                            |
-| notice            | string      |          | A note above the fields, see below                    |
+| Argument          | Type        | Required | Description                                               |
+| ----------------- | ----------- | -------- | --------------------------------------------------------- |
+| formId            | string      | ✓        | Unique ID of the form                                     |
+| title             | string      | ✓        | Form title                                                |
+| fields            | FormField[] | ✓        | List of form fields                                       |
+| submitLabel       | string      | ✓        | Text on the submit button                                 |
+| narrativeTemplate | string      | ✓        | Narrative template, with `{{fieldName}}` placeholders     |
+| validation        | object      |          | `{ name, data? }`, see below                              |
+| submitBehavior    | object      |          | `{ echoFilledNarrative? }`                                |
+| notice            | string      |          | A note above the fields, see below                        |
+| actionKind        | string      |          | Which action kind the answer is; default `act`, see below |
+
+`actionKind` is the action kind the player's answer is submitted as: a base kind (such as `say` or `act`) or a plugin kind `<pluginId>/<name>`. The server checks the answering seat's role against it and refuses an answer submitted as another kind (`invalid_action`); see [API · player interactions](./api.md#player-interactions).
 
 **FormField**: `{ type, name, label, placeholder?, options?, required?, defaultValue?, min?, max?, step? }`
 
@@ -390,11 +393,12 @@ The tool returns `filledNarrative` so the model can read each complete sentence 
 
 Create a group of options for the player to choose from. Use it for decision points, branching story lines, and NPC dialogue options.
 
-| Argument | Type     | Required | Description                                    |
-| -------- | -------- | -------- | ---------------------------------------------- |
-| choiceId | string   | ✓        | Unique ID of the group of choices              |
-| prompt   | string   | ✓        | Guiding text (for example "What will you do?") |
-| choices  | Choice[] | ✓        | List of choices (at least 2)                   |
+| Argument   | Type     | Required | Description                                                                     |
+| ---------- | -------- | -------- | ------------------------------------------------------------------------------- |
+| choiceId   | string   | ✓        | Unique ID of the group of choices                                               |
+| prompt     | string   | ✓        | Guiding text (for example "What will you do?")                                  |
+| choices    | Choice[] | ✓        | List of choices (at least 2)                                                    |
+| actionKind | string   |          | Which action kind the answer is; default `say`, with the rules of `create-form` |
 
 **Choice**: `{ id, label, description?, category? }`
 

@@ -505,7 +505,7 @@ curl -N -X POST http://localhost:3001/api/actions \
 
 ### 10. Submit a player interaction (if the turn returned pendingInputs)
 
-Sometimes a turn stops to wait for the player's answer, for example to choose one of several options. Then submit the answer as one action of `submit_actions`: `say` for a choice, `act` for a form or a confirmation. The `turnId` and `interactionId` come from the previous SSE stream.
+Sometimes a turn stops to wait for the player's answer, for example to choose one of several options. Then submit the answer as one action of `submit_actions`, with the `actionKind` the interaction declares as its `kind`; without a declaration, `say` for a choice and `act` for a form or a confirmation. The `turnId` and `interactionId` come from the previous SSE stream.
 
 ```bash
 curl -N -X POST http://localhost:3001/api/actions \
@@ -2959,18 +2959,18 @@ Sends the answer to one or more player interactions with `submit_actions`, and r
 
 **An answering action:**
 
-| Field                       | Type                                       | Description                                                |
-| --------------------------- | ------------------------------------------ | ---------------------------------------------------------- |
-| `kind`                      | string                                     | `say` for a choice, `act` for a form or a confirmation     |
-| `interaction.turnId`        | string                                     | The turn ID that produced the interaction                  |
-| `interaction.interactionId` | string                                     | The interaction ID, from the turn output's `pendingInputs` |
-| `interaction.type`          | `"form"` \| `"choice"` \| `"confirmation"` | The interaction type                                       |
-| `fields`                    | object                                     | The values the player entered                              |
-| `seatId`, `actorId`         | string                                     | Optional, with the same rules as other actions             |
+| Field                       | Type                                       | Description                                                                                                  |
+| --------------------------- | ------------------------------------------ | ------------------------------------------------------------------------------------------------------------ |
+| `kind`                      | string                                     | The interaction's declared `actionKind`; without one, `say` for a choice, `act` for a form or a confirmation |
+| `interaction.turnId`        | string                                     | The turn ID that produced the interaction                                                                    |
+| `interaction.interactionId` | string                                     | The interaction ID, from the turn output's `pendingInputs`                                                   |
+| `interaction.type`          | `"form"` \| `"choice"` \| `"confirmation"` | The interaction type                                                                                         |
+| `fields`                    | object                                     | The values the player entered                                                                                |
+| `seatId`, `actorId`         | string                                     | Optional, with the same rules as other actions                                                               |
 
 - An answer carries no `text`: the server fills it from the interaction's narrative template.
 - All answers in one submission must belong to the same `turnId`; they may be mixed with ordinary actions.
-- An answer is checked against the seat's role by its `kind`, so a spectator cannot answer a form (`action_kind_not_allowed`).
+- An answer is checked against the seat's role by its `kind`, so a spectator cannot answer a form (`action_kind_not_allowed`). The `kind` must be the one the committed interaction declares (or its default); otherwise the answer is refused with `invalid_action`.
 - An action accepts only the fields above. The source plugin, field definitions, and templates are read only from the interaction that was submitted.
 
 **Fields format for the three interaction types:**
@@ -5165,7 +5165,7 @@ The fields of each action:
 | `interaction` | object | No       | The interaction it answers; see [player interaction](#player-interaction)                                                   |
 
 - A client cannot send `source`: the server always sets it to `player`.
-- One submission holds at most 8 actions, with at most 100,000 characters of text in total.
+- One submission holds at most 8 actions, with at most 100,000 characters of text in total. The texts filled from interaction answers count too: after filling the answers under the lock, the server checks the total again and refuses a submission over it with `invalid_action`, storing nothing.
 
 Base kinds:
 
@@ -5192,7 +5192,7 @@ Which role may submit which base kind is in [seats](./world-model.md#seats).
 | 4 | The session's catalogue has the kind | 409 | `unknown_action_kind` |
 | 5 | The seat's role may submit the kind | 409 | `action_kind_not_allowed` |
 | 6 | `actorId` is bound to the seat; a kind not taken as a character has none | 409 | `actor_not_bound` |
-| 7 | The text rule; an answer has the right kind and no text; all answers belong to one turn | 400 | `invalid_action` |
+| 7 | The text rule; an answer has the kind its interaction declares and no text; all answers belong to one turn | 400 | `invalid_action` |
 | 8 | `fields` match the plugin kind's schema; a base kind takes no `fields` (except an answer) | 400 | `invalid_action_fields` |
 
 After that, the answering actions go to the interaction submission, whose error codes are in [player interactions](#player-interactions).
@@ -5204,12 +5204,13 @@ A turn's `TurnInput.playerMessage` is the text the kernel renders from the actio
 - **A single player's input stays as written.** When all actions come from one player seat that binds at most one character, are taken as the current character (or as none), and are each a `say` without `fields`, a `command` or an interaction answer, the rendering is the actions' texts joined with line breaks. A single-player game's prompts are therefore the same as before, byte for byte.
 - **Otherwise the character and the kind are named.** Each action is written `[<character name> · <kind label>] <text>` (in a Chinese session `【<character name>·<kind label>】<text>`), or `[<kind label>] <text>` when it is not taken as a character. For example, the second character speaking is `[Scout · says] Wait for me.`, and a host's narration is `[narration] Rain falls.`.
 - Base-kind labels are in the framework prompt file [`prompts/server/action-labels.md`](../../../prompts/server/action-labels.md), chosen by the session language; a plugin kind uses its `display.label`.
-- Only character names are written, never IDs. An action without text (`advance`, an answer that does not echo) renders nothing, so an `advance`-only submission adds no player message.
+- A plugin kind always renders, even without text: its label says what the player did, and its `fields` follow the text as JSON. For example `[Hero · passes]` or `[Hero · casts] {"spell":"light"}`.
+- Only character names are written, never IDs. A base kind or an answer without text (`advance`, an answer that does not echo) renders nothing, so an `advance`-only submission adds no player message.
 
 **Storage.** The player message is committed with the turn:
 
 - The prompt history (`turn_messages`) keeps the rendered text, so later turns see who did what.
-- The chat message's `content` keeps the raw text (the actions' texts joined with line breaks), and `metadata.actions` keeps the resolved actions (an action's `fields` are left out when they exceed 4 KB). The message API returns them as `actions`; see [message history](#message-history-1).
+- The chat message's `content` keeps the raw text (the actions' texts joined with line breaks; when no action has text, for example a single plugin kind without text, it keeps the rendering), and `metadata.actions` keeps the resolved actions (an action's `fields` are left out when they exceed 4 KB). The message API returns them as `actions`; see [message history](#message-history-1).
 
 **Retry.** When the turn fails, `execution.retry` gives a `submit_actions` with the resolved actions (`seatId` and `actorId` filled in); a turn that answered an interaction gives `retry_turn` (see above).
 

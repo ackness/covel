@@ -38,6 +38,7 @@ import {
   executeTurn,
   settleDroppedInputs,
   createInteractionSubmitter,
+  findCommittedInteraction,
   interactionSubmissionPayload,
   createTraceRecorder,
   createTurnEmitter,
@@ -56,8 +57,10 @@ import {
   type TurnAction,
   type TurnActionRequest,
   FORWARDED_EVENT_TYPES,
+  MAX_PLAYER_MESSAGE_CHARS,
   PLAYER_ABORT_REASON,
   concealedRuntimeIds,
+  interactionActionKind,
   readRuntimeEnv,
   turnActionSchema,
   validateActionRequest,
@@ -105,6 +108,7 @@ import { droppedRunPayloads } from "./actions/dropped-runs.js";
 import {
   ActionValidationError,
   actionRequestOf,
+  interactionKey,
   pluginKindLabels,
   resolveSubmittedActions,
   storedActions,
@@ -190,12 +194,56 @@ async function actionContext(
 
 type ActionContext = Awaited<ReturnType<typeof actionContext>>;
 
-/** The submitted actions checked against the session; throws `ActionValidationError`. */
-function resolveActionsFor(
-  context: ActionContext,
+/**
+ * The action kinds the interactions answered by `requests` declare, read
+ * from their committed messages, by `interactionKey`.
+ */
+async function declaredInteractionKinds(
+  store: DataStore,
+  sessionId: string,
   requests: readonly TurnActionRequest[],
-): TurnAction[] {
-  return resolveSubmittedActions({ requests, ...context });
+): Promise<Map<string, string>> {
+  const kinds = new Map<string, string>();
+  const turnIds = new Set(
+    requests.flatMap((request) =>
+      request.interaction ? [request.interaction.turnId] : [],
+    ),
+  );
+  for (const turnId of turnIds) {
+    const messages = await store.listTurnMessages(sessionId, { turnId });
+    for (const request of requests) {
+      if (request.interaction?.turnId !== turnId) continue;
+      const { interactionId } = request.interaction;
+      const located = findCommittedInteraction(messages, turnId, interactionId);
+      if (!located) continue;
+      kinds.set(
+        interactionKey(turnId, interactionId),
+        interactionActionKind(
+          located.interaction.type,
+          located.interaction.actionKind,
+        ),
+      );
+    }
+  }
+  return kinds;
+}
+
+/** The submitted actions checked against the session; throws `ActionValidationError`. */
+async function resolveActionsFor(
+  store: DataStore,
+  context: ActionContext,
+  session: Pick<SessionRecord, "id">,
+  requests: readonly TurnActionRequest[],
+): Promise<TurnAction[]> {
+  return resolveSubmittedActions({
+    requests,
+    ...context,
+    interactionKinds: await declaredInteractionKinds(
+      store,
+      session.id,
+      requests,
+    ),
+  });
 }
 
 /** The player's input of one turn, as the turn and its chat row take it. */
@@ -203,7 +251,10 @@ interface PlayerTurnInput {
   readonly actions: readonly TurnAction[];
   /** The model-facing rendering: `TurnInput.playerMessage`. */
   readonly message: string;
-  /** The raw texts, one per line: the chat row's `content`. */
+  /**
+   * The chat row's `content`: the raw texts, one per line, or the rendering
+   * when no action carries text (a plugin kind taken by its fields alone).
+   */
   readonly content: string;
   readonly messageId: string;
 }
@@ -214,15 +265,16 @@ async function playerTurnInput(
   actions: readonly TurnAction[],
   messageId: string,
 ): Promise<PlayerTurnInput> {
+  const message = await renderActions(actions, {
+    characters,
+    seats,
+    locale: session.locale,
+    kindLabels: pluginKindLabels(kinds),
+  });
   return {
     actions,
-    message: await renderActions(actions, {
-      characters,
-      seats,
-      locale: session.locale,
-      kindLabels: pluginKindLabels(kinds),
-    }),
-    content: actionsContent(actions),
+    message,
+    content: actionsContent(actions) || message,
     messageId,
   };
 }
@@ -297,8 +349,10 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
   if (type === "submit_actions") {
     try {
       interactionPayload = interactionSubmissionPayload(
-        resolveActionsFor(
+        await resolveActionsFor(
+          store,
           await actionContext(store, pluginRegistry, session),
+          session,
           payload.actions,
         ),
       );
@@ -614,8 +668,10 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
             type === "submit_actions"
           ) {
             try {
-              resolvedActions = resolveActionsFor(
+              resolvedActions = await resolveActionsFor(
+                store,
                 liveActionContext,
+                liveSession,
                 payload.actions,
               );
             } catch (error) {
@@ -728,6 +784,20 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
                   inputMessageId ?? crypto.randomUUID(),
                 )
               : undefined;
+          // The request schema bounds the typed texts and the submitter the
+          // filled answers; together they still share one limit, checked
+          // before anything is stored.
+          if (playerInput) {
+            const total = playerInput.actions.reduce(
+              (sum, action) => sum + (action.text?.length ?? 0),
+              0,
+            );
+            if (total > MAX_PLAYER_MESSAGE_CHARS)
+              throw new ActionRejectedError(
+                `submit_actions text must be at most ${MAX_PLAYER_MESSAGE_CHARS} characters in total, answers included`,
+                "invalid_action",
+              );
+          }
           const turnPlayerMessage = playerInput?.message ?? "";
           const registeredTurnControl = control.beginTurn(turnArgs.turnId);
           if (control.signal.aborted) {
@@ -777,6 +847,10 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
           // Commit the REST message mirror and interaction row with proposals
           // and the TurnMessage journal. Rollback removes new mirror rows and
           // turn attachments, preserving any uploaded browser input intent.
+          // Every action that renders (any text, or any plugin kind, with or
+          // without text) yields a row, so its `metadata.actions` and its
+          // `inputMessageId` are recorded; only an input that renders nothing
+          // (an `advance`, an answer that does not echo) has none.
           const playerInputCreatedAt = new Date().toISOString();
           const playerInputWrites =
             playerInput && turnPlayerMessage

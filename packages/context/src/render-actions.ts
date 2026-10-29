@@ -12,6 +12,7 @@ import {
   BASE_ACTION_KINDS,
   currentCharacterOf,
   isBaseActionKind,
+  modelFacingJson,
   resolveI18nText,
   seatCharacterIds,
   type BaseActionKind,
@@ -121,9 +122,27 @@ export function actionsContent(actions: readonly TurnAction[]): string {
 }
 
 /**
- * Render `actions` as the player's message for the model. An action without
- * text (`advance`, an interaction answer that does not echo) renders nothing,
- * so an advance-only submission renders as the empty string.
+ * The text part of one action in the labelled rendering, or `undefined` when
+ * the action renders nothing. A plugin kind always renders, even without
+ * text: its label says what the player did, and its `fields`, as JSON after
+ * the text, carry the choice. Base kinds and interaction answers render only
+ * their text, so an `advance` or an answer that does not echo adds nothing.
+ */
+function renderedText(action: TurnAction): string | undefined {
+  const text = action.text ?? "";
+  if (action.interaction !== undefined || isBaseActionKind(action.kind))
+    return text.length > 0 ? text : undefined;
+  const fields =
+    action.fields !== undefined && Object.keys(action.fields).length > 0
+      ? JSON.stringify(modelFacingJson(action.fields))
+      : "";
+  return [text, fields].filter((part) => part.length > 0).join(" ");
+}
+
+/**
+ * Render `actions` as the player's message for the model. An action that
+ * renders nothing (`advance`, an interaction answer that does not echo) is
+ * left out, so an advance-only submission renders as the empty string.
  */
 export async function renderActions(
   actions: readonly TurnAction[],
@@ -131,8 +150,11 @@ export async function renderActions(
 ): Promise<string> {
   if (isSinglePlayerInput(actions, options.seats, options.characters))
     return actionsContent(actions);
-  const spoken = actions.filter((action) => (action.text ?? "").length > 0);
-  if (spoken.length === 0) return "";
+  const rendered = actions.flatMap((action) => {
+    const text = renderedText(action);
+    return text === undefined ? [] : [{ action, text }];
+  });
+  if (rendered.length === 0) return "";
   const labels = parseActionLabels(
     await (options.loadPrompt ?? loadPrompt)(
       "server",
@@ -143,8 +165,8 @@ export async function renderActions(
   const names = new Map(
     options.characters.map((character) => [character.id, character.name]),
   );
-  return spoken
-    .map((action) => {
+  return rendered
+    .map(({ action, text }) => {
       const label = isBaseActionKind(action.kind)
         ? labels.kinds[action.kind]
         : (resolveI18nText(
@@ -153,10 +175,11 @@ export async function renderActions(
           ) ?? action.kind);
       const actor =
         action.actorId !== undefined ? names.get(action.actorId) : undefined;
-      const text = action.text ?? "";
-      return actor
+      const line = actor
         ? fill(labels.withActor, { actor, label, text })
         : fill(labels.withoutActor, { label, text });
+      // A label without text drops the separator the template puts before it.
+      return text.length > 0 ? line : line.trimEnd();
     })
     .join("\n");
 }

@@ -306,6 +306,9 @@ plugin 工具封装插件自己的业务。它的 schema、文案和数据结构
 | validation        | object      |      | `{ name, data? }`，见下             |
 | submitBehavior    | object      |      | `{ echoFilledNarrative? }`          |
 | notice            | string      |      | 字段上方的提示，见下                |
+| actionKind        | string      |      | 回答算哪种行动，默认 `act`，见下    |
+
+`actionKind` 是玩家回答时提交的行动类型：基础类型（如 `say`、`act`）或插件类型 `<pluginId>/<name>`。服务端按它校验回答者的座位身份，客户端提交别的类型会被拒绝（`invalid_action`），见 [API · 玩家交互](./api.md#玩家交互-1)。
 
 **FormField**: `{ type, name, label, placeholder?, options?, required?, defaultValue?, min?, max?, step? }`
 
@@ -390,11 +393,12 @@ plugin 工具封装插件自己的业务。它的 schema、文案和数据结构
 
 创建一组选项让玩家选。适用于决策点、分支剧情、NPC 对话选项。
 
-| 参数     | 类型     | 必需 | 描述                         |
-| -------- | -------- | ---- | ---------------------------- |
-| choiceId | string   | ✓    | 选项组唯一标识               |
-| prompt   | string   | ✓    | 引导文本（如"你要怎么做？"） |
-| choices  | Choice[] | ✓    | 选项列表（至少 2 个）        |
+| 参数       | 类型     | 必需 | 描述                                             |
+| ---------- | -------- | ---- | ------------------------------------------------ |
+| choiceId   | string   | ✓    | 选项组唯一标识                                   |
+| prompt     | string   | ✓    | 引导文本（如"你要怎么做？"）                     |
+| choices    | Choice[] | ✓    | 选项列表（至少 2 个）                            |
+| actionKind | string   |      | 回答算哪种行动，默认 `say`，规则同 `create-form` |
 
 **Choice**: `{ id, label, description?, category? }`
 
@@ -1605,7 +1609,7 @@ POST /api/actions
 }
 ```
 
-响应是 SSE 流：先是 `interaction.submitted`，随后是后续回合的事件。请求、拒绝和恢复见 [api.md § 玩家交互](./api.md#玩家交互)。
+响应是 SSE 流：先是 `interaction.submitted`，随后是后续回合的事件。请求、拒绝和恢复见 [api.md § 玩家交互](./api.md#玩家交互-1)。
 
 ## 创建新工具
 

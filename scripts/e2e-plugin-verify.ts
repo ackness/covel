@@ -1940,7 +1940,7 @@ async function runMain(
 
     exec = await runTurn(args, session.id, {
       type: "submit_actions",
-      payload: { content },
+      payload: { actions: [{ kind: "say", text: content }] },
     });
     reportTurn(ctx, exec);
     ctx.turnNumber += 1;

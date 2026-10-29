@@ -141,11 +141,40 @@ describe("renderActions", () => {
       ["whisper-pack/whisper", { en: "whispers", zh: "耳语" }],
     ]);
     expect(await render([whisper], { kindLabels })).toBe(
-      "[Hero · whispers] Over here.",
+      '[Hero · whispers] Over here. {"target":"Guide"}',
     );
     expect(await render([whisper], { kindLabels, locale: "zh-CN" })).toBe(
-      "【Hero·耳语】Over here.",
+      '【Hero·耳语】Over here. {"target":"Guide"}',
     );
+  });
+
+  it("renders a plugin kind without text by its label and fields", async () => {
+    const kindLabels = new Map([
+      ["turn-pack/pass", { en: "passes", zh: "让过" }],
+      ["turn-pack/cast", { en: "casts", zh: "施法" }],
+    ]);
+    const pass: TurnAction = {
+      seatId: "main",
+      kind: "turn-pack/pass",
+      actorId: "char-hero",
+      source: "player",
+    };
+    const cast: TurnAction = {
+      seatId: "main",
+      kind: "turn-pack/cast",
+      actorId: "char-hero",
+      fields: { spell: "light" },
+      source: "player",
+    };
+    expect(await render([pass], { kindLabels })).toBe("[Hero · passes]");
+    expect(await render([pass], { kindLabels, locale: "zh-CN" })).toBe(
+      "【Hero·让过】",
+    );
+    expect(await render([cast], { kindLabels })).toBe(
+      '[Hero · casts] {"spell":"light"}',
+    );
+    // The chat row has no raw text for them.
+    expect(actionsContent([pass, cast])).toBe("");
   });
 
   it("renders an advance as nothing", async () => {

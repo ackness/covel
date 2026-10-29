@@ -9,6 +9,7 @@ import {
   actionKindDeclarationSchema,
   actionRequestSchema,
   baseActionKindRoles,
+  checkProposalPayload,
   interactionActionKind,
   isBaseActionKind,
   pluginActionKindId,
@@ -64,6 +65,27 @@ describe("action kinds", () => {
     expect(interactionActionKind("choice")).toBe("say");
     expect(interactionActionKind("form")).toBe("act");
     expect(interactionActionKind("confirmation")).toBe("act");
+    // The kind an interaction declares wins over the default.
+    expect(interactionActionKind("choice", "act")).toBe("act");
+    expect(interactionActionKind("form", "vote-pack/ballot")).toBe(
+      "vote-pack/ballot",
+    );
+    expect(interactionActionKind("choice", "")).toBe("say");
+  });
+
+  it("keeps the action kind an interaction request declares", () => {
+    const checked = checkProposalPayload("interaction.request", {
+      interactionId: "stance",
+      type: "choice",
+      actionKind: "act",
+    });
+    expect(checked).toMatchObject({ ok: true, payload: { actionKind: "act" } });
+    expect(
+      checkProposalPayload("interaction.request", {
+        interactionId: "stance",
+        actionKind: "",
+      }).ok,
+    ).toBe(false);
   });
 });
 

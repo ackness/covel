@@ -16,6 +16,7 @@ import type {
   InteractionSubmitResult,
   SessionDispatch,
   SessionState,
+  StreamMessage,
 } from "./types.js";
 import { canRunSessionAction } from "./selectors.js";
 import {
@@ -52,6 +53,20 @@ function readFormIssues(
     }
   }
   return issues.length > 0 ? issues : [{ message: String(payload.message) }];
+}
+
+/**
+ * The action kind the interaction in block `blockId` declares, read from its
+ * block data; `undefined` when the block is not loaded or declares none.
+ */
+function declaredActionKind(
+  messages: readonly StreamMessage[],
+  blockId: string,
+): unknown {
+  const block = messages.find((message) => message.id === blockId)?.block;
+  if (!block) return undefined;
+  const data = (block.data ?? block) as Record<string, unknown>;
+  return data.actionKind;
 }
 
 /**
@@ -145,7 +160,10 @@ export async function submitInteractionBlock(
             payload: {
               actions: [
                 {
-                  kind: interactionActionKind(type),
+                  kind: interactionActionKind(
+                    type,
+                    declaredActionKind(deps.stateRef.current.messages, blockId),
+                  ),
                   interaction: { turnId, interactionId, type },
                   fields: values as Record<string, JsonValue>,
                 },

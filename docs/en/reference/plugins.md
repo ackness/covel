@@ -1222,7 +1222,8 @@ contributes:
 - **The wire kind is `<pluginId>/<name>`.** In `whisper-pack`, the example is `whisper-pack/whisper`. Two plugins may use the same `name` without a conflict. `name` is lower-case kebab-case, must not be a base kind's name, and must be unique in the package.
 - `roles` must not be empty. Which role may submit which base kind is in [seats](./world-model.md#seats).
 - `schema` is a JSON file in the package. Loading, `pnpm validate:plugin` and installation read it; a missing file, a file that is not a JSON object, or a path that leaves the package root is an error. A kind without `schema` takes no `fields`.
-- `display.label` is the name in the composer and the kind label rendered for the model, chosen by the session language. For example `[Aya · whispers] Over here.`.
+- `display.label` is the name in the composer and the kind label rendered for the model, chosen by the session language. `fields` follow the text as JSON; an action without text renders as its label and `fields`, and still reaches the player message and the chat history. For example `[Aya · whispers] Over here. {"target":"Guard"}` or `[Aya · passes]`.
+- A form, choice or confirmation can declare in `actionKind` which kind the player's answer is (a base kind or `<pluginId>/<name>`); by default a choice is `say` and a form or confirmation `act`. The answer is checked against the seat's role by this kind; see [API · player interactions](./api.md#player-interactions).
 - Only the kinds that the session's runnable plugins declare are available. The server checks each action against that catalogue; see [`GET /api/sessions/:id/action-kinds`](./api.md#action-kind-catalogue).
 - Function runtimes read the actions from `ctx.playerActions`, with `fields` as submitted; see [turn information in the handler context](#turn-information-in-the-handler-context).
 

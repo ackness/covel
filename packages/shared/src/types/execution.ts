@@ -406,6 +406,12 @@ interface BaseInteraction {
   readonly narrativeTemplate?: string;
   /** Optional generic client-side submit behavior. */
   readonly submitBehavior?: InteractionSubmitBehavior;
+  /**
+   * The action kind the answer is submitted as: a base kind or a plugin kind
+   * (`<pluginId>/<name>`). Defaults to `say` for a choice and `act` for a
+   * form or a confirmation. The answering seat's role must allow it.
+   */
+  readonly actionKind?: string;
 }
 
 export interface FormInteraction extends BaseInteraction {

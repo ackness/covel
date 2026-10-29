@@ -75,12 +75,15 @@ export function pluginActionKindId(pluginId: string, name: string): string {
 }
 
 /**
- * The kind an interaction answer is submitted as: `say` for a choice, `act`
- * for a form or a confirmation.
+ * The kind an interaction answer is submitted as: the kind the interaction
+ * declares in `actionKind`, else `say` for a choice and `act` for a form or a
+ * confirmation.
  */
 export function interactionActionKind(
   type: "form" | "choice" | "confirmation",
-): BaseActionKind {
+  declared?: unknown,
+): string {
+  if (typeof declared === "string" && declared.length > 0) return declared;
   return type === "choice" ? "say" : "act";
 }
 
