@@ -1,7 +1,12 @@
 import { describe, expect, it, vi } from "vitest";
 import { Hono } from "hono";
 import { createMemoryStore } from "@covel/store/memory";
-import type { SuspensionRecord } from "@covel/store";
+import {
+  exportSessionCheckpoint,
+  replaceSessionFromCheckpoint,
+  type SnapshotRecord,
+  type SuspensionRecord,
+} from "@covel/store";
 import type { FunctionHandler } from "@covel/shared/plugin-runtime";
 import { createEventBus } from "@covel/events";
 import { createPluginRegistry, parsePluginMd } from "@covel/plugin-loader";
@@ -10,7 +15,6 @@ import {
   executeTurn,
   createHookPipeline,
   createTurnEmitter,
-  buildSessionSnapshot,
   PluginExtensionHost,
   PluginServiceRegistry,
 } from "@covel/runtime";
@@ -29,6 +33,7 @@ import {
 } from "../../src/routes/api/turn-execution-deps.js";
 import { sessionRoutes } from "../../src/routes/api/session.js";
 import { resumeRoutes } from "../../src/routes/api/resume.js";
+import { snapshotRoutes } from "../../src/routes/api/snapshots.js";
 import { registerSessionPluginRoutes } from "../../src/routes/api/session/plugin-routes.js";
 import type { SessionRouteEnv } from "../../src/routes/api/session/route-env.js";
 import { createInProcessSessionLock } from "../../src/lib/session-lock.js";
@@ -150,6 +155,7 @@ async function fixture(
   registerSessionPluginRoutes(app);
   app.route("/api/sessions", sessionRoutes);
   app.route("/api/sessions", resumeRoutes);
+  app.route("/api/sessions", snapshotRoutes);
   const hookPipeline = createHookPipeline({
     onHandlerOutcome: host.onHandlerOutcome,
     isPluginLatched: host.latch.isLatched,
@@ -357,9 +363,123 @@ describe("host plugin fault boundary", () => {
         })
       ).status,
     ).toBe(404);
+  });
+
+  it("keeps a source plugin latched while saved snapshots, forks and checkpoint transfers omit its latch", async () => {
+    const f = await fixture();
+    for (const key of ["one", "two", "three"]) await f.run(key);
+    const sourceLatch = f.host.latch.latched("s");
+    expect(sourceLatch).toEqual([
+      { pluginId: "p", consecutiveFaults: 3, latched: true, reason: "runtime" },
+    ]);
+    const live = await f.app.request("/s/plugins");
+    expect(await live.json()).toMatchObject({
+      items: [
+        expect.objectContaining({ id: "p", paused: { reason: "runtime" } }),
+      ],
+    });
+
+    const response = await f.app.request("/api/sessions/s/snapshots", {
+      method: "POST",
+    });
+    expect(response.status).toBe(201);
+    const snapshot = (await response.json()) as SnapshotRecord;
+    const saved = await f.store.getSnapshot(snapshot.id);
+    expect(saved?.payload).toEqual(snapshot.payload);
+    expect(saved?.payload.session.activePlugins).toEqual(["p"]);
+    expect(JSON.stringify(saved?.payload)).not.toMatch(
+      /"(?:paused|latched|consecutiveFaults)"/,
+    );
+
+    const fork = await f.app.request("/api/sessions/s/fork", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ fromSnapshotId: snapshot.id }),
+    });
+    expect(fork.status).toBe(201);
+    const child = (await fork.json()) as { sessionId: string };
+    expect((await f.store.getSession(child.sessionId))?.activePlugins).toEqual([
+      "p",
+    ]);
+    expect(f.host.latch.latched(child.sessionId)).toEqual([]);
+    const childView = await f.app.request(`/${child.sessionId}/plugins`);
+    const childPlugins = (await childView.json()) as { items: unknown[] };
+    expect(childPlugins.items).toMatchObject([
+      expect.objectContaining({ id: "p" }),
+    ]);
+    expect(JSON.stringify(childPlugins)).not.toContain('"paused"');
+    const childSnapshots = await f.store.listSnapshots(child.sessionId);
+    expect(childSnapshots).toHaveLength(1);
+    expect(childSnapshots[0]?.payload.session.activePlugins).toEqual(["p"]);
+    expect(JSON.stringify(childSnapshots[0]?.payload)).not.toMatch(
+      /"(?:paused|latched|consecutiveFaults)"/,
+    );
+
+    const checkpoint = await exportSessionCheckpoint(f.store, "s", {
+      revision: 1,
+      actionId: "transfer",
+    });
     expect(
-      JSON.stringify(await buildSessionSnapshot(f.store, "s")),
-    ).not.toContain('"paused"');
+      checkpoint.snapshots.some((record) => record.id === snapshot.id),
+    ).toBe(true);
+    expect(JSON.stringify(checkpoint)).not.toMatch(
+      /"(?:paused|latched|consecutiveFaults)"/,
+    );
+    const restoredStore = createMemoryStore();
+    await replaceSessionFromCheckpoint(restoredStore, checkpoint);
+    expect((await restoredStore.getSnapshot(snapshot.id))?.payload).toEqual(
+      saved?.payload,
+    );
+    const restoredHost = createHostPluginFaults({
+      store: restoredStore,
+      eventBus: createEventBus(),
+      registry: { getActiveRuntimes: () => [runtime] },
+    });
+    const handler = vi.fn<FunctionHandler>(async () => ({
+      outcome: "success",
+      value: {},
+    }));
+    for (const target of [
+      {
+        store: f.store,
+        sessionId: child.sessionId,
+        pluginFaults: f.host.latch,
+      },
+      {
+        store: restoredStore,
+        sessionId: "s",
+        pluginFaults: restoredHost.latch,
+      },
+    ]) {
+      const execution = await executeTurn(
+        {
+          sessionId: target.sessionId,
+          turnId: "after-transfer",
+          playerMessage: "go",
+          origin: "player",
+        },
+        [runtime],
+        {
+          ...target,
+          loadRuntime: async (manifest) => ({
+            manifest,
+            promptTemplate: "",
+            handler,
+          }),
+          llm: {
+            generate: async () => {
+              throw new Error("no model");
+            },
+          },
+        },
+      );
+      expect(execution.result.runtimeResults).toMatchObject([
+        { pluginId: "p", status: "success" },
+      ]);
+      expect(target.pluginFaults.latched(target.sessionId)).toEqual([]);
+    }
+    expect(handler).toHaveBeenCalledTimes(2);
+    expect(f.host.latch.latched("s")).toEqual(sourceLatch);
   });
   it.each([
     { outputKind: "story" as const },

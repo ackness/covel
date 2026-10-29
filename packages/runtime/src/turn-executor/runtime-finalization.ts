@@ -9,6 +9,7 @@ import {
 } from "@covel/shared";
 import { AiProviderError, classifyProviderFailure } from "@covel/ai-provider";
 import { LLMRetryError } from "../retry/retry-common.js";
+import { serviceFailureOf } from "../plugin-services.js";
 import { isDeepStrictEqual } from "node:util";
 import { validateOutput } from "@covel/tools";
 import {
@@ -295,10 +296,21 @@ export async function finalizeRuntimeResult(
   // classifies ordinary plugin exceptions and cannot establish ownership.
   const { fault: _untrustedFault, ...withoutFault } = finalized;
   finalized = withoutFault;
+  const serviceFailure = serviceFailureOf(options.cause);
+  const ownServiceMisuse =
+    serviceFailure?.callerPluginId === manifest.pluginId &&
+    (serviceFailure.errorCode === "invalid-options" ||
+      serviceFailure.errorCode === "cycle-or-depth-limit");
+  // The caller's own deadline can cancel an outstanding service with the same
+  // error object. That remains its timeout, regardless of service provenance.
+  const ownDeadline =
+    options.cause instanceof RuntimeTimeoutError ||
+    finalized.stop?.reason === "deadline";
   if (
     finalized.status === "failed" &&
     !isSetupRuntime(manifest) &&
-    !signal?.aborted
+    !signal?.aborted &&
+    (!serviceFailure || ownServiceMisuse || ownDeadline)
   ) {
     const stop = finalized.stop?.reason;
     if (stop === "deadline") finalized = { ...finalized, fault: "timeout" };

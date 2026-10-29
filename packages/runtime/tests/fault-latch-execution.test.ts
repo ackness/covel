@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { createMemoryStore } from "@covel/store/memory";
 import type { RuntimeManifest } from "@covel/shared";
+import type { FunctionHandler } from "@covel/shared/plugin-runtime";
 import { z } from "zod";
 import { tool } from "@covel/tools";
 import type { ToolCallContext } from "../src/agent-loop/tool-executor.js";
@@ -10,7 +11,8 @@ import { classifyExecutionFaults } from "../src/faults/classify.js";
 import { executeTurn } from "../src/execution.js";
 import { createHookPipeline } from "../src/hooks/pipeline.js";
 import { createPluginFaultLatch } from "../src/faults/plugin-fault-latch.js";
-import { buildSessionSnapshot } from "../src/snapshot/snapshot-builder.js";
+import { saveAutoSnapshot } from "../src/snapshot/auto-snapshot.js";
+import { PluginServiceRegistry } from "../src/plugin-services.js";
 
 const p: RuntimeManifest = {
   pluginId: "p",
@@ -115,9 +117,19 @@ describe("fault latch execution admission", () => {
     expect(execution.commit.activePluginIds?.has("p")).toBe(false);
     expect(requests[0]).toContain("q-tool");
     expect(requests.flat()).not.toContain("p-tool");
-    expect(
-      JSON.stringify(await buildSessionSnapshot(store, "s")),
-    ).not.toContain('"paused"');
+    const snapshot = await saveAutoSnapshot({
+      store,
+      sessionId: "s",
+      turnId: "turn",
+      force: true,
+    });
+    expect(snapshot).not.toBeNull();
+    const saved = await store.getSnapshot(snapshot!.id);
+    expect(saved?.payload.session.activePlugins).toEqual(["p", "q"]);
+    expect(JSON.stringify(saved?.payload)).not.toMatch(
+      /"(?:paused|latched|consecutiveFaults)"/,
+    );
+    expect(latch.isLatched("s", "p")).toBe(true);
   });
   it("keeps current runtime and hook admission frozen when a hook latches mid-execution", async () => {
     const store = await fixture();
@@ -165,6 +177,125 @@ describe("fault latch execution admission", () => {
     expect(latch.isLatched("s", "p")).toBe(true);
   });
 });
+
+it.each([
+  "throw",
+  "primitive",
+  "admission",
+  "latched",
+  "timeout",
+  "invalid-options",
+  "caller-timeout",
+] as const)(
+  "attributes service %s failures across logical inputs",
+  async (mode) => {
+    const store = await fixture();
+    const latch = createPluginFaultLatch();
+    if (mode === "latched")
+      for (const key of ["one", "two", "three"])
+        latch.recordHookFault("s", "q", key, "hook");
+    const services = new PluginServiceRegistry({
+      list: async () => ["p", "q"],
+      ensure: async (sessionId, pluginId) => {
+        if (latch.isLatched(sessionId, pluginId))
+          throw new Error(`Plugin is unavailable: ${pluginId}`);
+        if (mode === "admission" && pluginId === "q")
+          throw new Error("Plugin not authorized");
+      },
+    });
+    const provider = vi.fn(() => {
+      if (mode === "timeout" || mode === "caller-timeout")
+        return new Promise<never>(() => {});
+      if (mode === "primitive") throw "provider primitive failure";
+      throw new Error("provider failure");
+    });
+    services.register("q", {
+      name: "probe",
+      contract: "probe@1",
+      input: z.unknown(),
+      output: z.unknown(),
+      handler: provider,
+    });
+    const caller = vi.fn<FunctionHandler>(async (ctx) => {
+      await ctx.services!.call(
+        { pluginId: "q", name: "probe", contract: "probe@1", input: {} },
+        mode === "timeout"
+          ? { timeoutMs: 1 }
+          : mode === "invalid-options"
+            ? { timeoutMs: 0 }
+            : undefined,
+      );
+      return { outcome: "success", value: {} };
+    });
+    for (const turnId of ["first", "second", "third"]) {
+      const execution = await executeTurn(
+        { sessionId: "s", turnId, playerMessage: "go", origin: "player" },
+        [{ ...p, ...(mode === "caller-timeout" ? { timeoutMs: 5 } : {}) }],
+        {
+          store,
+          pluginFaults: latch,
+          services,
+          loadRuntime: async (manifest) => ({
+            manifest,
+            promptTemplate: "",
+            handler: caller,
+          }),
+          llm: {
+            generate: async () => {
+              throw new Error("no model");
+            },
+          },
+        },
+      );
+      expect(execution.result.runtimeResults).toMatchObject([
+        { pluginId: "p", status: "failed" },
+      ]);
+      expect(execution.result.runtimeResults[0]?.error).toContain(
+        {
+          throw: "provider failure",
+          primitive: "provider primitive failure",
+          admission: "Plugin not authorized",
+          latched: "Plugin is unavailable: q",
+          timeout: "Plugin service call timed out",
+          "invalid-options": "timeoutMs",
+          "caller-timeout": "timed out after 5ms",
+        }[mode],
+      );
+      const expectedFault =
+        mode === "caller-timeout"
+          ? "timeout"
+          : mode === "invalid-options"
+            ? "runtime"
+            : undefined;
+      expect(execution.result.runtimeResults[0]?.fault).toBe(expectedFault);
+      const outcome = await commitExecution({
+        store,
+        execution,
+        completion: { kind: "turn", turnId, durationMs: 0 },
+      });
+      const transitions = latch.recordExecution({
+        sessionId: "s",
+        logicalKey: turnId,
+        results: execution.commit.results,
+        outcome,
+        exempt: new Set(),
+      });
+      if (expectedFault)
+        expect(transitions[0]?.type).toBe("plugin.fault.counted");
+      else expect(transitions).toEqual([]);
+    }
+    expect(caller.mock.calls).toHaveLength(3);
+    expect(latch.isLatched("s", "p")).toBe(
+      mode === "invalid-options" || mode === "caller-timeout",
+    );
+    expect(provider).toHaveBeenCalledTimes(
+      mode === "latched" || mode === "admission" || mode === "invalid-options"
+        ? 0
+        : 3,
+    );
+    expect(latch.isLatched("s", "q")).toBe(mode === "latched");
+  },
+);
 
 it.each(["throw", "timeout", "veto"] as const)(
   "attributes a PreStateCommit %s without blaming an innocent proposal owner",

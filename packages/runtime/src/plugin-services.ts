@@ -99,6 +99,32 @@ export interface PluginServiceCallEvent {
     | "cancelled";
 }
 
+type ServiceFailure = Pick<
+  PluginServiceCallEvent,
+  "callerPluginId" | "providerPluginId"
+> & { readonly errorCode: NonNullable<PluginServiceCallEvent["errorCode"]> };
+
+// Keep exception identity (including provider details and cancellation reasons)
+// while carrying host-owned provenance to runtime finalization. Nested calls
+// retain the original failing hop rather than blaming an intermediate caller.
+const serviceFailures = new WeakMap<object, ServiceFailure>();
+
+export function serviceFailureOf(error: unknown): ServiceFailure | undefined {
+  return typeof error === "object" && error !== null
+    ? serviceFailures.get(error)
+    : undefined;
+}
+
+function withServiceFailure(error: unknown, failure: ServiceFailure): unknown {
+  // Box primitive throws so they can carry the same provenance as Error throws.
+  const tagged =
+    typeof error === "object" && error !== null
+      ? error
+      : new Error(String(error), { cause: error });
+  if (!serviceFailures.has(tagged)) serviceFailures.set(tagged, failure);
+  return tagged;
+}
+
 interface CallState {
   readonly callId: string;
   diagnosticScope?: string;
@@ -621,7 +647,11 @@ export class PluginServiceRegistry {
           if (state.cancellation) errorCode = state.cancellation;
           else if (error instanceof ServiceOutputValidationError)
             errorCode = "output-validation";
-          throw error;
+          throw withServiceFailure(error, {
+            callerPluginId: caller.pluginId,
+            providerPluginId: target.providerPluginId,
+            errorCode,
+          });
         } finally {
           const event: PluginServiceCallEvent = {
             sessionId: caller.sessionId,

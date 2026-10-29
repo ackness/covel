@@ -4,4 +4,6 @@
 
 ### Fixed
 
+- **Service failures no longer pause an innocent caller.** Provider exceptions and service admission failures, including paused providers, retain their origin and do not count against the caller's fault latch.
+
 - **Failed resumes count toward the session's fault latch.** Self-caused runtime failures are recorded before the resume route returns an error. Buffered writes stay uncommitted and the suspension remains unresolved.
