@@ -261,6 +261,7 @@ Agent 的 guard 在调用模型之前执行。
 guard 拿到的 `ctx` 和函数 handler 的一样，内置插件和社区插件也一样：
 
 - 有 `ctx.inputs`（本次执行的输入绑定）、`ctx.world`、`ctx.store`、`ctx.pluginData`、`ctx.recursiveCall` 和其他帮手。
+- 读插件数据和函数 handler 一样，包含本次执行里同插件上游 runtime 的写入（见[执行内的插件数据可见性](#执行内的插件数据可见性)）。
 - 写入用 `ctx.pluginData`，或者用 `withPendingProposals` 把 proposal 挂在跳过的结果上。这些写入只在 guard 跳过时提交；不跳过就丢弃，由模型这次运行决定写什么。
 - guard 返回或超时之后，`ctx.signal` 被中止，这些能力全部失效。
 
@@ -755,11 +756,40 @@ homepage: https://example.com/tidefall
 
 **插件自己的数据。**
 
-- 插件自有的持久数据经绑定的 `ctx.store.getPluginData(namespace, key)` 和 `listPluginData(namespace)` 访问。
+- 插件自有的持久数据经绑定的 `ctx.store.getPluginData(namespace, key)` 和 `listPluginData(namespace)` 访问。读到的值包含本次执行里还没提交的写入，规则见下面的[执行内的插件数据可见性](#执行内的插件数据可见性)。
 - 插件不能指定任意的 sessionId 或 pluginId 去读其他插件的私有数据。
 - 要跨插件公开数据，用契约、服务或扩展，不要扫描对方的 namespace。
 
 **Lorebook。** Lorebook 条目的身份由 owner 和 id 两部分组成，owner 是 world、plugin 或 player。HTTP 的玩家编辑路径只管理 owner 为 player 的条目。不要用字符 ID、插件 ID 或任意 namespace 来模拟角色表和 Lorebook 的归属。
+
+### 执行内的插件数据可见性
+
+一次执行里的写入要到执行结束才提交。在那之前，插件读自己的数据时，读到的是"已提交的值 + 本次执行里会提交的写入"：
+
+- 自己这个 runtime 已经缓冲的写入。
+- 同一个插件里已经完成的上游 runtime 的写入：成功的结果，或者跳过了 agent、但留下了写入的 guard。它们按提交顺序叠加：先上游，再自己；嵌套调用的子结果排在父结果前面；一个结果里先叠 `effects.pluginData`，再叠缓冲的写入。`plugin.data.update` 的操作也按这个顺序计算，和提交时得到的值一样。
+
+`ctx.pluginData.get/list`、`ctx.store.getPluginData/listPluginData`、工具里的 `context.store`（agent 工具和 `ctx.tools.call`）以及内置的 `plugin-data-get/list` 都这样读。`ctx.pluginData.update` 的提前检查也按这个视图算。
+
+下面这些写入看不到：
+
+- 其他插件的写入。插件只能读自己的数据。
+- 同一层的兄弟 runtime。可见的写入在 runtime 开始时取定，同一层并行运行的 runtime 互相看不到。
+- 失败的结果，以及让 agent 照常运行的 guard 的写入（它们本来就不提交）。
+- 手动重试带来的上一轮结果和后台作业带来的上游结果。它们的写入已经由原来那次执行提交或丢弃，再算一遍会让 `inc` 之类的操作重复生效。
+- 嵌套执行里看不到父执行的上游。`ctx.recursiveCall` 开启的执行只看自己这次嵌套执行里的上游。
+
+上游的写入只用来读，不会进入读者自己的缓冲区，所以不会被提交两次。
+
+> [!IMPORTANT]
+> 这改变了以前的读取合同：以前每个 runtime 只看到已提交的值和自己的缓冲。现在，同插件里排在后面的 runtime 能读到前面 runtime 本次的写入，不必再靠输入绑定或事件转交。
+
+**读取依赖。** 读到上游写入的 runtime 依赖那次写入。提交时，上游的写入如果被丢弃（例如提交拒绝了它的 proposal），读过它的辅助 runtime 也一起丢弃，错误写成 `read data of <上游 runtime> that did not commit`。丢弃会继续传给它的硬依赖和读过它的写入的 runtime。故事和 setup runtime 不会因此丢弃：它们照常提交，trace 里记一条 `read-dependency.kept`。依赖按读取记录：
+
+- `get` 只依赖还影响返回值的上游写入。runtime 自己先整体写了这个键（`set` 或删除）再读，就不依赖上游。
+- `list` 依赖所有写过这个 namespace 的上游 runtime；不带 namespace 的列表依赖所有写过插件数据的上游。
+
+提交规则见[回合级单事务](./transactions.md#回合级单事务)。
 
 ### 动态维度
 

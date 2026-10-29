@@ -495,7 +495,9 @@ Read one item from the **current plugin's** storage. Reading across plugins is n
 - For the same key, operations are applied in proposal order, and the last one wins. After a delete, the read returns `found: false`. A later write makes the read return the new value.
 - Writing `null` stores a value. It is not the same as a delete.
 - The operations of a `plugin.data.update` are applied on top of the stored value (or the pending writes before it), with the same `applyDataOps` the commit uses. An update whose operations fail on that value is skipped, because the commit rejects it too.
-- Different runtimes each have their own buffer, and they are not merged here.
+- The writes that completed upstream runtimes of the same plugin made in this execution are added in too, before this runtime's own writes and in commit order. Other plugins, siblings of the same level, and the upstream results a retry or a background job brings are not added. Rules: [In-execution plugin-data visibility](./plugins.md#in-execution-plugin-data-visibility).
+- A runtime that read an upstream write depends on it: when the upstream is dropped at commit, an auxiliary runtime is dropped with it.
+- When the tool context has `context.store`, both read tools read through it, so they see what a function handler's `ctx.store` sees and record read dependencies; a host without `context.store` adds only `context.pendingProposals`.
 
 **What cannot be read.**
 
@@ -513,7 +515,8 @@ List all items in one namespace of the **current plugin**.
 
 **Output**: `{ count, items: [{ namespace, key, value, updatedAt }] }`
 
-- As with `plugin-data-get`, pending writes and deletes from this execution are added in. A deleted item does not appear in the list.
+- As with `plugin-data-get`, pending writes and deletes from this execution are added in, including the writes of upstream runtimes of the same plugin. A deleted item does not appear in the list.
+- A list with a `namespace` depends on every upstream runtime that wrote that namespace; without one, it depends on every upstream runtime that wrote plugin data.
 - The `namespace` filter also applies to pending items. When it is omitted, all namespaces are merged.
 - The namespaces of hidden world data do not appear in the results.
 

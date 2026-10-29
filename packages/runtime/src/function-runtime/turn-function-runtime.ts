@@ -31,6 +31,11 @@ import { freezeInputSlots } from "../agent-loop/runtime-input-slots.js";
 import { deepFreeze } from "../hooks/hook-settings.js";
 import { createPluginRuntimeContext } from "./plugin-runtime-context.js";
 import { attachNestedResults } from "../turn-executor/nested-results.js";
+import { attachReadDependencies } from "../read-dependencies.js";
+import {
+  createPluginDataVisibility,
+  type UpstreamPluginDataWrite,
+} from "./upstream-plugin-data.js";
 
 export interface ExecuteFunctionRuntimeOptions {
   readonly lastPlayerInput?:
@@ -38,6 +43,8 @@ export interface ExecuteFunctionRuntimeOptions {
   /** The scheduler's logical turn for this execution. */
   readonly logicalTurn?: number;
   readonly upstreamProposals?: readonly import("@covel/shared").Proposal[];
+  /** Writes of completed upstream runtimes of this plugin that reads include. */
+  readonly upstreamPluginData?: readonly UpstreamPluginDataWrite[];
   readonly manifest: RuntimeManifest;
   readonly input: TurnInput;
   readonly loaded: LoadedRuntime;
@@ -93,6 +100,7 @@ export async function executeFunctionRuntime({
   lastPlayerInput = null,
   logicalTurn,
   upstreamProposals = [],
+  upstreamPluginData = [],
   manifest,
   input,
   loaded,
@@ -172,6 +180,13 @@ export async function executeFunctionRuntime({
     timeoutMs,
     ...(executionId !== undefined ? { executionId } : {}),
     writeBuffer,
+    pluginDataVisibility: createPluginDataVisibility({
+      pluginId: manifest.pluginId,
+      runtimeId: manifest.name,
+      runId,
+      writes: upstreamPluginData,
+      ...(deps.pluginDataReadProbe ? { probe: deps.pluginDataReadProbe } : {}),
+    }),
   });
   const runtimeTools = runtimeContext.tools;
 
@@ -371,6 +386,8 @@ export async function executeFunctionRuntime({
       : result;
   if (ownSuccess)
     attachNestedResults(completedResult, runtimeContext.nestedResults);
+  if (ownSuccess)
+    attachReadDependencies(completedResult, runtimeContext.readDependencies());
 
   const finalOutput = (completedResult.output ??
     getToolContent(output)) as Record<string, unknown>;

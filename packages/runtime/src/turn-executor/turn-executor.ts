@@ -653,6 +653,8 @@ async function executeTurnImpl(
     completedResults.set(seed.runtimeId, seed);
     retrySeeds.set(seed.runtimeId, seed);
   }
+  // Their writes belong to the source execution: plugin-data reads skip them.
+  const seedResults: ReadonlySet<RuntimeResult> = new Set(retrySeeds.values());
 
   // Manual-trigger turns can carry an optional `triggerEvent` payload — used
   // by the plugin-rpc background follower path so a deferred follower runtime
@@ -714,6 +716,7 @@ async function executeTurnImpl(
       input,
       activeRuntimes,
       completedResults,
+      ...(seedResults.size > 0 ? { seedResults } : {}),
       deps,
       maxSteps,
       defaultTimeoutMs,

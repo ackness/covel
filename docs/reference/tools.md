@@ -495,7 +495,9 @@ interface UIRenderPart {
 - 同一个 key 按 proposal 的顺序应用，最后一次为准。删除后读取返回 `found: false`；之后再写入，读到新值。
 - 写入 `null` 是存了一个值，不等于删除。
 - `plugin.data.update` 的操作叠加在已存的值（或前面待提交的写入）之上，用的是提交时同一个 `applyDataOps`。操作在这个值上失败的那条更新被跳过，因为提交时它也会被拒。
-- 不同 runtime 各有自己的缓冲区，这里不会把它们合并。
+- 同一个插件里已经完成的上游 runtime 本次的写入也叠加上去，排在本 runtime 自己的写入前面，按提交顺序应用。其他插件、同一层的兄弟 runtime、重试和后台作业带来的上游结果不叠加。规则见[执行内的插件数据可见性](./plugins.md#执行内的插件数据可见性)。
+- 读到上游写入的 runtime 依赖那次写入：上游在提交时被丢弃，辅助 runtime 一起丢弃。
+- 工具上下文带 `context.store` 时，两个读取工具都经它读取，所以看到的内容和函数 handler 的 `ctx.store` 一样，并记下读取依赖；没有 `context.store` 的宿主只叠加 `context.pendingProposals`。
 
 **读不到的东西。**
 
@@ -513,7 +515,8 @@ interface UIRenderPart {
 
 **输出**: `{ count, items: [{ namespace, key, value, updatedAt }] }`
 
-- 和 `plugin-data-get` 一样，叠加本次执行里没提交的写入和删除。被删除的条目不出现在列表里。
+- 和 `plugin-data-get` 一样，叠加本次执行里没提交的写入和删除，包括同插件上游 runtime 的写入。被删除的条目不出现在列表里。
+- 带 `namespace` 的列表依赖写过这个 namespace 的全部上游 runtime；不传时依赖写过插件数据的全部上游 runtime。
 - `namespace` 过滤同样作用于待提交的条目。不传时合并所有 namespace。
 - 隐藏世界数据的 namespace 不出现在结果里。
 

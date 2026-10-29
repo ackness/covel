@@ -34,6 +34,7 @@ import {
   type HandlerHelperContext,
 } from "./plugin-handler-helpers.js";
 import type { ExecutionWriteBuffer } from "./execution-write-buffer.js";
+import type { PluginDataVisibility } from "./upstream-plugin-data.js";
 import {
   createRuntimeMediaContext,
   createRuntimeMediaWriter,
@@ -101,6 +102,12 @@ export interface PluginRuntimeContextOptions {
   readonly executionId?: string;
   /** Domain writes collect here and commit with the execution. */
   readonly writeBuffer: ExecutionWriteBuffer;
+  /**
+   * Upstream writes of the same plugin that reads include, and the recorder
+   * of what those reads saw. Shared by `ctx.pluginData`, `ctx.store` and
+   * `ctx.tools`; absent, reads see the store and the buffer only.
+   */
+  readonly pluginDataVisibility?: PluginDataVisibility;
 }
 
 export interface PluginRuntimeContext {
@@ -116,6 +123,8 @@ export interface PluginRuntimeContext {
    * handler that succeeded on its own (`attachNestedResults`).
    */
   readonly nestedResults: readonly RuntimeResult[];
+  /** Upstream producer ids whose writes this invocation's reads saw. */
+  readDependencies(): readonly string[];
   /** Revoke every capability; a later call throws. */
   revoke(): void;
   /** Wait for nested turns and tool calls the plugin did not await. */
@@ -145,6 +154,7 @@ export async function createPluginRuntimeContext({
   timeoutMs,
   executionId,
   writeBuffer,
+  pluginDataVisibility,
   recursionDepth,
 }: PluginRuntimeContextOptions): Promise<PluginRuntimeContext> {
   const helperCtx: HandlerHelperContext = {
@@ -192,7 +202,12 @@ export async function createPluginRuntimeContext({
     : undefined;
   const assetProgress = createAssetProgressEmitter(deps.emitter, helperCtx);
   const pluginDataHandle = deps.store
-    ? createPluginDataWriter(deps.store, helperCtx, writeBuffer)
+    ? createPluginDataWriter(
+        deps.store,
+        helperCtx,
+        writeBuffer,
+        pluginDataVisibility,
+      )
     : undefined;
   const loggerHandle = deps.store
     ? createPluginLogger(deps.store, helperCtx)
@@ -320,7 +335,12 @@ export async function createPluginRuntimeContext({
       )
     : undefined;
   const handlerStore = deps.store
-    ? createFunctionStoreView(deps.store, helperCtx, writeBuffer)
+    ? createFunctionStoreView(
+        deps.store,
+        helperCtx,
+        writeBuffer,
+        pluginDataVisibility,
+      )
     : createFunctionStoreView(undefined, helperCtx);
 
   // Trace plugin-owned provider HTTP calls (ctx.utils.fetchWithRetry — the wire
@@ -348,6 +368,7 @@ export async function createPluginRuntimeContext({
     messages,
     deps: { ...deps, hookPipeline },
     buffer: writeBuffer,
+    ...(pluginDataVisibility ? { pluginDataVisibility } : {}),
     world,
     upstreamProposals,
     inputs,
@@ -503,6 +524,7 @@ export async function createPluginRuntimeContext({
     abort: handlerAbort,
     tools: runtimeTools,
     nestedResults,
+    readDependencies: () => [...(pluginDataVisibility?.recorder ?? [])],
     revoke: () => {
       capabilitiesRevoked = true;
     },

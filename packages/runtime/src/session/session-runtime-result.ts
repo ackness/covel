@@ -93,6 +93,30 @@ export interface PreparedRuntimeProposals {
 }
 
 /**
+ * Which writes of a result may commit, before any check of their content.
+ * Non-success results are not normalized: their output is not a committable
+ * story/state output. Only a SKIPPED runtime (a guard that wrote then
+ * returned `{ skip: true }`) commits its buffered writes (`"buffered"`); a
+ * FAILED runtime drops everything (its writes must not land), and a SUSPENDED
+ * runtime stashes proposals in the suspension record instead. A success with
+ * output commits its normalized output and its buffered writes (`"all"`).
+ *
+ * The commit and the in-execution plugin-data overlay share this rule.
+ */
+export function commitEligibility(
+  result: Pick<
+    CommittableRuntimeResult,
+    "status" | "output" | "pendingProposals"
+  >,
+): "none" | "buffered" | "all" {
+  if (result.status === "success" && result.output) return "all";
+  return result.status === "skipped" &&
+    (result.pendingProposals?.length ?? 0) > 0
+    ? "buffered"
+    : "none";
+}
+
+/**
  * Normalize one result into proposals and apply the image-flow checks.
  * `commit: false` means nothing of this result may be written.
  */
@@ -124,14 +148,8 @@ async function collectRuntimeProposals(
       }) as Proposal,
   );
 
-  // Non-success results are not normalized — their output is not a committable
-  // story/state output. Only a SKIPPED runtime (a pre-game guard that wrote
-  // then returned skip:true) commits its buffered writes; a FAILED runtime
-  // drops everything (its writes must not land), and a SUSPENDED runtime
-  // stashes proposals in the suspension record instead.
-  const skippedWithWrites =
-    result.status === "skipped" && pendingProposals.length > 0;
-  if ((result.status !== "success" || !result.output) && !skippedWithWrites) {
+  const eligibility = commitEligibility(result);
+  if (eligibility === "none") {
     return { proposals: [], failures: [], commit: false };
   }
 
@@ -164,7 +182,7 @@ async function collectRuntimeProposals(
     };
   }
 
-  if (skippedWithWrites) {
+  if (eligibility === "buffered") {
     return { proposals: pendingProposals, failures: [], commit: true };
   }
 

@@ -400,6 +400,8 @@ The data space here belongs to the current plugin. Covel decides which session i
 
 Character data that a tool or a function reads already includes the changes that earlier steps of this turn proposed and that are not saved yet. So "write first, then read" returns what was just written. Do not get around this by reading old saved data, and do not submit the earlier steps' write requests a second time.
 
+Plugin data works the same way: what you read includes what earlier, completed runtimes of the same plugin wrote in this execution and has not been saved yet. When such a write is refused at save time, the runtimes that read it are dropped too (the story excepted). The rules are under [In-execution plugin-data visibility](../reference/plugins.md#in-execution-plugin-data-visibility).
+
 ### Read the complete story record
 
 `ctx.store.readTurnMessages` reads all saved messages page by page, including the original text that has been replaced by a summary. Store the position you reached, and next time read only what was added:

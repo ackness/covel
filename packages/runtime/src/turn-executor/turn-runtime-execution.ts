@@ -1,6 +1,7 @@
 import { buildTurnDigest, freezeSnapshot } from "./turn-digest.js";
 import { projectExecutionStory } from "./session-state.js";
 import { collectUpstreamWorldProposals } from "../function-runtime/world-model-view.js";
+import { collectUpstreamPluginDataWrites } from "../function-runtime/upstream-plugin-data.js";
 import type {
   ExecutionContext,
   InputSlot,
@@ -72,6 +73,12 @@ export interface RuntimeInvocation {
   readonly input: TurnInput;
   readonly activeRuntimes: readonly RuntimeManifest[];
   readonly completedResults: ReadonlyMap<string, RuntimeResult>;
+  /**
+   * Entries of `completedResults` seeded from another execution (retry seeds,
+   * detached upstream results). Their writes were committed or dropped by
+   * that execution, so plugin-data reads never apply them again.
+   */
+  readonly seedResults?: ReadonlySet<RuntimeResult>;
   readonly deps: TurnExecutorDeps;
   readonly maxSteps: number;
   readonly defaultTimeoutMs: number;
@@ -626,8 +633,17 @@ export async function executeOneRuntime(
       completedResults,
       input.sessionId,
     );
+    // Taken once per invocation: siblings of this DAG level never see each
+    // other, since completedResults changes only between levels.
+    const upstreamPluginData = collectUpstreamPluginDataWrites(
+      completedResults,
+      input.sessionId,
+      manifest.pluginId,
+      inv.seedResults,
+    );
     if (manifest.runtimeType === "function") {
       return await executeFunctionRuntime({
+        upstreamPluginData,
         lastPlayerInput: sessionMeta?.lastPlayerInput ?? null,
         ...(sessionMeta?.logicalTurn !== undefined
           ? { logicalTurn: sessionMeta.logicalTurn }
@@ -653,6 +669,7 @@ export async function executeOneRuntime(
     }
 
     const guardResult = await executeAgentGuard({
+      upstreamPluginData,
       lastPlayerInput: sessionMeta?.lastPlayerInput ?? null,
       ...(sessionMeta?.logicalTurn !== undefined
         ? { logicalTurn: sessionMeta.logicalTurn }
@@ -679,6 +696,7 @@ export async function executeOneRuntime(
 
     return await executeAgentRuntime({
       upstreamProposals,
+      upstreamPluginData,
       manifest,
       input,
       loaded,

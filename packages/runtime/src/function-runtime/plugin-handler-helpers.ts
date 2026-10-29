@@ -21,7 +21,7 @@ import type {
   PluginSessionView,
   PluginSetupRuntimeState,
 } from "@covel/shared/plugin-runtime";
-import type { Session, SetupRuntimeState } from "@covel/shared";
+import type { Proposal, Session, SetupRuntimeState } from "@covel/shared";
 import {
   applyDataOps,
   dataOpsSchema,
@@ -42,6 +42,13 @@ import {
   mergePluginDataRows,
   type ExecutionWriteBuffer,
 } from "./execution-write-buffer.js";
+import {
+  listPluginDataProducers,
+  noteRead,
+  observedRows,
+  readPluginDataKey,
+  type PluginDataVisibility,
+} from "./upstream-plugin-data.js";
 
 export interface HandlerHelperContext {
   readonly sessionId: string;
@@ -190,9 +197,14 @@ async function readTurnMessagePage(
  * so the handler reads its own not-yet-committed writes. Deletes (including
  * `set(null)`) use their own proposal and share the same transaction.
  *
- * `update` checks its operations against the current view (store row plus
- * buffer) and buffers a `plugin.data.update` proposal, which the commit
- * applies to the latest stored value.
+ * `visibility` adds the writes of completed upstream runtimes of the same
+ * plugin under the buffer, and records which of them each `get`/`list` saw.
+ * They are never buffered: only this runtime's writes commit with it.
+ *
+ * `update` checks its operations against the current view (store row,
+ * upstream writes, buffer) and buffers a `plugin.data.update` proposal, which
+ * the commit applies to the latest stored value. The check records no
+ * dependency: the commit applies the operations to what really landed.
  *
  * Without a buffer the writer applies changes directly for the explicit
  * standalone test-runtime API, which has no execution commit pipeline.
@@ -201,21 +213,32 @@ export function createPluginDataWriter(
   store: DataStore,
   ctx: HandlerHelperContext,
   buffer?: ExecutionWriteBuffer,
+  visibility?: PluginDataVisibility,
 ): PluginDataWriter {
   const { sessionId, pluginId } = ctx;
-  /** The stored row of one key with this execution's buffered writes applied. */
-  const currentView = async (
-    namespace: string,
-    key: string,
-  ): Promise<DataOpsCurrent> => {
+  /** One key's stored row with upstream and buffered writes applied. */
+  const readKey = async (namespace: string, key: string) => {
     const row = await store.getPluginData(sessionId, pluginId, namespace, key);
     const base: DataOpsCurrent = row
       ? { exists: true, value: row.value as JsonValue }
       : { exists: false };
-    return buffer
-      ? overlayPluginDataValue(buffer, pluginId, namespace, key, base)
-      : base;
+    // Read lazily: the buffer grows while the handler runs.
+    return {
+      base,
+      ...readPluginDataKey(
+        buffer ? visibility : undefined,
+        buffer ?? [],
+        pluginId,
+        namespace,
+        key,
+        base,
+      ),
+    };
   };
+  const currentView = async (
+    namespace: string,
+    key: string,
+  ): Promise<DataOpsCurrent> => (await readKey(namespace, key)).current;
   return {
     async set(namespace: string, key: string, value: unknown) {
       assertWritableNamespace(namespace);
@@ -245,15 +268,50 @@ export function createPluginDataWriter(
       });
     },
     async get(namespace: string, key: string) {
-      const view = await currentView(namespace, key);
-      if (!view.exists) return null;
-      return buffer ? structuredClone(view.value) : view.value;
+      const { base, current, producers } = await readKey(namespace, key);
+      const visible = current.exists ? current.value : null;
+      if (buffer)
+        noteRead(visibility, {
+          kind: "get",
+          namespace,
+          key,
+          visible,
+          producers,
+          withoutUpstream: () => {
+            const own = overlayPluginDataValue(
+              buffer,
+              pluginId,
+              namespace,
+              key,
+              base,
+            );
+            return own.exists ? own.value : null;
+          },
+        });
+      if (!current.exists) return null;
+      return buffer ? structuredClone(current.value) : current.value;
     },
     async list(namespace: string) {
       const rows = await store.listPluginData(sessionId, pluginId, namespace);
-      const merged = buffer
-        ? mergePluginDataRows(rows, buffer, sessionId, pluginId, namespace)
-        : rows;
+      if (!buffer) return rows.map(pluginDataEntry);
+      const merged = mergePluginDataRows(
+        rows,
+        buffer,
+        sessionId,
+        pluginId,
+        namespace,
+        visibility?.writes,
+      );
+      noteRead(visibility, {
+        kind: "list",
+        namespace,
+        visible: observedRows(merged),
+        producers: listPluginDataProducers(visibility, namespace),
+        withoutUpstream: () =>
+          observedRows(
+            mergePluginDataRows(rows, buffer, sessionId, pluginId, namespace),
+          ),
+      });
       return merged.map(pluginDataEntry);
     },
     async delete(namespace: string, key: string) {
@@ -512,7 +570,8 @@ function pluginSetupRuntimeState(
 export function createFunctionStoreView(
   store: DataStore | undefined,
   ctx: HandlerHelperContext,
-  buffer?: ExecutionWriteBuffer,
+  buffer?: readonly Proposal[],
+  visibility?: PluginDataVisibility,
 ): FunctionStoreView {
   if (!store) {
     const unavailable = async (): Promise<never> => {
@@ -552,17 +611,37 @@ export function createFunctionStoreView(
         namespace,
         key,
       );
-      const hit = overlayPluginDataValue(
+      const base: DataOpsCurrent = row
+        ? { exists: true, value: row.value as JsonValue }
+        : { exists: false };
+      // Read lazily: the buffer grows while the handler runs.
+      const { hit, current, producers } = readPluginDataKey(
+        visibility,
         overlay,
         pluginId,
         namespace,
         key,
-        row
-          ? { exists: true, value: row.value as JsonValue }
-          : { exists: false },
+        base,
       );
-      if (!hit.hit) return row;
-      if (!hit.exists) return null;
+      noteRead(visibility, {
+        kind: "get",
+        namespace,
+        key,
+        visible: current.exists ? current.value : null,
+        producers,
+        withoutUpstream: () => {
+          const own = overlayPluginDataValue(
+            overlay,
+            pluginId,
+            namespace,
+            key,
+            base,
+          );
+          return own.exists ? own.value : null;
+        },
+      });
+      if (!hit) return row;
+      if (!current.exists) return null;
       const now = new Date().toISOString();
       return {
         id: row?.id ?? `${sessionId}:${pluginId}:${namespace}:${key}`,
@@ -570,20 +649,40 @@ export function createFunctionStoreView(
         pluginId,
         namespace,
         key,
-        value: structuredClone(hit.value),
+        value: structuredClone(current.value),
         createdAt: row?.createdAt ?? now,
         updatedAt: now,
       };
     },
-    async listPluginData(namespace) {
+    // The public type takes a namespace; the builtin `plugin-data-list` tool
+    // omits it to list every namespace, as the store does.
+    async listPluginData(namespace: string | undefined) {
       const stored = await store.listPluginData(sessionId, pluginId, namespace);
-      return mergePluginDataRows(
+      const merged = mergePluginDataRows(
         stored,
         overlay,
         sessionId,
         pluginId,
         namespace,
+        visibility?.writes,
       );
+      noteRead(visibility, {
+        kind: "list",
+        ...(namespace !== undefined ? { namespace } : {}),
+        visible: observedRows(merged),
+        producers: listPluginDataProducers(visibility, namespace),
+        withoutUpstream: () =>
+          observedRows(
+            mergePluginDataRows(
+              stored,
+              overlay,
+              sessionId,
+              pluginId,
+              namespace,
+            ),
+          ),
+      });
+      return merged;
     },
   };
 }

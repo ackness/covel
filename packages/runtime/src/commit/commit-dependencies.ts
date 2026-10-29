@@ -5,6 +5,11 @@
  * their own. A runtime that hard-depends on a dropped one ran on output that
  * never landed, so it must not commit, and no follow-up work may be queued
  * from it either.
+ *
+ * Read dependencies (`read-dependencies.ts`, checked in `finalizeExecution`)
+ * drop a runtime that read a dropped runtime's uncommitted plugin data. Both
+ * kinds share one dropped set: a runtime dropped for what it read counts as
+ * dropped here, so its hard dependents and the jobs built on it follow.
  */
 
 import type {

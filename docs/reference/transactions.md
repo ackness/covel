@@ -388,14 +388,25 @@ SqliteStore、MemoryStore 和 PgStore（都在 Node 上）用同一种办法：
 
 **只有上游真正提交，下游才提交。** 提交单元按执行顺序提交。被丢弃 runtime 的硬依赖方一起丢弃（`commit/commit-dependencies.ts`）。依赖只在顶层 runtime 之间检查：嵌套结果只依赖同一次嵌套执行里的结果，它们在同一个单元里，随单元一起提交或丢弃。
 
-| 关系                                              | 上游被丢弃时                     |
-| ------------------------------------------------- | -------------------------------- |
-| turn 作用域的 `needs` 目标                        | 下游一起丢弃                     |
-| 必填 `inputs` 的来源                              | 下游一起丢弃                     |
-| 事件订阅者，触发它的事件的全部发出者都被丢弃      | 订阅者一起丢弃                   |
-| `after`、`required: false` 的输入                 | 不级联，它们只表达顺序或尽力读取 |
-| `cardinality: one` 的能力依赖，另有提供者提交成功 | 仍然满足                         |
-| story 或 setup runtime 的硬上游                   | 整回合回滚                       |
+| 关系                                              | 上游被丢弃时                              |
+| ------------------------------------------------- | ----------------------------------------- |
+| turn 作用域的 `needs` 目标                        | 下游一起丢弃                              |
+| 必填 `inputs` 的来源                              | 下游一起丢弃                              |
+| 事件订阅者，触发它的事件的全部发出者都被丢弃      | 订阅者一起丢弃                            |
+| `after`、`required: false` 的输入                 | 不级联，它们只表达顺序或尽力读取          |
+| `cardinality: one` 的能力依赖，另有提供者提交成功 | 仍然满足                                  |
+| story 或 setup runtime 的硬上游                   | 整回合回滚                                |
+| 读取了它未提交的插件数据（辅助单元）              | 下游一起丢弃                              |
+| 读取了它未提交的插件数据（story 或 setup 单元）   | 照常提交，trace 记 `read-dependency.kept` |
+
+**读取依赖。** 同一次执行里，runtime 读自己插件的数据时能看到同插件上游 runtime 还没提交的写入（见[执行内的插件数据可见性](./plugins.md#执行内的插件数据可见性)）。每次读取记下它实际看到了哪些上游的写入（`read-dependencies.ts`），执行把这些依赖带进提交计划。
+
+- `get` 只依赖还影响返回值的上游。runtime 自己先整体写了这个键（`set` 或删除）再读，就没有依赖。
+- `list` 依赖写过这个 namespace 的全部上游。不带 namespace 的列表依赖写过插件数据的全部上游。
+- 提交时，辅助单元里任一成员读过单元外、已被丢弃的上游，这个单元就一起丢弃，错误是 `read data of <上游 runtime> that did not commit`。
+- 它和硬依赖共用同一个丢弃集合：它的硬依赖方、读过它的写入的 runtime、`extraInTx` 和挂起保留的作业都把它当作被丢弃。
+- story 或 setup 单元不因读取依赖丢弃。每个被丢弃的上游在同一个事务里写一条 `read-dependency.kept` trace，载荷是 `runtimeId`、`runId`、`producerRuntimeId`、`producerRunId` 和 `reason`。
+- 生产者总是排在读者前面。依赖指向提交顺序更靠后的 run 是内核错误，只记警告并忽略。
 
 `extraInTx` 的第二个参数给出被丢弃的 runtime。主回合据此不排入依赖它们的 detached 作业和后台事件 follower。仍然排入的 detached 作业，在冻结的 turn digest 和上游结果里把被丢弃的 runtime 记为 `failed`。
 

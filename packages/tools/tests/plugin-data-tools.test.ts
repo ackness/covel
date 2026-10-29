@@ -582,3 +582,91 @@ describe("plugin-data reads see this loop's own pending writes", () => {
     ).toMatchObject({ count: 1, items: [{ key: "fresh", value: 2 }] });
   });
 });
+
+describe("plugin-data reads through the host's scoped store", () => {
+  // The kernel's `context.store` already includes this execution's pending
+  // writes and upstream writes of the same plugin, and records what each read
+  // saw. The tools read through it instead of the raw store.
+  function scopedStore(rows: PluginDataRow[]) {
+    return {
+      getPluginData: vi.fn(async (namespace: string, key: string) => {
+        return (
+          rows.find((row) => row.namespace === namespace && row.key === key) ??
+          null
+        );
+      }),
+      listPluginData: vi.fn(async (namespace?: string) =>
+        rows.filter(
+          (row) => namespace === undefined || row.namespace === namespace,
+        ),
+      ),
+      getSession: vi.fn(),
+      listPlayerInputs: vi.fn(),
+      listTurnMessages: vi.fn(),
+      readTurnMessages: vi.fn(),
+    };
+  }
+
+  it("reads plugin-data-get and plugin-data-list through context.store", async () => {
+    const raw = createMockStore();
+    const tools = createPluginDataTools(raw);
+    const scoped = scopedStore([
+      { namespace: "entries", key: "alpha", value: "upstream", updatedAt: "u" },
+      { namespace: "_hidden.events", key: "secret", value: 2, updatedAt: "t" },
+    ]);
+    const context = {
+      ...ctx(),
+      store: scoped as unknown as ToolExecutionContext["store"],
+    };
+
+    const got = await findByName(tools, "plugin-data-get").execute(
+      { namespace: "entries", key: "alpha" },
+      context,
+    );
+    const listed = await findByName(tools, "plugin-data-list").execute(
+      {},
+      context,
+    );
+
+    expect(getToolContent(got)).toEqual({
+      found: true,
+      namespace: "entries",
+      key: "alpha",
+      value: "upstream",
+      updatedAt: "u",
+    });
+    expect(getToolContent(listed)).toEqual({
+      count: 1,
+      items: [
+        {
+          namespace: "entries",
+          key: "alpha",
+          value: "upstream",
+          updatedAt: "u",
+        },
+      ],
+    });
+    expect(scoped.listPluginData).toHaveBeenCalledWith(undefined);
+    expect(raw.getPluginData).not.toHaveBeenCalled();
+    expect(raw.listPluginData).not.toHaveBeenCalled();
+  });
+
+  it("reports a key missing from context.store as not found", async () => {
+    const tools = createPluginDataTools(createMockStore());
+    const context = {
+      ...ctx(),
+      store: scopedStore([]) as unknown as ToolExecutionContext["store"],
+    };
+
+    const got = await findByName(tools, "plugin-data-get").execute(
+      { namespace: "entries", key: "missing" },
+      context,
+    );
+
+    expect(getToolContent(got)).toEqual({
+      found: false,
+      namespace: "entries",
+      key: "missing",
+    });
+  });
+});

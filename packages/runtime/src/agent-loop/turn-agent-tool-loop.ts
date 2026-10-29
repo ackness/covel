@@ -112,6 +112,8 @@ export interface AgentToolLoopInitialState {
 export interface RunAgentToolLoopOptions {
   readonly worldBase?: import("@covel/shared").WorldModelView;
   readonly upstreamProposals?: readonly Proposal[];
+  /** Upstream writes of this plugin that tool store reads include, and the recorder. */
+  readonly pluginDataVisibility?: import("../function-runtime/upstream-plugin-data.js").PluginDataVisibility;
   readonly manifest: RuntimeManifest;
   readonly input: TurnInput;
   /** Player messages recorded in the session, forwarded into the tool context. */
@@ -172,6 +174,7 @@ export async function runAgentToolLoop(
 async function runAgentToolLoopWithinBudget(
   {
     upstreamProposals = [],
+    pluginDataVisibility,
     worldBase,
     manifest,
     input,
@@ -580,6 +583,7 @@ async function runAgentToolLoopWithinBudget(
               locale: input.locale,
               messages: pluginMessagesFor(loaded.messages, input.locale),
               pendingProposals: pendingProposals,
+              ...(pluginDataVisibility ? { pluginDataVisibility } : {}),
               upstreamProposals,
               world,
               signal: hookOpts.signal,

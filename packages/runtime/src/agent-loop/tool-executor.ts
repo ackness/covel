@@ -87,6 +87,12 @@ export interface ToolCallContext {
   readonly messages?: import("@covel/shared").PluginMessages;
   readonly inputSlots?: Readonly<Record<string, InputSlot>>;
   readonly pendingProposals?: readonly Proposal[];
+  /**
+   * Kernel only, never part of the public tool context: upstream writes of
+   * the caller's plugin that `context.store` reads include, and the caller's
+   * read recorder.
+   */
+  readonly pluginDataVisibility?: import("../function-runtime/upstream-plugin-data.js").PluginDataVisibility;
   /** Player messages recorded in the session, forwarded to the tool context. */
   readonly turnNumber?: number;
   /** The scheduler's logical turn, forwarded to the tool context. */
