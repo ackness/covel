@@ -1,12 +1,6 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import {
-  Suspense,
-  lazy,
-  useCallback,
-  useEffect,
-  useRef,
-  useState,
-} from "react";
+import { Suspense, useCallback, useEffect, useRef, useState } from "react";
+import { lazyWithRetry } from "@/lib/lazy-with-retry.js";
 import { useTranslation } from "react-i18next";
 import { Loader2, AlertCircle } from "lucide-react";
 import { useSession } from "@/stores/session-store.js";
@@ -35,7 +29,7 @@ import { ServerStatusOverlay } from "@/components/desktop/server-status-overlay.
 // a session is active. Keeping it out of the main chunk trims first paint for
 // the marketing home / world-select / prep screens, which never touch it
 // (bundle budget). Split alongside the already-lazy /debug route.
-const GameView = lazy(() =>
+const GameView = lazyWithRetry(() =>
   import("@/components/session/game-view.js").then((m) => ({
     default: m.GameView,
   })),

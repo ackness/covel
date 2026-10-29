@@ -1,8 +1,9 @@
-import { lazy, Suspense } from "react";
+import { Suspense } from "react";
+import { lazyWithRetry } from "@/lib/lazy-with-retry.js";
 import type { Spec } from "@json-render/core";
 
 const JsonRenderDevtools = import.meta.env.DEV
-  ? lazy(async () => {
+  ? lazyWithRetry(async () => {
       const module = await import("@json-render/devtools-react");
       return { default: module.JsonRenderDevtools };
     })
