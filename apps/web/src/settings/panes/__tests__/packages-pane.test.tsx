@@ -521,3 +521,61 @@ it("refreshes the installed world list after a SillyTavern world import", async 
   cleanup();
   vi.unstubAllGlobals();
 });
+
+it("offers validation for installed plugins and worlds and disables it during install", async () => {
+  let finish: (value: Response) => void = () => {};
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (url: string) => {
+      if (url === "/api/plugins")
+        return Response.json({ items: [brokenPlugin] });
+      if (url === "/api/install/plugins")
+        return Response.json({
+          items: [
+            {
+              id: brokenPlugin.id,
+              version: null,
+              source: null,
+              pendingUpdate: null,
+            },
+          ],
+        });
+      if (url === "/api/install/worlds")
+        return Response.json({
+          items: [
+            { id: "sample", version: null, source: null, pendingUpdate: null },
+          ],
+        });
+      if (url === "/api/install/world")
+        return new Promise<Response>((resolve) => {
+          finish = resolve;
+        });
+      throw new Error(`Unexpected request: ${url}`);
+    }),
+  );
+  render(<PackagesPane />);
+  await screen.findByText("Broken plugin");
+  await screen.findByText("sample");
+  const buttons = screen.getAllByRole<HTMLButtonElement>("button", {
+    name: "Validate",
+  });
+  expect(buttons).toHaveLength(2);
+  expect(buttons.every((button) => !button.disabled)).toBe(true);
+  fireEvent.change(screen.getByTestId("install-world-file-input"), {
+    target: { files: [new File(["zip"], "world.zip")] },
+  });
+  await waitFor(() =>
+    expect(buttons.every((button) => button.disabled)).toBe(true),
+  );
+  finish(
+    Response.json({
+      ok: true,
+      kind: "world",
+      id: "sample",
+      restartRequired: false,
+    }),
+  );
+  await waitFor(() =>
+    expect(buttons.every((button) => !button.disabled)).toBe(true),
+  );
+});

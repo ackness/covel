@@ -89,6 +89,8 @@ pnpm i18n:add         # add a UI locale to the web app (apps/web/src/i18n/locale
 
 Further reading: for collections, see [Collections](../ship/collections.md). For the translation tools, see [i18n](../reference/i18n.md).
 
+CLI and in-app validation share `validatePluginPackage` / `validateWorldPackage`; the plugin CLI keeps its first-failure output, and the app returns structured issues.
+
 ## Individual checks
 
 `pnpm check` runs all of the following. While you are making repeated changes, you can run just one of them.

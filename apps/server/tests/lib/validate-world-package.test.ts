@@ -1,11 +1,13 @@
+import * as conventions from "../../src/world-data/conventions.js";
 // @vitest-environment node
 import { cp, mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   validateWorldPackage,
+  loadPluginCatalogue,
   type WorldPackageDiagnostic,
 } from "../../src/world-data/validate-world-package.js";
 
@@ -1194,5 +1196,32 @@ describe("validateWorldPackage", () => {
         hint: expect.stringContaining("npc-lin-yao"),
       }),
     ]);
+  });
+});
+
+describe("world validation catalogue ownership", () => {
+  it("preserves the live conventions when given a catalogue and matches CLI diagnostics", async () => {
+    const worldDir = await makeWorld({
+      "data/lorebook.yaml":
+        "- id: broken\n  content: Hidden\n  strategy: selective\n",
+    });
+    const spy = vi.spyOn(conventions, "setWorldDataConventions");
+    try {
+      const catalogue = await loadPluginCatalogue(pluginsDirs);
+      const cli = await validateWorldPackage({ worldDir, pluginsDirs });
+      expect(spy).toHaveBeenCalledTimes(1);
+      spy.mockClear();
+      const app = await validateWorldPackage({ worldDir, catalogue });
+      expect(spy).not.toHaveBeenCalled();
+      expect(app).toEqual(cli);
+    } finally {
+      spy.mockRestore();
+      await rm(path.dirname(worldDir), { recursive: true, force: true });
+    }
+  });
+  it("requires a catalogue or plugin directories", async () => {
+    await expect(validateWorldPackage({ worldDir: "/unused" })).rejects.toThrow(
+      "catalogue or pluginsDirs",
+    );
   });
 });

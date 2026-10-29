@@ -33,6 +33,8 @@ Write one short observation grounded in the latest narrative.
 
 Validate it:
 
+Players without a source checkout can click **Validate** in **Settings → Install & manage**.
+
 ```bash
 pnpm validate:plugin ~/.covel/plugins/observer
 ```

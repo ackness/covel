@@ -117,7 +117,8 @@ export interface WorldPackageDiagnostic {
 export interface ValidateWorldPackageOptions {
   readonly worldDir: string;
   /** Directories scanned for plugin packages; the catalogue IDs are checked against. */
-  readonly pluginsDirs: readonly string[];
+  readonly pluginsDirs?: readonly string[];
+  readonly catalogue?: PluginCatalogue;
   /**
    * Treat a plugin ID or contract that no scanned plugin supplies as an error.
    * Without it they are warnings, because the supplier may be a community
@@ -131,7 +132,7 @@ export interface ValidateWorldPackageResult {
   readonly diagnostics: readonly WorldPackageDiagnostic[];
 }
 
-type PluginCatalogue = Pick<PluginRegistry, "get" | "getAll">;
+export type PluginCatalogue = Pick<PluginRegistry, "get" | "getAll">;
 type CatalogueEntry = NonNullable<ReturnType<PluginRegistry["get"]>>;
 
 interface WorldManifestView {
@@ -1261,6 +1262,8 @@ async function checkWorldData(
 export async function validateWorldPackage(
   options: ValidateWorldPackageOptions,
 ): Promise<ValidateWorldPackageResult> {
+  if (!options.catalogue && !options.pluginsDirs)
+    throw new Error("World validation requires catalogue or pluginsDirs");
   // Source readers report real paths; resolve symlinks once so every reported
   // file can be shown relative to the world directory.
   const worldDir = await realpath(options.worldDir).catch(() =>
@@ -1301,12 +1304,15 @@ export async function validateWorldPackage(
     ...(validation.data as Omit<WorldManifestView, "editions">),
     editions: source.editions,
   };
-  const catalogue = await loadPluginCatalogue(options.pluginsDirs);
+  const catalogue =
+    options.catalogue ?? (await loadPluginCatalogue(options.pluginsDirs ?? []));
   // A package without a descriptor is read by the conventions of the
   // scanned plugins, as the server reads it by those of the installed ones.
   // Every scanned plugin's paths are read, so each file is checked for the
   // plugin that reads it; a session reads by its active plugins alone.
-  setWorldDataConventions(conventionsOfPlugins(catalogue));
+  // The live server owns global conventions when supplying its catalogue.
+  if (!options.catalogue)
+    setWorldDataConventions(conventionsOfPlugins(catalogue));
   const defaultPlugins = defaultSessionPlugins(manifest, catalogue);
   const strict = options.strict === true;
   return {

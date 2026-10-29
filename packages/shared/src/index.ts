@@ -619,3 +619,10 @@ export type {
   CaseExpectations,
   CaseArtifactConfig,
 } from "./schemas/runtime-cases.js";
+
+export {
+  packageValidationIssueSchema,
+  packageValidationReportSchema,
+  type PackageValidationIssue,
+  type PackageValidationReport,
+} from "./schemas/package-validation.js";

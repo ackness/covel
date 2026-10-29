@@ -16,6 +16,8 @@ After each change, run the first two. When both pass, go into the game.
 
 ## 1. Validate
 
+Players without a source checkout can click **Validate** in **Settings → Install & manage**.
+
 ```bash
 pnpm validate:plugin ~/.covel/plugins/tavern-rumors
 ```

@@ -135,3 +135,10 @@ export {
 } from "./static-validation.js";
 
 export { isPathInside, assertInsideRoot } from "./path-containment.js";
+
+export {
+  validatePluginPackage,
+  parseIssueLocation,
+  redactPaths,
+  type PluginPackageValidation,
+} from "./package-validation.js";

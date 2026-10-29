@@ -66,6 +66,8 @@ browser-private 一列只对访客开放他们用自己的密钥和存档做的�
 
 `apps/server/tests/bootstrap/route-access.test.ts` 列出服务端的每一条 API 路由和它要的动作。新加的路由在写进这张表之前，测试不会通过。测试还用一份把所有动作都关上的宿主配置去请求每条路由，自己读环境变量做判断的路由会被发现；除了 `host-profile.ts`，服务端和核心包里的代码都不能读这几个部署变量。
 
+校验端点 `POST /api/install/validate/plugin` 和 `POST /api/install/validate/world` 复用 `host.files`，不导入或执行包内代码。目录请求先解析真实路径，必须位于对应的允许根目录中，并拒绝符号链接包根。上传复用安装的 ZIP 路径和大小检查，临时文件在请求结束时清理。报告中的包内路径变为相对路径，临时目录、用户目录及其他主机路径被隐藏；CLI 的原始错误文本不进入 HTTP 响应。传入实时插件目录时，世界校验不修改进程的全局数据约定。
+
 ## Outbound requests (SSRF guard)
 
 服务端替玩家向模型供应商发请求。SSRF 防护要保证这些请求不会被引到内网或本机上的服务。

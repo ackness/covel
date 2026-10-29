@@ -66,6 +66,8 @@ The server refuses to start in these cases, and the error names the variable:
 
 `apps/server/tests/bootstrap/route-access.test.ts` lists every API route of the server and the actions it needs. A new route fails the test until it is added to that table. The test also requests every route under a host profile that closes every action, which catches a route that decides from environment variables on its own; apart from `host-profile.ts`, no code in the server or the core packages may read these deployment variables.
 
+The `POST /api/install/validate/plugin` and `POST /api/install/validate/world` endpoints reuse `host.files` and never import or execute package code. Directory requests resolve real paths, require containment in the corresponding allowed roots, and reject symlinked package roots. Uploads reuse installation’s ZIP path and size checks; temporary files are removed when the request ends. Reports make package paths relative and hide temporary, user and other host paths. Raw CLI errors never enter HTTP responses. World validation with the live plugin catalogue does not change process-global data conventions.
+
 ## Outbound requests (SSRF guard)
 
 The server sends requests to model providers on the player's behalf. The SSRF protection makes sure these requests cannot be pointed at services on the internal network or on the local machine.
