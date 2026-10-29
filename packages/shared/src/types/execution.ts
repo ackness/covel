@@ -85,6 +85,9 @@ export interface LoopStop {
   readonly cancelledBy?: "player" | "parent" | "hook" | "host";
 }
 
+export type PluginFaultReason =
+  "runtime" | "hook" | "proposal-rejected" | "timeout";
+
 export interface RuntimeResult {
   readonly pluginId: string;
   readonly runtimeId: string;
@@ -107,6 +110,8 @@ export interface RuntimeResult {
   readonly error?: string;
   /** Classified provider failure; absent for non-provider result failures. */
   readonly errorKind?: ProviderFailureKind;
+  /** Kernel attribution of a self-caused failure; never a provider or parent abort. */
+  readonly fault?: "runtime" | "timeout";
   /** Actual failed provider target, never credentials or endpoint configuration. */
   readonly failureTarget?: {
     readonly provider: string;

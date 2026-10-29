@@ -2048,7 +2048,11 @@
       "install": "请在「设置 → 安装与管理」中安装一个叙事插件，安装后重启后端生效。"
     },
     "dependentsOff": "以下插件需要的能力已关闭，开局后这些插件会停用：",
-    "trustedSourceApproved": "自动授权：可信来源"
+    "trustedSourceApproved": "自动授权：可信来源",
+    "faultPaused": "已暂停",
+    "resumeFault": "重新启用",
+    "faultPausedNotice": "{{plugin}} 因反复出错已在本会话中暂停。",
+    "resumeFaultFailed": "无法重新启用插件，请重试。"
   },
   "pluginJob": {
     "runtimesNotLoaded": "{{plugin}} 已授权，但它有 {{count}} 个任务无法加载，不会运行。",

@@ -4002,6 +4002,7 @@ Notes:
 Lists the plugins this session can see, and the commands the session can run right now.
 
 - `items[]`: each item adds `active`, `locked`, `sessionState`, and `serverCodeApproved` to `PluginSummary`, and can include `serverCodeApprovedBy: "session" | "trusted-source"`, `approvalRequired`, `autoAdded`, and `rejection`. `serverCodeApprovedBy` distinguishes an explicit session grant from a current implicit source-policy grant.
+- `items[].paused?: { reason }`: present only while paused by faults in this session; `active` still describes selection. Use the endpoint below to resume.
 - `items[].runtimes` has exactly the same shape as in `GET /api/plugins`.
 - `commands[]`: the only executable command catalog. It is filtered by the plugins that are currently enabled, plus the framework commands. Each command is listed once at the top level, and it is not repeated per plugin.
 - `unavailable[]`: the plugins the player confirmed that cannot run now. Each item is a `rejection` (`pluginId`, `code`, `reason`). The cause can be that the plugin is not installed (`unknown-plugin`), failed to load, or that its installed version lacks a provider or conflicts with another member. The game goes on.
@@ -4054,6 +4055,14 @@ Lists the plugins this session can see, and the commands the session can run rig
   ]
 }
 ```
+
+#### `POST /api/sessions/:id/plugins/:pluginId/resume-fault`
+
+Re-enable a plugin paused by faults in this session and reset its count, under `session.access` authorization. No request body is required. Returns the same plugin view and command directory as `GET /plugins`; the plugin no longer has `paused`. It runs again from the next execution.
+
+- `404 session_not_found`: unknown session; `404 plugin_not_found`: unknown plugin.
+- `409 plugin_not_paused`: the plugin is not currently paused by faults.
+- Saved selection, approvals and plugin data are unchanged; no snapshot is written. See [plugin fault latch](./protocol.md#plugin-fault-latch).
 
 #### `PUT /api/sessions/:id/plugins/:pluginId`
 
@@ -4448,7 +4457,7 @@ Resume a suspended runtime with the data the player submitted.
 Rules for failed responses:
 
 - A failed response returns only the general error envelope. It does not include a runtime result.
-- If the runtime itself fails, `error` is `Resume failed: <reason>`. This is the same text the player sees for `runtime.failed` in the turn event stream.
+- If the runtime itself fails, `error` is `Resume failed: <reason>`. This is the same text the player sees for `runtime.failed` in the turn event stream. Self-caused faults still count toward the session’s [fault latch](./protocol.md#plugin-fault-latch), but buffered writes stay uncommitted and the suspension stays unresolved. If the plugin is paused, the player must re-enable it before retrying.
 - If the commit fails, `error` is `Resume commit failed: <reason>. The suspension remains unresolved and can be retried.`
 - After a failure, this request releases its hold on the suspended item (unless the session was deleted and recreated), so you can retry. The internal cause is written only to the server log.
 
@@ -6194,6 +6203,9 @@ For the full classification table, see [protocol.md § 1. Event types](./protoco
 | `turn.resumed` | Flow control | Sent when `POST /api/sessions/:id/suspensions/:suspensionId/resume` restarts a runtime |
 | `proposal.failed` | Flow control | One proposal failed to submit. It is reported clearly and never dropped quietly; the submitter writes it straight to the action stream |
 | `job-status.updated` | Flow control | A background function runtime reports progress through `ctx.progress`; append-only, forwarded to the action stream |
+| `plugin.fault.counted` | Plugin faults | Counts a self-caused fault; trace-only, not forwarded to the action stream |
+| `plugin.fault.latched` | Plugin faults | Pauses a repeatedly failing plugin; forwarded to the action stream, with session events for other executions |
+| `plugin.fault.cleared` | Plugin faults | Clears the count after a clean run or player re-enable; same delivery as above |
 | `context.pruned` | System | The prompt went over the slot budget and the history was cut hard; only goes to the trace (used by `/debug`), not the action stream |
 | `context.compaction.failed` | System | History compaction failed, with the reason; only goes to the trace (used by `/debug`) |
 | `commit.fanout.failed` | System | The turn was committed, but some events sent after the commit could not be published; only goes to the trace, and the subscription stream also receives `system.reset` |
@@ -6207,10 +6219,15 @@ These events are also full members of `CovelEvent`. `COVEL_EVENT_META` says for 
 | ---------------------------------------------------------------------- | -------------------------------- | :-------------------------: | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `runtime.skipped`                                                      | `actions.ts`                     |             No              | A runtime was skipped because of cooldown / startTurn / maxTriggerCount                                                                                                |
 | `character.upserted`                                                   | `session-commit-emitter.ts`      |             Yes             | Sent after a `character.upsert` proposal is committed                                                                                                                  |
+| `domain-event.previewed`                                               | ToolExecutor                     |             Yes             | Event preview from a successful tool call, not a domain commit                                                                                                         |
+| `step.started` / `step.completed`                                      | TurnEmitter                      |             Yes             | Agent tool-loop step traces                                                                                                                                            |
+| `plugin.fault.latched` / `plugin.fault.cleared`                        | Host fault latch                 |             Yes             | Fixed player notices when a plugin pauses or its count clears                                                                                                          |
+| `plugin.fault.counted`                                                 | Host fault latch                 |             No              | Trace-only count of a plugin’s self-caused faults                                                                                                                      |
 | `tool.calling` / `tool.completed` / `tool.failed`                      | TurnEmitter                      |             Yes             | Tool-call traces (for the debug timeline)                                                                                                                              |
 | `llm.calling` / `llm.responded` / `message.completed`                  | TurnEmitter                      |             Yes             | LLM call traces                                                                                                                                                        |
 | `block.emitted`                                                        | TurnEmitter                      |             Yes             | Traces for a block being emitted                                                                                                                                       |
-| `hook.fired` / `hook.rewrote` / `hook.aborted`                         | TurnEmitter                      |             Yes             | Hook behavior traces                                                                                                                                                   |
+| `hook.fired` / `hook.aborted`                                          | TurnEmitter                      |             Yes             | Hook behavior traces                                                                                                                                                   |
+| `hook.rewrote`                                                         | TurnEmitter                      |             No              | Hook content rewrite trace; not forwarded to the action stream                                                                                                         |
 | `gateway.calling` / `gateway.responded` / `gateway.failed`             | TurnEmitter (`withGatewayTrace`) |             Yes             | Traces for a function runtime or an extension provider calling a provider through `ctx.gateway` (same as `llm.*`); a failure carries the `usage` the provider reported |
 | `function.executing` / `function.completed`                            | TurnEmitter                      |             No              | Start and end traces of a function runtime handler; only goes through the subscription channel and `trace_events`                                                      |
 | `recursive.calling` / `recursive.completed` / `recursive.failed`       | TurnEmitter                      |             No              | Traces of a recursive runtime; only goes through the subscription channel (topic `trace`)                                                                              |

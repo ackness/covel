@@ -99,6 +99,8 @@ handler 抛出异常、超时或返回了格式不对的结果，都算这个 ha
 - **可以拦截的事件**：失败按 `abort` 处理。一条坏掉的规则不能让它本该拦住的操作通过。
 - **其他事件**：跳过这个 handler，它之前的 handler 做出的改写保留，失败记入 trace（`hook.error`）。
 
+抛错、超时或返回无效结果，会计入注册这个 Hook 的插件的[故障熔断](./protocol.md#插件故障熔断)。主动返回 `abort` / 否决不算 Hook 故障；`PreStateCommit` 的主动否决属于 proposal 所属插件的拒绝。父执行取消不算 Hook 故障。
+
 ## Events
 
 “范围”一列说明事件是关于什么的：`session`（整个会话）、`turn`（一次执行）、`runtime`（一个 runtime）。范围为 `runtime` 的事件里，`ctx.pluginId` 和 `ctx.runtimeId` 就是那个 runtime。
@@ -304,3 +306,5 @@ agent runtime 的每次工具调用之前触发，函数 runtime 经 `ctx.tools.
 - Hook 没有自己的写入途径。插件的数据由它的 runtime 和工具写入。Hook 的返回值能改写结果和 proposal 的 payload，但加不了新的写入。
 - handler 不能依赖其他插件 handler 的先后顺序，自己的 `enforce` 分组除外。
 - 声明了 `io.concealed` 的 runtime，提示词和回答不会出现在 trace 和实时流里。但已启用插件的 Hook 仍然会在负载里收到它们。社区插件的 Hook 只有在玩家批准了它的服务端代码之后才运行。
+
+- 因故障暂停的插件从下次执行起不运行 Hook；当前执行保留冻结的启用集合。

@@ -46,6 +46,8 @@ describe("CovelEvent contract", () => {
       "llm.responded",
       "message.completed",
       "plugin-data.changed",
+      "plugin.fault.latched",
+      "plugin.fault.cleared",
       "step.completed",
       "step.started",
       "tool.calling",

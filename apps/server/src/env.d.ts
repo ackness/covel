@@ -14,6 +14,7 @@ import type {
   RpcExecutor,
   PluginRpcRegistry,
   HookPipeline,
+  PluginFaultLatch,
   TurnExecutorDeps,
 } from "@covel/runtime";
 import type { RpcApprovalGate } from "@covel/approval";
@@ -167,6 +168,7 @@ declare module "hono" {
      */
     clearSessionToolOverrides?: (sessionId: string) => void;
     /** Forget a session's consecutive history-compaction failure count. */
+    pluginFaults?: PluginFaultLatch;
     clearCompactionFailures?: (sessionId: string) => void;
     /** Release revision and full-commit replay state after session deletion. */
     clearBrowserWorkspace?: (sessionId: string) => void;

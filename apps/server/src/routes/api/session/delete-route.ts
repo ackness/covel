@@ -67,6 +67,7 @@ export async function deleteSessionWithLifecycle(
     c.get("rpcApprovalGate")?.revoke(id);
     c.get("clearSessionToolOverrides")?.(id);
     c.get("clearCompactionFailures")?.(id);
+    c.get("pluginFaults")?.forgetSession(id);
     c.get("clearBrowserWorkspace")?.(id);
   };
   // Runs once the row is gone. Media claims go only now, so a DELETE that

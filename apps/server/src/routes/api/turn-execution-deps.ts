@@ -23,6 +23,7 @@ export function buildTurnExecutorDeps(
   const executionSignal = c.get("requestWork")?.signal;
 
   return {
+    ...(c.get("pluginFaults") ? { pluginFaults: c.get("pluginFaults") } : {}),
     ...(executionSignal ? { turnControl: { executionSignal } } : {}),
     loadRuntime: c.get("loadRuntimeFn"),
     llm: c.get("llmAdapter"),

@@ -140,7 +140,11 @@ describe("HookPipeline", () => {
         ).resolves.toEqual(
           semantic === "parallel"
             ? { action: "continue" }
-            : { action: "abort", reason: "invalid filter input" },
+            : {
+                action: "abort",
+                reason: "invalid filter input",
+                handlerFailed: true,
+              },
         );
         expect(brokenHandler).not.toHaveBeenCalled();
         expect(laterHandler).toHaveBeenCalledTimes(
@@ -671,5 +675,74 @@ describe("HookPipeline", () => {
         expect(handler).toHaveBeenCalledOnce();
       });
     }
+  });
+});
+
+describe("handler fault outcomes", () => {
+  it("reports the hook owner, timeouts and clean invocations, excluding filters and global hooks", async () => {
+    const onHandlerOutcome = vi.fn();
+    const pipeline = createHookPipeline({ onHandlerOutcome });
+    pipeline.register({
+      id: "global",
+      event: "PostRuntime",
+      handler: async () => ({ action: "continue" }),
+    });
+    pipeline.register({
+      id: "filtered",
+      pluginId: "filtered",
+      event: "PostRuntime",
+      match: () => false,
+      handler: async () => ({ action: "continue" }),
+    });
+    pipeline.register({
+      id: "ok",
+      pluginId: "ok-owner",
+      event: "PostRuntime",
+      handler: async () => ({ action: "continue" }),
+    });
+    pipeline.register({
+      id: "bad",
+      pluginId: "bad-owner",
+      event: "PostRuntime",
+      handler: async () => {
+        throw new Error("bad");
+      },
+    });
+    pipeline.register({
+      id: "slow",
+      pluginId: "slow-owner",
+      event: "PostRuntime",
+      timeoutMs: 1,
+      handler: () => new Promise(() => {}),
+    });
+    await pipeline.run("PostRuntime", makeCtx("PostRuntime"), {});
+    expect(
+      onHandlerOutcome.mock.calls.map(([event]) => [
+        event.pluginId,
+        event.outcome,
+      ]),
+    ).toEqual([
+      ["ok-owner", "ok"],
+      ["bad-owner", "error"],
+      ["slow-owner", "timeout"],
+    ]);
+  });
+  it("does not count parent cancellation as a hook fault", async () => {
+    const onHandlerOutcome = vi.fn();
+    const pipeline = createHookPipeline({ onHandlerOutcome });
+    pipeline.register({
+      id: "cancelled",
+      pluginId: "p",
+      event: "TurnStart",
+      handler: () => new Promise(() => {}),
+    });
+    const controller = new AbortController();
+    controller.abort(new Error("parent"));
+    await pipeline.run(
+      "TurnStart",
+      { ...makeCtx(), signal: controller.signal },
+      {},
+    );
+    expect(onHandlerOutcome).not.toHaveBeenCalled();
   });
 });

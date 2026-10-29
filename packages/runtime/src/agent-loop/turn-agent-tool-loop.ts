@@ -185,14 +185,19 @@ export async function runAgentToolLoop(
   } catch (error) {
     // Classify before `assertLive` expires a budget whose clock has run out:
     // that throws the loop's own timeout in place of `error`.
-    const stop = classifyLoopError(error, budget, options.deps.turnControl);
+    const stop = classifyLoopError(
+      error,
+      budget,
+      options.deps.turnControl,
+      options.runId,
+    );
     let thrown = error;
     try {
       budget.assertLive();
     } catch (abort) {
       thrown = abort;
     }
-    if (stop) tagStop(thrown, stop);
+    if (stop) tagStop(thrown, stop, options.runId);
     await stepEvents.close(stop?.reason, { thrown: true });
     throw thrown;
   } finally {
@@ -403,7 +408,7 @@ async function runAgentToolLoopWithinBudget(
         };
 
     // Budget after hooks and tool results, immediately before each call.
-    const budgetedRequest = await tagging("context-overflow", () =>
+    const budgetedRequest = await tagging(runId, "context-overflow", () =>
       prepareBudgetedRequest({
         runtimeId: manifest.name,
         pluginId: manifest.pluginId,
@@ -438,7 +443,7 @@ async function runAgentToolLoopWithinBudget(
     budget.pauseForModel();
     let rawResponse: Awaited<ReturnType<typeof requestLLMResponse>>;
     try {
-      rawResponse = await tagging("model-error", () =>
+      rawResponse = await tagging(runId, "model-error", () =>
         requestLLMResponse({
           manifest,
           deps,
@@ -642,7 +647,7 @@ async function runAgentToolLoopWithinBudget(
 
     lastTarget = rawResponse.target;
     loop.enter("reviewing");
-    const response = await tagging("invalid-output", () =>
+    const response = await tagging(runId, "invalid-output", () =>
       reviewResponse(rawResponse, reviewMessages),
     );
     budget.assertLive();
@@ -1155,7 +1160,7 @@ async function runAgentToolLoopWithinBudget(
           profile.fallback !== "answer-without-tools" ||
           activeToolDefs === undefined
         ) {
-          tagStop(err, { reason: "loop-detected" });
+          tagStop(err, { reason: "loop-detected" }, runId);
           throw err;
         }
         console.warn(

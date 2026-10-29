@@ -90,7 +90,11 @@ export function registerSessionViewRoute(routes: Hono<SessionRouteEnv>): void {
         : {}),
       execution,
       eventCursor,
-      plugins: buildSnapshotPluginList(pluginRegistry, new Set(runnable)),
+      plugins: buildSnapshotPluginList(
+        pluginRegistry,
+        new Set(runnable),
+        c.get("pluginFaults")?.latched(id),
+      ),
     };
     return c.json({
       ...view,

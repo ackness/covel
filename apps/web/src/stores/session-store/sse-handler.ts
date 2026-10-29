@@ -1,3 +1,4 @@
+import { handlePluginFaultNotice } from "./fault-notices.js";
 import i18n from "i18next";
 import type { MutableRef } from "./runtime-refs.js";
 import { emitToast } from "@/lib/toast-channel.js";
@@ -277,6 +278,12 @@ export function createSseEventHandler(
     >;
 
     switch (eventType) {
+      case "plugin.fault.latched":
+      case "plugin.fault.cleared":
+        handlePluginFaultNotice(deps, eventType, payload, turnId);
+        break;
+      case "plugin.fault.counted":
+        break;
       case "llm.responded":
       case "gateway.responded": {
         // Only a story is kept when it is cut at the model's output limit or

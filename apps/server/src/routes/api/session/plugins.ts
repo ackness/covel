@@ -263,6 +263,7 @@ export function buildSessionPluginView(
   registry: PluginRegistry,
   options: {
     authorized: readonly string[];
+    paused?: readonly import("@covel/runtime").PluginFaultState[];
     trustedSources?: import("../../../trust/trusted-source-service.js").TrustedSourceService;
     isEntryPublished?: (pluginId: string) => boolean;
   },
@@ -308,7 +309,14 @@ export function buildSessionPluginView(
       registry,
       resolution,
       options,
-    ),
+    ).map((item) => {
+      const paused = options.paused?.find(
+        (state) => state.pluginId === item.id,
+      );
+      return paused?.reason
+        ? { ...item, paused: { reason: paused.reason } }
+        : item;
+    }),
     resolution,
     unavailable: set.rejected,
   };
@@ -317,12 +325,15 @@ export function buildSessionPluginView(
 export function buildSnapshotPluginList(
   registry: PluginRegistry,
   activeIds: ReadonlySet<string>,
+  paused: readonly import("@covel/runtime").PluginFaultState[] = [],
 ): SnapshotPluginStatus[] {
   return [...registry.getAll().values()].map((entry) => {
     const plugin = buildPluginSummary(entry);
     const stage = plugin.runtimes[0]?.stage;
+    const reason = paused.find((state) => state.pluginId === plugin.id)?.reason;
     return {
       id: plugin.id,
+      ...(reason ? { paused: { reason } } : {}),
       displayName: plugin.displayName,
       active: activeIds.has(plugin.id),
       ...(stage !== undefined ? { stage } : {}),

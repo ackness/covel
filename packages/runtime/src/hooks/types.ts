@@ -148,7 +148,11 @@ export interface HookContext {
 export type HookResult<P> =
   | { readonly action: "continue" }
   | { readonly action: "continue"; readonly replace: Partial<P> }
-  | { readonly action: "abort"; readonly reason: string };
+  | {
+      readonly action: "abort";
+      readonly reason: string;
+      readonly handlerFailed?: true;
+    };
 
 // ── Hook handler ─────────────────────────────────────────────────
 

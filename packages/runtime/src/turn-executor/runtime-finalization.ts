@@ -1,6 +1,7 @@
 import { stopOf } from "../agent-loop/stop-reason.js";
 import {
   CONCEALED_FAILURE_MESSAGE,
+  isSetupRuntime,
   type LLMTargetIdentity,
   type RuntimeManifest,
   type RuntimeResult,
@@ -8,6 +9,7 @@ import {
 } from "@covel/shared";
 import { AiProviderError, classifyProviderFailure } from "@covel/ai-provider";
 import { LLMRetryError } from "../retry/retry-common.js";
+import { serviceFailureOf } from "../plugin-services.js";
 import { isDeepStrictEqual } from "node:util";
 import { validateOutput } from "@covel/tools";
 import {
@@ -27,6 +29,14 @@ import {
   RuntimeTimeoutError,
   throwIfTurnExecutionAborted,
 } from "./turn-control.js";
+
+/** The exception behind a failure once retry wrappers are peeled off. */
+function unwrapRetryCause(cause: unknown): unknown {
+  let current = cause;
+  for (let depth = 0; depth < 8 && current instanceof LLMRetryError; depth++)
+    current = current.cause;
+  return current;
+}
 
 type FinalizationDeps = Pick<
   TurnExecutorDeps,
@@ -88,6 +98,10 @@ export async function finalizeRuntimeResult(
   } = {},
 ): Promise<RuntimeResult> {
   result = withAgentFailureTarget(result, options.lastTarget);
+  // Provider provenance belongs to the original exception, so it is read here,
+  // before a PostRuntime hook can sanitize or translate the error text.
+  const providerThrown =
+    unwrapRetryCause(options.cause) instanceof AiProviderError;
   const preHookOutput = result.output;
   let finalized = await runPostRuntimeHook(
     {
@@ -228,10 +242,7 @@ export async function finalizeRuntimeResult(
     options.cause !== undefined &&
     !signal?.aborted
   ) {
-    const cause =
-      options.cause instanceof LLMRetryError
-        ? options.cause.cause
-        : options.cause;
+    const cause = unwrapRetryCause(options.cause);
     finalized = {
       ...finalized,
       errorKind: classifyProviderFailure(cause).kind,
@@ -287,9 +298,51 @@ export async function finalizeRuntimeResult(
   }
   // A thrown agent-loop exit carries its stop reason on the error. It
   // describes this failure only: a success a hook produced gets none.
-  const thrownStop = stopOf(options.cause);
+  const thrownStop = stopOf(options.cause, result.runId);
   if (finalized.status === "failed" && thrownStop)
     finalized = { ...finalized, stop: thrownStop };
+  // Derive this after hooks and stop attribution; provider errorKind also
+  // classifies ordinary plugin exceptions and cannot establish ownership.
+  const { fault: _untrustedFault, ...withoutFault } = finalized;
+  finalized = withoutFault;
+  const serviceFailure = serviceFailureOf(options.cause);
+  const ownServiceMisuse =
+    serviceFailure?.callerPluginId === manifest.pluginId &&
+    (serviceFailure.errorCode === "invalid-options" ||
+      serviceFailure.errorCode === "cycle-or-depth-limit");
+  // The caller's own deadline can cancel an outstanding service with the same
+  // error object. That remains its timeout, regardless of service provenance.
+  const ownDeadline =
+    options.cause instanceof RuntimeTimeoutError ||
+    finalized.stop?.reason === "deadline";
+  if (
+    finalized.status === "failed" &&
+    !isSetupRuntime(manifest) &&
+    !signal?.aborted &&
+    (!serviceFailure || ownServiceMisuse || ownDeadline)
+  ) {
+    const stop = finalized.stop?.reason;
+    if (stop === "deadline") finalized = { ...finalized, fault: "timeout" };
+    else if (stop !== "cancelled" && stop !== "model-error") {
+      if (
+        stop === "max-steps" ||
+        stop === "invalid-output" ||
+        stop === "loop-detected" ||
+        stop === "context-overflow"
+      )
+        finalized = { ...finalized, fault: "runtime" };
+      else if (
+        !providerThrown &&
+        !finalized.failureTarget &&
+        !finalized.error?.startsWith("[provider:")
+      ) {
+        if (options.cause instanceof RuntimeTimeoutError)
+          finalized = { ...finalized, fault: "timeout" };
+        else if (options.cause !== undefined)
+          finalized = { ...finalized, fault: "runtime" };
+      }
+    }
+  }
   await reportRuntimeResult(deps, input.sessionId, finalized);
   return finalized;
 }

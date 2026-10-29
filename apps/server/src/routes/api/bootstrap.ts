@@ -13,6 +13,7 @@ import { memoryIngestLockId } from "../../lib/memory-ingest-lock.js";
 import type { EmbedFn, MemorySystem } from "@covel/memory";
 import type { MemoryIndexControl } from "../../embedding-lock.js";
 import { createPluginReloadRoutes } from "./plugin-reload.js";
+import { createHostPluginFaults } from "./plugin-faults.js";
 import { createPluginServiceAdmission } from "./bootstrap/plugin-service-admission.js";
 import {
   mediaImageFlowRoutes,
@@ -501,8 +502,11 @@ async function assembleApi(
     );
   };
 
+  const pluginFaultHost = createHostPluginFaults({ store, eventBus, registry });
+  const pluginFaults = pluginFaultHost.latch;
   const serviceCalls = new RecentPluginServiceCalls();
   const serviceAdmission = createPluginServiceAdmission({
+    pluginFaults,
     store,
     registry,
     ensurePluginEntry: (pluginId, sessionId) =>
@@ -519,7 +523,10 @@ async function assembleApi(
     undefined,
     (pluginId) => registry.get(pluginId)?.messages,
   );
-  const hookPipeline = createHookPipeline();
+  const hookPipeline = createHookPipeline({
+    onHandlerOutcome: pluginFaultHost.onHandlerOutcome,
+    isPluginLatched: pluginFaults.isLatched,
+  });
 
   // Unified plugin server entries (`entry` frontmatter field) — needs the
   // tool map, hook pipeline, and rpc registry above. Builtin
@@ -680,6 +687,7 @@ async function assembleApi(
       activeRuntimes,
       approvalScopes: new Map([[job.pluginId, expectedApprovalScope]]),
       deps: {
+        pluginFaults,
         loadRuntime: (manifest, locale) =>
           loadRuntimeFn(manifest, locale, job.sessionId),
         llm: requestServices.llm,
@@ -844,6 +852,7 @@ async function assembleApi(
     c.set("compactorRunner", compactorRunner);
     c.set("turnContextBudget", turnContextBudget);
     c.set("hookPipeline", hookPipeline);
+    c.set("pluginFaults", pluginFaults);
     c.set("eventDirectory", eventDirectory);
     if (bootstrapMemory) {
       c.set("memorySystem", bootstrapMemory.memorySystem);

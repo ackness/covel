@@ -325,6 +325,25 @@ agent runtime 的工具循环每一种结束方式都对应一个结束原因（
 - `_runtime_jobs` 和维度记录只带公开的部分，不含任务的 `payload`、原始错误或维度规则。
 - 以 `expectsBackgroundFollower` 排队的任务另外带 `phase: "prompt"`。
 
+### 插件故障熔断
+
+辅助插件在同一会话里连续三个逻辑输入因自身原因失败时，内核暂停它，并显示固定提示。插件列表显示“已暂停”，玩家可点“重新启用”清零。每个插件每个逻辑输入只计一次；同一输入的自动推进轮合并计数。同一次输入内故障优先于正常结果。一次真正提交的正常 runtime 运行清零；没有 runtime 的插件由正常完成的 Hook 清零。跳过、挂起等中性结果不改变计数。
+
+`RuntimeResult.fault?: "runtime" | "timeout"` 是内核写入的归因标记。只统计插件自己的异常、自己的超时，以及 agent 的 `max-steps`、`invalid-output`、`loop-detected`、`context-overflow` 和自己的 `deadline`。`errorKind` 不能用来判断是不是插件的错。是否提供者错误由原始异常（含重试包装的 `cause`）判定，PostRuntime Hook 改写错误文本不改变归因。模型和提供者错误、所有取消（取消标记只属于被取消的那次运行：上级自己的超时取消子 agent 时，上级仍按自己的超时计数）、依赖或读取引起的连带丢弃、维度版本冲突、过时的挂起基线、无辜插件的整次回滚均不计数。setup runtime 使用自己的重试预算，不参与熔断。子 agent 和服务提供方的故障目前不计入。服务异常保留失败调用的结构化来源；提供方抛错、服务不可用（包括提供方已暂停）、准入失败、服务调用自己的超时或取消均不记在调用方。调用方自己的 runtime 超时、无效调用选项和直接触发调用环或深度上限仍计数；嵌套提供方的调用错误不向外层调用方转嫁。
+
+Hook 自己抛错或超时记在 Hook 所属插件；主动 `abort` 不是 Hook 故障。插件自己的 proposal 被处理器拒绝或被 `PreStateCommit` 主动否决，记在 proposal 所属插件；其他插件的 Hook 抛错或超时只记 Hook 所属插件。提供当前 `outputKind: "story"` runtime 或维度契约的插件只记 trace，永不暂停。
+
+<!-- prettier-ignore -->
+| 事件 | Payload | 投递 |
+| --- | --- | --- |
+| `plugin.fault.counted` | `{ sessionId, pluginId, reason, consecutiveFaults }` | 只保存 trace，不转发给玩家 |
+| `plugin.fault.latched` | `{ sessionId, pluginId, reason }` | 玩家执行时进入 action 流，其他情况进入会话事件流 |
+| `plugin.fault.cleared` | `{ sessionId, pluginId, by: "clean-run" \| "player" }` | 同上 |
+
+`reason` 固定为 `"runtime" | "hook" | "proposal-rejected" | "timeout"`，不包含原始错误文本。`SessionPlugin.paused` 和实时会话视图的 `SnapshotPluginStatus.paused` 仅在暂停时出现，形状为 `{ reason }`。故障计数和暂停状态只在进程内存里，重启、结束或删除会话会清除，不进入保存的快照、fork、导出或 BrowserVault checkpoint。无需重建开发数据。
+
+暂停从下一次执行开始生效：不调度它的 runtime，不运行它的 Hook，也不向它的 runtime 提供工具；服务返回 `unavailable`。当前执行冻结的注册表和启用集合保持到执行结束。玩家重新启用的 API 见[会话插件管理](./api.md#会话插件管理)。提交结果的连带原因见[事务](./transactions.md#回合级单事务)。
+
 ### 作业进度事件（job-status，实验性）
 
 | 事件类型             | 方向 | 描述                     | 负载（完整 `JobStatusRecord`）                                                                                                                                                                            |
@@ -804,7 +823,7 @@ data: {
 
 `runtime.skipped` 是 actions 路由自己写进流里的，它在元数据里的 `forwardToActionStream` 是 `false`。
 
-本页其他小节里讲到的这些事件，同样标记为转发：`ui.rendered`、`asset.progress`、`world.dimensions.changed`、`plugin-data.changed`、`character-schema.changed`、`dimensions.changed`、`dimensions.settlement.changed`、`ui.slot.changed` / `ui.slot.preview` / `ui.slot.cleared`、`turn.suspended` / `turn.resumed`、`job-status.updated`。
+本页其他小节里讲到的这些事件，同样标记为转发：`ui.rendered`、`asset.progress`、`world.dimensions.changed`、`plugin-data.changed`、`character-schema.changed`、`dimensions.changed`、`dimensions.settlement.changed`、`ui.slot.changed` / `ui.slot.preview` / `ui.slot.cleared`、`turn.suspended` / `turn.resumed`、`job-status.updated`、`plugin.fault.latched` / `plugin.fault.cleared`。
 
 **不转发到 `/api/actions` 的内部事件**
 
@@ -818,6 +837,7 @@ data: {
 | `context.pruned`                                                       | 提示词第一次组装、`PostContextAssembly` 改写之后，或者工具循环某一步的实际请求触发了预算的硬裁剪时发出。负载是 `{ runtimeId, pluginId, prunedMessageCount }`。同一个 runtime 一回合里可能出现多次。它让 `/debug` 能说明“哪一步丢了历史”                                                   |
 | `context.compaction.failed`                                            | 历史压缩尝试失败时发出，负载是 `{ pluginId, extensionId, reason, consecutiveFailures }`                                                                                                                                                                                                   |
 | `commit.fanout.failed`                                                 | 见上文“`system.reset` 控制帧”一节                                                                                                                                                                                                                                                         |
+| `plugin.fault.counted`                                                 | 插件自身故障的计数 trace；不转发给玩家，固定提示由 `plugin.fault.latched` / `plugin.fault.cleared` 发出                                                                                                                                                                                   |
 
 补充：
 

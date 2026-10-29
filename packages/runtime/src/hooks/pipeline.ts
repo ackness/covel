@@ -25,6 +25,7 @@ import { GUARD_HOOK_EVENTS, HOOK_SEMANTICS } from "./types.js";
 import {
   currentActivePluginIds,
   currentHookLocale,
+  currentHookLogicalKey,
   currentOwnSettings,
   isHookInScope,
   isHookScopeActive,
@@ -54,11 +55,52 @@ const hookResultSchema = z.discriminatedUnion("action", [
 ]);
 
 interface HookPipelineRunOptions {
+  readonly logicalKey?: string;
   readonly eventBus?: EventBus;
   readonly emitter?: TurnEmitter;
 }
 
+export interface HookHandlerOutcome {
+  readonly sessionId: string;
+  readonly turnId?: string;
+  readonly logicalKey?: string;
+  readonly pluginId: string;
+  readonly outcome: "ok" | "error" | "timeout";
+  readonly emitter?: TurnEmitter;
+}
+export interface HookPipelineOptions {
+  /** Lifecycle/direct hooks have no execution admission snapshot. */
+  readonly isPluginLatched?: (sessionId: string, pluginId: string) => boolean;
+  readonly onHandlerOutcome?: (
+    event: HookHandlerOutcome,
+  ) => void | Promise<void>;
+}
+
 export class HookPipeline {
+  constructor(private readonly options: HookPipelineOptions = {}) {}
+
+  private async handlerOutcome(
+    ctx: HookContext,
+    reg: HookRegistration<unknown>,
+    outcome: HookHandlerOutcome["outcome"],
+    emitter?: TurnEmitter,
+    logicalKey?: string,
+  ): Promise<void> {
+    if (!reg.pluginId || ctx.signal?.aborted) return;
+    try {
+      await this.options.onHandlerOutcome?.({
+        emitter,
+        sessionId: ctx.sessionId,
+        turnId: ctx.turnId,
+        logicalKey,
+        pluginId: reg.pluginId,
+        outcome,
+      });
+    } catch {
+      console.warn("[hook-pipeline] handler outcome delivery failed");
+    }
+  }
+
   private readonly registrations = new Map<
     HookEvent,
     Array<HookRegistration<unknown>>
@@ -143,6 +185,11 @@ export class HookPipeline {
     payload: P,
     opts?: HookPipelineRunOptions,
   ): Promise<HookResult<P>> {
+    opts = {
+      ...opts,
+      logicalKey:
+        currentHookLogicalKey() ?? (ctx.turnId || crypto.randomUUID()),
+    };
     const raw =
       (this.snapshots.getStore() ?? this.registrations).get(event) ?? [];
     if (raw.length === 0) {
@@ -152,7 +199,13 @@ export class HookPipeline {
     // Session scope: a plugin's hooks fire only for sessions where the plugin
     // is active (framework hooks always fire). No active scope → run all.
     const active = currentActivePluginIds();
-    const scoped = raw.filter((reg) => isHookInScope(reg.pluginId, active));
+    const scoped = raw.filter(
+      (reg) =>
+        isHookInScope(reg.pluginId, active) &&
+        (currentHookLogicalKey() !== undefined ||
+          reg.pluginId === undefined ||
+          !this.options.isPluginLatched?.(ctx.sessionId, reg.pluginId)),
+    );
     if (scoped.length === 0) {
       return { action: "continue" };
     }
@@ -179,7 +232,7 @@ export class HookPipeline {
       }
       return semantic === "parallel"
         ? { action: "continue" }
-        : { action: "abort", reason };
+        : { action: "abort", reason, handlerFailed: true };
     }
 
     if (semantic === "first") {
@@ -331,7 +384,7 @@ export class HookPipeline {
         });
       }
 
-      result = await invokeWithSignal(
+      result = await invokeWithSignal<HookResult<P>>(
         async (signal) => {
           const returned = await handler(
             { ...ctxForHandler, signal },
@@ -349,7 +402,9 @@ export class HookPipeline {
             throw new TypeError("Hook handler returned an invalid result");
           }
           // Keep the owned data: schema output can drop execution artifacts.
-          return owned;
+          return owned.action === "abort"
+            ? { action: "abort", reason: owned.reason }
+            : owned;
         },
         ctx.signal,
         timeoutMs,
@@ -358,6 +413,13 @@ export class HookPipeline {
     } catch (err) {
       const reason = err instanceof Error ? err.message : String(err);
       const isTimeout = reason === timeoutMessage;
+      await this.handlerOutcome(
+        ctx,
+        reg,
+        isTimeout ? "timeout" : "error",
+        opts?.emitter,
+        opts?.logicalKey,
+      );
       emitHookEvent(
         opts?.eventBus,
         ctx,
@@ -372,10 +434,11 @@ export class HookPipeline {
       // the chain goes on without it and keeps what earlier handlers replaced.
       // A cancelled execution always ends the chain.
       return GUARD_HOOK_EVENTS.has(event) || ctx.signal?.aborted
-        ? { action: "abort", reason }
+        ? { action: "abort", reason, handlerFailed: true }
         : { action: "continue" };
     }
 
+    await this.handlerOutcome(ctx, reg, "ok", opts?.emitter, opts?.logicalKey);
     if (result.action === "abort") {
       emitHookEvent(opts?.eventBus, ctx, "hook.aborted", {
         hookId: reg.id,
@@ -418,8 +481,10 @@ export class HookPipeline {
   }
 }
 
-export function createHookPipeline(): HookPipeline {
-  return new HookPipeline();
+export function createHookPipeline(
+  options: HookPipelineOptions = {},
+): HookPipeline {
+  return new HookPipeline(options);
 }
 
 // ── Helpers ──────────────────────────────────────────────────────

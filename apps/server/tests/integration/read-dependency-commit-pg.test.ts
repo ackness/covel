@@ -183,6 +183,7 @@ describe.skipIf(!isolatedUrl)("read dependencies on real PG", () => {
       {
         runtimeId: producer.name,
         runId: runOf(producer.name),
+        cause: "rejected",
         error: expect.stringMatching(
           /^plugin\.data\.update: .*\(op 0, out-of-bounds\)$/,
         ),
@@ -190,6 +191,7 @@ describe.skipIf(!isolatedUrl)("read dependencies on real PG", () => {
       {
         runtimeId: reader.name,
         runId: runOf(reader.name),
+        cause: "read",
         error: `read data of ${producer.name} that did not commit`,
       },
     ]);

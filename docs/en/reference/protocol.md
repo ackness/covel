@@ -325,6 +325,25 @@ Events and REST reads use the same public shape:
 - `_runtime_jobs` and dimension records carry only their public parts. They do not include a job's `payload`, raw errors, or dimension rules.
 - A task queued with `expectsBackgroundFollower` also carries `phase: "prompt"`.
 
+### Plugin fault latch
+
+After an auxiliary plugin fails because of itself on three consecutive logical inputs in one session, the kernel pauses it and shows a fixed notice. The plugin list shows “Paused”; “Resume” clears the count. Each plugin counts at most once per logical input, including its auto-advance rounds. Faults take precedence over clean results within one input. A successful runtime result in a committed execution clears the count; a plugin with no runtimes clears it through a clean Hook invocation. Neutral results such as skips and suspensions leave it unchanged.
+
+`RuntimeResult.fault?: "runtime" | "timeout"` is the kernel's attribution marker. It counts the plugin's own exceptions, its own timeouts, and the agent stops `max-steps`, `invalid-output`, `loop-detected`, `context-overflow`, and its own `deadline`. `errorKind` does not establish fault ownership. Whether an error came from the provider is decided from the original exception (including a retry wrapper's `cause`), so a PostRuntime Hook rewriting the error text does not change attribution. Model and provider errors, every cancellation (a cancellation tag belongs only to the cancelled run: when a parent's own timeout cancels its child agent, the parent still counts its own timeout), dependency and read cascades, dimension version conflicts, stale suspension baselines, and innocent plugins in a whole-execution rollback do not count. Setup runtimes have their own retry budget and do not participate. Sub-agent and service-provider faults are not counted yet. Service exceptions retain structured provenance for the failing call. Provider exceptions, unavailable services (including paused providers), admission failures, and the service call's own timeout or cancellation do not count against the caller. The caller's own runtime timeout, invalid call options, and directly triggering the cycle or depth limit still count; a nested provider's call errors are not charged to the outer caller.
+
+A throwing or timed-out Hook counts against its registering plugin; a deliberate `abort` is not a Hook fault. A proposal rejected by its commit handler or deliberately vetoed by `PreStateCommit` counts against its source plugin. Another plugin's throwing or timed-out Hook counts only against the Hook owner. Plugins providing an active `outputKind: "story"` runtime or the dimension contract produce fault traces but are never paused.
+
+<!-- prettier-ignore -->
+| Event | Payload | Delivery |
+| --- | --- | --- |
+| `plugin.fault.counted` | `{ sessionId, pluginId, reason, consecutiveFaults }` | Trace only; never forwarded to players |
+| `plugin.fault.latched` | `{ sessionId, pluginId, reason }` | Action stream during player execution; session event stream otherwise |
+| `plugin.fault.cleared` | `{ sessionId, pluginId, by: "clean-run" \| "player" }` | Same as above |
+
+`reason` is the fixed vocabulary `"runtime" | "hook" | "proposal-rejected" | "timeout"`, with no raw error text. `SessionPlugin.paused` and the live session view's `SnapshotPluginStatus.paused` appear only while paused, as `{ reason }`. Counts and pauses live only in process memory. Restarting, ending or deleting a session clears them; saved snapshots, forks, exports and BrowserVault checkpoints never carry them. No development data needs to be recreated.
+
+Pausing takes effect at the next execution: its runtimes and Hooks do not run, its runtimes expose no tools, and its services return `unavailable`. The current execution keeps its frozen registry and admission set. See [session plugin management](./api.md#session-plugin-management) for re-enabling and [transactions](./transactions.md#turn-level-single-transaction) for cascade causes.
+
 ### Job progress events (job-status, experimental)
 
 | Event type           | Dir. | Description                                  | Payload (full `JobStatusRecord`)                                                                                                                                                                                   |
@@ -804,7 +823,7 @@ The events below are forwarded by the server through the actions SSE stream. The
 
 `runtime.skipped` is written into the stream by the actions route itself. Its `forwardToActionStream` in the metadata is `false`.
 
-The other events described in this page are also marked as forwarded: `ui.rendered`, `asset.progress`, `world.dimensions.changed`, `plugin-data.changed`, `character-schema.changed`, `dimensions.changed`, `dimensions.settlement.changed`, `ui.slot.changed` / `ui.slot.preview` / `ui.slot.cleared`, `turn.suspended` / `turn.resumed`, and `job-status.updated`.
+The other events described in this page are also marked as forwarded: `ui.rendered`, `asset.progress`, `world.dimensions.changed`, `plugin-data.changed`, `character-schema.changed`, `dimensions.changed`, `dimensions.settlement.changed`, `ui.slot.changed` / `ui.slot.preview` / `ui.slot.cleared`, `turn.suspended` / `turn.resumed`, `job-status.updated`, and `plugin.fault.latched` / `plugin.fault.cleared`.
 
 **Internal events not forwarded to `/api/actions`**
 
@@ -818,6 +837,7 @@ These are written only to `trace_events`, and are delivered through the subscrip
 | `context.pruned`                                                       | Emitted when the prompt is first assembled, after `PostContextAssembly` rewrites it, or when the actual request of one step of the tool loop triggers a hard budget trim. The payload is `{ runtimeId, pluginId, prunedMessageCount }`. The same runtime can emit it several times in one turn. It lets `/debug` show which step dropped history                                                        |
 | `context.compaction.failed`                                            | Emitted when a history compaction attempt fails. The payload is `{ pluginId, extensionId, reason, consecutiveFailures }`                                                                                                                                                                                                                                                                                |
 | `commit.fanout.failed`                                                 | See the section on the `system.reset` control frame above                                                                                                                                                                                                                                                                                                                                               |
+| `plugin.fault.counted`                                                 | Trace of a plugin’s self-caused fault count; never forwarded to players. `plugin.fault.latched` / `plugin.fault.cleared` carry the player notices                                                                                                                                                                                                                                                       |
 
 Additional notes:
 

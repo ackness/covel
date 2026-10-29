@@ -528,7 +528,32 @@ export type CovelEvent =
   // exception to effects isolation. Forwarded to the action stream so media
   // generation progress reaches the client live. Payload is the full record.
   // The runtime job worker reports queued/background job lifecycle here too.
-  | { readonly type: "job-status.updated"; readonly payload: JobStatusRecord };
+  | { readonly type: "job-status.updated"; readonly payload: JobStatusRecord }
+  | {
+      readonly type: "plugin.fault.counted";
+      readonly payload: {
+        readonly sessionId: string;
+        readonly pluginId: string;
+        readonly reason: import("./execution.js").PluginFaultReason;
+        readonly consecutiveFaults: number;
+      };
+    }
+  | {
+      readonly type: "plugin.fault.latched";
+      readonly payload: {
+        readonly sessionId: string;
+        readonly pluginId: string;
+        readonly reason: import("./execution.js").PluginFaultReason;
+      };
+    }
+  | {
+      readonly type: "plugin.fault.cleared";
+      readonly payload: {
+        readonly sessionId: string;
+        readonly pluginId: string;
+        readonly by: "clean-run" | "player";
+      };
+    };
 
 /** The closed vocabulary of every server→client event name. */
 export type CovelEventType = CovelEvent["type"];
@@ -550,6 +575,9 @@ export interface CovelEventMeta {
  * compiler-enforced change.
  */
 export const COVEL_EVENT_META = {
+  "plugin.fault.counted": { forwardToActionStream: false },
+  "plugin.fault.latched": { forwardToActionStream: true },
+  "plugin.fault.cleared": { forwardToActionStream: true },
   "narrative.delta": { forwardToActionStream: false },
   "narrative.completed": { forwardToActionStream: false },
   "interaction.requested": { forwardToActionStream: false },
@@ -818,6 +846,10 @@ export interface SnapshotTraceEvent {
 }
 
 export interface SnapshotPluginStatus {
+  /** Live session projection only; never part of a saved snapshot. */
+  readonly paused?: {
+    readonly reason: import("./execution.js").PluginFaultReason;
+  };
   readonly id: string;
   readonly displayName: import("./world.js").I18nText;
   readonly active: boolean;
