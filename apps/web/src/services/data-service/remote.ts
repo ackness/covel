@@ -1,4 +1,4 @@
-import type { MessageRecord, StatePatchRecord, WorldRecord } from "../api.js";
+import type { MessageRecord, WorldRecord } from "../api.js";
 import * as api from "../api.js";
 import { isNotFound } from "../api/request.js";
 import { ignoreError } from "../../lib/ignore-error.js";
@@ -222,9 +222,6 @@ export class RemoteDataService implements DataService {
 
   async listStatePatches(sessionId: string) {
     return api.listStatePatches(sessionId);
-  }
-  async addStatePatch(_sessionId: string, _patch: StatePatchRecord) {
-    // Remote mode: server stores patches during action SSE flow
   }
 
   async saveSubmittedBlocks(

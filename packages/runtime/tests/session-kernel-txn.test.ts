@@ -22,21 +22,21 @@ const SESSION_ID = "sess-txn";
 
 interface RecordingStore extends KernelStore {
   readonly messages: Array<Record<string, unknown>>;
-  readonly stateChanges: Array<Record<string, unknown>>;
+  readonly pluginData: Array<Record<string, unknown>>;
   readonly events: Array<Record<string, unknown>>;
   readonly traceEvents: Array<Record<string, unknown>>;
   readonly beginCalls: { count: number };
   readonly commitCalls: { count: number };
   readonly rollbackCalls: { count: number };
   failOn?: {
-    method: "addMessage" | "addStateChange" | "saveEvent";
+    method: "addMessage" | "setPluginData" | "saveEvent";
     afterN: number;
   };
 }
 
 function createRecordingStore(): RecordingStore {
   const messages: Array<Record<string, unknown>> = [];
-  const stateChanges: Array<Record<string, unknown>> = [];
+  const pluginData: Array<Record<string, unknown>> = [];
   const events: Array<Record<string, unknown>> = [];
   const traceEvents: Array<Record<string, unknown>> = [];
   const beginCalls = { count: 0 };
@@ -45,18 +45,18 @@ function createRecordingStore(): RecordingStore {
 
   const counters: Record<string, number> = {
     addMessage: 0,
-    addStateChange: 0,
+    setPluginData: 0,
     saveEvent: 0,
   };
 
   let snapshot: {
     messages: Array<Record<string, unknown>>;
-    stateChanges: Array<Record<string, unknown>>;
+    pluginData: Array<Record<string, unknown>>;
     events: Array<Record<string, unknown>>;
   } | null = null;
 
   function maybeFail(
-    method: "addMessage" | "addStateChange" | "saveEvent",
+    method: "addMessage" | "setPluginData" | "saveEvent",
   ): void {
     counters[method]!++;
     if (
@@ -70,7 +70,7 @@ function createRecordingStore(): RecordingStore {
 
   const store: RecordingStore = {
     messages,
-    stateChanges,
+    pluginData,
     events,
     traceEvents,
     beginCalls,
@@ -90,13 +90,13 @@ function createRecordingStore(): RecordingStore {
       maybeFail("saveEvent");
       events.push(record as Record<string, unknown>);
     },
-    async addStateChange(record) {
-      maybeFail("addStateChange");
-      stateChanges.push(record as Record<string, unknown>);
+    async addStateChange() {},
+    async setPluginData(record) {
+      maybeFail("setPluginData");
+      pluginData.push(record as Record<string, unknown>);
     },
     async upsertStateEntry(record) {
-      // state.patch commits the current value here before addStateChange; these
-      // tests only assert the change log / message / event arrays, so no-op.
+      // Retained state storage is not used by plugin proposals.
       void record;
     },
     async addTraceEvent(record) {
@@ -111,7 +111,7 @@ function createRecordingStore(): RecordingStore {
       beginCalls.count++;
       snapshot = {
         messages: [...messages],
-        stateChanges: [...stateChanges],
+        pluginData: [...pluginData],
         events: [...events],
       };
       try {
@@ -124,8 +124,8 @@ function createRecordingStore(): RecordingStore {
         if (snapshot) {
           messages.length = 0;
           messages.push(...snapshot.messages);
-          stateChanges.length = 0;
-          stateChanges.push(...snapshot.stateChanges);
+          pluginData.length = 0;
+          pluginData.push(...snapshot.pluginData);
           events.length = 0;
           events.push(...snapshot.events);
           snapshot = null;
@@ -157,7 +157,7 @@ function makeProposal(
 describe("session-kernel commitAll atomicity", () => {
   it("rolls back earlier writes when a later commit throws", async () => {
     const store = createRecordingStore();
-    store.failOn = { method: "addStateChange", afterN: 1 };
+    store.failOn = { method: "setPluginData", afterN: 1 };
 
     const pipeline = createCommitPipeline(store);
     const proposals: Proposal[] = [
@@ -167,8 +167,8 @@ describe("session-kernel commitAll atomicity", () => {
         "a",
       ),
       makeProposal(
-        "state.patch",
-        { table: "stats", field: "hp", value: 50 },
+        "plugin.data",
+        { namespace: "stats", key: "hp", value: 50 },
         "b",
       ),
       makeProposal(
@@ -184,7 +184,7 @@ describe("session-kernel commitAll atomicity", () => {
 
     // All writes rolled back.
     expect(store.messages).toHaveLength(0);
-    expect(store.stateChanges).toHaveLength(0);
+    expect(store.pluginData).toHaveLength(0);
 
     expect(store.beginCalls.count).toBe(1);
     expect(store.commitCalls.count).toBe(0);
@@ -198,8 +198,8 @@ describe("session-kernel commitAll atomicity", () => {
     const proposals: Proposal[] = [
       makeProposal("narrative.append", { content: "ok 1", kind: "story" }, "a"),
       makeProposal(
-        "state.patch",
-        { table: "stats", field: "hp", value: 80 },
+        "plugin.data",
+        { namespace: "stats", key: "hp", value: 80 },
         "b",
       ),
       makeProposal("event.emit", { topic: "test", data: { x: 1 } }, "c"),
@@ -210,7 +210,7 @@ describe("session-kernel commitAll atomicity", () => {
     expect(results.every((r) => r.committed)).toBe(true);
 
     expect(store.messages).toHaveLength(1);
-    expect(store.stateChanges).toHaveLength(1);
+    expect(store.pluginData).toHaveLength(1);
     expect(store.events).toHaveLength(1);
 
     expect(store.beginCalls.count).toBe(1);
@@ -226,8 +226,8 @@ describe("session-kernel commitAll atomicity", () => {
 
       const proposals: Proposal[] = [
         makeProposal("narrative.append", { content: "ok", kind: "story" }, "a"),
-        // Malformed: .js plugins bypass the type layer, so table can be missing.
-        makeProposal("state.patch", { field: "hp", value: 1 }, "b"),
+        // Malformed: .js plugins bypass the type layer, so namespace can be missing.
+        makeProposal("plugin.data", { key: "hp", value: 1 }, "b"),
         makeProposal("event.emit", { topic: "test", data: {} }, "c"),
       ];
 
@@ -235,13 +235,13 @@ describe("session-kernel commitAll atomicity", () => {
       expect(results[0]!.committed).toBe(true);
       expect(results[1]!.committed).toBe(false);
       expect(results[1]!.error).toMatch(
-        /state\.patch: invalid payload \(table:/,
+        /plugin\.data: invalid payload \(namespace:/,
       );
       expect(results[2]!.committed).toBe(true);
 
       // Siblings stay committed; the transaction commits (no rollback).
       expect(store.messages).toHaveLength(1);
-      expect(store.stateChanges).toHaveLength(0);
+      expect(store.pluginData).toHaveLength(0);
       expect(store.events).toHaveLength(1);
       expect(store.commitCalls.count).toBe(1);
       expect(store.rollbackCalls.count).toBe(0);
@@ -259,20 +259,22 @@ describe("session-kernel commitAll atomicity", () => {
     }
   });
 
-  it("rejects state.patch/event.emit with empty identifiers instead of defaulting", async () => {
+  it("rejects plugin.data/event.emit with empty identifiers instead of defaulting", async () => {
     const store = createRecordingStore();
     const pipeline = createCommitPipeline(store);
 
     const results = await pipeline.commitAll([
-      makeProposal("state.patch", { table: "", field: "hp", value: 1 }, "a"),
+      makeProposal("plugin.data", { namespace: "", key: "hp", value: 1 }, "a"),
       makeProposal("event.emit", { data: { x: 1 } }, "b"),
     ]);
 
     expect(results[0]!.committed).toBe(false);
-    expect(results[0]!.error).toMatch(/state\.patch: invalid payload \(table:/);
+    expect(results[0]!.error).toMatch(
+      /plugin\.data: invalid payload \(namespace:/,
+    );
     expect(results[1]!.committed).toBe(false);
     expect(results[1]!.error).toMatch(/event\.emit: invalid payload \(topic:/);
-    expect(store.stateChanges).toHaveLength(0);
+    expect(store.pluginData).toHaveLength(0);
     expect(store.events).toHaveLength(0);
   });
 
@@ -280,7 +282,7 @@ describe("session-kernel commitAll atomicity", () => {
     const store = createRecordingStore();
     // Proposal 1 (interaction.request) commits fine; proposal 2 throws a
     // store error → whole tx rolls back.
-    store.failOn = { method: "addStateChange", afterN: 1 };
+    store.failOn = { method: "setPluginData", afterN: 1 };
 
     const emitted: Array<{ type: string; commitCount: number }> = [];
     const emitter = {
@@ -306,8 +308,8 @@ describe("session-kernel commitAll atomicity", () => {
           "a",
         ),
         makeProposal(
-          "state.patch",
-          { table: "stats", field: "hp", value: 1 },
+          "plugin.data",
+          { namespace: "stats", key: "hp", value: 1 },
           "b",
         ),
       ]),
@@ -383,6 +385,7 @@ describe("session-kernel commitAll atomicity", () => {
       updateSession: vi.fn().mockResolvedValue(undefined),
       saveEvent: vi.fn().mockResolvedValue(undefined),
       addStateChange: vi.fn().mockResolvedValue(undefined),
+      setPluginData: vi.fn().mockResolvedValue(undefined),
       upsertStateEntry: vi.fn().mockResolvedValue(undefined),
       addTraceEvent: vi.fn().mockResolvedValue(undefined),
     };

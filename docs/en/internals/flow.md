@@ -289,7 +289,7 @@ flowchart TB
     end
 
     Group --> Commit["effects + story output → Proposal[] → CommitPipeline.commitAll<br/>PreStateCommit → handler → PostStateCommit"]
-    Commit --> SSE["Emit SessionEvent<br/>narrative.delta / narrative.completed<br/>interaction.requested / state.changed<br/>plugin-data.changed / event.emitted"]
+    Commit --> SSE["Emit SessionEvent<br/>narrative.delta / narrative.completed<br/>interaction.requested<br/>plugin-data.changed / event.emitted"]
     SSE --> PreGameTick{"phase === 'setup' and<br/>all setup runtimes<br/>have reported completion?"}
     PreGameTick -->|yes| Advance["setup commit: phase setup → playing<br/>completedPlayerTurns stays 0"]
     PreGameTick -->|no| Keep["Keep phase unchanged"]
@@ -313,7 +313,7 @@ Ordering rules for the main loop:
 - Runtimes that do not depend on each other run in parallel. When they tie, `name` gives a stable order.
 - A runtime in a dependency cycle, and everything downstream of it, is marked `skipped: dependency-cycle` for this turn. It does not fall back to running in an arbitrary order.
 
-**Proposal types** (all go through the commit chain, defined by `ProposalPayloadMap` in `packages/shared/src/types/proposal.ts`): `narrative.append`, `interaction.request`, `state.patch`, `event.emit`, `ui.render`, `asset.generate`, `plugin.data` / `plugin.data.batch` / `plugin.data.delete`, `character.schema.set`, `character.upsert`, `dimension.initialize`, `dimension.update`, `lorebook.upsert`.
+**Proposal types** (all go through the commit chain, defined by `ProposalPayloadMap` in `packages/shared/src/types/proposal.ts`): `narrative.append`, `interaction.request`, `event.emit`, `ui.render`, `asset.generate`, `plugin.data` / `plugin.data.batch` / `plugin.data.delete`, `character.schema.set`, `character.upsert`, `dimension.initialize`, `dimension.update`, `lorebook.upsert`.
 
 **Plugin dependencies and choosing providers**: four things decide which plugins a session enables: the player's explicit `requested` / `excluded` lists, the authorization state, core declarations, and the versioned `provides` / `requires`.
 
@@ -484,7 +484,7 @@ narrativeOutput:      ──►   Session Kernel                ──►   ┌�
 interactions:         ──►   │ → Proposal[]                ──►   ├────────────────────────────┤
 create-form / form          │                                   │  Character creation form   │
                             │ commitAll()                       │  (Form component)          │
-state.patch:          ──►   │ → SessionEvent[]            ──►   ├────────────────────────────┤
+plugin.data:          ──►   │ → SessionEvent[]            ──►   ├────────────────────────────┤
 plugin_data writes    ──►   │ SSE emit()                        │  Plugin message surface /  │
                             │                                   │  right panel               │
                             │                             ──►   ├────────────────────────────┤
@@ -998,7 +998,6 @@ The events it emits include:
 - `llm.calling` / `llm.responded`
 - `message.completed`
 - `block.emitted`
-- `state.patch.applied`
 - `hook.fired` / `hook.rewrote` / `hook.aborted`
 
 The lifecycle events of a runtime (`turn.started`, `turn.completed`, `runtime.started`, `runtime.completed`, `runtime.failed`) are still written by `TraceRecorder`. The two mechanisms run side by side.
@@ -1080,7 +1079,7 @@ sequenceDiagram
         Kernel-->>Web: SSE: narrative.delta / narrative.completed
         Kernel-->>Web: SSE: interaction.requested (e.g. the guide's action cards)
         Kernel-->>Web: SSE: plugin-data.changed (written by the plugin-data-set tool)
-        Kernel-->>Web: SSE: state.changed / event.emitted
+        Kernel-->>Web: SSE: event.emitted
         Server-->>Web: SSE: runtime.completed / runtime.failed / runtime.skipped { status, runId }
     end
     end

@@ -227,7 +227,6 @@ export type {
   Proposal,
   NarrativeAppendPayload,
   InteractionRequestPayload,
-  StatePatchPayload,
   EventEmitPayload,
   UIRenderPayload,
   AssetGeneratePayload,

@@ -3921,7 +3921,7 @@ runtime 报告失败时，它的原始错误保留在 `result.runtimeResults` �
 
 ### 状态查询
 
-状态系统用结构化的表保存游戏世界的各种事实，例如角色属性、世界状态、任务进度。插件通过 `state.patch` proposal 提交状态变更；这里的端点只读。
+这些只读调试端点保留对现有会话状态表和变更记录的访问。状态表和存储接口归内核所有，后续用途待定；插件不能再写入它们。插件自己的状态请使用插件数据。现有条目的快照、浏览器私有存档和 fork 处理保持不变。
 
 #### `GET /api/sessions/:id/state`
 
@@ -4278,7 +4278,7 @@ runtime 可以中途停下来等玩家提供数据，这叫挂起。本节的端
 
 `data-changed` 的规则：
 
-- 比较的记录是：插件数据的一个键、一个状态字段、一个角色、角色 schema、一条 lorebook 条目。只比较内容，别的键被写过不影响恢复。维度变更不在这里比较，它们提交时自己核对版本。
+- 比较的记录是：插件数据的一个键、一个角色、角色 schema、一条 lorebook 条目。只比较内容，别的键被写过不影响恢复。维度变更不在这里比较，它们提交时自己核对版本。
 - runtime 恢复运行期间，记录也可能被改。提交事务开始时会再比较一次；有变化就什么都不写，同样作废挂起项并返回这个 `409`。
 
 一个 runtime 同时只有一条待恢复的挂起项。它再次挂起时，旧的那条在保存新挂起项的同一个事务里按放弃的方式作废，不另发事件。网页端收到新的 `turn.suspended` 时，去掉同一个 runtime 的旧挂起项。
@@ -4753,8 +4753,8 @@ event: execution.completed
 data: {"runtimeCount":4,"resultCount":4,"durationMs":2500}
 id: example-epoch:1
 
-event: state.changed
-data: {"table":"character_stats","field":"hp","value":85}
+event: event.emitted
+data: {"topic":"quest.completed","data":{"name":"First steps"}}
 id: example-epoch:2
 ```
 
@@ -5914,7 +5914,6 @@ SSE 是服务器向客户端持续推送事件的方式。Covel 有两条独立�
 | `interaction.requested` | 交互 | 请求玩家输入（表单/选择/确认） |
 | `ui.rendered` | UI | `ui.render` proposal 提交后发出 |
 | `ui.part.update` | UI | UI part 状态更新（每个 part 一条） |
-| `state.changed` | 状态 | 游戏状态变更 |
 | `state.snapshot.created` | 状态 | 自动、手动或 fork 写入快照后发出 |
 | `session.forked` | 会话 | `POST /api/sessions/:id/fork` 建好子会话后发出 |
 | `execution.started` | 执行生命周期 | 回合开始执行 |
@@ -5949,7 +5948,7 @@ SSE 是服务器向客户端持续推送事件的方式。Covel 有两条独立�
 | `character.upserted`                                                   | `session-commit-emitter.ts`       |          是           | `character.upsert` proposal 提交后发出                                                                                    |
 | `tool.calling` / `tool.completed` / `tool.failed`                      | TurnEmitter                       |          是           | 工具调用 trace（调试时间线用）                                                                                            |
 | `llm.calling` / `llm.responded` / `message.completed`                  | TurnEmitter                       |          是           | LLM 调用 trace                                                                                                            |
-| `block.emitted` / `state.patch.applied`                                | TurnEmitter                       |          是           | 块发出 / state patch 应用的 trace                                                                                         |
+| `block.emitted`                                                        | TurnEmitter                       |          是           | 块发出的 trace                                                                                                            |
 | `hook.fired` / `hook.rewrote` / `hook.aborted`                         | TurnEmitter                       |          是           | Hook 行为 trace                                                                                                           |
 | `gateway.calling` / `gateway.responded` / `gateway.failed`             | TurnEmitter（`withGatewayTrace`） |          是           | function runtime 和扩展点提供方通过 `ctx.gateway` 调 provider 的 trace（与 `llm.*` 对等）；失败时带服务商已报告的 `usage` |
 | `function.executing` / `function.completed`                            | TurnEmitter                       |          否           | function runtime handler 的起止 trace；只走订阅通道和 `trace_events`                                                      |

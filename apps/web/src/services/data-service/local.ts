@@ -600,18 +600,6 @@ export class LocalDataService implements DataService {
     return (await appKv.getStatePatches(sessionId)) ?? [];
   }
 
-  async addStatePatch(
-    sessionId: string,
-    patch: StatePatchRecord,
-  ): Promise<void> {
-    if (patch.sessionId !== sessionId)
-      throw new Error("State patch session mismatch");
-    const owned = structuredClone(patch);
-    await this.writeSessionCache(sessionId, () =>
-      appKv.appendStatePatch(owned),
-    );
-  }
-
   private async writeSessionCache(
     sessionId: string,
     write: () => Promise<void>,

@@ -156,7 +156,7 @@ describe("operation settings snapshot", () => {
                   status: "success",
                   output: {},
                   effects: {
-                    statePatches: [{ table: "stats", field: "hp", value: 1 }],
+                    pluginData: [{ namespace: "stats", key: "hp", value: 1 }],
                   },
                   toolCalls: [],
                 },

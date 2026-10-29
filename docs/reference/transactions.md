@@ -372,11 +372,11 @@ SqliteStore、MemoryStore 和 PgStore（都在 Node 上）用同一种办法：
 **叙事优先的失败边界。**
 
 - 领域写入抛出的 store 错误，使整回合回滚。
-- handler 校验失败返回的 `{ committed: false }`（如 PreStateCommit veto、缺字段的 state.patch），在本次执行有成功的 story 结果时，只回滚提出它的那个可选 runtime。
+- handler 校验失败返回的 `{ committed: false }`（如 PreStateCommit veto、缺字段的 plugin.data），在本次执行有成功的 story 结果时，只回滚提出它的那个可选 runtime。
 - 做法：每个非 story、非 setup 的 runtime 在自己的 savepoint 里提交。被拒绝时只撤销它自己的写入，叙事和其他 runtime 照常提交。
 - 这时 `FinalizeExecutionOutcome` 以 `committed` 返回，并在 `failedProposals` / `isolatedRuntimes`（`{ runtimeId, error }`）里列出被丢弃的部分。主回合用 `proposal.failed` 和该 runtime 的 `runtime.failed` SSE 告知客户端。
 - 没有 story 的执行（manual、background、detached、setup）仍然是整体原子的：任何一个 proposal 失败就整体回滚。作业不会为没有落库的写入报告成功。
-- 结果里无法变成 proposal 的 effect 条目，同样算作该 runtime 被拒绝的写入，按上面的边界处理，不会以异常拖垮整回合。这类条目是：`effects.ui[].parts`、`effects.interactions`、`effects.notifications`、`effects.statePatches` 里不是对象的条目，以及后三个通道里不是数组的内容。function runtime 在 handler 返回时就以 `output-schema-invalid` 失败。
+- 结果里无法变成 proposal 的 effect 条目，同样算作该 runtime 被拒绝的写入，按上面的边界处理，不会以异常拖垮整回合。这类条目是：`effects.ui[].parts`、`effects.interactions`、`effects.notifications` 里不是对象的条目，以及后两个通道里不是数组的内容。function runtime 在 handler 返回时就以 `output-schema-invalid` 失败。在会提交写入的结果中，已移除的 `effects.statePatches` 通道也会被拒绝，错误信息会指引作者改用插件数据。它以 `effects.invalid` 诊断标记报告，不冒充某一种 proposal。
 
 **导出发布有独立的失败边界。**
 

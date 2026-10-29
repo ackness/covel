@@ -232,7 +232,7 @@ describe("function business value and effect boundary", () => {
                   : { skipReason: "cached" }),
                 effects: {
                   ...observation,
-                  statePatches: [{ table: "stats", field: "hp", value: 0 }],
+                  pluginData: [{ namespace: "stats", key: "hp", value: 0 }],
                 },
               }) as unknown as HandlerResult,
           }),
@@ -251,7 +251,7 @@ describe("function business value and effect boundary", () => {
       });
       expect(commit.status).toBe("committed");
       expect(
-        await store.getStateEntry("observed-session", "stats", "hp"),
+        await store.getPluginData("observed-session", "probe", "stats", "hp"),
       ).toBeNull();
     },
   );
@@ -285,7 +285,7 @@ describe("function business value and effect boundary", () => {
             outcome: "success",
             value: {},
             effects: {
-              statePatches: [{ table: "stats", field: "hp", value: 0 }],
+              pluginData: [{ namespace: "stats", key: "hp", value: 0 }],
             },
           }),
         }),
@@ -305,7 +305,7 @@ describe("function business value and effect boundary", () => {
     });
     expect(commit.status).toBe("committed");
     expect(
-      await store.getStateEntry("schema-session", "stats", "hp"),
+      await store.getPluginData("schema-session", "probe", "stats", "hp"),
     ).toBeNull();
   });
 

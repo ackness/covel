@@ -31,12 +31,6 @@ const pluginDataItemSchema = z.object({
 
 export const proposalPayloadSchemas = {
   "narrative.append": z.object({ content: z.string(), kind: nonEmpty }),
-  "state.patch": z.object({
-    table: nonEmpty,
-    field: nonEmpty,
-    value: z.unknown(),
-    reason: z.string().optional(),
-  }),
   "event.emit": z.object({ topic: nonEmpty, data: record.optional() }),
   // A custom `type` renders as a generic interactive block.
   "interaction.request": z.object({

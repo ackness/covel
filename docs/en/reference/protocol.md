@@ -139,7 +139,6 @@ In the tables, "S→C" means sent from the server to the client.
 
 | Event type               | Dir. | Description                                      | Payload                                            |
 | ------------------------ | ---- | ------------------------------------------------ | -------------------------------------------------- |
-| `state.changed`          | S→C  | A change to game state                           | `{ table, field, value, runtimeId, pluginId }`     |
 | `event.emitted`          | S→C  | A committed game business event                  | `{ topic?, type?, eventType?, data?, pluginId? }`  |
 | `domain-event.previewed` | S→C  | An instant preview of a validated business event | `{ runtimeId, pluginId, toolCallId, topic, data }` |
 
@@ -771,7 +770,7 @@ The events below are forwarded by the server through the actions SSE stream. The
 | `tool.calling` / `tool.completed` / `tool.failed`          | TurnEmitter                                                                                  | LLM tool call trace                                                                                                                                        |
 | `domain-event.previewed`                                   | ToolExecutor (after `emittedEvents` succeeds)                                                | Projected server-side into UI slot previews; not consumed directly by the frontend and not a domain commit                                                 |
 | `llm.calling` / `llm.responded` / `message.completed`      | TurnEmitter                                                                                  | LLM call trace                                                                                                                                             |
-| `block.emitted` / `state.patch.applied`                    | TurnEmitter                                                                                  | Trace of a block emitted / a state patch applied                                                                                                           |
+| `block.emitted`                                            | TurnEmitter                                                                                  | Trace of a block emitted                                                                                                                                   |
 | `hook.fired` / `hook.aborted`                              | TurnEmitter                                                                                  | Hook behavior trace                                                                                                                                        |
 | `gateway.calling` / `gateway.responded` / `gateway.failed` | TurnEmitter (`withGatewayTrace`)                                                             | Trace of a function-runtime or extension-provider `ctx.gateway` provider call (equivalent to `llm.*`); a failure carries the `usage` the provider reported |
 
@@ -1097,7 +1096,6 @@ Frames on `/api/events/stream` use a different structure, `ProtocolEvent`: `{ id
 narrative.delta       → messages (streaming buffer)
 narrative.completed   → messages (completed)
 interaction.requested → messages (block)
-state.changed         → gameState.tables (deep merge) + statePatches
 event.emitted         → gameState.events
 interaction.submitted → handled by the caller that submitted the form: SUBMIT_BLOCK + player bubble (not through handleSseEvent)
 execution.started     → executionSteps
@@ -1224,7 +1222,6 @@ These events use the standard SSE envelope, and they are saved to `trace_events`
 | `message.completed` | `{ runtimeId, pluginId, content, len, deltaCount }`. `deltaCount` is the number of `narrative.delta` events this runtime produced. It is the saved, authoritative count. The frontend uses a different synthetic field, `_aggregated`, when it combines live fragments. The two cannot be swapped |
 | `block.emitted` | `{ runtimeId, pluginId, proposalId, source, block }` |
 | `ui.rendered` | `{ runtimeId, pluginId, proposalId, source, render, block }`. The action stream and `state` topic send the same committed payload; the block ID and metadata come from the commit result |
-| `state.patch.applied` | `{ runtimeId, pluginId, proposalId, patch: { packageName, summary, ops } }` |
 | `hook.fired` | `{ event, hookName, pluginId, runtimeId?, targetId?, targetType, proposalType? }` |
 | `hook.rewrote` | `{ event, hookName, pluginId, runtimeId?, targetId?, diff?, proposalType? }` |
 | `hook.aborted` | `{ event, hookName, pluginId, runtimeId?, targetId?, reason, proposalType? }` |

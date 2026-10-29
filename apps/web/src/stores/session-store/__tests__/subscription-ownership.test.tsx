@@ -320,9 +320,9 @@ it("coalesces committed state notices during a snapshot read without replaying t
   options.dispatch.mockImplementation((action) => {
     options.stateRef.current = reducer(options.stateRef.current, action);
   });
-  streams[0]!.emit(event("state.changed"));
+  streams[0]!.emit(event("character.upserted"));
   expect(api.getSessionView).toHaveBeenCalledOnce();
-  streams[0]!.emit(event("state.changed"));
+  streams[0]!.emit(event("character.upserted"));
   streams[0]!.emit(event("character.upserted"));
   await act(async () => {
     pending.resolve({
@@ -362,8 +362,8 @@ it("refreshes once when a state commit follows snapshot publication but other re
     submittedInteractions: [],
     execution: { state: "idle" },
   });
-  streams[0]!.emit(event("state.changed"));
-  streams[0]!.emit(event("state.changed"));
+  streams[0]!.emit(event("character.upserted"));
+  streams[0]!.emit(event("character.upserted"));
   await act(async () => {
     pending.resolve(plugins("current"));
   });
@@ -376,78 +376,6 @@ it("refreshes once when a state commit follows snapshot publication but other re
     characters: [],
   });
   expect(options.stateRef.current.statePatches).toEqual([]);
-});
-
-it("does not duplicate action-stream patch history when the subscription observes the same commits", async () => {
-  vi.spyOn(Date, "now").mockReturnValue(123456789);
-  const pending = deferred<unknown>();
-  const current = {
-    session,
-    messages: [],
-    characters: [],
-    gameState: { stats: { hp: 9, mp: 4 } },
-    executionSteps: [],
-    submittedInteractions: [],
-    execution: { state: "idle" },
-  };
-  api.getSessionView
-    .mockReturnValueOnce(pending.promise)
-    .mockResolvedValue(current);
-  const { streams, options } = setup();
-  options.dispatch.mockImplementation((action) => {
-    options.stateRef.current = reducer(options.stateRef.current, action);
-  });
-  const ds = { addStatePatch: vi.fn(async () => {}) } as unknown as DataService;
-  const actionStream = createSseEventHandler({
-    ...options,
-    ds,
-    deltaBufferRef: { current: new Map() },
-    deltaRafRef: { current: null },
-    lastBackfilledTurnIdRef: { current: null },
-  });
-  for (const [field, value] of [
-    ["hp", 9],
-    ["mp", 4],
-  ] as const) {
-    const envelope = {
-      type: "state.changed",
-      payload: { table: "stats", field, value },
-      sessionId: session.id,
-      timestamp: session.createdAt,
-      requestId: "request",
-      traceId: "trace",
-      turnId: "turn",
-      flowId: "flow",
-      seq: value,
-    };
-    actionStream(envelope);
-    actionStream(envelope);
-    streams[0]!.emit({
-      ...event("state.changed"),
-      payload: { table: "stats", field, value },
-    });
-  }
-  await act(async () => {
-    pending.resolve({ ...current, gameState: {} });
-  });
-  expect(api.getSessionView).toHaveBeenCalledTimes(2);
-  expect(options.stateRef.current.gameState).toEqual({
-    characterSchema: null,
-    dimensions: {},
-    dimensionSettlements: [],
-    tables: current.gameState,
-    characters: [],
-  });
-  expect(options.stateRef.current.statePatches).toHaveLength(2);
-  expect(
-    new Set(options.stateRef.current.statePatches.map((patch) => patch.id))
-      .size,
-  ).toBe(2);
-  expect(ds.addStatePatch).toHaveBeenCalledTimes(4);
-  expect(
-    new Set(vi.mocked(ds.addStatePatch).mock.calls.map(([, patch]) => patch.id))
-      .size,
-  ).toBe(2);
 });
 
 function jobEnded(jobId: string): SubscriptionEvent {
@@ -501,7 +429,7 @@ it("reads only the snapshot for committed state and shows what a turn changed", 
   });
   // An observer of a turn that another tab runs sees these events live.
   await act(async () => {
-    streams[0]!.emit(event("state.changed"));
+    streams[0]!.emit(event("character.upserted"));
     streams[0]!.emit(event("character.upserted"));
     streams[0]!.emit(event("dimensions.changed"));
     streams[0]!.emit(pluginDataChanged("note"));
@@ -577,7 +505,7 @@ it("keeps events held by a full recovery through its follow-up snapshot read", a
     streams[0]!.state("connected");
   });
   streams[0]!.emit(pluginDataChanged("late"));
-  streams[0]!.emit(event("state.changed"));
+  streams[0]!.emit(event("character.upserted"));
   await act(async () => {
     pendingPlugins.resolve(plugins("current"));
   });
@@ -598,7 +526,7 @@ it("reads everything again when a stalled recovery holds too many events", async
   options.dispatch.mockImplementation((action) => {
     options.stateRef.current = reducer(options.stateRef.current, action);
   });
-  streams[0]!.emit(event("state.changed"));
+  streams[0]!.emit(event("character.upserted"));
   await act(async () => {
     for (let i = 0; i <= 500; i += 1)
       streams[0]!.emit(pluginDataChanged(`k${i}`));
@@ -618,7 +546,7 @@ it("backs off failed recovery reads, stops, and reads again on the next commit",
     options.stateRef.current = reducer(options.stateRef.current, action);
   });
   await act(async () => {
-    streams[0]!.emit(event("state.changed"));
+    streams[0]!.emit(event("character.upserted"));
   });
   streams[0]!.emit(pluginDataChanged("held"));
   let reads = 1;
@@ -652,7 +580,7 @@ it("backs off failed recovery reads, stops, and reads again on the next commit",
     execution: { state: "idle" },
   });
   await act(async () => {
-    streams[0]!.emit(event("state.changed"));
+    streams[0]!.emit(event("character.upserted"));
   });
   expect(api.getSessionView).toHaveBeenCalledTimes(reads + 1);
   expect(options.stateRef.current.executionError).toBeNull();
@@ -668,8 +596,8 @@ it("does not retry a failed current snapshot merely because committed notices ar
     .mockReturnValueOnce(pending.promise)
     .mockRejectedValue(new Error("offline"));
   const { streams } = setup();
-  streams[0]!.emit(event("state.changed"));
-  streams[0]!.emit(event("state.changed"));
+  streams[0]!.emit(event("character.upserted"));
+  streams[0]!.emit(event("character.upserted"));
   await act(async () => {
     pending.resolve({ session, messages: [], characters: [], gameState: {} });
   });
@@ -682,7 +610,7 @@ it.each(["unmount", "revisit"] as const)(
     const pending = deferred<unknown>();
     api.getSessionView.mockReturnValueOnce(pending.promise);
     const { streams, options, unmount, rerender } = setup();
-    streams[0]!.emit(event("state.changed"));
+    streams[0]!.emit(event("character.upserted"));
     streams[0]!.emit(event("character.upserted"));
     if (leave === "unmount") unmount();
     else {
@@ -757,7 +685,7 @@ it.each([false, true])(
       session.id,
       "background:terminal-job-event",
     );
-    if (stateFollowup) streams[0]!.emit(event("state.changed"));
+    if (stateFollowup) streams[0]!.emit(event("character.upserted"));
     await act(async () => {
       pendingPlugins.resolve(plugins("current"));
     });

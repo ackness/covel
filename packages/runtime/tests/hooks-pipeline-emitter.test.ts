@@ -22,7 +22,7 @@ describe("HookPipeline emitter integration", () => {
     await pipeline.run(
       "PreStateCommit",
       { event: "PreStateCommit", sessionId: "S", turnId: "T" },
-      { proposal: { id: "p1", type: "state.patch" } },
+      { proposal: { id: "p1", type: "plugin.data" } },
       { emitter },
     );
 
@@ -101,7 +101,7 @@ describe("HookPipeline emitter integration", () => {
         pluginId: "origin-plugin",
         runtimeId: "origin-plugin/main",
       },
-      { proposal: { id: "p1", type: "state.patch" } },
+      { proposal: { id: "p1", type: "plugin.data" } },
       { emitter },
     );
 
@@ -114,7 +114,7 @@ describe("HookPipeline emitter integration", () => {
       targetId: "p1",
       targetType: "proposal",
       // R3: proposalType is carried over from the pre-refactor inline trace write.
-      proposalType: "state.patch",
+      proposalType: "plugin.data",
       // R4: runtimeId flows from the HookContext the commit pipeline now populates.
       runtimeId: "origin-plugin/main",
     });

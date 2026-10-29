@@ -28,6 +28,7 @@ describe("agent output boundary", () => {
       manifest,
       finalContent: JSON.stringify({
         name: "Atlas",
+        statePatches: [{ table: "world", field: "name", value: "Atlas" }],
         events: [worldEvent, declaredEvent],
         interactions: [{ interactionId: "declared", type: "form" }],
         ui: [
@@ -42,7 +43,6 @@ describe("agent output boundary", () => {
             ],
           },
         ],
-        statePatches: [{ table: "world", field: "name", value: "Atlas" }],
         pluginData: [{ namespace: "world", key: "name", value: "Atlas" }],
         assetGenerations: [{ ref: "asset-1", modality: "image" }],
         notifications: [{ message: "Ready" }],

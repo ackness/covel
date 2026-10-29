@@ -1714,7 +1714,6 @@ Tools and runtimes do not change storage directly. They produce **proposals**: r
 Types registered so far:
 
 - `narrative.append`
-- `state.patch`
 - `event.emit`
 - `interaction.request`
 - `ui.render`
@@ -1734,13 +1733,7 @@ Each type is defined in one place: `ProposalPayloadMap`. `ProposalType`, the reg
 
 A proposal that fails is not committed. Its error code is `proposal-invalid` or the rejection reason of the media check. It takes the commit-failure path: an optional runtime next to a committed story loses only its own writes, and an execution with no story (manual, background, setup) commits nothing. Never only part of the proposals lands.
 
-**The difference between `state.patch` and `plugin.data`.** The state table that `state.patch` writes to is shared by the whole session:
-
-- At commit time, it requires only that `table` and `field` are non-empty strings.
-- It does not assign ownership by plugin, and it does not validate values against a table schema.
-- Each change records its source, `pluginId/runtimeId`, in the change record.
-
-Data that belongs to only one plugin goes in `plugin.data`. It is isolated by `(sessionId, pluginId, namespace, key)`.
+Plugin data uses `plugin.data`, isolated by `(sessionId, pluginId, namespace, key)`.
 
 ### `ui.render`
 

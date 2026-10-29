@@ -3,7 +3,7 @@
  *
  * A suspended runtime keeps the proposals it buffered before it stopped, and
  * the resume commits them later. In between, a background job or a manual run
- * can write the same plugin data key, state field, character or lorebook
+ * can write the same plugin data key, character or lorebook
  * entry. Committing the buffered value then would silently put back what the
  * runtime saw when it stopped.
  *
@@ -76,10 +76,6 @@ export function suspensionWriteTargets(
             });
         }
         break;
-      case "state.patch":
-        if (nonEmpty(payload.table) && nonEmpty(payload.field))
-          add({ kind: "state", table: payload.table, field: payload.field });
-        break;
       case "character.upsert":
         if (nonEmpty(payload.id)) add({ kind: "character", id: payload.id });
         break;
@@ -135,8 +131,6 @@ function describeTarget(target: SuspensionWriteTarget): string {
   switch (target.kind) {
     case "plugin-data":
       return `plugin data ${target.pluginId}/${target.namespace}/${target.key}`;
-    case "state":
-      return `state ${target.table}.${target.field}`;
     case "character":
       return `character ${target.id}`;
     case "character-schema":

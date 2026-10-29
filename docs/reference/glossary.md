@@ -188,7 +188,7 @@
 
 插件提出的一次写入请求。内核校验通过后才真正写入，插件从不直接写数据库。
 
-提案的类型只在一处定义：`ProposalPayloadMap`（`packages/shared/src/types/proposal.ts`）。目前有：`narrative.append`、`state.patch`、`event.emit`、`interaction.request`、`ui.render`、`asset.generate`、`plugin.data`、`plugin.data.batch`、`plugin.data.delete`、`character.upsert`、`character.schema.set`、`dimension.initialize`、`dimension.update`、`lorebook.upsert`。
+提案的类型只在一处定义：`ProposalPayloadMap`（`packages/shared/src/types/proposal.ts`）。目前有：`narrative.append`、`event.emit`、`interaction.request`、`ui.render`、`asset.generate`、`plugin.data`、`plugin.data.batch`、`plugin.data.delete`、`character.upsert`、`character.schema.set`、`dimension.initialize`、`dimension.update`、`lorebook.upsert`。
 
 详见：[事务](./transactions.md)、[回合管线](../internals/flow.md)。
 

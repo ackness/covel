@@ -66,12 +66,6 @@ export interface PluginHookOptions {
 /** A domain write produced by a tool and committed by the kernel. */
 export interface PluginProposalPayloads {
   "narrative.append": { readonly content: string; readonly kind: string };
-  "state.patch": {
-    readonly table: string;
-    readonly field: string;
-    readonly value: unknown;
-    readonly reason?: string;
-  };
   "event.emit": {
     readonly topic: string;
     readonly data: Readonly<Record<string, unknown>>;

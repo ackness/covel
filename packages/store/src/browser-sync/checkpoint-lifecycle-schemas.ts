@@ -48,11 +48,6 @@ const suspensionWriteBaseline = z.object({
       namespace: z.string(),
       key: z.string(),
     }),
-    z.object({
-      kind: z.literal("state"),
-      table: z.string(),
-      field: z.string(),
-    }),
     z.object({ kind: z.literal("character"), id: z.string() }),
     z.object({ kind: z.literal("character-schema") }),
     z.object({

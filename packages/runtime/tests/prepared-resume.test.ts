@@ -112,6 +112,51 @@ function completion(
 }
 
 describe("prepared resume host API", () => {
+  it("rejects an old state.patch proposal carried by a suspended resume", async () => {
+    const { store, child, deps, suspension } = await suspendedFixture();
+    const stale = {
+      ...suspension,
+      pendingContinuation: {
+        ...suspension.pendingContinuation,
+        pendingProposals: [
+          {
+            id: "removed-resume-write",
+            type: "state.patch",
+            sessionId: input.sessionId,
+            turnId: input.turnId,
+            source: { pluginId: "probe", runtimeId: child.name },
+            timestamp,
+            payload: { table: "stats", field: "hp", value: 1 },
+          },
+        ],
+      },
+    };
+    await store.saveSuspension(stale);
+    const stored = await store.getSuspension(stale.id);
+    if (!stored) throw new Error("Expected a persisted suspension");
+    const resumed = await resumeSuspendedRuntime(stored, {}, child, deps);
+    expect(resumed.result.status).toBe("success");
+    const outcome = await commitExecution({
+      store,
+      execution: resumed,
+      completion: completion(stale),
+    });
+    expect(outcome.status).toBe("failed");
+    expect(outcome.failedProposals).toEqual([
+      expect.objectContaining({
+        proposal: expect.objectContaining({ type: "state.patch" }),
+        code: "proposal-invalid",
+        error: "unknown proposal type: state.patch",
+      }),
+    ]);
+    expect((await store.getSuspension(stale.id))?.resolvedAt).toBeUndefined();
+    expect(
+      (await store.getSession(input.sessionId))?.completedPlayerTurns,
+    ).toBe(0);
+    expect(
+      await store.getStateEntry(input.sessionId, "stats", "hp"),
+    ).toBeNull();
+  });
   it("counts a player turn only when its suspended recursive child finally commits", async () => {
     const { store, child, deps, execution, suspension } =
       await suspendedFixture(true);

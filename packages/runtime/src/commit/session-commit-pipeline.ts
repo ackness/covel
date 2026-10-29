@@ -151,6 +151,7 @@ export function createCommitPipeline(
       return {
         committed: false,
         error: `unknown proposal type: ${proposal.type}`,
+        code: "proposal-invalid",
       };
     }
 

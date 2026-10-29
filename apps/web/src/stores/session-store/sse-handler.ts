@@ -11,7 +11,6 @@ import {
 } from "@covel/shared";
 import * as api from "@/services/api";
 import type { DataService } from "@/services/data-service.js";
-import { ignoreError } from "@/lib/ignore-error.js";
 import {
   appendStreamingText,
   clearStreamingText,
@@ -226,18 +225,6 @@ function toAssetProgressEvent(
   };
 }
 
-function statePatchId(envelope: api.SseEnvelope, prefix: string): string {
-  // The action stream assigns a unique traceId and serial seq per connection.
-  // Replayed envelopes retain their identity; malformed/missing IDs cannot
-  // collapse independent changes delivered within the same millisecond.
-  return typeof envelope.traceId === "string" &&
-    envelope.traceId &&
-    Number.isSafeInteger(envelope.seq) &&
-    envelope.seq >= 0
-    ? `${prefix}_${envelope.traceId}:${envelope.seq}`
-    : `${prefix}_${crypto.randomUUID()}`;
-}
-
 export function createSseEventHandler(
   deps: SseEventHandlerDeps,
 ): SseEventHandler {
@@ -402,39 +389,6 @@ export function createSseEventHandler(
           envelope.timestamp,
           turnId,
         );
-        break;
-      }
-      case "state.changed": {
-        const { table, field, value } = payload;
-        if (
-          typeof table !== "string" ||
-          !table ||
-          typeof field !== "string" ||
-          !field
-        )
-          break;
-        const patch = {
-          id: statePatchId(envelope, "sp"),
-          summary: `${table}.${field}`,
-          packageName: (payload.pluginId as string) ?? "system",
-          data: { [table]: { [field]: value } },
-        };
-
-        invalidateSessionResource(deps.dispatch, [
-          "game-state",
-          envelope.sessionId,
-        ]);
-        deps.dispatch({ type: "ADD_STATE_PATCH", patch });
-        const sid = deps.sessionIdRef.current;
-        if (sid) {
-          deps.ds
-            .addStatePatch(sid, {
-              ...patch,
-              sessionId: sid,
-              createdAt: new Date().toISOString(),
-            })
-            .catch(ignoreError("persist state patch"));
-        }
         break;
       }
       case "execution.started": {
@@ -692,7 +646,6 @@ export function createSseEventHandler(
       // `assertNeverEvent` exhaustiveness guard below stays green — adding a
       // new CovelEvent forces a conscious decision here (handle or ignore).
       case "ui.part.update":
-      case "state.patch.applied":
       case "world.dimensions.changed":
       case "state.snapshot.created":
       case "session.forked":

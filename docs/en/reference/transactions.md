@@ -372,11 +372,11 @@ Who calls it:
 **Failure boundary that favors the narrative.**
 
 - A store error thrown by a domain write rolls back the whole turn.
-- A `{ committed: false }` returned by handler validation (for example a PreStateCommit veto, or a `state.patch` missing a field) rolls back only the optional runtime that proposed it, when this execution has a successful story result.
+- A `{ committed: false }` returned by handler validation (for example a PreStateCommit veto, or a `plugin.data` missing a field) rolls back only the optional runtime that proposed it, when this execution has a successful story result.
 - How: each non-story, non-setup runtime commits in its own savepoint. When it is rejected, only its own writes are undone. The narrative and the other runtimes are committed as usual.
 - In this case `FinalizeExecutionOutcome` returns `committed`, and lists the dropped parts in `failedProposals` / `isolatedRuntimes` (`{ runtimeId, error }`). The main turn tells the client with `proposal.failed` and the runtime's `runtime.failed` SSE event.
 - Executions without a story (manual, background, detached, setup) are still atomic as a whole: if any one proposal fails, the whole thing is rolled back. A job does not report success for writes that were not stored.
-- An effect entry in the result that cannot become a proposal also counts as a write rejected for that runtime, and is handled by the boundary above. It does not bring down the whole turn with an exception. These entries are: entries in `effects.ui[].parts`, `effects.interactions`, `effects.notifications`, and `effects.statePatches` that are not objects, and content of the last three channels that is not an array. A function runtime fails with `output-schema-invalid` when its handler returns them.
+- An effect entry in the result that cannot become a proposal also counts as a write rejected for that runtime, and is handled by the boundary above. It does not bring down the whole turn with an exception. These entries are: entries in `effects.ui[].parts`, `effects.interactions`, and `effects.notifications` that are not objects, and content of the last two channels that is not an array. A function runtime fails with `output-schema-invalid` when its handler returns them. The removed `effects.statePatches` channel is also rejected on results that would commit writes, with a message directing authors to plugin data. It is reported with the diagnostic marker `effects.invalid`, rather than a proposal type.
 
 **Export publishing has its own failure boundary.**
 

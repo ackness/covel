@@ -49,7 +49,7 @@ function makeRuntime(
   };
 }
 
-function statePatchResult(field: string, value: JsonValue) {
+function pluginDataResult(field: string, value: JsonValue) {
   return {
     pluginId: "rt-a",
     runtimeId: "rt-a",
@@ -57,7 +57,7 @@ function statePatchResult(field: string, value: JsonValue) {
     turnId: TURN,
     status: "success" as const,
     output: {},
-    effects: { statePatches: [{ table: "stats", field, value }] },
+    effects: { pluginData: [{ namespace: "stats", key: field, value }] },
     toolCalls: [] as const,
     durationMs: 1,
     timestamp: new Date().toISOString(),
@@ -66,9 +66,9 @@ function statePatchResult(field: string, value: JsonValue) {
 
 function badResult() {
   return {
-    ...statePatchResult("hp", 1),
+    ...pluginDataResult("hp", 1),
     output: {},
-    effects: { statePatches: [{ field: "hp", value: 1 }] },
+    effects: { notifications: [null] },
   };
 }
 
@@ -93,7 +93,7 @@ describe("logical-turn counting via finalizeExecution", () => {
         sessionId: SID,
         executionContext: playerContext(logicalTurnId, executionId),
         runtimes: [makeRuntime("rt-a")],
-        results: [statePatchResult("hp", executionId)],
+        results: [pluginDataResult("hp", executionId)],
         turnIds: [],
         sessionClock: { now: new Date().toISOString() },
       });
@@ -119,7 +119,7 @@ describe("logical-turn counting via finalizeExecution", () => {
         countPolicy: "none",
       },
       runtimes: [makeRuntime("rt-a")],
-      results: [statePatchResult("hp", 9)],
+      results: [pluginDataResult("hp", 9)],
       turnIds: [],
       sessionClock: { now: new Date().toISOString() },
     });
@@ -150,7 +150,7 @@ describe("phase flip and atomicity", () => {
         countPolicy: "none",
       },
       runtimes: [makeRuntime("rt-a")],
-      results: [statePatchResult("hp", 1)],
+      results: [pluginDataResult("hp", 1)],
       turnIds: [],
       sessionClock: {
         now: new Date().toISOString(),
