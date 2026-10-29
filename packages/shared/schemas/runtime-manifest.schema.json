@@ -564,6 +564,37 @@
               "enum": ["answer-without-tools", "fail"],
               "description": "What a repeated tool loop does: `answer-without-tools` takes the tools away and asks for the answer; `fail` stops the runtime. Defaults to `fail` for `system`, otherwise `answer-without-tools`."
             },
+            "corrections": {
+              "type": "object",
+              "properties": {
+                "toolUse": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 3,
+                  "description": "Corrections for missing required tool use or explicit completion. Defaults to 1."
+                },
+                "review": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 5,
+                  "description": "Corrections after a PostLLMResponse rejection. Defaults to 2."
+                },
+                "loopPerturbation": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 3,
+                  "description": "Perturbations before the repeated-tool fallback. Defaults to 1."
+                },
+                "outputRepair": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 3,
+                  "description": "Requests with tools off to repair invalid output. Defaults to 1."
+                }
+              },
+              "additionalProperties": false,
+              "description": "Independent correction budgets for one agent loop run; 0 disables that correction."
+            },
             "finalizer": {
               "type": "object",
               "properties": {

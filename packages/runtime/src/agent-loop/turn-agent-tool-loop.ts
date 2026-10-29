@@ -24,7 +24,7 @@ import {
   parseJsonText,
   type EmittedEvent,
 } from "@covel/tools";
-import type { LLMMessage, LLMToolDefinition } from "@covel/shared";
+import type { LLMMessage, LLMResponse, LLMToolDefinition } from "@covel/shared";
 import { promptCacheKeyFor } from "../llm/prompt-cache-key.js";
 import type { HookPipeline } from "../hooks/pipeline.js";
 import type { RetryInfo } from "../retry/llm-retry.js";
@@ -41,7 +41,9 @@ import {
   withoutPictureAttachments,
 } from "./picture-attachments.js";
 import { handleSuspension } from "../resume/suspend-resume-handler.js";
-import { guardAgainstToolLoop, type LoopGuardState } from "./loop-detection.js";
+import { createCorrectionPolicy } from "./correction-policy.js";
+import { checkAgentOutput } from "./settle-agent-loop.js";
+import { guardAgainstToolLoop } from "./loop-detection.js";
 import {
   runPreToolUseHook,
   runPostToolUseHook,
@@ -235,6 +237,10 @@ async function runAgentToolLoopWithinBudget(
 ): Promise<AgentToolLoopResult> {
   // Resume starts with persisted loop state; ordinary execution starts fresh.
   let finalContent: string | null = initialState?.finalContent ?? null;
+  // Keep provider continuation attached to the accepted draft that supplied it.
+  let finalResponse: LLMResponse | undefined;
+  // Tool-call drafts already have a canonical assistant turn in messages.
+  let finalResponseMessageIndex: number | undefined;
   let lastTarget: LLMTargetIdentity | undefined;
   let finalToolOutput: Record<string, unknown> | null = null;
   const collectedToolCalls: ToolCallRecord[] = [
@@ -272,6 +278,7 @@ async function runAgentToolLoopWithinBudget(
   ];
   // The loop's phase, step count and stop reason.
   const loop = createLoopState();
+  let lastStartedStep = 0;
   // Set when a PreStep hook cancels the loop.
   let stopMessage: string | undefined;
 
@@ -297,6 +304,7 @@ async function runAgentToolLoopWithinBudget(
     maxSteps,
     timeoutMs,
   });
+  const policy = createCorrectionPolicy(profile.corrections);
   // The step limit in force. A PreStep hook may lower it, never raise it.
   let stepLimit = effectiveMaxSteps;
 
@@ -320,11 +328,6 @@ async function runAgentToolLoopWithinBudget(
     stepEvents.retry(info);
   };
 
-  // Count how many times we injected a perturbation into `messages` due to
-  // tool-loop detection. Once a loop has been perturbed and reappears, we
-  // give up — another perturbation would not help.
-  const loopGuardState: LoopGuardState = { loopPerturbations: 0 };
-
   // Shared hook wiring reused across the LLM-call and tool-call sites below.
   const hookOpts = {
     pipeline: hookPipeline,
@@ -343,12 +346,11 @@ async function runAgentToolLoopWithinBudget(
     hookOpts,
     messages,
     input.locale,
+    policy,
   );
   const pictureLoader = createPictureLoader(deps.mediaStore, input.sessionId);
   // A player's interjection is one more user message of the current turn.
   let currentTurnUserMessages = initialTurnUserMessages;
-  // One correction for a bare finish that violates the tool-use contract.
-  let noToolCallCorrections = 0;
   // The correction asked for a tool call; the next request requires one.
   let toolCallRequested = false;
   // Prose captured from steps that were extended by late steering (see the
@@ -364,6 +366,7 @@ async function runAgentToolLoopWithinBudget(
     readonly tools: readonly LLMToolDefinition[] | undefined;
     readonly toolChoice?: StepToolChoice;
     readonly requireToolCall: boolean;
+    readonly disableTools?: boolean;
   }) => {
     // Model resolution chain for story runtimes:
     // API override > manifest.model (a role the player binds) > undefined.
@@ -376,12 +379,15 @@ async function runAgentToolLoopWithinBudget(
     // ── PreLLMCall hook ──────────────────────────────────────────
     // Lets plugins non-destructively rewrite the request sent on THIS call
     // (messages / model / tools) without mutating the canonical transcript.
-    const hookedRequest = await runPreLLMCallHook(hookOpts, {
+    let hookedRequest = await runPreLLMCallHook(hookOpts, {
       messages,
       model: effectiveModel,
       tools: step.tools,
       ...(promptSegments ? { promptSegments } : {}),
     });
+    // Output repair must keep tools off even when a hook supplies its own.
+    if (step.disableTools)
+      hookedRequest = { ...hookedRequest, tools: undefined };
     // Pictures go only to a model known to read images. The hook may have
     // chosen another model, so the decision is made for this call.
     const sendPictures =
@@ -489,6 +495,7 @@ async function runAgentToolLoopWithinBudget(
       toolChoice: "auto",
       finalizer: true,
     });
+    lastStartedStep = step;
     try {
       const { rawResponse, reviewMessages } = await callModel({
         tools: undefined,
@@ -498,7 +505,10 @@ async function runAgentToolLoopWithinBudget(
       const response = await reviewResponse(rawResponse, reviewMessages);
       budget.assertLive();
       const text = response?.content?.trim() ? response.content : undefined;
-      if (!text) await delta.reset();
+      if (text) {
+        finalResponse = response;
+        finalResponseMessageIndex = undefined;
+      } else await delta.reset();
       return text;
     } catch (error) {
       // Only an abort or the deadline ends the loop here; any other failure
@@ -621,6 +631,7 @@ async function runAgentToolLoopWithinBudget(
       toolCount: stepTools?.length ?? 0,
       toolChoice: preStep.toolChoice ?? loopToolChoice,
     });
+    lastStartedStep = step;
 
     loop.enter("requesting-model");
     const { rawResponse, reviewMessages } = await callModel({
@@ -638,9 +649,16 @@ async function runAgentToolLoopWithinBudget(
     if (!response) {
       stepEvents.note({ kind: "review-rejected" });
       finalContent = null;
+      finalResponse = undefined;
+      finalResponseMessageIndex = undefined;
       // The rejected draft may already be on screen.
       await delta.reset();
       continue;
+    }
+
+    if (response.toolCalls.length > 0 && response.content) {
+      finalResponse = response;
+      finalResponseMessageIndex = messages.length;
     }
 
     if (response.toolCalls.length > 0) {
@@ -1026,6 +1044,8 @@ async function runAgentToolLoopWithinBudget(
           // A lookup is preparation, not a story. Give the model its remaining
           // bounded steps to write the narrative before accepting completion.
           finalContent = null;
+          finalResponse = undefined;
+          finalResponseMessageIndex = undefined;
           activeToolDefs = undefined;
           messages.push(writeStoryWithoutTools(input.locale));
           stepEvents.note({ kind: "story-without-tools" });
@@ -1040,12 +1060,13 @@ async function runAgentToolLoopWithinBudget(
         // ends the loop, and the contract is judged where the loop returns.
         if (
           requireToolUse &&
-          noToolCallCorrections === 0 &&
-          !hasBusinessWork(manifest, executedToolCalls, seededBusinessWork)
+          !hasBusinessWork(manifest, executedToolCalls, seededBusinessWork) &&
+          policy.take("toolUse")
         ) {
-          noToolCallCorrections++;
           toolCallRequested = true;
           finalContent = null;
+          finalResponse = undefined;
+          finalResponseMessageIndex = undefined;
           messages.push({
             role: "system",
             content: runtimeDoneCorrection(input.locale),
@@ -1096,6 +1117,8 @@ async function runAgentToolLoopWithinBudget(
           // incidental assistant prose and let the normal schema gate validate
           // the exact returned object before it reaches typed consumers.
           finalContent = null;
+          finalResponse = undefined;
+          finalResponseMessageIndex = undefined;
           finalToolOutput = completingToolOutputInResponse;
         } else if (!finalContent) {
           finalContent = JSON.stringify({
@@ -1113,14 +1136,14 @@ async function runAgentToolLoopWithinBudget(
       // almost certainly stuck in a KV-cache echo. Inject a perturbation
       // system message to nudge it onto a different path; on the second
       // detection give up so the loop cannot wedge the runtime forever.
-      const perturbationsBefore = loopGuardState.loopPerturbations;
+      const perturbationsBefore = policy.used("loopPerturbation");
       try {
         guardAgainstToolLoop({
           collectedToolCalls,
           threshold: retryPolicy.loopDetectionThreshold,
           runtimeName: manifest.name,
           messages,
-          state: loopGuardState,
+          policy,
           locale: input.locale,
         });
       } catch (err) {
@@ -1139,11 +1162,13 @@ async function runAgentToolLoopWithinBudget(
           `[runtime-loop] ${manifest.name} kept repeating a tool call; continuing without tools`,
         );
         finalContent = null;
+        finalResponse = undefined;
+        finalResponseMessageIndex = undefined;
         activeToolDefs = undefined;
         messages.push(answerWithoutTools(profile.answerPrompt, input.locale));
         stepEvents.note({ kind: "story-without-tools" });
       }
-      if (loopGuardState.loopPerturbations > perturbationsBefore)
+      if (policy.used("loopPerturbation") > perturbationsBefore)
         stepEvents.note({ kind: "loop-perturbation" });
 
       // Continue loop — LLM sees tool results and decides next action
@@ -1155,12 +1180,11 @@ async function runAgentToolLoopWithinBudget(
       manifest,
       calls: executedToolCalls,
       seededBusinessWork,
-      corrections: noToolCallCorrections,
+      canCorrect: () => policy.take("toolUse"),
       locale: input.locale,
       prior: initialState?.completionCalls,
     });
     if (completion.correction) {
-      noToolCallCorrections++;
       toolCallRequested = true;
       await delta.reset();
       messages.push({ role: "system", content: completion.correction });
@@ -1197,6 +1221,8 @@ async function runAgentToolLoopWithinBudget(
     }
 
     // Final response (no more tool calls)
+    finalResponse = response;
+    finalResponseMessageIndex = undefined;
     finalContent =
       steeredProse.length > 0
         ? [...steeredProse, response.content].filter(Boolean).join("\n\n")
@@ -1243,6 +1269,114 @@ async function runAgentToolLoopWithinBudget(
       loop.stop = { reason: finalizerExit, finalizer: true };
     }
   }
+  // Output repair follows every success-shaped exit, including a finalizer.
+  // Completion/tool failures are not output-format problems and cannot be
+  // repaired by prose. Completing-tool output belongs to the tool, not the model.
+  const requiredToolUseUnmet =
+    requireToolUse &&
+    !hasBusinessWork(manifest, executedToolCalls, seededBusinessWork);
+  const requiredCompletionUnmet =
+    manifest.requireExplicitCompletion === true &&
+    !hasExplicitCompletion(
+      manifest,
+      executedToolCalls,
+      initialState?.completionCalls,
+    );
+  const repairableExit =
+    loop.stop.reason === "completed" ||
+    loop.stop.reason === "tool-finished" ||
+    ((loop.stop.reason === "max-steps" || loop.stop.reason === "deadline") &&
+      loop.stop.finalizer);
+  if (
+    repairableExit &&
+    finalToolOutput === null &&
+    !requiredToolUseUnmet &&
+    !requiredCompletionUnmet
+  ) {
+    while (budget.deadline - Date.now() >= FINALIZER_MIN_REMAINING_MS) {
+      const checked = checkAgentOutput({
+        manifest,
+        input,
+        runId,
+        startTime,
+        toolLoop: {
+          finalContent,
+          finalToolOutput,
+          executedToolCalls,
+          failedToolCalls,
+          pendingProposals,
+          emittedEvents,
+          collectedToolCalls,
+        },
+        outputSchema: loaded.outputSchema,
+        priorToolCalls: initialState?.collectedToolCalls,
+      });
+      if (
+        checked.ok ||
+        budget.deadline - Date.now() < FINALIZER_MIN_REMAINING_MS ||
+        !policy.take("outputRepair")
+      )
+        break;
+      if (loop.phase !== "finalizing") loop.enter("finalizing");
+      await delta.reset();
+      if (finalContent && finalResponseMessageIndex === undefined) {
+        const { reasoningContent, providerContinuation } = finalResponse ?? {};
+        finalResponseMessageIndex = messages.length;
+        messages.push({
+          role: "assistant",
+          content: finalContent,
+          ...(reasoningContent ? { reasoningContent } : {}),
+          ...(providerContinuation ? { providerContinuation } : {}),
+        });
+      }
+      const problems = checked.errors.join("; ");
+      messages.push({
+        role: "system",
+        content:
+          instructionLocaleFor(input.locale) === "zh"
+            ? `你的答案不符合要求的输出格式。问题：${problems}。请按要求的格式重新给出完整答案。不要调用工具，也不要描述改正的过程。`
+            : `Your answer did not meet the required output format. Problems: ${problems}. Reply again with the complete answer in the required format. Do not call tools or describe the correction.`,
+      });
+      await stepEvents.start({
+        step: ++lastStartedStep,
+        maxSteps: stepLimit,
+        toolCount: 0,
+        toolChoice: "auto",
+        repair: true,
+      });
+      stepEvents.note({ kind: "output-repair" });
+      try {
+        const { rawResponse, reviewMessages } = await callModel({
+          tools: undefined,
+          toolChoice: "auto",
+          requireToolCall: false,
+          disableTools: true,
+        });
+        lastTarget = rawResponse.target;
+        const response = await reviewResponse(rawResponse, reviewMessages);
+        budget.assertLive();
+        if (response) {
+          // This is a complete replacement, including any earlier steered prose.
+          finalContent = response.content;
+          finalResponse = response;
+          finalResponseMessageIndex = undefined;
+          loop.stop = { ...loop.stop, repaired: true };
+        } else {
+          stepEvents.note({ kind: "review-rejected" });
+          await delta.reset();
+        }
+      } catch (error) {
+        budget.assertLive();
+        console.warn(
+          `[runtime-loop] ${manifest.name} output repair failed: ${
+            error instanceof Error ? error.message.slice(0, 200) : String(error)
+          }`,
+        );
+        await delta.reset();
+        break;
+      }
+    }
+  }
   loop.enter("stopped");
   await stepEvents.close(loop.stop.reason);
 
@@ -1263,17 +1397,9 @@ async function runAgentToolLoopWithinBudget(
     // Judged here, where every way out of the loop ends — a text answer,
     // `runtime-done`, a completing tool, a hook that stops the loop, or the
     // step limit — so none of them can pass a runtime that did no work.
-    requiredToolUseUnmet:
-      requireToolUse &&
-      !hasBusinessWork(manifest, executedToolCalls, seededBusinessWork),
+    requiredToolUseUnmet,
     lastTarget,
-    requiredCompletionUnmet:
-      manifest.requireExplicitCompletion === true &&
-      !hasExplicitCompletion(
-        manifest,
-        executedToolCalls,
-        initialState?.completionCalls,
-      ),
+    requiredCompletionUnmet,
   };
 }
 

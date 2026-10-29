@@ -198,11 +198,13 @@ agent runtime 的工具循环每一种结束方式都对应一个结束原因（
 | `context-overflow` | 上下文超限 | 裁剪之后请求仍然放不下 | 失败 |
 | `cancelled` | 取消 | `stop.cancelledBy` 说明是谁：`player`（玩家停止）、`parent`（上级执行取消或超时）、`hook`（`PreStep` 的 `stop`） | 失败 |
 | `model-error` | 模型错误 | 模型调用在重试用尽后仍然失败 | 失败 |
-| `invalid-output` | 输出无效 | `PostLLMResponse` 第三次退回草稿，或输出没通过 schema 检查 | 失败 |
+| `invalid-output` | 输出无效 | `PostLLMResponse` 退回草稿且审查纠正预算用尽，或修复后输出仍不符合 schema / 故事正文为空 | 失败 |
 | `loop-detected` | 循环检测 | 扰动之后模型仍然重复同一个工具调用 | 失败；`fallback` 为 `answer-without-tools` 的循环 profile（`story`、`actor`）第一次检测到时先拿走工具、要求写正文或答案，不结束 |
 | `suspended` | 挂起 | 调用了 `suspend` 工具，等待玩家输入 | 挂起 |
 
 **收尾步骤。** 循环用完步数时，模型在工具调用旁边写下的文字只是草稿，不算答案。这时内核再发一次请求：关掉工具，要求模型直接给出最终答案，输出格式不变，流式 runtime 照样流式显示。这次请求就是收尾步骤，步号是最后一步加 1，`PreStep` 不为它触发。只在下面几条都满足时才发：输出不是由完成工具交出的；`requireToolUse` 没开或已经满足；`requireExplicitCompletion` 没开或已经满足；离截止时间至少还有 3 秒。收尾写出非空文字时，它替换之前的文字，runtime 成功，`stop` 为 `{ reason: "max-steps", finalizer: true }`。文字为空、请求失败或草稿被退回时，runtime 以 `max-steps` 失败。超时不尝试收尾，除非循环 profile 写了时限预留（[`finalizer.deadlineReserveMs`](./plugins.md#循环-profileagentloopprofile)）：剩余时间不足预留时同样发收尾步骤，所以 `stop.finalizer` 表示收尾步骤在步数上限或时限预留处交出了答案。
+
+**输出修复步骤。** 符合修复条件的无效答案在收尾步骤之后、最终输出校验之前请求修复（条件见[循环 profile](./plugins.md#循环-profileagentloopprofile)）。`StepIdentity.repair: true` 同时出现在 `step.started` 和 `step.completed`，完成事件的 `notes` 包含 `output-repair`；这一步关闭工具且不触发 `PreStep`。修复交出替换答案后，`LoopStop.repaired: true` 保留原来的 `reason` 和 `finalizer`。最终输出仍无效时，结算改为 `invalid-output`。修复次数由 `agent.loop.corrections.outputRepair` 决定，默认 1。
 
 **`runtime.deferred` 是“移交公告”**
 
@@ -826,7 +828,7 @@ data: {
 
 声明了 `io.concealed: true` 的 runtime，它的 TurnEmitter 事件在保存和转发之前，只保留不含内容的字段，并带 `concealed: true`：
 
-- 保留：`runtimeId`、`pluginId`、`toolName`、`toolCallId`、`status`、`durationMs`、`usage`、`finishReason`、`seq`，以及步骤事件的 `step`、`stopReason`、`finalizer`、`retries`、`notes` 等。
+- 保留：`runtimeId`、`pluginId`、`toolName`、`toolCallId`、`status`、`durationMs`、`usage`、`finishReason`、`seq`，以及步骤事件的 `step`、`stopReason`、`finalizer`、`repair`、`retries`、`notes` 等。
 - 移除：`messages`、`text`、`toolCalls`、`arguments`、`result`、`parsedResult`、`output` 等内容字段。
 
 ## 二、命令类型（CommandType）
@@ -1246,8 +1248,8 @@ error.occurred        → executionError
 | `domain-event.previewed` | `{ runtimeId, pluginId, toolCallId, topic, data }`。`emit-event` 校验成功后的临时显示信号；持久的业务状态仍然由正常的事件链提交 |
 | `llm.calling` | `{ runtimeId, pluginId, slot, model, provider?: string \| null, messages, tools, attempt, startedAt, queueWaitMs?, streaming? }`。`slot` 是 runtime 请求的用途；生产环境的 gateway 在调用之前把它解析成 `model` / `provider`。不支持用途解析的自定义 adapter 可以不给 `provider` |
 | `llm.responded` | `{ runtimeId, pluginId, text?, reasoningContent?, toolCalls?, usage, finishReason, durationMs, attempt, error? }`。`usage` 是 `{ inputTokens, outputTokens, cachedInputTokens?, cacheWriteInputTokens? }`，其中 `inputTokens` 是包含缓存读写的总输入，后两项是服务商报告的子集。`finishReason` 为 `length` 只出现在 story runtime：正文在输出上限处被截断，但已经保留，客户端据此提示玩家；其他情况下被截断的调用按失败上报 |
-| `step.started` | `{ runtimeId, pluginId, turnId, runId, step, maxSteps, toolCount, toolChoice, finalizer? }`。agent 工具循环的一步要调用模型了，在 `PreStep` 之后、这一步的 `llm.calling` 之前发出。`maxSteps` 是这一步时的步数上限，`toolCount` 是这一步提供的工具数（工具名在 `llm.calling.tools` 里），`toolChoice` 是 `"auto"`、`"required"` 或 `{ name }`。收尾步骤带 `finalizer: true` |
-| `step.completed` | `{ runtimeId, pluginId, turnId, runId, step, durationMs, finishReason?, usage?, toolCalls, retries, notes, stopReason?, finalizer? }`。每个开始了的步骤恰好发一次，在这一步所有 `tool.*` 之后。`usage` 和 `llm.responded` 的相同，步骤因异常结束时没有。`toolCalls` 是 `[{ name, success }]`。`retries` 是这一步模型调用的重试 `[{ attempt, reason }]`。`notes` 是 `[{ kind, count?, ignored? }]`，`kind` 取 `review-rejected`、`no-tool-correction`、`runtime-done-correction`、`loop-perturbation`、`story-without-tools`、`late-steering`、`tool-activated`、`tool-narrowed`，只带种类和数目，不带工具名。`stopReason` 只出现在结束循环的那一步 |
+| `step.started` | `{ runtimeId, pluginId, turnId, runId, step, maxSteps, toolCount, toolChoice, finalizer?, repair? }`。agent 工具循环的一步要调用模型了，在 `PreStep` 之后、这一步的 `llm.calling` 之前发出。`maxSteps` 是这一步时的步数上限，`toolCount` 是这一步提供的工具数（工具名在 `llm.calling.tools` 里），`toolChoice` 是 `"auto"`、`"required"` 或 `{ name }`。收尾步骤带 `finalizer: true`；输出修复步骤带 `repair: true`，步号是上一个已开始步骤加 1 |
+| `step.completed` | `{ runtimeId, pluginId, turnId, runId, step, durationMs, finishReason?, usage?, toolCalls, retries, notes, stopReason?, finalizer?, repair? }`。每个开始了的步骤恰好发一次，在这一步所有 `tool.*` 之后。`usage` 和 `llm.responded` 的相同，步骤因异常结束时没有。`toolCalls` 是 `[{ name, success }]`。`retries` 是这一步模型调用的重试 `[{ attempt, reason }]`。`notes` 是 `[{ kind, count?, ignored? }]`，`kind` 取 `output-repair`、`review-rejected`、`no-tool-correction`、`runtime-done-correction`、`loop-perturbation`、`story-without-tools`、`late-steering`、`tool-activated`、`tool-narrowed`，只带种类和数目，不带工具名。`stopReason` 只出现在结束循环的那一步 |
 | `gateway.responded` | function-runtime gateway 的成功结果。文本和对象调用带 `{ runtimeId, pluginId, method, finishReason, usage, reasoningContent?, model?, provider?, durationMs }`，`model/provider` 是回退之后实际命中的目标。转写调用同样带可用的 `usage/model/provider`。旧的 trace，或者不支持这些元数据的自定义 gateway，可以没有它们 |
 | `message.completed` | `{ runtimeId, pluginId, content, len, deltaCount }`。`deltaCount` 是这个 runtime 产生的 `narrative.delta` 事件数，是保存下来的权威计数。前端汇总实时片段时用的是另一个合成字段 `_aggregated`，两者不能互换 |
 | `block.emitted` | `{ runtimeId, pluginId, proposalId, source, block }` |

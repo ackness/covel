@@ -197,7 +197,17 @@ In the path headings below, `[]` is a list item and `.*` is a map value.
 | `steering`            | boolean                              | no       | Merge the player's interjections into the transcript before each step and after a prose finish. Needs `io.visibility: story`. Defaults to the profile's value: true for `story`.                                                                                                             |
 | `truncation`          | `"accept"` or `"reject"`             | no       | `accept` keeps a reply cut at the output limit; `reject` fails it. `accept` needs streaming. Defaults to `accept` for `story`, otherwise `reject`.                                                                                                                                           |
 | `fallback`            | `"answer-without-tools"` or `"fail"` | no       | What a repeated tool loop does: `answer-without-tools` takes the tools away and asks for the answer; `fail` stops the runtime. Defaults to `fail` for `system`, otherwise `answer-without-tools`.                                                                                            |
+| `corrections`         | object                               | no       | Independent correction budgets for one agent loop run; 0 disables that correction.                                                                                                                                                                                                           |
 | `finalizer`           | object                               | no       | The final answer step, with tools off.                                                                                                                                                                                                                                                       |
+
+## `agent.loop.corrections`
+
+| Field              | Type    | Required | Description                                                                      |
+| ------------------ | ------- | -------- | -------------------------------------------------------------------------------- |
+| `toolUse`          | integer | no       | Corrections for missing required tool use or explicit completion. Defaults to 1. |
+| `review`           | integer | no       | Corrections after a PostLLMResponse rejection. Defaults to 2.                    |
+| `loopPerturbation` | integer | no       | Perturbations before the repeated-tool fallback. Defaults to 1.                  |
+| `outputRepair`     | integer | no       | Requests with tools off to repair invalid output. Defaults to 1.                 |
 
 ## `agent.loop.finalizer`
 

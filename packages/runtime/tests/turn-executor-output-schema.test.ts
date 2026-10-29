@@ -114,6 +114,9 @@ describe("runTurnPipeline: output.schema.json", () => {
       required: ["prompt"],
     };
     const llm = new CapturingLLM();
+    // Valid output, so the captured request is the first one (with tools),
+    // not an output repair request.
+    llm.content = JSON.stringify({ prompt: "a portrait" });
     const input: TurnInput = {
       origin: "player",
       sessionId: "sess-schema-tools",

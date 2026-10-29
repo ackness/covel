@@ -30,6 +30,8 @@ interface ValidatorContext {
   readonly startTime: number;
   readonly collectedToolCalls: readonly ToolCallRecord[];
   readonly outputSchema: Record<string, unknown>;
+  /** Only format problems, without runtime identity or an output preview. */
+  readonly onValidationErrors?: (errors: readonly string[]) => void;
 }
 
 /**
@@ -59,6 +61,9 @@ function checkSchemaProseFailure(
       ? ` Required fields: {${requiredFields.join(", ")}}.`
       : "";
 
+  ctx.onValidationErrors?.([
+    `plain prose instead of the JSON object required by output.schema.${requiredHint}`,
+  ]);
   return makeFailedResult(
     manifest,
     input,
@@ -116,6 +121,9 @@ function checkSchemaValidation(
   } else {
     return undefined;
   }
+  ctx.onValidationErrors?.(
+    validationErrors.slice(0, 5).map((error) => error.slice(0, 200)),
+  );
   return makeFailedResult(
     manifest,
     input,

@@ -189,7 +189,7 @@ const FRAMEWORK_CHINESE_LINES = {
   "packages/runtime/src/agent-loop/request-context-budget.ts": 2,
   "packages/runtime/src/agent-loop/response-review.ts": 1,
   "packages/runtime/src/agent-loop/runtime-completion.ts": 4,
-  "packages/runtime/src/agent-loop/turn-agent-tool-loop.ts": 2,
+  "packages/runtime/src/agent-loop/turn-agent-tool-loop.ts": 3,
   "packages/runtime/src/commit/commit-ui.ts": 2,
   "packages/runtime/src/llm/gateway-llm-adapter.ts": 1,
   "packages/runtime/src/retry/retry-common.ts": 3,

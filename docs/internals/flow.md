@@ -543,7 +543,7 @@ LLM: "调用 sync-           ToolExecutor:
 
 **输出审查在执行工具之前。** 插件可以在 `PreLLMCall` 里要求先缓冲输出，再在 `PostLLMResponse` 里拒绝草稿并给出纠正要求。
 
-- 最多纠正两次，并且仍然受原来的预算限制。
+- 纠正次数由 `agent.loop.corrections.review` 配置，默认两次；预算用尽后再次退回草稿，runtime 以 `invalid-output` 失败。纠正仍受步数和时限限制，配置见[循环 profile](../reference/plugins.md#循环-profileagentloopprofile)。
 - 两个内置叙事插件用它检查 `narrativePerson`：默认第二人称，允许第一或第三人称，对白保留各自的视角。
 - 它们在检查通过后一次显示整段正文。框架仍然支持其他插件流式输出。
 - 这是有限的文本检查，不保证所有剧情推断都正确。
@@ -558,6 +558,8 @@ deciding → finalizing → stopped        running-tools → suspended
 ```
 
 循环的行为来自 runtime 的循环 profile（`agent-loop/loop-profile.ts` 的 `resolveLoopProfile`），不看 `outputKind`：文字是否流式显示给玩家、是否并入玩家插话、截断的正文是否保留、工具调用打转时关掉工具还是失败（`fallback`）、步数上限和时限预留处是否收尾（`finalizer`）。没写 `agent.loop.profile` 时，故事 runtime 用 `story`，其他用 `system`；字段和取值见 [插件参考的循环 profile](../reference/plugins.md#循环-profileagentloopprofile)。回合层判断还有没有 runtime 读插话队列时用同一个解析函数。
+
+循环每次运行创建一个纠正策略（`agent-loop/correction-policy.ts`），从 profile 的 `corrections` 分别读取工具使用、回复审查、循环扰动和输出修复的预算。循环及收尾步骤之后、进入 `stopped` 之前，用与 `settleAgentLoop` 相同的无副作用输出检查决定是否需要修复。默认在预算和剩余时间允许时关闭工具再请求一次，把校验错误发给模型，完整替换无效答案；仍不符合 schema 或故事正文仍为空时以 `invalid-output` 失败。修复步骤不触发 `PreStep`，但照常经过 `PreLLMCall` 和 `PostLLMResponse`。条件和取值见[循环 profile](../reference/plugins.md#循环-profileagentloopprofile)。
 
 每一步的先后：
 

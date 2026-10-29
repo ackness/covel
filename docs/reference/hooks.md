@@ -227,6 +227,7 @@ agent runtime 的每次模型调用之前触发，包括工具结果之后的调
 负载：`{ messages, model, tools, stream?, promptSegments? }`。`promptSegments` 和 `PostContextAssembly` 里的是同一份列表。从挂起中恢复的运行不会重新组装上下文，所以它的调用里没有这个字段。
 
 - `replace.messages`、`replace.model`、`replace.tools` 只改这一次调用，runtime 自己的对话记录不变。
+- 输出修复请求在 Hook 处理后仍会关闭工具；`replace.tools` 不能为修复步骤重新启用工具。
 - `replace.stream: false` 让这次调用不走流式。
 - `abort` 等于“什么都不变”。
 
@@ -237,7 +238,7 @@ agent runtime 的每次模型调用之前触发，包括工具结果之后的调
 负载：`{ response, messages }`，即回答，以及实际发出去的消息。
 
 - `replace.response` 替换回答。
-- `replace.correction`（非空字符串）退回这份草稿：其中的工具调用不执行，这段文字作为改正要求发给模型，模型重新回答。一次运行里第三次要求改正时，runtime 失败。
+- `replace.correction`（非空字符串）退回这份草稿：其中的工具调用不执行，这段文字作为改正要求发给模型，模型重新回答。每次退回消耗一次 `agent.loop.corrections.review` 预算，默认允许纠正两次；预算用尽后再次退回，runtime 以 `invalid-output` 失败。配置见[循环 profile](./plugins.md#循环-profileagentloopprofile)。
 
 ### `PostRuntime`
 

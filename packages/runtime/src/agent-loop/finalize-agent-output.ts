@@ -59,6 +59,8 @@ export interface FinalizeAgentOutputParams {
   readonly emittedEvents?: readonly EmittedEvent[];
   /** Dedupe repeated tool interactions by `interactionId`. */
   readonly dedupeInteractions?: boolean;
+  /** A validation dry run neither warns nor mutates tool-owned output. */
+  readonly silent?: boolean;
   /**
    * Optional schema gate, invoked after any candidate output has been
    * converted into the output envelope. Returning a failed
@@ -144,6 +146,8 @@ export function finalizeAgentOutput(
     output = presentable ?? { narrativeOutput: "" };
   }
 
+  if (params.silent) output = { ...output };
+
   if (schemaGate) {
     const failed = schemaGate({
       output,
@@ -153,7 +157,8 @@ export function finalizeAgentOutput(
     if (failed) return { kind: "short-circuit", result: failed };
   }
 
-  if (modelAuthored) dropModelAuthoredEffects(output, manifest.name);
+  if (modelAuthored)
+    dropModelAuthoredEffects(output, manifest.name, params.silent);
 
   const declaredEvents = Array.isArray(output.events) ? output.events : [];
   const effectEvents = declaredEvents.filter(isEffectEvent);
@@ -271,6 +276,7 @@ const EFFECT_FIELDS = [
 function dropModelAuthoredEffects(
   output: Record<string, unknown>,
   runtimeName: string,
+  silent = false,
 ): void {
   const dropped: string[] = EFFECT_FIELDS.filter((key) => key in output);
   for (const key of dropped) delete output[key];
@@ -280,7 +286,7 @@ function dropModelAuthoredEffects(
     else delete output.events;
     dropped.push("events[].topic");
   }
-  if (dropped.length > 0)
+  if (dropped.length > 0 && !silent)
     console.warn(
       `[runtime] ${runtimeName} wrote ${dropped.join(", ")} in its final JSON; an agent's final output carries no effects, so they were ignored. Write through a tool listed in agent.tools.`,
     );

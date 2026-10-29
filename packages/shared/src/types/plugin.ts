@@ -183,6 +183,7 @@ export interface LoopProfileSpec {
   readonly truncation?: LoopPresetValues["truncation"];
   readonly fallback?: LoopPresetValues["fallback"];
   readonly finalizer?: Partial<LoopPresetValues["finalizer"]>;
+  readonly corrections?: Partial<LoopPresetValues["corrections"]>;
 }
 
 export interface OutputConfig {

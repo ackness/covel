@@ -227,6 +227,7 @@ Fires before each model call of an agent runtime. This includes calls made after
 Payload: `{ messages, model, tools, stream?, promptSegments? }`. `promptSegments` is the same list as in `PostContextAssembly`. A run resumed from a suspended state does not assemble its context again, so its calls do not have this field.
 
 - `replace.messages`, `replace.model`, and `replace.tools` change only this one call. The runtime's own conversation record is not changed.
+- Output repair requests keep tools off after hook processing; `replace.tools` cannot re-enable tools for repair steps.
 - `replace.stream: false` makes this call not stream.
 - `abort` is the same as "nothing changes".
 
@@ -237,7 +238,7 @@ Fires after each model reply, before the tool calls in the reply are run.
 Payload: `{ response, messages }`, the reply, and the messages actually sent.
 
 - `replace.response` replaces the reply.
-- `replace.correction` (a non-empty string) sends this draft back: its tool calls are not run, and this text is sent to the model as a correction request, so the model answers again. If a correction is requested a third time in one run, the runtime fails.
+- `replace.correction` (a non-empty string) sends this draft back: its tool calls are not run, and this text is sent to the model as a correction request, so the model answers again. Each rejection consumes one `agent.loop.corrections.review` unit, allowing two corrections by default. A further rejection after that budget is exhausted fails the runtime with `invalid-output`. See [the loop profile](./plugins.md#loop-profile-agentloopprofile) for configuration.
 
 ### `PostRuntime`
 

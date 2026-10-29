@@ -79,6 +79,12 @@ export interface LoopPresetValues {
    * a tool loop repeats; `fail` stops the runtime with `loop-detected`.
    */
   readonly fallback: "answer-without-tools" | "fail";
+  readonly corrections: {
+    readonly toolUse: number;
+    readonly review: number;
+    readonly loopPerturbation: number;
+    readonly outputRepair: number;
+  };
   readonly finalizer: {
     /** Ask once for the answer, tools off, at the step limit. */
     readonly maxSteps: boolean;
@@ -94,6 +100,7 @@ function frozenPreset(values: LoopPresetValues): LoopPresetValues {
   return Object.freeze({
     ...values,
     finalizer: Object.freeze({ ...values.finalizer }),
+    corrections: Object.freeze({ ...values.corrections }),
   });
 }
 
@@ -106,6 +113,12 @@ export const LOOP_PRESETS: Readonly<Record<LoopPresetId, LoopPresetValues>> =
       truncation: "accept",
       fallback: "answer-without-tools",
       finalizer: { maxSteps: true, deadlineReserveMs: 0 },
+      corrections: {
+        toolUse: 1,
+        review: 2,
+        loopPerturbation: 1,
+        outputRepair: 1,
+      },
     }),
     actor: frozenPreset({
       stream: false,
@@ -113,6 +126,12 @@ export const LOOP_PRESETS: Readonly<Record<LoopPresetId, LoopPresetValues>> =
       truncation: "reject",
       fallback: "answer-without-tools",
       finalizer: { maxSteps: true, deadlineReserveMs: 0 },
+      corrections: {
+        toolUse: 1,
+        review: 2,
+        loopPerturbation: 1,
+        outputRepair: 1,
+      },
     }),
     system: frozenPreset({
       stream: false,
@@ -120,6 +139,12 @@ export const LOOP_PRESETS: Readonly<Record<LoopPresetId, LoopPresetValues>> =
       truncation: "reject",
       fallback: "fail",
       finalizer: { maxSteps: true, deadlineReserveMs: 0 },
+      corrections: {
+        toolUse: 1,
+        review: 2,
+        loopPerturbation: 1,
+        outputRepair: 1,
+      },
     }),
   });
 
