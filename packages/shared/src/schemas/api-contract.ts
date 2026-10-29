@@ -21,6 +21,7 @@ import {
 import { i18nTextSchema, worldDimensionsSchema } from "./world.js";
 import { packageCreditFields } from "./package-info.js";
 import { turnActionRequestsSchema } from "./action.js";
+import { pluginSourceTrustSchema } from "./trusted-sources.js";
 
 export { MAX_PLAYER_MESSAGE_CHARS } from "./action.js";
 
@@ -246,6 +247,7 @@ export const pluginSummarySchema: z.ZodType<PluginSummary> = z
     description: i18nTextSchema,
     kind: z.enum(["core", "plugin"]),
     source: z.enum(["builtin", "community"]),
+    trust: pluginSourceTrustSchema.optional(),
     hostState: z.enum(["discovered", "installed", "loaded", "error"]),
     error: z.string().optional(),
     registrationError: z

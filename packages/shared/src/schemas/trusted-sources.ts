@@ -90,14 +90,14 @@ export const pluginCapabilitiesSchema = z.strictObject({
     }),
 });
 export type PluginCapabilities = z.infer<typeof pluginCapabilitiesSchema>;
-export type PackageIntegrity =
-  "verified" | "modified" | "no-receipt" | "unreadable";
-export interface PluginSourceTrust {
-  source: string | null;
-  trustedSource: boolean;
-  integrity: PackageIntegrity;
-  autoApproved: boolean;
-}
+export const pluginSourceTrustSchema = z.strictObject({
+  source: z.string().nullable(),
+  trustedSource: z.boolean(),
+  integrity: z.enum(["verified", "modified", "no-receipt", "unreadable"]),
+  autoApproved: z.boolean(),
+});
+export type PluginSourceTrust = z.infer<typeof pluginSourceTrustSchema>;
+export type PackageIntegrity = PluginSourceTrust["integrity"];
 const subset = (current: readonly string[], snapshot: readonly string[]) =>
   current.every((item) => snapshot.includes(item));
 export function capabilitiesWithin(

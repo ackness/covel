@@ -167,6 +167,51 @@ describe("shared API contracts", () => {
     ).toBe(true);
   });
 
+  it.each(["verified", "modified", "no-receipt", "unreadable"] as const)(
+    "preserves community source trust with %s integrity in discovery",
+    (integrity) => {
+      const community = {
+        ...plugin,
+        source: "community",
+        trust: {
+          source:
+            integrity === "no-receipt"
+              ? null
+              : "https://github.com/example/plugins",
+          trustedSource: integrity === "verified",
+          integrity,
+          autoApproved: integrity === "verified",
+        },
+      };
+      const response = { items: [plugin, community] };
+      expect(
+        apiListResponseSchema(pluginSummarySchema).parse(response),
+      ).toEqual(response);
+    },
+  );
+
+  it.each([
+    { integrity: "unknown" },
+    { source: 1 },
+    { trustedSource: "true" },
+    { autoApproved: undefined },
+    { extra: true },
+  ])("rejects malformed community source trust: %j", (invalid) => {
+    expect(
+      pluginSummarySchema.safeParse({
+        ...plugin,
+        source: "community",
+        trust: {
+          source: null,
+          trustedSource: false,
+          integrity: "no-receipt",
+          autoApproved: false,
+          ...invalid,
+        },
+      }).success,
+    ).toBe(false);
+  });
+
   it.each([
     { stage: "pre-turn", trigger: { type: "auto", topic: "" } },
     { trigger: { type: "manual", topic: "" } },
