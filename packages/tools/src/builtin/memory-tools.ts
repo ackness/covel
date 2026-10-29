@@ -31,6 +31,7 @@ export function createMemoryTools(deps: MemoryToolDeps): ToolModule[] {
   tools.push(
     tool({
       name: "memory-search",
+      annotations: { readOnly: true, concurrencySafe: true, idempotent: true },
       description:
         "Search conversation memory and the long-term knowledge base. Put the names involved and key words in the query, and add other words the story may have used for the same thing.",
       parameters: z.object({

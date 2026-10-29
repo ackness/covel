@@ -8,8 +8,7 @@ import { describe, it, expect } from "vitest";
 import { ZodError, z } from "zod";
 import { createToolExecutor } from "../src/agent-loop/tool-executor.js";
 import type { ToolCallContext } from "../src/agent-loop/tool-executor.js";
-import { ToolValidationError, withEmittedEvents } from "@covel/tools";
-import type { ToolModule } from "@covel/tools";
+import { tool, ToolValidationError, withEmittedEvents } from "@covel/tools";
 import type { ApprovalPipeline } from "@covel/approval";
 import { makeEmitterSpy } from "./_helpers/emitter-spy.js";
 
@@ -23,16 +22,16 @@ const baseCtx: ToolCallContext = {
 describe("ToolExecutor trace emissions", () => {
   it("emits tool.calling then tool.completed on success", async () => {
     const emitter = makeEmitterSpy();
-    const mockTool = {
+    const mockTool = tool({
       name: "echo",
       description: "echo",
-      jsonSchema: {},
+      parameters: z.unknown(),
       async execute(params: unknown) {
         return { echo: params };
       },
-    };
+    });
     const executor = createToolExecutor({
-      findTool: () => mockTool as unknown as ToolModule,
+      findTool: () => mockTool,
     });
 
     const res = await executor.execute(
@@ -62,10 +61,10 @@ describe("ToolExecutor trace emissions", () => {
 
   it("previews validated domain events immediately after tool completion", async () => {
     const emitter = makeEmitterSpy();
-    const mockTool = {
+    const mockTool = tool({
       name: "emit-event",
       description: "emit",
-      jsonSchema: {},
+      parameters: z.unknown(),
       async execute() {
         return withEmittedEvents({ _text: "emitted" }, [
           {
@@ -74,9 +73,9 @@ describe("ToolExecutor trace emissions", () => {
           },
         ]);
       },
-    };
+    });
     const executor = createToolExecutor({
-      findTool: () => mockTool as unknown as ToolModule,
+      findTool: () => mockTool,
     });
 
     const res = await executor.execute(
@@ -123,14 +122,14 @@ describe("ToolExecutor trace emissions", () => {
     const emitter = makeEmitterSpy();
     const executor = createToolExecutor({
       findTool: () =>
-        ({
+        tool({
           name: "x",
           description: "",
-          jsonSchema: {},
+          parameters: z.unknown(),
           async execute() {
             return {};
           },
-        }) as unknown as ToolModule,
+        }),
     });
     const res = await executor.execute(
       { toolCallId: "c3", name: "x", arguments: "{not json" },
@@ -147,15 +146,15 @@ describe("ToolExecutor trace emissions", () => {
     const approved: unknown[] = [];
     const executor = createToolExecutor({
       findTool: () =>
-        ({
+        tool({
           name: "x",
           description: "",
-          jsonSchema: {},
+          parameters: z.unknown(),
           async execute(params: unknown) {
             received.push(params);
             return {};
           },
-        }) as unknown as ToolModule,
+        }),
       // The approval check sees the arguments the call runs on.
       approval: {
         check: (request) => {
@@ -189,19 +188,19 @@ describe("ToolExecutor trace emissions", () => {
 
   it("emits tool.failed with DENIED when approval denies the call", async () => {
     const emitter = makeEmitterSpy();
-    const mockTool = {
+    const mockTool = tool({
       name: "dangerous",
       description: "",
-      jsonSchema: {},
+      parameters: z.unknown(),
       async execute() {
         return {};
       },
-    };
+    });
     const approval: ApprovalPipeline = {
       check: () => ({ decision: "deny", reason: "explicit deny" }),
     };
     const executor = createToolExecutor({
-      findTool: () => mockTool as unknown as ToolModule,
+      findTool: () => mockTool,
       approval,
     });
 
@@ -255,16 +254,16 @@ describe("ToolExecutor trace emissions", () => {
     });
     const validationError = new ToolValidationError(zodError!);
 
-    const throwingTool = {
+    const throwingTool = tool({
       name: "vx",
       description: "",
-      jsonSchema: {},
+      parameters: z.unknown(),
       async execute() {
         throw validationError;
       },
-    };
+    });
     const executor = createToolExecutor({
-      findTool: () => throwingTool as unknown as ToolModule,
+      findTool: () => throwingTool,
     });
 
     const res = await executor.execute(
@@ -288,16 +287,16 @@ describe("ToolExecutor trace emissions", () => {
   });
 
   it("does not emit anything when emitter is absent", async () => {
-    const mockTool = {
+    const mockTool = tool({
       name: "noop",
       description: "",
-      jsonSchema: {},
+      parameters: z.unknown(),
       async execute() {
         return {};
       },
-    };
+    });
     const executor = createToolExecutor({
-      findTool: () => mockTool as unknown as ToolModule,
+      findTool: () => mockTool,
     });
     const res = await executor.execute(
       { toolCallId: "c4", name: "noop", arguments: "{}" },

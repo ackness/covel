@@ -10,7 +10,7 @@
  * `defer: [subset]` and no-defer shapes of buildToolDefinitions.
  */
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 import type { RuntimeManifest, TurnInput } from "@covel/shared";
 import { SEARCH_TOOLS_TOOL_NAME, tool } from "@covel/tools";
@@ -118,6 +118,22 @@ const TOOL_CONTEXT = {
 };
 
 describe("tool-search: deferred loading in the agent loop", () => {
+  it("fails the runtime before calling the model when a declared plugin tool is missing", async () => {
+    const llm = new ScriptedLLM([DONE]);
+    const manifest = makeManifest({ tools: { plugin: ["x"], defer: ["x"] } });
+    const result = await runTurnPipeline(TURN_INPUT, [manifest], makeDeps(llm));
+    const runtime = result.runtimeResults.find(
+      (r) => r.runtimeId === manifest.name,
+    );
+    expect(runtime).toMatchObject({
+      status: "failed",
+      error:
+        'runtime "mega/worker" declares plugin tool "x", but its plugin did not register it',
+    });
+    expect(runtime).not.toHaveProperty("stop");
+    expect(llm.requestTools).toHaveLength(0);
+  });
+
   it("advertises only search-tools initially, activates matches for the next step", async () => {
     const llm = new ScriptedLLM([
       toolCallResponse(SEARCH_TOOLS_TOOL_NAME, { query: "roll dice" }),
@@ -182,6 +198,56 @@ describe("tool-search: deferred loading in the agent loop", () => {
 describe("buildToolDefinitions defer shapes", () => {
   const toolExecutor = createToolExecutor({
     findTool: (name) => TOOL_POOL.find((t) => t.name === name),
+  });
+
+  it.each([undefined, true, ["x"]] as const)(
+    "rejects a missing plugin tool with defer %j",
+    (defer) => {
+      const manifest = makeManifest({
+        tools: { plugin: ["x"], ...(defer !== undefined ? { defer } : {}) },
+      });
+      expect(() =>
+        buildToolDefinitions(manifest, toolExecutor, TOOL_CONTEXT),
+      ).toThrow(
+        'runtime "mega/worker" declares plugin tool "x", but its plugin did not register it',
+      );
+    },
+  );
+
+  it("drops a missing builtin host capability with a diagnostic", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      const definitions = buildToolDefinitions(
+        makeManifest({ tools: { builtin: ["memory-search"] } }),
+        toolExecutor,
+        TOOL_CONTEXT,
+      );
+      expect(definitions?.map((definition) => definition.name)).not.toContain(
+        "memory-search",
+      );
+      expect(warn).toHaveBeenCalledWith(
+        '[turn-executor] runtime "mega/worker": builtin tool "memory-search" is not installed on this host — not offered',
+      );
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it("offers only model-facing fields for a registered plugin tool", () => {
+    const module = TOOL_POOL[0];
+    if (!module) throw new Error("tool pool is empty");
+    const definitions = buildToolDefinitions(
+      makeManifest({ tools: { plugin: [module.name] } }),
+      toolExecutor,
+      TOOL_CONTEXT,
+    );
+    expect(
+      definitions?.find((definition) => definition.name === module.name),
+    ).toEqual({
+      name: module.name,
+      description: module.description,
+      parameters: module.jsonSchema,
+    });
   });
 
   it("defer: [subset] withholds only the listed names", () => {

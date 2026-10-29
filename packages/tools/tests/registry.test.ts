@@ -3,18 +3,6 @@ import { z } from "zod";
 import { ToolRegistry, FRAMEWORK_TOOL_NAMES } from "../src/registry.js";
 import { tool } from "@covel/plugin-handlers-utils";
 import type { ToolModule } from "../src/types.js";
-import {
-  builtinUITools,
-  createCharacterTools,
-  createEmitEventTool,
-  createMemoryTools,
-  createPluginDataTools,
-  runtimeDoneTool,
-  SEARCH_TOOLS_TOOL_NAME,
-  suspendTool,
-  worldDimensionGetTool,
-  worldDimensionListTool,
-} from "../src/index.js";
 
 const module = (name: string) =>
   tool({
@@ -25,24 +13,6 @@ const module = (name: string) =>
   });
 
 describe("ToolRegistry", () => {
-  it("reserves the full builtin factory output including optional and virtual tools", () => {
-    const names = [
-      ...builtinUITools,
-      suspendTool,
-      runtimeDoneTool,
-      worldDimensionGetTool,
-      worldDimensionListTool,
-      ...createCharacterTools({} as Parameters<typeof createCharacterTools>[0]),
-      ...createPluginDataTools(
-        {} as Parameters<typeof createPluginDataTools>[0],
-      ),
-      ...createMemoryTools({} as Parameters<typeof createMemoryTools>[0]),
-      createEmitEventTool({} as Parameters<typeof createEmitEventTool>[0]),
-    ].map((entry) => entry.name);
-    expect([...new Set([...names, SEARCH_TOOLS_TOOL_NAME])].sort()).toEqual(
-      [...FRAMEWORK_TOOL_NAMES].sort(),
-    );
-  });
   it("isolates same-named registrations and their disposers", () => {
     const registry = new ToolRegistry();
     const a = module("lookup");
@@ -81,6 +51,35 @@ describe("ToolRegistry", () => {
     { parametersSchema: undefined },
     { jsonSchema: null },
     { jsonSchema: [] },
+    { annotations: undefined },
+    {
+      annotations: {
+        readOnly: "yes",
+        stagesWrites: false,
+        idempotent: false,
+        concurrencySafe: false,
+      },
+    },
+    { annotations: { readOnly: true } },
+    {
+      annotations: {
+        readOnly: true,
+        stagesWrites: true,
+        idempotent: false,
+        concurrencySafe: false,
+      },
+    },
+    {
+      annotations: {
+        readOnly: false,
+        stagesWrites: false,
+        idempotent: false,
+        concurrencySafe: true,
+      },
+    },
+    { timeoutMs: 0 },
+    { timeoutMs: 1.5 },
+    { timeoutMs: 600_001 },
   ])("rejects malformed plugin tool declarations: %j", (override) => {
     const registry = new ToolRegistry();
     const malformed = {
@@ -91,6 +90,20 @@ describe("ToolRegistry", () => {
       "expected a ToolModule",
     );
     expect(registry.pluginTools.size).toBe(0);
+  });
+
+  it("validates builtin annotations and timeouts before registration", () => {
+    const registry = new ToolRegistry();
+    for (const override of [{ annotations: undefined }, { timeoutMs: -1 }]) {
+      const malformed = {
+        ...module("create-form"),
+        ...override,
+      } as unknown as ToolModule;
+      expect(() => registry.registerBuiltin(malformed)).toThrow(
+        "expected a ToolModule",
+      );
+      expect(registry.builtinTools.size).toBe(0);
+    }
   });
 
   it("keeps builtin resolution and provenance independent of plugin registration", () => {

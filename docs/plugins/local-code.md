@@ -87,6 +87,7 @@ export default function makeSaveNote({ tool, z, withPendingProposals }) {
   return tool({
     name: "save-note",
     description: "Save one short fact that the current narrative states.",
+    annotations: { idempotent: true },
     parameters: z.object({
       id: z.string().min(1).describe("Stable short key, e.g. gate-is-locked"),
       text: z.string().min(1).max(300),
@@ -118,6 +119,8 @@ export default function makeSaveNote({ tool, z, withPendingProposals }) {
 | `shortId`              | 生成短 ID。第四个参数传 `context.random`            |
 
 工具不直接写存档。它返回一条**写入请求**（proposal）：类型是 `plugin.data`，内容是“往 `notes` 里写这一条”。Covel 在回合结束时检查并保存所有请求。回合失败时，一条都不会保存。
+
+这个工具按稳定 key 覆盖同一条记录，所以声明 `idempotent: true`。只读工具还可以声明 `readOnly`、`concurrencySafe`；单次时限用 `timeoutMs`。默认值和检查规则见[工具注解与超时](../reference/tools.md#注解与超时)。
 
 三条规则：
 

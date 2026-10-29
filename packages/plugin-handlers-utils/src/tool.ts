@@ -3,12 +3,13 @@
  */
 
 import type { ZodType } from "zod";
-import { ZodError } from "zod";
+import { z, ZodError } from "zod";
 import { parseJsonText } from "./json-text.js";
 import type {
   PluginToolDefinition as ToolDefinitionInput,
   PluginToolContext as ToolExecutionContext,
   PluginToolModule as ToolModule,
+  PluginToolAnnotations,
 } from "./plugin-api.js";
 
 /**
@@ -163,6 +164,14 @@ function withPortablePatterns(schema: unknown): unknown {
   return portable;
 }
 
+const annotationsSchema = z.object({
+  readOnly: z.boolean().default(false),
+  stagesWrites: z.boolean().optional(),
+  idempotent: z.boolean().default(false),
+  concurrencySafe: z.boolean().default(false),
+});
+const timeoutSchema = z.number().int().min(1).max(600_000);
+
 /**
  * Define a Covel tool with type-safe parameters and execution.
  *
@@ -194,6 +203,31 @@ function withPortablePatterns(schema: unknown): unknown {
 export function tool<TParams extends ZodType, TOutput>(
   definition: ToolDefinitionInput<TParams, TOutput>,
 ): ToolModule<TParams, TOutput> {
+  const parsed = annotationsSchema.safeParse(
+    definition.annotations === undefined ? {} : definition.annotations,
+  );
+  if (!parsed.success)
+    throw new Error(`Tool "${definition.name}": annotations must be booleans`);
+  const annotations: Readonly<PluginToolAnnotations> = Object.freeze({
+    ...parsed.data,
+    stagesWrites: parsed.data.stagesWrites ?? !parsed.data.readOnly,
+  });
+  if (annotations.readOnly && annotations.stagesWrites)
+    throw new Error(
+      `Tool "${definition.name}": readOnly cannot be combined with stagesWrites`,
+    );
+  if (annotations.concurrencySafe && !annotations.readOnly)
+    throw new Error(
+      `Tool "${definition.name}": concurrencySafe requires readOnly`,
+    );
+  if (
+    definition.timeoutMs !== undefined &&
+    !timeoutSchema.safeParse(definition.timeoutMs).success
+  )
+    throw new Error(
+      `Tool "${definition.name}": timeoutMs must be an integer in [1, 600000]`,
+    );
+
   let jsonSchema: Readonly<Record<string, unknown>>;
   try {
     // Models supply the input shape; execute receives Zod's parsed output.
@@ -214,6 +248,10 @@ export function tool<TParams extends ZodType, TOutput>(
     description: definition.description,
     parametersSchema: definition.parameters,
     jsonSchema,
+    annotations,
+    ...(definition.timeoutMs !== undefined
+      ? { timeoutMs: definition.timeoutMs }
+      : {}),
     async execute(
       params: unknown,
       context: ToolExecutionContext,

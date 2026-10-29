@@ -1,10 +1,21 @@
 import { AsyncLocalStorage } from "node:async_hooks";
+import { z } from "zod";
 import type { ToolModule, ToolSource } from "./types.js";
 
 import { FRAMEWORK_TOOL_NAMES } from "@covel/plugin-handlers-utils";
 export { FRAMEWORK_TOOL_NAMES } from "@covel/plugin-handlers-utils";
 
 const reservedNames: ReadonlySet<string> = new Set(FRAMEWORK_TOOL_NAMES);
+const annotationsSchema = z
+  .object({
+    readOnly: z.boolean(),
+    stagesWrites: z.boolean(),
+    idempotent: z.boolean(),
+    concurrencySafe: z.boolean(),
+  })
+  .refine((value) => !value.readOnly || !value.stagesWrites)
+  .refine((value) => !value.concurrencySafe || value.readOnly);
+const timeoutSchema = z.number().int().min(1).max(600_000).optional();
 
 /** Tool names stay local to the calling plugin, including LLM-facing names. */
 export class ToolRegistry {
@@ -38,6 +49,7 @@ export class ToolRegistry {
   }
 
   registerBuiltin(module: ToolModule): void {
+    this.validateModule(module);
     if (!reservedNames.has(module.name)) {
       throw new Error(`Framework tool "${module.name}" must reserve its name`);
     }
@@ -45,21 +57,7 @@ export class ToolRegistry {
   }
 
   registerPlugin(pluginId: string, module: ToolModule): () => void {
-    if (
-      !module ||
-      module._type !== "covel-tool" ||
-      typeof module.name !== "string" ||
-      module.name.trim().length === 0 ||
-      module.name !== module.name.trim() ||
-      typeof module.description !== "string" ||
-      typeof module.parametersSchema?.safeParse !== "function" ||
-      !module.jsonSchema ||
-      typeof module.jsonSchema !== "object" ||
-      Array.isArray(module.jsonSchema) ||
-      typeof module.execute !== "function"
-    ) {
-      throw new Error("expected a ToolModule built with covel.toolkit.tool()");
-    }
+    this.validateModule(module);
     if (reservedNames.has(module.name)) {
       throw new Error(`tool "${module.name}" is reserved by the framework`);
     }
@@ -83,6 +81,26 @@ export class ToolRegistry {
         this.livePluginTools.delete(pluginId);
       }
     };
+  }
+
+  private validateModule(module: ToolModule): void {
+    if (
+      !module ||
+      module._type !== "covel-tool" ||
+      typeof module.name !== "string" ||
+      module.name.trim().length === 0 ||
+      module.name !== module.name.trim() ||
+      typeof module.description !== "string" ||
+      typeof module.parametersSchema?.safeParse !== "function" ||
+      !module.jsonSchema ||
+      typeof module.jsonSchema !== "object" ||
+      Array.isArray(module.jsonSchema) ||
+      typeof module.execute !== "function" ||
+      !annotationsSchema.safeParse(module.annotations).success ||
+      !timeoutSchema.safeParse(module.timeoutMs).success
+    ) {
+      throw new Error("expected a ToolModule built with covel.toolkit.tool()");
+    }
   }
 
   find(name: string, pluginId: string): ToolModule | undefined {
