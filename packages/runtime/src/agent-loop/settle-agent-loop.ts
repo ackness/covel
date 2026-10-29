@@ -53,7 +53,7 @@ export function settleAgentLoop(args: {
   });
   // A step limit or a deadline is never a success by itself, whatever text
   // the model wrote beside its tool calls. Only a finalizer that produced the
-  // answer turns a step limit into a completion.
+  // answer turns a step limit or the deadline reserve into a completion.
   switch (stop.reason) {
     case "max-steps":
       if (stop.finalizer) break;
@@ -66,6 +66,7 @@ export function settleAgentLoop(args: {
         }),
       );
     case "deadline":
+      if (stop.finalizer) break;
       return fail(
         formatToolLoopFailure({
           runtimeId: manifest.name,

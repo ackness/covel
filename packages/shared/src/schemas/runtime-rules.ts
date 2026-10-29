@@ -10,6 +10,12 @@
  */
 
 import { isKernelExtensionContract } from "../extension-points/contracts.js";
+import {
+  defaultAgentLoop,
+  defaultLoopPreset,
+  LOOP_PRESETS,
+  type LoopPresetId,
+} from "./runtime-defaults.js";
 
 /** The manifest fields the rules read, independent of where a manifest writes them. */
 export interface RuntimeRuleView {
@@ -20,6 +26,19 @@ export interface RuntimeRuleView {
   readonly stage?: string;
   readonly visibility?: string;
   readonly requireExplicitCompletion?: boolean;
+  /**
+   * The agent loop settings the rules read: the profile overrides as written,
+   * and the runtime's time limit. Absent for a function runtime.
+   */
+  readonly loop?: {
+    readonly preset?: string;
+    readonly stream?: boolean;
+    readonly steering?: boolean;
+    readonly truncation?: string;
+    readonly deadlineReserveMs?: number;
+    /** The written time limit; the authored rules fall back to the default. */
+    readonly timeoutMs?: number;
+  };
   /** Set when the turn finishes before this staged runtime does. */
   readonly detached?: {
     readonly settle?: boolean;
@@ -68,6 +87,9 @@ type RuleField =
   | "stage"
   | "visibility"
   | "requireExplicitCompletion"
+  | "loopPreset"
+  | "loop"
+  | "timeoutMs"
   | "detached"
   | "trigger"
   | "every"
@@ -91,6 +113,9 @@ export const IR_RULE_FIELD_PATHS: RuntimeRuleFieldPaths = {
   stage: ["stage"],
   visibility: ["outputKind"],
   requireExplicitCompletion: ["requireExplicitCompletion"],
+  loopPreset: ["loopProfile", "preset"],
+  loop: ["loopProfile"],
+  timeoutMs: ["timeoutMs"],
   detached: ["turnCompletion"],
   trigger: ["trigger"],
   every: ["trigger", "every"],
@@ -110,6 +135,9 @@ export const AUTHORING_RULE_FIELD_PATHS: RuntimeRuleFieldPaths = {
   stage: ["schedule", "stage"],
   visibility: ["io", "visibility"],
   requireExplicitCompletion: ["agent", "completion", "require"],
+  loopPreset: ["agent", "loop", "profile"],
+  loop: ["agent", "loop"],
+  timeoutMs: ["agent", "loop", "timeoutMs"],
   detached: ["schedule", "detached"],
   trigger: ["schedule", "trigger"],
   every: ["schedule", "every"],
@@ -119,6 +147,77 @@ export const AUTHORING_RULE_FIELD_PATHS: RuntimeRuleFieldPaths = {
   inputs: ["io", "inputs"],
   builtinTools: ["agent", "tools", "builtin"],
 };
+
+type RulePath = (
+  field: RuleField,
+  ...rest: (string | number)[]
+) => (string | number)[];
+
+function isLoopPresetId(value: string | undefined): value is LoopPresetId {
+  return value !== undefined && Object.hasOwn(LOOP_PRESETS, value);
+}
+
+/**
+ * The agent loop profile rules. Only a story writes the narrative feed and
+ * reads the player's interjections, so streaming and steering need
+ * `visibility: story`; a kept truncated reply is one the player has already
+ * read as it streamed.
+ */
+function loopProfileIssues(
+  m: RuntimeRuleView,
+  loop: NonNullable<RuntimeRuleView["loop"]>,
+  { authoring }: { readonly authoring: boolean },
+  at: RulePath,
+  name: (field: RuleField, ...rest: string[]) => string,
+  add: (path: readonly (string | number)[], message: string) => void,
+): void {
+  const story = m.visibility === "story";
+  const storyOnly = `only a story (${name("visibility")} 'story') writes the narrative feed and reads player interjections`;
+  if (loop.preset === "story" && !story)
+    add(
+      at("loopPreset"),
+      `${name("loopPreset")} 'story' requires ${name("visibility")} 'story'; use 'actor' or 'system'`,
+    );
+  const preset =
+    LOOP_PRESETS[
+      isLoopPresetId(loop.preset)
+        ? loop.preset
+        : defaultLoopPreset(story ? "story" : undefined)
+    ];
+  const stream = loop.stream ?? preset.stream;
+  const steering = loop.steering ?? preset.steering;
+  // A story preset on another runtime is reported once, above.
+  if (!story && loop.preset !== "story") {
+    if (stream)
+      add(
+        at("loop", "stream"),
+        `${name("loop", "stream")}: true requires ${name("visibility")} 'story'; ${storyOnly}`,
+      );
+    if (steering)
+      add(
+        at("loop", "steering"),
+        `${name("loop", "steering")}: true requires ${name("visibility")} 'story'; ${storyOnly}`,
+      );
+  }
+  if (loop.truncation === "accept" && !stream)
+    add(
+      at("loop", "truncation"),
+      `${name("loop", "truncation")} 'accept' requires ${name("loop", "stream")}: true; only a reply the player read as it streamed is kept when cut`,
+    );
+  const reserve = loop.deadlineReserveMs;
+  // The loader fills an agent's default time limit, so an authored runtime
+  // is checked against the limit its compiled form will carry.
+  const timeoutMs =
+    loop.timeoutMs ??
+    (authoring && m.runtimeType !== "function"
+      ? defaultAgentLoop(story ? "story" : undefined).timeoutMs
+      : undefined);
+  if (reserve !== undefined && timeoutMs !== undefined && reserve >= timeoutMs)
+    add(
+      at("loop", "finalizer", "deadlineReserveMs"),
+      `${name("loop", "finalizer", "deadlineReserveMs")} must be smaller than ${name("timeoutMs")} (${timeoutMs})`,
+    );
+}
 
 export interface RuntimeRuleIssue {
   readonly path: readonly (string | number)[];
@@ -185,6 +284,8 @@ export function runtimeRuleIssues(
       at("requireExplicitCompletion"),
       `explicit completion (${name("requireExplicitCompletion")}) is for non-story agent runtimes without ${name("output", "schema")}; completion uses tools or runtime-done`,
     );
+
+  if (m.loop) loopProfileIssues(m, m.loop, { authoring }, at, name, add);
 
   if (m.runtimeType === "function" && !m.handler?.trim())
     add(at("handler"), `${name("handler")} is required for a function runtime`);

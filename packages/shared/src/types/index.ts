@@ -125,6 +125,7 @@ export type {
   HookEventName,
   HookEnforce,
   HookDeclaration,
+  LoopProfileSpec,
   RuntimeManifest,
 } from "./plugin.js";
 

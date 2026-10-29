@@ -194,15 +194,15 @@ agent runtime 的工具循环每一种结束方式都对应一个结束原因（
 | `completed` | 完成 | 模型给出最终回复，没有再调用工具 | 成功；完成条件（`requireToolUse` 等）没满足时失败，原因仍是 `completed` |
 | `tool-finished` | 工具结束 | 完成工具、`runtime-done`，或 Hook（`PostToolUse` 的 `terminate`、`PreStep` 的 `stop`）以成功结束 | 成功；完成条件照常检查 |
 | `max-steps` | 步数上限 | 用完了 `maxSteps`（或 `PreStep` 减少后的步数） | 失败，即使模型在工具调用旁边写过文字。收尾步骤写出答案时成功，`stop.finalizer` 为 `true` |
-| `deadline` | 超时 | 到了 runtime 自己的截止时间 | 失败 |
+| `deadline` | 超时 | 到了 runtime 自己的截止时间，或进入了循环 profile 的时限预留（`finalizer.deadlineReserveMs`） | 失败。时限预留处的收尾步骤写出答案时成功，`stop.finalizer` 为 `true` |
 | `context-overflow` | 上下文超限 | 裁剪之后请求仍然放不下 | 失败 |
 | `cancelled` | 取消 | `stop.cancelledBy` 说明是谁：`player`（玩家停止）、`parent`（上级执行取消或超时）、`hook`（`PreStep` 的 `stop`） | 失败 |
 | `model-error` | 模型错误 | 模型调用在重试用尽后仍然失败 | 失败 |
 | `invalid-output` | 输出无效 | `PostLLMResponse` 第三次退回草稿，或输出没通过 schema 检查 | 失败 |
-| `loop-detected` | 循环检测 | 扰动之后模型仍然重复同一个工具调用 | 失败；故事 runtime 第一次检测到时先拿走工具、要求写正文，不结束 |
+| `loop-detected` | 循环检测 | 扰动之后模型仍然重复同一个工具调用 | 失败；`fallback` 为 `answer-without-tools` 的循环 profile（`story`、`actor`）第一次检测到时先拿走工具、要求写正文或答案，不结束 |
 | `suspended` | 挂起 | 调用了 `suspend` 工具，等待玩家输入 | 挂起 |
 
-**收尾步骤。** 循环用完步数时，模型在工具调用旁边写下的文字只是草稿，不算答案。这时内核再发一次请求：关掉工具，要求模型直接给出最终答案，输出格式不变，流式 runtime 照样流式显示。这次请求就是收尾步骤，步号是最后一步加 1，`PreStep` 不为它触发。只在下面几条都满足时才发：输出不是由完成工具交出的；`requireToolUse` 没开或已经满足；`requireExplicitCompletion` 没开或已经满足；离截止时间至少还有 3 秒。收尾写出非空文字时，它替换之前的文字，runtime 成功，`stop` 为 `{ reason: "max-steps", finalizer: true }`。文字为空、请求失败或草稿被退回时，runtime 以 `max-steps` 失败。超时永远不尝试收尾。
+**收尾步骤。** 循环用完步数时，模型在工具调用旁边写下的文字只是草稿，不算答案。这时内核再发一次请求：关掉工具，要求模型直接给出最终答案，输出格式不变，流式 runtime 照样流式显示。这次请求就是收尾步骤，步号是最后一步加 1，`PreStep` 不为它触发。只在下面几条都满足时才发：输出不是由完成工具交出的；`requireToolUse` 没开或已经满足；`requireExplicitCompletion` 没开或已经满足；离截止时间至少还有 3 秒。收尾写出非空文字时，它替换之前的文字，runtime 成功，`stop` 为 `{ reason: "max-steps", finalizer: true }`。文字为空、请求失败或草稿被退回时，runtime 以 `max-steps` 失败。超时不尝试收尾，除非循环 profile 写了时限预留（[`finalizer.deadlineReserveMs`](./plugins.md#循环-profileagentloopprofile)）：剩余时间不足预留时同样发收尾步骤，所以 `stop.finalizer` 表示收尾步骤在步数上限或时限预留处交出了答案。
 
 **`runtime.deferred` 是“移交公告”**
 

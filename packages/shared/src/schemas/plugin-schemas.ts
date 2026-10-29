@@ -969,6 +969,14 @@ interface ManifestCrossFieldView {
   readonly stage?: string;
   readonly outputKind?: string;
   readonly requireExplicitCompletion?: boolean;
+  readonly timeoutMs?: number;
+  readonly loopProfile?: {
+    readonly preset?: string;
+    readonly stream?: boolean;
+    readonly steering?: boolean;
+    readonly truncation?: string;
+    readonly finalizer?: { readonly deadlineReserveMs?: number };
+  };
   readonly turnCompletion?: NonNullable<RuntimeRuleView["detached"]> & {
     readonly mode?: string;
   };
@@ -984,11 +992,31 @@ function addIrRuleIssues(
   m: ManifestCrossFieldView,
   ctx: z.RefinementCtx,
 ): void {
-  const { outputKind, turnCompletion, execution, tools, ...rest } = m;
+  const {
+    outputKind,
+    turnCompletion,
+    execution,
+    tools,
+    loopProfile,
+    timeoutMs,
+    ...rest
+  } = m;
   const { mode, ...detachedOptions } = turnCompletion ?? {};
   for (const issue of runtimeRuleIssues(
     {
       ...rest,
+      ...(loopProfile
+        ? {
+            loop: {
+              preset: loopProfile.preset,
+              stream: loopProfile.stream,
+              steering: loopProfile.steering,
+              truncation: loopProfile.truncation,
+              deadlineReserveMs: loopProfile.finalizer?.deadlineReserveMs,
+              timeoutMs,
+            },
+          }
+        : {}),
       every: m.trigger?.every,
       visibility: outputKind,
       ...(mode === "detached" ? { detached: detachedOptions } : {}),
@@ -1136,6 +1164,25 @@ export const runtimeManifestInputSchema = z
     requireExplicitCompletion: z.boolean().optional(),
     /** Complete after a response batch successfully calls one of these tools. */
     completeAfterTools: z.array(z.string().min(1)).min(1).optional(),
+    /**
+     * Authored agent loop profile overrides (`agent.loop.profile` and the
+     * behaviour keys), only the values written. Resolved at run time.
+     */
+    loopProfile: z
+      .strictObject({
+        preset: z.enum(["story", "actor", "system"]).optional(),
+        stream: z.boolean().optional(),
+        steering: z.boolean().optional(),
+        truncation: z.enum(["accept", "reject"]).optional(),
+        fallback: z.enum(["answer-without-tools", "fail"]).optional(),
+        finalizer: z
+          .strictObject({
+            maxSteps: z.boolean().optional(),
+            deadlineReserveMs: z.number().int().min(0).optional(),
+          })
+          .optional(),
+      })
+      .optional(),
     /** Maximum nested ctx.recursiveCall() depth. Default 10. */
     maxRecursionDepth: z.number().int().min(0).max(50).optional(),
     outputKind: outputKindSchema.optional(),

@@ -56,3 +56,76 @@ export function defaultAgentLoop(
 ): AgentLoopDefaults {
   return AGENT_LOOP_DEFAULTS[visibility ?? DEFAULT_RUNTIME_VISIBILITY];
 }
+
+/**
+ * The built-in agent loop profiles (`agent.loop.profile`). A `story` loop
+ * streams its text to the player, merges the player's interjections and keeps
+ * a reply cut at the output limit; `actor` and `system` do none of that.
+ * `story` and `actor` continue without tools when a tool loop repeats;
+ * `system` fails.
+ */
+export type LoopPresetId = "story" | "actor" | "system";
+
+/** Every loop behaviour a profile sets, with no field left out. */
+export interface LoopPresetValues {
+  /** Forward the model's text deltas to the player's narrative feed. */
+  readonly stream: boolean;
+  /** Merge queued player interjections into the transcript. */
+  readonly steering: boolean;
+  /** `accept` keeps a reply cut at the output limit; `reject` fails it. */
+  readonly truncation: "accept" | "reject";
+  /**
+   * `answer-without-tools` takes the tools away and asks for the answer when
+   * a tool loop repeats; `fail` stops the runtime with `loop-detected`.
+   */
+  readonly fallback: "answer-without-tools" | "fail";
+  readonly finalizer: {
+    /** Ask once for the answer, tools off, at the step limit. */
+    readonly maxSteps: boolean;
+    /**
+     * Stop starting steps this many ms before the deadline and ask for the
+     * answer, tools off. `0` turns it off.
+     */
+    readonly deadlineReserveMs: number;
+  };
+}
+
+function frozenPreset(values: LoopPresetValues): LoopPresetValues {
+  return Object.freeze({
+    ...values,
+    finalizer: Object.freeze({ ...values.finalizer }),
+  });
+}
+
+/** The values of each built-in loop profile. */
+export const LOOP_PRESETS: Readonly<Record<LoopPresetId, LoopPresetValues>> =
+  Object.freeze({
+    story: frozenPreset({
+      stream: true,
+      steering: true,
+      truncation: "accept",
+      fallback: "answer-without-tools",
+      finalizer: { maxSteps: true, deadlineReserveMs: 0 },
+    }),
+    actor: frozenPreset({
+      stream: false,
+      steering: false,
+      truncation: "reject",
+      fallback: "answer-without-tools",
+      finalizer: { maxSteps: true, deadlineReserveMs: 0 },
+    }),
+    system: frozenPreset({
+      stream: false,
+      steering: false,
+      truncation: "reject",
+      fallback: "fail",
+      finalizer: { maxSteps: true, deadlineReserveMs: 0 },
+    }),
+  });
+
+/** The loop profile of an agent that names none: the one of its visibility. */
+export function defaultLoopPreset(
+  visibility: RuntimeVisibility | undefined,
+): LoopPresetId {
+  return visibility === "story" ? "story" : "system";
+}

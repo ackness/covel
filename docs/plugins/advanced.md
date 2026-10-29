@@ -260,6 +260,22 @@ function:
 
 完整的规则见[插件字段参考](../reference/plugins.md#超时和重试agentloop)。
 
+### 循环的行为
+
+agent 循环的其他行为来自一个循环 profile：文字是否边写边显示给玩家、是否读玩家的插话、模型反复调用同一个工具时怎么办。profile 按 `io.visibility` 推导，一般不用写。
+
+只回答一段简报、不写故事正文的 agent 可以用 `actor`。它和 `system` 的区别是：模型打转时，`actor` 关掉工具直接作答，`system` 失败。
+
+```yaml
+agent:
+  loop:
+    profile: actor
+    finalizer:
+      deadlineReserveMs: 10000 # 离时限还剩 10 秒时不再调用工具，直接作答
+```
+
+由其他 runtime 调起、交回一段答案的子 agent 会用到 `actor`。子 agent 还没有提供，现在写 `actor` 只改变上面这些行为。字段、取值和检查规则见[插件参考 · 循环 profile](../reference/plugins.md#循环-profileagentloopprofile)。
+
 ### 失败时
 
 - 运行失败的 runtime，它的写入一条都不保存，它发的事件也不会触发别的 runtime。

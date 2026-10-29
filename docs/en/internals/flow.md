@@ -556,9 +556,11 @@ preparing → awaiting-pre-step → requesting-model → reviewing → running-t
 deciding → finalizing → stopped        running-tools → suspended
 ```
 
+The loop's behaviour comes from the runtime's loop profile (`resolveLoopProfile` in `agent-loop/loop-profile.ts`), not from `outputKind`: whether text is shown to the player as it streams, whether the player's interjections are merged, whether cut-off story text is kept, whether a repeated tool call turns the tools off or fails (`fallback`), and whether a finalizer runs at the step limit and at the deadline reserve (`finalizer`). Without `agent.loop.profile`, a story runtime uses `story` and any other `system`; fields and values are in [the plugin reference's loop profile](../reference/plugins.md#loop-profile-agentloopprofile). The turn level uses the same resolver to tell whether any runtime still reads the interjection queue.
+
 The order within each step:
 
-1. Check for cancellation, and add the player's interjections to the conversation.
+1. Check for cancellation; when the profile has `steering`, add the player's interjections to the conversation.
 2. The `PreStep` hook: it can narrow this step's tools, change its tool choice, lower the steps left, or end the loop (see the [hook reference](../reference/hooks.md#prestep)).
 3. Send `step.started`.
 4. `PreLLMCall` → context budget → model call (`llm.calling` / `llm.responded`).
@@ -568,7 +570,7 @@ The order within each step:
 
 Every way of ending maps to one stop reason (`StopReason`), written to `RuntimeResult.stop` and to the `stopReason` of the runtime lifecycle events. The full table is in [the protocol reference's stop reasons](../reference/protocol.md#stop-reasons). The loop records the ordinary exits itself (`completed`, `tool-finished`, `max-steps`, `deadline`, PreStep's `cancelled`), and `settleAgentLoop` settles the result by it. A thrown exit keeps its original error object, and the reason is attached to the error (`agent-loop/stop-reason.ts`): call sites tag model errors, invalid output, context overflow and loop detection; the loop's outer catch tells apart the player's stop, the loop's own timeout and a parent's cancellation; and `finalizeRuntimeResult` reads the reason from the error into the failed result.
 
-**A step limit is not a success.** When the steps run out, text the model wrote beside a tool call is only a draft. As long as the output is not handed over by a completing tool, `requireToolUse` and `requireExplicitCompletion` are met or off, and at least 3 seconds remain before the deadline, the kernel sends one more request with tools off, the finalizer, asking for the final answer now. When the finalizer writes text, the runtime succeeds and its result is marked `stop.finalizer: true`; otherwise it fails with `max-steps` and its staged writes are not committed. A timeout is always a failure and never tries a finalizer.
+**A step limit is not a success.** When the steps run out, text the model wrote beside a tool call is only a draft. As long as the output is not handed over by a completing tool, `requireToolUse` and `requireExplicitCompletion` are met or off, and at least 3 seconds remain before the deadline, the kernel sends one more request with tools off, the finalizer, asking for the final answer now. When the finalizer writes text, the runtime succeeds and its result is marked `stop.finalizer: true`; otherwise it fails with `max-steps` and its staged writes are not committed. The profile's `finalizer.maxSteps: false` turns this finalizer off. A timeout is a failure and does not try a finalizer; the exception is a profile that sets `finalizer.deadlineReserveMs`: when less time than the reserve is left and the finalizer conditions above hold, the loop starts no new step and sends the finalizer instead, which succeeds with `{ reason: "deadline", finalizer: true }` when it writes the answer.
 
 ## 4. Plugin design
 

@@ -29,6 +29,7 @@ import { promptCacheKeyFor } from "../llm/prompt-cache-key.js";
 import type { HookPipeline } from "../hooks/pipeline.js";
 import type { RetryInfo } from "../retry/llm-retry.js";
 import { buildAgentLoopPolicy } from "./agent-loop-policy.js";
+import type { ResolvedLoopProfile } from "./loop-profile.js";
 import { prepareBudgetedRequest } from "./request-context-budget.js";
 import { createDeltaForwarder } from "./delta-forwarder.js";
 import { executeToolSearch, SEARCH_TOOLS_TOOL_NAME } from "./tool-search.js";
@@ -286,7 +287,7 @@ async function runAgentToolLoopWithinBudget(
     requireToolUse,
     completeAfterTools,
     outputFromCompletingTool,
-    acceptsSteering,
+    profile,
     authorizedToolNames,
   } = buildAgentLoopPolicy({
     manifest,
@@ -303,8 +304,9 @@ async function runAgentToolLoopWithinBudget(
   let activeToolDefs = toolDefs;
 
   // The loop's single narrative outlet — counts chunks for `message.completed`.
+  // Only a profile that streams to the player forwards text.
   const delta = createDeltaForwarder({
-    onDelta: manifest.outputKind === "story" ? deps.onDelta : undefined,
+    onDelta: profile.stream ? deps.onDelta : undefined,
     runtimeId: manifest.name,
     pluginId: manifest.pluginId,
   });
@@ -453,9 +455,9 @@ async function runAgentToolLoopWithinBudget(
           onStreamTime: budget.extend,
           useStreaming: useStreaming && llmRequest.stream !== false,
           reportRetry,
-          onStreamDelta:
-            manifest.outputKind === "story" ? delta.forward : async () => {},
-          deliversDeltas: manifest.outputKind === "story",
+          onStreamDelta: profile.stream ? delta.forward : async () => {},
+          deliversDeltas: profile.stream,
+          allowTruncatedText: profile.truncation === "accept",
           requireToolCall: step.requireToolCall,
           ...(step.toolChoice ? { toolChoice: step.toolChoice } : {}),
         }),
@@ -479,11 +481,7 @@ async function runAgentToolLoopWithinBudget(
    */
   const runFinalizer = async (step: number): Promise<string | undefined> => {
     await delta.reset();
-    messages.push(
-      manifest.outputKind === "story"
-        ? writeStoryWithoutTools(input.locale)
-        : finalAnswerWithoutTools(input.locale),
-    );
+    messages.push(answerWithoutTools(profile.answerPrompt, input.locale));
     await stepEvents.start({
       step,
       maxSteps: stepLimit,
@@ -516,7 +514,43 @@ async function runAgentToolLoopWithinBudget(
     }
   };
 
+  /**
+   * Whether a finalizer may run now: prose can satisfy the runtime's
+   * completion contract, and there is time left to write it. Shared by the
+   * step limit and the deadline reserve.
+   */
+  const finalizerEligible = (): boolean =>
+    !outputFromCompletingTool &&
+    (!requireToolUse ||
+      hasBusinessWork(manifest, executedToolCalls, seededBusinessWork)) &&
+    (manifest.requireExplicitCompletion !== true ||
+      hasExplicitCompletion(
+        manifest,
+        executedToolCalls,
+        initialState?.completionCalls,
+      )) &&
+    budget.deadline - Date.now() >= FINALIZER_MIN_REMAINING_MS;
+
+  // The deadline reserve: no new step starts this close to the deadline when
+  // a finalizer could write the answer instead. Off at 0; never more than
+  // half the runtime's time.
+  const deadlineReserveMs = Math.min(
+    profile.finalizer.deadlineReserveMs,
+    Math.floor(timeoutMs / 2),
+  );
+  let reserveReached = false;
+
   while (loop.steps < stepLimit && Date.now() < budget.deadline) {
+    // Read the deadline here: queue and stream time have moved it.
+    if (
+      deadlineReserveMs > 0 &&
+      budget.deadline - Date.now() < deadlineReserveMs &&
+      finalizerEligible()
+    ) {
+      reserveReached = true;
+      loop.stop = { reason: "deadline" };
+      break;
+    }
     loop.steps++;
     const step = loop.steps;
 
@@ -528,7 +562,7 @@ async function runAgentToolLoopWithinBudget(
     loop.enter("awaiting-pre-step");
     budget.assertLive();
     await stepEvents.close();
-    if (acceptsSteering) {
+    if (profile.steering) {
       for (const steer of deps.turnControl?.drainSteering?.() ?? []) {
         messages.push({ role: "user", content: steer });
         currentTurnUserMessages += 1;
@@ -980,8 +1014,11 @@ async function runAgentToolLoopWithinBudget(
         );
         collectedToolCalls.length = 0;
         collectedToolCalls.push(...businessCalls);
+        // The predicate is the story output contract; the correction is the
+        // profile's fallback.
         if (
-          manifest.outputKind === "story" &&
+          profile.fallback === "answer-without-tools" &&
+          profile.answerPrompt === "story" &&
           storyOutputError(
             finalContent ? parseFinalOutputEnvelope(finalContent).output : null,
           )
@@ -1089,8 +1126,12 @@ async function runAgentToolLoopWithinBudget(
       } catch (err) {
         // A failed story fails the whole player turn. A story stuck repeating
         // a tool call (e.g. an event no active plugin consumes) still has
-        // what it needs to narrate: take the tools away and ask for prose.
-        if (manifest.outputKind !== "story" || activeToolDefs === undefined) {
+        // what it needs to narrate, and an actor can answer from its brief:
+        // the profile's fallback takes the tools away and asks for the answer.
+        if (
+          profile.fallback !== "answer-without-tools" ||
+          activeToolDefs === undefined
+        ) {
           tagStop(err, { reason: "loop-detected" });
           throw err;
         }
@@ -1099,7 +1140,7 @@ async function runAgentToolLoopWithinBudget(
         );
         finalContent = null;
         activeToolDefs = undefined;
-        messages.push(writeStoryWithoutTools(input.locale));
+        messages.push(answerWithoutTools(profile.answerPrompt, input.locale));
         stepEvents.note({ kind: "story-without-tools" });
       }
       if (loopGuardState.loopPerturbations > perturbationsBefore)
@@ -1133,7 +1174,7 @@ async function runAgentToolLoopWithinBudget(
     // bare prose finish (the common single-step story turn) ends the loop
     // here. Drain once more and take another step so the player's message
     // lands mid-turn. Bounded by effectiveMaxSteps like any other step.
-    if (acceptsSteering && loop.steps < stepLimit) {
+    if (profile.steering && loop.steps < stepLimit) {
       const lateSteering = deps.turnControl?.drainSteering?.() ?? [];
       if (lateSteering.length > 0) {
         stepEvents.note({ kind: "late-steering", count: lateSteering.length });
@@ -1172,21 +1213,16 @@ async function runAgentToolLoopWithinBudget(
   // ── Finalizer ──────────────────────────────────────────────────
   // A step limit is never a success by itself: text the model wrote beside a
   // tool call is scratch. One request with tools off asks for the answer,
-  // when prose can satisfy the runtime's completion contract and there is
-  // time left to write it.
-  if (
-    loop.stop.reason === "max-steps" &&
-    !outputFromCompletingTool &&
-    (!requireToolUse ||
-      hasBusinessWork(manifest, executedToolCalls, seededBusinessWork)) &&
-    (manifest.requireExplicitCompletion !== true ||
-      hasExplicitCompletion(
-        manifest,
-        executedToolCalls,
-        initialState?.completionCalls,
-      )) &&
-    budget.deadline - Date.now() >= FINALIZER_MIN_REMAINING_MS
-  ) {
+  // when the profile's finalizer covers this exit (the step limit, or the
+  // deadline reserve), prose can satisfy the runtime's completion contract
+  // and there is time left to write it.
+  const finalizerExit =
+    loop.stop.reason === "max-steps" && profile.finalizer.maxSteps
+      ? ("max-steps" as const)
+      : reserveReached
+        ? ("deadline" as const)
+        : undefined;
+  if (finalizerExit && finalizerEligible()) {
     loop.enter("finalizing");
     const answer = await runFinalizer(loop.steps + 1);
     if (answer) {
@@ -1194,7 +1230,7 @@ async function runAgentToolLoopWithinBudget(
         steeredProse.length > 0
           ? [...steeredProse, answer].join("\n\n")
           : answer;
-      loop.stop = { reason: "max-steps", finalizer: true };
+      loop.stop = { reason: finalizerExit, finalizer: true };
     }
   }
   loop.enter("stopped");
@@ -1229,6 +1265,16 @@ async function runAgentToolLoopWithinBudget(
         initialState?.completionCalls,
       ),
   };
+}
+
+/** Ask for the answer `answerPrompt` names, tools off. */
+function answerWithoutTools(
+  answerPrompt: ResolvedLoopProfile["answerPrompt"],
+  locale: string | undefined,
+): LLMMessage {
+  return answerPrompt === "story"
+    ? writeStoryWithoutTools(locale)
+    : finalAnswerWithoutTools(locale);
 }
 
 /** Ask a non-story runtime at its step limit for its final answer, tools off. */

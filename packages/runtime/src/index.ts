@@ -142,6 +142,12 @@ export type {
   ToolExecutorConfig,
 } from "./agent-loop/tool-executor.js";
 
+// ── Agent Loop Profile ───────────────────────────────────────────
+export {
+  resolveLoopProfile,
+  type ResolvedLoopProfile,
+} from "./agent-loop/loop-profile.js";
+
 // ── Per-Session Runtime Slot Resolver ───────────────────
 
 // ── Public Plugin API (unified `entry` module contract) ────────

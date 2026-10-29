@@ -590,7 +590,11 @@ export {
   DEFAULT_RUNTIME_VISIBILITY,
   defaultAgentLoop,
   defaultAgentModel,
+  defaultLoopPreset,
+  LOOP_PRESETS,
   type AgentLoopDefaults,
+  type LoopPresetId,
+  type LoopPresetValues,
   type RuntimeVisibility,
 } from "./schemas/runtime-defaults.js";
 

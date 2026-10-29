@@ -1655,10 +1655,50 @@
                   "minimum": 0,
                   "maximum": 50,
                   "description": "Maximum depth of nested `ctx.recursiveCall()`. Defaults to 10."
+                },
+                "profile": {
+                  "type": "string",
+                  "enum": ["story", "actor", "system"],
+                  "description": "Loop profile the other loop behaviour keys override. `story` streams to the player, reads interjections and keeps a cut reply; `actor` and `system` do neither, and `actor` answers without tools where `system` fails. Defaults to `story` with `io.visibility: story`, otherwise `system`."
+                },
+                "stream": {
+                  "type": "boolean",
+                  "description": "Show the model's text to the player as it streams. Needs `io.visibility: story`. Defaults to the profile's value: true for `story`."
+                },
+                "steering": {
+                  "type": "boolean",
+                  "description": "Merge the player's interjections into the transcript before each step and after a prose finish. Needs `io.visibility: story`. Defaults to the profile's value: true for `story`."
+                },
+                "truncation": {
+                  "type": "string",
+                  "enum": ["accept", "reject"],
+                  "description": "`accept` keeps a reply cut at the output limit; `reject` fails it. `accept` needs streaming. Defaults to `accept` for `story`, otherwise `reject`."
+                },
+                "fallback": {
+                  "type": "string",
+                  "enum": ["answer-without-tools", "fail"],
+                  "description": "What a repeated tool loop does: `answer-without-tools` takes the tools away and asks for the answer; `fail` stops the runtime. Defaults to `fail` for `system`, otherwise `answer-without-tools`."
+                },
+                "finalizer": {
+                  "type": "object",
+                  "properties": {
+                    "maxSteps": {
+                      "type": "boolean",
+                      "description": "At the step limit, ask once for the answer with tools off. `false` makes the step limit always fail. Defaults to true."
+                    },
+                    "deadlineReserveMs": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991,
+                      "description": "Stop starting steps this many ms before the time limit and ask for the answer with tools off, when prose can complete the runtime. At most half of `timeoutMs` is used; smaller than `timeoutMs`. Defaults to 0, off."
+                    }
+                  },
+                  "additionalProperties": false,
+                  "description": "The final answer step, with tools off."
                 }
               },
               "additionalProperties": false,
-              "description": "Time, retry and step limits of the agent loop."
+              "description": "Time, retry and step limits of the agent loop, and its profile."
             }
           },
           "additionalProperties": false,
