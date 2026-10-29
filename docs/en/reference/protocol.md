@@ -1012,6 +1012,8 @@ Without an implicit trusted-source grant, a community plugin action with a defer
 1. First, authorize `covel:plugin-server-code` (running server code).
 2. After the retry, authorize the actual action.
 
+Internal approval keys cannot name ordinary actions; such requests are rejected. See the [action endpoint](./api.md#post-apisessionsidplugin-rpc).
+
 The client shows the approval one stage at a time, and retries the original request. When the same request asks again for the same `(pluginId, action)` authorization, the client stops, and it rejects approval answers that cross sessions.
 
 A batch of answers in `submit_interaction` can involve several source plugins, and there is no limit on the number of stages. Only when the server-code authorization for every source is complete are the answers validated and saved atomically.

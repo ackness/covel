@@ -1,4 +1,4 @@
-import type { PluginRpcRequest } from "@covel/shared";
+import { rpcActionNameSchema, type PluginRpcRequest } from "@covel/shared";
 import { z } from "zod";
 
 export type PluginRpcBodyValidation =
@@ -20,7 +20,7 @@ const pluginRpcBodySchema = z.discriminatedUnion("kind", [
   z.strictObject({
     kind: z.literal("action"),
     pluginId: selector,
-    action: selector,
+    action: selector.pipe(rpcActionNameSchema),
     payload: z.unknown().optional(),
   }),
   z.strictObject({

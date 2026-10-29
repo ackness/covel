@@ -3037,6 +3037,8 @@ Submission 里的其他键会被丢弃。来源插件、字段定义和模板只
 
 调用插件在 `entry` 里用 `covel.registerRpc` 注册的 handler，或者框架默认 handler（如 `slash-debug`）。
 
+`action` 必须遵守[保留前缀规则](./plugins.md#contributes-字段)。把内部审批键作为普通 action 提交时返回 `400`，即使同名 handler 已在 registry 中也不会执行。
+
 - 插件必须在会话当前启用、并且现在能运行的插件里。服务端在审批前检查一次，取得会话锁后再检查一次。插件已禁用时返回 `404 plugin_not_active`，不执行 handler，也不新增审批。玩家确认过、但现在不能运行的插件（见 `unavailable[]`）同样返回这个错误，错误信息写明原因。旧面板迟到的请求同样受这个检查约束。
 - `pluginId: "framework"` 表示框架默认 action。它不属于插件启用集，按各自的准入条件执行。`framework` 是保留 ID，没有插件能用它，所以这样的请求只会执行框架默认 action；写插件 ID 的请求也只会执行该插件自己注册的 action。
 - handler 在会话锁内运行，时限 30 秒。超时后 handler 的 `ctx.signal` 中止，之后它对 `ctx.store` 的调用一律被拒绝。已在进行的存储调用先完成，再返回 `504 handler_timeout` 并放开锁。超时之前已经写入的数据保留，不会回滚。

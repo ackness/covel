@@ -51,6 +51,8 @@ A community package implicitly receives `covel:plugin-server-code` and its `runt
 
 After normal server-code approval is allowed, only a trusted, verified community package gets its snapshot atomically replaced with current capabilities. A write failure is logged without failing approval. This rewrite invalidates an earlier signed update preview: confirming returns `409 Installed package changed; check for updates again`, requiring another update check. For older receipts without a snapshot, the first normal approval satisfying these conditions records one. Receipts gain only an optional field; no stored data needs recreation.
 
+For a restored active session, first-turn lazy entry publication uses the same activator. It re-verifies after publication re-registers the package, keeping authorization valid for the runtime snapshot without another enable request.
+
 Development reload re-registers the package and immediately invalidates verification. Local edits become `modified` and lose implicit approval until normal approval is given; that approval cannot update the snapshot while the digest still differs. Revoking session grants clears explicit grants only; instance source policy cannot be revoked per session.
 
 Trusted sources preserve `builtin | community`, add no API or privilege, and do not select plugins automatically. ZIP imports, hand-copied directories, worlds, per-action RPC approvals and payload-bound one-time grants are outside this mechanism. A snapshot bounds declarations; it is not a sandbox or code audit and does not protect against a stolen GitHub account. Signed publication metadata, keys, rollback, expiry and revocation metadata are not implemented; the host's preview-token signature only confirms the content of this installation.

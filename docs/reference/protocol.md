@@ -1012,6 +1012,8 @@ data: {
 1. 先授权 `covel:plugin-server-code`（运行服务端代码）。
 2. 重试之后，再授权真正的 action。
 
+内部审批键不能用作普通 action 名，请求会被拒绝，见 [action 接口](./api.md#post-apisessionsidplugin-rpc)。
+
 客户端逐个阶段显示审批，并重试原来的请求。同一个请求重复索取相同的 `(pluginId, action)` 授权时，客户端停止，并拒绝跨会话的审批回答。
 
 `submit_interaction` 的一批回答可以涉及多个来源插件，不限制阶段的数量。所有来源的 server-code 授权都齐了，才校验并原子保存。

@@ -547,7 +547,18 @@ async function assembleApi(
       services,
       extensions,
     }));
-  runtimeLoader.bindPluginEntry(pluginEntries.ensurePluginEntry);
+  // Community activation seam: running the plugin's `entry` module is what
+  // registers its tools, hooks, rpc actions and wires.
+  const activatePluginServerCode = async (
+    pluginId: string,
+    sessionId?: string,
+  ): Promise<void> => {
+    await trustedSources?.ensureFresh(pluginId);
+    await pluginEntries.ensurePluginEntry(pluginId, sessionId);
+    // Publishing an entry re-registers it and invalidates its verification.
+    await trustedSources?.ensureFresh(pluginId);
+  };
+  runtimeLoader.bindPluginEntry(activatePluginServerCode);
   const withPluginSnapshot = <T>(
     sessionId: string,
     fn: () => Promise<T>,
@@ -582,17 +593,6 @@ async function assembleApi(
       ),
   });
 
-  // Community activation seam: running the plugin's `entry` module is what
-  // registers its tools, hooks, rpc actions and wires.
-  const activatePluginServerCode = async (
-    pluginId: string,
-    sessionId?: string,
-  ): Promise<void> => {
-    await trustedSources?.ensureFresh(pluginId);
-    await pluginEntries.ensurePluginEntry(pluginId, sessionId);
-    // Publishing an entry re-registers it and invalidates its verification.
-    await trustedSources?.ensureFresh(pluginId);
-  };
   // For the routes that take the player's approval: the plugin's runtimes are
   // loaded right then, and one that does not import is in their answer.
   const preloadPluginRuntimes = async (pluginId: string, sessionId: string) => {

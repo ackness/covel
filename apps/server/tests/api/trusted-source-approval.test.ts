@@ -17,6 +17,7 @@ import { installRoutes } from "../../src/routes/api/install.js";
 import { verifyTrustedSourcesAtBoot } from "../../src/trust/boot.js";
 import { readReceipt } from "../../src/routes/api/install/package-files.js";
 import { closeTestApi } from "../helpers/close-api.js";
+import { parseJsonFrames } from "./sse-test-utils.js";
 import { id, packageFixture } from "../trust/fixtures.js";
 let root: string;
 let api: ApiBootstrapResult | undefined;
@@ -45,15 +46,19 @@ afterEach(async () => {
   vi.restoreAllMocks();
   await rm(root, { recursive: true, force: true });
 });
-async function session(sessionId = "session") {
+async function session(
+  sessionId = "session",
+  backend = store(),
+  activePlugins: string[] = [],
+) {
   const now = new Date().toISOString();
-  await store().createSession({
+  await backend.createSession({
     id: sessionId,
     phase: "playing",
     setupRuntimes: {},
     status: "active",
     completedPlayerTurns: 0,
-    activePlugins: [],
+    activePlugins,
     locale: "en-US",
     createdAt: now,
     updatedAt: now,
@@ -72,6 +77,7 @@ async function build(
     files?: Record<string, string>;
     hosted?: boolean;
     desktop?: boolean;
+    restoredActive?: boolean;
   } = {},
 ) {
   if (options.hosted) {
@@ -94,6 +100,7 @@ async function build(
       value: ["example/plugins"],
       updatedAt: new Date().toISOString(),
     });
+  if (options.restoredActive) await session("session", memory, [id]);
   api = await bootstrapApi({
     pluginsDir: builtin,
     pluginsDirs: [builtin, root],
@@ -120,7 +127,7 @@ async function build(
     createOriginGuardMiddleware(() => false),
   );
   app.route("/", api.app);
-  await session();
+  if (!options.restoredActive) await session();
   return fixture;
 }
 function put(entries: unknown, headers: Record<string, string> = {}) {
@@ -372,3 +379,103 @@ it("locks an environment-fixed policy with 409", async () => {
   expect(response.status).toBe(409);
   expect(await response.json()).toMatchObject({ code: "server_setting_fixed" });
 });
+
+it("executes a restored active session's first turn without enabling its trusted plugin again", async () => {
+  await build({
+    restoredActive: true,
+    manifest: {
+      ...baseline,
+      runtime: {
+        schedule: { stage: "pre-turn", trigger: { type: "auto" } },
+        function: { handler: "./handler.mjs" },
+      },
+    },
+    files: {
+      "server.js": code,
+      "handler.mjs":
+        'export default async () => ({ outcome: "success", value: { restored: true } });',
+    },
+  });
+  const entryBefore = api!.registry.get(id);
+  expect(api!.trustedSources.implicitGrant({ pluginId: id })).toBe(true);
+  const response = await app.request("/api/actions", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      requestId: crypto.randomUUID(),
+      sessionId: "session",
+      type: "send_message",
+      payload: { content: "Continue after restart." },
+    }),
+  });
+  const text = await response.text();
+  expect(response.status, text).toBe(200);
+  const events = parseJsonFrames<{
+    type: string;
+    payload: Record<string, unknown>;
+  }>(text);
+  expect(
+    events.filter(
+      (event) =>
+        event.type === "runtime.failed" || event.type === "error.occurred",
+    ),
+  ).toEqual([]);
+  expect(events).toContainEqual(
+    expect.objectContaining({
+      type: "runtime.completed",
+      payload: expect.objectContaining({ runtimeId: id }),
+    }),
+  );
+  expect(events).toContainEqual(
+    expect.objectContaining({
+      type: "execution.completed",
+      payload: expect.objectContaining({
+        runtimeCount: 1,
+        resultCount: 1,
+        committed: true,
+      }),
+    }),
+  );
+  expect(api!.registry.get(id)).not.toBe(entryBefore);
+  expect(api!.trustedSources.implicitGrant({ pluginId: id })).toBe(true);
+  expect((await store().getSession("session"))?.completedPlayerTurns).toBe(1);
+});
+
+it.each(["runtime:reset", "covel:plugin-server-code", "event:reset"])(
+  "rejects the internal approval name %s as an ordinary RPC action even when a handler exists",
+  async (action) => {
+    await build();
+    expect((await enable()).status).toBe(200);
+    const handler = vi.fn(async () => ({ reset: true }));
+    // Simulate a host registration outside the entry API. Public dispatch
+    // must reject internal keys even if a handler has reached the registry.
+    api!.app.post("/__register-action", (c) => {
+      c.get("rpcRegistry").registerPluginHandler(
+        id,
+        action,
+        handler,
+        {},
+        "community",
+      );
+      return c.json({ ok: true });
+    });
+    expect(
+      (await api!.app.request("/__register-action", { method: "POST" })).status,
+    ).toBe(200);
+    const response = await app.request("/api/sessions/session/plugin-rpc", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        kind: "action",
+        pluginId: id,
+        action,
+        payload: { target: "player", reset: true },
+      }),
+    });
+    expect(response.status, await response.clone().text()).toBe(400);
+    expect(await response.json()).toMatchObject({
+      error: expect.stringContaining("reserved"),
+    });
+    expect(handler).not.toHaveBeenCalled();
+  },
+);

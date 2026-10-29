@@ -628,3 +628,5 @@ export {
 } from "./schemas/package-validation.js";
 
 export * from "./schemas/trusted-sources.js";
+
+export { rpcActionNameSchema } from "./schemas/rpc-action.js";

@@ -1440,6 +1440,8 @@ These are the only two sources. Missing tools and another plugin's private tools
 
 A community plugin is one installed in a user directory such as `~/.covel/plugins/`. `getPluginTrustInfo` marks them as `community`. When the server starts, it **does not run these plugins' `entry`** (the `if (!trust.autoLoad) continue;` in `apps/server/src/routes/api/bootstrap/plugin-entry.ts`; the tool access table is built by `plugin-tool-access.ts`). Their code runs after player approval or an implicit server-code / `runtime:*` grant from instance [trusted-source policy](./plugin-installation.md#trusted-sources); per-action RPC approval remains separate.
 
+Framework approval keys and plugin action names are separate: the [reserved-prefix rule](./plugins.md#contributes-fields) is checked in declarations, registration and requests, so ordinary operations cannot reuse an internal grant.
+
 A community plugin goes through these stages:
 
 <!-- prettier-ignore -->

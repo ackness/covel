@@ -1438,6 +1438,8 @@ export default function ({ tool, z, shortId, shortIdBatch }) {
 
 社区插件指装在 `~/.covel/plugins/` 等用户目录里的插件。`getPluginTrustInfo` 把它们标为 `community`。服务启动时**不执行这些插件的 `entry`**（`apps/server/src/routes/api/bootstrap/plugin-entry.ts` 里的 `if (!trust.autoLoad) continue;`；工具访问表由 `plugin-tool-access.ts` 构建）。它的代码要等玩家批准或实例的[可信来源策略](./plugin-installation.md#可信来源)隐式授予 server-code / `runtime:*` 之后才运行；逐操作 RPC 仍单独审批。
 
+框架审批键与插件 action 名相互隔离：[保留前缀规则](./plugins.md#contributes-字段)在声明、注册和请求处都校验，不能借用内部授权执行普通操作。
+
 一个社区插件经历这些阶段：
 
 <!-- prettier-ignore -->

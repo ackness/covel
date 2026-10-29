@@ -283,6 +283,8 @@ Sender checks and startup error delivery have regression tests in `apps/desktop/
 
 ## Community plugin code
 
+Internal approval keys for server code, runtimes and events cannot be registered or requested as ordinary RPC actions. Manifest, entry registration and request validation enforce the [reserved-prefix rule](../reference/plugins.md#contributes-fields), preserving per-action consent for trusted sources.
+
 A plugin's server-side JavaScript (`entry`, handler, guard, hook, wire) runs in the server process, and has all of the server's permissions. There is no process sandbox, no VM sandbox, and no module sandbox. Execution requires player consent or the instance's [trusted-source policy](../reference/plugin-installation.md#trusted-sources). That policy reduces server-code and runtime prompts, adds no sandbox, and cannot protect against a stolen GitHub account; signed publication metadata is not implemented:
 
 - Manifest loading, installation, validation, and localization share one plain YAML reader that rejects engine directives such as `---js` before parsing.

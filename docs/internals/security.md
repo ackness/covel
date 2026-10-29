@@ -283,6 +283,8 @@ Web 客户端只发送它的请求用得到的供应商的密钥：
 
 ## Community plugin code
 
+服务端代码、runtime 和事件使用的内部审批键不能注册或请求为普通 RPC action。声明、entry 注册与请求校验共同执行[保留前缀规则](../reference/plugins.md#contributes-字段)，可信来源不能绕过逐操作审批。
+
 插件的服务端 JavaScript（`entry`、handler、guard、hook、wire）运行在服务端进程里，拥有服务端的全部权限。没有进程沙箱、VM 沙箱或模块沙箱。社区包需要玩家同意，或满足实例的[可信来源策略](../reference/plugin-installation.md#可信来源)，才可执行代码；策略只减少 server-code 与 runtime 提示，不提供沙箱，也不能防住 GitHub 账号失窃，发布签名元数据仍未实现：
 
 - 清单读取共用纯 YAML 解析入口，加载、安装、校验和本地化工具都在解析前拒绝 `---js` 等引擎指令。
