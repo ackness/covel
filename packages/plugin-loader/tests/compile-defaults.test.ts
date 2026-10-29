@@ -93,3 +93,54 @@ describe("defaults the compiler fills in", () => {
     ).toEqual({ type: "auto", every: 3, startTurn: 2 });
   });
 });
+
+describe("the agent loop profile", () => {
+  it("carries no loopProfile when the author wrote no profile key", () => {
+    for (const runtime of [
+      { schedule: { stage: "narrative" }, io: { visibility: "story" } },
+      { schedule: { stage: "post-turn" }, agent: { loop: { maxSteps: 3 } } },
+    ] satisfies RuntimeAuthoringManifest[])
+      expect(compile(runtime)).not.toHaveProperty("loopProfile");
+  });
+
+  it("maps agent.loop.profile and the overrides it names to loopProfile", () => {
+    const manifest = compile({
+      schedule: { stage: "post-turn" },
+      agent: {
+        loop: {
+          maxSteps: 4,
+          profile: "actor",
+          fallback: "fail",
+          finalizer: { deadlineReserveMs: 5000 },
+        },
+      },
+    });
+    expect(manifest.loopProfile).toEqual({
+      preset: "actor",
+      fallback: "fail",
+      finalizer: { deadlineReserveMs: 5000 },
+    });
+    expect(manifest.maxSteps).toBe(4);
+  });
+
+  it("keeps every written key, defaults included, and nothing else", () => {
+    const manifest = compile({
+      schedule: { stage: "narrative" },
+      io: { visibility: "story" },
+      agent: {
+        loop: {
+          stream: true,
+          steering: false,
+          truncation: "reject",
+          finalizer: { maxSteps: false },
+        },
+      },
+    });
+    expect(manifest.loopProfile).toEqual({
+      stream: true,
+      steering: false,
+      truncation: "reject",
+      finalizer: { maxSteps: false },
+    });
+  });
+});

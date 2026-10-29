@@ -557,9 +557,11 @@ preparing → awaiting-pre-step → requesting-model → reviewing → running-t
 deciding → finalizing → stopped        running-tools → suspended
 ```
 
+循环的行为来自 runtime 的循环 profile（`agent-loop/loop-profile.ts` 的 `resolveLoopProfile`），不看 `outputKind`：文字是否流式显示给玩家、是否并入玩家插话、截断的正文是否保留、工具调用打转时关掉工具还是失败（`fallback`）、步数上限和时限预留处是否收尾（`finalizer`）。没写 `agent.loop.profile` 时，故事 runtime 用 `story`，其他用 `system`；字段和取值见 [插件参考的循环 profile](../reference/plugins.md#循环-profileagentloopprofile)。回合层判断还有没有 runtime 读插话队列时用同一个解析函数。
+
 每一步的先后：
 
-1. 检查取消，把玩家插话并入对话。
+1. 检查取消；profile 开了 `steering` 时，把玩家插话并入对话。
 2. `PreStep` Hook：可以收窄这一步的工具、改工具选择、减少剩余步数，或结束循环（见 [Hook 参考](../reference/hooks.md#prestep)）。
 3. 发 `step.started`。
 4. `PreLLMCall` → 上下文预算 → 模型调用（`llm.calling` / `llm.responded`）。
@@ -569,7 +571,7 @@ deciding → finalizing → stopped        running-tools → suspended
 
 每一种结束方式对应一个结束原因（`StopReason`），写进 `RuntimeResult.stop` 和 runtime 生命周期事件的 `stopReason`，完整的表见 [协议参考的结束原因](../reference/protocol.md#stop-reasons)。正常的出口（`completed`、`tool-finished`、`max-steps`、`deadline`、PreStep 的 `cancelled`）由循环自己记下，`settleAgentLoop` 按它定结果。抛出的出口保留原来的错误对象，原因挂在错误上（`agent-loop/stop-reason.ts`）：调用点给模型错误、输出无效、上下文超限和循环检测打标，循环外层的 catch 再把玩家停止、自己的超时和上级取消分出来，`finalizeRuntimeResult` 从错误上读出原因，放进失败的结果。
 
-**步数上限不算成功。** 用完步数时，模型在工具调用旁边写的文字只是草稿。只要输出不是由完成工具交出、`requireToolUse` 和 `requireExplicitCompletion` 已满足或没开、离截止时间还有至少 3 秒，内核再发一次关掉工具的收尾请求，要求直接给出最终答案。收尾写出文字时 runtime 成功，结果标明 `stop.finalizer: true`；否则以 `max-steps` 失败，暂存的写入不提交。超时永远是失败，不尝试收尾。
+**步数上限不算成功。** 用完步数时，模型在工具调用旁边写的文字只是草稿。只要输出不是由完成工具交出、`requireToolUse` 和 `requireExplicitCompletion` 已满足或没开、离截止时间还有至少 3 秒，内核再发一次关掉工具的收尾请求，要求直接给出最终答案。收尾写出文字时 runtime 成功，结果标明 `stop.finalizer: true`；否则以 `max-steps` 失败，暂存的写入不提交。profile 的 `finalizer.maxSteps: false` 关掉这次收尾。超时是失败，不尝试收尾；例外是 profile 写了 `finalizer.deadlineReserveMs`：剩余时间不足预留、而且上面的收尾条件满足时，循环不再开始新的一步，先并入排队的玩家插话（profile 开了 `steering` 时），再发收尾请求，写出答案时以 `{ reason: "deadline", finalizer: true }` 成功。
 
 ## 四、插件设计
 

@@ -2,12 +2,13 @@
  * Player turn-control surface — mid-turn steering and abort.
  *
  * The server registers one `TurnControl` per in-flight turn and threads it
- * through `AgentLoopDeps`. Leaf module (only depends on @covel/shared) so the
- * retry layer, the agent loop, and the turn executor can all depend on it
- * without cycles.
+ * through `AgentLoopDeps`. Leaf module (depends only on @covel/shared and
+ * the pure loop-profile resolver) so the retry layer, the agent loop, and the
+ * turn executor can all depend on it without cycles.
  */
 
 import type { RuntimeManifest } from "@covel/shared";
+import { resolveLoopProfile } from "../agent-loop/loop-profile.js";
 
 /** Abort reason surfaced on `TurnResult.abortReason` for player aborts.
  *  Defined in @covel/shared (wire-protocol constant — the web client keys
@@ -28,9 +29,9 @@ export interface TurnControl {
    */
   readonly executionSignal?: AbortSignal;
   /**
-   * Drain queued player interjections. Story-output runtimes call this
-   * before each LLM step and merge the messages into the live transcript;
-   * plugin runtimes never see steering.
+   * Drain queued player interjections. Agents whose loop profile has
+   * `steering` (the `story` preset) call this before each LLM step and merge
+   * the messages into the live transcript; other runtimes never see steering.
    */
   readonly drainSteering?: () => readonly string[];
   /**
@@ -43,15 +44,17 @@ export interface TurnControl {
 }
 
 /**
- * Whether a runtime reads the steering queue. Only an agent with story output
- * merges interjections into its transcript: a plugin agent runs a structured
- * task that an interjection would corrupt, and a function runtime calls no
- * model.
+ * Whether a runtime reads the steering queue: an agent whose loop profile
+ * has `steering`, which the agent loop reads through the same resolver. A
+ * plugin agent runs a structured task that an interjection would corrupt,
+ * and a function runtime calls no model.
  */
 function runtimeAcceptsSteering(
-  manifest: Pick<RuntimeManifest, "outputKind" | "runtimeType">,
+  manifest: Pick<RuntimeManifest, "outputKind" | "runtimeType" | "loopProfile">,
 ): boolean {
-  return manifest.outputKind === "story" && manifest.runtimeType !== "function";
+  return (
+    manifest.runtimeType !== "function" && resolveLoopProfile(manifest).steering
+  );
 }
 
 /** The runtimes of one execution that can still read the steering queue. */

@@ -23,6 +23,29 @@ import {
 const loopDefault = (field: "timeoutMs" | "callTimeoutMs" | "maxRetries") =>
   `Defaults to ${AGENT_LOOP_DEFAULTS.system[field]}; ${AGENT_LOOP_DEFAULTS.story[field]} with \`io.visibility: story\`.`;
 
+/** The agent loop settings the shared runtime rules read. */
+function authoredLoopView(
+  loop:
+    | {
+        readonly profile?: string;
+        readonly stream?: boolean;
+        readonly steering?: boolean;
+        readonly truncation?: string;
+        readonly timeoutMs?: number;
+        readonly finalizer?: { readonly deadlineReserveMs?: number };
+      }
+    | undefined,
+) {
+  return {
+    preset: loop?.profile,
+    stream: loop?.stream,
+    steering: loop?.steering,
+    truncation: loop?.truncation,
+    deadlineReserveMs: loop?.finalizer?.deadlineReserveMs,
+    timeoutMs: loop?.timeoutMs,
+  };
+}
+
 export const contractIdSchema = z
   .string()
   .regex(/^[a-z][a-z0-9.-]*@[1-9][0-9]*$/);
@@ -359,8 +382,59 @@ export const runtimeAuthoringManifestSchema = z
                 "Maximum depth of nested `ctx.recursiveCall()`. Defaults to 10.",
               )
               .optional(),
+            profile: z
+              .enum(["story", "actor", "system"])
+              .describe(
+                "Loop profile the other loop behaviour keys override. `story` streams to the player, reads interjections and keeps a cut reply; `actor` and `system` do neither, and `actor` answers without tools where `system` fails. Defaults to `story` with `io.visibility: story`, otherwise `system`.",
+              )
+              .optional(),
+            stream: z
+              .boolean()
+              .describe(
+                "Show the model's text to the player as it streams. Needs `io.visibility: story`. Defaults to the profile's value: true for `story`.",
+              )
+              .optional(),
+            steering: z
+              .boolean()
+              .describe(
+                "Merge the player's interjections into the transcript before each step and after a prose finish. Needs `io.visibility: story`. Defaults to the profile's value: true for `story`.",
+              )
+              .optional(),
+            truncation: z
+              .enum(["accept", "reject"])
+              .describe(
+                "`accept` keeps a reply cut at the output limit; `reject` fails it. `accept` needs streaming. Defaults to `accept` for `story`, otherwise `reject`.",
+              )
+              .optional(),
+            fallback: z
+              .enum(["answer-without-tools", "fail"])
+              .describe(
+                "What a repeated tool loop does: `answer-without-tools` takes the tools away and asks for the answer; `fail` stops the runtime. Defaults to `fail` for `system`, otherwise `answer-without-tools`.",
+              )
+              .optional(),
+            finalizer: z
+              .strictObject({
+                maxSteps: z
+                  .boolean()
+                  .describe(
+                    "At the step limit, ask once for the answer with tools off. `false` makes the step limit always fail. Defaults to true.",
+                  )
+                  .optional(),
+                deadlineReserveMs: z
+                  .number()
+                  .int()
+                  .min(0)
+                  .describe(
+                    "Stop starting steps this many ms before the time limit and ask for the answer with tools off, when prose can complete the runtime. At most half of `timeoutMs` is used; smaller than `timeoutMs`. Defaults to 0, off.",
+                  )
+                  .optional(),
+              })
+              .describe("The final answer step, with tools off.")
+              .optional(),
           })
-          .describe("Time, retry and step limits of the agent loop.")
+          .describe(
+            "Time, retry and step limits of the agent loop, and its profile.",
+          )
           .optional(),
       })
       .describe(
@@ -457,6 +531,7 @@ export const runtimeAuthoringManifestSchema = z
         output: value.io?.output,
         requireExplicitCompletion:
           value.agent?.completion?.require === "explicit",
+        ...(value.agent ? { loop: authoredLoopView(value.agent.loop) } : {}),
         turnInputs: inputs
           .filter(
             ([, binding]) =>

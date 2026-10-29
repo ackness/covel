@@ -6,6 +6,10 @@
  */
 
 import type { DataOpKind } from "@covel/plugin-handlers-utils";
+import type {
+  LoopPresetId,
+  LoopPresetValues,
+} from "../schemas/runtime-defaults.js";
 
 /**
  * Runtime execution type.
@@ -167,6 +171,19 @@ export interface InputConfig {
  *   player.
  */
 export type OutputKind = "story" | "system";
+
+/**
+ * The authored overrides of an agent loop profile, as the compiled IR carries
+ * them: only the values the author wrote. See `LOOP_PRESETS`.
+ */
+export interface LoopProfileSpec {
+  readonly preset?: LoopPresetId;
+  readonly stream?: LoopPresetValues["stream"];
+  readonly steering?: LoopPresetValues["steering"];
+  readonly truncation?: LoopPresetValues["truncation"];
+  readonly fallback?: LoopPresetValues["fallback"];
+  readonly finalizer?: Partial<LoopPresetValues["finalizer"]>;
+}
 
 export interface OutputConfig {
   /** Relative path to output.schema.json. */
@@ -558,6 +575,14 @@ export interface RuntimeManifest {
    * write workflows that use other tools first.
    */
   readonly completeAfterTools?: readonly string[];
+  /**
+   * Agent runtimes only. The loop behaviour the author wrote under
+   * `agent.loop` (`profile`, `stream`, `steering`, `truncation`, `fallback`,
+   * `finalizer`), with nothing filled in. The agent loop resolves it over the
+   * named preset, or over the preset of `outputKind` (`story` for a story,
+   * `system` otherwise) when no preset is named.
+   */
+  readonly loopProfile?: LoopProfileSpec;
   /**
    * Maximum nested `ctx.recursiveCall()` depth for this runtime. Defaults
    * to the executor limit, currently 10. Depth starts at 0 for a top-level
