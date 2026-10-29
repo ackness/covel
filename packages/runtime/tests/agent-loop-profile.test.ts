@@ -105,6 +105,7 @@ describe("resolveLoopProfile", () => {
       truncation: "accept",
       fallback: "answer-without-tools",
       finalizer: { maxSteps: true, deadlineReserveMs: 5_000 },
+      corrections: LOOP_PRESETS.story.corrections,
       answerPrompt: "story",
     });
     expect(

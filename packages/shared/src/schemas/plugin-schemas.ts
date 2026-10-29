@@ -1175,6 +1175,14 @@ export const runtimeManifestInputSchema = z
         steering: z.boolean().optional(),
         truncation: z.enum(["accept", "reject"]).optional(),
         fallback: z.enum(["answer-without-tools", "fail"]).optional(),
+        corrections: z
+          .strictObject({
+            toolUse: z.number().int().min(0).max(3).optional(),
+            review: z.number().int().min(0).max(5).optional(),
+            loopPerturbation: z.number().int().min(0).max(3).optional(),
+            outputRepair: z.number().int().min(0).max(3).optional(),
+          })
+          .optional(),
         finalizer: z
           .strictObject({
             maxSteps: z.boolean().optional(),

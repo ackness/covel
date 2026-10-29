@@ -37,3 +37,20 @@ describe("concealTracePayload", () => {
     expect(JSON.stringify(concealed)).not.toContain("reveal-secret");
   });
 });
+
+it("preserves the repair identity and note without exposing content", () => {
+  expect(
+    concealTracePayload({
+      step: 2,
+      repair: true,
+      notes: [{ kind: "output-repair" }],
+      text: "private draft",
+      messages: [{ role: "system", content: "private errors" }],
+    }),
+  ).toEqual({
+    concealed: true,
+    step: 2,
+    repair: true,
+    notes: [{ kind: "output-repair" }],
+  });
+});

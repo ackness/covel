@@ -196,7 +196,7 @@ Leave out a field whose value is the default. When you write one, `pnpm validate
 | `agent.toolChoice` (with `finishWith`) | `required` |
 | `agent.loop.timeoutMs`, `callTimeoutMs`, `maxRetries` | a runtime with `io.visibility: story`: 240000, 120000, 1; any other: 120000, 60000, 3 |
 | `agent.loop.profile` | `story` for a runtime with `io.visibility: story`, `system` for any other |
-| `agent.loop.stream`, `steering`, `truncation`, `fallback`, `finalizer.*` | the chosen profile's value; see [Loop profile](#loop-profile-agentloopprofile) |
+| `agent.loop.stream`, `steering`, `truncation`, `fallback`, `finalizer.*`, `corrections.*` | the chosen profile's value; see [Loop profile](#loop-profile-agentloopprofile) |
 | `contributes.data.*.version` | `1` |
 | `contributes.hooks[].enforce` | `normal` |
 | `contributes.extensions[].order` | `0` |
@@ -681,7 +681,7 @@ No bundled plugin uses the fields below, and a first plugin does not need them. 
 | `agent.loop.firstTokenTimeoutMs`, `idleTimeoutMs` | The wait limits of a streaming call. See [Wait limits of a streaming call](#wait-limits-of-a-streaming-call). |
 | `agent.loop.loopDetection` | How many identical calls in a row count as a loop. The default is 3; `0` turns the check off. |
 | `agent.loop.maxRecursionDepth` | How deep `ctx.recursiveCall()` may nest. The default is 10. |
-| `agent.loop.profile`, `stream`, `steering`, `truncation`, `fallback`, `finalizer` | How the loop behaves; see [Loop profile](#loop-profile-agentloopprofile) |
+| `agent.loop.profile`, `stream`, `steering`, `truncation`, `fallback`, `finalizer`, `corrections` | How the loop behaves; see [Loop profile](#loop-profile-agentloopprofile) |
 
 ### Wait limits of a streaming call
 
@@ -717,6 +717,10 @@ When only one thing differs from the profile, write only that key; the rest keep
 | `fallback` | When the model keeps calling the same tool: `answer-without-tools` turns the tools off and asks for the answer; `fail` fails with `loop-detected` |
 | `finalizer.maxSteps` | At the step limit, turn the tools off and ask once more for the final answer. With `false` the step limit always fails |
 | `finalizer.deadlineReserveMs` | With this many milliseconds left before the time limit, start no new step and ask for the final answer with tools off. `0` turns it off |
+| `corrections.toolUse` | Corrections for missing required tool work or explicit completion. Integer 0–3, default 1 |
+| `corrections.review` | Corrections after `PostLLMResponse` rejects a draft. Integer 0–5, default 2 |
+| `corrections.loopPerturbation` | Perturbations of a repeated tool loop before `fallback`. Integer 0–3, default 1 |
+| `corrections.outputRepair` | Requests with tools off for a complete replacement of invalid output. Integer 0–3, default 1 |
 
 The values of the three profiles:
 
@@ -729,6 +733,7 @@ The values of the three profiles:
 | `fallback` | `answer-without-tools` | `answer-without-tools` | `fail` |
 | `finalizer.maxSteps` | `true` | `true` | `true` |
 | `finalizer.deadlineReserveMs` | `0` | `0` | `0` |
+| `corrections` | `{ toolUse: 1, review: 2, loopPerturbation: 1, outputRepair: 1 }` | `{ toolUse: 1, review: 2, loopPerturbation: 1, outputRepair: 1 }` | `{ toolUse: 1, review: 2, loopPerturbation: 1, outputRepair: 1 }` |
 
 `actor` is for an agent that only answers a brief and writes no story text, such as the sub-agents still to come.
 
@@ -740,6 +745,8 @@ Loading checks these rules and rejects a manifest that breaks one:
 - `finalizer.deadlineReserveMs` is a non-negative integer smaller than `timeoutMs` (compared with the default time limit when `timeoutMs` is not written).
 
 **Finishing before the time limit (`deadlineReserveMs`).** When less time than this is left, and text alone could complete the runtime at that moment (no unmet `requireToolUse` or explicit completion, and no output handed over by a completing tool) and at least 3 seconds remain to write it, the loop starts no new step and asks for the final answer with tools off. With `steering` on, player interjections queued during the last step are merged first, so that request reads them. When the answer is written, the runtime succeeds with stop reason `deadline` and `finalizer: true`. When it is not, the runtime still fails with a timeout. The reserve used is at most half of `timeoutMs`, and the time left is measured against the deadline as queue and streaming time have moved it. When the conditions do not hold, the loop runs to the real time limit as usual.
+
+**Correction budgets and output repair.** The four budgets in `agent.loop.corrections` are independent; `0` disables that correction. Write only keys you want to override. A bare text finish and a `runtime-done` without business work share the `toolUse` budget. After the loop and any finalizer, output that fails its schema or a story with empty text gets one request with tools off by default, including the validation errors and asking for a complete replacement answer. If it is still invalid, the runtime fails with `invalid-output`. The repair replaces earlier drafts and story text from before interjections. It runs only after a success-shaped exit, with required tool work and completion met, output not handed over by a completing tool, and at least 3 seconds left. Errors, cancellation and an expired deadline get no repair. Each request consumes one `outputRepair` unit; a new loop, including a resumed execution, starts fresh budgets.
 
 ### Author information
 

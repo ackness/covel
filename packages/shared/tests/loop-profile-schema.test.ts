@@ -261,3 +261,44 @@ describe("LOOP_PRESETS", () => {
     expect(LOOP_PRESETS.actor.fallback).toBe("answer-without-tools");
   });
 });
+
+describe("correction budgets on authored and IR schemas", () => {
+  const parsers = [
+    (corrections: Loop) =>
+      runtimeAuthoringManifestSchema.safeParse(authored({ corrections })),
+    (corrections: Loop) =>
+      runtimeManifestInputSchema.safeParse(compiled({ corrections })),
+  ];
+  it.each(["toolUse", "review", "loopPerturbation", "outputRepair"])(
+    "accepts only integer budgets in range for %s",
+    (key) => {
+      const maximum = key === "review" ? 5 : 3;
+      for (const parse of parsers) {
+        for (const value of [0, 1, maximum]) {
+          const result = parse({ [key]: value });
+          expect(result.success).toBe(true);
+        }
+        for (const value of [-1, maximum + 1, 0.5, "1", null]) {
+          const result = parse({ [key]: value });
+          expect(result.success).toBe(false);
+          if (!result.success)
+            expect(result.error.issues[0]?.path.at(-1)).toBe(key);
+        }
+      }
+    },
+  );
+  it("keeps optional keys absent and rejects unknown keys", () => {
+    for (const parse of parsers) {
+      expect(parse({}).success).toBe(true);
+      expect(parse({ typo: 1 }).success).toBe(false);
+    }
+    const authoredResult = runtimeAuthoringManifestSchema.parse(
+      authored({ corrections: { review: 0 } }),
+    );
+    expect(authoredResult.agent?.loop?.corrections).toEqual({ review: 0 });
+    const ir = runtimeManifestInputSchema.parse(
+      compiled({ corrections: { review: 0 } }),
+    );
+    expect(ir.loopProfile?.corrections).toEqual({ review: 0 });
+  });
+});

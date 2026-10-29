@@ -558,6 +558,8 @@ deciding → finalizing → stopped        running-tools → suspended
 
 The loop's behaviour comes from the runtime's loop profile (`resolveLoopProfile` in `agent-loop/loop-profile.ts`), not from `outputKind`: whether text is shown to the player as it streams, whether the player's interjections are merged, whether cut-off story text is kept, whether a repeated tool call turns the tools off or fails (`fallback`), and whether a finalizer runs at the step limit and at the deadline reserve (`finalizer`). Without `agent.loop.profile`, a story runtime uses `story` and any other `system`; fields and values are in [the plugin reference's loop profile](../reference/plugins.md#loop-profile-agentloopprofile). The turn level uses the same resolver to tell whether any runtime still reads the interjection queue.
 
+Each loop run creates one correction policy (`agent-loop/correction-policy.ts`), reading separate budgets for tool use, response review, loop perturbation and output repair from the profile's `corrections`. After the loop and any finalizer, before entering `stopped`, a silent output check shared with `settleAgentLoop` decides whether repair is needed. By default, when budget and remaining time allow, one more request with tools off sends the validation errors to the model and completely replaces the invalid answer. An answer that still fails its schema or a story whose text is still empty fails with `invalid-output`. Repair skips `PreStep` but passes through `PreLLMCall` and `PostLLMResponse`. Conditions and values are in [the loop profile](../reference/plugins.md#loop-profile-agentloopprofile).
+
 The order within each step:
 
 1. Check for cancellation; when the profile has `steering`, add the player's interjections to the conversation.

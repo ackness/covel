@@ -79,6 +79,8 @@ export interface LoopStop {
    * or the deadline reserve.
    */
   readonly finalizer?: true;
+  /** A repair request produced a replacement answer before output validation. */
+  readonly repaired?: true;
   /** Who cancelled the loop; set only with `reason: "cancelled"`. */
   readonly cancelledBy?: "player" | "parent" | "hook" | "host";
 }

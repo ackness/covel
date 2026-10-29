@@ -196,7 +196,7 @@ permissions:
 | `agent.toolChoice`（写了 `finishWith` 时） | `required` |
 | `agent.loop.timeoutMs`、`callTimeoutMs`、`maxRetries` | `io.visibility: story` 的 runtime：240000、120000、1；其他：120000、60000、3 |
 | `agent.loop.profile` | `io.visibility: story` 的 runtime 用 `story`，其他用 `system` |
-| `agent.loop.stream`、`steering`、`truncation`、`fallback`、`finalizer.*` | 所选 profile 的值，见[循环 profile](#循环-profileagentloopprofile) |
+| `agent.loop.stream`、`steering`、`truncation`、`fallback`、`finalizer.*`、`corrections.*` | 所选 profile 的值，见[循环 profile](#循环-profileagentloopprofile) |
 | `contributes.data.*.version` | `1` |
 | `contributes.hooks[].enforce` | `normal` |
 | `contributes.extensions[].order` | `0` |
@@ -681,7 +681,7 @@ Agent 的副作用只来自工具：模型能写什么，以 `agent.tools` 白�
 | `agent.loop.firstTokenTimeoutMs`、`idleTimeoutMs` | 流式调用的等待时限，见[流式调用的等待时限](#流式调用的等待时限) |
 | `agent.loop.loopDetection` | 模型连续重复同一个调用多少次算打转。默认 3，`0` 关闭检测 |
 | `agent.loop.maxRecursionDepth` | `ctx.recursiveCall()` 最多嵌套几层。默认 10 |
-| `agent.loop.profile`、`stream`、`steering`、`truncation`、`fallback`、`finalizer` | 循环的行为，见[循环 profile](#循环-profileagentloopprofile) |
+| `agent.loop.profile`、`stream`、`steering`、`truncation`、`fallback`、`finalizer`、`corrections` | 循环的行为，见[循环 profile](#循环-profileagentloopprofile) |
 
 ### 流式调用的等待时限
 
@@ -717,6 +717,10 @@ Agent 循环怎么跑由一个 profile 决定：文字是否流式显示给玩�
 | `fallback` | 模型反复调用同一个工具时：`answer-without-tools` 关掉工具、要答案；`fail` 以 `loop-detected` 失败 |
 | `finalizer.maxSteps` | 到步数上限时，关掉工具再要一次最终答案。`false` 时步数上限总是失败 |
 | `finalizer.deadlineReserveMs` | 离时限只剩这么多毫秒时不再开始新的一步，关掉工具要最终答案。`0` 关闭 |
+| `corrections.toolUse` | 缺少必需的工具工作或显式完成时的纠正次数。整数 0–3，默认 1 |
+| `corrections.review` | `PostLLMResponse` 退回草稿后的纠正次数。整数 0–5，默认 2 |
+| `corrections.loopPerturbation` | 工具循环打转时，进入 `fallback` 前的扰动次数。整数 0–3，默认 1 |
+| `corrections.outputRepair` | 输出无效时关闭工具重新请求完整答案的次数。整数 0–3，默认 1 |
 
 三个 profile 的取值：
 
@@ -729,6 +733,7 @@ Agent 循环怎么跑由一个 profile 决定：文字是否流式显示给玩�
 | `fallback` | `answer-without-tools` | `answer-without-tools` | `fail` |
 | `finalizer.maxSteps` | `true` | `true` | `true` |
 | `finalizer.deadlineReserveMs` | `0` | `0` | `0` |
+| `corrections` | `{ toolUse: 1, review: 2, loopPerturbation: 1, outputRepair: 1 }` | `{ toolUse: 1, review: 2, loopPerturbation: 1, outputRepair: 1 }` | `{ toolUse: 1, review: 2, loopPerturbation: 1, outputRepair: 1 }` |
 
 `actor` 给只回答一段简报、不写正文的 agent 用，例如将来的子 agent。
 
@@ -740,6 +745,8 @@ Agent 循环怎么跑由一个 profile 决定：文字是否流式显示给玩�
 - `finalizer.deadlineReserveMs` 是非负整数，并且小于 `timeoutMs`（没写时按默认时限比较）。
 
 **时限前的收尾（`deadlineReserveMs`）。** 剩余时间少于这个值、而且这时一段文字就能完成 runtime（没有未完成的 `requireToolUse` 或显式完成要求，最终输出也不是来自完成工具），并且至少还剩 3 秒写答案，循环就不再开始新的一步，改为关掉工具要最终答案。profile 开了 `steering` 时，上一步期间排队的玩家插话先并入对话，收尾请求能读到。写出了答案，runtime 成功，结束原因是 `deadline`，并带 `finalizer: true`。没写出答案时仍按超时失败。实际使用的值最多是 `timeoutMs` 的一半；剩余时间按排队和流式输出顺延后的时限计算。条件不满足时循环照常走到真正的时限。
+
+**纠正预算与输出修复。** `agent.loop.corrections` 的四项预算互不占用，`0` 关闭对应的纠正；只写要覆盖的键。裸文本结束和没有业务工作的 `runtime-done` 共用 `toolUse` 预算。循环及收尾步骤结束后，输出若不符合 schema，或故事正文为空，默认再发一次关闭工具的请求，带上校验错误，要求重新给出完整答案；仍不合格时以 `invalid-output` 失败。修复不追加旧草稿或插话前的正文。只有原本成功结束、必需的工具工作与完成条件已满足、输出不来自完成工具、且还剩至少 3 秒时才尝试；异常、取消和真正超时不修复。每次修复消耗一个 `outputRepair` 预算，新的循环（包括恢复执行）重新计数。
 
 ### 作者信息
 

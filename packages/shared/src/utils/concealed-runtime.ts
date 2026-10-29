@@ -45,6 +45,7 @@ const CONTENT_FREE_TRACE_FIELDS = new Set([
   "step",
   "stopReason",
   "finalizer",
+  "repair",
   "retries",
   "notes",
 ]);

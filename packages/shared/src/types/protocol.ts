@@ -150,6 +150,7 @@ export interface RuntimeFailedPayload extends RuntimeLifecyclePayload {
 
 /** What a step note records; never a tool name or any model content. */
 export type StepNoteKind =
+  | "output-repair"
   | "review-rejected"
   | "no-tool-correction"
   | "runtime-done-correction"
@@ -173,10 +174,12 @@ interface StepIdentity {
   readonly pluginId: string;
   readonly turnId: string;
   readonly runId: string;
-  /** 1-based step number; the finalizer step is one past the last step. */
+  /** 1-based step number, including finalizer and repair requests. */
   readonly step: number;
   /** Set on the finalizer step: tools off, final answer now. */
   readonly finalizer?: true;
+  /** Set on an output repair request, with tools off. */
+  readonly repair?: true;
 }
 
 /** An agent-loop step is about to call the model. */

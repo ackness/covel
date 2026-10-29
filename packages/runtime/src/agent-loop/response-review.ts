@@ -1,14 +1,15 @@
 import { instructionLocaleFor } from "@covel/shared";
 import type { LLMMessage, LLMResponse } from "@covel/shared";
 import { runPostLLMResponseHook } from "../hooks/wire-helpers.js";
+import type { CorrectionPolicy } from "./correction-policy.js";
 
 /** Rejected drafts never dispatch tools or become the committed narrative. */
 export function createResponseReviewer(
   opts: Parameters<typeof runPostLLMResponseHook>[0],
   transcript: LLMMessage[],
-  locale?: string,
+  locale: string | undefined,
+  policy: CorrectionPolicy,
 ) {
-  let corrections = 0;
   const notAccepted =
     instructionLocaleFor(locale) === "zh"
       ? "草稿未被接受。改正后重新发送完整的回复——被拒绝的草稿不会被执行，也不会被提交。不要描述改正的过程。"
@@ -23,7 +24,7 @@ export function createResponseReviewer(
       requestMessages,
     );
     if (!reviewed.correction) return reviewed.response;
-    if (++corrections > 2) {
+    if (!policy.take("review")) {
       throw new Error(`Response validation failed: ${reviewed.correction}`);
     }
     // No tool-call IDs: this rejected batch was deliberately not executed.
