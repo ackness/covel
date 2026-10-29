@@ -110,3 +110,15 @@ When files on disk change while the world record keeps its older content, the wo
 - Data in a save that a player or a plugin has changed is handled separately by [world data sync](./world-data.md#preflight-and-sync). It runs a trial first, and then checks for conflicts.
 - Overrides outside the world package are not affected by the file replacement. But they may change what the new package actually does.
 - Rolling back files only swaps the files back. It does not roll back gameplay, and it does not migrate data.
+
+## In-app validation
+
+Players without a source checkout or pnpm can open **Settings → Install & manage** and click **Validate** on an installed package, or select plugin or world and drop a ZIP. ZIP validation does not install the package. The API also accepts directory paths within allowed roots; the UI has no directory picker yet.
+
+Validation reads manifests and referenced files, checking fields, files, languages and static declarations. It never imports or executes package code, and changes no world or save. It shares the CLI validation core; the plugin CLI displays the first failure, while the app continues collecting problems that can be checked independently.
+
+Reports contain `kind`, `id` when available, `ok`, `counts.errors`, `counts.warnings` and `issues`. Each issue has `severity`, `code`, `message`, and, when known, a package-relative `file`, manifest field path or JSON pointer `field`, and repair `hint`. The summary may include version and languages. Messages are limited to 2000 characters; the first 200 issues are retained, with an additional `issues-truncated` warning and omitted count when necessary. Headings and known codes use the UI language; other messages stay in English. Reports can be copied as plain text.
+
+Access uses the same `host.files` rules as installation: hosted instances require the operator Bearer token; personal instances retain the install API’s desktop token or explicit enablement rules. Paths must resolve to directories within the corresponding plugin or world roots, and symlinked package roots are rejected. Reports make package paths relative and replace other host paths with `<path>`; CLI-only raw text is never returned. See [API](./api.md#in-app-validation) for requests.
+
+World validation uses the running server’s installed plugins as its contract catalogue, so missing-plugin or contract warnings may differ from the CLI’s default bundled plugin scan. World validation does not require `world.write`.

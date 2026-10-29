@@ -89,6 +89,8 @@ pnpm i18n:add         # add a UI locale to the web app (apps/web/src/i18n/locale
 
 延伸阅读：合集见[合集](../ship/collections.md)，翻译工具见 [i18n](../reference/i18n.md)。
 
+CLI 和应用内校验共用 `validatePluginPackage` / `validateWorldPackage`；插件 CLI 保留首个失败的输出，应用返回结构化问题。
+
 ## Individual checks
 
 `pnpm check` 会把下面这些全跑一遍。反复修改时可以只跑其中一个。

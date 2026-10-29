@@ -1050,6 +1050,8 @@ setup runtime 挂起等玩家回答时，这次尝试不占重试次数。挂起
 <!-- prettier-ignore -->
 | 方法 | 路径 | 请求 | 描述 |
 | --- | --- | --- | --- |
+| POST | `/api/install/validate/plugin` | multipart `file` 或 JSON `{source}` | 静态校验插件，返回 `200 PackageValidationReport` |
+| POST | `/api/install/validate/world` | multipart `file` 或 JSON `{source}` | 静态校验世界，返回 `200 PackageValidationReport` |
 | POST | `/api/install/plugin` | multipart 字段 `file` | 把插件 `.zip` 解压到用户插件目录 |
 | POST | `/api/install/world` | multipart 字段 `file` | 把世界 `.zip` 解压到用户世界目录 |
 | POST | `/api/install/plugin/github/preview` | `{ url }` | 解析公开的 GitHub 仓库或子目录并返回预览；不安装、不执行插件 |
@@ -1091,6 +1093,40 @@ setup runtime 挂起等玩家回答时，这次尝试不占重试次数。挂起
 > - 安装时 ID 依次取 `PLUGIN.md` 的 `id`、包所在的文件夹名、`package.json` 的包名（去掉 scope 和精确的 `plugin-` 前缀），见[插件安装](./plugin-installation.md#安装器做什么不做什么)。写了 `id` 时，`package.json` 的包名不参与。
 > - 内置保留 ID 的检查、安装目录和返回的 `id` 都使用这个 ID。没有写 `id`、也没有顶层文件夹的包，`package.json` 写 `@covel/plugin-narrator` 时会命中保留 ID，返回 `409`。
 > - 启动时的插件发现把目录名作为 ID。`PLUGIN.md` 写了不同的 `id` 时，插件注册为 `hostState: "error"`，不加载任何 runtime、tool、hook 或 wire。
+
+### 应用内校验
+
+两个校验端点复用安装的 `host.files` 权限，世界校验不额外要求 `world.write`。上传使用 multipart 字段 `file`，上限 20 MiB；ZIP 内容由归档读取器检查，不信任 MIME 类型。JSON 可以指定已安装包或允许根目录内的目录：
+
+```json
+{ "source": { "kind": "installed", "id": "my-package" } }
+```
+
+```json
+{ "source": { "kind": "path", "path": "/allowed/packages/my-package" } }
+```
+
+完成校验就返回 `200`，即使发现错误。问题中的路径始终相对于包，不含主机路径。例：
+
+```json
+{
+  "kind": "plugin",
+  "id": "my-package",
+  "ok": false,
+  "counts": { "errors": 1, "warnings": 0 },
+  "issues": [
+    {
+      "severity": "error",
+      "code": "unknown-field",
+      "file": "PLUGIN.md",
+      "field": "future",
+      "message": "unknown field"
+    }
+  ]
+}
+```
+
+请求不合法为 `400`；找不到包为 `404`；世界 ID 有多个匹配为 `409`；目录在允许根之外为 `403 path-outside-roots`；上传过大为 `413`；插件目录不可用为 `503`。详细报告与路径处理见[插件安装](./plugin-installation.md#应用内校验)和[世界安装](./world-installation.md#应用内校验)。
 
 ### 状态查询
 

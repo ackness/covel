@@ -1,16 +1,7 @@
-import { readFileSync } from "node:fs";
 import {
-  packageModuleTypeProblem,
-  validatePluginFiles,
-} from "../src/static-validation.js";
-/** Statically validate current-format packages; never execute plugin entries. */
-import fs from "node:fs/promises";
-import path from "node:path";
-import { loadPluginDefinition } from "../src/load.js";
-import { discoverPluginAt } from "../src/discover.js";
-import { validatePluginLabels } from "../src/locale-labels.js";
-import { describePluginLanguages } from "../src/plugin-languages.js";
-import { authoringWarnings } from "../src/authoring-warnings.js";
+  normalizePluginPackagePath,
+  validatePluginPackage,
+} from "../src/package-validation.js";
 
 /** Where a validation run writes its results and its messages. */
 export interface ValidateManifestOutput {
@@ -36,82 +27,21 @@ export async function runValidateManifest(
   const visited = new Set<string>();
   for (const arg of args) {
     try {
-      let rootPath = path.resolve(arg);
-      if ((await fs.stat(rootPath)).isFile()) rootPath = path.dirname(rootPath);
-      if (path.basename(path.dirname(rootPath)) === "runtimes")
-        rootPath = path.dirname(path.dirname(rootPath));
-      rootPath = await fs.realpath(rootPath);
+      const rootPath = await normalizePluginPackagePath(arg);
       if (visited.has(rootPath)) continue;
       visited.add(rootPath);
-      const discovery = await discoverPluginAt(rootPath);
-      if (!discovery)
-        throw new Error(
-          `${rootPath}: no enabled plugin with a root PLUGIN.md found`,
-        );
-      if (discovery.layoutWarnings?.length)
-        throw new Error(discovery.layoutWarnings.join("\n"));
-      const definition = await loadPluginDefinition(discovery);
-      // Loading leaves such a runtime out so the game goes on; the author
-      // still has to fix it.
-      if (definition.disabledRuntimes.length)
-        throw new Error(
-          definition.disabledRuntimes.map(({ message }) => message).join("\n"),
-        );
-      // Loading leaves an unknown field out so the package keeps working;
-      // the author still has to remove or rename it.
-      if (definition.ignoredFields.length)
-        throw new Error(
-          definition.ignoredFields
-            .map(
-              ({ message }) =>
-                `${message}; remove it or correct its name using the current plugin manifest reference`,
-            )
-            .join("\n"),
-        );
-      validatePluginFiles(
-        definition.packageManifest,
-        definition.manifests,
-        (file) => readFileSync(file, "utf8"),
-      );
-      // `package.json` is optional; the version is the one in PLUGIN.md.
-      const packageJson = await fs
-        .readFile(path.join(rootPath, "package.json"), "utf-8")
-        .then(
-          (content) => JSON.parse(content) as { type?: unknown },
-          () => undefined,
-        );
-      const moduleProblem =
-        packageJson && packageModuleTypeProblem(packageJson);
-      if (moduleProblem) throw new Error(`${rootPath}: ${moduleProblem}`);
-      const labelProblems = await validatePluginLabels(rootPath);
-      if (labelProblems.length > 0)
-        throw new Error(
-          `${rootPath}: locale files\n  - ${labelProblems.join("\n  - ")}`,
-        );
-      output.stdout.write(`✓ Static package validation: ${rootPath}\n`);
-      // A language the package lacks is not an error: labels fall back to
-      // English and the prompts are English. The author sees what players get.
-      output.stdout.write(
-        `  languages: ${describePluginLanguages(definition.languages)}\n`,
-      );
-      // A field written with its default, or a version the package needs,
-      // does not stop the package; the author still sees it.
-      for (const warning of authoringWarnings(
-        definition.packageManifest,
-        definition.manifests,
-      ))
-        output.stdout.write(`  warning: ${warning}\n`);
-      // A plugin names the role (slot) it wants; the player's settings pick
-      // the model and the endpoint. Nothing reads a plugin's own llm.toml.
-      if (
-        await fs.stat(path.join(rootPath, "llm.toml")).then(
-          () => true,
-          () => false,
-        )
-      )
+      const report = await validatePluginPackage(rootPath);
+      if (!report.ok) {
+        output.stderr.write(`✗ ${report.cliFailure}\n`);
+        status = 1;
+      } else {
         output.stdout.write(
-          "  warning: llm.toml is ignored: a plugin cannot choose a model or an endpoint. Name the role with agent.model / function.model; the player's model settings bind it.\n",
+          `✓ Static package validation: ${report.rootPath}\n`,
         );
+        output.stdout.write(`  languages: ${report.languages}\n`);
+        for (const warning of report.cliWarnings)
+          output.stdout.write(`${warning}\n`);
+      }
     } catch (error) {
       output.stderr.write(
         `✗ ${error instanceof Error ? error.message : String(error)}\n`,

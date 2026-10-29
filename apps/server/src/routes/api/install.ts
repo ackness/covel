@@ -24,10 +24,13 @@ import { createGithubUpdateRoutes } from "./install/github-updates.js";
 import { createInstalledPackageRoutes } from "./install/installed-packages.js";
 import { accessGuard } from "../../host-profile.js";
 
+import { packageValidationRoutes } from "./install/validate.js";
+
 export const installRoutes = new Hono();
 installRoutes.use("*", accessGuard("host.files"));
 
 installRoutes.route("/", pluginInstallRoutes);
+installRoutes.route("/", packageValidationRoutes);
 for (const kind of ["plugin", "world"] as const) {
   installRoutes.route("/", createInstalledPackageRoutes(kind));
   installRoutes.route("/", createGithubInstallRoutes(kind));

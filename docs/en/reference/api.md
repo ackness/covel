@@ -1050,6 +1050,8 @@ Authentication:
 <!-- prettier-ignore -->
 | Method | Path | Request | Description |
 | --- | --- | --- | --- |
+| POST | `/api/install/validate/plugin` | multipart `file` or JSON `{source}` | Statically validate a plugin; returns `200 PackageValidationReport` |
+| POST | `/api/install/validate/world` | multipart `file` or JSON `{source}` | Statically validate a world; returns `200 PackageValidationReport` |
 | POST | `/api/install/plugin` | multipart field `file` | Unzip a plugin `.zip` into the user plugins folder |
 | POST | `/api/install/world` | multipart field `file` | Unzip a world `.zip` into the user worlds folder |
 | POST | `/api/install/plugin/github/preview` | `{ url }` | Parse a public GitHub repository or subfolder and return a preview. Does not install or run the plugin |
@@ -1091,6 +1093,40 @@ Rollback results for failed batch installations are documented in [Plugin instal
 > - At install time, the ID is the `id` in `PLUGIN.md`, else the name of the folder that holds the package, else the package name in `package.json` (without its scope and the exact `plugin-` prefix); see [plugin installation](./plugin-installation.md#what-the-installer-does-and-does-not-do). When `id` is written, the `package.json` name plays no part.
 > - The check for reserved built-in IDs, the install directory, and the returned `id` all use this ID. A package with no `id` and no top-level folder whose `package.json` names `@covel/plugin-narrator` hits a reserved ID and returns `409`.
 > - Plugin discovery at startup takes the directory name as the ID. When `PLUGIN.md` writes a different `id`, the plugin is registered with `hostState: "error"`, and no runtime, tool, hook, or wire is loaded.
+
+### In-app validation
+
+Both validation endpoints reuse installation’s `host.files` authorization. World validation adds no `world.write` requirement. Upload a ZIP as multipart `file`, capped at 20 MiB; the archive reader checks its contents regardless of MIME type. JSON can select an installed package or a directory within allowed roots:
+
+```json
+{ "source": { "kind": "installed", "id": "my-package" } }
+```
+
+```json
+{ "source": { "kind": "path", "path": "/allowed/packages/my-package" } }
+```
+
+Completed validation returns `200` even when errors are found. Issue paths are relative to the package and contain no host paths. Example:
+
+```json
+{
+  "kind": "plugin",
+  "id": "my-package",
+  "ok": false,
+  "counts": { "errors": 1, "warnings": 0 },
+  "issues": [
+    {
+      "severity": "error",
+      "code": "unknown-field",
+      "file": "PLUGIN.md",
+      "field": "future",
+      "message": "unknown field"
+    }
+  ]
+}
+```
+
+Invalid requests return `400`; missing packages `404`; ambiguous world IDs `409`; paths outside allowed roots `403 path-outside-roots`; excessive uploads `413`; unavailable plugin catalogues `503`. See [plugin installation](./plugin-installation.md#in-app-validation) and [world installation](./world-installation.md#in-app-validation) for report and path handling.
 
 ### State query
 

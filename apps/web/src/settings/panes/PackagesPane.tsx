@@ -20,6 +20,10 @@ import {
   type InstallKind,
   type InstallResult,
 } from "@/services/api.js";
+import {
+  PackageValidationButton,
+  PackageValidationZip,
+} from "./PackageValidation.js";
 import { GithubPackageUpdater } from "./GithubPackageUpdater.js";
 import { pluginPackageInfo } from "@/lib/package-info.js";
 import { useSessionActions } from "@/stores/session-store.js";
@@ -399,6 +403,11 @@ export function PackagesPane() {
                       : t("settings.packages.uninstall", "Uninstall")}
                   </Button>
                 </div>
+                <PackageValidationButton
+                  kind="plugin"
+                  id={p.id}
+                  disabled={!!busy || !!removing || githubBusy || updateBusy}
+                />
                 <PluginLoadWarnings
                   diagnostics={installed.find((plugin) => plugin.id === p.id)}
                 />
@@ -427,6 +436,11 @@ export function PackagesPane() {
                   {item.id}
                   {item.version ? ` · ${item.version}` : ""}
                 </p>
+                <PackageValidationButton
+                  kind="world"
+                  id={item.id}
+                  disabled={!!busy || !!removing || githubBusy || updateBusy}
+                />
                 <GithubPackageUpdater
                   kind="world"
                   installation={item}
@@ -443,6 +457,9 @@ export function PackagesPane() {
           </ul>
         </section>
       )}
+      <PackageValidationZip
+        disabled={!!busy || !!removing || githubBusy || updateBusy}
+      />
     </div>
   );
 }
