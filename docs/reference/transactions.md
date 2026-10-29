@@ -444,6 +444,7 @@ SqliteStore、MemoryStore 和 PgStore（都在 Node 上）用同一种办法：
 
 **resume。**
 
+- runtime 在进入提交前失败时，只记录自身故障的熔断计数并释放 claim；不提交缓冲写入，不解决或清空 suspension。
 - resume 通过 `extraInTx` 把助手的回合消息和 suspension 的 resolved 标记放进同一个事务。任何一处失败，连同 proposal 一起回滚；claim 释放之后可以重试。
 - resolved 标记同时清掉这条 suspension 里已被本次 resume 用掉的内容（消息、已缓冲的工具调用和 proposal、输入），只留执行标识、挂起时的玩家回合数和插件版本、语言和回合号。回滚时这些内容随事务恢复。
 - 放弃、过期和作废走同一个出口：删除 suspension、给回合计数（它是这个逻辑回合最后一个还在等待的 suspension 时）、把回合扣下的 detached 作业入队，都在一个事务里。

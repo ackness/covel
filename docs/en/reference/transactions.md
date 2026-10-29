@@ -444,6 +444,7 @@ The second argument of `extraInTx` gives the dropped runtimes. The main turn use
 
 **Resume.**
 
+- If the runtime fails before commit, only its self-caused fault is recorded for the latch and the claim is released. Buffered writes are not committed, and the suspension is neither resolved nor cleared.
 - Resume puts the assistant's turn message and the suspension's resolved mark into the same transaction through `extraInTx`. If anything fails, they are rolled back together with the proposals. After the claim is released, it can be retried.
 - The resolved mark also clears what this resume has already used from the suspension (messages, buffered tool calls and proposals, input), and keeps only the execution identifier, the player turns and plugin version recorded at suspension, the language, and the turn number. On rollback, this content is restored with the transaction.
 - Abandoning, expiring and voiding go through one exit: deleting the suspension, counting the turn (when it was the last suspension of its logical turn still waiting) and queuing the detached jobs the turn held back happen in one transaction.

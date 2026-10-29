@@ -4390,7 +4390,7 @@ Resume a suspended runtime with the data the player submitted.
 Rules for failed responses:
 
 - A failed response returns only the general error envelope. It does not include a runtime result.
-- If the runtime itself fails, `error` is `Resume failed: <reason>`. This is the same text the player sees for `runtime.failed` in the turn event stream.
+- If the runtime itself fails, `error` is `Resume failed: <reason>`. This is the same text the player sees for `runtime.failed` in the turn event stream. Self-caused faults still count toward the session’s [fault latch](./protocol.md#plugin-fault-latch), but buffered writes stay uncommitted and the suspension stays unresolved. If the plugin is paused, the player must re-enable it before retrying.
 - If the commit fails, `error` is `Resume commit failed: <reason>. The suspension remains unresolved and can be retried.`
 - After a failure, this request releases its hold on the suspended item (unless the session was deleted and recreated), so you can retry. The internal cause is written only to the server log.
 

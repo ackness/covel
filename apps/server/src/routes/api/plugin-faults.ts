@@ -2,8 +2,14 @@ import {
   createPluginFaultLatch,
   type FaultTransition,
   type TurnEmitter,
+  type PreparedExecution,
+  type FinalizeExecutionOutcome,
 } from "@covel/runtime";
-import { DIMENSION_CONTRACT, type RuntimeManifest } from "@covel/shared";
+import {
+  DIMENSION_CONTRACT,
+  isSetupRuntime,
+  type RuntimeManifest,
+} from "@covel/shared";
 import type { DataStore } from "@covel/store";
 import type { EventBus } from "@covel/events";
 import type { PluginRegistry } from "@covel/plugin-loader";
@@ -30,6 +36,43 @@ export function faultExemptions(
       )
       .map((runtime) => runtime.pluginId),
   );
+}
+
+/** Record commit outcomes and runtime failures that return before any commit. */
+export async function recordExecutionFaults(args: {
+  readonly store: DataStore;
+  readonly execution: PreparedExecution;
+  readonly outcome: FinalizeExecutionOutcome;
+  readonly turnId: string;
+  readonly emitter?: TurnEmitter;
+  readonly eventBus?: EventBus;
+}): Promise<void> {
+  const faults = pluginFaultHost(args.store);
+  if (!faults) return;
+  const plan = args.execution.commit;
+  const transitions = faults.latch.recordExecution({
+    sessionId: plan.sessionId,
+    logicalKey: plan.executionContext.logicalTurnId ?? args.turnId,
+    results: plan.results,
+    outcome: args.outcome,
+    exempt: faults.exemptions(plan.sessionId, plan.runtimes),
+    setupRuntimeIds: new Set(
+      plan.runtimes.filter(isSetupRuntime).map((runtime) => runtime.name),
+    ),
+  });
+  try {
+    await faults.publish(
+      transitions,
+      plan.executionContext.origin === "player" ||
+        plan.executionContext.origin === "continuation"
+        ? args.emitter
+        : undefined,
+      args.eventBus,
+      { traceId: args.emitter?.traceId, turnId: args.turnId },
+    );
+  } catch (error) {
+    console.warn("[plugin-faults] transition delivery failed", error);
+  }
 }
 
 export function createHostPluginFaults(args: {

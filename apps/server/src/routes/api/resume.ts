@@ -1,6 +1,7 @@
 import { sessionEventBus } from "./session/session-events.js";
 import { preflightRuntimeApprovals } from "./actions/approval-preflight.js";
 import { commitExecution } from "./commit-execution.js";
+import { recordExecutionFaults } from "./plugin-faults.js";
 import { resolveMediaImageFlow } from "./media-image-flow.js";
 import {
   requestJobServices,
@@ -362,6 +363,16 @@ resumeRoutes.post("/:id/suspensions/:suspensionId/resume", async (c) => {
         const { result } = execution;
 
         if (result.status !== "success" || !result.output) {
+          // No proposals were submitted: count only the runtime's own fault,
+          // leaving buffered writes and the unresolved suspension untouched.
+          await recordExecutionFaults({
+            store,
+            execution,
+            outcome: { status: "failed", events: [], failedProposals: [] },
+            turnId: suspension.turnId,
+            emitter,
+            eventBus,
+          });
           await releaseClaim();
           // The runtime's own failure, the text a turn reports to the player
           // in `runtime.failed`. An exception below stays a generic 500.

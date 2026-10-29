@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 import { Hono } from "hono";
 import { createMemoryStore } from "@covel/store/memory";
+import type { SuspensionRecord } from "@covel/store";
+import type { FunctionHandler } from "@covel/shared/plugin-runtime";
 import { createEventBus } from "@covel/events";
 import { createPluginRegistry, parsePluginMd } from "@covel/plugin-loader";
 import { createRpcApprovalGate } from "@covel/approval";
@@ -17,6 +19,7 @@ import {
   DIMENSION_CONTRACT,
   sessionWorldContextV1,
   type RuntimeManifest,
+  type Proposal,
 } from "@covel/shared";
 import { createHostPluginFaults } from "../../src/routes/api/plugin-faults.js";
 import { commitExecution } from "../../src/routes/api/commit-execution.js";
@@ -25,6 +28,7 @@ import {
   buildResumeTurnExecutorDeps,
 } from "../../src/routes/api/turn-execution-deps.js";
 import { sessionRoutes } from "../../src/routes/api/session.js";
+import { resumeRoutes } from "../../src/routes/api/resume.js";
 import { registerSessionPluginRoutes } from "../../src/routes/api/session/plugin-routes.js";
 import type { SessionRouteEnv } from "../../src/routes/api/session/route-env.js";
 import { createInProcessSessionLock } from "../../src/lib/session-lock.js";
@@ -38,7 +42,12 @@ const runtime: RuntimeManifest = {
   stage: "post-turn",
   trigger: { type: "auto" },
 };
-async function fixture(runtimes: readonly RuntimeManifest[] = [runtime]) {
+async function fixture(
+  runtimes: readonly RuntimeManifest[] = [runtime],
+  handler: FunctionHandler = async () => {
+    throw new Error("self-caused");
+  },
+) {
   const store = createMemoryStore();
   const eventBus = createEventBus();
   const registry = createPluginRegistry();
@@ -49,13 +58,18 @@ async function fixture(runtimes: readonly RuntimeManifest[] = [runtime]) {
       "---\nid: p\nkind: plugin\ndescription: Probe\n---\n",
       "p/PLUGIN.md",
     ),
-    manifests: [],
+    manifests: runtimes.map((manifest) => ({
+      runtime: manifest.runtimeType === "function" ? { function: {} } : {},
+      manifest,
+      promptTemplate: "",
+      rawFrontmatter: {},
+    })),
     summary: {
       id: "p",
       name: "Probe",
       description: "Probe",
       kind: "plugin",
-      runtimeCount: 0,
+      runtimeCount: runtimes.length,
     },
     loadedRuntimes: new Map(),
     status: "registered",
@@ -110,12 +124,24 @@ async function fixture(runtimes: readonly RuntimeManifest[] = [runtime]) {
       },
     );
   }
+  const llm = {
+    generate: async () => {
+      throw new Error("no model");
+    },
+  };
+  const loadRuntime = async (manifest: RuntimeManifest) => ({
+    manifest,
+    promptTemplate: "",
+    handler,
+  });
   const app = new Hono<SessionRouteEnv>();
   app.use("*", async (c, next) => {
     c.set("store", store);
     c.set("pluginRegistry", registry);
     c.set("eventBus", eventBus);
     c.set("pluginFaults", host.latch);
+    c.set("llmAdapter", llm);
+    c.set("loadRuntimeFn", loadRuntime);
     c.set("hookPipeline", hookPipeline);
     c.set("rpcApprovalGate", createRpcApprovalGate());
     c.set("sessionLock", createInProcessSessionLock());
@@ -123,6 +149,7 @@ async function fixture(runtimes: readonly RuntimeManifest[] = [runtime]) {
   });
   registerSessionPluginRoutes(app);
   app.route("/api/sessions", sessionRoutes);
+  app.route("/api/sessions", resumeRoutes);
   const hookPipeline = createHookPipeline({
     onHandlerOutcome: host.onHandlerOutcome,
     isPluginLatched: host.latch.isLatched,
@@ -153,18 +180,8 @@ async function fixture(runtimes: readonly RuntimeManifest[] = [runtime]) {
         emitter,
         services,
         extensions,
-        llm: {
-          generate: async () => {
-            throw new Error("no model");
-          },
-        },
-        loadRuntime: async (manifest) => ({
-          manifest,
-          promptTemplate: "",
-          handler: async () => {
-            throw new Error("self-caused");
-          },
-        }),
+        llm,
+        loadRuntime,
       },
     );
     const completion =
@@ -193,8 +210,10 @@ async function fixture(runtimes: readonly RuntimeManifest[] = [runtime]) {
 }
 
 describe("host plugin fault boundary", () => {
+  // These prepared executions exercise the commit boundary. The real resume
+  // route's pre-commit failure path is covered separately below.
   it.each(["player", "manual", "resume", "background"] as const)(
-    "counts %s commits at the shared boundary",
+    "counts faults at the shared boundary for origin=%s",
     async (origin) => {
       const f = await fixture();
       for (const key of ["one", "two", "three"]) await f.run(key, origin);
@@ -207,6 +226,96 @@ describe("host plugin fault boundary", () => {
       expect(fourth.result.runtimeResults).toEqual([]);
     },
   );
+  it("latches after two prior faults and a self-caused failure through the real resume route without committing or resolving the suspension", async () => {
+    const handler = vi.fn<FunctionHandler>(async (ctx) => {
+      if (ctx.resumedFromSuspensionId) {
+        if (!ctx.pluginData) throw new Error("fixture requires plugin data");
+        await ctx.pluginData.set("notes", "resume-write", "uncommitted");
+        throw new Error("self-caused resume failure");
+      }
+      throw new Error("self-caused");
+    });
+    const f = await fixture([runtime], handler);
+    await f.run("one");
+    await f.run("two");
+    expect(f.host.latch.isLatched("s", "p")).toBe(false);
+
+    const timestamp = new Date().toISOString();
+    const pending: Proposal = {
+      id: "buffered-before-resume",
+      sessionId: "s",
+      turnId: "suspended-turn",
+      timestamp,
+      type: "plugin.data",
+      source: { pluginId: runtime.pluginId, runtimeId: runtime.name },
+      payload: {
+        namespace: "notes",
+        key: "buffered-write",
+        value: "uncommitted",
+      },
+    };
+    const suspension: SuspensionRecord = {
+      id: "faulting-resume",
+      sessionId: "s",
+      turnId: "suspended-turn",
+      pluginId: runtime.pluginId,
+      runtimeId: runtime.name,
+      reason: "Need input",
+      resumeSchema: { type: "object" },
+      createdAt: timestamp,
+      pendingContinuation: {
+        takenUnder: {
+          playerTurns: (await f.store.getTurnMessageStats("s"))
+            .playerMessageCount,
+          pluginVersion: "0.0.0",
+          writes: [],
+        },
+        executionContext: {
+          executionId: "suspended-execution",
+          origin: "manual",
+          countPolicy: "none",
+          logicalTurnId: "resume-logical-input",
+        },
+        messages: [],
+        toolCallsSoFar: [],
+        pendingProposals: [pending],
+      },
+    };
+    await f.store.saveSuspension(suspension);
+    const before = await f.store.getSession("s");
+    const events: string[] = [];
+    f.eventBus.onEmit((event) => events.push(event.type));
+    const commit = vi.spyOn(f.store, "withTransaction");
+    const response = await f.app.request(
+      "/api/sessions/s/suspensions/faulting-resume/resume",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ data: {} }),
+      },
+    );
+
+    expect(response.status).toBe(500);
+    expect(await response.json()).toMatchObject({
+      error: "Resume failed: self-caused resume failure",
+    });
+    expect(handler).toHaveBeenCalledTimes(3);
+    expect(f.host.latch.latched("s")).toEqual([
+      { pluginId: "p", consecutiveFaults: 3, latched: true, reason: "runtime" },
+    ]);
+    expect(events).toContain("plugin.fault.latched");
+    expect(commit).not.toHaveBeenCalled();
+    expect(await f.store.getSuspension(suspension.id)).toEqual(suspension);
+    expect(await f.store.listPluginData("s", "p", "notes")).toEqual([]);
+    expect(await f.store.getSession("s")).toEqual(before);
+    const view = await f.app.request("/s/plugins");
+    expect(await view.json()).toMatchObject({
+      items: [
+        expect.objectContaining({ id: "p", paused: { reason: "runtime" } }),
+      ],
+    });
+  });
+
   it("publishes player notices for action forwarding; lists and resumes a paused plugin", async () => {
     const f = await fixture();
     const events: string[] = [];

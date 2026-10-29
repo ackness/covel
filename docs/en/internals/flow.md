@@ -1174,6 +1174,6 @@ For why it is designed this way, see [design principles](./design-principles.md)
 
 ## Plugin fault latch
 
-The host's shared `commitExecution` boundary attributes faults after player, manual, resumed and background commits. The Hook pipeline separately reports handler outcomes against the registering plugin. The in-memory latch counts per session and plugin, deduping one input by `logicalTurnId ?? turnId`. See the [protocol](../reference/protocol.md#plugin-fault-latch) for counting, exemptions and events.
+The host's shared `recordExecutionFaults` helper attributes faults and publishes latch events. `commitExecution` calls it after player, manual, resumed and background commits. When a resumed runtime fails before commit, the resume route also calls it before returning the error, without committing buffered writes or resolving the suspension. The Hook pipeline separately reports handler outcomes against the registering plugin. The in-memory latch counts per session and plugin, deduping one input by `logicalTurnId ?? turnId`. See the [protocol](../reference/protocol.md#plugin-fault-latch) for counting, exemptions and events.
 
 `executeTurn` filters paused plugins' runtimes and Hook admission sets at entry; resume and service admission also check pauses. A running registry snapshot stays unchanged; services capture the same execution's pause set. Restart, session end and deletion clear memory without writing domain data or snapshots.

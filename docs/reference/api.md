@@ -4390,7 +4390,7 @@ runtime 可以中途停下来等玩家提供数据，这叫挂起。本节的端
 失败响应的规则：
 
 - 失败时只返回通用错误信封，不带 runtime 结果。
-- runtime 自己执行失败时，`error` 是 `Resume failed: <原因>`，与回合事件流里 `runtime.failed` 给玩家看的文字相同。
+- runtime 自己执行失败时，`error` 是 `Resume failed: <原因>`，与回合事件流里 `runtime.failed` 给玩家看的文字相同。 自身故障仍计入本会话的[熔断](./protocol.md#插件故障熔断)，但缓冲写入不提交，挂起项保持未解决；插件被暂停后，玩家需先重新启用再重试。
 - 提交失败时，`error` 是 `Resume commit failed: <原因>. The suspension remains unresolved and can be retried.`
 - 失败后，这次请求对挂起项的占用会被释放（前提是会话没有被删除重建），所以可以重试。内部原因只写进服务端日志。
 
