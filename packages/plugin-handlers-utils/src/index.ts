@@ -480,6 +480,17 @@ export { fillNarrativeTemplate } from "./fill-narrative-template.js";
 export * from "./character-field-values.js";
 export type { MediaReference } from "./types.js";
 export * from "./prompt-text.js";
-export { DATA_OP_KINDS, type DataOpKind } from "./data-ops.js";
+export {
+  DATA_OP_KINDS,
+  applyDataOps,
+  dataOpSchema,
+  dataOpsSchema,
+  type DataOp,
+  type DataOpError,
+  type DataOpErrorCode,
+  type DataOpKind,
+  type DataOpsCurrent,
+  type DataOpsResult,
+} from "./data-ops.js";
 export type { SimpleCompletionAdapter } from "./completion-adapter.js";
 export type TokenEstimator = (text: string) => number;
