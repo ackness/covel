@@ -18,11 +18,15 @@ import { runAgentToolLoop } from "../agent-loop/turn-agent-tool-loop.js";
 import { freezeInputSlots } from "../agent-loop/runtime-input-slots.js";
 import { executeFunctionRuntime } from "../function-runtime/turn-function-runtime.js";
 import { createWorldModelView } from "../function-runtime/world-model-view.js";
-import { makeFailedResult } from "../turn-executor/turn-executor-helpers.js";
 import {
   finalizeRuntimeResult,
   runRuntimePreHook,
 } from "../turn-executor/runtime-finalization.js";
+import {
+  DEFAULT_RUNTIME_TIMEOUT_MS,
+  finalizeRuntimeFailure,
+  finalizeThrownRuntime,
+} from "../turn-executor/runtime-scaffold.js";
 import { throwIfTurnExecutionAborted } from "../turn-executor/turn-control.js";
 import type { TurnExecutorDeps } from "../turn-executor/turn-executor-types.js";
 
@@ -84,18 +88,11 @@ export async function resumeRuntimePipeline(
       options,
     });
   } catch (error: unknown) {
-    return finalizeRuntimeResult(
+    // Unlike dispatch: plain `deps`, not the dispatcher's `{ ...deps, hookPipeline }`.
+    return finalizeThrownRuntime(
       deps,
-      manifest,
-      input,
-      makeFailedResult(
-        manifest,
-        input,
-        runId,
-        startTime,
-        error instanceof Error ? error.message : String(error),
-      ),
-      { cause: error },
+      { manifest, input, runId, startTime },
+      error,
     );
   }
 }
@@ -114,22 +111,24 @@ async function executeResumedRuntime(
 ): Promise<RuntimeResult> {
   const { startTime, runId, input, options } = execution;
   const maxSteps = options?.maxSteps ?? DEFAULT_MAX_TOOL_STEPS;
-  const timeoutMs = options?.timeoutMs ?? manifest.timeoutMs ?? 60000;
+  // Resume lets the caller's timeout beat the manifest's, the reverse
+  // of `resolveRuntimeTimeoutMs` for a dispatched runtime.
+  const resumeTimeoutMs =
+    options?.timeoutMs ?? manifest.timeoutMs ?? DEFAULT_RUNTIME_TIMEOUT_MS;
   const hookPipeline = deps.hookPipeline;
   let lastTarget: LLMTargetIdentity | undefined;
   let deltaCount = 0;
 
+  const postRuntimeOptions = () => ({
+    lastTarget,
+    deltaCount,
+    outputContractSchema: loaded?.outputContractSchema,
+    ...(loaded?.outputSchema ? { agentOutputSchema: loaded.outputSchema } : {}),
+  });
   const finalizeWithPostRuntime = (
     result: RuntimeResult,
   ): Promise<RuntimeResult> =>
-    finalizeRuntimeResult(deps, manifest, input, result, {
-      lastTarget,
-      deltaCount,
-      outputContractSchema: loaded?.outputContractSchema,
-      ...(loaded?.outputSchema
-        ? { agentOutputSchema: loaded.outputSchema }
-        : {}),
-    });
+    finalizeRuntimeResult(deps, manifest, input, result, postRuntimeOptions());
 
   const preRuntime = await runRuntimePreHook(
     deps,
@@ -147,14 +146,11 @@ async function executeResumedRuntime(
   );
   throwIfTurnExecutionAborted(deps.turnControl, "resume loading");
   if (!loaded) {
-    return finalizeWithPostRuntime(
-      makeFailedResult(
-        manifest,
-        input,
-        runId,
-        startTime,
-        "Runtime not found on resume",
-      ),
+    return finalizeRuntimeFailure(
+      deps,
+      { manifest, input, runId, startTime },
+      "Runtime not found on resume",
+      postRuntimeOptions(),
     );
   }
 
@@ -198,7 +194,7 @@ async function executeResumedRuntime(
       recursionDepth: 0,
       startTime,
       runId,
-      timeoutMs,
+      timeoutMs: resumeTimeoutMs,
       executionId: runId,
       resumeData,
       resumedFromSuspensionId: suspension.id,
@@ -287,7 +283,7 @@ async function executeResumedRuntime(
       : undefined,
     deps,
     maxSteps,
-    timeoutMs,
+    timeoutMs: resumeTimeoutMs,
     messages,
     ...(deps.estimator && deps.contextBudget
       ? {

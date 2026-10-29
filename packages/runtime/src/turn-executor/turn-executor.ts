@@ -71,6 +71,7 @@ import {
   PLAYER_ABORT_REASON,
   trackSteeringReaders,
 } from "./turn-control.js";
+import { DEFAULT_RUNTIME_TIMEOUT_MS } from "./runtime-scaffold.js";
 import {
   detachedUpstreamResults,
   planTurnDetachment,
@@ -192,7 +193,7 @@ async function executeTurnImpl(
   const executionStartedAt =
     input.detachedStage?.sourceExecutionStartedAt ?? new Date().toISOString();
   const maxSteps = options?.maxSteps ?? DEFAULT_MAX_TOOL_STEPS;
-  const defaultTimeoutMs = options?.timeoutMs ?? 60000;
+  const defaultTimeoutMs = options?.timeoutMs ?? DEFAULT_RUNTIME_TIMEOUT_MS;
   const recursionDepth = options?.recursionDepth ?? 0;
   const targetedRuntimeId =
     input.detachedStage?.runtimeId ?? input.manualTrigger?.runtimeId;
