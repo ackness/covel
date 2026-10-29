@@ -225,8 +225,7 @@ describe("world-time pipeline", () => {
     expect(update.payload.ops[0]).toEqual({ op: "inc", path: "/tick", by: 60 });
     expect(update.payload.ops[1].value).not.toHaveProperty("schemaVersion");
     const predicted = {
-      schemaVersion: 1,
-      definition: value.definition,
+      ...value,
       tick: value.tick + 60,
       ...describeTime(value.definition, value.tick + 60, "en"),
       lastTurnId: "next-turn",
