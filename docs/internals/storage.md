@@ -564,6 +564,21 @@ MemoryStore、SQLite、PostgreSQL 和浏览器检查点都保持这些身份。�
 - `runtime_outputs` 是更窄的投影，供运行时输出 API 使用。
 - 行在提交之前写入，由 `setTurnResultCommitStatus` 结算。回合提交成功时，它还会把“写入被丢弃的运行时”的结果改写为 `failed` 并附上错误，所以重试绝不会把一个被丢弃的结果当作成功来做种子。
 
+## 状态所有者登记
+
+新增表或会话字段时，先在 [`state-ownership.ts`](../../packages/store/src/state-ownership.ts) 登记它的所有者和保存范围。`KERNEL_TABLE_OWNERSHIP` 覆盖 SQLite 和 PostgreSQL 的全部 Drizzle 表，记录会话或全局作用域，以及快照、浏览器检查点和分叉的处理方式。`SESSION_FIELD_OWNERSHIP` 覆盖 `SessionRecord` 的每个字段，记录所有者和是否进入快照。这份登记只描述现有行为，不驱动数据复制或写入。
+
+[`state-ownership.test.ts`](../../packages/store/tests/state-ownership.test.ts) 检查：
+
+- 表名与两个后端的 schema 完全一致。会话作用域包含级联登记里的子表、父表 `sessions` 和由 MediaStore 管理的 `media_refs`。
+- 标为 `captured` 的表恰好对应 `SnapshotPayload` 里的数据集。消息游标、显示边界和压缩标签不是消息行数据集。
+- 标为 `exported` 的表恰好对应检查点领域，包括记录数组、生命周期数组、单条记录和嵌套的 `state` 数组。这里表示检查点有该领域，不保证复制全部行；例如工具调用和事件数组目前导出为空。
+- 会话字段的快照登记与 `SnapshotSessionState` 中的同名字段一致。类型检查还要求新增 `SessionRecord`、快照或检查点字段时补齐对应登记或测试映射。
+
+`plugin_data` 的行归 `plugin_id` 所有；`_` 命名空间和 `__kernel:` 所有者是内核分区。控制面命名空间不进入快照和分叉。`state_schemas`、`state_entries`、`state_changes` 登记为内核所有：插件写入路径已移除，之后会改造或移除这三张表。
+
+分叉行为已登记，但 store 测试无法依赖 `apps/server`，因此不核对分叉实现。会话 `metadata` 的子键不在字段检查范围内；目前没有重置路径，操作记录表也尚未创建，本登记不为它们声明行为。
+
 ## Plugin-data ownership and reserved names
 
 面向插件的数据 API 同时绑定会话 ID 和插件所有者。命名空间只是这个所有者分区里的一个名字，不能用它选中别的所有者。插件的普通写入先缓冲成提案，再以来源所有者的身份提交。

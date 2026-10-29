@@ -564,6 +564,21 @@ These rows are not copied in full into browser checkpoints (see [Browser-Private
 - `runtime_outputs` is a narrower projection, used by the runtime output API.
 - A row is written before commit and settled by `setTurnResultCommitStatus`. When the turn commits successfully, it also rewrites results of discarded runtime writes to `failed` with an error attached, so a retry never seeds a discarded result as if it had succeeded.
 
+## State Ownership Registry
+
+When adding a table or session field, register its owner and persistence scope in [`state-ownership.ts`](../../../packages/store/src/state-ownership.ts). `KERNEL_TABLE_OWNERSHIP` covers every Drizzle table in SQLite and PostgreSQL, recording session or global scope and how snapshots, browser checkpoints and forks handle it. `SESSION_FIELD_OWNERSHIP` covers every `SessionRecord` field, recording its owner and whether a snapshot captures it. This inventory describes existing behavior; it does not drive data copying or writes.
+
+[`state-ownership.test.ts`](../../../packages/store/tests/state-ownership.test.ts) checks that:
+
+- Table names exactly match both backend schemas. Session scope includes the registered cascade children, the parent `sessions` table and MediaStore-managed `media_refs`.
+- Tables marked `captured` exactly match the datasets in `SnapshotPayload`. Message cursors, display boundaries and compaction tags are not message-row datasets.
+- Tables marked `exported` exactly match checkpoint domains, including record arrays, lifecycle arrays, singletons and nested `state` arrays. This means the checkpoint has that domain; it does not promise to copy every row. For example, tool-call and event arrays are currently exported empty.
+- Session-field snapshot policies match the same-name fields in `SnapshotSessionState`. Type checking also requires new `SessionRecord`, snapshot or checkpoint fields to have corresponding registry entries or test mappings.
+
+Rows in `plugin_data` belong to their `plugin_id`; `_` namespaces and `__kernel:` owners are kernel partitions. Control-plane namespaces are excluded from snapshots and forks. `state_schemas`, `state_entries` and `state_changes` are registered as kernel-owned: the plugin write path has been removed, and they will be reworked or removed later.
+
+Fork behavior is recorded, but store tests cannot depend on `apps/server`, so they do not verify the fork implementation. Session `metadata` sub-keys are outside field coverage. There is currently no reset path, and the operation-record table has not been created yet. This inventory declares no behavior for them.
+
 ## Plugin-Data Ownership and Reserved Names
 
 The plugin-facing data API is bound to both the session ID and the plugin owner. A namespace is only a name inside that owner's partition, and it cannot be used to select a different owner. A plugin's ordinary writes are first buffered as proposals, and then committed under the identity of the originating owner.
