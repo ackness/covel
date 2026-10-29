@@ -472,6 +472,31 @@ const uiSpecs: {
   { name: "an unknown component", spec: { view: { component: "Widget" } } },
 ];
 
+describe("dataset declarations", () => {
+  it("a key that is not a required schema property is rejected by load and validation alike", async () => {
+    const dir = await plugin(
+      {
+        contributes: {
+          datasets: { journal: { schema: "./journal.json", key: "ghost" } },
+        },
+      },
+      {},
+      {
+        "journal.json": JSON.stringify({
+          type: "object",
+          properties: { id: { type: "string" } },
+          required: ["id"],
+        }),
+      },
+    );
+    const message = `${path.join(dir, "PLUGIN.md")}: contributes.datasets.journal.key: ghost is not a required property of ./journal.json`;
+    await expect(load(dir)).rejects.toThrow(message);
+    const result = await validate(dir);
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain(message);
+  });
+});
+
 describe("UI specs", () => {
   async function uiPlugin(spec: unknown, files: Record<string, string> = {}) {
     return plugin(

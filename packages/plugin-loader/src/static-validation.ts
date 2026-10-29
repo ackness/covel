@@ -5,6 +5,7 @@ import {
   pluginUiSpecIssues,
 } from "@covel/shared";
 import path from "node:path";
+import { datasetKeyIssue, datasetSchemaIssues } from "./dataset-rules.js";
 import type { ParsedPluginMd, ParsedRuntimeMd } from "./types.js";
 
 /** Every declared server module, relative to the manifest that owns it. */
@@ -199,6 +200,29 @@ export function validatePluginFiles(
       declaration.schema,
       true,
     );
+  for (const [name, declaration] of Object.entries(
+    plugin.contributes?.datasets ?? {},
+  )) {
+    const document = file(
+      packageManifest.sourcePath,
+      `contributes.datasets.${name}.schema`,
+      declaration.schema,
+      true,
+    );
+    const keyIssue = datasetKeyIssue(
+      packageManifest.sourcePath,
+      name,
+      declaration,
+      document,
+    );
+    if (keyIssue) throw new Error(keyIssue);
+  }
+  const [schemaIssue] = datasetSchemaIssues(
+    packageManifest.sourcePath,
+    root,
+    plugin.contributes,
+  );
+  if (schemaIssue) throw new Error(schemaIssue);
   // The same rules decide whether the game shows the panel (`loadPluginUiSpecs`).
   for (const [slot, paths] of Object.entries(plugin.contributes?.ui ?? {}))
     for (const reference of paths ?? []) {

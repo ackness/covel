@@ -133,6 +133,7 @@ Session prep groups the plugins by whether they call a model, that is by the der
 | `events` | Plugin event contracts |
 | `settings` | Player settings. The runtime reads them through `ctx.userSettings`. |
 | `data` | The schema, version, accepts, and search settings for this plugin's data namespace |
+| `datasets` | Typed datasets the package owns: the name is the namespace, with schema, key and ops. See [Datasets](#datasets-contributesdatasets) |
 | `ui` | Paths, relative to the package root, of the `right/message` UI spec files |
 | `worldProjections` | Declarations of world data projections |
 | `prompt` | Static prompt sections |
@@ -955,6 +956,7 @@ The directory-level command `pnpm validate:plugin <dir>` and the ZIP install sha
 - The referenced entry, handler, guard, JSON Schema, and UI files must be inside the package.
 - Each JSON UI spec declares one of `view` and `webview`. Component names in `view` must be in the [component catalogue](./ui-components.md). `repeat.statePath` and `$item` must have a legal form (see [UI panels](./ui-panels.md#json-render-binding-cheat-sheet)). The error gives the spec file and the path of the node.
 - The built-in tool names and the plugin tool declarations, the runtime references inside the package, and the root contract dependencies must all be consistent.
+- Each `contributes.datasets` schema file must be in the package and valid JSON. `key` must be a required property in the schema's top-level `properties` (skipped when the schema has none). A name that is also in `contributes.data` must use the same schema in both.
 - An error from a cross-field rule (for example, `schedule.detached` is only allowed on `post-turn` or `audit`, or a story runtime's contract input must set `required: false`) gives the file path and the field path you wrote, for example `runtimes/note/RUNTIME.md: schedule.stage: …`.
 
 Loading, `pnpm validate:plugin` and installation use one copy of the manifest rules (the schemas in `@covel/shared`), and the same holds for UI specs: a panel that passes the check is not dropped in the game for its format.
@@ -1084,6 +1086,29 @@ To see a real example of a given pattern, look here:
 | Background music scheduling | [soundtrack](../../../plugins/soundtrack/PLUGIN.md) |
 | World data entering the narrative prompt | [character-blueprint](../../../plugins/character-blueprint/PLUGIN.md) |
 | Hidden world data and planning | [story-events](../../../plugins/story-events/PLUGIN.md) |
+
+### Datasets (`contributes.datasets`)
+
+A dataset is a typed kind of plugin data that a plugin declares: a namespace the package owns, plus the JSON Schema every record in it must satisfy.
+
+```yaml
+contributes:
+  datasets:
+    journal:
+      schema: ./schemas/journal.json # required: a package-relative .json path
+      key: id # optional: the top-level record field that is the key
+      ops: [upsertItem, delete] # optional: allowed operations, default all
+```
+
+- **The name is the namespace.** The `journal` dataset is the plugin-data space `journal`. A name starts with a letter and holds only letters, digits, `_` and `-`, at most 64 characters. A name starting with `_` is reserved for the kernel and cannot be declared.
+- `schema` must be a `.json` file in the package, with no `..` and no leading `/`.
+- `key`: which top-level field of a record (a string value) is its key. Leave it out to derive no key; the caller then chooses keys.
+- `ops`: the operation kinds this dataset allows, from `set`, `merge`, `inc`, `append`, `insert`, `remove`, `upsertItem`, `delete`. Leaving it out means all of them. When written it cannot be empty or contain duplicates.
+- Omitted fields take their defaults. The compiled declaration always carries `namespace`, `schema` and `ops` (`key` only when written). The compiled result is copied onto `datasets` of every runtime in the package.
+- **Relation to `contributes.data`.** When the same name appears in both `data` and `datasets`, the two `schema` paths must point at the same file: a namespace has one schema. `data` still governs world-pack import; the dataset governs the records in the namespace.
+- A namespace without a dataset declaration behaves as before.
+
+Only static checks exist today. Loading, `pnpm validate:plugin` and installation read and parse every dataset schema file (a missing file, invalid JSON, or a path outside the package root is an error) and check `key`: when the schema has a top-level `properties`, `key` must be one of them and be listed in the top-level `required`. A schema without top-level `properties` (only `$ref`, `allOf` and the like) skips that check. Validating writes against `schema` and `ops` at commit is not available yet, so a declaration does not restrict writes today.
 
 ### Reserved data namespaces
 

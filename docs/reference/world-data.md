@@ -1442,6 +1442,7 @@ contributes:
 ```
 
 - schema 是插件根目录里的 JSON Schema 文件。
+- 同一个 namespace 也可以声明成[数据集](./plugins.md#数据集contributesdatasets)；两边的 `schema` 必须是同一个文件。
 - 接收声明只写在包的根 `PLUGIN.md`，不写进 `RUNTIME.md`。
 - 插件代码用 `ctx.pluginData.get(namespace,key)` / `list(namespace)` 读自己的数据；RPC 用绑定了当前会话和插件的 `ctx.store`。不要去读别的插件的私有数据。
 

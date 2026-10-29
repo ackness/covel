@@ -459,3 +459,91 @@ describe("fields the author need not write", () => {
     ]);
   });
 });
+
+describe("plugin manifest datasets", () => {
+  const withDatasets = (datasets: unknown) => ({
+    id: "probe",
+    kind: "plugin",
+    description: "Probe",
+    contributes: { datasets },
+  });
+  const accepted = (datasets: unknown) =>
+    pluginManifestSchema.safeParse(withDatasets(datasets)).success;
+
+  it("accepts a declaration with every field", () => {
+    const parsed = pluginManifestSchema.parse(
+      withDatasets({
+        journal: {
+          schema: "./schemas/journal.json",
+          key: "id",
+          ops: ["upsertItem", "delete"],
+        },
+        notes: { schema: "schemas/notes.json" },
+      }),
+    );
+    expect(parsed.contributes?.datasets?.journal).toEqual({
+      schema: "./schemas/journal.json",
+      key: "id",
+      ops: ["upsertItem", "delete"],
+    });
+    expect(parsed.contributes?.datasets?.notes).toEqual({
+      schema: "schemas/notes.json",
+    });
+  });
+
+  it("rejects a reserved or malformed dataset name", () => {
+    expect(accepted({ _kernel: { schema: "s.json" } })).toBe(false);
+    expect(accepted({ "bad name": { schema: "s.json" } })).toBe(false);
+    expect(accepted({ ok_name: { schema: "s.json" } })).toBe(true);
+  });
+
+  it("rejects an unknown, duplicate or empty ops list", () => {
+    expect(accepted({ a: { schema: "s.json", ops: ["explode"] } })).toBe(false);
+    expect(accepted({ a: { schema: "s.json", ops: ["set", "set"] } })).toBe(
+      false,
+    );
+    expect(accepted({ a: { schema: "s.json", ops: [] } })).toBe(false);
+    expect(accepted({ a: { schema: "s.json", ops: ["set", "merge"] } })).toBe(
+      true,
+    );
+  });
+
+  it("rejects a schema path that leaves the package", () => {
+    expect(accepted({ a: { schema: "../s.json" } })).toBe(false);
+    expect(accepted({ a: { schema: "/etc/s.json" } })).toBe(false);
+    expect(accepted({ a: { schema: "s.yaml" } })).toBe(false);
+  });
+
+  it("rejects a malformed key and extra fields", () => {
+    expect(accepted({ a: { schema: "s.json", key: "1id" } })).toBe(false);
+    expect(accepted({ a: { schema: "s.json", key: "a.b" } })).toBe(false);
+    expect(accepted({ a: { schema: "s.json", extra: true } })).toBe(false);
+    expect(accepted({ a: { schema: "s.json", tools: ["get"] } })).toBe(false);
+    expect(accepted({ a: {} })).toBe(false);
+  });
+});
+
+describe("compiled runtime manifest datasets", () => {
+  const compiled = (datasets: unknown) =>
+    runtimeManifestInputSchema.safeParse({
+      name: "dataset-runtime",
+      description: "Dataset runtime",
+      stage: "narrative",
+      datasets,
+    }).success;
+
+  it("requires resolved ops and a matching namespace", () => {
+    const ok = {
+      journal: {
+        namespace: "journal",
+        schema: "./j.json",
+        ops: ["set"],
+      },
+    };
+    expect(compiled(ok)).toBe(true);
+    expect(compiled({ journal: { ...ok.journal, ops: undefined } })).toBe(
+      false,
+    );
+    expect(compiled({ other: ok.journal })).toBe(false);
+  });
+});

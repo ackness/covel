@@ -9,6 +9,7 @@ import {
   pluginDataSchemaMapSchema,
   stageRank,
   type PluginDataSchemaDecl,
+  type PluginDatasetDecl,
   type RuntimeManifest,
   type WorldProjectionDecl,
   worldProjectionMapSchema,
@@ -60,6 +61,14 @@ function mergeDataSchemas(
   return Object.keys(schemas).length
     ? pluginDataSchemaMapSchema.parse(schemas)
     : undefined;
+}
+function mergeDatasets(
+  entry: PluginRegistryEntry,
+): Readonly<Record<string, PluginDatasetDecl>> | undefined {
+  const datasets =
+    entry.datasets ??
+    resolvePluginDeclarations(pluginDeclarations(entry)).datasets;
+  return Object.keys(datasets).length ? datasets : undefined;
 }
 function mergeWorldProjections(
   entry: PluginRegistryEntry,
@@ -283,6 +292,7 @@ export function createPluginRegistry(
     },
     register(entry: PluginRegistryEntry): void {
       const dataSchemas = mergeDataSchemas(entry);
+      const datasets = mergeDatasets(entry);
       const worldProjections = mergeWorldProjections(entry);
       validateWorldProjectionTargets(entry.id, dataSchemas, worldProjections);
       for (const [id, other] of entries) {
@@ -301,6 +311,7 @@ export function createPluginRegistry(
       entries.set(entry.id, {
         ...entry,
         ...(dataSchemas ? { dataSchemas: deepFreezeJson(dataSchemas) } : {}),
+        ...(datasets ? { datasets: deepFreezeJson(datasets) } : {}),
         ...(worldProjections
           ? { worldProjections: deepFreezeJson(worldProjections) }
           : {}),

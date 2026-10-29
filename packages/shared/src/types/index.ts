@@ -107,6 +107,7 @@ export type {
   InputConfig,
   OutputConfig,
   PluginDataSchemaDecl,
+  PluginDatasetDecl,
   WorldProjectionDecl,
   WorldProjectionOutputDecl,
   PluginEventDecl,

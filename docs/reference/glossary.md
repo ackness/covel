@@ -18,6 +18,7 @@
 | Collection | 合集 |  |
 | Contract | 契约 | 带版本号的 ID，例如 `narrative-engine@1`。 |
 | Credits | 作者信息 | 一个包的 `author`、`license` 和 `homepage` 字段。 |
+| Dataset | 数据集 | 插件声明的带类型数据（`contributes.datasets`）。不是安装用的 **Collection**。 |
 | Deployment form | 部署形态 | 桌面客户端、自部署网页版、官方网页版。不是 `DEPLOYMENT_TIER`。 |
 | Edition | 语言版本 | 世界的一种语言：`defaultLocale`，以及根目录里每个 `world.<locale>.yaml` 或 `WORLD.<locale>.md` 的语言。 |
 | Kernel | 内核 |  |
@@ -96,7 +97,7 @@
 
 一份清单（`covel-collection.yaml`），列出要一起安装的世界和插件，也可以包含别的仓库里按提交固定的包。
 
-它只在安装时起作用。装下来的仍是普通的插件和世界，各自单独更新和卸载。它和 **Pack** 不同：Pack 是在已经装好的插件里做选择。
+它只在安装时起作用。装下来的仍是普通的插件和世界，各自单独更新和卸载。它和 **Pack** 不同：Pack 是在已经装好的插件里做选择。它也不是 **Dataset**（数据集）：数据集是插件声明的带类型数据。
 
 详见：[合集](../ship/collections.md)、[插件安装](./plugin-installation.md)。
 
@@ -118,6 +119,14 @@
 它只用于展示，在开始游戏之前显示。框架不根据它做任何判断；玩家确认了第三方链接提示之后，链接才会打开。
 
 详见：[作者信息](./plugins.md#作者信息)、[安全边界](../internals/security.md#package-credits-and-author-links)。
+
+## Dataset
+
+数据集是插件用 `contributes.datasets` 声明的一类带类型的插件数据：名字就是插件数据的 namespace，每条记录要满足一份 JSON Schema，还可以写作为键的字段和允许的操作种类。
+
+它和 **Collection** 无关：Collection 是安装时用的清单（`covel-collection.yaml`）。数据集目前只做静态检查，提交时的强制校验尚未提供。
+
+详见：[数据集](./plugins.md#数据集contributesdatasets)、[世界数据](./world-data.md)。
 
 ## Deployment form
 

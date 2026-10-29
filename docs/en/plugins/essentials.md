@@ -223,6 +223,7 @@ Limits to remember:
 
 - A value can be at most 256 KiB once it is converted to JSON. When it is larger, the write fails. The error states the plugin, the `namespace/key`, the actual size and the limit. The original value does not change, and nothing is cut short. A list that keeps growing must be split across several keys, or trimmed by your code.
 - A namespace that starts with `_` is reserved for Covel itself. Plugins cannot write to it.
+- To declare the shape of a namespace's records (JSON Schema, key, allowed operations), see [datasets](../reference/plugins.md#datasets-contributesdatasets).
 - If two plugins need to share data, they must do it through a public capability. They cannot read each other's namespaces.
 
 ### Who owns characters
