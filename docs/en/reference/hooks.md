@@ -237,7 +237,7 @@ Fires after each model reply, before the tool calls in the reply are run.
 Payload: `{ response, messages }`, the reply, and the messages actually sent.
 
 - `replace.response` replaces the reply.
-- `replace.correction` (a non-empty string) sends this draft back: its tool calls are not run, and this text is sent to the model as a correction request, so the model answers again. If a correction is requested a third time in one run, the runtime fails.
+- `replace.correction` (a non-empty string) sends this draft back: its tool calls are not run, and this text is sent to the model as a correction request, so the model answers again. Each rejection consumes one `agent.loop.corrections.review` unit, allowing two corrections by default. A further rejection after that budget is exhausted fails the runtime with `invalid-output`. See [the loop profile](./plugins.md#loop-profile-agentloopprofile) for configuration.
 
 ### `PostRuntime`
 

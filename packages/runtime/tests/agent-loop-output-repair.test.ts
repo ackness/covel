@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { LoadedRuntime } from "@covel/shared/plugin-runtime";
-import type { LLMAdapter } from "@covel/shared";
+import type { LLMAdapter, LLMResponse } from "@covel/shared";
 import { tool } from "@covel/tools";
 import { z } from "zod";
 import { createMemoryStore } from "@covel/store/memory";
@@ -12,6 +12,7 @@ import { finalizeAgentOutput } from "../src/agent-loop/finalize-agent-output.js"
 import { createAgentSchemaGate } from "../src/agent-loop/runtime-output-validator.js";
 import { createLoopState } from "../src/agent-loop/loop-state.js";
 import { createHookPipeline } from "../src/hooks/pipeline.js";
+import type { PostLLMResponsePayload } from "../src/hooks/wire-helpers.js";
 import { executeTurn } from "../src/execution.js";
 import { commitExecution } from "../src/commit/commit-execution.js";
 import { makeEmitterSpy } from "./_helpers/emitter-spy.js";
@@ -22,6 +23,7 @@ import {
   prose,
   queuedLLM,
   runLoop,
+  scriptedLLM,
   toolCall,
   type LoopRunOptions,
 } from "./_helpers/agent-loop-fixture.js";
@@ -94,6 +96,109 @@ describe("output repair", () => {
       repair: true,
       notes: [{ kind: "output-repair" }],
       stopReason: "completed",
+    });
+  });
+
+  it.each([false, true])(
+    "replays continuation data through repeated repairs (after finalizer: %s)",
+    async (afterFinalizer) => {
+      const thinking = (response: LLMResponse, label: string): LLMResponse => ({
+        ...response,
+        reasoningContent: `Plan ${label}.`,
+        providerContinuation: {
+          protocol: "openai-chat-v1",
+          model: "fixture",
+          items: [{ type: "reasoning", field: "reasoning", label }],
+        },
+      });
+      const drafts = [
+        thinking(prose("first invalid draft"), "first"),
+        thinking(prose('{"answer":7}'), "second"),
+      ];
+      const script = [
+        ...(afterFinalizer
+          ? [thinking(toolCall("mark", { note: "a" }), "tool")]
+          : []),
+        ...drafts,
+        prose(valid),
+      ];
+      const llm = scriptedLLM((request, call) => {
+        // Emulate a thinking provider that rejects assistant drafts without
+        // the reasoning and opaque continuation returned with that draft.
+        for (const draft of drafts) {
+          const replayed = request.messages.find(
+            (message) =>
+              message.role === "assistant" && message.content === draft.content,
+          );
+          if (replayed) {
+            expect(replayed.reasoningContent).toBe(draft.reasoningContent);
+            expect(replayed.providerContinuation).toEqual(
+              draft.providerContinuation,
+            );
+          }
+        }
+        return script[call - 1]!;
+      });
+      const { result } = await run({
+        llm,
+        maxSteps: afterFinalizer ? 1 : undefined,
+        manifest: manifest({
+          loopProfile: { corrections: { outputRepair: 2 } },
+        }),
+      });
+      expect(result.status).toBe("success");
+      expect(result.output).toEqual({ answer: "fixed" });
+      expect(result.stop).toEqual({
+        reason: afterFinalizer ? "max-steps" : "completed",
+        ...(afterFinalizer ? { finalizer: true } : {}),
+        repaired: true,
+      });
+      expect(llm.requests).toHaveLength(script.length);
+      for (const [index, draft] of drafts.entries()) {
+        const request = llm.requests[index + (afterFinalizer ? 2 : 1)];
+        expect(request?.tools).toBeUndefined();
+        expect(request?.messages).toContainEqual({
+          role: "assistant",
+          content: draft.content,
+          reasoningContent: draft.reasoningContent,
+          providerContinuation: draft.providerContinuation,
+        });
+      }
+    },
+  );
+
+  it("replays the accepted continuation after a review hook replaces the draft", async () => {
+    const hookPipeline = createHookPipeline();
+    const providerContinuation = {
+      protocol: "openai-chat-v1",
+      model: "fixture",
+      items: [{ type: "reasoning", field: "reasoning", label: "accepted" }],
+    };
+    hookPipeline.register<PostLLMResponsePayload>({
+      id: "rewrite-draft",
+      event: "PostLLMResponse",
+      handler: async (_context, payload) => ({
+        action: "continue",
+        replace: {
+          response: {
+            ...payload.response,
+            reasoningContent: "Accepted reasoning.",
+            providerContinuation,
+          },
+        },
+      }),
+    });
+    const llm = queuedLLM([
+      { ...prose("invalid draft"), reasoningContent: "Raw reasoning." },
+      prose(valid),
+    ]);
+    const { result } = await run({ llm, hookPipeline });
+    expect(result.status).toBe("success");
+    expect(llm.requests[1]?.messages).toContainEqual({
+      role: "assistant",
+      content: "invalid draft",
+      reasoningContent: "Accepted reasoning.",
+      providerContinuation,
     });
   });
 

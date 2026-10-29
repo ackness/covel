@@ -542,7 +542,7 @@ LLM: "call sync-           ToolExecutor:
 
 **Output review happens before tools run.** A plugin can ask for the output to be buffered in `PreLLMCall`. Then in `PostLLMResponse` it can reject the draft and give a correction request.
 
-- At most two corrections are allowed, and they still count against the original budget.
+- `agent.loop.corrections.review` configures the correction budget, with two corrections by default. A further rejection after that budget is exhausted fails the runtime with `invalid-output`. Corrections remain subject to step and time limits; see [the loop profile](../reference/plugins.md#loop-profile-agentloopprofile).
 - The two built-in narrative plugins use this to check `narrativePerson`. The default is second person. First or third person is allowed, and dialogue keeps its own point of view.
 - After the check passes, they show the whole passage of story text at once. The framework still supports other plugins that stream their output.
 - This is a limited text check. It does not guarantee that every plot inference is correct.

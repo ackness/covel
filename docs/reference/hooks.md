@@ -237,7 +237,7 @@ agent runtime 的每次模型调用之前触发，包括工具结果之后的调
 负载：`{ response, messages }`，即回答，以及实际发出去的消息。
 
 - `replace.response` 替换回答。
-- `replace.correction`（非空字符串）退回这份草稿：其中的工具调用不执行，这段文字作为改正要求发给模型，模型重新回答。一次运行里第三次要求改正时，runtime 失败。
+- `replace.correction`（非空字符串）退回这份草稿：其中的工具调用不执行，这段文字作为改正要求发给模型，模型重新回答。每次退回消耗一次 `agent.loop.corrections.review` 预算，默认允许纠正两次；预算用尽后再次退回，runtime 以 `invalid-output` 失败。配置见[循环 profile](./plugins.md#循环-profileagentloopprofile)。
 
 ### `PostRuntime`
 

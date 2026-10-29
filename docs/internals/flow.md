@@ -543,7 +543,7 @@ LLM: "调用 sync-           ToolExecutor:
 
 **输出审查在执行工具之前。** 插件可以在 `PreLLMCall` 里要求先缓冲输出，再在 `PostLLMResponse` 里拒绝草稿并给出纠正要求。
 
-- 最多纠正两次，并且仍然受原来的预算限制。
+- 纠正次数由 `agent.loop.corrections.review` 配置，默认两次；预算用尽后再次退回草稿，runtime 以 `invalid-output` 失败。纠正仍受步数和时限限制，配置见[循环 profile](../reference/plugins.md#循环-profileagentloopprofile)。
 - 两个内置叙事插件用它检查 `narrativePerson`：默认第二人称，允许第一或第三人称，对白保留各自的视角。
 - 它们在检查通过后一次显示整段正文。框架仍然支持其他插件流式输出。
 - 这是有限的文本检查，不保证所有剧情推断都正确。

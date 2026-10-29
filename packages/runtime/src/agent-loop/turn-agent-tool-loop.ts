@@ -24,7 +24,7 @@ import {
   parseJsonText,
   type EmittedEvent,
 } from "@covel/tools";
-import type { LLMMessage, LLMToolDefinition } from "@covel/shared";
+import type { LLMMessage, LLMResponse, LLMToolDefinition } from "@covel/shared";
 import { promptCacheKeyFor } from "../llm/prompt-cache-key.js";
 import type { HookPipeline } from "../hooks/pipeline.js";
 import type { RetryInfo } from "../retry/llm-retry.js";
@@ -237,6 +237,8 @@ async function runAgentToolLoopWithinBudget(
 ): Promise<AgentToolLoopResult> {
   // Resume starts with persisted loop state; ordinary execution starts fresh.
   let finalContent: string | null = initialState?.finalContent ?? null;
+  // Keep provider continuation attached to the accepted draft that supplied it.
+  let finalResponse: LLMResponse | undefined;
   let lastTarget: LLMTargetIdentity | undefined;
   let finalToolOutput: Record<string, unknown> | null = null;
   const collectedToolCalls: ToolCallRecord[] = [
@@ -497,7 +499,8 @@ async function runAgentToolLoopWithinBudget(
       const response = await reviewResponse(rawResponse, reviewMessages);
       budget.assertLive();
       const text = response?.content?.trim() ? response.content : undefined;
-      if (!text) await delta.reset();
+      if (text) finalResponse = response;
+      else await delta.reset();
       return text;
     } catch (error) {
       // Only an abort or the deadline ends the loop here; any other failure
@@ -638,10 +641,14 @@ async function runAgentToolLoopWithinBudget(
     if (!response) {
       stepEvents.note({ kind: "review-rejected" });
       finalContent = null;
+      finalResponse = undefined;
       // The rejected draft may already be on screen.
       await delta.reset();
       continue;
     }
+
+    if (response.toolCalls.length > 0 && response.content)
+      finalResponse = response;
 
     if (response.toolCalls.length > 0) {
       loop.enter("running-tools");
@@ -1026,6 +1033,7 @@ async function runAgentToolLoopWithinBudget(
           // A lookup is preparation, not a story. Give the model its remaining
           // bounded steps to write the narrative before accepting completion.
           finalContent = null;
+          finalResponse = undefined;
           activeToolDefs = undefined;
           messages.push(writeStoryWithoutTools(input.locale));
           stepEvents.note({ kind: "story-without-tools" });
@@ -1045,6 +1053,7 @@ async function runAgentToolLoopWithinBudget(
         ) {
           toolCallRequested = true;
           finalContent = null;
+          finalResponse = undefined;
           messages.push({
             role: "system",
             content: runtimeDoneCorrection(input.locale),
@@ -1095,6 +1104,7 @@ async function runAgentToolLoopWithinBudget(
           // incidental assistant prose and let the normal schema gate validate
           // the exact returned object before it reaches typed consumers.
           finalContent = null;
+          finalResponse = undefined;
           finalToolOutput = completingToolOutputInResponse;
         } else if (!finalContent) {
           finalContent = JSON.stringify({
@@ -1138,6 +1148,7 @@ async function runAgentToolLoopWithinBudget(
           `[runtime-loop] ${manifest.name} kept repeating a tool call; continuing without tools`,
         );
         finalContent = null;
+        finalResponse = undefined;
         activeToolDefs = undefined;
         messages.push(answerWithoutTools(profile.answerPrompt, input.locale));
         stepEvents.note({ kind: "story-without-tools" });
@@ -1195,6 +1206,7 @@ async function runAgentToolLoopWithinBudget(
     }
 
     // Final response (no more tool calls)
+    finalResponse = response;
     finalContent =
       steeredProse.length > 0
         ? [...steeredProse, response.content].filter(Boolean).join("\n\n")
@@ -1291,8 +1303,15 @@ async function runAgentToolLoopWithinBudget(
         break;
       if (loop.phase !== "finalizing") loop.enter("finalizing");
       await delta.reset();
-      if (finalContent)
-        messages.push({ role: "assistant", content: finalContent });
+      if (finalContent) {
+        const { reasoningContent, providerContinuation } = finalResponse ?? {};
+        messages.push({
+          role: "assistant",
+          content: finalContent,
+          ...(reasoningContent ? { reasoningContent } : {}),
+          ...(providerContinuation ? { providerContinuation } : {}),
+        });
+      }
       const problems = checked.errors.join("; ");
       messages.push({
         role: "system",
@@ -1321,6 +1340,7 @@ async function runAgentToolLoopWithinBudget(
         if (response) {
           // This is a complete replacement, including any earlier steered prose.
           finalContent = response.content;
+          finalResponse = response;
           loop.stop = { ...loop.stop, repaired: true };
         } else {
           stepEvents.note({ kind: "review-rejected" });
