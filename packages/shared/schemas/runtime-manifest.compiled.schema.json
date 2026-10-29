@@ -743,6 +743,57 @@
         "additionalProperties": false
       }
     },
+    "datasets": {
+      "type": "object",
+      "propertyNames": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 64,
+        "pattern": "^[a-zA-Z][a-zA-Z0-9_-]*$"
+      },
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "namespace": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "pattern": "^[a-zA-Z][a-zA-Z0-9_-]*$",
+            "description": "Plugin-data namespace; equals the dataset name."
+          },
+          "schema": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "^(?!\\/)(?!.*(?:^|\\/)\\.\\.(?:\\/|$))[a-z0-9_./-]+\\.json$",
+            "description": "Package-relative JSON Schema that every record of the dataset must satisfy."
+          },
+          "key": {
+            "type": "string",
+            "description": "Top-level record field whose string value is the record's key."
+          },
+          "ops": {
+            "minItems": 1,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "set",
+                "merge",
+                "inc",
+                "append",
+                "insert",
+                "remove",
+                "upsertItem",
+                "delete"
+              ]
+            },
+            "description": "Operation kinds allowed on this dataset. Defaults to every kind."
+          }
+        },
+        "required": ["namespace", "schema", "ops"],
+        "additionalProperties": false
+      }
+    },
     "userSettings": {
       "type": "array",
       "items": {

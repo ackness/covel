@@ -20,7 +20,9 @@ import {
 import {
   permissionsDeclSchema,
   pluginCommandsSchema,
+  pluginDataNamespaceSchema,
   pluginDataSchemaDeclSchema,
+  pluginDatasetDeclSchema,
   pluginDescriptionSchema,
   pluginDisplayNameSchema,
   pluginEntryPathSchema,
@@ -422,6 +424,12 @@ export const pluginManifestSchema = z.strictObject({
         .optional(),
       events: pluginEventsSchema.optional(),
       settings: pluginUserSettingsSchema.optional(),
+      datasets: z
+        .record(pluginDataNamespaceSchema, pluginDatasetDeclSchema)
+        .describe(
+          "Typed plugin-data datasets the package owns; the name is the plugin-data namespace.",
+        )
+        .optional(),
       data: z
         .record(
           z.string(),

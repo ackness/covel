@@ -18,6 +18,7 @@ Each English term has only one Chinese term. The Chinese docs, the UI text, and 
 | Collection | 合集 |  |
 | Contract | 契约 | A versioned ID, for example `narrative-engine@1`. |
 | Credits | 作者信息 | The `author`, `license`, and `homepage` fields of a package. |
+| Dataset | 数据集 | Typed plugin data a plugin declares (`contributes.datasets`). Not the install-time **Collection**. |
 | Deployment form | 部署形态 | The desktop app, the self-hosted web app, the official web app. Not `DEPLOYMENT_TIER`. |
 | Edition | 语言版本 | One language of a world: `defaultLocale`, and the language of each `world.<locale>.yaml` or `WORLD.<locale>.md` at the root. |
 | Kernel | 内核 |  |
@@ -96,7 +97,7 @@ See: [built-in plugins and features](../builtin/index.md), [plugin field referen
 
 A list (`covel-collection.yaml`) of worlds and plugins to install together. It can also include packages from other repositories that are pinned to a commit.
 
-It only matters at install time. What gets installed is still ordinary plugins and worlds, and each is updated and uninstalled on its own. It is different from a **Pack**. A Pack is a choice among plugins that are already installed.
+It only matters at install time. What gets installed is still ordinary plugins and worlds, and each is updated and uninstalled on its own. It is different from a **Pack**. A Pack is a choice among plugins that are already installed. It is also not a **Dataset**: a dataset is typed plugin data that a plugin declares.
 
 See: [collections](../ship/collections.md), [plugin installation](./plugin-installation.md).
 
@@ -118,6 +119,14 @@ The optional `author`, `license`, and `homepage` fields in a plugin, world, or c
 It is for display only, and it is shown before the game starts. The framework makes no decisions based on it. A link opens only after the player confirms the third-party link warning.
 
 See: [author information](./plugins.md#author-information), [security boundaries](../internals/security.md#package-credits-and-author-links).
+
+## Dataset
+
+A dataset is a typed kind of plugin data that a plugin declares with `contributes.datasets`. Its name is the plugin-data namespace, every record must satisfy one JSON Schema, and it can name a key field and the operation kinds it allows.
+
+It has nothing to do with a **Collection**, which is an install-time manifest (`covel-collection.yaml`). Datasets only get static checks today; enforcement at commit is not available yet.
+
+See: [Datasets](./plugins.md#datasets-contributesdatasets), [world data](./world-data.md).
 
 ## Deployment form
 

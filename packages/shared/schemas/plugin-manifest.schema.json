@@ -717,6 +717,52 @@
           },
           "description": "Player-configurable settings. A world can preset them with `pluginSettings`."
         },
+        "datasets": {
+          "type": "object",
+          "propertyNames": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "pattern": "^[a-zA-Z][a-zA-Z0-9_-]*$"
+          },
+          "additionalProperties": {
+            "type": "object",
+            "properties": {
+              "schema": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "^(?!\\/)(?!.*(?:^|\\/)\\.\\.(?:\\/|$))[a-z0-9_./-]+\\.json$",
+                "description": "Package-relative JSON Schema that every record of the dataset must satisfy."
+              },
+              "key": {
+                "type": "string",
+                "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+                "description": "Top-level record field whose string value is the record's key. Omit when callers choose keys."
+              },
+              "ops": {
+                "minItems": 1,
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "enum": [
+                    "set",
+                    "merge",
+                    "inc",
+                    "append",
+                    "insert",
+                    "remove",
+                    "upsertItem",
+                    "delete"
+                  ]
+                },
+                "description": "Operation kinds allowed on this dataset. Defaults to every kind."
+              }
+            },
+            "required": ["schema"],
+            "additionalProperties": false
+          },
+          "description": "Typed plugin-data datasets the package owns; the name is the plugin-data namespace."
+        },
         "data": {
           "type": "object",
           "propertyNames": {

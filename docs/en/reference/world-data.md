@@ -1442,6 +1442,7 @@ contributes:
 ```
 
 - The schema is a JSON Schema file in the plugin's root folder.
+- The same namespace can also be declared as a [dataset](./plugins.md#datasets-contributesdatasets); the two `schema` paths must be the same file.
 - The receiving declaration is written only in the package's root `PLUGIN.md`. It is not written in `RUNTIME.md`.
 - Plugin code reads its own data with `ctx.pluginData.get(namespace,key)` / `list(namespace)`. RPC uses `ctx.store`, which is bound to the current session and plugin. Do not read another plugin's private data.
 

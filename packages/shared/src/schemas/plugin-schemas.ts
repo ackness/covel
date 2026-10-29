@@ -4,6 +4,7 @@
  * These schemas are used by @covel/plugin-loader to validate parsed YAML.
  */
 
+import { DATA_OP_KINDS } from "@covel/plugin-handlers-utils";
 import { z } from "zod";
 
 /** A versioned extension point or UI slot name, such as `prompt.segment@1`. */
@@ -68,7 +69,7 @@ import {
  * level (no leading `/`, no `..` segments); the loader adds a defence-in-depth
  * containment check on the resolved absolute path.
  */
-const pluginRelativeJsonSchemaPath = z
+export const pluginRelativeJsonSchemaPath = z
   .string()
   .min(1)
   .regex(/^(?!\/)(?!.*(?:^|\/)\.\.(?:\/|$))[a-z0-9_./-]+\.json$/i, {
@@ -307,7 +308,7 @@ const outputConfigSchema = z
 
 // ── Plugin data schemas ─────────────────────────────────────────
 
-const pluginDataNamespaceSchema = z
+export const pluginDataNamespaceSchema = z
   .string()
   .min(1)
   .max(64)
@@ -348,6 +349,61 @@ export const pluginDataSchemaMapSchema = z
           code: z.ZodIssueCode.custom,
           path: [namespace, "namespace"],
           message: `namespace must match dataSchemas key "${namespace}"`,
+        });
+      }
+    }
+  });
+
+// ── Plugin datasets ─────────────────────────────────────────────
+
+const datasetOpsSchema = z
+  .array(z.enum(DATA_OP_KINDS))
+  .min(1)
+  .refine(hasUniqueItems, "ops entries must be unique")
+  .describe("Operation kinds allowed on this dataset. Defaults to every kind.");
+
+/**
+ * Authored `contributes.datasets.<name>`: a typed plugin-data dataset. The name
+ * is the plugin-data namespace.
+ */
+export const pluginDatasetDeclSchema = z.strictObject({
+  schema: pluginRelativeJsonSchemaPath.describe(
+    "Package-relative JSON Schema that every record of the dataset must satisfy.",
+  ),
+  key: z
+    .string()
+    .regex(/^[A-Za-z_][A-Za-z0-9_]*$/)
+    .describe(
+      "Top-level record field whose string value is the record's key. Omit when callers choose keys.",
+    )
+    .optional(),
+  ops: datasetOpsSchema.optional(),
+});
+
+/** Compiled dataset declaration with defaults resolved. */
+const compiledPluginDatasetDeclSchema = z.strictObject({
+  namespace: pluginDataNamespaceSchema.describe(
+    "Plugin-data namespace; equals the dataset name.",
+  ),
+  schema: pluginRelativeJsonSchemaPath.describe(
+    "Package-relative JSON Schema that every record of the dataset must satisfy.",
+  ),
+  key: z
+    .string()
+    .describe("Top-level record field whose string value is the record's key.")
+    .optional(),
+  ops: datasetOpsSchema,
+});
+
+const compiledPluginDatasetMapSchema = z
+  .record(pluginDataNamespaceSchema, compiledPluginDatasetDeclSchema)
+  .superRefine((datasets, ctx) => {
+    for (const [namespace, decl] of Object.entries(datasets)) {
+      if (decl.namespace !== namespace) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: [namespace, "namespace"],
+          message: `namespace must match datasets key "${namespace}"`,
         });
       }
     }
@@ -1113,6 +1169,8 @@ export const runtimeManifestInputSchema = z
     trigger: triggerConfigSchema.optional(),
     /** Copied from the package by the loader. */
     dataSchemas: pluginDataSchemaMapSchema.optional(),
+    /** Copied from the package by the loader. */
+    datasets: compiledPluginDatasetMapSchema.optional(),
     /** Copied from the package by the loader. */
     userSettings: pluginUserSettingsSchema.optional(),
   })

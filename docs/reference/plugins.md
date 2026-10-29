@@ -133,6 +133,7 @@ Extract facts supported by runtime-inputs.narrative.value, then call save-facts.
 | `events` | 插件事件契约 |
 | `settings` | 玩家配置项，运行时通过 `ctx.userSettings` 读取 |
 | `data` | 本插件数据 namespace 的 schema、version、accepts、search |
+| `datasets` | 本插件拥有的带类型数据集：名字即 namespace，写 schema、key、ops，见[数据集](#数据集contributesdatasets) |
 | `ui` | 包根相对的 `right/message` UI spec 路径 |
 | `worldProjections` | 世界数据投影声明 |
 | `prompt` | 静态提示词段 |
@@ -932,6 +933,7 @@ namespace 声明 `search` 之后，它的记录进入框架的记忆检索（[`m
 - 引用的 entry、handler、guard、JSON Schema 和 UI 文件必须在包里。
 - 每份 JSON UI spec 声明 `view` 或 `webview` 中的一个；`view` 里的组件名必须在[组件目录](./ui-components.md)里；`repeat.statePath` 和 `$item` 的写法必须合法（见 [UI 面板](./ui-panels.md#json-render-绑定速查)）。报错给出 spec 文件和节点的路径。
 - 内置工具名和插件工具声明、包内的 runtime 引用，以及根契约依赖必须一致。
+- `contributes.datasets` 的 schema 文件必须在包里并且是合法 JSON；`key` 必须是 schema 顶层 `properties` 里的必填属性（schema 顶层没有 `properties` 时跳过）；同名出现在 `contributes.data` 时两边必须用同一份 schema。
 - 跨字段的规则（例如 `schedule.detached` 只能用在 `post-turn` 或 `audit`）报错时给出文件路径和你写的字段路径，例如 `runtimes/note/RUNTIME.md: schedule.stage: …`。
 
 加载、`pnpm validate:plugin` 和安装用同一份清单规则（`@covel/shared` 的 schema），UI spec 也一样：校验通过的面板，游戏里不会因为格式被去掉。
@@ -1061,6 +1063,29 @@ pnpm lint
 | 背景音乐调度 | [soundtrack](../../plugins/soundtrack/PLUGIN.md) |
 | 世界数据进入叙事提示 | [character-blueprint](../../plugins/character-blueprint/PLUGIN.md) |
 | 隐藏世界数据与策划 | [story-events](../../plugins/story-events/PLUGIN.md) |
+
+### 数据集（`contributes.datasets`）
+
+数据集是插件声明的一类带类型的插件数据：这个包拥有的一个 namespace，加上其中每条记录必须满足的 JSON Schema。
+
+```yaml
+contributes:
+  datasets:
+    journal:
+      schema: ./schemas/journal.json # 必填：包内相对路径，.json
+      key: id # 可选：记录里充当键的顶层字段
+      ops: [upsertItem, delete] # 可选：允许的操作，默认全部
+```
+
+- **名字就是 namespace。** `journal` 数据集对应插件数据的 `journal` 空间。名字用字母开头，只含字母、数字、`_`、`-`，最长 64 个字符；以 `_` 开头的空间留给内核，不能声明。
+- `schema` 必须是包内的 `.json` 文件，不能含 `..` 或前导 `/`。
+- `key`：记录的哪个顶层字段（字符串值）充当它的键。不写就不推导键，由调用方决定。
+- `ops`：这个数据集允许的操作种类，取自 `set`、`merge`、`inc`、`append`、`insert`、`remove`、`upsertItem`、`delete`。不写等于全部；写了就不能为空，也不能重复。
+- 不写的字段按默认处理，编译后的声明总会带齐 `namespace`、`schema`、`ops`（`key` 仅在写了时存在）。编译结果复制到包里每个 runtime 的 `datasets`。
+- **与 `contributes.data` 的关系。** 同一个名字同时出现在 `data` 和 `datasets` 里时，两边的 `schema` 必须指向同一个文件：一个 namespace 只有一份 schema。`data` 仍管世界包导入，数据集管 namespace 里的记录。
+- 没有声明数据集的 namespace，行为和以前一样。
+
+当前只做静态检查：加载、`pnpm validate:plugin` 和安装都会读取并解析每个数据集的 schema 文件（缺文件、JSON 不合法、路径越出包根会报错），并检查 `key`——当 schema 顶层有 `properties` 时，`key` 必须是其中的属性，并且列在顶层 `required` 里。顶层没有 `properties`（只写 `$ref`、`allOf` 等）的 schema 跳过这项检查。提交时按 `schema` 和 `ops` 校验写入的功能尚未提供，所以目前声明还不会限制写入。
 
 ### 保留的数据命名空间
 

@@ -5,6 +5,8 @@
  * All runtime configuration is defined via YAML frontmatter in PLUGIN.md files.
  */
 
+import type { DataOpKind } from "@covel/plugin-handlers-utils";
+
 /**
  * Runtime execution type.
  * - `agent` (default): LLM-driven with prompt template, tool calling, context assembly.
@@ -186,6 +188,20 @@ export interface PluginDataSchemaDecl {
   readonly schema: string;
   /** Optional author-facing description for tooling and diagnostics. */
   readonly description?: string;
+}
+
+// ── Plugin datasets ─────────────────────────────────────────────
+
+/** Compiled `contributes.datasets.<name>` with defaults resolved. */
+export interface PluginDatasetDecl {
+  /** Plugin-data namespace; equals the dataset name. */
+  readonly namespace: string;
+  /** Plugin-relative path to the JSON Schema every record must satisfy. */
+  readonly schema: string;
+  /** Top-level record field whose string value is the record's key. */
+  readonly key?: string;
+  /** Operation kinds allowed on the dataset; every kind when undeclared. */
+  readonly ops: readonly DataOpKind[];
 }
 
 // ── World projections ─────────────────────────────────────
@@ -648,4 +664,6 @@ export interface RuntimeManifest {
   readonly userSettings?: readonly PluginUserSettingSpec[];
   /** The package's plugin-data schemas, copied onto each runtime by the loader. */
   readonly dataSchemas?: Readonly<Record<string, PluginDataSchemaDecl>>;
+  /** The package's datasets keyed by namespace, copied onto each runtime by the loader. */
+  readonly datasets?: Readonly<Record<string, PluginDatasetDecl>>;
 }
