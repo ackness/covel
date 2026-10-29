@@ -345,13 +345,21 @@ export function createBrowserWorkspaceRoutes(
             const admittedCheckpoint = {
               ...checkpoint,
               world: checkpoint.world
-                ? preserveWorldProvenance(
-                    {
-                      ...checkpoint.world,
-                      metadata: withoutWorldDeletion(checkpoint.world.metadata),
-                    },
-                    worlds.get(checkpoint.world.id) ?? undefined,
-                  )
+                ? // An edited world keeps the server's own record, which a
+                  // store may hold with absent fields; a checkpoint is JSON.
+                  (JSON.parse(
+                    JSON.stringify(
+                      preserveWorldProvenance(
+                        {
+                          ...checkpoint.world,
+                          metadata: withoutWorldDeletion(
+                            checkpoint.world.metadata,
+                          ),
+                        },
+                        worlds.get(checkpoint.world.id) ?? undefined,
+                      ),
+                    ),
+                  ) as BrowserCheckpoint["world"])
                 : null,
             };
             if (

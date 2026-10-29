@@ -402,3 +402,27 @@ describe("browser-private workspace exchange", () => {
     expect((await store.getSession(SESSION_ID))?.locale).toBe("ru-RU");
   });
 });
+
+describe("browser checkpoint world provenance", () => {
+  it("accepts a save when the server keeps its edited world with absent fields", async () => {
+    // A package-built record can hold `undefined` for an absent manifest field;
+    // MemoryStore keeps it as is, while JSON-backed stores drop it.
+    await store.upsertWorld({
+      id: WORLD_ID,
+      name: "Browser World",
+      description: "",
+      metadata: { packageModified: true, worldDataPath: undefined },
+      createdAt: "2026-08-25T00:00:00.000Z",
+    });
+    const browser = createMemoryStore();
+    await seed(browser);
+    const checkpoint = await exportSessionCheckpoint(browser, SESSION_ID, {
+      revision: 2,
+      actionId: "local-edit",
+    });
+
+    const response = await upload(checkpoint);
+
+    expect(response.status).toBe(200);
+  });
+});
