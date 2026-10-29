@@ -95,6 +95,26 @@ function fixture<M extends ExtensionMode>(
 const input = { value: 2, turnId: "turn" };
 
 describe("kernel extension execution", () => {
+  it("gives providers an empty world, seats included, when the caller has none", async () => {
+    const { point, host, execution } = fixture("collect");
+    host.register(
+      "alpha",
+      { point: point.id, id: "one" },
+      {
+        handler: (_value, context) => {
+          expect(context.world).toEqual({
+            characterSchema: null,
+            characters: [],
+            dimensions: {},
+            seats: [],
+          });
+          return { value: 1 };
+        },
+      },
+    );
+    expect(await execution().run(point, input)).toEqual([{ value: 1 }]);
+  });
+
   it("parses once and gives each provider isolated input and a lazy world copy", async () => {
     const { point, host } = fixture("collect");
     const parse = vi.spyOn(point.input, "parse");

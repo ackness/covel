@@ -56,6 +56,10 @@ A world can set a default for this setting in `pluginSettings`. Your own setting
 
 Once the story is written, its narration is checked for the correct person. If it is wrong, the model is asked to rewrite it, up to two extra model calls. You only see the text after it passes the check.
 
+### The character you play
+
+The character sheet the Narrator gives the model is the character **you are currently playing**, and the person check is anchored on it too. When a session has several player characters (you play more than one), the other player characters are listed with the supporting cast in the character profiles, tagged `[player]`. With one player character nothing changes. For how the current character is chosen and switched, see [Seats](../reference/world-model.md#seats); the play screen has no switch control yet.
+
 ## Dialogue Narrator (`chat-mode-narrator`)
 
 Makes the story feel more like a conversation between characters. Each paragraph shows who is speaking, and the highlight on stage follows the speaker.
@@ -82,6 +86,10 @@ A world can preset these settings. For example, "Harukaze Academy · Spring Mint
 
 - It works best with "Scene Stage" to supply the characters on stage, and "Action Suggestions" to supply scene hints. Without them it still tells the story, as plain dialogue narration with no stage.
 - It cannot be on at the same time as "Narrator".
+
+### The character you play
+
+As with "Narrator": the character sheet and the person check follow the character you are currently playing, and the other player characters are listed in the character profiles, tagged `[player]`. See [Narrator · The character you play](#the-character-you-play).
 
 ## Action Suggestions (`guide`)
 

@@ -5,7 +5,7 @@
 
 ### Added
 
-- **Sessions have seats.** `session.seats` records who plays (a human or an empty seat), in which role (player, host or spectator), which characters they control and which one is current. Every new session has one human player seat that binds every `type: player` character, so single-player play is unchanged. Plugins read the seats as `ctx.world.seats`, tools as `context.world.seats`, and the SDK exports `seatCharacterIds`, `currentCharacterOf` and `primarySeat`. See `docs/reference/world-model.md`.
+- **Sessions have seats.** `session.seats` records who plays (a human or an empty seat), in which role (player, host or spectator), which characters they control and which one is current. Every new session has one human player seat that binds every `type: player` character, so single-player play is unchanged. Function runtimes, guards and extension providers read the seats as `ctx.world.seats` (every extension call site, including the image flow and history compaction), tools as `context.world.seats`, and the SDK exports `seatCharacterIds`, `currentCharacterOf` and `primarySeat`. See `docs/reference/world-model.md`.
 - **`PATCH /api/sessions/:id/seats/:seatId` switches the current character.** The body is `{ currentCharacterId }`; the character must be bound to that human seat. The switch runs under the session lock and applies from the next turn. The game view has no switch control yet. See `docs/reference/api.md`.
 
 ### Upgrade notes

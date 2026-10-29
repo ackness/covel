@@ -120,11 +120,30 @@ export function registerLifecycleStoreSuites(getStore: () => DataStore): void {
     });
 
     it("round-trips seats on create, get, list and update", async () => {
-      const session = makeSession();
+      // Distinct from the column default, so a backend that dropped seats on
+      // insert would fail here instead of reading the default back.
+      const created = [
+        {
+          id: "lead",
+          controller: "human" as const,
+          role: "host" as const,
+          characters: ["char-ada", "char-lin"],
+          currentCharacterId: "char-lin",
+        },
+        {
+          id: "bench",
+          controller: "empty" as const,
+          role: "player" as const,
+          characters: "auto" as const,
+        },
+      ];
+      const session = makeSession({ seats: created });
       await store.createSession(session);
-      expect((await store.getSession(session.id))?.seats).toEqual([
-        { id: "main", controller: "human", role: "player", characters: "auto" },
-      ]);
+      expect((await store.getSession(session.id))?.seats).toEqual(created);
+      expect(
+        (await store.listSessions()).find((row) => row.id === session.id)
+          ?.seats,
+      ).toEqual(created);
       const seats = [
         {
           id: "main",

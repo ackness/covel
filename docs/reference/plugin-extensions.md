@@ -30,6 +30,8 @@
 
 `ctx.recursiveCall` 的用途是[包内嵌套调用](./plugins.md#嵌套调用ctxrecursivecall)。要请求其他包的结果，使用服务；要触发其他包的后续工作，使用事件。
 
+会话的座位（谁在玩、控制哪些角色）不归任何插件，也不需要通过服务或输入去问别的插件。函数 runtime、guard、工具（`context.world`）和扩展提供者（`ctx.world`）都在 `world.seats` 上读到同一份，只读。用 SDK 的 `primarySeat`、`currentCharacterOf`、`seatCharacterIds` 推导玩家扮演的角色，规则见[座位](./world-model.md#座位)。插件不能写座位，玩家用[切换接口](./api.md#会话座位)换当前角色。
+
 ### 服务只给函数 runtime
 
 `ctx.services` 目前只向函数 runtime 开放。框架不会把所有公共服务自动暴露给每个 agent。agent 想用服务的结果，有两条路：

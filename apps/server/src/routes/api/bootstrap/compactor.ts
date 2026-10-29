@@ -1,4 +1,5 @@
 import {
+  createWorldModelView,
   resolveRequestContextBudget,
   type PluginExtensionHost,
   type LLMAdapter,
@@ -118,6 +119,7 @@ export function createBootstrapCompactorRunner(
           : {}),
         locale: locale ?? "zh-CN",
         signal: signal ?? new AbortController().signal,
+        world: await createWorldModelView(store, sessionId),
         readPluginData: (pluginId, namespace) =>
           store.listPluginData(sessionId, pluginId, namespace),
         gateway: {
