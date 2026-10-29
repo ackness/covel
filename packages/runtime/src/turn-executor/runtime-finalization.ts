@@ -1,3 +1,4 @@
+import { stopOf } from "../agent-loop/stop-reason.js";
 import {
   CONCEALED_FAILURE_MESSAGE,
   type LLMTargetIdentity,
@@ -284,6 +285,11 @@ export async function finalizeRuntimeResult(
       error: `${target}${CONCEALED_FAILURE_MESSAGE}`,
     };
   }
+  // A thrown agent-loop exit carries its stop reason on the error. It
+  // describes this failure only: a success a hook produced gets none.
+  const thrownStop = stopOf(options.cause);
+  if (finalized.status === "failed" && thrownStop)
+    finalized = { ...finalized, stop: thrownStop };
   await reportRuntimeResult(deps, input.sessionId, finalized);
   return finalized;
 }

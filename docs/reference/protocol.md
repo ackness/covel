@@ -158,8 +158,8 @@ return { result: execution.result, committed: outcome.status === "committed" };
 | `interaction.submitted` | S→C  | `submit_interaction` 的回答已落库、后续回合已开始；先于该回合的 `execution.started` | `{ interactionTurnId, results: [{ submissionId, interactionId, values, filledNarrative }], message?: { id, content } }` |
 | `runtime.started`       | S→C  | 单个 runtime 开始                                                                   | `{ runtimeId, pluginId, kind, turnId, runId, label, stage? }`                                                           |
 | `runtime.deferred`      | S→C  | staged runtime 已随原始回合提交并转入后台                                           | `{ runtimeId, pluginId, jobId, sourceTurnId }`                                                                          |
-| `runtime.completed`     | S→C  | 单个 runtime 完成                                                                   | `{ runtimeId, pluginId, turnId, runId, status, durationMs }`                                                            |
-| `runtime.failed`        | S→C  | 单个 runtime 失败                                                                   | `{ runtimeId, pluginId, turnId, runId, status, durationMs, error, errorKind?, failureTarget? }`                         |
+| `runtime.completed`     | S→C  | 单个 runtime 完成                                                                   | `{ runtimeId, pluginId, turnId, runId, status, durationMs, stopReason? }`                                               |
+| `runtime.failed`        | S→C  | 单个 runtime 失败                                                                   | `{ runtimeId, pluginId, turnId, runId, status, durationMs, error, errorKind?, failureTarget?, stopReason? }`            |
 | `execution.completed`   | S→C  | 回合执行终态                                                                        | `{ runtimeCount, resultCount, durationMs, committed, error?, abortReason?, resync? }`，各字段见下                       |
 
 `runtime.started.stage` 记录这次 runtime 的阶段，取值为 `setup`、`pre-turn`、`narrative`、`post-turn` 或 `audit`；没有阶段的 event/manual runtime 不带此字段。持久 trace 保留它，客户端从实时事件和历史 trace 恢复到同一条执行步骤，后续终态事件不清除阶段。某个执行组有 `stage: "setup"` 的步骤时，时间线显示中性的“开局准备”摘要，不提供单任务重试；会话进入 `playing` 或页面刷新后也不变。不要按当前会话阶段或插件名称推断历史执行的阶段。
@@ -179,6 +179,30 @@ return { result: execution.result, committed: outcome.status === "committed" };
 `runtime.failed.errorKind` 是可选的模型失败类别，取值见 [模型失败分类](./slots.md#连接测试与失败原因)。`missing_key` 表示内置远程服务商在发请求前就发现缺少密钥。回合失败提示复用连接测试的处理建议，服务商的原话保留在可展开的详情里。无法分类的异常用 `unknown`；没有模型异常的失败可以不带此字段。`io.concealed` 仍用固定文本替换错误详情，但保留类别，因为类别不含隐藏内容。
 
 `runtime.failed.failureTarget` 是可选的 `{ provider, model? }`，只来自实际失败的模型异常，不从错误文字推断。它保存在 runtime result 和 trace 中，并随 SSE、会话快照恢复到执行记录。备用目标失败时记录备用目标；修改模型设置不会改写历史目标。此字段只含服务商和模型标识，不含密钥或连接配置。客户端用当前 active runtime 的模型用途和当前路由，列出同一服务商可能受影响的用途。
+
+`runtime.completed.stopReason` 和 `runtime.failed.stopReason` 说明 agent runtime 的工具循环怎样结束，取值见下面的结束原因表，和 `RuntimeResult.stop.reason` 相同。函数 runtime 和 guard 不带这个字段。循环里抛出、又没有哪个调用点能归类的内部错误（比如工具执行器或 Hook 自身的缺陷）也不带。
+
+<a id="stop-reasons"></a>
+
+#### 结束原因
+
+agent runtime 的工具循环每一种结束方式都对应一个结束原因（`StopReason`）。它写进 `RuntimeResult.stop`、runtime 生命周期事件的 `stopReason`，以及结束循环的那一步的 `step.completed`。
+
+<!-- prettier-ignore -->
+| 标识符 | 结束原因 | 含义 | runtime 结果 |
+| --- | --- | --- | --- |
+| `completed` | 完成 | 模型给出最终回复，没有再调用工具 | 成功；完成条件（`requireToolUse` 等）没满足时失败，原因仍是 `completed` |
+| `tool-finished` | 工具结束 | 完成工具、`runtime-done`，或 Hook（`PostToolUse` 的 `terminate`、`PreStep` 的 `stop`）以成功结束 | 成功；完成条件照常检查 |
+| `max-steps` | 步数上限 | 用完了 `maxSteps`（或 `PreStep` 减少后的步数） | 失败，即使模型在工具调用旁边写过文字。收尾步骤写出答案时成功，`stop.finalizer` 为 `true` |
+| `deadline` | 超时 | 到了 runtime 自己的截止时间 | 失败 |
+| `context-overflow` | 上下文超限 | 裁剪之后请求仍然放不下 | 失败 |
+| `cancelled` | 取消 | `stop.cancelledBy` 说明是谁：`player`（玩家停止）、`parent`（上级执行取消或超时）、`hook`（`PreStep` 的 `stop`） | 失败 |
+| `model-error` | 模型错误 | 模型调用在重试用尽后仍然失败 | 失败 |
+| `invalid-output` | 输出无效 | `PostLLMResponse` 第三次退回草稿，或输出没通过 schema 检查 | 失败 |
+| `loop-detected` | 循环检测 | 扰动之后模型仍然重复同一个工具调用 | 失败；故事 runtime 第一次检测到时先拿走工具、要求写正文，不结束 |
+| `suspended` | 挂起 | 调用了 `suspend` 工具，等待玩家输入 | 挂起 |
+
+**收尾步骤。** 循环用完步数时，模型在工具调用旁边写下的文字只是草稿，不算答案。这时内核再发一次请求：关掉工具，要求模型直接给出最终答案，输出格式不变，流式 runtime 照样流式显示。这次请求就是收尾步骤，步号是最后一步加 1，`PreStep` 不为它触发。只在下面几条都满足时才发：输出不是由完成工具交出的；`requireToolUse` 没开或已经满足；`requireExplicitCompletion` 没开或已经满足；离截止时间至少还有 3 秒。收尾写出非空文字时，它替换之前的文字，runtime 成功，`stop` 为 `{ reason: "max-steps", finalizer: true }`。文字为空、请求失败或草稿被退回时，runtime 以 `max-steps` 失败。超时永远不尝试收尾。
 
 **`runtime.deferred` 是“移交公告”**
 
@@ -771,6 +795,7 @@ data: {
 | `tool.calling` / `tool.completed` / `tool.failed`          | TurnEmitter                                                                                   | LLM 工具调用 trace                                                                                                     |
 | `domain-event.previewed`                                   | ToolExecutor（`emittedEvents` 成功后）                                                        | 服务端投影成 UI slot 预览；前端不直接消费，不代表领域提交                                                              |
 | `llm.calling` / `llm.responded` / `message.completed`      | TurnEmitter                                                                                   | LLM 调用 trace                                                                                                         |
+| `step.started` / `step.completed`                          | TurnEmitter                                                                                   | agent 工具循环每一步的开始和结束，见下面的 trace 负载表                                                                |
 | `block.emitted`                                            | TurnEmitter                                                                                   | 块发出 trace                                                                                                           |
 | `hook.fired` / `hook.aborted`                              | TurnEmitter                                                                                   | Hook 行为 trace                                                                                                        |
 | `gateway.calling` / `gateway.responded` / `gateway.failed` | TurnEmitter（`withGatewayTrace`）                                                             | function-runtime 和扩展点提供方的 `ctx.gateway` provider 调用 trace（与 `llm.*` 对等）；失败时带服务商已报告的 `usage` |
@@ -801,7 +826,7 @@ data: {
 
 声明了 `io.concealed: true` 的 runtime，它的 TurnEmitter 事件在保存和转发之前，只保留不含内容的字段，并带 `concealed: true`：
 
-- 保留：`runtimeId`、`pluginId`、`toolName`、`toolCallId`、`status`、`durationMs`、`usage`、`finishReason`、`seq` 等。
+- 保留：`runtimeId`、`pluginId`、`toolName`、`toolCallId`、`status`、`durationMs`、`usage`、`finishReason`、`seq`，以及步骤事件的 `step`、`stopReason`、`finalizer`、`retries`、`notes` 等。
 - 移除：`messages`、`text`、`toolCalls`、`arguments`、`result`、`parsedResult`、`output` 等内容字段。
 
 ## 二、命令类型（CommandType）
@@ -1219,6 +1244,8 @@ error.occurred        → executionError
 | `domain-event.previewed` | `{ runtimeId, pluginId, toolCallId, topic, data }`。`emit-event` 校验成功后的临时显示信号；持久的业务状态仍然由正常的事件链提交 |
 | `llm.calling` | `{ runtimeId, pluginId, slot, model, provider?: string \| null, messages, tools, attempt, startedAt, queueWaitMs?, streaming? }`。`slot` 是 runtime 请求的用途；生产环境的 gateway 在调用之前把它解析成 `model` / `provider`。不支持用途解析的自定义 adapter 可以不给 `provider` |
 | `llm.responded` | `{ runtimeId, pluginId, text?, reasoningContent?, toolCalls?, usage, finishReason, durationMs, attempt, error? }`。`usage` 是 `{ inputTokens, outputTokens, cachedInputTokens?, cacheWriteInputTokens? }`，其中 `inputTokens` 是包含缓存读写的总输入，后两项是服务商报告的子集。`finishReason` 为 `length` 只出现在 story runtime：正文在输出上限处被截断，但已经保留，客户端据此提示玩家；其他情况下被截断的调用按失败上报 |
+| `step.started` | `{ runtimeId, pluginId, turnId, runId, step, maxSteps, toolCount, toolChoice, finalizer? }`。agent 工具循环的一步要调用模型了，在 `PreStep` 之后、这一步的 `llm.calling` 之前发出。`maxSteps` 是这一步时的步数上限，`toolCount` 是这一步提供的工具数（工具名在 `llm.calling.tools` 里），`toolChoice` 是 `"auto"`、`"required"` 或 `{ name }`。收尾步骤带 `finalizer: true` |
+| `step.completed` | `{ runtimeId, pluginId, turnId, runId, step, durationMs, finishReason?, usage?, toolCalls, retries, notes, stopReason?, finalizer? }`。每个开始了的步骤恰好发一次，在这一步所有 `tool.*` 之后。`usage` 和 `llm.responded` 的相同，步骤因异常结束时没有。`toolCalls` 是 `[{ name, success }]`。`retries` 是这一步模型调用的重试 `[{ attempt, reason }]`。`notes` 是 `[{ kind, count?, ignored? }]`，`kind` 取 `review-rejected`、`no-tool-correction`、`runtime-done-correction`、`loop-perturbation`、`story-without-tools`、`late-steering`、`tool-activated`、`tool-narrowed`，只带种类和数目，不带工具名。`stopReason` 只出现在结束循环的那一步 |
 | `gateway.responded` | function-runtime gateway 的成功结果。文本和对象调用带 `{ runtimeId, pluginId, method, finishReason, usage, reasoningContent?, model?, provider?, durationMs }`，`model/provider` 是回退之后实际命中的目标。转写调用同样带可用的 `usage/model/provider`。旧的 trace，或者不支持这些元数据的自定义 gateway，可以没有它们 |
 | `message.completed` | `{ runtimeId, pluginId, content, len, deltaCount }`。`deltaCount` 是这个 runtime 产生的 `narrative.delta` 事件数，是保存下来的权威计数。前端汇总实时片段时用的是另一个合成字段 `_aggregated`，两者不能互换 |
 | `block.emitted` | `{ runtimeId, pluginId, proposalId, source, block }` |

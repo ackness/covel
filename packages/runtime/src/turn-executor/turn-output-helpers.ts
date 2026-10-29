@@ -225,10 +225,17 @@ export function extractToolFailureMessage(result: string): string | undefined {
 
 export function formatToolLoopFailure(args: {
   runtimeId: string;
-  reason: "max_steps" | "timeout" | "tool_failed_without_output";
+  reason:
+    "max_steps" | "timeout" | "tool_failed_without_output" | "stopped_by_hook";
   maxSteps?: number;
+  /** `stopped_by_hook`: the message the hook gave. */
+  message?: string;
   failedToolCalls: readonly FailedToolCallState[];
 }): string {
+  if (args.reason === "stopped_by_hook")
+    return `Runtime "${args.runtimeId}" was stopped by a PreStep hook${
+      args.message ? `: ${args.message}` : "."
+    }`;
   const reasonText =
     args.reason === "max_steps"
       ? `exhausted the tool loop after ${args.maxSteps ?? 0} steps without producing final output`

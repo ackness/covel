@@ -215,7 +215,7 @@ describe("runAgentToolLoop core", () => {
 
     expect(llm.calls).toBe(1);
     expect(result.finalContent).toBe("done story");
-    expect(result.stoppedWithResponse).toBe(true);
+    expect(result.stop).toEqual({ reason: "completed" });
     expect(result.streamDeltaCount).toBe(0);
     expect(result.collectedToolCalls).toHaveLength(0);
   });
@@ -380,7 +380,7 @@ describe("runAgentToolLoop core", () => {
     });
 
     expect(llm.calls).toBe(1);
-    expect(result.stoppedWithResponse).toBe(true);
+    expect(result.stop).toEqual({ reason: "tool-finished" });
     expect(result.collectedToolCalls.map((call) => call.toolName)).toEqual([
       "mark",
     ]);
@@ -453,7 +453,7 @@ describe("runAgentToolLoop core", () => {
 
     // Exits right after the runtime-done round — no third LLM call.
     expect(llm.calls).toBe(2);
-    expect(result.stoppedWithResponse).toBe(true);
+    expect(result.stop).toEqual({ reason: "tool-finished" });
     // Sentinel stripped: only the business tool remains.
     expect(result.collectedToolCalls.map((c) => c.toolName)).toEqual(["mark"]);
     // No prose was produced → JSON envelope over business calls.
@@ -471,7 +471,7 @@ describe("runAgentToolLoop core", () => {
 
     expect(result.collectedToolCalls).toHaveLength(2);
     expect(result.effectiveMaxSteps).toBe(2);
-    expect(result.stoppedWithResponse).toBe(false);
+    expect(result.stop.reason).toBe("max-steps");
   });
 
   it("streams deltas for story runtimes with identity attached", async () => {

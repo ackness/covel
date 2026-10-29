@@ -281,7 +281,7 @@ flowchart TB
       RT -->|function| F1["handler(ctx) → HandlerResult<br/>validate outcome; store output / effects / completion separately"]
       F1 --> G6
       RT -->|agent| G4["buildContext<br/>runtime body + prompt.segment extension segments<br/>+ typed inputs + projected history<br/>→ the first agent compacts and rebuilds against the real system prompt<br/>→ budget again after the PostContextAssembly hook"]
-      G4 --> G5["LLM + ToolExecutor loop<br/>PreLLMCall → LLM → PostLLMResponse review<br/>tools run only after acceptance; on rejection, limited corrections<br/>PreToolUse → execute → PostToolUse"]
+      G4 --> G5["LLM + ToolExecutor loop (per step)<br/>PreStep → PreLLMCall → LLM → PostLLMResponse review<br/>tools run only after acceptance; on rejection, limited corrections<br/>PreToolUse → execute → PostToolUse<br/>records a stop reason (StopReason) when it ends"]
       G5 -->|split agent protocol| G6["RuntimeResult: output / effects / completion"]
       G6 --> G7["PostRuntime hook"]
       G7 --> Final["Validate story output / timeout / parent cancellation"]
@@ -546,6 +546,29 @@ LLM: "call sync-           ToolExecutor:
 - The two built-in narrative plugins use this to check `narrativePerson`. The default is second person. First or third person is allowed, and dialogue keeps its own point of view.
 - After the check passes, they show the whole passage of story text at once. The framework still supports other plugins that stream their output.
 - This is a limited text check. It does not guarantee that every plot inference is correct.
+
+**Phases and stop reasons of the tool loop.** An agent's tool loop (`packages/runtime/src/agent-loop/turn-agent-tool-loop.ts`) moves through fixed phases. The phases and their legal transitions are in `agent-loop/loop-state.ts`; an illegal transition throws at once (it is a defect of the loop itself, which no model or plugin can trigger):
+
+```
+preparing → awaiting-pre-step → requesting-model → reviewing → running-tools → deciding
+              ↑                                       │                          │
+              └───────────── next step ←──────────────┴──────────────────────────┘
+deciding → finalizing → stopped        running-tools → suspended
+```
+
+The order within each step:
+
+1. Check for cancellation, and add the player's interjections to the conversation.
+2. The `PreStep` hook: it can narrow this step's tools, change its tool choice, lower the steps left, or end the loop (see the [hook reference](../reference/hooks.md#prestep)).
+3. Send `step.started`.
+4. `PreLLMCall` → context budget → model call (`llm.calling` / `llm.responded`).
+5. The `PostLLMResponse` review; once accepted, the tools run (`tool.*`).
+6. Decide whether to end: a completing tool, `runtime-done`, a hook's `terminate`, a final reply without tool calls; otherwise go to the next step.
+7. The step's `step.completed` is sent when the next step starts or the loop ends, exactly once for each step that started.
+
+Every way of ending maps to one stop reason (`StopReason`), written to `RuntimeResult.stop` and to the `stopReason` of the runtime lifecycle events. The full table is in [the protocol reference's stop reasons](../reference/protocol.md#stop-reasons). The loop records the ordinary exits itself (`completed`, `tool-finished`, `max-steps`, `deadline`, PreStep's `cancelled`), and `settleAgentLoop` settles the result by it. A thrown exit keeps its original error object, and the reason is attached to the error (`agent-loop/stop-reason.ts`): call sites tag model errors, invalid output, context overflow and loop detection; the loop's outer catch tells apart the player's stop, the loop's own timeout and a parent's cancellation; and `finalizeRuntimeResult` reads the reason from the error into the failed result.
+
+**A step limit is not a success.** When the steps run out, text the model wrote beside a tool call is only a draft. As long as the output is not handed over by a completing tool, `requireToolUse` and `requireExplicitCompletion` are met or off, and at least 3 seconds remain before the deadline, the kernel sends one more request with tools off, the finalizer, asking for the final answer now. When the finalizer writes text, the runtime succeeds and its result is marked `stop.finalizer: true`; otherwise it fails with `max-steps` and its staged writes are not committed. A timeout is always a failure and never tries a finalizer.
 
 ## 4. Plugin design
 

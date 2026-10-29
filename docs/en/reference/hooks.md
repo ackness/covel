@@ -1,6 +1,6 @@
 # Hooks
 
-A hook is a piece of plugin code. The kernel calls it at fixed moments: when a session starts or ends, when a turn starts or ends, before and after a runtime runs, before and after each model call, before and after each tool call, and before and after each write is committed. This page lists all 16 events, and what each one gives its handler and what the handler can return. Plugin authors who write hooks need it.
+A hook is a piece of plugin code. The kernel calls it at fixed moments: when a session starts or ends, when a turn starts or ends, before and after a runtime runs, before and after each model call, before and after each tool call, and before and after each write is committed. This page lists all 17 events, and what each one gives its handler and what the handler can return. Plugin authors who write hooks need it.
 
 A hook does only one of three things:
 
@@ -105,24 +105,25 @@ The "Scope" column says what the event is about: `session` (the whole session), 
 
 The table is in the order the kernel actually fires the events.
 
-| Event                 | Scope   | How it runs | Guard | What the handler can do                               |
-| --------------------- | ------- | ----------- | ----- | ----------------------------------------------------- |
-| `SessionStart`        | session | parallel    | no    | Observe                                               |
-| `TurnStart`           | turn    | sequential  | yes   | Stop this turn                                        |
-| `PreCompaction`       | turn    | sequential  | yes   | Stop the history compression for this turn            |
-| `PostCompaction`      | turn    | parallel    | no    | Observe                                               |
-| `PreSchedule`         | turn    | sequential  | no    | Remove or reorder the runtimes selected for this turn |
-| `PreRuntime`          | runtime | sequential  | yes   | Stop this runtime (recorded as skipped)               |
-| `PostContextAssembly` | runtime | sequential  | no    | Rewrite the system prompt and the history             |
-| `PreLLMCall`          | runtime | sequential  | no    | Rewrite one call's messages, model, and tools         |
-| `PostLLMResponse`     | runtime | sequential  | no    | Rewrite the reply, or ask the model to correct it     |
-| `PostRuntime`         | runtime | sequential  | no    | Rewrite the runtime's result                          |
-| `PreToolUse`          | runtime | sequential  | yes   | Stop the tool call, or rewrite its name or arguments  |
-| `PostToolUse`         | runtime | sequential  | no    | Rewrite the tool result, or end the tool loop         |
-| `PreStateCommit`      | runtime | sequential  | yes   | Stop one proposal, or rewrite its payload             |
-| `PostStateCommit`     | runtime | parallel    | no    | Observe                                               |
-| `TurnStop`            | turn    | parallel    | no    | Observe                                               |
-| `SessionEnd`          | session | parallel    | no    | Observe                                               |
+| Event                 | Scope   | How it runs | Guard | What the handler can do                                                                 |
+| --------------------- | ------- | ----------- | ----- | --------------------------------------------------------------------------------------- |
+| `SessionStart`        | session | parallel    | no    | Observe                                                                                 |
+| `TurnStart`           | turn    | sequential  | yes   | Stop this turn                                                                          |
+| `PreCompaction`       | turn    | sequential  | yes   | Stop the history compression for this turn                                              |
+| `PostCompaction`      | turn    | parallel    | no    | Observe                                                                                 |
+| `PreSchedule`         | turn    | sequential  | no    | Remove or reorder the runtimes selected for this turn                                   |
+| `PreRuntime`          | runtime | sequential  | yes   | Stop this runtime (recorded as skipped)                                                 |
+| `PostContextAssembly` | runtime | sequential  | no    | Rewrite the system prompt and the history                                               |
+| `PreStep`             | runtime | sequential  | no    | Narrow this step's tools, change its tool choice, lower the steps left, or end the loop |
+| `PreLLMCall`          | runtime | sequential  | no    | Rewrite one call's messages, model, and tools                                           |
+| `PostLLMResponse`     | runtime | sequential  | no    | Rewrite the reply, or ask the model to correct it                                       |
+| `PostRuntime`         | runtime | sequential  | no    | Rewrite the runtime's result                                                            |
+| `PreToolUse`          | runtime | sequential  | yes   | Stop the tool call, or rewrite its name or arguments                                    |
+| `PostToolUse`         | runtime | sequential  | no    | Rewrite the tool result, or end the tool loop                                           |
+| `PreStateCommit`      | runtime | sequential  | yes   | Stop one proposal, or rewrite its payload                                               |
+| `PostStateCommit`     | runtime | parallel    | no    | Observe                                                                                 |
+| `TurnStop`            | turn    | parallel    | no    | Observe                                                                                 |
+| `SessionEnd`          | session | parallel    | no    | Observe                                                                                 |
 
 Each event has its own section below, which describes in order: when it fires, what the payload holds, and what the return value does.
 
@@ -193,9 +194,34 @@ To find out what your plugin put into the prompt, read `promptSegments`. Do not 
 
 `replace.systemPrompt` and `replace.messages` take effect. Content the framework writes at the start of the system prompt (the runtime framework notes, the output language instruction, and the completion convention) is placed again in front of the replaced system prompt. The handler does not need to include it.
 
+### `PreStep`
+
+Fires once per step of an agent runtime's tool loop, before the model call: after the player's interjections join the conversation, and before `PreLLMCall`. The finalizer step after the step limit (see [stop reasons](./protocol.md#stop-reasons)) does not fire it. A run resumed from a suspended state fires it on every step, like any other run.
+
+Payload: `{ step, stepsRemaining, maxSteps, toolNames, toolChoice }`.
+
+| Field            | Content                                                                    |
+| ---------------- | -------------------------------------------------------------------------- |
+| `step`           | The number of this step, starting at 1.                                    |
+| `stepsRemaining` | How many steps are left, this one included.                                |
+| `maxSteps`       | The step limit in force.                                                   |
+| `toolNames`      | The names of the tools offered to the model this step.                     |
+| `toolChoice`     | The tool choice the loop would send: `"auto"`, `"required"` or `{ name }`. |
+
+`replace` accepts these four fields. Invalid parts are dropped; they do not fail the runtime:
+
+- `replace.tools`: offer only these tools to the model. It can only be a subset of `toolNames`. Names outside it are ignored and recorded in this step's `step.completed`. The narrowing applies to this step only; the next step starts from the full tool set again. It also does not change which tools may run: if the model calls a tool the hook removed, the call still runs as long as the manifest declares the tool.
+- `replace.toolChoice`: this step's tool choice, replacing the manifest's `llm.toolChoice`. `"auto"` means no choice is sent; `{ name }` must be a tool offered this step. On a step where the runtime asked the model to correct itself and call a tool, `"auto"` does not lift that requirement.
+- `replace.stepsRemaining`: lower the steps left to this integer (at least 1, this step included). A value larger than the current one is ignored: steps can only go down. When they run out, the loop ends with `max-steps`.
+- `replace.stop: { reason, message? }`: end the loop before this step's model call. `reason` can only be one of these two:
+  - `"tool-finished"`: end as a success, the same as `PostToolUse`'s `terminate`. The runtime's completion conditions (`requireToolUse` and so on) are still checked.
+  - `"cancelled"`: the runtime fails with the error `Runtime "<id>" was stopped by a PreStep hook`, followed by `message`. The tool calls already made stay in the failed result.
+
+`abort` is the same as "nothing changes". `PreStep` runs first and `PreLLMCall` then rewrites the call: `PreLLMCall`'s `replace.tools` overrides the tools `PreStep` narrowed.
+
 ### `PreLLMCall`
 
-Fires before each model call of an agent runtime. This includes calls made after tool results.
+Fires before each model call of an agent runtime. This includes calls made after tool results and the finalizer step. Within one step, `PreStep` runs first.
 
 Payload: `{ messages, model, tools, stream?, promptSegments? }`. `promptSegments` is the same list as in `PostContextAssembly`. A run resumed from a suspended state does not assemble its context again, so its calls do not have this field.
 

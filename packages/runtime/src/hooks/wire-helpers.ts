@@ -331,9 +331,16 @@ export async function runPostRuntimeHook(
           ...(result.completion ? { completion: result.completion } : {}),
         })
       : {};
+  // How the loop ended is the runtime's own record, like its identity. It
+  // describes the status the runtime reported, so a changed status drops it:
+  // a failure a hook turned into success keeps no stale `max-steps`.
+  const { stop: _hookStop, ...rewritten } = replaced;
+  const stop =
+    status === result.status && result.stop ? { stop: result.stop } : {};
   return {
-    ...replaced,
+    ...rewritten,
     ...writes,
+    ...stop,
     canonicalValue,
     ...(result.status === "suspended"
       ? {
@@ -453,6 +460,131 @@ export async function runPostContextAssemblyHook(
     };
   }
   return assembled;
+}
+
+// ── PreStep ──────────────────────────────────────────────────────
+
+/** Tool choice of one step; `"auto"` sends none. */
+export type StepToolChoice = "auto" | "required" | { readonly name: string };
+
+/** What a PreStep handler sees: the step the loop is about to run. */
+export interface PreStepPayload {
+  /** 1-based number of the step. */
+  readonly step: number;
+  /** Steps left including this one. */
+  readonly stepsRemaining: number;
+  /** The step limit in force. */
+  readonly maxSteps: number;
+  /** Names of the tools offered to the model this step. */
+  readonly toolNames: readonly string[];
+  /** The tool choice the loop would send. */
+  readonly toolChoice: StepToolChoice;
+}
+
+/** What a PreStep handler may return in `replace`. */
+export interface PreStepReplace {
+  /** Offer only these tools this step; a subset of `toolNames`. */
+  readonly tools?: readonly string[];
+  readonly toolChoice?: StepToolChoice;
+  /** Lower the steps left, this one included; never raises them. */
+  readonly stepsRemaining?: number;
+  /** End the loop before the model call. */
+  readonly stop?: {
+    readonly reason: "tool-finished" | "cancelled";
+    readonly message?: string;
+  };
+}
+
+/** The validated outcome; invalid parts of a replacement are dropped. */
+export interface PreStepOutcome {
+  /** The tools kept for this step, when a handler narrowed them. */
+  readonly tools?: readonly string[];
+  /** Names a handler gave that were not offered this step. */
+  readonly ignoredTools: number;
+  readonly toolChoice?: StepToolChoice;
+  readonly stepsRemaining?: number;
+  readonly stop?: {
+    readonly reason: "tool-finished" | "cancelled";
+    readonly message?: string;
+  };
+}
+
+const MAX_PRE_STEP_STOP_MESSAGE = 500;
+
+function isStepToolChoice(value: unknown): value is StepToolChoice {
+  if (value === "auto" || value === "required") return true;
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    !Array.isArray(value) &&
+    typeof (value as { name?: unknown }).name === "string"
+  );
+}
+
+/**
+ * Run PreStep before a step's model call. Sequential and transform-only, like
+ * PreLLMCall: a failed handler is skipped and `abort` means "no change".
+ */
+export async function runPreStepHook(
+  opts: BaseOpts & { readonly pluginId: string; readonly runtimeId: string },
+  payload: PreStepPayload,
+): Promise<PreStepOutcome> {
+  const hookResult = await runHook<PreStepPayload & PreStepReplace>(
+    opts,
+    "PreStep",
+    payload,
+    { pluginId: opts.pluginId, runtimeId: opts.runtimeId },
+  );
+  const replace = hookReplace(hookResult) as
+    Readonly<Record<string, unknown>> | undefined;
+  if (!replace) return { ignoredTools: 0 };
+  const offered = new Set(payload.toolNames);
+  let tools: string[] | undefined;
+  let ignoredTools = 0;
+  if (Array.isArray(replace.tools)) {
+    const kept = new Set<string>();
+    for (const name of replace.tools) {
+      if (typeof name === "string" && offered.has(name)) kept.add(name);
+      else ignoredTools += 1;
+    }
+    tools = [...kept];
+  }
+  const stepTools = new Set(tools ?? payload.toolNames);
+  const toolChoice =
+    isStepToolChoice(replace.toolChoice) &&
+    (typeof replace.toolChoice === "string" ||
+      stepTools.has(replace.toolChoice.name))
+      ? typeof replace.toolChoice === "string"
+        ? replace.toolChoice
+        : { name: replace.toolChoice.name }
+      : undefined;
+  const remaining = replace.stepsRemaining;
+  const stepsRemaining =
+    typeof remaining === "number" &&
+    Number.isInteger(remaining) &&
+    remaining >= 1 &&
+    remaining < payload.stepsRemaining
+      ? remaining
+      : undefined;
+  const rawStop = replace.stop;
+  let stop: PreStepOutcome["stop"];
+  if (typeof rawStop === "object" && rawStop !== null) {
+    const { reason, message } = rawStop as Record<string, unknown>;
+    if (reason === "tool-finished" || reason === "cancelled") {
+      const text =
+        typeof message === "string"
+          ? message.trim().slice(0, MAX_PRE_STEP_STOP_MESSAGE)
+          : "";
+      stop = { reason, ...(text ? { message: text } : {}) };
+    }
+  }
+  return {
+    ...(tools ? { tools } : {}),
+    ignoredTools,
+    ...(toolChoice ? { toolChoice } : {}),
+    ...(stepsRemaining !== undefined ? { stepsRemaining } : {}),
+    ...(stop ? { stop } : {}),
+  };
 }
 
 // ── PreLLMCall ───────────────────────────────────────────────────

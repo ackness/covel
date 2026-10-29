@@ -2,7 +2,7 @@
  * Hook lifecycle pipeline types.
  *
  * Defines handler contracts and registration structures for the HookPipeline
- * across the 16 hook events. All types are framework-level — no plugin IDs here.
+ * across the 17 hook events. All types are framework-level — no plugin IDs here.
  *
  * The event names themselves are NOT defined here: `HookEvent` is re-derived
  * from the single source of truth `HOOK_EVENTS` in `@covel/shared`, so the
@@ -14,7 +14,7 @@ import type { HookEnforce, HookEventName } from "@covel/shared";
 // ── Hook event names ─────────────────────────────────────────────
 
 /**
- * The 16 framework hook events. Alias of `@covel/shared`'s `HookEventName`,
+ * The 17 framework hook events. Alias of `@covel/shared`'s `HookEventName`,
  * which is itself `typeof HOOK_EVENTS[number]` — keep this name local because
  * the runtime/pipeline code references `HookEvent` throughout.
  */
@@ -41,6 +41,10 @@ export const HOOK_SEMANTICS: Record<HookEvent, HookSemantic> = {
   // Turn-level (once per runtime): rewrite the assembled system prompt /
   // projected history after buildContext, before the loop. Chained.
   PostContextAssembly: "sequential",
+  // Per step, before the model call: narrow the step's tools, change its tool
+  // choice, lower the remaining steps or end the loop. Not a guard: a failed
+  // handler is skipped and `abort` means "no change".
+  PreStep: "sequential",
   // Non-destructively rewrite the request sent to the LLM on each call;
   // chained so each handler sees the previous handler's edits.
   PreLLMCall: "sequential",
@@ -95,7 +99,7 @@ export interface HookContext {
   /**
    * Plugin of the runtime the event is about — not the plugin that
    * registered the handler. Set, with `runtimeId`, for every event that
-   * concerns one runtime: PreRuntime, PostContextAssembly, PreLLMCall,
+   * concerns one runtime: PreRuntime, PostContextAssembly, PreStep, PreLLMCall,
    * PostLLMResponse, PreToolUse, PostToolUse, PostRuntime, and the two
    * commit events (the proposal's source). Absent for session and turn events.
    * This is the one place for the identity: payloads do not repeat it.

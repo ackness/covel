@@ -41,26 +41,30 @@ async function run(
     },
   });
   let step = 0;
-  const generate = vi.fn(async (): Promise<LLMResponse> => {
-    step++;
-    const done = step === finishAt;
-    return {
-      content: null,
-      finishReason: "tool_calls",
-      usage: { inputTokens: 1, outputTokens: 1 },
-      toolCalls: [
-        {
-          id: `call-${step}`,
-          name: done ? "runtime-done" : "emit-event",
-          arguments: JSON.stringify(
-            done
-              ? { reason: "done" }
-              : { topic: "probe.progress", data: { step } },
-          ),
-        },
-      ],
-    };
-  });
+  const generate = vi.fn(
+    async (_request: {
+      readonly tools?: readonly unknown[];
+    }): Promise<LLMResponse> => {
+      step++;
+      const done = step === finishAt;
+      return {
+        content: null,
+        finishReason: "tool_calls",
+        usage: { inputTokens: 1, outputTokens: 1 },
+        toolCalls: [
+          {
+            id: `call-${step}`,
+            name: done ? "runtime-done" : "emit-event",
+            arguments: JSON.stringify(
+              done
+                ? { reason: "done" }
+                : { topic: "probe.progress", data: { step } },
+            ),
+          },
+        ],
+      };
+    },
+  );
   const deps = {
     store,
     llm: { generate },
@@ -121,10 +125,14 @@ describe.each(["turn", "resume"] as const)("%s tool budget", (path) => {
     expect(result.status).toBe("success");
   });
 
+  // The limit is followed by one finalizer request (tools off). It writes no
+  // answer here, so the step limit stays a failure.
   it("stops unfinished work at 20 steps", async () => {
     const { result, generate } = await run(path, 21);
-    expect(generate).toHaveBeenCalledTimes(20);
+    expect(generate).toHaveBeenCalledTimes(21);
+    expect(generate.mock.calls[20]?.[0].tools).toBeUndefined();
     expect(result.status).toBe("failed");
+    expect(result.stop).toEqual({ reason: "max-steps" });
   });
 
   it("stops as soon as the work completes", async () => {
@@ -140,8 +148,10 @@ describe.each(["turn", "resume"] as const)("%s tool budget", (path) => {
     "honors caller %s and plugin %s limits",
     async (caller, plugin, expected) => {
       const { result, generate } = await run(path, 21, caller, plugin);
-      expect(generate).toHaveBeenCalledTimes(expected);
+      // `expected` steps, then the finalizer request.
+      expect(generate).toHaveBeenCalledTimes(expected + 1);
       expect(result.status).toBe("failed");
+      expect(result.stop).toEqual({ reason: "max-steps" });
     },
   );
 });

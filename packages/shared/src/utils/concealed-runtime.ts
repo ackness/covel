@@ -40,6 +40,13 @@ const CONTENT_FREE_TRACE_FIELDS = new Set([
   "runtimeIds",
   "sourceCommitted",
   "sourceFailedRuntimeIds",
+  // Agent-loop step events: a step number, how the loop ended, and counts of
+  // retries and notes. Notes carry a kind and counts, never a tool name.
+  "step",
+  "stopReason",
+  "finalizer",
+  "retries",
+  "notes",
 ]);
 
 /** Keep only content-free fields of a concealed runtime's trace payload. */
