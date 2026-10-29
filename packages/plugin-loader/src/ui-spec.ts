@@ -1,6 +1,8 @@
+import { scanPluginAssetRoot, type PluginAssetRoot } from "./ui-assets.js";
 import { isPathInside } from "./path-containment.js";
 import {
   MAX_UI_WEBVIEW_BYTES,
+  pluginAssetUrl,
   pluginUiSpecIssues,
   type PluginUiSpecIssue,
 } from "@covel/shared";
@@ -40,6 +42,7 @@ export async function loadPluginUiSpec(
   file: string,
   ownerPluginId: string,
   slot?: PluginUiSlot,
+  assets?: PluginAssetRoot[],
 ): Promise<Record<string, unknown>> {
   const specPath = await containedFile(root, file);
   // The spec holds English text; `locales/<locale>.yaml` translates it.
@@ -51,8 +54,36 @@ export async function loadPluginUiSpec(
   const issues = pluginUiSpecIssues(spec, ownerPluginId, slot);
   if (issues.length) throw new PluginUiSpecError(issues, specId);
   const webview = spec.webview as
-    { entry: string; height?: number } | undefined;
-  if (webview) {
+    { root?: string; entry: string; height?: number } | undefined;
+  if (webview?.root !== undefined) {
+    const rootDir = await containedFile(root, path.resolve(root, webview.root));
+    if (rootDir === (await fs.realpath(root)))
+      throw new PluginUiSpecError(
+        [
+          {
+            path: "webview.root",
+            message:
+              "webview.root must be a directory of UI files, not the package root",
+          },
+        ],
+        specId,
+      );
+    const entry = path.posix.normalize(webview.entry);
+    const scanned = await scanPluginAssetRoot(rootDir, entry);
+    if (scanned.issues.length)
+      throw new PluginUiSpecError(scanned.issues, specId);
+    assets?.push({
+      pluginId: ownerPluginId,
+      digest: scanned.digest,
+      rootDir,
+      entry,
+      files: scanned.listed,
+    });
+    spec.webview = {
+      url: pluginAssetUrl(ownerPluginId, scanned.digest, entry),
+      ...(webview.height === undefined ? {} : { height: webview.height }),
+    };
+  } else if (webview) {
     const htmlPath = await containedFile(
       root,
       path.resolve(path.dirname(specPath), webview.entry),
@@ -94,6 +125,7 @@ export interface PluginUiSpecs {
     Record<PluginUiSlot, readonly Readonly<Record<string, unknown>>[]>
   >;
   readonly diagnostics: readonly PluginUiSpecDiagnostic[];
+  readonly assets: readonly PluginAssetRoot[];
 }
 
 /**
@@ -111,6 +143,7 @@ export async function loadPluginUiSpecs(
     Record<PluginUiSlot, Readonly<Record<string, unknown>>[]>
   > = {};
   const diagnostics: PluginUiSpecDiagnostic[] = [];
+  const assets: PluginAssetRoot[] = [];
   const viewIds = new Set<string>();
   for (const slot of ["right", "message", "view"] as const)
     for (const [specIndex, declaredPath] of (ui?.[slot] ?? []).entries()) {
@@ -123,11 +156,13 @@ export async function loadPluginUiSpecs(
                 "custom component files are not supported; declare a JSON UI spec with a view or webview",
             },
           ]);
+        const specAssets: PluginAssetRoot[] = [];
         const spec = await loadPluginUiSpec(
           root,
           path.resolve(root, declaredPath),
           pluginId,
           slot,
+          specAssets,
         );
         if (slot === "view" && typeof spec.id === "string") {
           if (viewIds.has(spec.id))
@@ -138,6 +173,7 @@ export async function loadPluginUiSpecs(
           viewIds.add(spec.id);
         }
         (slots[slot] ??= []).push(spec);
+        assets.push(...specAssets);
       } catch (error) {
         diagnostics.push({
           slot,
@@ -153,7 +189,7 @@ export async function loadPluginUiSpecs(
         });
       }
     }
-  return { slots, diagnostics };
+  return { slots, diagnostics, assets };
 }
 
 /** Why a spec could not be read, without the host's directories in it. */

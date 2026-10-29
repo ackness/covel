@@ -54,6 +54,7 @@ it("waits for the plugin list, preserves the chosen view and recovers from error
     ({ status }: { status: "loading" | "ready" | "error" }) =>
       useGameViewMode(world, {
         status,
+        reload: () => {},
         views: status === "error" ? [] : [entry],
       }),
     { initialProps: { status: "loading" as "loading" | "ready" | "error" } },
@@ -73,7 +74,11 @@ it("waits for the plugin list, preserves the chosen view and recovers from error
 it("falls back to stage for a missing selection and ignores unknown choices", () => {
   const { result, rerender } = renderHook(
     ({ entries }) =>
-      useGameViewMode(stageWorld, { status: "ready", views: entries }),
+      useGameViewMode(stageWorld, {
+        status: "ready",
+        reload: () => {},
+        views: entries,
+      }),
     { initialProps: { entries: [entry] } },
   );
   act(() => result.current[1]("plugin:unknown:view"));
@@ -87,7 +92,7 @@ it("falls back to stage for a missing selection and ignores unknown choices", ()
 it("uses parsed for a missing world default and holds unconsented default views on the host", () => {
   const world: World = { metadata: { defaultViewMode: entry.mode } };
   const missing = renderHook(() =>
-    useGameViewMode(world, { views: [], status: "ready" }),
+    useGameViewMode(world, { views: [], status: "ready", reload: () => {} }),
   );
   expect(missing.result.current[0]).toBe("parsed");
   expect(missing.result.current[2].fellBack).toBe(true);
@@ -95,7 +100,7 @@ it("uses parsed for a missing world default and holds unconsented default views 
     ({ allowed }) =>
       useGameViewMode(
         world,
-        { views: [entry], status: "ready" },
+        { views: [entry], status: "ready", reload: () => {} },
         () => allowed,
       ),
     { initialProps: { allowed: false } },

@@ -591,3 +591,62 @@ HTML 文件在一个隔离的框里运行。框架给它一个 `window.covel` �
 | 菜单里没有视图         | 确认插件在当前会话启用，检查 `/api/ui-specs` 的 `diagnostics`                 |
 | 读取授权后页面仍为空白 | 检查 HTML 使用 classic script 和 `window.covel.subscribe`；用宿主返回按钮离开 |
 | 页面在数据为空时不显示 | 无数据源的 json-render 页面添加 `alwaysRender: true`                          |
+
+## 多文件页面
+
+视图需要独立脚本、样式和图片时，在 `contributes.ui.view` 注册 JSON spec：
+
+```text
+my-plugin/
+  PLUGIN.md
+  ui/view.json
+  ui/app/index.html
+  ui/app/app.js
+  ui/app/style.css
+  ui/app/img/logo.png
+```
+
+```yaml
+contributes:
+  ui:
+    view: [./ui/view.json]
+```
+
+```json
+{
+  "id": "console",
+  "label": "Console",
+  "webview": { "root": "./ui/app", "entry": "index.html" },
+  "bridge": "session"
+}
+```
+
+```html
+<!doctype html>
+<html>
+  <head>
+    <link rel="stylesheet" href="style.css" />
+    <script src="app.js" defer></script>
+  </head>
+  <body>
+    <img src="img/logo.png" alt="Logo" />
+    <p id="story"></p>
+  </body>
+</html>
+```
+
+```js
+window.covel.subscribe((state) => {
+  document.querySelector("#story").textContent =
+    state.session?.messages.map((message) => message.text).join("\n") ?? "";
+});
+```
+
+通过包的消息目录翻译标签：
+
+```yaml
+messages:
+  Console: 控制台
+```
+
+`root` 相对包根目录，`entry` 相对 `root`。使用经典外部脚本，内联脚本和模块脚本不会运行。宿主注入 `window.covel`；页面不读会话时删掉 `bridge`。读取会话的页面只在玩家授权后挂载。玩家始终保留宿主返回按钮，也能重试失败的页面。文件规则、上限、CSP 和缓存契约见[多文件页面](../reference/ui-panels.md#多文件页面)。不要把私人文件放进发布根目录。

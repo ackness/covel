@@ -18,6 +18,13 @@ export const viewEntry: PluginViewEntry = {
     bridge: "session",
   },
 };
+export const pageViewEntry: PluginViewEntry = {
+  ...viewEntry,
+  spec: {
+    ...viewEntry.spec,
+    webview: { url: `/plugin-assets/p/${"a".repeat(32)}/index.html` },
+  },
+};
 export const sessionPlugin: SessionPlugin = {
   id: "p",
   displayName: { en: "Probe", zh: "示例" },

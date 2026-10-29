@@ -3,7 +3,11 @@ import { cleanup, render } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 import { PluginPanel } from "../plugin-panel.js";
 import type { PluginWebview } from "../plugin-webview.js";
-import { projection, viewEntry } from "./plugin-view-fixtures.js";
+import {
+  projection,
+  viewEntry,
+  pageViewEntry,
+} from "./plugin-view-fixtures.js";
 const captured = vi.hoisted(() => ({
   props: undefined as ComponentProps<typeof PluginWebview> | undefined,
 }));
@@ -20,25 +24,34 @@ vi.mock("@/stores/session-store.js", () => ({
 }));
 vi.mock("react-force-graph-2d", () => ({ default: () => null }));
 afterEach(cleanup);
-it("forwards session projection and stream only for an opted-in spec and fills the view", () => {
-  const stream = { subscribe: () => () => {}, read: () => null };
-  const spec = { ...viewEntry.spec };
-  const values = {
-    pluginId: "p",
-    spec,
-    fill: true,
-    sessionBridge: { projection, stream },
-    stateOverride: {},
-  };
-  const view = render(<PluginPanel {...values} />);
-  expect(captured.props?.state.session).toEqual(projection);
-  expect(captured.props?.stream).toBe(stream);
-  expect(captured.props?.fill).toBe(true);
-  view.rerender(
-    <PluginPanel {...values} spec={{ ...spec, bridge: undefined }} />,
-  );
-  expect(captured.props?.state).not.toHaveProperty("session");
-  expect(captured.props?.stream).toBeUndefined();
-  view.rerender(<PluginPanel {...values} sessionBridge={undefined} />);
-  expect(captured.props?.state).not.toHaveProperty("session");
-});
+it.each([viewEntry, pageViewEntry])(
+  "forwards session projection and stream only for an opted-in spec and fills the view ($spec.webview)",
+  (entry) => {
+    const stream = { subscribe: () => () => {}, read: () => null };
+    const spec = { ...entry.spec };
+    const onRetry = vi.fn();
+    const values = {
+      pluginId: "p",
+      onRetry,
+      spec,
+      fill: true,
+      sessionBridge: { projection, stream },
+      stateOverride: {},
+    };
+    const view = render(<PluginPanel {...values} />);
+    expect(captured.props?.state.session).toEqual(projection);
+    expect(captured.props?.stream).toBe(stream);
+    expect(captured.props?.fill).toBe(true);
+    expect(captured.props?.src).toBe(spec.webview?.url);
+    expect(captured.props?.html).toBe(spec.webview?.html);
+    captured.props?.onRetry?.();
+    expect(onRetry).toHaveBeenCalledOnce();
+    view.rerender(
+      <PluginPanel {...values} spec={{ ...spec, bridge: undefined }} />,
+    );
+    expect(captured.props?.state).not.toHaveProperty("session");
+    expect(captured.props?.stream).toBeUndefined();
+    view.rerender(<PluginPanel {...values} sessionBridge={undefined} />);
+    expect(captured.props?.state).not.toHaveProperty("session");
+  },
+);

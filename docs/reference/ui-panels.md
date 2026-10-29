@@ -292,12 +292,12 @@ contributes:
 UI spec 是**不可信的插件输入**。它的规则只有一份：`@covel/shared` 的 `pluginUiSpecIssues`（`packages/shared/src/schemas/ui-spec.ts`）。`pnpm validate:plugin`、ZIP 安装和 `/api/ui-specs` 加载面板时都用它，所以校验通过的 spec 在游戏里不会因为格式被去掉。
 
 - **版本。** `specVersion` 可以省略，按 v1 处理。写得比宿主支持的版本高（当前 `CURRENT_UI_SPEC_VERSION = 1`）会被拒绝。这样旧宿主遇到新插件包时会明确报错，而不是画出一个坏面板。
-- **`webview`。** `entry` 指向包里的一份 `.html`，不超过 512 KiB；`height` 是 80 到 800 之间的整数。`surfaces` 只能是 `panel` 和 `stage`。
+- **`webview`。** 单文件 `entry` 指向包里的一份 `.html`，不超过 512 KiB；视图也可用[多文件页面](#多文件页面)；`height` 是 80 到 800 之间的整数。`surfaces` 只能是 `panel` 和 `stage`。
 - **数据归属。** `pluginId`、`sourcePlugin`、`sourcePluginId` 只能写本插件的 ID；`dataSource.bindings` 只能是写死的本插件 namespace，最多 8 个。
 - **`view` 或 `webview`，二选一。** 每份 spec 必须声明 `view`（对象）或 `webview`（HTML 文档）。两个都写或都不写，校验失败。
 - **`view` 递归校验。** 检查的内容有 `component` / `type`、`children`、命名的 `slots`、`repeat`，以及 `on` / `watch` 的 action 绑定结构。组件名必须在共享的 `PLUGIN_UI_COMPONENT_NAMES` 里；不认识的组件在服务端就产生带路径的诊断。`props` 和 directive 表达式不做限制，由组件和 json-render 在运行时解析，这样插件可以扩展数据的形状。
 - **不是 JSON 的声明。** `contributes.ui` 只接受 `.json` 文件。`pnpm validate:plugin` 和安装拒绝别的文件；加载时这一项给出诊断，同一个插件的其他合法 JSON spec 照常显示。浏览器不会执行插件的组件文件。
-- **需要自定义组件时。** 声明 `webview.entry` 并提供一份独立的 HTML；或者组合 catalog 组件，绑定框架的 action。浏览器不会直接导入插件的 `.tsx` / `.js` 模块。
+- **需要自定义组件时。** 声明 `webview.entry` 并提供一份独立的 HTML；或者组合 catalog 组件，绑定框架的 action。浏览器不会直接导入插件的 `.tsx` / `.js` 模块；多文件页面可以加载发布根目录中的经典 `.js` 脚本。
 - **一份坏 spec 不拖累整个响应。** 校验失败的 spec 从它所在的位置去掉，响应顶层的 `diagnostics[]` 给出具体诊断：
 
   ```ts
@@ -762,6 +762,61 @@ contributes:
 - 视图列表加载时先显示宿主默认界面。视图缺失、插件停用、请求失败或渲染出错时回退。宿主默认值只有两种：世界默认值恰为 `stage` 时用舞台，否则用 `parsed`。插件视图永远不作为回退目标。请求暂时失败后仍保留玩家的选择，后续成功加载可以恢复；渲染失败则切回宿主默认值并提示。
 - 视图选择只存在当前挂载中，不按会话保存。插件视图不进入沉浸舞台模式，也不显示宿主输入框。
 
+### 多文件页面
+
+页面就是插件视图，没有 `contributes.ui.pages`。只有 `contributes.ui.view` 可以声明 `webview.root`；右侧面板和消息块仍用单文件 HTML。页面保留故事栏布局，不替换宿主主视图或输入框系统位置。
+
+作者在 spec 中声明：
+
+```json
+{
+  "id": "console",
+  "label": "Console",
+  "webview": { "root": "./ui/console/", "entry": "pages/index.html" },
+  "bridge": "session"
+}
+```
+
+`root` 相对插件包根目录，和 spec JSON 所在目录无关。`entry` 相对 `root`，必须以 `.html` 结尾。两者不能是绝对路径或含 `..` 段；`root` 不能是 `.`、`./` 或包根目录。没有 `root` 时，`entry` 仍相对 spec 文件。
+
+作者形状和 API 输出不同：单文件返回 `webview: { html, height? }`；多文件返回 `webview: { url, height? }`。`url` 为 `/plugin-assets/<pluginId>/<digest>/<entry>`，每段分别编码。多文件直接进入 `sandbox="allow-scripts"` 的 iframe，不用 `srcdoc` 或外层 frame 宿主。
+
+<!-- prettier-ignore -->
+| 发布规则 | 限制 |
+| --- | --- |
+| HTML | 只发布声明的入口；其他 `.html` 不发布。静态规划不限内联 HTML 的 512 KiB，入口响应上限为 2 MiB，超出返回 404 |
+| 经典脚本、样式、数据 | `.js`、`.css`、`.json`、`.txt` |
+| 图片和字体 | `.png`、`.jpg`、`.jpeg`、`.gif`、`.webp`、`.avif`、`.svg`、`.woff2`、`.woff` |
+| 其他类型 | `.mjs`、`.wasm`、`.map`、无扩展名文件等不发布；扩展名按小写比较 |
+| 隐藏和链接 | 不发布任一级以 `.` 开头的名称、`node_modules`、符号链接、Windows junction 或特殊文件；不跟随链接 |
+| 保留名称 | 任一级的 `__covel__` 都是错误，留给宿主桥接脚本 |
+| 根目录检查 | 根目录直接含 `PLUGIN.md`、`RUNTIME.md` 或 `.covel-install.json` 时拒绝；根目录不能是包根目录 |
+| 数量和大小 | 最多 512 个已发布文件，合计 32 MiB，单文件 8 MiB；边界值有效 |
+
+根目录里所有符合规则的文件都可被公开下载，不能放密钥、服务端代码或私人数据。清单之外的文件一律 404。详情见 [资源 API](./api.md#get-plugin-assetspluginiddigest)。
+
+入口响应的 CSP：
+
+<!-- prettier-ignore -->
+| 指令 | 值 |
+| --- | --- |
+| `default-src` | `'none'` |
+| `script-src` | `'self'` |
+| `style-src` | `'self' 'unsafe-inline'` |
+| `img-src` | `'self' data: blob:` |
+| `font-src` | `'self' data:` |
+| `connect-src` / `frame-src` / `form-action` / `base-uri` / `object-src` | `'none'` |
+| `sandbox` | `allow-scripts` |
+| `frame-ancestors` | `'self'` |
+
+使用经典外部脚本 `<script src="app.js"></script>`，不使用模块脚本、内联脚本、事件属性或 `eval`。内联样式允许；跨源字体和网络请求不允许。`'self'` 按浏览器看到的源工作，兼容 Vite 和反向代理，不限制到某个路径前缀；文件边界由路由的发布清单检查。主页面的 `frame-src 'self'` 限制 iframe 导航，`/api` 另有不透明源和嵌入目标拒绝规则，见[安全边界](../internals/security.md#plugin-pages-loaded-by-url)。
+
+宿主在入口 `<head>` 后注入经典桥接脚本 `__covel__/bridge-<hash8>.js`。没有 `<head>` 时依次放在 `<html>`、doctype 后，或文档开头；嵌套入口自动添加 `../`。作者不用复制桥接代码。收到端口后脚本回报 `ready`，URL 页面等待 8 秒；超时在 iframe 上方显示失败和“重试”。宿主用不带凭据的 HEAD 探测：404 显示“此页面已更新，请重新加载。”，其他失败显示“页面加载失败。”。迟到的 `ready` 会清除错误。重试重新获取 spec 并重建 iframe；宿主的返回按钮始终可用。
+
+摘要是按相对路径排序的 `[relativePath, size, sha256(content)]` JSON 行的 SHA-256 前 32 位小写十六进制。注册表首次投影时计算，重新注册插件时重算；生产文件应只在重启时改变，不保留旧文件副本。重新注册后旧摘要 URL 返回 404，新 URL 可加载。资源使用一年不可变缓存；入口 ETag 还包含桥接脚本摘要，宿主升级不会复用旧桥接脚本地址。
+
+`bridge: "session"` 的逐能力授权不变。整份 spec 的授权哈希包含 URL，而 URL 的摘要覆盖所有发布文件；任一文件变化都会使旧授权失效。没有桥接授权就不挂载读取会话的页面。没有新增任何会话写操作，也不保存每会话的视图选择。开发模式未获服务端代码批准的插件可能要重启才能重算摘要。
+
 ### 读取会话前的授权
 
 只有 `contributes.ui.view` 中的 `webview` 可以声明 `bridge: "session"`。玩家同意前不挂载这个页面，也不发送任何会话投影。世界默认选择了它时同样先弹出授权提示，并在下面显示 `parsed` / `stage`。
@@ -802,7 +857,7 @@ contributes:
 
 KiB 按 UTF-8 字节计算。状态变化推送完整投影；流式文本用 `{ type: "stream", seq, append }` 合并推送，间隔 100 ms，结束时立即补齐尾部。完整推送也带当时的流式全文，供页面重新同步。叙事重置会使旧追加基线失效，下一次推送用完整文本替换旧草稿；即使替换文本在 100 ms 内超过旧文本长度，也不会拼接旧前缀。正常完成仍会补齐最后一段文本。
 
-**此版本的会话桥只读。** 不新增 `submitAction`、表单提交、中止或打开面板能力。原有 `invokeRuntime`、`invokePluginAction`、`invokeCommand`、`emitEvent`、`setUiState` 保持原样。图片只传引用，不传字节或 blob URL，因此示例页不显示图片；也不提供输入框。HTML 仍为单文件，页面未连接时没有握手超时回退，但宿主返回按钮一直可用。
+**此版本的会话桥只读。** 不新增 `submitAction`、表单提交、中止或打开面板能力。原有 `invokeRuntime`、`invokePluginAction`、`invokeCommand`、`emitEvent`、`setUiState` 保持原样。图片只传引用，不传字节或 blob URL，因此示例页不显示图片；也不提供输入框。单文件页面没有握手超时提示；多文件页面的超时和重试见[多文件页面](#多文件页面)。宿主返回按钮一直可用。
 
 ## 组件 Catalog
 
@@ -894,7 +949,7 @@ catalog 里的组件不够用时，插件可以带一份自己的 HTML。JSON sp
 - **放大。** 右侧面板里的每个插件面板都可以“放大”到一个大对话框里显示。
 - **显示在舞台上。** `ui.right` 的 spec 可以声明 `surfaces: ["panel", "stage"]`。不写时只显示在右侧面板。
 - **玩家确认与加载失败。** 舞台插件面板的 `sendMessage` 只把文字填进输入框，由玩家编辑后发送。舞台复用会话已加载的面板定义；加载失败时显示提示和“重试”，不阻止玩家继续输入。
-- **隔离方式。** HTML 放在两层 opaque-origin 的 sandbox iframe 里：
+- **隔离方式。** 单文件 HTML 放在两层 opaque-origin 的 sandbox iframe 里；视图也可选择[多文件页面](#多文件页面)：
   - 外层是 Web 构建里的静态文档 `/plugin-frame.html`。它按 URL 加载，所以带自己的 CSP，不继承主页面的策略（主页面不允许内联脚本）。它的 CSP 禁止插件文档自己导航到网络地址，端口只转交一次。
   - 内层是插件的 HTML。它保留内联脚本和 `window.covel` 数据 / 动作桥。组件代码和业务状态的结构归插件自己。
 

@@ -266,17 +266,32 @@ export function validatePluginBundle(
     }
     const root = withDerivedPackageFields(parsed, declarations, exists);
     validatePluginDeclarations(root);
-    validatePluginFiles(root, declarations, (absolutePath) => {
-      const relative = path
-        .relative(path.resolve(pluginId), absolutePath)
-        .split(path.sep)
-        .join("/");
-      const entry = entries.find(
-        (candidate) => candidate.relativePath === relative,
-      );
-      if (!entry) throw new Error("File not found");
-      return entry.content.toString("utf8");
-    });
+    validatePluginFiles(
+      root,
+      declarations,
+      (absolutePath) => {
+        const relative = path
+          .relative(path.resolve(pluginId), absolutePath)
+          .split(path.sep)
+          .join("/");
+        const entry = entries.find(
+          (candidate) => candidate.relativePath === relative,
+        );
+        if (!entry) throw new Error("File not found");
+        return entry.content.toString("utf8");
+      },
+      (absoluteDir) =>
+        entries.flatMap((entry) => {
+          const file = path.resolve(pluginId, entry.relativePath);
+          const relative = path.relative(absoluteDir, file);
+          return relative &&
+            relative !== ".." &&
+            !relative.startsWith(`..${path.sep}`) &&
+            !path.isAbsolute(relative)
+            ? [{ path: file, size: entry.content.byteLength }]
+            : [];
+        }),
+    );
     // `package.json` is optional: a package without one is ESM and bundles
     // no dependencies.
     if (packageJson) {

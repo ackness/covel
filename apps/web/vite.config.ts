@@ -5,7 +5,7 @@ import { TanStackRouterVite } from "@tanstack/router-plugin/vite";
 import { fileURLToPath } from "node:url";
 import { injectPageCsp } from "./src/lib/page-csp.js";
 
-const RUNTIME_PROXY_PATHS = ["/api"] as const;
+const RUNTIME_PROXY_PATHS = ["/api", "/plugin-assets"] as const;
 
 const RUNTIME_NOT_READY_BODY = JSON.stringify({
   error: "runtime server not ready",

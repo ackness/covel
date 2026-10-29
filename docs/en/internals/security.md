@@ -377,7 +377,7 @@ default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-sr
 What each part means:
 
 - **Scripts** can only be the application's own files. There are no inline scripts, no inline event handlers, no `eval`, and no remote scripts. The built page has only one external module script and no inline content. (Zod is configured not to probe `eval`; see `apps/web/src/lib/zod-config.ts`.)
-- **Frames** are limited to the same origin. The only frame the application creates is the plugin frame host described below.
+- **Frames** are limited to the same origin. Plugin UI uses the frame host or multi-file pages described below; theme contrast checks also use a temporary frame without scripts.
 - `connect-src` allows the same origin, `blob:`, `data:` and `https:`. Application JavaScript downloads player-imported images over HTTPS; CSS image and font requests do not use this directive. A server in a shared form adds the local machine's `http://127.0.0.1:*` and `http://localhost:*` when it serves the page, for the [local model relay](#local-model-relay) (`withLocalModelRelayConnect`, `packages/shared/src/utils/page-policy.ts`). The built page, the personal form and the desktop window do not have these two, and the whole of `http:` is never opened.
 - There are no browser plugins (`object-src 'none'`).
 - `base-uri` and `form-action` are fixed to the same origin.
@@ -389,6 +389,8 @@ Theme CSS is untrusted content. Themes share the settings document, and CSP does
 `tests/e2e/page-policy.spec.ts` loads the main screens of the built application and a session with a plugin panel, and fails if any `securitypolicyviolation` event appears.
 
 ### Plugin HTML
+
+The following two-frame arrangement describes single-file HTML. Multi-file views use the direct URL arrangement below.
 
 A plugin's `webview` HTML runs in a browser sandbox. It must never reach the origin the application runs on: the settings and provider keys in `localStorage`, the cookies, and the API with the player's session token. It runs in a second-level frame, below the application page.
 
@@ -436,6 +438,25 @@ The application ships its own fonts (`@fontsource-variable/*`, SIL OFL 1.1), and
 - Once allowed, external images are downloaded by JavaScript and displayed as embedded data; external URLs never reach `<img>`. Only HTTPS raster images with CORS support are accepted, with the same limits as theme images; failures show a placeholder. Requests send no credentials or referrer.
 - Plugin webviews and json-render panels are not Markdown, and they have their own rules.
 
+### Plugin pages loaded by URL
+
+A multi-file view loads directly from `/plugin-assets/<pluginId>/<digest>/<entry>` into one `sandbox="allow-scripts"` iframe. It has no `srcdoc` or outer host. The [page contract](../reference/ui-panels.md#multi-file-pages) defines its CSP, file types and limits.
+
+<!-- prettier-ignore -->
+| Threat | Boundary |
+| --- | --- |
+| Reading app storage, cookies or preload APIs | Opaque origin, without `allow-same-origin`; the frame receives no Electron IPC or provider credentials |
+| Network, nested frames, forms, base changes and inline code | Response CSP blocks connections, frames, forms, base URLs, objects, inline scripts and eval; only classic same-origin scripts, styles, images and fonts can load |
+| Reading package files or escaping the root | Realpath containment at indexing; lstat omits links and junctions; the route serves only listed files and checks O_NOFOLLOW, regular-file status, indexed size and realpath again |
+| Running a directly opened SVG | Non-entry responses use `Content-Security-Policy: sandbox` |
+| API calls from opaque documents | Every `/api` method rejects `Origin: null` before CORS with `foreign_request_refused` |
+| API self-navigation without Origin | `Sec-Fetch-Dest: iframe`, `frame`, `embed` and `object` are refused on `/api`; no Sec-Fetch-Site heuristic |
+| Navigation and port reuse | The main page's `frame-src 'self'` blocks other origins; same-origin navigation remains possible, but gets no second bridge port and `/api` is separately guarded |
+| Content changes and session reads | URL digest covers every published file; consent remains plugin ID + capability + whole-spec hash through SettingsStore |
+| Missing, stale or failed pages | 8-second ready handshake, credential-free HEAD probe and Retry overlay; host back controls remain available |
+
+`script-src 'self'` deliberately uses the browser-visible origin rather than an absolute path source: the server cannot infer that origin behind Vite or a reverse proxy. A page can load other same-origin public static files, including another plugin's published assets or app scripts, but still cannot read app storage, use the API or make connections. Authors must keep secrets and server code out of the published root. Public delivery needs no cookies, token, second origin or media-token exception. The asset route omits CORP because an opaque-origin page must load its own classic subresources. The bridge source is shared with single-file views and injected by the host; it adds no write capability.
+
 ## Other server guards
 
 **Import from the desktop menu.** Imports from the desktop menu open the shared package installer, and use the same server-side validation, archive limits, and trust flow as imports on the Web. The older native IPC channels that copied a directory or ZIP straight into the resource directory are no longer open.
@@ -473,7 +494,7 @@ The application ships its own fonts (`@fontsource-variable/*`, SIL OFL 1.1), and
 | World IDs | Allowlist `/^[a-z0-9_-]{1,64}$/i` | world routes |
 | World reads | `GET /api/worlds` and `GET /api/worlds/:id` require no identity on any tier. Anyone who can reach the server can read every world record, including the characters, lore, and contract data embedded in stored (generated) worlds, and content the author marked as hidden. Writes are guarded, and reads are not. A hosted deployment that cannot show this content to every visitor must put the server behind its own access control | `apps/server/src/routes/api/worlds/crud.ts` |
 | World gallery | `GET /api/worlds/:id/gallery*` serves the images in a world package without a session. Anyone who can list the world can reach them. The request gives the two parts of a file address. It answers only when the gallery list itself contains this file: a bitmap (PNG, JPEG, WebP, never SVG) listed by the package's `media/gallery.json` and not later than the opening scene. When there is no such file, it answers for a file directly inside a public `kind: media` source. Paths are resolved inside the package, and symbolic links are refused. Sources with `enabled: false` or `visibility: hidden` are not served. The only audio file it serves is the `.mp3` / `.wav` named by `themeMusic` in `world.yaml`, under the same path rules | `apps/server/src/world-data/gallery.ts` |
-| Write origin | CORS can only stop a page from reading the response. "Simple" cross-site requests (form submissions, `fetch` with `text/plain`) still run the handler. A `POST` / `PUT` / `PATCH` / `DELETE` that carries an `Origin` is rejected with `403 origin_not_allowed` before it enters any route, unless the origin is on the CORS allowlist, or its host is the host the request was sent to (`Host`, or `X-Forwarded-Host` behind a proxy). A request with no `Origin` is a non-browser client, and it is allowed. This is not authentication; the Host name check above stops DNS rebinding | `apps/server/src/middleware/origin-guard.ts` |
+| Write origin | CORS can only stop a page from reading the response. "Simple" cross-site requests (form submissions, `fetch` with `text/plain`) still run the handler. A `POST` / `PUT` / `PATCH` / `DELETE` that carries an `Origin` is rejected with `403 origin_not_allowed` before it enters any route, unless the origin is on the CORS allowlist, or its host is the host the request was sent to (`Host`, or `X-Forwarded-Host` behind a proxy). A request with no `Origin` is a non-browser client, and it is allowed. This is not authentication; the Host name check above stops DNS rebinding. Before CORS, all methods on `/api` and `/api/*` reject trimmed case-insensitive `Origin: null` or embedded destinations (`iframe`, `frame`, `embed`, `object`) with `403 foreign_request_refused`, without CORS allow headers. The guard does not inspect Sec-Fetch-Site and does not cover plugin asset/frame routes. | `apps/server/src/middleware/origin-guard.ts` and `apps/server/src/middleware/foreign-request-guard.ts` |
 | Rate limiting | `rateLimiter()` and `singleFlight()`. `RATE_LIMIT_RPM` sets only the quota of `GET /api/events/stream` (per IP per minute, default 60); other routes have their quotas written into each route, for example 10 for media upload, 30 for `POST /api/actions`, and 120 for reading session state (per minute). Each client address has one quota for each concrete path, and a second quota for each route template (`/api/sessions/:id/state`), which is eight times the first. This gives each session its own quota, while rotating path parameters runs into the larger one. The counter table keeps at most 10,000 entries, and evicts the entries with the oldest time window first | `apps/server/src/middleware/rate-limit.ts` |
 | Raw config files | `GET` / `PUT /api/config/raw*` read and write `llm.toml` as text (and `config.toml` in desktop mode). They share the install guard: the hosted tiers require the operator token, the desktop shell requires the desktop token, and production requires `COVEL_INSTALL_API_ENABLED=1`. The file names come from a fixed list, never from a path in the request. `keys.env` is not on the list. Text is written only after the server's own parser accepts it. Parse and validation errors for `llm.toml` give the line, the column and the key, never a value substituted for `${VAR}`, so the refusal, the log and the Settings page cannot carry a secret | `apps/server/src/routes/raw-config-api.ts` |
 | Error sanitization | In production, `app.onError` returns `"Internal server error"`. Stack traces and paths go only to `console.error`. In development, it returns `err.message` | `routes/api/bootstrap.ts`, `app.ts` |

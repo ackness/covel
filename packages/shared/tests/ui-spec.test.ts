@@ -331,3 +331,44 @@ describe("full-column view placement", () => {
     ).toEqual([]);
   });
 });
+
+describe("multi-file view authoring", () => {
+  const spec = (root = "./ui/app", entry = "index.html") => ({
+    id: "page",
+    label: "Page",
+    bridge: "session",
+    webview: { root, entry },
+  });
+  it("allows package-relative roots and nested entries with the session bridge", () => {
+    expect(pluginUiSpecIssues(spec(), "owner", "view")).toEqual([]);
+    expect(
+      pluginUiSpecIssues(spec("./ui/app/", "pages/two.html"), "owner", "view"),
+    ).toEqual([]);
+  });
+  it.each(["..", "ui/../secret", "/ui", "C:/ui", "\\ui", ".", "./", ""])(
+    "rejects root %s",
+    (root) => {
+      expect(pluginUiSpecIssues(spec(root), "owner", "view")).toContainEqual(
+        expect.objectContaining({ path: "webview.root" }),
+      );
+    },
+  );
+  it.each([
+    "../index.html",
+    "/index.html",
+    "C:/index.html",
+    "x/../../index.html",
+    "x\\index.html",
+    "app.js",
+  ])("rejects entry %s", (entry) => {
+    expect(
+      pluginUiSpecIssues(spec("ui", entry), "owner", "view"),
+    ).toContainEqual(expect.objectContaining({ path: "webview.entry" }));
+  });
+  it.each(["right", "message"] as const)("rejects roots in %s", (slot) => {
+    expect(pluginUiSpecIssues(spec(), "owner", slot)).toContainEqual({
+      path: "webview.root",
+      message: "webview.root is only valid in contributes.ui.view",
+    });
+  });
+});

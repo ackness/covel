@@ -60,6 +60,8 @@ The specs are split into two projects. The configuration sorts each file automat
 
 The built page carries a content security policy, and the dev server does not. `tests/e2e/page-policy.spec.ts` checks that the main pages, and a session with plugin panels, produce no policy violations. A new spec that wants the same check calls `watchPolicyViolations(page)` (`tests/e2e/helpers/page-policy.ts`) before the first navigation, and asserts at the end that the returned list is empty.
 
+`tests/e2e/plugin-assets-isolation.spec.ts` checks classic page resources, the injected bridge and sandbox/CSP isolation under PAGE_CSP in `chromium-dev`.
+
 ### Accessibility Cases
 
 ```bash

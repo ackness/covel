@@ -1,57 +1,5 @@
 import { z } from "zod";
-import { PLUGIN_FRAME_CSP } from "@covel/shared";
-
-/** Small transport only; rendering, state interpretation and interactions belong to the plugin. */
-const BRIDGE = `
-(() => {
-  let port, state = {}, sequence = 0;
-  const listeners = new Set(), pending = new Map();
-  // The host's style scheme, as --covel-* custom properties on the document.
-  const applyTheme = theme => {
-    if (!theme || !theme.tokens) return;
-    const root = document.documentElement;
-    for (const [name, value] of Object.entries(theme.tokens))
-      root.style.setProperty("--covel-" + name.replace(/[A-Z]/g, c => "-" + c.toLowerCase()), String(value));
-    root.style.colorScheme = theme.scheme;
-    root.dataset.covelScheme = theme.scheme;
-  };
-  window.covel = Object.freeze({
-    getState: () => state,
-    subscribe(fn) { listeners.add(fn); fn(state); return () => listeners.delete(fn); },
-    invoke(action, params = {}) {
-      if (!port) return Promise.reject(new Error("Plugin UI is not connected"));
-      const id = String(++sequence);
-      return new Promise((resolve, reject) => {
-        const timer = setTimeout(() => { pending.delete(id); reject(new Error("Plugin UI action timed out")); }, 120000);
-        pending.set(id, { resolve, reject, timer });
-        port.postMessage({ type: "action", id, action, params });
-      });
-    }
-  });
-  addEventListener("message", event => {
-    if (event.source !== parent || event.data?.type !== "covel:connect" || !event.ports[0] || port) return;
-    port = event.ports[0];
-    port.onmessage = ({ data }) => {
-      if (data?.type === "state") {
-        state = data.value;
-        applyTheme(state.theme);
-        for (const fn of listeners) fn(state);
-      } else if (data?.type === "stream") {
-        if (!state.session) return;
-        state = { ...state, session: { ...state.session, streaming: {
-          seq: data.seq, text: (state.session.streaming?.seq === data.seq ? state.session.streaming.text : "") + data.append
-        } } };
-        for (const fn of listeners) fn(state);
-      } else if (data?.type === "result") {
-        const request = pending.get(data.id);
-        if (!request) return;
-        pending.delete(data.id); clearTimeout(request.timer);
-        data.error ? request.reject(new Error(data.error)) : request.resolve(data.value);
-      }
-    };
-    port.start();
-  });
-})();`;
+import { PLUGIN_FRAME_CSP, PLUGIN_BRIDGE_SCRIPT } from "@covel/shared";
 
 /**
  * The plugin's document as the frame host (`public/plugin-frame.html`) loads
@@ -60,7 +8,7 @@ const BRIDGE = `
  * somewhere else.
  */
 export function pluginFrameDocument(html: string): string {
-  return `<meta http-equiv="Content-Security-Policy" content="${PLUGIN_FRAME_CSP}"><script>${BRIDGE}</script>${html}`;
+  return `<meta http-equiv="Content-Security-Policy" content="${PLUGIN_FRAME_CSP}"><script>${PLUGIN_BRIDGE_SCRIPT}</script>${html}`;
 }
 
 /** A message that can be answered: anything else from the frame is dropped. */
@@ -102,13 +50,23 @@ export interface PluginBridge {
  */
 export function connectPluginBridge(
   target: Pick<Window, "postMessage">,
-  html: string,
+  html: string | undefined,
   host: () => PluginBridgeHost,
+  options?: { onReady?: () => void },
 ): PluginBridge {
   const channel = new MessageChannel();
   const port = channel.port1;
   const inFlight = new Set<string>();
   port.onmessage = async ({ data }: MessageEvent<unknown>) => {
+    if (
+      data &&
+      typeof data === "object" &&
+      "type" in data &&
+      data.type === "ready"
+    ) {
+      options?.onReady?.();
+      return;
+    }
     const envelope = actionEnvelope.safeParse(data);
     if (!envelope.success) return;
     const { id } = envelope.data;
@@ -138,7 +96,9 @@ export function connectPluginBridge(
   // The frame is an opaque origin, which no target origin but "*" matches.
   // The message carries the plugin's own HTML and nothing else.
   target.postMessage(
-    { type: "covel:connect", document: pluginFrameDocument(html) },
+    html === undefined
+      ? { type: "covel:connect" }
+      : { type: "covel:connect", document: pluginFrameDocument(html) },
     "*",
     [channel.port2],
   );

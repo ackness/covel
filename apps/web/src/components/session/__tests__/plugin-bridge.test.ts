@@ -258,6 +258,7 @@ it("the page bridge merges appends and ignores the stream lane without consented
   const parent = {};
   const port = {
     start: vi.fn(),
+    postMessage: vi.fn(),
     onmessage: undefined as ((event: { data: unknown }) => void) | undefined,
   };
   const source = pluginFrameDocument("").match(
@@ -276,6 +277,7 @@ it("the page bridge merges appends and ignores the stream lane without consented
     data: { type: "covel:connect" },
     ports: [port],
   });
+  expect(port.postMessage).toHaveBeenCalledExactlyOnceWith({ type: "ready" });
   const notify = vi.fn();
   page.covel?.subscribe(notify);
   notify.mockClear();
@@ -297,4 +299,35 @@ it("the page bridge merges appends and ignores the stream lane without consented
     session: { streaming: { seq: 3, text: "c" } },
   });
   expect(notify).toHaveBeenCalledTimes(3);
+});
+
+it("connects URL pages without a document and handles ready separately from actions", async () => {
+  const posted = vi.fn();
+  const ready = vi.fn();
+  let transferred: MessagePort | undefined;
+  const bridge = connectPluginBridge(
+    {
+      postMessage: (message: unknown, origin: string, ports: MessagePort[]) => {
+        posted(message, origin);
+        transferred = ports[0];
+      },
+    } as unknown as Pick<Window, "postMessage">,
+    undefined,
+    () => ({ state: {}, locked: false, handlers: {} }),
+    { onReady: ready },
+  );
+  if (!transferred) throw new Error("missing port");
+  open.push(transferred);
+  expect(posted).toHaveBeenCalledExactlyOnceWith(
+    { type: "covel:connect" },
+    "*",
+  );
+  const port = transferred;
+  const received: unknown[] = [];
+  port.onmessage = (event) => received.push(event.data);
+  port.postMessage({ type: "unknown" });
+  port.postMessage({ type: "ready" });
+  await vi.waitFor(() => expect(ready).toHaveBeenCalledOnce());
+  expect(received).toEqual([{ type: "state", value: {} }]);
+  bridge.close();
 });

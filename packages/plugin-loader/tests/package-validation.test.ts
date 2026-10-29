@@ -373,3 +373,59 @@ describe("diagnostic locations and redaction", () => {
     ).toBe("<path> <path> <path>");
   });
 });
+
+it("validates multi-file pages with the same planner the loader uses", async () => {
+  const root = await fixture(
+    { contributes: { ui: { view: ["./ui/view.json"] } } },
+    {
+      "ui/view.json": JSON.stringify({
+        id: "page",
+        label: "Page",
+        webview: { root: "./ui/app", entry: "index.html" },
+      }),
+      "ui/app/index.html": "<head></head>",
+      "ui/app/app.js": "// page",
+    },
+  );
+  const {
+    loadPluginUiSpecs,
+    loadPluginDefinition,
+    discoverPluginAt,
+    validatePluginFiles,
+  } = await import("../src/index.js");
+  expect((await validatePluginPackage(root)).ok).toBe(true);
+  const discovery = await discoverPluginAt(root);
+  if (!discovery) throw new Error("missing discovery");
+  const definition = await loadPluginDefinition(discovery);
+  expect(() =>
+    validatePluginFiles(
+      definition.packageManifest,
+      definition.manifests,
+      (file) => {
+        // This callback is only asked for JSON; the root requires an explicit listing.
+        if (file.endsWith("view.json"))
+          return JSON.stringify({
+            id: "page",
+            label: "Page",
+            webview: { root: "./ui/app", entry: "index.html" },
+          });
+        throw new Error("unexpected read");
+      },
+    ),
+  ).toThrow("cannot list webview.root");
+  expect(
+    (await loadPluginUiSpecs(root, "probe", { view: ["ui/view.json"] }))
+      .diagnostics,
+  ).toEqual([]);
+  await mkdir(path.join(root, "ui/app/__covel__"));
+  const report = await validatePluginPackage(root);
+  expect(report.ok).toBe(false);
+  expect(report.issues).toContainEqual(
+    expect.objectContaining({
+      code: "plugin-files",
+      file: "ui/view.json",
+      field: "webview.root",
+      message: expect.stringContaining("reserved"),
+    }),
+  );
+});
