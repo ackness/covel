@@ -5219,12 +5219,12 @@ A turn's `TurnInput.playerMessage` is the text the kernel renders from the actio
 
 After the player submits the opening form, the opening narrative appears on its own. The player does not need to send another message.
 
-- **When it happens**: One player action (`submit_actions` / `start_session`) completes the **last** setup runtime. The setup run is committed separately, and `phase` switches to `playing`.
+- **When it happens**: One player action (`submit_actions` / `start_session`) completes the **last** setup runtime. The setup run is committed separately, and `phase` switches to `playing`. A `retry_turn` that reruns such a turn from its recorded answer does the same (for example, recovering after the server stopped right after saving the last opening answer).
 - **What happens**: In the same request, on the same SSE stream, the server automatically runs one main-loop turn. This turn has a new `turnId` and its own transaction. It reads the setup state that was just committed, and lets the narrative runtime write the opening.
 - **Counting**: The continuation turn runs with `origin: continuation`. It does not increase `completedPlayerTurns`.
 - **Events**: The whole stream still sends only **one** `execution.completed`, and it uses the data from the continuation turn.
 - **Cases with no continuation**:
-  - The action is `retry_turn` / `retry_runtime` / `retry_failed_runtimes`;
+  - The action is `retry_runtime` / `retry_failed_runtimes`, or a `retry_turn` that does not rerun a player's answer (such as recovering the opening continuation itself);
   - The execution was aborted (`abortReason`);
   - The commit failed;
   - Setup still has unfinished items (an opening interaction comes next).

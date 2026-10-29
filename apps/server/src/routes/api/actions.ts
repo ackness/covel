@@ -1340,6 +1340,9 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
             commitError,
             fanOutFailed: outcome.fanOutFailed === true,
             wasPreGamePending,
+            // A `retry_turn` that ran again from the player's recorded input.
+            replaysPlayerInput:
+              type === "retry_turn" && playerInput !== undefined,
             queuedRuntimeJobs: committed ? queuedRuntimeJobs : [],
             followerJobs: committed ? followerJobs : [],
           };
@@ -1373,22 +1376,25 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
         commitError,
         fanOutFailed,
         wasPreGamePending,
+        replaysPlayerInput,
         queuedRuntimeJobs,
         followerJobs,
       } = locked;
       // A request that completes the LAST setup runtime commits on its own
       // (turn-wide transaction discipline), so the narrator never ran for it:
-      // the opening continuation follows. Guarded to player actions (both
-      // retry actions keep rerun-only semantics) and skipped when the turn
-      // aborted. Until it starts, a stop reaches this request and the opening
-      // does not start; otherwise a stop from here on has nothing to stop.
+      // the opening continuation follows. Guarded to player actions: a
+      // `retry_turn` that replays the player's recorded answer continues as
+      // its submission would have, while runtime retries and a retried opening
+      // keep rerun-only semantics. Skipped when the turn aborted. Until it
+      // starts, a stop reaches this request and the opening does not start;
+      // otherwise a stop from here on has nothing to stop.
       const continues =
         turnArgs.origin === "player" &&
         committed &&
         wasPreGamePending &&
         !result.abortReason &&
         !isRuntimeRetry &&
-        type !== "retry_turn";
+        (type !== "retry_turn" || replaysPlayerInput);
       if (!continues) control.finish();
 
       // ——— Post-lock tail (per turn) ———

@@ -5217,12 +5217,12 @@ id: example-epoch:2
 
 玩家提交完开局表单后，不用再手动发一条消息，开场叙事会自动出现。
 
-- **什么时候发生**：一次玩家动作（`submit_actions` / `start_session`）完成了**最后一个** setup runtime。setup 执行单独提交，`phase` 切换到 `playing`。
+- **什么时候发生**：一次玩家动作（`submit_actions` / `start_session`）完成了**最后一个** setup runtime。setup 执行单独提交，`phase` 切换到 `playing`。从记下的回答重跑这类回合的 `retry_turn` 也一样（例如服务端在保存最后一个开局回答后停止，之后恢复）。
 - **发生什么**：同一个请求在同一条 SSE 流上自动接着跑一个主循环回合。这个回合有全新的 `turnId` 和独立的事务，读取刚刚提交的 setup 状态，让叙事 runtime 写出开场。
 - **计数**：接力回合以 `origin: continuation` 执行，不增加 `completedPlayerTurns`。
 - **事件**：整条流仍然只发**一个** `execution.completed`，用的是接力回合的数据。
 - **不接力的情况**：
-  - 动作是 `retry_turn` / `retry_runtime` / `retry_failed_runtimes`；
+  - 动作是 `retry_runtime` / `retry_failed_runtimes`，或者不重跑玩家回答的 `retry_turn`（例如恢复开场接力本身）；
   - 执行被中止（`abortReason`）；
   - 提交失败；
   - setup 还有没完成的项（后面还有开局交互）。

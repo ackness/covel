@@ -126,6 +126,7 @@ When a form appears in the opening stage (creating a character, assigning points
 
 - A number field uses its default value. If there is no default, it uses the minimum value.
 - A point-buy form spreads the points across the number fields one by one, within the budget.
+- The answer is submitted as the action kind the form declares (`actionKind`), or as `act` when it declares none.
 - To set specific values, use `--form-values '<json>'`.
 
 ## 4. Two checks that appear only in the debug records

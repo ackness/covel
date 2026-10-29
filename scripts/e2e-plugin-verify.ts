@@ -931,6 +931,8 @@ interface DetectedForm {
   }>;
   /** The form's declared validator, e.g. `{ name: "point-buy", data }`. */
   validation?: { name?: unknown; data?: unknown };
+  /** The action kind the form declares its answer is submitted as. */
+  actionKind?: string;
 }
 
 /**
@@ -1003,6 +1005,10 @@ function toDetectedForm(
     source.validation && typeof source.validation === "object"
       ? (source.validation as { name?: unknown; data?: unknown })
       : undefined;
+  const actionKind =
+    typeof source.actionKind === "string" && source.actionKind.length > 0
+      ? source.actionKind
+      : undefined;
 
   return {
     turnId,
@@ -1012,6 +1018,7 @@ function toDetectedForm(
     ),
     fields,
     validation,
+    ...(actionKind ? { actionKind } : {}),
   };
 }
 
@@ -1858,6 +1865,9 @@ async function runMain(
     console.log("  Detected interaction form:");
     kv("Runtime", detectedForm.runtimeId);
     kv("Interaction", detectedForm.interactionId);
+    // A form answer is submitted as the kind the form declares, else `act`.
+    const answerKind = detectedForm.actionKind ?? "act";
+    kv("Action kind", answerKind);
     kv(
       "Fields",
       detectedForm.fields
@@ -1879,7 +1889,7 @@ async function runMain(
       payload: {
         actions: [
           {
-            kind: "act",
+            kind: answerKind,
             interaction: {
               turnId: detectedForm.turnId,
               interactionId: detectedForm.interactionId,
