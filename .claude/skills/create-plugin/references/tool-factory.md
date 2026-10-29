@@ -9,9 +9,11 @@
 export default function ({ tool, z, shortId, shortIdBatch }) {
   return tool({
     name: 'my-tool',
-    description: 'Save one selected story note.',
+    description: 'Echo one selected story note.',
+    annotations: { readOnly: true, idempotent: true, concurrencySafe: true },
+    timeoutMs: 5000,
     parameters: z.object({
-      param1: z.string().describe('The note text to save.'),
+      param1: z.string().describe('The note text to echo.'),
       param2: z.number().optional().describe('Optional note priority.'),
     }),
     execute: async (params, context) => {
@@ -22,6 +24,8 @@ export default function ({ tool, z, shortId, shortIdBatch }) {
   });
 }
 ```
+
+注解和单次时限的完整规则见 [工具注解与超时](../../../../docs/reference/tools.md#注解与超时)。使用 `tool()` 让 SDK 补齐注解；手写模块必须提供完整注解。返回 proposal 或领域事件的工具不能声明只读，未注册的声明工具会让 runtime 启动失败，包括延迟工具。
 
 ## 注入对象
 

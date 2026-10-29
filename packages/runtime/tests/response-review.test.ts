@@ -87,6 +87,12 @@ async function run(
     getToolInfo: () => ({
       name: "emit-event",
       description: "test",
+      annotations: {
+        readOnly: false,
+        stagesWrites: true,
+        idempotent: false,
+        concurrencySafe: false,
+      },
       jsonSchema: { type: "object" },
     }),
   };

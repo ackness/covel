@@ -131,6 +131,12 @@ describe("runTurnPipeline: output.schema.json", () => {
       getToolInfo: (name) => ({
         name,
         description: `Tool ${name}`,
+        annotations: {
+          readOnly: false,
+          stagesWrites: true,
+          idempotent: false,
+          concurrencySafe: false,
+        },
         jsonSchema: { type: "object", additionalProperties: true },
       }),
     };
@@ -169,6 +175,12 @@ describe("runTurnPipeline: output.schema.json", () => {
       getToolInfo: (name) => ({
         name,
         description: "Submit the output",
+        annotations: {
+          readOnly: false,
+          stagesWrites: true,
+          idempotent: false,
+          concurrencySafe: false,
+        },
         jsonSchema: { ...OBJECT_SCHEMA },
       }),
     };
@@ -222,6 +234,12 @@ describe("runTurnPipeline: output.schema.json", () => {
       getToolInfo: (name) => ({
         name,
         description: "Submit the output",
+        annotations: {
+          readOnly: false,
+          stagesWrites: true,
+          idempotent: false,
+          concurrencySafe: false,
+        },
         jsonSchema: { ...OBJECT_SCHEMA },
       }),
     };

@@ -293,6 +293,12 @@ describe("Turn executor hook wire-in", () => {
         getToolInfo: vi.fn().mockReturnValue({
           name: "my-tool",
           description: "test",
+          annotations: {
+            readOnly: false,
+            stagesWrites: true,
+            idempotent: false,
+            concurrencySafe: false,
+          },
           jsonSchema: { type: "object" },
         }),
       };
@@ -517,6 +523,12 @@ describe("Turn executor hook wire-in", () => {
         getToolInfo: vi.fn().mockReturnValue({
           name: "my-tool",
           description: "test",
+          annotations: {
+            readOnly: false,
+            stagesWrites: true,
+            idempotent: false,
+            concurrencySafe: false,
+          },
           jsonSchema: { type: "object" },
         }),
       };
@@ -1118,6 +1130,12 @@ describe("Turn executor hook wire-in", () => {
         getToolInfo: vi.fn().mockReturnValue({
           name: "my-tool",
           description: "test",
+          annotations: {
+            readOnly: false,
+            stagesWrites: true,
+            idempotent: false,
+            concurrencySafe: false,
+          },
           jsonSchema: { type: "object" },
         }),
       };
@@ -1185,6 +1203,12 @@ describe("Turn executor hook wire-in", () => {
         getToolInfo: vi.fn().mockReturnValue({
           name: "my-tool",
           description: "test",
+          annotations: {
+            readOnly: false,
+            stagesWrites: true,
+            idempotent: false,
+            concurrencySafe: false,
+          },
           jsonSchema: { type: "object" },
         }),
       };

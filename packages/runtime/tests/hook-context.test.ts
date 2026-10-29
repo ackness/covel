@@ -117,6 +117,12 @@ it("gives every hook the session locale, and the runtime identity in the context
         getToolInfo: vi.fn(() => ({
           name: "look",
           description: "Look",
+          annotations: {
+            readOnly: false,
+            stagesWrites: true,
+            idempotent: false,
+            concurrencySafe: false,
+          },
           jsonSchema: { type: "object" },
         })),
       },

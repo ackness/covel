@@ -82,6 +82,12 @@ export function buildToolDefinitions(
   toolExecutor: ToolExecutor,
   context: ToolCallContext,
 ): LLMToolDefinition[] | undefined {
+  for (const name of manifest.tools?.plugin ?? []) {
+    if (!toolExecutor.getToolInfo(name, context))
+      throw new Error(
+        `runtime "${manifest.name}" declares plugin tool "${name}", but its plugin did not register it`,
+      );
+  }
   // Deferred tools (tools.defer) are registered and authorized but withheld
   // from the initial advertisement — the LLM discovers them through the
   // injected `search-tools` tool (see agent-loop/tool-search.ts).
@@ -131,12 +137,10 @@ export function buildToolDefinitions(
         parameters: { type: "object" },
       });
     } else {
-      // Manifest-declared tool not found in registry — advertising a
-      // schema-less stub would invite a call that can only fail NOT_FOUND,
-      // so warn and drop instead.
+      // Missing builtins are optional host capabilities.
       console.warn(
-        `[turn-executor] runtime "${manifest.name}" declares tool "${name}" ` +
-          `not found in registry — dropped from LLM advertisement`,
+        `[turn-executor] runtime "${manifest.name}": builtin tool "${name}" ` +
+          `is not installed on this host — not offered`,
       );
     }
   }

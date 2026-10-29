@@ -96,6 +96,8 @@ export type {
   ToolExecutionContext,
   ToolModule,
   ToolDefinitionInput,
+  ToolAnnotations,
+  PluginToolAnnotations,
   ToolSource,
   ValidationResult,
 } from "./types.js";

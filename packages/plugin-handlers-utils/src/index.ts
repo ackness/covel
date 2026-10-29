@@ -28,6 +28,7 @@ export type {
   PluginEntryFactory,
   PluginToolkit,
   PluginToolDefinition,
+  PluginToolAnnotations,
   PluginToolModule,
   PluginToolContext,
   PluginToolStore,

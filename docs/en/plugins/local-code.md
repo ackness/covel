@@ -87,6 +87,7 @@ export default function makeSaveNote({ tool, z, withPendingProposals }) {
   return tool({
     name: "save-note",
     description: "Save one short fact that the current narrative states.",
+    annotations: { idempotent: true },
     parameters: z.object({
       id: z.string().min(1).describe("Stable short key, e.g. gate-is-locked"),
       text: z.string().min(1).max(300),
@@ -118,6 +119,8 @@ This file exports one function. Covel passes a set of helpers to it:
 | `shortId`              | Generates a short ID. Pass `context.random` as the fourth argument                                      |
 
 The tool does not write to the save directly. It returns a **write request** (a proposal). Its type is `plugin.data`, and its content means "write this one record into `notes`". Covel checks and saves all write requests when the turn ends. If the turn fails, none of them are saved.
+
+This tool overwrites the same record by a stable key, so it declares `idempotent: true`. Read tools can also declare `readOnly` and `concurrencySafe`; use `timeoutMs` for a per-call limit. See [Annotations and timeout](../reference/tools.md#annotations-and-timeout) for defaults and validation rules.
 
 Three rules:
 

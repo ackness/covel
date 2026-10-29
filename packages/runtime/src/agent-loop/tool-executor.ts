@@ -19,6 +19,7 @@ import {
   parseJsonText,
   type EmittedEvent,
   type ToolModule,
+  type ToolAnnotations,
   type ToolSource,
 } from "@covel/tools";
 import type { DataStore } from "@covel/store";
@@ -41,7 +42,10 @@ type ToolErrorCode =
   | "INVALID_ARGS"
   | "VALIDATION_ERROR"
   | "CANCELLED"
+  | "TIMEOUT"
   | "EXECUTION_ERROR";
+
+class ToolTimeoutError extends Error {}
 
 function toolError(
   code: ToolErrorCode,
@@ -133,12 +137,14 @@ export interface ToolInfo {
   readonly name: string;
   readonly description: string;
   readonly jsonSchema: Readonly<Record<string, unknown>>;
+  readonly annotations: Readonly<ToolAnnotations>;
+  readonly timeoutMs?: number;
 }
 
 export interface ToolExecutor {
   execute(call: ToolCall, context: ToolCallContext): Promise<ToolCallResult>;
   /**
-   * Look up a tool's LLM-facing shape (name/description/jsonSchema).
+   * Look up a tool's model-facing shape and execution metadata.
    *
    * `context` lets the resolver return a session-specific variant — e.g.
    * character write tools with `fields` typed against the
@@ -273,6 +279,8 @@ export function createToolExecutor(
         name: tool.name,
         description: tool.description,
         jsonSchema: tool.jsonSchema as Record<string, unknown>,
+        annotations: tool.annotations,
+        ...(tool.timeoutMs !== undefined ? { timeoutMs: tool.timeoutMs } : {}),
       };
     },
 
@@ -451,33 +459,74 @@ export function createToolExecutor(
       // 4. Execute
       let invocation: ReturnType<typeof createToolExecutionContext> | undefined;
       try {
-        invocation = createToolExecutionContext(context, config.store);
+        const timeoutController =
+          tool.timeoutMs !== undefined ? new AbortController() : undefined;
+        const executionSignal = combineAbortSignals(
+          context.signal,
+          timeoutController?.signal,
+        );
+        invocation = createToolExecutionContext(
+          { ...context, signal: executionSignal },
+          config.store,
+        );
         // Capture authority before any asynchronous trace work.
         await emitToolCalling(context, call, toolSource, approvalStatus);
         invocation.assertLive();
         const active = invocation;
-        const work = lifetime.track(
-          (async () => {
-            try {
-              const rawResult = await tool.execute(params, active.context);
-              active.assertLive();
-              // Snapshot envelopes before cleanup or trace persistence can yield.
-              return {
-                parsedResult: structuredClone(getToolContent(rawResult)),
-                pendingProposals: structuredClone(
-                  getPendingProposals(rawResult),
-                ),
-                emittedEvents: structuredClone(getEmittedEvents(rawResult)),
-              };
-            } finally {
-              active.close();
-              await active.drain();
-            }
-          })(),
-        );
         const { parsedResult, pendingProposals, emittedEvents } =
-          await waitForToolWork(work, context.signal!, () => active.close());
+          await (async () => {
+            let timer: ReturnType<typeof setTimeout> | undefined;
+            try {
+              if (timeoutController && tool.timeoutMs !== undefined) {
+                timer = setTimeout(
+                  () =>
+                    timeoutController.abort(
+                      new ToolTimeoutError(
+                        `Tool "${call.name}" timed out after ${tool.timeoutMs}ms`,
+                      ),
+                    ),
+                  tool.timeoutMs,
+                );
+                timer.unref?.();
+              }
+              const work = lifetime.track(
+                (async () => {
+                  try {
+                    const rawResult = await tool.execute(
+                      params,
+                      active.context,
+                    );
+                    active.assertLive();
+                    // Snapshot envelopes before cleanup or trace persistence can yield.
+                    return {
+                      parsedResult: structuredClone(getToolContent(rawResult)),
+                      pendingProposals: structuredClone(
+                        getPendingProposals(rawResult),
+                      ),
+                      emittedEvents: structuredClone(
+                        getEmittedEvents(rawResult),
+                      ),
+                    };
+                  } finally {
+                    active.close();
+                    await active.drain();
+                  }
+                })(),
+              );
+              return await waitForToolWork(work, executionSignal!, () =>
+                active.close(),
+              );
+            } finally {
+              if (timer !== undefined) clearTimeout(timer);
+            }
+          })();
         context.signal?.throwIfAborted();
+        if (
+          tool.annotations.readOnly &&
+          ((pendingProposals?.length ?? 0) > 0 ||
+            (emittedEvents?.length ?? 0) > 0)
+        )
+          throw new Error("read-only tool returned writes");
 
         // Text-first convention: if the tool result is an object with a
         // `_text` string field, send ONLY the text as the LLM-facing payload
@@ -558,6 +607,10 @@ export function createToolExecutor(
         if (context.signal?.aborted) {
           code = "CANCELLED";
           message = "Tool execution was cancelled";
+          errorResult = toolError(code, message);
+        } else if (error instanceof ToolTimeoutError) {
+          code = "TIMEOUT";
+          message = error.message;
           errorResult = toolError(code, message);
         } else if (error instanceof ToolValidationError) {
           // Dedupe Zod issues by path so only the FIRST issue on any given

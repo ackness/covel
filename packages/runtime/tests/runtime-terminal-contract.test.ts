@@ -89,6 +89,12 @@ describe.each(["agent", "function"] as const)(
                 getToolInfo: () => ({
                   name: "suspend",
                   description: "wait",
+                  annotations: {
+                    readOnly: false,
+                    stagesWrites: true,
+                    idempotent: false,
+                    concurrencySafe: false,
+                  },
                   jsonSchema: { type: "object", properties: {} },
                 }),
                 async execute() {

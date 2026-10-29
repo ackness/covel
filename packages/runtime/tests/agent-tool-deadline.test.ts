@@ -231,7 +231,20 @@ describe("agent tool deadline", () => {
           };
         },
       },
-      toolExecutor: { execute, getToolInfo: () => undefined },
+      toolExecutor: {
+        execute,
+        getToolInfo: (name) => ({
+          name,
+          description: name,
+          jsonSchema: { type: "object" },
+          annotations: {
+            readOnly: true,
+            stagesWrites: false,
+            idempotent: true,
+            concurrencySafe: true,
+          },
+        }),
+      },
     });
     const running = runAgentToolLoop({ ...opts, hookPipeline: pipeline });
     const rejected = expect(running).rejects.toThrow("timed out");
