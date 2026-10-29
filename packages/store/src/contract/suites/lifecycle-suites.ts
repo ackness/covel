@@ -1,6 +1,7 @@
 /**
  * Contract suites for the scheduling-redesign storage wave:
- *   - Session lifecycle fields (`phase` / `completedPlayerTurns` / `setupRuntimes`).
+ *   - Session lifecycle fields (`phase` / `completedPlayerTurns` / `setupRuntimes`)
+ *     and the session's `seats`.
  *   - Logical-turn completion ledger (idempotent, count-at-most-once).
  *   - Setup-runtime attempt log (idempotent insert + terminalising update).
  *   - Append-only job-status stream (idempotent, ordered).
@@ -116,6 +117,68 @@ export function registerLifecycleStoreSuites(getStore: () => DataStore): void {
       const updated = await store.getSession(session.id);
       expect(Object.keys(updated?.setupRuntimes ?? {})).toEqual(["c"]);
       expect(updated?.setupRuntimes?.c?.state).toBe("blocked");
+    });
+
+    it("round-trips seats on create, get, list and update", async () => {
+      const session = makeSession();
+      await store.createSession(session);
+      expect((await store.getSession(session.id))?.seats).toEqual([
+        { id: "main", controller: "human", role: "player", characters: "auto" },
+      ]);
+      const seats = [
+        {
+          id: "main",
+          controller: "human" as const,
+          role: "player" as const,
+          characters: "auto" as const,
+          currentCharacterId: "char-lin",
+        },
+        {
+          id: "guest",
+          controller: "empty" as const,
+          role: "spectator" as const,
+          characters: ["char-kai"],
+        },
+      ];
+      await store.updateSession(session.id, { seats, updatedAt: ts() });
+      expect((await store.getSession(session.id))?.seats).toEqual(seats);
+      expect(
+        (await store.listSessions()).find((row) => row.id === session.id)
+          ?.seats,
+      ).toEqual(seats);
+      // Replaced wholesale, like setupRuntimes.
+      await store.updateSession(session.id, {
+        seats: [seats[1]!],
+        updatedAt: ts(),
+      });
+      expect((await store.getSession(session.id))?.seats).toEqual([seats[1]]);
+    });
+
+    it("rejects seats that break an invariant on create and update", async () => {
+      const twoAuto = [
+        { id: "a", controller: "human", role: "player", characters: "auto" },
+        { id: "b", controller: "human", role: "player", characters: "auto" },
+      ] as const;
+      const rejected = makeSession({ seats: twoAuto });
+      await expect(store.createSession(rejected)).rejects.toThrow(
+        /Invalid session seats/,
+      );
+      expect(await store.getSession(rejected.id)).toBeNull();
+
+      const session = makeSession();
+      await store.createSession(session);
+      await expect(
+        store.updateSession(session.id, {
+          seats: [
+            { id: "a", controller: "human", role: "player", characters: ["x"] },
+            { id: "b", controller: "human", role: "host", characters: ["x"] },
+          ],
+          updatedAt: ts(),
+        }),
+      ).rejects.toThrow(/Invalid session seats/);
+      expect((await store.getSession(session.id))?.seats).toEqual(
+        session.seats,
+      );
     });
 
     it("leaves lifecycle fields untouched when the patch omits them", async () => {

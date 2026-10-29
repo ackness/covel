@@ -77,7 +77,8 @@ describe("narrative perspective review", () => {
       getOwnSettings: () => ({ narrativePerson: "second" }),
     };
     review.context(ctx, {
-      characters: [{ name: "林潮", type: "player" }],
+      characters: [{ id: "lin", name: "林潮", type: "player" }],
+      currentCharacterId: "lin",
     });
     const reply = (content: string): LLMResponse => ({
       content,
@@ -154,7 +155,10 @@ describe("narrative perspective review", () => {
       [a, "Ada"],
       [b, "Lin"],
     ] as const)
-      review.context(ctx, { characters: [{ name, type: "player" }] });
+      review.context(ctx, {
+        characters: [{ id: name, name, type: "player" }],
+        currentCharacterId: name,
+      });
     const request = { messages: [] };
     expect(
       review.prepare(a, request).replace?.messages.at(-1)?.content,
@@ -169,5 +173,34 @@ describe("narrative perspective review", () => {
     expect(
       review.prepare(b, request).replace?.messages.at(-1)?.content,
     ).toContain('"Lin"');
+  });
+
+  it("anchors the person rules on the current character, not the first player", () => {
+    const review = createNarrativeReview("story");
+    const ctx = {
+      sessionId: "s",
+      turnId: "t",
+      pluginId: "story",
+      runtimeId: "story",
+      locale: "en",
+    };
+    const characters = [
+      { id: "ada", name: "Ada", type: "player" },
+      { id: "lin", name: "Lin", type: "player" },
+    ];
+    review.context(ctx, { characters, currentCharacterId: "lin" });
+    const added = String(
+      review.prepare(ctx, { messages: [] }).replace?.messages.at(-1)?.content,
+    );
+    expect(added).toContain('Player character: "Lin". ');
+    expect(added).not.toContain('"Ada"');
+    review.cleanup(ctx);
+
+    review.context(ctx, { characters });
+    expect(
+      String(
+        review.prepare(ctx, { messages: [] }).replace?.messages.at(-1)?.content,
+      ),
+    ).not.toContain("Player character:");
   });
 });

@@ -55,6 +55,9 @@ async function fixture() {
     },
     activePlugins: ["test-story"],
     setupRuntimes: {},
+    seats: [
+      { id: "main", controller: "human", role: "player", characters: "auto" },
+    ],
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   });

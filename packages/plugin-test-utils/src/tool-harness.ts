@@ -1,7 +1,11 @@
 import { compileRuntimeManifest } from "@covel/plugin-loader";
 import { createMemoryStore } from "@covel/store/memory";
 import type { DataStore } from "@covel/store";
-import { isJsonValue, type JsonValue } from "@covel/shared";
+import {
+  defaultSessionSeats,
+  isJsonValue,
+  type JsonValue,
+} from "@covel/shared";
 import {
   commitExecution,
   createToolExecutor,
@@ -31,6 +35,7 @@ export async function createPluginTestStore(context: {
     phase: "playing",
     completedPlayerTurns: 0,
     setupRuntimes: {},
+    seats: defaultSessionSeats(),
     createdAt: now,
     updatedAt: now,
   });

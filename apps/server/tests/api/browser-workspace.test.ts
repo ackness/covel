@@ -28,6 +28,9 @@ async function seed(target: DataStore, metadata?: Record<string, unknown>) {
   await target.createSession({
     phase: "playing",
     setupRuntimes: {},
+    seats: [
+      { id: "main", controller: "human", role: "player", characters: "auto" },
+    ],
     id: SESSION_ID,
     worldId: WORLD_ID,
     status: "active",

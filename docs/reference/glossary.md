@@ -34,6 +34,7 @@
 | Roleplay notes | 扮演说明 | 世界作者写在角色记录的 `blueprint` 字段里、告诉叙事怎样演这个角色的内容；由“角色资料”插件读取。不是角色本身。 |
 | Runtime | runtime | 保留英文：它指清单里的一个运行单元，不是泛指“运行时”。 |
 | Runtime manifest | runtime 清单 |  |
+| Seat | 座位 | 会话里“谁在玩、以什么身份、控制哪些角色”（`session.seats`）。 |
 | Segment | 提示词段 |  |
 | Server-scoped setting | 服务端设置 | `scope: "server"` 的设置；其余的是本设备设置。 |
 | Session | 会话 |  |
@@ -245,6 +246,12 @@ agent runtime 用完步数之后，内核再发的一次模型请求：关掉工
 内部字段不是作者格式，不能照抄进 `PLUGIN.md`。
 
 详见：[插件字段参考](./plugins.md)、[写插件要知道的规则](../plugins/essentials.md)。
+
+## Seat
+
+会话里的一个位置：谁坐在这里（人类或空置）、以什么身份（玩家、主持人、旁观者）、控制哪些角色、当前扮演哪一个。座位存放在会话记录的 `seats` 上。新会话有一个人类玩家座位，绑定所有 `type: player` 的角色。故事跟随主座位的当前角色。
+
+详见：[世界模型：座位](./world-model.md#座位)、[HTTP API](./api.md#会话座位)。
 
 ## Segment
 

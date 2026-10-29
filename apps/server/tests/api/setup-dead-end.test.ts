@@ -115,6 +115,9 @@ async function harness(options: {
     status: "active",
     phase: "setup",
     setupRuntimes: {},
+    seats: [
+      { id: "main", controller: "human", role: "player", characters: "auto" },
+    ],
     completedPlayerTurns: 0,
     activePlugins: options.plugins ?? [
       "pregame",

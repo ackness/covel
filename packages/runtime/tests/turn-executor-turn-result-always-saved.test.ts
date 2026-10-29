@@ -40,6 +40,9 @@ async function freshActiveStore(sessionId: string): Promise<DataStore> {
     phase: "setup",
     completedPlayerTurns: 0,
     setupRuntimes: {},
+    seats: [
+      { id: "main", controller: "human", role: "player", characters: "auto" },
+    ],
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   });

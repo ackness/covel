@@ -90,6 +90,9 @@ const session: SessionRecord = {
   runtimeModelOverrides: { "inspector/story": "deep" },
   completedPlayerTurns: 0,
   setupRuntimes: {},
+  seats: [
+    { id: "main", controller: "human", role: "player", characters: "auto" },
+  ],
   createdAt: "2026-01-01T00:00:00.000Z",
   updatedAt: "2026-01-01T00:00:00.000Z",
 };

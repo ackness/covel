@@ -44,6 +44,9 @@ beforeEach(() => {
     phase: "playing",
     completedPlayerTurns: 0,
     setupRuntimes: {},
+    seats: [
+      { id: "main", controller: "human", role: "player", characters: "auto" },
+    ],
     activePlugins: [],
     locale: "en-US",
     createdAt: "2026-01-01",

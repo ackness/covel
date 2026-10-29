@@ -34,6 +34,9 @@ function checkpoint(
       phase: "playing",
       completedPlayerTurns: revision,
       setupRuntimes: {},
+      seats: [
+        { id: "main", controller: "human", role: "player", characters: "auto" },
+      ],
       locale: "zh-CN",
       activePlugins: [],
       createdAt: now,

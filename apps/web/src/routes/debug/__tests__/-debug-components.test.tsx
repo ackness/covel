@@ -94,6 +94,14 @@ describe("debug route components", () => {
             phase: "playing",
             completedPlayerTurns: 2,
             setupRuntimes: {},
+            seats: [
+              {
+                id: "main",
+                controller: "human",
+                role: "player",
+                characters: "auto",
+              },
+            ],
           },
         ]}
         selectedSessionId="session-a"

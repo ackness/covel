@@ -300,6 +300,9 @@ describe("package declarations across framework consumers", () => {
       phase: "playing",
       locale: "en-US",
       activePlugins: ["inspector"],
+      seats: [
+        { id: "main", controller: "human", role: "player", characters: "auto" },
+      ],
       createdAt: "2026-10-07T00:00:00.000Z",
       updatedAt: "2026-10-07T00:00:00.000Z",
     } as never);

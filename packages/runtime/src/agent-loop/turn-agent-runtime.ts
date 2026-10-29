@@ -65,6 +65,7 @@ export interface ExecuteAgentRuntimeOptions {
           description?: string;
           fields?: Record<string, unknown>;
         }[];
+        currentCharacterId?: string;
         lastFormValues?: Record<string, unknown>;
       }
     | undefined;
@@ -274,6 +275,8 @@ export async function executeAgentRuntime({
         ({ id, name, type, description }) =>
           Object.freeze({ id, name, type, description }),
       ),
+      currentCharacterId: (sessionContext?.sessionMeta ?? sessionMeta)
+        ?.currentCharacterId,
       promptSegments: includedSegments,
     },
   );

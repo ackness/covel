@@ -398,6 +398,11 @@ export interface AssembledContextView {
     readonly type: string;
     readonly description?: string;
   }[];
+  /**
+   * The character the player acts as: the current character of the primary
+   * seat, one of `characters`. Absent when no seat binds a character.
+   */
+  readonly currentCharacterId?: string;
   /** The `prompt.segment@1` segments this runtime's prompt was built with. */
   readonly promptSegments?: readonly IncludedPromptSegment[];
 }
@@ -437,6 +442,7 @@ export async function runPostContextAssemblyHook(
     promptTemplate: assembled.promptTemplate,
     inputSlots: assembled.inputSlots,
     characters: assembled.characters,
+    currentCharacterId: assembled.currentCharacterId,
     promptSegments: assembled.promptSegments,
   };
   const hookResult = await runHook(opts, "PostContextAssembly", payload, {
@@ -456,6 +462,7 @@ export async function runPostContextAssemblyHook(
       promptTemplate: assembled.promptTemplate,
       inputSlots: assembled.inputSlots,
       characters: assembled.characters,
+      currentCharacterId: assembled.currentCharacterId,
       promptSegments: assembled.promptSegments,
     };
   }

@@ -27,6 +27,9 @@ function makeSession(overrides?: Partial<SessionRecord>): SessionRecord {
     phase: "playing",
     completedPlayerTurns: 0,
     setupRuntimes: {},
+    seats: [
+      { id: "main", controller: "human", role: "player", characters: "auto" },
+    ],
     locale: "zh-CN",
     activePlugins: [],
     createdAt: ts(),

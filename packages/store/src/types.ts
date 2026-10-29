@@ -178,6 +178,7 @@ export interface SessionStore {
         | "phase"
         | "completedPlayerTurns"
         | "setupRuntimes"
+        | "seats"
       >
     >,
   ): Promise<void>;

@@ -136,7 +136,12 @@ describe("kernel extension execution", () => {
         sessionId: "session",
         locale: "en",
         signal: new AbortController().signal,
-        world: { characterSchema: null, characters: [], dimensions: {} },
+        world: {
+          characterSchema: null,
+          characters: [],
+          dimensions: {},
+          seats: [],
+        },
         readPluginData: async () => [],
       });
       expect(await run.run(point, input)).toEqual([

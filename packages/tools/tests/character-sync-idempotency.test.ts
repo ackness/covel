@@ -38,7 +38,7 @@ function fixture() {
 }
 
 function world(characters: WorldModelView["characters"]): WorldModelView {
-  return { characters, characterSchema: null, dimensions: {} };
+  return { characters, characterSchema: null, dimensions: {}, seats: [] };
 }
 
 describe("character batch idempotency", () => {

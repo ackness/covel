@@ -106,6 +106,12 @@ export interface SessionMeta {
   readonly turnNumber: number;
   readonly characters: readonly CharacterSummary[];
   /**
+   * The character the player acts as: the current character of the primary
+   * seat. `<player-character>` and `{{ player.character }}` show it, and the
+   * profiles leave out only it. Absent when no seat binds a character.
+   */
+  readonly currentCharacterId?: string;
+  /**
    * Latest player form submission for this session. Populated from the
    * `player_inputs` table — the newest row by time wins. Plugins read this via
    * `{{ player.lastFormValues }}` to process form submissions without

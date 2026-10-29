@@ -180,15 +180,16 @@ handler 抛出异常、超时或返回了格式不对的结果，都算这个 ha
 
 对 agent runtime 触发一次：它的上下文组装好之后、第一次模型调用之前。
 
-负载：`{ systemPrompt, messages, outputKind?, promptTemplate?, inputSlots?, characters?, promptSegments? }`。
+负载：`{ systemPrompt, messages, outputKind?, promptTemplate?, inputSlots?, characters?, currentCharacterId?, promptSegments? }`。
 
-| 字段             | 内容                                                                                                                                                                                           |
-| ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `outputKind`     | `story` 或 `system`。                                                                                                                                                                          |
-| `promptTemplate` | 这个 runtime 的提示词正文，渲染之前的样子。                                                                                                                                                    |
-| `inputSlots`     | 解析后的 `io.inputs` 值。                                                                                                                                                                      |
-| `characters`     | 会话里的角色（`id`、`name`、`type`、`description`）。                                                                                                                                          |
-| `promptSegments` | 这个 runtime 的提示词用到的 [`prompt.segment@1`](./extension-points.md) 片段，每条是 `{ pluginId, id }`：提供片段的插件，以及它给片段起的 `id`。`audience` 没有包含这个 runtime 的片段不列出。 |
+| 字段                 | 内容                                                                                                                                                                                                            |
+| -------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `outputKind`         | `story` 或 `system`。                                                                                                                                                                                           |
+| `promptTemplate`     | 这个 runtime 的提示词正文，渲染之前的样子。                                                                                                                                                                     |
+| `inputSlots`         | 解析后的 `io.inputs` 值。                                                                                                                                                                                       |
+| `characters`         | 会话里的角色（`id`、`name`、`type`、`description`）。                                                                                                                                                           |
+| `currentCharacterId` | 玩家当前扮演的角色的 `id`：主座位的当前角色（见[座位](./world-model.md#座位)），是 `characters` 中的一个。没有座位绑定角色时不出现。按它找玩家角色，不要按 `type === "player"` 找：一个会话可以有多个玩家角色。 |
+| `promptSegments`     | 这个 runtime 的提示词用到的 [`prompt.segment@1`](./extension-points.md) 片段，每条是 `{ pluginId, id }`：提供片段的插件，以及它给片段起的 `id`。`audience` 没有包含这个 runtime 的片段不列出。                  |
 
 想知道自己的插件往提示词里放了什么，读 `promptSegments`，不要去搜提示词文本。Hook 需要区分几种状态时，给每种状态的片段起不同的 `id`。内置的 `world-init` 是例子：规则全部放得下时，它的规则片段叫 `dimension-rules`；有规则被截掉时叫 `dimension-rules-truncated`。它的 `PreLLMCall` handler 只在第二种情况下才提供读取工具。
 

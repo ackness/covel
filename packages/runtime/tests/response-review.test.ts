@@ -38,6 +38,9 @@ async function run(
     phase: "playing",
     activePlugins: [story.pluginId],
     setupRuntimes: {},
+    seats: [
+      { id: "main", controller: "human", role: "player", characters: "auto" },
+    ],
     completedPlayerTurns: 1,
     createdAt: now,
     updatedAt: now,

@@ -829,7 +829,7 @@ The id of a new character is made from its name, and it is a readable word form 
 - Names are compared by the [normalization rules](./world-model.md#aliases-and-name-resolution). Differences in case, full-width and half-width characters, whitespace, and the middle dot do not count.
 - When the name is an **alias** of any existing character, the tool returns that character and creates nothing, whatever the type.
 - When creating `type: "player"`, if the name is the name or alias of another character, the tool reports an error and asks for a different name for the player. A player cannot be an NPC that already exists in the world.
-- There is at most one player per session. The other types come from the schema's `types`.
+- A session can have several players. A new player character is bound to the default seat automatically (see [seats](./world-model.md#seats)). The other types come from the schema's `types`.
 
 **Example `_text` the model sees**:
 

@@ -125,6 +125,9 @@ describe("plugin RPC detached-stage runner", () => {
       phase: "playing",
       completedPlayerTurns: 1,
       setupRuntimes: {},
+      seats: [
+        { id: "main", controller: "human", role: "player", characters: "auto" },
+      ],
       activePlugins: [PLUGIN_ID],
       metadata: {
         approvalScopeNonce: crypto.randomUUID(),

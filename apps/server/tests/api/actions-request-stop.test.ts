@@ -91,6 +91,9 @@ describe("POST /api/actions — how an action ends", () => {
       phase: "playing",
       status: "active",
       setupRuntimes: {},
+      seats: [
+        { id: "main", controller: "human", role: "player", characters: "auto" },
+      ],
       metadata: {
         approvalScopeNonce: crypto.randomUUID(),
         sessionIncarnationNonce: crypto.randomUUID(),

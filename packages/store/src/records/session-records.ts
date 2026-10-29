@@ -2,7 +2,7 @@
  * Session record type and partial-update semantics.
  */
 
-import type { SessionStatus, SetupRuntimeState } from "@covel/shared";
+import type { Seat, SessionStatus, SetupRuntimeState } from "@covel/shared";
 
 export interface SessionRecord {
   readonly id: string;
@@ -35,6 +35,11 @@ export interface SessionRecord {
    * scanning attempts. Replaced wholesale on write (no deep merge).
    */
   readonly setupRuntimes: Readonly<Record<string, SetupRuntimeState>>;
+  /**
+   * Who plays and which characters they control, validated by `seatsSchema`
+   * on every write and read. Replaced wholesale on write (no deep merge).
+   */
+  readonly seats: readonly Seat[];
 }
 
 export function mergeSessionPatch(
@@ -53,6 +58,7 @@ export function mergeSessionPatch(
       | "phase"
       | "completedPlayerTurns"
       | "setupRuntimes"
+      | "seats"
     >
   >,
 ): SessionRecord {

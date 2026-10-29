@@ -73,6 +73,9 @@ describe("store factory env wiring", () => {
       phase: "setup",
       completedPlayerTurns: 0,
       setupRuntimes: {},
+      seats: [
+        { id: "main", controller: "human", role: "player", characters: "auto" },
+      ],
       locale: "en",
       activePlugins: [],
       createdAt: "2026-01-01T00:00:00.000Z",

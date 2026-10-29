@@ -105,6 +105,14 @@ it.each(
         status: "active",
         completedPlayerTurns: 1,
         setupRuntimes: {},
+        seats: [
+          {
+            id: "main",
+            controller: "human",
+            role: "player",
+            characters: "auto",
+          },
+        ],
         activePlugins: [pluginId],
         locale: "en-US",
         createdAt: now,

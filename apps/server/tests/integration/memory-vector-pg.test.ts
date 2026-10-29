@@ -87,6 +87,9 @@ maybe("memory vector recall over real PgStore (pgvector)", () => {
     await store.createSession({
       phase: "playing",
       setupRuntimes: {},
+      seats: [
+        { id: "main", controller: "human", role: "player", characters: "auto" },
+      ],
       metadata: {
         approvalScopeNonce: globalThis.crypto.randomUUID(),
         sessionIncarnationNonce: globalThis.crypto.randomUUID(),
@@ -177,6 +180,14 @@ maybe("memory vector recall over real PgStore (pgvector)", () => {
       await store.createSession({
         phase: "playing",
         setupRuntimes: {},
+        seats: [
+          {
+            id: "main",
+            controller: "human",
+            role: "player",
+            characters: "auto",
+          },
+        ],
         metadata: {
           approvalScopeNonce: globalThis.crypto.randomUUID(),
           sessionIncarnationNonce: globalThis.crypto.randomUUID(),

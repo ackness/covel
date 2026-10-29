@@ -67,6 +67,14 @@ describe("schema-gen completion and public output contract", () => {
         phase: "setup",
         completedPlayerTurns: 0,
         setupRuntimes: {},
+        seats: [
+          {
+            id: "main",
+            controller: "human",
+            role: "player",
+            characters: "auto",
+          },
+        ],
         activePlugins: ["world-init"],
         metadata: { _dimensionProviderPluginId: "world-init" },
         createdAt: now,

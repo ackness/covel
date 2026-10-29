@@ -185,9 +185,8 @@ function createCreateCharacterTool(
       // of a duplicate. The same name with another type stays a new record.
       const existing = await mergeCharacterViews(store, context);
       const nameKey = characterNameKey(params.name);
-      // The player is never an existing character of the world under another
-      // type: returning that character would leave the session without a
-      // player, and a second record with its name makes the name ambiguous.
+      // A player character is never an existing character of the world under
+      // another type: a second record with its name makes the name ambiguous.
       if (params.type === "player") {
         const owner = existing.find(
           (c) =>
@@ -235,12 +234,6 @@ function createCreateCharacterTool(
       ]);
       if (!allowedTypes.has(params.type))
         throw new Error(`Unknown character type: ${params.type}`);
-      if (
-        params.type === "player" &&
-        existing.some((character) => character.type === "player")
-      ) {
-        throw new Error("A session may have at most one player character");
-      }
       const fields = mergeSchemaDefaults(params.fields, schema);
 
       // A word id from the name (`char-lin-yao`): models read character ids in

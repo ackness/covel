@@ -2,7 +2,12 @@
  * Backend-agnostic canonical row→record mappers for the session domain.
  */
 
-import type { SessionStatus, SetupRuntimeState } from "@covel/shared";
+import {
+  seatsSchema,
+  type Seat,
+  type SessionStatus,
+  type SetupRuntimeState,
+} from "@covel/shared";
 import type { SessionRecord } from "../../types.js";
 import type { JsonReader } from "./json-reader.js";
 
@@ -21,6 +26,7 @@ export interface SessionRow {
   phase: string;
   completedPlayerTurns: number;
   setupRuntimes: unknown;
+  seats: unknown;
 }
 
 const SESSION_STATUSES = new Set<SessionStatus>(["active", "paused", "ended"]);
@@ -56,6 +62,19 @@ function requireSetupRuntimes(
     throw new Error("Invalid session setupRuntimes: expected object");
   }
   return value as Readonly<Record<string, SetupRuntimeState>>;
+}
+
+/**
+ * The store boundary for session seats: every write and every read passes
+ * `seatsSchema`, which also checks the binding invariants.
+ */
+export function requireSeats(value: unknown): readonly Seat[] {
+  const parsed = seatsSchema.safeParse(value);
+  if (!parsed.success)
+    throw new Error(
+      `Invalid session seats: ${parsed.error.issues.map((issue) => issue.message).join("; ")}`,
+    );
+  return parsed.data;
 }
 
 export function toSessionRecord(
@@ -101,5 +120,6 @@ export function toSessionRecord(
     phase: requireSessionPhase(row.phase),
     completedPlayerTurns: row.completedPlayerTurns,
     setupRuntimes,
+    seats: requireSeats(json.readRequired(row.seats)),
   };
 }

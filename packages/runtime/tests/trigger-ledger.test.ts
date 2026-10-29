@@ -115,6 +115,9 @@ describe("runtime trigger ledger", () => {
       status: "active",
       completedPlayerTurns: 0,
       setupRuntimes: {},
+      seats: [
+        { id: "main", controller: "human", role: "player", characters: "auto" },
+      ],
       activePlugins: ["tracker"],
       createdAt: now,
       updatedAt: now,
@@ -180,6 +183,9 @@ describe("runtime trigger ledger", () => {
       status: "active",
       completedPlayerTurns: 0,
       setupRuntimes: {},
+      seats: [
+        { id: "main", controller: "human", role: "player", characters: "auto" },
+      ],
       activePlugins: ["tracker"],
       createdAt: now,
       updatedAt: now,

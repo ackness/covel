@@ -35,6 +35,14 @@ describe("graph identity across SQLite and allocator restarts", () => {
         completedPlayerTurns: 1,
         activePlugins: [context.pluginId],
         setupRuntimes: {},
+        seats: [
+          {
+            id: "main",
+            controller: "human",
+            role: "player",
+            characters: "auto",
+          },
+        ],
         createdAt: now,
         updatedAt: now,
       });

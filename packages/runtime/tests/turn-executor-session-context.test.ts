@@ -139,6 +139,9 @@ async function seedWorld(
     phase: "playing",
     completedPlayerTurns: 1,
     setupRuntimes: {},
+    seats: [
+      { id: "main", controller: "human", role: "player", characters: "auto" },
+    ],
     locale: "zh-CN",
     activePlugins: [],
     createdAt: ts(),
@@ -332,6 +335,9 @@ describe("turn-executor → SessionContextSnapshot wiring", () => {
       status: "active",
       phase: "setup",
       completedPlayerTurns: 0,
+      seats: [
+        { id: "main", controller: "human", role: "player", characters: "auto" },
+      ],
       setupRuntimes: {
         pregame: mirrorSetupDone("0.0.0", ts(), 1, 1),
         "world-init/schema-gen": mirrorSetupDone("0.0.0", ts(), 1, 1),

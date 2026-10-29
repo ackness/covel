@@ -313,8 +313,8 @@ Template variables read only the object's own properties. Lookups in `inputs` by
 
 Common variables:
 
-- `player.message`, `player.lastFormValues`, `player.character`.
-- `characters.npcs`: the profiles of all non-player characters. Each line is `name [type] | description | fields`. If a character has an alias, `(aka alias, …)` follows the name. The description and fields are each cut to 400 characters. The total is about 8000 characters. Characters beyond that are listed by name only. It does not include an id. The model looks characters up by name or alias with `get-character`. Putting this in the body means the model does not have to call `get-character` once for each character who appears.
+- `player.message`, `player.lastFormValues`, `player.character`. `player.character` is the current character of the primary seat (see [seats](./world-model.md#seats)), and empty when there is none.
+- `characters.npcs`: the profiles of all characters except the current one. The other characters the player controls carry their `[player]` tag. Each line is `name [type] | description | fields`. If a character has an alias, `(aka alias, …)` follows the name. The description and fields are each cut to 400 characters. The total is about 8000 characters. Characters beyond that are listed by name only. It does not include an id. The model looks characters up by name or alias with `get-character`. Putting this in the body means the model does not have to call `get-character` once for each character who appears.
 - `session.id`, `session.turnNumber`.
 - `inputs.<pluginId>.<runtimeId>.<field>`.
 - `world.name`, `world.description`, `world.tags`, `world.lore`, `world.schema`, `world.entries`, `world.dimensions`. `world.lore` is the whole body text, including the [part shown only to the narrator](./world-data.md#narrator-only-lore-narrator-only). It does not include the two marker lines.
@@ -329,11 +329,20 @@ The values of `player.character` and `characters.npcs` change as the story goes 
 A runtime that wants the system prompt to stay the same from turn to turn writes only a block name in the body. The plugin's entry provides turn-level prompt segments, and the content goes into the [turn context](#turn-context):
 
 ```js
-import { characterSheetSegments } from "@covel/plugin-handlers-utils";
+import {
+  characterSheetSegments,
+  currentCharacterOf,
+  primarySeat,
+} from "@covel/plugin-handlers-utils";
 
 covel.provideExtension("prompt.segment@1", "character-sheets", {
   handler: (_input, ctx) =>
     characterSheetSegments(ctx.world.characters, {
+      currentCharacterId: currentCharacterOf(
+        primarySeat(ctx.world.seats),
+        ctx.world.characters,
+        ctx.world.seats,
+      )?.id,
       profiles: true,
       locale: ctx.locale,
       schema: ctx.world.characterSchema,
@@ -341,8 +350,8 @@ covel.provideExtension("prompt.segment@1", "character-sheets", {
 });
 ```
 
-- `<player-character>` is the player's character sheet. It is the same JSON as `player.character`.
-- When `profiles: true` is set, `<character-profiles>` is added too. Its line format is the same as `characters.npcs`.
+- `<player-character>` is the sheet of the `currentCharacterId` character, the one the player plays right now. It is the same JSON as `player.character`. Without `currentCharacterId` there is no such block.
+- When `profiles: true` is set, `<character-profiles>` is added too. Its line format is the same as `characters.npcs`, and it leaves out only the current character.
 - `locale` decides whether the "profiles not listed" line is in Chinese or English. It matches the language of the body.
 - `schema` makes numeric attributes that declare min and max show their range (`"might": "2/5"`). Otherwise the model sees a bare number and cannot tell 2/5 from 2/100.
 

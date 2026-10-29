@@ -419,6 +419,7 @@ snapshotRoutes.post("/:id/fork", rateLimiter({ max: 10 }), async (c) => {
               phase: snapshotSession.phase,
               completedPlayerTurns: snapshotSession.completedPlayerTurns,
               setupRuntimes: snapshotSession.setupRuntimes,
+              seats: snapshotSession.seats,
               locale: snapshotSession.locale,
               activePlugins: childActivePlugins,
               runtimeModelOverrides: snapshotSession.runtimeModelOverrides,

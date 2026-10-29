@@ -9,7 +9,7 @@ import {
   type ToolModule,
 } from "@covel/tools";
 import { z } from "zod";
-import type { Proposal, RuntimeManifest, TurnInput } from "@covel/shared";
+import type { Proposal, RuntimeManifest, Seat, TurnInput } from "@covel/shared";
 import { runTurnPipeline } from "../src/turn-executor/turn-executor.js";
 import { createToolExecutor } from "../src/agent-loop/tool-executor.js";
 import { finalizeExecution } from "../src/commit/finalize-execution.js";
@@ -40,6 +40,7 @@ async function fixture(
     completedPlayerTurns?: number;
     origin?: TurnInput["origin"];
     extraTools?: ToolModule[];
+    seats?: Seat[];
   } = {},
 ) {
   const runtime = options.runtime ?? manifest;
@@ -52,6 +53,9 @@ async function fixture(
     phase: options.phase ?? "setup",
     completedPlayerTurns: options.completedPlayerTurns ?? 0,
     setupRuntimes: {},
+    seats: options.seats ?? [
+      { id: "main", controller: "human", role: "player", characters: "auto" },
+    ],
     activePlugins: ["community"],
     createdAt: new Date().toISOString(),
   });
@@ -232,6 +236,47 @@ describe("governed function tools", () => {
       expect(toolTurn).toBe(handlerTurn);
     },
   );
+
+  it("shows the stored seats to the handler's ctx.world and a tool's context.world", async () => {
+    const seats: Seat[] = [
+      {
+        id: "main",
+        controller: "human",
+        role: "player",
+        characters: "auto",
+        currentCharacterId: "char-lin",
+      },
+      { id: "guest", controller: "empty", role: "spectator", characters: [] },
+    ];
+    let handlerSeats: unknown;
+    let toolSeats: unknown;
+    const probe = tool({
+      name: "seat-probe",
+      description: "Inspect seats",
+      parameters: z.object({}),
+      async execute(_args, context) {
+        toolSeats = context.world?.seats;
+        return {};
+      },
+    });
+    const f = await fixture(
+      async (ctx) => {
+        handlerSeats = ctx.world?.seats;
+        await ctx.tools!.call("seat-probe", {});
+        return { outcome: "success", value: {} };
+      },
+      {
+        seats,
+        runtime: { ...manifest, tools: { builtin: ["seat-probe"] } },
+        extraTools: [probe],
+      },
+    );
+    expect(f.result.runtimeResults[0]?.status).toBe("success");
+    expect(handlerSeats).toEqual(seats);
+    expect(toolSeats).toEqual(seats);
+    expect(Object.isFrozen(handlerSeats)).toBe(true);
+    expect((await f.store.getSession(input.sessionId))?.seats).toEqual(seats);
+  });
 
   it("keeps logicalTurn absent for a thin host that does not supply a clock", async () => {
     const observed = vi.fn();

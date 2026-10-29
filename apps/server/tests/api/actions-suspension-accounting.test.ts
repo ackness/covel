@@ -62,6 +62,9 @@ async function buildScenario(options: ScenarioOptions) {
     phase: "playing",
     completedPlayerTurns: 3,
     setupRuntimes: {},
+    seats: [
+      { id: "main", controller: "human", role: "player", characters: "auto" },
+    ],
 
     createdAt: "2026-08-25T00:00:00.000Z",
     updatedAt: "2026-08-25T00:00:00.000Z",

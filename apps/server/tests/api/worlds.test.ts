@@ -413,6 +413,9 @@ describe("world routes", () => {
       status: "active",
       phase: "playing",
       setupRuntimes: {},
+      seats: [
+        { id: "main", controller: "human", role: "player", characters: "auto" },
+      ],
       metadata: { sessionIncarnationNonce: crypto.randomUUID() },
       completedPlayerTurns: 0,
       locale: "en-US",
@@ -585,6 +588,9 @@ describe("world routes", () => {
     await store.createSession({
       phase: "playing",
       setupRuntimes: {},
+      seats: [
+        { id: "main", controller: "human", role: "player", characters: "auto" },
+      ],
       metadata: {
         approvalScopeNonce: globalThis.crypto.randomUUID(),
         sessionIncarnationNonce: globalThis.crypto.randomUUID(),
@@ -648,6 +654,9 @@ describe("world routes", () => {
     await store.createSession({
       phase: "playing",
       setupRuntimes: {},
+      seats: [
+        { id: "main", controller: "human", role: "player", characters: "auto" },
+      ],
       metadata: {
         approvalScopeNonce: globalThis.crypto.randomUUID(),
         sessionIncarnationNonce: globalThis.crypto.randomUUID(),
@@ -720,6 +729,14 @@ describe("world routes", () => {
       await store.createSession({
         phase: "playing",
         setupRuntimes: {},
+        seats: [
+          {
+            id: "main",
+            controller: "human",
+            role: "player",
+            characters: "auto",
+          },
+        ],
         metadata: {
           approvalScopeNonce: globalThis.crypto.randomUUID(),
           sessionIncarnationNonce: globalThis.crypto.randomUUID(),

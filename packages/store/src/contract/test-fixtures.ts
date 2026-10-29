@@ -53,6 +53,9 @@ export function makeSession(overrides?: Partial<SessionRecord>): SessionRecord {
     phase: "setup",
     completedPlayerTurns: 0,
     setupRuntimes: {},
+    seats: [
+      { id: "main", controller: "human", role: "player", characters: "auto" },
+    ],
     locale: "zh-CN",
     activePlugins: [],
     createdAt: ts(),
@@ -403,6 +406,9 @@ export function makeSnapshotPayload(
       runtimeModelOverrides: { narrator: "balance" },
       phase: "playing",
       completedPlayerTurns: 2,
+      seats: [
+        { id: "main", controller: "human", role: "player", characters: "auto" },
+      ],
       setupRuntimes: {
         "setup/schema": {
           state: "done",

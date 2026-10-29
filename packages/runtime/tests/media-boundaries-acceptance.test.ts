@@ -91,6 +91,9 @@ async function seedPlaying(store: ReturnType<typeof createMemoryStore>) {
     phase: "playing",
     completedPlayerTurns: 1,
     setupRuntimes: {},
+    seats: [
+      { id: "main", controller: "human", role: "player", characters: "auto" },
+    ],
     activePlugins: [],
     createdAt: now,
     updatedAt: now,

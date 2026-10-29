@@ -41,6 +41,9 @@ async function playingStore(sessionId: string) {
     completedPlayerTurns: 1,
     // Empty mirror → the setup runtimes below are pending (late-setup band).
     setupRuntimes: {},
+    seats: [
+      { id: "main", controller: "human", role: "player", characters: "auto" },
+    ],
     activePlugins: [],
     createdAt: now,
     updatedAt: now,

@@ -43,6 +43,14 @@ describe("reporting helpers", () => {
         phase: "playing",
         completedPlayerTurns: 0,
         setupRuntimes: {},
+        seats: [
+          {
+            id: "main",
+            controller: "human",
+            role: "player",
+            characters: "auto",
+          },
+        ],
         activePlugins: ["probe"],
         createdAt: "2026-10-07T00:00:00Z",
         updatedAt: "2026-10-07T00:00:00Z",

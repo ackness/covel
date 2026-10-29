@@ -88,6 +88,9 @@ async function createSession(
   await store.createSession({
     phase: "playing",
     setupRuntimes: {},
+    seats: [
+      { id: "main", controller: "human", role: "player", characters: "auto" },
+    ],
     metadata: {
       approvalScopeNonce: globalThis.crypto.randomUUID(),
       sessionIncarnationNonce: globalThis.crypto.randomUUID(),
@@ -253,6 +256,14 @@ describe("Snapshot routes", () => {
         phase: "playing",
         completedPlayerTurns: 1,
         setupRuntimes: {},
+        seats: [
+          {
+            id: "main",
+            controller: "human",
+            role: "player",
+            characters: "auto",
+          },
+        ],
       });
       // Characters / plugin data / working memory were seeded — must appear in payload.
       expect((payload.characters as unknown[]).length).toBe(1);

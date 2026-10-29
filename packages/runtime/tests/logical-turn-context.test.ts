@@ -13,6 +13,9 @@ describe("logical turn in handler context", () => {
       phase: "playing",
       completedPlayerTurns: 4,
       setupRuntimes: {},
+      seats: [
+        { id: "main", controller: "human", role: "player", characters: "auto" },
+      ],
       locale: "en-US",
       activePlugins: ["probe"],
       createdAt: now,

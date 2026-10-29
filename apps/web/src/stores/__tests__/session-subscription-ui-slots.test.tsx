@@ -94,6 +94,14 @@ function setup() {
         locale: "en-US",
         activePlugins: [],
         setupRuntimes: {},
+        seats: [
+          {
+            id: "main",
+            controller: "human",
+            role: "player",
+            characters: "auto",
+          },
+        ] as const,
         completedPlayerTurns: 0,
         createdAt: "now",
         updatedAt: "now",

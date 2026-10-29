@@ -60,6 +60,9 @@ async function run(
     status: "active",
     phase: "playing",
     setupRuntimes: {},
+    seats: [
+      { id: "main", controller: "human", role: "player", characters: "auto" },
+    ],
     activePlugins: runtimes.map((rt) => rt.pluginId),
     completedPlayerTurns: 1,
     createdAt: "2026-01-01T00:00:00Z",

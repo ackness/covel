@@ -58,6 +58,9 @@ async function createPregameStore(sessionId: string): Promise<DataStore> {
     status: "active",
     phase: "setup",
     completedPlayerTurns: 0,
+    seats: [
+      { id: "main", controller: "human", role: "player", characters: "auto" },
+    ],
     setupRuntimes: {
       pregame: mirrorSetupDone("0.0.0", "2026-01-01T00:00:00.000Z", 1, 1),
       "world-init/schema-gen": mirrorSetupDone(

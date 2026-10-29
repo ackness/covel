@@ -38,6 +38,9 @@ function session(id: string): SessionRecord {
     phase: "playing",
     completedPlayerTurns: 1,
     setupRuntimes: {},
+    seats: [
+      { id: "main", controller: "human", role: "player", characters: "auto" },
+    ],
     activePlugins: ["mimo-tts"],
     metadata: { sessionIncarnationNonce: `test-${id}` },
     createdAt: ENQUEUED_AT,

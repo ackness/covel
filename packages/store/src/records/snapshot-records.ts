@@ -115,6 +115,7 @@ export type SnapshotSessionState = Readonly<
     | "phase"
     | "completedPlayerTurns"
     | "setupRuntimes"
+    | "seats"
     | "locale"
     | "activePlugins"
     | "runtimeModelOverrides"

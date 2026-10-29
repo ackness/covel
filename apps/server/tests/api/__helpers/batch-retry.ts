@@ -108,6 +108,9 @@ export async function batchRetryFixture() {
     },
     completedPlayerTurns: 2,
     setupRuntimes: {},
+    seats: [
+      { id: "main", controller: "human", role: "player", characters: "auto" },
+    ],
     createdAt: "2026-01-01T00:00:00Z",
     updatedAt: "2026-01-01T00:00:00Z",
   });

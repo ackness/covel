@@ -117,6 +117,9 @@ describe("builtin model-facing results", () => {
       locale: "en",
       completedPlayerTurns: 1,
       setupRuntimes: {},
+      seats: [
+        { id: "main", controller: "human", role: "player", characters: "auto" },
+      ],
       activePlugins: ["journal"],
       createdAt: timestamp,
       updatedAt: timestamp,
@@ -175,6 +178,7 @@ describe("builtin model-facing results", () => {
             version: 1,
           },
         },
+        seats: [],
       },
     };
     return { registry, executor, context };

@@ -172,6 +172,8 @@ export async function createWorldModelView(
       worldRecord,
       dimensions,
       ...(providerId ? { dimensionProviderPluginId: providerId } : {}),
+      // No session row (a deleted session) seats nobody.
+      seats: session?.seats ?? [],
     },
     upstream,
     sessionId,
@@ -246,7 +248,7 @@ function overlayOwnedWorldModelView(
   // buffered write. A copy for every read cost 2.4 ms for 200 characters, and
   // a loop that looks one character up per step paid it per step. Frozen, the
   // copy cannot be changed by one reader under another.
-  type Readable = "characters" | "characterSchema" | "dimensions";
+  type Readable = "characters" | "characterSchema" | "dimensions" | "seats";
   let frozenFor: WorldModelView | undefined;
   let frozen: { [K in Readable]?: WorldModelView[K] } = {};
   const read = <K extends Readable>(key: K): WorldModelView[K] => {
@@ -275,6 +277,9 @@ function overlayOwnedWorldModelView(
     get dimensionProviderPluginId() {
       assertLive();
       return snapshot.dimensionProviderPluginId;
+    },
+    get seats() {
+      return read("seats");
     },
   });
 }

@@ -71,6 +71,9 @@ describe("English instructions for bundled runtimes", () => {
       phase: "playing",
       completedPlayerTurns: 0,
       setupRuntimes: {},
+      seats: [
+        { id: "main", controller: "human", role: "player", characters: "auto" },
+      ],
       activePlugins: [],
       createdAt: "2026-10-15T00:00:00.000Z",
       updatedAt: "2026-10-15T00:00:00.000Z",

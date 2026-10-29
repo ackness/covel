@@ -37,6 +37,9 @@ const session = (nonce: string, status: "active" | "ended") => ({
   locale: "en-US",
   completedPlayerTurns: 1,
   setupRuntimes: {},
+  seats: [
+    { id: "main", controller: "human", role: "player", characters: "auto" },
+  ] as const,
   activePlugins: ["probe"],
   metadata: { sessionIncarnationNonce: nonce },
   createdAt: at,

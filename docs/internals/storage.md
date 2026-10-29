@@ -483,7 +483,7 @@ Dexie BrowserVault 的 schema 归 `apps/web` 所有，不作为服务端 `DataSt
 - PostgreSQL 用每张表各自的序列分配消息、trace 和回合产物的位置，多个连接同时写也一样。
 - SQLite 在它串行化的写入边界内分配。
 - 回滚后序号有空洞是正常的。按顺序导入时，按导入列表的顺序分配新的位置。游标分页和完整列表用相同的位置。
-- 两个 SQL 后端的数据 schema 版本都是 5。启动时会检查它，见[启动时检查数据 schema 版本](#capabilities-and-migrations)。
+- 两个 SQL 后端的数据 schema 版本都是 7。启动时会检查它，见[启动时检查数据 schema 版本](#capabilities-and-migrations)。版本 7 给 `sessions` 加了 `seats` 列，版本 6 的数据库被拒绝打开，开发数据库和浏览器存档要重建。
 
 **向量检索。** 先按会话、插件、命名空间过滤，再精确选出 top-K。内存、SQLite 和 PostgreSQL 都返回欧氏 L2 距离。PostgreSQL 会把过滤后的候选物化，而不是用全局的近似索引，因为后者在过滤之后可能漏掉命中。
 
@@ -495,6 +495,7 @@ Dexie BrowserVault 的 schema 归 `apps/web` 所有，不作为服务端 `DataSt
 - 角色的身份是 `(sessionId, id)`。
 - 设定集条目的身份还包含它的所有者：世界、玩家，或某个具体的插件。插件只能修改自己的设定条目，即使别的所有者用了相同的条目 ID。
 - 每个会话有一份权威的 `characterSchema`，角色类型是开放的，属性经过校验。
+- 会话的[座位](../reference/world-model.md#座位)存放在 `sessions.seats`：SQLite 是 `TEXT` 里的 JSON，PostgreSQL 是 `jsonb`，都是 NOT NULL，列默认值是默认座位。每次写入和读取都用 `@covel/shared` 的 `seatsSchema` 校验，包括绑定约束（`assertSeatsValid`），违反时整条写入被拒绝。写入时整体替换，不做深合并。座位随快照（`SnapshotSessionState.seats`）、分叉和浏览器检查点保存。绑定的角色在读取时推导，所以新建玩家角色不写座位。
 
 MemoryStore、SQLite、PostgreSQL 和浏览器检查点都保持这些身份。所以浏览器持久化和服务端共用领域形状，但不共用服务端的表结构或各后端的增删改查实现。
 
@@ -575,7 +576,7 @@ MemoryStore、SQLite、PostgreSQL 和浏览器检查点都保持这些身份。�
 - 标为 `exported` 的表恰好对应检查点领域，包括记录数组、生命周期数组、单条记录和嵌套的 `state` 数组。这里表示检查点有该领域，不保证复制全部行；例如工具调用和事件数组目前导出为空。
 - 会话字段的快照登记与 `SnapshotSessionState` 中的同名字段一致。类型检查还要求新增 `SessionRecord`、快照或检查点字段时补齐对应登记或测试映射。
 
-`plugin_data` 的行归 `plugin_id` 所有；`_` 命名空间和 `__kernel:` 所有者是内核分区。控制面命名空间不进入快照和分叉。`state_schemas`、`state_entries`、`state_changes` 登记为内核所有：插件写入路径已移除，之后会改造或移除这三张表。
+`plugin_data` 的行归 `plugin_id` 所有；`_` 命名空间和 `__kernel:` 所有者是内核分区。控制面命名空间不进入快照和分叉。`state_schemas`、`state_entries`、`state_changes` 登记为内核所有：插件写入路径已移除。座位等内核会话状态已经放在会话记录上，这三张表之后删除。
 
 分叉行为已登记，但 store 测试无法依赖 `apps/server`，因此不核对分叉实现。会话 `metadata` 的子键不在字段检查范围内；目前没有重置路径，操作记录表也尚未创建，本登记不为它们声明行为。
 

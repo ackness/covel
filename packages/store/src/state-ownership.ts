@@ -312,4 +312,5 @@ export const SESSION_FIELD_OWNERSHIP: Readonly<
   phase: { owner: "kernel", snapshot: "captured" },
   completedPlayerTurns: { owner: "kernel", snapshot: "captured" },
   setupRuntimes: { owner: "kernel", snapshot: "captured" },
+  seats: { owner: "kernel", snapshot: "captured" },
 };

@@ -288,6 +288,9 @@ describe("start-game API lifecycle scenario", () => {
     await store.createSession({
       locale: "zh-CN",
       phase: "setup",
+      seats: [
+        { id: "main", controller: "human", role: "player", characters: "auto" },
+      ],
       setupRuntimes: Object.fromEntries(
         ["pregame", "world-init/schema-gen", "char-creator/player-init"].map(
           (runtimeId) => [

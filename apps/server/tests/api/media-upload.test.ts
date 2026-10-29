@@ -39,6 +39,9 @@ async function makeApp(withStore = true): Promise<{
     phase: "playing",
     completedPlayerTurns: 0,
     setupRuntimes: {},
+    seats: [
+      { id: "main", controller: "human", role: "player", characters: "auto" },
+    ],
     metadata: {
       ownerTokenHash: hashSessionOwnerToken(OWNER),
       approvalScopeNonce: globalThis.crypto.randomUUID(),
@@ -200,6 +203,9 @@ describe("POST /api/media (upload)", () => {
       phase: "playing",
       completedPlayerTurns: 0,
       setupRuntimes: {},
+      seats: [
+        { id: "main", controller: "human", role: "player", characters: "auto" },
+      ],
       metadata: {
         approvalScopeNonce: globalThis.crypto.randomUUID(),
         sessionIncarnationNonce: globalThis.crypto.randomUUID(),

@@ -893,6 +893,71 @@ describe("Turn executor hook wire-in", () => {
       expect(Array.isArray(seenPayload?.messages)).toBe(true);
     });
 
+    it("names the primary seat's current character among the payload characters", async () => {
+      const llm = new SimpleMockLLM();
+      const pipeline = createHookPipeline();
+      let seenPayload: Record<string, unknown> | undefined;
+      pipeline.register({
+        id: "global:PostContextAssembly:seat",
+        event: "PostContextAssembly",
+        handler: vi
+          .fn()
+          .mockImplementation(
+            async (_ctx, payload: Record<string, unknown>) => {
+              seenPayload = payload;
+              return { action: "continue" };
+            },
+          ),
+      });
+      const store = await createMainLoopStore("sess-hook-wire");
+      const at = "2024-01-01T00:00:00Z";
+      await store.createSession({
+        id: "sess-hook-wire",
+        status: "active",
+        phase: "playing",
+        completedPlayerTurns: 1,
+        setupRuntimes: {},
+        seats: [
+          {
+            id: "main",
+            controller: "human",
+            role: "player",
+            characters: "auto",
+            currentCharacterId: "lin",
+          },
+        ],
+        locale: "en-US",
+        activePlugins: [],
+        createdAt: at,
+        updatedAt: at,
+      });
+      for (const [id, name] of [
+        ["ada", "Ada"],
+        ["lin", "Lin"],
+      ] as const)
+        await store.upsertCharacter({
+          id,
+          sessionId: "sess-hook-wire",
+          name,
+          type: "player",
+          version: 1,
+          createdAt: at,
+          updatedAt: at,
+        });
+
+      await runTurnPipeline(
+        makeTurnInput(),
+        [makeManifest({ outputKind: "story" })],
+        await makeDeps(llm, pipeline, store),
+      );
+
+      expect(seenPayload?.currentCharacterId).toBe("lin");
+      expect(seenPayload?.characters).toEqual([
+        expect.objectContaining({ id: "ada", type: "player" }),
+        expect.objectContaining({ id: "lin", type: "player" }),
+      ]);
+    });
+
     it("re-applies the hard budget after hook rewrites", async () => {
       const llm = new SimpleMockLLM();
       const pipeline = createHookPipeline();

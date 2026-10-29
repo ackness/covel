@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import {
   DEFAULT_LOCALE,
+  defaultSessionSeats,
   type RuntimeResult,
   type TurnInput,
 } from "@covel/shared";
@@ -174,6 +175,7 @@ export async function runRuntimeDebug(
       phase: "playing",
       completedPlayerTurns: 0,
       setupRuntimes: {},
+      seats: defaultSessionSeats(),
       activePlugins: [...pluginIds],
       createdAt: now,
       updatedAt: now,

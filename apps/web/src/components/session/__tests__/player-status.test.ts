@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { describe, expect, it } from "vitest";
-import { selectPlayerStatus } from "../player-status.js";
+import { currentCharacterIdOf, selectPlayerStatus } from "../player-status.js";
 
 const schema = {
   attributes: [
@@ -52,6 +52,7 @@ describe("selectPlayerStatus", () => {
         characterSchema: schema,
       },
       "zh-CN",
+      "pc",
     );
     expect(status).toEqual({
       name: "Zhang San",
@@ -106,6 +107,7 @@ describe("selectPlayerStatus", () => {
         characterSchema: { attributes: equipment },
       },
       "en-US",
+      "pc",
     );
     expect(status).toEqual({
       name: "Zhang San",
@@ -122,13 +124,18 @@ describe("selectPlayerStatus", () => {
         characterSchema: schema,
       },
       "en-US",
+      "pc",
     );
     expect(status?.meters[0]).toMatchObject({ label: "Vitality", value: 100 });
   });
 
   it("yields nothing without a player, or with neither stats nor items", () => {
     expect(
-      selectPlayerStatus({ characters: [], characterSchema: schema }, "en-US"),
+      selectPlayerStatus(
+        { characters: [], characterSchema: schema },
+        "en-US",
+        undefined,
+      ),
     ).toBeNull();
     expect(
       selectPlayerStatus(
@@ -137,7 +144,36 @@ describe("selectPlayerStatus", () => {
           characterSchema: { attributes: [schema.attributes[0]] },
         },
         "en-US",
+        "pc",
       ),
     ).toBeNull();
+  });
+
+  it("follows the primary seat's current character among several players", () => {
+    const gameState = {
+      characters: [
+        { id: "ada", name: "Ada", type: "player", fields: { vitality: 40 } },
+        { id: "lin", name: "Lin", type: "player", fields: { vitality: 90 } },
+      ],
+      characterSchema: schema,
+    };
+    const seat = {
+      id: "main",
+      controller: "human",
+      role: "player",
+      characters: "auto",
+    } as const;
+    const first = currentCharacterIdOf(gameState, [seat]);
+    expect(first).toBe("ada");
+    expect(selectPlayerStatus(gameState, "en-US", first)?.name).toBe("Ada");
+    const switched = currentCharacterIdOf(gameState, [
+      { ...seat, currentCharacterId: "lin" },
+    ]);
+    expect(switched).toBe("lin");
+    expect(selectPlayerStatus(gameState, "en-US", switched)).toMatchObject({
+      name: "Lin",
+      meters: [{ id: "vitality", value: 90 }, { id: "stress" }],
+    });
+    expect(currentCharacterIdOf(gameState, [])).toBeUndefined();
   });
 });

@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
+import { currentCharacterOf, primarySeat, type Seat } from "@covel/shared";
 import { useSession } from "@/stores/session-store.js";
 import { resolveDisplayText } from "@/lib/i18n-text.js";
 
@@ -43,8 +44,30 @@ function finite(value: unknown): number | undefined {
 }
 
 /**
- * The player at a glance, read from the session World Model: the character
- * record plus the session's character schema. Gauges are the bounded `stats`
+ * The character the player acts as: the current character of the session's
+ * primary seat, among the World Model's characters.
+ */
+export function currentCharacterIdOf(
+  gameState: Readonly<Record<string, unknown>>,
+  seats: readonly Seat[],
+): string | undefined {
+  const characters = (
+    Array.isArray(gameState.characters) ? gameState.characters : []
+  ).flatMap((raw) => {
+    const character = asRecord(raw);
+    return character &&
+      typeof character.id === "string" &&
+      typeof character.type === "string"
+      ? [{ id: character.id, type: character.type }]
+      : [];
+  });
+  return currentCharacterOf(primarySeat(seats), characters, seats)?.id;
+}
+
+/**
+ * The player at a glance, read from the session World Model: the record of
+ * the character the player acts as (`currentCharacterId`, see
+ * `currentCharacterIdOf`) plus the session's character schema. Gauges are the bounded `stats`
  * attributes, unbounded ones are plain numbers, and carried items are the
  * string lists in the `equipment` category.
  * Both are kernel data — the world defines which attributes exist — so nothing
@@ -53,13 +76,15 @@ function finite(value: unknown): number | undefined {
 export function selectPlayerStatus(
   gameState: Readonly<Record<string, unknown>>,
   locale: string,
+  currentCharacterId: string | undefined,
 ): PlayerStatus | null {
+  if (currentCharacterId === undefined) return null;
   const characters = Array.isArray(gameState.characters)
     ? gameState.characters
     : [];
   const player = characters
     .map(asRecord)
-    .find((character) => character?.type === "player");
+    .find((character) => character?.id === currentCharacterId);
   if (!player) return null;
   const fields = asRecord(player.fields) ?? {};
   const attributes = asRecord(gameState.characterSchema)?.attributes;
@@ -110,9 +135,15 @@ export function selectPlayerStatus(
 export function usePlayerStatus(): PlayerStatus | null {
   const { state } = useSession();
   const { i18n } = useTranslation();
+  const seats = state.session?.seats;
   return useMemo(
-    () => selectPlayerStatus(state.gameState, i18n.language),
-    [state.gameState, i18n.language],
+    () =>
+      selectPlayerStatus(
+        state.gameState,
+        i18n.language,
+        currentCharacterIdOf(state.gameState, seats ?? []),
+      ),
+    [state.gameState, i18n.language, seats],
   );
 }
 

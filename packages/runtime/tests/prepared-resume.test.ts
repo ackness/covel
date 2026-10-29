@@ -30,6 +30,9 @@ async function suspendedFixture(nested = false) {
     status: "active",
     phase: "playing",
     setupRuntimes: {},
+    seats: [
+      { id: "main", controller: "human", role: "player", characters: "auto" },
+    ],
     activePlugins: ["probe"],
     completedPlayerTurns: 0,
     createdAt: timestamp,
@@ -316,6 +319,9 @@ describe("resumed setup runtime", () => {
       status: "active",
       phase: "setup",
       setupRuntimes: {},
+      seats: [
+        { id: "main", controller: "human", role: "player", characters: "auto" },
+      ],
       activePlugins: ["probe"],
       completedPlayerTurns: 0,
       createdAt: timestamp,
@@ -460,6 +466,9 @@ describe("a setup runtime's suspension that ends without an answer (F-188)", () 
       status: "active",
       phase: "setup",
       setupRuntimes: {},
+      seats: [
+        { id: "main", controller: "human", role: "player", characters: "auto" },
+      ],
       activePlugins: ["probe"],
       completedPlayerTurns: 0,
       createdAt: timestamp,

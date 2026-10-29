@@ -148,6 +148,7 @@ export async function buildSnapshotPayload(
       phase: session.phase,
       completedPlayerTurns: session.completedPlayerTurns,
       setupRuntimes: session.setupRuntimes,
+      seats: session.seats,
       ...(typeof session.metadata?.loreOverride === "string"
         ? { loreOverride: session.metadata.loreOverride }
         : {}),

@@ -13,6 +13,8 @@ World Model 是一局游戏里由内核保管的那部分世界数据：世界�
 | `ctx.world.characters`      | 角色                 |
 | `ctx.world.dimensions`      | 维度的当前值         |
 
+`ctx.world.seats` 和它们放在一起，是会话的座位（谁在玩、控制哪些角色），只读。它是会话状态，不属于 World Model，见[座位](#座位)。
+
 这些入口是只读的，写入要通过 proposal（一份“我想改什么”的申请，由内核校验后统一保存）。
 
 - 角色和角色 schema：同一次执行里，排在前面的 runtime 提出的合法修改，以及当前 runtime 自己还没保存的修改，后面读得到。
@@ -25,7 +27,7 @@ World Model 是一局游戏里由内核保管的那部分世界数据：世界�
 世界包可以在 `world.yaml` 里声明 `characterSchema`，创建会话时它被复制进会话。
 
 - 它包含 `types`（角色类型）和 `attributes`（属性）。
-- `player` 是保留类型，每局游戏最多一个。其他类型由 schema 声明。
+- `player` 是保留类型，表示“可以由玩家扮演的角色”，一局游戏可以有多个。其他类型由 schema 声明。玩家此刻扮演哪一个，由[座位](#座位)决定。
 - 角色的 `fields` 按当前的 schema 校验。
 - 修改 schema 的 proposal 是 `character.schema.set`，内容是 `{types, attributes}`，版本由内核递增。
 
@@ -41,7 +43,7 @@ World Model 是一局游戏里由内核保管的那部分世界数据：世界�
 
 AI 生成世界时的校验：
 
-- 新建时，接受补充的角色之前，按生成的 `characterSchema` 校验**整组**角色：角色类型、属性约束、只有一个玩家。
+- 新建时，接受补充的角色之前，按生成的 `characterSchema` 校验**整组**角色：角色类型和属性约束。
 - 修改时，按合并后的 schema 校验全部角色，不能只检查新增的。
 
 ### 别名与按名字解析
@@ -116,6 +118,55 @@ interface CharacterRecord {
 
 > [!IMPORTANT]
 > `characters` 表有 `aliases` 列。服务端只建表、不改表，所以在加入别名之前创建的 SQLite / PostgreSQL 开发数据库缺这一列，读取角色时报 `no such column: aliases`。按[迁移说明](./env-registry.md#plugin-extension-development-data)备份后换一个新的数据库文件（PostgreSQL 重建 schema）。浏览器私有存档里的角色没有别名，照常读取。
+
+## 座位
+
+座位描述“谁在玩、以什么身份、控制哪些角色”。座位存放在会话记录的 `seats` 字段上，由内核持有，随快照、分叉和浏览器存档一起保存。
+
+| 字段                 | 含义                                                                 |
+| -------------------- | -------------------------------------------------------------------- |
+| `id`                 | 座位在会话里的标识，切换角色的接口用它指定座位                       |
+| `controller`         | 控制者：`human`（本机的这个人）或 `empty`（空置）。AI 控制者以后再加 |
+| `role`               | 身份：`player`（玩家）、`host`（主持人）或 `spectator`（旁观者）     |
+| `characters`         | 绑定的角色：`"auto"`，或一组角色 `id`                                |
+| `currentCharacterId` | 可选。座位当前扮演的角色                                             |
+
+**默认座位**：每个新会话有一个座位 `{ id: "main", controller: "human", role: "player", characters: "auto" }`。单人游戏的体验和以前一样。
+
+**绑定规则**在读取时推导，不需要写入：
+
+- `"auto"` 绑定所有 `type: player` 的角色，按角色列表的顺序，跳过别的座位明确列出的角色。
+- 明确的列表绑定其中仍然存在的角色，按列表的顺序。
+- 新建一个玩家角色（建角插件、世界导入、`create-character`）不需要写座位：下一次读取时它就绑定到 `"auto"` 座位上。
+
+每次写入都检查这些约束：座位 `id` 不重复；最多一个座位用 `"auto"`；一个角色 `id` 只能出现在一个座位的列表里，在同一个列表里也只出现一次。
+
+**当前角色**：座位的 `currentCharacterId` 绑定在这个座位上并且存在时，就是它；否则是第一个绑定的角色；都没有时没有当前角色。当前角色被删除后，自动退回到第一个绑定的角色。
+
+**主座位**是第一个 `controller: "human"`、`role: "player"` 的座位。故事跟随主座位的当前角色：
+
+- 提示词里的 `<player-character>` 和 `{{ player.character }}` 是它（见[提示词结构](./prompt-structure.md#让-system-prompt-保持不变的写法)）。
+- `{{ characters.npcs }}` 和 `<character-profiles>` 只跳过它。玩家控制的其他角色带着 `[player]` 标签列在里面。
+- `PostContextAssembly` 的载荷用 `currentCharacterId` 指出它（见[Hook](./hooks.md)）。
+- 游玩界面的玩家状态显示它。
+
+插件用 SDK 的三个辅助函数读同一条规则：
+
+```js
+import { currentCharacterOf, primarySeat } from "@covel/plugin-handlers-utils";
+
+const player = currentCharacterOf(
+  primarySeat(ctx.world.seats),
+  ctx.world.characters,
+  ctx.world.seats,
+);
+```
+
+`seatCharacterIds(seat, characters, seats)` 返回一个座位绑定的角色 `id`。
+
+**切换当前角色**：`PATCH /api/sessions/:id/seats/:seatId`，请求体 `{ "currentCharacterId": "…" }`。角色必须绑定在这个座位上，座位必须由人控制。从下一回合起生效。见 [API](./api.md#会话座位)。现在游玩界面还没有切换控件。
+
+还在用 `find(type === "player")` 的内置插件（背包、检定、记忆、建角等）在有多个玩家角色时按第一个处理，之后再改用座位。
 
 ## 动态维度快照
 

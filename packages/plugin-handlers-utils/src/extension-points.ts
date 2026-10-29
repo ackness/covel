@@ -11,6 +11,7 @@
 import type { JsonValue, MediaReference, PluginDataReader } from "./types.js";
 import type { PluginServiceContext } from "./plugin-api.js";
 import type { PluginMessages } from "./messages.js";
+import type { Seat } from "./seats.js";
 import type {
   ExtensionDimensionSnapshot,
   ExtensionWorldDimensions,
@@ -408,6 +409,11 @@ export type ExtensionWorldModel = {
   readonly characters: readonly ExtensionWorldCharacter[];
   readonly dimensions: ExtensionDimensionSnapshot;
   readonly dimensionProviderPluginId?: string;
+  /**
+   * The session's seats, read-only. `currentCharacterOf(primarySeat(seats),
+   * characters, seats)` is the character the player acts as.
+   */
+  readonly seats: readonly Seat[];
 };
 
 /**

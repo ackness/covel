@@ -37,6 +37,9 @@ describe("wrapStoreWithPluginDataEvents", () => {
       locale: "en-US",
       activePlugins: [],
       setupRuntimes: {},
+      seats: [
+        { id: "main", controller: "human", role: "player", characters: "auto" },
+      ],
       completedPlayerTurns: 0,
       createdAt: "2026-10-15T00:00:00Z",
       updatedAt: "2026-10-15T00:00:00Z",
@@ -402,6 +405,9 @@ describe("wrapStoreWithPluginDataEvents · real SQLite commit pipeline", () => {
       phase: "playing",
       completedPlayerTurns: 1,
       setupRuntimes: {},
+      seats: [
+        { id: "main", controller: "human", role: "player", characters: "auto" },
+      ],
       locale: "en",
       activePlugins: [],
       metadata: {

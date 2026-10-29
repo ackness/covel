@@ -125,6 +125,8 @@ export { appendSummaryEntries } from "./session-summary.js";
 export { mentionedCharacterIds } from "./character-mentions.js";
 export type { MentionableCharacter } from "./character-mentions.js";
 export { characterSheetSegments } from "./character-sheets.js";
+export { currentCharacterOf, primarySeat, seatCharacterIds } from "./seats.js";
+export type { Seat, SeatCharacter, SeatController, SeatRole } from "./seats.js";
 export {
   characterLabel,
   characterNameKey,

@@ -95,6 +95,9 @@ async function seededStore() {
     status: "active",
     phase: "playing",
     completedPlayerTurns: 2,
+    seats: [
+      { id: "main", controller: "human", role: "player", characters: "auto" },
+    ],
     setupRuntimes: {
       "p/opening": {
         state: "done",

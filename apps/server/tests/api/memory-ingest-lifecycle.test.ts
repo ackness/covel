@@ -36,6 +36,9 @@ async function seed(store: DataStore, id = "session") {
     locale: "en",
     completedPlayerTurns: 1,
     setupRuntimes: {},
+    seats: [
+      { id: "main", controller: "human", role: "player", characters: "auto" },
+    ],
     activePlugins: ["fake-narrator"],
     metadata: {
       sessionIncarnationNonce: crypto.randomUUID(),
