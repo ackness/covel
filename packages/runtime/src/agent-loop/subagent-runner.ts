@@ -375,12 +375,13 @@ async function runProvider({
 
   // The caller's input with the brief as the only user message. Its model
   // overrides are the session's (`runtimeModelOverrides`, keyed by this
-  // provider's runtimeId); the request-scoped story override and the
-  // caller's manual or detached activation do not carry over.
+  // provider's runtimeId); the request-scoped story override, the caller's
+  // manual or detached activation and the player's actions do not carry over.
   const {
     modelOverride: _modelOverride,
     manualTrigger: _manualTrigger,
     detachedStage: _detachedStage,
+    actions: _actions,
     ...inherited
   } = args.input;
   const input: TurnInput = {
