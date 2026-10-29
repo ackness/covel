@@ -186,6 +186,6 @@ Covel 还在早期开发，只针对当前的契约。改一个契约时，生�
 
 独立运行 `pnpm check:boundaries` 时也会测试它的解析器；完整的 `pnpm check` 直接运行边界扫描，再由 `check:scripts` 运行解析器测试，避免重复执行。
 
-`test-runtime` 只提供 CLI，不提供包导入入口。用 `pnpm test:runtime` 运行 runtime cases。
+`test-runtime` 只提供 CLI，不提供包导入入口。用 `pnpm test:runtime` 运行 runtime cases；`pnpm plugin:extract <dir>` 在作者本机执行入口工厂，记录注册并同步声明，纯文本改写由 `plugin-loader` 负责。
 
 网页端从 SettingsStore 读取主题和明暗偏好，经主题解析后，通过 appearance 辅助函数应用实际显示值。回退显示不改写已保存的偏好。

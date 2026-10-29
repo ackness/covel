@@ -159,6 +159,23 @@ export default function register(covel) {
 
 `covel.toolkit` 就是上一步用到的那组帮手。
 
+入口注册变了以后，在仓库根目录运行：
+
+```bash
+pnpm plugin:extract ~/.covel/plugins/notebook
+pnpm plugin:extract ~/.covel/plugins/notebook --check
+pnpm plugin:extract ~/.covel/plugins/notebook --check --json
+```
+
+第一条命令在作者本机运行入口工厂，把 `tools`、`actions`、`services`、`forms`、`wires`、`hooks` 六组注册写回根 `PLUGIN.md` 的 `contributes`，并打印变化的键。一致时显示 `Declarations are in sync.`。列表按首次注册顺序去重；普通 hook 写成事件名，其他阶段写成 `{ event, enforce }`。空列表的键会删除。注释、其他字段和 Markdown 正文保留。
+
+`--check` 不写文件，按键显示 `-` 移除的名字和 `+` 新增的名字；只有顺序或写法变化时单独说明。有漂移时退出 1，一致时退出 0，适合 CI。`--json` 输出 `extracted` 和 `drift`。提取失败退出 1，参数错误退出 2。
+
+扩展注册和命令元数据只报告，不改写：`extensions` 可能带声明专用的选项，`commands` 没有入口注册方法。这些声明仍由作者维护。只改 canonical `PLUGIN.md`；`PLUGIN.<locale>.md` 若带上述注册列表、`extensions` 或 `commands`，会报告文件名并保持原样。本地化的 `contributes.prompt` 可以保留。
+
+> [!CAUTION]
+> 这个命令以你的权限执行插件入口代码，只用于你自己的包。它记录注册，不调用工具、动作、服务或 hook 的处理函数；入口在注册时调用 `covel.http` 等宿主能力会报错。工厂抛错、入口路径逃出包目录或 frontmatter 带可执行指令时，不写回文件。安装和审批仍只读取静态声明，加载时仍做[双向核对](../reference/plugins.md#contributes-字段)。
+
 ## 5. 校验和离线运行
 
 ```bash

@@ -73,6 +73,7 @@ pnpm pack:tabletop-plugin   # write the ZIP test:tabletop-plugin uses to test-re
 ## Authoring and packaging
 
 ```bash
+pnpm plugin:extract <plugin-dir> # run your own entry factory and sync canonical PLUGIN.md; --check for CI, --json for a report
 pnpm describe:authoring  # what a world may contain for the scanned plugins: files, data contracts
                       # with the path each file goes to and an example, plugin IDs and settings
                       # (--json, --check validates plugin examples, --plugins <dir>)
@@ -86,6 +87,8 @@ pnpm i18n:add         # add a UI locale to the web app (apps/web/src/i18n/locale
 ```
 
 `pnpm create-plugin <name> [-t dir] [-r a:function,b:agent]` 从 `templates/` 生成一个插件。默认生成到用户插件目录；加 `--with-tools` 时生成到仓库的 `plugins/` 下，这个选项不能和 `-t`、`-r` 一起用。
+
+`pnpm plugin:extract` 会以你的权限执行入口代码，只用于你自己的包。默认写回声明并列出变化的键；`--check` 不写文件，按键列出新增和移除的名字，有漂移时退出 1，一致时退出 0。`--json` 输出提取结果和漂移。提取失败退出 1，参数错误退出 2。范围和本地化文件规则见[带本地代码的插件](../plugins/local-code.md#4-写入口文件)。`pnpm validate:plugin` 仍然只做静态校验，不执行入口。
 
 延伸阅读：合集见[合集](../ship/collections.md)，翻译工具见 [i18n](../reference/i18n.md)。
 
