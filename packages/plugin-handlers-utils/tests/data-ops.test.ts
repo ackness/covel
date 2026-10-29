@@ -374,6 +374,120 @@ describe("applyDataOps: paths", () => {
   });
 });
 
+describe("applyDataOps: present/absent and root/path matrix", () => {
+  const cases: {
+    name: string;
+    current: Parameters<typeof applyDataOps>[0];
+    op: DataOp;
+    expected: JsonValue | undefined;
+  }[] = [
+    {
+      name: "insert at a path, present",
+      current: present({ log: ["a", "c"] }),
+      op: { op: "insert", path: "/log", index: 1, value: "b" },
+      expected: { log: ["a", "b", "c"] },
+    },
+    {
+      name: "insert at a path, absent root starts from {}",
+      current: absent,
+      op: { op: "insert", path: "/log", index: 0, value: "x" },
+      expected: { log: ["x"] },
+    },
+    {
+      name: "insert at a path, absent final key",
+      current: present({ other: 1 }),
+      op: { op: "insert", path: "/log", index: 0, value: "x" },
+      expected: { other: 1, log: ["x"] },
+    },
+    {
+      name: "remove by value at a path, present",
+      current: present({ tags: ["a", "b", "a"], n: 1 }),
+      op: { op: "remove", path: "/tags", value: "a" },
+      expected: { tags: ["b"], n: 1 },
+    },
+    {
+      name: "remove by match at a path, present",
+      current: present({ items: [{ id: 1 }, { id: 2 }] }),
+      op: { op: "remove", path: "/items", match: { id: 1 } },
+      expected: { items: [{ id: 2 }] },
+    },
+    {
+      name: "remove on an absent root yields an empty array",
+      current: absent,
+      op: { op: "remove", value: 1 },
+      expected: [],
+    },
+    {
+      name: "remove at a path on an absent root yields an empty array there",
+      current: absent,
+      op: { op: "remove", path: "/tags", value: "a" },
+      expected: { tags: [] },
+    },
+    {
+      name: "remove at an absent final key yields an empty array there",
+      current: present({ n: 1 }),
+      op: { op: "remove", path: "/tags", match: { id: 1 } },
+      expected: { n: 1, tags: [] },
+    },
+    {
+      name: "merge on an absent root with a path",
+      current: absent,
+      op: { op: "merge", path: "/stats", value: { hp: 3 } },
+      expected: { stats: { hp: 3 } },
+    },
+    {
+      name: "merge at a path, present",
+      current: present({ stats: { hp: 1 }, n: 1 }),
+      op: { op: "merge", path: "/stats", value: { mp: 2, hp: null } },
+      expected: { stats: { mp: 2 }, n: 1 },
+    },
+    {
+      name: "upsertItem at a path, appends when no element matches",
+      current: present({ list: [{ id: "a" }] }),
+      op: { op: "upsertItem", path: "/list", key: "id", value: { id: "b" } },
+      expected: { list: [{ id: "a" }, { id: "b" }] },
+    },
+    {
+      name: "upsertItem at a path, merges into the match",
+      current: present({ list: [{ id: "a", n: 1 }] }),
+      op: {
+        op: "upsertItem",
+        path: "/list",
+        key: "id",
+        value: { id: "a", n: 2 },
+      },
+      expected: { list: [{ id: "a", n: 2 }] },
+    },
+    {
+      name: "upsertItem at a path on an absent root",
+      current: absent,
+      op: { op: "upsertItem", path: "/list", key: "id", value: { id: "a" } },
+      expected: { list: [{ id: "a" }] },
+    },
+    {
+      name: "delete of an absent key stays absent",
+      current: absent,
+      op: { op: "delete" },
+      expected: undefined,
+    },
+    {
+      name: "delete of a present key",
+      current: present({ a: 1 }),
+      op: { op: "delete" },
+      expected: undefined,
+    },
+  ];
+
+  it.each(cases)("$name", ({ current, op, expected }) => {
+    const result = applyDataOps(current, [op]);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    if (expected === undefined)
+      expect(result).toEqual({ ok: true, exists: false });
+    else expect(result).toEqual({ ok: true, exists: true, value: expected });
+  });
+});
+
 describe("applyDataOps: atomicity and purity", () => {
   it("returns the first error with its index and no value", () => {
     const result = applyDataOps(present(1), [
@@ -390,12 +504,22 @@ describe("applyDataOps: atomicity and purity", () => {
     const current = { list: [{ id: 1, a: { x: 1 } }], n: 1 };
     const opValue = { id: 1, a: { y: 2 } };
     const snapshot = structuredClone({ current, opValue });
-    applyDataOps(present(current), [
+    const result = applyDataOps(present(current), [
       { op: "inc", path: "/n", by: 1 },
       { op: "upsertItem", path: "/list", key: "id", value: opValue },
       { op: "append", path: "/list", value: opValue },
       { op: "merge", value: { n: null } },
     ]);
+    expect(result).toEqual({
+      ok: true,
+      exists: true,
+      value: {
+        list: [
+          { id: 1, a: { y: 2 } },
+          { id: 1, a: { y: 2 } },
+        ],
+      },
+    });
     expect({ current, opValue }).toEqual(snapshot);
   });
 
@@ -419,6 +543,21 @@ describe("applyDataOps: atomicity and purity", () => {
       const result = applyDataOps(present([1]), [op]);
       expect(result.ok).toBe(false);
       if (!result.ok) expect(result.error.code).toBe("invalid-op");
+    }
+    // A hostile getter must not escape from error reporting either.
+    const hostile = {
+      op: "inc",
+      by: 1,
+      get path(): string {
+        throw new Error("bad");
+      },
+    } as unknown as DataOp;
+    const hostileResult = applyDataOps(present(1), [hostile]);
+    expect(hostileResult.ok).toBe(false);
+    if (!hostileResult.ok) {
+      expect(hostileResult.error.code).toBe("invalid-op");
+      expect(hostileResult.error.opIndex).toBe(0);
+      expect(hostileResult.error).not.toHaveProperty("path");
     }
     const cyclic: Record<string, unknown> = {};
     cyclic.self = cyclic;

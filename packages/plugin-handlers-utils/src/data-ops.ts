@@ -519,6 +519,18 @@ function applyOne(state: State, op: DataOp): State {
   return modifyAt(root, pointer.tokens, 0, fn);
 }
 
+/** Reads `op.path` for error reports; a hostile getter must not escape. */
+function safePath(op: unknown): string | undefined {
+  try {
+    if (typeof op !== "object" || op === null || !("path" in op))
+      return undefined;
+    const { path } = op as { path?: unknown };
+    return typeof path === "string" ? path : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 /**
  * Applies `ops` in order to a plugin-data value. Pure and total: it never
  * mutates its inputs, never throws, and returns either the complete result or
@@ -538,13 +550,7 @@ export function applyDataOps(
     try {
       state = applyOne(state, op);
     } catch (error) {
-      const path =
-        typeof op === "object" &&
-        op !== null &&
-        "path" in op &&
-        typeof op.path === "string"
-          ? op.path
-          : undefined;
+      const path = safePath(op);
       const known = error instanceof OpFailure;
       return {
         ok: false,
