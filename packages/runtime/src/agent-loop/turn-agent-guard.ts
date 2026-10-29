@@ -18,6 +18,7 @@ import { getToolContent, getPendingProposals } from "@covel/tools";
 import type { HookPipeline } from "../hooks/pipeline.js";
 import { createExecutionWriteBuffer } from "../function-runtime/execution-write-buffer.js";
 import { createPluginRuntimeContext } from "../function-runtime/plugin-runtime-context.js";
+import { attachNestedResults } from "../turn-executor/nested-results.js";
 import { finalizeRuntimeResult } from "../turn-executor/runtime-finalization.js";
 import type { TurnExecutorDeps } from "../turn-executor/turn-executor-types.js";
 import { RuntimeTimeoutError } from "../turn-executor/turn-control.js";
@@ -214,6 +215,12 @@ export async function executeAgentGuard({
         result,
         { outputContractSchema: loaded.outputContractSchema },
       );
+      // The guard's nested calls commit with its buffered writes: only when
+      // it skipped the run and the result is still skipped. A hook that
+      // changes the status drops the buffered writes (`wire-helpers.ts`), and
+      // a guard that lets the agent run discards both.
+      if (postResult.status === "skipped")
+        attachNestedResults(postResult, runtimeContext.nestedResults);
       const postOutput = postResult.output as Record<string, unknown> | null;
       if (
         deps.store &&

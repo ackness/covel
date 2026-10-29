@@ -99,6 +99,7 @@ import {
   scheduleTriggeredRuntimes,
   selectTriggeredRuntimes,
 } from "./scheduling.js";
+import { nestedResultsOf } from "./nested-results.js";
 
 export {
   __testOnly_parseFinalOutputEnvelope,
@@ -660,11 +661,6 @@ async function executeTurnImpl(
     ? input.manualTrigger?.triggerEvent
     : undefined;
 
-  // Nested `ctx.recursiveCall` executions bubble their runtime results
-  // here so the commit-owning caller can process their proposals through the
-  // same barrier as top-level results.
-  const nestedRuntimeResults: RuntimeResult[] = [];
-
   // The runtimes of this execution that read the player's interjections. The
   // queue closes when the last of them settles, so a later `/steer` is refused
   // instead of accepted with no model call left to read it. A nested execution
@@ -747,9 +743,6 @@ async function executeTurnImpl(
             ),
           }
         : {}),
-      collectNestedResults: (results) => {
-        nestedRuntimeResults.push(...results);
-      },
     }).finally(() => steeringReaders.settled(manifest.name));
   };
 
@@ -1029,7 +1022,9 @@ async function executeTurnImpl(
       : {}),
     deps,
     turnNumber,
-    nestedRuntimeResults,
+    // `ctx.recursiveCall` results ride on the parent result whose handler
+    // succeeded; a failed parent took its children's results down with it.
+    nestedRuntimeResults: nestedResultsOf([...completedResults.values()]),
   });
 
   const setupCompletion = setupTracker.setupCompletion;

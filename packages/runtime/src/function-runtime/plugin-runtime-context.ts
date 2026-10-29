@@ -17,6 +17,7 @@ import type {
   RecursiveCallDelta,
   RuntimeActivation,
   RuntimeManifest,
+  RuntimeResult,
   TurnInput,
 } from "@covel/shared";
 import type {
@@ -109,6 +110,12 @@ export interface PluginRuntimeContext {
   readonly abort: AbortController;
   /** Tool calls and events made through `ctx.tools`. */
   readonly tools: ReturnType<typeof createRuntimeTools>;
+  /**
+   * Kernel-held results of the nested executions this invocation started.
+   * Like the write buffer, they commit only when attached to the result of a
+   * handler that succeeded on its own (`attachNestedResults`).
+   */
+  readonly nestedResults: readonly RuntimeResult[];
   /** Revoke every capability; a later call throws. */
   revoke(): void;
   /** Wait for nested turns and tool calls the plugin did not await. */
@@ -351,9 +358,17 @@ export async function createPluginRuntimeContext({
     },
   });
   const inFlightRecursiveCalls = new Set<Promise<unknown>>();
+  const nestedResults: RuntimeResult[] = [];
   const rawRecursiveCall = createRecursiveCall(handlerAbort.signal);
   const trackedRecursiveCall: typeof rawRecursiveCall = (delta, opts) => {
-    const call = rawRecursiveCall(delta, opts);
+    const call = rawRecursiveCall(delta, opts).then((nested) => {
+      // The plugin gets a copy; the kernel keeps and commits the originals,
+      // so mutating the returned value cannot change what commits or who
+      // owns it.
+      const copy = structuredClone(nested);
+      nestedResults.push(...nested.runtimeResults);
+      return copy;
+    });
     inFlightRecursiveCalls.add(call);
     void call.then(
       () => inFlightRecursiveCalls.delete(call),
@@ -487,6 +502,7 @@ export async function createPluginRuntimeContext({
     context,
     abort: handlerAbort,
     tools: runtimeTools,
+    nestedResults,
     revoke: () => {
       capabilitiesRevoked = true;
     },

@@ -296,7 +296,8 @@ export interface PluginFunctionContext {
   readonly execution?: PluginExecutionInfo;
   /**
    * Run one manual runtime of this plugin inside the current execution. Its
-   * effects commit with the parent's.
+   * effects commit with the parent's, only when this handler succeeds; the
+   * resolved value is a copy, so changing it changes nothing that commits.
    */
   readonly recursiveCall: (
     delta: PluginRecursiveCallDelta,

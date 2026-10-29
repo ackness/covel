@@ -160,9 +160,10 @@ describe("prepared resume host API", () => {
   it("counts a player turn only when its suspended recursive child finally commits", async () => {
     const { store, child, deps, execution, suspension } =
       await suspendedFixture(true);
+    // The nested child commits right before the parent that called it.
     expect(execution.commit.results.map((result) => result.status)).toEqual([
-      "success",
       "suspended",
+      "success",
     ]);
     expect(suspension.pendingContinuation.executionContext).toMatchObject({
       logicalTurnId: input.logicalTurnId,

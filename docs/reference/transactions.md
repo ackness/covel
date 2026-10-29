@@ -349,7 +349,7 @@ SqliteStore、MemoryStore 和 PgStore（都在 Node 上）用同一种办法：
 事务边界有两层：
 
 - **`commitAll`**（`packages/runtime/src/commit/session-commit-pipeline.ts`）把**单个 runtime** 的一串 proposal 提交进一个 `withTransaction` 回调。它是最底层的提交原语。
-- **`finalizeExecution`**（`packages/runtime/src/commit/finalize-execution.ts`）把**整个 execution** 的所有 runtime 一起包进**一个** `withTransaction`。“整个 execution”指顶层结果，加上拍平后的嵌套 `recursiveCall` 结果。
+- **`finalizeExecution`**（`packages/runtime/src/commit/finalize-execution.ts`）把**整个 execution** 的所有 runtime 一起包进**一个** `withTransaction`。“整个 execution”指顶层结果，加上拍平后的嵌套 `recursiveCall` 结果。嵌套结果只在父 handler 成功时进入，排在父结果之前（子先于父）。
 
 谁来调用：
 
@@ -373,8 +373,8 @@ SqliteStore、MemoryStore 和 PgStore（都在 Node 上）用同一种办法：
 
 - 领域写入抛出的 store 错误，使整回合回滚。
 - handler 校验失败返回的 `{ committed: false }`（如 PreStateCommit veto、缺字段的 plugin.data），在本次执行有成功的 story 结果时，只回滚提出它的那个可选 runtime。
-- 做法：每个非 story、非 setup 的 runtime 在自己的 savepoint 里提交。被拒绝时只撤销它自己的写入，叙事和其他 runtime 照常提交。
-- 这时 `FinalizeExecutionOutcome` 以 `committed` 返回，并在 `failedProposals` / `isolatedRuntimes`（`{ runtimeId, error }`）里列出被丢弃的部分。主回合用 `proposal.failed` 和该 runtime 的 `runtime.failed` SSE 告知客户端。
+- 做法：每个非 story、非 setup 的顶层 runtime 连同它下面各层的嵌套 `recursiveCall` 结果，组成一个提交单元，在一个 savepoint 里提交（子先于父）。单元里任何一条写入被拒，整个单元一起撤销，叙事和其他单元照常提交。含有 story 或 setup 运行的单元（哪怕是嵌套运行；setup 按 manifest 的 stage 判断）直接在执行事务里提交：其中任何写入被拒，整回合回滚。被丢弃单元里的挂起不保存。保存下来的挂起，它扣住的 detached 作业按丢弃结算：硬依赖被丢弃 runtime 的作业去掉，其余作业在冻结输入里把它记为 `failed`。本次执行的挂起全部被丢弃时，回合像挂起被放弃一样结束：计数，扣住的 detached 作业按同样规则结算后排入。
+- 这时 `FinalizeExecutionOutcome` 以 `committed` 返回，并在 `failedProposals` / `isolatedRuntimes`（`{ runtimeId, runId, error }`，被丢弃单元里的每次运行一条）里列出被丢弃的部分。同一个 runtime 可能既嵌套运行又在顶层运行，所以按 `runId` 区分；journal、触发计数和已保存的 `turn_results` 条目也按运行结算。主回合用 `proposal.failed` 和该 runtime 的 `runtime.failed` SSE 告知客户端。
 - 没有 story 的执行（manual、background、detached、setup）仍然是整体原子的：任何一个 proposal 失败就整体回滚。作业不会为没有落库的写入报告成功。
 - 结果里无法变成 proposal 的 effect 条目，同样算作该 runtime 被拒绝的写入，按上面的边界处理，不会以异常拖垮整回合。这类条目是：`effects.ui[].parts`、`effects.interactions`、`effects.notifications` 里不是对象的条目，以及后两个通道里不是数组的内容。function runtime 在 handler 返回时就以 `output-schema-invalid` 失败。在会提交写入的结果中，已移除的 `effects.statePatches` 通道也会被拒绝，错误信息会指引作者改用插件数据。它以 `effects.invalid` 诊断标记报告，不冒充某一种 proposal。
 
@@ -384,7 +384,7 @@ SqliteStore、MemoryStore 和 PgStore（都在 Node 上）用同一种办法：
 - 单个 export 的存储失败先回滚这个 savepoint，再记录诊断，然后继续其他 export 和领域提交。这样 PostgreSQL 不会把一个已被捕获的 SQL 错误留在中止的事务里。
 - 缺少声明的 schema，以及公共输出契约校验失败，仍然在正常的执行校验边界处理。
 
-**只有上游真正提交，下游才提交。** 结果按执行顺序提交。被丢弃 runtime 的硬依赖方一起丢弃（`commit/commit-dependencies.ts`）。
+**只有上游真正提交，下游才提交。** 提交单元按执行顺序提交。被丢弃 runtime 的硬依赖方一起丢弃（`commit/commit-dependencies.ts`）。依赖只在顶层 runtime 之间检查：嵌套结果只依赖同一次嵌套执行里的结果，它们在同一个单元里，随单元一起提交或丢弃。
 
 | 关系                                              | 上游被丢弃时                     |
 | ------------------------------------------------- | -------------------------------- |
@@ -473,22 +473,25 @@ for (const result of results) {
 }
 // All runtime results then share one required transaction, which only writes.
 await store.withTransaction(async (tx) => {
-  for (const result of results) {
-    const { proposals, failedProposals } = prepared.get(result);
+  // A unit is a top-level result preceded by its nested results.
+  for (const unit of units) {
     const commit = async (sink) => {
-      const out = await commitPreparedProposals(
-        proposals,
-        sink,
-        sessionId,
-        result,
-        opts,
-      );
-      const failed = [...failedProposals, ...out.failedProposals];
-      if (failed.length > 0) throw new ProposalCommitFailure(failed);
+      for (const result of unit.members) {
+        const { proposals, failedProposals } = prepared.get(result);
+        const out = await commitPreparedProposals(
+          proposals,
+          sink,
+          sessionId,
+          result,
+          opts,
+        );
+        const failed = [...failedProposals, ...out.failedProposals];
+        if (failed.length > 0) throw new ProposalCommitFailure(failed);
+      }
     };
-    // An optional runtime beside a committed story commits in its own
-    // savepoint; a ProposalCommitFailure there drops that runtime alone.
-    await (isolates(result) ? tx.savepoint(commit) : commit(tx));
+    // An optional runtime beside a committed story commits with its nested
+    // results in one savepoint; a ProposalCommitFailure there drops the unit.
+    await (isolates(unit) ? tx.savepoint(commit) : commit(tx));
   }
   for (const message of journalMessages) await tx.appendTurnMessage(message);
   await extraInTx?.(tx, { droppedRuntimeIds });

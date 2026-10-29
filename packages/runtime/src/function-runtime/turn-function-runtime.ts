@@ -28,6 +28,7 @@ import { suspensionBasis } from "../resume/suspension-settlement.js";
 import { freezeInputSlots } from "../agent-loop/runtime-input-slots.js";
 import { deepFreeze } from "../hooks/hook-settings.js";
 import { createPluginRuntimeContext } from "./plugin-runtime-context.js";
+import { attachNestedResults } from "../turn-executor/nested-results.js";
 
 export interface ExecuteFunctionRuntimeOptions {
   readonly lastPlayerInput?:
@@ -434,10 +435,11 @@ export async function executeFunctionRuntime({
   // Keep commands separate from business output; copying the result preserves them.
   // The buffer belongs to the handler's own success: a failed handler that a
   // PostRuntime hook turned into success commits none of its buffered writes.
+  // Results of its `ctx.recursiveCall`s follow the same rule.
+  const ownSuccess =
+    rawResult.status === "success" && result.status === "success";
   const completedResult: RuntimeResult =
-    rawResult.status === "success" &&
-    result.status === "success" &&
-    writeBuffer.length > 0
+    ownSuccess && writeBuffer.length > 0
       ? {
           ...result,
           pendingProposals: [
@@ -446,6 +448,8 @@ export async function executeFunctionRuntime({
           ],
         }
       : result;
+  if (ownSuccess)
+    attachNestedResults(completedResult, runtimeContext.nestedResults);
 
   const finalOutput = (completedResult.output ??
     getToolContent(output)) as Record<string, unknown>;

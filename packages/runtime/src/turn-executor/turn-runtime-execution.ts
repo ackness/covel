@@ -135,13 +135,6 @@ export interface RuntimeInvocation {
   readonly pluginSetupReady?: (pluginId: string) => boolean;
   /** Whether a setup runtime is satisfied in the execution's live mirror. */
   readonly setupRuntimeDone: (runtimeId: string) => boolean;
-  /**
-   *  sink for runtime results produced by nested `ctx.recursiveCall`
-   * executions. The top-level executeTurn wires this to a collector so the
-   * commit-owning caller processes nested proposals through the same barrier
-   * as top-level results (they were previously dropped on the floor).
-   */
-  readonly collectNestedResults?: (results: readonly RuntimeResult[]) => void;
 }
 
 export async function executeOneRuntime(
@@ -172,6 +165,10 @@ export async function executeOneRuntime(
   const startTime = Date.now();
   const runId = inv.runId ?? crypto.randomUUID();
   const timeoutMs = manifest.timeoutMs ?? defaultTimeoutMs;
+  // Resolves to the nested execution's kernel-held result. The invocation
+  // context keeps those originals for the commit, attached to the parent's
+  // result only when its own handler succeeds, and hands the plugin a copy
+  // (`createPluginRuntimeContext`).
   const createRecursiveCall = (parentSignal?: AbortSignal) => {
     return async (
       rawDelta: RecursiveCallDelta,
@@ -279,14 +276,6 @@ export async function executeOneRuntime(
             `recursiveCall from runtime "${manifest.name}" was aborted`,
           );
         }
-        // Bubble the nested execution's results (its own + any it
-        // collected from deeper levels) up to the top-level turn so the
-        // commit-owning caller processes their proposals — a nested
-        // executeTurn has no commit path of its own.
-        inv.collectNestedResults?.([
-          ...nestedResult.runtimeResults,
-          ...(nestedResult.nestedRuntimeResults ?? []),
-        ]);
         await deps.emitter?.emit("recursive.completed", {
           ...tracePayload,
           resultCount: nestedResult.runtimeResults.length,

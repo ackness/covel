@@ -557,6 +557,21 @@ An agent's side effects come only from its tools. What the model can write is de
 
 `ctx.recursiveCall({ playerMessage, manualTrigger: { runtimeId, payload } })` starts a nested run inside the current execution. Its effects commit with the parent's. Only these fields are read; the session, locale, settings and model come from the parent, and other fields are ignored.
 
+The nested call's writes follow the parent handler:
+
+- When the parent handler succeeds, the nested writes commit with the parent's, ahead of the parent's result.
+- When the parent handler fails (it throws, times out, or returns `failed` or `skipped`), the nested writes are discarded with it. They are also discarded when a PostRuntime Hook changes the parent result's status (for example, rewrites a failure as a success), just like the parent's own writes. The rule applies at every level: when any parent handler fails, the writes of every level below it are discarded.
+- When the parent handler suspends for input, its own writes wait to commit after the resume, but the nested writes are discarded. Nested writes are not yet saved with a suspension.
+- A nested call made from an agent's guard commits only when the guard returns `{ skip: true }` and the result is still skipped; it is discarded when the guard lets the agent run.
+
+At commit, a top-level runtime and the nested calls at every level below it are one unit: they all commit, or they are all discarded.
+
+- In an execution with a story, the unit of a non-story runtime commits in one savepoint. When any of its writes is rejected, the whole unit is discarded and the story is still saved. Runtimes that depend on that top-level runtime are discarded with it under the [commit rules](./transactions.md#turn-level-single-transaction).
+- When the unit holds a run of a story or setup runtime, at top level or nested inside, the unit commits under the story rule: when any of its writes is rejected, the whole execution rolls back.
+- When a unit is discarded, the suspensions of its nested calls are void too: they are not saved, cannot be resumed, and do not replace an existing suspension. When the execution leaves no other suspension, the turn ends and counts as usual, and the detached jobs the suspension held back are queued as usual.
+
+`ctx.recursiveCall` returns a copy of the nested result. Changing it does not change what commits or who owns it.
+
 `manualTrigger.runtimeId` may only name a runtime in the caller's own package: the package ID for an inline runtime, or `<pluginId>/<runtimeId>` for a multi-runtime package. A target in another package throws before the nested execution starts. The error names the target runtime and the caller's package ID. Bundled and community plugins follow the same rule.
 
 Use [services](./plugin-extensions.md#registering-and-calling-public-functions) for requests and responses across packages, or [events](./plugin-extensions.md#how-events-trigger-downstream-work) to trigger work in another package.

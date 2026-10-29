@@ -9,6 +9,7 @@ import { emitSubEvent } from "../turn-executor/turn-runtime-helpers.js";
 import { saveAutoSnapshot } from "../snapshot/auto-snapshot.js";
 import { finalizeSuspendedJobStatuses } from "../job-status/job-status.js";
 import {
+  applyIsolatedRuntimes,
   finalizeExecution,
   type FinalizeExecutionArgs,
   type FinalizeExecutionOutcome,
@@ -96,9 +97,11 @@ export async function commitExecution(
 
   const { completion, store, eventBus } = args;
   const { sessionId } = plan;
-  const suspended = plan.results.some(
-    (result) => result.status === "suspended",
-  );
+  // A suspended run whose writes were dropped left no continuation behind.
+  const suspended = applyIsolatedRuntimes(
+    plan.results,
+    outcome.isolatedRuntimes,
+  ).some((result) => result.status === "suspended");
   if (plan.resumedExecution) {
     // The suspended execution's progress jobs end with the resume that
     // continued it; a failed resume leaves them waiting for the retry.

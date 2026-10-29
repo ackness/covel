@@ -349,7 +349,7 @@ This is a synchronous convention. It does not try to recreate the full server tr
 There are two layers of transaction boundary:
 
 - **`commitAll`** (`packages/runtime/src/commit/session-commit-pipeline.ts`) commits the chain of proposals from **one runtime** into one `withTransaction` callback. It is the lowest-level commit primitive.
-- **`finalizeExecution`** (`packages/runtime/src/commit/finalize-execution.ts`) wraps all runtimes of **a whole execution** in **one** `withTransaction`. "The whole execution" means the top-level results, plus the flattened results of nested `recursiveCall`.
+- **`finalizeExecution`** (`packages/runtime/src/commit/finalize-execution.ts`) wraps all runtimes of **a whole execution** in **one** `withTransaction`. "The whole execution" means the top-level results, plus the flattened results of nested `recursiveCall`. Nested results enter only when their parent handler succeeded, and sit right before the parent's result (child before parent).
 
 Who calls it:
 
@@ -373,8 +373,8 @@ Who calls it:
 
 - A store error thrown by a domain write rolls back the whole turn.
 - A `{ committed: false }` returned by handler validation (for example a PreStateCommit veto, or a `plugin.data` missing a field) rolls back only the optional runtime that proposed it, when this execution has a successful story result.
-- How: each non-story, non-setup runtime commits in its own savepoint. When it is rejected, only its own writes are undone. The narrative and the other runtimes are committed as usual.
-- In this case `FinalizeExecutionOutcome` returns `committed`, and lists the dropped parts in `failedProposals` / `isolatedRuntimes` (`{ runtimeId, error }`). The main turn tells the client with `proposal.failed` and the runtime's `runtime.failed` SSE event.
+- How: each non-story, non-setup top-level runtime, together with the nested `recursiveCall` results at every level below it, forms one commit unit that commits in one savepoint (children before their parent). When any write in the unit is rejected, the whole unit is undone. The narrative and the other units are committed as usual. A unit that holds a story or setup run (even a nested one; setup is judged by the manifest's stage) commits directly in the execution transaction: when any of its writes is rejected, the whole turn rolls back. Suspensions in a discarded unit are not saved. For a suspension that is saved, the detached jobs it holds back are settled for the drops: a job that hard-depends on a dropped runtime is removed, and the rest record it as `failed` in their frozen inputs. When every suspension of the execution is discarded, the turn ends as if they had been abandoned: it counts, and the detached jobs they held back are queued after the same settlement.
+- In this case `FinalizeExecutionOutcome` returns `committed`, and lists the dropped parts in `failedProposals` / `isolatedRuntimes` (`{ runtimeId, runId, error }`, one entry for each run in a dropped unit). The same runtime can run both nested and at top level, so runs are told apart by `runId`; journal entries, trigger counts and saved `turn_results` entries are also settled per run. The main turn tells the client with `proposal.failed` and the runtime's `runtime.failed` SSE event.
 - Executions without a story (manual, background, detached, setup) are still atomic as a whole: if any one proposal fails, the whole thing is rolled back. A job does not report success for writes that were not stored.
 - An effect entry in the result that cannot become a proposal also counts as a write rejected for that runtime, and is handled by the boundary above. It does not bring down the whole turn with an exception. These entries are: entries in `effects.ui[].parts`, `effects.interactions`, and `effects.notifications` that are not objects, and content of the last two channels that is not an array. A function runtime fails with `output-schema-invalid` when its handler returns them. The removed `effects.statePatches` channel is also rejected on results that would commit writes, with a message directing authors to plugin data. It is reported with the diagnostic marker `effects.invalid`, rather than a proposal type.
 
@@ -384,7 +384,7 @@ Who calls it:
 - When one export's storage fails, the savepoint is rolled back first, then the diagnostic is recorded, and then the other exports and the domain commit continue. This way PostgreSQL does not leave a caught SQL error in an aborted transaction.
 - A missing declared schema, and a failed public output contract check, are still handled at the normal execution validation boundary.
 
-**Downstream commits only if upstream really commits.** Results are committed in execution order. The hard dependents of a dropped runtime are dropped with it (`commit/commit-dependencies.ts`).
+**Downstream commits only if upstream really commits.** Commit units are committed in execution order. The hard dependents of a dropped runtime are dropped with it (`commit/commit-dependencies.ts`). Dependencies are checked only between top-level runtimes: a nested result depends only on results of its own nested execution, which sit in the same unit and commit or drop with it.
 
 | Relationship                                                                             | When the upstream is dropped                              |
 | ---------------------------------------------------------------------------------------- | --------------------------------------------------------- |
@@ -473,22 +473,25 @@ for (const result of results) {
 }
 // All runtime results then share one required transaction, which only writes.
 await store.withTransaction(async (tx) => {
-  for (const result of results) {
-    const { proposals, failedProposals } = prepared.get(result);
+  // A unit is a top-level result preceded by its nested results.
+  for (const unit of units) {
     const commit = async (sink) => {
-      const out = await commitPreparedProposals(
-        proposals,
-        sink,
-        sessionId,
-        result,
-        opts,
-      );
-      const failed = [...failedProposals, ...out.failedProposals];
-      if (failed.length > 0) throw new ProposalCommitFailure(failed);
+      for (const result of unit.members) {
+        const { proposals, failedProposals } = prepared.get(result);
+        const out = await commitPreparedProposals(
+          proposals,
+          sink,
+          sessionId,
+          result,
+          opts,
+        );
+        const failed = [...failedProposals, ...out.failedProposals];
+        if (failed.length > 0) throw new ProposalCommitFailure(failed);
+      }
     };
-    // An optional runtime beside a committed story commits in its own
-    // savepoint; a ProposalCommitFailure there drops that runtime alone.
-    await (isolates(result) ? tx.savepoint(commit) : commit(tx));
+    // An optional runtime beside a committed story commits with its nested
+    // results in one savepoint; a ProposalCommitFailure there drops the unit.
+    await (isolates(unit) ? tx.savepoint(commit) : commit(tx));
   }
   for (const message of journalMessages) await tx.appendTurnMessage(message);
   await extraInTx?.(tx, { droppedRuntimeIds });

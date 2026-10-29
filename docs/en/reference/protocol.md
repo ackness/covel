@@ -1261,6 +1261,8 @@ Final states of runtimes:
 - The final state of a newly executed runtime is published after `PostRuntime` and the output and cancel checks. A final failure uses `runtime.failed`, and a final success or pause uses `runtime.completed`. The action SSE turns a "skipped" into `runtime.skipped`.
 - The final-state payload keeps `turnId` and `runId`. It does not mean the transaction commit succeeded.
 - When the turn commit succeeds, but the writes of an optional runtime were discarded on their own, the main turn sends a `runtime.failed` for it before `execution.completed` (with the reason for the discard). The client uses it to override the earlier `runtime.completed`.
+  - Each nested run (`ctx.recursiveCall`) discarded with it gets one too. The payload carries the `runId` and `turnId` of the discarded run.
+  - The client shows one step per runtime in a turn. So when the top-level run of the same runtime committed, no correction is sent for its discarded nested run, which would show the committed run as failed.
 - In historical data, `runtime.completed` with `status: "failed"`, and `turn.completed` with `committed: false`, still count as diagnostic failures.
 - When an LLM attempt fails and then succeeds on retry, the failure record is still kept. The interface should show "recovered attempts" separately from the task's final state.
 
