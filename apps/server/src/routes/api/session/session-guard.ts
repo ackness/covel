@@ -71,24 +71,43 @@ export const SESSION_DELETION_END_FIRED_KEY = "deletionEndHookFiredNonce";
 /** Private lease for an observe-only SessionStart/SessionEnd callback. */
 export const SESSION_LIFECYCLE_PENDING_KEY = "sessionLifecyclePending";
 
+/** Metadata keys only the server owns: credentials and capability generations. */
+const PRIVATE_SESSION_METADATA_KEYS: ReadonlySet<string> = new Set([
+  SESSION_OWNER_TOKEN_HASH_KEY,
+  SESSION_APPROVAL_SCOPE_KEY,
+  SESSION_APPROVAL_REVISIONS_KEY,
+  SESSION_INCARNATION_KEY,
+  SESSION_DELETION_PENDING_KEY,
+  SESSION_DELETION_STARTED_AT_KEY,
+  SESSION_DELETION_RETRY_KEY,
+  SESSION_DELETION_END_FIRED_KEY,
+  SESSION_LIFECYCLE_PENDING_KEY,
+]);
+
+function filterSessionMetadata(
+  metadata: SessionRecord["metadata"],
+  keepPrivate: boolean,
+): Record<string, unknown> | undefined {
+  if (!metadata) return undefined;
+  return Object.fromEntries(
+    Object.entries(metadata).filter(
+      ([key]) => PRIVATE_SESSION_METADATA_KEYS.has(key) === keepPrivate,
+    ),
+  );
+}
+
 /** Remove framework-private credentials/capability generations from metadata. */
 export function publicSessionMetadata(
   metadata: SessionRecord["metadata"],
 ): Record<string, unknown> | undefined {
-  if (!metadata) return undefined;
-  const {
-    [SESSION_OWNER_TOKEN_HASH_KEY]: _ownerHash,
-    [SESSION_APPROVAL_SCOPE_KEY]: _approvalScope,
-    [SESSION_APPROVAL_REVISIONS_KEY]: _approvalRevisions,
-    [SESSION_INCARNATION_KEY]: _incarnation,
-    [SESSION_DELETION_PENDING_KEY]: _deletionPending,
-    [SESSION_DELETION_STARTED_AT_KEY]: _deletionStartedAt,
-    [SESSION_DELETION_RETRY_KEY]: _deletionRetry,
-    [SESSION_DELETION_END_FIRED_KEY]: _deletionEndFired,
-    [SESSION_LIFECYCLE_PENDING_KEY]: _lifecyclePending,
-    ...rest
-  } = metadata;
-  return rest;
+  return filterSessionMetadata(metadata, false);
+}
+
+/** Only the framework-private keys that `publicSessionMetadata` removes. */
+export function privateSessionMetadata(
+  metadata: SessionRecord["metadata"],
+): Record<string, unknown> | undefined {
+  return filterSessionMetadata(metadata, true);
 }
 
 type ResolveResult =

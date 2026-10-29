@@ -685,6 +685,7 @@ curl -X DELETE http://localhost:3001/api/sessions/<sessionId>
 | POST | `/api/sessions/:id/browser-commit`     | body `{ actionId, baseRevision }`；导出下一版完整 checkpoint                                       |
 
 - `browser-checkpoint` 拒绝过期的 revision，也拒绝 revision 相同但 head 不同的分叉。
+- 整体替换时，会话元数据以浏览器存档为准（包括玩家的插件选择 `pluginSelection`）；服务端只保留自己的凭据和能力代次，例如 owner token 哈希与会话 incarnation。
 - `browser-commit` 对重复的 `actionId` 是幂等的，返回同一个 commit。
 - `SessionCommit` 的形状是 `{ baseRevision, revision, actionId, checkpoint }`。
 

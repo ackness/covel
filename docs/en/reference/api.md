@@ -685,6 +685,7 @@ When a new local save first creates its server mirror, it uploads the initial ch
 | POST   | `/api/sessions/:id/browser-commit`     | Body `{ actionId, baseRevision }`. Exports the next full checkpoint                                                                                 |
 
 - `browser-checkpoint` rejects an outdated revision. It also rejects a fork where the revision is the same but the head is different.
+- A full replacement takes session metadata from the browser save, including the player's plugin selection (`pluginSelection`). The server keeps only its own credentials and capability generations, such as the owner token hash and the session incarnation.
 - `browser-commit` is idempotent for a repeated `actionId`, and returns the same commit.
 - The shape of `SessionCommit` is `{ baseRevision, revision, actionId, checkpoint }`.
 

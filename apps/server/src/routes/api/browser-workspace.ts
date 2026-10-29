@@ -26,6 +26,7 @@ import {
 } from "@covel/store/session";
 import { errorBody, readJsonBody } from "../../api-error.js";
 import {
+  privateSessionMetadata,
   publicSessionMetadata,
   resolveSessionParam,
   sessionIncarnationIdentity,
@@ -499,9 +500,12 @@ export function createBrowserWorkspaceRoutes(
                       completedPlayerTurns:
                         checkpoint.session.completedPlayerTurns,
                       setupRuntimes: checkpoint.session.setupRuntimes,
+                      // The browser save owns public metadata such as the
+                      // player's plugin selection; the server keeps only its
+                      // credentials and capability generations.
                       metadata: {
                         ...publicSessionMetadata(checkpoint.session.metadata),
-                        ...live.metadata,
+                        ...privateSessionMetadata(live.metadata),
                       },
                     },
                   },
