@@ -68,6 +68,14 @@ export async function executeToolAndCommit<TOutput>(
     store,
     findTool: () => ({
       ...module,
+      // JS tests may pass a bare `{ execute }`; give it the annotations
+      // `tool()` defaults to, so the executor treats it as a write tool.
+      annotations: module.annotations ?? {
+        readOnly: false,
+        stagesWrites: true,
+        idempotent: false,
+        concurrencySafe: false,
+      },
       async execute(args, ctx) {
         try {
           return (raw = await module.execute(args, ctx));

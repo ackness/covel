@@ -3,7 +3,7 @@ import path from "node:path";
 import { tmpdir } from "node:os";
 import { Hono } from "hono";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { readRuntimeEnv } from "@covel/shared";
+import { defaultSessionSeats, readRuntimeEnv } from "@covel/shared";
 import { createMemoryStore } from "@covel/store/memory";
 import {
   bootstrapApi,
@@ -60,6 +60,7 @@ async function session(
     completedPlayerTurns: 0,
     activePlugins,
     locale: "en-US",
+    seats: defaultSessionSeats(),
     createdAt: now,
     updatedAt: now,
     metadata: {

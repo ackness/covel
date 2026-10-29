@@ -590,6 +590,7 @@ export class PluginServiceRegistry {
                       characterSchema: null,
                       characters: [],
                       dimensions: {},
+                      seats: [],
                     },
                   ));
                 },

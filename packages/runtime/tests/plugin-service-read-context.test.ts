@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 import type { DataStore } from "@covel/store";
 import { createMemoryStore } from "@covel/store/memory";
+import { defaultSessionSeats } from "@covel/shared";
 import type {
   HandlerResult,
   RuntimeManifest,
@@ -82,6 +83,7 @@ async function fixture() {
     setupRuntimes: {},
     activePlugins: [...active],
     completedPlayerTurns: 1,
+    seats: defaultSessionSeats(),
     createdAt: timestamp,
     updatedAt: timestamp,
   });
