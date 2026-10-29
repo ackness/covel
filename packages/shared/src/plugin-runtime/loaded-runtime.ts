@@ -47,6 +47,15 @@ export interface LoadedRuntime {
   readonly exportContractSchemas?: Readonly<
     Record<string, Readonly<Record<string, unknown>>>
   >;
+  /**
+   * The package's compiled dataset record schemas, keyed by namespace
+   * (`contributes.datasets`). The commit validates every write into a
+   * declared dataset against them; the object is shared, never cloned, so
+   * the compiled validator is reused.
+   */
+  readonly datasetSchemas?: Readonly<
+    Record<string, Readonly<Record<string, unknown>>>
+  >;
   /** Handler function for `runtimeType: 'function'` runtimes. */
   readonly handler?: FunctionHandler;
   /** Guard function — runs before agent execution, returns `{ skip: true }` to bypass LLM. */

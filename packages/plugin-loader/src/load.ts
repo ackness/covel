@@ -821,6 +821,8 @@ export async function loadRuntime(
     guard = mod.default as AgentGuard;
   }
 
+  const datasetSchemas = snapshot.packageManifest?.datasetSchemas;
+
   return {
     manifest: resolvePluginRuntimeManifest(snapshot, parsed.manifest),
     promptTemplate: resolveRuntimePrompt(parsed, locale),
@@ -835,6 +837,10 @@ export async function loadRuntime(
     ...(unresolvedAccepts.length > 0 ? { unresolvedAccepts } : {}),
     ...(Object.keys(exportContractSchemas).length
       ? { exportContractSchemas }
+      : {}),
+    // Shared, not copied: the commit's Ajv cache keys on schema identity.
+    ...(datasetSchemas && Object.keys(datasetSchemas).length > 0
+      ? { datasetSchemas }
       : {}),
     ...(snapshot.messages.length > 0 ? { messages: snapshot.messages } : {}),
     handler,

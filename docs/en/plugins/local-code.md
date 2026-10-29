@@ -369,7 +369,7 @@ Things a function often uses:
 | `ctx.inputs.<名字>.value`                                                     | An input you declared                                                                                                                                                                                                                    |
 | `ctx.playerMessage`                                                           | The player's input for this turn                                                                                                                                                                                                         |
 | `ctx.manualPayload`                                                           | The data the UI sends with a manual trigger                                                                                                                                                                                              |
-| `ctx.pluginData.get/list/set`                                                 | Reads and writes your own data                                                                                                                                                                                                           |
+| `ctx.pluginData.get/list/set/update`                                          | Reads and writes your own data; see [change data](#change-data)                                                                                                                                                                          |
 | `ctx.world`                                                                   | Characters, character field definitions, lorebook. Read-only                                                                                                                                                                             |
 | `ctx.userSettings`                                                            | The player's settings                                                                                                                                                                                                                    |
 | `ctx.random`                                                                  | Random numbers. Use only this for dice rolls                                                                                                                                                                                             |
@@ -421,6 +421,27 @@ await ctx.pluginData.set("progress", "cursor", after ?? null);
 - `hasMore` being `false` means you have reached the end.
 - Messages come in the order they were saved. A background execution's message can carry an earlier time than the message before it, but it was saved later, so it still comes after the position you stored and is not missed.
 - It returns only saved messages. It does not include the turn that is still running.
+
+## Change data
+
+`ctx.pluginData.set(namespace, key, value)` writes a whole value. When the value is computed from the stored one (3 gold less, one more item in a list), submit a list of operations with `ctx.pluginData.update` instead:
+
+```js
+try {
+  await ctx.pluginData.update("wallet", "gold", [
+    { op: "inc", by: -3, min: 0 },
+  ]);
+} catch (error) {
+  // The ops fail against the current value: here, not enough gold.
+  return { outcome: "failed", error: "not enough gold" };
+}
+const gold = await ctx.pluginData.get("wallet", "gold"); // the value after the ops
+```
+
+- The operations apply at commit to the latest stored value. When two runs each take 3 at the same time, both take effect; neither overwrites the other.
+- The call first tries them on the value it sees now. When they fail (for example the result is below `min`), it throws and writes nothing, so you can handle it right there.
+- It returns nothing. Read the key again for the new value.
+- The operations are `set`, `merge`, `inc`, `append`, `insert`, `remove`, `upsertItem` and `delete`. For the rules at commit, see [Transactions · Operation-based writes](../reference/transactions.md#operation-based-writes-plugindataupdate).
 
 ## Ask the player for input: a form
 

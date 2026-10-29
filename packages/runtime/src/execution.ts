@@ -69,6 +69,7 @@ export interface ExecutionCommitPlan extends Pick<
   | "sessionClock"
   | "setupRan"
   | "abortReason"
+  | "datasetSchemas"
 > {
   readonly outputSchemas: Readonly<Record<string, Schema>>;
   readonly resolvedSuspensionId?: string;
@@ -100,8 +101,10 @@ export type ExecutionDeps = TurnExecutorDeps & { readonly store: DataStore };
 
 function captureSchemas(deps: ExecutionDeps) {
   const outputSchemas: Record<string, Schema> = {};
+  const datasetSchemas: Record<string, Readonly<Record<string, Schema>>> = {};
   return {
     outputSchemas,
+    datasetSchemas,
     deps: {
       ...deps,
       loadRuntime: async (
@@ -112,6 +115,10 @@ function captureSchemas(deps: ExecutionDeps) {
           // Loader schemas are shared per registry generation. Preserve identity
           // so export validation reuses the compiled validator across executions.
           outputSchemas[args[0].name] = loaded.outputSchema;
+        }
+        if (loaded?.datasetSchemas) {
+          // Same identity rule: commit validates dataset writes with these.
+          datasetSchemas[loaded.manifest.pluginId] = loaded.datasetSchemas;
         }
         return loaded;
       },
@@ -306,6 +313,7 @@ export async function executeTurn(
         ...(turn.setupRan ? { setupRan: turn.setupRan } : {}),
       }),
       outputSchemas: captured.outputSchemas,
+      datasetSchemas: captured.datasetSchemas,
       hookSettings: hookScope.settings,
       hookLocale: hookScope.locale,
     },
@@ -412,6 +420,7 @@ export async function resumeSuspendedRuntime(
         ...(releasedRuntimeJobs?.length ? { releasedRuntimeJobs } : {}),
       }),
       outputSchemas: captured.outputSchemas,
+      datasetSchemas: captured.datasetSchemas,
       hookSettings: hookScope.settings,
       hookLocale: hookScope.locale,
     },

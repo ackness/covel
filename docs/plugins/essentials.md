@@ -217,7 +217,7 @@ io:
 | 函数、RPC             | `ctx.store.getPluginData(namespace, key)` / `listPluginData(namespace)` | `{ key, value }` 这样的行；没有时是 `null`  |
 | agent 的提示词        | 在 `io.selfData` 里列出数据空间                                         | 这个空间的内容被放进提示词                  |
 
-写入有两种方式：函数里调用 `ctx.pluginData.set(namespace, key, value)`，或者由工具提交一条“我想写这个”的请求（proposal）。两者都在回合结束时一起保存。runtime 失败时，它的写入一条都不会留下。
+写入有两种方式：函数里调用 `ctx.pluginData.set(namespace, key, value)`，或者由工具提交一条“我想写这个”的请求（proposal）。两者都在回合结束时一起保存。runtime 失败时，它的写入一条都不会留下。新值要从旧值算出来（比如金币减 3）时，用 `ctx.pluginData.update` 交一串操作，见[改数据](./local-code.md#改数据)。
 
 要记住的限制：
 

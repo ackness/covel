@@ -369,7 +369,7 @@ export default async function handler(ctx) {
 | `ctx.inputs.<名字>.value`                                                     | 你声明的输入                                                                                                                                                               |
 | `ctx.playerMessage`                                                           | 玩家这一回合的输入                                                                                                                                                         |
 | `ctx.manualPayload`                                                           | 手动触发时界面传来的数据                                                                                                                                                   |
-| `ctx.pluginData.get/list/set`                                                 | 读写自己的数据                                                                                                                                                             |
+| `ctx.pluginData.get/list/set/update`                                          | 读写自己的数据，见[改数据](#改数据)                                                                                                                                        |
 | `ctx.world`                                                                   | 角色、角色的字段定义、资料库。只读                                                                                                                                         |
 | `ctx.userSettings`                                                            | 玩家的设置项                                                                                                                                                               |
 | `ctx.random`                                                                  | 随机数。掷骰只用它                                                                                                                                                         |
@@ -421,6 +421,27 @@ await ctx.pluginData.set("progress", "cursor", after ?? null);
 - `hasMore` 为 `false` 表示已经读到末尾。
 - 消息按保存的先后返回。后台执行的消息可能比它前面的消息时间更早，但它保存得晚，所以仍然排在你存下的位置之后，不会漏掉。
 - 它只返回已保存的消息，不包含正在运行的这一回合。
+
+## 改数据
+
+`ctx.pluginData.set(namespace, key, value)` 写入整个值。值是从已有的值算出来的（金币减 3、往列表里加一项）时，改用 `ctx.pluginData.update` 交一串操作：
+
+```js
+try {
+  await ctx.pluginData.update("wallet", "gold", [
+    { op: "inc", by: -3, min: 0 },
+  ]);
+} catch (error) {
+  // The ops fail against the current value: here, not enough gold.
+  return { outcome: "failed", error: "not enough gold" };
+}
+const gold = await ctx.pluginData.get("wallet", "gold"); // the value after the ops
+```
+
+- 操作在提交时作用在最新存的值上。两次运行同时各扣 3，两次都会扣到，不会一次覆盖另一次。
+- 调用时先拿当前看到的值试一遍。失败（比如结果小于 `min`）就直接抛错，什么都不写，你可以当场处理。
+- 它不返回新值。想要新值，再 `get` 一次。
+- 可用的操作有 `set`、`merge`、`inc`、`append`、`insert`、`remove`、`upsertItem`、`delete`。提交时的规则见[事务 · 操作式写入](../reference/transactions.md#操作式写入plugindataupdate)。
 
 ## 向玩家要输入：表单
 

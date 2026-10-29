@@ -353,7 +353,14 @@ describe("Plugin Routes", () => {
       expect(body.framework.proposals.pluginDataTypes).toEqual([
         "plugin.data",
         "plugin.data.batch",
+        "plugin.data.update",
       ]);
+      expect(body.framework.pluginData.writePaths).toEqual(
+        expect.arrayContaining([
+          "function-ctx.pluginData.update",
+          "local-tool:withPendingProposals(plugin.data.update)",
+        ]),
+      );
     });
   });
 

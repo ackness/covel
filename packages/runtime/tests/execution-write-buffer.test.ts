@@ -12,6 +12,7 @@ import type { Proposal, CharacterUpsertPayload } from "@covel/shared";
 import {
   createFunctionStoreView,
   createPluginDataWriter,
+  makeRevocableCapability,
 } from "../src/function-runtime/plugin-handler-helpers.js";
 import { createExecutionWriteBuffer } from "../src/function-runtime/execution-write-buffer.js";
 import { createWorldModelView } from "../src/function-runtime/world-model-view.js";
@@ -121,7 +122,12 @@ describe("buffered writes as a handler reads them", () => {
           description: "",
         });
       }
-      const world = await createWorldModelView(store, CTX.sessionId, [], buffer);
+      const world = await createWorldModelView(
+        store,
+        CTX.sessionId,
+        [],
+        buffer,
+      );
       const before = world.characters[0]!;
       expect(await store.listCharacters(CTX.sessionId)).toEqual([initial]);
       const result = await processRuntimeResult(
@@ -301,6 +307,161 @@ describe("createPluginDataWriter with a write buffer", () => {
     await writer.set("generated", "img-2", null);
     expect(await writer.get("generated", "img-2")).toBeNull();
     expect(await writer.list("generated")).toEqual([]);
+  });
+});
+
+describe("createPluginDataWriter.update", () => {
+  const seed = async (
+    store: ReturnType<typeof createMemoryStore>,
+    key: string,
+    value: unknown,
+  ) => {
+    const now = new Date().toISOString();
+    await store.setPluginData({
+      id: `row-${key}`,
+      sessionId: CTX.sessionId,
+      pluginId: CTX.pluginId,
+      namespace: "wallet",
+      key,
+      value,
+      createdAt: now,
+      updatedAt: now,
+    });
+  };
+  const storedValue = async (
+    store: ReturnType<typeof createMemoryStore>,
+    key: string,
+  ) =>
+    (await store.getPluginData(CTX.sessionId, CTX.pluginId, "wallet", key))
+      ?.value;
+
+  it("buffers one plugin.data.update and every read projects it over the stored row", async () => {
+    const store = createMemoryStore();
+    await seed(store, "gold", { coins: 10, log: ["start"] });
+    const buffer = createExecutionWriteBuffer();
+    const writer = createPluginDataWriter(store, CTX, buffer);
+    const view = createFunctionStoreView(store, CTX, buffer);
+
+    await writer.update("wallet", "gold", [
+      { op: "inc", path: "/coins", by: -3, min: 0 },
+      { op: "append", path: "/log", value: "spent" },
+    ]);
+    expect(buffer).toEqual([
+      expect.objectContaining({
+        type: "plugin.data.update",
+        source: { pluginId: CTX.pluginId, runtimeId: CTX.runtimeId },
+        payload: {
+          namespace: "wallet",
+          key: "gold",
+          ops: [
+            { op: "inc", path: "/coins", by: -3, min: 0 },
+            { op: "append", path: "/log", value: "spent" },
+          ],
+        },
+      }),
+    ]);
+    const projected = { coins: 7, log: ["start", "spent"] };
+    expect(await storedValue(store, "gold")).toEqual({
+      coins: 10,
+      log: ["start"],
+    });
+    expect(await writer.get("wallet", "gold")).toEqual(projected);
+    expect(await writer.list("wallet")).toMatchObject([
+      { key: "gold", value: projected },
+    ]);
+    expect(await view.getPluginData("wallet", "gold")).toMatchObject({
+      id: "row-gold",
+      value: projected,
+    });
+    expect(await view.listPluginData("wallet")).toMatchObject([
+      { id: "row-gold", key: "gold", value: projected },
+    ]);
+
+    // A second update reads the first one's projection.
+    await writer.update("wallet", "gold", [
+      { op: "inc", path: "/coins", by: -7, min: 0 },
+    ]);
+    expect(await writer.get("wallet", "gold")).toMatchObject({ coins: 0 });
+
+    // An update ending absent reads as deleted.
+    await writer.update("wallet", "gold", [{ op: "delete" }]);
+    expect(await writer.get("wallet", "gold")).toBeNull();
+    expect(await view.getPluginData("wallet", "gold")).toBeNull();
+    expect(await writer.list("wallet")).toEqual([]);
+  });
+
+  it("throws on ops that fail against the current view and buffers nothing", async () => {
+    const store = createMemoryStore();
+    await seed(store, "gold", 2);
+    const buffer = createExecutionWriteBuffer();
+    const writer = createPluginDataWriter(store, CTX, buffer);
+    await expect(
+      writer.update("wallet", "gold", [{ op: "inc", by: -3, min: 0 }]),
+    ).rejects.toThrow(
+      /^pluginData\.update: inc result is outside the allowed range$/,
+    );
+    expect(buffer).toEqual([]);
+  });
+
+  it("throws a TypeError for invalid ops", async () => {
+    const store = createMemoryStore();
+    const buffer = createExecutionWriteBuffer();
+    const writer = createPluginDataWriter(store, CTX, buffer);
+    for (const ops of [[], [{ op: "swap" }], "inc", [{ op: "inc", by: NaN }]])
+      await expect(
+        writer.update("wallet", "gold", ops as never),
+      ).rejects.toThrow(
+        expect.objectContaining({
+          name: "TypeError",
+          message: expect.stringMatching(/^pluginData\.update: invalid ops \(/),
+        }),
+      );
+    expect(buffer).toEqual([]);
+  });
+
+  it("throws for a reserved namespace and an oversized result", async () => {
+    const store = createMemoryStore();
+    const buffer = createExecutionWriteBuffer();
+    const writer = createPluginDataWriter(store, CTX, buffer);
+    await expect(
+      writer.update("_logs", "k", [{ op: "set", value: 1 }]),
+    ).rejects.toThrow(/_logs/);
+    await seed(store, "big", ["x".repeat(200 * 1024)]);
+    await expect(
+      writer.update("wallet", "big", [
+        { op: "append", value: "y".repeat(60 * 1024) },
+      ]),
+    ).rejects.toThrow(/byte limit/);
+    expect(buffer).toEqual([]);
+    await writer.update("_hidden.state", "k", [{ op: "inc", by: 1 }]);
+    expect(buffer).toHaveLength(1);
+  });
+
+  it("writes directly without a buffer", async () => {
+    const store = createMemoryStore();
+    await seed(store, "gold", 4);
+    const writer = createPluginDataWriter(store, CTX);
+    await writer.update("wallet", "gold", [{ op: "inc", by: 1 }]);
+    expect(await storedValue(store, "gold")).toBe(5);
+    await writer.update("wallet", "gold", [{ op: "delete" }]);
+    expect(await storedValue(store, "gold")).toBeUndefined();
+    await writer.update("wallet", "fresh", [{ op: "append", value: 1 }]);
+    expect(await storedValue(store, "fresh")).toEqual([1]);
+  });
+
+  it("is revoked with the rest of the writer", async () => {
+    const store = createMemoryStore();
+    let revoked = false;
+    const writer = makeRevocableCapability(
+      createPluginDataWriter(store, CTX, createExecutionWriteBuffer()),
+      () => revoked,
+      "pluginData",
+    );
+    await writer.update("wallet", "gold", [{ op: "inc", by: 1 }]);
+    revoked = true;
+    expect(() =>
+      writer.update("wallet", "gold", [{ op: "inc", by: 1 }]),
+    ).toThrow(/capability "pluginData\.update" is revoked/);
   });
 });
 

@@ -21,7 +21,10 @@ import { createEventCommitHandlers } from "./commit-event.js";
 import type { CommitHandlerMap } from "./commit-handler-types.js";
 import { createMemoryLoreCommitHandlers } from "./commit-memory-lore.js";
 import { createNarrativeCommitHandlers } from "./commit-narrative.js";
-import { createPluginDataCommitHandlers } from "./commit-plugin-data.js";
+import {
+  createPluginDataCommitHandlers,
+  type PluginDataCommitOptions,
+} from "./commit-plugin-data.js";
 import { createUiCommitHandlers } from "./commit-ui.js";
 
 export type {
@@ -31,13 +34,13 @@ export type {
 
 export function createCommitHandlers(
   store: KernelStore,
-  options: CharacterCommitOptions = {},
+  options: CharacterCommitOptions & PluginDataCommitOptions = {},
 ): CommitHandlerMap {
   return {
     ...createNarrativeCommitHandlers(store),
     ...createUiCommitHandlers(store),
     ...createEventCommitHandlers(store),
-    ...createPluginDataCommitHandlers(store),
+    ...createPluginDataCommitHandlers(store, options),
     ...createCharacterCommitHandlers(store, options),
     ...createDimensionCommitHandlers(store),
     ...createMemoryLoreCommitHandlers(store),

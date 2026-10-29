@@ -24,6 +24,7 @@
 | Kernel | 内核 |  |
 | Local model relay | 本地模型中继 | 共享形态的服务端经玩家浏览器访问玩家电脑或局域网上的模型。见[安全边界](../internals/security.md#local-model-relay)。 |
 | Official web app | 官方网页版 |  |
+| Operation-based write | 操作式写入 | 交一串操作（`plugin.data.update`），不交算好的整个值。 |
 | Pack | 玩法包 |  |
 | PluginType | 插件类型 |  |
 | Preset | 预设 |  |
@@ -124,7 +125,7 @@
 
 数据集是插件用 `contributes.datasets` 声明的一类带类型的插件数据：名字就是插件数据的 namespace，每条记录要满足一份 JSON Schema，还可以写作为键的字段和允许的操作种类。
 
-它和 **Collection** 无关：Collection 是安装时用的清单（`covel-collection.yaml`）。数据集目前只做静态检查，提交时的强制校验尚未提供。
+它和 **Collection** 无关：Collection 是安装时用的清单（`covel-collection.yaml`）。提交时，插件写入自己数据集的每一条 proposal 都按声明的操作种类和 schema 校验。
 
 详见：[数据集](./plugins.md#数据集contributesdatasets)、[世界数据](./world-data.md)。
 
@@ -164,6 +165,12 @@
 
 详见：[存储](../internals/storage.md)、[存储模式说明](./api.md#存储模式说明)。
 
+## Operation-based write
+
+操作式写入是对一个插件数据键交一串操作（`inc`、`upsertItem` 等），而不是先读出值、算好、再整个写回。插件用 `ctx.pluginData.update` 或 `plugin.data.update` 提案提交；内核在提交事务里把这些操作应用到最新存的值上。所以两次同时的“金币 +1”都会生效。
+
+详见：[事务 · 操作式写入](./transactions.md#操作式写入plugindataupdate)。
+
 ## Pack
 
 一组起了名字的插件（`requested` 和 `recommended` 两个集合，加上标签），合起来构成一种玩法，例如 `traditional-story`、`dialogue-mode`。
@@ -197,7 +204,7 @@
 
 插件提出的一次写入请求。内核校验通过后才真正写入，插件从不直接写数据库。
 
-提案的类型只在一处定义：`ProposalPayloadMap`（`packages/shared/src/types/proposal.ts`）。目前有：`narrative.append`、`event.emit`、`interaction.request`、`ui.render`、`asset.generate`、`plugin.data`、`plugin.data.batch`、`plugin.data.delete`、`character.upsert`、`character.schema.set`、`dimension.initialize`、`dimension.update`、`lorebook.upsert`。
+提案的类型只在一处定义：`ProposalPayloadMap`（`packages/shared/src/types/proposal.ts`）。目前有：`narrative.append`、`event.emit`、`interaction.request`、`ui.render`、`asset.generate`、`plugin.data`、`plugin.data.batch`、`plugin.data.delete`、`plugin.data.update`、`character.upsert`、`character.schema.set`、`dimension.initialize`、`dimension.update`、`lorebook.upsert`。
 
 详见：[事务](./transactions.md)、[回合管线](../internals/flow.md)。
 

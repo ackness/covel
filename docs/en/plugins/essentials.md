@@ -217,7 +217,7 @@ Each plugin has its own area of data. It is read and written by "namespace + key
 | Function, RPC                   | `ctx.store.getPluginData(namespace, key)` / `listPluginData(namespace)` | A row such as `{ key, value }`. When there is none, `null`. |
 | An agent's prompt               | List the namespace in `io.selfData`                                     | The contents of that namespace are put into the prompt      |
 
-There are two ways to write: in a function, call `ctx.pluginData.set(namespace, key, value)`, or have a tool submit a request saying "I want to write this" (a proposal). Both are saved together at the end of the turn. When a runtime fails, none of its writes are left behind.
+There are two ways to write: in a function, call `ctx.pluginData.set(namespace, key, value)`, or have a tool submit a request saying "I want to write this" (a proposal). Both are saved together at the end of the turn. When a runtime fails, none of its writes are left behind. When the new value is computed from the old one (3 gold less, for example), submit a list of operations with `ctx.pluginData.update`; see [change data](./local-code.md#change-data).
 
 Limits to remember:
 

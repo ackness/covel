@@ -1,10 +1,15 @@
-/** Commit handlers for plugin-data KV writes and deletes. */
+/** Commit handlers for plugin-data KV writes, deletes and operation lists. */
 
 import {
+  applyDataOps,
   pluginCodeNamespaceWriteError,
   type CommitResult,
+  type DataOpKind,
+  type DataOpsCurrent,
+  type JsonValue,
   type ProposalFor,
 } from "@covel/shared";
+import { validateOutput } from "@covel/tools";
 import type { KernelStore } from "../session/session-kernel-store.js";
 import type { CommitHandlerMap } from "./commit-handler-types.js";
 import {
@@ -42,12 +47,125 @@ function oversizedValueFailure(
   return error ? commitError(`${proposalType}: ${error}`) : undefined;
 }
 
+/**
+ * The commit rules of one declared dataset (`contributes.datasets`). `schema`
+ * is the compiled record schema; it is absent when the host did not capture
+ * the document, and every write into the namespace is then refused.
+ */
+export interface DatasetPolicy {
+  readonly namespace: string;
+  readonly ops: readonly DataOpKind[];
+  readonly schema?: Readonly<Record<string, unknown>>;
+}
+
+/** The dataset policy of `(pluginId, namespace)`, or `undefined` when none is declared. */
+export type DatasetPolicyResolver = (
+  pluginId: string,
+  namespace: string,
+) => DatasetPolicy | undefined;
+
+/** Compiled dataset record schemas: plugin id → namespace → schema. */
+export type DatasetSchemas = Readonly<
+  Record<string, Readonly<Record<string, Readonly<Record<string, unknown>>>>>
+>;
+
+/**
+ * The dataset resolver of one execution: `RuntimeManifest.datasets` (the same
+ * on every runtime of a package) plus the schemas the plan captured. A
+ * declared dataset without a captured schema gets a policy without `schema`,
+ * which refuses every write. `undefined` when no runtime declares a dataset.
+ */
+export function datasetPolicyResolver(
+  runtimes: readonly {
+    readonly pluginId: string;
+    readonly datasets?: Readonly<
+      Record<
+        string,
+        { readonly namespace: string; readonly ops: readonly DataOpKind[] }
+      >
+    >;
+  }[],
+  schemas: DatasetSchemas = {},
+): DatasetPolicyResolver | undefined {
+  const byPlugin = new Map<string, Map<string, DatasetPolicy>>();
+  for (const runtime of runtimes) {
+    if (!runtime.datasets || byPlugin.has(runtime.pluginId)) continue;
+    const policies = new Map<string, DatasetPolicy>();
+    const pluginSchemas = Object.hasOwn(schemas, runtime.pluginId)
+      ? schemas[runtime.pluginId]
+      : undefined;
+    for (const decl of Object.values(runtime.datasets)) {
+      const schema =
+        pluginSchemas && Object.hasOwn(pluginSchemas, decl.namespace)
+          ? pluginSchemas[decl.namespace]
+          : undefined;
+      policies.set(decl.namespace, {
+        namespace: decl.namespace,
+        ops: decl.ops,
+        ...(schema ? { schema } : {}),
+      });
+    }
+    if (policies.size > 0) byPlugin.set(runtime.pluginId, policies);
+  }
+  if (byPlugin.size === 0) return undefined;
+  return (pluginId, namespace) => byPlugin.get(pluginId)?.get(namespace);
+}
+
+export interface PluginDataCommitOptions {
+  /** Enforces declared datasets; without it no namespace is checked. */
+  readonly datasetPolicy?: DatasetPolicyResolver;
+}
+
+const MAX_SCHEMA_ERRORS = 3;
+
+/**
+ * Dataset check of one plugin-data write: every operation kind must be
+ * allowed, and a present resulting value must match the record schema. A
+ * whole-value write counts as `set` and a delete as `delete`.
+ */
+function datasetFailure(
+  proposalType: string,
+  policy: DatasetPolicy | undefined,
+  opKinds: readonly DataOpKind[],
+  result?: { readonly value: unknown },
+): CommitResult | undefined {
+  if (!policy) return undefined;
+  const fail = (message: string) =>
+    commitError(`${proposalType}: ${message}`, "dataset-violation");
+  if (!policy.schema)
+    return fail(`dataset schema of ${policy.namespace} is unavailable`);
+  const refused = opKinds.find((kind) => !policy.ops.includes(kind));
+  if (refused !== undefined)
+    return fail(
+      `dataset ${policy.namespace}: operation kind ${refused} is not allowed`,
+    );
+  if (!result) return undefined;
+  const check = validateOutput(result.value, policy.schema);
+  if (check.valid) return undefined;
+  const errors = (check.errors ?? []).slice(0, MAX_SCHEMA_ERRORS).join("; ");
+  return fail(
+    `dataset ${policy.namespace}: record does not match its schema (${errors})`,
+  );
+}
+
 export function createPluginDataCommitHandlers(
   store: KernelStore,
+  options: PluginDataCommitOptions = {},
 ): Pick<
   CommitHandlerMap,
-  "plugin.data" | "plugin.data.batch" | "plugin.data.delete"
+  | "plugin.data"
+  | "plugin.data.batch"
+  | "plugin.data.delete"
+  | "plugin.data.update"
 > {
+  const policyOf = (
+    pluginId: string,
+    namespace: unknown,
+  ): DatasetPolicy | undefined =>
+    typeof namespace === "string" && options.datasetPolicy
+      ? options.datasetPolicy(pluginId, namespace)
+      : undefined;
+
   async function commitPluginData(
     proposal: ProposalFor<"plugin.data">,
   ): Promise<CommitResult> {
@@ -74,6 +192,12 @@ export function createPluginDataCommitHandlers(
         payload.namespace,
         payload.key,
         payload.value,
+      ),
+      datasetFailure(
+        "plugin.data",
+        policyOf(proposal.source.pluginId, payload.namespace),
+        ["set"],
+        { value: payload.value },
       ),
     );
     if (invalid) return invalid;
@@ -129,6 +253,12 @@ export function createPluginDataCommitHandlers(
           item.key,
           item.value,
         ),
+        datasetFailure(
+          "plugin.data.batch",
+          policyOf(proposal.source.pluginId, item.namespace),
+          ["set"],
+          { value: item.value },
+        ),
       );
       if (itemInvalid) return itemInvalid;
       records.push({
@@ -167,6 +297,11 @@ export function createPluginDataCommitHandlers(
         "plugin.data.delete: key must be a non-empty string",
       ),
       reservedNamespaceFailure("plugin.data.delete", payload.namespace),
+      datasetFailure(
+        "plugin.data.delete",
+        policyOf(proposal.source.pluginId, payload.namespace),
+        ["delete"],
+      ),
     );
     if (invalid) return invalid;
 
@@ -179,9 +314,104 @@ export function createPluginDataCommitHandlers(
     return { committed: true };
   }
 
+  /**
+   * Read-modify-write inside the commit transaction: the latest stored value
+   * goes through `applyDataOps`, the same function the in-execution overlay
+   * uses, and the result is checked and written back. Per-session commit
+   * serialization keeps the read and the write together.
+   */
+  async function commitPluginDataUpdate(
+    proposal: ProposalFor<"plugin.data.update">,
+  ): Promise<CommitResult> {
+    const type = "plugin.data.update";
+    const payload = proposal.payload;
+    const { getPluginData, setPluginData, deletePluginData } = store;
+    if (!getPluginData || !setPluginData || !deletePluginData) {
+      return commitError(`${type}: store does not support plugin data writes`);
+    }
+    const pluginId = proposal.source.pluginId;
+    const policy = policyOf(pluginId, payload.namespace);
+    const invalid = firstFailure(
+      requireNonEmptyString(
+        payload.namespace,
+        `${type}: namespace must be a non-empty string`,
+      ),
+      requireNonEmptyString(
+        payload.key,
+        `${type}: key must be a non-empty string`,
+      ),
+      requireNonEmptyArray(
+        payload.ops,
+        `${type}: ops must be a non-empty array`,
+      ),
+      reservedNamespaceFailure(type, payload.namespace),
+    );
+    if (invalid) return invalid;
+    const kinds = datasetFailure(
+      type,
+      policy,
+      payload.ops.map((op) => op.op),
+    );
+    if (kinds) return kinds;
+
+    const row = await getPluginData(
+      proposal.sessionId,
+      pluginId,
+      payload.namespace,
+      payload.key,
+    );
+    const current: DataOpsCurrent = row
+      ? { exists: true, value: row.value as JsonValue }
+      : { exists: false };
+    const result = applyDataOps(current, payload.ops);
+    if (!result.ok) {
+      const { error } = result;
+      const at = error.path !== undefined ? ` at ${error.path}` : "";
+      return commitError(
+        `${type}: ${error.message} (op ${error.opIndex}${at}, ${error.code})`,
+        "data-op-rejected",
+      );
+    }
+    if (!result.exists) {
+      if (row) {
+        await deletePluginData(
+          proposal.sessionId,
+          pluginId,
+          payload.namespace,
+          payload.key,
+        );
+      }
+      return { committed: true };
+    }
+    const resultInvalid = firstFailure(
+      oversizedValueFailure(
+        type,
+        pluginId,
+        payload.namespace,
+        payload.key,
+        result.value,
+      ),
+      datasetFailure(type, policy, [], { value: result.value }),
+    );
+    if (resultInvalid) return resultInvalid;
+
+    await setPluginData({
+      id: crypto.randomUUID(),
+      sessionId: proposal.sessionId,
+      pluginId,
+      namespace: payload.namespace,
+      key: payload.key,
+      value: result.value,
+      createdAt: proposal.timestamp,
+      updatedAt: proposal.timestamp,
+    });
+    return { committed: true };
+  }
+
   return {
     "plugin.data": commitPluginData,
     "plugin.data.batch": commitPluginDataBatch,
     "plugin.data.delete": commitPluginDataDelete,
+    "plugin.data.update": commitPluginDataUpdate,
   };
 }

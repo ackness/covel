@@ -102,6 +102,11 @@ export interface PluginProposalPayloads {
     readonly items: readonly PluginProposalPayloads["plugin.data"][];
   };
   "plugin.data.delete": { readonly namespace: string; readonly key: string };
+  "plugin.data.update": {
+    readonly namespace: string;
+    readonly key: string;
+    readonly ops: readonly import("./data-ops.js").DataOp[];
+  };
   "character.upsert": {
     readonly id: string;
     readonly name: string;

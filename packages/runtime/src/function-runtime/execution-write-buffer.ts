@@ -20,7 +20,7 @@
  */
 
 import type { PluginDataRecord } from "@covel/store";
-import type { Proposal } from "@covel/shared";
+import type { DataOp, Proposal } from "@covel/shared";
 import { overlayPluginDataRows } from "@covel/tools";
 import type { HandlerHelperContext } from "./plugin-handler-helpers.js";
 
@@ -72,7 +72,33 @@ export function bufferPluginDataDelete(
   });
 }
 
-/** Merge committed plugin-data rows with buffered writes (buffer wins). */
+/**
+ * Buffer operations against one plugin-data key. The commit applies them to
+ * the latest stored value; the caller has already checked them against the
+ * current view.
+ */
+export function bufferPluginDataUpdate(
+  buffer: ExecutionWriteBuffer,
+  ctx: HandlerHelperContext,
+  namespace: string,
+  key: string,
+  ops: readonly DataOp[],
+): void {
+  buffer.push({
+    id: crypto.randomUUID(),
+    type: "plugin.data.update",
+    source: proposalSource(ctx),
+    turnId: ctx.turnId,
+    sessionId: ctx.sessionId,
+    payload: { namespace, key, ops },
+    timestamp: new Date().toISOString(),
+  });
+}
+
+/**
+ * Merge committed plugin-data rows with buffered writes (buffer wins). A
+ * buffered `plugin.data.update` is applied on top of the stored row.
+ */
 export function mergePluginDataRows(
   stored: readonly PluginDataRecord[],
   buffer: ExecutionWriteBuffer,
@@ -91,7 +117,12 @@ export function mergePluginDataRows(
   for (const row of stored)
     byKey.set(compositeKey(row.pluginId, row.namespace, row.key), row);
   for (const owner of pluginIds) {
-    const overlay = overlayPluginDataRows(buffer, owner, namespace);
+    const overlay = overlayPluginDataRows(
+      buffer,
+      owner,
+      namespace,
+      stored.filter((row) => row.pluginId === owner),
+    );
     for (const entry of overlay.values()) {
       const ck = compositeKey(owner, entry.namespace, entry.key);
       if (entry.deleted) {
@@ -113,4 +144,3 @@ export function mergePluginDataRows(
   }
   return structuredClone([...byKey.values()]);
 }
-

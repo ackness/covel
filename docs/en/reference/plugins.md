@@ -893,7 +893,7 @@ After a namespace declares `search`, its records enter the framework's memory re
 - A plugin runtime reads it through `ctx.pluginData.list("_hidden.facts")`.
 - Extension points, model tools, `io.selfData`, and the public API cannot read it.
 - Revealing it should happen through this turn's runtime output. See [World Data · Hidden data](./world-data.md#hidden-data-visibility-hidden) for details.
-- The plugin's own code (`ctx.pluginData.set` in a function runtime, and `plugin.data` proposals produced by the plugin's local tools) can also write to its own `_hidden.<namespace>`. This is used to append hidden content during the story. A write always belongs to the plugin that issued the proposal, so it cannot reach another plugin's hidden data.
+- The plugin's own code (`ctx.pluginData.set` / `ctx.pluginData.update` in a function runtime, and `plugin.data` / `plugin.data.update` proposals produced by the plugin's local tools) can also write to its own `_hidden.<namespace>`. This is used to append hidden content during the story. A write always belongs to the plugin that issued the proposal, so it cannot reach another plugin's hidden data.
 - The REST interface and the built-in `plugin-data-set` and `plugin-data-set-batch` tools cannot write to any namespace that starts with `_`.
 
 ## Prompt and memory extensions
@@ -1108,13 +1108,22 @@ contributes:
 - **Relation to `contributes.data`.** When the same name appears in both `data` and `datasets`, the two `schema` paths must point at the same file: a namespace has one schema. `data` still governs world-pack import; the dataset governs the records in the namespace.
 - A namespace without a dataset declaration behaves as before.
 
-Only static checks exist today. Loading, `pnpm validate:plugin` and installation read and parse every dataset schema file (a missing file, invalid JSON, or a path outside the package root is an error) and check `key`: when the schema has a top-level `properties`, `key` must be one of them and be listed in the top-level `required`. A schema without top-level `properties` (only `$ref`, `allOf` and the like) skips that check. Validating writes against `schema` and `ops` at commit is not available yet, so a declaration does not restrict writes today.
+Loading, `pnpm validate:plugin` and installation read and parse every dataset schema file (a missing file, invalid JSON, or a path outside the package root is an error) and check `key`: when the schema has a top-level `properties`, `key` must be one of them and be listed in the top-level `required`. A schema without top-level `properties` (only `$ref`, `allOf` and the like) skips that check.
+
+At commit, every proposal a plugin writes into a dataset namespace it declares is checked against the declaration:
+
+- **Operation kinds.** Each operation kind of a `plugin.data.update` must be in `ops`. A whole-value write (`ctx.pluginData.set`, `plugin.data`, each item of `plugin.data.batch`) counts as `set`, and a delete (`plugin.data.delete`) counts as `delete`. So a dataset whose `ops` lack `set` cannot be overwritten with `set`.
+- **Record schema.** The written value (for `plugin.data.update`, the result after the operations) must satisfy `schema`.
+- A violation rejects the proposal with `code: "dataset-violation"`, under the commit-unit rules. When the host did not capture the schema document, every write is refused instead of let through.
+- `key` is not checked at commit.
+
+See [Transactions · Operation-based writes](./transactions.md#operation-based-writes-plugindataupdate).
 
 ### Reserved data namespaces
 
 Every namespace that starts with `_` is reserved for the kernel.
 
-- A plugin cannot write to or delete them through the generic plugin-data API or through a proposal. This includes names starting with `_` that it has never seen, and the old `_memory`.
+- A plugin cannot write to or delete them through the generic plugin-data API or through a proposal (`set`, `update` and `delete` alike). This includes names starting with `_` that it has never seen, and the old `_memory`.
 - `_hidden.<namespace>` holds world data declared `visibility: hidden`, along with hidden content a plugin appends during the story. Only the runtimes of the owning plugin can read it, and only the owning plugin's own code can write to it.
 - Plugin logs are produced through the restricted logger API. Business data uses ordinary names such as `blocks` and `definitions`.
 - `__kernel:<subsystem>` is another owner partition. A plugin's bound read interface cannot reach it.
