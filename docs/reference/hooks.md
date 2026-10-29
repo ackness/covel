@@ -227,6 +227,7 @@ agent runtime 的每次模型调用之前触发，包括工具结果之后的调
 负载：`{ messages, model, tools, stream?, promptSegments? }`。`promptSegments` 和 `PostContextAssembly` 里的是同一份列表。从挂起中恢复的运行不会重新组装上下文，所以它的调用里没有这个字段。
 
 - `replace.messages`、`replace.model`、`replace.tools` 只改这一次调用，runtime 自己的对话记录不变。
+- 输出修复请求在 Hook 处理后仍会关闭工具；`replace.tools` 不能为修复步骤重新启用工具。
 - `replace.stream: false` 让这次调用不走流式。
 - `abort` 等于“什么都不变”。
 

@@ -227,6 +227,7 @@ Fires before each model call of an agent runtime. This includes calls made after
 Payload: `{ messages, model, tools, stream?, promptSegments? }`. `promptSegments` is the same list as in `PostContextAssembly`. A run resumed from a suspended state does not assemble its context again, so its calls do not have this field.
 
 - `replace.messages`, `replace.model`, and `replace.tools` change only this one call. The runtime's own conversation record is not changed.
+- Output repair requests keep tools off after hook processing; `replace.tools` cannot re-enable tools for repair steps.
 - `replace.stream: false` makes this call not stream.
 - `abort` is the same as "nothing changes".
 

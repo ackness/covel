@@ -239,6 +239,8 @@ async function runAgentToolLoopWithinBudget(
   let finalContent: string | null = initialState?.finalContent ?? null;
   // Keep provider continuation attached to the accepted draft that supplied it.
   let finalResponse: LLMResponse | undefined;
+  // Tool-call drafts already have a canonical assistant turn in messages.
+  let finalResponseMessageIndex: number | undefined;
   let lastTarget: LLMTargetIdentity | undefined;
   let finalToolOutput: Record<string, unknown> | null = null;
   const collectedToolCalls: ToolCallRecord[] = [
@@ -364,6 +366,7 @@ async function runAgentToolLoopWithinBudget(
     readonly tools: readonly LLMToolDefinition[] | undefined;
     readonly toolChoice?: StepToolChoice;
     readonly requireToolCall: boolean;
+    readonly disableTools?: boolean;
   }) => {
     // Model resolution chain for story runtimes:
     // API override > manifest.model (a role the player binds) > undefined.
@@ -376,12 +379,15 @@ async function runAgentToolLoopWithinBudget(
     // ── PreLLMCall hook ──────────────────────────────────────────
     // Lets plugins non-destructively rewrite the request sent on THIS call
     // (messages / model / tools) without mutating the canonical transcript.
-    const hookedRequest = await runPreLLMCallHook(hookOpts, {
+    let hookedRequest = await runPreLLMCallHook(hookOpts, {
       messages,
       model: effectiveModel,
       tools: step.tools,
       ...(promptSegments ? { promptSegments } : {}),
     });
+    // Output repair must keep tools off even when a hook supplies its own.
+    if (step.disableTools)
+      hookedRequest = { ...hookedRequest, tools: undefined };
     // Pictures go only to a model known to read images. The hook may have
     // chosen another model, so the decision is made for this call.
     const sendPictures =
@@ -499,8 +505,10 @@ async function runAgentToolLoopWithinBudget(
       const response = await reviewResponse(rawResponse, reviewMessages);
       budget.assertLive();
       const text = response?.content?.trim() ? response.content : undefined;
-      if (text) finalResponse = response;
-      else await delta.reset();
+      if (text) {
+        finalResponse = response;
+        finalResponseMessageIndex = undefined;
+      } else await delta.reset();
       return text;
     } catch (error) {
       // Only an abort or the deadline ends the loop here; any other failure
@@ -642,13 +650,16 @@ async function runAgentToolLoopWithinBudget(
       stepEvents.note({ kind: "review-rejected" });
       finalContent = null;
       finalResponse = undefined;
+      finalResponseMessageIndex = undefined;
       // The rejected draft may already be on screen.
       await delta.reset();
       continue;
     }
 
-    if (response.toolCalls.length > 0 && response.content)
+    if (response.toolCalls.length > 0 && response.content) {
       finalResponse = response;
+      finalResponseMessageIndex = messages.length;
+    }
 
     if (response.toolCalls.length > 0) {
       loop.enter("running-tools");
@@ -1034,6 +1045,7 @@ async function runAgentToolLoopWithinBudget(
           // bounded steps to write the narrative before accepting completion.
           finalContent = null;
           finalResponse = undefined;
+          finalResponseMessageIndex = undefined;
           activeToolDefs = undefined;
           messages.push(writeStoryWithoutTools(input.locale));
           stepEvents.note({ kind: "story-without-tools" });
@@ -1054,6 +1066,7 @@ async function runAgentToolLoopWithinBudget(
           toolCallRequested = true;
           finalContent = null;
           finalResponse = undefined;
+          finalResponseMessageIndex = undefined;
           messages.push({
             role: "system",
             content: runtimeDoneCorrection(input.locale),
@@ -1105,6 +1118,7 @@ async function runAgentToolLoopWithinBudget(
           // the exact returned object before it reaches typed consumers.
           finalContent = null;
           finalResponse = undefined;
+          finalResponseMessageIndex = undefined;
           finalToolOutput = completingToolOutputInResponse;
         } else if (!finalContent) {
           finalContent = JSON.stringify({
@@ -1149,6 +1163,7 @@ async function runAgentToolLoopWithinBudget(
         );
         finalContent = null;
         finalResponse = undefined;
+        finalResponseMessageIndex = undefined;
         activeToolDefs = undefined;
         messages.push(answerWithoutTools(profile.answerPrompt, input.locale));
         stepEvents.note({ kind: "story-without-tools" });
@@ -1207,6 +1222,7 @@ async function runAgentToolLoopWithinBudget(
 
     // Final response (no more tool calls)
     finalResponse = response;
+    finalResponseMessageIndex = undefined;
     finalContent =
       steeredProse.length > 0
         ? [...steeredProse, response.content].filter(Boolean).join("\n\n")
@@ -1303,8 +1319,9 @@ async function runAgentToolLoopWithinBudget(
         break;
       if (loop.phase !== "finalizing") loop.enter("finalizing");
       await delta.reset();
-      if (finalContent) {
+      if (finalContent && finalResponseMessageIndex === undefined) {
         const { reasoningContent, providerContinuation } = finalResponse ?? {};
+        finalResponseMessageIndex = messages.length;
         messages.push({
           role: "assistant",
           content: finalContent,
@@ -1333,6 +1350,7 @@ async function runAgentToolLoopWithinBudget(
           tools: undefined,
           toolChoice: "auto",
           requireToolCall: false,
+          disableTools: true,
         });
         lastTarget = rawResponse.target;
         const response = await reviewResponse(rawResponse, reviewMessages);
@@ -1341,6 +1359,7 @@ async function runAgentToolLoopWithinBudget(
           // This is a complete replacement, including any earlier steered prose.
           finalContent = response.content;
           finalResponse = response;
+          finalResponseMessageIndex = undefined;
           loop.stop = { ...loop.stop, repaired: true };
         } else {
           stepEvents.note({ kind: "review-rejected" });

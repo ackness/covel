@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { LoadedRuntime } from "@covel/shared/plugin-runtime";
 import type { LLMAdapter, LLMResponse } from "@covel/shared";
+import { getProtocolDefinition } from "@covel/ai-provider";
 import { tool } from "@covel/tools";
 import { z } from "zod";
 import { createMemoryStore } from "@covel/store/memory";
@@ -16,6 +17,7 @@ import type { PostLLMResponsePayload } from "../src/hooks/wire-helpers.js";
 import { executeTurn } from "../src/execution.js";
 import { commitExecution } from "../src/commit/commit-execution.js";
 import { makeEmitterSpy } from "./_helpers/emitter-spy.js";
+import { createGatewayAdapter } from "../src/llm/gateway-llm-adapter.js";
 import {
   input,
   makeExecutor,
@@ -59,7 +61,10 @@ async function run(opts: LoopRunOptions) {
   return { loop, args, ...settleAgentLoop(args) };
 }
 
-afterEach(() => vi.restoreAllMocks());
+afterEach(() => {
+  vi.restoreAllMocks();
+  vi.unstubAllGlobals();
+});
 
 describe("output repair", () => {
   it("repairs schema prose with tools off, required fields and additive step events", async () => {
@@ -211,6 +216,101 @@ describe("output repair", () => {
     expect(result.status).toBe("success");
     expect(llm.requests[1]?.tools).toBeUndefined();
     expect(llm.requests[1]?.defaults?.toolChoice).toBeUndefined();
+  });
+
+  it("keeps repair tools off after PreLLMCall tries to restore them", async () => {
+    const hookPipeline = createHookPipeline();
+    const hook = vi.fn(async () => ({
+      action: "continue" as const,
+      replace: {
+        tools: [{ name: "restored", description: "hook tool", parameters: {} }],
+      },
+    }));
+    hookPipeline.register({
+      id: "restore-tools",
+      event: "PreLLMCall",
+      handler: hook,
+    });
+    const llm = queuedLLM([prose("invalid draft"), prose(valid)]);
+    const { result } = await run({ llm, hookPipeline });
+    expect(result.status).toBe("success");
+    expect(hook).toHaveBeenCalledTimes(2);
+    expect(
+      llm.requests[0]?.tools?.map((definition) => definition.name),
+    ).toEqual(["restored"]);
+    expect(llm.requests[1]?.tools).toBeUndefined();
+  });
+
+  it("serializes a native tool-call draft once when tool-finished needs repair", async () => {
+    const native = [
+      { text: "invalid draft" },
+      {
+        functionCall: { id: "native-mark", name: "mark", args: { note: "a" } },
+        thoughtSignature: "synthetic-signature",
+      },
+    ];
+    const parts = [native, [{ text: valid }]];
+    const fetchMock = vi.fn<typeof fetch>(
+      async () =>
+        new Response(
+          JSON.stringify({
+            candidates: [
+              {
+                content: { role: "model", parts: parts.shift() },
+                finishReason: "STOP",
+              },
+            ],
+            usageMetadata: { promptTokenCount: 1, candidatesTokenCount: 1 },
+          }),
+          { headers: { "content-type": "application/json" } },
+        ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const adapter = getProtocolDefinition(
+      "google-generative-ai-v1",
+    )!.createAdapter();
+    const llm = createGatewayAdapter({
+      resolveSlot: () => null,
+      generateText: (request) =>
+        adapter.generateText(
+          {
+            baseUrl: "https://generativelanguage.googleapis.com/v1beta",
+            apiKey: "synthetic-key",
+          },
+          { ...request, model: "gemini-fixture" },
+        ),
+    });
+    const hookPipeline = createHookPipeline();
+    hookPipeline.register({
+      id: "finish-after-tool",
+      event: "PostToolUse",
+      handler: async () => ({
+        action: "continue",
+        replace: { terminate: true },
+      }),
+    });
+    const { result } = await run({ llm, hookPipeline });
+    expect(result.status).toBe("success");
+    expect(result.output).toEqual({ answer: "fixed" });
+    expect(result.stop).toEqual({ reason: "tool-finished", repaired: true });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    const repairBody = JSON.parse(String(fetchMock.mock.calls[1]?.[1]?.body));
+    expect(
+      repairBody.contents.filter(
+        (turn: { role: string }) => turn.role === "model",
+      ),
+    ).toEqual([{ role: "model", parts: native }]);
+    expect(repairBody.contents).toContainEqual({
+      role: "user",
+      parts: [
+        expect.objectContaining({
+          functionResponse: expect.objectContaining({
+            id: "native-mark",
+            name: "mark",
+          }),
+        }),
+      ],
+    });
   });
 
   it("keeps schema mismatch invalid after exactly one repair", async () => {
@@ -522,7 +622,7 @@ describe("output gate agreement", () => {
     const { args } = await run({ llm: queuedLLM([prose(valid)]) });
     const toolOutput = {
       narrativeOutput: "story",
-      interactions: [{ interactionId: "a" }],
+      interaction: { interactionId: "a" },
       pluginData: [{ value: "data" }],
     };
     const toolLoop = {
@@ -534,7 +634,19 @@ describe("output gate agreement", () => {
       finalToolOutput: null,
     };
     const before = structuredClone(toolLoop);
-    checkAgentOutput({ ...args, outputSchema: undefined, toolLoop });
+    // The required narrative field proves validation selected the tool result,
+    // rather than the empty fallback envelope.
+    expect(
+      checkAgentOutput({
+        ...args,
+        outputSchema: {
+          type: "object",
+          required: ["narrativeOutput"],
+          properties: { narrativeOutput: { const: "story" } },
+        },
+        toolLoop,
+      }),
+    ).toEqual({ ok: true });
     expect(toolLoop).toEqual(before);
     const modelLoop = {
       ...args.toolLoop,

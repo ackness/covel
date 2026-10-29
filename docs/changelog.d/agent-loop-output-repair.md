@@ -9,4 +9,5 @@
 
 ### Fixed
 
-- **Output repair preserves thinking-provider continuation data.** Replayed drafts retain the accepted response's reasoning and provider continuation, including finalizer drafts and repeated repair attempts.
+- **Output repair preserves thinking-provider continuation data.** Replayed drafts retain the accepted response's reasoning and provider continuation, including finalizer drafts and repeated repair attempts. Tool-call drafts reuse their canonical transcript turn with its tool calls, so native continuations remain valid after a hook ends the loop.
+- **Output repair keeps tools off after request hooks.** `PreLLMCall` cannot restore tools during repair.
