@@ -459,3 +459,16 @@ it("F-090 announces a collection ZIP that installs no packages", async () => {
     i18n.t("settings.packages.nothingInstalled"),
   );
 });
+
+it("renders the SillyTavern content importer", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () => Response.json({ items: [] })),
+  );
+  render(<PackagesPane />);
+  expect(
+    await screen.findByText(i18n.t("settings.stImport.title")),
+  ).toBeTruthy();
+  cleanup();
+  vi.unstubAllGlobals();
+});

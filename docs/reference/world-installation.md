@@ -41,18 +41,23 @@
 
 **预览时做的检查**：在一个临时目录里验证世界的清单、外部的维度文件和世界数据的引用。这一步不使用本机的世界 override，所以检查的是包本身。
 
+### 从 SillyTavern 内容导入
+
+在 **设置 → 安装与管理** 的 **导入 SillyTavern 内容** 中选择角色卡或世界书，预览报告后导入为一个世界。这里只做数据转换，不执行脚本；世界立即可用。转换、略过内容和示例见[导入指南](../worlds/import-sillytavern.md)。不支持导入浏览器私有 BrowserVault。
+
 ## API
 
 这些接口受“是否允许安装”的开关控制。写入世界还要遵守全局的世界写入权限。
 
-| 方法   | 路径                                       | 行为                                                                               |
-| ------ | ------------------------------------------ | ---------------------------------------------------------------------------------- |
-| POST   | `/api/install/world/github/preview`        | `{url}` → `{items}`                                                                |
-| POST   | `/api/install/world/github`                | `{token, acceptRisk:true}` → `201 {ok:true,kind:"world",id,restartRequired:false}` |
-| GET    | `/api/install/worlds`                      | `{items:[{id,version,source,pendingUpdate}]}`                                      |
-| POST   | `/api/install/world/github/update/preview` | `{id,url?}` → current、pinned 或 available + preview                               |
-| POST   | `/api/install/world/github/update`         | `{token,acceptRisk:true}` → `201 {ok:true,kind:"world",id,restartRequired:true}`   |
-| DELETE | `/api/install/world/github/update/:id`     | 取消暂存更新，返回 `{ok:true}`                                                     |
+| 方法   | 路径                                       | 行为                                                                                                                                                             |
+| ------ | ------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| POST   | `/api/install/st-import`                   | multipart `file`（可重复）、`locale?`、`name?`、`preview?` → `{ok,preview,kind:"world",id,restartRequired:false,report}`；[契约](./api.md#插件与世界安装install) |
+| POST   | `/api/install/world/github/preview`        | `{url}` → `{items}`                                                                                                                                              |
+| POST   | `/api/install/world/github`                | `{token, acceptRisk:true}` → `201 {ok:true,kind:"world",id,restartRequired:false}`                                                                               |
+| GET    | `/api/install/worlds`                      | `{items:[{id,version,source,pendingUpdate}]}`                                                                                                                    |
+| POST   | `/api/install/world/github/update/preview` | `{id,url?}` → current、pinned 或 available + preview                                                                                                             |
+| POST   | `/api/install/world/github/update`         | `{token,acceptRisk:true}` → `201 {ok:true,kind:"world",id,restartRequired:true}`                                                                                 |
+| DELETE | `/api/install/world/github/update/:id`     | 取消暂存更新，返回 `{ok:true}`                                                                                                                                   |
 
 - **预览的形状**和插件包的预览相同：`id`、`version`、`description`、`author`、`source`、`token`、`expiresAt`。`author` 是清单里的作者名，没有声明时是 `null`。
 - `description` 是 `I18nText`，包含加载器合并的 `world.<locale>.yaml` 摘要翻译，由客户端按界面语言调用 `resolveI18nText`。

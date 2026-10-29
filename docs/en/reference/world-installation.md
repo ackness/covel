@@ -41,18 +41,23 @@ Rules:
 
 **Checks made during preview**: the world's manifest, its external dimension file, and its world data references are validated in a temporary directory. This step does not use the local world overrides on your machine, so it checks the package itself.
 
+### Import SillyTavern content
+
+In **Settings → Install & manage**, choose character cards or lorebooks under **Import SillyTavern content**, preview the report, then import them as one world. This performs data conversion without executing scripts. The world is available immediately. See [the import guide](../worlds/import-sillytavern.md) for mapping, omissions and samples. Browser-private BrowserVault import is not supported.
+
 ## API
 
 These endpoints are controlled by the "allow install" switch. Writing a world also has to follow the global world write permission.
 
-| Method | Path                                       | Behavior                                                                           |
-| ------ | ------------------------------------------ | ---------------------------------------------------------------------------------- |
-| POST   | `/api/install/world/github/preview`        | `{url}` → `{items}`                                                                |
-| POST   | `/api/install/world/github`                | `{token, acceptRisk:true}` → `201 {ok:true,kind:"world",id,restartRequired:false}` |
-| GET    | `/api/install/worlds`                      | `{items:[{id,version,source,pendingUpdate}]}`                                      |
-| POST   | `/api/install/world/github/update/preview` | `{id,url?}` → current, pinned, or available + preview                              |
-| POST   | `/api/install/world/github/update`         | `{token,acceptRisk:true}` → `201 {ok:true,kind:"world",id,restartRequired:true}`   |
-| DELETE | `/api/install/world/github/update/:id`     | Cancels a staged update. Returns `{ok:true}`                                       |
+| Method | Path                                       | Behavior                                                                                                                                                                         |
+| ------ | ------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| POST   | `/api/install/st-import`                   | Multipart `file` (repeated), `locale?`, `name?`, `preview?` → `{ok,preview,kind:"world",id,restartRequired:false,report}`; [contract](./api.md#plugin-and-world-install-install) |
+| POST   | `/api/install/world/github/preview`        | `{url}` → `{items}`                                                                                                                                                              |
+| POST   | `/api/install/world/github`                | `{token, acceptRisk:true}` → `201 {ok:true,kind:"world",id,restartRequired:false}`                                                                                               |
+| GET    | `/api/install/worlds`                      | `{items:[{id,version,source,pendingUpdate}]}`                                                                                                                                    |
+| POST   | `/api/install/world/github/update/preview` | `{id,url?}` → current, pinned, or available + preview                                                                                                                            |
+| POST   | `/api/install/world/github/update`         | `{token,acceptRisk:true}` → `201 {ok:true,kind:"world",id,restartRequired:true}`                                                                                                 |
+| DELETE | `/api/install/world/github/update/:id`     | Cancels a staged update. Returns `{ok:true}`                                                                                                                                     |
 
 - **The shape of a preview** is the same as the preview for a plugin package: `id`, `version`, `description`, `author`, `source`, `token`, and `expiresAt`. `author` is the author name from the manifest. It is `null` if none is declared.
 - `description` is `I18nText`, including summary translations merged by the loader from `world.<locale>.yaml`. Clients call `resolveI18nText` with the UI language.

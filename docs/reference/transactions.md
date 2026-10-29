@@ -12,6 +12,8 @@
 
 世界包文件不在数据库事务里。生成、修订和翻译通过暂存、包预检、目录替换和失败恢复协调文件与世界记录；[API 的写回规则](./api.md#post-apiworldsidtranslate)说明失败时保留哪些内容。
 
+SillyTavern 内容导入复用 ZIP 世界激活：转换和预览只在内存中进行，随后在世界锁内原子落盘、读回预检并创建记录。失败时只清理本次新建的目录。见[世界安装](./world-installation.md)。
+
 ## Contract
 
 ```ts

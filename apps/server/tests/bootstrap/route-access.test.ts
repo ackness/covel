@@ -220,6 +220,7 @@ const ROUTES: Record<string, RouteAccess> = {
   "POST /api/install/plugin/github/update": needs("host.files"),
   "DELETE /api/install/plugin/github/update/:id": needs("host.files"),
   "POST /api/install/world": needs("host.files", "world.write"),
+  "POST /api/install/st-import": needs("host.files", "world.write"),
   "POST /api/install/world/github/preview": needs("host.files", "world.write"),
   "POST /api/install/world/github": needs("host.files", "world.write"),
   "POST /api/install/world/github/update/preview": needs(

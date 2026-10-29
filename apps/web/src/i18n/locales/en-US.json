@@ -1396,6 +1396,38 @@
       "updateRisk": "Updates are staged until backend restart. Locally edited worlds cannot be overwritten. Updating does not change data already imported into an existing game. To use new starting data, start a new game.",
       "installed": "Installed world packages"
     },
+    "stImport": {
+      "title": "Import SillyTavern content",
+      "hint": "Import character cards and lorebooks as one world. Preview the report before importing. No scripts or extensions are executed.",
+      "files": "Character cards and lorebooks",
+      "locale": "Content language",
+      "name": "World name (optional)",
+      "preview": "Preview",
+      "import": "Import",
+      "success": "World imported.",
+      "counts": "Characters: {{characters}} · Lore entries: {{entries}} · Cover: {{cover}}",
+      "levels": {
+        "error": "Errors",
+        "warning": "Warnings",
+        "info": "Information"
+      },
+      "codes": {
+        "v1-card": "Flat V1 card accepted.",
+        "field-ignored": "Unmapped field omitted.",
+        "extensions-ignored": "Extensions omitted; nothing was executed.",
+        "alternate-greetings-unsupported": "Alternate greetings omitted: there is no opening selector.",
+        "instructions-in-world-text": "Card instructions are included as plain narration notes.",
+        "mes-example-unparsed": "Dialogue examples could not be parsed.",
+        "text-truncated": "Content shortened to the destination limit.",
+        "html-removed": "HTML or unsafe links removed.",
+        "macros-removed": "Unsupported macros removed without evaluation.",
+        "regex-keys-dropped": "Regular expression keys omitted.",
+        "lorebook-feature-dropped": "Unsupported lorebook feature omitted.",
+        "entries-skipped-empty": "Empty lorebook entries skipped.",
+        "entry-skipped-no-keys": "Selective entries without literal keys skipped.",
+        "entries-limit": "Entries beyond the total limit of 2000 omitted."
+      }
+    },
     "deleteProviderTitle": "Delete provider?",
     "deleteProviderConfirm": "This also removes its model configurations, saved API key and role bindings to those models.",
     "deleteModelTitle": "Delete model configuration?",

@@ -483,3 +483,7 @@ The application ships its own fonts (`@fontsource-variable/*`, SIL OFL 1.1), and
 - A world translation stream that is already open (`routes/api/worlds/translate.ts`) uses the same sanitized error content, and does not change its HTTP status. The reasons a translation is rejected are reported (no translation, the reply is not JSON, a placeholder was changed). Unexpected storage or provider errors are not reported.
 - The causes are all recorded in the server log.
 - These changes do not mean that every trace, game content, or log output has been sanitized.
+
+## Importing third-party content: data conversion only
+
+SillyTavern content import uses bounded PNG chunk walking (including remaining-length checks before reading data), bounded JSON with Zod validation, fixed output paths, text sanitizing and fixed macro substitutions. PNG cover files have text and other metadata removed. No extension, script, card regex or executable macro runs. Unsupported fields and conversion losses are reported. Preview writes nothing; import uses the ZIP world's existing validation and activation under the world lock, guarded by `host.files` and `world.write`. Sanitizing does not make prompts trustworthy: lore and narration notes enter model context at the same trust level as other third-party world packages. See [the import guide](../worlds/import-sillytavern.md).

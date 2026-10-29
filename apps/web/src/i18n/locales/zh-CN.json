@@ -1346,6 +1346,38 @@
       "updateRisk": "更新将在后端重启时应用，本地编辑过的世界不会被覆盖。更新不会改写已有游戏导入的数据；想使用新的开局数据，请新开一局。",
       "installed": "已安装的世界包"
     },
+    "stImport": {
+      "title": "导入 SillyTavern 内容",
+      "hint": "将角色卡和世界书转成一个世界。先预览报告，再导入；不会执行脚本或扩展。",
+      "files": "角色卡和世界书",
+      "locale": "内容语言",
+      "name": "世界名称（可选）",
+      "preview": "预览",
+      "import": "导入",
+      "success": "世界已导入。",
+      "counts": "角色：{{characters}} · 资料条目：{{entries}} · 封面：{{cover}}",
+      "levels": {
+        "error": "错误",
+        "warning": "警告",
+        "info": "信息"
+      },
+      "codes": {
+        "v1-card": "已接受平铺的 V1 角色卡。",
+        "field-ignored": "已略过无法映射的字段。",
+        "extensions-ignored": "已略过扩展；未执行任何代码。",
+        "alternate-greetings-unsupported": "已略过备选开场白：目前没有开场选择器。",
+        "instructions-in-world-text": "角色卡指令已作为普通叙事备注写入世界正文。",
+        "mes-example-unparsed": "无法解析对话示例。",
+        "text-truncated": "内容已裁剪至目标长度上限。",
+        "html-removed": "已移除 HTML 或危险链接。",
+        "macros-removed": "已移除不支持的宏，未求值。",
+        "regex-keys-dropped": "已略过正则关键词。",
+        "lorebook-feature-dropped": "已略过不支持的世界书功能。",
+        "entries-skipped-empty": "已跳过空白资料条目。",
+        "entry-skipped-no-keys": "已跳过没有字面关键词的选择性条目。",
+        "entries-limit": "已略过超出总计 2000 条上限的资料条目。"
+      }
+    },
     "deleteProviderTitle": "删除服务商？",
     "deleteProviderConfirm": "同时删除此服务商的模型配置和已保存的 API 密钥，并取消这些模型的用途分配。",
     "deleteModelTitle": "删除模型配置？",

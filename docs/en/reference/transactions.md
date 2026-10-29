@@ -12,6 +12,8 @@ A world package digest is saved with the world record’s metadata and needs no 
 
 World package files are outside the database transaction. Generation, revision, and translation coordinate files and world records through staging, package preflight, directory replacement, and failure recovery; the [API write-back rules](./api.md#post-apiworldsidtranslate) describe what survives a failure.
 
+SillyTavern content import reuses ZIP world activation: conversion and preview stay in memory, then the world lock protects atomic materialization, read-back preflight and record creation. Failure removes only the newly created directory. See [world installation](./world-installation.md).
+
 ## Contract
 
 ```ts

@@ -1052,6 +1052,7 @@ Authentication:
 | --- | --- | --- | --- |
 | POST | `/api/install/plugin` | multipart field `file` | Unzip a plugin `.zip` into the user plugins folder |
 | POST | `/api/install/world` | multipart field `file` | Unzip a world `.zip` into the user worlds folder |
+| POST | `/api/install/st-import` | multipart `file` (repeated), `locale?`, `name?`, `preview?` | Convert SillyTavern content into one world; preview writes nothing |
 | POST | `/api/install/plugin/github/preview` | `{ url }` | Parse a public GitHub repository or subfolder and return a preview. Does not install or run the plugin |
 | POST | `/api/install/plugin/github` | `{ token, acceptRisk: true }` | Validate the confirmed preview and install |
 | POST | `/api/install/world/github/preview` | `{ url }` | Same as above, for a world package |
@@ -1068,6 +1069,7 @@ What each endpoint accepts and returns:
 
 - `POST /api/install/plugin`: accepts a `.zip` with `PLUGIN.md` at the root (`package.json` is optional, and a multi-runtime layout works too), or a `.zip` with a single top-level folder that holds `PLUGIN.md`. Returns `201 { ok, kind: "plugin", id, restartRequired: true, hasServerCode }`.
 - `POST /api/install/world`: accepts a `.zip` with `world.yaml` and `WORLD.md` at the root. Returns `201 { ok, kind: "world", id, restartRequired: false }`.
+- `POST /api/install/st-import`: returns `200` for `preview=true`, otherwise `201`, with `{ ok: true, preview, kind: "world", id, restartRequired: false, report }`. Requires `host.files` and `world.write`. `locale` is canonicalized BCP 47 (default `DEFAULT_LOCALE`); `name` is optional. The report includes `sources`, `world: { id, name, locale, summary }`, `counts: { characters, loreEntries, hasCover }`, and `items: [{ level, code, source?, field?, count?, message }]`. Messages are English; clients translate known codes. Limits: 8 files, 6 cards, 8 MiB per file, 20 MiB request body, 3 MiB decoded card JSON, 4096 PNG chunks, 2000 lore entries (excess reported and omitted), 20000 characters per entry and 2 MiB generated lorebook YAML. Invalid content returns `400`, a per-file size violation `413`, and exhausted ID candidates `409`; converter errors include `details: { code }`. Import reuses ZIP manifest validation and atomic world activation; an ID race returns `409` and can be retried. See [the import guide](../worlds/import-sillytavern.md).
 - `POST /api/install/plugin/github/preview`: returns the fixed commit, the summary, and the signed preview.
 - `.../github/update/preview`: returns `{ status: "current" }`, `{ status: "pinned" }`, or `{ status: "available", ... }` plus a preview. The full contract of the update endpoints is in [Plugin install](./plugin-installation.md#http-contract) and [World install](./world-installation.md).
 - `POST /api/install/plugin/github`: returns `201 { ok, kind: "plugin", id, restartRequired: true }`.

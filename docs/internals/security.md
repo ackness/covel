@@ -483,3 +483,7 @@ default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-sr
 - 已经打开的世界翻译流（`routes/api/worlds/translate.ts`）使用同样清理过的错误内容，不改变它的 HTTP 状态。翻译被拒的原因会报告（没有译文、回复不是 JSON、占位符被改动）；意外的存储或供应商错误不会报告。
 - 原因都记在服务端日志里。
 - 这些改动并不表示所有 trace、游戏内容或日志输出面都做了清理。
+
+## 导入第三方内容：只做数据转换
+
+SillyTavern 内容导入使用有上限的 PNG 块遍历（读数据前先检查剩余长度）、有上限并经 Zod 校验的 JSON、固定输出路径、文本清理和固定宏替换。PNG 封面会移除文本及其他元数据。不执行扩展、脚本、卡片正则或可执行宏，不能映射的字段和转换损失都会报告。预览不写入；导入由 `host.files` 与 `world.write` 保护，复用 ZIP 世界的校验及世界锁内的激活流程。清理不代表提示词可信：资料和叙事备注仍进入模型上下文，信任程度与其他第三方世界包相同。见[导入指南](../worlds/import-sillytavern.md)。

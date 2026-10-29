@@ -33,15 +33,18 @@ A world can also prepare data for plugins. A quest plugin receives the starting 
 
 So the same world can be played in very different ways. With only the narrator on, it is an interactive novel. Add dice, quests, and an inventory, and it becomes a tabletop role-playing game.
 
-## Three ways to make one
+<a id="three-ways-to-make-one"></a>
+
+## Four ways to make one
 
 | Way                                   | Good for                                                         | How to start                                                                                                   |
 | ------------------------------------- | ---------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
 | **Create with AI in the app**         | Getting a playable world quickly                                 | "AI Create World" on the world selection page. Fill in a creative brief                                        |
+| **Import SillyTavern content**        | Existing character cards or lorebooks                            | [Import guide](./import-sillytavern.md)                                                                        |
 | **Write the files by hand**           | Full control over the content, or learning the package structure | [The first world](./first-world.md)                                                                            |
 | **Have a development agent write it** | Working in the code repository with tools such as Claude Code    | The repository includes a `/create-world` skill. See [Use a development agent for tasks](../agent-workflow.md) |
 
-All three ways produce the same kind of world package, and you can switch between them and keep editing.
+All four ways produce the same kind of world package, and you can switch between them and keep editing.
 
 ## In this chapter
 

@@ -11,6 +11,8 @@ Some terms used throughout this page:
 - **Descriptor**: an optional file (`data/world.data.yaml`) that changes how a conventional file is read, or adds a file outside the conventions. Most worlds do not need it.
 - **Session**: one game that a player starts with this world. The world package's data is copied into the session when the session is created. After that, each session changes on its own. Saves in browser-private mode work the same way ([Browser-private workspace](./api.md#browser-private-workspace)).
 
+SillyTavern character cards and lorebooks can be [converted into this same ordinary package](../worlds/import-sillytavern.md). Conversion reports unmappable fields and creates only fixed content files, without executing extensions or scripts.
+
 ## World Package
 
 **The smallest world package** has two files:
