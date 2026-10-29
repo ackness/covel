@@ -205,7 +205,6 @@ export async function convertStImport(input: {
     | undefined;
   let firstBookName = "";
   let author = "";
-  let summaryNotes = "";
   for (const file of input.files) {
     const reporter = new ImportReporter();
     if (file.bytes.byteLength > MAX_ST_FILE_BYTES)
@@ -344,12 +343,15 @@ export async function convertStImport(input: {
           );
         }
       }
-      const creatorNotes =
-        text(card.creator_notes, "creator_notes")
-          .trim()
-          .split(/\n\s*\n/)[0] ?? "";
+      if (card.creator_notes !== undefined)
+        reporter.add(
+          "info",
+          "field-ignored",
+          source,
+          "Creator notes were omitted because world summaries enter model prompts",
+          "creator_notes",
+        );
       firstCard ??= { name, description, opening };
-      summaryNotes ||= creatorNotes;
       if (!author) author = text(card.creator, "creator", 120).trim();
       for (const field of card.ignored)
         reporter.add(
@@ -388,7 +390,17 @@ export async function convertStImport(input: {
           extensionKeys.length,
         );
       if (card.character_book) book = parseLorebook(card.character_book);
-      if (png && !cover) cover = stripPngTextChunks(file.bytes);
+      if (png) {
+        if (!cover) cover = stripPngTextChunks(file.bytes);
+        else
+          reporter.add(
+            "info",
+            "field-ignored",
+            source,
+            "Additional PNG image was omitted; only the first PNG supplies the cover",
+            "image",
+          );
+      }
     }
     for (const tag of [...(card?.tags ?? []), ...(book?.tags ?? [])]) {
       const normalized = text(tag, "tags", 200)
@@ -437,11 +449,7 @@ export async function convertStImport(input: {
       tags.size - 12,
     );
   const id = await chooseWorldId(name, input.isIdTaken);
-  const summary = (
-    cutText(summaryNotes, 280) ||
-    cutText(firstCard?.description ?? "", 200) ||
-    name
-  ).trim();
+  const summary = cutText(firstCard?.description ?? "", 200).trim() || name;
   const sections = [`# ${name.replace(/\n/g, " ")}`];
   if (scenarios.length)
     sections.push(
@@ -451,10 +459,12 @@ export async function convertStImport(input: {
   if (notes.length)
     sections.push(`## Narration notes\n\n${notes.join("\n\n")}`);
   if (sections.length === 1) {
-    // A lorebook-only world uses its first usable entry as the premise.
+    // Lore entries stay behind their own activation rules, outside world text.
     const premise = firstCard
       ? cutText(firstCard.description, 1200).trim()
-      : cutText(lore[0]?.content ?? "", 1200);
+      : lore.length
+        ? name
+        : "";
     if (!premise)
       throw new StImportError(
         "no-usable-text",

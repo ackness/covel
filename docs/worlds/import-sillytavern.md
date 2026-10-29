@@ -16,20 +16,21 @@
 
 ## 角色卡怎样转换
 
-| 原字段                                       | 导入结果                                                      |
-| -------------------------------------------- | ------------------------------------------------------------- |
-| `name`、V3 `nickname`                        | NPC 的名字和别名；第一张卡的名字也是默认世界名                |
-| `description`、`personality`                 | 角色说明、`blueprint.persona.summary`；过长的文字会裁剪并报告 |
-| `scenario`                                   | 世界正文的 Scenario；多张卡按角色分段                         |
-| `first_mes`                                  | 角色蓝图的开场白；第一张卡也写进世界正文的 Opening            |
-| `mes_example`                                | 按 `<START>` 和玩家 / 角色行解析为对话示例                    |
-| `system_prompt`、`post_history_instructions` | 世界正文的 Narration notes；报告会明确提醒                    |
-| `creator_notes`                              | 第一段只用于世界摘要，不进入世界正文或角色提示                |
-| `tags`、`creator`                            | 合并的世界标签、首个非空作者                                  |
-| `character_book`                             | 追加到资料库                                                  |
-| 第一张 PNG 卡的图片                          | 去掉文本及其他元数据后作为封面；不是角色立绘                  |
+<!-- prettier-ignore -->
+| 原字段 | 导入结果 |
+| --- | --- |
+| `name`、V3 `nickname` | NPC 的名字和别名；第一张卡的名字也是默认世界名 |
+| `description`、`personality` | 角色说明、`blueprint.persona.summary`；第一张卡的描述还用于世界摘要，过长的文字会裁剪并报告 |
+| `scenario` | 世界正文的 Scenario；多张卡按角色分段 |
+| `first_mes` | 角色蓝图的开场白；第一张卡也写进世界正文的 Opening |
+| `mes_example` | 按 `<START>` 和玩家 / 角色行解析为对话示例 |
+| `system_prompt`、`post_history_instructions` | 世界正文的 Narration notes；报告会明确提醒 |
+| `creator_notes` | 整段略过并报告，不写入世界包或摘要，避免进入模型提示词 |
+| `tags`、`creator` | 合并的世界标签、首个非空作者 |
+| `character_book` | 追加到资料库 |
+| 第一张 PNG 卡的图片 | 去掉文本及其他元数据后作为封面；不是角色立绘；后续 PNG 图片逐来源报告为略过 |
 
-正文没有场景、开场白和叙事备注时，用第一张卡的描述作为 Premise。只有世界书时，用第一条有效资料的正文。没有任何可用文字时，导入会失败。
+正文没有场景、开场白和叙事备注时，用第一张卡的描述作为 Premise。只有世界书时，用世界名称作为中性的 Premise；条目正文只留在资料库中，按启用状态和关键词规则进入提示词，不会复制到每回合都会读取的世界正文。没有任何可用文字时，导入会失败。
 
 ## 世界书怎样转换
 

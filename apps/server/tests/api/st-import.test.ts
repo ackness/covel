@@ -5,6 +5,12 @@ import { Hono } from "hono";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { createMemoryStore } from "@covel/store/memory";
 import { stImportResultSchema } from "@covel/shared";
+import { buildContext, buildSessionContextSnapshot } from "@covel/context";
+import {
+  discoverPluginAt,
+  loadPluginDefinition,
+  resolveRuntimePrompt,
+} from "@covel/plugin-loader";
 import { validateWorldPackage } from "../../src/world-data/validate-world-package.js";
 import { installRoutes } from "../../src/routes/api/install.js";
 import { worldRoutes } from "../../src/routes/api/worlds.js";
@@ -55,6 +61,82 @@ async function post(
   if (options.name !== undefined) form.set("name", options.name);
   return app.request("/api/install/st-import", { method: "POST", body: form });
 }
+async function narratorPrompt(worldId: string) {
+  // Use the real dialogue-pack narrator template and the published world record.
+  const discovery = await discoverPluginAt(
+    path.resolve("../../plugins/chat-mode-narrator"),
+  );
+  if (!discovery) throw new Error("Narrator fixture missing");
+  const definition = await loadPluginDefinition(discovery, "en-US");
+  const runtime = definition.manifests.find(
+    ({ manifest }) => manifest.outputKind === "story",
+  );
+  if (!runtime) throw new Error("Narrator fixture has no story runtime");
+  const sessionId = "import-prompt-session";
+  const sessionContext = await buildSessionContextSnapshot(store, sessionId, {
+    worldId,
+    locale: "en-US",
+    turnNumber: 1,
+    playerMessage: "Look around",
+  });
+  return buildContext({
+    manifest: runtime.manifest,
+    promptTemplate: resolveRuntimePrompt(runtime, "en-US"),
+    sessionContext,
+    completedResults: new Map(),
+    turnInput: {
+      sessionId,
+      turnId: "first-turn",
+      playerMessage: "Look around",
+      origin: "player",
+      locale: "en-US",
+    },
+    userSettings: Object.fromEntries(
+      (runtime.manifest.userSettings ?? []).map((setting) => [
+        setting.key,
+        setting.default,
+      ]),
+    ),
+  });
+}
+it("keeps omitted creator notes out of the published summary and assembled narrator prompt", async () => {
+  const description = "Mira keeps a watchful eye on the island beacon.";
+  const creatorNotes = "PRIVATE CREATOR GUIDANCE\n\nPRIVATE FOLLOW-UP GUIDANCE";
+  const response = await post([
+    v2Card({ description, creator_notes: creatorNotes }),
+  ]);
+  expect(response.status).toBe(201);
+  const body = stImportResultSchema.parse(await response.json());
+  expect(body.report.world.summary).toBe(description);
+  expect(body.report.items).toContainEqual(
+    expect.objectContaining({ code: "field-ignored", field: "creator_notes" }),
+  );
+  expect(await store.getWorld(body.id)).toMatchObject({ description });
+  const assembled = await narratorPrompt(body.id);
+  expect(assembled.systemPrompt).toContain(
+    `<world-summary>\nName: Mira\nDescription: ${description}`,
+  );
+  expect(JSON.stringify(assembled)).not.toContain("PRIVATE CREATOR GUIDANCE");
+  expect(JSON.stringify(assembled)).not.toContain("PRIVATE FOLLOW-UP GUIDANCE");
+});
+it.each([
+  { label: "disabled", constant: true, disable: true },
+  { label: "selective", constant: false, disable: false },
+])(
+  "keeps $label lore out of the unconditional narrator prompt",
+  async ({ constant, disable }) => {
+    const content = "The forbidden beacon hides a sleeping dragon.";
+    const response = await post([
+      worldInfo([{ key: ["beacon"], content, constant, disable }]),
+    ]);
+    expect(response.status).toBe(201);
+    const body = stImportResultSchema.parse(await response.json());
+    const assembled = await narratorPrompt(body.id);
+    expect(assembled.systemPrompt).toContain("<world-lore>");
+    expect(assembled.systemPrompt).toContain("## Premise\n\nIsland almanac");
+    expect(JSON.stringify(assembled)).not.toContain(content);
+  },
+);
 it("installs card plus lorebook with no world validation errors or receipt", async () => {
   const response = await post([v2Card(), worldInfo()]);
   expect(response.status).toBe(201);

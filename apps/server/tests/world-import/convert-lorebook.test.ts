@@ -28,6 +28,37 @@ it("combines standalone object and array books with character books", async () =
     expect(entry.strategy === "constant" || entry.keys.length > 0).toBe(true);
   }
 });
+it.each([
+  { label: "disabled", constant: true, disable: true, enabled: false },
+  { label: "selective", constant: false, disable: false, enabled: true },
+])(
+  "keeps $label lore solely in the lorebook",
+  async ({ constant, disable, enabled }) => {
+    const content = "The forbidden beacon hides a sleeping dragon.";
+    const result = await convert([
+      worldInfo([{ key: ["beacon"], content, constant, disable }]),
+    ]);
+    const md = result.entries
+      .find((entry) => entry.relativePath === "WORLD.md")
+      ?.content.toString();
+    expect(md).toContain("## Premise\n\nIsland almanac");
+    expect(md).not.toContain(content);
+    expect(result.report.world.summary).not.toContain(content);
+    const entries = parse(
+      result.entries
+        .find((entry) => entry.relativePath === "data/lorebook.yaml")!
+        .content.toString(),
+    );
+    expect(entries).toEqual([
+      expect.objectContaining({
+        content,
+        keys: ["beacon"],
+        enabled,
+        strategy: constant ? "constant" : "selective",
+      }),
+    ]);
+  },
+);
 it("maps activation, positions and depth, and aggregates unsupported features", async () => {
   const result = await convert([
     worldInfo([

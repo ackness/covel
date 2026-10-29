@@ -2,8 +2,11 @@ import { expect, it } from "vitest";
 import { parse } from "yaml";
 import { ST_IMPORT_CODES } from "@covel/shared";
 import { convertStImport } from "../../src/world-import/st/convert.js";
+import { stripPngTextChunks } from "../../src/world-import/st/png-chunks.js";
 import {
   convert,
+  makePng,
+  pngChunk,
   v1Card,
   v2Card,
   v3Card,
@@ -21,7 +24,7 @@ function file(
 it("maps V2 text, metadata, notes and examples into a valid world bundle", async () => {
   const result = await convert([
     v2Card({
-      system_prompt: "Stay kind. {{original}}",
+      system_prompt: "Stay kind to {{user}}, {{char}}. {{original}}",
       post_history_instructions: "Remember the beacon.",
       alternate_greetings: ["SECRET ALTERNATE"],
       extensions: { regex_scripts: ["EVIL SCRIPT"], world: "Other" },
@@ -58,10 +61,16 @@ it("maps V2 text, metadata, notes and examples into a valid world bundle", async
     },
   });
   const md = file(result, "WORLD.md");
+  for (const heading of ["## Scenario", "## Opening", "## Narration notes"])
+    expect(md).toContain(heading);
   expect(md.indexOf("## Scenario")).toBeLessThan(md.indexOf("## Opening"));
   expect(md.indexOf("## Opening")).toBeLessThan(
     md.indexOf("## Narration notes"),
   );
+  expect(md).toContain("the player arrives at Mira's beacon.");
+  expect(md).toContain("Welcome, the player.");
+  expect(md).toContain("Stay kind to the player, Mira.");
+  expect(md).not.toContain("{{original}}");
   expect(md).toContain("Reminder:\nRemember the beacon.");
   expect(md).not.toContain("original sample");
   const all = result.entries
@@ -117,6 +126,8 @@ it("accepts V3 extras, V1, and top-level fallback", async () => {
   expect(file(result, "characters/characters.json")).toContain(
     "Top-level fallback",
   );
+  const characters = JSON.parse(file(result, "characters/characters.json"));
+  expect(characters[0].aliases).toEqual(["Keeper"]);
 });
 it("parses two dialogue blocks and warns for unparsed examples", async () => {
   const result = await convert([
@@ -226,22 +237,57 @@ it("caps extension and macro names, without exposing discarded values", async ()
     expect.objectContaining({ code: "macros-removed", count: 2 }),
   );
 });
-it("uses only the first creator-note paragraph and handles Unicode truncation", async () => {
+it("omits creator notes and handles Unicode truncation in the description summary", async () => {
   const result = await convert([
     v2Card({
-      creator_notes: "x".repeat(279) + "😀\n\nPRIVATE",
+      creator_notes: "PRIVATE FIRST PARAGRAPH\n\nPRIVATE SECOND PARAGRAPH",
+      description: "x".repeat(199) + "😀",
       tags: ["x".repeat(40)],
     }),
   ]);
-  expect(result.report.world.summary).toHaveLength(279);
+  expect(result.report.world.summary).toBe("x".repeat(199));
+  expect(parse(file(result, "world.yaml")).summary).toBe("x".repeat(199));
   expect(
     result.entries.every(
       (entry) => !entry.content.toString().includes("PRIVATE"),
     ),
   ).toBe(true);
   expect(result.report.items).toContainEqual(
+    expect.objectContaining({ code: "field-ignored", field: "creator_notes" }),
+  );
+  expect(result.report.items).toContainEqual(
     expect.objectContaining({ code: "text-truncated", field: "tags" }),
   );
+});
+it("reports each additional PNG image and keeps only the first as the cover", async () => {
+  const first = makePng(v2Card(), "chara", [
+    pngChunk("pHYs", Buffer.from("00000b1300000b1301", "hex")),
+  ]);
+  const second = makePng(v3Card({ name: "Lena" }), "ccv3");
+  const result = await convertStImport({
+    files: [
+      { name: "first.png", bytes: first },
+      { name: "second.png", bytes: second },
+    ],
+    locale: "en-US",
+    isIdTaken: async () => false,
+  });
+  expect(result.report.counts).toMatchObject({ characters: 2, hasCover: true });
+  expect(result.report.items.filter((item) => item.field === "image")).toEqual([
+    expect.objectContaining({
+      level: "info",
+      code: "field-ignored",
+      source: "second.png",
+      count: 1,
+      message: expect.stringContaining("Additional PNG image was omitted"),
+    }),
+  ]);
+  const images = result.entries.filter((entry) =>
+    entry.relativePath.startsWith("media/"),
+  );
+  expect(images).toHaveLength(1);
+  expect(images[0]?.relativePath).toBe("media/gallery/cover.png");
+  expect(images[0]?.content).toEqual(Buffer.from(stripPngTextChunks(first)));
 });
 it("detects JSON after long whitespace and a BOM", async () => {
   const result = await convertStImport({

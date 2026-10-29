@@ -16,20 +16,21 @@ See the [install API](../reference/api.md#plugin-and-world-install-install) for 
 
 ## How character cards map
 
-| Source field                                 | Imported result                                                                            |
-| -------------------------------------------- | ------------------------------------------------------------------------------------------ |
-| `name`, V3 `nickname`                        | NPC name and alias; the first card's name is also the default world name                   |
-| `description`, `personality`                 | Character description and `blueprint.persona.summary`; long text is shortened and reported |
-| `scenario`                                   | Scenario in the world text, grouped by character for multiple cards                        |
-| `first_mes`                                  | Character blueprint opening; the first card also supplies Opening in the world text        |
-| `mes_example`                                | Dialogue examples parsed from `<START>` blocks and player / character lines                |
-| `system_prompt`, `post_history_instructions` | Narration notes in the world text, with an explicit warning                                |
-| `creator_notes`                              | First paragraph used only for the world summary, never world text or character prompts     |
-| `tags`, `creator`                            | Combined world tags and the first non-empty author                                         |
-| `character_book`                             | Added to the lorebook                                                                      |
-| First PNG card image                         | Cover after text and other metadata are stripped; not a character portrait                 |
+<!-- prettier-ignore -->
+| Source field | Imported result |
+| --- | --- |
+| `name`, V3 `nickname` | NPC name and alias; the first card's name is also the default world name |
+| `description`, `personality` | Character description and `blueprint.persona.summary`; the first card's description also supplies the world summary; long text is shortened and reported |
+| `scenario` | Scenario in the world text, grouped by character for multiple cards |
+| `first_mes` | Character blueprint opening; the first card also supplies Opening in the world text |
+| `mes_example` | Dialogue examples parsed from `<START>` blocks and player / character lines |
+| `system_prompt`, `post_history_instructions` | Narration notes in the world text, with an explicit warning |
+| `creator_notes` | Omitted entirely and reported; never written to the package or summary, so they cannot enter model prompts |
+| `tags`, `creator` | Combined world tags and the first non-empty author |
+| `character_book` | Added to the lorebook |
+| First PNG card image | Cover after text and other metadata are stripped; not a character portrait; each later PNG image is reported as omitted by source |
 
-If there is no scenario, opening or narration note, the first card's description supplies Premise. A lorebook-only world uses its first usable entry. Import fails when no usable text remains.
+If there is no scenario, opening or narration note, the first card's description supplies Premise. A lorebook-only world uses the world name as a neutral Premise. Entry content stays solely in the lorebook, entering prompts according to enabled status and keyword rules; it is never copied into world text that is read every turn. Import fails when no usable text remains.
 
 ## How lorebooks map
 
