@@ -18,6 +18,7 @@ import {
   collectExecutionSuspensionRuns,
   collectExecutionSuspensions,
 } from "./suspension-artifact.js";
+import { collectExecutionReadDependencies } from "./read-dependencies.js";
 import { runWithHookScope } from "./hooks/hook-scope.js";
 import {
   buildHookSettings,
@@ -70,6 +71,7 @@ export interface ExecutionCommitPlan extends Pick<
   | "setupRan"
   | "abortReason"
   | "datasetSchemas"
+  | "readDependencies"
 > {
   readonly outputSchemas: Readonly<Record<string, Schema>>;
   readonly resolvedSuspensionId?: string;
@@ -270,6 +272,8 @@ export async function executeTurn(
         ...(abortReason !== undefined ? { abortReason } : {}),
         journalMessages,
         journalMessageRuns: collectExecutionJournalRuns(turn),
+        // A resume has no upstream in its execution, so it carries none.
+        readDependencies: collectExecutionReadDependencies(turn),
         suspensionRuns: collectExecutionSuspensionRuns(turn),
         runtimeTriggers: collectExecutionTriggers(turn),
         runtimeTriggerRuns: collectExecutionTriggerRuns(turn),

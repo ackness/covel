@@ -28,6 +28,11 @@ import { finalizeRuntimeResult } from "../turn-executor/runtime-finalization.js"
 import type { TurnExecutorDeps } from "../turn-executor/turn-executor-types.js";
 import { runAgentToolLoop } from "./turn-agent-tool-loop.js";
 import { MAX_PICTURE_ATTACHMENTS } from "./picture-attachments.js";
+import { attachReadDependencies } from "../read-dependencies.js";
+import {
+  createPluginDataVisibility,
+  type UpstreamPluginDataWrite,
+} from "../function-runtime/upstream-plugin-data.js";
 
 export interface AgentCompactionRefresh {
   readonly compacted: boolean;
@@ -37,6 +42,8 @@ export interface AgentCompactionRefresh {
 
 export interface ExecuteAgentRuntimeOptions {
   readonly upstreamProposals?: readonly import("@covel/shared").Proposal[];
+  /** Writes of completed upstream runtimes of this plugin that tool reads include. */
+  readonly upstreamPluginData?: readonly UpstreamPluginDataWrite[];
   readonly manifest: RuntimeManifest;
   readonly input: TurnInput;
   readonly loaded: LoadedRuntime;
@@ -89,6 +96,7 @@ export interface ExecuteAgentRuntimeOptions {
 
 export async function executeAgentRuntime({
   upstreamProposals = [],
+  upstreamPluginData = [],
   manifest,
   input,
   loaded,
@@ -287,9 +295,18 @@ export async function executeAgentRuntime({
         deps.dimensionContext,
       )
     : undefined;
+  // The agent's own recorder; a guard that let it run kept none.
+  const pluginDataVisibility = createPluginDataVisibility({
+    pluginId: manifest.pluginId,
+    runtimeId: manifest.name,
+    runId,
+    writes: upstreamPluginData,
+    ...(deps.pluginDataReadProbe ? { probe: deps.pluginDataReadProbe } : {}),
+  });
   const toolLoop = await runAgentToolLoop({
     worldBase,
     upstreamProposals,
+    pluginDataVisibility,
     manifest,
     input,
     ...(sessionMeta?.turnNumber !== undefined
@@ -341,6 +358,8 @@ export async function executeAgentRuntime({
         : {}),
     },
   );
+  if (settled.kind === "success" && result.status === "success")
+    attachReadDependencies(result, pluginDataVisibility.recorder);
   if (settled.kind === "success" && deps.store && result.output) {
     attachRuntimeJournal(
       result,

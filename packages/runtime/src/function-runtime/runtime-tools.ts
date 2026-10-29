@@ -14,6 +14,7 @@ import {
 } from "../hooks/wire-helpers.js";
 import type { ExecutionWriteBuffer } from "./execution-write-buffer.js";
 import type { HandlerHelperContext } from "./plugin-handler-helpers.js";
+import type { PluginDataVisibility } from "./upstream-plugin-data.js";
 
 /** Deterministic handlers use the same governed tools as agent runtimes. */
 export function createRuntimeTools(options: {
@@ -29,6 +30,8 @@ export function createRuntimeTools(options: {
   messages?: import("@covel/shared").PluginMessages;
   deps: TurnExecutorDeps;
   buffer: ExecutionWriteBuffer;
+  /** Upstream writes of the same plugin and the invocation's read recorder. */
+  pluginDataVisibility?: PluginDataVisibility;
   inputs?: Readonly<Record<string, InputSlot>>;
   signal: AbortSignal;
   assertLive: () => void;
@@ -88,6 +91,9 @@ export function createRuntimeTools(options: {
             signal,
             authorizedToolNames,
             pendingProposals: buffer,
+            ...(options.pluginDataVisibility
+              ? { pluginDataVisibility: options.pluginDataVisibility }
+              : {}),
             upstreamProposals: options.upstreamProposals,
             world: options.world,
             inputSlots: options.inputs,

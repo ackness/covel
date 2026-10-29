@@ -15,14 +15,18 @@
  * them.
  *
  * Reads consult the buffer first (read-through overlay) so a handler/guard sees
- * its own not-yet-committed writes within the same execution. The overlay is
- * per-execution only; cross-runtime same-turn reads are not merged.
+ * its own not-yet-committed writes within the same execution. Reads of the
+ * plugin's own data also apply the writes of completed upstream runtimes of
+ * the same plugin, before the buffer (`upstream-plugin-data.ts`). Those
+ * writes are read-only context and never enter this buffer: the buffer holds
+ * only the runtime's own writes, which are all that commit with its result.
  */
 
 import type { PluginDataRecord } from "@covel/store";
 import type { DataOp, Proposal } from "@covel/shared";
 import { overlayPluginDataRows } from "@covel/tools";
 import type { HandlerHelperContext } from "./plugin-handler-helpers.js";
+import type { UpstreamPluginDataWrite } from "./upstream-plugin-data.js";
 
 /** A mutable per-execution proposal buffer. */
 export type ExecutionWriteBuffer = Proposal[];
@@ -96,19 +100,22 @@ export function bufferPluginDataUpdate(
 }
 
 /**
- * Merge committed plugin-data rows with buffered writes (buffer wins). A
- * buffered `plugin.data.update` is applied on top of the stored row.
+ * Merge committed plugin-data rows with upstream writes of the same plugin,
+ * then buffered writes (later wins). A `plugin.data.update` is applied on top
+ * of the value before it.
  */
 export function mergePluginDataRows(
   stored: readonly PluginDataRecord[],
-  buffer: ExecutionWriteBuffer,
+  buffer: readonly Proposal[],
   sessionId: string,
   pluginId?: string,
   namespace?: string,
+  visible: readonly UpstreamPluginDataWrite[] = [],
 ): PluginDataRecord[] {
+  const overlay = [...visible.map((write) => write.proposal), ...buffer];
   const pluginIds =
     pluginId === undefined
-      ? new Set(buffer.map((proposal) => proposal.source.pluginId))
+      ? new Set(overlay.map((proposal) => proposal.source.pluginId))
       : [pluginId];
   const now = new Date().toISOString();
   const byKey = new Map<string, PluginDataRecord>();
@@ -117,13 +124,13 @@ export function mergePluginDataRows(
   for (const row of stored)
     byKey.set(compositeKey(row.pluginId, row.namespace, row.key), row);
   for (const owner of pluginIds) {
-    const overlay = overlayPluginDataRows(
-      buffer,
+    const rows = overlayPluginDataRows(
+      overlay,
       owner,
       namespace,
       stored.filter((row) => row.pluginId === owner),
     );
-    for (const entry of overlay.values()) {
+    for (const entry of rows.values()) {
       const ck = compositeKey(owner, entry.namespace, entry.key);
       if (entry.deleted) {
         byKey.delete(ck);

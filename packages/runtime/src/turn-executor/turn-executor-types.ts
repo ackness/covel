@@ -188,6 +188,14 @@ export interface TurnExecutorDeps extends AgentLoopDeps {
   readonly eventDirectory?: {
     catalogText(sessionId: string, locale: string): Promise<string>;
   };
+
+  /**
+   * Internal test seam: called synchronously for every plugin-data overlay
+   * read with the value the read returns without upstream writes of the same
+   * plugin (`withoutUpstream`) and the value it returns (`visible`). Used to
+   * review the effect of that visibility; a throw is logged and ignored.
+   */
+  readonly pluginDataReadProbe?: import("../function-runtime/upstream-plugin-data.js").PluginDataReadProbe;
 }
 
 export interface TurnExecutorOptions {

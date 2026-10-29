@@ -75,6 +75,55 @@ export function malformedDomainEffect(
 }
 
 /**
+ * The plugin-data proposals a result's `effects.pluginData[]` commits as. Each
+ * entry is `{ namespace, key, value }`. One entry becomes `plugin.data`,
+ * several become one `plugin.data.batch` so they commit in one store call.
+ * Function runtimes use this to write their own namespace (image galleries,
+ * job state, per-session caches) without reaching into the DataStore.
+ *
+ * {@link normalizeOutput} and the in-execution plugin-data overlay both call
+ * this, so what a later runtime of the same plugin reads is what commits.
+ */
+export function pluginDataProposalsFromEffects(
+  effects: RuntimeEffects | undefined,
+  source: ProposalSource,
+  turnId: string,
+  sessionId: string,
+): Proposal[] {
+  const pluginData = effects?.pluginData as
+    | Array<{
+        namespace?: unknown;
+        key?: unknown;
+        value?: unknown;
+      }>
+    | undefined;
+  if (!Array.isArray(pluginData) || pluginData.length === 0) return [];
+  const items = pluginData
+    .filter(
+      (item): item is { namespace: string; key: string; value: unknown } =>
+        !!item &&
+        typeof item === "object" &&
+        typeof item.namespace === "string" &&
+        item.namespace.length > 0 &&
+        typeof item.key === "string" &&
+        item.key.length > 0 &&
+        "value" in item,
+    )
+    .map((item) => ({
+      namespace: item.namespace,
+      key: item.key,
+      value: item.value,
+    }));
+  if (items.length === 1)
+    return [makeProposal("plugin.data", source, turnId, sessionId, items[0]!)];
+  if (items.length > 1)
+    return [
+      makeProposal("plugin.data.batch", source, turnId, sessionId, { items }),
+    ];
+  return [];
+}
+
+/**
  * Turn a success result into proposals. Callers reject the result first when
  * {@link malformedDomainEffect} reports an entry.
  */
@@ -176,45 +225,9 @@ export function normalizeOutput(
     );
   }
 
-  // plugin.data / plugin.data.batch — from pluginData[]. Each entry is
-  // `{ namespace, key, value }`. Single entry → plugin.data, multiple → a
-  // batched plugin.data.batch so commits happen in one store call. Function
-  // runtimes need this to write their own namespace (e.g. image galleries,
-  // job state, per-session caches) without reaching into DataStore directly.
-  const pluginData = effects.pluginData as
-    | Array<{
-        namespace?: unknown;
-        key?: unknown;
-        value?: unknown;
-      }>
-    | undefined;
-  if (Array.isArray(pluginData) && pluginData.length > 0) {
-    const items = pluginData
-      .filter(
-        (item): item is { namespace: string; key: string; value: unknown } =>
-          !!item &&
-          typeof item === "object" &&
-          typeof item.namespace === "string" &&
-          item.namespace.length > 0 &&
-          typeof item.key === "string" &&
-          item.key.length > 0 &&
-          "value" in item,
-      )
-      .map((item) => ({
-        namespace: item.namespace,
-        key: item.key,
-        value: item.value,
-      }));
-    if (items.length === 1) {
-      proposals.push(
-        makeProposal("plugin.data", source, turnId, sessionId, items[0]!),
-      );
-    } else if (items.length > 1) {
-      proposals.push(
-        makeProposal("plugin.data.batch", source, turnId, sessionId, { items }),
-      );
-    }
-  }
+  proposals.push(
+    ...pluginDataProposalsFromEffects(effects, source, turnId, sessionId),
+  );
 
   // notifications[] — system-level messages surfaced to the chat feed.
   // Each notification is normalised into a narrative.append proposal with

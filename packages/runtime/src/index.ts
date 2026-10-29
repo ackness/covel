@@ -71,6 +71,10 @@ export {
   TurnAbortedError,
 } from "./turn-executor/turn-control.js";
 export type { TurnControl } from "./turn-executor/turn-control.js";
+export type {
+  PluginDataReadObservation,
+  PluginDataReadProbe,
+} from "./function-runtime/upstream-plugin-data.js";
 export { pendingDimensionSettlements } from "./turn-executor/dimension-barrier.js";
 export { createRuntimeMediaContext } from "./function-runtime/runtime-media-context.js";
 export { enforceHttpPermissions } from "./function-runtime/http-permissions.js";

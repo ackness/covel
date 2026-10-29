@@ -2,10 +2,13 @@
  * Built-in plugin data tools — allow LLM agents to read/write plugin-scoped
  * persistent data via function calling.
  *
- * Read tools overlay this execution's set, batch and delete proposals over
- * the injected store. Write tools return
- * proposal-backed results so the Session Kernel commit chain performs the
- * actual persistence.
+ * Read tools read through the host's scoped `context.store` when it is
+ * present: it includes this execution's earlier writes (the caller's own and
+ * those of completed upstream runtimes of the same plugin) and records what
+ * the read saw, so the commit can drop a reader whose producer was dropped.
+ * Without it they overlay the caller's pending proposals over the injected
+ * store. Write tools return proposal-backed results so the Session Kernel
+ * commit chain performs the actual persistence.
  */
 
 import {
@@ -22,7 +25,7 @@ import {
   overlayPluginDataValue,
 } from "../proposal-overlay.js";
 import { tool, type JsonValue } from "@covel/plugin-handlers-utils";
-import type { ToolModule } from "../types.js";
+import type { ToolExecutionContext, ToolModule } from "../types.js";
 
 /** Minimal read-only store interface for plugin data operations. */
 interface PluginDataStore {
@@ -91,6 +94,35 @@ function makePluginDataBatchProposal(
     payload,
     timestamp,
   };
+}
+
+/** One row as the host's scoped store view returns it. */
+interface ScopedPluginDataRow {
+  readonly namespace?: string;
+  readonly key: string;
+  readonly value: unknown;
+  readonly updatedAt?: string;
+}
+
+/**
+ * The host's scoped reads as they behave: rows carry their namespace and
+ * timestamps, and a list without a namespace covers every namespace. The
+ * public `PluginToolStore` type is narrower.
+ */
+interface ScopedPluginDataReads {
+  getPluginData(
+    namespace: string,
+    key: string,
+  ): Promise<ScopedPluginDataRow | null>;
+  listPluginData(
+    namespace: string | undefined,
+  ): Promise<readonly ScopedPluginDataRow[]>;
+}
+
+function scopedReads(
+  context: ToolExecutionContext,
+): ScopedPluginDataReads | undefined {
+  return context.store as ScopedPluginDataReads | undefined;
 }
 
 /** Model-driven writes never reach framework or hidden namespaces. */
@@ -225,6 +257,19 @@ function createPluginDataGetTool(store: PluginDataStore): ToolModule {
     execute: async (params, context) => {
       if (!isModelReadableNamespace(params.namespace))
         return { found: false, namespace: params.namespace, key: params.key };
+      const scoped = scopedReads(context);
+      if (scoped) {
+        const row = await scoped.getPluginData(params.namespace, params.key);
+        if (!row)
+          return { found: false, namespace: params.namespace, key: params.key };
+        return {
+          found: true,
+          namespace: params.namespace,
+          key: params.key,
+          value: row.value,
+          updatedAt: row.updatedAt ?? new Date().toISOString(),
+        };
+      }
       const targetPlugin = context.pluginId;
       const record = await store.getPluginData(
         context.sessionId,
@@ -274,9 +319,30 @@ function createPluginDataListTool(store: PluginDataStore): ToolModule {
         .describe("Data namespace; omit to list every namespace"),
     }),
     execute: async (params, context) => {
-      const targetPlugin = context.pluginId;
       if (params.namespace && !isModelReadableNamespace(params.namespace))
         return { count: 0, items: [] };
+      const scoped = scopedReads(context);
+      if (scoped) {
+        const now = new Date().toISOString();
+        const items = (await scoped.listPluginData(params.namespace)).flatMap(
+          (row) => {
+            const namespace = row.namespace ?? params.namespace;
+            // A row whose namespace is unknown cannot be screened.
+            if (namespace === undefined || !isModelReadableNamespace(namespace))
+              return [];
+            return [
+              {
+                namespace,
+                key: row.key,
+                value: row.value,
+                updatedAt: row.updatedAt ?? now,
+              },
+            ];
+          },
+        );
+        return { count: items.length, items };
+      }
+      const targetPlugin = context.pluginId;
       const records = (
         await store.listPluginData(
           context.sessionId,
