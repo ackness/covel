@@ -209,3 +209,26 @@ it("defaults invalid insertion orders instead of persisting non-finite values", 
   );
   expect(entries[0].insertionOrder).toBe(100);
 });
+it("reports {{char}} and <BOT> in a standalone lorebook instead of removing them silently", async () => {
+  const result = await convert([
+    worldInfo([
+      { key: ["beacon"], content: "{{char}} guards the <BOT> beacon." },
+    ]),
+  ]);
+  expect(result.report.items).toContainEqual(
+    expect.objectContaining({
+      code: "macros-removed",
+      count: 2,
+      message: expect.stringContaining("char"),
+    }),
+  );
+});
+it("reports unresolved character macros in a lorebook uploaded beside a card", async () => {
+  const result = await convert([
+    v2Card({ name: "Mira" }),
+    worldInfo([{ key: ["beacon"], content: "{{char}} hides a beacon." }]),
+  ]);
+  expect(result.report.items).toContainEqual(
+    expect.objectContaining({ code: "macros-removed", count: 1 }),
+  );
+});

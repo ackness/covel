@@ -29,3 +29,10 @@ it("handles repeated unclosed comment delimiters without rescanning", () => {
   const input = "{{//".repeat(100000);
   expect(resolveMacros(input, "Mira", "en-US").text).toBe(input);
 });
+it("reports character macros that have no character in scope", () => {
+  expect(resolveMacros("A {{char}} and <BOT> speak.", "", "en-US")).toEqual({
+    text: "A  and  speak.",
+    removed: 2,
+    names: ["char", "BOT"],
+  });
+});

@@ -342,7 +342,10 @@ export function PackagesPane() {
       <StImportCard
         busy={githubBusy || !!busy || updateBusy || !!removing}
         onBusyChange={setGithubBusy}
-        onImported={refreshWorlds}
+        onImported={() => {
+          void refreshInstalled();
+          refreshWorlds();
+        }}
       />
 
       {rows.length > 0 && (
