@@ -248,7 +248,7 @@ it("manually reconnects after giving up and retains registered event handlers", 
           start(controller) {
             controller.enqueue(
               new TextEncoder().encode(
-                'id: epoch:1\nevent: state.changed\ndata: {"payload":{}}\n\n',
+                'id: epoch:1\nevent: state.snapshot.created\ndata: {"payload":{}}\n\n',
               ),
             );
           },

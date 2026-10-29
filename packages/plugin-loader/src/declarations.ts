@@ -7,7 +7,7 @@ import type {
 
 type DeclarationEntry = Pick<
   PluginRegistryEntry,
-  "packageManifest" | "manifests" | "dataSchemas"
+  "packageManifest" | "manifests" | "dataSchemas" | "datasets"
 >;
 
 /** Package declarations are never inferred to be executable. */
@@ -31,6 +31,7 @@ export function resolvePluginDeclarations(records: readonly ParsedPluginMd[]) {
     extensions: root?.extensions ?? [],
     userSettings: root?.userSettings ?? [],
     dataSchemas: root?.dataSchemas ?? {},
+    datasets: root?.datasets ?? {},
     worldProjections: root?.worldProjections ?? {},
     commands: root?.commands ?? [],
     events: root?.events ?? [],
@@ -70,11 +71,13 @@ export function resolvePluginRuntimeManifest(
 ): RuntimeManifest {
   const declarations = resolvePluginDeclarations(pluginDeclarations(entry));
   const dataSchemas = entry.dataSchemas ?? declarations.dataSchemas;
+  const datasets = entry.datasets ?? declarations.datasets;
   return {
     ...manifest,
     ...(declarations.userSettings.length
       ? { userSettings: declarations.userSettings }
       : {}),
     ...(Object.keys(dataSchemas).length ? { dataSchemas } : {}),
+    ...(Object.keys(datasets).length ? { datasets } : {}),
   };
 }

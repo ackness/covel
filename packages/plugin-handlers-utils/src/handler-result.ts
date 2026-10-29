@@ -86,7 +86,6 @@ export type PluginFormInteraction = {
  * scheduling and proposal normalization.
  */
 export interface RuntimeEffects extends ObservabilityEffects {
-  readonly statePatches?: readonly JsonValue[];
   readonly events?: readonly JsonValue[];
   readonly interactions?: readonly (PluginFormInteraction | JsonValue)[];
   readonly ui?: readonly JsonValue[];

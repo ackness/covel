@@ -139,7 +139,6 @@ In the tables, "S→C" means sent from the server to the client.
 
 | Event type               | Dir. | Description                                      | Payload                                            |
 | ------------------------ | ---- | ------------------------------------------------ | -------------------------------------------------- |
-| `state.changed`          | S→C  | A change to game state                           | `{ table, field, value, runtimeId, pluginId }`     |
 | `event.emitted`          | S→C  | A committed game business event                  | `{ topic?, type?, eventType?, data?, pluginId? }`  |
 | `domain-event.previewed` | S→C  | An instant preview of a validated business event | `{ runtimeId, pluginId, toolCallId, topic, data }` |
 
@@ -283,6 +282,7 @@ This is a notice that the world package's declaration changed. It is not an upda
 
 - Every write path triggers it: `plugin-data-set`, `plugin-data-set-batch`, DELETE `/plugin-data/...`, and so on. A successful compare-and-set write also counts (runtime job state changes, dimension records).
 - It is intercepted in one place, `wrapStoreWithPluginDataEvents`, at the store layer. So the frontend can see plugin state changes live.
+- A committed `plugin.data.update` fires it too: `value` is the result after the operations and `operation` is `set`; when the result is absent and the existing row was deleted, `operation` is `delete`. Without a row and with an absent result nothing is written and nothing fires.
 - The final state of a background job is given by `job-status.updated`. Changes to `_runtime_jobs` rows are used only to sync data.
 
 **Payload**
@@ -771,7 +771,7 @@ The events below are forwarded by the server through the actions SSE stream. The
 | `tool.calling` / `tool.completed` / `tool.failed`          | TurnEmitter                                                                                  | LLM tool call trace                                                                                                                                        |
 | `domain-event.previewed`                                   | ToolExecutor (after `emittedEvents` succeeds)                                                | Projected server-side into UI slot previews; not consumed directly by the frontend and not a domain commit                                                 |
 | `llm.calling` / `llm.responded` / `message.completed`      | TurnEmitter                                                                                  | LLM call trace                                                                                                                                             |
-| `block.emitted` / `state.patch.applied`                    | TurnEmitter                                                                                  | Trace of a block emitted / a state patch applied                                                                                                           |
+| `block.emitted`                                            | TurnEmitter                                                                                  | Trace of a block emitted                                                                                                                                   |
 | `hook.fired` / `hook.aborted`                              | TurnEmitter                                                                                  | Hook behavior trace                                                                                                                                        |
 | `gateway.calling` / `gateway.responded` / `gateway.failed` | TurnEmitter (`withGatewayTrace`)                                                             | Trace of a function-runtime or extension-provider `ctx.gateway` provider call (equivalent to `llm.*`); a failure carries the `usage` the provider reported |
 
@@ -1097,7 +1097,6 @@ Frames on `/api/events/stream` use a different structure, `ProtocolEvent`: `{ id
 narrative.delta       → messages (streaming buffer)
 narrative.completed   → messages (completed)
 interaction.requested → messages (block)
-state.changed         → gameState.tables (deep merge) + statePatches
 event.emitted         → gameState.events
 interaction.submitted → handled by the caller that submitted the form: SUBMIT_BLOCK + player bubble (not through handleSseEvent)
 execution.started     → executionSteps
@@ -1224,7 +1223,6 @@ These events use the standard SSE envelope, and they are saved to `trace_events`
 | `message.completed` | `{ runtimeId, pluginId, content, len, deltaCount }`. `deltaCount` is the number of `narrative.delta` events this runtime produced. It is the saved, authoritative count. The frontend uses a different synthetic field, `_aggregated`, when it combines live fragments. The two cannot be swapped |
 | `block.emitted` | `{ runtimeId, pluginId, proposalId, source, block }` |
 | `ui.rendered` | `{ runtimeId, pluginId, proposalId, source, render, block }`. The action stream and `state` topic send the same committed payload; the block ID and metadata come from the commit result |
-| `state.patch.applied` | `{ runtimeId, pluginId, proposalId, patch: { packageName, summary, ops } }` |
 | `hook.fired` | `{ event, hookName, pluginId, runtimeId?, targetId?, targetType, proposalType? }` |
 | `hook.rewrote` | `{ event, hookName, pluginId, runtimeId?, targetId?, diff?, proposalType? }` |
 | `hook.aborted` | `{ event, hookName, pluginId, runtimeId?, targetId?, reason, proposalType? }` |
@@ -1264,6 +1262,8 @@ Final states of runtimes:
 - The final state of a newly executed runtime is published after `PostRuntime` and the output and cancel checks. A final failure uses `runtime.failed`, and a final success or pause uses `runtime.completed`. The action SSE turns a "skipped" into `runtime.skipped`.
 - The final-state payload keeps `turnId` and `runId`. It does not mean the transaction commit succeeded.
 - When the turn commit succeeds, but the writes of an optional runtime were discarded on their own, the main turn sends a `runtime.failed` for it before `execution.completed` (with the reason for the discard). The client uses it to override the earlier `runtime.completed`.
+  - Each nested run (`ctx.recursiveCall`) discarded with it gets one too. The payload carries the `runId` and `turnId` of the discarded run.
+  - The client shows one step per runtime in a turn. So when the top-level run of the same runtime committed, no correction is sent for its discarded nested run, which would show the committed run as failed.
 - In historical data, `runtime.completed` with `status: "failed"`, and `turn.completed` with `committed: false`, still count as diagnostic failures.
 - When an LLM attempt fails and then succeeds on retry, the failure record is still kept. The interface should show "recovered attempts" separately from the task's final state.
 

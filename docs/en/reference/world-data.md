@@ -1442,6 +1442,9 @@ contributes:
 ```
 
 - The schema is a JSON Schema file in the plugin's root folder.
+- The same namespace can also be declared as a [dataset](./plugins.md#datasets-contributesdatasets); the two `schema` paths must be the same file.
+  - The dataset's commit checks (the operation kinds `ops` allows, and the record schema) cover only the plugin-data proposals a plugin submits during an execution: `plugin.data`, `plugin.data.batch`, `plugin.data.delete` and `plugin.data.update`. See [Transactions · Operation-based writes](./transactions.md#operation-based-writes-plugindataupdate).
+  - World data import and sync deliberately stay unchanged and skip these checks: records are still validated against the source's declared `schema`, and the dataset's `ops` do not restrict them. So a world pack's seeded records are written even when the dataset's `ops` omit `set`.
 - The receiving declaration is written only in the package's root `PLUGIN.md`. It is not written in `RUNTIME.md`.
 - Plugin code reads its own data with `ctx.pluginData.get(namespace,key)` / `list(namespace)`. RPC uses `ctx.store`, which is bound to the current session and plugin. Do not read another plugin's private data.
 

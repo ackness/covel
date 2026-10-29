@@ -36,7 +36,7 @@ export interface NormalizedHandlerResult {
 
 /** Domain-effect control keys the runtime output normalizer understands. */
 const DOMAIN_EFFECT_KEYS = [
-  "statePatches",
+  "statePatches", // Removed writes are still diagnosed when stripping failed/skipped effects.
   "events",
   "interactions",
   "ui",

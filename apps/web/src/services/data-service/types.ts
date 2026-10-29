@@ -89,7 +89,6 @@ export interface DataService {
 
   // State patches
   listStatePatches(sessionId: string): Promise<StatePatchRecord[]>;
-  addStatePatch(sessionId: string, patch: StatePatchRecord): Promise<void>;
 
   /**
    * Atomically merge submitted block IDs and their form values into a session.

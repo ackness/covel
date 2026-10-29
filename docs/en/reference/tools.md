@@ -432,13 +432,14 @@ What happens when the limit is exceeded:
 
 The same limit applies at every write entry point:
 
-| Entry point                                            | When the limit is exceeded                                                                                        |
-| ------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------- |
-| Tools `plugin-data-set` / `plugin-data-set-batch`      | Error at call time                                                                                                |
-| Commit of `plugin.data` / `plugin.data.batch`          | The commit fails                                                                                                  |
-| `ctx.pluginData.set`, the store view of an RPC handler | The write fails                                                                                                   |
-| REST `PUT /api/sessions/:id/plugin-data/...`           | Returns `413`                                                                                                     |
-| World package import                                   | The record gets an error diagnostic. The import fails and is not truncated. `pnpm validate:world` reports it too. |
+| Entry point                                                                      | When the limit is exceeded                                                                                        |
+| -------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| Tools `plugin-data-set` / `plugin-data-set-batch`                                | Error at call time                                                                                                |
+| Commit of `plugin.data` / `plugin.data.batch`                                    | The commit fails                                                                                                  |
+| Commit of `plugin.data.update` (the result after the operations)                 | The commit fails                                                                                                  |
+| `ctx.pluginData.set` / `ctx.pluginData.update`, the store view of an RPC handler | The write fails                                                                                                   |
+| REST `PUT /api/sessions/:id/plugin-data/...`                                     | Returns `413`                                                                                                     |
+| World package import                                                             | The record gets an error diagnostic. The import fails and is not truncated. `pnpm validate:world` reports it too. |
 
 For reference, the largest seed record in the bundled worlds is about 7 KB. To store more, split it into several keys, or keep only the part that later turns will read.
 
@@ -488,11 +489,12 @@ Read one item from the **current plugin's** storage. Reading across plugins is n
 
 **Output**: `{ found, namespace, key, value?, updatedAt? }`
 
-**It can read what it just wrote.** A write is committed only when execution finishes. But a read adds in the uncommitted `plugin.data` / `plugin.data.batch` / `plugin.data.delete` operations from this execution:
+**It can read what it just wrote.** A write is committed only when execution finishes. But a read adds in the uncommitted `plugin.data` / `plugin.data.batch` / `plugin.data.delete` / `plugin.data.update` operations from this execution:
 
 - Only pending operations for the **current session and current plugin** are applied.
 - For the same key, operations are applied in proposal order, and the last one wins. After a delete, the read returns `found: false`. A later write makes the read return the new value.
 - Writing `null` stores a value. It is not the same as a delete.
+- The operations of a `plugin.data.update` are applied on top of the stored value (or the pending writes before it), with the same `applyDataOps` the commit uses. An update whose operations fail on that value is skipped, because the commit rejects it too.
 - Different runtimes each have their own buffer, and they are not merged here.
 
 **What cannot be read.**
@@ -515,7 +517,7 @@ List all items in one namespace of the **current plugin**.
 - The `namespace` filter also applies to pending items. When it is omitted, all namespaces are merged.
 - The namespaces of hidden world data do not appear in the results.
 
-Reads and merges match the full `(namespace, key)` pair of strings exactly. They do not split on control characters, and they do not rewrite fields. The exported `overlayPluginDataRows()` uses `JSON.stringify([namespace, key])` as the Map key. Buffered reads in a function runtime and in a guard follow the same rules.
+Reads and merges match the full `(namespace, key)` pair of strings exactly. They do not split on control characters, and they do not rewrite fields. The exported `overlayPluginDataRows()` uses `JSON.stringify([namespace, key])` as the Map key; its fourth parameter `baseRows` holds the stored rows that a `plugin.data.update` starts from. Buffered reads in a function runtime and in a guard follow the same rules.
 
 ### runtime-done
 
@@ -1620,7 +1622,7 @@ Rules:
 
 **Writes** still go through the returned `withPendingProposals(...)`. A domain state cannot be committed directly while a tool is running.
 
-**Be careful with composite tools.** When one tool calls another tool directly inside it, the proposals the sub-tool newly produces are not yet in the executor's read snapshot. Such sub-calls must merge those local proposals themselves, using pure helper functions such as `overlayPluginDataValue`. The codex sync tool is an example. Apart from that, do not merge again by hand the proposals the executor has already merged.
+**Be careful with composite tools.** When one tool calls another tool directly inside it, the proposals the sub-tool newly produces are not yet in the executor's read snapshot. Such sub-calls must merge those local proposals themselves, using pure helper functions such as `overlayPluginDataValue`. The last parameter of `overlayPluginDataValue` is the key's stored value (`{ exists: false }` or `{ exists: true, value }`), so read the store first and merge after; it returns `{ hit, exists, value? }`. The codex sync tool is an example. Apart from that, do not merge again by hand the proposals the executor has already merged.
 
 #### Cancellation
 
@@ -1714,12 +1716,11 @@ Tools and runtimes do not change storage directly. They produce **proposals**: r
 Types registered so far:
 
 - `narrative.append`
-- `state.patch`
 - `event.emit`
 - `interaction.request`
 - `ui.render`
 - `asset.generate`
-- `plugin.data`, `plugin.data.batch`, `plugin.data.delete`
+- `plugin.data`, `plugin.data.batch`, `plugin.data.delete`, `plugin.data.update`
 - `character.upsert`, `character.schema.set`
 - `dimension.initialize`, `dimension.update`
 - `lorebook.upsert`
@@ -1734,13 +1735,7 @@ Each type is defined in one place: `ProposalPayloadMap`. `ProposalType`, the reg
 
 A proposal that fails is not committed. Its error code is `proposal-invalid` or the rejection reason of the media check. It takes the commit-failure path: an optional runtime next to a committed story loses only its own writes, and an execution with no story (manual, background, setup) commits nothing. Never only part of the proposals lands.
 
-**The difference between `state.patch` and `plugin.data`.** The state table that `state.patch` writes to is shared by the whole session:
-
-- At commit time, it requires only that `table` and `field` are non-empty strings.
-- It does not assign ownership by plugin, and it does not validate values against a table schema.
-- Each change records its source, `pluginId/runtimeId`, in the change record.
-
-Data that belongs to only one plugin goes in `plugin.data`. It is isolated by `(sessionId, pluginId, namespace, key)`.
+Plugin data uses `plugin.data`, isolated by `(sessionId, pluginId, namespace, key)`.
 
 ### `ui.render`
 

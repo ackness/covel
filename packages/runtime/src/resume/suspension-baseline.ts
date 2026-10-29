@@ -3,7 +3,7 @@
  *
  * A suspended runtime keeps the proposals it buffered before it stopped, and
  * the resume commits them later. In between, a background job or a manual run
- * can write the same plugin data key, state field, character or lorebook
+ * can write the same plugin data key, character or lorebook
  * entry. Committing the buffered value then would silently put back what the
  * runtime saw when it stopped.
  *
@@ -12,7 +12,10 @@
  * commit transaction reads them again before it writes anything: when one
  * changed, nothing commits and the suspension is out of date. Dimension
  * proposals are left out: they carry the version they were built from and the
- * commit rejects them when it moved on.
+ * commit rejects them when it moved on. A `plugin.data.update` counts only
+ * when its operations contain `set` or `delete`: relative operations (`inc`,
+ * `merge`, array operations) apply to whatever value is stored at commit, so
+ * they cannot put back a stale whole value.
  */
 
 import { isRecord } from "../utils/is-record.js";
@@ -64,6 +67,23 @@ export function suspensionWriteTargets(
             key: payload.key,
           });
         break;
+      case "plugin.data.update":
+        if (
+          nonEmpty(pluginId) &&
+          nonEmpty(payload.namespace) &&
+          nonEmpty(payload.key) &&
+          Array.isArray(payload.ops) &&
+          (payload.ops as unknown[]).some(
+            (op) => isRecord(op) && (op.op === "set" || op.op === "delete"),
+          )
+        )
+          add({
+            kind: "plugin-data",
+            pluginId,
+            namespace: payload.namespace,
+            key: payload.key,
+          });
+        break;
       case "plugin.data.batch":
         if (!nonEmpty(pluginId) || !Array.isArray(payload.items)) break;
         for (const item of payload.items as unknown[]) {
@@ -75,10 +95,6 @@ export function suspensionWriteTargets(
               key: item.key,
             });
         }
-        break;
-      case "state.patch":
-        if (nonEmpty(payload.table) && nonEmpty(payload.field))
-          add({ kind: "state", table: payload.table, field: payload.field });
         break;
       case "character.upsert":
         if (nonEmpty(payload.id)) add({ kind: "character", id: payload.id });
@@ -135,8 +151,6 @@ function describeTarget(target: SuspensionWriteTarget): string {
   switch (target.kind) {
     case "plugin-data":
       return `plugin data ${target.pluginId}/${target.namespace}/${target.key}`;
-    case "state":
-      return `state ${target.table}.${target.field}`;
     case "character":
       return `character ${target.id}`;
     case "character-schema":

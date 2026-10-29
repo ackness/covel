@@ -78,7 +78,7 @@ async function seedSetupSession(): Promise<DataStore> {
  * `{ skip: true }`. Returns the guard's skipped result (carrying the buffered
  * character.upsert proposal) plus the store.
  */
-async function runGuardTurn(): Promise<{
+async function runGuardTurn(removedStateWrite = false): Promise<{
   store: DataStore;
   guardResult: Awaited<
     ReturnType<typeof runTurnPipeline>
@@ -95,6 +95,22 @@ async function runGuardTurn(): Promise<{
         return withPendingProposals(
           { skip: true, preGameDone: true, playerName: "Rin" },
           [
+            ...(removedStateWrite
+              ? [
+                  {
+                    id: "removed-state-write",
+                    type: "state.patch",
+                    sessionId: ctx.sessionId,
+                    source: {
+                      pluginId: ctx.pluginId,
+                      runtimeId: ctx.runtimeId,
+                    },
+                    turnId: "t1",
+                    timestamp: new Date().toISOString(),
+                    payload: { table: "stats", field: "hp", value: 1 },
+                  } as unknown as import("@covel/plugin-handlers-utils").PluginProposal,
+                ]
+              : []),
             makeProposal(ctx, new Date().toISOString(), "character.upsert", {
               id: "player-x",
               name: "Rin",
@@ -125,7 +141,7 @@ async function runGuardTurn(): Promise<{
   return { store, guardResult };
 }
 
-/** A sibling result whose state.patch is missing `table` → rejected on commit. */
+/** A sibling result whose notification has a non-object entry → rejected on commit. */
 function failingSiblingResult(): Parameters<
   typeof finalizeExecution
 >[0]["results"][number] {
@@ -136,12 +152,69 @@ function failingSiblingResult(): Parameters<
     turnId: "t1",
     status: "success",
     output: {},
-    effects: { statePatches: [{ field: "hp", value: 1 }] },
+    effects: { notifications: [null] },
     toolCalls: [],
   };
 }
 
 describe("agent guard write buffer — whole-execution atomicity", () => {
+  it("rejects a removed state.patch proposal buffered by a skipped guard", async () => {
+    const { store, guardResult } = await runGuardTurn(true);
+    const outcome = await finalizeExecution({
+      executionContext: {
+        executionId: "removed-guard-write",
+        origin: "manual",
+        countPolicy: "none",
+      },
+      store,
+      sessionId: SESSION_ID,
+      runtimes: [guardRuntime],
+      results: [guardResult],
+      turnIds: ["t1"],
+    });
+    expect(outcome.status).toBe("failed");
+    expect(outcome.failedProposals).toEqual([
+      expect.objectContaining({
+        proposal: expect.objectContaining({ type: "state.patch" }),
+        code: "proposal-invalid",
+        error: "unknown proposal type: state.patch",
+      }),
+    ]);
+    expect(await store.listCharacters(SESSION_ID)).toEqual([]);
+    expect(await store.getStateEntry(SESSION_ID, "stats", "hp")).toBeNull();
+  });
+
+  it("rejects removed effects on a skipped guard that would commit buffered writes", async () => {
+    const { store, guardResult } = await runGuardTurn();
+    const outcome = await finalizeExecution({
+      executionContext: {
+        executionId: "removed-guard-effects",
+        origin: "manual",
+        countPolicy: "none",
+      },
+      store,
+      sessionId: SESSION_ID,
+      runtimes: [guardRuntime],
+      results: [
+        {
+          ...guardResult,
+          effects: {
+            statePatches: [],
+          } as unknown as import("@covel/shared").RuntimeEffects,
+        },
+      ],
+      turnIds: ["t1"],
+    });
+    expect(outcome.status).toBe("failed");
+    expect(outcome.failedProposals).toEqual([
+      expect.objectContaining({
+        proposal: expect.objectContaining({ type: "effects.invalid" }),
+        error:
+          "effects.statePatches is no longer supported; use plugin data (effects.pluginData) instead",
+      }),
+    ]);
+    expect(await store.listCharacters(SESSION_ID)).toEqual([]);
+  });
   it("rolls the guard's player back when a same-execution proposal fails", async () => {
     const { store, guardResult } = await runGuardTurn();
 
@@ -155,7 +228,7 @@ describe("agent guard write buffer — whole-execution atomicity", () => {
       sessionId: SESSION_ID,
       runtimes: [guardRuntime, siblingRuntime],
       // Guard's buffered player upsert commits, then the sibling's malformed
-      // state.patch is rejected — the whole execution rolls back.
+      // notification is rejected — the whole execution rolls back.
       results: [guardResult, failingSiblingResult()],
       turnIds: ["t1"],
     });

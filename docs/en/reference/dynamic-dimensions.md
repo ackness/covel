@@ -154,7 +154,7 @@ There is no expression language. A world file contains no code.
 
 ## Session authority and sync
 
-**Who is responsible, and where it is stored.** The kernel finds the one enabled provider for the contract `world.dimensions@1`, and it fixes that provider for this game. Each dimension is one record `{definition,value,version,lastTrackedSource?}` in the protected area `plugin_data[_dimensions]`. There is no new database table, and there is no permanent copy in the lorebook. The general plugin data writes and state patches cannot change it.
+**Who is responsible, and where it is stored.** The kernel finds the one enabled provider for the contract `world.dimensions@1`, and it fixes that provider for this game. Each dimension is one record `{definition,value,version,lastTrackedSource?}` in the protected area `plugin_data[_dimensions]`. There is no new database table, and there is no permanent copy in the lorebook. General plugin data writes cannot change it.
 
 **Two kinds of writes:**
 

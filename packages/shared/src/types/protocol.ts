@@ -80,13 +80,6 @@ export interface UiRenderedPayload {
   readonly turnId?: string;
 }
 
-export interface StateChangedPayload {
-  readonly table?: string;
-  readonly field?: string;
-  readonly value?: unknown;
-  readonly pluginId?: string;
-}
-
 export interface ExecutionStartedPayload {
   readonly status: string;
   readonly runtimeCount: number;
@@ -139,6 +132,10 @@ export interface RuntimeDeferredPayload {
 export interface RuntimeLifecyclePayload {
   readonly runtimeId: string;
   readonly pluginId: string;
+  /** The turn the run belongs to; nested runs share their parent's. */
+  readonly turnId?: string;
+  /** The run itself: a runtime can run nested and at top level in one turn. */
+  readonly runId?: string;
   readonly status: string;
   readonly durationMs?: number;
 }
@@ -272,12 +269,6 @@ export type CovelEvent =
   // UI render parts
   | { readonly type: "ui.rendered"; readonly payload: UiRenderedPayload }
   | { readonly type: "ui.part.update"; readonly payload: CovelEventPayload }
-  // State
-  | { readonly type: "state.changed"; readonly payload: StateChangedPayload }
-  | {
-      readonly type: "state.patch.applied";
-      readonly payload: CovelEventPayload;
-    }
   // Execution lifecycle
   | {
       readonly type: "execution.started";
@@ -488,8 +479,6 @@ export const COVEL_EVENT_META = {
   "interaction.requested": { forwardToActionStream: false },
   "ui.rendered": { forwardToActionStream: true },
   "ui.part.update": { forwardToActionStream: false },
-  "state.changed": { forwardToActionStream: false },
-  "state.patch.applied": { forwardToActionStream: true },
   "execution.started": { forwardToActionStream: false },
   "runtime.started": { forwardToActionStream: false },
   // Written directly by the action route. Persistent EventBus subscribers may

@@ -282,6 +282,26 @@ const crossField = [
     field: "agent.finishWith",
   },
   {
+    name: "a story runtime with a required contract input",
+    runtime: {
+      ...staged,
+      io: {
+        visibility: "story",
+        inputs: { cast: { from: { contract: "scene-cast@1" } } },
+      },
+    },
+    field: "io.inputs.cast.required",
+  },
+  {
+    name: "a story runtime that needs a contract",
+    runtime: {
+      ...staged,
+      schedule: { stage: "narrative", needs: [{ contract: "scene-cast@1" }] },
+      io: { visibility: "story" },
+    },
+    field: "schedule.needs.0",
+  },
+  {
     name: "options on a kernel input",
     runtime: {
       schedule: { stage: "narrative" },
@@ -331,6 +351,52 @@ describe("cross-field rules", () => {
       expect(error).not.toMatch(/turnCompletion|outputKind|requireExplicit/);
     },
   );
+
+  it("rejects a story package that requires a plugin contract, and accepts a system one", async () => {
+    const storyRuntime = { ...staged, io: { visibility: "story" } };
+    const story = await plugin(
+      { requires: ["scene-cast@1"] },
+      { one: storyRuntime },
+    );
+    const file = path.join(story, "PLUGIN.md");
+    const error = await load(story).then(
+      () => undefined,
+      (caught: Error) => caught.message,
+    );
+    expect(error).toContain(`${file}: requires:`);
+    expect(error).toContain("cannot require contract scene-cast@1");
+    expect((await validate(story)).stderr).toContain(`${file}: requires:`);
+
+    const inlineRuntime = {
+      ...storyRuntime,
+      function: { handler: "./handler.js" },
+    };
+    const inline = await plugin({
+      requires: ["scene-cast@1"],
+      runtime: inlineRuntime,
+    });
+    const inlineResult = await validate(inline);
+    expect(inlineResult.status).toBe(1);
+    expect(inlineResult.stderr).toContain(
+      `${path.join(inline, "PLUGIN.md")}: requires:`,
+    );
+    expect(inlineResult.stderr).toContain(
+      "cannot require contract scene-cast@1",
+    );
+    const inlineControl = await plugin({ runtime: inlineRuntime });
+    expect((await validate(inlineControl)).status).toBe(0);
+
+    const system = await plugin(
+      { requires: ["scene-cast@1"] },
+      { one: staged },
+    );
+    expect((await validate(system)).status).toBe(0);
+    const kernel = await plugin(
+      { requires: ["stage.cast@1"] },
+      { one: storyRuntime },
+    );
+    expect((await validate(kernel)).status).toBe(0);
+  });
 
   it("accepts a kernel input that names only its source", async () => {
     const dir = await plugin(
@@ -405,6 +471,31 @@ const uiSpecs: {
   },
   { name: "an unknown component", spec: { view: { component: "Widget" } } },
 ];
+
+describe("dataset declarations", () => {
+  it("a key that is not a required schema property is rejected by load and validation alike", async () => {
+    const dir = await plugin(
+      {
+        contributes: {
+          datasets: { journal: { schema: "./journal.json", key: "ghost" } },
+        },
+      },
+      {},
+      {
+        "journal.json": JSON.stringify({
+          type: "object",
+          properties: { id: { type: "string" } },
+          required: ["id"],
+        }),
+      },
+    );
+    const message = `${path.join(dir, "PLUGIN.md")}: contributes.datasets.journal.key: ghost is not a required property of ./journal.json`;
+    await expect(load(dir)).rejects.toThrow(message);
+    const result = await validate(dir);
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain(message);
+  });
+});
 
 describe("UI specs", () => {
   async function uiPlugin(spec: unknown, files: Record<string, string> = {}) {

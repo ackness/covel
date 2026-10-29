@@ -44,13 +44,6 @@ export interface InteractionRequestPayload {
   readonly narrativeTemplate?: string;
 }
 
-export interface StatePatchPayload {
-  readonly table: string;
-  readonly field: string;
-  readonly value: unknown;
-  readonly reason?: string;
-}
-
 export interface EventEmitPayload {
   readonly topic: string;
   readonly data: Readonly<Record<string, unknown>>;
@@ -77,6 +70,17 @@ export interface PluginDataBatchPayload {
 export interface PluginDataDeletePayload {
   readonly namespace: string;
   readonly key: string;
+}
+
+/**
+ * Operations against one plugin-data key. The commit applies them to the
+ * latest stored value inside the commit transaction; see
+ * `docs/reference/transactions.md`.
+ */
+export interface PluginDataUpdatePayload {
+  readonly namespace: string;
+  readonly key: string;
+  readonly ops: readonly import("@covel/plugin-handlers-utils").DataOp[];
 }
 
 export interface CharacterUpsertPayload {
@@ -151,7 +155,6 @@ export interface LorebookUpsertEntry {
 
 export interface ProposalPayloadMap {
   "narrative.append": NarrativeAppendPayload;
-  "state.patch": StatePatchPayload;
   "event.emit": EventEmitPayload;
   "interaction.request": InteractionRequestPayload;
   "ui.render": UIRenderPayload;
@@ -159,6 +162,7 @@ export interface ProposalPayloadMap {
   "plugin.data": PluginDataPayload;
   "plugin.data.batch": PluginDataBatchPayload;
   "plugin.data.delete": PluginDataDeletePayload;
+  "plugin.data.update": PluginDataUpdatePayload;
   "character.upsert": CharacterUpsertPayload;
   "character.schema.set": CharacterSchemaSetPayload;
   "dimension.initialize": import("@covel/plugin-handlers-utils/dimensions").DimensionInitializePayload;
@@ -200,7 +204,6 @@ export type Proposal = { [K in ProposalType]: ProposalFor<K> }[ProposalType];
  */
 export const PROPOSAL_TYPES = [
   "narrative.append",
-  "state.patch",
   "event.emit",
   "interaction.request",
   "ui.render",
@@ -208,6 +211,7 @@ export const PROPOSAL_TYPES = [
   "plugin.data",
   "plugin.data.batch",
   "plugin.data.delete",
+  "plugin.data.update",
   "character.upsert",
   "character.schema.set",
   "dimension.initialize",

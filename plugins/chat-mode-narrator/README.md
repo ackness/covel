@@ -5,7 +5,7 @@
 ## 运行时结构
 
 - `PLUGIN.md`：单 agent runtime 和玩家可调设置。
-- 依赖 `scene-stage` 的 cast runtime（`scene-cast@1`）提供当前在场角色上下文。
+- 不依赖任何其他插件：有 `scene-stage` 的 cast runtime（`scene-cast@1`）时读取当前在场角色上下文，没有时按世界、历史和玩家输入里在场的角色退化为纯对白叙事。
 - 可读取 `npc-graph/rag-retriever` 提供的人物关系上下文。
 - 常驻 prompt 只使用世界名称、简介和标签；由世界上下文扩展提供世界条目。
 - 玩家角色卡（`<player-character>`）由 entry 注册的回合级提示段提供，排在历史之后；正文里只写块名，system prompt 不随角色卡变化。

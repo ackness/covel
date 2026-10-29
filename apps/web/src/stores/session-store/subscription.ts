@@ -637,7 +637,6 @@ export function useSessionSubscription({
           .catch(ignoreError("checkpoint terminal background job"));
       }
       if (
-        event.type === "state.changed" ||
         event.type === "character.upserted" ||
         event.type === "character-schema.changed" ||
         event.type === "dimensions.changed" ||

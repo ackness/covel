@@ -432,13 +432,14 @@ interface UIRenderPart {
 
 同一个上限适用于所有写入口：
 
-| 入口                                             | 超限时                                                                        |
-| ------------------------------------------------ | ----------------------------------------------------------------------------- |
-| 工具 `plugin-data-set` / `plugin-data-set-batch` | 调用时报错                                                                    |
-| `plugin.data` / `plugin.data.batch` 的提交       | 提交失败                                                                      |
-| `ctx.pluginData.set`、RPC handler 的 store view  | 写入失败                                                                      |
-| REST `PUT /api/sessions/:id/plugin-data/...`     | 返回 `413`                                                                    |
-| 世界包导入                                       | 该记录得到一条 error 诊断，导入失败、不截断。`pnpm validate:world` 同样报告。 |
+| 入口                                                                      | 超限时                                                                        |
+| ------------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
+| 工具 `plugin-data-set` / `plugin-data-set-batch`                          | 调用时报错                                                                    |
+| `plugin.data` / `plugin.data.batch` 的提交                                | 提交失败                                                                      |
+| `plugin.data.update` 的提交（按操作之后的结果算）                         | 提交失败                                                                      |
+| `ctx.pluginData.set` / `ctx.pluginData.update`、RPC handler 的 store view | 写入失败                                                                      |
+| REST `PUT /api/sessions/:id/plugin-data/...`                              | 返回 `413`                                                                    |
+| 世界包导入                                                                | 该记录得到一条 error 诊断，导入失败、不截断。`pnpm validate:world` 同样报告。 |
 
 作为参照，内置世界里最大的一条种子记录约 7 KB。要存更多内容时，拆成多个 key，或只保留之后的回合会读的部分。
 
@@ -488,11 +489,12 @@ interface UIRenderPart {
 
 **输出**: `{ found, namespace, key, value?, updatedAt? }`
 
-**能读到自己刚写的。** 写入要到执行完成时才提交。但读取会把本次执行里还没提交的 `plugin.data` / `plugin.data.batch` / `plugin.data.delete` 叠加上去：
+**能读到自己刚写的。** 写入要到执行完成时才提交。但读取会把本次执行里还没提交的 `plugin.data` / `plugin.data.batch` / `plugin.data.delete` / `plugin.data.update` 叠加上去：
 
 - 只叠加**当前会话、当前插件**的待提交操作。
 - 同一个 key 按 proposal 的顺序应用，最后一次为准。删除后读取返回 `found: false`；之后再写入，读到新值。
 - 写入 `null` 是存了一个值，不等于删除。
+- `plugin.data.update` 的操作叠加在已存的值（或前面待提交的写入）之上，用的是提交时同一个 `applyDataOps`。操作在这个值上失败的那条更新被跳过，因为提交时它也会被拒。
 - 不同 runtime 各有自己的缓冲区，这里不会把它们合并。
 
 **读不到的东西。**
@@ -515,7 +517,7 @@ interface UIRenderPart {
 - `namespace` 过滤同样作用于待提交的条目。不传时合并所有 namespace。
 - 隐藏世界数据的 namespace 不出现在结果里。
 
-读取和合并按完整的 `(namespace, key)` 这一对字符串精确匹配，不按控制字符拆分，也不改写字段。框架导出的 `overlayPluginDataRows()` 用 `JSON.stringify([namespace, key])` 作为 Map 的 key。函数 runtime 和 guard 的缓冲读取遵循同样的规则。
+读取和合并按完整的 `(namespace, key)` 这一对字符串精确匹配，不按控制字符拆分，也不改写字段。框架导出的 `overlayPluginDataRows()` 用 `JSON.stringify([namespace, key])` 作为 Map 的 key；它的第四个参数 `baseRows` 是已存的行，`plugin.data.update` 从这些行开始应用操作。函数 runtime 和 guard 的缓冲读取遵循同样的规则。
 
 ### runtime-done
 
@@ -1618,7 +1620,7 @@ export default function ({ tool, z, shortId }) {
 
 **写入**仍然通过返回 `withPendingProposals(...)`。不能在工具执行中直接提交领域状态。
 
-**组合工具要注意。** 一个工具在内部直接调用另一个工具时，子工具新产生的提案还没有进入执行器的读取快照。这类子调用要自己用 `overlayPluginDataValue` 等纯辅助函数合并这些局部提案。codex 的同步工具是例子。除此之外，不要再手动合并执行器已经合并过的提案。
+**组合工具要注意。** 一个工具在内部直接调用另一个工具时，子工具新产生的提案还没有进入执行器的读取快照。这类子调用要自己用 `overlayPluginDataValue` 等纯辅助函数合并这些局部提案。`overlayPluginDataValue` 的最后一个参数是这个键已存的值（`{ exists: false }` 或 `{ exists: true, value }`），所以先读 store 再合并；它返回 `{ hit, exists, value? }`。codex 的同步工具是例子。除此之外，不要再手动合并执行器已经合并过的提案。
 
 #### 取消
 
@@ -1712,12 +1714,11 @@ agent:
 当前已注册的类型：
 
 - `narrative.append`
-- `state.patch`
 - `event.emit`
 - `interaction.request`
 - `ui.render`
 - `asset.generate`
-- `plugin.data`、`plugin.data.batch`、`plugin.data.delete`
+- `plugin.data`、`plugin.data.batch`、`plugin.data.delete`、`plugin.data.update`
 - `character.upsert`、`character.schema.set`
 - `dimension.initialize`、`dimension.update`
 - `lorebook.upsert`
@@ -1732,13 +1733,7 @@ agent:
 
 没通过的 proposal 不提交，错误码是 `proposal-invalid` 或媒体检查的拒绝原因。它走的是提交失败的路径：跟在一段已提交故事旁边的可选 runtime，只丢掉它自己的写入；没有故事的执行（手动、后台、setup）整次不提交。不会只落下一部分 proposal。
 
-**`state.patch` 和 `plugin.data` 的区别。** `state.patch` 写入的状态表是全会话共享的：
-
-- 提交时只要求 `table` 和 `field` 是非空字符串。
-- 不按插件划分归属，也不按表的 schema 校验值。
-- 每次变更在变更记录里带上来源 `pluginId/runtimeId`。
-
-只属于一个插件的数据放在 `plugin.data`。它按 `(sessionId, pluginId, namespace, key)` 隔离。
+插件数据使用 `plugin.data`，按 `(sessionId, pluginId, namespace, key)` 隔离。
 
 ### `ui.render`
 

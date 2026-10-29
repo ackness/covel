@@ -3723,7 +3723,18 @@ Returns an index of the framework's capabilities. Third-party developers, extern
       "reservedNamespaces": ["_runtime_jobs", "_logs"],
       "writePaths": [
         "builtin-tool:plugin-data-set",
-        "function-output:pluginData[]"
+        "function-output:pluginData[]",
+        "function-ctx.pluginData.update",
+        "local-tool:withPendingProposals(plugin.data.update)",
+        "plugin-rpc:context.store.setPluginData",
+        "management-api:PUT /api/sessions/:id/plugin-data/:pluginId/:namespace/:key"
+      ]
+    },
+    "proposals": {
+      "pluginDataTypes": [
+        "plugin.data",
+        "plugin.data.batch",
+        "plugin.data.update"
       ]
     },
     "worldData": {
@@ -3746,6 +3757,12 @@ Returns an index of the framework's capabilities. Third-party developers, extern
 
 > [!NOTE]
 > **Values of `triggerTypes`**: the only trigger types available are `auto` / `manual` / `event`. `triggerTypes` lists all three. The cadence of an `auto` runtime is written in `schedule.every` and given in `trigger.every` of the runtime summary. For details, see [reference/plugins.md → Runtime grouped fields](./plugins.md#runtime-field-groups).
+
+**Plugin-data write paths.** `pluginData.writePaths` lists every way plugin data is written, and `proposals.pluginDataTypes` lists the proposal types that write plugin data:
+
+- Operation-based writes have two paths: `function-ctx.pluginData.update` in a function runtime, and `plugin.data.update` submitted by a plugin's local tool through `withPendingProposals`. Both produce a `plugin.data.update` proposal, which applies its operations to the stored value inside the commit transaction. See [Transactions · Operation-based writes](./transactions.md#operation-based-writes-plugindataupdate).
+- Paths that produce proposals (builtin tools, `function-output:pluginData[]`, `function-ctx.pluginData.*`, a local tool's `withPendingProposals`) are checked at commit against the plugin's declared [datasets](./plugins.md#datasets-contributesdatasets): operation kinds and the record schema. A violation is refused with `code: "dataset-violation"`.
+- `plugin-rpc:context.store.setPluginData` and `management-api:PUT …` are direct writes outside the commit pipeline. They skip the dataset checks and do not read the current value. World data import skips the dataset checks too (see [World Data · Companion plugin data](./world-data.md#companion-plugin-data)).
 
 #### `GET /api/plugins`
 
@@ -3921,7 +3938,7 @@ When an error happens, the session is not changed.
 
 ### State query
 
-The state system keeps facts about the game world in structured tables. Examples are character attributes, world state, and quest progress. Plugins submit state changes through the `state.patch` proposal. The endpoints here are read-only.
+These read-only debug endpoints retain access to existing session-state tables and change records. The tables and store APIs are kernel-owned, with their future use undecided; plugins can no longer write them. Use plugin data for plugin-owned state. Snapshot, browser-vault, and fork handling of existing entries is preserved.
 
 #### `GET /api/sessions/:id/state`
 
@@ -4278,7 +4295,7 @@ The server voids it the way [abandoning](#delete-apisessionsidsuspensionssuspens
 
 Rules for `data-changed`:
 
-- The records compared are: one plugin data key, one state field, one character, the character schema, one lorebook entry. Only the content is compared, so a write to another key does not affect the resume. Dimension changes are not compared here; they check their version themselves when they commit.
+- The records compared are: one plugin data key, one character, the character schema, one lorebook entry. Only the content is compared, so a write to another key does not affect the resume. Dimension changes are not compared here; they check their version themselves when they commit.
 - A record can also change while the resumed runtime runs. The commit transaction compares again before it writes anything; on a change it writes nothing, voids the item the same way and answers the same `409`.
 
 A runtime has only one suspended item waiting to resume at a time. When it suspends again, the older item is voided the way abandoning does, in the transaction that saves the new one, and no separate event is sent. When the web client receives the new `turn.suspended`, it drops the older item of the same runtime.
@@ -4755,8 +4772,8 @@ event: execution.completed
 data: {"runtimeCount":4,"resultCount":4,"durationMs":2500}
 id: example-epoch:1
 
-event: state.changed
-data: {"table":"character_stats","field":"hp","value":85}
+event: event.emitted
+data: {"topic":"quest.completed","data":{"name":"First steps"}}
 id: example-epoch:2
 ```
 
@@ -5916,7 +5933,6 @@ For the full classification table, see [protocol.md § 1. Event types](./protoco
 | `interaction.requested` | Interaction | Asks the player for input (form, choice, or confirmation) |
 | `ui.rendered` | UI | Sent after a `ui.render` proposal is submitted |
 | `ui.part.update` | UI | Status update for a UI part (one per part) |
-| `state.changed` | State | Game state changed |
 | `state.snapshot.created` | State | Sent after a snapshot is written, by automatic, manual, or fork |
 | `session.forked` | Session | Sent after `POST /api/sessions/:id/fork` creates the child session |
 | `execution.started` | Execution lifecycle | A turn starts running |
@@ -5951,7 +5967,7 @@ These events are also full members of `CovelEvent`. `COVEL_EVENT_META` says for 
 | `character.upserted`                                                   | `session-commit-emitter.ts`      |             Yes             | Sent after a `character.upsert` proposal is committed                                                                                                                  |
 | `tool.calling` / `tool.completed` / `tool.failed`                      | TurnEmitter                      |             Yes             | Tool-call traces (for the debug timeline)                                                                                                                              |
 | `llm.calling` / `llm.responded` / `message.completed`                  | TurnEmitter                      |             Yes             | LLM call traces                                                                                                                                                        |
-| `block.emitted` / `state.patch.applied`                                | TurnEmitter                      |             Yes             | Traces for a block being emitted / a state patch being applied                                                                                                         |
+| `block.emitted`                                                        | TurnEmitter                      |             Yes             | Traces for a block being emitted                                                                                                                                       |
 | `hook.fired` / `hook.rewrote` / `hook.aborted`                         | TurnEmitter                      |             Yes             | Hook behavior traces                                                                                                                                                   |
 | `gateway.calling` / `gateway.responded` / `gateway.failed`             | TurnEmitter (`withGatewayTrace`) |             Yes             | Traces for a function runtime or an extension provider calling a provider through `ctx.gateway` (same as `llm.*`); a failure carries the `usage` the provider reported |
 | `function.executing` / `function.completed`                            | TurnEmitter                      |             No              | Start and end traces of a function runtime handler; only goes through the subscription channel and `trace_events`                                                      |

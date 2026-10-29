@@ -92,6 +92,8 @@ Usage is simple: put the writes that must succeed or fail together into `fn`, an
 - `rejects a nested withTransaction with a clear error instead of deadlocking`
 - `recovers and accepts a fresh withTransaction after a nested rejection`
 
+`contract/suites/plugin-data-suite.ts` also checks the read-modify-write that operation-based writes rely on: a write is read back on the same transaction, a write of a failed savepoint is not visible afterwards, and a nested value round-trips unchanged.
+
 A new storage backend **must** pass this suite.
 
 ## Versioned plugin-data batch CAS
@@ -349,7 +351,7 @@ This is a synchronous convention. It does not try to recreate the full server tr
 There are two layers of transaction boundary:
 
 - **`commitAll`** (`packages/runtime/src/commit/session-commit-pipeline.ts`) commits the chain of proposals from **one runtime** into one `withTransaction` callback. It is the lowest-level commit primitive.
-- **`finalizeExecution`** (`packages/runtime/src/commit/finalize-execution.ts`) wraps all runtimes of **a whole execution** in **one** `withTransaction`. "The whole execution" means the top-level results, plus the flattened results of nested `recursiveCall`.
+- **`finalizeExecution`** (`packages/runtime/src/commit/finalize-execution.ts`) wraps all runtimes of **a whole execution** in **one** `withTransaction`. "The whole execution" means the top-level results, plus the flattened results of nested `recursiveCall`. Nested results enter only when their parent handler succeeded, and sit right before the parent's result (child before parent).
 
 Who calls it:
 
@@ -372,11 +374,11 @@ Who calls it:
 **Failure boundary that favors the narrative.**
 
 - A store error thrown by a domain write rolls back the whole turn.
-- A `{ committed: false }` returned by handler validation (for example a PreStateCommit veto, or a `state.patch` missing a field) rolls back only the optional runtime that proposed it, when this execution has a successful story result.
-- How: each non-story, non-setup runtime commits in its own savepoint. When it is rejected, only its own writes are undone. The narrative and the other runtimes are committed as usual.
-- In this case `FinalizeExecutionOutcome` returns `committed`, and lists the dropped parts in `failedProposals` / `isolatedRuntimes` (`{ runtimeId, error }`). The main turn tells the client with `proposal.failed` and the runtime's `runtime.failed` SSE event.
+- A `{ committed: false }` returned by handler validation (for example a PreStateCommit veto, or a `plugin.data` missing a field) rolls back only the optional runtime that proposed it, when this execution has a successful story result.
+- How: each non-story, non-setup top-level runtime, together with the nested `recursiveCall` results at every level below it, forms one commit unit that commits in one savepoint (children before their parent). When any write in the unit is rejected, the whole unit is undone. The narrative and the other units are committed as usual. A unit that holds a story or setup run (even a nested one; setup is judged by the manifest's stage) commits directly in the execution transaction: when any of its writes is rejected, the whole turn rolls back. Suspensions in a discarded unit are not saved. For a suspension that is saved, the detached jobs it holds back are settled for the drops: a job that hard-depends on a dropped runtime is removed, and the rest record it as `failed` in their frozen inputs. When every suspension of the execution is discarded, the turn ends as if they had been abandoned: it counts, and the detached jobs they held back are queued after the same settlement.
+- In this case `FinalizeExecutionOutcome` returns `committed`, and lists the dropped parts in `failedProposals` / `isolatedRuntimes` (`{ runtimeId, runId, error }`, one entry for each run in a dropped unit). The same runtime can run both nested and at top level, so runs are told apart by `runId`; journal entries, trigger counts and saved `turn_results` entries are also settled per run. The main turn tells the client with `proposal.failed` and the runtime's `runtime.failed` SSE event.
 - Executions without a story (manual, background, detached, setup) are still atomic as a whole: if any one proposal fails, the whole thing is rolled back. A job does not report success for writes that were not stored.
-- An effect entry in the result that cannot become a proposal also counts as a write rejected for that runtime, and is handled by the boundary above. It does not bring down the whole turn with an exception. These entries are: entries in `effects.ui[].parts`, `effects.interactions`, `effects.notifications`, and `effects.statePatches` that are not objects, and content of the last three channels that is not an array. A function runtime fails with `output-schema-invalid` when its handler returns them.
+- An effect entry in the result that cannot become a proposal also counts as a write rejected for that runtime, and is handled by the boundary above. It does not bring down the whole turn with an exception. These entries are: entries in `effects.ui[].parts`, `effects.interactions`, and `effects.notifications` that are not objects, and content of the last two channels that is not an array. A function runtime fails with `output-schema-invalid` when its handler returns them. The removed `effects.statePatches` channel is also rejected on results that would commit writes, with a message directing authors to plugin data. It is reported with the diagnostic marker `effects.invalid`, rather than a proposal type.
 
 **Export publishing has its own failure boundary.**
 
@@ -384,7 +386,7 @@ Who calls it:
 - When one export's storage fails, the savepoint is rolled back first, then the diagnostic is recorded, and then the other exports and the domain commit continue. This way PostgreSQL does not leave a caught SQL error in an aborted transaction.
 - A missing declared schema, and a failed public output contract check, are still handled at the normal execution validation boundary.
 
-**Downstream commits only if upstream really commits.** Results are committed in execution order. The hard dependents of a dropped runtime are dropped with it (`commit/commit-dependencies.ts`).
+**Downstream commits only if upstream really commits.** Commit units are committed in execution order. The hard dependents of a dropped runtime are dropped with it (`commit/commit-dependencies.ts`). Dependencies are checked only between top-level runtimes: a nested result depends only on results of its own nested execution, which sit in the same unit and commit or drop with it.
 
 | Relationship                                                                             | When the upstream is dropped                              |
 | ---------------------------------------------------------------------------------------- | --------------------------------------------------------- |
@@ -473,22 +475,25 @@ for (const result of results) {
 }
 // All runtime results then share one required transaction, which only writes.
 await store.withTransaction(async (tx) => {
-  for (const result of results) {
-    const { proposals, failedProposals } = prepared.get(result);
+  // A unit is a top-level result preceded by its nested results.
+  for (const unit of units) {
     const commit = async (sink) => {
-      const out = await commitPreparedProposals(
-        proposals,
-        sink,
-        sessionId,
-        result,
-        opts,
-      );
-      const failed = [...failedProposals, ...out.failedProposals];
-      if (failed.length > 0) throw new ProposalCommitFailure(failed);
+      for (const result of unit.members) {
+        const { proposals, failedProposals } = prepared.get(result);
+        const out = await commitPreparedProposals(
+          proposals,
+          sink,
+          sessionId,
+          result,
+          opts,
+        );
+        const failed = [...failedProposals, ...out.failedProposals];
+        if (failed.length > 0) throw new ProposalCommitFailure(failed);
+      }
     };
-    // An optional runtime beside a committed story commits in its own
-    // savepoint; a ProposalCommitFailure there drops that runtime alone.
-    await (isolates(result) ? tx.savepoint(commit) : commit(tx));
+    // An optional runtime beside a committed story commits with its nested
+    // results in one savepoint; a ProposalCommitFailure there drops the unit.
+    await (isolates(unit) ? tx.savepoint(commit) : commit(tx));
   }
   for (const message of journalMessages) await tx.appendTurnMessage(message);
   await extraInTx?.(tx, { droppedRuntimeIds });
@@ -503,6 +508,39 @@ await store.withTransaction(async (tx) => {
 });
 // Flush buffered notifications only after COMMIT; discard them on rollback.
 ```
+
+### Operation-based writes (plugin.data.update)
+
+A plugin can submit a list of operations against one plugin-data key instead of a computed value. A function runtime calls `ctx.pluginData.update(namespace, key, ops)`; a tool uses `makeProposal(ctx, now, "plugin.data.update", { namespace, key, ops })`. The operation kinds and their meaning are the `ops` of [plugin datasets](./plugins.md#datasets-contributesdatasets).
+
+**Read-modify-write in the commit transaction.** At commit, the `plugin.data.update` handler reads the key's stored value inside the commit transaction, applies the operations in order with `applyDataOps`, and writes the result back:
+
+- When the result is absent (for example the last operation is `delete`), an existing row is deleted; without a row nothing happens, and the commit still succeeds.
+- When the result is present, every `MediaRef` in the **result** is checked against the session and canonicalized, then the result is checked against the size limit of one value and then against the dataset rules (below) before it is written. The payload check before commit sees only the operations, and a reference can be assembled across operations or by changing the stored value, so the result is checked again. The rewrite keeps the row's ID and `createdAt`.
+- In-execution overlay reads (a runtime reading its own uncommitted writes) project the operations with the same `applyDataOps`. So what a runtime reads equals what the commit stores.
+
+**All or nothing per proposal.** When any operation of the list fails, the whole proposal is rejected and the key keeps its value. A rejected proposal follows the commit-unit rules above: next to a successful story only its optional unit is dropped, and an execution without a story rolls back as a whole. The handler never throws for a data problem; only a store error throws, and it rolls the whole execution back like any other write.
+
+**Error codes.** A rejection sets `CommitResult.code` to one of:
+
+| `code`                                                                | Cause                                                                                                                                                                                | Shape of `error`                                                                                                         |
+| --------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------ |
+| `data-op-rejected`                                                    | An operation fails against the current value, for example an `inc` past its `min`                                                                                                    | `plugin.data.update: inc result is outside the allowed range (op 0, out-of-bounds)`, with a path as `(op 1 at /gold, …)` |
+| `dataset-violation`                                                   | The write breaks a declared dataset: an operation kind that is not allowed, a result that does not match the record schema, or a schema document that is missing or does not compile | `plugin.data.update: dataset inventory: operation kind append is not allowed`                                            |
+| `media-not-found` / `media-ownership-invalid` / `media-mime-mismatch` | A `MediaRef` in the result names an asset that does not exist, that the session does not reference, or whose MIME type differs                                                       | `plugin.data.update: session … has no reference to media …`                                                              |
+
+A missing namespace or key, and an empty or invalid operation list, are rejected by the payload check before the handler runs, with `code` `proposal-invalid`. Rejections for a reserved namespace and the size limit happen in the handler and carry `error` without a `code`.
+
+**Dataset checks.** When a plugin declares a namespace in `contributes.datasets`, **every** plugin-data proposal of that plugin into the namespace is checked:
+
+- Each operation kind of a `plugin.data.update` must be in the dataset's `ops`. A whole-value write (`plugin.data` and each item of `plugin.data.batch`) counts as `set`, and `plugin.data.delete` counts as `delete`.
+- When the result is present, the written value is validated against the dataset's record schema, and the first 3 errors are reported.
+- When the host did not capture the dataset's schema document, every write is refused (`dataset schema of <ns> is unavailable`) instead of let through.
+- A namespace without a dataset gets none of these checks. The `key` field is not checked at commit.
+
+**Relies on per-session commit serialization.** The read-modify-write is correct because the commits of one session are serialized by the session lock, which is distributed across PostgreSQL processes (see the action-level plugin-rpc lock boundary above). Two executions that each prepare `inc +1` and commit one after the other add both. Writers outside the session lock do not read the current value and can overwrite it: the management API `PUT` of plugin data and the immediate writes of a plugin action RPC.
+
+**Suspension write baseline.** The write baseline recorded when a suspension is saved (`takenUnder.writes`) includes a `plugin.data.update` only when its operations contain `set` or `delete`. An update of relative operations only (`merge`, `inc`, array operations) applies to the latest value at commit and cannot put back a stale whole value, so it is left out.
 
 ## World Data import
 

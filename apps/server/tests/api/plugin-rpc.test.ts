@@ -1114,7 +1114,6 @@ function makeFunctionEntry(args: {
         assetGenerations,
         notifications,
         ui,
-        statePatches,
         preGameDone,
         ...value
       } = raw;
@@ -1125,7 +1124,6 @@ function makeFunctionEntry(args: {
         ...(assetGenerations ? { assetGenerations } : {}),
         ...(notifications ? { notifications } : {}),
         ...(ui ? { ui } : {}),
-        ...(statePatches ? { statePatches } : {}),
       };
       return {
         outcome: "success",

@@ -115,7 +115,7 @@ describe("F-201 event incarnation transport", () => {
             id: "other:1",
             sessionId: "same-id",
             topic: "state",
-            type: "state.changed",
+            type: "character.upserted",
             payload: { secret: true },
           },
         }),

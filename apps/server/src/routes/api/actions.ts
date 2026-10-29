@@ -87,6 +87,7 @@ import { resolveSessionById } from "./session/session-guard.js";
 import { readLockedSession } from "./session/locked-mutation.js";
 import { retryPendingDimensionSettlements } from "./actions/dimension-settlement-retry.js";
 import { preflightActionApprovals } from "./actions/approval-preflight.js";
+import { droppedRunPayloads } from "./actions/dropped-runs.js";
 import { preflightFormApprovals } from "./plugin-rpc/form-approvals.js";
 import { buildTurnExecutorDeps } from "./turn-execution-deps.js";
 import { buildSessionHookScope } from "./session/hook-scope.js";
@@ -944,20 +945,13 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
                   error: fp.error,
                 });
               }
-              // A runtime already streamed as completed whose writes were
+              // A run already streamed as completed whose writes were
               // dropped at commit: show the saved result, not the run.
-              for (const isolated of outcome.isolatedRuntimes ?? []) {
-                const dropped = result.runtimeResults.find(
-                  (item) => item.runtimeId === isolated.runtimeId,
-                );
-                if (!dropped) continue;
-                await writeEvent("runtime.failed", {
-                  runtimeId: dropped.runtimeId,
-                  pluginId: dropped.pluginId,
-                  status: "failed",
-                  durationMs: dropped.durationMs,
-                  error: isolated.error,
-                });
+              for (const payload of droppedRunPayloads(
+                result,
+                outcome.isolatedRuntimes,
+              )) {
+                await writeEvent("runtime.failed", payload);
               }
             },
             signal: commitSignal,

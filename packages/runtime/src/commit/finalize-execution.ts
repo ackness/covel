@@ -42,6 +42,7 @@ import type {
   RuntimeResult,
   SessionEvent,
 } from "@covel/shared";
+import { isSetupRuntime } from "@covel/shared";
 import {
   assertSuspensionWritesUnchanged,
   SuspensionDataChangedError,
@@ -62,6 +63,7 @@ import {
   commitPreparedProposals,
   prepareRuntimeProposals,
   type CommittableRuntimeResult,
+  type FailedProposal,
   type PreparedRuntimeProposals,
 } from "../session/session-runtime-result.js";
 import {
@@ -92,8 +94,12 @@ import {
   needsSettlementReceipt,
   registerDimensionSettlements,
 } from "./dimension-finalization.js";
-import { droppedUpstream } from "./commit-dependencies.js";
+import { droppedUpstream, settleDroppedInputs } from "./commit-dependencies.js";
 import { flushPostCommit } from "./post-commit-fanout.js";
+import {
+  datasetPolicyResolver,
+  type DatasetSchemas,
+} from "./commit-plugin-data.js";
 
 /**
  * Manifests resolve output kind, capabilities, scope, the persistent
@@ -107,12 +113,6 @@ type FinalizeManifest = RuntimeManifest;
 /** Commit results retain the execution identity and status of a runtime result. */
 type FinalizableResult = CommittableRuntimeResult &
   Pick<RuntimeResult, "runId" | "status">;
-
-interface FailedProposal {
-  readonly proposal: Proposal;
-  readonly error: string;
-  readonly code?: string;
-}
 
 export interface FinalizeExecutionArgs {
   /** Execution-level veto/cancellation forbids all domain writes and success fan-out. */
@@ -130,12 +130,33 @@ export interface FinalizeExecutionArgs {
    */
   readonly runtimes: readonly FinalizeManifest[];
   readonly imageFlowRuntimeIds?: readonly string[];
-  /** Flattened results to commit: top-level plus nested recursiveCall results. */
+  /**
+   * Flattened results to commit, in execution order: top-level results, each
+   * preceded by the nested recursiveCall results of its successful handler.
+   */
   readonly results: readonly FinalizableResult[];
+  /**
+   * How `results` group into commit units: the length of each unit, in order.
+   * A unit is one top-level result preceded by every result nested under it
+   * (children before their parent), and it commits or drops as one. Omitted,
+   * every result is its own unit.
+   */
+  readonly commitUnits?: readonly number[];
   /** Conversation entries committed atomically with this execution. */
   readonly journalMessages?: readonly TurnMessageRecord[];
+  /**
+   * The `runId` of the result each journal message came from, by message id.
+   * A message without an entry is dropped when a top-level runtime with its
+   * `sourceRuntimeId` is dropped.
+   */
+  readonly journalMessageRuns?: Readonly<Record<string, string>>;
   /** Runtime ids counted into the trigger ledger, one entry per run. */
   readonly runtimeTriggers?: readonly string[];
+  /**
+   * The `runId` of each `runtimeTriggers` entry, at the same index. Without
+   * it, an entry is dropped when a top-level runtime of that id is dropped.
+   */
+  readonly runtimeTriggerRuns?: readonly string[];
   /**
    * Continuations created while the runtimes executed. Callers stage these
    * instead of publishing them immediately; finalize persists them inside the
@@ -145,6 +166,13 @@ export interface FinalizeExecutionArgs {
    * like an abandon: a runtime has one suspension that can be resumed.
    */
   readonly suspensions?: readonly SuspensionRecord[];
+  /**
+   * The `runId` of the result each continuation came from, by suspension id.
+   * A continuation whose run was dropped at commit is never saved; when no
+   * continuation of the execution survives, the dropped ones end as if
+   * abandoned: their turn counts and the jobs they held back are queued.
+   */
+  readonly suspensionRuns?: Readonly<Record<string, string>>;
   /**
    * A resumed suspension's `takenUnder.writes`. They are read again first in
    * the transaction; when one changed, nothing commits and the outcome's
@@ -224,6 +252,13 @@ export interface FinalizeExecutionArgs {
    * callers / tests) ⇒ export values are published without media processing.
    */
   readonly mediaStore?: MediaOwnershipStore;
+  /**
+   * Compiled dataset record schemas by plugin id, then namespace, captured
+   * with the runtimes. Every plugin-data write into a namespace a runtime of
+   * its package declares in `datasets` is checked against them; a declared
+   * dataset without a schema here refuses every write.
+   */
+  readonly datasetSchemas?: DatasetSchemas;
 }
 
 export interface FinalizeExecutionOutcome {
@@ -238,8 +273,10 @@ export interface FinalizeExecutionOutcome {
   readonly failedProposals: readonly FailedProposal[];
   /**
    * Optional runtimes whose writes were dropped without failing the turn: a
-   * rejected proposal, or a hard upstream that was itself dropped. Their
-   * persisted results are settled as `failed` with `error`.
+   * rejected proposal, or a hard upstream that was itself dropped. A dropped
+   * top-level runtime takes the results nested under it along; each dropped
+   * run has its own entry. Their persisted results are settled as `failed`
+   * with `error`.
    */
   readonly isolatedRuntimes?: readonly IsolatedRuntime[];
   /** A non-proposal error (store error / `extraInTx` throw) that rolled back the execution. */
@@ -258,28 +295,44 @@ export interface FinalizeExecutionOutcome {
 
 export interface IsolatedRuntime {
   readonly runtimeId: string;
+  /**
+   * The dropped run. The same runtime can run nested and at top level in one
+   * execution, so a consumer matches on this when it is present.
+   */
+  readonly runId?: string;
   readonly error: string;
 }
 
 export interface CommitIsolation {
+  /** Top-level runtimes of this execution whose writes were dropped. */
   readonly droppedRuntimeIds: ReadonlySet<string>;
 }
 
 /** Results as committed: a runtime whose writes were dropped reads as failed. */
 export function applyIsolatedRuntimes<
-  T extends { readonly runtimeId: string; readonly status: string },
+  T extends {
+    readonly runtimeId: string;
+    readonly runId?: string;
+    readonly status: string;
+  },
 >(
   results: readonly T[],
   isolated: readonly IsolatedRuntime[] | undefined,
 ): T[] {
-  const errors = new Map(
-    (isolated ?? []).map((item) => [item.runtimeId, item.error]),
-  );
-  return results.map((result) =>
-    errors.has(result.runtimeId)
-      ? { ...result, status: "failed", error: errors.get(result.runtimeId) }
-      : result,
-  );
+  const byRun = new Map<string, string>();
+  const byRuntime = new Map<string, string>();
+  for (const item of isolated ?? []) {
+    if (item.runId !== undefined) byRun.set(item.runId, item.error);
+    else byRuntime.set(item.runtimeId, item.error);
+  }
+  return results.map((result) => {
+    const error =
+      (result.runId !== undefined ? byRun.get(result.runId) : undefined) ??
+      byRuntime.get(result.runtimeId);
+    return error !== undefined
+      ? { ...result, status: "failed", error }
+      : result;
+  });
 }
 
 /** Carries the failed proposals out of the transaction callback for the caller. */
@@ -292,6 +345,52 @@ class ProposalCommitFailure extends Error {
 
 function errorMessage(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
+}
+
+/** A top-level result and the nested results that commit or drop with it. */
+interface CommitUnit {
+  /** The top-level result, last of `members`. */
+  readonly root: FinalizableResult;
+  /** Children before their parent, `root` last. */
+  readonly members: readonly FinalizableResult[];
+}
+
+function commitUnitsOf(
+  results: readonly FinalizableResult[],
+  sizes: readonly number[] | undefined,
+): CommitUnit[] {
+  if (!sizes) return results.map((root) => ({ root, members: [root] }));
+  const units: CommitUnit[] = [];
+  let start = 0;
+  for (const size of sizes) {
+    const members = results.slice(start, start + size);
+    const root = members.at(-1);
+    if (size < 1 || members.length !== size || !root) break;
+    units.push({ root, members });
+    start += size;
+  }
+  if (start !== results.length) {
+    throw new Error(
+      `commitUnits cover ${start} of ${results.length} results; the commit plan is malformed`,
+    );
+  }
+  return units;
+}
+
+/** One entry per dropped run, in commit order. */
+function isolatedRuntimesOf(
+  isolated: ReadonlyMap<CommitUnit, string>,
+): IsolatedRuntime[] {
+  return [...isolated].flatMap(([unit, error]) =>
+    unit.members.map((member) => ({
+      runtimeId: member.runtimeId,
+      runId: member.runId,
+      error:
+        member === unit.root
+          ? error
+          : `dropped with ${unit.root.runtimeId}: ${error}`,
+    })),
+  );
 }
 
 async function settleTurnResults(
@@ -361,11 +460,21 @@ async function terminalizeExecutionJobs(
       progressScopeId: scopeId,
     });
     if (reported.length === 0) return;
-    const statusByRuntime = new Map(
-      applyIsolatedRuntimes(args.results, outcome.isolatedRuntimes).map(
-        (result) => [result.runtimeId, result.status],
-      ),
+    // Jobs name a runtime, not a run. When a runtime ran both nested and at
+    // top level, its top-level run decides.
+    const settled = applyIsolatedRuntimes(
+      args.results,
+      outcome.isolatedRuntimes,
     );
+    const roots = new Set(
+      commitUnitsOf(args.results, args.commitUnits).map((unit) => unit.root),
+    );
+    const statusByRuntime = new Map<string, string>();
+    for (const preferRoot of [false, true])
+      args.results.forEach((result, index) => {
+        if (roots.has(result) === preferRoot)
+          statusByRuntime.set(result.runtimeId, settled[index]!.status);
+      });
     const groups = new Map<
       string,
       { pluginId: string; runtimeId: string; jobIds: Set<string> }
@@ -488,16 +597,28 @@ export async function finalizeExecution(
   const saveSuspensions = async (
     tx: StoreTransaction,
     deferPostCommit: (fn: () => Promise<void>) => void,
+    dropped: {
+      /** Suspension ids whose run was dropped at commit. */
+      readonly suspensionIds: ReadonlySet<string>;
+      /** Held-back jobs as this execution committed them. */
+      readonly settleJobs: (
+        jobs: readonly DeferredRuntimeJob[],
+      ) => readonly DeferredRuntimeJob[];
+    },
   ): Promise<void> => {
     const saved = new Map<string, SuspensionRecord>();
     const voided: SuspensionRecord[] = [];
     const now = sessionClock?.now ?? new Date().toISOString();
-    for (const suspension of args.suspensions ?? []) {
+    const suspensions = args.suspensions ?? [];
+    for (const suspension of suspensions) {
       if (suspension.sessionId !== sessionId) {
         throw new Error(
           `suspension ${suspension.id} belongs to session ${suspension.sessionId}, expected ${sessionId}`,
         );
       }
+      // The run that asked for input had its writes dropped: nothing may
+      // resume it, and it must not replace a suspension that still stands.
+      if (dropped.suspensionIds.has(suspension.id)) continue;
       // What the buffered proposals would overwrite, read after this
       // execution's own writes: a resume compares it before committing.
       const continuation = suspension.pendingContinuation;
@@ -505,6 +626,15 @@ export async function finalizeExecution(
         ...suspension,
         pendingContinuation: {
           ...continuation,
+          // The jobs it holds back for the resume see this commit's drops
+          // the way the host's own deferred jobs do.
+          ...(continuation.withheldRuntimeJobs
+            ? {
+                withheldRuntimeJobs: dropped.settleJobs(
+                  continuation.withheldRuntimeJobs as readonly DeferredRuntimeJob[],
+                ),
+              }
+            : {}),
           takenUnder: {
             ...continuation.takenUnder,
             writes: await takeSuspensionWriteBaseline(
@@ -540,6 +670,36 @@ export async function finalizeExecution(
         voided.push(older);
       }
     }
+    // When every continuation of this execution was dropped, its turn ends
+    // here as if they had been abandoned: it counts, and the jobs it held
+    // back for the resume are queued now.
+    const abandoned = suspensions.filter((suspension) =>
+      dropped.suspensionIds.has(suspension.id),
+    );
+    if (abandoned.length > 0 && abandoned.length === suspensions.length) {
+      const continuation = abandoned[0]!.pendingContinuation;
+      if (
+        continuation.executionContext.countPolicy === "complete-player-turn"
+      ) {
+        await applySessionClockTx(tx, {
+          sessionId,
+          executionContext: continuation.executionContext,
+          update: { now },
+        });
+      }
+      const jobs = dropped.settleJobs(
+        (continuation.withheldRuntimeJobs ??
+          []) as readonly DeferredRuntimeJob[],
+      );
+      if (jobs.length > 0) {
+        if (!args.enqueueReleasedJobsInTx) {
+          throw new Error(
+            `cannot queue the jobs held back by dropped suspension ${abandoned[0]!.id}`,
+          );
+        }
+        await args.enqueueReleasedJobsInTx(tx, jobs);
+      }
+    }
     for (const record of saved.values()) {
       deferPostCommit(async () => {
         emitCommittedSuspension(eventBus, record);
@@ -561,6 +721,7 @@ export async function finalizeExecution(
     }
   };
 
+  const datasetPolicy = datasetPolicyResolver(runtimes, args.datasetSchemas);
   const commitOpts = (
     result: FinalizableResult,
     deferPostCommit?: (fn: () => Promise<void>) => void,
@@ -583,26 +744,33 @@ export async function finalizeExecution(
       : {}),
     ...(args.proposalGuard ? { proposalGuard: args.proposalGuard } : {}),
     ...(args.mediaStore ? { mediaStore: args.mediaStore } : {}),
+    ...(datasetPolicy ? { datasetPolicy } : {}),
     ...(deferPostCommit ? { deferPostCommit } : {}),
   });
   const kindOf = (result: FinalizableResult): string =>
     outputKindByRuntime.get(result.runtimeId) ?? "system";
 
   // A committed story must not be lost to an optional runtime's rejected
-  // write. When the execution produced a story, every other non-setup runtime
-  // commits in its own savepoint: a rejection rolls back that runtime alone.
+  // write. When the execution produced a story, every other non-setup unit
+  // commits in its own savepoint: a rejection rolls back that unit alone.
   // Without a story (manual, background, detached, setup), the execution stays
   // all-or-nothing so a job never reports success for writes that did not land.
   const hasStory = results.some(
     (result) => kindOf(result) === "story" && result.status === "success",
   );
-  const setupRuntimeIds = new Set(
-    (args.setupRan ?? []).map((ran) => ran.runtimeId),
-  );
-  const isolates = (result: FinalizableResult): boolean =>
-    hasStory &&
-    kindOf(result) !== "story" &&
-    !setupRuntimeIds.has(result.runtimeId);
+  // A setup run is known by its manifest's stage: `setupRan` lists only the
+  // setup runtimes this execution scheduled, not one a parent called nested.
+  const setupRuntimeIds = new Set([
+    ...(args.setupRan ?? []).map((ran) => ran.runtimeId),
+    ...runtimes.filter(isSetupRuntime).map((runtime) => runtime.name),
+  ]);
+  const protects = (result: FinalizableResult): boolean =>
+    kindOf(result) === "story" || setupRuntimeIds.has(result.runtimeId);
+  // A unit holding a story or setup run anywhere, even nested, stays with the
+  // execution: dropping it on its own could drop the very story that made
+  // isolation safe.
+  const isolates = (unit: CommitUnit): boolean =>
+    hasStory && !unit.members.some(protects);
 
   // Every exit funnels through here so reported jobs always reach a terminal
   // state, whatever the domain outcome.
@@ -642,23 +810,36 @@ export async function finalizeExecution(
     const postCommit: Array<() => Promise<void>> = [];
     let committedEvents: readonly SessionEvent[] = [];
     const isolatedFailures: FailedProposal[] = [];
-    // runtimeId -> why its writes were dropped.
-    const isolated = new Map<string, string>();
+    // Each unit is a top-level result with the results nested under it; it
+    // commits or drops as one. Dropped unit -> why its writes were dropped.
+    let units: CommitUnit[] = [];
+    const isolated = new Map<CommitUnit, string>();
+    // Top-level runtime ids are unique within an execution, so dependency
+    // checks, which only cross units at top level, can key on them.
+    const droppedRootIds = (): Set<string> =>
+      new Set([...isolated.keys()].map((unit) => unit.root.runtimeId));
+    const droppedRuns = (): Set<FinalizableResult> =>
+      new Set([...isolated.keys()].flatMap((unit) => unit.members));
     const manifestByRuntime = new Map(runtimes.map((rt) => [rt.name, rt]));
-    // A result stands on its hard upstreams when it succeeded, and also when
-    // it has writes to commit whatever its status: a guard that wrote and then
-    // returned `{ skip: true }` leaves a skipped result with buffered writes.
+    // A unit stands on its top-level result's hard upstreams when that result
+    // succeeded, and also when the unit has writes to commit whatever its
+    // status: a guard that wrote and then returned `{ skip: true }` leaves a
+    // skipped result with buffered writes. Nested results depend only on
+    // results of their own nested execution, which sit in the same unit.
     const lostUpstreamOf = (
-      result: FinalizableResult,
-      writes: PreparedRuntimeProposals,
+      unit: CommitUnit,
+      prepared: ReadonlyMap<FinalizableResult, PreparedRuntimeProposals>,
     ): string | undefined => {
-      const manifest = manifestByRuntime.get(result.runtimeId);
+      const manifest = manifestByRuntime.get(unit.root.runtimeId);
       return manifest &&
-        (result.status === "success" || writes.proposals.length > 0)
+        (unit.root.status === "success" ||
+          unit.members.some(
+            (member) => prepared.get(member)!.proposals.length > 0,
+          ))
         ? droppedUpstream(manifest, {
             runtimes,
-            results,
-            dropped: new Set(isolated.keys()),
+            results: units.map((candidate) => candidate.root),
+            dropped: droppedRootIds(),
           })
         : undefined;
     };
@@ -666,6 +847,7 @@ export async function finalizeExecution(
       if (args.abortReason !== undefined) {
         throw new Error(`Execution aborted: ${args.abortReason}`);
       }
+      units = commitUnitsOf(results, args.commitUnits);
       // Normalization, guards and PreStateCommit hooks run before the
       // transaction: hooks are plugin code with their own timeouts and must
       // never hold the store's write gate. The transaction then only writes.
@@ -801,26 +983,42 @@ export async function finalizeExecution(
           if (failed.length > 0) throw new ProposalCommitFailure(failed);
           return committed;
         };
-        // Results arrive in execution order, so every upstream settles before
-        // the runtimes that depend on it.
-        for (const result of results) {
+        // A unit's results commit children first, then the parent; units
+        // arrive in execution order, so every upstream settles before the
+        // runtimes that depend on it.
+        const commitUnit = async (
+          unit: CommitUnit,
+          sink: StoreTransaction,
+          defer: (fn: () => Promise<void>) => void,
+        ): Promise<readonly SessionEvent[]> => {
+          const committed: SessionEvent[] = [];
+          for (const member of unit.members) {
+            args.signal?.throwIfAborted();
+            committed.push(...(await commitResult(member, sink, defer)));
+          }
+          return committed;
+        };
+        for (const unit of units) {
           args.signal?.throwIfAborted();
-          const lostUpstream = lostUpstreamOf(result, prepared.get(result)!);
+          const { root } = unit;
+          const lostUpstream = lostUpstreamOf(unit, prepared);
           if (lostUpstream) {
             const error = `upstream ${lostUpstream} did not commit`;
             // A story or setup runtime cannot stand on writes that did not land.
-            if (!isolates(result)) {
-              throw new Error(`${result.runtimeId}: ${error}`);
+            if (!isolates(unit)) {
+              throw new Error(`${root.runtimeId}: ${error}`);
             }
-            isolated.set(result.runtimeId, error);
+            isolated.set(unit, error);
             console.warn(
-              `[finalize-execution] dropped writes of ${result.runtimeId} for session ${sessionId}: ${error}`,
+              `[finalize-execution] dropped writes of ${root.runtimeId} for session ${sessionId}: ${error}`,
             );
             continue;
           }
-          if (!isolates(result) || !tx.savepoint) {
+          // A unit with a story or setup run stays all-or-nothing with the
+          // execution; any other unit gets one savepoint next to a story.
+          if (!isolates(unit) || !tx.savepoint) {
             events.push(
-              ...(await commitResult(result, tx, (fn) => postCommit.push(fn))),
+              ...(await commitUnit(unit, tx, (fn) => postCommit.push(fn))),
             );
             continue;
           }
@@ -828,7 +1026,7 @@ export async function finalizeExecution(
           try {
             events.push(
               ...(await tx.savepoint((sp) =>
-                commitResult(result, sp, (fn) => buffered.push(fn)),
+                commitUnit(unit, sp, (fn) => buffered.push(fn)),
               )),
             );
             postCommit.push(...buffered);
@@ -836,16 +1034,26 @@ export async function finalizeExecution(
             if (!(err instanceof ProposalCommitFailure)) throw err;
             isolatedFailures.push(...err.failedProposals);
             isolated.set(
-              result.runtimeId,
+              unit,
               err.failedProposals.map((fp) => fp.error).join("; ") ||
                 "proposal rejected",
             );
             console.warn(
-              `[finalize-execution] dropped writes of ${result.runtimeId} for session ${sessionId}: ` +
+              `[finalize-execution] dropped writes of ${root.runtimeId} for session ${sessionId}: ` +
                 err.failedProposals.map((fp) => fp.error).join("; "),
             );
           }
         }
+        const dropped = droppedRuns();
+        const droppedIds = droppedRootIds();
+        const droppedRunIds = new Set([...dropped].map((run) => run.runId));
+        const runDropped = (
+          runId: string | undefined,
+          runtimeId: string | undefined,
+        ): boolean =>
+          runId !== undefined
+            ? droppedRunIds.has(runId)
+            : runtimeId !== undefined && droppedIds.has(runtimeId);
         // Every narrative owes a settlement, whether or not a runtime of this
         // execution asked for its receipt.
         events.push(
@@ -854,15 +1062,41 @@ export async function finalizeExecution(
         // A dropped runtime settles as failed: like any failed run, it adds
         // nothing to the conversation and does not count as a trigger.
         for (const message of args.journalMessages ?? []) {
-          if (message.sourceRuntimeId && isolated.has(message.sourceRuntimeId))
+          if (
+            runDropped(
+              args.journalMessageRuns?.[message.id],
+              message.sourceRuntimeId,
+            )
+          )
             continue;
           await tx.appendTurnMessage(message);
         }
-        await extraInTx?.(tx, {
-          droppedRuntimeIds: new Set(isolated.keys()),
-        });
+        await extraInTx?.(tx, { droppedRuntimeIds: droppedIds });
         args.signal?.throwIfAborted();
-        await saveSuspensions(tx, (fn) => postCommit.push(fn));
+        const rootView = {
+          runtimes,
+          results: units.map((unit) => unit.root),
+          dropped: droppedIds,
+        };
+        await saveSuspensions(tx, (fn) => postCommit.push(fn), {
+          suspensionIds: new Set(
+            (args.suspensions ?? [])
+              .filter((suspension) => {
+                const run = args.suspensionRuns?.[suspension.id];
+                return run !== undefined && droppedRunIds.has(run);
+              })
+              .map((suspension) => suspension.id),
+          ),
+          // Like the host's own deferred jobs: none that builds on a dropped
+          // runtime, and the rest see it as failed.
+          settleJobs: (jobs) =>
+            jobs
+              .filter((job) => {
+                const target = manifestByRuntime.get(job.runtimeId);
+                return !target || !droppedUpstream(target, rootView);
+              })
+              .map((job) => settleDroppedInputs(job, droppedIds)),
+        });
         if (shouldWriteClock) {
           await applySessionClockTx(tx, {
             sessionId,
@@ -873,20 +1107,18 @@ export async function finalizeExecution(
         await recordRuntimeTriggersTx(tx, {
           sessionId,
           runtimeIds: (args.runtimeTriggers ?? []).filter(
-            (runtimeId) => !isolated.has(runtimeId),
+            (runtimeId, index) =>
+              !runDropped(args.runtimeTriggerRuns?.[index], runtimeId),
           ),
           now: new Date().toISOString(),
         });
         await publishExports(
           tx,
-          results.filter((result) => !isolated.has(result.runtimeId)),
+          results.filter((result) => !dropped.has(result)),
         );
         // Persisted results were written before commit; settle dropped ones
         // as failed so history, retries and reloads match what was saved.
-        const failedRuntimes = [...isolated].map(([runtimeId, error]) => ({
-          runtimeId,
-          error,
-        }));
+        const failedRuntimes = isolatedRuntimesOf(isolated);
         for (const turnId of turnIds) {
           await tx.setTurnResultCommitStatus(
             sessionId,
@@ -935,12 +1167,7 @@ export async function finalizeExecution(
       failedProposals: isolatedFailures,
       ...(fanOutFailed ? { fanOutFailed } : {}),
       ...(isolated.size > 0
-        ? {
-            isolatedRuntimes: [...isolated].map(([runtimeId, error]) => ({
-              runtimeId,
-              error,
-            })),
-          }
+        ? { isolatedRuntimes: isolatedRuntimesOf(isolated) }
         : {}),
     });
   });

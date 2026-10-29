@@ -33,11 +33,7 @@ const execution = {
       runId: "fixture-run",
       output: {},
       effects: {
-        statePatches: [1, 2, 3].map((value) => ({
-          table: "stats",
-          field: `hp${value}`,
-          value,
-        })),
+        notifications: [1, 2, 3].map((value) => ({ message: `hp${value}` })),
       },
     },
   ],
@@ -79,12 +75,7 @@ it("cancels a blocked commit hook, rolls back earlier writes and skips later pro
     expect(signal.aborted).toBe(true);
     expect(outcome?.status).toBe("failed");
     expect(calls).toBe(2);
-    expect(
-      await store.getStateEntry(execution.sessionId, "stats", "hp1"),
-    ).toBeNull();
-    expect(
-      await store.getStateEntry(execution.sessionId, "stats", "hp3"),
-    ).toBeNull();
+    expect(await store.listMessages(execution.sessionId)).toEqual([]);
     expect(vi.getTimerCount()).toBe(0);
   } finally {
     // Release the fixture even if an assertion fails against a regression.
@@ -117,6 +108,6 @@ it("finishes post-commit hooks when cancellation arrives after the transaction",
   expect(result.status).toBe("committed");
   expect(observed).toEqual([false, false, false]);
   expect(
-    await store.getStateEntry(execution.sessionId, "stats", "hp3"),
-  ).toMatchObject({ value: 3 });
+    (await store.listMessages(execution.sessionId)).map((m) => m.content),
+  ).toEqual(["hp1", "hp2", "hp3"]);
 });

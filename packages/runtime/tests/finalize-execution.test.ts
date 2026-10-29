@@ -24,6 +24,8 @@ import { createEventBus } from "@covel/events";
 import type { TurnEmitter } from "../src/trace/turn-emitter.js";
 import { finalizeExecution } from "../src/commit/finalize-execution.js";
 import { createHookPipeline } from "../src/hooks/pipeline.js";
+import type { LoadedRuntime } from "@covel/shared/plugin-runtime";
+import { commitExecution, executeTurn } from "../src/index.js";
 
 const SESSION_ID = "sess-finalize";
 const TURN_ID = "turn-finalize";
@@ -88,14 +90,14 @@ function makeSuspension(): SuspensionRecord {
   };
 }
 
-/** A state.patch that commits; assert via `getStateEntry`. */
-function statePatch(field: string, value: JsonValue): RuntimeEffects {
-  return { statePatches: [{ table: "stats", field, value }] };
+/** A plugin.data write that commits. */
+function pluginData(field: string, value: JsonValue): RuntimeEffects {
+  return { pluginData: [{ namespace: "stats", key: field, value }] };
 }
 
-/** A state.patch missing `table` — the handler rejects it with `{ committed: false }`. */
-function badStatePatch(): RuntimeEffects {
-  return { statePatches: [{ field: "hp", value: 1 }] };
+/** A malformed notification rejects the runtime write. */
+function malformedEffects(): RuntimeEffects {
+  return { notifications: [null] };
 }
 
 function makeRecordingEmitter(): {
@@ -202,7 +204,7 @@ describe("finalizeExecution", () => {
         runtimes: [makeRuntime("story", "story"), makeRuntime("tracker")],
         results: [
           makeResult("story", { narrativeOutput: "A complete, valid scene." }),
-          makeResult("tracker", {}, statePatch("hp", 99)),
+          makeResult("tracker", {}, pluginData("hp", 99)),
         ],
         turnIds: [TURN_ID],
         extraInTx: async () => {
@@ -211,7 +213,9 @@ describe("finalizeExecution", () => {
       });
       expect(outcome.status).toBe("failed");
       expect(outcome.events).toEqual([]);
-      expect(await store.getStateEntry(SESSION_ID, "stats", "hp")).toBeNull();
+      expect(
+        await store.getPluginData(SESSION_ID, "tracker", "stats", "hp"),
+      ).toBeNull();
       expect(await store.listTurnMessages(SESSION_ID)).toEqual([]);
       expect(await commitStatusOf(store)).toBe("failed");
     },
@@ -276,7 +280,7 @@ describe("finalizeExecution", () => {
       store,
       sessionId: SESSION_ID,
       runtimes: [makeRuntime("rt-a")],
-      results: [makeResult("rt-a", {}, badStatePatch())],
+      results: [makeResult("rt-a", {}, malformedEffects())],
       suspensions: [makeSuspension()],
       turnIds: [TURN_ID],
       eventBus,
@@ -292,7 +296,7 @@ describe("finalizeExecution", () => {
     await savePendingTurn(store);
     const { emitter, emits } = makeRecordingEmitter();
 
-    // Runtime A commits several explicit effects; runtime B's malformed patch
+    // Runtime A commits several explicit effects; runtime B's malformed notification
     // causes the entire transaction to roll back.
     const outcome = await finalizeExecution({
       executionContext: {
@@ -308,14 +312,14 @@ describe("finalizeExecution", () => {
           "rt-a",
           {},
           {
-            ...statePatch("hp", 42),
             events: [{ topic: "stats.changed", data: { hp: 42 } }],
             pluginData: [
+              { namespace: "stats", key: "hp", value: 42 },
               { namespace: "entries", key: "rollback", value: { hp: 42 } },
             ],
           },
         ),
-        makeResult("rt-b", {}, badStatePatch()),
+        makeResult("rt-b", {}, malformedEffects()),
       ],
       turnIds: [TURN_ID],
       emitter,
@@ -325,11 +329,13 @@ describe("finalizeExecution", () => {
     expect(outcome.events).toHaveLength(0);
     expect(outcome.failedProposals).toHaveLength(1);
     expect(outcome.failedProposals[0]!.error).toMatch(
-      /state\.patch: invalid payload \(table:/,
+      /effects\.notifications\[0\] is not an object/,
     );
 
     // The committed sibling's write is rolled back — DB has no trace of it.
-    expect(await store.getStateEntry(SESSION_ID, "stats", "hp")).toBeNull();
+    expect(
+      await store.getPluginData(SESSION_ID, "rt-a", "stats", "hp"),
+    ).toBeNull();
     expect(await store.listEvents(SESSION_ID)).toEqual([]);
     expect(
       await store.getPluginData(SESSION_ID, "rt-a", "entries", "rollback"),
@@ -386,7 +392,7 @@ describe("finalizeExecution", () => {
       store,
       sessionId: SESSION_ID,
       runtimes: [makeRuntime("rt-a")],
-      results: [makeResult("rt-a", {}, statePatch("hp", 10))],
+      results: [makeResult("rt-a", {}, pluginData("hp", 10))],
       turnIds: [TURN_ID],
       journalMessages: [
         {
@@ -433,7 +439,7 @@ describe("finalizeExecution", () => {
       store,
       sessionId: SESSION_ID,
       runtimes: [makeRuntime("rt-a")],
-      results: [makeResult("rt-a", {}, badStatePatch())],
+      results: [makeResult("rt-a", {}, malformedEffects())],
       turnIds: [TURN_ID],
       journalMessages: [
         {
@@ -470,8 +476,22 @@ describe("finalizeExecution", () => {
       sessionId: SESSION_ID,
       runtimes: [makeRuntime("rt-a"), makeRuntime("rt-b")],
       results: [
-        makeResult("rt-a", {}, statePatch("hp", 10)),
-        makeResult("rt-b", {}, statePatch("mp", 20)),
+        makeResult(
+          "rt-a",
+          {},
+          {
+            ...pluginData("hp", 10),
+            interactions: [{ interactionId: "hp", type: "form" }],
+          },
+        ),
+        makeResult(
+          "rt-b",
+          {},
+          {
+            ...pluginData("mp", 20),
+            interactions: [{ interactionId: "mp", type: "form" }],
+          },
+        ),
       ],
       turnIds: [TURN_ID],
       emitter,
@@ -480,26 +500,30 @@ describe("finalizeExecution", () => {
     expect(outcome.status).toBe("committed");
     expect(outcome.failedProposals).toHaveLength(0);
     expect(outcome.events.map((e) => e.type)).toEqual([
-      "state.changed",
-      "state.changed",
+      "interaction.requested",
+      "interaction.requested",
     ]);
 
     // Both writes landed.
-    expect((await store.getStateEntry(SESSION_ID, "stats", "hp"))?.value).toBe(
-      10,
-    );
-    expect((await store.getStateEntry(SESSION_ID, "stats", "mp"))?.value).toBe(
-      20,
-    );
+    expect(
+      (await store.getPluginData(SESSION_ID, "rt-a", "stats", "hp"))?.value,
+    ).toBe(10);
+    expect(
+      (await store.getPluginData(SESSION_ID, "rt-b", "stats", "mp"))?.value,
+    ).toBe(20);
     expect(await commitStatusOf(store)).toBe("committed");
 
     // Deferred fan-out flushed after commit, in proposal (runtime) order.
     expect(emits.map((e) => e.type)).toEqual([
-      "state.patch.applied",
-      "state.patch.applied",
+      "block.emitted",
+      "block.emitted",
     ]);
     expect(
-      emits.map((e) => (e.payload.patch as { summary: string }).summary),
+      emits.map(
+        (e) =>
+          (e.payload.block as { data: { interactionId: string } }).data
+            .interactionId,
+      ),
     ).toEqual(["hp", "mp"]);
   });
 
@@ -512,7 +536,7 @@ describe("finalizeExecution", () => {
     const { emitter, emits } = makeRecordingEmitter();
     const emit = emitter.emit.bind(emitter);
     (emitter as { emit: TurnEmitter["emit"] }).emit = async (type, payload) => {
-      if (type === "state.patch.applied") throw new Error("subscriber gone");
+      if (type === "block.emitted") throw new Error("subscriber gone");
       await emit(type, payload);
     };
     const logged = vi.spyOn(console, "warn").mockImplementation(() => {});
@@ -526,7 +550,16 @@ describe("finalizeExecution", () => {
         store,
         sessionId: SESSION_ID,
         runtimes: [makeRuntime("rt-a")],
-        results: [makeResult("rt-a", {}, statePatch("hp", 10))],
+        results: [
+          makeResult(
+            "rt-a",
+            {},
+            {
+              ...pluginData("hp", 10),
+              interactions: [{ interactionId: "hp", type: "form" }],
+            },
+          ),
+        ],
         turnIds: [TURN_ID],
         emitter,
         eventBus,
@@ -536,7 +569,7 @@ describe("finalizeExecution", () => {
       expect(outcome.status).toBe("committed");
       expect(outcome.fanOutFailed).toBe(true);
       expect(
-        (await store.getStateEntry(SESSION_ID, "stats", "hp"))?.value,
+        (await store.getPluginData(SESSION_ID, "rt-a", "stats", "hp"))?.value,
       ).toBe(10);
       expect(resets).toEqual([
         { sessionId: SESSION_ID, reason: "publish-failed" },
@@ -580,13 +613,15 @@ describe("finalizeExecution", () => {
       sessionId: SESSION_ID,
       runtimes: [makeRuntime("rt-b"), makeRuntime("rt-a", "story")],
       results: [
-        makeResult("rt-b", {}, statePatch("hp", 99)),
+        makeResult("rt-b", {}, pluginData("hp", 99)),
         makeResult("rt-a", { toolCalls: [] }),
       ],
       turnIds: [TURN_ID],
     });
     expect(outcome.status).toBe("failed");
-    expect(await store.getStateEntry(SESSION_ID, "stats", "hp")).toBeNull();
+    expect(
+      await store.getPluginData(SESSION_ID, "rt-b", "stats", "hp"),
+    ).toBeNull();
     expect(
       (
         await store.getPluginData(
@@ -617,7 +652,7 @@ describe("finalizeExecution", () => {
       runtimes: [makeRuntime("rt-a", "story"), makeRuntime("rt-b")],
       results: [
         makeResult("rt-a", { narrativeOutput: "committed line" }),
-        makeResult("rt-b", {}, badStatePatch()),
+        makeResult("rt-b", {}, malformedEffects()),
       ],
       turnIds: [TURN_ID],
     });
@@ -632,6 +667,11 @@ describe("finalizeExecution", () => {
   });
 
   it.each([
+    {
+      statePatches: [{ table: "stats", field: "hp", value: 1 }],
+      pluginData: [{ namespace: "stats", key: "hp", value: 2 }],
+    },
+    { statePatches: [] },
     { statePatches: [null] },
     { statePatches: { length: 1 } },
     { interactions: { length: 1 } },
@@ -663,6 +703,23 @@ describe("finalizeExecution", () => {
       expect(result.isolatedRuntimes).toEqual([
         expect.objectContaining({ runtimeId: "sibling" }),
       ]);
+      if ("statePatches" in effects) {
+        expect(result.failedProposals[0]?.proposal).toMatchObject({
+          type: "effects.invalid",
+          source: { pluginId: "sibling", runtimeId: "sibling" },
+          payload: {
+            error:
+              "effects.statePatches is no longer supported; use plugin data (effects.pluginData) instead",
+          },
+        });
+        expect(result.failedProposals[0]?.error).toBe(
+          "effects.statePatches is no longer supported; use plugin data (effects.pluginData) instead",
+        );
+        expect(
+          await store.getPluginData(SESSION_ID, "sibling", "stats", "hp"),
+        ).toBeNull();
+        expect(await store.getStateEntry(SESSION_ID, "stats", "hp")).toBeNull();
+      }
       expect(
         (await store.listMessages(SESSION_ID)).map(
           (message) => message.content,
@@ -759,7 +816,7 @@ describe("finalizeExecution", () => {
       runtimes: [makeRuntime("rt-a", "story"), makeRuntime("rt-b")],
       results: [
         makeResult("rt-a", { narrativeOutput: "committed line" }),
-        makeResult("rt-b", {}, badStatePatch()),
+        makeResult("rt-b", {}, malformedEffects()),
       ],
       turnIds: [TURN_ID],
       journalMessages: [journalRow("rt-a", 100), journalRow("rt-b", 500)],
@@ -830,7 +887,7 @@ describe("finalizeExecution", () => {
       runtimes: [makeRuntime("rt-a"), makeRuntime("rt-b")],
       results: [
         makeResult("rt-a", { narrativeOutput: "plugin line" }),
-        makeResult("rt-b", {}, badStatePatch()),
+        makeResult("rt-b", {}, malformedEffects()),
       ],
       turnIds: [TURN_ID],
     });
@@ -878,7 +935,7 @@ describe("finalizeExecution", () => {
       runtimes: [makeRuntime("rt-a"), makeRuntime("rt-b")],
       results: [
         makeResult("rt-a", output),
-        makeResult("rt-b", {}, badStatePatch()),
+        makeResult("rt-b", {}, malformedEffects()),
       ],
       turnIds: [TURN_ID],
     });
@@ -952,7 +1009,7 @@ describe("finalizeExecution", () => {
         sessionId: SESSION_ID,
         executionContext,
         runtimes: [makeRuntime("rt-a")],
-        results: [makeResult("rt-a", {}, statePatch("hp", 3))],
+        results: [makeResult("rt-a", {}, pluginData("hp", 3))],
         turnIds: [TURN_ID],
       });
 
@@ -970,7 +1027,7 @@ describe("finalizeExecution", () => {
         sessionId: SESSION_ID,
         executionContext,
         runtimes: [makeRuntime("rt-a")],
-        results: [makeResult("rt-a", {}, badStatePatch())],
+        results: [makeResult("rt-a", {}, malformedEffects())],
         turnIds: [TURN_ID],
       });
 
@@ -1046,23 +1103,23 @@ describe("finalizeExecution — dependents of a dropped runtime", () => {
           manifest("late", { after: ["up"] }),
         ],
         [
-          makeResult("up", {}, badStatePatch()),
+          makeResult("up", {}, malformedEffects()),
           {
             ...makeResult("down"),
             status,
             pendingProposals: [
               {
                 id: "guard-write",
-                type: "state.patch" as const,
+                type: "plugin.data" as const,
                 sessionId: SESSION_ID,
                 turnId: TURN_ID,
                 source: { pluginId: "down", runtimeId: "down" },
                 timestamp: new Date().toISOString(),
-                payload: { table: "stats", field: "derived", value: 2 },
+                payload: { namespace: "stats", key: "derived", value: 2 },
               },
             ],
           },
-          makeResult("late", {}, statePatch("late", 3)),
+          makeResult("late", {}, pluginData("late", 3)),
         ],
       );
 
@@ -1073,11 +1130,11 @@ describe("finalizeExecution — dependents of a dropped runtime", () => {
           { runtimeId: "down", error: "upstream up did not commit" },
         ],
       });
-      expect(await store.getStateEntry(SESSION_ID, "stats", "derived")).toBe(
-        null,
-      );
       expect(
-        (await store.getStateEntry(SESSION_ID, "stats", "late"))?.value,
+        await store.getPluginData(SESSION_ID, "down", "stats", "derived"),
+      ).toBe(null);
+      expect(
+        (await store.getPluginData(SESSION_ID, "late", "stats", "late"))?.value,
       ).toBe(3);
       expect(statuses).toEqual({
         up: "failed",
@@ -1102,13 +1159,13 @@ describe("finalizeExecution — dependents of a dropped runtime", () => {
           "up",
           {},
           {
-            ...badStatePatch(),
+            ...malformedEffects(),
             events: [{ topic: "found", data: {} }],
           },
         ),
-        makeResult("reader", {}, statePatch("reader", 1)),
-        makeResult("optional-reader", {}, statePatch("optional", 1)),
-        makeResult("follower", {}, statePatch("follower", 1)),
+        makeResult("reader", {}, pluginData("reader", 1)),
+        makeResult("optional-reader", {}, pluginData("optional", 1)),
+        makeResult("follower", {}, pluginData("follower", 1)),
       ],
     );
 
@@ -1118,11 +1175,18 @@ describe("finalizeExecution — dependents of a dropped runtime", () => {
       "follower",
     ]);
     expect(
-      (await store.getStateEntry(SESSION_ID, "stats", "optional"))?.value,
+      (
+        await store.getPluginData(
+          SESSION_ID,
+          "optional-reader",
+          "stats",
+          "optional",
+        )
+      )?.value,
     ).toBe(1);
-    expect(await store.getStateEntry(SESSION_ID, "stats", "follower")).toBe(
-      null,
-    );
+    expect(
+      await store.getPluginData(SESSION_ID, "follower", "stats", "follower"),
+    ).toBe(null);
   });
 
   it.each([
@@ -1140,14 +1204,15 @@ describe("finalizeExecution — dependents of a dropped runtime", () => {
           }),
         ],
         [
-          makeResult("provider-a", {}, badStatePatch()),
-          makeResult("provider-b", {}, statePatch("b", 1)),
-          makeResult("consumer", {}, statePatch("consumer", 1)),
+          makeResult("provider-a", {}, malformedEffects()),
+          makeResult("provider-b", {}, pluginData("b", 1)),
+          makeResult("consumer", {}, pluginData("consumer", 1)),
         ],
       );
 
-      const consumer = await store.getStateEntry(
+      const consumer = await store.getPluginData(
         SESSION_ID,
+        "consumer",
         "stats",
         "consumer",
       );
@@ -1171,7 +1236,7 @@ describe("finalizeExecution — dependents of a dropped runtime", () => {
         { ...makeRuntime("story", "story"), needs: ["context"] },
       ] as never,
       results: [
-        makeResult("context", {}, badStatePatch()),
+        makeResult("context", {}, malformedEffects()),
         storyResult(),
       ] as never,
       turnIds: [TURN_ID],
@@ -1187,8 +1252,8 @@ describe("finalizeExecution — dependents of a dropped runtime", () => {
     const { store } = await finalize(
       [manifest("up"), manifest("down", { needs: ["up"] })],
       [
-        makeResult("up", {}, badStatePatch()),
-        makeResult("down", {}, statePatch("derived", 2)),
+        makeResult("up", {}, malformedEffects()),
+        makeResult("down", {}, pluginData("derived", 2)),
       ],
       {
         extraInTx: async (_tx, isolation) => {
@@ -1217,5 +1282,289 @@ describe("finalizeExecution — dependents of a dropped runtime", () => {
       });
       expect(rows.at(-1)?.state).toBe("failed");
     }
+  });
+});
+
+describe("finalizeExecution — plugin.data.update", () => {
+  const manual = () => ({
+    executionId: crypto.randomUUID(),
+    origin: "manual" as const,
+    countPolicy: "none" as const,
+  });
+  const update = (
+    runtimeId: string,
+    ops: readonly import("@covel/shared").DataOp[],
+  ): Proposal => ({
+    id: crypto.randomUUID(),
+    type: "plugin.data.update",
+    source: { pluginId: runtimeId, runtimeId },
+    sessionId: SESSION_ID,
+    turnId: TURN_ID,
+    payload: { namespace: "wallet", key: "gold", ops },
+    timestamp: new Date().toISOString(),
+  });
+  const withProposals = (
+    result: ReturnType<typeof makeResult>,
+    proposals: readonly Proposal[],
+  ) => ({ ...result, pendingProposals: proposals });
+  const seedGold = async (store: DataStore, pluginId: string, value: number) =>
+    store.setPluginData({
+      id: crypto.randomUUID(),
+      sessionId: SESSION_ID,
+      pluginId,
+      namespace: "wallet",
+      key: "gold",
+      value,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    });
+  const gold = async (store: DataStore, pluginId: string) =>
+    (await store.getPluginData(SESSION_ID, pluginId, "wallet", "gold"))?.value;
+
+  it("drops an auxiliary runtime whose op list is rejected and keeps the story and siblings", async () => {
+    const store = createMemoryStore();
+    await savePendingTurn(store);
+    await seedGold(store, "aux", 1);
+    const outcome = await finalizeExecution({
+      executionContext: manual(),
+      store,
+      sessionId: SESSION_ID,
+      runtimes: [
+        makeRuntime("story", "story"),
+        makeRuntime("aux"),
+        makeRuntime("sibling"),
+      ],
+      results: [
+        makeResult("story", { narrativeOutput: "The till rings." }),
+        withProposals(makeResult("aux"), [
+          update("aux", [{ op: "inc", by: -2, min: 0 }]),
+        ]),
+        withProposals(makeResult("sibling"), [
+          update("sibling", [{ op: "inc", by: 3 }]),
+        ]),
+      ],
+      turnIds: [TURN_ID],
+    });
+    expect(outcome).toMatchObject({
+      status: "committed",
+      isolatedRuntimes: [{ runtimeId: "aux", error: expect.any(String) }],
+    });
+    expect(outcome.failedProposals).toEqual([
+      expect.objectContaining({ code: "data-op-rejected" }),
+    ]);
+    expect(await gold(store, "aux")).toBe(1);
+    expect(await gold(store, "sibling")).toBe(3);
+    expect(await store.listMessages(SESSION_ID)).toHaveLength(1);
+  });
+
+  it("rolls the whole execution back on the same failure without a story", async () => {
+    const store = createMemoryStore();
+    await savePendingTurn(store);
+    await seedGold(store, "aux", 1);
+    const outcome = await finalizeExecution({
+      executionContext: manual(),
+      store,
+      sessionId: SESSION_ID,
+      runtimes: [makeRuntime("aux"), makeRuntime("sibling")],
+      results: [
+        withProposals(makeResult("sibling"), [
+          update("sibling", [{ op: "inc", by: 3 }]),
+        ]),
+        withProposals(makeResult("aux"), [
+          update("aux", [{ op: "inc", by: -2, min: 0 }]),
+        ]),
+      ],
+      turnIds: [TURN_ID],
+    });
+    expect(outcome.status).toBe("failed");
+    expect(await gold(store, "aux")).toBe(1);
+    expect(await gold(store, "sibling")).toBeUndefined();
+    expect(await commitStatusOf(store)).toBe("failed");
+  });
+
+  it.each([
+    {
+      label: "does not compile",
+      schema: { type: "invalid" },
+      ops: [{ op: "inc", by: 1 }] as const,
+    },
+    {
+      // An async validator returns a Promise, which must not read as success.
+      label: "is asynchronous",
+      schema: { $async: true, type: "number" },
+      ops: [{ op: "set", value: "rich" }] as const,
+    },
+  ])(
+    "drops an auxiliary runtime whose dataset schema $label and keeps the story",
+    async ({ schema, ops }) => {
+      const store = createMemoryStore();
+      await savePendingTurn(store);
+      await seedGold(store, "aux", 1);
+      const outcome = await finalizeExecution({
+        executionContext: manual(),
+        store,
+        sessionId: SESSION_ID,
+        runtimes: [
+          makeRuntime("story", "story"),
+          {
+            ...makeRuntime("aux"),
+            datasets: {
+              wallet: {
+                namespace: "wallet",
+                ops: ["inc", "set"],
+                schema: "schemas/wallet.json",
+              },
+            },
+          },
+        ],
+        datasetSchemas: { aux: { wallet: schema } },
+        results: [
+          makeResult("story", { narrativeOutput: "The till rings." }),
+          withProposals(makeResult("aux"), [update("aux", ops)]),
+        ],
+        turnIds: [TURN_ID],
+      });
+      expect(outcome).toMatchObject({
+        status: "committed",
+        isolatedRuntimes: [{ runtimeId: "aux", error: expect.any(String) }],
+      });
+      expect(outcome.failedProposals).toEqual([
+        expect.objectContaining({ code: "dataset-violation" }),
+      ]);
+      expect(await gold(store, "aux")).toBe(1);
+      expect(await store.listMessages(SESSION_ID)).toHaveLength(1);
+      expect(await commitStatusOf(store)).toBe("committed");
+    },
+  );
+
+  describe("through executeTurn and commitExecution", () => {
+    const wallet = (extra: Partial<RuntimeManifest> = {}): RuntimeManifest => ({
+      name: "bank/main",
+      pluginId: "bank",
+      description: "bank",
+      runtimeType: "function",
+      stage: "narrative",
+      trigger: { type: "auto" },
+      ...extra,
+    });
+    const session = async () => {
+      const store = createMemoryStore();
+      await store.createSession({
+        id: SESSION_ID,
+        locale: "en-US",
+        status: "active",
+        phase: "playing",
+        setupRuntimes: {},
+        activePlugins: ["bank"],
+        completedPlayerTurns: 0,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      });
+      return store;
+    };
+    const turn = (turnId: string) => ({
+      sessionId: SESSION_ID,
+      turnId,
+      logicalTurnId: `logical-${turnId}`,
+      playerMessage: "Deposit",
+      origin: "manual" as const,
+    });
+    const commit = (
+      store: DataStore,
+      execution: Awaited<ReturnType<typeof executeTurn>>,
+    ) =>
+      commitExecution({
+        store,
+        execution,
+        completion: {
+          kind: "turn",
+          turnId: execution.result.turnId,
+          durationMs: 1,
+        },
+      });
+
+    it("keeps both of two inc +1 prepared before either commits (no lost update)", async () => {
+      const store = await session();
+      await seedGold(store, "bank", 10);
+      const runtime = wallet();
+      const loadRuntime = async (
+        manifest: RuntimeManifest,
+      ): Promise<LoadedRuntime> => ({
+        manifest,
+        promptTemplate: "",
+        handler: async (ctx) => {
+          await ctx.pluginData!.update("wallet", "gold", [
+            { op: "inc", by: 1 },
+          ]);
+          expect(await ctx.pluginData!.get("wallet", "gold")).toBe(11);
+          return { outcome: "success" as const, value: {} };
+        },
+      });
+      const deps = { store, loadRuntime, llm: { generate: vi.fn() } };
+      const first = await executeTurn(turn("t1"), [runtime], deps);
+      const second = await executeTurn(turn("t2"), [runtime], deps);
+      expect(await gold(store, "bank")).toBe(10);
+      expect((await commit(store, first)).status).toBe("committed");
+      expect((await commit(store, second)).status).toBe("committed");
+      expect(await gold(store, "bank")).toBe(12);
+    });
+
+    it("carries the captured dataset schemas to the commit handler", async () => {
+      const store = await session();
+      const schema = {
+        type: "object",
+        properties: { amount: { type: "integer", minimum: 0 } },
+        required: ["amount"],
+      };
+      const runtime = wallet({
+        datasets: {
+          wallet: {
+            namespace: "wallet",
+            schema: "./wallet.json",
+            ops: ["set", "inc"],
+          },
+        },
+      });
+      const datasetSchemas = { wallet: schema };
+      let ops: readonly import("@covel/shared").DataOp[] = [];
+      const loadRuntime = async (
+        manifest: RuntimeManifest,
+      ): Promise<LoadedRuntime> => ({
+        manifest,
+        promptTemplate: "",
+        datasetSchemas,
+        handler: async (ctx) => {
+          await ctx.pluginData!.update("wallet", "gold", ops);
+          return { outcome: "success" as const, value: {} };
+        },
+      });
+      const deps = { store, loadRuntime, llm: { generate: vi.fn() } };
+
+      ops = [{ op: "set", value: { amount: 5 } }];
+      const valid = await executeTurn(turn("t1"), [runtime], deps);
+      expect(valid.commit.datasetSchemas?.bank?.wallet).toBe(schema);
+      expect((await commit(store, valid)).status).toBe("committed");
+      expect(await gold(store, "bank")).toEqual({ amount: 5 });
+
+      ops = [{ op: "set", value: { amount: -1 } }];
+      const invalid = await commit(
+        store,
+        await executeTurn(turn("t2"), [runtime], deps),
+      );
+      expect(invalid.status).toBe("failed");
+      expect(invalid.failedProposals).toEqual([
+        expect.objectContaining({ code: "dataset-violation" }),
+      ]);
+
+      ops = [{ op: "merge", value: { amount: 1 } }];
+      const refused = await commit(
+        store,
+        await executeTurn(turn("t3"), [runtime], deps),
+      );
+      expect(refused.failedProposals[0]?.error).toMatch(
+        /operation kind merge is not allowed/,
+      );
+      expect(await gold(store, "bank")).toEqual({ amount: 5 });
+    });
   });
 });

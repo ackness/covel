@@ -18,9 +18,10 @@ import { getToolContent, getPendingProposals } from "@covel/tools";
 import type { HookPipeline } from "../hooks/pipeline.js";
 import { createExecutionWriteBuffer } from "../function-runtime/execution-write-buffer.js";
 import { createPluginRuntimeContext } from "../function-runtime/plugin-runtime-context.js";
+import { attachNestedResults } from "../turn-executor/nested-results.js";
 import { finalizeRuntimeResult } from "../turn-executor/runtime-finalization.js";
 import type { TurnExecutorDeps } from "../turn-executor/turn-executor-types.js";
-import { RuntimeTimeoutError } from "../turn-executor/turn-control.js";
+import { runLeasedInvocation } from "../turn-executor/runtime-scaffold.js";
 import { freezeInputSlots } from "./runtime-input-slots.js";
 import { deepFreeze } from "../hooks/hook-settings.js";
 
@@ -117,67 +118,20 @@ export async function executeAgentGuard({
       ...(executionId !== undefined ? { executionId } : {}),
       writeBuffer,
     });
-    const guardAbort = runtimeContext.abort;
 
-    // Deadline race — the same pattern as the function-runtime handler:
-    // without it a hung guard blocks the whole turn (and the session lock)
-    // forever. Promise.race keeps the guard promise subscribed, so a
-    // post-timeout rejection is still observed.
-    let deadlineTimer: ReturnType<typeof setTimeout> | undefined;
-    let removeAbortListener: (() => void) | undefined;
-    let rawGuardOutput: Awaited<ReturnType<typeof guard>>;
-    try {
-      const guardWork = guard(runtimeContext.context).then(async (output) => {
-        // A guard may launch a nested turn or tool call without awaiting it.
-        await runtimeContext.drain();
-        return output;
-      });
-      const aborted = new Promise<never>((_, reject) => {
-        const onAbort = () => {
-          // Revoke with the abort so no capability call enters during the
-          // rejection microtask window.
-          runtimeContext.revoke();
-          const reason = guardAbort.signal.reason;
-          reject(
-            reason instanceof Error
-              ? reason
-              : new Error(`agent guard "${manifest.name}" aborted`),
-          );
-        };
-        if (guardAbort.signal.aborted) {
-          onAbort();
-          return;
-        }
-        guardAbort.signal.addEventListener("abort", onAbort, { once: true });
-        removeAbortListener = () =>
-          guardAbort.signal.removeEventListener("abort", onAbort);
-      });
-      rawGuardOutput = await Promise.race([
-        guardWork,
-        aborted,
-        new Promise<never>(() => {
-          deadlineTimer = setTimeout(() => {
-            guardAbort.abort(
-              new RuntimeTimeoutError(
-                `agent guard "${manifest.name}" timed out after ${timeoutMs}ms`,
-              ),
-            );
-          }, timeoutMs);
-        }),
-      ]);
-    } finally {
-      clearTimeout(deadlineTimer);
-      removeAbortListener?.();
-      runtimeContext.dispose();
-      // A guard's capabilities are a lease for this invocation.
-      runtimeContext.revoke();
-      if (!guardAbort.signal.aborted) {
-        guardAbort.abort(new Error(`agent guard "${manifest.name}" completed`));
-      }
-      // Invocation work already propagates tool failures. Cleanup must settle
-      // outstanding calls without replacing the original timeout or error.
-      await runtimeContext.drain().catch(() => undefined);
-    }
+    // Deadline race — the same lease as a function handler: without it a hung
+    // guard blocks the whole turn (and the session lock) forever. A guard's
+    // capabilities are a lease for this invocation.
+    const rawGuardOutput = await runLeasedInvocation(
+      runtimeContext,
+      () => guard(runtimeContext.context),
+      {
+        timeoutMs,
+        timeoutMessage: `agent guard "${manifest.name}" timed out after ${timeoutMs}ms`,
+        abortedMessage: `agent guard "${manifest.name}" aborted`,
+        completedMessage: `agent guard "${manifest.name}" completed`,
+      },
+    );
 
     const guardOutput = getToolContent(rawGuardOutput);
     if (guardOutput.skip === true) {
@@ -214,6 +168,12 @@ export async function executeAgentGuard({
         result,
         { outputContractSchema: loaded.outputContractSchema },
       );
+      // The guard's nested calls commit with its buffered writes: only when
+      // it skipped the run and the result is still skipped. A hook that
+      // changes the status drops the buffered writes (`wire-helpers.ts`), and
+      // a guard that lets the agent run discards both.
+      if (postResult.status === "skipped")
+        attachNestedResults(postResult, runtimeContext.nestedResults);
       const postOutput = postResult.output as Record<string, unknown> | null;
       if (
         deps.store &&

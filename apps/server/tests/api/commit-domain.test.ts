@@ -9,12 +9,14 @@
  *    messages, interactions, or compaction.
  */
 
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { Hono } from "hono";
 import { type DataStore } from "@covel/store";
 import { createMemoryStore } from "@covel/store/memory";
 import { createEventBus } from "@covel/events";
 import { createHookPipeline } from "@covel/runtime";
+import * as runtime from "@covel/runtime";
+import type { RuntimeEffects } from "@covel/shared";
 import {
   createPluginRegistry,
   type PluginRegistry,
@@ -96,6 +98,8 @@ async function drain(res: Response): Promise<DrainedStream> {
 }
 
 describe("commit-domain fault injection (Batch 2)", () => {
+  afterEach(() => vi.restoreAllMocks());
+
   let store: DataStore;
   let registry: PluginRegistry;
   let app: Hono;
@@ -190,6 +194,42 @@ describe("commit-domain fault injection (Batch 2)", () => {
     expect(types).not.toContain("proposal.failed");
     expect(subTypes).toContain("turn.completed");
     expect(await store.listSnapshots(SESSION_ID)).not.toHaveLength(0);
+  });
+
+  it("reports a removed effect with a non-proposal marker in proposal.failed", async () => {
+    const execute = runtime.executeTurn;
+    vi.spyOn(runtime, "executeTurn").mockImplementation(async (...args) => {
+      const execution = await execute(...args);
+      return {
+        ...execution,
+        commit: {
+          ...execution.commit,
+          results: execution.commit.results.map((result) => ({
+            ...result,
+            effects: {
+              statePatches: [{ table: "stats", field: "hp", value: 1 }],
+            } as unknown as RuntimeEffects,
+          })),
+        },
+      };
+    });
+    const res = await sendMessage();
+    expect(res.status).toBe(200);
+    const { events } = await drain(res);
+    expect(events.filter((event) => event.type === "proposal.failed")).toEqual([
+      {
+        type: "proposal.failed",
+        payload: {
+          proposalId: expect.any(String),
+          proposalType: "effects.invalid",
+          runtimeId: RUNTIME_ID,
+          pluginId: RUNTIME_ID,
+          error:
+            "effects.statePatches is no longer supported; use plugin data (effects.pluginData) instead",
+        },
+      },
+    ]);
+    expect(await store.getStateEntry(SESSION_ID, "stats", "hp")).toBeNull();
   });
 
   it("a blocked proposal emits proposal.failed and withholds turn.completed", async () => {

@@ -87,6 +87,7 @@ In the path headings below, `[]` is a list item and `.*` is a map value.
 | `forms`            | list of string                                                                                                                                                                                                                                                                                                                                 | no       | IDs of forms the entry registers.                                                                                                       |
 | `events`           | list of object                                                                                                                                                                                                                                                                                                                                 | no       | Domain events the package's runtimes may emit with the builtin `emit-event` tool.                                                       |
 | `settings`         | list of object                                                                                                                                                                                                                                                                                                                                 | no       | Player-configurable settings. A world can preset them with `pluginSettings`.                                                            |
+| `datasets`         | map of object                                                                                                                                                                                                                                                                                                                                  | no       | Typed plugin-data datasets the package owns; the name is the plugin-data namespace.                                                     |
 | `data`             | map of object                                                                                                                                                                                                                                                                                                                                  | no       | Own plugin data namespaces, keyed by namespace.                                                                                         |
 | `ui`               | object                                                                                                                                                                                                                                                                                                                                         | no       | Package-relative paths of declarative UI specs, by placement.                                                                           |
 | `worldProjections` | map of object                                                                                                                                                                                                                                                                                                                                  | no       | Pure projections from world data into own namespaces, keyed by projection ID.                                                           |
@@ -161,6 +162,14 @@ In the path headings below, `[]` is a list item and `.*` is a map value.
 | ------- | ------ | -------- | --------------------------- |
 | `value` | string | yes      | Stored value of the option. |
 | `label` | text   | yes      | Label shown for the option. |
+
+## `contributes.datasets.*`
+
+| Field    | Type                                                                                                              | Required | Description                                                                                   |
+| -------- | ----------------------------------------------------------------------------------------------------------------- | -------- | --------------------------------------------------------------------------------------------- |
+| `schema` | string                                                                                                            | yes      | Package-relative JSON Schema that every record of the dataset must satisfy.                   |
+| `key`    | string                                                                                                            | no       | Top-level record field whose string value is the record's key. Omit when callers choose keys. |
+| `ops`    | list of `"set"` or `"merge"` or `"inc"` or `"append"` or `"insert"` or `"remove"` or `"upsertItem"` or `"delete"` | no       | Operation kinds allowed on this dataset. Defaults to every kind.                              |
 
 ## `contributes.data.*`
 
@@ -334,14 +343,14 @@ In the path headings below, `[]` is a list item and `.*` is a map value.
 
 ## `runtime.io.inputs.*`
 
-| Field      | Type                      | Required | Description                                                                                                                                                                   |
-| ---------- | ------------------------- | -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `from`     | object                    | yes      | Producer of the value: a runtime in this package, a contract, or a kernel input. A kernel input takes no other field.                                                         |
-| `scope`    | `"turn"` or `"committed"` | no       | `turn` reads the same execution's upstream result. `committed` reads the latest committed export and needs `recordAs`. Defaults to `turn`.                                    |
-| `select`   | string                    | no       | JSON Pointer applied to the upstream value. Declaring `select` with `scope: committed` is rejected; committed inputs read the complete export. Example: `"/narrativeOutput"`. |
-| `required` | boolean                   | no       | `true` stops this runtime when the upstream value is missing or failed. Defaults to `true`.                                                                                   |
-| `accepts`  | string                    | no       | Schema the bound value must satisfy: a local path or `contract:<contractId>`. It adds to the public contract check.                                                           |
-| `recordAs` | string                    | no       | Export key to read from the producer. Required with `scope: committed`.                                                                                                       |
+| Field      | Type                      | Required | Description                                                                                                                                                                      |
+| ---------- | ------------------------- | -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `from`     | object                    | yes      | Producer of the value: a runtime in this package, a contract, or a kernel input. A kernel input takes no other field.                                                            |
+| `scope`    | `"turn"` or `"committed"` | no       | `turn` reads the same execution's upstream result. `committed` reads the latest committed export and needs `recordAs`. Defaults to `turn`.                                       |
+| `select`   | string                    | no       | JSON Pointer applied to the upstream value. Declaring `select` with `scope: committed` is rejected; committed inputs read the complete export. Example: `"/narrativeOutput"`.    |
+| `required` | boolean                   | no       | `true` stops this runtime when the upstream value is missing or failed. Defaults to `true`. A story runtime (`io.visibility: story`) must set it to `false` for contract inputs. |
+| `accepts`  | string                    | no       | Schema the bound value must satisfy: a local path or `contract:<contractId>`. It adds to the public contract check.                                                              |
+| `recordAs` | string                    | no       | Export key to read from the producer. Required with `scope: committed`.                                                                                                          |
 
 ## `runtime.io.inputs.*.from` (form 1 of 3)
 

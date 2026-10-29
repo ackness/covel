@@ -32,6 +32,7 @@ export type {
 
 import type {
   PluginDataSchemaDecl,
+  PluginDatasetDecl,
   WorldProjectionDecl,
   PluginTag,
   RuntimeManifest,
@@ -57,6 +58,8 @@ export interface PackageManifest {
   readonly extensions?: readonly import("@covel/shared").ExtensionDeclaration[];
   readonly userSettings?: readonly PluginUserSettingSpec[];
   readonly dataSchemas?: Readonly<Record<string, PluginDataSchemaDecl>>;
+  /** Typed datasets keyed by namespace, defaults resolved. */
+  readonly datasets?: Readonly<Record<string, PluginDatasetDecl>>;
   readonly worldProjections?: Readonly<Record<string, WorldProjectionDecl>>;
   readonly commands?: readonly SlashCommandSpec[];
   readonly events?: readonly PluginEventDecl[];
@@ -101,6 +104,10 @@ export interface ParsedPluginMd extends ParsedMarkdown {
   readonly plugin: import("@covel/shared").PluginManifest;
   readonly manifest: PackageManifest;
   readonly contractSchemas?: Readonly<
+    Record<string, Readonly<Record<string, unknown>>>
+  >;
+  /** Parsed JSON Schema of each `contributes.datasets.<name>.schema`, keyed by dataset name. */
+  readonly datasetSchemas?: Readonly<
     Record<string, Readonly<Record<string, unknown>>>
   >;
   /** The inline runtime, when it was left out (`plugin.runtime` is then absent). */
@@ -217,6 +224,8 @@ export interface PluginRegistryEntry {
   readonly ignoredFields?: readonly IgnoredField[];
   /** Normalized package data schema declarations. */
   readonly dataSchemas?: Readonly<Record<string, PluginDataSchemaDecl>>;
+  /** Normalized package datasets keyed by namespace. */
+  readonly datasets?: Readonly<Record<string, PluginDatasetDecl>>;
   /** Normalized package world projections. */
   readonly worldProjections?: Readonly<Record<string, WorldProjectionDecl>>;
   /**

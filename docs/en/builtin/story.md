@@ -15,12 +15,12 @@ This page explains how the story is written, how you get suggestions after it, a
 
 `narrator` and `chat-mode-narrator` do the same job: they write the next part of the story based on your action. They cannot be on at the same time. Pick one.
 
-|                | Narrator (`narrator`)                                         | Dialogue Narrator (`chat-mode-narrator`)                                 |
-| -------------- | ------------------------------------------------------------- | ------------------------------------------------------------------------ |
-| Reads like     | A 200 to 400 character novel passage                          | A conversation, with characters taking turns to speak                    |
-| Good for       | Exploration, investigation, adventure, and other long stories | Romance, everyday life, roleplay, and other play that relies on chatting |
-| Matching packs | Traditional Story, Low Cost                                   | Dialogue Mode                                                            |
-| Needs          | Nothing else                                                  | Scene Stage (`scene-stage`) and Action Suggestions (`guide`)             |
+|                 | Narrator (`narrator`)                                         | Dialogue Narrator (`chat-mode-narrator`)                                 |
+| --------------- | ------------------------------------------------------------- | ------------------------------------------------------------------------ |
+| Reads like      | A 200 to 400 character novel passage                          | A conversation, with characters taking turns to speak                    |
+| Good for        | Exploration, investigation, adventure, and other long stories | Romance, everyday life, roleplay, and other play that relies on chatting |
+| Matching packs  | Traditional Story, Low Cost                                   | Dialogue Mode                                                            |
+| Works best with | Nothing else                                                  | Scene Stage (`scene-stage`) and Action Suggestions (`guide`)             |
 
 How to choose:
 
@@ -80,7 +80,7 @@ A world can preset these settings. For example, "Harukaze Academy · Spring Mint
 
 ### Works with
 
-- It needs "Scene Stage" to supply the characters on stage, and "Action Suggestions" to supply scene hints.
+- It works best with "Scene Stage" to supply the characters on stage, and "Action Suggestions" to supply scene hints. Without them it still tells the story, as plain dialogue narration with no stage.
 - It cannot be on at the same time as "Narrator".
 
 ## Action Suggestions (`guide`)

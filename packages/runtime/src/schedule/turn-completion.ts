@@ -53,7 +53,10 @@ export function createDetachedProposalGuard(
         ? undefined
         : "detached runtime emitted undeclared UI output";
     }
-    if (proposal.type === "plugin.data") {
+    if (
+      proposal.type === "plugin.data" ||
+      proposal.type === "plugin.data.update"
+    ) {
       const namespace = proposal.payload.namespace;
       if (namespace.startsWith("_")) {
         return "detached runtime cannot write framework-reserved plugin data";

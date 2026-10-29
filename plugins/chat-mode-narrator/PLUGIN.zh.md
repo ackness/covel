@@ -54,7 +54,7 @@ contributes:
 
 - 对话占比：{{ userSettings.dialogueRatio }}%
 - 回复长度：{{ userSettings.proseLength }}
-- 目标活跃说话人数：以 `runtime-inputs.active-cast.value` 中实际列出的角色为准（由 scene-stage 按玩家设置决定）
+- 目标活跃说话人数：以 `runtime-inputs.active-cast.value` 中实际列出的角色为准（由 scene-stage 按玩家设置决定）。`active-cast` 缺失时说明没有启用场景舞台：由世界、历史和玩家输入中在场的角色发言，仍以对话为主
 
 ## 已结算的跑团检定
 

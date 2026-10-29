@@ -314,8 +314,7 @@ The display history of state changes is a read-through cache on IndexedDB. It is
 - Only the latest value of each `table.field` is cached, up to the 256 most recently updated fields. Reading, compaction, and writing share one read-write transaction; the last 256 event IDs deduplicate replays.
 - The reducer uses the same field limit and a separate revision counter to refresh the state panel. Full game state is not capped; authoritative snapshots take precedence.
 - Asset progress is coalesced by asset (or plugin and runtime when the asset ID is absent) and phase, with at most 256 turns and 256 entries per turn. Removing a turn’s last message from the live window also clears that turn’s assets and progress.
-- The development state-patch cache format has changed: clear the old browser display cache. There is no migration or dual read. Save checkpoints are unaffected.
-- A state patch keeps the `table.field` shape. The identity of a live event is `traceId` plus `seq`. When there is no valid pair, a UUID is used.
+- Retained state patches keep the `table.field` shape; live session-state write events are no longer received.
 - There is no "one array per service" cache, so the history of other tabs is not overwritten, and stale read results are not kept.
 - LocalDataService takes a snapshot for each append, holds the world and session ownership for the whole write, and checks after it is released that the session still exists. Local form and timeline writes use the same ownership and existence checks. Input is copied before waiting for release.
 - A write queued after a deletion fails, and does not recreate the cache.
@@ -564,6 +563,21 @@ These rows are not copied in full into browser checkpoints (see [Browser-Private
 - A retry rebuilds its seed from the full runtime results it saved (including effects and canonical values). The media reference scan also reads it directly.
 - `runtime_outputs` is a narrower projection, used by the runtime output API.
 - A row is written before commit and settled by `setTurnResultCommitStatus`. When the turn commits successfully, it also rewrites results of discarded runtime writes to `failed` with an error attached, so a retry never seeds a discarded result as if it had succeeded.
+
+## State Ownership Registry
+
+When adding a table or session field, register its owner and persistence scope in [`state-ownership.ts`](../../../packages/store/src/state-ownership.ts). `KERNEL_TABLE_OWNERSHIP` covers every Drizzle table in SQLite and PostgreSQL, recording session or global scope and how snapshots, browser checkpoints and forks handle it. `SESSION_FIELD_OWNERSHIP` covers every `SessionRecord` field, recording its owner and whether a snapshot captures it. This inventory describes existing behavior; it does not drive data copying or writes.
+
+[`state-ownership.test.ts`](../../../packages/store/tests/state-ownership.test.ts) checks that:
+
+- Table names exactly match both backend schemas. Session scope includes the registered cascade children, the parent `sessions` table and MediaStore-managed `media_refs`.
+- Tables marked `captured` exactly match the datasets in `SnapshotPayload`. Message cursors, display boundaries and compaction tags are not message-row datasets.
+- Tables marked `exported` exactly match checkpoint domains, including record arrays, lifecycle arrays, singletons and nested `state` arrays. This means the checkpoint has that domain; it does not promise to copy every row. For example, tool-call and event arrays are currently exported empty.
+- Session-field snapshot policies match the same-name fields in `SnapshotSessionState`. Type checking also requires new `SessionRecord`, snapshot or checkpoint fields to have corresponding registry entries or test mappings.
+
+Rows in `plugin_data` belong to their `plugin_id`; `_` namespaces and `__kernel:` owners are kernel partitions. Control-plane namespaces are excluded from snapshots and forks. `state_schemas`, `state_entries` and `state_changes` are registered as kernel-owned: the plugin write path has been removed, and they will be reworked or removed later.
+
+Fork behavior is recorded, but store tests cannot depend on `apps/server`, so they do not verify the fork implementation. Session `metadata` sub-keys are outside field coverage. There is currently no reset path, and the operation-record table has not been created yet. This inventory declares no behavior for them.
 
 ## Plugin-Data Ownership and Reserved Names
 

@@ -133,6 +133,7 @@ Session prep groups the plugins by whether they call a model, that is by the der
 | `events` | Plugin event contracts |
 | `settings` | Player settings. The runtime reads them through `ctx.userSettings`. |
 | `data` | The schema, version, accepts, and search settings for this plugin's data namespace |
+| `datasets` | Typed datasets the package owns: the name is the namespace, with schema, key and ops. See [Datasets](#datasets-contributesdatasets) |
 | `ui` | Paths, relative to the package root, of the `right/message` UI spec files |
 | `worldProjections` | Declarations of world data projections |
 | `prompt` | Static prompt sections |
@@ -291,6 +292,14 @@ The contracts that a runtime's `schedule.needs[].contract` and `io.inputs.*.from
 - For a contract listed in the root `requires`, the resolver activates a provider.
 - A contract not listed in `requires` is optional: when the session has a provider, it binds as usual; when it has none, the gates apply, and a runtime whose required input or `needs` has no provider does not run. This is how a contract that another runtime in the same package provides is used.
 - `schedule.after` only orders work, and `from.kernel` is a kernel input. Neither one activates another package.
+
+**A story runtime must not hard-depend on another plugin.** One narrative plugin is enough to play, so a runtime with `io.visibility: story`:
+
+- must set `required: false` on every input bound to a contract (`io.inputs.*.from.contract`, in both `turn` and `committed` scope). The default is `true`, which is rejected.
+- cannot list a contract in `schedule.needs`; bind it as an optional input, or use `schedule.after` to order only.
+- belongs to a package whose root `requires` lists no plugin contract: with a missing provider the resolver turns the whole package off. Remove the entry and let the runtime read the contract as an optional input.
+
+Kernel extension contracts are exempt. When a provider is missing the input has no value, and the runtime must still write its story without it.
 
 ### Stages and scheduling order
 
@@ -511,7 +520,8 @@ The output contract of a function is based on the `value` that the handler retur
 
 - The runtime stores the raw business value using `canonicalValue`. An object is projected to `output`. A scalar, an array, or `null` is projected to `{ value }`. When there is no value, the projection is an empty object.
 - Fields in the business value named `events`, `pluginData`, `interactions`, or `preGameDone` do not trigger side effects, and they do not complete setup. These intents must be expressed through `HandlerResult.effects` and `HandlerResult.completion`.
-- `effects.interactions`, `effects.notifications`, and `effects.statePatches` must be arrays. Their entries, and `effects.ui[].parts`, must be objects. If a function returns a channel that is not an array, or an entry that is not an object, it fails with `output-schema-invalid`. The same kind of content that arrives by another route is treated at commit time as a rejected write of that runtime (see [Transactions reference](./transactions.md)).
+- `effects.interactions` and `effects.notifications` must be arrays. Their entries, and `effects.ui[].parts`, must be objects. If a function returns a channel that is not an array, or an entry that is not an object, it fails with `output-schema-invalid`. The same kind of content that arrives by another route is treated at commit time as a rejected write of that runtime (see [Transactions reference](./transactions.md)).
+- `effects.statePatches` has been removed; this field is explicitly rejected on a successful result. Failed or skipped handler results strip domain effects and retain their original error or skip reason. Store plugin-owned state in plugin data through `effects.pluginData`.
 - The same-turn input, the public contract validation, and the `recordAs` publication all read the same business value.
 - When no `value` is given, no export is published. Do not guess `output.value` to unwrap it.
 - The `select` of a normal input works on this business value. A committed input reads the complete export, and `select` is not supported there.
@@ -555,6 +565,21 @@ An agent's side effects come only from its tools. What the model can write is de
 #### Nested calls (`ctx.recursiveCall`)
 
 `ctx.recursiveCall({ playerMessage, manualTrigger: { runtimeId, payload } })` starts a nested run inside the current execution. Its effects commit with the parent's. Only these fields are read; the session, locale, settings and model come from the parent, and other fields are ignored.
+
+The nested call's writes follow the parent handler:
+
+- When the parent handler succeeds, the nested writes commit with the parent's, ahead of the parent's result.
+- When the parent handler fails (it throws, times out, or returns `failed` or `skipped`), the nested writes are discarded with it. They are also discarded when a PostRuntime Hook changes the parent result's status (for example, rewrites a failure as a success), just like the parent's own writes. The rule applies at every level: when any parent handler fails, the writes of every level below it are discarded.
+- When the parent handler suspends for input, its own writes wait to commit after the resume, but the nested writes are discarded. Nested writes are not yet saved with a suspension.
+- A nested call made from an agent's guard commits only when the guard returns `{ skip: true }` and the result is still skipped; it is discarded when the guard lets the agent run.
+
+At commit, a top-level runtime and the nested calls at every level below it are one unit: they all commit, or they are all discarded.
+
+- In an execution with a story, the unit of a non-story runtime commits in one savepoint. When any of its writes is rejected, the whole unit is discarded and the story is still saved. Runtimes that depend on that top-level runtime are discarded with it under the [commit rules](./transactions.md#turn-level-single-transaction).
+- When the unit holds a run of a story or setup runtime, at top level or nested inside, the unit commits under the story rule: when any of its writes is rejected, the whole execution rolls back.
+- When a unit is discarded, the suspensions of its nested calls are void too: they are not saved, cannot be resumed, and do not replace an existing suspension. When the execution leaves no other suspension, the turn ends and counts as usual, and the detached jobs the suspension held back are queued as usual.
+
+`ctx.recursiveCall` returns a copy of the nested result. Changing it does not change what commits or who owns it.
 
 `manualTrigger.runtimeId` may only name a runtime in the caller's own package: the package ID for an inline runtime, or `<pluginId>/<runtimeId>` for a multi-runtime package. A target in another package throws before the nested execution starts. The error names the target runtime and the caller's package ID. Bundled and community plugins follow the same rule.
 
@@ -868,7 +893,7 @@ After a namespace declares `search`, its records enter the framework's memory re
 - A plugin runtime reads it through `ctx.pluginData.list("_hidden.facts")`.
 - Extension points, model tools, `io.selfData`, and the public API cannot read it.
 - Revealing it should happen through this turn's runtime output. See [World Data · Hidden data](./world-data.md#hidden-data-visibility-hidden) for details.
-- The plugin's own code (`ctx.pluginData.set` in a function runtime, and `plugin.data` proposals produced by the plugin's local tools) can also write to its own `_hidden.<namespace>`. This is used to append hidden content during the story. A write always belongs to the plugin that issued the proposal, so it cannot reach another plugin's hidden data.
+- The plugin's own code (`ctx.pluginData.set` / `ctx.pluginData.update` in a function runtime, and `plugin.data` / `plugin.data.update` proposals produced by the plugin's local tools) can also write to its own `_hidden.<namespace>`. This is used to append hidden content during the story. A write always belongs to the plugin that issued the proposal, so it cannot reach another plugin's hidden data.
 - The REST interface and the built-in `plugin-data-set` and `plugin-data-set-batch` tools cannot write to any namespace that starts with `_`.
 
 ## Prompt and memory extensions
@@ -931,7 +956,8 @@ The directory-level command `pnpm validate:plugin <dir>` and the ZIP install sha
 - The referenced entry, handler, guard, JSON Schema, and UI files must be inside the package.
 - Each JSON UI spec declares one of `view` and `webview`. Component names in `view` must be in the [component catalogue](./ui-components.md). `repeat.statePath` and `$item` must have a legal form (see [UI panels](./ui-panels.md#json-render-binding-cheat-sheet)). The error gives the spec file and the path of the node.
 - The built-in tool names and the plugin tool declarations, the runtime references inside the package, and the root contract dependencies must all be consistent.
-- An error from a cross-field rule (for example, `schedule.detached` is only allowed on `post-turn` or `audit`) gives the file path and the field path you wrote, for example `runtimes/note/RUNTIME.md: schedule.stage: …`.
+- Each `contributes.datasets` schema file must be in the package and valid JSON. `key` must be a required property in the schema's top-level `properties` (skipped when the schema has none). A name that is also in `contributes.data` must use the same schema in both.
+- An error from a cross-field rule (for example, `schedule.detached` is only allowed on `post-turn` or `audit`, or a story runtime's contract input must set `required: false`) gives the file path and the field path you wrote, for example `runtimes/note/RUNTIME.md: schedule.stage: …`.
 
 Loading, `pnpm validate:plugin` and installation use one copy of the manifest rules (the schemas in `@covel/shared`), and the same holds for UI specs: a panel that passes the check is not dropped in the game for its format.
 
@@ -1061,11 +1087,44 @@ To see a real example of a given pattern, look here:
 | World data entering the narrative prompt | [character-blueprint](../../../plugins/character-blueprint/PLUGIN.md) |
 | Hidden world data and planning | [story-events](../../../plugins/story-events/PLUGIN.md) |
 
+### Datasets (`contributes.datasets`)
+
+A dataset is a typed kind of plugin data that a plugin declares: a namespace the package owns, plus the JSON Schema every record in it must satisfy.
+
+```yaml
+contributes:
+  datasets:
+    journal:
+      schema: ./schemas/journal.json # required: a package-relative .json path
+      key: id # optional: the top-level record field that is the key
+      ops: [upsertItem, delete] # optional: allowed operations, default all
+```
+
+- **The name is the namespace.** The `journal` dataset is the plugin-data space `journal`. A name starts with a letter and holds only letters, digits, `_` and `-`, at most 64 characters. A name starting with `_` is reserved for the kernel and cannot be declared.
+- `schema` must be a `.json` file in the package, with no `..` and no leading `/`.
+- `key`: which top-level field of a record (a string value) is its key. Leave it out to derive no key; the caller then chooses keys.
+- `ops`: the operation kinds this dataset allows, from `set`, `merge`, `inc`, `append`, `insert`, `remove`, `upsertItem`, `delete`. Leaving it out means all of them. When written it cannot be empty or contain duplicates.
+- Omitted fields take their defaults. The compiled declaration always carries `namespace`, `schema` and `ops` (`key` only when written). The compiled result is copied onto `datasets` of every runtime in the package.
+- **Relation to `contributes.data`.** When the same name appears in both `data` and `datasets`, the two `schema` paths must point at the same file: a namespace has one schema. `data` still governs world-pack import; the dataset governs the records in the namespace.
+- A namespace without a dataset declaration behaves as before.
+
+Loading, `pnpm validate:plugin` and installation read and parse every dataset schema file (a missing file, invalid JSON, or a path outside the package root is an error) and check `key`: when the schema has a top-level `properties`, `key` must be one of them and be listed in the top-level `required`. A schema without top-level `properties` (only `$ref`, `allOf` and the like) skips that check.
+
+At commit, every proposal a plugin writes into a dataset namespace it declares is checked against the declaration:
+
+- **Operation kinds.** Each operation kind of a `plugin.data.update` must be in `ops`. A whole-value write (`ctx.pluginData.set`, `plugin.data`, each item of `plugin.data.batch`) counts as `set`, and a delete (`plugin.data.delete`) counts as `delete`. So a dataset whose `ops` lack `set` cannot be overwritten with `set`.
+- **Record schema.** The written value (for `plugin.data.update`, the result after the operations) must satisfy `schema`.
+- A violation rejects the proposal with `code: "dataset-violation"`, under the commit-unit rules. When the host did not capture the schema document, every write is refused instead of let through.
+- `key` is not checked at commit.
+- Writes outside the commit pipeline skip these checks: world data import and sync (validated against the source's `schema`, see [World Data · Companion plugin data](./world-data.md#companion-plugin-data)), `context.store.setPluginData` in a plugin action RPC, and the management API `PUT`.
+
+See [Transactions · Operation-based writes](./transactions.md#operation-based-writes-plugindataupdate).
+
 ### Reserved data namespaces
 
 Every namespace that starts with `_` is reserved for the kernel.
 
-- A plugin cannot write to or delete them through the generic plugin-data API or through a proposal. This includes names starting with `_` that it has never seen, and the old `_memory`.
+- A plugin cannot write to or delete them through the generic plugin-data API or through a proposal (`set`, `update` and `delete` alike). This includes names starting with `_` that it has never seen, and the old `_memory`.
 - `_hidden.<namespace>` holds world data declared `visibility: hidden`, along with hidden content a plugin appends during the story. Only the runtimes of the owning plugin can read it, and only the owning plugin's own code can write to it.
 - Plugin logs are produced through the restricted logger API. Business data uses ordinary names such as `blocks` and `definitions`.
 - `__kernel:<subsystem>` is another owner partition. A plugin's bound read interface cannot reach it.

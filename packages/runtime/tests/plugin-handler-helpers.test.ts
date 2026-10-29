@@ -124,6 +124,43 @@ describe("createPluginDataWriter", () => {
     const writer = createPluginDataWriter(store, ctx);
     expect(await writer.get("images", "missing")).toBeNull();
   });
+
+  it("update reads and writes only the runtime plugin's row", async () => {
+    await store.setPluginData({
+      id: "foreign",
+      sessionId: SESSION_ID,
+      pluginId: "other-plugin",
+      namespace: "images",
+      key: "count",
+      value: 100,
+      createdAt: "2026-01-01T00:00:00.000Z",
+      updatedAt: "2026-01-01T00:00:00.000Z",
+    });
+    const buffer: Proposal[] = [];
+    const buffered = createPluginDataWriter(store, ctx, buffer);
+    await buffered.update("images", "count", [{ op: "inc", by: 1 }]);
+    expect(await buffered.get("images", "count")).toBe(1);
+    expect(buffer[0]?.source.pluginId).toBe(PLUGIN_ID);
+    // Another plugin's buffered update never reaches this plugin's view.
+    buffer.push({
+      ...buffer[0]!,
+      id: "foreign-update",
+      source: { pluginId: "other-plugin", runtimeId: "other-plugin/main" },
+    });
+    expect(await buffered.get("images", "count")).toBe(1);
+
+    await createPluginDataWriter(store, ctx).update("images", "count", [
+      { op: "inc", by: 2 },
+    ]);
+    expect(
+      (await store.getPluginData(SESSION_ID, PLUGIN_ID, "images", "count"))
+        ?.value,
+    ).toBe(2);
+    expect(
+      (await store.getPluginData(SESSION_ID, "other-plugin", "images", "count"))
+        ?.value,
+    ).toBe(100);
+  });
 });
 
 describe("createPluginLogger", () => {

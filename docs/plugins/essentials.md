@@ -200,6 +200,8 @@ io:
 
 `io.concealed: true` 不能和 `io.visibility: story` 一起用，加载会失败：故事 runtime 的文字本来就是给玩家读的。
 
+故事 runtime 也不能硬依赖别的插件：契约输入要写 `required: false`，不能在 `needs` 里写契约，规则见[依赖和引用的范围](../reference/plugins.md#依赖和引用的范围)。
+
 要把隐藏内容交给别的插件，用输出能力传过去，由接收的插件存进它自己的隐藏数据空间。例子见 [story-events 的 plot runtime](../../plugins/story-events/runtimes/plot/RUNTIME.md) 和[世界数据 · 隐藏数据](../reference/world-data.md#隐藏数据visibility-hidden)。
 
 ## 数据归属
@@ -215,12 +217,13 @@ io:
 | 函数、RPC             | `ctx.store.getPluginData(namespace, key)` / `listPluginData(namespace)` | `{ key, value }` 这样的行；没有时是 `null`  |
 | agent 的提示词        | 在 `io.selfData` 里列出数据空间                                         | 这个空间的内容被放进提示词                  |
 
-写入有两种方式：函数里调用 `ctx.pluginData.set(namespace, key, value)`，或者由工具提交一条“我想写这个”的请求（proposal）。两者都在回合结束时一起保存。runtime 失败时，它的写入一条都不会留下。
+写入有两种方式：函数里调用 `ctx.pluginData.set(namespace, key, value)`，或者由工具提交一条“我想写这个”的请求（proposal）。两者都在回合结束时一起保存。runtime 失败时，它的写入一条都不会留下。新值要从旧值算出来（比如金币减 3）时，用 `ctx.pluginData.update` 交一串操作，见[改数据](./local-code.md#改数据)。
 
 要记住的限制：
 
 - 一个值转成 JSON 后最多 256 KiB。超过时写入失败，错误里写明插件、`namespace/key`、实际大小和上限。原值不变，也不会被截断。会不断变长的列表要拆到多个键里，或者自己裁剪。
 - 以 `_` 开头的数据空间留给 Covel 自己用，插件不能写。
+- 想给一个数据空间声明记录的形状（JSON Schema、键、允许的操作），见[数据集](../reference/plugins.md#数据集contributesdatasets)。
 - 两个插件要共享数据，必须通过公开的能力，不能去读对方的数据空间。
 
 ### 角色归谁

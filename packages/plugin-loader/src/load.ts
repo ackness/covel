@@ -1,3 +1,4 @@
+import { datasetKeyIssue, datasetSchemaIssues } from "./dataset-rules.js";
 import { assertInsideRoot } from "./path-containment.js";
 import { fileExists } from "./file-system.js";
 import { provideHostModules } from "./host-modules.js";
@@ -369,6 +370,30 @@ export async function loadPluginDefinition(
         );
     }
   }
+  const datasetSchemas: Record<string, Readonly<Record<string, unknown>>> = {};
+  for (const [name, declaration] of Object.entries(
+    parsedPackage.plugin.contributes?.datasets ?? {},
+  )) {
+    const schemaPath = path.resolve(discovery.rootPath, declaration.schema);
+    await assertInsideRoot(
+      discovery.rootPath,
+      schemaPath,
+      "Dataset schema path traversal rejected",
+    );
+    const document = await readSchemaFile(
+      schemaPath,
+      `contributes.datasets.${name}.schema`,
+    );
+    const keyIssue = datasetKeyIssue(rootPath, name, declaration, document);
+    if (keyIssue) throw new Error(keyIssue);
+    datasetSchemas[name] = document;
+  }
+  const [schemaIssue] = datasetSchemaIssues(
+    rootPath,
+    discovery.rootPath,
+    parsedPackage.plugin.contributes,
+  );
+  if (schemaIssue) throw new Error(schemaIssue);
   if (parsedPackage.plugin.id !== discovery.id)
     throw new Error(
       `${rootPath}: id must match plugin directory ${discovery.id}`,
@@ -423,6 +448,7 @@ export async function loadPluginDefinition(
       exists,
     ),
     contractSchemas,
+    datasetSchemas,
   };
   const plugin = packageManifest.plugin;
   validateRuntimeDeclarations(packageManifest, manifests);
@@ -795,6 +821,8 @@ export async function loadRuntime(
     guard = mod.default as AgentGuard;
   }
 
+  const datasetSchemas = snapshot.packageManifest?.datasetSchemas;
+
   return {
     manifest: resolvePluginRuntimeManifest(snapshot, parsed.manifest),
     promptTemplate: resolveRuntimePrompt(parsed, locale),
@@ -809,6 +837,10 @@ export async function loadRuntime(
     ...(unresolvedAccepts.length > 0 ? { unresolvedAccepts } : {}),
     ...(Object.keys(exportContractSchemas).length
       ? { exportContractSchemas }
+      : {}),
+    // Shared, not copied: the commit's Ajv cache keys on schema identity.
+    ...(datasetSchemas && Object.keys(datasetSchemas).length > 0
+      ? { datasetSchemas }
       : {}),
     ...(snapshot.messages.length > 0 ? { messages: snapshot.messages } : {}),
     handler,

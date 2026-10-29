@@ -10,7 +10,6 @@ import {
   makeCharacter,
   makeLorebookEntry,
   makeSession,
-  makeStateEntry,
   ts,
 } from "../test-fixtures.js";
 
@@ -86,14 +85,9 @@ export function registerSuspensionWriteSuites(getStore: () => DataStore): void {
       expect(await digest(a, pluginTarget)).toBeNull();
     });
 
-    it("tells state fields, characters, the character schema and lorebook entries apart by content", async () => {
+    it("tells characters, the character schema and lorebook entries apart by content", async () => {
       await createSessions();
       const [a, b] = sessions;
-      const stateTarget: SuspensionWriteTarget = {
-        kind: "state",
-        table: "stats",
-        field: "hp",
-      };
       const characterTarget: SuspensionWriteTarget = {
         kind: "character",
         id: "char-1",
@@ -117,9 +111,6 @@ export function registerSuspensionWriteSuites(getStore: () => DataStore): void {
         updatedAt: at,
       });
       const write = async (sessionId: string, at: string, hp: number) => {
-        await store.upsertStateEntry(
-          makeStateEntry({ sessionId, value: { hp }, updatedAt: at }),
-        );
         await store.upsertCharacter(
           makeCharacter({
             id: "char-1",
@@ -142,11 +133,11 @@ export function registerSuspensionWriteSuites(getStore: () => DataStore): void {
           }),
         ]);
       };
-      const targets = [stateTarget, characterTarget, schemaTarget, loreTarget];
+      const targets = [characterTarget, schemaTarget, loreTarget];
       const digests = (sessionId: string) =>
         Promise.all(targets.map((target) => digest(sessionId, target)));
 
-      expect(await digests(a)).toEqual([null, null, null, null]);
+      expect(await digests(a)).toEqual([null, null, null]);
       await write(a, ts(), 10);
       const first = await digests(a);
       for (const value of first) expect(value).toMatch(/^[0-9a-f]{64}$/);

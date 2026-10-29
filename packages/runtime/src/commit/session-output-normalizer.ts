@@ -18,25 +18,34 @@ import {
 
 /** A domain effect {@link normalizeOutput} cannot turn into a proposal. */
 export interface MalformedDomainEffect {
-  /** Proposal type the malformed entry would have become. */
+  /** Proposal type, or a diagnostic marker for effects with no proposal type. */
   readonly type:
-    "interaction.request" | "narrative.append" | "ui.render" | "state.patch";
+    | "interaction.request"
+    | "narrative.append"
+    | "ui.render"
+    | "effects.invalid";
   readonly error: string;
 }
 
 /**
- * Find the first effect entry {@link normalizeOutput} reads fields from that is
- * not an object. Such an entry is a rejected write of its runtime, reported
- * here so no caller has to survive a thrown TypeError.
+ * Reject removed effect channels and find malformed entries that
+ * {@link normalizeOutput} reads fields from. These are rejected writes of the
+ * runtime, so no caller has to survive a thrown TypeError.
  */
 export function malformedDomainEffect(
   effects: RuntimeEffects | undefined,
 ): MalformedDomainEffect | undefined {
   if (!effects) return undefined;
+  if ("statePatches" in effects) {
+    return {
+      type: "effects.invalid",
+      error:
+        "effects.statePatches is no longer supported; use plugin data (effects.pluginData) instead",
+    };
+  }
   for (const [channel, type] of [
     ["interactions", "interaction.request"],
     ["notifications", "narrative.append"],
-    ["statePatches", "state.patch"],
   ] as const) {
     const entries: unknown = effects[channel];
     if (entries === undefined || entries === null) continue;
@@ -131,17 +140,6 @@ export function normalizeOutput(
         ...normalizeUIRenderInstruction(block, `ui-${index + 1}`),
       }),
     );
-  }
-
-  // state.patch — from statePatches[]
-  const statePatches = effects.statePatches as
-    Array<Record<string, unknown>> | undefined;
-  if (statePatches && statePatches.length > 0) {
-    for (const patch of statePatches) {
-      proposals.push(
-        makeProposal("state.patch", source, turnId, sessionId, patch),
-      );
-    }
   }
 
   // Business output may use the same keys; it is never inspected here.

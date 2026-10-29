@@ -74,7 +74,7 @@ export function registerPersistenceStoreSuites(
           ...base.pendingContinuation,
           messages: [{ role: "system", content: "x".repeat(20_000) }],
           toolCallsSoFar: [{ name: "ask" }],
-          pendingProposals: [{ type: "state.patch" }],
+          pendingProposals: [{ type: "plugin.data" }],
           partialContent: "Half a sentence",
           suspendToolCallId: "call-1",
           emittedEvents: [{ topic: "t" }],

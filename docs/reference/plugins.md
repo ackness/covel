@@ -133,6 +133,7 @@ Extract facts supported by runtime-inputs.narrative.value, then call save-facts.
 | `events` | 插件事件契约 |
 | `settings` | 玩家配置项，运行时通过 `ctx.userSettings` 读取 |
 | `data` | 本插件数据 namespace 的 schema、version、accepts、search |
+| `datasets` | 本插件拥有的带类型数据集：名字即 namespace，写 schema、key、ops，见[数据集](#数据集contributesdatasets) |
 | `ui` | 包根相对的 `right/message` UI spec 路径 |
 | `worldProjections` | 世界数据投影声明 |
 | `prompt` | 静态提示词段 |
@@ -291,6 +292,14 @@ runtime 的 `schedule.needs[].contract` 和 `io.inputs.*.from.contract` 引用�
 - 写进根 `requires` 的契约，解析器会激活一个提供者。
 - 没写进 `requires` 的契约是可选的：会话里有提供者时照常绑定；没有时按门控处理，必需的输入或 `needs` 缺了提供者，这个 runtime 不运行。包内其他 runtime 提供的契约就是这样用的。
 - `schedule.after` 只排序，`from.kernel` 是内核输入。这两者都不会让别的包被激活。
+
+**故事 runtime 不能硬依赖其他插件。** 只要有一个玩家能玩的叙事插件，故事就应当能进行，所以 `io.visibility: story` 的 runtime：
+
+- 绑定契约的输入（`io.inputs.*.from.contract`，`turn` 和 `committed` 范围都算）必须写 `required: false`，不写时默认是 `true`，会被拒绝。
+- `schedule.needs` 不能写契约，要改成可选输入，或者用 `schedule.after` 只排序。
+- 所在包的根 `requires` 不能列插件契约：缺提供者时解析器会关掉整个包。把它删掉，让 runtime 按可选输入读取。
+
+内核扩展契约不受此限。提供者缺失时，这些输入就没有值，runtime 要能在没有它们时照常写出正文。
 
 ### 阶段和调度顺序
 
@@ -511,7 +520,8 @@ Function 的输出契约以 handler 返回的 `value` 为准。它可以是标�
 
 - 运行时用 `canonicalValue` 保存原始的业务值。对象投影为 `output`；标量、数组和 `null` 投影为 `{ value }`；没有值时投影为空对象。
 - 业务值里叫 `events`、`pluginData`、`interactions` 或 `preGameDone` 的字段不会发起副作用，也不会完成 setup。这些意图必须通过 `HandlerResult.effects` 和 `HandlerResult.completion` 表达。
-- `effects.interactions`、`effects.notifications` 和 `effects.statePatches` 必须是数组，其中的条目以及 `effects.ui[].parts` 必须是对象。function 返回了不是数组的通道或不是对象的条目时，以 `output-schema-invalid` 失败。其他途径带进来的同类内容，在提交时作为该 runtime 被拒绝的写入处理（见[事务参考](./transactions.md)）。
+- `effects.interactions` 和 `effects.notifications` 必须是数组，其中的条目以及 `effects.ui[].parts` 必须是对象。function 返回了不是数组的通道或不是对象的条目时，以 `output-schema-invalid` 失败。其他途径带进来的同类内容，在提交时作为该 runtime 被拒绝的写入处理（见[事务参考](./transactions.md)）。
+- `effects.statePatches` 已移除；成功结果里的这个字段会被明确拒绝。失败或跳过的 handler 结果会剥离领域 effects，并保留原始错误或跳过原因。插件自己的状态请用 `effects.pluginData` 写入插件数据。
 - 同一轮的输入、公共契约校验和 `recordAs` 发布，读的都是同一个业务值。
 - 没有提供 `value` 时不发布 export。不要靠猜 `output.value` 来拆箱。
 - 普通输入的 `select` 作用在这个业务值上。committed 输入读完整的 export，不支持 `select`。
@@ -555,6 +565,21 @@ Agent 的副作用只来自工具：模型能写什么，以 `agent.tools` 白�
 #### 嵌套调用（`ctx.recursiveCall`）
 
 `ctx.recursiveCall({ playerMessage, manualTrigger: { runtimeId, payload } })` 在当前执行里发起嵌套运行，副作用随父执行一起提交。它只读取这些字段；会话、语言、设置和模型沿用父执行，其他字段被忽略。
+
+子调用的写入跟着父 handler 走：
+
+- 父 handler 成功时，子调用的写入和父写入一起提交，排在父结果之前。
+- 父 handler 失败时（抛错、超时、返回 `failed` 或 `skipped`），子调用的写入一起丢弃。PostRuntime Hook 改写了父结果的状态（例如把失败改成成功）时也丢弃，和父 handler 自己的写入一样。多层嵌套逐层适用：任何一层父 handler 失败，它下面所有层的写入都丢弃。
+- 父 handler 挂起等待输入时，它自己的写入留到恢复后提交，子调用的写入则丢弃。目前子调用的写入不随挂起保存。
+- agent 的 guard 里发起的子调用，只在 guard 返回 `{ skip: true }`、结果仍是跳过时提交；guard 放行、agent 照常运行时丢弃。
+
+提交时，顶层 runtime 和它下面所有层的嵌套调用是一个整体，要么全部提交，要么全部丢弃：
+
+- 有故事的执行里，非故事 runtime 的这个整体在一个 savepoint 里提交。其中任何一条写入被拒，整体一起丢弃，故事照常保存。依赖这个顶层 runtime 的下游按[提交规则](./transactions.md#回合级单事务)跟着丢弃。
+- 整体里有故事或 setup runtime 的运行时，不论它在顶层还是嵌套在里面，整体按故事的规则提交：其中任何写入被拒，整次执行回滚。
+- 整体被丢弃时，其中嵌套调用的挂起也一起作废：不保存，也不能恢复，不会替换已有的挂起。本次执行没有别的挂起留下时，这一回合照常结束并计数，被挂起扣住的 detached 作业照常排入。
+
+`ctx.recursiveCall` 返回的是嵌套结果的副本。改动它不会影响提交的内容和归属。
 
 `manualTrigger.runtimeId` 只能点名调用者自己包里的 runtime：内联 runtime 用包 ID，多 runtime 包用 `<pluginId>/<runtimeId>`。点名别的包会在嵌套执行开始前报错，错误写明目标 runtime 和调用者的包 ID。内置插件和社区插件遵守同一条规则。
 
@@ -868,7 +893,7 @@ namespace 声明 `search` 之后，它的记录进入框架的记忆检索（[`m
 - 插件 runtime 通过 `ctx.pluginData.list("_hidden.facts")` 读取。
 - 扩展点、模型工具、`io.selfData` 和公共 API 都读不到它。
 - 揭示应该通过本回合的 runtime 输出完成，详见 [World Data · 隐藏数据](./world-data.md#隐藏数据visibility-hidden)。
-- 插件自己的代码（function runtime 的 `ctx.pluginData.set`、插件本地工具产生的 `plugin.data` 提案）也可以写入自己的 `_hidden.<namespace>`，用于在剧情中追加隐藏内容。写入总是归属提案来源的插件，碰不到其他插件的隐藏数据。
+- 插件自己的代码（function runtime 的 `ctx.pluginData.set` / `ctx.pluginData.update`、插件本地工具产生的 `plugin.data` / `plugin.data.update` 提案）也可以写入自己的 `_hidden.<namespace>`，用于在剧情中追加隐藏内容。写入总是归属提案来源的插件，碰不到其他插件的隐藏数据。
 - REST 接口和内置的 `plugin-data-set` / `plugin-data-set-batch` 工具不能写任何 `_` 开头的命名空间。
 
 ## 提示词与记忆扩展
@@ -931,7 +956,8 @@ namespace 声明 `search` 之后，它的记录进入框架的记忆检索（[`m
 - 引用的 entry、handler、guard、JSON Schema 和 UI 文件必须在包里。
 - 每份 JSON UI spec 声明 `view` 或 `webview` 中的一个；`view` 里的组件名必须在[组件目录](./ui-components.md)里；`repeat.statePath` 和 `$item` 的写法必须合法（见 [UI 面板](./ui-panels.md#json-render-绑定速查)）。报错给出 spec 文件和节点的路径。
 - 内置工具名和插件工具声明、包内的 runtime 引用，以及根契约依赖必须一致。
-- 跨字段的规则（例如 `schedule.detached` 只能用在 `post-turn` 或 `audit`）报错时给出文件路径和你写的字段路径，例如 `runtimes/note/RUNTIME.md: schedule.stage: …`。
+- `contributes.datasets` 的 schema 文件必须在包里并且是合法 JSON；`key` 必须是 schema 顶层 `properties` 里的必填属性（schema 顶层没有 `properties` 时跳过）；同名出现在 `contributes.data` 时两边必须用同一份 schema。
+- 跨字段的规则（例如 `schedule.detached` 只能用在 `post-turn` 或 `audit`，故事 runtime 的契约输入必须写 `required: false`）报错时给出文件路径和你写的字段路径，例如 `runtimes/note/RUNTIME.md: schedule.stage: …`。
 
 加载、`pnpm validate:plugin` 和安装用同一份清单规则（`@covel/shared` 的 schema），UI spec 也一样：校验通过的面板，游戏里不会因为格式被去掉。
 
@@ -1061,11 +1087,44 @@ pnpm lint
 | 世界数据进入叙事提示 | [character-blueprint](../../plugins/character-blueprint/PLUGIN.md) |
 | 隐藏世界数据与策划 | [story-events](../../plugins/story-events/PLUGIN.md) |
 
+### 数据集（`contributes.datasets`）
+
+数据集是插件声明的一类带类型的插件数据：这个包拥有的一个 namespace，加上其中每条记录必须满足的 JSON Schema。
+
+```yaml
+contributes:
+  datasets:
+    journal:
+      schema: ./schemas/journal.json # 必填：包内相对路径，.json
+      key: id # 可选：记录里充当键的顶层字段
+      ops: [upsertItem, delete] # 可选：允许的操作，默认全部
+```
+
+- **名字就是 namespace。** `journal` 数据集对应插件数据的 `journal` 空间。名字用字母开头，只含字母、数字、`_`、`-`，最长 64 个字符；以 `_` 开头的空间留给内核，不能声明。
+- `schema` 必须是包内的 `.json` 文件，不能含 `..` 或前导 `/`。
+- `key`：记录的哪个顶层字段（字符串值）充当它的键。不写就不推导键，由调用方决定。
+- `ops`：这个数据集允许的操作种类，取自 `set`、`merge`、`inc`、`append`、`insert`、`remove`、`upsertItem`、`delete`。不写等于全部；写了就不能为空，也不能重复。
+- 不写的字段按默认处理，编译后的声明总会带齐 `namespace`、`schema`、`ops`（`key` 仅在写了时存在）。编译结果复制到包里每个 runtime 的 `datasets`。
+- **与 `contributes.data` 的关系。** 同一个名字同时出现在 `data` 和 `datasets` 里时，两边的 `schema` 必须指向同一个文件：一个 namespace 只有一份 schema。`data` 仍管世界包导入，数据集管 namespace 里的记录。
+- 没有声明数据集的 namespace，行为和以前一样。
+
+加载、`pnpm validate:plugin` 和安装都会读取并解析每个数据集的 schema 文件（缺文件、JSON 不合法、路径越出包根会报错），并检查 `key`——当 schema 顶层有 `properties` 时，`key` 必须是其中的属性，并且列在顶层 `required` 里。顶层没有 `properties`（只写 `$ref`、`allOf` 等）的 schema 跳过这项检查。
+
+提交时，插件写入自己声明的数据集 namespace 的每一条 proposal 都按声明校验：
+
+- **操作种类。** `plugin.data.update` 里每个操作的种类都必须在 `ops` 里。整值写入（`ctx.pluginData.set`、`plugin.data`、`plugin.data.batch` 的每一项）算作 `set`，删除（`plugin.data.delete`）算作 `delete`。所以 `ops` 里没有 `set` 的数据集，不能用 `set` 整个覆盖。
+- **记录 schema。** 写入后的值（对 `plugin.data.update` 是应用操作之后的结果）必须满足 `schema`。
+- 违反任何一条，这条 proposal 以 `code: "dataset-violation"` 被拒，按提交单元规则处理。宿主没有拿到 schema 文档时，写入一律被拒，不会放过。
+- `key` 在提交时不检查。
+- 不经过提交流水线的写入不做这些检查：世界数据的导入和同步（按 source 的 `schema` 校验，见 [World Data · 配套插件数据](./world-data.md#配套插件数据)）、plugin action RPC 的 `context.store.setPluginData`，以及管理 API 的 `PUT`。
+
+详见[事务 · 操作式写入](./transactions.md#操作式写入plugindataupdate)。
+
 ### 保留的数据命名空间
 
 所有以 `_` 开头的 namespace 都保留给内核。
 
-- 插件不能通过通用的 plugin-data API 或 proposal 写入或删除它们，包括没见过的 `_` 名字和旧的 `_memory`。
+- 插件不能通过通用的 plugin-data API 或 proposal（`set`、`update`、`delete` 都一样）写入或删除它们，包括没见过的 `_` 名字和旧的 `_memory`。
 - `_hidden.<namespace>` 存放 `visibility: hidden` 的世界数据，以及插件在剧情中追加的隐藏内容。只有所属插件的 runtime 能读，也只有所属插件自己的代码能写。
 - 插件日志通过受限的 logger API 产生。业务数据使用 `blocks`、`definitions` 这样的普通名字。
 - `__kernel:<subsystem>` 是另一种 owner 分区，插件绑定的读取接口访问不到它。

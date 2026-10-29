@@ -199,7 +199,7 @@ describe("Hook data at the commit boundary", () => {
                 },
               ],
               effects: {
-                statePatches: [{ op: "set", path: "/x", value: 1 }],
+                pluginData: [{ namespace: "stats", key: "x", value: 1 }],
               },
               completion: "done",
             },

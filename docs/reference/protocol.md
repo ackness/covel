@@ -139,7 +139,6 @@ return { result: execution.result, committed: outcome.status === "committed" };
 
 | 事件类型                 | 方向 | 描述                   | 负载                                               |
 | ------------------------ | ---- | ---------------------- | -------------------------------------------------- |
-| `state.changed`          | S→C  | 游戏状态变更           | `{ table, field, value, runtimeId, pluginId }`     |
 | `event.emitted`          | S→C  | 已提交的游戏业务事件   | `{ topic?, type?, eventType?, data?, pluginId? }`  |
 | `domain-event.previewed` | S→C  | 已校验业务事件即时预览 | `{ runtimeId, pluginId, toolCallId, topic, data }` |
 
@@ -283,6 +282,7 @@ return { result: execution.result, committed: outcome.status === "committed" };
 
 - 所有写入路径都会触发：`plugin-data-set`、`plugin-data-set-batch`、DELETE `/plugin-data/...` 等。成功的 compare-and-set 写入也算（runtime job 的状态迁移、维度记录）。
 - 它由 `wrapStoreWithPluginDataEvents` 在 store 层统一拦截，所以前端可以实时看到插件状态的变化。
+- `plugin.data.update` 提交时也会触发：`value` 是应用操作之后的结果，`operation` 是 `set`；结果不存在而删掉了原来的行时，`operation` 是 `delete`。原本没有行、结果也不存在时什么都不写，也不触发。
 - 后台任务的终态以 `job-status.updated` 为准。`_runtime_jobs` 行的变化只用于同步数据。
 
 **负载**
@@ -771,7 +771,7 @@ data: {
 | `tool.calling` / `tool.completed` / `tool.failed`          | TurnEmitter                                                                                   | LLM 工具调用 trace                                                                                                     |
 | `domain-event.previewed`                                   | ToolExecutor（`emittedEvents` 成功后）                                                        | 服务端投影成 UI slot 预览；前端不直接消费，不代表领域提交                                                              |
 | `llm.calling` / `llm.responded` / `message.completed`      | TurnEmitter                                                                                   | LLM 调用 trace                                                                                                         |
-| `block.emitted` / `state.patch.applied`                    | TurnEmitter                                                                                   | 块发出 / state patch 应用 trace                                                                                        |
+| `block.emitted`                                            | TurnEmitter                                                                                   | 块发出 trace                                                                                                           |
 | `hook.fired` / `hook.aborted`                              | TurnEmitter                                                                                   | Hook 行为 trace                                                                                                        |
 | `gateway.calling` / `gateway.responded` / `gateway.failed` | TurnEmitter（`withGatewayTrace`）                                                             | function-runtime 和扩展点提供方的 `ctx.gateway` provider 调用 trace（与 `llm.*` 对等）；失败时带服务商已报告的 `usage` |
 
@@ -1097,7 +1097,6 @@ interface SseEnvelope {
 narrative.delta       → messages (streaming buffer)
 narrative.completed   → messages (completed)
 interaction.requested → messages (block)
-state.changed         → gameState.tables (deep merge) + statePatches
 event.emitted         → gameState.events
 interaction.submitted → handled by the caller that submitted the form: SUBMIT_BLOCK + player bubble (not through handleSseEvent)
 execution.started     → executionSteps
@@ -1224,7 +1223,6 @@ error.occurred        → executionError
 | `message.completed` | `{ runtimeId, pluginId, content, len, deltaCount }`。`deltaCount` 是这个 runtime 产生的 `narrative.delta` 事件数，是保存下来的权威计数。前端汇总实时片段时用的是另一个合成字段 `_aggregated`，两者不能互换 |
 | `block.emitted` | `{ runtimeId, pluginId, proposalId, source, block }` |
 | `ui.rendered` | `{ runtimeId, pluginId, proposalId, source, render, block }`。action 流和 `state` topic 发送相同的已提交负载；`block` 的 ID 和元数据来自提交结果 |
-| `state.patch.applied` | `{ runtimeId, pluginId, proposalId, patch: { packageName, summary, ops } }` |
 | `hook.fired` | `{ event, hookName, pluginId, runtimeId?, targetId?, targetType, proposalType? }` |
 | `hook.rewrote` | `{ event, hookName, pluginId, runtimeId?, targetId?, diff?, proposalType? }` |
 | `hook.aborted` | `{ event, hookName, pluginId, runtimeId?, targetId?, reason, proposalType? }` |
@@ -1264,6 +1262,8 @@ runtime 的终态：
 - 新执行的 runtime 终态，在 `PostRuntime` 和输出 / 取消校验之后发布：最终失败用 `runtime.failed`，最终成功或暂停用 `runtime.completed`。action SSE 把“跳过”对应成 `runtime.skipped`。
 - 终态的 payload 保留 `turnId` 和 `runId`。它不等于事务提交成功。
 - 回合提交成功、但某个可选 runtime 的写入被单独丢弃时，主回合在 `execution.completed` 之前给它补发一条 `runtime.failed`（带丢弃的原因）。客户端用它覆盖之前的 `runtime.completed`。
+  - 和它一起丢弃的嵌套运行（`ctx.recursiveCall`）也各补发一条。载荷带被丢弃那次运行的 `runId` 和 `turnId`。
+  - 客户端按回合和 runtime 显示一个步骤。所以同一个 runtime 在顶层的那次运行已经提交时，不为它被丢弃的嵌套运行补发，以免把已提交的运行显示成失败。
 - 历史数据里 `runtime.completed` 的 `status: "failed"`、`turn.completed` 的 `committed: false`，仍然属于诊断上的失败。
 - 一次 LLM 尝试失败、重试之后成功，失败记录仍然保留。界面应该把“已恢复的尝试”和任务的最终状态分开显示。
 

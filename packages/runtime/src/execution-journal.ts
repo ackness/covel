@@ -56,18 +56,48 @@ export function attachRuntimeTrigger(result: object, runtimeId: string): void {
   });
 }
 
+function executionResults(
+  turnResult: Pick<TurnResult, "runtimeResults" | "nestedRuntimeResults">,
+): RuntimeResult[] {
+  return [
+    ...new Set([
+      ...turnResult.runtimeResults,
+      ...(turnResult.nestedRuntimeResults ?? []),
+    ]),
+  ];
+}
+
+function countedRuns(
+  turnResult: Pick<TurnResult, "runtimeResults" | "nestedRuntimeResults">,
+): { readonly runtimeId: string; readonly runId: string }[] {
+  return executionResults(turnResult).flatMap((result) => {
+    const runtimeId = (result as JournalCarrier)[RUNTIME_TRIGGER];
+    return runtimeId ? [{ runtimeId, runId: result.runId }] : [];
+  });
+}
+
 /** Runtime ids of every counted run in one execution, one entry per run. */
 export function collectExecutionTriggers(
   turnResult: Pick<TurnResult, "runtimeResults" | "nestedRuntimeResults">,
 ): readonly string[] {
-  const results = new Set<object>([
-    ...turnResult.runtimeResults,
-    ...(turnResult.nestedRuntimeResults ?? []),
-  ]);
-  return [...results].flatMap((result) => {
-    const runtimeId = (result as JournalCarrier)[RUNTIME_TRIGGER];
-    return runtimeId ? [runtimeId] : [];
-  });
+  return countedRuns(turnResult).map((run) => run.runtimeId);
+}
+
+/** The `runId` behind each `collectExecutionTriggers` entry, same order. */
+export function collectExecutionTriggerRuns(
+  turnResult: Pick<TurnResult, "runtimeResults" | "nestedRuntimeResults">,
+): readonly string[] {
+  return countedRuns(turnResult).map((run) => run.runId);
+}
+
+/** The `runId` of the result each pending message came from, by message id. */
+export function collectExecutionJournalRuns(
+  turnResult: Pick<TurnResult, "runtimeResults" | "nestedRuntimeResults">,
+): Record<string, string> {
+  const runs: Record<string, string> = {};
+  for (const result of executionResults(turnResult))
+    for (const message of journalOf(result)) runs[message.id] ??= result.runId;
+  return runs;
 }
 
 /** Collect and de-duplicate every pending message produced by one execution. */

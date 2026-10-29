@@ -19,15 +19,18 @@ import { normalizeHandlerResult } from "../commit/normalize-handler-result.js";
 import { materializeHandlerSuccess } from "../commit/materialize-handler-output.js";
 import { collectUiBlocks } from "../session/session-kernel-helpers.js";
 import { finalizeRuntimeResult } from "../turn-executor/runtime-finalization.js";
+import {
+  finalizeRuntimeFailure,
+  finalizeSuspension,
+  runLeasedInvocation,
+} from "../turn-executor/runtime-scaffold.js";
 import type { HookPipeline } from "../hooks/pipeline.js";
-import { makeFailedResult } from "../turn-executor/turn-executor-helpers.js";
 import type { TurnExecutorDeps } from "../turn-executor/turn-executor-types.js";
-import { RuntimeTimeoutError } from "../turn-executor/turn-control.js";
-import { attachSuspensionArtifact } from "../suspension-artifact.js";
 import { suspensionBasis } from "../resume/suspension-settlement.js";
 import { freezeInputSlots } from "../agent-loop/runtime-input-slots.js";
 import { deepFreeze } from "../hooks/hook-settings.js";
 import { createPluginRuntimeContext } from "./plugin-runtime-context.js";
+import { attachNestedResults } from "../turn-executor/nested-results.js";
 
 export interface ExecuteFunctionRuntimeOptions {
   readonly lastPlayerInput?:
@@ -138,18 +141,12 @@ export async function executeFunctionRuntime({
   const writeBuffer = createExecutionWriteBuffer();
   writeBuffer.push(...structuredClone(pendingProposals));
 
+  const run = { manifest, input, runId, startTime };
   if (!loaded.handler) {
-    return finalizeRuntimeResult(
+    return finalizeRuntimeFailure(
       { ...deps, hookPipeline },
-      manifest,
-      input,
-      makeFailedResult(
-        manifest,
-        input,
-        runId,
-        startTime,
-        "Function runtime missing handler",
-      ),
+      run,
+      "Function runtime missing handler",
     );
   }
   const runtimeContext = await createPluginRuntimeContext({
@@ -176,7 +173,6 @@ export async function executeFunctionRuntime({
     ...(executionId !== undefined ? { executionId } : {}),
     writeBuffer,
   });
-  const handlerAbort = runtimeContext.abort;
   const runtimeTools = runtimeContext.tools;
 
   await deps.emitter?.emit("function.executing", {
@@ -185,83 +181,31 @@ export async function executeFunctionRuntime({
     hasGateway: !!deps.gateway,
   });
 
-  let output: Awaited<ReturnType<NonNullable<typeof loaded.handler>>>;
-  let deadlineTimer: ReturnType<typeof setTimeout> | undefined;
-  let removeAbortListener: (() => void) | undefined;
-  try {
-    // Deadline race: without it a hung handler (e.g. a provider call that
-    // never resolves) blocks the whole turn forever — timeoutMs only existed
-    // for the agent path before. Promise.race subscribes to the handler
-    // promise, so a post-timeout rejection is still observed (no unhandled
-    // rejection). The merged abort signal (ctx.signal) lets a cooperative
-    // handler cancel its own in-flight provider work; a NON-cooperative
-    // losing handler keeps running detached, but its capabilities are
-    // revoked in the finally below so late writes are rejected.
-    const handlerPromise = loaded.handler(runtimeContext.context);
-    const handlerWork = handlerPromise.then(async (result) => {
-      // A handler may intentionally launch a recursive call without awaiting
-      // it. Keep the invocation lease until all nested turns have settled.
-      await runtimeContext.drain();
-      return result;
-    });
-    const aborted = new Promise<never>((_, reject) => {
-      const onAbort = () => {
-        // Revoke synchronously with the abort so no capability call can enter
-        // during the Promise.race rejection microtask window.
-        runtimeContext.revoke();
-        const reason = handlerAbort.signal.reason;
-        reject(
-          reason instanceof Error
-            ? reason
-            : new Error(`function runtime "${manifest.name}" was aborted`),
-        );
-      };
-      if (handlerAbort.signal.aborted) {
-        onAbort();
-        return;
-      }
-      handlerAbort.signal.addEventListener("abort", onAbort, { once: true });
-      removeAbortListener = () =>
-        handlerAbort.signal.removeEventListener("abort", onAbort);
-    });
-    output = await Promise.race([
-      handlerWork,
-      aborted,
-      new Promise<never>(() => {
-        deadlineTimer = setTimeout(() => {
-          const err = new RuntimeTimeoutError(
-            `function runtime "${manifest.name}" timed out after ${timeoutMs}ms`,
-          );
-          handlerAbort.abort(err);
-        }, timeoutMs);
-      }),
-    ]);
-  } catch (err) {
-    // Function-layer terminal marker; rethrow so the dispatch catch emits the
-    // single runtime.failed (avoids a double terminal event).
-    await deps.emitter?.emit("function.completed", {
-      ...helperCtx,
-      status: "failed",
-      durationMs: Date.now() - startTime,
-      error: err instanceof Error ? err.message : String(err),
-    });
-    throw err;
-  } finally {
-    clearTimeout(deadlineTimer);
-    removeAbortListener?.();
-    runtimeContext.dispose();
-    // The race has settled — no further capability use is legitimate,
-    // whether the handler won (its output is final) or lost (it is detached).
-    runtimeContext.revoke();
-    if (!handlerAbort.signal.aborted) {
-      handlerAbort.abort(
-        new Error(`function runtime "${manifest.name}" completed`),
-      );
-    }
-    // Invocation work already propagates tool failures. Cleanup must settle
-    // outstanding calls without replacing the original timeout or error.
-    await runtimeContext.drain().catch(() => undefined);
-  }
+  // Deadline race: without it a hung handler (e.g. a provider call that never
+  // resolves) blocks the whole turn forever. The merged abort signal
+  // (ctx.signal) lets a cooperative handler cancel its own in-flight provider
+  // work; a non-cooperative one is detached with its capabilities revoked.
+  const handler = loaded.handler;
+  const output = await runLeasedInvocation(
+    runtimeContext,
+    () => handler.call(loaded, runtimeContext.context),
+    {
+      timeoutMs,
+      timeoutMessage: `function runtime "${manifest.name}" timed out after ${timeoutMs}ms`,
+      abortedMessage: `function runtime "${manifest.name}" was aborted`,
+      completedMessage: `function runtime "${manifest.name}" completed`,
+      // Function-layer terminal marker; the error is rethrown so the dispatch
+      // catch emits the single runtime.failed (avoids a double terminal event).
+      onFailure: async (err) => {
+        await deps.emitter?.emit("function.completed", {
+          ...helperCtx,
+          status: "failed",
+          durationMs: Date.now() - startTime,
+          error: err instanceof Error ? err.message : String(err),
+        });
+      },
+    },
+  );
 
   const { outcome: handlerOutcome, diagnostics } = normalizeHandlerResult(
     getToolContent(output),
@@ -309,32 +253,10 @@ export async function executeFunctionRuntime({
       },
       createdAt: new Date().toISOString(),
     };
-    const suspendedResult: RuntimeResult = {
-      pluginId: manifest.pluginId,
-      runtimeId: manifest.name,
-      runId,
-      turnId: input.turnId,
-      status: "suspended",
-      output: {
-        suspended: true,
-        suspensionId,
-        reason: suspension.reason,
-        resumeSchema: suspension.resumeSchema,
-      },
+    return finalizeSuspension({ ...deps, hookPipeline }, run, {
+      record: suspension,
       toolCalls: [],
-      durationMs: Date.now() - startTime,
-      timestamp: new Date().toISOString(),
-    };
-
-    const finalResult = await finalizeRuntimeResult(
-      { ...deps, hookPipeline },
-      manifest,
-      input,
-      suspendedResult,
-    );
-    return finalResult.status === "suspended"
-      ? attachSuspensionArtifact(finalResult, { record: suspension })
-      : finalResult;
+    });
   }
 
   // `output.schema` validates the canonical success value. A mismatch fails
@@ -434,10 +356,11 @@ export async function executeFunctionRuntime({
   // Keep commands separate from business output; copying the result preserves them.
   // The buffer belongs to the handler's own success: a failed handler that a
   // PostRuntime hook turned into success commits none of its buffered writes.
+  // Results of its `ctx.recursiveCall`s follow the same rule.
+  const ownSuccess =
+    rawResult.status === "success" && result.status === "success";
   const completedResult: RuntimeResult =
-    rawResult.status === "success" &&
-    result.status === "success" &&
-    writeBuffer.length > 0
+    ownSuccess && writeBuffer.length > 0
       ? {
           ...result,
           pendingProposals: [
@@ -446,6 +369,8 @@ export async function executeFunctionRuntime({
           ],
         }
       : result;
+  if (ownSuccess)
+    attachNestedResults(completedResult, runtimeContext.nestedResults);
 
   const finalOutput = (completedResult.output ??
     getToolContent(output)) as Record<string, unknown>;

@@ -90,7 +90,7 @@ async function buildScenario(options: ScenarioOptions) {
         handler: async () => ({
           outcome: "success",
           effects: {
-            statePatches: [{ table: "world", field: "weather", value: "rain" }],
+            pluginData: [{ namespace: "world", key: "weather", value: "rain" }],
           },
         }),
       },

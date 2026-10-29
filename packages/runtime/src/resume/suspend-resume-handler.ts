@@ -22,9 +22,8 @@ import type { SuspensionRecord } from "@covel/store";
 import type { EmittedEvent, SuspendSentinel } from "@covel/tools";
 import type { LLMMessage } from "@covel/shared";
 import type { HookPipeline } from "../hooks/pipeline.js";
-import { finalizeRuntimeResult } from "../turn-executor/runtime-finalization.js";
+import { finalizeSuspension } from "../turn-executor/runtime-scaffold.js";
 import type { AgentLoopDeps } from "../turn-executor/turn-executor-types.js";
-import { attachSuspensionArtifact } from "../suspension-artifact.js";
 import { suspensionBasis } from "./suspension-settlement.js";
 
 export interface HandleSuspensionOptions {
@@ -116,31 +115,10 @@ export async function handleSuspension(
     createdAt: new Date().toISOString(),
   };
 
-  const suspendedResult: RuntimeResult = {
-    pluginId: manifest.pluginId,
-    runtimeId: manifest.name,
-    runId,
-    turnId: input.turnId,
-    status: "suspended",
-    output: {
-      suspended: true,
-      suspensionId,
-      reason: sentinel.reason,
-      resumeSchema: sentinel.resumeSchema,
-    },
-    toolCalls: [...collectedToolCalls],
-    durationMs: Date.now() - startTime,
-    timestamp: new Date().toISOString(),
-  };
-
-  const finalResult = await finalizeRuntimeResult(
+  return finalizeSuspension(
     { ...deps, hookPipeline },
-    manifest,
-    input,
-    suspendedResult,
+    { manifest, input, runId, startTime },
+    { record: suspension, toolCalls: [...collectedToolCalls] },
     { outputContractSchema: opts.outputContractSchema },
   );
-  return finalResult.status === "suspended"
-    ? attachSuspensionArtifact(finalResult, { record: suspension })
-    : finalResult;
 }

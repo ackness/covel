@@ -18,7 +18,7 @@
  *
  * Effects come from tools only. `agent.tools` is the complete list of what a
  * model can write, so a field of the model's final JSON that is shaped like an
- * effect (`pluginData`, `statePatches`, an event with a `topic`, …) does
+ * effect (`pluginData`, an event with a `topic`, …) does
  * nothing, as an effect-shaped field of a function handler's `value` does
  * nothing. The completion signal (`preGameDone` / `completion`) is not an
  * effect and is still read from the envelope.
@@ -213,7 +213,6 @@ export function finalizeAgentOutput(
   delete output.ui;
 
   for (const key of [
-    "statePatches",
     "assetGenerations",
     "pluginData",
     "notifications",
@@ -254,12 +253,12 @@ export function finalizeAgentOutput(
   };
 }
 
-/** Envelope fields that carry effects when a tool result supplies them. */
+/** Fields stripped and warned about in model-authored JSON. */
 const EFFECT_FIELDS = [
+  "statePatches", // Removed writes still need an author warning in model-authored JSON.
   "interactions",
   "interaction",
   "ui",
-  "statePatches",
   "assetGenerations",
   "pluginData",
   "notifications",

@@ -356,7 +356,7 @@ describe("scenario 9: media pipeline & job-status boundaries", () => {
       error: "provider down",
       effects: {
         jobStatus: [{ jobId: "g", state: "failed", sequence: 1 }],
-        statePatches: [{ table: "s", field: "f", value: 1 }],
+        pluginData: [{ namespace: "s", key: "f", value: 1 }],
       },
     };
     const n = normalizeHandlerResult(raw);
@@ -364,7 +364,7 @@ describe("scenario 9: media pipeline & job-status boundaries", () => {
     const effects = (n.outcome as { effects?: Record<string, unknown> })
       .effects;
     expect(effects?.jobStatus).toBeDefined();
-    expect(effects?.statePatches).toBeUndefined();
+    expect(effects?.pluginData).toBeUndefined();
     expect(
       n.diagnostics.some(
         (d) => d.code === "non-success-domain-effects-stripped",

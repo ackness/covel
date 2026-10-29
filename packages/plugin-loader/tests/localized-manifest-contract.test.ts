@@ -8,6 +8,7 @@ import {
   loadPluginEntryDefinition,
 } from "../src/load.js";
 import { reconcileLocalizedManifest } from "../src/localized-manifest.js";
+import { parsePluginMd } from "../src/parse-plugin-md.js";
 import type { PluginDiscoveryResult } from "../src/types.js";
 
 /**
@@ -126,6 +127,62 @@ runtime:
       (await loadRuntime(discovery, "demo/story", "en-US", captured))
         .promptTemplate,
     ).toContain("Canonical body.");
+  });
+
+  describe("contributes.datasets is structural data", () => {
+    const datasetsOf = (lines: string[]) =>
+      `---\nid: demo\nkind: plugin\ndescription: Demo\ncontributes:\n  datasets:\n${lines.map((l) => `    ${l}`).join("\n")}\n---\n`;
+
+    it("keeps declarations named like prose fields when a variant retranslates them", async () => {
+      const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+      const schemaDir = path.join(dir, "schemas");
+      await fs.mkdir(schemaDir, { recursive: true });
+      for (const file of ["a", "b", "c"])
+        await fs.writeFile(
+          path.join(schemaDir, `${file}.json`),
+          JSON.stringify({ type: "object" }),
+        );
+      await fs.writeFile(
+        path.join(dir, "PLUGIN.md"),
+        datasetsOf([
+          "description: {schema: ./schemas/a.json, key: id, ops: [set]}",
+          "title: {schema: ./schemas/b.json}",
+          "content: {schema: ./schemas/c.json}",
+        ]),
+      );
+      await fs.writeFile(
+        path.join(dir, "PLUGIN.zh.md"),
+        datasetsOf([
+          "description: {schema: ./schemas/zh-missing.json, ops: [delete]}",
+          "title: {schema: ./schemas/b.json, key: name}",
+          "content: {schema: ./schemas/c.json}",
+        ]),
+      );
+      const discovery = discoveryOf();
+      const definition = await loadPluginDefinition(discovery);
+      const canonical = definition.packageManifest.manifest.datasets;
+      expect(canonical).toEqual({
+        description: expect.objectContaining({
+          schema: "./schemas/a.json",
+          key: "id",
+          ops: ["set"],
+        }),
+        title: expect.objectContaining({ schema: "./schemas/b.json" }),
+        content: expect.objectContaining({ schema: "./schemas/c.json" }),
+      });
+      const zh = parsePluginMd(
+        await fs.readFile(path.join(dir, "PLUGIN.zh.md"), "utf-8"),
+        path.join(dir, "PLUGIN.zh.md"),
+        parsePluginMd(
+          await fs.readFile(path.join(dir, "PLUGIN.md"), "utf-8"),
+          path.join(dir, "PLUGIN.md"),
+        ).rawFrontmatter,
+      );
+      expect(zh.manifest.datasets).toEqual(canonical);
+      expect(warn).toHaveBeenCalledWith(
+        expect.stringContaining("contributes.datasets"),
+      );
+    });
   });
 
   it("takes contract fields from PLUGIN.md and prose from the Chinese variant", async () => {

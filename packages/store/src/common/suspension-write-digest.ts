@@ -18,11 +18,7 @@ import type { SuspensionWriteTarget } from "../records/snapshot-records.js";
 /** The reads a digest needs; a `StoreTransaction` reads inside its transaction. */
 export type SuspensionWriteReader = Pick<
   DataStore,
-  | "getPluginData"
-  | "getStateEntry"
-  | "getCharacter"
-  | "getCharacterSchema"
-  | "getLorebookEntry"
+  "getPluginData" | "getCharacter" | "getCharacterSchema" | "getLorebookEntry"
 >;
 
 function canonicalJson(value: unknown): string {
@@ -67,14 +63,6 @@ async function readContent(
         target.pluginId,
         target.namespace,
         target.key,
-      );
-      return row ? { content: row.value } : null;
-    }
-    case "state": {
-      const row = await reader.getStateEntry(
-        sessionId,
-        target.table,
-        target.field,
       );
       return row ? { content: row.value } : null;
     }

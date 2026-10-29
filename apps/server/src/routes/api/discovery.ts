@@ -114,8 +114,10 @@ export function buildFrameworkCapabilities(
           "builtin-tool:plugin-data-set",
           "builtin-tool:plugin-data-set-batch",
           "function-output:pluginData[]",
+          "function-ctx.pluginData.update",
           "local-tool:withPendingProposals(plugin.data)",
           "local-tool:withPendingProposals(plugin.data.batch)",
+          "local-tool:withPendingProposals(plugin.data.update)",
           "plugin-rpc:context.store.setPluginData",
           "management-api:PUT /api/sessions/:id/plugin-data/:pluginId/:namespace/:key",
         ],
@@ -133,7 +135,11 @@ export function buildFrameworkCapabilities(
       },
       proposals: {
         types: PROPOSAL_TYPES,
-        pluginDataTypes: ["plugin.data", "plugin.data.batch"],
+        pluginDataTypes: [
+          "plugin.data",
+          "plugin.data.batch",
+          "plugin.data.update",
+        ],
       },
       protocol: {
         events: uniqueSorted(Object.keys(COVEL_EVENT_META)),

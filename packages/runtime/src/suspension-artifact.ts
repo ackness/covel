@@ -40,6 +40,23 @@ function artifactsOf(carrier: object): readonly SuspensionArtifact[] {
   return (carrier as SuspensionCarrier)[EXECUTION_SUSPENSIONS] ?? [];
 }
 
+/**
+ * The `runId` of the result each continuation came from, by suspension id.
+ * A continuation attached to the turn itself has no entry.
+ */
+export function collectExecutionSuspensionRuns(
+  turnResult: Pick<TurnResult, "runtimeResults" | "nestedRuntimeResults">,
+): Record<string, string> {
+  const runs: Record<string, string> = {};
+  for (const result of [
+    ...turnResult.runtimeResults,
+    ...(turnResult.nestedRuntimeResults ?? []),
+  ])
+    for (const { record } of artifactsOf(result))
+      runs[record.id] ??= result.runId;
+  return runs;
+}
+
 /** Collect and de-duplicate every continuation created by one execution. */
 export function collectExecutionSuspensions(
   turnResult: Pick<TurnResult, "runtimeResults" | "nestedRuntimeResults">,

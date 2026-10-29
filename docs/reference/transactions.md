@@ -92,6 +92,8 @@ type StoreTransaction = Omit<DataStore, "withTransaction" | "close"> & {
 - `rejects a nested withTransaction with a clear error instead of deadlocking`
 - `recovers and accepts a fresh withTransaction after a nested rejection`
 
+`contract/suites/plugin-data-suite.ts` 另外检查操作式写入依赖的读改写：同一事务里写入后能读回，失败的 savepoint 里的写入之后不可见，嵌套值原样往返。
+
 新增的存储后端**必须**通过这套测试。
 
 ## Versioned plugin-data batch CAS
@@ -349,7 +351,7 @@ SqliteStore、MemoryStore 和 PgStore（都在 Node 上）用同一种办法：
 事务边界有两层：
 
 - **`commitAll`**（`packages/runtime/src/commit/session-commit-pipeline.ts`）把**单个 runtime** 的一串 proposal 提交进一个 `withTransaction` 回调。它是最底层的提交原语。
-- **`finalizeExecution`**（`packages/runtime/src/commit/finalize-execution.ts`）把**整个 execution** 的所有 runtime 一起包进**一个** `withTransaction`。“整个 execution”指顶层结果，加上拍平后的嵌套 `recursiveCall` 结果。
+- **`finalizeExecution`**（`packages/runtime/src/commit/finalize-execution.ts`）把**整个 execution** 的所有 runtime 一起包进**一个** `withTransaction`。“整个 execution”指顶层结果，加上拍平后的嵌套 `recursiveCall` 结果。嵌套结果只在父 handler 成功时进入，排在父结果之前（子先于父）。
 
 谁来调用：
 
@@ -372,11 +374,11 @@ SqliteStore、MemoryStore 和 PgStore（都在 Node 上）用同一种办法：
 **叙事优先的失败边界。**
 
 - 领域写入抛出的 store 错误，使整回合回滚。
-- handler 校验失败返回的 `{ committed: false }`（如 PreStateCommit veto、缺字段的 state.patch），在本次执行有成功的 story 结果时，只回滚提出它的那个可选 runtime。
-- 做法：每个非 story、非 setup 的 runtime 在自己的 savepoint 里提交。被拒绝时只撤销它自己的写入，叙事和其他 runtime 照常提交。
-- 这时 `FinalizeExecutionOutcome` 以 `committed` 返回，并在 `failedProposals` / `isolatedRuntimes`（`{ runtimeId, error }`）里列出被丢弃的部分。主回合用 `proposal.failed` 和该 runtime 的 `runtime.failed` SSE 告知客户端。
+- handler 校验失败返回的 `{ committed: false }`（如 PreStateCommit veto、缺字段的 plugin.data），在本次执行有成功的 story 结果时，只回滚提出它的那个可选 runtime。
+- 做法：每个非 story、非 setup 的顶层 runtime 连同它下面各层的嵌套 `recursiveCall` 结果，组成一个提交单元，在一个 savepoint 里提交（子先于父）。单元里任何一条写入被拒，整个单元一起撤销，叙事和其他单元照常提交。含有 story 或 setup 运行的单元（哪怕是嵌套运行；setup 按 manifest 的 stage 判断）直接在执行事务里提交：其中任何写入被拒，整回合回滚。被丢弃单元里的挂起不保存。保存下来的挂起，它扣住的 detached 作业按丢弃结算：硬依赖被丢弃 runtime 的作业去掉，其余作业在冻结输入里把它记为 `failed`。本次执行的挂起全部被丢弃时，回合像挂起被放弃一样结束：计数，扣住的 detached 作业按同样规则结算后排入。
+- 这时 `FinalizeExecutionOutcome` 以 `committed` 返回，并在 `failedProposals` / `isolatedRuntimes`（`{ runtimeId, runId, error }`，被丢弃单元里的每次运行一条）里列出被丢弃的部分。同一个 runtime 可能既嵌套运行又在顶层运行，所以按 `runId` 区分；journal、触发计数和已保存的 `turn_results` 条目也按运行结算。主回合用 `proposal.failed` 和该 runtime 的 `runtime.failed` SSE 告知客户端。
 - 没有 story 的执行（manual、background、detached、setup）仍然是整体原子的：任何一个 proposal 失败就整体回滚。作业不会为没有落库的写入报告成功。
-- 结果里无法变成 proposal 的 effect 条目，同样算作该 runtime 被拒绝的写入，按上面的边界处理，不会以异常拖垮整回合。这类条目是：`effects.ui[].parts`、`effects.interactions`、`effects.notifications`、`effects.statePatches` 里不是对象的条目，以及后三个通道里不是数组的内容。function runtime 在 handler 返回时就以 `output-schema-invalid` 失败。
+- 结果里无法变成 proposal 的 effect 条目，同样算作该 runtime 被拒绝的写入，按上面的边界处理，不会以异常拖垮整回合。这类条目是：`effects.ui[].parts`、`effects.interactions`、`effects.notifications` 里不是对象的条目，以及后两个通道里不是数组的内容。function runtime 在 handler 返回时就以 `output-schema-invalid` 失败。在会提交写入的结果中，已移除的 `effects.statePatches` 通道也会被拒绝，错误信息会指引作者改用插件数据。它以 `effects.invalid` 诊断标记报告，不冒充某一种 proposal。
 
 **导出发布有独立的失败边界。**
 
@@ -384,7 +386,7 @@ SqliteStore、MemoryStore 和 PgStore（都在 Node 上）用同一种办法：
 - 单个 export 的存储失败先回滚这个 savepoint，再记录诊断，然后继续其他 export 和领域提交。这样 PostgreSQL 不会把一个已被捕获的 SQL 错误留在中止的事务里。
 - 缺少声明的 schema，以及公共输出契约校验失败，仍然在正常的执行校验边界处理。
 
-**只有上游真正提交，下游才提交。** 结果按执行顺序提交。被丢弃 runtime 的硬依赖方一起丢弃（`commit/commit-dependencies.ts`）。
+**只有上游真正提交，下游才提交。** 提交单元按执行顺序提交。被丢弃 runtime 的硬依赖方一起丢弃（`commit/commit-dependencies.ts`）。依赖只在顶层 runtime 之间检查：嵌套结果只依赖同一次嵌套执行里的结果，它们在同一个单元里，随单元一起提交或丢弃。
 
 | 关系                                              | 上游被丢弃时                     |
 | ------------------------------------------------- | -------------------------------- |
@@ -473,22 +475,25 @@ for (const result of results) {
 }
 // All runtime results then share one required transaction, which only writes.
 await store.withTransaction(async (tx) => {
-  for (const result of results) {
-    const { proposals, failedProposals } = prepared.get(result);
+  // A unit is a top-level result preceded by its nested results.
+  for (const unit of units) {
     const commit = async (sink) => {
-      const out = await commitPreparedProposals(
-        proposals,
-        sink,
-        sessionId,
-        result,
-        opts,
-      );
-      const failed = [...failedProposals, ...out.failedProposals];
-      if (failed.length > 0) throw new ProposalCommitFailure(failed);
+      for (const result of unit.members) {
+        const { proposals, failedProposals } = prepared.get(result);
+        const out = await commitPreparedProposals(
+          proposals,
+          sink,
+          sessionId,
+          result,
+          opts,
+        );
+        const failed = [...failedProposals, ...out.failedProposals];
+        if (failed.length > 0) throw new ProposalCommitFailure(failed);
+      }
     };
-    // An optional runtime beside a committed story commits in its own
-    // savepoint; a ProposalCommitFailure there drops that runtime alone.
-    await (isolates(result) ? tx.savepoint(commit) : commit(tx));
+    // An optional runtime beside a committed story commits with its nested
+    // results in one savepoint; a ProposalCommitFailure there drops the unit.
+    await (isolates(unit) ? tx.savepoint(commit) : commit(tx));
   }
   for (const message of journalMessages) await tx.appendTurnMessage(message);
   await extraInTx?.(tx, { droppedRuntimeIds });
@@ -503,6 +508,39 @@ await store.withTransaction(async (tx) => {
 });
 // Flush buffered notifications only after COMMIT; discard them on rollback.
 ```
+
+### 操作式写入（plugin.data.update）
+
+插件可以对一个插件数据键提交一串操作，而不是先算好的整个值。function runtime 调用 `ctx.pluginData.update(namespace, key, ops)`；工具用 `makeProposal(ctx, now, "plugin.data.update", { namespace, key, ops })`。操作的种类和语义见[插件数据操作](./plugins.md#数据集contributesdatasets)里的 `ops`。
+
+**在提交事务里读改写。** 提交时，`plugin.data.update` 的处理器在提交事务里读出这个键当前存的值，用 `applyDataOps` 依次应用这些操作，再把结果写回：
+
+- 结果是“不存在”（比如最后一个操作是 `delete`）时，有行就删掉，没有行就什么都不做，提交照样成功。
+- 结果存在时，先把**结果**里的每个 `MediaRef` 按会话校验并规范化，再按单个值的大小上限检查结果，再按数据集规则检查（见下），然后写回。提交前的载荷检查只看到操作本身，而引用可能由多个操作拼出来，或者由操作改写已存的值得到，所以结果要再查一遍。改写保留原来那一行的 ID 和 `createdAt`。
+- 执行中的覆盖读（runtime 读自己还没提交的写入）用同一个 `applyDataOps` 投影这些操作。所以 runtime 读到的值，和提交存下的值一致。
+
+**每个 proposal 全有或全无。** 一串操作里任何一个失败，整个 proposal 被拒，这个键保持原样。被拒的 proposal 按上面的提交单元规则处理：有成功 story 时只丢弃它所在的可选单元，没有 story 的执行整体回滚。处理器不会为数据问题抛异常；只有 store 错误会抛出，并像其他写入一样回滚整次执行。
+
+**错误码。** 被拒时 `CommitResult.code` 是下面之一：
+
+| `code`                                                                | 原因                                                                                            | `error` 的样子                                                                                                         |
+| --------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| `data-op-rejected`                                                    | 操作作用在当前值上失败，比如 `inc` 越过 `min`                                                   | `plugin.data.update: inc result is outside the allowed range (op 0, out-of-bounds)`，有路径时写成 `(op 1 at /gold, …)` |
+| `dataset-violation`                                                   | 违反了声明的数据集：操作种类不允许、结果不符合记录 schema，或数据集的 schema 文档缺失、无法编译 | `plugin.data.update: dataset inventory: operation kind append is not allowed`                                          |
+| `media-not-found` / `media-ownership-invalid` / `media-mime-mismatch` | 结果里的 `MediaRef` 指向不存在的资源、本会话没有引用的资源，或 MIME 类型不符                    | `plugin.data.update: session … has no reference to media …`                                                            |
+
+缺少 namespace / key、空的或不合法的操作列表在处理器之前就被载荷检查拒绝，`code` 是 `proposal-invalid`。保留命名空间和超过大小上限的拒绝发生在处理器里，没有 `code`，只有 `error`。
+
+**数据集检查。** 插件在 `contributes.datasets` 里声明了某个命名空间时，这个插件写入该命名空间的**每一种**插件数据 proposal 都要检查：
+
+- `plugin.data.update` 里每个操作的种类都必须在数据集的 `ops` 里。整值写入（`plugin.data` 和 `plugin.data.batch` 的每一项）算作 `set`，`plugin.data.delete` 算作 `delete`。
+- 结果存在时，按数据集的记录 schema 校验写入后的值，最多报告前 3 条错误。
+- 宿主没有拿到数据集的 schema 文档时，写入一律被拒（`dataset schema of <ns> is unavailable`），不会放过。
+- 没有声明数据集的命名空间不做这些检查。`key` 字段在提交时不检查。
+
+**依赖会话内串行提交。** 读改写之所以正确，是因为同一个会话的提交按会话锁串行；PostgreSQL 多进程部署里这把锁是分布式的（见上面的 Action 级 plugin-rpc 锁边界）。两次执行各自准备 `inc +1`，先后提交，最终是两次都加上。会话锁之外的写入者不读当前值，可能覆盖：管理 API 的 `PUT` 插件数据，以及 plugin action RPC 的立即写入。
+
+**挂起的写入基线。** 保存挂起时记录的写入基线（`takenUnder.writes`）只收录含 `set` 或 `delete` 的 `plugin.data.update`。只有相对操作（`merge`、`inc`、数组操作）的更新作用在提交时的最新值上，不会把旧的整个值写回去，所以不收录。
 
 ## World Data import
 

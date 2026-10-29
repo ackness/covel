@@ -36,6 +36,13 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+/**
+ * Subtrees that are structure all the way down. Their keys are author-chosen
+ * identifiers (dataset names), so a dataset named `description` or `title` must
+ * not be mistaken for a prose field.
+ */
+const STRUCTURAL_PATHS: ReadonlySet<string> = new Set(["contributes.datasets"]);
+
 function reconcileValue(
   canonical: unknown,
   localized: unknown,
@@ -48,6 +55,12 @@ function reconcileValue(
   // manifests are precisely what goes stale as the canonical one evolves.
   // A field the translation DECLARES differently is still reported below.
   if (localized === undefined) return canonical;
+
+  if (STRUCTURAL_PATHS.has(path)) {
+    if (JSON.stringify(canonical) !== JSON.stringify(localized))
+      drift.push(path);
+    return canonical;
+  }
 
   if (isPlainObject(canonical) && isPlainObject(localized)) {
     const out: Record<string, unknown> = {};

@@ -200,6 +200,8 @@ Once it is declared:
 
 `io.concealed: true` cannot be used together with `io.visibility: story`. Loading fails, because story runtime text is meant for the player to read anyway.
 
+A story runtime also cannot hard-depend on another plugin: contract inputs must set `required: false` and `needs` cannot list a contract. See [Scope of dependencies and references](../reference/plugins.md#scope-of-dependencies-and-references).
+
 To pass hidden content to another plugin, send it with an output capability. The receiving plugin stores it in its own hidden data namespace. For examples, see the [story-events plot runtime](../../../plugins/story-events/runtimes/plot/RUNTIME.md) and [world data · hidden data](../reference/world-data.md#hidden-data-visibility-hidden).
 
 ## Data ownership
@@ -215,12 +217,13 @@ Each plugin has its own area of data. It is read and written by "namespace + key
 | Function, RPC                   | `ctx.store.getPluginData(namespace, key)` / `listPluginData(namespace)` | A row such as `{ key, value }`. When there is none, `null`. |
 | An agent's prompt               | List the namespace in `io.selfData`                                     | The contents of that namespace are put into the prompt      |
 
-There are two ways to write: in a function, call `ctx.pluginData.set(namespace, key, value)`, or have a tool submit a request saying "I want to write this" (a proposal). Both are saved together at the end of the turn. When a runtime fails, none of its writes are left behind.
+There are two ways to write: in a function, call `ctx.pluginData.set(namespace, key, value)`, or have a tool submit a request saying "I want to write this" (a proposal). Both are saved together at the end of the turn. When a runtime fails, none of its writes are left behind. When the new value is computed from the old one (3 gold less, for example), submit a list of operations with `ctx.pluginData.update`; see [change data](./local-code.md#change-data).
 
 Limits to remember:
 
 - A value can be at most 256 KiB once it is converted to JSON. When it is larger, the write fails. The error states the plugin, the `namespace/key`, the actual size and the limit. The original value does not change, and nothing is cut short. A list that keeps growing must be split across several keys, or trimmed by your code.
 - A namespace that starts with `_` is reserved for Covel itself. Plugins cannot write to it.
+- To declare the shape of a namespace's records (JSON Schema, key, allowed operations), see [datasets](../reference/plugins.md#datasets-contributesdatasets).
 - If two plugins need to share data, they must do it through a public capability. They cannot read each other's namespaces.
 
 ### Who owns characters

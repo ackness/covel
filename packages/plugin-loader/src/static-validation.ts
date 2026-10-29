@@ -1,9 +1,11 @@
 import {
   FRAMEWORK_TOOL_NAMES,
+  isKernelExtensionContract,
   MAX_UI_WEBVIEW_BYTES,
   pluginUiSpecIssues,
 } from "@covel/shared";
 import path from "node:path";
+import { datasetKeyIssue, datasetSchemaIssues } from "./dataset-rules.js";
 import type { ParsedPluginMd, ParsedRuntimeMd } from "./types.js";
 
 /** Every declared server module, relative to the manifest that owns it. */
@@ -58,6 +60,19 @@ export function validateRuntimeDeclarations(
       );
     outputs.add(contract);
   }
+  // A story package must keep playing without any other package. `requires`
+  // turns the whole package off when a provider is missing, so it cannot name
+  // a plugin contract. The same rule on a runtime's inputs and `needs` is a
+  // manifest rule (@covel/shared).
+  const story = manifests.find(
+    ({ runtime }) => runtime?.io?.visibility === "story",
+  );
+  if (story)
+    for (const contract of plugin.requires ?? [])
+      if (!isKernelExtensionContract(contract))
+        throw new Error(
+          `${packageManifest.sourcePath}: requires: a package with a story runtime (${story.sourcePath}) cannot require contract ${contract}: remove it from requires and bind it as an optional input (required: false), so the story still runs when no provider is active`,
+        );
   for (const parsed of manifests) {
     const runtimeReferences = [
       ...(["needs", "after"] as const).flatMap((field) =>
@@ -185,6 +200,29 @@ export function validatePluginFiles(
       declaration.schema,
       true,
     );
+  for (const [name, declaration] of Object.entries(
+    plugin.contributes?.datasets ?? {},
+  )) {
+    const document = file(
+      packageManifest.sourcePath,
+      `contributes.datasets.${name}.schema`,
+      declaration.schema,
+      true,
+    );
+    const keyIssue = datasetKeyIssue(
+      packageManifest.sourcePath,
+      name,
+      declaration,
+      document,
+    );
+    if (keyIssue) throw new Error(keyIssue);
+  }
+  const [schemaIssue] = datasetSchemaIssues(
+    packageManifest.sourcePath,
+    root,
+    plugin.contributes,
+  );
+  if (schemaIssue) throw new Error(schemaIssue);
   // The same rules decide whether the game shows the panel (`loadPluginUiSpecs`).
   for (const [slot, paths] of Object.entries(plugin.contributes?.ui ?? {}))
     for (const reference of paths ?? []) {

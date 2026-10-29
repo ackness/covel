@@ -29,15 +29,17 @@ export interface ProcessRuntimeResultOutput {
   /** SessionEvents from successfully committed proposals — ready to push to the client. */
   readonly events: SessionEvent[];
   /** Proposals that failed to commit. Empty when everything succeeds. */
-  readonly failedProposals: ReadonlyArray<{
-    readonly proposal: Proposal;
-    readonly error: string;
-    readonly code?: string;
-  }>;
+  readonly failedProposals: readonly FailedProposal[];
 }
 
-type FailedProposal = {
-  readonly proposal: Proposal;
+/** Rejected writes include diagnostics for effects that have no proposal type. */
+export type FailedProposal = {
+  readonly proposal:
+    | Proposal
+    | (Omit<Proposal, "type" | "payload"> & {
+        readonly type: "effects.invalid";
+        readonly payload: { readonly error: string };
+      });
   readonly error: string;
   readonly code?: string;
 };
@@ -80,6 +82,8 @@ export interface RuntimeCommitOptions {
   readonly deferPostCommit?: (fn: () => Promise<void>) => void;
   /** Media store the MediaRefs of every proposal are checked against. */
   readonly mediaStore?: MediaOwnershipStore;
+  /** Declared dataset rules every plugin-data write is checked against. */
+  readonly datasetPolicy?: import("../commit/commit-plugin-data.js").DatasetPolicyResolver;
 }
 
 /** Proposals ready to persist, plus the ones already rejected on the way. */
@@ -125,9 +129,10 @@ async function collectRuntimeProposals(
   // then returned skip:true) commits its buffered writes; a FAILED runtime
   // drops everything (its writes must not land), and a SUSPENDED runtime
   // stashes proposals in the suspension record instead.
-  if (result.status !== "success" || !result.output) {
-    const commit = result.status === "skipped" && pendingProposals.length > 0;
-    return { proposals: commit ? pendingProposals : [], failures: [], commit };
+  const skippedWithWrites =
+    result.status === "skipped" && pendingProposals.length > 0;
+  if ((result.status !== "success" || !result.output) && !skippedWithWrites) {
+    return { proposals: [], failures: [], commit: false };
   }
 
   // A malformed effect is a rejected write of this runtime, never a thrown
@@ -138,13 +143,20 @@ async function collectRuntimeProposals(
       proposals: [],
       failures: [
         {
-          proposal: makeProposal(
-            malformed.type,
-            source,
-            result.turnId,
-            sessionId,
-            { error: malformed.error },
-          ),
+          proposal:
+            malformed.type === "effects.invalid"
+              ? {
+                  id: crypto.randomUUID(),
+                  type: malformed.type,
+                  source,
+                  turnId: result.turnId,
+                  sessionId,
+                  timestamp: new Date().toISOString(),
+                  payload: { error: malformed.error },
+                }
+              : makeProposal(malformed.type, source, result.turnId, sessionId, {
+                  error: malformed.error,
+                }),
           error: malformed.error,
         },
       ],
@@ -152,8 +164,12 @@ async function collectRuntimeProposals(
     };
   }
 
+  if (skippedWithWrites) {
+    return { proposals: pendingProposals, failures: [], commit: true };
+  }
+
   const proposals = normalizeOutput(
-    result.output,
+    result.output ?? {},
     source,
     result.turnId,
     sessionId,
@@ -345,6 +361,7 @@ async function persistProposals(
     {
       preStateCommitApplied,
       ...(opts?.mediaStore ? { mediaStore: opts.mediaStore } : {}),
+      ...(opts?.datasetPolicy ? { datasetPolicy: opts.datasetPolicy } : {}),
     },
   );
   const commitResults = await pipeline.commitAll(

@@ -18,11 +18,13 @@ Each English term has only one Chinese term. The Chinese docs, the UI text, and 
 | Collection | 合集 |  |
 | Contract | 契约 | A versioned ID, for example `narrative-engine@1`. |
 | Credits | 作者信息 | The `author`, `license`, and `homepage` fields of a package. |
+| Dataset | 数据集 | Typed plugin data a plugin declares (`contributes.datasets`). Not the install-time **Collection**. |
 | Deployment form | 部署形态 | The desktop app, the self-hosted web app, the official web app. Not `DEPLOYMENT_TIER`. |
 | Edition | 语言版本 | One language of a world: `defaultLocale`, and the language of each `world.<locale>.yaml` or `WORLD.<locale>.md` at the root. |
 | Kernel | 内核 |  |
 | Local model relay | 本地模型中继 | On a shared form, the server reaches a model on the player's computer or local network through the player's browser. See [Security boundaries](../internals/security.md#local-model-relay). |
 | Official web app | 官方网页版 |  |
+| Operation-based write | 操作式写入 | Submitting a list of operations (`plugin.data.update`) instead of a computed whole value. |
 | Pack | 玩法包 |  |
 | PluginType | 插件类型 |  |
 | Preset | 预设 |  |
@@ -96,7 +98,7 @@ See: [built-in plugins and features](../builtin/index.md), [plugin field referen
 
 A list (`covel-collection.yaml`) of worlds and plugins to install together. It can also include packages from other repositories that are pinned to a commit.
 
-It only matters at install time. What gets installed is still ordinary plugins and worlds, and each is updated and uninstalled on its own. It is different from a **Pack**. A Pack is a choice among plugins that are already installed.
+It only matters at install time. What gets installed is still ordinary plugins and worlds, and each is updated and uninstalled on its own. It is different from a **Pack**. A Pack is a choice among plugins that are already installed. It is also not a **Dataset**: a dataset is typed plugin data that a plugin declares.
 
 See: [collections](../ship/collections.md), [plugin installation](./plugin-installation.md).
 
@@ -118,6 +120,14 @@ The optional `author`, `license`, and `homepage` fields in a plugin, world, or c
 It is for display only, and it is shown before the game starts. The framework makes no decisions based on it. A link opens only after the player confirms the third-party link warning.
 
 See: [author information](./plugins.md#author-information), [security boundaries](../internals/security.md#package-credits-and-author-links).
+
+## Dataset
+
+A dataset is a typed kind of plugin data that a plugin declares with `contributes.datasets`. Its name is the plugin-data namespace, every record must satisfy one JSON Schema, and it can name a key field and the operation kinds it allows.
+
+It has nothing to do with a **Collection**, which is an install-time manifest (`covel-collection.yaml`). At commit, every proposal a plugin writes into its own dataset is checked against the declared operation kinds and schema.
+
+See: [Datasets](./plugins.md#datasets-contributesdatasets), [world data](./world-data.md).
 
 ## Deployment form
 
@@ -157,6 +167,12 @@ The official web app is the web app that the Covel project plans to deploy for e
 
 See: [storage](../internals/storage.md), [storage mode notes](./api.md#storage-mode-notes).
 
+## Operation-based write
+
+An operation-based write submits a list of operations (`inc`, `upsertItem` and so on) against one plugin-data key, instead of reading the value, computing it and writing the whole value back. A plugin submits it with `ctx.pluginData.update` or a `plugin.data.update` proposal; the kernel applies the operations to the latest stored value inside the commit transaction. So two simultaneous "gold +1" both take effect.
+
+See: [Transactions · Operation-based writes](./transactions.md#operation-based-writes-plugindataupdate).
+
 ## Pack
 
 A named group of plugins (two sets, `requested` and `recommended`, plus tags) that together make up a way of playing, for example `traditional-story` or `dialogue-mode`.
@@ -190,7 +206,7 @@ See: `packages/settings/src/`.
 
 A request from a plugin to write something. The kernel writes it only after validation passes. A plugin never writes to the database directly.
 
-The proposal types are defined in one place: `ProposalPayloadMap` (`packages/shared/src/types/proposal.ts`). They are currently: `narrative.append`, `state.patch`, `event.emit`, `interaction.request`, `ui.render`, `asset.generate`, `plugin.data`, `plugin.data.batch`, `plugin.data.delete`, `character.upsert`, `character.schema.set`, `dimension.initialize`, `dimension.update`, and `lorebook.upsert`.
+The proposal types are defined in one place: `ProposalPayloadMap` (`packages/shared/src/types/proposal.ts`). They are currently: `narrative.append`, `event.emit`, `interaction.request`, `ui.render`, `asset.generate`, `plugin.data`, `plugin.data.batch`, `plugin.data.delete`, `plugin.data.update`, `character.upsert`, `character.schema.set`, `dimension.initialize`, `dimension.update`, and `lorebook.upsert`.
 
 See: [transactions](./transactions.md), [turn pipeline](../internals/flow.md).
 

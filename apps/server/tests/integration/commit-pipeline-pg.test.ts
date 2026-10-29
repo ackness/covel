@@ -8,7 +8,7 @@
  *
  *   1. A multi-proposal chain commits atomically (all rows durable).
  *   2. A real DB error mid-chain (duplicate message PK) rolls the WHOLE chain
- *      back — no message and no state-change rows survive.
+ *      back — no message and no plugin-data rows survive.
  *   3. Two concurrent `commitAll` calls on different sessions both commit
  *      without serializing behind a shared begin/commit window.
  *
@@ -128,8 +128,8 @@ describe.skipIf(!isolatedUrl)("commit pipeline on real PG (bug6)", () => {
       ),
       makeProposal(
         {
-          type: "state.patch",
-          payload: { table: "stats", field: "hp", value: 80 },
+          type: "plugin.data",
+          payload: { namespace: "stats", key: "hp", value: 80 },
         },
         "pg-ok-state-1",
         sessionId,
@@ -148,9 +148,9 @@ describe.skipIf(!isolatedUrl)("commit pipeline on real PG (bug6)", () => {
     expect(results.every((r) => r.committed)).toBe(true);
 
     expect(await store.listMessages(sessionId)).toHaveLength(2);
-    expect(await store.listStateChanges(sessionId, "stats", "hp")).toHaveLength(
-      1,
-    );
+    expect(
+      await store.listPluginData(sessionId, SOURCE.pluginId, "stats"),
+    ).toHaveLength(1);
   });
 
   it("rolls back the whole chain when a later write throws (duplicate PK)", async () => {
@@ -161,7 +161,7 @@ describe.skipIf(!isolatedUrl)("commit pipeline on real PG (bug6)", () => {
     // The second narrative re-uses the first message id. addMessage is a plain
     // INSERT (no upsert), so the duplicate PK throws a real PG unique
     // violation mid-chain — which must roll back the earlier message AND the
-    // state-change write.
+    // plugin-data write.
     await expect(
       pipeline.commitAll([
         makeProposal(
@@ -174,8 +174,8 @@ describe.skipIf(!isolatedUrl)("commit pipeline on real PG (bug6)", () => {
         ),
         makeProposal(
           {
-            type: "state.patch",
-            payload: { table: "stats", field: "mp", value: 10 },
+            type: "plugin.data",
+            payload: { namespace: "stats", key: "mp", value: 10 },
           },
           "pg-dup-state",
           sessionId,
@@ -193,9 +193,9 @@ describe.skipIf(!isolatedUrl)("commit pipeline on real PG (bug6)", () => {
 
     // Nothing from the failed chain survives.
     expect(await store.listMessages(sessionId)).toHaveLength(0);
-    expect(await store.listStateChanges(sessionId, "stats", "mp")).toHaveLength(
-      0,
-    );
+    expect(
+      await store.listPluginData(sessionId, SOURCE.pluginId, "stats"),
+    ).toHaveLength(0);
   });
 
   it("runs two concurrent commitAll chains on different sessions", async () => {
@@ -232,5 +232,96 @@ describe.skipIf(!isolatedUrl)("commit pipeline on real PG (bug6)", () => {
     expect(resB[0]!.committed).toBe(true);
     expect(await store.listMessages(sessionA)).toHaveLength(1);
     expect(await store.listMessages(sessionB)).toHaveLength(1);
+  });
+
+  describe("plugin.data.update", () => {
+    const update = (
+      sessionId: string,
+      key: string,
+      ops: Extract<
+        ProposalBody,
+        { type: "plugin.data.update" }
+      >["payload"]["ops"],
+    ) =>
+      makeProposal(
+        {
+          type: "plugin.data.update",
+          payload: { namespace: "wallet", key, ops },
+        },
+        globalThis.crypto.randomUUID(),
+        sessionId,
+      );
+    const value = async (sessionId: string, key: string) =>
+      (await store.getPluginData(sessionId, SOURCE.pluginId, "wallet", key))
+        ?.value;
+
+    it("commits inc and upsertItem", async () => {
+      const sessionId = "pg-update-ops";
+      await seedSession(store, sessionId);
+      const results = await createCommitPipeline(store).commitAll([
+        update(sessionId, "purse", [
+          { op: "inc", path: "/gold", by: 3 },
+          {
+            op: "upsertItem",
+            path: "/items",
+            key: "id",
+            value: { id: "a", qty: 1, note: null },
+          },
+        ]),
+        update(sessionId, "purse", [
+          { op: "inc", path: "/gold", by: -1.5 },
+          {
+            op: "upsertItem",
+            path: "/items",
+            key: "id",
+            value: { id: "a", qty: 2 },
+          },
+        ]),
+      ]);
+      expect(results.every((r) => r.committed)).toBe(true);
+      expect(await value(sessionId, "purse")).toEqual({
+        gold: 1.5,
+        items: [{ id: "a", qty: 2, note: null }],
+      });
+    });
+
+    it("sums two sequential commitAll calls with inc on one key", async () => {
+      const sessionId = "pg-update-sum";
+      await seedSession(store, sessionId);
+      const pipeline = createCommitPipeline(store);
+      await pipeline.commitAll([
+        update(sessionId, "gold", [{ op: "inc", by: 1 }]),
+      ]);
+      await pipeline.commitAll([
+        update(sessionId, "gold", [{ op: "inc", by: 1 }]),
+      ]);
+      expect(await value(sessionId, "gold")).toBe(2);
+    });
+
+    it("leaves the row of a rejected op list while its siblings commit", async () => {
+      const sessionId = "pg-update-reject";
+      await seedSession(store, sessionId);
+      const pipeline = createCommitPipeline(store);
+      await pipeline.commitAll([
+        update(sessionId, "gold", [{ op: "set", value: 1 }]),
+      ]);
+      const results = await pipeline.commitAll([
+        update(sessionId, "other", [{ op: "append", value: "x" }]),
+        update(sessionId, "gold", [{ op: "inc", by: -5, min: 0 }]),
+        makeProposal(
+          {
+            type: "narrative.append",
+            payload: { content: "sibling", kind: "story" },
+          },
+          "pg-update-reject-msg",
+          sessionId,
+        ),
+      ]);
+      expect(results.map((r) => r.committed)).toEqual([true, false, true]);
+      expect(results[1]).toMatchObject({ code: "data-op-rejected" });
+      expect(await value(sessionId, "gold")).toBe(1);
+      expect(await value(sessionId, "other")).toEqual(["x"]);
+      expect(await store.listMessages(sessionId)).toHaveLength(1);
+    });
   });
 });

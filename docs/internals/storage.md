@@ -314,8 +314,7 @@ Web 应用用三个数据库，生命周期各自独立：
 - 每个 `table.field` 只缓存最新值，最多保留最近更新的 256 个字段。读、压缩和写在同一个读写事务里完成，并用最近 256 个事件 ID 去重。
 - reducer 使用同样的字段上限，以独立修订号刷新状态面板。完整的游戏状态不受缓存上限影响；权威快照始终优先。
 - 资产进度按资产（没有资产 ID 时按插件和 runtime）与阶段合并，最多保留 256 个回合、每回合 256 项。消息窗口移除一个回合的最后一条消息时，也清除该回合的资产和进度。
-- 状态补丁的开发期缓存格式已变化，需要清除旧的浏览器显示缓存；没有迁移或双读。存档检查点不受影响。
-- 状态补丁保留 `table.field` 的形状。实时事件的身份是 `traceId` 加 `seq`；没有有效的这一对时用 UUID。
+- 保留的状态补丁沿用 `table.field` 的形状；当前不再接收会话状态的实时写入事件。
 - 没有“每个服务一份数组”的缓存，所以不会覆盖别的标签页的历史，也不会留着过期的读取结果。
 - LocalDataService 为每次追加取一份快照，写入期间一直持有世界和会话的归属，并在放行后检查会话仍然存在。本地的表单和时间线写入也用同样的归属和存在性检查；输入在等待放行之前先复制。
 - 排在删除后面的写入会失败，不会把缓存重新建出来。
@@ -564,6 +563,21 @@ MemoryStore、SQLite、PostgreSQL 和浏览器检查点都保持这些身份。�
 - 重试从它保存的完整运行时结果（包括 effects 和规范值）重建种子；媒体引用扫描也直接读它。
 - `runtime_outputs` 是更窄的投影，供运行时输出 API 使用。
 - 行在提交之前写入，由 `setTurnResultCommitStatus` 结算。回合提交成功时，它还会把“写入被丢弃的运行时”的结果改写为 `failed` 并附上错误，所以重试绝不会把一个被丢弃的结果当作成功来做种子。
+
+## 状态所有者登记
+
+新增表或会话字段时，先在 [`state-ownership.ts`](../../packages/store/src/state-ownership.ts) 登记它的所有者和保存范围。`KERNEL_TABLE_OWNERSHIP` 覆盖 SQLite 和 PostgreSQL 的全部 Drizzle 表，记录会话或全局作用域，以及快照、浏览器检查点和分叉的处理方式。`SESSION_FIELD_OWNERSHIP` 覆盖 `SessionRecord` 的每个字段，记录所有者和是否进入快照。这份登记只描述现有行为，不驱动数据复制或写入。
+
+[`state-ownership.test.ts`](../../packages/store/tests/state-ownership.test.ts) 检查：
+
+- 表名与两个后端的 schema 完全一致。会话作用域包含级联登记里的子表、父表 `sessions` 和由 MediaStore 管理的 `media_refs`。
+- 标为 `captured` 的表恰好对应 `SnapshotPayload` 里的数据集。消息游标、显示边界和压缩标签不是消息行数据集。
+- 标为 `exported` 的表恰好对应检查点领域，包括记录数组、生命周期数组、单条记录和嵌套的 `state` 数组。这里表示检查点有该领域，不保证复制全部行；例如工具调用和事件数组目前导出为空。
+- 会话字段的快照登记与 `SnapshotSessionState` 中的同名字段一致。类型检查还要求新增 `SessionRecord`、快照或检查点字段时补齐对应登记或测试映射。
+
+`plugin_data` 的行归 `plugin_id` 所有；`_` 命名空间和 `__kernel:` 所有者是内核分区。控制面命名空间不进入快照和分叉。`state_schemas`、`state_entries`、`state_changes` 登记为内核所有：插件写入路径已移除，之后会改造或移除这三张表。
+
+分叉行为已登记，但 store 测试无法依赖 `apps/server`，因此不核对分叉实现。会话 `metadata` 的子键不在字段检查范围内；目前没有重置路径，操作记录表也尚未创建，本登记不为它们声明行为。
 
 ## Plugin-data ownership and reserved names
 

@@ -9,6 +9,8 @@
  * list them in their `description`.
  */
 
+import { isKernelExtensionContract } from "../extension-points/contracts.js";
+
 /** The manifest fields the rules read, independent of where a manifest writes them. */
 export interface RuntimeRuleView {
   readonly outputContract?: string;
@@ -33,13 +35,29 @@ export interface RuntimeRuleView {
   };
   /** Cadence of an `auto` runtime, in logical turns. */
   readonly every?: number;
-  readonly needs?: readonly (string | { readonly scope?: string })[];
+  readonly needs?: readonly (
+    | string
+    | {
+        readonly scope?: string;
+        readonly contract?: string;
+        readonly capability?: string;
+      }
+  )[];
   readonly output?: { readonly schema?: string; readonly recordAs?: string };
   /** `true` when a `manual` / `event` activation runs as a background job. */
   readonly background?: boolean;
   readonly builtinTools?: readonly string[];
   /** Names of the inputs read from the same execution (not committed, not kernel). */
   readonly turnInputs?: readonly string[];
+  /**
+   * Inputs bound to a contract (`turn` and `committed` scope; not kernel
+   * inputs). `required` is the effective value, `true` by default.
+   */
+  readonly contractInputs?: readonly {
+    readonly name: string;
+    readonly contract: string;
+    readonly required: boolean;
+  }[];
 }
 
 type RuleField =
@@ -272,6 +290,29 @@ export function runtimeRuleIssues(
       `${name("stage")} is required for ${name("trigger", "type")} 'auto', the default; choose setup, pre-turn, narrative, post-turn or audit, or use trigger 'manual' or 'event'`,
       "runtime",
     );
+
+  // A story runtime must run without any other package: the player can play
+  // with only one narrative plugin. Every contract is foreign, so a contract
+  // that must resolve (a required input or a `needs` gate) would turn the
+  // story off with its provider. Kernel extension contracts are exempt.
+  if (m.visibility === "story") {
+    const story = `a story runtime (${name("visibility")} 'story')`;
+    for (const input of m.contractInputs ?? [])
+      if (input.required && !isKernelExtensionContract(input.contract))
+        add(
+          at("inputs", input.name, "required"),
+          `${story} cannot require contract ${input.contract}: set ${name("inputs", input.name, "required")}: false so the story still runs when no provider is active`,
+        );
+    for (const [i, need] of (m.needs ?? []).entries()) {
+      if (typeof need === "string") continue;
+      const contract = need.contract ?? need.capability;
+      if (contract !== undefined && !isKernelExtensionContract(contract))
+        add(
+          at("needs", i),
+          `${story} cannot gate on contract ${contract} in ${name("needs")}; bind it as an optional input (required: false) or use schedule.after to order only`,
+        );
+    }
+  }
 
   // An event/manual runtime that always runs in the background has no
   // same-execution upstream: no activation could satisfy a turn input.

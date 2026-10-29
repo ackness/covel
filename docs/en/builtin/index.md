@@ -40,7 +40,7 @@ Plugins marked "On by default" are added to every game automatically, and you ca
 | Plugin                                                | What it does                                                                   | On by default |
 | ----------------------------------------------------- | ------------------------------------------------------------------------------ | ------------- |
 | [Narrator](./story.md) `narrator`                     | Writes the story text for each turn                                            | Yes           |
-| [Dialogue Narrator](./story.md) `chat-mode-narrator`  | Tells the story as character dialogue, for stage mode                          |               |
+| [Dialogue Narrator](./story.md) `chat-mode-narrator`  | Tells the story as character dialogue; works alone, Scene Stage is optional    |               |
 | [Action Suggestions](./story.md) `guide`              | Gives a few actions you can tap below the story text                           |               |
 | [Reply Variants](./story.md) `branch-reply`           | Writes another version of the same turn                                        |               |
 | [Story Memory](./story.md) `memory`                   | Remembers the ongoing plot, the current scene and the player character's state | Yes           |
@@ -48,14 +48,14 @@ Plugins marked "On by default" are added to every game automatically, and you ca
 
 ### RPG mechanics
 
-| Plugin                                         | What it does                                                                      | On by default |
-| ---------------------------------------------- | --------------------------------------------------------------------------------- | ------------- |
+| Plugin                                         | What it does                                                                                  | On by default |
+| ---------------------------------------------- | --------------------------------------------------------------------------------------------- | ------------- |
 | [Dice Check](./rpg.md) `dice-check`            | Pre-rolled dice decide risky actions; no attribute label appears when no ability is available |               |
-| [Tabletop Rules](./rpg.md) `tabletop-rules`    | Assigns attribute points at the start, and lets the player start attribute checks |               |
-| [Quest Log](./rpg.md) `core-quest`             | Records quests and objectives, with localized status badges                       |               |
-| [Inventory](./rpg.md) `inventory`              | Records what the player character carries; items can be used and dropped          |               |
-| [Affinity](./rpg.md) `affinity`                | Records each character's attitude toward the player character                     |               |
-| [Hidden Story Events](./rpg.md) `story-events` | Story events that only happen when their conditions are met                       |               |
+| [Tabletop Rules](./rpg.md) `tabletop-rules`    | Assigns attribute points at the start, and lets the player start attribute checks             |               |
+| [Quest Log](./rpg.md) `core-quest`             | Records quests and objectives, with localized status badges                                   |               |
+| [Inventory](./rpg.md) `inventory`              | Records what the player character carries; items can be used and dropped                      |               |
+| [Affinity](./rpg.md) `affinity`                | Records each character's attitude toward the player character                                 |               |
+| [Hidden Story Events](./rpg.md) `story-events` | Story events that only happen when their conditions are met                                   |               |
 
 ### Characters and world
 
@@ -65,7 +65,7 @@ Plugins marked "On by default" are added to every game automatically, and you ca
 | [Character Creator](./world.md) `char-creator`         | Creates the player character, and updates characters during play          | Yes           |
 | [Character Profiles](./world.md) `character-blueprint` | Holds the characters and portraits the world provides                     |               |
 | [World Dimensions](./world.md) `world-init`            | Prepares character attributes and dimensions, and updates dimension state | Yes           |
-| [World Time](./world.md) `world-time`                  | Time passing, day and night, and a rules summary                                           | Yes           |
+| [World Time](./world.md) `world-time`                  | Time passing, day and night, and a rules summary                          | Yes           |
 | [World Rules](./world.md) `living-world-rules`         | Brings the world's rules into every turn, with localized category badges  |               |
 | [Codex](./world.md) `codex`                            | Records people, places and things, with localized category badges         |               |
 | [Relationship Graph](./world.md) `npc-graph`           | Records a graph of relationships between people, groups and factions      |               |

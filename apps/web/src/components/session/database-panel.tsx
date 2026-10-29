@@ -10,7 +10,7 @@
  * stack of bordered cards.
  *
  * Data source: GET /api/sessions/:id/state
- * Auto-refreshes whenever a new `state.changed` SSE event bumps `refreshKey`
+ * Auto-refreshes whenever a resource invalidation bumps `refreshKey`
  * from the parent (session store exposes statePatchRevision).
  */
 

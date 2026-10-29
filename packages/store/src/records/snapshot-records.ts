@@ -210,7 +210,6 @@ export type SuspensionWriteTarget =
       readonly namespace: string;
       readonly key: string;
     }
-  | { readonly kind: "state"; readonly table: string; readonly field: string }
   | { readonly kind: "character"; readonly id: string }
   | { readonly kind: "character-schema" }
   | {

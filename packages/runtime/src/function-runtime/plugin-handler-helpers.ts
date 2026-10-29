@@ -23,10 +23,14 @@ import type {
 } from "@covel/shared/plugin-runtime";
 import type { Session, SetupRuntimeState } from "@covel/shared";
 import {
+  applyDataOps,
+  dataOpsSchema,
   pluginCodeNamespaceWriteError,
   pluginDataEntry,
   readEnvChoice,
   readEnvString,
+  type DataOpsCurrent,
+  type JsonValue,
   type RpcHandlerStore,
 } from "@covel/shared";
 import { overlayPluginDataValue } from "@covel/tools";
@@ -34,6 +38,7 @@ import { pluginDataSizeError } from "@covel/shared";
 import {
   bufferPluginData,
   bufferPluginDataDelete,
+  bufferPluginDataUpdate,
   mergePluginDataRows,
   type ExecutionWriteBuffer,
 } from "./execution-write-buffer.js";
@@ -185,6 +190,10 @@ async function readTurnMessagePage(
  * so the handler reads its own not-yet-committed writes. Deletes (including
  * `set(null)`) use their own proposal and share the same transaction.
  *
+ * `update` checks its operations against the current view (store row plus
+ * buffer) and buffers a `plugin.data.update` proposal, which the commit
+ * applies to the latest stored value.
+ *
  * Without a buffer the writer applies changes directly for the explicit
  * standalone test-runtime API, which has no execution commit pipeline.
  */
@@ -194,6 +203,19 @@ export function createPluginDataWriter(
   buffer?: ExecutionWriteBuffer,
 ): PluginDataWriter {
   const { sessionId, pluginId } = ctx;
+  /** The stored row of one key with this execution's buffered writes applied. */
+  const currentView = async (
+    namespace: string,
+    key: string,
+  ): Promise<DataOpsCurrent> => {
+    const row = await store.getPluginData(sessionId, pluginId, namespace, key);
+    const base: DataOpsCurrent = row
+      ? { exists: true, value: row.value as JsonValue }
+      : { exists: false };
+    return buffer
+      ? overlayPluginDataValue(buffer, pluginId, namespace, key, base)
+      : base;
+  };
   return {
     async set(namespace: string, key: string, value: unknown) {
       assertWritableNamespace(namespace);
@@ -223,17 +245,9 @@ export function createPluginDataWriter(
       });
     },
     async get(namespace: string, key: string) {
-      if (buffer) {
-        const hit = overlayPluginDataValue(buffer, pluginId, namespace, key);
-        if (hit.hit) return structuredClone(hit.value);
-      }
-      const row = await store.getPluginData(
-        sessionId,
-        pluginId,
-        namespace,
-        key,
-      );
-      return row ? row.value : null;
+      const view = await currentView(namespace, key);
+      if (!view.exists) return null;
+      return buffer ? structuredClone(view.value) : view.value;
     },
     async list(namespace: string) {
       const rows = await store.listPluginData(sessionId, pluginId, namespace);
@@ -249,6 +263,56 @@ export function createPluginDataWriter(
       } else {
         await store.deletePluginData(sessionId, pluginId, namespace, key);
       }
+    },
+    async update(namespace: string, key: string, ops: unknown) {
+      assertWritableNamespace(namespace);
+      const parsed = dataOpsSchema.safeParse(ops);
+      if (!parsed.success) {
+        const issues = parsed.error.issues
+          .slice(0, 3)
+          .map((issue) =>
+            issue.path.length > 0
+              ? `${issue.path.join(".")}: ${issue.message}`
+              : issue.message,
+          )
+          .join("; ");
+        throw new TypeError(`pluginData.update: invalid ops (${issues})`);
+      }
+      const result = applyDataOps(
+        await currentView(namespace, key),
+        parsed.data,
+      );
+      if (!result.ok) {
+        throw new Error(`pluginData.update: ${result.error.message}`);
+      }
+      if (result.exists) {
+        assertPluginDataSize(pluginId, namespace, key, result.value);
+      }
+      if (buffer) {
+        bufferPluginDataUpdate(
+          buffer,
+          ctx,
+          namespace,
+          key,
+          structuredClone(parsed.data),
+        );
+        return;
+      }
+      if (!result.exists) {
+        await store.deletePluginData(sessionId, pluginId, namespace, key);
+        return;
+      }
+      const now = new Date().toISOString();
+      await store.setPluginData({
+        id: `${sessionId}:${pluginId}:${namespace}:${key}`,
+        sessionId,
+        pluginId,
+        namespace,
+        key,
+        value: structuredClone(result.value),
+        createdAt: now,
+        updatedAt: now,
+      });
     },
   };
 }
@@ -482,22 +546,34 @@ export function createFunctionStoreView(
     readTurnMessages: (options) =>
       readTurnMessagePage(store, sessionId, options),
     async getPluginData(namespace, key) {
-      const hit = overlayPluginDataValue(overlay, pluginId, namespace, key);
-      if (hit.hit) {
-        if (hit.deleted) return null;
-        const now = new Date().toISOString();
-        return {
-          id: `${sessionId}:${pluginId}:${namespace}:${key}`,
-          sessionId,
-          pluginId,
-          namespace,
-          key,
-          value: structuredClone(hit.value),
-          createdAt: now,
-          updatedAt: now,
-        };
-      }
-      return store.getPluginData(sessionId, pluginId, namespace, key);
+      const row = await store.getPluginData(
+        sessionId,
+        pluginId,
+        namespace,
+        key,
+      );
+      const hit = overlayPluginDataValue(
+        overlay,
+        pluginId,
+        namespace,
+        key,
+        row
+          ? { exists: true, value: row.value as JsonValue }
+          : { exists: false },
+      );
+      if (!hit.hit) return row;
+      if (!hit.exists) return null;
+      const now = new Date().toISOString();
+      return {
+        id: row?.id ?? `${sessionId}:${pluginId}:${namespace}:${key}`,
+        sessionId,
+        pluginId,
+        namespace,
+        key,
+        value: structuredClone(hit.value),
+        createdAt: row?.createdAt ?? now,
+        updatedAt: now,
+      };
     },
     async listPluginData(namespace) {
       const stored = await store.listPluginData(sessionId, pluginId, namespace);

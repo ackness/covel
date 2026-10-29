@@ -639,6 +639,70 @@ export function registerPluginDataStoreSuite(getStore: () => DataStore): void {
         expect(rows.map((row) => row.key)).toEqual(expected);
     });
 
+    describe("read-modify-write inside a transaction (plugin.data.update)", () => {
+      const row = (key: string, value: unknown) => ({
+        id: `rmw-${key}-${JSON.stringify(value)}`,
+        sessionId: "sess-rmw",
+        pluginId: "p1",
+        namespace: "wallet",
+        key,
+        value,
+        createdAt: "2024-01-01T00:00:00.000Z",
+        updatedAt: "2024-01-01T00:00:00.000Z",
+      });
+      const read = (tx: Pick<DataStore, "getPluginData">, key = "gold") =>
+        tx.getPluginData("sess-rmw", "p1", "wallet", key);
+
+      it("reads a write back on the same transaction", async () => {
+        await store.setPluginData(row("gold", 1));
+        await store.withTransaction(async (tx) => {
+          expect((await read(tx))?.value).toBe(1);
+          await tx.setPluginData(row("gold", 2));
+          expect((await read(tx))?.value).toBe(2);
+          await tx.deletePluginData("sess-rmw", "p1", "wallet", "gold");
+          expect(await read(tx)).toBeNull();
+          await tx.setPluginData(row("gold", 3));
+          expect((await read(tx))?.value).toBe(3);
+        });
+        expect((await read(store))?.value).toBe(3);
+      });
+
+      it("hides a write of a failed savepoint and keeps the earlier value", async () => {
+        await store.setPluginData(row("gold", 1));
+        await store.withTransaction(async (tx) => {
+          await tx.setPluginData(row("gold", 2));
+          await expect(
+            tx.savepoint!(async (sp) => {
+              await sp.setPluginData(row("gold", 3));
+              expect((await read(sp))?.value).toBe(3);
+              throw new Error("savepoint boom");
+            }),
+          ).rejects.toThrow("savepoint boom");
+          expect((await read(tx))?.value).toBe(2);
+        });
+        expect((await read(store))?.value).toBe(2);
+      });
+
+      it("round-trips a nested value produced by operations unchanged", async () => {
+        const value = {
+          items: [
+            { id: "a", qty: 2, tags: ["x"], note: null },
+            { id: "b", qty: -1.25, nested: { deep: [0, -0.5, 1e-3] } },
+          ],
+          empty: {},
+          none: [],
+          flag: false,
+          zero: 0,
+          text: "",
+        };
+        await store.withTransaction(async (tx) => {
+          await tx.setPluginData(row("nested", value));
+          expect((await read(tx, "nested"))?.value).toEqual(value);
+        });
+        expect((await read(store, "nested"))?.value).toEqual(value);
+      });
+    });
+
     it("keeps a rewritten row's ID, creation time and place in the list", async () => {
       const row = (key: string, createdAt: string, value: number) => ({
         id: `keep-${key}-${value}`,

@@ -15,6 +15,7 @@ import type {
 import { emitCommittedProposal } from "./session-commit-emitter.js";
 import { flushPostCommit } from "./post-commit-fanout.js";
 import { checkCommitProposal } from "./proposal-check.js";
+import type { DatasetPolicyResolver } from "./commit-plugin-data.js";
 import type { MediaOwnershipStore } from "../media/canonicalize-media-refs.js";
 export type { KernelStore } from "../session/session-kernel-store.js";
 import type { KernelStore } from "../session/session-kernel-store.js";
@@ -101,6 +102,8 @@ export interface CommitPipelineOptions {
   readonly preStateCommitApplied?: boolean;
   /** Canonicalize the MediaRefs of every proposal against the session. */
   readonly mediaStore?: MediaOwnershipStore;
+  /** Declared dataset rules every plugin-data write is checked against. */
+  readonly datasetPolicy?: DatasetPolicyResolver;
 }
 
 export function createCommitPipeline(
@@ -111,7 +114,11 @@ export function createCommitPipeline(
   signal?: AbortSignal,
   options: CommitPipelineOptions = {},
 ): CommitPipeline {
-  const handlers = createCommitHandlers(store);
+  const handlerOptions = {
+    ...(options.datasetPolicy ? { datasetPolicy: options.datasetPolicy } : {}),
+    ...(options.mediaStore ? { mediaStore: options.mediaStore } : {}),
+  };
+  const handlers = createCommitHandlers(store, handlerOptions);
 
   function commit(proposal: Proposal): Promise<CommitResult> {
     return commitWith(handlers, store, proposal);
@@ -151,6 +158,7 @@ export function createCommitPipeline(
       return {
         committed: false,
         error: `unknown proposal type: ${proposal.type}`,
+        code: "proposal-invalid",
       };
     }
 
@@ -327,7 +335,10 @@ export function createCommitPipeline(
         );
       }
       const results = await store.withTransaction(async (tx) => {
-        const txHandlers = createCommitHandlers(tx, { singleBatch: true });
+        const txHandlers = createCommitHandlers(tx, {
+          singleBatch: true,
+          ...handlerOptions,
+        });
         const txResults: CommitResult[] = [];
         for (const entry of screened) {
           txResults.push(
@@ -375,7 +386,7 @@ export function createCommitPipeline(
     // PreStateCommit runs between the records unless the caller ran it
     // beforehand; only then is the batch the sole writer for its whole length.
     const batchHandlers = options.preStateCommitApplied
-      ? createCommitHandlers(store, { singleBatch: true })
+      ? createCommitHandlers(store, { singleBatch: true, ...handlerOptions })
       : handlers;
     const results: CommitResult[] = [];
     for (const p of proposals) {

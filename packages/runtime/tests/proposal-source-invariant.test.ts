@@ -30,7 +30,6 @@ describe("proposal source invariants", () => {
         { topic: "quest.complete", data: { id: "q1" } },
         { topic: "quest.start", data: { id: "q2" } },
       ],
-      statePatches: [{ table: "world", field: "time", value: "night" }],
       pluginData: [
         { namespace: "entries", key: "k1", value: 1 },
         { namespace: "entries", key: "k2", value: 2 },

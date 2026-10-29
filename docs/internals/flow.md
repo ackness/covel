@@ -290,7 +290,7 @@ flowchart TB
     end
 
     Group --> Commit["effects + story 输出 → Proposal[] → CommitPipeline.commitAll<br/>PreStateCommit → handler → PostStateCommit"]
-    Commit --> SSE["发 SessionEvent<br/>narrative.delta / narrative.completed<br/>interaction.requested / state.changed<br/>plugin-data.changed / event.emitted"]
+    Commit --> SSE["发 SessionEvent<br/>narrative.delta / narrative.completed<br/>interaction.requested<br/>plugin-data.changed / event.emitted"]
     SSE --> PreGameTick{"phase === 'setup' 且<br/>所有 setup runtime<br/>都已报告完成?"}
     PreGameTick -->|是| Advance["setup 提交: phase setup → playing<br/>completedPlayerTurns 保持 0"]
     PreGameTick -->|否| Keep["保持 phase 不变"]
@@ -314,7 +314,7 @@ flowchart TB
 - 互不依赖的 runtime 并行；并列时用 `name` 做稳定的先后。
 - 依赖成环的 runtime 和它的下游，本回合记为 `skipped: dependency-cycle`，不会退回成任意顺序执行。
 
-**Proposal 类型**（全部过 commit chain，源自 `packages/shared/src/types/proposal.ts` 的 `ProposalPayloadMap`）：`narrative.append`、`interaction.request`、`state.patch`、`event.emit`、`ui.render`、`asset.generate`、`plugin.data` / `plugin.data.batch` / `plugin.data.delete`、`character.schema.set`、`character.upsert`、`dimension.initialize`、`dimension.update`、`lorebook.upsert`。
+**Proposal 类型**（全部过 commit chain，源自 `packages/shared/src/types/proposal.ts` 的 `ProposalPayloadMap`）：`narrative.append`、`interaction.request`、`event.emit`、`ui.render`、`asset.generate`、`plugin.data` / `plugin.data.batch` / `plugin.data.delete` / `plugin.data.update`、`character.schema.set`、`character.upsert`、`dimension.initialize`、`dimension.update`、`lorebook.upsert`。
 
 **插件依赖与提供者选择**：一个会话启用哪些插件，由四样东西算出来：玩家明确的 `requested` / `excluded`、授权状态、core 声明、带版本的 `provides` / `requires`。
 
@@ -485,7 +485,7 @@ narrativeOutput:    ──►    Session Kernel      ──►    ┌───�
 interactions:       ──►     │ → Proposal[]      ──►    ├─────────────────┤
 create-form / form          │                         │  角色创建表单    │
                             │ commitAll()              │  (Form 组件)     │
-state.patch:        ──►     │ → SessionEvent[]  ──►    ├─────────────────┤
+plugin.data:        ──►     │ → SessionEvent[]  ──►    ├─────────────────┤
 plugin_data 写入      ──►    │ SSE emit()               │  插件消息面 /    │
                             │                         │  右侧面板         │
                             │                  ──►    ├─────────────────┤
@@ -997,7 +997,6 @@ turn_messages (canonical 追加式执行日志):
 - `llm.calling` / `llm.responded`
 - `message.completed`
 - `block.emitted`
-- `state.patch.applied`
 - `hook.fired` / `hook.rewrote` / `hook.aborted`
 
 runtime 的生命周期事件（`turn.started`、`turn.completed`、`runtime.started`、`runtime.completed`、`runtime.failed`）仍由 `TraceRecorder` 写入，两套机制并存。
@@ -1079,7 +1078,7 @@ sequenceDiagram
         Kernel-->>Web: SSE: narrative.delta / narrative.completed
         Kernel-->>Web: SSE: interaction.requested (如 guide 的 action 卡片)
         Kernel-->>Web: SSE: plugin-data.changed (plugin-data-set 工具写入)
-        Kernel-->>Web: SSE: state.changed / event.emitted
+        Kernel-->>Web: SSE: event.emitted
         Server-->>Web: SSE: runtime.completed / runtime.failed / runtime.skipped { status, runId }
     end
     end
