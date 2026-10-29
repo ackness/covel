@@ -8,7 +8,6 @@
 
 import {
   Suspense,
-  lazy,
   useState,
   useRef,
   useEffect,
@@ -18,6 +17,7 @@ import {
   type ComponentType,
   type Ref,
 } from "react";
+import { lazyWithRetry } from "@/lib/lazy-with-retry.js";
 import { Maximize, Minus, Plus } from "lucide-react";
 import {
   GraphRelationships,
@@ -33,7 +33,7 @@ import { graphCanvasPropsSchema, type GraphCanvasProps } from "@covel/shared";
 import type { ForceLink, ForceNode, MutableForceNode } from "./graph-types.js";
 import { createGraphDataPools, syncGraphData } from "./graph-canvas-sync.js";
 
-const ForceGraph2D = lazy(async () => {
+const ForceGraph2D = lazyWithRetry(async () => {
   const mod = await import("react-force-graph-2d");
   // The wrapper uses React refs; its published type only lists object refs.
   type Props = Omit<ComponentProps<typeof mod.default>, "ref"> & {

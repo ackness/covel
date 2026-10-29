@@ -1,6 +1,7 @@
 import type { Components } from "react-markdown";
 import { importImage } from "@/lib/import-image.js";
-import { lazy, memo, Suspense, useContext, useEffect, useState } from "react";
+import { memo, Suspense, useContext, useEffect, useState } from "react";
+import { lazyWithRetry } from "@/lib/lazy-with-retry.js";
 import { useTranslation } from "react-i18next";
 import {
   ALLOWED_IMAGE_HOSTS_SETTING,
@@ -123,7 +124,7 @@ function MarkdownImage({ src, alt }: { src?: string | Blob; alt?: string }) {
 // Lazy-load react-markdown + the remark chain so the (sizeable) markdown
 // parser stays out of the session first-paint path and only loads when the
 // first rich-text message actually renders.
-const LazyReactMarkdown = lazy(async () => {
+const LazyReactMarkdown = lazyWithRetry(async () => {
   const [
     { default: ReactMarkdown, defaultUrlTransform },
     { default: remarkGfm },
