@@ -59,3 +59,31 @@ it("keeps the last good list during a retry and exposes an empty list on failure
   expect(result.current.status).toBe("error");
   expect(result.current.views).toEqual([]);
 });
+it("reload refetches the projection and replaces a stale page URL", async () => {
+  const spec = {
+    ...viewEntry.spec,
+    webview: { url: "/plugin-assets/p/old/index.html" },
+  };
+  mocks.fetch.mockResolvedValueOnce({
+    view: [{ pluginId: "p", specs: [spec] }],
+  });
+  const { result } = renderHook(() =>
+    usePluginViews("s", [sessionPlugin], "en"),
+  );
+  await waitFor(() => expect(result.current.status).toBe("ready"));
+  mocks.fetch.mockResolvedValueOnce({
+    view: [
+      {
+        pluginId: "p",
+        specs: [
+          { ...spec, webview: { url: "/plugin-assets/p/new/index.html" } },
+        ],
+      },
+    ],
+  });
+  act(() => result.current.reload());
+  await waitFor(() =>
+    expect(result.current.views[0]?.spec.webview?.url).toContain("/new/"),
+  );
+  expect(mocks.fetch).toHaveBeenCalledTimes(2);
+});

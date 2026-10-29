@@ -55,6 +55,7 @@ import { localModelRelayPagePolicy } from "./middleware/page-relay-policy.js";
 import { createConsumeUnreadBodyMiddleware } from "./middleware/consume-unread-body.js";
 import { createRequestBodyLimitMiddleware } from "./middleware/request-body-limit.js";
 import { createOriginGuardMiddleware } from "./middleware/origin-guard.js";
+import { createForeignRequestGuardMiddleware } from "./middleware/foreign-request-guard.js";
 import { createHostGuardMiddleware } from "./middleware/host-guard.js";
 import { pluginFrameHeaders } from "./middleware/plugin-frame-headers.js";
 import {
@@ -156,11 +157,22 @@ app.use("*", async (c, next) => {
     return next();
   return honoLogger(c, next);
 });
-app.use("*", secureHeaders());
+const defaultSecureHeaders = secureHeaders();
+// Opaque page origins must be able to load classic subresources from this route.
+// Hono writes secure headers after route handlers, so configure CORP here.
+const pluginAssetSecureHeaders = secureHeaders({
+  crossOriginResourcePolicy: false,
+});
+app.use("*", (c, next) =>
+  (c.req.path.startsWith("/plugin-assets/")
+    ? pluginAssetSecureHeaders
+    : defaultSecureHeaders)(c, next),
+);
 // Before any route or static file: on the token-less self tier, a request
 // must name this server by a loopback name or a COVEL_ALLOWED_HOSTS entry,
 // which refuses DNS-rebound pages (see middleware/host-guard.ts).
 app.use("*", createHostGuardMiddleware(hostProfile.network));
+app.use("*", createForeignRequestGuardMiddleware());
 app.use("*", createRequestBodyLimitMiddleware());
 
 // Guard any /api/debug/* or /api/internal/* route in production so that an

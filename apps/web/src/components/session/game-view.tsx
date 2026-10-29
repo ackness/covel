@@ -675,6 +675,7 @@ export function GameView({
           )}
           {activePluginView && parsePluginViewMode(viewMode) ? (
             <PluginViewHost
+              onRetry={pluginViews.reload}
               key={activePluginView.mode}
               entry={activePluginView}
               sessionId={session.id}

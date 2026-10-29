@@ -15,6 +15,7 @@ export function PluginViewHost({
   onFallback,
   sessionBridgeAllowed = false,
   onRevoke,
+  onRetry,
 }: {
   entry: PluginViewEntry;
   sessionId: string;
@@ -22,6 +23,7 @@ export function PluginViewHost({
   /** Granted for this exact plugin + content hash by the host consent gate. */
   sessionBridgeAllowed?: boolean;
   onRevoke?: () => void;
+  onRetry?: () => void;
 }) {
   const { t } = useTranslation();
   const bridge = useSessionBridge(sessionId);
@@ -80,6 +82,7 @@ export function PluginViewHost({
               expanded
               fill
               onRenderError={failed}
+              onRetry={onRetry}
               sessionBridge={
                 readsSession && sessionBridgeAllowed && bridge.projection
                   ? { projection: bridge.projection, stream: bridge.stream }

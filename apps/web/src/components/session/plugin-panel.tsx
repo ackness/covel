@@ -70,6 +70,7 @@ export interface PluginPanelProps {
   fill?: boolean;
   sessionBridge?: { projection: SessionProjection; stream: StreamFeed };
   onRenderError?: () => void;
+  onRetry?: () => void;
 }
 
 function resolveEmptyMessage(value: unknown, locale: string): string {
@@ -171,6 +172,7 @@ function PluginPanelView({
   fill = false,
   sessionBridge,
   onRenderError,
+  onRetry,
   data,
   sources,
   jobs,
@@ -503,8 +505,12 @@ function PluginPanelView({
   );
 
   if (spec.webview && typeof spec.webview === "object") {
-    const webview = spec.webview as { html?: unknown; height?: number };
-    if (typeof webview.html === "string") {
+    const webview = spec.webview as {
+      html?: unknown;
+      url?: unknown;
+      height?: number;
+    };
+    if (typeof webview.html === "string" || typeof webview.url === "string") {
       const allowed = Object.fromEntries(
         [
           "invokeRuntime",
@@ -520,7 +526,9 @@ function PluginPanelView({
       return (
         <PluginWebview
           title={resolveEmptyMessage(spec.label, activeLocale) || pluginId}
-          html={webview.html}
+          html={typeof webview.html === "string" ? webview.html : undefined}
+          src={typeof webview.url === "string" ? webview.url : undefined}
+          onRetry={onRetry}
           height={webview.height}
           expanded={expanded}
           fill={fill}

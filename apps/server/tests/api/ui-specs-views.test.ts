@@ -156,3 +156,51 @@ describe("GET /api/ui-specs plugin views", () => {
     );
   });
 });
+
+it("projects multi-file view URLs and diagnoses root in right panels", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "covel-ui-page-projection-"));
+  try {
+    const plugin = path.join(root, "page");
+    await mkdir(path.join(plugin, "ui/app"), { recursive: true });
+    await writeFile(
+      path.join(plugin, "PLUGIN.md"),
+      "---\nid: page\ndescription: Page\ncontributes:\n  ui:\n    view: [./view.json]\n    right: [./right.json]\n---\n",
+    );
+    const webview = { root: "./ui/app", entry: "index.html" };
+    await writeFile(
+      path.join(plugin, "view.json"),
+      JSON.stringify({ id: "page", label: "Page", webview }),
+    );
+    await writeFile(
+      path.join(plugin, "right.json"),
+      JSON.stringify({ label: "Right", webview }),
+    );
+    await writeFile(path.join(plugin, "ui/app/index.html"), "<head></head>");
+    const registry = createPluginRegistry();
+    await registerTestPlugins(registry, [root]);
+    const app = createMiscApiRoutes(stubAi, registry, createMemoryStore());
+    const result = (await (
+      await app.request("/api/ui-specs")
+    ).json()) as Response;
+    expect(result.view[0]?.specs[0]?.webview).toEqual({
+      url: expect.stringMatching(
+        /^\/plugin-assets\/page\/[a-f0-9]{32}\/index.html$/,
+      ),
+    });
+    expect(result.right).toEqual([]);
+    expect(result.diagnostics).toContainEqual(
+      expect.objectContaining({
+        slot: "right",
+        issues: expect.arrayContaining([
+          expect.objectContaining({
+            path: "webview.root",
+            message: "webview.root is only valid in contributes.ui.view",
+          }),
+        ]),
+      }),
+    );
+  } finally {
+    __resetUiSpecsCache();
+    await rm(root, { recursive: true, force: true });
+  }
+});

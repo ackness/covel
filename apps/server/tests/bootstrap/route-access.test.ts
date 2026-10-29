@@ -63,6 +63,7 @@ const W = "w-probe";
 
 /** Every route the server serves. Keep it sorted by module, as mounted. */
 const ROUTES: Record<string, RouteAccess> = {
+  "GET /plugin-assets/:pluginId/:digest/*": PUBLIC,
   // ── Sessions ──────────────────────────────────────────────────
   "GET /api/sessions": { ...needs("session.list"), refusal: "empty-list" },
   "POST /api/sessions": needs("session.create"),

@@ -309,6 +309,8 @@ CORS 只能阻止网页读取响应，所以另有一道写入来源检查：
 - 规则：`Origin` 不在允许列表里，也不是请求访问的主机（`Host` 或 `X-Forwarded-Host`）时，在进入任何路由之前返回 `403 { "code": "origin_not_allowed" }`。
 - 不带 `Origin` 的非浏览器客户端不受影响。
 
+在 CORS 之前还有第二道检查，适用于所有方法的 `/api` 和 `/api/*`：`Origin` 去空格、不区分大小写后为 `null`，或者 `Sec-Fetch-Dest` 为 `iframe`、`frame`、`embed`、`object` 时，返回 `403 { "code": "foreign_request_refused" }`，不带 CORS 允许头。GET 和 OPTIONS 同样拒绝。不检查 `Sec-Fetch-Site`；普通 fetch、媒体和顶层文档请求照常工作。`/plugin-assets/*`、`/plugin-frame.html` 和应用主页面不受这道检查影响。
+
 ## Personal configuration API
 
 这一节是模型配置和个人设置相关的端点。
@@ -1464,6 +1466,7 @@ fork 和社区插件的授权：
 | GET | `/api/plugins` | 列出插件（`PluginSummary`） |
 | GET | `/api/worlds/:id/plugin-plan` | 返回某个世界的插件方案 `WorldPluginPlan` |
 | GET | `/api/ui-specs?sessionId=<id>` | 列出插件的 UI 声明，按 slot 分组 |
+| GET | `/plugin-assets/:pluginId/:digest/*` | 公开、无需凭据的插件页面文件 |
 | GET | `/api/llm-config` | 返回 slot 配置与能力信息 |
 | POST | `/api/llm-config/reload` | 重读 `llm.toml` 并应用，无需重启 |
 | GET | `/api/provider-keys` | 返回哪些 provider 配置了密钥，不含密钥内容 |
@@ -1535,9 +1538,19 @@ fork 和社区插件的授权：
 - 清空最后一个密钥时，文件和运行时的值一起清除。
 - 只有连不上 sidecar 时才回退到本地保存。HTTP 请求被拒绝不会触发本地覆盖。
 
+<a id="get-plugin-assetspluginiddigest"></a>
+
+#### GET /plugin-assets/:pluginId/:digest/*
+
+所有宿主配置中均公开，不验证会话、令牌或 cookie。只读取当前非错误插件的已索引 UI 根目录。依次检查 ID 和摘要、原始及解码路径段、发布清单和读取时的真实路径边界。隐藏路径、遍历、编码分隔符、链接、未发布文件、大小变化和过期摘要都返回同一份 `404 { "error": "File not found" }`，带 `Cache-Control: no-store` 和 `X-Content-Type-Options: nosniff`。
+
+成功的 GET 和 HEAD 带清单中的 MIME、`nosniff`、`ETag`、`Content-Length`、`Referrer-Policy: no-referrer`。入口 HTML 使用 `Cache-Control: no-cache`，其余资源使用 `Cache-Control: public, max-age=31536000, immutable`。入口 ETag 包含宿主桥脚本的摘要，使宿主升级能在同一个插件 URL 上刷新 HTML。精确匹配的 `If-None-Match` 返回 304、无响应体，并保留相应缓存策略。不发送 Set-Cookie、CORS 允许头或 Cross-Origin-Resource-Policy。入口 HTML 使用[页面 CSP 和宿主注入的桥](./ui-panels.md#多文件页面)；其他文件使用 `Content-Security-Policy: sandbox`。保留 `X-Frame-Options: SAMEORIGIN`。不走媒体令牌处理。
+
 #### GET /api/ui-specs
 
-返回插件的 UI 声明，按 slot 分组。前端在启动时调用它，用来动态构建右侧面板的标签页和消息区的 block 渲染器。
+返回插件的 UI 声明，按 slot 分组。前端在启动时调用它，用来动态构建右侧面板的标签页、消息区的 block 渲染器和插件视图导航。
+
+单文件 webview 返回 `webview: { html, height? }`，多文件视图返回 `webview: { url, height? }`，不返回作者字段 `root` 和 `entry`。URL 包含全部发布文件的摘要；重新注册后重建索引，旧 URL 返回 404。只有视图允许 `root`；在 `right` 或 `message` 中声明会得到 `webview.root` 诊断。
 
 **查询参数：**
 
@@ -1579,7 +1592,7 @@ fork 和社区插件的授权：
 - 失败原因写在顶层的 `diagnostics[]` 里，每项是 `{ pluginId, runtimeId, slot, specIndex, specId?, issues[{ path, message, code }] }`，说明是哪个插件、哪个字段、什么问题。文件读不出来（不存在、不是 JSON、指向插件目录以外）也写在这里；`code` 都是 `invalid`。
 - 带 `sessionId` 时，`diagnostics` 只包含该会话已激活的插件。
 
-`view` 始终为数组（可以为空），项为 `{ pluginId, specs }`。仅列出当前会话活跃插件的视图；同一插件重复的视图 ID 保留第一份，其余报告 `slot: "view"` 诊断。这里只读取 JSON 和 HTML，不导入插件代码，不需要服务端代码审批。读取会话的玩家授权在浏览器挂载前单独处理，见[插件视图](./ui-panels.md#插件视图)。
+`view` 始终为数组（可以为空），项为 `{ pluginId, specs }`。仅列出当前会话活跃插件的视图；同一插件重复的视图 ID 保留第一份，其余报告 `slot: "view"` 诊断。这里只读取 UI JSON、HTML 和已发布资源，不导入插件代码，不需要服务端代码审批。读取会话的玩家授权在浏览器挂载前单独处理，见[插件视图](./ui-panels.md#插件视图)。
 
 **开发热重载**：`POST /api/plugins/:id/reload` 重新加载一个社区插件。
 

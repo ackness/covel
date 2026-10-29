@@ -148,3 +148,8 @@ describe("Vite runtime proxy", () => {
     });
   });
 });
+it("proxies both API and plugin assets to the runtime", () => {
+  const config = createRuntimeProxyConfig({ RUNTIME_PORT: "3101" });
+  expect(Object.keys(config)).toEqual(["/api", "/plugin-assets"]);
+  expect(config["/plugin-assets"]?.target).toBe("http://127.0.0.1:3101");
+});

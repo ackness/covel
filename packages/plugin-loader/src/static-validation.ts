@@ -1,3 +1,4 @@
+import { planPluginAssetRoot } from "./ui-assets.js";
 import {
   FRAMEWORK_TOOL_NAMES,
   isKernelExtensionContract,
@@ -127,6 +128,9 @@ export function validatePluginFiles(
   packageManifest: ParsedPluginMd,
   manifests: readonly ParsedRuntimeMd[],
   readFile: (absolutePath: string) => string,
+  listFiles?: (
+    absoluteDir: string,
+  ) => readonly { path: string; size: number }[],
 ): void {
   if (packageManifest.disabledRuntime)
     throw new Error(packageManifest.disabledRuntime.message);
@@ -250,9 +254,43 @@ export function validatePluginFiles(
             )
             .join("\n"),
         );
-      const entry = (spec as { webview?: { entry?: string } }).webview?.entry;
+      const webview = (spec as { webview?: { root?: string; entry?: string } })
+        .webview;
+      const entry = webview?.entry;
       if (!entry) continue;
       const specFile = path.resolve(path.dirname(source!), reference);
+      if (webview?.root !== undefined) {
+        if (!listFiles)
+          throw new Error(
+            `${specFile}: webview.root: cannot list webview.root`,
+          );
+        const assetRoot = path.resolve(root, webview.root);
+        let files: readonly { path: string; size: number }[];
+        try {
+          files = listFiles(assetRoot);
+        } catch (error) {
+          throw new Error(
+            `${specFile}: webview.root: ${error instanceof Error ? error.message : String(error)}`,
+          );
+        }
+        const plan = planPluginAssetRoot(
+          files.map((file) => ({
+            relativePath: path
+              .relative(assetRoot, file.path)
+              .split(path.sep)
+              .join("/"),
+            size: file.size,
+          })),
+          path.posix.normalize(entry),
+        );
+        if (plan.issues.length)
+          throw new Error(
+            plan.issues
+              .map((issue) => `${specFile}: ${issue.path}: ${issue.message}`)
+              .join("\n"),
+          );
+        continue;
+      }
       const { content } = read(specFile, "webview.entry", entry);
       if (Buffer.byteLength(content) > MAX_UI_WEBVIEW_BYTES)
         throw new Error(

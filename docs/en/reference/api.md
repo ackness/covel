@@ -309,6 +309,8 @@ CORS can only stop a web page from reading a response. So there is a separate ch
 - Rule: if the `Origin` is not in the allow list, and is not the host the request is for (`Host` or `X-Forwarded-Host`), it returns `403 { "code": "origin_not_allowed" }` before any route runs.
 - Non-browser clients that send no `Origin` header are not affected.
 
+Before CORS, a second guard applies to `/api` and `/api/*` on every method: a trimmed, case-insensitive `Origin: null`, or `Sec-Fetch-Dest: iframe`, `frame`, `embed` or `object`, returns `403 { "code": "foreign_request_refused" }` with no CORS allow headers. This includes GET and OPTIONS. It does not inspect `Sec-Fetch-Site`; ordinary fetch, media and top-level document requests remain valid. `/plugin-assets/*`, `/plugin-frame.html` and the app shell are outside this guard.
+
 ## Personal configuration API
 
 This section covers the endpoints for model configuration and personal settings.
@@ -1464,6 +1466,7 @@ In the table below, "hosted deployment" means `DEPLOYMENT_TIER` is `demo` or `co
 | GET | `/api/plugins` | List plugins (`PluginSummary`) |
 | GET | `/api/worlds/:id/plugin-plan` | Return the plugin plan `WorldPluginPlan` for a world |
 | GET | `/api/ui-specs?sessionId=<id>` | List plugins' UI declarations, grouped by slot |
+| GET | `/plugin-assets/:pluginId/:digest/*` | Public, credential-free plugin page files |
 | GET | `/api/llm-config` | Return slot configuration and capability information |
 | POST | `/api/llm-config/reload` | Read `llm.toml` again and apply it, with no restart needed |
 | GET | `/api/provider-keys` | Return which providers have a key configured, without the key contents |
@@ -1535,9 +1538,19 @@ How the desktop app (Electron) behaves when it saves keys:
 - When the last key is cleared, the values in the file and in the runtime are cleared together.
 - It falls back to a local save only when the sidecar cannot be reached. An HTTP request that is rejected does not trigger a local overwrite.
 
+<a id="get-plugin-assetspluginiddigest"></a>
+
+#### GET /plugin-assets/:pluginId/:digest/*
+
+Public in every host profile, without session, token or cookie authentication. Only a current non-error plugin's indexed UI root can be read. The ID and digest, raw and decoded path segments, published listing and serve-time file containment are checked in order. Hidden paths, traversal, encoded separators, links, unlisted files, changed sizes and stale digests all return the same `404 { "error": "File not found" }`, with `Cache-Control: no-store` and `X-Content-Type-Options: nosniff`.
+
+Successful GET and HEAD responses use the listed MIME, `nosniff`, `ETag`, `Content-Length` and `Referrer-Policy: no-referrer`. Entry HTML uses `Cache-Control: no-cache`; other assets use `Cache-Control: public, max-age=31536000, immutable`. Entry ETags include the host bridge script hash so a host upgrade can refresh HTML at the same plugin URL. An exact `If-None-Match` returns 304 without a body and retains the appropriate cache policy. No Set-Cookie, CORS allow headers or Cross-Origin-Resource-Policy are sent. Entry HTML receives the [page CSP and injected bridge](./ui-panels.md#multi-file-pages); other files receive `Content-Security-Policy: sandbox`. `X-Frame-Options: SAMEORIGIN` remains. No media token handling applies.
+
 #### GET /api/ui-specs
 
-Returns plugins' UI declarations, grouped by slot. The front end calls it at startup, to build the right-panel tabs and the block renderers of the message area dynamically.
+Returns plugins' UI declarations, grouped by slot. The front end calls it at startup, to build right-panel tabs, message block renderers and plugin view navigation dynamically.
+
+A webview spec returns `webview: { html, height? }` for a single file or `webview: { url, height? }` for a multi-file view. Authoring fields `root` and `entry` are not sent. The URL contains the digest of every published file; a new registration rebuilds the asset index and makes old URLs return 404. Only views allow `root`; a `right` or `message` declaration receives a `webview.root` diagnostic.
 
 **Query parameters:**
 
@@ -1579,7 +1592,7 @@ Each slot is an array. Its elements are `{ pluginId, specs[] }`. Each item in `s
 - The reason for failure is written in the top-level `diagnostics[]`. Each item is `{ pluginId, runtimeId, slot, specIndex, specId?, issues[{ path, message, code }] }`. It says which plugin, which field, and what the problem is. A file that cannot be read (missing, not JSON, or pointing outside the plugin directory) is reported here too; `code` is always `invalid`.
 - With `sessionId`, `diagnostics` includes only the plugins active in that session.
 
-`view` is always an array (possibly empty) of `{ pluginId, specs }`. With a session, it lists only active plugins. The first view ID within a plugin wins; later duplicates produce `slot: "view"` diagnostics. Loading reads JSON and HTML without importing plugin code or requiring server-code approval. The browser separately gates mounting on player consent for session reading; see [Plugin views](./ui-panels.md#plugin-views).
+`view` is always an array (possibly empty) of `{ pluginId, specs }`. With a session, it lists only active plugins. The first view ID within a plugin wins; later duplicates produce `slot: "view"` diagnostics. Loading reads UI JSON, HTML and published assets without importing plugin code or requiring server-code approval. The browser separately gates mounting on player consent for session reading; see [Plugin views](./ui-panels.md#plugin-views).
 
 **Development hot reload**: `POST /api/plugins/:id/reload` reloads one community plugin.
 
