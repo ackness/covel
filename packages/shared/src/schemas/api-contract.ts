@@ -20,6 +20,7 @@ import {
 } from "./plugin-schemas.js";
 import { i18nTextSchema, worldDimensionsSchema } from "./world.js";
 import { packageCreditFields } from "./package-info.js";
+import { pluginSourceTrustSchema } from "./trusted-sources.js";
 
 /**
  * The longest message a player's action may carry, in characters. A form
@@ -302,6 +303,7 @@ export const pluginSummarySchema: z.ZodType<PluginSummary> = z
     description: i18nTextSchema,
     kind: z.enum(["core", "plugin"]),
     source: z.enum(["builtin", "community"]),
+    trust: pluginSourceTrustSchema.optional(),
     hostState: z.enum(["discovered", "installed", "loaded", "error"]),
     error: z.string().optional(),
     registrationError: z
