@@ -150,7 +150,7 @@ describe("corrections in the loop", () => {
       expect(String(error)).toContain(
         "Response validation failed: Use the selected perspective.",
       );
-      expect(stopOf(error)).toEqual({ reason: "invalid-output" });
+      expect(stopOf(error, "run-loop")).toEqual({ reason: "invalid-output" });
       expect(llm.requests).toHaveLength(review + 1);
     },
   );
@@ -174,7 +174,7 @@ describe("corrections in the loop", () => {
         }),
       });
       if (fallback === "fail")
-        expect(stopOf(await thrownBy(promise))).toEqual({
+        expect(stopOf(await thrownBy(promise), "run-loop")).toEqual({
           reason: "loop-detected",
         });
       else {

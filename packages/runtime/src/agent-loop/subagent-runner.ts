@@ -582,7 +582,7 @@ async function runProvider({
         : {}),
     };
   } catch (error) {
-    let stop = stopOf(error);
+    let stop = stopOf(error, subagentCallId);
     // The model-call layer reports any execution abort as the player's. Only
     // the player's own signal is; any other abort came from the caller.
     if (
