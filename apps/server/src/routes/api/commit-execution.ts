@@ -1,4 +1,5 @@
 import { commitExecution as commitRuntimeExecution } from "@covel/runtime";
+import { recordExecutionFaults } from "./plugin-faults.js";
 import type { MemorySystem } from "@covel/memory";
 
 /** Schedule only durable state; the memory system tracks work for shutdown drain. */
@@ -19,6 +20,14 @@ export async function commitExecution(
   },
 ): ReturnType<typeof commitRuntimeExecution> {
   const outcome = await commitRuntimeExecution(args);
+  await recordExecutionFaults({
+    store: args.store,
+    execution: args.execution,
+    outcome,
+    turnId: args.completion.turnId,
+    emitter: args.emitter,
+    eventBus: args.eventBus,
+  });
   if (outcome.status === "committed") {
     scheduleMemoryIngest(args.memorySystem, args.execution.commit.sessionId);
   }

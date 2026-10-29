@@ -105,6 +105,7 @@ describe("resolveLoopProfile", () => {
       truncation: "accept",
       fallback: "answer-without-tools",
       finalizer: { maxSteps: true, deadlineReserveMs: 5_000 },
+      corrections: LOOP_PRESETS.story.corrections,
       answerPrompt: "story",
     });
     expect(
@@ -195,7 +196,7 @@ describe("the loop core under a profile", () => {
       }),
     );
     expect(String(error)).toContain("tool-loop detected");
-    expect(stopOf(error)).toEqual({ reason: "loop-detected" });
+    expect(stopOf(error, "run-loop")).toEqual({ reason: "loop-detected" });
   });
 
   it("(iv) an actor repeating a tool call continues without tools and gives its answer", async () => {
@@ -402,7 +403,7 @@ describe("the deadline reserve (vi)", () => {
         deps: { toolExecutor: makeExecutor([failing]) },
       }),
     );
-    expect(stopOf(error)).toEqual({ reason: "deadline" });
+    expect(stopOf(error, "run-loop")).toEqual({ reason: "deadline" });
     // The fifth step started with 4 s left, inside the reserve.
     expect(llm.requests.filter((r) => r.tools)).toHaveLength(5);
     expect(llm.requests.every((r) => r.tools)).toBe(true);

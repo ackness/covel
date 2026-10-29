@@ -54,7 +54,10 @@ describe("execution reads through the bootstrap response barrier", () => {
       type: "turn.started",
       createdAt: "2026-01-01T00:00:00.000Z",
       payload: {
-        recoveryAction: { type: "send_message", payload: { content } },
+        recoveryAction: {
+          type: "submit_actions",
+          payload: { actions: [{ kind: "say", text: content }] },
+        },
       },
     });
   }
@@ -118,7 +121,10 @@ describe("execution reads through the bootstrap response barrier", () => {
           expect(fresh.status).toBe(200);
           expect(await fresh.json()).toMatchObject({
             state: "interrupted",
-            retry: { type: "send_message", payload: { content: secret } },
+            retry: {
+              type: "submit_actions",
+              payload: { actions: [{ kind: "say", text: secret }] },
+            },
           });
         }
       } finally {
@@ -142,8 +148,8 @@ describe("execution reads through the bootstrap response barrier", () => {
     expect(await normal.json()).toMatchObject({
       state: "interrupted",
       retry: {
-        type: "send_message",
-        payload: { content: "synthetic-owner-input" },
+        type: "submit_actions",
+        payload: { actions: [{ kind: "say", text: "synthetic-owner-input" }] },
       },
     });
     const denied = await status("synthetic-wrong-owner");

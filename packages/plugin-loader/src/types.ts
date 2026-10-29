@@ -110,6 +110,12 @@ export interface ParsedPluginMd extends ParsedMarkdown {
   readonly datasetSchemas?: Readonly<
     Record<string, Readonly<Record<string, unknown>>>
   >;
+  /**
+   * `contributes.actionKinds` as catalogue entries: wire kind
+   * `<pluginId>/<name>`, defaults resolved, fields schemas parsed. Set by
+   * `loadPluginDefinition`.
+   */
+  readonly actionKinds?: readonly import("@covel/shared").ActionKindDescriptor[];
   /** The inline runtime, when it was left out (`plugin.runtime` is then absent). */
   readonly disabledRuntime?: DisabledRuntime;
 }

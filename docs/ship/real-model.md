@@ -126,6 +126,7 @@ pnpm e2e:verify --enable-plugins memory --plugin memory
 
 - 数字字段用它的默认值，没有默认值就用最小值。
 - 配点表单按预算把点数逐一分到数字字段上。
+- 回答按表单声明的行动类型（`actionKind`）提交，没有声明时用 `act`。
 - 想指定值时用 `--form-values '<json>'`。
 
 ## 4. 两项只有调试记录里才看得到的检查

@@ -20,7 +20,10 @@ test("a stopped turn stays uncommitted after reload and retries only on request"
       state: "failed",
       turnId: sourceTurnId,
       abortReason: "aborted-by-player",
-      retry: { type: "send_message", payload: { content: playerAction } },
+      retry: {
+        type: "submit_actions",
+        payload: { actions: [{ kind: "say", text: playerAction }] },
+      },
     }),
     steps: () => [],
   });
@@ -35,8 +38,11 @@ test("a stopped turn stays uncommitted after reload and retries only on request"
     await notice.getByRole("button", { name: "重试未完成回合" }).click();
     await expect.poll(() => fixture.actions.length).toBe(1);
     expect(fixture.actions[0]).toMatchObject({
-      type: "send_message",
-      payload: { content: playerAction, recoverFromTurnId: sourceTurnId },
+      type: "submit_actions",
+      payload: {
+        actions: [{ kind: "say", text: playerAction }],
+        recoverFromTurnId: sourceTurnId,
+      },
     });
   } finally {
     await fixture.dispose();
@@ -101,8 +107,11 @@ test("refreshing an interrupted turn only retries after explicit player confirma
     await expect.poll(() => fixture.actions.length).toBe(1);
     expect(fixture.actions[0]).toMatchObject({
       sessionId: fixture.id,
-      type: "send_message",
-      payload: { content: playerAction, recoverFromTurnId: sourceTurnId },
+      type: "submit_actions",
+      payload: {
+        actions: [{ kind: "say", text: playerAction }],
+        recoverFromTurnId: sourceTurnId,
+      },
     });
     expect(fixture.actions[0]!.requestId).toBeTruthy();
     expect(fixture.actions[0]!.requestId).not.toBe(originalRequestId);

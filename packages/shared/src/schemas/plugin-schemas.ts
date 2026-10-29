@@ -969,6 +969,8 @@ interface ManifestCrossFieldView {
   readonly stage?: string;
   readonly outputKind?: string;
   readonly requireExplicitCompletion?: boolean;
+  readonly subagentOnly?: boolean;
+  readonly guard?: string;
   readonly timeoutMs?: number;
   readonly loopProfile?: {
     readonly preset?: string;
@@ -982,6 +984,7 @@ interface ManifestCrossFieldView {
   };
   readonly trigger?: RuntimeRuleView["trigger"] & { readonly every?: number };
   readonly needs?: RuntimeRuleView["needs"];
+  readonly after?: RuntimeRuleView["after"];
   readonly output?: RuntimeRuleView["output"];
   readonly execution?: string;
   readonly tools?: { readonly builtin?: readonly string[] };
@@ -1175,6 +1178,14 @@ export const runtimeManifestInputSchema = z
         steering: z.boolean().optional(),
         truncation: z.enum(["accept", "reject"]).optional(),
         fallback: z.enum(["answer-without-tools", "fail"]).optional(),
+        corrections: z
+          .strictObject({
+            toolUse: z.number().int().min(0).max(3).optional(),
+            review: z.number().int().min(0).max(5).optional(),
+            loopPerturbation: z.number().int().min(0).max(3).optional(),
+            outputRepair: z.number().int().min(0).max(3).optional(),
+          })
+          .optional(),
         finalizer: z
           .strictObject({
             maxSteps: z.boolean().optional(),
@@ -1189,6 +1200,11 @@ export const runtimeManifestInputSchema = z
     concealed: z.boolean().optional(),
     outputContract: z.string().min(1).optional(),
     defaultProvider: z.boolean().optional(),
+    /**
+     * Runs only as a sub-agent of another runtime (`ctx.agents.run` /
+     * `delegate`); the scheduler never selects it. Omitted when false.
+     */
+    subagentOnly: z.literal(true).optional(),
     /** Coarse scheduling stage: which band this runtime runs in. */
     stage: stageSchema.optional(),
     /** Weak ordering dependencies (no gate). */

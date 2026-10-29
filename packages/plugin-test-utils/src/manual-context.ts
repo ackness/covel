@@ -4,16 +4,64 @@
 
 import type { FunctionHandlerContext } from "@covel/shared/plugin-runtime";
 import type {
+  SubagentRequest,
+  SubagentResult,
+  SubagentRunApi,
+} from "@covel/shared";
+import type {
   FunctionStoreView,
   PluginRandom,
 } from "@covel/plugin-handlers-utils";
 import { validateRandomIntRange } from "@covel/plugin-handlers-utils";
+
+/** Scripted `ctx.agents.run` answers: a list used in order, or a function. */
+export type ScriptedSubagentResults =
+  | readonly SubagentResult[]
+  | ((request: SubagentRequest) => SubagentResult | Promise<SubagentResult>);
+
 export interface ManualFunctionContextOptions extends Partial<
   Omit<FunctionHandlerContext, "pluginId" | "store">
 > {
   readonly pluginId: string;
   /** Stub only the reads exercised by this test; omitted methods reject. */
   readonly store?: Partial<FunctionStoreView>;
+  /**
+   * Answers for `ctx.agents.run`. Without it (and without `agents`) the
+   * context has no `agents`, like a guard's.
+   */
+  readonly subagents?: ScriptedSubagentResults;
+}
+
+/**
+ * A `ctx.agents` stub. A list answers the calls in order; a call past its end
+ * resolves `not-found`. `requests` records every request, copied.
+ */
+export function makeScriptedAgents(results: ScriptedSubagentResults): {
+  readonly agents: SubagentRunApi;
+  readonly requests: readonly SubagentRequest[];
+} {
+  const requests: SubagentRequest[] = [];
+  let next = 0;
+  return {
+    requests,
+    agents: {
+      async run(request) {
+        requests.push(structuredClone(request));
+        if (typeof results === "function")
+          return structuredClone(await results(request));
+        const result = results[next++];
+        return result
+          ? structuredClone(result)
+          : {
+              ok: false,
+              error: {
+                code: "not-found",
+                message: "No scripted sub-agent result is left",
+              },
+            };
+      },
+    },
+  };
 }
 
 /** `ctx.random` for a test: the same numbers on every run, within each range. */
@@ -34,18 +82,22 @@ export function makeManualFunctionContext({
   sessionId = `sess-${pluginId}`,
   turnId = `turn-${pluginId}`,
   playerMessage = "",
+  playerActions = [],
   locale,
   store = {},
   manualPayload = {},
   random = makeRandom(),
+  subagents,
   ...capabilities
 }: ManualFunctionContextOptions): FunctionHandlerContext {
   return {
+    ...(subagents ? { agents: makeScriptedAgents(subagents).agents } : {}),
     sessionId,
     turnId,
     pluginId,
     runtimeId,
     playerMessage,
+    playerActions,
     ...(locale ? { locale } : {}),
     store: {
       getPluginData: missingRead("getPluginData"),

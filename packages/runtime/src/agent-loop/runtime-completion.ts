@@ -180,7 +180,7 @@ export function checkTextCompletion(args: {
   manifest: RuntimeManifest;
   calls: readonly ExecutedToolCallState[];
   seededBusinessWork: boolean;
-  corrections: number;
+  canCorrect: () => boolean;
   locale?: string;
   prior?: CompletionCalls;
 }): { correction?: string } {
@@ -195,7 +195,7 @@ export function checkTextCompletion(args: {
   const reason = requiredToolUseUnmet
     ? "no-tool-call"
     : "no-explicit-completion";
-  if (args.corrections === 0) {
+  if (args.canCorrect()) {
     console.warn(
       `[covel:warn] [runtime-retry] ${manifest.name} attempt=1 reason=${reason} cause=completion contract unmet`,
     );

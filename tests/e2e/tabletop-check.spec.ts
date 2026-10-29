@@ -12,7 +12,10 @@ import {
 import check from "../../plugins/tabletop-rules/runtimes/check/handler.js";
 import { createFormTool } from "../../packages/plugin-handlers-utils/src/index.js";
 import { createMemoryStore } from "../../packages/store/src/memory-entry.js";
-import { createInteractionSubmitter } from "../../packages/runtime/src/interaction/interaction-submission.js";
+import {
+  createInteractionSubmitter,
+  interactionSubmissionPayload,
+} from "../../packages/runtime/src/interaction/interaction-submission.js";
 import { actionStreamBody } from "./helpers/action-stream.js";
 import { makeRandom } from "../../packages/plugin-test-utils/src/manual-context.js";
 
@@ -203,10 +206,15 @@ for (const width of [1512, 390]) {
     let answered = 0;
     await page.route("**/api/actions", async (route) => {
       const body = route.request().postDataJSON();
-      if (body.type !== "submit_interaction") return route.fallback();
-      const prepared = await submitInteraction(body.payload, {
+      const answers =
+        body.type === "submit_actions"
+          ? interactionSubmissionPayload(body.payload.actions)
+          : undefined;
+      if (!answers) return route.fallback();
+      const prepared = await submitInteraction(answers, {
         sessionId: fixture.id,
       });
+      const content = prepared.texts.filter(Boolean).join("\n");
       await prepared.persist(store);
       answered += 1;
       return route.fulfill({
@@ -217,11 +225,11 @@ for (const width of [1512, 390]) {
             {
               interactionTurnId: prepared.turnId,
               results: prepared.results,
-              ...(prepared.playerMessage
+              ...(content
                 ? {
                     message: {
                       id: "check-answer",
-                      content: prepared.playerMessage,
+                      content,
                     },
                   }
                 : {}),

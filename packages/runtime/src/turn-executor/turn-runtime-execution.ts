@@ -206,9 +206,19 @@ export async function executeOneRuntime(
       // and kernel-only inputs (retry seeds, detached-stage context) are
       // never read from the delta — the nested execution inherits them.
       const delta = readRecursiveCallDelta(rawDelta, manifest.pluginId);
+      const targetId = delta.manualTrigger?.runtimeId;
+      if (
+        targetId !== undefined &&
+        activeRuntimes.some((rt) => rt.name === targetId && rt.subagentOnly)
+      )
+        throw new Error(
+          `recursiveCall cannot run sub-agent-only runtime "${targetId}"; run it with ctx.agents.run`,
+        );
 
+      // A nested execution has no player input of its own.
+      const { actions: _parentActions, ...parentInput } = input;
       const nestedInput: RecursiveTurnInput = {
-        ...input,
+        ...parentInput,
         ...(delta.manualTrigger ? { manualTrigger: delta.manualTrigger } : {}),
         sessionId: input.sessionId,
         turnId: input.turnId,

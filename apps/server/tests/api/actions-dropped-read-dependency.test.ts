@@ -174,9 +174,9 @@ describe("POST /api/actions — a run dropped for what it read", () => {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         requestId: "req-read-dependency",
-        type: "send_message",
+        type: "submit_actions",
         sessionId: SESSION_ID,
-        payload: { content: "go" },
+        payload: { actions: [{ kind: "say", text: "go" }] },
       }),
     });
     const events = (await res.text())

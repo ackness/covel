@@ -281,7 +281,53 @@ agent:
       deadlineReserveMs: 10000 # with 10 seconds left, stop calling tools and answer
 ```
 
-Sub-agents, agents another runtime starts to hand back one answer, will use `actor`. Sub-agents are not available yet; writing `actor` today changes only the behaviour above. Fields, values and checks are in [Plugin reference · Loop profile](../reference/plugins.md#loop-profile-agentloopprofile).
+A [sub-agent](#sub-agents) that names no profile uses `actor`. Fields, values and checks are in [Plugin reference · Loop profile](../reference/plugins.md#loop-profile-agentloopprofile).
+
+### Sub-agents
+
+A sub-agent is a small job handed to another agent: you give it a brief, it gives back one result. For example, an orchestrator asks the "guard" character for a line of dialogue. A sub-agent runs inside the caller's execution and returns output only: it writes no data and emits no events.
+
+The provider is an agent runtime with `schedule.subagentOnly: true`. The scheduler never runs it on its own, and the player cannot run it manually:
+
+```yaml
+# runtimes/guard/RUNTIME.md
+schedule:
+  subagentOnly: true
+io:
+  output:
+    contract: gate-actor@1
+    schema: ./output.schema.json
+agent:
+  model: actor
+  tools:
+    builtin: [plugin-data-get]
+```
+
+A function runtime calls it with `ctx.agents.run`:
+
+```js
+export default async function handler(ctx) {
+  const reply = await ctx.agents?.run({
+    target: { contract: "gate-actor@1" }, // or { runtimeId: "my-plugin/guard" } (own package)
+    brief: "A stranger asks to pass the gate.",
+    data: { stranger: "Mara" },
+    budget: { maxSteps: 4, timeoutMs: 20000 },
+  });
+  if (!reply?.ok) return { outcome: "success", value: { line: "..." } };
+  return { outcome: "success", value: { line: reply.output.line } };
+}
+```
+
+An agent runtime that declares `delegate` in `agent.tools.builtin` lets its model call it, with `target`, `brief` and optionally `data` and `maxSteps`.
+
+- The sub-agent sees only the brief and `data`, not the session history or the caller's conversation.
+- It can use read-only tools only. Write tools the provider declares, `suspend` and `delegate` are taken away.
+- A failure does not throw: the result is `{ ok: false, error: { code, message } }`, and the caller decides what to do.
+- One execution runs at most 8 sub-agents at a time, and a sub-agent cannot call another one. A full pool refuses at once (`unavailable`); nothing queues.
+- When the caller is cancelled or times out, the sub-agent stops with it.
+- It uses the model role it declares. The player can bind another model to this runtime in the session.
+
+The full request, result and error codes are in [Plugin reference · Sub-agents](../reference/plugins.md#sub-agents).
 
 ### When something fails
 

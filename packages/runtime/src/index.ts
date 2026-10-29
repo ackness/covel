@@ -177,6 +177,7 @@ export type {
 export { RpcValidationError } from "./rpc/rpc-validation-error.js";
 export {
   createInteractionSubmitter,
+  interactionSubmissionPayload,
   findCommittedInteraction,
   FormRejectedError,
   FormValidatorFailedError,
@@ -316,3 +317,15 @@ export { PluginEntryScope } from "./plugin-entry-scope.js";
 export type { PluginServiceCallEvent } from "./plugin-services.js";
 
 export { validatePluginHookRegistration } from "./plugin-hook-registration.js";
+
+export {
+  classifyExecutionFaults,
+  type PluginFaultVerdict,
+} from "./faults/classify.js";
+export {
+  createPluginFaultLatch,
+  PLUGIN_FAULT_THRESHOLD,
+  type PluginFaultLatch,
+  type PluginFaultState,
+  type FaultTransition,
+} from "./faults/plugin-fault-latch.js";

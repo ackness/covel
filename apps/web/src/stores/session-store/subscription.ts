@@ -1,3 +1,4 @@
+import { handlePluginFaultNotice } from "./fault-notices.js";
 import type { MutableRef } from "./runtime-refs.js";
 import { applyUiSlotEvent, recoverUiSlots } from "@/stores/ui-slot-store.js";
 import { useEffect, useRef } from "react";
@@ -149,6 +150,15 @@ export function createSubscriptionEventHandler(
     if (!options.isCurrent()) return;
     if (applyUiSlotEvent(event.sessionId, event.type, event.payload)) return;
     switch (event.type) {
+      case "plugin.fault.latched":
+      case "plugin.fault.cleared":
+        handlePluginFaultNotice(
+          options,
+          event.type,
+          event.payload ?? {},
+          typeof event.payload?.turnId === "string" ? event.payload.turnId : "",
+        );
+        break;
       case "interaction.requested":
       case "ui.rendered": {
         const payload = event.payload ?? {};

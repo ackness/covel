@@ -123,8 +123,8 @@ async function fixture(
       body: JSON.stringify({
         requestId: crypto.randomUUID(),
         sessionId: "session",
-        type: "send_message",
-        payload: { content: "Visit the harbour" },
+        type: "submit_actions",
+        payload: { actions: [{ kind: "say", text: "Visit the harbour" }] },
       }),
     });
     expect(response.status).toBe(200);

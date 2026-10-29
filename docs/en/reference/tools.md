@@ -37,6 +37,7 @@ There are two kinds of tool:
 | **emit-event** | builtin | — | auto-allow | Emit a domain event that the current session has declared (one topic at a time). Checks the topic and payload schema | defaults |
 | **suspend** | builtin | — | auto-allow | Suspend the current runtime to wait for player input. Writes to the `suspensions` table. Can be resumed through the resume API | defaults |
 | **runtime-done** | builtin | — | auto-allow | The end signal for the agent tool loop. Call it after the business tool calls are done to end this runtime | defaults |
+| **delegate** | builtin | — | auto-allow | Hand one job to a sub-agent and get its output back; the sub-agent writes nothing | `readOnly` |
 | **search-tools** | injected | — | auto-allow | Deferred tool search. The framework injects it automatically when a manifest declares `tools.defer`. It uses BM25 search to find and activate tools that were not preloaded | — |
 | **memory-search** | builtin | — | auto-allow | Search memory: conversation history and past summaries (recall), plus the long-term knowledge base (archival), which includes lorebook data, characters, and data that plugins declare as searchable | `readOnly`, `idempotent`, `concurrencySafe` |
 | initialize-world | local | world-init | auto-allow | Initialize the world by combining the character attribute schema and the dimension declarations | defaults |
@@ -296,16 +297,19 @@ A form that a manual runtime opens through the plugin's UI works the same way. T
 
 Plugins can use the SDK's `fillNarrativeTemplate(template, values)` for a preview. The submitted `filledNarrative` uses this same function: missing values become empty strings, duplicate full stops at placeholder boundaries are merged, and field text is preserved. Within one agent execution, successful tool results with the same `interactionId` show only the last successful form or choice. A failed call does not replace it.
 
-| Argument          | Type        | Required | Description                                           |
-| ----------------- | ----------- | -------- | ----------------------------------------------------- |
-| formId            | string      | ✓        | Unique ID of the form                                 |
-| title             | string      | ✓        | Form title                                            |
-| fields            | FormField[] | ✓        | List of form fields                                   |
-| submitLabel       | string      | ✓        | Text on the submit button                             |
-| narrativeTemplate | string      | ✓        | Narrative template, with `{{fieldName}}` placeholders |
-| validation        | object      |          | `{ name, data? }`, see below                          |
-| submitBehavior    | object      |          | `{ echoFilledNarrative? }`                            |
-| notice            | string      |          | A note above the fields, see below                    |
+| Argument          | Type        | Required | Description                                               |
+| ----------------- | ----------- | -------- | --------------------------------------------------------- |
+| formId            | string      | ✓        | Unique ID of the form                                     |
+| title             | string      | ✓        | Form title                                                |
+| fields            | FormField[] | ✓        | List of form fields                                       |
+| submitLabel       | string      | ✓        | Text on the submit button                                 |
+| narrativeTemplate | string      | ✓        | Narrative template, with `{{fieldName}}` placeholders     |
+| validation        | object      |          | `{ name, data? }`, see below                              |
+| submitBehavior    | object      |          | `{ echoFilledNarrative? }`                                |
+| notice            | string      |          | A note above the fields, see below                        |
+| actionKind        | string      |          | Which action kind the answer is; default `act`, see below |
+
+`actionKind` is the action kind the player's answer is submitted as: a base kind (such as `say` or `act`) or a plugin kind `<pluginId>/<name>`. The server checks the answering seat's role against it and refuses an answer submitted as another kind (`invalid_action`); see [API · player interactions](./api.md#player-interactions).
 
 **FormField**: `{ type, name, label, placeholder?, options?, required?, defaultValue?, min?, max?, step? }`
 
@@ -390,11 +394,12 @@ The tool returns `filledNarrative` so the model can read each complete sentence 
 
 Create a group of options for the player to choose from. Use it for decision points, branching story lines, and NPC dialogue options.
 
-| Argument | Type     | Required | Description                                    |
-| -------- | -------- | -------- | ---------------------------------------------- |
-| choiceId | string   | ✓        | Unique ID of the group of choices              |
-| prompt   | string   | ✓        | Guiding text (for example "What will you do?") |
-| choices  | Choice[] | ✓        | List of choices (at least 2)                   |
+| Argument   | Type     | Required | Description                                                                     |
+| ---------- | -------- | -------- | ------------------------------------------------------------------------------- |
+| choiceId   | string   | ✓        | Unique ID of the group of choices                                               |
+| prompt     | string   | ✓        | Guiding text (for example "What will you do?")                                  |
+| choices    | Choice[] | ✓        | List of choices (at least 2)                                                    |
+| actionKind | string   |          | Which action kind the answer is; default `say`, with the rules of `create-form` |
 
 **Choice**: `{ id, label, description?, category? }`
 
@@ -816,6 +821,28 @@ When a runtime has many tools, putting every tool's schema into every model call
 - When to use it: when a runtime's allow-list has more than about 10 tools, preloading every schema on every call starts to take up the prompt budget.
 
 The contract is declared in `packages/tools/src/builtin/tool-search.ts`, and the execution logic is in `packages/runtime/src/agent-loop/tool-search.ts`. The approach follows openai/codex's `tool_search` (`ToolExposure::Deferred` + BM25).
+
+### Sub-agents (delegate)
+
+An agent runtime uses it to hand a job to a [sub-agent](./plugins.md#sub-agents): another agent runtime runs with the brief inside this execution and returns its output. List `delegate` in `agent.tools.builtin` to call it.
+
+| Parameter | Type   | Required | Description                                                                                        |
+| --------- | ------ | -------- | -------------------------------------------------------------------------------------------------- |
+| target    | object | ✓        | `{ contract }` (the contract's provider, any package) or `{ runtimeId }` (own package), never both |
+| brief     | string | ✓        | The task; the sub-agent sees only this and `data`. 1 to 20 000 characters                          |
+| data      | object | —        | Facts the sub-agent needs, as a JSON object, at most 32 KB                                         |
+| maxSteps  | number | —        | The sub-agent's step limit; it can only be lower than the provider's own                           |
+
+**Output**: on success the tool result is the sub-agent's output, and the model receives it as JSON (through `modelFacingJson`, without bookkeeping fields); `stopReason` and usage are recorded only on `subagent.completed`. When `completeAfterTools` lists `delegate`, that output is checked as the caller's own output. On failure it receives `{ success: false, error, code }`, where `code` is one of the `ctx.agents.run` error codes. A failure other than `invalid-input` is not a tool failure of this runtime, so the model can try another way.
+
+**Notes**:
+
+- The kernel answers the call inside the agent loop; the tool itself never runs. It is traced like any tool: `tool.calling` / `tool.completed` / `tool.failed`, with `approvalStatus: auto-allowed`. The sub-agent's events point back to the call with `parentCallId`.
+- Caps: one execution runs at most 8 sub-agents at a time, and a call over the cap gets `unavailable` at once. A sub-agent does not get `delegate`, so it cannot go one level deeper.
+- The sub-agent can use read-only tools only; its write tools are taken away. It makes no proposals, and the caller's commit does not change because of it.
+- It is annotated `readOnly`, but neither `idempotent` nor `concurrencySafe`: two runs give different answers.
+
+The contract is declared in `packages/tools/src/builtin/delegate.ts`; the execution logic is in `packages/runtime/src/agent-loop/subagent-delegate.ts` and `subagent-runner.ts`.
 
 ## Character management tools
 
@@ -1539,9 +1566,9 @@ Tool execute() returns { ..., interaction: InteractionPayload }
   ↓ aggregated into an array and stored in TurnMessage.pendingInput
   ↓ TurnResult.pendingInputs is returned (supports multiple plugins and multiple interactions)
   ↓ the front end renders the UI for all interactions
-  ↓ the player submits POST /api/actions submit_interaction { turnId, submissions: [...] }
-  ↓ each submission is translated into natural language with its narrativeTemplate
-  ↓ the same request saves the answers and runs the following turns; the narrative text is the player's message for that turn
+  ↓ the player submits POST /api/actions submit_actions { actions: [{ kind, interaction, fields }] }
+  ↓ each answer is translated into natural language with its narrativeTemplate, as its action text
+  ↓ the same request saves the answers and runs the following turns; the action texts are rendered as the player's message for that turn
     (plain text, which the LLM sees the same way as an ordinary message)
 ```
 
@@ -1596,13 +1623,12 @@ POST /api/actions
 
 {
   "requestId": "...",
-  "type": "submit_interaction",
+  "type": "submit_actions",
   "sessionId": "...",
   "payload": {
-    "turnId": "...",
-    "submissions": [
-      { "interactionId": "form-1", "type": "form", "values": { "name": "林清风" } },
-      { "interactionId": "choice-1", "type": "choice", "values": { "selectedId": "a", "selectedLabel": "跟随黑袍人" } }
+    "actions": [
+      { "kind": "act", "interaction": { "turnId": "...", "interactionId": "form-1", "type": "form" }, "fields": { "name": "林清风" } },
+      { "kind": "say", "interaction": { "turnId": "...", "interactionId": "choice-1", "type": "choice" }, "fields": { "selectedId": "a", "selectedLabel": "跟随黑袍人" } }
     ]
   }
 }

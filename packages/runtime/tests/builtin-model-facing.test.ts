@@ -5,9 +5,12 @@ import {
   createMemoryTools,
   FRAMEWORK_TOOL_NAMES,
 } from "@covel/tools";
-import type { CharacterSchemaRecord } from "@covel/shared";
+import type { CharacterSchemaRecord, TurnInput } from "@covel/shared";
 import { createToolExecutor } from "../src/agent-loop/tool-executor.js";
 import { executeToolSearch } from "../src/agent-loop/tool-search.js";
+import { withSubagentDelegate } from "../src/agent-loop/subagent-delegate.js";
+import { createExecutionContext } from "../src/turn-executor/execution-context.js";
+import type { SubagentRunner } from "../src/agent-loop/subagent-runner.js";
 
 const sessionId = "private-session-bookkeeping";
 const rowId = "0b6f6a2e-3c1d-4f5a-9b7e-1a2b3c4d5e6f";
@@ -89,6 +92,7 @@ const inputs: Record<string, Record<string, unknown>> = {
   "memory-search": { query: "gate" },
   "world-dimension-get": { queries: [{ dimension: "discoveries" }] },
   "world-dimension-list": {},
+  delegate: { target: { contract: "gate-actor@1" }, brief: "Greet them" },
 };
 
 function assertModelText(text: string): void {
@@ -158,15 +162,41 @@ describe("builtin model-facing results", () => {
       ],
     }))
       registry.registerBuiltin(module);
-    const executor = createToolExecutor({
+    const inner = createToolExecutor({
       findTool: (name, context) => registry.find(name, context.pluginId),
       store,
+    });
+    // `delegate` is answered by the agent loop's executor wrapper; the
+    // sub-agent here returns a stored value with its bookkeeping.
+    const runner: SubagentRunner = {
+      inFlight: 0,
+      run: async () => ({ ok: true, output: value, stopReason: "completed" }),
+    };
+    const input: TurnInput = {
+      origin: "player",
+      sessionId,
+      turnId,
+      playerMessage: "",
+    };
+    const executor = withSubagentDelegate(inner, runner, {
+      caller: { pluginId: "journal", runtimeId: "journal/record", depth: 0 },
+      input,
+      deps: {
+        llm: {
+          generate: async () => {
+            throw new Error("no model in this test");
+          },
+        },
+        loadRuntime: async () => undefined,
+      },
+      executionContext: createExecutionContext(input),
     });
     const context = {
       sessionId,
       turnId,
       pluginId: "journal",
       runtimeId: "journal/record",
+      authorizedToolNames: new Set(Object.keys(inputs)),
       world: {
         characterSchema: schema,
         characters: [character],

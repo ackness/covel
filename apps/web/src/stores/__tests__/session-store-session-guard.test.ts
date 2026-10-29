@@ -138,9 +138,9 @@ describe("runtime RPC — originating session", () => {
     await runActionStream(
       {
         requestId: "req-1",
-        type: "send_message",
+        type: "submit_actions",
         sessionId: "sess-a",
-        payload: { content: "hello" },
+        payload: { actions: [{ kind: "say", text: "hello" }] },
       },
       vi.fn(),
       dispatch,
@@ -163,9 +163,9 @@ describe("runtime RPC — originating session", () => {
     await runActionStream(
       {
         requestId: "req-1",
-        type: "send_message",
+        type: "submit_actions",
         sessionId: "sess-a",
-        payload: { content: "hello" },
+        payload: { actions: [{ kind: "say", text: "hello" }] },
       },
       handleSseEvent,
       vi.fn(),

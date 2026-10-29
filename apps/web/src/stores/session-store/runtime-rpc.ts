@@ -263,8 +263,9 @@ export function runActionStream(
           envelope.payload.committed === false &&
           envelope.payload.abortReason === PLAYER_ABORT_REASON &&
           !executionStarted &&
-          (request.type === "send_message" ||
-            request.type === "execute_command");
+          // Typed input only: an interaction answer has no echo to restore.
+          request.type === "submit_actions" &&
+          !request.payload.actions.some((action) => action.interaction);
         if (stoppedBeforeStart) {
           dispatch({
             type: "RESTORE_STOPPED_INPUT",
@@ -399,23 +400,21 @@ export async function runSingleSessionAction({
           requestId: owner.requestId,
           sessionId: session.id,
         };
-        const action: api.ActionRequest = content.startsWith("/")
-          ? {
-              ...base,
-              type: "execute_command",
-              payload: {
-                command: content,
-                ...(input ? { inputMessageId: input.id } : {}),
+        // No seat is named: the server takes the primary seat and its
+        // current character.
+        const action: api.ActionRequest = {
+          ...base,
+          type: "submit_actions",
+          payload: {
+            actions: [
+              {
+                kind: content.startsWith("/") ? "command" : "say",
+                text: content,
               },
-            }
-          : {
-              ...base,
-              type: "send_message",
-              payload: {
-                content,
-                ...(input ? { inputMessageId: input.id } : {}),
-              },
-            };
+            ],
+            ...(input ? { inputMessageId: input.id } : {}),
+          },
+        };
         return runActionStream(action, handleSseEvent, dispatch, {
           toastOnError: true,
           sessionIdRef,

@@ -31,6 +31,7 @@ export function buildTurnDigest(
     turnDigestSchema.parse({
       turnId: input.turnId,
       playerMessage: input.playerMessage,
+      actions: input.actions ?? [],
       lastPlayerInput: snapshotPlayerInput(lastPlayerInput),
       runtimeResults: results
         .filter(

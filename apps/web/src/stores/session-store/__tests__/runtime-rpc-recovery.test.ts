@@ -136,10 +136,15 @@ describe("durable player input identity", () => {
       await pending;
       const input = f.inputs[0]!;
       expect(sendAction.mock.calls[0]![0]).toMatchObject({
-        type: content.startsWith("/") ? "execute_command" : "send_message",
+        type: "submit_actions",
         payload: {
           inputMessageId: input.id,
-          ...(content.startsWith("/") ? { command: content } : { content }),
+          actions: [
+            {
+              kind: content.startsWith("/") ? "command" : "say",
+              text: content,
+            },
+          ],
         },
       });
       expect(f.dispatch).toHaveBeenCalledWith({
@@ -378,9 +383,9 @@ it("does not assign a rejected echo to a subsequent action without an echo", asy
 });
 
 describe("stop before turn start", () => {
-  it.each(["send_message", "execute_command"] as const)(
+  it.each(["say", "command"] as const)(
     "returns only the %s echo, without recovering a previous turn",
-    async (type) => {
+    async (kind) => {
       let state: SessionState = {
         ...initialState,
         executing: true,
@@ -407,9 +412,14 @@ describe("stop before turn start", () => {
       const pending = runActionStream(
         {
           ...request,
-          ...(type === "send_message"
-            ? { type, payload: { content: "Look around" } }
-            : { type, payload: { command: "/look" } }),
+          type: "submit_actions",
+          payload: {
+            actions: [
+              kind === "say"
+                ? { kind, text: "Look around" }
+                : { kind, text: "/look" },
+            ],
+          },
         },
         vi.fn(),
         dispatch,

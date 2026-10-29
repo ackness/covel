@@ -434,8 +434,8 @@ it("executes a restored active session's first turn without enabling its trusted
     body: JSON.stringify({
       requestId: crypto.randomUUID(),
       sessionId: "session",
-      type: "send_message",
-      payload: { content: "Continue after restart." },
+      type: "submit_actions",
+      payload: { actions: [{ kind: "say", text: "Continue after restart." }] },
     }),
   });
   const text = await response.text();

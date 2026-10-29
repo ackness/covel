@@ -477,3 +477,14 @@ export async function cancelSuspension(
     { method: "DELETE" },
   );
 }
+
+/** Clear this session's in-memory fault pause and retry on its next execution. */
+export function resumeSessionPluginFault(
+  sessionId: string,
+  pluginId: string,
+): Promise<SessionPluginsResponse> {
+  return request<SessionPluginsResponse>(
+    `/api/sessions/${encodeURIComponent(sessionId)}/plugins/${encodeURIComponent(pluginId)}/resume-fault`,
+    { method: "POST" },
+  );
+}

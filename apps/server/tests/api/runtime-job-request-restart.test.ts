@@ -45,6 +45,7 @@ describe("request-only runtime jobs across a SQLite restart", () => {
     const sourceDigest = {
       turnId: "source-turn-A",
       playerMessage: "Original submitted action A",
+      actions: [],
       lastPlayerInput: null,
       narrativeText: "Original narrative A",
       toolCallSummaries: [],

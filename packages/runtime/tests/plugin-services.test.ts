@@ -3,6 +3,7 @@ import { z } from "zod";
 import type { PluginServiceContext } from "@covel/shared/plugin-runtime";
 import {
   PluginServiceRegistry,
+  serviceFailureOf,
   type PluginServiceCallEvent,
 } from "../src/plugin-services.js";
 import type { TurnEmitter } from "../src/trace/turn-emitter.js";
@@ -184,6 +185,37 @@ describe("public plugin services", () => {
       expect(event).not.toHaveProperty("error");
       expect(event).not.toHaveProperty("gateway");
     }
+  });
+
+  it("preserves the original failing hop and exception through nested services", async () => {
+    const { registry, client, active } = fixture();
+    active.add("inner");
+    const cause = Object.freeze(new Error("inner provider failed"));
+    registry.register("inner", {
+      name: request.name,
+      contract: request.contract,
+      input: schema,
+      output: schema,
+      handler: () => {
+        throw cause;
+      },
+    });
+    registry.register("provider", {
+      name: request.name,
+      contract: request.contract,
+      input: schema,
+      output: schema,
+      handler: async (_input, ctx) =>
+        (await ctx.services.call({ ...request, pluginId: "inner" })) as {
+          value: number;
+        },
+    });
+    await expect(client.call(request)).rejects.toBe(cause);
+    expect(serviceFailureOf(cause)).toEqual({
+      callerPluginId: "provider",
+      providerPluginId: "inner",
+      errorCode: "invocation-error",
+    });
   });
 
   it("reports only registered or admitted service identities", async () => {

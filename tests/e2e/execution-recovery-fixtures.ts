@@ -133,8 +133,8 @@ export async function createRecoveryFixture(
       ...(executionState === "interrupted"
         ? {
             retry: {
-              type: "send_message" as const,
-              payload: { content: playerAction },
+              type: "submit_actions" as const,
+              payload: { actions: [{ kind: "say", text: playerAction }] },
             },
           }
         : {}),

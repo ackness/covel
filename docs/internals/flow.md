@@ -15,7 +15,7 @@
 
 玩家输入“我去探索沼泽”并按下发送，接下来发生这些事：
 
-1. **前端发出请求。** 浏览器把这句话发到 `POST /api/actions`。这个连接不会马上关掉，服务端沿着它一条一条地推送事件（这种方式叫 SSE），前端收到一条就更新一点画面。
+1. **前端发出请求。** 浏览器把这句话作为一个 `say` 行动发到 `POST /api/actions`。这个连接不会马上关掉，服务端沿着它一条一条地推送事件（这种方式叫 SSE），前端收到一条就更新一点画面。
 2. **服务端排队。** 同一个会话同一时刻只做一件事。服务端先等上一回合留下的、声明了“下一回合必须读到”的后台工作做完，再给会话上锁。
 3. **定住本回合用的插件。** 回合开始时用的是哪一版插件、哪些工具，到回合结束都不变。中途热更新了插件，也要等下一回合才生效。
 4. **挑出这一回合要运行的 runtime。** 每个 runtime 都写了自己什么时候运行：每回合、每隔几回合、某个事件发生时，或者只在被点名时。内核照着这些声明挑。
@@ -141,7 +141,7 @@ stateDiagram-v2
 - agent 输出 `preGameDone: true`；
 - guard（runtime 运行前的检查函数）返回 `{ skip: true }`。
 
-内核把结果记进 `setupRuntimes`。玩家可以多次提交表单或消息来推进，例如 `char-creator` 的表单经 `submit_interaction` 提交。
+内核把结果记进 `setupRuntimes`。玩家可以多次提交表单或消息来推进，例如 `char-creator` 的表单作为 `submit_actions` 里的行动提交。
 
 失败时的规则：
 
@@ -471,6 +471,15 @@ flowchart LR
 
 提示词各段的精确顺序见 [Prompt 结构](../reference/prompt-structure.md)。
 
+**玩家的输入先是一组行动。** 前端发的是 `submit_actions`：一句话是一个 `say` 行动，斜杠命令是 `command`，表单和选项的回答是带 `interaction` 的行动。服务端按下面的顺序处理：
+
+1. **校验。** 按座位身份检查每个行动：座位存在并且由人控制，这局有这个行动类型，座位身份能用它，行动的角色绑定在座位上，文字和 `fields` 合规。有一个不合格就拒绝整次提交，什么都不保存。
+2. **补全。** 省略的座位取主座位，省略的角色取座位的当前角色，`source` 设为 `player`。回答交互的行动经交互提交流程，填好叙事文字。
+3. **渲染。** `renderActions`（`@covel/context`）把行动写成给模型看的文字。单人玩家的普通输入保持原文；多个角色、主持人或插件类型的行动会标出角色名和类型名，例如 `【阿雅·说】……`。
+4. **进入回合。** 渲染结果是 `TurnInput.playerMessage`，解析后的行动是 `TurnInput.actions`。函数 runtime 从 `ctx.playerActions` 读行动，`TurnStart` hook 的载荷带 `actions`。prompt 历史保存渲染后的文字，聊天消息保存原文和 `metadata.actions`。
+
+字段和错误码见 [api.md § submit_actions](../reference/api.md#submit_actions)。
+
 ### 3.2 输出方向：LLM → 玩家
 
 模型的输出先变成提案，提交后变成事件，前端按事件渲染。
@@ -543,7 +552,7 @@ LLM: "调用 sync-           ToolExecutor:
 
 **输出审查在执行工具之前。** 插件可以在 `PreLLMCall` 里要求先缓冲输出，再在 `PostLLMResponse` 里拒绝草稿并给出纠正要求。
 
-- 最多纠正两次，并且仍然受原来的预算限制。
+- 纠正次数由 `agent.loop.corrections.review` 配置，默认两次；预算用尽后再次退回草稿，runtime 以 `invalid-output` 失败。纠正仍受步数和时限限制，配置见[循环 profile](../reference/plugins.md#循环-profileagentloopprofile)。
 - 两个内置叙事插件用它检查 `narrativePerson`：默认第二人称，允许第一或第三人称，对白保留各自的视角。
 - 它们在检查通过后一次显示整段正文。框架仍然支持其他插件流式输出。
 - 这是有限的文本检查，不保证所有剧情推断都正确。
@@ -559,6 +568,8 @@ deciding → finalizing → stopped        running-tools → suspended
 
 循环的行为来自 runtime 的循环 profile（`agent-loop/loop-profile.ts` 的 `resolveLoopProfile`），不看 `outputKind`：文字是否流式显示给玩家、是否并入玩家插话、截断的正文是否保留、工具调用打转时关掉工具还是失败（`fallback`）、步数上限和时限预留处是否收尾（`finalizer`）。没写 `agent.loop.profile` 时，故事 runtime 用 `story`，其他用 `system`；字段和取值见 [插件参考的循环 profile](../reference/plugins.md#循环-profileagentloopprofile)。回合层判断还有没有 runtime 读插话队列时用同一个解析函数。
 
+循环每次运行创建一个纠正策略（`agent-loop/correction-policy.ts`），从 profile 的 `corrections` 分别读取工具使用、回复审查、循环扰动和输出修复的预算。循环及收尾步骤之后、进入 `stopped` 之前，用与 `settleAgentLoop` 相同的无副作用输出检查决定是否需要修复。默认在预算和剩余时间允许时关闭工具再请求一次，把校验错误发给模型，完整替换无效答案；仍不符合 schema 或故事正文仍为空时以 `invalid-output` 失败。修复步骤不触发 `PreStep`，但照常经过 `PreLLMCall` 和 `PostLLMResponse`。条件和取值见[循环 profile](../reference/plugins.md#循环-profileagentloopprofile)。
+
 每一步的先后：
 
 1. 检查取消；profile 开了 `steering` 时，把玩家插话并入对话。
@@ -569,7 +580,7 @@ deciding → finalizing → stopped        running-tools → suspended
 6. 判断是否结束：完成工具、`runtime-done`、Hook 的 `terminate`、没有工具调用的最终回复，否则进入下一步。
 7. 这一步的 `step.completed` 在下一步开始或循环结束时发出，每个开始了的步骤恰好一次。
 
-每一种结束方式对应一个结束原因（`StopReason`），写进 `RuntimeResult.stop` 和 runtime 生命周期事件的 `stopReason`，完整的表见 [协议参考的结束原因](../reference/protocol.md#stop-reasons)。正常的出口（`completed`、`tool-finished`、`max-steps`、`deadline`、PreStep 的 `cancelled`）由循环自己记下，`settleAgentLoop` 按它定结果。抛出的出口保留原来的错误对象，原因挂在错误上（`agent-loop/stop-reason.ts`）：调用点给模型错误、输出无效、上下文超限和循环检测打标，循环外层的 catch 再把玩家停止、自己的超时和上级取消分出来，`finalizeRuntimeResult` 从错误上读出原因，放进失败的结果。
+每一种结束方式对应一个结束原因（`StopReason`），写进 `RuntimeResult.stop` 和 runtime 生命周期事件的 `stopReason`，完整的表见 [协议参考的结束原因](../reference/protocol.md#stop-reasons)。正常的出口（`completed`、`tool-finished`、`max-steps`、`deadline`、PreStep 的 `cancelled`）由循环自己记下，`settleAgentLoop` 按它定结果。抛出的出口保留原来的错误对象，原因挂在错误上（`agent-loop/stop-reason.ts`）：调用点给模型错误、输出无效、上下文超限和循环检测打标，循环外层的 catch 再把玩家停止、自己的超时和上级取消分出来，`finalizeRuntimeResult` 从错误上读出原因，放进失败的结果。标记属于打标的那次运行（`runId`）：上级超时取消正在等待的子 agent 时，两者共用同一个错误对象，子 agent 的“上级取消”不会变成上级自己的结束原因。
 
 **步数上限不算成功。** 用完步数时，模型在工具调用旁边写的文字只是草稿。只要输出不是由完成工具交出、`requireToolUse` 和 `requireExplicitCompletion` 已满足或没开、离截止时间还有至少 3 秒，内核再发一次关掉工具的收尾请求，要求直接给出最终答案。收尾写出文字时 runtime 成功，结果标明 `stop.finalizer: true`；否则以 `max-steps` 失败，暂存的写入不提交。profile 的 `finalizer.maxSteps: false` 关掉这次收尾。超时是失败，不尝试收尾；例外是 profile 写了 `finalizer.deadlineReserveMs`：剩余时间不足预留、而且上面的收尾条件满足时，循环不再开始新的一步，先并入排队的玩家插话（profile 开了 `steering` 时），再发收尾请求，写出答案时以 `{ reason: "deadline", finalizer: true }` 成功。
 
@@ -697,6 +708,20 @@ io:
 | `auto`         | 每回合；写了 `schedule.every` 时，逻辑回合数能被它整除的回合 |
 | `event`        | 它订阅的事件在待处理事件里                                   |
 | `manual`       | 只在被 plugin-rpc 点名时，不看上面的任何门槛                 |
+
+`schedule.subagentOnly` 的 runtime 不在这棵树里：自动、手动点名、批量重跑和 `recursiveCall` 都不选中它。
+
+### 4.4 子 agent
+
+子 agent 由另一个 runtime 在自己的执行里运行：函数用 `ctx.agents.run`，agent 用 `delegate` 工具。
+
+- **同一次执行**：子 agent 没有自己的调度、执行或提交。它用的是调用方这次执行的 trace、取消信号和会话快照；trace 事件带 `parentCallId`，调试页能看出调用树。
+- **不形成提交单位**：它只交回输出、结束原因和用量。工具只剩只读的，没有 proposal 和事件；万一出现也被丢弃，并记一条 `subagent.writes-dropped`。调用方的提交单位只含调用方自己的写入。
+- **上限**：每次顶层执行一个 runner（`runTurnPipeline` 创建，嵌套执行共用），同时最多 8 个子 agent，深度 1。满了立刻拒绝，不排队，所以调用方不会等自己的名额。
+- **取消**：调用方的 `executionSignal`、运行时限和收尾时的撤销都传到子 agent；玩家的中止也一样。
+- **循环**：子 agent 走同一个 `runAgentToolLoop` 和收尾步骤，`allowSuspend: false`，默认 `actor` profile，没有会话历史。`PreRuntime` / `PostRuntime` 不触发，循环内的 Hook 照常触发。
+
+规则和错误码见[插件参考 · 子 agent](../reference/plugins.md#子-agent)。
 
 ## 五、前端交互设计
 
@@ -848,8 +873,8 @@ io:
   │  │                                                            │ │
   │  │ 点击提交 → submitInteraction():                            │ │
   │  │   POST /api/actions                                        │ │
-  │  │     { type: "submit_interaction",                          │ │
-  │  │       payload: { turnId, submissions: [...] } }             │ │
+  │  │     { type: "submit_actions",                              │ │
+  │  │       payload: { actions: [{ interaction, fields }] } }     │ │
   │  │                                                            │ │
   │  │   服务端在会话锁内一次完成:                                │ │
   │  │   ├─ 定位已提交交互、来源插件、字段与跨字段校验             │ │
@@ -1080,7 +1105,7 @@ sequenceDiagram
     Note over Web: 渲染叙事 (Prose) + 表单 (Form)<br/>pluginData 更新 → 右侧面板 + 消息面板
 
     Player->>Web: 填写并提交角色创建表单
-    Web->>Server: POST /api/actions { type: 'submit_interaction', turnId, submissions }
+    Web->>Server: POST /api/actions { type: 'submit_actions', actions: [{ interaction, fields }] }
     Note over Server: 会话锁内校验回答，一个事务保存回答与 turn.started
     Server-->>Web: SSE: interaction.submitted (已存的值 + filledNarrative 玩家消息)
 
@@ -1170,3 +1195,9 @@ sequenceDiagram
   插件 → 前端:    plugin-data.changed SSE events
   前端 → 插件:    UI Actions → plugin-rpc (invokeRuntime / invokePluginAction / invokeCommand / emitEvent)
 ```
+
+## 插件故障熔断
+
+宿主共享的 `recordExecutionFaults` 负责归因和发布熔断事件。`commitExecution` 在玩家、手动、恢复和后台提交之后调用它；恢复的 runtime 失败、尚未进入提交时，恢复路由也在返回错误前调用它，不提交缓冲写入或解决挂起项。Hook 管线在 handler 完成时单独报告所属插件的故障。内存里的 latch 按会话和插件计数，以 `logicalTurnId ?? turnId` 合并同一输入。详细计数、豁免和事件见[协议](../reference/protocol.md#插件故障熔断)。
+
+`executeTurn` 在执行入口过滤已暂停插件的 runtime 和 Hook 启用集合，恢复入口和服务准入也检查暂停状态。注册表快照不在运行中修改；服务捕获同一执行的暂停集合。重启、会话结束和删除只清内存，不写入领域数据或快照。

@@ -47,6 +47,7 @@ pnpm test                      # all Vitest suites
 pnpm --filter @covel/runtime test  # example: one package's tests
 pnpm test:docs                 # documentation package tests + script checks
 pnpm test:docs:packages        # docs + SDK README contracts, after pnpm check
+pnpm plugin:extract <dir>      # execute your own entry and sync declarations; --check for CI
 pnpm test:pg                   # live-PG store contracts + server integration
 pnpm e2e:smoke                 # deterministic Chromium smoke suite
 pnpm e2e                       # all Playwright suites

@@ -55,6 +55,8 @@ function flattenMessage(m: {
     runtimeId: meta.runtimeId,
     kind: meta.kind,
     block: meta.block,
+    // A player's message keeps the resolved actions it carried.
+    ...(Array.isArray(meta.actions) ? { actions: meta.actions } : {}),
     createdAt: m.createdAt,
   };
 }

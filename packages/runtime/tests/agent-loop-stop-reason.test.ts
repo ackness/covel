@@ -335,7 +335,7 @@ describe("the deadline (E6) and cancellation (E7)", () => {
       }),
     );
     expect(error).toBeInstanceOf(TurnAbortedError);
-    expect(stopOf(error)).toEqual({
+    expect(stopOf(error, "run-loop")).toEqual({
       reason: "cancelled",
       cancelledBy: "player",
     });
@@ -356,7 +356,7 @@ describe("the deadline (E6) and cancellation (E7)", () => {
       }),
     );
     expect(error).toBe(parentTimeout);
-    expect(stopOf(error)).toEqual({
+    expect(stopOf(error, "run-loop")).toEqual({
       reason: "cancelled",
       cancelledBy: "parent",
     });
@@ -371,27 +371,32 @@ describe("the deadline (E6) and cancellation (E7)", () => {
       }),
     );
     expect(error).toBeInstanceOf(RuntimeTimeoutError);
-    expect(stopOf(error)).toEqual({ reason: "deadline" });
+    expect(stopOf(error, "run-loop")).toEqual({ reason: "deadline" });
   });
 
   it("classifies by who fired, before any call-site tag", () => {
     const budget = createAgentLoopBudget(10_000, "probe", undefined);
     try {
       const tagged = new Error("model failed");
-      tagStop(tagged, { reason: "model-error" });
-      expect(classifyLoopError(tagged, budget, undefined)).toEqual({
+      tagStop(tagged, { reason: "model-error" }, "run");
+      expect(classifyLoopError(tagged, budget, undefined, "run")).toEqual({
         reason: "model-error",
       });
-      expect(classifyLoopError(new Error("bug"), budget, undefined)).toBe(
-        undefined,
-      );
       expect(
-        classifyLoopError(new RuntimeTimeoutError("x"), budget, undefined),
+        classifyLoopError(new Error("bug"), budget, undefined, "run"),
+      ).toBe(undefined);
+      expect(
+        classifyLoopError(
+          new RuntimeTimeoutError("x"),
+          budget,
+          undefined,
+          "run",
+        ),
       ).toEqual({ reason: "cancelled", cancelledBy: "parent" });
       const player = new AbortController();
       player.abort();
       expect(
-        classifyLoopError(tagged, budget, { signal: player.signal }),
+        classifyLoopError(tagged, budget, { signal: player.signal }, "run"),
       ).toEqual({ reason: "cancelled", cancelledBy: "player" });
       expect(budget.expired()).toBe(false);
     } finally {
@@ -406,7 +411,7 @@ describe("thrown exits (E8–E11)", () => {
       throw new Error("PROVIDER_ERROR: upstream exploded");
     });
     const error = await thrownBy(runLoop({ llm: failing }));
-    expect(stopOf(error)).toEqual({ reason: "model-error" });
+    expect(stopOf(error, "run-loop")).toEqual({ reason: "model-error" });
 
     const result = await runRuntime({ llm: failing });
     expect(result.status).toBe("failed");
@@ -427,7 +432,7 @@ describe("thrown exits (E8–E11)", () => {
       runLoop({ llm: queuedLLM([prose("draft")]), hookPipeline }),
     );
     expect(String(error)).toContain("Response validation failed");
-    expect(stopOf(error)).toEqual({ reason: "invalid-output" });
+    expect(stopOf(error, "run-loop")).toEqual({ reason: "invalid-output" });
   });
 
   it("E10: a context budget overflow is context-overflow", async () => {
@@ -447,7 +452,7 @@ describe("thrown exits (E8–E11)", () => {
       }),
     );
     expect(error).toBeInstanceOf(RangeError);
-    expect(stopOf(error)).toEqual({ reason: "context-overflow" });
+    expect(stopOf(error, "run-loop")).toEqual({ reason: "context-overflow" });
   });
 
   it("E11: a second loop detection is loop-detected", async () => {
@@ -463,7 +468,7 @@ describe("thrown exits (E8–E11)", () => {
         }),
       );
       expect(String(error)).toContain("tool-loop detected");
-      expect(stopOf(error)).toEqual({ reason: "loop-detected" });
+      expect(stopOf(error, "run-loop")).toEqual({ reason: "loop-detected" });
     } finally {
       warn.mockRestore();
     }
@@ -513,7 +518,7 @@ describe("thrown exits (E8–E11)", () => {
       }),
     );
     expect(String(error)).toContain("executor bug");
-    expect(stopOf(error)).toBeUndefined();
+    expect(stopOf(error, "run-loop")).toBeUndefined();
   });
 });
 

@@ -157,6 +157,12 @@ export const runtimeAuthoringManifestSchema = z
             "`true` runs a `manual` or `event` activation as a durable background job: the caller gets a job ID at once. Defaults to `false`: the caller waits for the result.",
           )
           .optional(),
+        subagentOnly: z
+          .boolean()
+          .describe(
+            "`true` makes this agent runtime a sub-agent provider: the scheduler never runs it, and another runtime runs it with `ctx.agents.run` or the `delegate` tool. It implies `trigger: manual` and allows no `stage`, `needs`, `after`, `background`, `io.output.recordAs`, `guard` or `io.visibility: story`. Defaults to `false`.",
+          )
+          .optional(),
       })
       .describe("When and in what order the runtime runs.")
       .optional(),
@@ -412,6 +418,49 @@ export const runtimeAuthoringManifestSchema = z
                 "What a repeated tool loop does: `answer-without-tools` takes the tools away and asks for the answer; `fail` stops the runtime. Defaults to `fail` for `system`, otherwise `answer-without-tools`.",
               )
               .optional(),
+            corrections: z
+              .strictObject({
+                toolUse: z
+                  .number()
+                  .int()
+                  .min(0)
+                  .max(3)
+                  .describe(
+                    "Corrections for missing required tool use or explicit completion. Defaults to 1.",
+                  )
+                  .optional(),
+                review: z
+                  .number()
+                  .int()
+                  .min(0)
+                  .max(5)
+                  .describe(
+                    "Corrections after a PostLLMResponse rejection. Defaults to 2.",
+                  )
+                  .optional(),
+                loopPerturbation: z
+                  .number()
+                  .int()
+                  .min(0)
+                  .max(3)
+                  .describe(
+                    "Perturbations before the repeated-tool fallback. Defaults to 1.",
+                  )
+                  .optional(),
+                outputRepair: z
+                  .number()
+                  .int()
+                  .min(0)
+                  .max(3)
+                  .describe(
+                    "Requests with tools off to repair invalid output. Defaults to 1.",
+                  )
+                  .optional(),
+              })
+              .describe(
+                "Independent correction budgets for one agent loop run; 0 disables that correction.",
+              )
+              .optional(),
             finalizer: z
               .strictObject({
                 maxSteps: z
@@ -524,6 +573,9 @@ export const runtimeAuthoringManifestSchema = z
         trigger: value.schedule?.trigger,
         every: value.schedule?.every,
         needs: value.schedule?.needs,
+        after: value.schedule?.after,
+        subagentOnly: value.schedule?.subagentOnly,
+        guard: value.guard,
         ...(detached ? { detached: detached === true ? {} : detached } : {}),
         background: value.schedule?.background,
         builtinTools: (value.function ?? value.agent)?.tools?.builtin,

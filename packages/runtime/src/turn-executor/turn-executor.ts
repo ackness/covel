@@ -1,3 +1,4 @@
+import { createSubagentRunner } from "../agent-loop/subagent-runner.js";
 import { buildTurnDigest } from "./turn-digest.js";
 /**
  * TurnExecutor — orchestrates a complete turn execution.
@@ -168,13 +169,15 @@ export async function runTurnPipeline(
     activePluginIds: new Set(activeRuntimes.map((r) => r.pluginId)),
     settings: buildHookSettings(activeRuntimes, userSettings),
   };
+  // One sub-agent runner per top-level execution; nested executions share it.
+  const subagents = deps.subagents ?? createSubagentRunner({ activeRuntimes });
   return runWithHookScope(
     { ...hookScope, locale: hookScope.locale ?? input.locale },
     () =>
       executeTurnImpl(
         { ...input, userSettings },
         activeRuntimes,
-        deps,
+        { ...deps, subagents },
         options,
       ),
   );
@@ -251,6 +254,7 @@ async function executeTurnImpl(
       },
       {
         playerMessage: input.playerMessage,
+        actions: input.actions ?? [],
         activeRuntimes: activeRuntimes.map((r) => r.name),
       },
     );

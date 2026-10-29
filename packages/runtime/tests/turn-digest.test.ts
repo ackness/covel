@@ -102,6 +102,7 @@ describe("kernel turn digest", () => {
     expect(digest).toEqual({
       turnId: "current",
       playerMessage: "Go",
+      actions: [],
       locale: "en",
       narrativeText: "Current story",
       lastPlayerInput: null,

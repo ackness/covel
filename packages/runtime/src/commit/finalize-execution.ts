@@ -305,6 +305,7 @@ export interface FinalizeExecutionOutcome {
 }
 
 export interface IsolatedRuntime {
+  readonly cause: "rejected" | "upstream" | "read" | "nested";
   readonly runtimeId: string;
   /**
    * The dropped run. The same runtime can run nested and at top level in one
@@ -390,12 +391,16 @@ function commitUnitsOf(
 
 /** One entry per dropped run, in commit order. */
 function isolatedRuntimesOf(
-  isolated: ReadonlyMap<CommitUnit, string>,
+  isolated: ReadonlyMap<
+    CommitUnit,
+    { error: string; cause: IsolatedRuntime["cause"] }
+  >,
 ): IsolatedRuntime[] {
-  return [...isolated].flatMap(([unit, error]) =>
+  return [...isolated].flatMap(([unit, { error, cause }]) =>
     unit.members.map((member) => ({
       runtimeId: member.runtimeId,
       runId: member.runId,
+      cause: member === unit.root ? cause : "nested",
       error:
         member === unit.root
           ? error
@@ -812,6 +817,11 @@ export async function finalizeExecution(
   // re-establish it here — session-scoped like every other commit site.
   const scope: HookScope = {
     activePluginIds,
+    logicalKey:
+      executionContext.logicalTurnId ??
+      turnIds[0] ??
+      results.at(-1)?.turnId ??
+      executionContext.executionId,
     settings: args.hookSettings ?? buildHookSettings(runtimes, undefined),
     locale: args.hookLocale,
   };
@@ -824,7 +834,10 @@ export async function finalizeExecution(
     // Each unit is a top-level result with the results nested under it; it
     // commits or drops as one. Dropped unit -> why its writes were dropped.
     let units: CommitUnit[] = [];
-    const isolated = new Map<CommitUnit, string>();
+    const isolated = new Map<
+      CommitUnit,
+      { error: string; cause: IsolatedRuntime["cause"] }
+    >();
     // Top-level runtime ids are unique within an execution, so dependency
     // checks, which only cross units at top level, can key on them.
     const droppedRootIds = (): Set<string> =>
@@ -1065,7 +1078,7 @@ export async function finalizeExecution(
             if (!isolates(unit)) {
               throw new Error(`${root.runtimeId}: ${error}`);
             }
-            isolated.set(unit, error);
+            isolated.set(unit, { error, cause: "upstream" });
             console.warn(
               `[finalize-execution] dropped writes of ${root.runtimeId} for session ${sessionId}: ${error}`,
             );
@@ -1074,7 +1087,7 @@ export async function finalizeExecution(
           const lostReads = lostReadsOf(unit, prepared);
           if (lostReads.length > 0 && isolates(unit)) {
             const error = `read data of ${lostReads[0]!.producer.runtimeId} that did not commit`;
-            isolated.set(unit, error);
+            isolated.set(unit, { error, cause: "read" });
             console.warn(
               `[finalize-execution] dropped writes of ${root.runtimeId} for session ${sessionId}: ${error}`,
             );
@@ -1118,11 +1131,12 @@ export async function finalizeExecution(
           } catch (err) {
             if (!(err instanceof ProposalCommitFailure)) throw err;
             isolatedFailures.push(...err.failedProposals);
-            isolated.set(
-              unit,
-              err.failedProposals.map((fp) => fp.error).join("; ") ||
+            isolated.set(unit, {
+              cause: "rejected",
+              error:
+                err.failedProposals.map((fp) => fp.error).join("; ") ||
                 "proposal rejected",
-            );
+            });
             console.warn(
               `[finalize-execution] dropped writes of ${root.runtimeId} for session ${sessionId}: ` +
                 err.failedProposals.map((fp) => fp.error).join("; "),

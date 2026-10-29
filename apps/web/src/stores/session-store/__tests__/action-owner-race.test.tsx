@@ -245,8 +245,10 @@ describe("same-session action ownership", () => {
         state: "failed",
         turnId: "failed-turn",
         retry: {
-          type: "send_message",
-          payload: { content: "Keep this exact player input" },
+          type: "submit_actions",
+          payload: {
+            actions: [{ kind: "say", text: "Keep this exact player input" }],
+          },
         },
       },
     });
@@ -254,9 +256,9 @@ describe("same-session action ownership", () => {
     expect(send).toHaveBeenCalledOnce();
     expect(send.mock.calls[0]![0]).toEqual(
       expect.objectContaining({
-        type: "send_message",
+        type: "submit_actions",
         payload: {
-          content: "Keep this exact player input",
+          actions: [{ kind: "say", text: "Keep this exact player input" }],
           recoverFromTurnId: "failed-turn",
         },
       }),

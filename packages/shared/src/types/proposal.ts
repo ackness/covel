@@ -42,6 +42,8 @@ export interface InteractionRequestPayload {
   readonly title?: string;
   readonly data: Readonly<Record<string, unknown>>;
   readonly narrativeTemplate?: string;
+  /** The action kind the answer is submitted as (see `InteractionPayload`). */
+  readonly actionKind?: string;
 }
 
 export interface EventEmitPayload {

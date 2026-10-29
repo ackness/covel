@@ -138,6 +138,7 @@ export type {
   ToolCallRecord,
   TokenUsage,
   RuntimeResult,
+  PluginFaultReason,
   StopReason,
   LoopStop,
   RuntimeRetryScope,
@@ -158,6 +159,14 @@ export type {
   WriteConflictEntry,
   WriteConflict,
 } from "./execution.js";
+
+export type {
+  SubagentTarget,
+  SubagentRequest,
+  SubagentErrorCode,
+  SubagentResult,
+  SubagentRunApi,
+} from "./subagent.js";
 
 export type {
   StateChangeEntry,

@@ -26,8 +26,8 @@ contributes:
       - ./runtimes/schema-gen/ui/world-overview.json
       - ./runtimes/schema-gen/ui/world-schema.json
   tools:
-    - initialize-world
     - dimension-rule-get
+    - initialize-world
     - update-dimensions
   hooks:
     - PreLLMCall

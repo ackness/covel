@@ -146,6 +146,8 @@ export function buildPluginFlowResponse(registry: PluginRegistry) {
         outputKind: manifest.outputKind ?? "system",
         outputContract: manifest.outputContract,
         execution: manifest.execution ?? "sync",
+        // Not a manual run the player can start: another runtime runs it.
+        ...(manifest.subagentOnly ? { subagentOnly: true as const } : {}),
         model: manifest.model,
         trigger: {
           type: manifest.trigger?.type ?? "auto",

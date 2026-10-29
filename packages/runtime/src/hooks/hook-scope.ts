@@ -27,6 +27,8 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 
 export interface HookScope {
+  /** One player input across its continuation rounds. */
+  readonly logicalKey?: string;
   /** Plugin ids active in the current session. */
   readonly activePluginIds: ReadonlySet<string>;
   /**
@@ -106,4 +108,8 @@ export function isHookInScope(
 ): boolean {
   if (pluginId === undefined || active === undefined) return true;
   return active.has(pluginId);
+}
+
+export function currentHookLogicalKey(): string | undefined {
+  return storage.getStore()?.logicalKey;
 }

@@ -152,15 +152,15 @@ return { result: execution.result, committed: outcome.status === "committed" };
 
 ### 执行生命周期事件
 
-| 事件类型                | 方向 | 描述                                                                                | 负载                                                                                                                    |
-| ----------------------- | ---- | ----------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
-| `execution.started`     | S→C  | 回合执行开始                                                                        | `{ runtimeCount }`                                                                                                      |
-| `interaction.submitted` | S→C  | `submit_interaction` 的回答已落库、后续回合已开始；先于该回合的 `execution.started` | `{ interactionTurnId, results: [{ submissionId, interactionId, values, filledNarrative }], message?: { id, content } }` |
-| `runtime.started`       | S→C  | 单个 runtime 开始                                                                   | `{ runtimeId, pluginId, kind, turnId, runId, label, stage? }`                                                           |
-| `runtime.deferred`      | S→C  | staged runtime 已随原始回合提交并转入后台                                           | `{ runtimeId, pluginId, jobId, sourceTurnId }`                                                                          |
-| `runtime.completed`     | S→C  | 单个 runtime 完成                                                                   | `{ runtimeId, pluginId, turnId, runId, status, durationMs, stopReason? }`                                               |
-| `runtime.failed`        | S→C  | 单个 runtime 失败                                                                   | `{ runtimeId, pluginId, turnId, runId, status, durationMs, error, errorKind?, failureTarget?, stopReason? }`            |
-| `execution.completed`   | S→C  | 回合执行终态                                                                        | `{ runtimeCount, resultCount, durationMs, committed, error?, abortReason?, resync? }`，各字段见下                       |
+| 事件类型                | 方向 | 描述                                                                                  | 负载                                                                                                                    |
+| ----------------------- | ---- | ------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| `execution.started`     | S→C  | 回合执行开始                                                                          | `{ runtimeCount }`                                                                                                      |
+| `interaction.submitted` | S→C  | `submit_actions` 里的交互回答已落库、后续回合已开始；先于该回合的 `execution.started` | `{ interactionTurnId, results: [{ submissionId, interactionId, values, filledNarrative }], message?: { id, content } }` |
+| `runtime.started`       | S→C  | 单个 runtime 开始                                                                     | `{ runtimeId, pluginId, kind, turnId, runId, label, stage? }`                                                           |
+| `runtime.deferred`      | S→C  | staged runtime 已随原始回合提交并转入后台                                             | `{ runtimeId, pluginId, jobId, sourceTurnId }`                                                                          |
+| `runtime.completed`     | S→C  | 单个 runtime 完成                                                                     | `{ runtimeId, pluginId, turnId, runId, status, durationMs, stopReason? }`                                               |
+| `runtime.failed`        | S→C  | 单个 runtime 失败                                                                     | `{ runtimeId, pluginId, turnId, runId, status, durationMs, error, errorKind?, failureTarget?, stopReason? }`            |
+| `execution.completed`   | S→C  | 回合执行终态                                                                          | `{ runtimeCount, resultCount, durationMs, committed, error?, abortReason?, resync? }`，各字段见下                       |
 
 `runtime.started.stage` 记录这次 runtime 的阶段，取值为 `setup`、`pre-turn`、`narrative`、`post-turn` 或 `audit`；没有阶段的 event/manual runtime 不带此字段。持久 trace 保留它，客户端从实时事件和历史 trace 恢复到同一条执行步骤，后续终态事件不清除阶段。某个执行组有 `stage: "setup"` 的步骤时，时间线显示中性的“开局准备”摘要，不提供单任务重试；会话进入 `playing` 或页面刷新后也不变。不要按当前会话阶段或插件名称推断历史执行的阶段。
 
@@ -198,11 +198,13 @@ agent runtime 的工具循环每一种结束方式都对应一个结束原因（
 | `context-overflow` | 上下文超限 | 裁剪之后请求仍然放不下 | 失败 |
 | `cancelled` | 取消 | `stop.cancelledBy` 说明是谁：`player`（玩家停止）、`parent`（上级执行取消或超时）、`hook`（`PreStep` 的 `stop`） | 失败 |
 | `model-error` | 模型错误 | 模型调用在重试用尽后仍然失败 | 失败 |
-| `invalid-output` | 输出无效 | `PostLLMResponse` 第三次退回草稿，或输出没通过 schema 检查 | 失败 |
+| `invalid-output` | 输出无效 | `PostLLMResponse` 退回草稿且审查纠正预算用尽，或修复后输出仍不符合 schema / 故事正文为空 | 失败 |
 | `loop-detected` | 循环检测 | 扰动之后模型仍然重复同一个工具调用 | 失败；`fallback` 为 `answer-without-tools` 的循环 profile（`story`、`actor`）第一次检测到时先拿走工具、要求写正文或答案，不结束 |
 | `suspended` | 挂起 | 调用了 `suspend` 工具，等待玩家输入 | 挂起 |
 
 **收尾步骤。** 循环用完步数时，模型在工具调用旁边写下的文字只是草稿，不算答案。这时内核再发一次请求：关掉工具，要求模型直接给出最终答案，输出格式不变，流式 runtime 照样流式显示。这次请求就是收尾步骤，步号是最后一步加 1，`PreStep` 不为它触发。只在下面几条都满足时才发：输出不是由完成工具交出的；`requireToolUse` 没开或已经满足；`requireExplicitCompletion` 没开或已经满足；离截止时间至少还有 3 秒。收尾写出非空文字时，它替换之前的文字，runtime 成功，`stop` 为 `{ reason: "max-steps", finalizer: true }`。文字为空、请求失败或草稿被退回时，runtime 以 `max-steps` 失败。超时不尝试收尾，除非循环 profile 写了时限预留（[`finalizer.deadlineReserveMs`](./plugins.md#循环-profileagentloopprofile)）：剩余时间不足预留时同样发收尾步骤，所以 `stop.finalizer` 表示收尾步骤在步数上限或时限预留处交出了答案。
+
+**输出修复步骤。** 符合修复条件的无效答案在收尾步骤之后、最终输出校验之前请求修复（条件见[循环 profile](./plugins.md#循环-profileagentloopprofile)）。`StepIdentity.repair: true` 同时出现在 `step.started` 和 `step.completed`，完成事件的 `notes` 包含 `output-repair`；这一步关闭工具且不触发 `PreStep`。修复交出替换答案后，`LoopStop.repaired: true` 保留原来的 `reason` 和 `finalizer`。最终输出仍无效时，结算改为 `invalid-output`。修复次数由 `agent.loop.corrections.outputRepair` 决定，默认 1。
 
 **`runtime.deferred` 是“移交公告”**
 
@@ -322,6 +324,25 @@ agent runtime 的工具循环每一种结束方式都对应一个结束原因（
 - 隐藏的世界数据（`_hidden.*`）的变化不发出。
 - `_runtime_jobs` 和维度记录只带公开的部分，不含任务的 `payload`、原始错误或维度规则。
 - 以 `expectsBackgroundFollower` 排队的任务另外带 `phase: "prompt"`。
+
+### 插件故障熔断
+
+辅助插件在同一会话里连续三个逻辑输入因自身原因失败时，内核暂停它，并显示固定提示。插件列表显示“已暂停”，玩家可点“重新启用”清零。每个插件每个逻辑输入只计一次；同一输入的自动推进轮合并计数。同一次输入内故障优先于正常结果。一次真正提交的正常 runtime 运行清零；没有 runtime 的插件由正常完成的 Hook 清零。跳过、挂起等中性结果不改变计数。
+
+`RuntimeResult.fault?: "runtime" | "timeout"` 是内核写入的归因标记。只统计插件自己的异常、自己的超时，以及 agent 的 `max-steps`、`invalid-output`、`loop-detected`、`context-overflow` 和自己的 `deadline`。`errorKind` 不能用来判断是不是插件的错。是否提供者错误由原始异常（含重试包装的 `cause`）判定，PostRuntime Hook 改写错误文本不改变归因。模型和提供者错误、所有取消（取消标记只属于被取消的那次运行：上级自己的超时取消子 agent 时，上级仍按自己的超时计数）、依赖或读取引起的连带丢弃、维度版本冲突、过时的挂起基线、无辜插件的整次回滚均不计数。setup runtime 使用自己的重试预算，不参与熔断。子 agent 和服务提供方的故障目前不计入。服务异常保留失败调用的结构化来源；提供方抛错、服务不可用（包括提供方已暂停）、准入失败、服务调用自己的超时或取消均不记在调用方。调用方自己的 runtime 超时、无效调用选项和直接触发调用环或深度上限仍计数；嵌套提供方的调用错误不向外层调用方转嫁。
+
+Hook 自己抛错或超时记在 Hook 所属插件；主动 `abort` 不是 Hook 故障。插件自己的 proposal 被处理器拒绝或被 `PreStateCommit` 主动否决，记在 proposal 所属插件；其他插件的 Hook 抛错或超时只记 Hook 所属插件。提供当前 `outputKind: "story"` runtime 或维度契约的插件只记 trace，永不暂停。
+
+<!-- prettier-ignore -->
+| 事件 | Payload | 投递 |
+| --- | --- | --- |
+| `plugin.fault.counted` | `{ sessionId, pluginId, reason, consecutiveFaults }` | 只保存 trace，不转发给玩家 |
+| `plugin.fault.latched` | `{ sessionId, pluginId, reason }` | 玩家执行时进入 action 流，其他情况进入会话事件流 |
+| `plugin.fault.cleared` | `{ sessionId, pluginId, by: "clean-run" \| "player" }` | 同上 |
+
+`reason` 固定为 `"runtime" | "hook" | "proposal-rejected" | "timeout"`，不包含原始错误文本。`SessionPlugin.paused` 和实时会话视图的 `SnapshotPluginStatus.paused` 仅在暂停时出现，形状为 `{ reason }`。故障计数和暂停状态只在进程内存里，重启、结束或删除会话会清除，不进入保存的快照、fork、导出或 BrowserVault checkpoint。无需重建开发数据。
+
+暂停从下一次执行开始生效：不调度它的 runtime，不运行它的 Hook，也不向它的 runtime 提供工具；服务返回 `unavailable`。当前执行冻结的注册表和启用集合保持到执行结束。玩家重新启用的 API 见[会话插件管理](./api.md#会话插件管理)。提交结果的连带原因见[事务](./transactions.md#回合级单事务)。
 
 ### 作业进度事件（job-status，实验性）
 
@@ -609,7 +630,7 @@ Gemini 原生的思考强度、`providerOptions.google.thinkingConfig`、`cached
 **只进 trace 的事件**
 
 - `context.compacted` 只写进 `trace_events`，由历史压缩的编排写入，不在 `CovelEvent` 里。摘要策略通过 `history.compact@2` 扩展提供。
-- `recursive.calling/completed/failed` 在 `CovelEvent` 里，但只通过订阅 topic `trace` 下发，不转发到 `/api/actions`。
+- `recursive.calling/completed/failed` 和 [`subagent.*`](#子-agent-事件) 在 `CovelEvent` 里，但只通过订阅 topic `trace` 下发，不转发到 `/api/actions`。
 
 | 事件                            | 触发点                | payload                                                                                                                                 |
 | ------------------------------- | --------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
@@ -802,7 +823,7 @@ data: {
 
 `runtime.skipped` 是 actions 路由自己写进流里的，它在元数据里的 `forwardToActionStream` 是 `false`。
 
-本页其他小节里讲到的这些事件，同样标记为转发：`ui.rendered`、`asset.progress`、`world.dimensions.changed`、`plugin-data.changed`、`character-schema.changed`、`dimensions.changed`、`dimensions.settlement.changed`、`ui.slot.changed` / `ui.slot.preview` / `ui.slot.cleared`、`turn.suspended` / `turn.resumed`、`job-status.updated`。
+本页其他小节里讲到的这些事件，同样标记为转发：`ui.rendered`、`asset.progress`、`world.dimensions.changed`、`plugin-data.changed`、`character-schema.changed`、`dimensions.changed`、`dimensions.settlement.changed`、`ui.slot.changed` / `ui.slot.preview` / `ui.slot.cleared`、`turn.suspended` / `turn.resumed`、`job-status.updated`、`plugin.fault.latched` / `plugin.fault.cleared`。
 
 **不转发到 `/api/actions` 的内部事件**
 
@@ -816,6 +837,7 @@ data: {
 | `context.pruned`                                                       | 提示词第一次组装、`PostContextAssembly` 改写之后，或者工具循环某一步的实际请求触发了预算的硬裁剪时发出。负载是 `{ runtimeId, pluginId, prunedMessageCount }`。同一个 runtime 一回合里可能出现多次。它让 `/debug` 能说明“哪一步丢了历史”                                                   |
 | `context.compaction.failed`                                            | 历史压缩尝试失败时发出，负载是 `{ pluginId, extensionId, reason, consecutiveFailures }`                                                                                                                                                                                                   |
 | `commit.fanout.failed`                                                 | 见上文“`system.reset` 控制帧”一节                                                                                                                                                                                                                                                         |
+| `plugin.fault.counted`                                                 | 插件自身故障的计数 trace；不转发给玩家，固定提示由 `plugin.fault.latched` / `plugin.fault.cleared` 发出                                                                                                                                                                                   |
 
 补充：
 
@@ -826,7 +848,7 @@ data: {
 
 声明了 `io.concealed: true` 的 runtime，它的 TurnEmitter 事件在保存和转发之前，只保留不含内容的字段，并带 `concealed: true`：
 
-- 保留：`runtimeId`、`pluginId`、`toolName`、`toolCallId`、`status`、`durationMs`、`usage`、`finishReason`、`seq`，以及步骤事件的 `step`、`stopReason`、`finalizer`、`retries`、`notes` 等。
+- 保留：`runtimeId`、`pluginId`、`toolName`、`toolCallId`、`status`、`durationMs`、`usage`、`finishReason`、`seq`，以及步骤事件的 `step`、`stopReason`、`finalizer`、`repair`、`retries`、`notes` 等。
 - 移除：`messages`、`text`、`toolCalls`、`arguments`、`result`、`parsedResult`、`output` 等内容字段。
 
 ## 二、命令类型（CommandType）
@@ -852,14 +874,13 @@ data: {
 
 | 命令             | 方法 | 端点                                           | 响应                  |
 | ---------------- | ---- | ---------------------------------------------- | --------------------- |
-| `turn.submit`    | POST | `/api/actions` `type: "send_message"`          | SSE: ProtocolEvent 流 |
-| `turn.cmd`       | POST | `/api/actions` `type: "execute_command"`       | SSE: ProtocolEvent 流 |
+| `turn.submit`    | POST | `/api/actions` `type: "submit_actions"`        | SSE: ProtocolEvent 流 |
 | `turn.start`     | POST | `/api/actions` `type: "start_session"`         | SSE: ProtocolEvent 流 |
 | `turn.retry`     | POST | `/api/actions` `type: "retry_turn"`            | SSE: ProtocolEvent 流 |
 | `runtime.retry`  | POST | `/api/actions` `type: "retry_runtime"`         | SSE: ProtocolEvent 流 |
 | `runtimes.retry` | POST | `/api/actions` `type: "retry_failed_runtimes"` | SSE: ProtocolEvent 流 |
 
-加上[交互响应](#交互响应)里的 `submit_interaction`，一共七种。其他取值一律返回 400 `Unsupported action type`。插件要发事件，请用内置的 `emit-event` 工具。
+一共五种。玩家的发言、行动、斜杠命令和[交互响应](#交互响应)都是 `submit_actions` 里的行动，见 [api.md § submit_actions](./api.md#submit_actions)。其他取值一律返回 400 `Unsupported action type`，包括已经删除的 `send_message`、`execute_command` 和 `submit_interaction`。插件要发事件，请用内置的 `emit-event` 工具。
 
 流里的每一帧外层是 `SseEnvelope`，见下文“四、SSE 信封格式”。
 
@@ -869,12 +890,13 @@ data: {
 
 **`retry_turn`**
 
-- 普通请求的 payload 是空的。它用空的玩家输入和当前已提交的上下文，启动一个新的主循环回合。提交成功之后，玩家回合数加一。
+- 普通请求的 payload 是空的。它用当前已提交的上下文启动一个新的主循环回合，不带玩家输入。提交成功之后，玩家回合数加一。
+- 恢复一个回答过交互的玩家回合时，它从那个回合在 `turn.started` 里记下的行动重新运行，回答不会再次提交。
 - 它不恢复、也不重新生成历史回合。
 
 **恢复没有完成的回合**
 
-- 上表的六种动作都可以附加 `payload.recoverFromTurnId`，并且必须和服务端返回的原 action 描述一致。
+- 上表的五种动作都可以附加 `payload.recoverFromTurnId`，并且必须和服务端返回的原 action 描述一致。
 - 客户端从 `GET /api/sessions/:id/execution` 读取只读的状态。刷新页面不会重新提交动作。玩家明确点了恢复重试之后，才用新的 requestId 发送。
 - 恢复轮询在成功时每 3 秒检查一次；失败后等待 3、6、12、24 秒，之后最多每 30 秒一次，成功后复位。状态请求不叠加 HTTP 重试；页面隐藏时暂停，重新显示时立即检查，同一观察不会并发轮询。
 - 服务端在会话锁里校验来源回合。开场恢复保留 continuation 的来源，不增加玩家回合数。
@@ -909,7 +931,7 @@ data: {
 
 **`payload.inputMessageId`**
 
-`send_message` 和 `execute_command` 可以提供它。流程是：浏览器先保存玩家的输入，再把它的 ID 随动作发出。
+`submit_actions` 可以提供它。流程是：浏览器先保存玩家的输入，再把它的 ID 随动作发出。
 
 | 情况                                                       | 结果                                                                       |
 | ---------------------------------------------------------- | -------------------------------------------------------------------------- |
@@ -926,18 +948,18 @@ data: {
 
 **聊天回合和插件调用的区别**
 
-- 玩家发送的自然语言走 `/api/actions` 的 `send_message`，触发写故事的主流程。
+- 玩家发送的自然语言走 `/api/actions` 的 `submit_actions`（一个 `say` 行动），触发写故事的主流程。
 - 输入框先用 `GET /api/sessions/:id/plugins` 返回的会话命令目录匹配斜线命令。
   - 已知的命令走 `/api/sessions/:id/plugin-rpc` 的 `{ kind: "command", commandId, input }`，不经过写故事的主流程。
-  - 未知的命令按输入框原有的规则处理（普通空闲时提交走 `execute_command`）。
+  - 未知的命令按输入框原有的规则处理（普通空闲时作为 `command` 行动提交）。
 - 声明了 command 的插件 UI 按钮使用 JSON-RENDER 的 `invokeCommand`，走 `/api/sessions/:id/plugin-rpc` 的 `{ kind: "command", commandId, args }`。它不经过写故事的主流程，并且和输入框命令共用参数校验、上下文、审批、handler 和 trace。
 - 其他自定义的 UI action 才使用 `invokePluginAction`。
 
 ### 交互响应
 
-| 命令           | 方法 | 端点           | 响应                                                                                  |
-| -------------- | ---- | -------------- | ------------------------------------------------------------------------------------- |
-| `input.submit` | POST | `/api/actions` | `type: "submit_interaction"` 的 SSE 流：`interaction.submitted`，随后是后续回合的事件 |
+| 命令           | 方法 | 端点           | 响应                                                                                                        |
+| -------------- | ---- | -------------- | ----------------------------------------------------------------------------------------------------------- |
+| `input.submit` | POST | `/api/actions` | `type: "submit_actions"`（带 `interaction` 的行动）的 SSE 流：`interaction.submitted`，随后是后续回合的事件 |
 
 保存回答和开始后续回合是一次操作：同一把会话锁，同一个事务。见 [api.md § 玩家交互](./api.md#玩家交互)。
 
@@ -1041,7 +1063,7 @@ data: {
 
 客户端逐个阶段显示审批，并重试原来的请求。同一个请求重复索取相同的 `(pluginId, action)` 授权时，客户端停止，并拒绝跨会话的审批回答。
 
-`submit_interaction` 的一批回答可以涉及多个来源插件，不限制阶段的数量。所有来源的 server-code 授权都齐了，才校验并原子保存。
+一次 `submit_actions` 里的一批回答可以涉及多个来源插件，不限制阶段的数量。所有来源的 server-code 授权都齐了，才校验并原子保存。
 
 **框架默认 action：** 见 [api.md](./api.md#post-apisessionsidplugin-rpc) 的“框架默认 action”小节。
 
@@ -1246,8 +1268,8 @@ error.occurred        → executionError
 | `domain-event.previewed` | `{ runtimeId, pluginId, toolCallId, topic, data }`。`emit-event` 校验成功后的临时显示信号；持久的业务状态仍然由正常的事件链提交 |
 | `llm.calling` | `{ runtimeId, pluginId, slot, model, provider?: string \| null, messages, tools, attempt, startedAt, queueWaitMs?, streaming? }`。`slot` 是 runtime 请求的用途；生产环境的 gateway 在调用之前把它解析成 `model` / `provider`。不支持用途解析的自定义 adapter 可以不给 `provider` |
 | `llm.responded` | `{ runtimeId, pluginId, text?, reasoningContent?, toolCalls?, usage, finishReason, durationMs, attempt, error? }`。`usage` 是 `{ inputTokens, outputTokens, cachedInputTokens?, cacheWriteInputTokens? }`，其中 `inputTokens` 是包含缓存读写的总输入，后两项是服务商报告的子集。`finishReason` 为 `length` 只出现在 story runtime：正文在输出上限处被截断，但已经保留，客户端据此提示玩家；其他情况下被截断的调用按失败上报 |
-| `step.started` | `{ runtimeId, pluginId, turnId, runId, step, maxSteps, toolCount, toolChoice, finalizer? }`。agent 工具循环的一步要调用模型了，在 `PreStep` 之后、这一步的 `llm.calling` 之前发出。`maxSteps` 是这一步时的步数上限，`toolCount` 是这一步提供的工具数（工具名在 `llm.calling.tools` 里），`toolChoice` 是 `"auto"`、`"required"` 或 `{ name }`。收尾步骤带 `finalizer: true` |
-| `step.completed` | `{ runtimeId, pluginId, turnId, runId, step, durationMs, finishReason?, usage?, toolCalls, retries, notes, stopReason?, finalizer? }`。每个开始了的步骤恰好发一次，在这一步所有 `tool.*` 之后。`usage` 和 `llm.responded` 的相同，步骤因异常结束时没有。`toolCalls` 是 `[{ name, success }]`。`retries` 是这一步模型调用的重试 `[{ attempt, reason }]`。`notes` 是 `[{ kind, count?, ignored? }]`，`kind` 取 `review-rejected`、`no-tool-correction`、`runtime-done-correction`、`loop-perturbation`、`story-without-tools`、`late-steering`、`tool-activated`、`tool-narrowed`，只带种类和数目，不带工具名。`stopReason` 只出现在结束循环的那一步 |
+| `step.started` | `{ runtimeId, pluginId, turnId, runId, step, maxSteps, toolCount, toolChoice, finalizer?, repair? }`。agent 工具循环的一步要调用模型了，在 `PreStep` 之后、这一步的 `llm.calling` 之前发出。`maxSteps` 是这一步时的步数上限，`toolCount` 是这一步提供的工具数（工具名在 `llm.calling.tools` 里），`toolChoice` 是 `"auto"`、`"required"` 或 `{ name }`。收尾步骤带 `finalizer: true`；输出修复步骤带 `repair: true`，步号是上一个已开始步骤加 1 |
+| `step.completed` | `{ runtimeId, pluginId, turnId, runId, step, durationMs, finishReason?, usage?, toolCalls, retries, notes, stopReason?, finalizer?, repair? }`。每个开始了的步骤恰好发一次，在这一步所有 `tool.*` 之后。`usage` 和 `llm.responded` 的相同，步骤因异常结束时没有。`toolCalls` 是 `[{ name, success }]`。`retries` 是这一步模型调用的重试 `[{ attempt, reason }]`。`notes` 是 `[{ kind, count?, ignored? }]`，`kind` 取 `output-repair`、`review-rejected`、`no-tool-correction`、`runtime-done-correction`、`loop-perturbation`、`story-without-tools`、`late-steering`、`tool-activated`、`tool-narrowed`，只带种类和数目，不带工具名。`stopReason` 只出现在结束循环的那一步 |
 | `gateway.responded` | function-runtime gateway 的成功结果。文本和对象调用带 `{ runtimeId, pluginId, method, finishReason, usage, reasoningContent?, model?, provider?, durationMs }`，`model/provider` 是回退之后实际命中的目标。转写调用同样带可用的 `usage/model/provider`。旧的 trace，或者不支持这些元数据的自定义 gateway，可以没有它们 |
 | `message.completed` | `{ runtimeId, pluginId, content, len, deltaCount }`。`deltaCount` 是这个 runtime 产生的 `narrative.delta` 事件数，是保存下来的权威计数。前端汇总实时片段时用的是另一个合成字段 `_aggregated`，两者不能互换 |
 | `block.emitted` | `{ runtimeId, pluginId, proposalId, source, block }` |
@@ -1322,6 +1344,22 @@ runtime 的终态：
 - `complete: true` 只说明 JSON 请求内容是完整的。它不保证资源永久有效、HTTP 头可以重建，或者真实的模型结果是确定的。
 - 请求正文沿用现有 trace 的敏感内容访问和留存规则。它包含玩家的文字，不能当成可以公开导出的脱敏日志。
 - function runtime 的 `gateway.*` 仍然只记录形状，不扩大正文的收集范围。
+
+### 子 agent 事件
+
+[子 agent](./plugins.md#子-agent) 的一次运行发出 `subagent.*`。它们和 `recursive.*` 一样只进 trace（`forwardToActionStream: false`）。
+
+<!-- prettier-ignore -->
+| Type | Payload |
+| --- | --- |
+| `subagent.started` | `{ subagentCallId, parentCallId, parentRuntimeId, parentPluginId, runtimeId, pluginId, turnId }`。找到提供方、开始运行时发出 |
+| `subagent.completed` | `subagent.started` 的字段 + `{ stopReason, durationMs, usage? }`。`usage` 是这次运行各步之和 `{ inputTokens, outputTokens }` |
+| `subagent.failed` | `{ subagentCallId, parentCallId, parentRuntimeId, parentPluginId, turnId, code, error, durationMs, runtimeId?, pluginId?, stopReason?, cancelledBy? }`。`code` 是 `ctx.agents.run` 的错误码，`error` 是固定的说明文字。还没找到提供方就被拒绝（请求不合法、达到上限、没有或有多个提供方）时没有 `runtimeId` / `pluginId`。`cancelledBy` 是 `parent` 或 `player` |
+| `subagent.writes-dropped` | 子 agent 的标识 + `{ count }`。正常情况下不会出现：子 agent 只有只读工具。万一有写入或事件，它们被丢弃并记下数量 |
+
+- `subagentCallId` 是内核给这次运行分配的 ID，也是子 agent 各步 `step.*` 的 `runId`。`parentCallId` 是 `delegate` 工具调用的 `toolCallId`，或者调用 `ctx.agents.run` 的函数 runtime 的 `runId`。
+- 子 agent 自己发出的 `step.*`、`llm.*`、`tool.*` 等事件照常保存，`runtimeId` 是子 agent 的，另外带 `subagentCallId`、`parentCallId` 和 `parentRuntimeId`。这些 ID 不算内容：`io.concealed` 的 runtime 隐去内容时，它们和 `cancelledBy` 一起保留。
+- `delegate` 调用本身在调用方的 trace 里是普通的 `tool.calling` / `tool.completed` / `tool.failed`，`approvalStatus` 是 `auto-allowed`。
 
 ## Event bus lifecycle and client handler failures
 

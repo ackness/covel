@@ -14,9 +14,11 @@ import {
   MAX_PLAYER_MESSAGE_CHARS,
   type InteractionPayload,
   type InteractionType,
+  type TurnAction,
 } from "@covel/shared";
 import {
   createInteractionSubmitter,
+  interactionSubmissionPayload,
   FormRejectedError,
   InteractionAlreadySubmittedError,
   InteractionSubmissionError,
@@ -765,7 +767,7 @@ describe("submitFormHandler (Epic A)", () => {
       );
       expect(prepared).toMatchObject({
         turnId: TURN,
-        playerMessage: "Hello Aria",
+        texts: ["Hello Aria"],
         results: [{ interactionId: "name-form", values: { name: "Aria" } }],
       });
       expect(await store.listPlayerInputs(SESSION)).toEqual([]);
@@ -801,8 +803,8 @@ describe("submitFormHandler (Epic A)", () => {
     const submit = createInteractionSubmitter(undefined, store);
     expect(
       (await submit({ turnId: TURN, submissions: [quiet] }, makeCtx(store)))
-        .playerMessage,
-    ).toBe("");
+        .texts,
+    ).toEqual([""]);
     const both = await submit(
       {
         turnId: TURN,
@@ -817,7 +819,8 @@ describe("submitFormHandler (Epic A)", () => {
       },
       makeCtx(store),
     );
-    expect(both.playerMessage).toBe("Chose X");
+    // One text per submitted answer, in order; a quiet answer's is empty.
+    expect(both.texts).toEqual(["", "Chose X"]);
     expect(both.results.map((result) => result.filledNarrative)).toEqual([
       "Quiet A",
       "Chose X",
@@ -922,5 +925,40 @@ describe("typed numeric form constraints", () => {
       zero: 0,
       ready: false,
     });
+  });
+});
+
+describe("interaction answers as actions", () => {
+  const say: TurnAction = {
+    seatId: "main",
+    kind: "say",
+    text: "Hi",
+    source: "player",
+  };
+  const answer = (interactionId: string, turnId = "turn-a"): TurnAction => ({
+    seatId: "main",
+    kind: "act",
+    fields: { name: "Aya" },
+    interaction: { turnId, interactionId, type: "form" as const },
+    source: "player" as const,
+  });
+
+  it("feeds the submitter from the answering actions, in order", () => {
+    expect(
+      interactionSubmissionPayload([say, answer("f1"), answer("f2")]),
+    ).toEqual({
+      turnId: "turn-a",
+      submissions: [
+        { interactionId: "f1", type: "form", values: { name: "Aya" } },
+        { interactionId: "f2", type: "form", values: { name: "Aya" } },
+      ],
+    });
+  });
+
+  it("is undefined without an answer and refuses answers to two turns", () => {
+    expect(interactionSubmissionPayload([say])).toBeUndefined();
+    expect(() =>
+      interactionSubmissionPayload([answer("f1"), answer("f2", "turn-b")]),
+    ).toThrow(InteractionSubmissionError);
   });
 });

@@ -73,8 +73,18 @@ describe("droppedRunPayloads", () => {
           nestedRuntimeResults: [run(SHARED, "nested-run")],
         },
         [
-          { runtimeId: SHARED, runId: "nested-run", error: "child rejected" },
-          { runtimeId: PARENT, runId: "parent-run", error: "dropped" },
+          {
+            runtimeId: SHARED,
+            runId: "nested-run",
+            cause: "nested",
+            error: "child rejected",
+          },
+          {
+            runtimeId: PARENT,
+            runId: "parent-run",
+            cause: "rejected",
+            error: "dropped",
+          },
         ],
       ),
     ).toEqual([
@@ -99,8 +109,18 @@ describe("droppedRunPayloads", () => {
           nestedRuntimeResults: [run(SHARED, "nested-run")],
         },
         [
-          { runtimeId: SHARED, runId: "nested-run", error: "rejected" },
-          { runtimeId: PARENT, runId: "parent-run", error: "rejected" },
+          {
+            runtimeId: SHARED,
+            runId: "nested-run",
+            cause: "nested",
+            error: "rejected",
+          },
+          {
+            runtimeId: PARENT,
+            runId: "parent-run",
+            cause: "rejected",
+            error: "rejected",
+          },
         ],
       ).map((payload) => payload.runId),
     ).toEqual(["parent-run"]);
@@ -234,9 +254,9 @@ describe("POST /api/actions — runs dropped with a nested unit", () => {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         requestId: "req-dropped-nested",
-        type: "send_message",
+        type: "submit_actions",
         sessionId: SESSION_ID,
-        payload: { content: "go" },
+        payload: { actions: [{ kind: "say", text: "go" }] },
       }),
     });
     const events = (await res.text())

@@ -86,10 +86,10 @@ describe("subscription visibility", () => {
       await vi.waitFor(() => expect(subscription!.state).toBe("connected"));
       const action = sendAction(
         {
-          type: "send_message",
+          type: "submit_actions",
           requestId: "action",
           sessionId: "session",
-          payload: { content: "Go" },
+          payload: { actions: [{ kind: "say", text: "Go" }] },
         },
         vi.fn(),
         vi.fn(),

@@ -79,9 +79,14 @@ export interface LoopStop {
    * or the deadline reserve.
    */
   readonly finalizer?: true;
+  /** A repair request produced a replacement answer before output validation. */
+  readonly repaired?: true;
   /** Who cancelled the loop; set only with `reason: "cancelled"`. */
   readonly cancelledBy?: "player" | "parent" | "hook" | "host";
 }
+
+export type PluginFaultReason =
+  "runtime" | "hook" | "proposal-rejected" | "timeout";
 
 export interface RuntimeResult {
   readonly pluginId: string;
@@ -105,6 +110,8 @@ export interface RuntimeResult {
   readonly error?: string;
   /** Classified provider failure; absent for non-provider result failures. */
   readonly errorKind?: ProviderFailureKind;
+  /** Kernel attribution of a self-caused failure; never a provider or parent abort. */
+  readonly fault?: "runtime" | "timeout";
   /** Actual failed provider target, never credentials or endpoint configuration. */
   readonly failureTarget?: {
     readonly provider: string;
@@ -179,7 +186,17 @@ export type TurnDigest = import("zod").infer<
 export interface TurnInput {
   readonly sessionId: string;
   readonly turnId: string;
+  /**
+   * The player's input as the model reads it: the kernel's rendering of
+   * `actions` (`renderActions` in `@covel/context`), empty without input.
+   */
   readonly playerMessage: string;
+  /**
+   * The player's resolved actions. Absent for an execution without player
+   * input: the opening, a manual or event run, a detached job, a nested
+   * recursive call.
+   */
+  readonly actions?: readonly import("./action.js").TurnAction[];
   readonly locale?: string;
   /** API-level model override. Takes highest priority over plugin config. */
   readonly modelOverride?: string;
@@ -396,6 +413,12 @@ interface BaseInteraction {
   readonly narrativeTemplate?: string;
   /** Optional generic client-side submit behavior. */
   readonly submitBehavior?: InteractionSubmitBehavior;
+  /**
+   * The action kind the answer is submitted as: a base kind or a plugin kind
+   * (`<pluginId>/<name>`). Defaults to `say` for a choice and `act` for a
+   * form or a confirmation. The answering seat's role must allow it.
+   */
+  readonly actionKind?: string;
 }
 
 export interface FormInteraction extends BaseInteraction {

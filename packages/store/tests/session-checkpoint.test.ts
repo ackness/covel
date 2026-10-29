@@ -39,7 +39,7 @@ describe("session checkpoint transfer", () => {
         sessionId: session.id,
         id: "recovery",
         type: "turn.started",
-        payload: { recoveryAction: { type: "send_message" } },
+        payload: { recoveryAction: { type: "submit_actions" } },
       }),
     );
     const checkpoint = await exportSessionCheckpoint(store, session.id, {

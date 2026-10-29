@@ -78,9 +78,11 @@ const ROUTES: Record<string, RouteAccess> = {
     onlyWhen: "plugin.community: enabling a community plugin",
   },
   "DELETE /api/sessions/:id/plugins/:pluginId": SESSION,
+  "POST /api/sessions/:id/plugins/:pluginId/resume-fault": SESSION,
   "GET /api/sessions/:id/memory-index": SESSION,
   "POST /api/sessions/:id/memory-index/rebuild": SESSION,
   "PATCH /api/sessions/:id/seats/:seatId": SESSION,
+  "GET /api/sessions/:id/action-kinds": SESSION,
   "GET /api/sessions/:id/state": SESSION,
   "GET /api/sessions/:id/state-patches": SESSION,
   "GET /api/sessions/:id/messages": SESSION,
@@ -151,9 +153,9 @@ const ROUTES: Record<string, RouteAccess> = {
     probe: {
       body: {
         requestId: "req-probe",
-        type: "send_message",
+        type: "submit_actions",
         sessionId: S,
-        payload: { content: "probe" },
+        payload: { actions: [{ kind: "say", text: "probe" }] },
       },
     },
   },

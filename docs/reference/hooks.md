@@ -99,6 +99,8 @@ handler 抛出异常、超时或返回了格式不对的结果，都算这个 ha
 - **可以拦截的事件**：失败按 `abort` 处理。一条坏掉的规则不能让它本该拦住的操作通过。
 - **其他事件**：跳过这个 handler，它之前的 handler 做出的改写保留，失败记入 trace（`hook.error`）。
 
+抛错、超时或返回无效结果，会计入注册这个 Hook 的插件的[故障熔断](./protocol.md#插件故障熔断)。主动返回 `abort` / 否决不算 Hook 故障；`PreStateCommit` 的主动否决属于 proposal 所属插件的拒绝。父执行取消不算 Hook 故障。
+
 ## Events
 
 “范围”一列说明事件是关于什么的：`session`（整个会话）、`turn`（一次执行）、`runtime`（一个 runtime）。范围为 `runtime` 的事件里，`ctx.pluginId` 和 `ctx.runtimeId` 就是那个 runtime。
@@ -137,7 +139,7 @@ handler 抛出异常、超时或返回了格式不对的结果，都算这个 ha
 
 每次执行开始时触发，在选出任何 runtime 之前。玩家回合、手动运行、后台任务都算一次执行。
 
-负载：`{ playerMessage, activeRuntimes }`。`activeRuntimes` 是这个会话的 runtime ID 列表。
+负载：`{ playerMessage, actions, activeRuntimes }`。`playerMessage` 是内核从玩家行动渲染出的文字；`actions` 是解析后的行动（每个是 `{ seatId, kind, actorId?, text?, fields?, interaction?, source }`），没有玩家输入的执行是空数组；`activeRuntimes` 是这个会话的 runtime ID 列表。
 
 `abort` 结束这次执行，不运行任何 runtime。`reason` 作为这个回合的中止原因返回给客户端。
 
@@ -227,6 +229,7 @@ agent runtime 的每次模型调用之前触发，包括工具结果之后的调
 负载：`{ messages, model, tools, stream?, promptSegments? }`。`promptSegments` 和 `PostContextAssembly` 里的是同一份列表。从挂起中恢复的运行不会重新组装上下文，所以它的调用里没有这个字段。
 
 - `replace.messages`、`replace.model`、`replace.tools` 只改这一次调用，runtime 自己的对话记录不变。
+- 输出修复请求在 Hook 处理后仍会关闭工具；`replace.tools` 不能为修复步骤重新启用工具。
 - `replace.stream: false` 让这次调用不走流式。
 - `abort` 等于“什么都不变”。
 
@@ -237,7 +240,7 @@ agent runtime 的每次模型调用之前触发，包括工具结果之后的调
 负载：`{ response, messages }`，即回答，以及实际发出去的消息。
 
 - `replace.response` 替换回答。
-- `replace.correction`（非空字符串）退回这份草稿：其中的工具调用不执行，这段文字作为改正要求发给模型，模型重新回答。一次运行里第三次要求改正时，runtime 失败。
+- `replace.correction`（非空字符串）退回这份草稿：其中的工具调用不执行，这段文字作为改正要求发给模型，模型重新回答。每次退回消耗一次 `agent.loop.corrections.review` 预算，默认允许纠正两次；预算用尽后再次退回，runtime 以 `invalid-output` 失败。配置见[循环 profile](./plugins.md#循环-profileagentloopprofile)。
 
 ### `PostRuntime`
 
@@ -303,3 +306,5 @@ agent runtime 的每次工具调用之前触发，函数 runtime 经 `ctx.tools.
 - Hook 没有自己的写入途径。插件的数据由它的 runtime 和工具写入。Hook 的返回值能改写结果和 proposal 的 payload，但加不了新的写入。
 - handler 不能依赖其他插件 handler 的先后顺序，自己的 `enforce` 分组除外。
 - 声明了 `io.concealed` 的 runtime，提示词和回答不会出现在 trace 和实时流里。但已启用插件的 Hook 仍然会在负载里收到它们。社区插件的 Hook 只有在玩家批准了它的服务端代码之后才运行。
+
+- 因故障暂停的插件从下次执行起不运行 Hook；当前执行保留冻结的启用集合。

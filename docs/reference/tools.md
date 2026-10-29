@@ -37,6 +37,7 @@
 | **emit-event** | builtin | — | auto-allow | 发射当前 session 已声明的领域事件（一次一个 topic），校验 topic + payload schema | 默认 |
 | **suspend** | builtin | — | auto-allow | 挂起当前 runtime 等待玩家输入，写 `suspensions` 表，可通过 resume API 恢复 | 默认 |
 | **runtime-done** | builtin | — | auto-allow | Agent 工具循环的结束信号——业务工具调用完毕后调用以结束本 runtime | 默认 |
+| **delegate** | builtin | — | auto-allow | 把一件事交给子 agent 运行并拿回它的输出；子 agent 不写入 | `readOnly` |
 | **search-tools** | 注入 | — | auto-allow | 延迟工具搜索——manifest 声明 `tools.defer` 时框架自动注入，BM25 检索并激活未预载工具 | — |
 | **memory-search** | builtin | — | auto-allow | 搜索记忆：对话历史与历史摘要(recall) + 长期知识库(archival，含 lorebook/角色/插件声明可检索的数据) | `readOnly`, `idempotent`, `concurrencySafe` |
 | initialize-world | local | world-init | auto-allow | 组合角色属性 schema 与维度声明初始化 | 默认 |
@@ -306,6 +307,9 @@ plugin 工具封装插件自己的业务。它的 schema、文案和数据结构
 | validation        | object      |      | `{ name, data? }`，见下             |
 | submitBehavior    | object      |      | `{ echoFilledNarrative? }`          |
 | notice            | string      |      | 字段上方的提示，见下                |
+| actionKind        | string      |      | 回答算哪种行动，默认 `act`，见下    |
+
+`actionKind` 是玩家回答时提交的行动类型：基础类型（如 `say`、`act`）或插件类型 `<pluginId>/<name>`。服务端按它校验回答者的座位身份，客户端提交别的类型会被拒绝（`invalid_action`），见 [API · 玩家交互](./api.md#玩家交互-1)。
 
 **FormField**: `{ type, name, label, placeholder?, options?, required?, defaultValue?, min?, max?, step? }`
 
@@ -390,11 +394,12 @@ plugin 工具封装插件自己的业务。它的 schema、文案和数据结构
 
 创建一组选项让玩家选。适用于决策点、分支剧情、NPC 对话选项。
 
-| 参数     | 类型     | 必需 | 描述                         |
-| -------- | -------- | ---- | ---------------------------- |
-| choiceId | string   | ✓    | 选项组唯一标识               |
-| prompt   | string   | ✓    | 引导文本（如"你要怎么做？"） |
-| choices  | Choice[] | ✓    | 选项列表（至少 2 个）        |
+| 参数       | 类型     | 必需 | 描述                                             |
+| ---------- | -------- | ---- | ------------------------------------------------ |
+| choiceId   | string   | ✓    | 选项组唯一标识                                   |
+| prompt     | string   | ✓    | 引导文本（如"你要怎么做？"）                     |
+| choices    | Choice[] | ✓    | 选项列表（至少 2 个）                            |
+| actionKind | string   |      | 回答算哪种行动，默认 `say`，规则同 `create-form` |
 
 **Choice**: `{ id, label, description?, category? }`
 
@@ -814,6 +819,28 @@ JSON Schema 只能检查字段的形状，检查不了“这个结果和骰子�
 - 适用场景：一个 runtime 的白名单超过大约 10 个工具，每次调用都预载全部 schema 开始挤占提示词预算。
 
 契约声明在 `packages/tools/src/builtin/tool-search.ts`，执行逻辑在 `packages/runtime/src/agent-loop/tool-search.ts`。做法参照 openai/codex 的 `tool_search`（`ToolExposure::Deferred` + BM25）。
+
+### 子 agent（delegate）
+
+agent runtime 用它把一件事交给[子 agent](./plugins.md#子-agent)：另一个 agent runtime 在这次执行里拿着简报运行，交回输出。在 `agent.tools.builtin` 里列出 `delegate` 才能调用。
+
+| 参数     | 类型   | 必需 | 描述                                                                             |
+| -------- | ------ | ---- | -------------------------------------------------------------------------------- |
+| target   | object | ✓    | `{ contract }`（契约的提供方，任何包）或 `{ runtimeId }`（本包），只能写其中一个 |
+| brief    | string | ✓    | 任务说明，子 agent 只看到它和 `data`。1 到 20 000 个字符                         |
+| data     | object | —    | 子 agent 需要的事实，JSON 对象，最多 32 KB                                       |
+| maxSteps | number | —    | 子 agent 的步数上限，只能比提供方自己的更低                                      |
+
+**输出**：成功时，工具结果就是子 agent 的输出，模型收到它的 JSON（经过 `modelFacingJson`，不含簿记字段）；`stopReason` 和用量只记在 `subagent.completed` 里。`delegate` 列在 `completeAfterTools` 里时，这份输出直接作为调用方的输出接受校验。失败时收到 `{ success: false, error, code }`，`code` 是 `ctx.agents.run` 的错误码之一。除 `invalid-input` 外的失败不算这个 runtime 的工具失败，模型可以换个办法继续。
+
+**注意事项**：
+
+- 调用由内核在 agent 循环里接住，不交给工具本身执行。trace 和普通工具一样：`tool.calling` / `tool.completed` / `tool.failed`，`approvalStatus` 是 `auto-allowed`。子 agent 的事件用 `parentCallId` 指回这次调用。
+- 上限：一次执行最多同时运行 8 个子 agent，超过的调用立刻得到 `unavailable`。子 agent 拿不到 `delegate`，不能再往下调用。
+- 子 agent 只能用只读工具，自己的写入工具被拿掉；它不产生 proposal，调用方的提交不受它影响。
+- 注解是 `readOnly`，但不是 `idempotent` 也不是 `concurrencySafe`：两次运行的答案不一样。
+
+契约声明在 `packages/tools/src/builtin/delegate.ts`，执行逻辑在 `packages/runtime/src/agent-loop/subagent-delegate.ts` 和 `subagent-runner.ts`。
 
 ## Character 管理工具
 
@@ -1537,9 +1564,9 @@ export default function ({ tool, z, shortId, shortIdBatch }) {
   ↓ 聚合为数组存入 TurnMessage.pendingInput
   ↓ 返回 TurnResult.pendingInputs（支持多插件、多交互）
   ↓ 前端渲染所有交互 UI
-  ↓ 玩家提交 POST /api/actions submit_interaction { turnId, submissions: [...] }
-  ↓ 每个 submission 用 narrativeTemplate 翻译为自然语言
-  ↓ 同一个请求保存回答并运行后续回合，叙事文本是该回合的玩家消息
+  ↓ 玩家提交 POST /api/actions submit_actions { actions: [{ kind, interaction, fields }] }
+  ↓ 每个回答用 narrativeTemplate 翻译为自然语言，作为它的行动文字
+  ↓ 同一个请求保存回答并运行后续回合，行动文字渲染为该回合的玩家消息
     （纯文本，LLM 看到的和普通消息一样）
 ```
 
@@ -1594,19 +1621,18 @@ POST /api/actions
 
 {
   "requestId": "...",
-  "type": "submit_interaction",
+  "type": "submit_actions",
   "sessionId": "...",
   "payload": {
-    "turnId": "...",
-    "submissions": [
-      { "interactionId": "form-1", "type": "form", "values": { "name": "林清风" } },
-      { "interactionId": "choice-1", "type": "choice", "values": { "selectedId": "a", "selectedLabel": "跟随黑袍人" } }
+    "actions": [
+      { "kind": "act", "interaction": { "turnId": "...", "interactionId": "form-1", "type": "form" }, "fields": { "name": "林清风" } },
+      { "kind": "say", "interaction": { "turnId": "...", "interactionId": "choice-1", "type": "choice" }, "fields": { "selectedId": "a", "selectedLabel": "跟随黑袍人" } }
     ]
   }
 }
 ```
 
-响应是 SSE 流：先是 `interaction.submitted`，随后是后续回合的事件。请求、拒绝和恢复见 [api.md § 玩家交互](./api.md#玩家交互)。
+响应是 SSE 流：先是 `interaction.submitted`，随后是后续回合的事件。请求、拒绝和恢复见 [api.md § 玩家交互](./api.md#玩家交互-1)。
 
 ## 创建新工具
 

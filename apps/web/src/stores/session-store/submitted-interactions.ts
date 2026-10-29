@@ -1,8 +1,8 @@
 import type { SnapshotSubmittedInteraction } from "@covel/shared";
 
 /**
- * The turn and interaction a message block answers to, as the
- * `submit_interaction` action names them. One reader for the form that submits and for the restore
+ * The turn and interaction a message block answers to, as an answering
+ * action of `submit_actions` names them. One reader for the form that submits and for the restore
  * that matches the server's record back to blocks.
  */
 export function readBlockInteractionRef(

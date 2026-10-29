@@ -186,6 +186,6 @@ Covel is still in early development, and it targets only the current contracts. 
 
 Standalone `pnpm check:boundaries` also tests its parser. The complete `pnpm check` runs the boundary scanner directly and runs the parser tests through `check:scripts`, without repeating them.
 
-`test-runtime` provides a CLI only, with no package import entry. Run runtime cases with `pnpm test:runtime`.
+`test-runtime` provides a CLI only, with no package import entry. Run runtime cases with `pnpm test:runtime`; `pnpm plugin:extract <dir>` executes the entry factory on the author's machine to record registrations and sync declarations, with pure text rewriting owned by `plugin-loader`.
 
 The web app reads theme and color scheme preferences from SettingsStore, resolves the displayed selection, and applies it through its appearance helpers. Display fallbacks leave saved preferences unchanged.

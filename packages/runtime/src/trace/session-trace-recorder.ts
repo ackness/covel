@@ -9,6 +9,7 @@ import type {
   RuntimeRetryScope,
   SessionExecutionStatus,
   Stage,
+  TurnAction,
 } from "@covel/shared";
 import type { KernelStore } from "../commit/session-commit-pipeline.js";
 
@@ -18,6 +19,15 @@ export interface TraceRecorder {
     requestId?: string;
     origin?: "player" | "continuation";
     recoveryAction?: SessionExecutionStatus["retry"];
+    /**
+     * The player's resolved actions and the id their chat row is saved
+     * under. A `retry_turn` of a turn that answered an interaction runs
+     * again from these, since the answer itself is already stored.
+     */
+    playerInput?: {
+      readonly actions: readonly TurnAction[];
+      readonly messageId: string;
+    };
   }): Promise<void>;
   turnCompleted(
     info: {

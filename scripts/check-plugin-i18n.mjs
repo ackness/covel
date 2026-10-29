@@ -170,6 +170,7 @@ const FRAMEWORK_CHINESE_LINES = {
   "apps/server/src/routes/api/bootstrap/compactor.ts": 1,
   "apps/server/src/routes/api/bootstrap/plugin-rpc-wiring.ts": 2,
   "apps/server/src/routes/api/plugin-diagnostics.ts": 1,
+  "apps/server/src/routes/api/session/action-kinds.ts": 6,
   "apps/server/src/routes/api/session/commands.ts": 4,
   "apps/server/src/routes/misc-api/plugin-flow.ts": 6,
   // Player-name locale pair written into imported world content.
@@ -189,7 +190,7 @@ const FRAMEWORK_CHINESE_LINES = {
   "packages/runtime/src/agent-loop/request-context-budget.ts": 2,
   "packages/runtime/src/agent-loop/response-review.ts": 1,
   "packages/runtime/src/agent-loop/runtime-completion.ts": 4,
-  "packages/runtime/src/agent-loop/turn-agent-tool-loop.ts": 2,
+  "packages/runtime/src/agent-loop/turn-agent-tool-loop.ts": 3,
   "packages/runtime/src/commit/commit-ui.ts": 2,
   "packages/runtime/src/llm/gateway-llm-adapter.ts": 1,
   "packages/runtime/src/retry/retry-common.ts": 3,

@@ -134,12 +134,15 @@ Extract facts supported by runtime-inputs.narrative.value, then call save-facts.
 | `settings` | 玩家配置项，运行时通过 `ctx.userSettings` 读取 |
 | `data` | 本插件数据 namespace 的 schema、version、accepts、search |
 | `datasets` | 本插件拥有的带类型数据集：名字即 namespace，写 schema、key、ops，见[数据集](#数据集contributesdatasets) |
+| `actionKinds` | 玩家能提交的行动类型：名字、可用身份、文字规则、`fields` 的 schema、显示名称，见[行动类型](#行动类型contributesactionkinds) |
 | `ui` | 包根相对的 `right/message/view` UI spec 路径 |
 | `ui.view` | 包根相对的完整故事栏视图 spec 路径；声明与授权见[插件视图](./ui-panels.md#插件视图) |
 | `worldProjections` | 世界数据投影声明 |
 | `prompt` | 静态提示词段 |
 
 entry 里的注册和清单里的声明双向核对：注册了却没声明，或者声明了却没实现，加载都会失败。包级贡献只属于根文件，不会合并子 runtime 的字段。`wires` 和其他不常用的写法见[高级字段](#高级字段)。
+
+作者可以用 `pnpm plugin:extract <dir>` 从入口生成六组注册声明，用 `--check` 在 CI 检查漂移。它会执行作者自己的代码；安装、审批和静态校验仍只读声明，加载时仍双向核对。改写范围和命令用法见[带本地代码的插件](../plugins/local-code.md#4-写入口文件)。
 
 内置插件也只读当前数据契约。骰子回执必须带 `checks` 数组，`pluginData.get()` 直接返回保存的值。经过 `select: /narrativeOutput` 投影的叙事输入是字符串。世界规则是带 `schemaVersion`、`id`、`content` 的扁平记录，不接受 `{ rule, ... }` 包装。NPC 关系的每个事实只能有一个开放版本；遇到重复开放版本会拒绝写入，不自动修复。立绘替换只匹配完整角色 ID 或当前的 `npc-<blueprintId>` 投影，不匹配任意会话前缀。
 
@@ -196,7 +199,7 @@ permissions:
 | `agent.toolChoice`（写了 `finishWith` 时） | `required` |
 | `agent.loop.timeoutMs`、`callTimeoutMs`、`maxRetries` | `io.visibility: story` 的 runtime：240000、120000、1；其他：120000、60000、3 |
 | `agent.loop.profile` | `io.visibility: story` 的 runtime 用 `story`，其他用 `system` |
-| `agent.loop.stream`、`steering`、`truncation`、`fallback`、`finalizer.*` | 所选 profile 的值，见[循环 profile](#循环-profileagentloopprofile) |
+| `agent.loop.stream`、`steering`、`truncation`、`fallback`、`finalizer.*`、`corrections.*` | 所选 profile 的值，见[循环 profile](#循环-profileagentloopprofile) |
 | `contributes.data.*.version` | `1` |
 | `contributes.hooks[].enforce` | `normal` |
 | `contributes.extensions[].order` | `0` |
@@ -344,6 +347,7 @@ setup runtime 的完成状态按根 `PLUGIN.md` 的 `version` 记录。发布新
 - `schedule.every: N` 让 `auto` runtime 只在逻辑回合是 N 的倍数时运行。例如 `every: 3` 在第 3、6、9 回合运行。
 - `schedule.trigger` 还可以写 `startTurn`（从第几回合开始）、`cooldownTurns`（两次运行至少隔几个回合）和 `maxTriggerCount`（一局最多几次）。只写这些时，`type` 也不用写。
 - `manual` 和 `event` 按请求或事件单独触发，不声明 stage，也不能写 `every`。setup runtime 不能写 `every`、`startTurn` 和 `cooldownTurns`。
+- `schedule.subagentOnly: true` 让 agent runtime 只作为[子 agent](#子-agent) 运行：调度器从不选中它，手动 RPC、批量重跑和 `ctx.recursiveCall` 都不能运行它。它隐含 `trigger: manual`，`type` 不用写，写别的类型会被拒绝。它不能是函数 runtime，不能是 `io.visibility: story`，也不能写 `stage`、`needs`、`after`、`background`、`io.output.recordAs` 和 `guard`：这些只对被调度的 runtime 有意义。
 - `schedule.background: true` 让手动或事件 runtime 在后台执行：调用方立刻拿到一个任务编号，不等它完成。这样的 runtime 没有同一次执行的上游，所以不能读 `scope: turn` 的输入；改用 `scope: committed` 或内核输入。
 - `schedule.detached: true` 让回合先结束，这个 runtime 之后作为持久的后台作业运行。只能用在 `post-turn` 和 `audit` 阶段，`io.visibility: story` 的 runtime 不能用。
 - `schedule.detached` 写成对象时设置作业的选项，同时表示 detached：`settle: true` 让玩家的下一次行动先等它完成，最多等 `maxSettleWaitMs`（不超过 120000）；`maxQueueMs` 和 `maxExecutionMs` 限制作业排队和运行的时间。
@@ -556,7 +560,8 @@ Agent 的副作用只来自工具：模型能写什么，以 `agent.tools` 白�
 
 | 字段                          | 含义                                                                                                                                                                                                                                                         |
 | ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `ctx.playerMessage`           | 当前输入的文本字符串                                                                                                                                                                                                                                         |
+| `ctx.playerMessage`           | 玩家这一回合的输入：内核从 `ctx.playerActions` 渲染出的文字。单人玩家的普通输入是原文；多个角色、主持人或插件类型会标出角色名和类型名，见 [API · 玩家消息怎么渲染](./api.md#玩家消息怎么渲染)                                                                |
+| `ctx.playerActions`           | 这一回合玩家解析后的行动，按提交顺序，每个是 `{ seatId, kind, actorId?, text?, fields?, interaction?, source }`。开场、手动运行、事件、后台作业和 `ctx.recursiveCall` 的嵌套运行是空数组                                                                     |
 | `ctx.logicalTurn`             | 调度器的逻辑回合：已提交的主循环玩家回合数加一。函数 handler 和插件工具的上下文里都有。setup、开场续写和第一条玩家消息同为第 1 回合，`startTurn` / `every` 也按它计数                                                                                        |
 | 工具上下文的 `turnNumber`     | 会话里已记录的玩家消息数，包括 setup 的表单提交                                                                                                                                                                                                              |
 | `ctx.session.lastPlayerInput` | 源执行开始时最近的一条 `PlayerInputSubmission \| null`，包含 `id/sessionId/turnId/formId/values/createdAt`                                                                                                                                                   |
@@ -589,6 +594,58 @@ Agent 的副作用只来自工具：模型能写什么，以 `agent.tools` 白�
 `manualTrigger.runtimeId` 只能点名调用者自己包里的 runtime：内联 runtime 用包 ID，多 runtime 包用 `<pluginId>/<runtimeId>`。点名别的包会在嵌套执行开始前报错，错误写明目标 runtime 和调用者的包 ID。内置插件和社区插件遵守同一条规则。
 
 跨包请求与响应用[服务](./plugin-extensions.md#公共函数注册与调用)，触发其他包的后续工作用[事件](./plugin-extensions.md#事件怎么触发下游)。
+
+`manualTrigger.runtimeId` 点名一个 `schedule.subagentOnly` runtime 时报错，改用 `ctx.agents.run`。
+
+#### 子 agent
+
+子 agent 是调用方在自己这次执行里运行的另一个 agent runtime。它有自己的对话记录和预算，**只交回输出**：不产生写入、不发事件，也不形成顶层 runtime 结果，所以不会成为提交单位。函数 runtime 用 `ctx.agents.run`，agent runtime 用内置工具 [`delegate`](./tools.md#子-agentdelegate)。
+
+```ts
+const result = await ctx.agents?.run({
+  target: { contract: "gate-actor@1" }, // 或 { runtimeId: "my-plugin/guard" }
+  brief: "A stranger asks to pass the gate.",
+  data: { stranger: "Mara" },
+  budget: { maxSteps: 4, timeoutMs: 20000 },
+});
+// { ok: true, output, stopReason, usage? } 或 { ok: false, error: { code, message }, stopReason? }
+```
+
+<!-- prettier-ignore -->
+| 字段 | 含义 |
+| --- | --- |
+| `target` | `{ contract }`：输出契约是它的那个激活的 `subagentOnly` 提供方，可以是别的包。`{ runtimeId }`：调用方自己包里激活的 `subagentOnly` runtime |
+| `brief` | 任务说明，是子 agent 唯一的用户消息。1 到 20 000 个字符 |
+| `data` | 可选的 JSON 对象，序列化后接在简报后面，最多 32 KB |
+| `budget` | 可选的 `maxSteps` 和 `timeoutMs`。只能比提供方自己的上限更紧；时限也不超过调用方剩下的时间 |
+
+提供方的写法：一个 agent runtime，`io.output.contract` 写它提供的契约，再写 `schedule.subagentOnly: true`（规则见[触发方式](#触发方式)）。它的提示词照常写在 RUNTIME.md 正文里。
+
+运行时的规则：
+
+- **独立的对话**：子 agent 的提示词是提供方自己的正文，加上框架的完成说明，再加简报。看不到会话历史，也看不到调用方的对话。
+- **只读工具**：提供方 `agent.tools` 里没有 `readOnly` 注解的工具（插件工具、`plugin-data-set` 这类写入工具）、`suspend` 和 `delegate` 都被拿掉。声明了却没注册的插件工具仍按原规则让这次运行失败。
+- **循环 profile**：没写 `agent.loop.profile` 时用 `actor`，不流式显示，也不读玩家插话。
+- **模型**：用提供方自己声明的模型用途。会话的 `runtimeModelOverrides` 按提供方的 runtimeId 生效，挂起后恢复的运行里也一样；调用方的覆盖和请求里的故事模型覆盖都不生效。
+- **上限**：一次执行最多同时运行 8 个子 agent，嵌套执行也算在内；子 agent 不能再调用子 agent（深度上限 1）。超过上限的调用立刻得到 `unavailable`，不排队。
+- **取消**：调用方被取消、超时或运行结束，子 agent 跟着停下，结果是 `cancelled`。handler 没有等待的子 agent，runtime 收尾前会等它结束。
+- **只交回输出**：输出按提供方的 `io.output.schema` 和契约 schema 检查，没通过算 `internal`。Hook 中的 `PreRuntime`、`PostRuntime` 和 `PostContextAssembly` 不为子 agent 触发；循环里的 `PreLLMCall`、`PreStep`、`PreToolUse` 和 `PostToolUse` 照常触发，`ctx.runtimeId` 是子 agent 的。
+- **trace**：子 agent 的每个事件都带 `subagentCallId`、`parentCallId` 和 `parentRuntimeId`，另有 `subagent.started` / `completed` / `failed`（见[协议](./protocol.md#子-agent-事件)）。`io.concealed` 的提供方和顶层运行一样隐去内容。
+
+失败不会抛异常（只有 handler 结束后再调用才抛），而是返回错误码：
+
+<!-- prettier-ignore -->
+| `error.code` | 含义 |
+| --- | --- |
+| `invalid-input` | 请求不合法：缺字段、简报太长、`data` 不是 JSON 或太大 |
+| `not-found` | 没有符合 `target` 的激活提供方 |
+| `ambiguous` | 有不止一个激活的提供方提供这个契约 |
+| `unavailable` | 达到深度上限或这次执行的并发上限 |
+| `timeout` | 子 agent 用完了自己的时限 |
+| `cancelled` | 调用方或玩家取消了 |
+| `internal` | 其他失败：输出不合格、模型出错、工具打转等。错误文字是固定的，原因只记在服务端日志里 |
+
+`ctx.agents` 只在函数 runtime 里有；agent 的 guard 里没有。
 
 #### 会话视图（`store.getSession()`）
 
@@ -651,7 +708,8 @@ Agent 的副作用只来自工具：模型能写什么，以 `agent.tools` 白�
 | 字段                | 含义                                                   |
 | ------------------- | ------------------------------------------------------ |
 | `turnId`            | 源回合的 ID                                            |
-| `playerMessage`     | 玩家这一回合的输入                                     |
+| `playerMessage`     | 玩家这一回合的输入（行动渲染出的文字）                 |
+| `actions`           | 玩家这一回合解析后的行动；没有玩家输入时是空数组       |
 | `lastPlayerInput`   | 和 `ctx.session.lastPlayerInput` 同一份快照，或 `null` |
 | `narrativeText`     | 这一回合成功的 story runtime 写的正文，用空行连接      |
 | `toolCallSummaries` | 成功、可见的工具调用，每次一行简短摘要                 |
@@ -681,7 +739,7 @@ Agent 的副作用只来自工具：模型能写什么，以 `agent.tools` 白�
 | `agent.loop.firstTokenTimeoutMs`、`idleTimeoutMs` | 流式调用的等待时限，见[流式调用的等待时限](#流式调用的等待时限) |
 | `agent.loop.loopDetection` | 模型连续重复同一个调用多少次算打转。默认 3，`0` 关闭检测 |
 | `agent.loop.maxRecursionDepth` | `ctx.recursiveCall()` 最多嵌套几层。默认 10 |
-| `agent.loop.profile`、`stream`、`steering`、`truncation`、`fallback`、`finalizer` | 循环的行为，见[循环 profile](#循环-profileagentloopprofile) |
+| `agent.loop.profile`、`stream`、`steering`、`truncation`、`fallback`、`finalizer`、`corrections` | 循环的行为，见[循环 profile](#循环-profileagentloopprofile) |
 
 ### 流式调用的等待时限
 
@@ -717,6 +775,10 @@ Agent 循环怎么跑由一个 profile 决定：文字是否流式显示给玩�
 | `fallback` | 模型反复调用同一个工具时：`answer-without-tools` 关掉工具、要答案；`fail` 以 `loop-detected` 失败 |
 | `finalizer.maxSteps` | 到步数上限时，关掉工具再要一次最终答案。`false` 时步数上限总是失败 |
 | `finalizer.deadlineReserveMs` | 离时限只剩这么多毫秒时不再开始新的一步，关掉工具要最终答案。`0` 关闭 |
+| `corrections.toolUse` | 缺少必需的工具工作或显式完成时的纠正次数。整数 0–3，默认 1 |
+| `corrections.review` | `PostLLMResponse` 退回草稿后的纠正次数。整数 0–5，默认 2 |
+| `corrections.loopPerturbation` | 工具循环打转时，进入 `fallback` 前的扰动次数。整数 0–3，默认 1 |
+| `corrections.outputRepair` | 输出无效时关闭工具重新请求完整答案的次数。整数 0–3，默认 1 |
 
 三个 profile 的取值：
 
@@ -729,8 +791,9 @@ Agent 循环怎么跑由一个 profile 决定：文字是否流式显示给玩�
 | `fallback` | `answer-without-tools` | `answer-without-tools` | `fail` |
 | `finalizer.maxSteps` | `true` | `true` | `true` |
 | `finalizer.deadlineReserveMs` | `0` | `0` | `0` |
+| `corrections` | `{ toolUse: 1, review: 2, loopPerturbation: 1, outputRepair: 1 }` | `{ toolUse: 1, review: 2, loopPerturbation: 1, outputRepair: 1 }` | `{ toolUse: 1, review: 2, loopPerturbation: 1, outputRepair: 1 }` |
 
-`actor` 给只回答一段简报、不写正文的 agent 用，例如将来的子 agent。
+`actor` 给只回答一段简报、不写正文的 agent 用。[子 agent](#子-agent) 没写 profile 时就用它。
 
 加载时检查这几条，不满足的清单被拒绝：
 
@@ -740,6 +803,8 @@ Agent 循环怎么跑由一个 profile 决定：文字是否流式显示给玩�
 - `finalizer.deadlineReserveMs` 是非负整数，并且小于 `timeoutMs`（没写时按默认时限比较）。
 
 **时限前的收尾（`deadlineReserveMs`）。** 剩余时间少于这个值、而且这时一段文字就能完成 runtime（没有未完成的 `requireToolUse` 或显式完成要求，最终输出也不是来自完成工具），并且至少还剩 3 秒写答案，循环就不再开始新的一步，改为关掉工具要最终答案。profile 开了 `steering` 时，上一步期间排队的玩家插话先并入对话，收尾请求能读到。写出了答案，runtime 成功，结束原因是 `deadline`，并带 `finalizer: true`。没写出答案时仍按超时失败。实际使用的值最多是 `timeoutMs` 的一半；剩余时间按排队和流式输出顺延后的时限计算。条件不满足时循环照常走到真正的时限。
+
+**纠正预算与输出修复。** `agent.loop.corrections` 的四项预算互不占用，`0` 关闭对应的纠正；只写要覆盖的键。裸文本结束和没有业务工作的 `runtime-done` 共用 `toolUse` 预算。循环及收尾步骤结束后，输出若不符合 schema，或故事正文为空，默认再发一次关闭工具的请求，带上校验错误，要求重新给出完整答案；仍不合格时以 `invalid-output` 失败。修复不追加旧草稿或插话前的正文。只有原本成功结束、必需的工具工作与完成条件已满足、输出不来自完成工具、且还剩至少 3 秒时才尝试；异常、取消和真正超时不修复。每次修复消耗一个 `outputRepair` 预算，新的循环（包括恢复执行）重新计数。
 
 ### 作者信息
 
@@ -1032,6 +1097,7 @@ namespace 声明 `search` 之后，它的记录进入框架的记忆检索（[`m
 - 引用的 entry、handler、guard、JSON Schema 和 UI 文件必须在包里。
 - 每份 JSON UI spec 声明 `view` 或 `webview` 中的一个；`view` 里的组件名必须在[组件目录](./ui-components.md)里；`repeat.statePath` 和 `$item` 的写法必须合法（见 [UI 面板](./ui-panels.md#json-render-绑定速查)）。报错给出 spec 文件和节点的路径。
 - 内置工具名和插件工具声明、包内的 runtime 引用，以及根契约依赖必须一致。
+- `contributes.actionKinds` 的 `name` 不能是基础行动类型、不能重复；`schema` 文件必须在包里并且是 JSON 对象。
 - `contributes.datasets` 的 schema 文件必须在包里并且是合法 JSON；`key` 必须是 schema 顶层 `properties` 里的必填属性（schema 顶层没有 `properties` 时跳过）；同名出现在 `contributes.data` 时两边必须用同一份 schema。
 - 跨字段的规则（例如 `schedule.detached` 只能用在 `post-turn` 或 `audit`，故事 runtime 的契约输入必须写 `required: false`）报错时给出文件路径和你写的字段路径，例如 `runtimes/note/RUNTIME.md: schedule.stage: …`。
 
@@ -1196,6 +1262,32 @@ contributes:
 - 不经过提交流水线的写入不做这些检查：世界数据的导入和同步（按 source 的 `schema` 校验，见 [World Data · 配套插件数据](./world-data.md#配套插件数据)）、plugin action RPC 的 `context.store.setPluginData`，以及管理 API 的 `PUT`。
 
 详见[事务 · 操作式写入](./transactions.md#操作式写入plugindataupdate)。
+
+### 行动类型（`contributes.actionKinds`）
+
+玩家每次提交的是一组行动（见 [API · submit_actions](./api.md#submit_actions)）。内核有六个基础类型：`say`、`act`、`narrate`、`direct`、`advance`、`command`。插件可以再声明自己的类型，不用写服务端代码：
+
+```yaml
+contributes:
+  actionKinds:
+    - name: whisper
+      roles: [player] # 可选：哪些座位身份能用，默认 [player]
+      text: required # 可选：required / optional（默认）/ none
+      actor: true # 可选：是否以角色的身份进行，默认 true
+      schema: ./schemas/whisper.json # 可选：fields 要符合的 JSON Schema
+      display:
+        label: { zh: 耳语, en: whispers }
+        icon: ear
+        placeholder: { zh: 对谁说悄悄话, en: Whisper to someone }
+```
+
+- **线上的类型名是 `<pluginId>/<name>`。** 上例在 `whisper-pack` 里就是 `whisper-pack/whisper`。两个插件可以用同一个 `name`，不会冲突。`name` 用小写 kebab-case，不能是基础类型的名字，在包里不能重复。
+- `roles` 不能为空。身份和基础类型的对应见[座位](./world-model.md#座位)。
+- `schema` 是包内的 JSON 文件，加载、`pnpm validate:plugin` 和安装都会读取它；缺文件、不是 JSON 对象、路径越出包根都会报错。没有 `schema` 的类型不接受 `fields`。
+- `display.label` 是输入框里的名称，也是渲染给模型看的类型名，按会话语言选。`fields` 以 JSON 跟在文字后面；没有文字的行动只写类型名和 `fields`，照样进入玩家消息和聊天记录。例如 `【阿雅·耳语】在这边。{"target":"守卫"}`、`【阿雅·让过】`。
+- 表单、选项和确认框可以用 `actionKind` 声明玩家的回答算哪种行动（基础类型或 `<pluginId>/<name>`），默认选项是 `say`，表单和确认框是 `act`。回答按这个类型校验座位身份，见 [API · 玩家交互](./api.md#玩家交互-1)。
+- 只有这局可运行的插件声明的类型可用。服务端按目录校验每个行动，见 [`GET /api/sessions/:id/action-kinds`](./api.md#行动类型目录)。
+- 函数 runtime 从 `ctx.playerActions` 读到行动，`fields` 原样保留，见[handler 上下文里的回合信息](#handler-上下文里的回合信息)。
 
 ### 保留的数据命名空间
 

@@ -152,15 +152,15 @@ This lets stage animations react while the narrative is still being generated, a
 
 ### Execution lifecycle events
 
-| Event type              | Dir. | Description                                                                                                            | Payload                                                                                                                 |
-| ----------------------- | ---- | ---------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
-| `execution.started`     | S→C  | A turn execution starts                                                                                                | `{ runtimeCount }`                                                                                                      |
-| `interaction.submitted` | S→C  | The answer to `submit_interaction` is saved and the next turn has started. Sent before that turn's `execution.started` | `{ interactionTurnId, results: [{ submissionId, interactionId, values, filledNarrative }], message?: { id, content } }` |
-| `runtime.started`       | S→C  | One runtime starts                                                                                                     | `{ runtimeId, pluginId, kind, turnId, runId, label, stage? }`                                                           |
-| `runtime.deferred`      | S→C  | A staged runtime was committed with the original turn and moved to the background                                      | `{ runtimeId, pluginId, jobId, sourceTurnId }`                                                                          |
-| `runtime.completed`     | S→C  | One runtime completes                                                                                                  | `{ runtimeId, pluginId, turnId, runId, status, durationMs, stopReason? }`                                               |
-| `runtime.failed`        | S→C  | One runtime fails                                                                                                      | `{ runtimeId, pluginId, turnId, runId, status, durationMs, error, errorKind?, failureTarget?, stopReason? }`            |
-| `execution.completed`   | S→C  | The final state of a turn execution                                                                                    | `{ runtimeCount, resultCount, durationMs, committed, error?, abortReason?, resync? }`, each field explained below       |
+| Event type              | Dir. | Description                                                                                                                    | Payload                                                                                                                 |
+| ----------------------- | ---- | ------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------- |
+| `execution.started`     | S→C  | A turn execution starts                                                                                                        | `{ runtimeCount }`                                                                                                      |
+| `interaction.submitted` | S→C  | The interaction answer in `submit_actions` is saved and the next turn has started. Sent before that turn's `execution.started` | `{ interactionTurnId, results: [{ submissionId, interactionId, values, filledNarrative }], message?: { id, content } }` |
+| `runtime.started`       | S→C  | One runtime starts                                                                                                             | `{ runtimeId, pluginId, kind, turnId, runId, label, stage? }`                                                           |
+| `runtime.deferred`      | S→C  | A staged runtime was committed with the original turn and moved to the background                                              | `{ runtimeId, pluginId, jobId, sourceTurnId }`                                                                          |
+| `runtime.completed`     | S→C  | One runtime completes                                                                                                          | `{ runtimeId, pluginId, turnId, runId, status, durationMs, stopReason? }`                                               |
+| `runtime.failed`        | S→C  | One runtime fails                                                                                                              | `{ runtimeId, pluginId, turnId, runId, status, durationMs, error, errorKind?, failureTarget?, stopReason? }`            |
+| `execution.completed`   | S→C  | The final state of a turn execution                                                                                            | `{ runtimeCount, resultCount, durationMs, committed, error?, abortReason?, resync? }`, each field explained below       |
 
 `runtime.started.stage` records the runtime's stage for that execution: `setup`, `pre-turn`, `narrative`, `post-turn` or `audit`. Event/manual runtimes without a stage omit it. Persisted traces retain it, and clients restore it from live events and historical traces onto the same execution step; later terminal events do not clear the stage. A group with a `stage: "setup"` step keeps a neutral "Opening setup" summary without per-task retries, even after the session enters `playing` or the page reloads. Do not infer a historical execution's stage from the current session phase or a plugin name.
 
@@ -198,11 +198,13 @@ Every way an agent runtime's tool loop can end maps to one stop reason (`StopRea
 | `context-overflow` | Context overflow | The request still does not fit after pruning | Failure |
 | `cancelled` | Cancelled | `stop.cancelledBy` says who: `player` (the player stopped), `parent` (the enclosing execution was cancelled or timed out), `hook` (`PreStep`'s `stop`) | Failure |
 | `model-error` | Model error | The model call still failed after its retries ran out | Failure |
-| `invalid-output` | Invalid output | `PostLLMResponse` rejected a draft for the third time, or the output failed the schema check | Failure |
+| `invalid-output` | Invalid output | `PostLLMResponse` exhausted its review correction budget, or output still fails its schema / story text is empty after repair | Failure |
 | `loop-detected` | Loop detected | The model kept repeating the same tool call after a perturbation | Failure; on a loop profile whose `fallback` is `answer-without-tools` (`story`, `actor`), the first detection takes the tools away and asks for the story text or the answer instead of ending |
 | `suspended` | Suspended | The `suspend` tool was called; the loop waits for the player's input | Suspended |
 
 **The finalizer step.** When the loop runs out of steps, text the model wrote beside a tool call is a draft, not an answer. The kernel then sends one more request: tools off, asking the model for its final answer now, in the same output format, streamed when the runtime streams. That request is the finalizer step. Its step number is one past the last step, and `PreStep` does not fire for it. It is sent only when all of these hold: the output is not handed over by a completing tool; `requireToolUse` is off or already met; `requireExplicitCompletion` is off or already met; and at least 3 seconds remain before the deadline. When the finalizer writes non-empty text, that text replaces the earlier text, the runtime succeeds, and `stop` is `{ reason: "max-steps", finalizer: true }`. When the text is empty, the request fails or the draft is rejected, the runtime fails with `max-steps`. A timeout does not try a finalizer, unless the loop profile sets a deadline reserve ([`finalizer.deadlineReserveMs`](./plugins.md#loop-profile-agentloopprofile)): with less time left than the reserve, the finalizer step is sent as well, so `stop.finalizer` means the finalizer step handed over the answer at the step limit or at the deadline reserve.
+
+**The output repair step.** An invalid answer eligible for repair gets a repair request after any finalizer and before final output validation (conditions in [the loop profile](./plugins.md#loop-profile-agentloopprofile)). `StepIdentity.repair: true` appears on both `step.started` and `step.completed`; the completed event's `notes` include `output-repair`. Tools are off and `PreStep` does not fire. Once repair produces a replacement answer, `LoopStop.repaired: true` preserves the original `reason` and `finalizer`. Output that remains invalid settles as `invalid-output`. `agent.loop.corrections.outputRepair` limits the requests, default 1.
 
 **`runtime.deferred` is a "handoff notice"**
 
@@ -322,6 +324,25 @@ Events and REST reads use the same public shape:
 - Changes to hidden world data (`_hidden.*`) are not sent.
 - `_runtime_jobs` and dimension records carry only their public parts. They do not include a job's `payload`, raw errors, or dimension rules.
 - A task queued with `expectsBackgroundFollower` also carries `phase: "prompt"`.
+
+### Plugin fault latch
+
+After an auxiliary plugin fails because of itself on three consecutive logical inputs in one session, the kernel pauses it and shows a fixed notice. The plugin list shows “Paused”; “Resume” clears the count. Each plugin counts at most once per logical input, including its auto-advance rounds. Faults take precedence over clean results within one input. A successful runtime result in a committed execution clears the count; a plugin with no runtimes clears it through a clean Hook invocation. Neutral results such as skips and suspensions leave it unchanged.
+
+`RuntimeResult.fault?: "runtime" | "timeout"` is the kernel's attribution marker. It counts the plugin's own exceptions, its own timeouts, and the agent stops `max-steps`, `invalid-output`, `loop-detected`, `context-overflow`, and its own `deadline`. `errorKind` does not establish fault ownership. Whether an error came from the provider is decided from the original exception (including a retry wrapper's `cause`), so a PostRuntime Hook rewriting the error text does not change attribution. Model and provider errors, every cancellation (a cancellation tag belongs only to the cancelled run: when a parent's own timeout cancels its child agent, the parent still counts its own timeout), dependency and read cascades, dimension version conflicts, stale suspension baselines, and innocent plugins in a whole-execution rollback do not count. Setup runtimes have their own retry budget and do not participate. Sub-agent and service-provider faults are not counted yet. Service exceptions retain structured provenance for the failing call. Provider exceptions, unavailable services (including paused providers), admission failures, and the service call's own timeout or cancellation do not count against the caller. The caller's own runtime timeout, invalid call options, and directly triggering the cycle or depth limit still count; a nested provider's call errors are not charged to the outer caller.
+
+A throwing or timed-out Hook counts against its registering plugin; a deliberate `abort` is not a Hook fault. A proposal rejected by its commit handler or deliberately vetoed by `PreStateCommit` counts against its source plugin. Another plugin's throwing or timed-out Hook counts only against the Hook owner. Plugins providing an active `outputKind: "story"` runtime or the dimension contract produce fault traces but are never paused.
+
+<!-- prettier-ignore -->
+| Event | Payload | Delivery |
+| --- | --- | --- |
+| `plugin.fault.counted` | `{ sessionId, pluginId, reason, consecutiveFaults }` | Trace only; never forwarded to players |
+| `plugin.fault.latched` | `{ sessionId, pluginId, reason }` | Action stream during player execution; session event stream otherwise |
+| `plugin.fault.cleared` | `{ sessionId, pluginId, by: "clean-run" \| "player" }` | Same as above |
+
+`reason` is the fixed vocabulary `"runtime" | "hook" | "proposal-rejected" | "timeout"`, with no raw error text. `SessionPlugin.paused` and the live session view's `SnapshotPluginStatus.paused` appear only while paused, as `{ reason }`. Counts and pauses live only in process memory. Restarting, ending or deleting a session clears them; saved snapshots, forks, exports and BrowserVault checkpoints never carry them. No development data needs to be recreated.
+
+Pausing takes effect at the next execution: its runtimes and Hooks do not run, its runtimes expose no tools, and its services return `unavailable`. The current execution keeps its frozen registry and admission set. See [session plugin management](./api.md#session-plugin-management) for re-enabling and [transactions](./transactions.md#turn-level-single-transaction) for cascade causes.
 
 ### Job progress events (job-status, experimental)
 
@@ -609,7 +630,7 @@ A committed `interaction.requested` and `ui.rendered` are also pushed through th
 **Events that go only to the trace**
 
 - `context.compacted` is written only to `trace_events`. It is written by the history compaction orchestration, and it is not in `CovelEvent`. The summary strategy is provided through the `history.compact@2` extension.
-- `recursive.calling/completed/failed` are in `CovelEvent`, but they are delivered only through the `trace` subscription topic. They are not forwarded to `/api/actions`.
+- `recursive.calling/completed/failed` and [`subagent.*`](#sub-agent-events) are in `CovelEvent`, but they are delivered only through the `trace` subscription topic. They are not forwarded to `/api/actions`.
 
 | Event                           | Trigger point                      | Payload                                                                                                                                 |
 | ------------------------------- | ---------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
@@ -802,7 +823,7 @@ The events below are forwarded by the server through the actions SSE stream. The
 
 `runtime.skipped` is written into the stream by the actions route itself. Its `forwardToActionStream` in the metadata is `false`.
 
-The other events described in this page are also marked as forwarded: `ui.rendered`, `asset.progress`, `world.dimensions.changed`, `plugin-data.changed`, `character-schema.changed`, `dimensions.changed`, `dimensions.settlement.changed`, `ui.slot.changed` / `ui.slot.preview` / `ui.slot.cleared`, `turn.suspended` / `turn.resumed`, and `job-status.updated`.
+The other events described in this page are also marked as forwarded: `ui.rendered`, `asset.progress`, `world.dimensions.changed`, `plugin-data.changed`, `character-schema.changed`, `dimensions.changed`, `dimensions.settlement.changed`, `ui.slot.changed` / `ui.slot.preview` / `ui.slot.cleared`, `turn.suspended` / `turn.resumed`, `job-status.updated`, and `plugin.fault.latched` / `plugin.fault.cleared`.
 
 **Internal events not forwarded to `/api/actions`**
 
@@ -816,6 +837,7 @@ These are written only to `trace_events`, and are delivered through the subscrip
 | `context.pruned`                                                       | Emitted when the prompt is first assembled, after `PostContextAssembly` rewrites it, or when the actual request of one step of the tool loop triggers a hard budget trim. The payload is `{ runtimeId, pluginId, prunedMessageCount }`. The same runtime can emit it several times in one turn. It lets `/debug` show which step dropped history                                                        |
 | `context.compaction.failed`                                            | Emitted when a history compaction attempt fails. The payload is `{ pluginId, extensionId, reason, consecutiveFailures }`                                                                                                                                                                                                                                                                                |
 | `commit.fanout.failed`                                                 | See the section on the `system.reset` control frame above                                                                                                                                                                                                                                                                                                                                               |
+| `plugin.fault.counted`                                                 | Trace of a plugin’s self-caused fault count; never forwarded to players. `plugin.fault.latched` / `plugin.fault.cleared` carry the player notices                                                                                                                                                                                                                                                       |
 
 Additional notes:
 
@@ -826,7 +848,7 @@ Additional notes:
 
 For a runtime that declares `io.concealed: true`, its TurnEmitter events keep only fields without content before they are saved and forwarded, and they carry `concealed: true`:
 
-- Kept: `runtimeId`, `pluginId`, `toolName`, `toolCallId`, `status`, `durationMs`, `usage`, `finishReason`, `seq`, the step events' `step`, `stopReason`, `finalizer`, `retries` and `notes`, and so on.
+- Kept: `runtimeId`, `pluginId`, `toolName`, `toolCallId`, `status`, `durationMs`, `usage`, `finishReason`, `seq`, the step events' `step`, `stopReason`, `finalizer`, `repair`, `retries` and `notes`, and so on.
 - Removed: content fields such as `messages`, `text`, `toolCalls`, `arguments`, `result`, `parsedResult`, and `output`.
 
 ## 2. Command types (CommandType)
@@ -852,14 +874,13 @@ The `type` values `/api/actions` accepts form a closed set, defined by `actionRe
 
 | Command          | Method | Endpoint                                       | Response                  |
 | ---------------- | ------ | ---------------------------------------------- | ------------------------- |
-| `turn.submit`    | POST   | `/api/actions` `type: "send_message"`          | SSE: ProtocolEvent stream |
-| `turn.cmd`       | POST   | `/api/actions` `type: "execute_command"`       | SSE: ProtocolEvent stream |
+| `turn.submit`    | POST   | `/api/actions` `type: "submit_actions"`        | SSE: ProtocolEvent stream |
 | `turn.start`     | POST   | `/api/actions` `type: "start_session"`         | SSE: ProtocolEvent stream |
 | `turn.retry`     | POST   | `/api/actions` `type: "retry_turn"`            | SSE: ProtocolEvent stream |
 | `runtime.retry`  | POST   | `/api/actions` `type: "retry_runtime"`         | SSE: ProtocolEvent stream |
 | `runtimes.retry` | POST   | `/api/actions` `type: "retry_failed_runtimes"` | SSE: ProtocolEvent stream |
 
-Add `submit_interaction` from [Interaction responses](#interaction-responses) and there are seven in total. Any other value returns 400 `Unsupported action type`. To emit an event from a plugin, use the built-in `emit-event` tool.
+There are five in total. The player's speech, acts, slash commands and [interaction responses](#interaction-responses) are all actions of `submit_actions`; see [api.md § submit_actions](./api.md#submit_actions). Any other value returns 400 `Unsupported action type`, including the removed `send_message`, `execute_command`, and `submit_interaction`. To emit an event from a plugin, use the built-in `emit-event` tool.
 
 Each frame in the stream is wrapped in a `SseEnvelope`. See "4. SSE envelope format" below.
 
@@ -869,12 +890,13 @@ It requires the session to already have a non-empty `activePlugins` (chosen when
 
 **`retry_turn`**
 
-- A normal request's payload is empty. It uses an empty player input and the current committed context to start a new main-loop turn. After the submission succeeds, the player's turn count goes up by one.
+- A normal request's payload is empty. It uses the current committed context to start a new main-loop turn, without player input. After the submission succeeds, the player's turn count goes up by one.
+- When it recovers a player turn that answered an interaction, it runs again from the actions that turn recorded in `turn.started`; the answer is not submitted again.
 - It does not resume or regenerate historical turns.
 
 **Recovering an unfinished turn**
 
-- Each of the six actions in the table above can add `payload.recoverFromTurnId`. It must match the original action description the server returns.
+- Each of the five actions in the table above can add `payload.recoverFromTurnId`. It must match the original action description the server returns.
 - The client reads read-only state from `GET /api/sessions/:id/execution`. Refreshing the page does not resubmit the action. The new requestId is sent only after the player explicitly clicks retry.
 - Recovery polls every 3 seconds after success. Failures wait 3, 6, 12, and 24 seconds, then at most once every 30 seconds; success resets the delay. Status requests do not add HTTP retries. Polling pauses while hidden and checks immediately on becoming visible, without overlapping reads for the same observation.
 - The server checks the source turn inside the session lock. An opening recovery keeps the source of the continuation, and does not increase the player's turn count.
@@ -909,7 +931,7 @@ It requires the session to already have a non-empty `activePlugins` (chosen when
 
 **`payload.inputMessageId`**
 
-`send_message` and `execute_command` can provide it. The flow is: the browser saves the player's input first, then sends its ID along with the action.
+`submit_actions` can provide it. The flow is: the browser saves the player's input first, then sends its ID along with the action.
 
 | Case                                                                                             | Result                                                                                                               |
 | ------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------- |
@@ -926,18 +948,18 @@ It requires the session to already have a non-empty `activePlugins` (chosen when
 
 **The difference between a chat turn and a plugin call**
 
-- Natural language from the player goes through `send_message` on `/api/actions`. It triggers the main flow that writes the story.
+- Natural language from the player goes through `submit_actions` (one `say` action) on `/api/actions`. It triggers the main flow that writes the story.
 - The input box first matches slash commands against the session command catalog returned by `GET /api/sessions/:id/plugins`.
   - A known command goes through `/api/sessions/:id/plugin-rpc` as `{ kind: "command", commandId, input }`. It does not go through the main story-writing flow.
-  - An unknown command follows the input box's existing rules (during normal idle submission, it uses `execute_command`).
+  - An unknown command follows the input box's existing rules (during normal idle submission, it is sent as a `command` action).
 - A plugin UI button that declares a command uses JSON-RENDER's `invokeCommand`. It goes through `/api/sessions/:id/plugin-rpc` as `{ kind: "command", commandId, args }`. It does not go through the main story-writing flow. It shares argument validation, context, approval, handler, and trace with input-box commands.
 - Other custom UI actions use `invokePluginAction`.
 
 ### Interaction responses
 
-| Command        | Method | Endpoint       | Response                                                                                                      |
-| -------------- | ------ | -------------- | ------------------------------------------------------------------------------------------------------------- |
-| `input.submit` | POST   | `/api/actions` | SSE stream for `type: "submit_interaction"`: `interaction.submitted`, followed by the events of the next turn |
+| Command        | Method | Endpoint       | Response                                                                                                                                     |
+| -------------- | ------ | -------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| `input.submit` | POST   | `/api/actions` | SSE stream for `type: "submit_actions"` (actions that carry `interaction`): `interaction.submitted`, followed by the events of the next turn |
 
 Saving the answer and starting the next turn is one operation: the same session lock and the same transaction. See [api.md § Player interactions](./api.md#player-interaction).
 
@@ -1041,7 +1063,7 @@ Internal approval keys cannot name ordinary actions; such requests are rejected.
 
 The client shows the approval one stage at a time, and retries the original request. When the same request asks again for the same `(pluginId, action)` authorization, the client stops, and it rejects approval answers that cross sessions.
 
-A batch of answers in `submit_interaction` can involve several source plugins, and there is no limit on the number of stages. Only when the server-code authorization for every source is complete are the answers validated and saved atomically.
+A batch of answers in one `submit_actions` can involve several source plugins, and there is no limit on the number of stages. Only when the server-code authorization for every source is complete are the answers validated and saved atomically.
 
 **Framework default actions:** see the "Framework default actions" section in [api.md](./api.md#post-apisessionsidplugin-rpc).
 
@@ -1246,8 +1268,8 @@ These events use the standard SSE envelope, and they are saved to `trace_events`
 | `domain-event.previewed` | `{ runtimeId, pluginId, toolCallId, topic, data }`. A temporary display signal after `emit-event` passes validation. Persistent business state is still committed by the normal event chain |
 | `llm.calling` | `{ runtimeId, pluginId, slot, model, provider?: string \| null, messages, tools, attempt, startedAt, queueWaitMs?, streaming? }`. `slot` is the role the runtime requests. In production, the gateway resolves it to `model` / `provider` before the call. A custom adapter that does not support role resolution can omit `provider` |
 | `llm.responded` | `{ runtimeId, pluginId, text?, reasoningContent?, toolCalls?, usage, finishReason, durationMs, attempt, error? }`. `usage` is `{ inputTokens, outputTokens, cachedInputTokens?, cacheWriteInputTokens? }`. `inputTokens` is the total input including cache reads and writes. The last two are subsets reported by the provider. `finishReason` of `length` appears only in the story runtime: the body was cut off at the output limit but was kept, and the client uses this to tell the player. In other cases, a truncated call is reported as a failure |
-| `step.started` | `{ runtimeId, pluginId, turnId, runId, step, maxSteps, toolCount, toolChoice, finalizer? }`. A step of an agent tool loop is about to call the model; sent after `PreStep` and before the step's `llm.calling`. `maxSteps` is the step limit at this step, `toolCount` is the number of tools offered this step (their names are in `llm.calling.tools`), and `toolChoice` is `"auto"`, `"required"` or `{ name }`. The finalizer step carries `finalizer: true` |
-| `step.completed` | `{ runtimeId, pluginId, turnId, runId, step, durationMs, finishReason?, usage?, toolCalls, retries, notes, stopReason?, finalizer? }`. Sent exactly once for each step that started, after all the step's `tool.*` events. `usage` is the same as in `llm.responded`; a step that ended with an error has none. `toolCalls` is `[{ name, success }]`. `retries` lists the retries of the step's model call as `[{ attempt, reason }]`. `notes` is `[{ kind, count?, ignored? }]`, where `kind` is one of `review-rejected`, `no-tool-correction`, `runtime-done-correction`, `loop-perturbation`, `story-without-tools`, `late-steering`, `tool-activated` and `tool-narrowed`; a note carries only its kind and counts, never a tool name. `stopReason` appears only on the step that ended the loop |
+| `step.started` | `{ runtimeId, pluginId, turnId, runId, step, maxSteps, toolCount, toolChoice, finalizer?, repair? }`. A step of an agent tool loop is about to call the model; sent after `PreStep` and before the step's `llm.calling`. `maxSteps` is the step limit at this step, `toolCount` is the number of tools offered this step (their names are in `llm.calling.tools`), and `toolChoice` is `"auto"`, `"required"` or `{ name }`. The finalizer step carries `finalizer: true`; an output repair step carries `repair: true`, numbered one past the last started step |
+| `step.completed` | `{ runtimeId, pluginId, turnId, runId, step, durationMs, finishReason?, usage?, toolCalls, retries, notes, stopReason?, finalizer?, repair? }`. Sent exactly once for each step that started, after all the step's `tool.*` events. `usage` is the same as in `llm.responded`; a step that ended with an error has none. `toolCalls` is `[{ name, success }]`. `retries` lists the retries of the step's model call as `[{ attempt, reason }]`. `notes` is `[{ kind, count?, ignored? }]`, where `kind` is one of `output-repair`, `review-rejected`, `no-tool-correction`, `runtime-done-correction`, `loop-perturbation`, `story-without-tools`, `late-steering`, `tool-activated` and `tool-narrowed`; a note carries only its kind and counts, never a tool name. `stopReason` appears only on the step that ended the loop |
 | `gateway.responded` | The success result of a function-runtime gateway. Text and object calls carry `{ runtimeId, pluginId, method, finishReason, usage, reasoningContent?, model?, provider?, durationMs }`. `model/provider` is the target actually hit after fallback. Transcription calls also carry `usage/model/provider` when available. Old traces, or custom gateways that do not support this metadata, may lack them |
 | `message.completed` | `{ runtimeId, pluginId, content, len, deltaCount }`. `deltaCount` is the number of `narrative.delta` events this runtime produced. It is the saved, authoritative count. The frontend uses a different synthetic field, `_aggregated`, when it combines live fragments. The two cannot be swapped |
 | `block.emitted` | `{ runtimeId, pluginId, proposalId, source, block }` |
@@ -1322,6 +1344,22 @@ Privacy boundary:
 - `complete: true` only means the JSON request content is complete. It does not guarantee that the resource stays valid forever, that HTTP headers can be rebuilt, or that the real model result is deterministic.
 - The request body follows the existing trace rules for access to and retention of sensitive content. It contains the player's text, and it must not be treated as a redacted log that can be exported publicly.
 - The `gateway.*` events of a function runtime still record only the shape, and do not widen the range of body content collected.
+
+### Sub-agent events
+
+One run of a [sub-agent](./plugins.md#sub-agents) emits `subagent.*`. Like `recursive.*`, they go to the trace only (`forwardToActionStream: false`).
+
+<!-- prettier-ignore -->
+| Type | Payload |
+| --- | --- |
+| `subagent.started` | `{ subagentCallId, parentCallId, parentRuntimeId, parentPluginId, runtimeId, pluginId, turnId }`. Emitted when a provider is found and the run starts |
+| `subagent.completed` | The fields of `subagent.started` + `{ stopReason, durationMs, usage? }`. `usage` is the sum over the run's steps, `{ inputTokens, outputTokens }` |
+| `subagent.failed` | `{ subagentCallId, parentCallId, parentRuntimeId, parentPluginId, turnId, code, error, durationMs, runtimeId?, pluginId?, stopReason?, cancelledBy? }`. `code` is a `ctx.agents.run` error code and `error` fixed text. A call refused before a provider is found (an invalid request, a cap, no provider or several) has no `runtimeId` / `pluginId`. `cancelledBy` is `parent` or `player` |
+| `subagent.writes-dropped` | The sub-agent's identity + `{ count }`. It should never appear: a sub-agent has read-only tools only. Any writes or events it produces anyway are dropped and counted |
+
+- `subagentCallId` is the ID the kernel gives the run; it is also the `runId` of the sub-agent's `step.*` events. `parentCallId` is the `toolCallId` of the `delegate` call, or the `runId` of the function runtime that called `ctx.agents.run`.
+- The sub-agent's own `step.*`, `llm.*`, `tool.*` and other events are stored as usual, with the sub-agent's `runtimeId`, plus `subagentCallId`, `parentCallId` and `parentRuntimeId`. These IDs are not content: when an `io.concealed` runtime's content is hidden, they are kept together with `cancelledBy`.
+- The `delegate` call itself is an ordinary `tool.calling` / `tool.completed` / `tool.failed` in the caller's trace, with `approvalStatus: auto-allowed`.
 
 ## Event bus lifecycle and client handler failures
 

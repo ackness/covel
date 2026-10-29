@@ -15,7 +15,7 @@ Learn these four terms first. They are used all the way through this page:
 
 The player types "I go explore the swamp" and presses send. Then these things happen:
 
-1. **The frontend sends a request.** The browser sends the sentence to `POST /api/actions`. The connection stays open. The server keeps sending events down it one at a time (this is called SSE), and the frontend updates the screen a little with each event.
+1. **The frontend sends a request.** The browser sends the sentence as a `say` action to `POST /api/actions`. The connection stays open. The server keeps sending events down it one at a time (this is called SSE), and the frontend updates the screen a little with each event.
 2. **The server queues the request.** A session does only one thing at a time. Before the server locks the session, it waits for any background work from the previous turn to finish, if that work declared that the next turn must read its result.
 3. **The plugins for this turn are fixed.** The version of each plugin and the tools it provides are fixed when the turn starts, and they stay the same until the turn ends. If a plugin is hot-reloaded in the middle of a turn, the change takes effect only in the next turn.
 4. **The kernel picks the runtimes for this turn.** Each runtime declares when it runs: every turn, every few turns, when an event happens, or only when it is called by name. The kernel picks runtimes by these declarations.
@@ -140,7 +140,7 @@ A setup runtime reports "I am done" with one of three clear signals:
 - an agent outputs `preGameDone: true`;
 - a guard (the check function that runs before a runtime) returns `{ skip: true }`.
 
-The kernel records the result in `setupRuntimes`. The player can move setup forward by submitting a form or a message several times. For example, the form of `char-creator` is submitted through `submit_interaction`.
+The kernel records the result in `setupRuntimes`. The player can move setup forward by submitting a form or a message several times. For example, the form of `char-creator` is submitted as an action of `submit_actions`.
 
 Rules for failure:
 
@@ -470,6 +470,15 @@ Player input              Framework translation layer        What the LLM receiv
 
 The exact order of the prompt sections is in [Prompt structure](../reference/prompt-structure.md).
 
+**The player's input is first a list of actions.** The frontend sends `submit_actions`: a sentence is a `say` action, a slash command is `command`, and an answer to a form or a choice is an action that carries `interaction`. The server handles it in this order:
+
+1. **Check.** Each action is checked against the seat's role: the seat exists and a human controls it, the session has the action kind, the seat's role may use it, the acting character is bound to the seat, and the text and `fields` follow the kind's rules. If one fails, the whole submission is refused and nothing is saved.
+2. **Fill in.** A missing seat becomes the primary seat, a missing character the seat's current character, and `source` is set to `player`. An answering action goes through the interaction submission, which fills in its narrative text.
+3. **Render.** `renderActions` (`@covel/context`) writes the actions as the text the model reads. A single player's ordinary input stays as written; actions of several characters, a host or a plugin kind name the character and the kind, for example `[Aya · says] ...`.
+4. **Enter the turn.** The rendering is `TurnInput.playerMessage`, and the resolved actions are `TurnInput.actions`. Function runtimes read the actions from `ctx.playerActions`, and the `TurnStart` hook payload carries `actions`. The prompt history keeps the rendered text; the chat message keeps the raw text and `metadata.actions`.
+
+Fields and error codes are in [api.md § submit_actions](../reference/api.md#submit_actions).
+
 ### 3.2 Output direction: LLM → player
 
 The model's output first becomes proposals. After they are committed, they become events. The frontend renders the events.
@@ -542,7 +551,7 @@ LLM: "call sync-           ToolExecutor:
 
 **Output review happens before tools run.** A plugin can ask for the output to be buffered in `PreLLMCall`. Then in `PostLLMResponse` it can reject the draft and give a correction request.
 
-- At most two corrections are allowed, and they still count against the original budget.
+- `agent.loop.corrections.review` configures the correction budget, with two corrections by default. A further rejection after that budget is exhausted fails the runtime with `invalid-output`. Corrections remain subject to step and time limits; see [the loop profile](../reference/plugins.md#loop-profile-agentloopprofile).
 - The two built-in narrative plugins use this to check `narrativePerson`. The default is second person. First or third person is allowed, and dialogue keeps its own point of view.
 - After the check passes, they show the whole passage of story text at once. The framework still supports other plugins that stream their output.
 - This is a limited text check. It does not guarantee that every plot inference is correct.
@@ -558,6 +567,8 @@ deciding → finalizing → stopped        running-tools → suspended
 
 The loop's behaviour comes from the runtime's loop profile (`resolveLoopProfile` in `agent-loop/loop-profile.ts`), not from `outputKind`: whether text is shown to the player as it streams, whether the player's interjections are merged, whether cut-off story text is kept, whether a repeated tool call turns the tools off or fails (`fallback`), and whether a finalizer runs at the step limit and at the deadline reserve (`finalizer`). Without `agent.loop.profile`, a story runtime uses `story` and any other `system`; fields and values are in [the plugin reference's loop profile](../reference/plugins.md#loop-profile-agentloopprofile). The turn level uses the same resolver to tell whether any runtime still reads the interjection queue.
 
+Each loop run creates one correction policy (`agent-loop/correction-policy.ts`), reading separate budgets for tool use, response review, loop perturbation and output repair from the profile's `corrections`. After the loop and any finalizer, before entering `stopped`, a silent output check shared with `settleAgentLoop` decides whether repair is needed. By default, when budget and remaining time allow, one more request with tools off sends the validation errors to the model and completely replaces the invalid answer. An answer that still fails its schema or a story whose text is still empty fails with `invalid-output`. Repair skips `PreStep` but passes through `PreLLMCall` and `PostLLMResponse`. Conditions and values are in [the loop profile](../reference/plugins.md#loop-profile-agentloopprofile).
+
 The order within each step:
 
 1. Check for cancellation; when the profile has `steering`, add the player's interjections to the conversation.
@@ -568,7 +579,7 @@ The order within each step:
 6. Decide whether to end: a completing tool, `runtime-done`, a hook's `terminate`, a final reply without tool calls; otherwise go to the next step.
 7. The step's `step.completed` is sent when the next step starts or the loop ends, exactly once for each step that started.
 
-Every way of ending maps to one stop reason (`StopReason`), written to `RuntimeResult.stop` and to the `stopReason` of the runtime lifecycle events. The full table is in [the protocol reference's stop reasons](../reference/protocol.md#stop-reasons). The loop records the ordinary exits itself (`completed`, `tool-finished`, `max-steps`, `deadline`, PreStep's `cancelled`), and `settleAgentLoop` settles the result by it. A thrown exit keeps its original error object, and the reason is attached to the error (`agent-loop/stop-reason.ts`): call sites tag model errors, invalid output, context overflow and loop detection; the loop's outer catch tells apart the player's stop, the loop's own timeout and a parent's cancellation; and `finalizeRuntimeResult` reads the reason from the error into the failed result.
+Every way of ending maps to one stop reason (`StopReason`), written to `RuntimeResult.stop` and to the `stopReason` of the runtime lifecycle events. The full table is in [the protocol reference's stop reasons](../reference/protocol.md#stop-reasons). The loop records the ordinary exits itself (`completed`, `tool-finished`, `max-steps`, `deadline`, PreStep's `cancelled`), and `settleAgentLoop` settles the result by it. A thrown exit keeps its original error object, and the reason is attached to the error (`agent-loop/stop-reason.ts`): call sites tag model errors, invalid output, context overflow and loop detection; the loop's outer catch tells apart the player's stop, the loop's own timeout and a parent's cancellation; and `finalizeRuntimeResult` reads the reason from the error into the failed result. A tag belongs to the run (`runId`) that made it: when a parent's timeout cancels the child agent it awaits, both share one error object, and the child's "cancelled by parent" never becomes the parent's own stop reason.
 
 **A step limit is not a success.** When the steps run out, text the model wrote beside a tool call is only a draft. As long as the output is not handed over by a completing tool, `requireToolUse` and `requireExplicitCompletion` are met or off, and at least 3 seconds remain before the deadline, the kernel sends one more request with tools off, the finalizer, asking for the final answer now. When the finalizer writes text, the runtime succeeds and its result is marked `stop.finalizer: true`; otherwise it fails with `max-steps` and its staged writes are not committed. The profile's `finalizer.maxSteps: false` turns this finalizer off. A timeout is a failure and does not try a finalizer; the exception is a profile that sets `finalizer.deadlineReserveMs`: when less time than the reserve is left and the finalizer conditions above hold, the loop starts no new step, merges queued player interjections when the profile has `steering` on, and sends the finalizer instead, which succeeds with `{ reason: "deadline", finalizer: true }` when it writes the answer.
 
@@ -698,6 +709,20 @@ In one line for each trigger type:
 | `auto`         | Every turn; with `schedule.every`, the turns whose logical turn number it divides |
 | `event`        | The event it subscribes to is in the pending events                               |
 | `manual`       | Only when named by plugin-rpc. None of the gates above apply                      |
+
+A `schedule.subagentOnly` runtime is not in this tree: neither the automatic path, a manual target, a batch re-run nor `recursiveCall` selects it.
+
+### 4.4 Sub-agents
+
+Another runtime runs a sub-agent inside its own execution: a function with `ctx.agents.run`, an agent with the `delegate` tool.
+
+- **Same execution**: a sub-agent has no scheduling, execution or commit of its own. It uses the caller's trace, cancellation signal and session snapshot; its trace events carry `parentCallId`, so the debug page can show the call tree.
+- **No commit unit**: it returns output, the stop reason and usage only. It keeps read-only tools only, so it has no proposals or events; any that appear anyway are dropped and recorded as `subagent.writes-dropped`. The caller's commit unit holds the caller's own writes only.
+- **Caps**: one runner per top-level execution (created by `runTurnPipeline`, shared by nested executions), at most 8 sub-agents at a time, depth 1. A full pool refuses at once and nothing queues, so a caller never waits for its own slot.
+- **Cancellation**: the caller's `executionSignal`, its time limit and the revocation at its end reach the sub-agent, and so does the player's abort.
+- **Loop**: a sub-agent runs the same `runAgentToolLoop` and settle step, with `allowSuspend: false`, the `actor` profile by default and no session history. `PreRuntime` / `PostRuntime` do not fire; the in-loop hooks do.
+
+Rules and error codes are in [Plugin reference · Sub-agents](../reference/plugins.md#sub-agents).
 
 ## 5. Front-end interaction design
 
@@ -849,8 +874,8 @@ The example is the character creation form at the start. It covers everything fr
   │ │                                                                                       │  │
   │ │ Click submit → submitInteraction():                                                   │  │
   │ │   POST /api/actions                                                                   │  │
-  │ │     { type: "submit_interaction",                                                     │  │
-  │ │       payload: { turnId, submissions: [...] } }                                       │  │
+  │ │     { type: "submit_actions",                                                         │  │
+  │ │       payload: { actions: [{ interaction, fields }] } }                               │  │
   │ │                                                                                       │  │
   │ │   The server does all of this inside the session lock:                                │  │
   │ │   ├─ locate the interaction and source plugin; validate fields and cross-field rules  │  │
@@ -1081,7 +1106,7 @@ sequenceDiagram
     Note over Web: Render narrative (Prose) + form (Form)<br/>pluginData updates → right panel + message panel
 
     Player->>Web: Fill in and submit the character creation form
-    Web->>Server: POST /api/actions { type: 'submit_interaction', turnId, submissions }
+    Web->>Server: POST /api/actions { type: 'submit_actions', actions: [{ interaction, fields }] }
     Note over Server: Validate answers inside the session lock, one transaction saves them with turn.started
     Server-->>Web: SSE: interaction.submitted (stored values + filledNarrative player message)
 
@@ -1171,3 +1196,9 @@ For why it is designed this way, see [design principles](./design-principles.md)
   Plugin → frontend:   plugin-data.changed SSE events
   Frontend → plugin:   UI Actions → plugin-rpc (invokeRuntime / invokePluginAction / invokeCommand / emitEvent)
 ```
+
+## Plugin fault latch
+
+The host's shared `recordExecutionFaults` helper attributes faults and publishes latch events. `commitExecution` calls it after player, manual, resumed and background commits. When a resumed runtime fails before commit, the resume route also calls it before returning the error, without committing buffered writes or resolving the suspension. The Hook pipeline separately reports handler outcomes against the registering plugin. The in-memory latch counts per session and plugin, deduping one input by `logicalTurnId ?? turnId`. See the [protocol](../reference/protocol.md#plugin-fault-latch) for counting, exemptions and events.
+
+`executeTurn` filters paused plugins' runtimes and Hook admission sets at entry; resume and service admission also check pauses. A running registry snapshot stays unchanged; services capture the same execution's pause set. Restart, session end and deletion clear memory without writing domain data or snapshots.

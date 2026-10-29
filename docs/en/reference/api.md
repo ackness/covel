@@ -33,7 +33,8 @@ This page lists every endpoint, request field, response, and error code. Use it 
 | Create, list, or delete a session | `POST` / `GET /api/sessions`, `DELETE /api/sessions/:id` | [Session management](#session-management) |
 | Start a game, send a message, submit a choice | `POST /api/actions` | [Turn execution](#turn-execution) |
 | Interrupt or steer a turn that is running | `POST /api/sessions/:id/abort`, `/steer` | "Mid-turn control (W4)" in the endpoint list |
-| Answer a form or choice shown during a turn | `POST /api/actions` (`submit_interaction`) | [Player interaction](#player-interaction) |
+| Answer a form or choice shown during a turn | `POST /api/actions` (`submit_actions`) | [Player interaction](#player-interaction) |
+| See which actions a session accepts | `GET /api/sessions/:id/action-kinds` | [Action kind catalogue](#action-kind-catalogue) |
 | Read the chat history | `GET /api/sessions/:id/messages` | [Message history](#message-history) |
 | Read state tables and characters | `GET /api/sessions/:id/state`, `/characters` | [State query](#state-query), [Character data](#character-data) |
 | Turn plugins on or off for a session | `PUT` / `DELETE /api/sessions/:id/plugins/:pluginId` | [Session plugin management](#session-plugin-management) |
@@ -470,9 +471,9 @@ curl -N -X POST http://localhost:3001/api/actions \
   -H "Content-Type: application/json" \
   -d '{
     "requestId": "req-002",
-    "type": "send_message",
+    "type": "submit_actions",
     "sessionId": "<sessionId>",
-    "payload": { "content": "我环顾四周，观察这个陌生的世界" }
+    "payload": { "actions": [{ "kind": "say", "text": "我环顾四周，观察这个陌生的世界" }] }
   }'
 ```
 
@@ -496,30 +497,29 @@ curl -N -X POST http://localhost:3001/api/actions \
   -H "Content-Type: application/json" \
   -d '{
     "requestId": "req-003",
-    "type": "send_message",
+    "type": "submit_actions",
     "sessionId": "<sessionId>",
-    "payload": { "content": "走向远处的城镇" }
+    "payload": { "actions": [{ "kind": "say", "text": "走向远处的城镇" }] }
   }'
 ```
 
 ### 10. Submit a player interaction (if the turn returned pendingInputs)
 
-Sometimes a turn stops to wait for the player's answer, for example to choose one of several options. Then submit the answer as `submit_interaction`. The `turnId` and `interactionId` come from the previous SSE stream.
+Sometimes a turn stops to wait for the player's answer, for example to choose one of several options. Then submit the answer as one action of `submit_actions`, with the `actionKind` the interaction declares as its `kind`; without a declaration, `say` for a choice and `act` for a form or a confirmation. The `turnId` and `interactionId` come from the previous SSE stream.
 
 ```bash
 curl -N -X POST http://localhost:3001/api/actions \
   -H "Content-Type: application/json" \
   -d '{
     "requestId": "req-004",
-    "type": "submit_interaction",
+    "type": "submit_actions",
     "sessionId": "<sessionId>",
     "payload": {
-      "turnId": "<turnId>",
-      "submissions": [
+      "actions": [
         {
-          "interactionId": "<interactionId>",
-          "type": "choice",
-          "values": { "selectedId": "option_1", "selectedLabel": "接受任务" }
+          "kind": "say",
+          "interaction": { "turnId": "<turnId>", "interactionId": "<interactionId>", "type": "choice" },
+          "fields": { "selectedId": "option_1", "selectedLabel": "接受任务" }
         }
       ]
     }
@@ -628,16 +628,17 @@ Cascade delete is not one database transaction that covers all sessions:
 
 ### Session management
 
-| Method | Path                                     | Description                                                              |
-| ------ | ---------------------------------------- | ------------------------------------------------------------------------ |
-| GET    | `/api/sessions`                          | List all sessions (optional `?worldId=` filter)                          |
-| POST   | `/api/sessions`                          | Create a new session                                                     |
-| GET    | `/api/sessions/:id`                      | Get session information                                                  |
-| PATCH  | `/api/sessions/:id`                      | Update session fields (`status` / `runtimeModelOverrides`)               |
-| DELETE | `/api/sessions/:id`                      | Delete a session                                                         |
-| GET    | `/api/sessions/:id/memory-index`         | The vector model of the memory index, and whether it is still configured |
-| POST   | `/api/sessions/:id/memory-index/rebuild` | Rebuild the memory index with the configured vector model                |
-| PATCH  | `/api/sessions/:id/seats/:seatId`        | Switch the character a seat plays; see [session seats](#session-seats)   |
+| Method | Path                                     | Description                                                                               |
+| ------ | ---------------------------------------- | ----------------------------------------------------------------------------------------- |
+| GET    | `/api/sessions`                          | List all sessions (optional `?worldId=` filter)                                           |
+| POST   | `/api/sessions`                          | Create a new session                                                                      |
+| GET    | `/api/sessions/:id`                      | Get session information                                                                   |
+| PATCH  | `/api/sessions/:id`                      | Update session fields (`status` / `runtimeModelOverrides`)                                |
+| DELETE | `/api/sessions/:id`                      | Delete a session                                                                          |
+| GET    | `/api/sessions/:id/memory-index`         | The vector model of the memory index, and whether it is still configured                  |
+| POST   | `/api/sessions/:id/memory-index/rebuild` | Rebuild the memory index with the configured vector model                                 |
+| PATCH  | `/api/sessions/:id/seats/:seatId`        | Switch the character a seat plays; see [session seats](#session-seats)                    |
+| GET    | `/api/sessions/:id/action-kinds`         | The action kinds the session accepts; see [action kind catalogue](#action-kind-catalogue) |
 
 #### Session identity `incarnation`
 
@@ -848,7 +849,7 @@ A few things to know about `GET /api/sessions/:id/view`:
 The view's `submittedInteractions` lists the interactions the player has already answered. Its shape is `{ turnId, interactionId, values }[]`. `values` are the values the server saved.
 
 - It returns only the answers for turns whose messages are inside the `messages` window (matched by the message's `turnId`, or by the form block's own `meta.turnId`). Its purpose is to mark the form blocks in the window. Older forms load with the history pages, and are treated as answered by their position.
-- The answer and its follow-up turn are saved and started in the same `submit_interaction` request. So an interaction listed here always has a turn that follows it.
+- The answer and its follow-up turn are saved and started in the same `submit_actions` request. So an interaction listed here always has a turn that follows it.
 - The client marks the form in the matching message as submitted, fills it in, and does not send it again.
 - After a refresh, on another device, or when opened in a second tab, the view matches the browser that submitted it. The browser's own cache is valid only between submitting and the next restore. The server's record is authoritative.
 - If the submit response is lost, the client learns from here that the answer was saved. It then watches that turn through the `execution` status.
@@ -872,7 +873,7 @@ When restoring an existing session, if the recent window does not overlap the me
 | `startedAt`   | Optional                                                                                                                                                                                                                                                                                                                                                         |
 | `origin`      | Optional, `player` or `continuation`: whether this foreground action belongs to a player turn or the opening continuation; a retry uses it to decide how to run again. It is not the execution origin: when runtimes run again (`retry_runtime`, `retry_failed_runtimes`), the turn result's `origin` is `manual`, while this field keeps the flow it belongs to |
 | `abortReason` | Optional                                                                                                                                                                                                                                                                                                                                                         |
-| `retry`       | Optional, `{ type, payload }`. Used when the player explicitly retries                                                                                                                                                                                                                                                                                           |
+| `retry`       | Optional, `{ type, payload }`. Used when the player explicitly retries. `type` is `submit_actions`, `start_session`, `retry_turn`, `retry_runtime`, or `retry_failed_runtimes`                                                                                                                                                                                   |
 
 This endpoint does not wait for the lock of a long turn. On PostgreSQL it checks with a non-blocking advisory lock:
 
@@ -908,7 +909,7 @@ The status code is `409`. The response does not include retry input for the new 
 - When the player explicitly retries, it uses the description in `retry` and a new `requestId`. It also adds `recoverFromTurnId` to the payload.
 - The server checks the source turn again inside the session lock. A repeated click, or a source turn that has already ended, does not run again.
 - A retry of the opening continuation keeps `origin: continuation`, and does not add to the player's turn count.
-- The `turn.started` of the new turn records only the action input needed for recovery. It does not record request headers or credentials.
+- The `turn.started` of the new turn records only the action input needed for recovery. It does not record request headers or credentials. A player turn also records its resolved actions and its chat message ID (`playerInput`); a turn that answered an interaction is rerun from it with `retry_turn`.
 - For old logs, a retry with no input is offered only when the request's traceId proves that it was the opening continuation. Otherwise the player is asked to enter the input again.
 - A batch of helper tasks is recovered with `retry_failed_runtimes`. After an interruption, the same set of targets must be recovered according to the description in `retry`. A successful task that was not committed does not count as recovered, and cannot be used as context.
 
@@ -1017,6 +1018,54 @@ The body must be exactly `{ "currentCharacterId": "<character id>" }`. Any other
 | 404         | `seat_not_found`         | The session has no such seat                              |
 | 409         | `seat_not_human`         | No human controls the seat (`controller` is not `human`)  |
 | 409         | `seat_character_unbound` | The character does not exist or is not bound to this seat |
+
+### Action kind catalogue
+
+What a player submits each time is a list of **actions** (see [`submit_actions`](#submit_actions)). This endpoint lists the action kinds a session can use, and which ones each seat may submit now. The composer offers its modes from it, and the server checks actions against the same catalogue.
+
+| Method | Path                             | Description                                              |
+| ------ | -------------------------------- | -------------------------------------------------------- |
+| GET    | `/api/sessions/:id/action-kinds` | The session's action kinds and what each seat may submit |
+
+Authentication is the same as for the other session endpoints (owner token). Response:
+
+```json
+{
+  "kinds": [
+    {
+      "kind": "say",
+      "source": "framework",
+      "roles": ["player"],
+      "text": "required",
+      "actor": true,
+      "display": { "label": { "zh": "说", "en": "Say" } }
+    },
+    {
+      "kind": "whisper-pack/whisper",
+      "source": "plugin",
+      "pluginId": "whisper-pack",
+      "roles": ["player"],
+      "text": "optional",
+      "actor": true,
+      "display": { "label": { "zh": "耳语", "en": "Whisper" }, "icon": "ear" },
+      "fieldsSchema": { "type": "object", "required": ["target"] }
+    }
+  ],
+  "seats": [
+    {
+      "seatId": "main",
+      "role": "player",
+      "controller": "human",
+      "allowed": ["say", "act", "command", "whisper-pack/whisper"]
+    }
+  ]
+}
+```
+
+- `kinds` lists the six base kinds first (`say`, `act`, `narrate`, `direct`, `advance`, `command`), then, in plugin order, the kinds that the session's runnable plugins declare in `contributes.actionKinds`. A plugin kind's `kind` is `<pluginId>/<name>`.
+- `text` is the text rule: `required` needs text, `optional` may have it, `none` takes none. `actor` says whether the action is taken as a character.
+- `fieldsSchema` is the JSON Schema a plugin kind's `fields` must match; a kind without one takes no `fields`.
+- `seats[].allowed` is the kinds the seat's role may submit; it is empty for a seat no human controls (`controller` is not `human`). Which role may submit which base kind is in [seats](./world-model.md#seats).
 
 ### Player interaction
 
@@ -2746,7 +2795,7 @@ The only entry point is [`POST /api/actions`](#post-apiactions). The request bod
 - Within one stage, runtimes that do not depend on each other run in parallel. Runtimes that depend on each other are ordered by `needs` / `after` / `inputs`.
 - `session.completedPlayerTurns` is the number of committed normal player turns. A run during setup is saved in `turn_results`, but it is not counted. After `phase` becomes `playing`, the first successful player turn moves it to `1`.
 - The server uses `commitExecution` to commit, in one transaction, the results of the top-level run and of its recursive child runs, along with the journal and the pending items. In the transaction, each result is normalized first, then the state is committed. The SessionEvent is published only after the transaction commits.
-- When a runtime's output has `pendingInputs`, the player's answer is sent with `submit_interaction` on `POST /api/actions`. The same request both saves the answer and runs the turn that reads it.
+- When a runtime's output has `pendingInputs`, the player's answer is sent as an action of `submit_actions` on `POST /api/actions`. The same request both saves the answer and runs the turn that reads it.
 - `schedule.detached` applies only to a `post-turn` / `audit` function leaf that passes the safety check:
   - Its upstream results, its source run, its model, and its settings are frozen in the original turn.
   - The queue record is committed in the same transaction as the original turn.
@@ -2865,36 +2914,39 @@ Neither of these final states writes any game data.
 
 ### Player interactions
 
-After a turn runs, it may produce `pendingInputs`, such as a form, a multiple-choice question, or a confirmation box. The player sends the answer with the `submit_interaction` action.
+After a turn runs, it may produce `pendingInputs`, such as a form, a multiple-choice question, or a confirmation box. The player's answer is an action of [`submit_actions`](#submit_actions) that carries `interaction`.
 
 **Saving the answer and starting the next turn is one operation on the server:**
 
 1. Inside the same session lock, check the answer and confirm it has not been answered before.
 2. In one transaction, write the player's input and the `turn.started` event of the next turn.
-3. Run this turn on the same SSE stream. The natural-language text the answer fills in becomes the player message for this turn.
+3. Run this turn on the same SSE stream. The natural-language text the answer fills in is the action's `text`, and it enters the turn's player message by the [rendering rules](#how-the-player-message-is-rendered).
 
 So there is no in-between state where the answer is saved but the turn has not started. A second tab or a retry also cannot make the turn run again.
 
 If this turn finishes the last setup runtime, the server automatically runs the normal turn next on the same SSE stream, with a new `turnId` and a separate transaction. In other words, finishing setup and the first normal story turn are two separate turns.
 
-#### `POST /api/actions` (`submit_interaction`)
+#### `POST /api/actions` (answering an interaction)
 
-Sends the answer to one or more player interactions, and runs the turn that reads them. For the request headers, the SSE frame format, and the opening handoff, see [`POST /api/actions`](#post-apiactions).
+Sends the answer to one or more player interactions with `submit_actions`, and runs the turn that reads them. For the request headers, the SSE frame format, and the opening handoff, see [`POST /api/actions`](#post-apiactions); for the general rules of actions, see [`submit_actions`](#submit_actions).
 
 **Request body:**
 
 ```json
 {
   "requestId": "req-003",
-  "type": "submit_interaction",
+  "type": "submit_actions",
   "sessionId": "mistport-a1b2c3d4",
   "payload": {
-    "turnId": "a1b2c3d4-...",
-    "submissions": [
+    "actions": [
       {
-        "interactionId": "char-creation-form",
-        "type": "form",
-        "values": {
+        "kind": "act",
+        "interaction": {
+          "turnId": "a1b2c3d4-...",
+          "interactionId": "char-creation-form",
+          "type": "form"
+        },
+        "fields": {
           "name": "艾尔文",
           "class": "战士",
           "background": "孤儿出身的流浪剑客"
@@ -2905,31 +2957,35 @@ Sends the answer to one or more player interactions, and runs the turn that read
 }
 ```
 
-| Field                 | Type         | Required | Description                               |
-| --------------------- | ------------ | -------- | ----------------------------------------- |
-| `type`                | string       | Yes      | Always `"submit_interaction"`             |
-| `payload.turnId`      | string       | Yes      | The turn ID that produced the interaction |
-| `payload.submissions` | Submission[] | Yes      | The array of submissions, 1 to 20 items   |
+**An answering action:**
 
-**Submission object:**
+| Field                       | Type                                       | Description                                                                                                  |
+| --------------------------- | ------------------------------------------ | ------------------------------------------------------------------------------------------------------------ |
+| `kind`                      | string                                     | The interaction's declared `actionKind`; without one, `say` for a choice, `act` for a form or a confirmation |
+| `interaction.turnId`        | string                                     | The turn ID that produced the interaction                                                                    |
+| `interaction.interactionId` | string                                     | The interaction ID, from the turn output's `pendingInputs`                                                   |
+| `interaction.type`          | `"form"` \| `"choice"` \| `"confirmation"` | The interaction type                                                                                         |
+| `fields`                    | object                                     | The values the player entered                                                                                |
+| `seatId`, `actorId`         | string                                     | Optional, with the same rules as other actions                                                               |
 
-| Field           | Type                                       | Description                                                |
-| --------------- | ------------------------------------------ | ---------------------------------------------------------- |
-| `interactionId` | string                                     | The interaction ID, from the turn output's `pendingInputs` |
-| `type`          | `"form"` \| `"choice"` \| `"confirmation"` | The interaction type                                       |
-| `values`        | object                                     | The values the player entered                              |
+- An answer carries no `text`: the server fills it from the interaction's narrative template.
+- All answers in one submission must belong to the same `turnId`; they may be mixed with ordinary actions.
+- An answer is checked against the seat's role by its `kind`, so a spectator cannot answer a form (`action_kind_not_allowed`). The `kind` must be the one the committed interaction declares (or its default); otherwise the answer is refused with `invalid_action`.
+- An action accepts only the fields above. The source plugin, field definitions, and templates are read only from the interaction that was submitted.
 
-Other keys in a submission are dropped. The source plugin, field definitions, and templates are read only from the interaction that was submitted.
-
-**Values format for the three interaction types:**
+**Fields format for the three interaction types:**
 
 **Form (form):** each field name has one value
 
 ```json
 {
-  "interactionId": "create-character",
-  "type": "form",
-  "values": { "name": "艾尔文", "class": "法师" }
+  "kind": "act",
+  "interaction": {
+    "turnId": "t1",
+    "interactionId": "create-character",
+    "type": "form"
+  },
+  "fields": { "name": "艾尔文", "class": "法师" }
 }
 ```
 
@@ -2937,9 +2993,13 @@ Other keys in a submission are dropped. The source plugin, field definitions, an
 
 ```json
 {
-  "interactionId": "path-choice",
-  "type": "choice",
-  "values": { "selectedId": "forest_path", "selectedLabel": "穿越黑暗森林" }
+  "kind": "say",
+  "interaction": {
+    "turnId": "t1",
+    "interactionId": "path-choice",
+    "type": "choice"
+  },
+  "fields": { "selectedId": "forest_path", "selectedLabel": "穿越黑暗森林" }
 }
 ```
 
@@ -2947,9 +3007,13 @@ Other keys in a submission are dropped. The source plugin, field definitions, an
 
 ```json
 {
-  "interactionId": "accept-quest",
-  "type": "confirmation",
-  "values": { "confirmed": true }
+  "kind": "act",
+  "interaction": {
+    "turnId": "t1",
+    "interactionId": "accept-quest",
+    "type": "confirmation"
+  },
+  "fields": { "confirmed": true }
 }
 ```
 
@@ -2974,11 +3038,11 @@ Other keys in a submission are dropped. The source plugin, field definitions, an
 }
 ```
 
-| Field               | Description                                                                                                                                            |
-| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `interactionTurnId` | The turn that produced the interaction. The `turnId` in the envelope is the next turn                                                                  |
-| `results[].values`  | The values the server saved. The client uses them to fill the form again, instead of the text the player typed                                         |
-| `message`           | The player message for the next turn: `id` is the ID of the saved `turn_messages` row, and `content` is each `filledNarrative` joined with line breaks |
+| Field               | Description                                                                                                                                                                                                    |
+| ------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `interactionTurnId` | The turn that produced the interaction. The `turnId` in the envelope is the next turn                                                                                                                          |
+| `results[].values`  | The values the server saved. The client uses them to fill the form again, instead of the text the player typed                                                                                                 |
+| `message`           | The player message for the next turn: `id` is the ID of the saved chat message, and `content` is the text of each action of the submission joined with line breaks (an answer's text is its `filledNarrative`) |
 
 - `results[].values` is already normalized: numbers and booleans are converted to the field type, and `selectedLabel` is taken from the original option.
 - When an interaction declares `submitBehavior.echoFilledNarrative: false`, its narrative is not counted in `message`. If none are counted, there is no `message`, and the turn runs with no player message.
@@ -3005,7 +3069,7 @@ Other keys in a submission are dropped. The source plugin, field definitions, an
 `form_rejected`:
 
 - What is checked: required fields, numbers, ranges, steps, options, text length, and the source plugin's form validator.
-- Text length uses the same limit as `send_message.content`: 100,000 characters (`MAX_PLAYER_MESSAGE_CHARS`).
+- Text length uses the same limit as the total text of one submission's actions: 100,000 characters (`MAX_PLAYER_MESSAGE_CHARS`).
   - If a single `text` / `textarea` field goes over, it is rejected field by field.
   - If the whole player message made from all the fields goes over, it is rejected as an error for the whole form. The reason is that this text is the player message for the next turn, and a retry after the turn fails also sends it as one message.
 - `message` is the text written for the player in the session's locale. It uses the field's `label` to say which item it is and what to change.
@@ -3046,7 +3110,7 @@ Other keys in a submission are dropped. The source plugin, field definitions, an
 **Connection drops:** once a turn starts, it runs on the server through to commit. This does not depend on the connection.
 
 - A client that lost the response does not know whether the answer was saved, so it does not resend. It polls `GET /api/sessions/:id/execution`, and it marks the form as submitted using `submittedInteractions` from the combined view.
-- When the next turn fails, `execution.retry` gives `send_message` (with the content of that player message). If there is no player message, it gives `retry_turn`. A retry does not submit the answer again.
+- When the next turn fails, `execution.retry` gives `retry_turn`. The server runs the turn again from the actions it recorded in `turn.started`, and does not submit the answer again.
 
 **Usage notes:**
 
@@ -3094,6 +3158,8 @@ Calls the handler that the plugin registers in `entry` with `covel.registerRpc`,
 ##### Runtime level
 
 Runs one target runtime by hand. It goes through the full turn flow: it builds the prompt, runs the tool loop, and submits proposals. Downstream runtimes triggered by an event keep running in the same turn. When one event has several subscribers, they run in order of `name`.
+
+A target with `schedule.subagentOnly` returns `409 runtime_subagent_only` and nothing runs: it runs only as a [sub-agent](./plugins.md#sub-agents) inside another runtime. The plugin detail and the execution flow mark such a runtime with `subagentOnly: true`.
 
 How it runs is decided by `schedule.background` in the runtime manifest:
 
@@ -3936,6 +4002,7 @@ Notes:
 Lists the plugins this session can see, and the commands the session can run right now.
 
 - `items[]`: each item adds `active`, `locked`, `sessionState`, and `serverCodeApproved` to `PluginSummary`, and can include `serverCodeApprovedBy: "session" | "trusted-source"`, `approvalRequired`, `autoAdded`, and `rejection`. `serverCodeApprovedBy` distinguishes an explicit session grant from a current implicit source-policy grant.
+- `items[].paused?: { reason }`: present only while paused by faults in this session; `active` still describes selection. Use the endpoint below to resume.
 - `items[].runtimes` has exactly the same shape as in `GET /api/plugins`.
 - `commands[]`: the only executable command catalog. It is filtered by the plugins that are currently enabled, plus the framework commands. Each command is listed once at the top level, and it is not repeated per plugin.
 - `unavailable[]`: the plugins the player confirmed that cannot run now. Each item is a `rejection` (`pluginId`, `code`, `reason`). The cause can be that the plugin is not installed (`unknown-plugin`), failed to load, or that its installed version lacks a provider or conflicts with another member. The game goes on.
@@ -3988,6 +4055,14 @@ Lists the plugins this session can see, and the commands the session can run rig
   ]
 }
 ```
+
+#### `POST /api/sessions/:id/plugins/:pluginId/resume-fault`
+
+Re-enable a plugin paused by faults in this session and reset its count, under `session.access` authorization. No request body is required. Returns the same plugin view and command directory as `GET /plugins`; the plugin no longer has `paused`. It runs again from the next execution.
+
+- `404 session_not_found`: unknown session; `404 plugin_not_found`: unknown plugin.
+- `409 plugin_not_paused`: the plugin is not currently paused by faults.
+- Saved selection, approvals and plugin data are unchanged; no snapshot is written. See [plugin fault latch](./protocol.md#plugin-fault-latch).
 
 #### `PUT /api/sessions/:id/plugins/:pluginId`
 
@@ -4112,7 +4187,7 @@ The rate limit is the same as for `/page`: the same client can make at most 120 
 | --------- | -------- | ----------- |
 | `id`      | Path     | Session ID  |
 
-**Response:** `{ items }`. Each item is a flat message object. `turnId`, `runtimeId`, `kind`, and `block` are moved up from `metadata` in storage to the top level.
+**Response:** `{ items }`. Each item is a flat message object. `turnId`, `runtimeId`, `kind`, and `block` are moved up from `metadata` in storage to the top level. A player message also has `actions`: the resolved actions it submitted (see [`submit_actions`](#submit_actions)).
 
 ```json
 {
@@ -4340,6 +4415,7 @@ Resume a suspended runtime with the data the player submitted.
 
 - **agent runtime**: Continues from the saved tool-call record.
 - **function runtime**: Calls the handler again. This time's data is passed in through `ctx.resumeData` and `ctx.resumedFromSuspensionId`. It does not enter the model loop.
+- The session's `runtimeModelOverrides` apply as usual: the resumed runtime and the sub-agents it calls each pick their model by their own runtimeId.
 
 **Request**
 
@@ -4353,7 +4429,7 @@ Resume a suspended runtime with the data the player submitted.
 | ------ | ------ | -------- | ---------------------------------------------------------------------------- |
 | `data` | object | Yes      | Data the player submitted. It must match the suspended item's `resumeSchema` |
 
-- If a community plugin lacks execution grants, the server first returns `202 approval-required`, asking for `covel:plugin-server-code` and then `runtime:<runtimeId>`. Only the resumed runtime needs approval; the server rechecks the grants under the session lock. The client approves each request and retries the original submission. Denying approval leaves the suspension pending. Hosted deployments also require an operator credential.
+- If a community plugin lacks execution grants, the server first returns `202 approval-required`, asking for `covel:plugin-server-code` and then `runtime:<runtimeId>`. Only the resumed runtime and the session's sub-agent providers need approval; the server rechecks the grants under the session lock. The client approves each request and retries the original submission. Denying approval leaves the suspension pending. Hosted deployments also require an operator credential.
 - The server checks `data` against `resumeSchema` with full JSON Schema validation (Ajv). This covers `enum`, nested objects, `min` / `max`, `minLength` / `maxLength`, `pattern`, array `items`, `oneOf` / `anyOf`, and more. If the data does not match, the server returns `400 resume_data_invalid`. If the schema is not an object or cannot compile, it returns `400 resume_schema_invalid` without claiming the suspension or running the plugin. The author must correct the schema produced by the plugin and create a new suspension. The player can abandon the original item.
 - A browser client can send an `X-Provider-Keys` header to give model keys for this request. The desktop app and self-hosted clients can leave it out, and the server then uses the keys it was started with. The server never returns keys through this endpoint.
 
@@ -4381,7 +4457,7 @@ Resume a suspended runtime with the data the player submitted.
 Rules for failed responses:
 
 - A failed response returns only the general error envelope. It does not include a runtime result.
-- If the runtime itself fails, `error` is `Resume failed: <reason>`. This is the same text the player sees for `runtime.failed` in the turn event stream.
+- If the runtime itself fails, `error` is `Resume failed: <reason>`. This is the same text the player sees for `runtime.failed` in the turn event stream. Self-caused faults still count toward the session’s [fault latch](./protocol.md#plugin-fault-latch), but buffered writes stay uncommitted and the suspension stays unresolved. If the plugin is paused, the player must re-enable it before retrying.
 - If the commit fails, `error` is `Resume commit failed: <reason>. The suspension remains unresolved and can be retried.`
 - After a failure, this request releases its hold on the suspended item (unless the session was deleted and recreated), so you can retry. The internal cause is written only to the server log.
 
@@ -4951,17 +5027,17 @@ Pushes an event into a session's event stream from outside. Clients subscribed t
 
 #### `POST /api/actions`
 
-Every game action from the player comes in through here: sending a message, running a command, answering an interaction, starting a session, and retrying. The server turns each action into one turn run, and it sends the results back over SSE, one piece at a time. The built-in front end mainly uses this endpoint.
+Every game action from the player comes in through here: saying something, acting, running a command, answering an interaction, starting a session, and retrying. The server turns each action into one turn run, and it sends the results back over SSE, one piece at a time. The built-in front end mainly uses this endpoint.
 
 **Request**
 
 ```json
 {
   "requestId": "req-001",
-  "type": "send_message",
+  "type": "submit_actions",
   "sessionId": "mistport-a1b2c3d4",
   "payload": {
-    "content": "我拔出剑，准备迎战"
+    "actions": [{ "kind": "say", "text": "我拔出剑，准备迎战" }]
   }
 }
 ```
@@ -4979,33 +5055,34 @@ Top-level fields:
 Validation rules:
 
 - Only the five fields above are accepted at the top level. The `payload` of each action also rejects any field that is not declared.
-- Seven `type` values are supported: `send_message`, `execute_command`, `submit_interaction`, `start_session`, `retry_turn`, `retry_runtime`, and `retry_failed_runtimes`. Any `type` not on this list returns `400`.
-- All seven request types must include a `payload` that matches the `type`, even when it is an empty object.
+- Five `type` values are supported: `submit_actions`, `start_session`, `retry_turn`, `retry_runtime`, and `retry_failed_runtimes`. Any `type` not on this list returns `400`, including the removed `send_message`, `execute_command`, and `submit_interaction`.
+- All five request types must include a `payload` that matches the `type`, even when it is an empty object.
 - A request cannot include `locale`. Turns always use the content language that was set when the session was created (`session.locale`). A request with `locale` is rejected.
 - `requestId`, `sessionId`, and the runtime and turn IDs must be safe identifiers with a limited length.
 - An invalid request returns `400` before a turn is created or a message is written.
 
 `payload` for each `type`:
 
-| `payload` field         | Applies to `type`       | Required | Description                                                                            |
-| ----------------------- | ----------------------- | -------- | -------------------------------------------------------------------------------------- |
-| `content`               | `send_message`          | Yes      | The player's natural-language input                                                    |
-| `command`               | `execute_command`       | Yes      | A command that starts with `/` (for example `/look`)                                   |
-| `turnId`, `submissions` | `submit_interaction`    | Yes      | Answers an interaction raised by a turn. See [Player interaction](#player-interaction) |
-| `loreOverride`          | `start_session`         | No       | Text that overrides the world background. Up to 500000 characters                      |
-| —                       | `retry_turn`            | —        | `payload` is an empty object                                                           |
-| `runtimeId`             | `retry_runtime`         | Yes      | Runs only this one runtime again                                                       |
-| `retryFromTurnId`       | `retry_runtime`         | No       | Says which turn the failure to fix comes from                                          |
-| `runtimeIds`            | `retry_failed_runtimes` | Yes      | 1–20 unique, enabled runtime IDs                                                       |
-| `retryFromTurnId`       | `retry_failed_runtimes` | Yes      | The committed original turn where these runtimes failed                                |
+| `payload` field   | Applies to `type`       | Required | Description                                                                           |
+| ----------------- | ----------------------- | -------- | ------------------------------------------------------------------------------------- |
+| `actions`         | `submit_actions`        | Yes      | 1 to 8 actions; see [`submit_actions`](#submit_actions)                               |
+| `inputMessageId`  | `submit_actions`        | No       | The ID of the player input the browser saved first; see the [protocol](./protocol.md) |
+| `loreOverride`    | `start_session`         | No       | Text that overrides the world background. Up to 500000 characters                     |
+| —                 | `retry_turn`            | —        | `payload` is an empty object                                                          |
+| `runtimeId`       | `retry_runtime`         | Yes      | Runs only this one runtime again                                                      |
+| `retryFromTurnId` | `retry_runtime`         | No       | Says which turn the failure to fix comes from                                         |
+| `runtimeIds`      | `retry_failed_runtimes` | Yes      | 1–20 unique, enabled runtime IDs                                                      |
+| `retryFromTurnId` | `retry_failed_runtimes` | Yes      | The committed original turn where these runtimes failed                               |
 
 > [!NOTE]
-> The player's input has exactly two field names: `send_message` uses `payload.content`, and `execute_command` uses `payload.command`. There are no aliases. To send an event from a plugin, use the built-in `emit-event` tool.
+> Player input goes only through `submit_actions`: speech is `say`, a slash command is `command`, and an answer to an interaction is an action that carries `interaction`. To send an event from a plugin, use the built-in `emit-event` tool.
 
 Extra notes for each type:
 
 - **`loreOverride` in `start_session`**: The server saves it in the session. The setup, the opening continuation, and later turns all use this `world.lore` first. An empty string means the background was deliberately cleared. If it is left out, the value already saved in the session is kept. The web session-prep screen passes the background when it creates the session, so "Begin Adventure" no longer sends the world draft.
-- **`retry_turn`**: Starts a new main-loop turn with empty player input, using the context that is already committed. After the commit succeeds, the player's turn count goes up by one. It does not restore or regenerate past turns.
+- **`retry_turn`**: Starts a new main-loop turn, using the context that is already committed. After the commit succeeds, the player's turn count goes up by one. It does not restore or regenerate past turns.
+  - When it retries, with `recoverFromTurnId`, a player turn that answered an interaction, the server runs again from the actions that turn recorded in `turn.started` (`playerInput`); the answer is not submitted again.
+  - Otherwise the turn has no player input.
 - **`retry_runtime`**: Runs only the named runtime again, as a manual trigger. It does not advance the player's turn count.
   - With `retryFromTurnId`: That turn must be a committed original turn in the current story, and the target runtime must still be failing. If the turn does not exist, the request is rejected right away. The server does not switch to a different turn.
   - Without it: The request is handled as an ordinary manual call. It uses the result of the most recent committed player turn, if there is one.
@@ -5064,8 +5141,8 @@ If a community plugin in the session has not been approved yet, the server retur
 
 - The client approves the current session through the approval endpoint, and then resends the original request with the **same `requestId`**.
 - You may be asked several times in a row: first `covel:plugin-server-code`, then each `runtime:<name>`.
-- The scope that an ordinary action checks: the runtimes in the selected plugins that take part in automatic runs (after resolving the contract dependencies). An explicit retry checks only the selected targets.
-- An ordinary call to a manual runtime still goes through the plugin RPC approval.
+- The scope that an ordinary action checks: the runtimes in the selected plugins that take part in automatic runs, and the sub-agent providers (`schedule.subagentOnly`, which any execution may call), all after resolving the contract dependencies. An explicit retry checks only the selected targets and the sub-agent providers.
+- An ordinary call to a manual runtime still goes through the plugin RPC approval: first the target's own grants, then those of the session's sub-agent providers.
 - If approval is refused, the turn is not run.
 - The `demo` and `commercial` deployment tiers also require the operator token. Before the code is actually loaded during execution, the approval is checked once more.
 - The web client supports approving several requests in a row. It rejects duplicate approval responses and responses that belong to another session.
@@ -5080,16 +5157,86 @@ The session must already have a non-empty `activePlugins`. Otherwise the server 
 - The `plugin-plan.defaultPluginIds` is calculated the same way as for the session: `requires`, `conflicts`, and the rule that replaces a core plugin with a trusted built-in core plugin. The session-prep screen shows this result, and it does not lock again a core plugin that has already been replaced.
 - The endpoint that creates a session no longer reads the world's plugin policy. It only adds the built-in core plugins and the `requires` relationships, and it handles `conflicts`.
 
+##### `submit_actions`
+
+What a player submits each time is a list of **actions**. A single-player game usually has one:
+
+```json
+{ "kind": "say", "text": "我拔出剑，准备迎战" }
+```
+
+The fields of each action:
+
+| Field         | Type   | Required | Description                                                                                                                 |
+| ------------- | ------ | -------- | --------------------------------------------------------------------------------------------------------------------------- |
+| `kind`        | string | Yes      | A base kind, or a plugin kind `<pluginId>/<name>`; see [action kind catalogue](#action-kind-catalogue)                      |
+| `seatId`      | string | No       | The seat it is submitted from. Left out, it is the primary seat (the first player seat a human controls)                    |
+| `actorId`     | string | No       | The character it is taken as. Left out, it is the seat's current character; a kind not taken as a character cannot have one |
+| `text`        | string | By kind  | What the player wrote                                                                                                       |
+| `fields`      | object | No       | A plugin kind's structured fields, or an interaction's answer                                                               |
+| `interaction` | object | No       | The interaction it answers; see [player interaction](#player-interaction)                                                   |
+
+- A client cannot send `source`: the server always sets it to `player`.
+- One submission holds at most 8 actions, with at most 100,000 characters of text in total. The texts filled from interaction answers count too: after filling the answers under the lock, the server checks the total again and refuses a submission over it with `invalid_action`, storing nothing.
+
+Base kinds:
+
+<!-- prettier-ignore -->
+| `kind` | Meaning | Text | Taken as a character |
+| --- | --- | --- | --- |
+| `say` | Speak as a character | Required | Yes |
+| `act` | Act as a character | Required | Yes |
+| `narrate` | Write narration directly | Required | No |
+| `direct` | A director's instruction to the narrator | Required | No |
+| `advance` | No text; only moves the story on | None | No |
+| `command` | A slash command; the text starts with `/` | Required | No |
+
+Which role may submit which base kind is in [seats](./world-model.md#seats).
+
+**Order of checks.** The server checks each action in the order below. The first failure refuses the whole submission and nothing is saved: no message, no interaction record, no turn. A failure before the stream opens is a JSON response; if the session changed while the request waited for the lock, the same checks run again under the lock, and a failure is an `error.occurred` with the same `code`.
+
+<!-- prettier-ignore -->
+| Order | Check | Status | `code` |
+| --- | --- | --- | --- |
+| 1 | The body matches the schema | 400 | `invalid_action_request` |
+| 2 | The seat exists (without `seatId`, the session must have a primary seat) | 404 | `seat_not_found` |
+| 3 | A human controls the seat | 409 | `seat_not_human` |
+| 4 | The session's catalogue has the kind | 409 | `unknown_action_kind` |
+| 5 | The seat's role may submit the kind | 409 | `action_kind_not_allowed` |
+| 6 | `actorId` is bound to the seat; a kind not taken as a character has none | 409 | `actor_not_bound` |
+| 7 | The text rule; an answer has the kind its interaction declares and no text; all answers belong to one turn | 400 | `invalid_action` |
+| 8 | `fields` match the plugin kind's schema; a base kind takes no `fields` (except an answer) | 400 | `invalid_action_fields` |
+
+After that, the answering actions go to the interaction submission, whose error codes are in [player interactions](#player-interactions). Once the submission has applied defaults and coerced numbers, an answer to an interaction declared as a plugin kind with a schema must also match that schema (a form need not repeat the plugin kind's limits); otherwise it is refused with `invalid_action_fields` and nothing is saved. This step runs under the session lock, so a failure is an `error.occurred` with that `code`.
+
+##### How the player message is rendered
+
+A turn's `TurnInput.playerMessage` is the text the kernel renders from the actions; narrators and plugins that read `ctx.playerMessage` read it:
+
+- **A single player's input stays as written.** When all actions come from one player seat that binds at most one character, are taken as the current character (or as none), and are each a `say` without `fields`, a `command` or an interaction answered as `say` / `act`, the rendering is the actions' texts joined with line breaks. A single-player game's prompts are therefore the same as before, byte for byte.
+- An interaction answered as a plugin kind does not take this path: it is written in the labelled form below, so the model knows which kind of action it was.
+- **Otherwise the character and the kind are named.** Each action is written `[<character name> · <kind label>] <text>` (in a Chinese session `【<character name>·<kind label>】<text>`), or `[<kind label>] <text>` when it is not taken as a character. For example, the second character speaking is `[Scout · says] Wait for me.`, and a host's narration is `[narration] Rain falls.`.
+- Base-kind labels are in the framework prompt file [`prompts/server/action-labels.md`](../../../prompts/server/action-labels.md), chosen by the session language; a plugin kind uses its `display.label`.
+- A plugin kind always renders, even without text: its label says what the player did, and its `fields` follow the text as JSON. For example `[Hero · passes]` or `[Hero · casts] {"spell":"light"}`.
+- Only character names are written, never IDs. A base kind or an answer without text (`advance`, an answer that does not echo) renders nothing, so an `advance`-only submission adds no player message.
+
+**Storage.** The player message is committed with the turn:
+
+- The prompt history (`turn_messages`) keeps the rendered text, so later turns see who did what.
+- The chat message's `content` keeps the raw text (the actions' texts joined with line breaks; when no action has text, for example a single plugin kind without text, it keeps the rendering), and `metadata.actions` keeps the resolved actions (an action's `fields` are left out when they exceed 4 KB). The message API returns them as `actions`; see [message history](#message-history-1).
+
+**Retry.** When the turn fails, `execution.retry` gives a `submit_actions` with the resolved actions (`seatId` and `actorId` filled in); a turn that answered an interaction gives `retry_turn` (see above).
+
 ##### Opening continuation
 
 After the player submits the opening form, the opening narrative appears on its own. The player does not need to send another message.
 
-- **When it happens**: One player action (`send_message` / `execute_command` / `submit_interaction` / `start_session`) completes the **last** setup runtime. The setup run is committed separately, and `phase` switches to `playing`.
+- **When it happens**: One player action (`submit_actions` / `start_session`) completes the **last** setup runtime. The setup run is committed separately, and `phase` switches to `playing`. A `retry_turn` that reruns such a turn from its recorded answer does the same (for example, recovering after the server stopped right after saving the last opening answer).
 - **What happens**: In the same request, on the same SSE stream, the server automatically runs one main-loop turn. This turn has a new `turnId` and its own transaction. It reads the setup state that was just committed, and lets the narrative runtime write the opening.
 - **Counting**: The continuation turn runs with `origin: continuation`. It does not increase `completedPlayerTurns`.
 - **Events**: The whole stream still sends only **one** `execution.completed`, and it uses the data from the continuation turn.
 - **Cases with no continuation**:
-  - The action is `retry_turn` / `retry_runtime` / `retry_failed_runtimes`;
+  - The action is `retry_runtime` / `retry_failed_runtimes`, or a `retry_turn` that does not rerun a player's answer (such as recovering the opening continuation itself);
   - The execution was aborted (`abortReason`);
   - The commit failed;
   - Setup still has unfinished items (an opening interaction comes next).
@@ -6056,6 +6203,9 @@ For the full classification table, see [protocol.md § 1. Event types](./protoco
 | `turn.resumed` | Flow control | Sent when `POST /api/sessions/:id/suspensions/:suspensionId/resume` restarts a runtime |
 | `proposal.failed` | Flow control | One proposal failed to submit. It is reported clearly and never dropped quietly; the submitter writes it straight to the action stream |
 | `job-status.updated` | Flow control | A background function runtime reports progress through `ctx.progress`; append-only, forwarded to the action stream |
+| `plugin.fault.counted` | Plugin faults | Counts a self-caused fault; trace-only, not forwarded to the action stream |
+| `plugin.fault.latched` | Plugin faults | Pauses a repeatedly failing plugin; forwarded to the action stream, with session events for other executions |
+| `plugin.fault.cleared` | Plugin faults | Clears the count after a clean run or player re-enable; same delivery as above |
 | `context.pruned` | System | The prompt went over the slot budget and the history was cut hard; only goes to the trace (used by `/debug`), not the action stream |
 | `context.compaction.failed` | System | History compaction failed, with the reason; only goes to the trace (used by `/debug`) |
 | `commit.fanout.failed` | System | The turn was committed, but some events sent after the commit could not be published; only goes to the trace, and the subscription stream also receives `system.reset` |
@@ -6069,10 +6219,15 @@ These events are also full members of `CovelEvent`. `COVEL_EVENT_META` says for 
 | ---------------------------------------------------------------------- | -------------------------------- | :-------------------------: | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `runtime.skipped`                                                      | `actions.ts`                     |             No              | A runtime was skipped because of cooldown / startTurn / maxTriggerCount                                                                                                |
 | `character.upserted`                                                   | `session-commit-emitter.ts`      |             Yes             | Sent after a `character.upsert` proposal is committed                                                                                                                  |
+| `domain-event.previewed`                                               | ToolExecutor                     |             Yes             | Event preview from a successful tool call, not a domain commit                                                                                                         |
+| `step.started` / `step.completed`                                      | TurnEmitter                      |             Yes             | Agent tool-loop step traces                                                                                                                                            |
+| `plugin.fault.latched` / `plugin.fault.cleared`                        | Host fault latch                 |             Yes             | Fixed player notices when a plugin pauses or its count clears                                                                                                          |
+| `plugin.fault.counted`                                                 | Host fault latch                 |             No              | Trace-only count of a plugin’s self-caused faults                                                                                                                      |
 | `tool.calling` / `tool.completed` / `tool.failed`                      | TurnEmitter                      |             Yes             | Tool-call traces (for the debug timeline)                                                                                                                              |
 | `llm.calling` / `llm.responded` / `message.completed`                  | TurnEmitter                      |             Yes             | LLM call traces                                                                                                                                                        |
 | `block.emitted`                                                        | TurnEmitter                      |             Yes             | Traces for a block being emitted                                                                                                                                       |
-| `hook.fired` / `hook.rewrote` / `hook.aborted`                         | TurnEmitter                      |             Yes             | Hook behavior traces                                                                                                                                                   |
+| `hook.fired` / `hook.aborted`                                          | TurnEmitter                      |             Yes             | Hook behavior traces                                                                                                                                                   |
+| `hook.rewrote`                                                         | TurnEmitter                      |             No              | Hook content rewrite trace; not forwarded to the action stream                                                                                                         |
 | `gateway.calling` / `gateway.responded` / `gateway.failed`             | TurnEmitter (`withGatewayTrace`) |             Yes             | Traces for a function runtime or an extension provider calling a provider through `ctx.gateway` (same as `llm.*`); a failure carries the `usage` the provider reported |
 | `function.executing` / `function.completed`                            | TurnEmitter                      |             No              | Start and end traces of a function runtime handler; only goes through the subscription channel and `trace_events`                                                      |
 | `recursive.calling` / `recursive.completed` / `recursive.failed`       | TurnEmitter                      |             No              | Traces of a recursive runtime; only goes through the subscription channel (topic `trace`)                                                                              |

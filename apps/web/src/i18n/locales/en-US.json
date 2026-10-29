@@ -2114,7 +2114,11 @@
       "install": "Install a narrative plugin under Settings → Install & manage, then restart the backend."
     },
     "dependentsOff": "These plugins will be off because a capability they need is off:",
-    "trustedSourceApproved": "auto-approved: trusted source"
+    "trustedSourceApproved": "auto-approved: trusted source",
+    "faultPaused": "Paused",
+    "resumeFault": "Resume",
+    "faultPausedNotice": "{{plugin}} is paused in this session after repeated errors.",
+    "resumeFaultFailed": "Could not resume the plugin. Try again."
   },
   "pluginJob": {
     "runtimesNotLoaded": "{{plugin}} was approved, but {{count}} of its tasks cannot be loaded and will not run.",

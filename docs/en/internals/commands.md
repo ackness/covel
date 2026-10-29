@@ -73,6 +73,7 @@ Further reading:
 ## Authoring and packaging
 
 ```bash
+pnpm plugin:extract <plugin-dir> # run your own entry factory and sync canonical PLUGIN.md; --check for CI, --json for a report
 pnpm describe:authoring  # what a world may contain for the scanned plugins: files, data contracts
                       # with the path each file goes to and an example, plugin IDs and settings
                       # (--json, --check validates plugin examples, --plugins <dir>)
@@ -86,6 +87,8 @@ pnpm i18n:add         # add a UI locale to the web app (apps/web/src/i18n/locale
 ```
 
 `pnpm create-plugin <name> [-t dir] [-r a:function,b:agent]` generates a plugin from `templates/`. By default it is generated into the user plugin directory. With `--with-tools`, it is generated under the repository's `plugins/` instead. This option cannot be used together with `-t` or `-r`.
+
+`pnpm plugin:extract` executes entry code with your permissions and is meant for your own package. By default it writes declarations and lists changed keys; `--check` writes nothing and lists added and removed names per key, exiting 1 on drift and 0 when in sync. `--json` emits the extraction result and drift. Extraction errors exit 1; invalid arguments exit 2. See [Plugins with local code](../plugins/local-code.md#4-write-the-entry-file) for the scope and localized-file rules. `pnpm validate:plugin` remains static and never executes the entry.
 
 Further reading: for collections, see [Collections](../ship/collections.md). For the translation tools, see [i18n](../reference/i18n.md).
 

@@ -281,7 +281,53 @@ agent:
       deadlineReserveMs: 10000 # 离时限还剩 10 秒时不再调用工具，直接作答
 ```
 
-由其他 runtime 调起、交回一段答案的子 agent 会用到 `actor`。子 agent 还没有提供，现在写 `actor` 只改变上面这些行为。字段、取值和检查规则见[插件参考 · 循环 profile](../reference/plugins.md#循环-profileagentloopprofile)。
+[子 agent](#子-agent) 不写 profile 时就用 `actor`。字段、取值和检查规则见[插件参考 · 循环 profile](../reference/plugins.md#循环-profileagentloopprofile)。
+
+### 子 agent
+
+子 agent 是交给另一个 agent 做的一件小事：给它一段简报，它回一份结果。比如编排者让“守卫”这个角色说一句台词。子 agent 在调用方的这次执行里运行，只交回输出，不写数据，也不发事件。
+
+提供方是一个 agent runtime，写 `schedule.subagentOnly: true`。调度器从不自动运行它，玩家也不能手动运行它：
+
+```yaml
+# runtimes/guard/RUNTIME.md
+schedule:
+  subagentOnly: true
+io:
+  output:
+    contract: gate-actor@1
+    schema: ./output.schema.json
+agent:
+  model: actor
+  tools:
+    builtin: [plugin-data-get]
+```
+
+函数 runtime 用 `ctx.agents.run` 调用它：
+
+```js
+export default async function handler(ctx) {
+  const reply = await ctx.agents?.run({
+    target: { contract: "gate-actor@1" }, // 或 { runtimeId: "my-plugin/guard" }（本包）
+    brief: "A stranger asks to pass the gate.",
+    data: { stranger: "Mara" },
+    budget: { maxSteps: 4, timeoutMs: 20000 },
+  });
+  if (!reply?.ok) return { outcome: "success", value: { line: "..." } };
+  return { outcome: "success", value: { line: reply.output.line } };
+}
+```
+
+agent runtime 在 `agent.tools.builtin` 里声明 `delegate`，模型就能调用它，参数是 `target`、`brief`，可选 `data` 和 `maxSteps`。
+
+- 子 agent 只看到简报和 `data`，看不到会话历史和调用方的对话。
+- 它只能用只读工具。提供方声明的写入工具、`suspend` 和 `delegate` 都会被拿掉。
+- 失败不会抛异常：结果是 `{ ok: false, error: { code, message } }`，由调用方决定怎么办。
+- 一次执行最多同时跑 8 个子 agent，子 agent 不能再调用子 agent。满了直接拒绝（`unavailable`），不排队。
+- 调用方被取消或超时，子 agent 跟着停下。
+- 它用自己声明的模型用途。玩家可以在会话里为这个 runtime 单独换模型。
+
+完整的请求、结果和错误码见[插件参考 · 子 agent](../reference/plugins.md#子-agent)。
 
 ### 失败时
 

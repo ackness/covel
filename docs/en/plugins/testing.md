@@ -197,6 +197,7 @@ Key points:
 - It does not simulate saving. The `pluginData`, `world`, `tools`, `images`, `signal`, and `triggerEvent` that you pass in are given to the function as they are.
 - If a `ctx.store` read method is not provided, calling it fails right away, for example with `store.getPluginData is not configured for this test context`. This way, a test does not quietly read empty data.
 - By default, a fixed `ctx.random` is included, and it gives the same numbers on every run. So the result of a dice roll can be asserted directly.
+- For a function that calls sub-agents, pass `subagents`: a list of results used in order, or a function that returns a result for each request. Without it, `ctx.agents` is absent. To assert the requests sent, use `makeScriptedAgents(results)`, which returns `{ agents, requests }`.
 - The effects that a function returns are in `result.effects`, for example `result.effects.interactions`.
 - For functions that produce both model instructions and player-visible data, test content locales with different `COVEL_INSTRUCTION_LOCALE` values. Cover at least Chinese content with English instructions and English content with Chinese instructions. Call the real handler and assert the instruction language and result data separately; for missing values, check that optional fields are actually omitted. Set overrides with `vi.stubEnv` and restore them with `vi.unstubAllEnvs` in `afterEach`. See the [Dice Check tests](../../../plugins/dice-check/tests/roller.test.js) and the language rules in the [i18n reference](../reference/i18n.md#2-localize-a-plugin).
 
@@ -209,6 +210,7 @@ The exports of `@covel/plugin-test-utils`:
 | ---------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
 | `makeManualFunctionContext`                                            | Builds the `ctx` for a function                                                                                     |
 | `makeRandom(seed?)`                                                    | The `ctx.random` for tests. Tests that write their own `ctx` put it in themselves                                   |
+| `makeScriptedAgents(results)` | A `ctx.agents` for tests: answers `ctx.agents.run` from a script and records each request |
 | `loadPluginMessages(pluginRoot, locale)`                               | Reads the translations in the plugin's `locales/` and gets `ctx.messages`. Use it when you assert on Chinese output |
 | `createPluginTestStore` / `executeToolAndCommit` / `commitToolResults` | Makes a tool go through the real execution and save flow                                                            |
 | `MockLLM`                                                              | A fake model. It records each call. It supports one default reply and a list of replies used in order               |

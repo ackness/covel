@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { normalizeUIRenderInstruction } from "@covel/shared";
 import {
+  createChoicesTool,
   createFormTool,
   createNotificationTool,
   renderUITool,
@@ -259,5 +260,37 @@ describe("create-form select options", () => {
         CTX,
       ),
     ).rejects.toThrow();
+  });
+
+  it("carries the action kind an interaction declares, and none by default", async () => {
+    const choices = {
+      choiceId: "stance",
+      prompt: "How do you stand?",
+      choices: [
+        { id: "firm", label: "Firm" },
+        { id: "loose", label: "Loose" },
+      ],
+    };
+    const declared = (await createChoicesTool.execute(
+      { ...choices, actionKind: "act" },
+      CTX,
+    )) as { interaction: Record<string, unknown> };
+    expect(declared.interaction.actionKind).toBe("act");
+    const plain = (await createChoicesTool.execute(choices, CTX)) as {
+      interaction: Record<string, unknown>;
+    };
+    expect(plain.interaction).not.toHaveProperty("actionKind");
+    const form = (await createFormTool.execute(
+      {
+        formId: "ballot",
+        title: "Ballot",
+        submitLabel: "Vote",
+        narrativeTemplate: "{{pick}}",
+        fields: [{ type: "text", name: "pick", label: "Pick" }],
+        actionKind: "vote-pack/ballot",
+      },
+      CTX,
+    )) as { interaction: Record<string, unknown> };
+    expect(form.interaction.actionKind).toBe("vote-pack/ballot");
   });
 });

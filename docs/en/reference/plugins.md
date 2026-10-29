@@ -134,12 +134,15 @@ Session prep groups the plugins by whether they call a model, that is by the der
 | `settings` | Player settings. The runtime reads them through `ctx.userSettings`. |
 | `data` | The schema, version, accepts, and search settings for this plugin's data namespace |
 | `datasets` | Typed datasets the package owns: the name is the namespace, with schema, key and ops. See [Datasets](#datasets-contributesdatasets) |
+| `actionKinds` | Action kinds players may submit: name, roles, text rule, `fields` schema and display label. See [Action kinds](#action-kinds-contributesactionkinds) |
 | `ui` | Paths, relative to the package root, of the `right/message/view` UI spec files |
 | `ui.view` | Full-column view spec paths relative to the package root; see [Plugin views](./ui-panels.md#plugin-views) for declarations and consent |
 | `worldProjections` | Declarations of world data projections |
 | `prompt` | Static prompt sections |
 
 Registrations in `entry` and declarations in the manifest are checked in both directions. If something is registered but not declared, or declared but not implemented, loading fails. Package-level contributions belong only to the root file. They are not merged with the fields of a child runtime. `wires` and other rarely needed forms are in [Advanced fields](#advanced-fields).
+
+Authors can generate the six registration lists from their entry with `pnpm plugin:extract <dir>` and check drift in CI with `--check`. This executes the author's own code; installation, approval and static validation still read declarations, and loading still checks both directions. See [Plugins with local code](../plugins/local-code.md#4-write-the-entry-file) for the rewrite scope and command usage.
 
 Bundled plugins follow the same current data contracts as external packages. Dice receipts carry a `checks` array, and `pluginData.get()` returns the stored value directly. A narrative binding projected with `select: /narrativeOutput` carries a string. World rules use flat records with `schemaVersion`, `id`, and `content`, without a `{ rule, ... }` wrapper. NPC edge history permits one open version per relation; duplicate open versions are rejected without automatic repair. Portrait replacement matches an exact character ID or the current `npc-<blueprintId>` projection, never an arbitrary session prefix.
 
@@ -196,7 +199,7 @@ Leave out a field whose value is the default. When you write one, `pnpm validate
 | `agent.toolChoice` (with `finishWith`) | `required` |
 | `agent.loop.timeoutMs`, `callTimeoutMs`, `maxRetries` | a runtime with `io.visibility: story`: 240000, 120000, 1; any other: 120000, 60000, 3 |
 | `agent.loop.profile` | `story` for a runtime with `io.visibility: story`, `system` for any other |
-| `agent.loop.stream`, `steering`, `truncation`, `fallback`, `finalizer.*` | the chosen profile's value; see [Loop profile](#loop-profile-agentloopprofile) |
+| `agent.loop.stream`, `steering`, `truncation`, `fallback`, `finalizer.*`, `corrections.*` | the chosen profile's value; see [Loop profile](#loop-profile-agentloopprofile) |
 | `contributes.data.*.version` | `1` |
 | `contributes.hooks[].enforce` | `normal` |
 | `contributes.extensions[].order` | `0` |
@@ -344,6 +347,7 @@ The trigger types are `auto` (the default), `manual`, and `event`.
 - `schedule.every: N` makes an `auto` runtime run only on the logical turns that are a multiple of N. For example, `every: 3` runs on turns 3, 6 and 9.
 - `schedule.trigger` can also set `startTurn` (the first turn it may run), `cooldownTurns` (the least number of turns between two runs) and `maxTriggerCount` (the most runs in one session). When it sets only these, `type` can be left out too.
 - `manual` and `event` runtimes are triggered separately, by a request or by an event. They declare no stage and cannot set `every`. A setup runtime cannot set `every`, `startTurn` or `cooldownTurns`.
+- `schedule.subagentOnly: true` makes an agent runtime run only as a [sub-agent](#sub-agents): the scheduler never selects it, and no manual RPC, batch re-run or `ctx.recursiveCall` can run it. It implies `trigger: manual`, so `type` can be left out, and any other type is rejected. It cannot be a function runtime or `io.visibility: story`, and cannot set `stage`, `needs`, `after`, `background`, `io.output.recordAs` or `guard`: these mean something only for a scheduled runtime.
 - `schedule.background: true` runs a manual or event runtime in the background: the caller gets a job ID at once and does not wait for the result. Such a runtime has no upstream in the same execution, so it cannot read a `scope: turn` input; use `scope: committed` or a kernel input instead.
 - `schedule.detached: true` lets the turn finish first; the runtime then runs as a durable background job. It is allowed only on the `post-turn` and `audit` stages, and not on a runtime with `io.visibility: story`.
 - Written as an object, `schedule.detached` sets the job's options and also makes the runtime detached: `settle: true` makes the player's next action wait until the job is done, for at most `maxSettleWaitMs` (120000 at most); `maxQueueMs` and `maxExecutionMs` limit how long the job may queue and run.
@@ -556,7 +560,8 @@ An agent's side effects come only from its tools. What the model can write is de
 
 | Field                            | Meaning                                                                                                                                                                                                                                                                                                                               |
 | -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `ctx.playerMessage`              | The text of the current input, as a string                                                                                                                                                                                                                                                                                            |
+| `ctx.playerMessage`              | The player's input for this turn: the text the kernel renders from `ctx.playerActions`. A single player's ordinary input is the text as written; several characters, a host or a plugin kind name the character and the kind. See [API · How the player message is rendered](./api.md#how-the-player-message-is-rendered)             |
+| `ctx.playerActions`              | The player's resolved actions of this turn, in submission order, each `{ seatId, kind, actorId?, text?, fields?, interaction?, source }`. Empty for the opening, a manual run, an event, a detached job, and a nested `ctx.recursiveCall` run                                                                                         |
 | `ctx.logicalTurn`                | The scheduler's logical turn: the number of committed main-loop player turns, plus one. It is in the context of function handlers and plugin tools. Setup, the opening continuation, and the first player message are all turn 1. `startTurn` and `every` also count by it.                                                           |
 | `turnNumber` in the tool context | The number of player messages recorded in the session, including the form submission during setup                                                                                                                                                                                                                                     |
 | `ctx.session.lastPlayerInput`    | The most recent `PlayerInputSubmission \| null` when the source execution starts. It includes `id/sessionId/turnId/formId/values/createdAt`.                                                                                                                                                                                          |
@@ -589,6 +594,58 @@ At commit, a top-level runtime and the nested calls at every level below it are 
 `manualTrigger.runtimeId` may only name a runtime in the caller's own package: the package ID for an inline runtime, or `<pluginId>/<runtimeId>` for a multi-runtime package. A target in another package throws before the nested execution starts. The error names the target runtime and the caller's package ID. Bundled and community plugins follow the same rule.
 
 Use [services](./plugin-extensions.md#registering-and-calling-public-functions) for requests and responses across packages, or [events](./plugin-extensions.md#how-events-trigger-downstream-work) to trigger work in another package.
+
+A `manualTrigger.runtimeId` that names a `schedule.subagentOnly` runtime is an error; use `ctx.agents.run` instead.
+
+#### Sub-agents
+
+A sub-agent is another agent runtime that the caller runs inside its own execution. It has its own transcript and budget and **returns output only**: it makes no writes, emits no events and forms no top-level runtime result, so it is never a commit unit. A function runtime uses `ctx.agents.run`; an agent runtime uses the builtin tool [`delegate`](./tools.md#sub-agents-delegate).
+
+```ts
+const result = await ctx.agents?.run({
+  target: { contract: "gate-actor@1" }, // or { runtimeId: "my-plugin/guard" }
+  brief: "A stranger asks to pass the gate.",
+  data: { stranger: "Mara" },
+  budget: { maxSteps: 4, timeoutMs: 20000 },
+});
+// { ok: true, output, stopReason, usage? } or { ok: false, error: { code, message }, stopReason? }
+```
+
+<!-- prettier-ignore -->
+| Field | Meaning |
+| --- | --- |
+| `target` | `{ contract }`: the active `subagentOnly` provider whose output contract it is, in any package. `{ runtimeId }`: an active `subagentOnly` runtime of the caller's own package |
+| `brief` | The task, the sub-agent's only user message. 1 to 20 000 characters |
+| `data` | An optional JSON object, serialized after the brief, at most 32 KB |
+| `budget` | Optional `maxSteps` and `timeoutMs`. They can only tighten the provider's own limits, and the time limit never exceeds what the caller has left |
+
+The provider is an agent runtime that names the contract it provides in `io.output.contract` and sets `schedule.subagentOnly: true` (rules under [Triggers](#triggers)). Its prompt is the RUNTIME.md body, as usual.
+
+Rules at run time:
+
+- **Own transcript**: the sub-agent's prompt is the provider's own body, the framework's completion instructions, then the brief. It sees neither the session history nor the caller's conversation.
+- **Read-only tools**: tools in the provider's `agent.tools` without the `readOnly` annotation (plugin tools, write tools such as `plugin-data-set`), `suspend` and `delegate` are taken away. A declared plugin tool that is not registered still fails the run as it always does.
+- **Loop profile**: without `agent.loop.profile` it runs `actor`: no streaming, no player interjections.
+- **Model**: it uses the model role the provider declares. The session's `runtimeModelOverrides` apply by the provider's runtimeId, also in a run resumed after suspension; the caller's override and the request's story model override do not.
+- **Caps**: one execution runs at most 8 sub-agents at a time, nested executions included, and a sub-agent cannot call another one (depth cap 1). A call over a cap gets `unavailable` at once; nothing queues.
+- **Cancellation**: when the caller is cancelled, times out or ends, the sub-agent stops with it, with `cancelled`. A sub-agent the handler did not await is waited for before the runtime finishes.
+- **Output only**: the output is checked against the provider's `io.output.schema` and contract schema; a failure is `internal`. The `PreRuntime`, `PostRuntime` and `PostContextAssembly` hooks do not fire for a sub-agent; the in-loop `PreLLMCall`, `PreStep`, `PreToolUse` and `PostToolUse` fire as usual, with the sub-agent's `ctx.runtimeId`.
+- **Trace**: every event of the sub-agent carries `subagentCallId`, `parentCallId` and `parentRuntimeId`, plus `subagent.started` / `completed` / `failed` (see [protocol](./protocol.md#sub-agent-events)). An `io.concealed` provider has its content hidden as a top-level run does.
+
+A failure does not throw (only a call after the handler has ended throws); it returns an error code:
+
+<!-- prettier-ignore -->
+| `error.code` | Meaning |
+| --- | --- |
+| `invalid-input` | The request is invalid: a missing field, a brief that is too long, `data` that is not JSON or too large |
+| `not-found` | No active provider matches `target` |
+| `ambiguous` | More than one active provider offers the contract |
+| `unavailable` | The depth cap or the execution's concurrency cap is reached |
+| `timeout` | The sub-agent used up its own time limit |
+| `cancelled` | The caller or the player cancelled |
+| `internal` | Any other failure: invalid output, a model error, a tool loop. The message is fixed text; the reason is logged on the server only |
+
+`ctx.agents` exists only in a function runtime; an agent's guard has none.
 
 #### The session view (`store.getSession()`)
 
@@ -651,7 +708,8 @@ The kernel input `turn-digest@1` freezes the facts of the source turn. A foregro
 | Field               | Meaning                                                                       |
 | ------------------- | ----------------------------------------------------------------------------- |
 | `turnId`            | The ID of the source turn                                                     |
-| `playerMessage`     | The player's input for that turn                                              |
+| `playerMessage`     | The player's input for that turn (the text rendered from the actions)         |
+| `actions`           | The player's resolved actions of that turn; empty without player input        |
 | `lastPlayerInput`   | The same snapshot as `ctx.session.lastPlayerInput`, or `null`                 |
 | `narrativeText`     | The story text of the turn's successful story runtimes, joined by blank lines |
 | `toolCallSummaries` | One short line per successful, visible tool call                              |
@@ -681,7 +739,7 @@ No bundled plugin uses the fields below, and a first plugin does not need them. 
 | `agent.loop.firstTokenTimeoutMs`, `idleTimeoutMs` | The wait limits of a streaming call. See [Wait limits of a streaming call](#wait-limits-of-a-streaming-call). |
 | `agent.loop.loopDetection` | How many identical calls in a row count as a loop. The default is 3; `0` turns the check off. |
 | `agent.loop.maxRecursionDepth` | How deep `ctx.recursiveCall()` may nest. The default is 10. |
-| `agent.loop.profile`, `stream`, `steering`, `truncation`, `fallback`, `finalizer` | How the loop behaves; see [Loop profile](#loop-profile-agentloopprofile) |
+| `agent.loop.profile`, `stream`, `steering`, `truncation`, `fallback`, `finalizer`, `corrections` | How the loop behaves; see [Loop profile](#loop-profile-agentloopprofile) |
 
 ### Wait limits of a streaming call
 
@@ -717,6 +775,10 @@ When only one thing differs from the profile, write only that key; the rest keep
 | `fallback` | When the model keeps calling the same tool: `answer-without-tools` turns the tools off and asks for the answer; `fail` fails with `loop-detected` |
 | `finalizer.maxSteps` | At the step limit, turn the tools off and ask once more for the final answer. With `false` the step limit always fails |
 | `finalizer.deadlineReserveMs` | With this many milliseconds left before the time limit, start no new step and ask for the final answer with tools off. `0` turns it off |
+| `corrections.toolUse` | Corrections for missing required tool work or explicit completion. Integer 0–3, default 1 |
+| `corrections.review` | Corrections after `PostLLMResponse` rejects a draft. Integer 0–5, default 2 |
+| `corrections.loopPerturbation` | Perturbations of a repeated tool loop before `fallback`. Integer 0–3, default 1 |
+| `corrections.outputRepair` | Requests with tools off for a complete replacement of invalid output. Integer 0–3, default 1 |
 
 The values of the three profiles:
 
@@ -729,8 +791,9 @@ The values of the three profiles:
 | `fallback` | `answer-without-tools` | `answer-without-tools` | `fail` |
 | `finalizer.maxSteps` | `true` | `true` | `true` |
 | `finalizer.deadlineReserveMs` | `0` | `0` | `0` |
+| `corrections` | `{ toolUse: 1, review: 2, loopPerturbation: 1, outputRepair: 1 }` | `{ toolUse: 1, review: 2, loopPerturbation: 1, outputRepair: 1 }` | `{ toolUse: 1, review: 2, loopPerturbation: 1, outputRepair: 1 }` |
 
-`actor` is for an agent that only answers a brief and writes no story text, such as the sub-agents still to come.
+`actor` is for an agent that only answers a brief and writes no story text. A [sub-agent](#sub-agents) that names no profile uses it.
 
 Loading checks these rules and rejects a manifest that breaks one:
 
@@ -740,6 +803,8 @@ Loading checks these rules and rejects a manifest that breaks one:
 - `finalizer.deadlineReserveMs` is a non-negative integer smaller than `timeoutMs` (compared with the default time limit when `timeoutMs` is not written).
 
 **Finishing before the time limit (`deadlineReserveMs`).** When less time than this is left, and text alone could complete the runtime at that moment (no unmet `requireToolUse` or explicit completion, and no output handed over by a completing tool) and at least 3 seconds remain to write it, the loop starts no new step and asks for the final answer with tools off. With `steering` on, player interjections queued during the last step are merged first, so that request reads them. When the answer is written, the runtime succeeds with stop reason `deadline` and `finalizer: true`. When it is not, the runtime still fails with a timeout. The reserve used is at most half of `timeoutMs`, and the time left is measured against the deadline as queue and streaming time have moved it. When the conditions do not hold, the loop runs to the real time limit as usual.
+
+**Correction budgets and output repair.** The four budgets in `agent.loop.corrections` are independent; `0` disables that correction. Write only keys you want to override. A bare text finish and a `runtime-done` without business work share the `toolUse` budget. After the loop and any finalizer, output that fails its schema or a story with empty text gets one request with tools off by default, including the validation errors and asking for a complete replacement answer. If it is still invalid, the runtime fails with `invalid-output`. The repair replaces earlier drafts and story text from before interjections. It runs only after a success-shaped exit, with required tool work and completion met, output not handed over by a completing tool, and at least 3 seconds left. Errors, cancellation and an expired deadline get no repair. Each request consumes one `outputRepair` unit; a new loop, including a resumed execution, starts fresh budgets.
 
 ### Author information
 
@@ -1032,6 +1097,7 @@ The directory-level command `pnpm validate:plugin <dir>` and the ZIP install sha
 - The referenced entry, handler, guard, JSON Schema, and UI files must be inside the package.
 - Each JSON UI spec declares one of `view` and `webview`. Component names in `view` must be in the [component catalogue](./ui-components.md). `repeat.statePath` and `$item` must have a legal form (see [UI panels](./ui-panels.md#json-render-binding-cheat-sheet)). The error gives the spec file and the path of the node.
 - The built-in tool names and the plugin tool declarations, the runtime references inside the package, and the root contract dependencies must all be consistent.
+- A `contributes.actionKinds` `name` must not be a base action kind or repeat; its `schema` file must be in the package and be a JSON object.
 - Each `contributes.datasets` schema file must be in the package and valid JSON. `key` must be a required property in the schema's top-level `properties` (skipped when the schema has none). A name that is also in `contributes.data` must use the same schema in both.
 - An error from a cross-field rule (for example, `schedule.detached` is only allowed on `post-turn` or `audit`, or a story runtime's contract input must set `required: false`) gives the file path and the field path you wrote, for example `runtimes/note/RUNTIME.md: schedule.stage: …`.
 
@@ -1196,6 +1262,32 @@ At commit, every proposal a plugin writes into a dataset namespace it declares i
 - Writes outside the commit pipeline skip these checks: world data import and sync (validated against the source's `schema`, see [World Data · Companion plugin data](./world-data.md#companion-plugin-data)), `context.store.setPluginData` in a plugin action RPC, and the management API `PUT`.
 
 See [Transactions · Operation-based writes](./transactions.md#operation-based-writes-plugindataupdate).
+
+### Action kinds (`contributes.actionKinds`)
+
+What a player submits each time is a list of actions (see [API · submit_actions](./api.md#submit_actions)). The kernel has six base kinds: `say`, `act`, `narrate`, `direct`, `advance`, `command`. A plugin can declare more kinds of its own, without server code:
+
+```yaml
+contributes:
+  actionKinds:
+    - name: whisper
+      roles: [player] # optional: which seat roles may use it, default [player]
+      text: required # optional: required / optional (default) / none
+      actor: true # optional: whether it is taken as a character, default true
+      schema: ./schemas/whisper.json # optional: the JSON Schema fields must match
+      display:
+        label: { zh: 耳语, en: whispers }
+        icon: ear
+        placeholder: { zh: 对谁说悄悄话, en: Whisper to someone }
+```
+
+- **The wire kind is `<pluginId>/<name>`.** In `whisper-pack`, the example is `whisper-pack/whisper`. Two plugins may use the same `name` without a conflict. `name` is lower-case kebab-case, must not be a base kind's name, and must be unique in the package.
+- `roles` must not be empty. Which role may submit which base kind is in [seats](./world-model.md#seats).
+- `schema` is a JSON file in the package. Loading, `pnpm validate:plugin` and installation read it; a missing file, a file that is not a JSON object, or a path that leaves the package root is an error. A kind without `schema` takes no `fields`.
+- `display.label` is the name in the composer and the kind label rendered for the model, chosen by the session language. `fields` follow the text as JSON; an action without text renders as its label and `fields`, and still reaches the player message and the chat history. For example `[Aya · whispers] Over here. {"target":"Guard"}` or `[Aya · passes]`.
+- A form, choice or confirmation can declare in `actionKind` which kind the player's answer is (a base kind or `<pluginId>/<name>`); by default a choice is `say` and a form or confirmation `act`. The answer is checked against the seat's role by this kind; see [API · player interactions](./api.md#player-interactions).
+- Only the kinds that the session's runnable plugins declare are available. The server checks each action against that catalogue; see [`GET /api/sessions/:id/action-kinds`](./api.md#action-kind-catalogue).
+- Function runtimes read the actions from `ctx.playerActions`, with `fields` as submitted; see [turn information in the handler context](#turn-information-in-the-handler-context).
 
 ### Reserved data namespaces
 

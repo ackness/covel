@@ -11,6 +11,8 @@ Each English term has only one Chinese term. The Chinese docs, the UI text, and 
 <!-- prettier-ignore -->
 | Term | Chinese | Notes |
 | --- | --- | --- |
+| Action | 行动 | One item of a player's submission: from which seat, as which character, what kind of thing (`submit_actions`). |
+| Action kind | 行动类型 | A kind of action: the kernel's `say`, `act` and so on, or a plugin's `<pluginId>/<name>`. |
 | Alias | 别名 | Another name for the same character (`aliases`). It is not a compatibility name for a field or ID. |
 | Binding | 绑定 |  |
 | Bundled plugin | 内置插件 | A plugin that ships with Covel. Not the same as `kind: core`. |
@@ -22,6 +24,7 @@ Each English term has only one Chinese term. The Chinese docs, the UI text, and 
 | Dataset | 数据集 | Typed plugin data a plugin declares (`contributes.datasets`). Not the install-time **Collection**. |
 | Deployment form | 部署形态 | The desktop app, the self-hosted web app, the official web app. Not `DEPLOYMENT_TIER`. |
 | Edition | 语言版本 | One language of a world: `defaultLocale`, and the language of each `world.<locale>.yaml` or `WORLD.<locale>.md` at the root. |
+| Fault latch | 熔断 | A session-local pause after consecutive self-caused auxiliary plugin faults, cleared by the player or a process restart. See the [protocol](./protocol.md#plugin-fault-latch). |
 | Finalizer step | 收尾步骤 | The one request, after an agent runs out of steps, that turns tools off and asks for the answer now. |
 | Kernel | 内核 |  |
 | Local model relay | 本地模型中继 | On a shared form, the server reaches a model on the player's computer or local network through the player's browser. See [Security boundaries](../internals/security.md#local-model-relay). |
@@ -41,6 +44,7 @@ Each English term has only one Chinese term. The Chinese docs, the UI text, and 
 | Session | 会话 |  |
 | Slot | 槽位 | In the settings UI it is called "model role". |
 | Stop reason | 结束原因 | How an agent tool loop ended (`RuntimeResult.stop.reason`). |
+| Sub-agent | 子 agent | An agent runtime another runtime runs inside its own execution, returning output only. |
 | Trigger mode | 触发模式 |  |
 | Trusted source | 可信来源 | A GitHub source chosen by the instance owner or operator to reduce approval prompts. |
 | Turn | 回合 | "This turn" is 本回合 in Chinese. |
@@ -73,6 +77,18 @@ These are the words used in prompt bodies to describe what a runtime reads and w
 | scene | 场景 | The place and time where the narrative is now |  |
 | inject | 注入 | The framework puts a piece of data into the prompt | insert, provide |
 | block | 区块 | A tagged section of the prompt, for example `<existing-quests>` | section (section means a heading subsection) |
+
+## Action
+
+One item of a player's submission. It says which seat it is submitted from (`seatId`), as which character (`actorId`), what kind of action it is (`kind`), and its text or structured fields. Answers to forms and choices are actions too. The server checks each action against the seat's role, then renders the actions into the `playerMessage` the model reads; function runtimes read them from `ctx.playerActions`.
+
+See: [HTTP API: submit_actions](./api.md#submit_actions).
+
+## Action kind
+
+A kind of action. The kernel has six base kinds: `say`, `act`, `narrate` (narration), `direct` (a director's instruction), `advance`, and `command` (a slash command). A plugin declares its own kinds in `contributes.actionKinds`, written `<pluginId>/<name>` on the wire. The seat's role decides which kinds it may submit.
+
+See: [Plugin field reference: action kinds](./plugins.md#action-kinds-contributesactionkinds), [World model: seats](./world-model.md#seats).
 
 ## Alias
 
@@ -292,6 +308,12 @@ How an agent runtime's tool loop ended, for example `completed` (the model gave 
 It is written to `RuntimeResult.stop` and to the `stopReason` of the runtime lifecycle events. Function runtimes have no stop reason.
 
 See: [the protocol reference's stop reasons](./protocol.md#stop-reasons), [turn pipeline](../internals/flow.md).
+
+## Sub-agent
+
+An agent runtime that another runtime runs inside its own execution: a function with `ctx.agents.run`, an agent with the `delegate` tool. It runs with the caller's brief, its own transcript and its own budget, and returns output only: it writes no data, emits no events and forms no commit unit. The provider sets `schedule.subagentOnly: true`, and the scheduler never runs it on its own.
+
+See: [Plugin reference · Sub-agents](./plugins.md#sub-agents), [the delegate tool](./tools.md#sub-agents-delegate).
 
 ## Trigger mode
 

@@ -150,6 +150,7 @@ export interface RuntimeFailedPayload extends RuntimeLifecyclePayload {
 
 /** What a step note records; never a tool name or any model content. */
 export type StepNoteKind =
+  | "output-repair"
   | "review-rejected"
   | "no-tool-correction"
   | "runtime-done-correction"
@@ -173,10 +174,12 @@ interface StepIdentity {
   readonly pluginId: string;
   readonly turnId: string;
   readonly runId: string;
-  /** 1-based step number; the finalizer step is one past the last step. */
+  /** 1-based step number, including finalizer and repair requests. */
   readonly step: number;
   /** Set on the finalizer step: tools off, final answer now. */
   readonly finalizer?: true;
+  /** Set on an output repair request, with tools off. */
+  readonly repair?: true;
 }
 
 /** An agent-loop step is about to call the model. */
@@ -464,6 +467,17 @@ export type CovelEvent =
       readonly payload: CovelEventPayload;
     }
   | { readonly type: "recursive.failed"; readonly payload: CovelEventPayload }
+  // Sub-agent trace events (TurnEmitter): one sub-agent run of `ctx.agents.run`
+  // or `delegate`. Trace-only (forward:false). The sub-agent's own step, LLM
+  // and tool events carry `subagentCallId` / `parentCallId` / `parentRuntimeId`
+  // so /debug can rebuild the call tree.
+  | { readonly type: "subagent.started"; readonly payload: CovelEventPayload }
+  | { readonly type: "subagent.completed"; readonly payload: CovelEventPayload }
+  | { readonly type: "subagent.failed"; readonly payload: CovelEventPayload }
+  | {
+      readonly type: "subagent.writes-dropped";
+      readonly payload: CovelEventPayload;
+    }
   // Function-runtime trace events (TurnEmitter). `function.*` mark the handler
   // boundary (forward:false, like runtime.started/completed); `gateway.*` wrap
   // the function-runtime `ctx.gateway` provider calls (forward:true, mirroring
@@ -514,7 +528,32 @@ export type CovelEvent =
   // exception to effects isolation. Forwarded to the action stream so media
   // generation progress reaches the client live. Payload is the full record.
   // The runtime job worker reports queued/background job lifecycle here too.
-  | { readonly type: "job-status.updated"; readonly payload: JobStatusRecord };
+  | { readonly type: "job-status.updated"; readonly payload: JobStatusRecord }
+  | {
+      readonly type: "plugin.fault.counted";
+      readonly payload: {
+        readonly sessionId: string;
+        readonly pluginId: string;
+        readonly reason: import("./execution.js").PluginFaultReason;
+        readonly consecutiveFaults: number;
+      };
+    }
+  | {
+      readonly type: "plugin.fault.latched";
+      readonly payload: {
+        readonly sessionId: string;
+        readonly pluginId: string;
+        readonly reason: import("./execution.js").PluginFaultReason;
+      };
+    }
+  | {
+      readonly type: "plugin.fault.cleared";
+      readonly payload: {
+        readonly sessionId: string;
+        readonly pluginId: string;
+        readonly by: "clean-run" | "player";
+      };
+    };
 
 /** The closed vocabulary of every server→client event name. */
 export type CovelEventType = CovelEvent["type"];
@@ -536,6 +575,9 @@ export interface CovelEventMeta {
  * compiler-enforced change.
  */
 export const COVEL_EVENT_META = {
+  "plugin.fault.counted": { forwardToActionStream: false },
+  "plugin.fault.latched": { forwardToActionStream: true },
+  "plugin.fault.cleared": { forwardToActionStream: true },
   "narrative.delta": { forwardToActionStream: false },
   "narrative.completed": { forwardToActionStream: false },
   "interaction.requested": { forwardToActionStream: false },
@@ -596,6 +638,11 @@ export const COVEL_EVENT_META = {
   "recursive.calling": { forwardToActionStream: false },
   "recursive.completed": { forwardToActionStream: false },
   "recursive.failed": { forwardToActionStream: false },
+  // Sub-agent runs — trace-only, like recursive.*.
+  "subagent.started": { forwardToActionStream: false },
+  "subagent.completed": { forwardToActionStream: false },
+  "subagent.failed": { forwardToActionStream: false },
+  "subagent.writes-dropped": { forwardToActionStream: false },
   // Function-runtime trace events (see CovelEvent union). function.* mark the
   // handler boundary (trace-only); gateway.* wrap provider calls and forward to
   // the action stream for agent/function parity with llm.calling/responded.
@@ -697,8 +744,7 @@ export interface SessionExecutionStatus {
   readonly retry?: {
     readonly type:
       | "start_session"
-      | "send_message"
-      | "execute_command"
+      | "submit_actions"
       | "retry_turn"
       | "retry_failed_runtimes"
       | "retry_runtime";
@@ -739,7 +785,7 @@ export interface SessionSnapshot {
   readonly messagesCursor?: PageCursor | null;
   /**
    * The forms, choices and confirmations of the turns in `messages` that the
-   * player already answered through the `submit_interaction` action, with the
+   * player already answered through a `submit_actions` answer, with the
    * values the server stored. Answers to older turns are left out. An
    * entry is written in the transaction that starts the follow-up turn, so
    * each one has a turn. The client marks the matching message blocks as
@@ -800,6 +846,10 @@ export interface SnapshotTraceEvent {
 }
 
 export interface SnapshotPluginStatus {
+  /** Live session projection only; never part of a saved snapshot. */
+  readonly paused?: {
+    readonly reason: import("./execution.js").PluginFaultReason;
+  };
   readonly id: string;
   readonly displayName: import("./world.js").I18nText;
   readonly active: boolean;

@@ -32,6 +32,8 @@ export interface PluginRuntimeSummary {
   readonly trigger: PluginRuntimeTrigger;
   readonly execution: "sync" | "background";
   readonly turnCompletion: EffectiveTurnCompletion;
+  /** Runs only as a sub-agent of another runtime; no manual run starts it. */
+  readonly subagentOnly?: true;
   readonly model?: string;
   readonly outputKind: "story" | "system";
   readonly outputContract?: string;
@@ -169,6 +171,9 @@ export interface PluginDetail extends Omit<PluginSummary, "runtimes"> {
 }
 
 export interface SessionPlugin extends PluginSummary {
+  readonly paused?: {
+    readonly reason: import("./execution.js").PluginFaultReason;
+  };
   readonly serverCodeApprovedBy?: "session" | "trusted-source";
   /** Live authorization for this session, independent of host publication. */
   readonly serverCodeApproved: boolean;

@@ -391,9 +391,9 @@ describe("HTTP API e2e: haruka academy chat mode", () => {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           requestId: `req-haruka-chat-${index + 1}`,
-          type: "send_message",
+          type: "submit_actions",
           sessionId,
-          payload: { content },
+          payload: { actions: [{ kind: "say", text: content }] },
         }),
       });
       expect(actionRes.status).toBe(200);
@@ -590,9 +590,11 @@ describe("HTTP API e2e: haruka academy chat mode", () => {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         requestId: "req-haruka-chat-no-stage",
-        type: "send_message",
+        type: "submit_actions",
         sessionId,
-        payload: { content: "神代澪，谢谢你帮我整理课程表。" },
+        payload: {
+          actions: [{ kind: "say", text: "神代澪，谢谢你帮我整理课程表。" }],
+        },
       }),
     });
     expect(actionRes.status).toBe(200);

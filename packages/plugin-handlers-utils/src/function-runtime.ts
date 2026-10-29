@@ -5,6 +5,7 @@ import type {
   PluginServiceClient,
   PluginServiceGateway,
 } from "./plugin-api.js";
+import type { TurnAction } from "./actions.js";
 import type { ExtensionWorldModel } from "./extension-points.js";
 import type { HandlerResult, JobStatusEffect } from "./handler-result.js";
 import type { PluginToolResult } from "./tool-result.js";
@@ -153,7 +154,10 @@ export interface PluginPlayerInputSubmission {
  */
 export interface PluginTurnDigest {
   readonly turnId: string;
+  /** The kernel's rendering of `actions`, as the model reads it. */
   readonly playerMessage: string;
+  /** The player's resolved actions of the turn; empty without player input. */
+  readonly actions: readonly TurnAction[];
   readonly lastPlayerInput: PluginPlayerInputSubmission | null;
   /** Story text of the turn's successful story runtimes, joined by blank lines. */
   readonly narrativeText: string;
@@ -179,6 +183,81 @@ export interface PluginRecursiveCallDelta {
 
 export type PluginRuntimeStatus =
   "pending" | "running" | "success" | "failed" | "skipped" | "suspended";
+
+/** Why an agent loop ended. */
+export type PluginStopReason =
+  | "completed"
+  | "tool-finished"
+  | "max-steps"
+  | "deadline"
+  | "context-overflow"
+  | "cancelled"
+  | "model-error"
+  | "invalid-output"
+  | "loop-detected"
+  | "suspended";
+
+/**
+ * Which runtime `ctx.agents.run` runs: the active `subagentOnly` provider of
+ * a contract (any package), or a `subagentOnly` runtime of this package.
+ */
+export type PluginSubagentTarget =
+  { readonly contract: string } | { readonly runtimeId: string };
+
+export interface PluginSubagentRequest {
+  readonly target: PluginSubagentTarget;
+  /** The task, as the sub-agent's only user message (1–20 000 characters). */
+  readonly brief: string;
+  /** Structured context appended to the brief as JSON (at most 32 KB). */
+  readonly data?: Readonly<Record<string, unknown>>;
+  /** Narrows the provider's own limits; it never raises them. */
+  readonly budget?: {
+    readonly maxSteps?: number;
+    readonly timeoutMs?: number;
+  };
+}
+
+/**
+ * Why a sub-agent produced no output. `unavailable` means the depth or
+ * per-execution pool cap was reached: the call is refused at once.
+ */
+export type PluginSubagentErrorCode =
+  | "invalid-input"
+  | "not-found"
+  | "ambiguous"
+  | "unavailable"
+  | "timeout"
+  | "cancelled"
+  | "internal";
+
+export type PluginSubagentResult =
+  | {
+      readonly ok: true;
+      readonly output: Readonly<Record<string, unknown>>;
+      readonly stopReason: PluginStopReason;
+      readonly usage?: {
+        readonly inputTokens: number;
+        readonly outputTokens: number;
+      };
+    }
+  | {
+      readonly ok: false;
+      readonly error: {
+        readonly code: PluginSubagentErrorCode;
+        readonly message: string;
+      };
+      readonly stopReason?: PluginStopReason;
+    };
+
+/** Run sub-agents: agent runtimes with their own transcript and budget. */
+export interface PluginAgents {
+  /**
+   * Run one sub-agent and wait for its output. It produces no writes and no
+   * events. A sub-agent failure resolves with `ok: false`; the call throws
+   * only after this handler's run has ended.
+   */
+  run(request: PluginSubagentRequest): Promise<PluginSubagentResult>;
+}
 
 /** One runtime's result inside a nested execution. */
 export interface PluginNestedRuntimeResult {
@@ -271,7 +350,18 @@ export interface PluginFunctionContext {
   readonly turnId: string;
   readonly pluginId: string;
   readonly runtimeId: string;
+  /**
+   * The player's input as the model reads it: the kernel's rendering of
+   * `playerActions`. A single player's message is its text unchanged; other
+   * submissions name the acting character and the kind.
+   */
   readonly playerMessage: string;
+  /**
+   * The player's resolved actions of this turn, in submission order. Empty
+   * for an execution without player input: the opening, a manual or event
+   * run, a detached job, a nested `recursiveCall`.
+   */
+  readonly playerActions: readonly TurnAction[];
   /**
    * The scheduler's logical turn: committed main-loop player turns plus one.
    * Setup and the opening continuation share turn 1 with the first message;
@@ -318,6 +408,11 @@ export interface PluginFunctionContext {
   ) => Promise<PluginNestedTurnResult>;
   /** 0 for a top-level execution, one more for each `recursiveCall` level. */
   readonly recursionDepth: number;
+  /**
+   * Run another agent runtime as a sub-agent of this run. Present for a
+   * function runtime; absent for a guard.
+   */
+  readonly agents?: PluginAgents;
   readonly userSettings?: Readonly<Record<string, unknown>>;
   readonly pluginData?: PluginDataWriter;
   readonly logger?: PluginLogger;

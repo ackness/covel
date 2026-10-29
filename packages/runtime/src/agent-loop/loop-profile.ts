@@ -51,6 +51,15 @@ export function resolveLoopProfile(
       deadlineReserveMs:
         spec?.finalizer?.deadlineReserveMs ?? base.finalizer.deadlineReserveMs,
     },
+    corrections: {
+      toolUse: spec?.corrections?.toolUse ?? base.corrections.toolUse,
+      review: spec?.corrections?.review ?? base.corrections.review,
+      loopPerturbation:
+        spec?.corrections?.loopPerturbation ??
+        base.corrections.loopPerturbation,
+      outputRepair:
+        spec?.corrections?.outputRepair ?? base.corrections.outputRepair,
+    },
     answerPrompt: story ? "story" : "answer",
   };
 }

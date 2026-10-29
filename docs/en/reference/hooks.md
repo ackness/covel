@@ -99,6 +99,8 @@ If a handler throws an error, times out, or returns a result in the wrong format
 - **Events that can be intercepted**: a failure is treated as `abort`. A broken rule cannot let through an operation that it was supposed to block.
 - **Other events**: the handler is skipped. Any rewrites made by earlier handlers are kept, and the failure is recorded in the trace (`hook.error`).
 
+Throws, timeouts and malformed results count toward the registering plugin's [fault latch](./protocol.md#plugin-fault-latch). A deliberate `abort` / veto is not a Hook fault; a deliberate `PreStateCommit` veto is a rejection of the proposal owner. Parent cancellation is not a Hook fault.
+
 ## Events
 
 The "Scope" column says what the event is about: `session` (the whole session), `turn` (one execution), or `runtime` (one runtime). For events with scope `runtime`, `ctx.pluginId` and `ctx.runtimeId` are that runtime.
@@ -137,7 +139,7 @@ Payload: `{ sessionId, worldId? }`.
 
 Fires at the start of each execution, before any runtime is selected. A player turn, a manual run, and a background job each count as one execution.
 
-Payload: `{ playerMessage, activeRuntimes }`. `activeRuntimes` is the list of runtime IDs for this session.
+Payload: `{ playerMessage, actions, activeRuntimes }`. `playerMessage` is the text the kernel renders from the player's actions; `actions` is the resolved actions (each `{ seatId, kind, actorId?, text?, fields?, interaction?, source }`), an empty array for an execution without player input; `activeRuntimes` is the list of runtime IDs for this session.
 
 `abort` ends this execution, and no runtime runs. `reason` is returned to the client as the reason the turn was stopped.
 
@@ -227,6 +229,7 @@ Fires before each model call of an agent runtime. This includes calls made after
 Payload: `{ messages, model, tools, stream?, promptSegments? }`. `promptSegments` is the same list as in `PostContextAssembly`. A run resumed from a suspended state does not assemble its context again, so its calls do not have this field.
 
 - `replace.messages`, `replace.model`, and `replace.tools` change only this one call. The runtime's own conversation record is not changed.
+- Output repair requests keep tools off after hook processing; `replace.tools` cannot re-enable tools for repair steps.
 - `replace.stream: false` makes this call not stream.
 - `abort` is the same as "nothing changes".
 
@@ -237,7 +240,7 @@ Fires after each model reply, before the tool calls in the reply are run.
 Payload: `{ response, messages }`, the reply, and the messages actually sent.
 
 - `replace.response` replaces the reply.
-- `replace.correction` (a non-empty string) sends this draft back: its tool calls are not run, and this text is sent to the model as a correction request, so the model answers again. If a correction is requested a third time in one run, the runtime fails.
+- `replace.correction` (a non-empty string) sends this draft back: its tool calls are not run, and this text is sent to the model as a correction request, so the model answers again. Each rejection consumes one `agent.loop.corrections.review` unit, allowing two corrections by default. A further rejection after that budget is exhausted fails the runtime with `invalid-output`. See [the loop profile](./plugins.md#loop-profile-agentloopprofile) for configuration.
 
 ### `PostRuntime`
 
@@ -303,3 +306,5 @@ Payload: `{ sessionId, reason }`, where `reason` is `ended` or `deleted`.
 - A hook has no write path of its own. A plugin's data is written by its runtimes and tools. A hook's return value can rewrite a result and a proposal's payload, but it cannot add a write.
 - A handler cannot depend on the order of other plugins' handlers. Its own `enforce` group is the exception.
 - For a runtime that declares `io.concealed`, the prompt and the reply do not appear in the trace or the live stream. However, the hooks of enabled plugins still receive them in the payload. A community plugin's hooks run only after the player has approved its server code.
+
+- A plugin paused by faults runs no Hooks from the next execution; the current execution keeps its frozen admission set.

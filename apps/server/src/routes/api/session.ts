@@ -93,6 +93,7 @@ import { registerSessionViewRoute } from "./session/view-route.js";
 import { registerSessionDeleteRoute } from "./session/delete-route.js";
 import { registerSessionMemoryIndexRoutes } from "./session/memory-index-route.js";
 import { registerSessionSeatRoutes } from "./session/seat-routes.js";
+import { registerSessionActionKindRoutes } from "./session/action-kinds.js";
 import {
   fireSessionEnd,
   lifecycleLeaseIsFresh,
@@ -173,6 +174,7 @@ registerSessionViewRoute(sessionRoutes);
 registerSessionDeleteRoute(sessionRoutes);
 registerSessionMemoryIndexRoutes(sessionRoutes);
 registerSessionSeatRoutes(sessionRoutes);
+registerSessionActionKindRoutes(sessionRoutes);
 
 /**
  * Whether any plugin in the set declares a setup-stage runtime. Discovered by
@@ -769,6 +771,7 @@ sessionRoutes.patch("/:id", async (c) => {
       updated.hookScope,
       "ended",
     );
+    c.get("pluginFaults")?.forgetSession(id);
   }
 
   let responseSession: SessionRecord | Response = updated.merged;

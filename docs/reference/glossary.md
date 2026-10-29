@@ -11,6 +11,8 @@
 <!-- prettier-ignore -->
 | Term | 中文 | 说明 |
 | --- | --- | --- |
+| Action | 行动 | 玩家一次提交里的一项：从哪个座位、以哪个角色、做哪种事（`submit_actions`）。 |
+| Action kind | 行动类型 | 一种行动：内核的 `say`、`act` 等，或插件声明的 `<pluginId>/<name>`。 |
 | Alias | 别名 | 同一个角色的另一个名字（`aliases`）。不是字段或 ID 的兼容名。 |
 | Binding | 绑定 |  |
 | Bundled plugin | 内置插件 | 随 Covel 一起安装的插件。不等于 `kind: core`。 |
@@ -22,6 +24,7 @@
 | Dataset | 数据集 | 插件声明的带类型数据（`contributes.datasets`）。不是安装用的 **Collection**。 |
 | Deployment form | 部署形态 | 桌面客户端、自部署网页版、官方网页版。不是 `DEPLOYMENT_TIER`。 |
 | Edition | 语言版本 | 世界的一种语言：`defaultLocale`，以及根目录里每个 `world.<locale>.yaml` 或 `WORLD.<locale>.md` 的语言。 |
+| Fault latch | 熔断 | 辅助插件在同一会话连续因自身故障失败后暂停，可由玩家重新启用；只在进程内存中保存。见[协议](./protocol.md#插件故障熔断)。 |
 | Finalizer step | 收尾步骤 | agent 用完步数后关掉工具、要求直接给出答案的那一次请求。 |
 | Kernel | 内核 |  |
 | Local model relay | 本地模型中继 | 共享形态的服务端经玩家浏览器访问玩家电脑或局域网上的模型。见[安全边界](../internals/security.md#local-model-relay)。 |
@@ -41,6 +44,7 @@
 | Session | 会话 |  |
 | Slot | 槽位 | 设置界面里叫“模型用途”。 |
 | Stop reason | 结束原因 | agent 工具循环怎样结束（`RuntimeResult.stop.reason`）。 |
+| Sub-agent | 子 agent | 另一个 runtime 在自己的执行里运行、只交回输出的 agent runtime。 |
 | Trigger mode | 触发模式 |  |
 | Trusted source | 可信来源 | 实例所有者或运营者选定的 GitHub 来源，只减少审批提示。 |
 | Turn | 回合 | “This turn” 是“本回合”。 |
@@ -73,6 +77,18 @@
 | scene | 场景 | 叙事此刻所在的地点和时间 |  |
 | inject | 注入 | 框架把一块数据放进提示词 | insert, provide |
 | block | 区块 | 提示词里带标签的一段，例如 `<existing-quests>` | section（section 指一个标题小节） |
+
+## Action
+
+玩家一次提交里的一项。它写明从哪个座位提交（`seatId`）、以哪个角色（`actorId`）、是哪种行动（`kind`），以及文字或结构化字段。表单和选项的回答也是行动。服务端按座位身份校验每个行动，再渲染成给模型看的 `playerMessage`；函数 runtime 从 `ctx.playerActions` 读到它们。
+
+详见：[HTTP API：submit_actions](./api.md#submit_actions)。
+
+## Action kind
+
+一种行动。内核有六个基础类型：`say`（说话）、`act`（行动）、`narrate`（旁白）、`direct`（导演指示）、`advance`（推进）、`command`（斜杠命令）。插件在 `contributes.actionKinds` 里声明自己的类型，线上写作 `<pluginId>/<name>`。座位身份决定能提交哪些类型。
+
+详见：[插件字段参考：行动类型](./plugins.md#行动类型contributesactionkinds)、[世界模型：座位](./world-model.md#座位)。
 
 ## Alias
 
@@ -290,6 +306,12 @@ agent runtime 的工具循环怎样结束，例如 `completed`（模型给出了
 它写在 `RuntimeResult.stop` 和 runtime 生命周期事件的 `stopReason` 里。函数 runtime 没有结束原因。
 
 详见：[协议参考的结束原因](./protocol.md#stop-reasons)、[回合管线](../internals/flow.md)。
+
+## Sub-agent
+
+另一个 runtime 在自己的执行里运行的 agent runtime：函数用 `ctx.agents.run`，agent 用 `delegate` 工具。它拿着调用方给的简报，用自己的对话记录和预算运行，只交回输出，不写数据、不发事件，也不形成提交单位。提供方写 `schedule.subagentOnly: true`，调度器从不自动运行它。
+
+详见：[插件参考 · 子 agent](./plugins.md#子-agent)、[delegate 工具](./tools.md#子-agentdelegate)。
 
 ## Trigger mode
 

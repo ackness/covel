@@ -376,18 +376,31 @@ describe("recursiveCall results at commit", () => {
         {
           runtimeId: c.name,
           runId: expect.any(String),
+          cause: "nested",
           error: expect.any(String),
         },
-        { runtimeId: f.name, runId: runs.nestedF, error: expect.any(String) },
+        {
+          runtimeId: f.name,
+          runId: runs.nestedF,
+          cause: "nested",
+          error: expect.any(String),
+        },
         {
           runtimeId: b.name,
           runId: expect.any(String),
+          cause: "nested",
           error: expect.any(String),
         },
-        { runtimeId: a.name, runId: expect.any(String), error: "c rejected" },
+        {
+          runtimeId: a.name,
+          runId: expect.any(String),
+          cause: "rejected",
+          error: "c rejected",
+        },
         {
           runtimeId: f.name,
           runId: runs.topF,
+          cause: "upstream",
           error: "upstream probe/a did not commit",
         },
       ]);
@@ -419,7 +432,12 @@ describe("recursiveCall results at commit", () => {
 
       expect(outcome.status).toBe("committed");
       expect(outcome.isolatedRuntimes).toEqual([
-        { runtimeId: f.name, runId: runs.topF, error: "f rejected" },
+        {
+          runtimeId: f.name,
+          runId: runs.topF,
+          cause: "rejected",
+          error: "f rejected",
+        },
       ]);
       expect(notes).toEqual({ a: "a", b: "b", c: "c", "f-nested": "f-nested" });
       expect([nestedF, topF]).toEqual(["success", "failed"]);

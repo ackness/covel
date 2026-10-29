@@ -1,3 +1,4 @@
+import { pluginFaultHost } from "../plugin-faults.js";
 import { readLockedSession } from "./locked-mutation.js";
 import {
   approvalVerdictResponse,
@@ -155,6 +156,7 @@ export function registerSessionPluginRoutes(
     }
     await c.get("trustedSources")?.verifyAll();
     const view = buildSessionPluginView(guard.session, pluginRegistry, {
+      paused: c.get("pluginFaults")?.latched(id),
       isEntryPublished: c.get("isPluginEntryPublished"),
       trustedSources: c.get("trustedSources"),
       authorized: authorizedSessionPluginIds(
@@ -166,6 +168,55 @@ export function registerSessionPluginRoutes(
     return c.json({
       ...view,
       commands: buildSessionCommandList(view.resolution.active, pluginRegistry),
+    });
+  });
+
+  routes.post("/:id/plugins/:pluginId/resume-fault", async (c) => {
+    const guard = await resolveSessionParam(c);
+    if (!guard.ok) return guard.response;
+    const id = c.req.param("id");
+    const pluginId = c.req.param("pluginId");
+    const registry = c.get("pluginRegistry");
+    if (!registry.get(pluginId))
+      return c.json(
+        errorBody("Plugin not found", { code: "plugin_not_found" }),
+        404,
+      );
+    return withSettledSessionLock(c, id, async () => {
+      const session = await readLockedSession({
+        c,
+        store: c.get("store"),
+        sessionId: id,
+        expectedSession: guard.session,
+        allowedStatuses: ["active", "paused"],
+      });
+      if (session instanceof Response) return session;
+      const faults = c.get("pluginFaults");
+      if (!faults?.isLatched(id, pluginId))
+        return c.json(
+          errorBody("Plugin is not paused", { code: "plugin_not_paused" }),
+          409,
+        );
+      const transitions = faults.clear(id, pluginId, "player");
+      await pluginFaultHost(c.get("store"))?.publish(
+        transitions,
+        undefined,
+        c.get("eventBus"),
+      );
+      const view = buildSessionPluginView(session, registry, {
+        paused: faults.latched(id),
+        authorized: authorizedSessionPluginIds(
+          registry,
+          c.get("rpcApprovalGate"),
+          session,
+        ),
+        trustedSources: c.get("trustedSources"),
+        isEntryPublished: c.get("isPluginEntryPublished"),
+      });
+      return c.json({
+        ...view,
+        commands: buildSessionCommandList(view.resolution.active, registry),
+      });
     });
   });
 

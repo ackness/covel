@@ -462,9 +462,9 @@ export function useBuildSessionActions({
 
       runKernelAction({
         requestId: crypto.randomUUID(),
-        type: "execute_command",
+        type: "submit_actions",
         sessionId,
-        payload: { command },
+        payload: { actions: [{ kind: "command", text: command }] },
       });
     },
     [stateRef, runKernelAction],

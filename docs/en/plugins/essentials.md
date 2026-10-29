@@ -226,6 +226,7 @@ Limits to remember:
 - A value can be at most 256 KiB once it is converted to JSON. When it is larger, the write fails. The error states the plugin, the `namespace/key`, the actual size and the limit. The original value does not change, and nothing is cut short. A list that keeps growing must be split across several keys, or trimmed by your code.
 - A namespace that starts with `_` is reserved for Covel itself. Plugins cannot write to it.
 - To declare the shape of a namespace's records (JSON Schema, key, allowed operations), see [datasets](../reference/plugins.md#datasets-contributesdatasets).
+- To let players submit a new kind of action (for example "whisper"), declare it in `contributes.actionKinds`; see [action kinds](../reference/plugins.md#action-kinds-contributesactionkinds).
 - If two plugins need to share data, they must do it through a public capability. They cannot read each other's namespaces.
 
 ### Who owns characters
@@ -352,6 +353,8 @@ Keep an entity together with references to it. See the [plugin reference](../ref
 | The plugin is excluded from the session, with the reason `event-topic-conflict` | An event name is the same as another plugin's. Add your own prefix to the event name.                                             |
 | A write fails, with a message that the size limit was exceeded                  | A value is over 256 KiB. Split it into several keys.                                                                              |
 | In a game in Chinese, changes to the prompt have no effect                      | You changed only the English body. A game in Chinese reads `*.zh.md`.                                                             |
+
+An auxiliary plugin that repeatedly fails in one session because of its own exceptions, timeouts, invalid agent stops or rejected proposals is paused. Use “Resume” in the plugin list to reset and retry. Provider/model errors, cancellations, dependency cascades and version conflicts do not count; setup, story providers and dimension providers receive special protection. A deliberate Hook veto is not a Hook fault; throws and timeouts count against the Hook owner. See the [fault latch](../reference/protocol.md#plugin-fault-latch) for the full rules. State lives in memory and clears on restart.
 
 ## Next
 

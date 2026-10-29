@@ -144,3 +144,26 @@ describe("the agent loop profile", () => {
     });
   });
 });
+
+describe("compiled correction budgets", () => {
+  it("maps only written keys and preserves zero", () => {
+    const result = compile({
+      schedule: { stage: "narrative" },
+      agent: { loop: { corrections: { review: 0, outputRepair: 2 } } },
+    });
+    expect(result.loopProfile).toEqual({
+      corrections: { review: 0, outputRepair: 2 },
+    });
+  });
+  it("adds no profile for absent or empty correction overrides", () => {
+    for (const loop of [
+      {},
+      { corrections: {} },
+      { corrections: { toolUse: undefined } },
+    ]) {
+      expect(
+        compile({ schedule: { stage: "narrative" }, agent: { loop } }),
+      ).not.toHaveProperty("loopProfile");
+    }
+  });
+});

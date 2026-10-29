@@ -378,7 +378,7 @@ SqliteStore、MemoryStore 和 PgStore（都在 Node 上）用同一种办法：
 - 领域写入抛出的 store 错误，使整回合回滚。
 - handler 校验失败返回的 `{ committed: false }`（如 PreStateCommit veto、缺字段的 plugin.data），在本次执行有成功的 story 结果时，只回滚提出它的那个可选 runtime。
 - 做法：每个非 story、非 setup 的顶层 runtime 连同它下面各层的嵌套 `recursiveCall` 结果，组成一个提交单元，在一个 savepoint 里提交（子先于父）。单元里任何一条写入被拒，整个单元一起撤销，叙事和其他单元照常提交。含有 story 或 setup 运行的单元（哪怕是嵌套运行；setup 按 manifest 的 stage 判断）直接在执行事务里提交：其中任何写入被拒，整回合回滚。被丢弃单元里的挂起不保存。保存下来的挂起，它扣住的 detached 作业按丢弃结算：硬依赖被丢弃 runtime 的作业去掉，其余作业在冻结输入里把它记为 `failed`。本次执行的挂起全部被丢弃时，回合像挂起被放弃一样结束：计数，扣住的 detached 作业按同样规则结算后排入。
-- 这时 `FinalizeExecutionOutcome` 以 `committed` 返回，并在 `failedProposals` / `isolatedRuntimes`（`{ runtimeId, runId, error }`，被丢弃单元里的每次运行一条）里列出被丢弃的部分。同一个 runtime 可能既嵌套运行又在顶层运行，所以按 `runId` 区分；journal、触发计数和已保存的 `turn_results` 条目也按运行结算。主回合用 `proposal.failed` 和该 runtime 的 `runtime.failed` SSE 告知客户端。
+- 这时 `FinalizeExecutionOutcome` 以 `committed` 返回，并在 `failedProposals` / `isolatedRuntimes`（`{ runtimeId, runId, error, cause }`，被丢弃单元里的每次运行一条）里列出被丢弃的部分。同一个 runtime 可能既嵌套运行又在顶层运行，所以按 `runId` 区分；journal、触发计数和已保存的 `turn_results` 条目也按运行结算。主回合用 `proposal.failed` 和该 runtime 的 `runtime.failed` SSE 告知客户端。
 - 没有 story 的执行（manual、background、detached、setup）仍然是整体原子的：任何一个 proposal 失败就整体回滚。作业不会为没有落库的写入报告成功。
 - 结果里无法变成 proposal 的 effect 条目，同样算作该 runtime 被拒绝的写入，按上面的边界处理，不会以异常拖垮整回合。这类条目是：`effects.ui[].parts`、`effects.interactions`、`effects.notifications` 里不是对象的条目，以及后两个通道里不是数组的内容。function runtime 在 handler 返回时就以 `output-schema-invalid` 失败。在会提交写入的结果中，已移除的 `effects.statePatches` 通道也会被拒绝，错误信息会指引作者改用插件数据。它以 `effects.invalid` 诊断标记报告，不冒充某一种 proposal。
 
@@ -444,6 +444,7 @@ SqliteStore、MemoryStore 和 PgStore（都在 Node 上）用同一种办法：
 
 **resume。**
 
+- runtime 在进入提交前失败时，只记录自身故障的熔断计数并释放 claim；不提交缓冲写入，不解决或清空 suspension。
 - resume 通过 `extraInTx` 把助手的回合消息和 suspension 的 resolved 标记放进同一个事务。任何一处失败，连同 proposal 一起回滚；claim 释放之后可以重试。
 - resolved 标记同时清掉这条 suspension 里已被本次 resume 用掉的内容（消息、已缓冲的工具调用和 proposal、输入），只留执行标识、挂起时的玩家回合数和插件版本、语言和回合号。回滚时这些内容随事务恢复。
 - 放弃、过期和作废走同一个出口：删除 suspension、给回合计数（它是这个逻辑回合最后一个还在等待的 suspension 时）、把回合扣下的 detached 作业入队，都在一个事务里。
@@ -463,7 +464,7 @@ SqliteStore、MemoryStore 和 PgStore（都在 Node 上）用同一种办法：
 
 **交互回答和后续回合。**
 
-- `submit_interaction` action 在回合的 session lock 里校验回答，并确认它还没有被回答过。然后用一个 store 事务写入批量的 player input 和后续回合的 `turn.started`。
+- `submit_actions` 里回答交互的行动在回合的 session lock 里校验，并确认它还没有被回答过。然后用一个 store 事务写入批量的 player input 和后续回合的 `turn.started`。
 - 所以回答落库和回合开始同成同败。重复提交在锁里看到已有的回答而被拒绝，不会出现“回答已保存而回合没有开始”的状态。
 - 回合自己的结果仍然由 `finalizeExecution` 提交。它失败时回答保留，回合经现有的重试再跑。
 
@@ -554,6 +555,10 @@ await store.withTransaction(async (tx) => {
 **依赖会话内串行提交。** 读改写之所以正确，是因为同一个会话的提交按会话锁串行；PostgreSQL 多进程部署里这把锁是分布式的（见上面的 Action 级 plugin-rpc 锁边界）。两次执行各自准备 `inc +1`，先后提交，最终是两次都加上。会话锁之外的写入者不读当前值，可能覆盖：管理 API 的 `PUT` 插件数据，以及 plugin action RPC 的立即写入。
 
 **挂起的写入基线。** 保存挂起时记录的写入基线（`takenUnder.writes`）只收录含 `set` 或 `delete` 的 `plugin.data.update`。只有相对操作（`merge`、`inc`、数组操作）的更新作用在提交时的最新值上，不会把旧的整个值写回去，所以不收录。
+
+`isolatedRuntimes[].cause` 是结构化的丢弃原因：`rejected`（本单元提案被拒）、`upstream`（硬依赖未提交）、`read`（读过的生产方未提交）、`nested`（随父单元丢弃）。保留原有 `error` 文本；熔断不靠匹配文本归因。被拒提案按 `proposal.source.pluginId` 归属，不把整个单元都算成有错。
+
+`FailedProposal.code: "hook-failed"` 表示 `PreStateCommit` 因 handler 抛错、超时或无效结果而失败，不是主动否决。只计 Hook 所属插件的故障，不能把 proposal 所属插件算成被主动拒绝。`dimension-version-conflict` 和 `suspension-data-changed` 也不计入[熔断](./protocol.md#插件故障熔断)。
 
 ## World Data import
 

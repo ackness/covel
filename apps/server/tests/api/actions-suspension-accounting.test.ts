@@ -170,9 +170,9 @@ async function buildScenario(options: ScenarioOptions) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         requestId,
-        type: "send_message",
+        type: "submit_actions",
         sessionId: SESSION_ID,
-        payload: { content: "continue" },
+        payload: { actions: [{ kind: "say", text: "continue" }] },
       }),
     });
     expect(response.status).toBe(200);

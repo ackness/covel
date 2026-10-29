@@ -29,14 +29,18 @@ export async function preflightActionApprovals(
     c,
     session,
     (manifest) =>
-      retryTargets
+      isSubagentProvider(manifest) ||
+      (retryTargets
         ? retryTargets.includes(manifest.name)
-        : manifest.trigger?.type !== "manual",
+        : manifest.trigger?.type !== "manual"),
     "session-action",
   );
 }
 
-/** Check only the requested continuations, including manual runtimes. */
+/**
+ * Check only the requested continuations, including manual runtimes, and the
+ * sub-agent providers they can delegate to.
+ */
 export async function preflightRuntimeApprovals(
   c: Context,
   session: SessionRecord,
@@ -45,9 +49,30 @@ export async function preflightRuntimeApprovals(
   return preflightApprovals(
     c,
     session,
-    (manifest) => runtimeIds.includes(manifest.name),
+    (manifest) =>
+      runtimeIds.includes(manifest.name) || isSubagentProvider(manifest),
     "resume",
   );
+}
+
+/**
+ * Check the sub-agent providers a manual runtime run can delegate to. The
+ * route asks for its explicit target's grants itself.
+ */
+export async function preflightSubagentApprovals(
+  c: Context,
+  session: SessionRecord,
+): Promise<Response | undefined> {
+  return preflightApprovals(c, session, isSubagentProvider, "manual-runtime");
+}
+
+/**
+ * A sub-agent provider runs inside any execution of the session, whichever
+ * runtime its caller is, so every execution admits it up front. The runtime
+ * loader still refuses it without both grants.
+ */
+function isSubagentProvider(manifest: RuntimeManifest): boolean {
+  return manifest.subagentOnly === true;
 }
 
 async function preflightApprovals(

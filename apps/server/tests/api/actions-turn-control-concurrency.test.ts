@@ -174,8 +174,8 @@ describe("POST /api/actions — steer/abort targets the executing turn, not a qu
         body: JSON.stringify({
           requestId: `queued-${change}`,
           sessionId: SESSION_ID,
-          type: "send_message",
-          payload: { content: "Do not execute." },
+          type: "submit_actions",
+          payload: { actions: [{ kind: "say", text: "Do not execute." }] },
         }),
       });
       expect(response.status).toBe(200);
@@ -270,8 +270,8 @@ describe("POST /api/actions — steer/abort targets the executing turn, not a qu
       body: JSON.stringify({
         requestId: "queued-shutdown",
         sessionId: SESSION_ID,
-        type: "send_message",
-        payload: { content: "Do not execute." },
+        type: "submit_actions",
+        payload: { actions: [{ kind: "say", text: "Do not execute." }] },
       }),
     });
     expect(response.status).toBe(200);
@@ -364,9 +364,9 @@ describe("POST /api/actions — steer/abort targets the executing turn, not a qu
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           requestId,
-          type: "send_message",
+          type: "submit_actions",
           sessionId: SESSION_ID,
-          payload: { content: "go" },
+          payload: { actions: [{ kind: "say", text: "go" }] },
         }),
       });
 

@@ -93,7 +93,12 @@ for (const width of [1512, 390]) {
     let accepted = 0;
     await page.route("**/api/actions", async (route) => {
       const body = route.request().postDataJSON();
-      if (body.type !== "submit_interaction") return route.fallback();
+      const answer = (
+        body.payload?.actions as
+          | Array<{ interaction?: unknown; fields?: Record<string, number> }>
+          | undefined
+      )?.find((action) => action.interaction);
+      if (body.type !== "submit_actions" || !answer) return route.fallback();
       if (!authorized)
         return route.fulfill({
           status: 202,
@@ -107,7 +112,7 @@ for (const width of [1512, 390]) {
             },
           },
         });
-      const values = body.payload.submissions[0].values;
+      const values = answer.fields ?? {};
       submissions.push(values);
       if (values.strength + values.agility !== 4) {
         return route.fulfill({

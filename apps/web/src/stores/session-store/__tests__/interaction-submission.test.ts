@@ -129,15 +129,18 @@ describe("interaction submission", () => {
 
     expect(api.sendAction).toHaveBeenCalledOnce();
     expect(stream().request).toMatchObject({
-      type: "submit_interaction",
+      type: "submit_actions",
       sessionId: "session-1",
       payload: {
-        turnId: "turn-1",
-        submissions: [
+        actions: [
           {
-            interactionId: "form-1",
-            type: "form",
-            values: { name: "Player", points: "3" },
+            kind: "act",
+            interaction: {
+              turnId: "turn-1",
+              interactionId: "form-1",
+              type: "form",
+            },
+            fields: { name: "Player", points: "3" },
           },
         ],
       },
@@ -169,6 +172,32 @@ describe("interaction submission", () => {
     );
     expect(deps.resyncSession).toHaveBeenCalledOnce();
     expect(deps.inFlight.size).toBe(0);
+  });
+
+  it("submits the answer as the kind its interaction declares", async () => {
+    const deps = makeDeps();
+    deps.stateRef.current.messages = [
+      {
+        id: "block-1",
+        role: "assistant",
+        content: "",
+        timestamp: "2026-01-01T00:00:00.000Z",
+        turnId: "turn-1",
+        block: {
+          type: "interactive_form",
+          data: {
+            type: "form",
+            interactionId: "form-1",
+            actionKind: "vote-pack/ballot",
+          },
+        },
+      },
+    ];
+    answerWith(stored, envelope("execution.completed", { committed: true }));
+    await submitInteractionBlock(deps, submission);
+    expect(stream().request).toMatchObject({
+      payload: { actions: [{ kind: "vote-pack/ballot" }] },
+    });
   });
 
   it("adds no player bubble for an answer the interaction keeps silent", async () => {

@@ -72,6 +72,7 @@ it("does not hold the next request to the settle wait of a job no model can run"
         turnDigest: {
           turnId: "turn-1",
           playerMessage: "hello",
+          actions: [],
           lastPlayerInput: null,
           narrativeText: "",
           toolCallSummaries: [],

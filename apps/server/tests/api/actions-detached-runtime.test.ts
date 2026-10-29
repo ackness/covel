@@ -175,9 +175,9 @@ describe("POST /api/actions — scheduler-detached runtime", () => {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         requestId: "detached-request",
-        type: "send_message",
+        type: "submit_actions",
         sessionId: SESSION_ID,
-        payload: { content: "continue" },
+        payload: { actions: [{ kind: "say", text: "continue" }] },
       }),
     });
     const stream = await response.text();
@@ -384,6 +384,7 @@ runtime:
               turnDigest: {
                 turnId: "source-turn",
                 playerMessage: "",
+                actions: [],
                 lastPlayerInput: null,
                 narrativeText: "",
                 toolCallSummaries: [],

@@ -20,6 +20,10 @@ import type {
   RuntimeStatus,
   Session,
   SetupRuntimeState,
+  StopReason,
+  SubagentErrorCode,
+  SubagentRequest,
+  SubagentResult,
   TurnDigest,
   WorldDimensions,
   WorldModelView,
@@ -60,6 +64,10 @@ import type {
   PluginServiceGateway,
   PluginSessionView,
   PluginSetupRuntimeState,
+  PluginStopReason,
+  PluginSubagentErrorCode,
+  PluginSubagentRequest,
+  PluginSubagentResult,
   PluginTurnDigest,
 } from "@covel/plugin-handlers-utils";
 import type { ImageGenerationHandlerContext } from "@covel/plugin-handlers-utils/image-generation";
@@ -277,6 +285,16 @@ type _TurnDigestFits = Assert<
 type _SameTurnDigestKeys = Assert<SameKeys<TurnDigest, PluginTurnDigest>>;
 type _SameRecursiveDelta = Assert<
   MutuallyAssignable<RecursiveCallDelta, PluginRecursiveCallDelta>
+>;
+type _SameStopReason = Assert<MutuallyAssignable<StopReason, PluginStopReason>>;
+type _SameSubagentRequest = Assert<
+  MutuallyAssignable<SubagentRequest, PluginSubagentRequest>
+>;
+type _SameSubagentResult = Assert<
+  MutuallyAssignable<SubagentResult, PluginSubagentResult>
+>;
+type _SameSubagentErrorCode = Assert<
+  MutuallyAssignable<SubagentErrorCode, PluginSubagentErrorCode>
 >;
 type _SameRuntimeStatus = Assert<
   MutuallyAssignable<RuntimeStatus, PluginRuntimeStatus>

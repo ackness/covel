@@ -166,6 +166,18 @@ const player = currentCharacterOf(
 
 **Switching the current character**: `PATCH /api/sessions/:id/seats/:seatId` with the body `{ "currentCharacterId": "…" }`. The character must be bound to that seat, and a human must control the seat. It applies from the next turn. See [API](./api.md#session-seats). The game view has no switch control yet.
 
+**The role decides which actions a seat may submit.** What a player submits each time is a list of actions (see [API · submit_actions](./api.md#submit_actions)). The server checks them against the seat's role:
+
+| Role `role` | Base action kinds it may submit           |
+| ----------- | ----------------------------------------- |
+| `player`    | `say`, `act`, `command`                   |
+| `host`      | `narrate`, `direct`, `advance`, `command` |
+| `spectator` | `advance`                                 |
+
+- This table is `ROLE_ACTION_KINDS` in `@covel/shared`; the server reads only it.
+- A plugin's action kind declares which roles may use it (`contributes.actionKinds[].roles`, default `[player]`).
+- An action taken as a character (`say`, `act`, and plugin kinds by default) may use only a character bound to the seat; left out, it is the seat's current character. A seat no human controls cannot submit actions.
+
 The bundled plugins that still use `find(type === "player")` (inventory, checks, memory, character creation and others) act on the first player character when there are several, until they move to seats.
 
 ## Dynamic dimension snapshot

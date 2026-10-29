@@ -61,7 +61,10 @@ export async function runPreStateCommitHook(
     readonly eventBus?: EventBus;
     readonly emitter?: TurnEmitter;
   } = {},
-): Promise<{ readonly proposal: Proposal } | { readonly error: string }> {
+): Promise<
+  | { readonly proposal: Proposal }
+  | { readonly error: string; readonly code?: "hook-failed" }
+> {
   const hookCtx: HookContext = {
     event: "PreStateCommit",
     sessionId: proposal.sessionId,
@@ -79,7 +82,10 @@ export async function runPreStateCommitHook(
   // Parent cancellation stops the whole batch, including later proposals.
   opts.signal?.throwIfAborted();
   if (preResult.action === "abort") {
-    return { error: `pre-state-commit hook aborted: ${preResult.reason}` };
+    return {
+      error: `pre-state-commit hook aborted: ${preResult.reason}`,
+      ...(preResult.handlerFailed ? { code: "hook-failed" as const } : {}),
+    };
   }
   if (
     preResult.action === "continue" &&
@@ -171,7 +177,12 @@ export function createCommitPipeline(
         eventBus,
         emitter,
       });
-      if ("error" in hooked) return { committed: false, error: hooked.error };
+      if ("error" in hooked)
+        return {
+          committed: false,
+          error: hooked.error,
+          ...(hooked.code ? { code: hooked.code } : {}),
+        };
       effectiveProposal = hooked.proposal;
     }
 
@@ -321,7 +332,8 @@ export function createCommitPipeline(
       // PreStateCommit runs before the transaction opens; a vetoed proposal
       // keeps its slot as a failed result without reaching a handler.
       const screened: Array<
-        { readonly proposal: Proposal } | { readonly error: string }
+        | { readonly proposal: Proposal }
+        | { readonly error: string; readonly code?: "hook-failed" }
       > = [];
       for (const p of proposals) {
         screened.push(
@@ -343,7 +355,11 @@ export function createCommitPipeline(
         for (const entry of screened) {
           txResults.push(
             "error" in entry
-              ? { committed: false, error: entry.error }
+              ? {
+                  committed: false,
+                  error: entry.error,
+                  ...(entry.code ? { code: entry.code } : {}),
+                }
               : await commitWith(
                   txHandlers,
                   tx,

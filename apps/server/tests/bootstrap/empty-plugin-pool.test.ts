@@ -75,8 +75,8 @@ it("boots without plugins and handles a world with dimensions without a server e
     const turn = await post("/api/actions", {
       requestId: crypto.randomUUID(),
       sessionId: session.id,
-      type: "send_message",
-      payload: { content: "Look around." },
+      type: "submit_actions",
+      payload: { actions: [{ kind: "say", text: "Look around." }] },
     });
     expect(turn.status).toBe(200);
     const events = parseJsonFrames<{

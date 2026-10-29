@@ -145,9 +145,9 @@ runtime:
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         requestId: "export-action",
-        type: "send_message",
+        type: "submit_actions",
         sessionId: "session",
-        payload: { content: "Continue" },
+        payload: { actions: [{ kind: "say", text: "Continue" }] },
       }),
     });
     const stream = await response.text();

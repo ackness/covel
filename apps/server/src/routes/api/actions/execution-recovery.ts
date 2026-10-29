@@ -1,5 +1,8 @@
 import { z } from "zod";
-import type { SessionExecutionStatus } from "@covel/shared";
+import {
+  turnActionRequestsSchema,
+  type SessionExecutionStatus,
+} from "@covel/shared";
 import type { DataStore } from "@covel/store";
 import { getActiveTurn } from "../turn-control.js";
 import { ActionRejectedError } from "./action-rejection.js";
@@ -9,16 +12,9 @@ const recoveryActionSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("start_session"), payload: z.object({}) }),
   z.object({ type: z.literal("retry_turn"), payload: z.object({}) }),
   z.object({
-    type: z.literal("send_message"),
+    type: z.literal("submit_actions"),
     payload: z.object({
-      content: z.string().min(1),
-      inputMessageId: z.string().min(1).optional(),
-    }),
-  }),
-  z.object({
-    type: z.literal("execute_command"),
-    payload: z.object({
-      command: z.string().min(1),
+      actions: turnActionRequestsSchema,
       inputMessageId: z.string().min(1).optional(),
     }),
   }),

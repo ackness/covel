@@ -79,6 +79,13 @@ function agentLoopProfile(agent: AuthoredAgent | undefined) {
       ? { deadlineReserveMs: loop.finalizer.deadlineReserveMs }
       : {}),
   };
+  const corrections =
+    loop?.corrections &&
+    Object.fromEntries(
+      Object.entries(loop.corrections).filter(
+        ([, value]) => value !== undefined,
+      ),
+    );
   const profile = {
     ...(loop?.profile ? { preset: loop.profile } : {}),
     ...(loop?.stream !== undefined ? { stream: loop.stream } : {}),
@@ -86,6 +93,7 @@ function agentLoopProfile(agent: AuthoredAgent | undefined) {
     ...(loop?.truncation ? { truncation: loop.truncation } : {}),
     ...(loop?.fallback ? { fallback: loop.fallback } : {}),
     ...(finalizer && Object.keys(finalizer).length ? { finalizer } : {}),
+    ...(corrections && Object.keys(corrections).length ? { corrections } : {}),
   };
   return Object.keys(profile).length ? profile : undefined;
 }
@@ -122,12 +130,16 @@ export function compileRuntimeManifest(
     runtimeType === "agent" ? defaultAgentLoop(visibility) : undefined;
   const schedule = runtime.schedule;
   const detached = schedule?.detached;
-  // `auto` is the default trigger and `every` its cadence.
+  // `auto` is the default trigger and `every` its cadence. A sub-agent-only
+  // runtime is activated by its caller, so its trigger is `manual`.
+  const subagentOnly = schedule?.subagentOnly === true;
   const trigger =
-    schedule?.trigger || schedule?.every !== undefined
+    schedule?.trigger || schedule?.every !== undefined || subagentOnly
       ? {
           ...schedule?.trigger,
-          type: schedule?.trigger?.type ?? ("auto" as const),
+          type:
+            schedule?.trigger?.type ??
+            (subagentOnly ? ("manual" as const) : ("auto" as const)),
           ...(schedule?.every !== undefined ? { every: schedule.every } : {}),
         }
       : undefined;
@@ -176,6 +188,7 @@ export function compileRuntimeManifest(
     advertiseEvents: a?.advertiseEvents,
     stage: schedule?.stage,
     trigger,
+    ...(subagentOnly ? { subagentOnly: true as const } : {}),
     needs: schedule?.needs?.map(compileDependency),
     after: schedule?.after?.map(compileDependency),
     turnCompletion: detached

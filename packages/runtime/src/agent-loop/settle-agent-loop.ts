@@ -12,6 +12,79 @@ import { completionContractError } from "./runtime-completion.js";
 import { createAgentSchemaGate } from "./runtime-output-validator.js";
 import type { AgentToolLoopCompleted } from "./turn-agent-tool-loop.js";
 
+interface AgentOutputArgs {
+  readonly manifest: RuntimeManifest;
+  readonly input: TurnInput;
+  readonly runId: string;
+  readonly startTime: number;
+  readonly toolLoop: Pick<
+    AgentToolLoopCompleted,
+    | "finalContent"
+    | "finalToolOutput"
+    | "executedToolCalls"
+    | "failedToolCalls"
+    | "pendingProposals"
+    | "emittedEvents"
+    | "collectedToolCalls"
+  >;
+  readonly outputSchema?: Record<string, unknown>;
+  readonly priorToolCalls?: readonly ToolCallRecord[];
+}
+
+/** One output gate for settlement and the silent pre-settlement repair check. */
+function evaluateAgentOutput(args: AgentOutputArgs, silent = false) {
+  const {
+    manifest,
+    input,
+    runId,
+    startTime,
+    toolLoop,
+    outputSchema,
+    priorToolCalls,
+  } = args;
+  let errors: readonly string[] = [];
+  const finalized = finalizeAgentOutput({
+    manifest,
+    finalContent: toolLoop.finalContent,
+    ...(toolLoop.finalToolOutput
+      ? { preferredOutput: toolLoop.finalToolOutput }
+      : {}),
+    executedToolCalls: toolLoop.executedToolCalls,
+    priorToolCalls,
+    failedToolCalls: toolLoop.failedToolCalls,
+    pendingProposals: toolLoop.pendingProposals,
+    emittedEvents: toolLoop.emittedEvents,
+    dedupeInteractions: true,
+    silent,
+    schemaGate: createAgentSchemaGate({
+      manifest,
+      input,
+      runId,
+      startTime,
+      collectedToolCalls: toolLoop.collectedToolCalls,
+      outputSchema,
+      onValidationErrors: (problems) => {
+        errors = problems;
+      },
+    }),
+  });
+  if (finalized.kind === "invalid-output") errors = ["the story text is empty"];
+  return { finalized, errors };
+}
+
+/** Test the output gates only; tool failures and completion contracts settle separately. */
+export function checkAgentOutput(
+  args: AgentOutputArgs,
+):
+  | { readonly ok: true }
+  | { readonly ok: false; readonly errors: readonly string[] } {
+  const { finalized, errors } = evaluateAgentOutput(args, true);
+  return finalized.kind === "invalid-output" ||
+    finalized.kind === "short-circuit"
+    ? { ok: false, errors }
+    : { ok: true };
+}
+
 /** Settle ordinary and resumed loops before their caller runs hooks and telemetry. */
 export function settleAgentLoop(args: {
   readonly manifest: RuntimeManifest;
@@ -22,26 +95,9 @@ export function settleAgentLoop(args: {
   readonly outputSchema?: Record<string, unknown>;
   readonly priorToolCalls?: readonly ToolCallRecord[];
 }): { readonly kind: "failed" | "success"; readonly result: RuntimeResult } {
-  const {
-    manifest,
-    input,
-    runId,
-    startTime,
-    toolLoop,
-    outputSchema,
-    priorToolCalls,
-  } = args;
-  const {
-    finalContent,
-    finalToolOutput,
-    collectedToolCalls,
-    executedToolCalls,
-    failedToolCalls,
-    pendingProposals,
-    emittedEvents,
-    stop,
-    effectiveMaxSteps,
-  } = toolLoop;
+  const { manifest, input, runId, startTime, toolLoop } = args;
+  const { collectedToolCalls, failedToolCalls, stop, effectiveMaxSteps } =
+    toolLoop;
   const fail = (error: string, failedStop: LoopStop = stop) => ({
     kind: "failed" as const,
     result: {
@@ -91,25 +147,7 @@ export function settleAgentLoop(args: {
   const completionError = completionContractError(manifest, toolLoop);
   if (completionError) return fail(completionError);
 
-  const finalized = finalizeAgentOutput({
-    manifest,
-    finalContent,
-    ...(finalToolOutput ? { preferredOutput: finalToolOutput } : {}),
-    executedToolCalls,
-    priorToolCalls,
-    failedToolCalls,
-    pendingProposals,
-    emittedEvents,
-    dedupeInteractions: true,
-    schemaGate: createAgentSchemaGate({
-      manifest,
-      input,
-      runId,
-      startTime,
-      collectedToolCalls,
-      outputSchema,
-    }),
-  });
+  const { finalized } = evaluateAgentOutput(args);
   if (finalized.kind === "tool-failed") {
     return fail(
       formatToolLoopFailure({

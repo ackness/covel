@@ -19,6 +19,7 @@ import {
 } from "@covel/runtime";
 import type { RuntimeManifest } from "@covel/shared";
 import { actionRoutes } from "../../src/routes/api/actions.js";
+import { getSessionExecutionStatus } from "../../src/routes/api/actions/execution-recovery.js";
 import { pluginRpcRoutes } from "../../src/routes/api/plugin-rpc.js";
 import { createInProcessSessionLock } from "../../src/lib/session-lock.js";
 
@@ -238,10 +239,17 @@ function makeLoadedRuntimes(store: DataStore): Map<string, LoadedRuntime> {
   return loaded;
 }
 
+/** Test hooks a request reads when it runs. */
+interface AppHooks {
+  /** Runs right after a turn stores its input and `turn.started` marker. */
+  prepareTools?: (sessionId: string) => Promise<void>;
+}
+
 function makeApp(
   store: DataStore,
   registry: PluginRegistry,
   loaded: Map<string, LoadedRuntime>,
+  hooks: AppHooks = {},
 ): Hono {
   const app = new Hono();
   const eventBus = createEventBus(store);
@@ -263,6 +271,9 @@ function makeApp(
     c.set("rpcExecutor", rpcExecutor);
     c.set("rpcRegistry", rpcRegistry);
     c.set("rpcApprovalGate", rpcApprovalGate);
+    c.set("prepareToolsForSession", async (sessionId: string) => {
+      await hooks.prepareTools?.(sessionId);
+    });
     await next();
   });
   app.route("/api/actions", actionRoutes);
@@ -275,6 +286,7 @@ describe("start-game API lifecycle scenario", () => {
   let registry: PluginRegistry;
   let app: Hono;
   let loaded: Map<string, LoadedRuntime>;
+  let hooks: AppHooks;
 
   beforeEach(async () => {
     store = createMemoryStore();
@@ -318,8 +330,22 @@ describe("start-game API lifecycle scenario", () => {
       updatedAt: new Date().toISOString(),
     });
 
-    app = makeApp(store, registry, loaded);
+    hooks = {};
+    app = makeApp(store, registry, loaded, hooks);
   });
+
+  function postAction(type: string, payload: Record<string, unknown>) {
+    return app.request("/api/actions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        requestId: crypto.randomUUID(),
+        type,
+        sessionId: "sess-start-flow-api",
+        payload,
+      }),
+    });
+  }
 
   it("start_session leaves setup active while the character form is pending", async () => {
     const res = await app.request("/api/actions", {
@@ -369,15 +395,18 @@ describe("start-game API lifecycle scenario", () => {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         requestId: "req-followup",
-        type: "submit_interaction",
+        type: "submit_actions",
         sessionId: "sess-start-flow-api",
         payload: {
-          turnId: bootstrapTurnId,
-          submissions: [
+          actions: [
             {
-              interactionId: "form-char-creation",
-              type: "form",
-              values: { name: "Aria", concept: "cartographer" },
+              kind: "act",
+              interaction: {
+                turnId: bootstrapTurnId,
+                interactionId: "form-char-creation",
+                type: "form",
+              },
+              fields: { name: "Aria", concept: "cartographer" },
             },
           ],
         },
@@ -451,9 +480,9 @@ describe("start-game API lifecycle scenario", () => {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         requestId: "req-main-1",
-        type: "send_message",
+        type: "submit_actions",
         sessionId: "sess-start-flow-api",
-        payload: { content: "look around" },
+        payload: { actions: [{ kind: "say", text: "look around" }] },
       }),
     });
     expect(firstMainLoop.status).toBe(200);
@@ -480,5 +509,97 @@ describe("start-game API lifecycle scenario", () => {
 
     const afterFirstMainLoop = await store.getSession("sess-start-flow-api");
     expect(afterFirstMainLoop?.completedPlayerTurns).toBe(1);
+  });
+
+  it("recovers a final setup answer saved before the server stopped, and the opening follows", async () => {
+    const startEvents = await drainActionStream(
+      await postAction("start_session", {}),
+    );
+    const bootstrapTurnId = startEvents[0]!.turnId;
+
+    // The server stops right after it saves the answer with its turn marker:
+    // the setup runtime never runs, and nothing after the marker is written.
+    let stopped = false;
+    hooks.prepareTools = async () => {
+      stopped = true;
+      throw new Error("server stopped");
+    };
+    const addTraceEvent = store.addTraceEvent.bind(store);
+    store.addTraceEvent = async (record) => {
+      if (stopped) throw new Error("server stopped");
+      return addTraceEvent(record);
+    };
+    const setCommitStatus = store.setTurnResultCommitStatus.bind(store);
+    store.setTurnResultCommitStatus = async (...args) => {
+      if (stopped) throw new Error("server stopped");
+      return setCommitStatus(...args);
+    };
+    const stoppedEvents = await drainActionStream(
+      await postAction("submit_actions", {
+        actions: [
+          {
+            kind: "act",
+            interaction: {
+              turnId: bootstrapTurnId,
+              interactionId: "form-char-creation",
+              type: "form",
+            },
+            fields: { name: "Aria", concept: "cartographer" },
+          },
+        ],
+      }),
+    );
+    expect(stoppedEvents[0]?.type).toBe("interaction.submitted");
+    const answerTurnId = stoppedEvents[0]!.turnId;
+    // Restarted: the answer is stored, setup is still pending.
+    stopped = false;
+    delete hooks.prepareTools;
+    expect(await store.listPlayerInputs("sess-start-flow-api")).toHaveLength(1);
+    expect((await store.getSession("sess-start-flow-api"))?.phase).toBe(
+      "setup",
+    );
+    expect(
+      await getSessionExecutionStatus(store, "sess-start-flow-api"),
+    ).toMatchObject({
+      state: "interrupted",
+      turnId: answerTurnId,
+      retry: { type: "retry_turn", payload: {} },
+    });
+
+    const recovered = await drainActionStream(
+      await postAction("retry_turn", { recoverFromTurnId: answerTurnId }),
+    );
+    // The answer is not submitted again; the recovered turn finishes setup
+    // and the opening follows on the same stream, as after the submission.
+    expect(recovered.map((event) => event.type)).not.toContain(
+      "interaction.submitted",
+    );
+    expect(await store.listPlayerInputs("sess-start-flow-api")).toHaveLength(1);
+    expect(
+      (await store.listCharacters("sess-start-flow-api")).map(
+        (character) => character.name,
+      ),
+    ).toEqual(["Aria"]);
+    const [setupTurnId, openingTurnId, ...more] = [
+      ...new Set(recovered.map((event) => event.turnId)),
+    ];
+    expect(more).toEqual([]);
+    expect(
+      (
+        await turnRuntimeResults(store, "sess-start-flow-api", setupTurnId!)
+      ).map((row) => row.runtimeId),
+    ).toContain("char-creator/player-init");
+    expect(
+      (
+        await turnRuntimeResults(store, "sess-start-flow-api", openingTurnId!)
+      ).filter((row) => row.runtimeId === "narrator"),
+    ).toHaveLength(1);
+    expect(
+      recovered.filter((event) => event.type === "execution.completed"),
+    ).toMatchObject([{ payload: { committed: true } }]);
+    // Setup and its opening are not completed player turns.
+    const session = await store.getSession("sess-start-flow-api");
+    expect(session?.phase).toBe("playing");
+    expect(session?.completedPlayerTurns).toBe(0);
   });
 });

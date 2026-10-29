@@ -1,3 +1,4 @@
+import { handlePluginFaultNotice } from "./fault-notices.js";
 import i18n from "i18next";
 import type { MutableRef } from "./runtime-refs.js";
 import { emitToast } from "@/lib/toast-channel.js";
@@ -277,6 +278,12 @@ export function createSseEventHandler(
     >;
 
     switch (eventType) {
+      case "plugin.fault.latched":
+      case "plugin.fault.cleared":
+        handlePluginFaultNotice(deps, eventType, payload, turnId);
+        break;
+      case "plugin.fault.counted":
+        break;
       case "llm.responded":
       case "gateway.responded": {
         // Only a story is kept when it is cut at the model's output limit or
@@ -672,6 +679,11 @@ export function createSseEventHandler(
       case "recursive.calling":
       case "recursive.completed":
       case "recursive.failed":
+      // Sub-agent runs: trace-only, never forwarded to this action stream.
+      case "subagent.started":
+      case "subagent.completed":
+      case "subagent.failed":
+      case "subagent.writes-dropped":
       // Function-runtime trace events: drive the /debug timeline via the
       // subscription channel / trace_events, not this action renderer.
       // gateway.* forward to the action stream (llm.* parity) but the action
