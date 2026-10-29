@@ -283,7 +283,7 @@ Web 客户端只发送它的请求用得到的供应商的密钥：
 
 ## Community plugin code
 
-插件的服务端 JavaScript（`entry`、handler、guard、hook、wire）运行在服务端进程里，拥有服务端的全部权限。没有进程沙箱、VM 沙箱或模块沙箱。挡在社区包和这些权限之间的，只有玩家的同意：
+插件的服务端 JavaScript（`entry`、handler、guard、hook、wire）运行在服务端进程里，拥有服务端的全部权限。没有进程沙箱、VM 沙箱或模块沙箱。社区包需要玩家同意，或满足实例的[可信来源策略](../reference/plugin-installation.md#可信来源)，才可执行代码；策略只减少 server-code 与 runtime 提示，不提供沙箱，也不能防住 GitHub 账号失窃，发布签名元数据仍未实现：
 
 - 清单读取共用纯 YAML 解析入口，加载、安装、校验和本地化工具都在解析前拒绝 `---js` 等引擎指令。
 - 批准之前，`community` 包只是数据。安装、预览、列表和校验只解析它的文件，一个都不 import。两阶段批准（先 `covel:plugin-server-code`，再授予具体操作，见 [Hosted auth](#hosted-auth)）把守着第一次 import。
@@ -341,7 +341,7 @@ personal 形态信任本机上的其他进程。回环监听、Host 和 Origin �
 这是第二扇门，比只限桌面端的那几个接口更窄。`/api/config/settings`、`/api/config/keys`、`/api/config/proxy` 和 `/api/config/data-root` 仍然要 `COVEL_DESKTOP_REST=1` 才开放：普通的自托管 Web 部署不能写文件、密钥、代理或路径。
 
 - **谁能写。** 只有 personal 形态，也就是唯一的玩家拥有服务端的形态；桌面壳设了 bearer token 时，还需要带上它。在 browser-private 形态和 `demo` / `commercial` 上，写入在检查令牌之前就被拒绝，operator token 也不例外：那里的值归运营者，来自环境变量。在 personal 形态上，环境变量同样优先于存储的值。
-- **能写什么。** 只能写 `SERVER_SETTINGS`（`packages/shared/src/env/server-settings.ts`）里列出的 key，值必须被它的 schema 接受。这份名单是封闭的，每个值都是枚举值或有范围的选项。可能指向路径、URL、主机或凭据的 key 不属于这里。出现未知 key 时，整个请求被拒绝。
+- **能写什么。** 只能写 `SERVER_SETTINGS`（`packages/shared/src/env/server-settings.ts`）里列出的 key，值必须被它的 schema 接受。这份名单是封闭的，值有 schema 约束。`trust.sources` 是 GitHub 所有者或仓库名称列表，由 `COVEL_TRUSTED_SOURCES` 覆盖；不接受任意 URL、路径或凭据。出现未知 key 时，整个请求被拒绝。
 - **能读什么。** `GET /api/config/server-settings` 在所有档位上都公开，只返回这些 key 的生效值。不要添加生效值必须保密的设置。
 - **谁够得着。** 写入的来源检查（`origin_not_allowed`）和其他 `PUT` 一样适用。别人能访问到的 `self` 服务端，会让他们改这些设置，就像让他们使用其他所有路由一样。`self` 服务端只应该暴露给它的主人。
 

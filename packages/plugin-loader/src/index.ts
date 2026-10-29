@@ -142,3 +142,8 @@ export {
   redactPaths,
   type PluginPackageValidation,
 } from "./package-validation.js";
+
+export {
+  computePluginCapabilities,
+  packageHasServerCode,
+} from "./capabilities.js";

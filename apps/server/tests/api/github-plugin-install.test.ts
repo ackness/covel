@@ -1,3 +1,4 @@
+import { installTrustPolicy } from "../trust/fixtures.js";
 import { mkdtemp, mkdir, readFile, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -68,8 +69,11 @@ beforeEach(async () => {
   vi.stubEnv("COVEL_DESKTOP_REST_TOKEN", "");
   vi.stubEnv("DEPLOYMENT_TIER", "self");
   vi.stubEnv("NODE_ENV", "test");
+  vi.stubEnv("COVEL_TRUSTED_SOURCES", "");
+  const trustedSources = await installTrustPolicy(root);
   app = new Hono();
   app.use("*", async (c, next) => {
+    c.set("trustedSources", trustedSources);
     c.set("reservedPluginIds", new Set(["narrator"]));
     await next();
   });
@@ -617,4 +621,43 @@ it("supports encoded slash refs without guessing where the path starts", () => {
     ref: "feature/notes",
     directory: "plugins/note",
   });
+});
+
+it.each([true, false])(
+  "records the exact previewed capabilities only for a trusted source (trusted=%s)",
+  async (trusted) => {
+    vi.stubEnv(
+      "COVEL_TRUSTED_SOURCES",
+      trusted ? "example/plugins" : "other/repository",
+    );
+    const item = await preview();
+    expect(item.trustedSource).toBe(trusted);
+    expect(item.capabilities.serverCode).toBe(true);
+    const response = await request("plugin/github", {
+      token: item.token,
+      acceptRisk: true,
+    });
+    expect(response.status).toBe(201);
+    const receipt = JSON.parse(
+      await readFile(path.join(root, item.id, ".covel-install.json"), "utf8"),
+    );
+    expect(receipt.capabilities).toEqual(
+      trusted ? item.capabilities : undefined,
+    );
+  },
+);
+it("rechecks policy after the preview before recording a snapshot", async () => {
+  vi.stubEnv("COVEL_TRUSTED_SOURCES", "example/plugins");
+  const item = await preview();
+  expect(item.trustedSource).toBe(true);
+  vi.stubEnv("COVEL_TRUSTED_SOURCES", "other");
+  expect(
+    (await request("plugin/github", { token: item.token, acceptRisk: true }))
+      .status,
+  ).toBe(201);
+  expect(
+    JSON.parse(
+      await readFile(path.join(root, item.id, ".covel-install.json"), "utf8"),
+    ),
+  ).not.toHaveProperty("capabilities");
 });

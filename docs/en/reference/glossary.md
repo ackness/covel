@@ -15,6 +15,7 @@ Each English term has only one Chinese term. The Chinese docs, the UI text, and 
 | Binding | 绑定 |  |
 | Bundled plugin | 内置插件 | A plugin that ships with Covel. Not the same as `kind: core`. |
 | Capability | 能力标签 | The `tag` of a model route (`text`, `image`, and so on). Plugins are found by **Contract**, not by capability tag. |
+| Capability snapshot | 能力快照 | The declaration bounds in an install receipt; see [trusted sources](./plugin-installation.md#trusted-sources). |
 | Collection | 合集 |  |
 | Contract | 契约 | A versioned ID, for example `narrative-engine@1`. |
 | Credits | 作者信息 | The `author`, `license`, and `homepage` fields of a package. |
@@ -38,6 +39,7 @@ Each English term has only one Chinese term. The Chinese docs, the UI text, and 
 | Session | 会话 |  |
 | Slot | 槽位 | In the settings UI it is called "model role". |
 | Trigger mode | 触发模式 |  |
+| Trusted source | 可信来源 | A GitHub source chosen by the instance owner or operator to reduce approval prompts. |
 | Turn | 回合 | "This turn" is 本回合 in Chinese. |
 | World | 世界 | A world's installation package is called a "world package". |
 

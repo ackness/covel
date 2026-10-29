@@ -105,6 +105,7 @@ export async function dispatchPluginEvent(
   }
   const gate = c.get("rpcApprovalGate");
   const approvalScope = sessionApprovalScope(session, body.pluginId);
+  await c.get("trustedSources")?.ensureFresh(body.pluginId);
   const needsServerCodeGrant =
     trustInfo.source === "community" &&
     !hasServerCodeGrant(gate, session, body.pluginId);
@@ -141,6 +142,7 @@ export async function dispatchPluginEvent(
     const operatorDenied = requireAccess(c, "plugin.community");
     if (operatorDenied) return operatorDenied;
     const scope = sessionApprovalScope(session, runtime.pluginId);
+    await c.get("trustedSources")?.ensureFresh(runtime.pluginId);
     const needsServerCode = !hasServerCodeGrant(
       gate,
       session,

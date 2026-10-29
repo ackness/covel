@@ -109,6 +109,8 @@ describe("PackagesPane installed plugin management", () => {
                       version: null,
                       source: null,
                       pendingUpdate: null,
+                      integrity: "no-receipt",
+                      trustedSource: false,
                     },
                   ]
                 : [],
@@ -188,6 +190,8 @@ describe("PackagesPane installed plugin management", () => {
                   version: null,
                   source: null,
                   pendingUpdate: null,
+                  integrity: "no-receipt",
+                  trustedSource: false,
                 },
               ],
             });
@@ -280,6 +284,8 @@ describe("PackagesPane installed plugin management", () => {
                 version: null,
                 source: null,
                 pendingUpdate: null,
+                integrity: "no-receipt",
+                trustedSource: false,
               },
             ],
           });
@@ -334,6 +340,8 @@ describe("PackagesPane installed plugin management", () => {
                 version: null,
                 source: null,
                 pendingUpdate: null,
+                integrity: "no-receipt",
+                trustedSource: false,
               },
             ],
           });
@@ -537,13 +545,22 @@ it("offers validation for installed plugins and worlds and disables it during in
               version: null,
               source: null,
               pendingUpdate: null,
+              integrity: "no-receipt",
+              trustedSource: false,
             },
           ],
         });
       if (url === "/api/install/worlds")
         return Response.json({
           items: [
-            { id: "sample", version: null, source: null, pendingUpdate: null },
+            {
+              id: "sample",
+              version: null,
+              source: null,
+              pendingUpdate: null,
+              integrity: "no-receipt",
+              trustedSource: false,
+            },
           ],
         });
       if (url === "/api/install/world")
@@ -579,3 +596,43 @@ it("offers validation for installed plugins and worlds and disables it during in
     expect(buttons.every((button) => !button.disabled)).toBe(true),
   );
 });
+
+it.each(["modified", "verified", "no-receipt"] as const)(
+  "warns only for modified installed files (%s)",
+  async (integrity) => {
+    await i18n.changeLanguage("en-US");
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) => {
+        if (url === "/api/install/plugins")
+          return Response.json({
+            items: [
+              {
+                id: brokenPlugin.id,
+                version: null,
+                source: null,
+                pendingUpdate: null,
+                integrity,
+                trustedSource: false,
+              },
+            ],
+          });
+        return Response.json({
+          items: url === "/api/plugins" ? [brokenPlugin] : [],
+        });
+      }),
+    );
+    try {
+      render(<PackagesPane />);
+      await screen.findByText("Broken plugin");
+      expect(
+        !!screen.queryByText(
+          "Files differ from what was installed; this package is not treated as coming from its source.",
+        ),
+      ).toBe(integrity === "modified");
+    } finally {
+      cleanup();
+      vi.unstubAllGlobals();
+    }
+  },
+);

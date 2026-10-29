@@ -35,10 +35,15 @@ export const pluginRoutes = new Hono<Env>();
 // GET /plugins — List all loaded plugins
 pluginRoutes.get("/", async (c) => {
   const registry = c.get("pluginRegistry");
+  await c.get("trustedSources")?.verifyAll();
   return c.json(
     listBody(
       [...registry.getAll().values()].map((entry) =>
-        buildPluginSummary(entry, c.get("isPluginEntryPublished")),
+        buildPluginSummary(
+          entry,
+          c.get("isPluginEntryPublished"),
+          c.get("trustedSources"),
+        ),
       ),
     ),
   );
@@ -55,7 +60,14 @@ pluginRoutes.get("/:id", async (c) => {
       404,
     );
   }
-  return c.json(buildPluginDetail(entry, c.get("isPluginEntryPublished")));
+  await c.get("trustedSources")?.ensureFresh(id);
+  return c.json(
+    buildPluginDetail(
+      entry,
+      c.get("isPluginEntryPublished"),
+      c.get("trustedSources"),
+    ),
+  );
 });
 
 // DELETE /plugins/:id — uninstall a third-party plugin from the user plugins

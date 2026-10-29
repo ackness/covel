@@ -74,7 +74,7 @@ describe("server settings", () => {
     const { app } = build();
     const res = await app.request(PATH);
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({
+    expect(await res.json()).toMatchObject({
       settings: { [KEY]: { value: "30", source: "default", settable: true } },
     });
   });
@@ -87,7 +87,7 @@ describe("server settings", () => {
 
     const res = await put(app, { [KEY]: "keep" });
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({
+    expect(await res.json()).toMatchObject({
       settings: { [KEY]: { value: "keep", source: "setting", settable: true } },
     });
     expect(currentTraceRetention()).toEqual({ days: 0, source: "setting" });
@@ -141,7 +141,7 @@ describe("server settings", () => {
     const { app } = build();
     await put(app, { [KEY]: "7" });
     process.env.COVEL_TRACE_RETENTION_DAYS = "14";
-    expect(await (await app.request(PATH)).json()).toEqual({
+    expect(await (await app.request(PATH)).json()).toMatchObject({
       settings: { [KEY]: { value: "14", source: "env", settable: false } },
     });
     const res = await put(app, { [KEY]: "90" });
@@ -175,7 +175,7 @@ describe("server settings", () => {
       expect(await res.json()).toMatchObject({
         code: "server_settings_operator_only",
       });
-      expect(await (await app.request(PATH)).json()).toEqual({
+      expect(await (await app.request(PATH)).json()).toMatchObject({
         settings: {
           [KEY]: { value: "30", source: "default", settable: false },
         },

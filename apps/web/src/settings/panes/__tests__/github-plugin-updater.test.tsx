@@ -20,6 +20,8 @@ const source = {
   tracking: { kind: "default-branch" as const },
 };
 const installation: PluginInstallation = {
+  integrity: "verified",
+  trustedSource: false,
   id: "example-note",
   version: "1.0.0",
   source,
@@ -31,6 +33,19 @@ const preview: GithubPluginUpdatePreview = {
   description: "Updated note",
   author: null,
   hasServerCode: true,
+  trustedSource: false,
+  capabilities: {
+    serverCode: true,
+    http: [],
+    hooks: [],
+    tools: [],
+    actions: [],
+    services: [],
+    wires: [],
+    extensions: [],
+    forms: [],
+    datasets: [],
+  },
   source: { ...source, commit: "c".repeat(40), digest: "d".repeat(64) },
   previous: { version: installation.version, source },
   token: "update-preview",

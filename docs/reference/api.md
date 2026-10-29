@@ -347,6 +347,11 @@ CORS 只能阻止网页读取响应，所以另有一道写入来源检查：
       "value": "30",
       "source": "default",
       "settable": true
+    },
+    "trust.sources": {
+      "value": [],
+      "source": "default",
+      "settable": true
     }
   }
 }
@@ -360,11 +365,13 @@ CORS 只能阻止网页读取响应，所以另有一道写入来源检查：
 
 `source` 是 `env` 时，`value` 可能是设置界面不提供给玩家的值。例如 `COVEL_TRACE_RETENTION_DAYS=14` 对应 `"14"`。
 
+`trust.sources` 保存规范化的 GitHub `owner` 或 `owner/repo` 数组，默认 `[]`；`COVEL_TRUSTED_SOURCES` 覆盖它。仅 personal 形态可写，host profile 的 `server.settings` 决定权限；browser-private 和托管形态由运营者通过环境变量设置。语法与自动授权条件见[可信来源](./plugin-installation.md#可信来源)。
+
 **`PUT /api/config/server-settings`**
 
 请求体是 `{ "entries": { "<key>": <value> | null } }`。它保存每个值（`null` 表示删掉保存的值），返回和 `GET` 一样的响应体。
 
-- 只在 `DEPLOYMENT_TIER=self` 下接受。
+- 只在 personal 形态接受；browser-private 和托管形态均拒绝。
 - 桌面外壳设置了 bearer token 时必须带上它，否则返回 `401 desktop_rest_token_invalid`。
 - 一个请求里只要有一条被拒绝，就什么都不写。
 - 保存的值在下一次提交或清理时生效，不用重启。
@@ -1080,6 +1087,8 @@ setup runtime 挂起等玩家回答时，这次尝试不占重试次数。挂起
 - `POST /api/install/collection`：响应和 batch 相同。
 
 批量安装失败的撤回结果见[插件安装](./plugin-installation.md#多包预览和批量安装)：`details.rolledBack` 和 `details.retained` 分别列出已撤回和保留的包。
+
+GitHub 插件安装和更新预览始终返回 `capabilities` 与 `trustedSource`；前者包含代码、HTTP、钩子、工具、操作、服务契约、wires、扩展、表单和数据集的声明快照。`GET /api/install/plugins` 的每项还返回 `integrity` 和 `trustedSource`。字段和快照规则见[插件安装](./plugin-installation.md#可信来源)。
 
 - `GET /api/install/plugins`：列表里包含还没有重启加载的插件。
 
@@ -3458,6 +3467,8 @@ runtime 报告失败时，它的原始错误保留在 `result.runtimeResults` �
 
 ### RPC Approval 流程
 
+可信来源只隐式满足 `covel:plugin-server-code` 与 `runtime:*`，不满足 action；撤销会话授权也不会移除实例来源策略。
+
 第三方插件（来源为 `community`）的 RPC action 在执行前需要玩家明确批准。这样没有审计过的代码不能自己操作会话。
 
 #### 流程
@@ -3817,6 +3828,7 @@ runtime 报告失败时，它的原始错误保留在 `result.runtimeResults` �
 | --- | --- |
 | `id`, `displayName`, `description` | 包的身份和可本地化的描述 |
 | `kind`, `source` | `core \| plugin` 与 `builtin \| community` |
+| `trust?` | 社区包的 `{ source: string \| null, trustedSource, integrity, autoApproved }`；`source` 是安装记录的仓库，`integrity` 为 `verified \| modified \| no-receipt \| unreadable`。 |
 | `hostState`, `error?` | 宿主状态 `discovered \| installed \| loaded \| error`，以及加载错误 |
 | `disabledRuntimes?`, `ignoredFields?` | 不影响整个插件加载的诊断，见下 |
 | `provides`, `requires`, `optional`, `conflicts` | 包级 contract 声明。`provides` 含各 runtime 的 `io.output.contract`；`optional` 由 Covel 推出：runtime 引用了、却不在 `requires` 里的契约 |
@@ -3873,7 +3885,7 @@ runtime 报告失败时，它的原始错误保留在 `result.runtimeResults` �
 
 列出这个会话能看到的插件，以及会话当前可执行的命令。
 
-- `items[]`：每项在 `PluginSummary` 的基础上增加 `active`、`locked`、`sessionState`、`serverCodeApproved`，以及可选的 `approvalRequired`、`autoAdded`、`rejection`。
+- `items[]`：每项在 `PluginSummary` 的基础上增加 `active`、`locked`、`sessionState`、`serverCodeApproved`，以及可选的 `serverCodeApprovedBy: "session" | "trusted-source"`、`approvalRequired`、`autoAdded`、`rejection`。`serverCodeApprovedBy` 区分显式会话批准与当前来源策略的隐式批准。
 - `items[].runtimes` 与 `GET /api/plugins` 的形状完全相同。
 - `commands[]`：唯一的可执行命令目录。它按当前启用的插件过滤，再加上框架命令。命令只在顶层列一次，不按插件重复返回。
 - `unavailable[]`：玩家确认的插件里现在不能运行的那些，每项是一个 `rejection`（`pluginId`、`code`、`reason`）。原因可能是没有安装（`unknown-plugin`）、加载失败，或者当前版本缺少提供者、和别的成员冲突。游戏照常进行。

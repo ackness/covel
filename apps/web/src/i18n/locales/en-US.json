@@ -1384,7 +1384,7 @@
       "riskTitle": "Review before installing",
       "codeRisk": "This package contains code. When execution is approved, third-party code runs in the Covel backend without a process sandbox and may access its files, environment variables, and network. Declared permissions do not fully isolate arbitrary JavaScript.",
       "contentRisk": "Plugin content can change model behavior, data sent to providers, and API costs. File inspection is not a security audit.",
-      "targetRisk": "Installation writes to the connected backend: your computer on desktop, or the remote server when using a hosted instance. Restarting is required; installing does not enable or authorize execution.",
+      "targetRisk": "Installation writes to the connected backend: your computer on desktop, or the remote server when using a hosted instance. Restarting is required. Enabling uses your instance’s approval and trusted-source policy.",
       "indexRisk": "Directory listing or official maintenance does not grant built-in trust or guarantee a security audit. Install only sources you trust.",
       "accept": "I understand the risks and trust this source.",
       "install": "Confirm installation",
@@ -1399,7 +1399,7 @@
       "hasCode": "contains code",
       "installSelected": "Install {{count}} selected",
       "blocked": "Resolve the errors above or deselect the affected packages before installing.",
-      "mixedWorldRisk": "Worlds contain third-party prompts, settings and media. Review their content before playing. Installing does not authorize plugins; each one still asks for approval in a session."
+      "mixedWorldRisk": "Worlds contain third-party prompts, settings and media. Review their content before playing. Installing does not authorize plugins automatically except where your instance’s trusted-source policy covers their code and runtimes."
     },
     "worldGithub": {
       "risk": "Worlds contain third-party prompts, settings and media. Review their content and plugin requirements before playing. World installation does not install or authorize plugins, or run repository scripts.",
@@ -1547,6 +1547,35 @@
         "cover": "Cover image: {{message}}",
         "locale-file-name": "Locale filename: {{message}}"
       }
+    },
+    "trustedSources": {
+      "title": "Trusted sources",
+      "explanation": "These sources skip the server-code prompt when files are unchanged and nothing new is requested.",
+      "entry": "GitHub owner or owner/repo",
+      "add": "Add",
+      "remove": "Remove",
+      "removeEntry": "Remove {{entry}}",
+      "suggest": "Suggest the official repository",
+      "invalid": "Enter a GitHub owner or owner/repo (up to 100 entries).",
+      "badge": "From a trusted source",
+      "growth": "New capabilities after an update will ask for approval again.",
+      "modified": "Files differ from what was installed; this package is not treated as coming from its source."
+    },
+    "capabilities": {
+      "title": "Requested capabilities",
+      "yes": "Yes",
+      "no": "No",
+      "none": "None",
+      "serverCode": "Server code",
+      "http": "HTTP origins",
+      "hooks": "Hooks",
+      "tools": "Tools",
+      "actions": "Actions",
+      "services": "Service contracts",
+      "wires": "Wires",
+      "extensions": "Extensions",
+      "forms": "Forms",
+      "datasets": "Datasets"
     }
   },
   "appearance": {
@@ -2081,7 +2110,8 @@
       "enable": "Turn on {{plugins}} to get a story.",
       "install": "Install a narrative plugin under Settings → Install & manage, then restart the backend."
     },
-    "dependentsOff": "These plugins will be off because a capability they need is off:"
+    "dependentsOff": "These plugins will be off because a capability they need is off:",
+    "trustedSourceApproved": "auto-approved: trusted source"
   },
   "pluginJob": {
     "runtimesNotLoaded": "{{plugin}} was approved, but {{count}} of its tasks cannot be loaded and will not run.",

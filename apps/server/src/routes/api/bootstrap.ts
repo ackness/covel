@@ -136,6 +136,11 @@ import { createEventDirectory } from "./bootstrap/event-directory.js";
 import { requestLlmServices } from "./bootstrap/request-llm-services.js";
 import { createBootstrapMemorySystem } from "./bootstrap/memory.js";
 import { createSearchablePluginDataResolver } from "./bootstrap/searchable-plugin-data.js";
+import {
+  createTrustedSourceService,
+  type TrustedSourceService,
+} from "../../trust/trusted-source-service.js";
+import { resolveUserResourceDirs } from "../../lib/user-resource-dirs.js";
 import { createBootstrapPluginRpc } from "./bootstrap/plugin-rpc-wiring.js";
 import { wrapStoreWithPluginDataEvents } from "./bootstrap/plugin-data-store-events.js";
 import {
@@ -255,6 +260,7 @@ export interface ApiBootstrapConfig {
 }
 
 export interface ApiBootstrapResult {
+  readonly trustedSources: TrustedSourceService;
   readonly memorySystem?: MemorySystem;
   readonly applicationWork: ApplicationWork;
   readonly app: Hono;
@@ -451,36 +457,38 @@ async function assembleApi(
 
   const getPluginSource = (pluginId: string) => registry.get(pluginId)?.source;
 
+  let trustedSources: TrustedSourceService | undefined;
   const { rpcRegistry, rpcExecutor, rpcApprovalGate } =
-    createBootstrapPluginRpc();
+    createBootstrapPluginRpc({
+      implicitGrant: (query) => trustedSources?.implicitGrant(query) ?? false,
+    });
 
   // Entry import only honors the EXACT server-code grant. The old
   // no-action `hasGrant` matched any live grant for the plugin, so approving
   // one ordinary RPC action (or one runtime) silently authorized importing
   // and executing the plugin's entire server entry.
-  const isCommunityServerCodeApproved = (
+  const isCommunityServerCodeApproved = async (
     sessionId: string | undefined,
     pluginId: string,
   ): Promise<boolean> => {
-    if (!sessionId) return Promise.resolve(false);
-    return store
-      .getSession(sessionId)
-      .then((session) =>
-        Boolean(
-          session &&
-          rpcApprovalGate.hasGrant(
-            sessionId,
-            pluginId,
-            COMMUNITY_SERVER_CODE_ACTION,
-            sessionApprovalScope(session, pluginId),
-          ),
-        ),
-      );
+    if (!sessionId) return false;
+    await trustedSources?.ensureFresh(pluginId);
+    const session = await store.getSession(sessionId);
+    return Boolean(
+      session &&
+      rpcApprovalGate.hasGrant(
+        sessionId,
+        pluginId,
+        COMMUNITY_SERVER_CODE_ACTION,
+        sessionApprovalScope(session, pluginId),
+      ),
+    );
   };
   const isCommunityHookApproved = async (
     sessionId: string,
     pluginId: string,
   ): Promise<boolean> => {
+    await trustedSources?.ensureFresh(pluginId);
     const session = await store.getSession(sessionId);
     return Boolean(
       session &&
@@ -580,7 +588,10 @@ async function assembleApi(
     pluginId: string,
     sessionId?: string,
   ): Promise<void> => {
+    await trustedSources?.ensureFresh(pluginId);
     await pluginEntries.ensurePluginEntry(pluginId, sessionId);
+    // Publishing an entry re-registers it and invalidates its verification.
+    await trustedSources?.ensureFresh(pluginId);
   };
   // For the routes that take the player's approval: the plugin's runtimes are
   // loaded right then, and one that does not import is in their answer.
@@ -840,6 +851,7 @@ async function assembleApi(
     c.set("rpcExecutor", rpcExecutor);
     c.set("rpcRegistry", rpcRegistry);
     c.set("rpcApprovalGate", rpcApprovalGate);
+    c.set("trustedSources", trustedSources);
     c.set("sessionLock", sessionLock);
     c.set("memoryIngestLock", memoryIngestLock);
     c.set("runtimeJobWorker", runtimeJobWorker);
@@ -951,6 +963,11 @@ async function assembleApi(
   });
   await serverSettings.load();
   installTraceRetentionSource(serverSettings);
+  trustedSources = createTrustedSourceService({
+    settings: serverSettings,
+    registry,
+    pluginsRoot: resolveUserResourceDirs().plugins,
+  });
   app.route(
     "/api/config/server-settings",
     createServerSettingsRoutes(serverSettings),
@@ -982,6 +999,7 @@ async function assembleApi(
 
   return {
     memorySystem: bootstrapMemory?.memorySystem,
+    trustedSources,
     app,
     applicationWork,
     registry,

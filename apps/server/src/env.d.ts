@@ -119,6 +119,7 @@ declare module "hono" {
     rpcExecutor: RpcExecutor;
     rpcRegistry: PluginRpcRegistry;
     rpcApprovalGate: RpcApprovalGate;
+    trustedSources?: import("./trust/trusted-source-service.js").TrustedSourceService;
     /**
      * Per-session serializer. Injected by `bootstrapApi()`:
      *   - `STORE_BACKEND=pg` → `createPgAdvisorySessionLock(sql)` — mutual

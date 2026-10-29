@@ -196,7 +196,7 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
   }
 
   const eventBus = sessionEventBus(rootEventBus, session);
-  const approval = preflightActionApprovals(c, session, body);
+  const approval = await preflightActionApprovals(c, session, body);
   if (approval) return approval;
   // A form's validator is its provider's server code: ask for that grant
   // before the stream opens. The lock re-checks it against the live session.

@@ -30,6 +30,7 @@ import { useSessionActions } from "@/stores/session-store.js";
 import { PackageCredits } from "@/components/shared/package-credits.js";
 import { PluginLoadWarnings } from "@/components/shared/plugin-load-warnings.js";
 import { StImportCard } from "./StImportCard.js";
+import { TrustedSourcesCard } from "./TrustedSourcesCard.js";
 import { GithubCollectionInstaller } from "./GithubCollectionInstaller.js";
 import type { PluginInstallation, PluginSummary } from "@covel/shared";
 import { ignoreError } from "@/lib/ignore-error.js";
@@ -216,6 +217,8 @@ export function PackagesPane() {
           version: plugin.version ?? null,
           source: null,
           pendingUpdate: null,
+          integrity: "no-receipt" as const,
+          trustedSource: false,
         }))
       : installations;
 
@@ -290,6 +293,8 @@ export function PackagesPane() {
           )}
         </div>
       )}
+
+      <TrustedSourcesCard />
 
       <GithubCollectionInstaller
         disabled={!!busy || !!removing || updateBusy || githubBusy}
@@ -372,6 +377,12 @@ export function PackagesPane() {
                       {p.id}
                       {p.version ? ` · ${p.version}` : ""}
                     </div>
+                    {(p.integrity === "modified" ||
+                      p.integrity === "unreadable") && (
+                      <p className="text-xs text-(--accent-warning)">
+                        {t("settings.trustedSources.modified")}
+                      </p>
+                    )}
                     {p.source && (
                       <a
                         className="block text-xs underline wrap-break-word"

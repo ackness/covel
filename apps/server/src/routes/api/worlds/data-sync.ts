@@ -144,6 +144,8 @@ worldDataSyncRoutes.post("/:id/sync-data", async (c) => {
   // Planning reads files and executes bounded projection workers. Keep that
   // expensive, non-mutating phase outside the session lock; the locked phase
   // below revalidates every session field that influenced the plan.
+  for (const pluginId of session.activePlugins)
+    await c.get("trustedSources")?.ensureFresh(pluginId);
   const prepared = await prepareWorldDataSyncForSession(syncOptions(session));
   const runSyncData = (liveSession: typeof session) =>
     syncWorldDataForSession({
@@ -294,6 +296,8 @@ worldDataSyncRoutes.post("/:id/sync-dimensions", async (c) => {
 
   // Planning is non-mutating and may touch files; keep it outside the lock,
   // matching the sync-data route. The locked phase revalidates session fields.
+  for (const pluginId of session.activePlugins)
+    await c.get("trustedSources")?.ensureFresh(pluginId);
   const prepared = await prepareWorldDataSyncForSession(syncOptions(session));
 
   let report: Awaited<ReturnType<typeof syncWorldDataForSession>> | undefined;

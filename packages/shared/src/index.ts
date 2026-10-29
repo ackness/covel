@@ -626,3 +626,5 @@ export {
   type PackageValidationIssue,
   type PackageValidationReport,
 } from "./schemas/package-validation.js";
+
+export * from "./schemas/trusted-sources.js";

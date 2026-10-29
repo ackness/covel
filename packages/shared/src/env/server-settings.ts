@@ -1,3 +1,4 @@
+import { TRUSTED_SOURCES_SERVER_SETTING } from "./trusted-sources.js";
 import type { ServerSettingDefinition } from "./server-setting.js";
 import { TRACE_RETENTION_SERVER_SETTING } from "./trace-retention.js";
 
@@ -7,6 +8,7 @@ import { TRACE_RETENTION_SERVER_SETTING } from "./trace-retention.js";
  */
 export const SERVER_SETTINGS: readonly ServerSettingDefinition[] = [
   TRACE_RETENTION_SERVER_SETTING,
+  TRUSTED_SOURCES_SERVER_SETTING,
 ];
 
 export function serverSettingDefinition(

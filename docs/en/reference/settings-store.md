@@ -53,7 +53,7 @@ Every setting has a scope:
 
 A `server` setting is declared in two places: the registry entry has `SettingEntry.scope: "server"`, and the same key has a definition in `SERVER_SETTINGS` (`packages/shared/src/env/server-settings.ts`: schema, default, and the environment variable that overrides it). A test fails when the two differ.
 
-For now there is only one: `diagnostics.traceRetention` (Settings → General → "Keep diagnostic traces"). Its values are `7` / `30` / `90` / `keep`, and the default is `30`.
+The keys are `diagnostics.traceRetention` (Settings → General → "Keep diagnostic traces": `7` / `30` / `90` / `keep`, default `30`) and `trust.sources` (Settings → Install & manage → "Trusted sources": an array of GitHub owners or repositories, default `[]`, overridden by `COVEL_TRUSTED_SOURCES`). See [plugin installation](./plugin-installation.md#trusted-sources) for syntax and approval conditions.
 
 - **Where it is stored.** In the server's database, in the `server_settings` table of the DataStore (`listServerSettings` / `setServerSetting` / `deleteServerSetting`, covered by the store contract suite).
   - The desktop app and a self-hosted web deployment use the same mechanism.
@@ -61,7 +61,7 @@ For now there is only one: `diagnostics.traceRetention` (Settings → General �
   - Several server processes on one PostgreSQL database read the same value.
   - It is never written to `settings.json` or localStorage.
   - With `STORE_BACKEND=memory` it lasts only until the process exits.
-- **Who may write.** `DEPLOYMENT_TIER=self` only: the one player owns the server. When the desktop shell set a token, `PUT /api/config/server-settings` also requires it. On the `demo` / `commercial` tiers these settings belong to the operator and are set through the environment; a write returns `403` and the control is shown as locked.
+- **Who may write.** Only the personal form: the one player owns the server. When the desktop shell set a token, `PUT /api/config/server-settings` also requires it. On browser-private and the `demo` / `commercial` tiers these settings belong to the operator and are set through the environment; a write returns `403` and the control is shown as locked.
 - **Precedence.** The operator's environment variable, then the stored value, then the default. A key fixed by the environment is not settable, and a write of it returns `409`.
 - **Validation.** A write may contain known keys only, and each value must pass the schema in the definition. One invalid entry rejects the whole request and nothing is written.
 - **Effect.** The server reads from an in-memory copy. That copy is filled before the first sweep and replaced on every write. A change therefore applies at the next commit or sweep, without a restart. Other server processes on the same database follow within 30 seconds.

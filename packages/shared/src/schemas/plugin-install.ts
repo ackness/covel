@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { pluginCapabilitiesSchema } from "./trusted-sources.js";
 import { i18nTextSchema } from "./world.js";
 
 export const githubPluginPreviewRequestSchema = z
@@ -62,6 +63,8 @@ export const githubPluginPreviewSchema = z
     /** Author name from the package manifest; null when it declares none. */
     author: z.string().nullable(),
     hasServerCode: z.boolean(),
+    capabilities: pluginCapabilitiesSchema,
+    trustedSource: z.boolean(),
     source: githubPluginSourceSchema,
     token: z.string(),
     expiresAt: z.number(),
@@ -72,6 +75,8 @@ export type GithubPluginPreview = z.infer<typeof githubPluginPreviewSchema>;
 
 export const pluginInstallationSchema = z
   .object({
+    integrity: z.enum(["verified", "modified", "no-receipt", "unreadable"]),
+    trustedSource: z.boolean(),
     id: z.string(),
     version: z.string().nullable(),
     source: githubPluginSourceSchema.nullable(),

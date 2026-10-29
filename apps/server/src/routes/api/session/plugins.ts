@@ -208,6 +208,7 @@ export function buildAvailablePluginList(
   plan?: SessionPluginResolution,
   options: {
     authorized?: readonly string[];
+    trustedSources?: import("../../../trust/trusted-source-service.js").TrustedSourceService;
     isEntryPublished?: (pluginId: string) => boolean;
   } = {},
 ): SessionPlugin[] {
@@ -218,8 +219,21 @@ export function buildAvailablePluginList(
     const rejection = plan?.rejected.find((item) => item.pluginId === entry.id);
     const isActive = active.includes(entry.id);
     return {
-      ...buildPluginSummary(entry, options.isEntryPublished),
+      ...buildPluginSummary(
+        entry,
+        options.isEntryPublished,
+        options.trustedSources,
+      ),
       serverCodeApproved: authorized.has(entry.id),
+      ...(authorized.has(entry.id) && entry.source !== "builtin"
+        ? {
+            serverCodeApprovedBy: options.trustedSources?.implicitGrant({
+              pluginId: entry.id,
+            })
+              ? ("trusted-source" as const)
+              : ("session" as const),
+          }
+        : {}),
       active: isActive,
       locked: false,
       sessionState: isActive
@@ -249,6 +263,7 @@ export function buildSessionPluginView(
   registry: PluginRegistry,
   options: {
     authorized: readonly string[];
+    trustedSources?: import("../../../trust/trusted-source-service.js").TrustedSourceService;
     isEntryPublished?: (pluginId: string) => boolean;
   },
 ): {

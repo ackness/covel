@@ -1436,18 +1436,19 @@ export default function ({ tool, z, shortId, shortIdBatch }) {
 
 ### 第三方插件 server-code / plugin tool 审批边界
 
-社区插件指装在 `~/.covel/plugins/` 等用户目录里的插件。`getPluginTrustInfo` 把它们标为 `community`。服务启动时**不执行这些插件的 `entry`**（`apps/server/src/routes/api/bootstrap/plugin-entry.ts` 里的 `if (!trust.autoLoad) continue;`；工具访问表由 `plugin-tool-access.ts` 构建）。它的代码要等玩家批准之后才运行。
+社区插件指装在 `~/.covel/plugins/` 等用户目录里的插件。`getPluginTrustInfo` 把它们标为 `community`。服务启动时**不执行这些插件的 `entry`**（`apps/server/src/routes/api/bootstrap/plugin-entry.ts` 里的 `if (!trust.autoLoad) continue;`；工具访问表由 `plugin-tool-access.ts` 构建）。它的代码要等玩家批准或实例的[可信来源策略](./plugin-installation.md#可信来源)隐式授予 server-code / `runtime:*` 之后才运行；逐操作 RPC 仍单独审批。
 
 一个社区插件经历这些阶段：
 
-| 阶段            | 发生什么                                                                                                                                                                                                                                                                    |
-| --------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **discovered**  | 拖入 zip，经 `POST /api/install/plugin` 安装。安装时检查它没有冒充内置插件：不能用保留的内置 ID。                                                                                                                                                                           |
-| **approved**    | 第一次需要运行它的代码时，先审批固定的 `covel:plugin-server-code`。加载并验证真实的 action 之后，再做 action 审批。server-code 和 `runtime:*` 的授权只能按会话给；普通 action 可以选“仅这一次”或“这个会话”。托管环境还要求 operator token，因为社区代码在服务端进程内执行。 |
-| **import**      | 批准后，`activatePluginServerCode` 按需加载该插件的服务端代码，执行 `entry` 工厂（`ensurePluginEntry`；批准时和 RPC 派发时各触发一次）。                                                                                                                                    |
-| **active**      | 运行期的工具调用按上表的审批规则放行或拒绝。                                                                                                                                                                                                                                |
-| **revoked**     | `DELETE /api/sessions/:id/approvals[?pluginId=]` 或禁用插件。两者都在会话锁内更换持久化的授权代次，并清除本进程里的会话授权、一次性授权和等待中的审批。其他进程里的旧授权因为代次对不上而一起失效。社区插件的授权不会随新建会话、分支或进程重启而恢复。                     |
-| **uninstalled** | `DELETE /api/plugins/:id` 删除 `~/.covel/plugins/<id>` 目录。它拒绝内置 ID，返回 `restartRequired:true`。界面上在「设置 → 安装与管理」里列出已安装的第三方插件，并提供卸载按钮。                                                                                            |
+<!-- prettier-ignore -->
+| 阶段 | 发生什么 |
+| --- | --- |
+| **discovered** | 拖入 zip，经 `POST /api/install/plugin` 安装。安装时检查它没有冒充内置插件：不能用保留的内置 ID。 |
+| **approved** | 第一次需要运行它的代码时，先审批固定的 `covel:plugin-server-code`。加载并验证真实的 action 之后，再做 action 审批。server-code 和 `runtime:*` 的授权只能按会话给；普通 action 可以选“仅这一次”或“这个会话”。托管环境还要求 operator token，因为社区代码在服务端进程内执行。 |
+| **import** | 批准后，`activatePluginServerCode` 按需加载该插件的服务端代码，执行 `entry` 工厂（`ensurePluginEntry`；批准时和 RPC 派发时各触发一次）。 |
+| **active** | 运行期的工具调用按上表的审批规则放行或拒绝。 |
+| **revoked** | `DELETE /api/sessions/:id/approvals[?pluginId=]` 或禁用插件。两者都在会话锁内更换持久化的授权代次，并清除本进程里的会话授权、一次性授权和等待中的审批。其他进程里的旧授权因为代次对不上而一起失效。社区插件的显式授权不会随新建会话、分支或进程重启而恢复；实例来源策略按当前条件重新判断，不受会话撤销影响。 |
+| **uninstalled** | `DELETE /api/plugins/:id` 删除 `~/.covel/plugins/<id>` 目录。它拒绝内置 ID，返回 `restartRequired:true`。界面上在「设置 → 安装与管理」里列出已安装的第三方插件，并提供卸载按钮。 |
 
 实际效果：
 

@@ -44,7 +44,8 @@ export interface EvaluateInput {
 export type EvaluateResult =
   | {
       readonly status: "allow";
-      readonly reason: "trusted" | "session-cached" | "one-time-grant";
+      readonly reason:
+        "trusted" | "trusted-source" | "session-cached" | "one-time-grant";
     }
   | {
       readonly status: "pending";
@@ -87,7 +88,7 @@ export interface RpcApprovalGate {
    */
   getPending(approvalId: string): RpcApprovalPending | undefined;
   /**
-   * Check whether a community plugin currently holds an explicit grant for
+   * Check whether a community plugin currently holds an explicit or implicit grant for
    * EXACTLY this action in a session, without consuming a one-time grant or
    * creating a pending request. The action is mandatory — the old optional
    * form matched ANY live grant by prefix, which collapsed the two-phase
@@ -103,7 +104,7 @@ export interface RpcApprovalGate {
   /**
    * Revoke cached session grants + fresh one-time grants for a session,
    * optionally scoped to one plugin. Returns the number of grants cleared.
-   * Withdraws a previously approved community plugin mid-session.
+   * Clears explicit consent mid-session; instance implicit policy is unchanged.
    */
   revoke(sessionId: string, pluginId?: string): number;
 }
@@ -208,7 +209,34 @@ function samePayload(left: unknown, right: unknown): boolean {
   );
 }
 
-export function createRpcApprovalGate(): RpcApprovalGate {
+export interface ImplicitGrantQuery {
+  readonly sessionId: string;
+  readonly pluginId: string;
+  readonly action: string;
+}
+export interface RpcApprovalGateOptions {
+  readonly implicitGrant?: (query: ImplicitGrantQuery) => boolean;
+}
+export function createRpcApprovalGate(
+  options: RpcApprovalGateOptions = {},
+): RpcApprovalGate {
+  let loggedImplicitError = false;
+  function implicitlyGranted(query: ImplicitGrantQuery): boolean {
+    if (
+      query.action !== COMMUNITY_SERVER_CODE_ACTION &&
+      !query.action.startsWith("runtime:")
+    )
+      return false;
+    try {
+      return options.implicitGrant?.(query) === true;
+    } catch (error) {
+      if (!loggedImplicitError) {
+        loggedImplicitError = true;
+        console.warn("[rpc-approval] implicit grant failed:", error);
+      }
+      return false;
+    }
+  }
   const state: InternalState = {
     pending: new Map(),
     sessionCache: new Map(),
@@ -278,6 +306,9 @@ export function createRpcApprovalGate(): RpcApprovalGate {
       if (isAutoTrusted(input.trustLevel)) {
         return { status: "allow", reason: "trusted" };
       }
+
+      if (implicitlyGranted(input))
+        return { status: "allow", reason: "trusted-source" };
 
       // 2. Session-level pre-authorization → always allowed.
       const key = tripleKey(
@@ -452,6 +483,7 @@ export function createRpcApprovalGate(): RpcApprovalGate {
         pluginId,
         action,
       );
+      if (implicitlyGranted({ sessionId, pluginId, action })) return true;
       if (state.sessionCache.has(exactKey)) {
         return true;
       }

@@ -1,3 +1,4 @@
+import { installTrustPolicy } from "../trust/fixtures.js";
 import {
   mkdtemp,
   readFile,
@@ -101,14 +102,17 @@ beforeEach(async () => {
   vi.stubEnv("COVEL_DESKTOP_REST_TOKEN", "");
   vi.stubEnv("DEPLOYMENT_TIER", "self");
   vi.stubEnv("NODE_ENV", "test");
+  vi.stubEnv("COVEL_TRUSTED_SOURCES", "");
   head = first;
   branchExists = true;
   archives = new Map([
     [first, await zip(files("1.0.0"))],
     [second, await zip(files("1.1.0"))],
   ]);
+  const trustedSources = await installTrustPolicy(root);
   app = new Hono();
   app.use("*", async (c, next) => {
+    c.set("trustedSources", trustedSources);
     c.set("reservedPluginIds", new Set(["narrator"]));
     await next();
   });
@@ -481,3 +485,34 @@ it("admits only one concurrent update transaction", async () => {
     await readFile(path.join(root, "example-note/PLUGIN.md"), "utf8"),
   ).toContain("1.1.0");
 });
+
+it.each([true, false])(
+  "carries the previous snapshot through queued application without widening it (snapshot=%s)",
+  async (snapshot) => {
+    vi.stubEnv("COVEL_TRUSTED_SOURCES", snapshot ? "example/plugins" : "other");
+    const installed = await install();
+    vi.stubEnv("COVEL_TRUSTED_SOURCES", "example/plugins");
+    head = second;
+    const nextFiles = files("1.1.0");
+    nextFiles["plugins/note/PLUGIN.md"] = nextFiles[
+      "plugins/note/PLUGIN.md"
+    ].replace(
+      "entry: ./server.js",
+      "entry: ./server.js\ncontributes:\n  tools: [new-tool]",
+    );
+    archives.set(second, await zip(nextFiles));
+    const updated = await queue();
+    expect(updated.trustedSource).toBe(true);
+    expect(updated.capabilities.tools).toEqual(["new-tool"]);
+    await applyPendingPackageUpdates(root);
+    const receipt = JSON.parse(
+      await readFile(
+        path.join(root, "example-note/.covel-install.json"),
+        "utf8",
+      ),
+    );
+    expect(receipt.capabilities).toEqual(
+      snapshot ? installed.capabilities : undefined,
+    );
+  },
+);

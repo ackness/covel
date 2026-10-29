@@ -15,6 +15,7 @@
 | Binding | 绑定 |  |
 | Bundled plugin | 内置插件 | 随 Covel 一起安装的插件。不等于 `kind: core`。 |
 | Capability | 能力标签 | 一条模型路由的 `tag`（`text`、`image` 等）。找插件靠的是 **Contract**，不是能力标签。 |
+| Capability snapshot | 能力快照 | 安装记录里的声明能力上界；见[可信来源](./plugin-installation.md#可信来源)。 |
 | Collection | 合集 |  |
 | Contract | 契约 | 带版本号的 ID，例如 `narrative-engine@1`。 |
 | Credits | 作者信息 | 一个包的 `author`、`license` 和 `homepage` 字段。 |
@@ -38,6 +39,7 @@
 | Session | 会话 |  |
 | Slot | 槽位 | 设置界面里叫“模型用途”。 |
 | Trigger mode | 触发模式 |  |
+| Trusted source | 可信来源 | 实例所有者或运营者选定的 GitHub 来源，只减少审批提示。 |
 | Turn | 回合 | “This turn” 是“本回合”。 |
 | World | 世界 | 世界的安装包叫“世界包”。 |
 

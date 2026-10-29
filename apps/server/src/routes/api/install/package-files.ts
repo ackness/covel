@@ -2,7 +2,12 @@ import { constants } from "node:fs";
 import { lstat, open, readdir } from "node:fs/promises";
 import path from "node:path";
 import { z } from "zod";
-import { githubPluginSourceSchema, pluginInstallIdSchema } from "@covel/shared";
+import {
+  githubPluginSourceSchema,
+  pluginInstallIdSchema,
+  pluginCapabilitiesSchema,
+  type PackageIntegrity,
+} from "@covel/shared";
 import { resolveUserResourceDirs } from "../../../lib/user-resource-dirs.js";
 import { digestEntries } from "./github-source.js";
 import {
@@ -17,6 +22,7 @@ export const packageReceiptSchema = z
     source: githubPluginSourceSchema,
     version: z.string().nullable(),
     installedAt: z.iso.datetime(),
+    capabilities: pluginCapabilitiesSchema.optional(),
   })
   .strict();
 export type PackageReceipt = z.infer<typeof packageReceiptSchema>;
@@ -83,7 +89,7 @@ export async function readReceipt(directory: string): Promise<PackageReceipt> {
       (
         await readRegularFile(
           path.join(directory, INSTALL_RECEIPT_FILE),
-          16 * 1024,
+          1024 * 1024,
         )
       ).toString("utf8"),
     ),
@@ -142,4 +148,52 @@ export async function readUnmodifiedPackage(
       "Package files were modified locally; back up and resolve local changes before updating",
     );
   return { receipt, entries };
+}
+
+export interface PackageIntegrityResult {
+  status: PackageIntegrity;
+  receipt?: PackageReceipt;
+  files?: string[];
+}
+/** Receipt metadata is excluded from the content digest, just as at install. */
+export async function checkPackageIntegrity(
+  directory: string,
+): Promise<PackageIntegrityResult> {
+  let receipt: PackageReceipt;
+  try {
+    await assertPackageDirectory(directory);
+    try {
+      await lstat(path.join(directory, INSTALL_RECEIPT_FILE));
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT")
+        return { status: "no-receipt" };
+      throw error;
+    }
+    receipt = await readReceipt(directory);
+  } catch {
+    return { status: "unreadable" };
+  }
+  try {
+    const entries = await readPackageFiles(directory);
+    return {
+      status:
+        digestEntries(entries) === receipt.source.digest
+          ? "verified"
+          : "modified",
+      receipt,
+      files: entries.map((entry) => entry.relativePath).sort(),
+    };
+  } catch (error) {
+    // Unsupported files/links and files removed during traversal are edits.
+    const code = (error as NodeJS.ErrnoException).code;
+    return {
+      status:
+        (error as { httpStatus?: number }).httpStatus === 409 ||
+        code === "ENOENT" ||
+        code === "ELOOP"
+          ? "modified"
+          : "unreadable",
+      receipt,
+    };
+  }
 }

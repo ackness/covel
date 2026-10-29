@@ -51,7 +51,8 @@ export function deriveBuiltinPluginIds(
  * Determine trust level for a plugin.
  *
  * - builtin: shipped under `plugins/` (auto-load, no approval)
- * - community: everything else (requires user confirmation, tools need approval)
+ * - community: everything else (the host approval gate may cover server code
+ *   and runtimes through its trusted-source policy; this source never changes)
  *
  * The caller should always pass an explicit `source` derived from the load
  * path; the no-source fallback treats everything as community — it deliberately
