@@ -7,7 +7,11 @@ import type {
   PluginToolkit,
   PluginEntryScope,
 } from "@covel/runtime";
-import { pluginMessagesFor, type RpcTrustLevel } from "@covel/shared";
+import {
+  pluginMessagesFor,
+  rpcActionNameSchema,
+  type RpcTrustLevel,
+} from "@covel/shared";
 import {
   normalizeFormRefusal,
   validatePluginHookRegistration,
@@ -190,6 +194,13 @@ export function buildEntryApi(
           throw new PluginRegistrationError(
             "registerRpc",
             "expected a non-empty action name and a handler function",
+          );
+        }
+        const name = rpcActionNameSchema.safeParse(action);
+        if (!name.success) {
+          throw new PluginRegistrationError(
+            "registerRpc",
+            name.error.issues.map((issue) => issue.message).join("; "),
           );
         }
         if (rpcRegistry.getPluginAction(pluginId, action)) {

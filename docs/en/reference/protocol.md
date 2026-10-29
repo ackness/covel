@@ -1032,10 +1032,12 @@ Every non-2xx answer uses `{ error, code?, details? }`. It does not return a bus
 
 **Two authorizations**
 
-A community plugin action with a deferred `entry` returns `approval-required` twice in a row:
+Without an implicit trusted-source grant, a community plugin action with a deferred `entry` returns `approval-required` twice in a row:
 
 1. First, authorize `covel:plugin-server-code` (running server code).
 2. After the retry, authorize the actual action.
+
+Internal approval keys cannot name ordinary actions; such requests are rejected. See the [action endpoint](./api.md#post-apisessionsidplugin-rpc).
 
 The client shows the approval one stage at a time, and retries the original request. When the same request asks again for the same `(pluginId, action)` authorization, the client stops, and it rejects approval answers that cross sessions.
 
@@ -1047,7 +1049,7 @@ Resuming a suspended runtime also requests each missing grant. The client releas
 
 ### RPC Approval
 
-Calls to community plugin RPCs need the player's explicit approval. After the framework returns 202, the frontend reads the pending items through the endpoints below, and submits a decision.
+Per-action community RPCs still need explicit approval; [trusted sources](./plugin-installation.md#trusted-sources) skip only server-code and `runtime:*` prompts and preserve owner/operator checks. After the framework returns 202, the frontend reads the pending items through the endpoints below, and submits a decision.
 
 | Command           | Method | Endpoint                              | Response                                 |
 | ----------------- | ------ | ------------------------------------- | ---------------------------------------- |

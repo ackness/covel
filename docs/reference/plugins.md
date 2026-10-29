@@ -124,7 +124,7 @@ Extract facts supported by runtime-inputs.narrative.value, then call save-facts.
 | `contributes` 字段 | 对应注册或资源 |
 | --- | --- |
 | `tools` | `registerTool` 的工具名 |
-| `actions` | `registerRpc` 的 action 名 |
+| `actions` | `registerRpc` 的非空 action 名；`covel:`、`runtime:`、`event:` 前缀保留给框架审批，声明、注册和 action 请求均拒绝这些前缀。 |
 | `commands` | 玩家命令元数据；`action` 必须列入 `actions` |
 | `services` | `registerService` 的契约 ID |
 | `extensions` | `provideExtension` 提供的扩展，写成 `<point>/<id>`，例如 `prompt.segment@1/notes`。要写 `order`、`slot` 这些选项时写成 `{point, id, …}` |

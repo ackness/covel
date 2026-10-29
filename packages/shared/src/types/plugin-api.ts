@@ -59,6 +59,7 @@ export interface PluginLoadDiagnostics {
 
 /** Registry-level plugin view used by lists, settings, and session prep. */
 export interface PluginSummary extends PluginLoadDiagnostics {
+  readonly trust?: import("../schemas/trusted-sources.js").PluginSourceTrust;
   readonly id: string;
   readonly displayName: I18nText;
   readonly description: I18nText;
@@ -168,6 +169,7 @@ export interface PluginDetail extends Omit<PluginSummary, "runtimes"> {
 }
 
 export interface SessionPlugin extends PluginSummary {
+  readonly serverCodeApprovedBy?: "session" | "trusted-source";
   /** Live authorization for this session, independent of host publication. */
   readonly serverCodeApproved: boolean;
   /** Selected by the player but paused until this process receives approval. */

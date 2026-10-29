@@ -39,6 +39,7 @@ import {
   inspectBundle,
   previewLifetime,
   receiptEntry,
+  sourceIsTrusted,
   signPreview,
   verifyPreview,
 } from "./github-preview.js";
@@ -386,6 +387,9 @@ githubCollectionRoutes.post("/github/preview", async (c) => {
           digest: digestEntries(bundle),
           tracking: member.tracking,
         },
+        trustedSource:
+          member.kind === "plugin" &&
+          sourceIsTrusted(c, repositoryUrl(member.location)),
         expiresAt: Date.now() + previewLifetime,
       };
       items.push({
@@ -496,7 +500,19 @@ githubCollectionRoutes.post("/github/batch", async (c) => {
       prepared.push({
         kind,
         id: summary.id,
-        entries: [...entries, receiptEntry(preview)],
+        entries: [
+          ...entries,
+          receiptEntry(
+            {
+              ...preview,
+              trustedSource:
+                kind === "plugin" &&
+                sourceIsTrusted(c, preview.source.repository),
+            },
+            undefined,
+            kind,
+          ),
+        ],
       });
     }
     // Consent may have expired while archives were downloading.

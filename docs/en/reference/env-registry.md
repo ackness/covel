@@ -340,6 +340,7 @@ The variables below are also in `registry.ts`. For variables whose use is alread
 | `COVEL_COMPACTOR_CONTEXT_WINDOW` | Calculated from model capabilities           | Fixes the context window used for compression and prompt budgets                             |
 | `COVEL_SNAPSHOT_INTERVAL_TURNS`  | `5`                                          | Writes an automatic snapshot every this many player turns                                    |
 | `COVEL_AUTO_SNAPSHOT_RETENTION`  | `20`                                         | How many automatic snapshots are kept for each session                                       |
+| `COVEL_TRUSTED_SOURCES`          | Unset                                        | Comma-separated trusted GitHub owners or repositories                                        |
 | `COVEL_TRACE_RETENTION_DAYS`     | `30`                                         | How many days traces and event logs are kept                                                 |
 | `COVEL_PLUGIN_LOG_LEVEL`         | `debug` in development, `info` in production | Lowest level of plugin logs that are written to storage                                      |
 
@@ -524,6 +525,10 @@ This is an **optional explicit override**.
 - The default is `20`. It is the number of automatic snapshots kept for each session. `0` or a negative number keeps all of them.
 - After each checkpoint is written, older `kind=auto` snapshots are deleted. A snapshot that is referenced as the `parentId` of a fork is not deleted. Manual snapshots and fork snapshots are not affected.
 - The snapshot content does not include the framework's own control data (the namespaces `_jobs`, `_runtime_jobs`, `_runtime_job_control`, `_logs`).
+
+**`COVEL_TRUSTED_SOURCES`**
+
+Comma-separated GitHub `owner` or `owner/repo` entries; no sources are trusted by default. Overrides and locks `trust.sources`; shared forms use only this environment value. One invalid entry makes the whole variable unset and is logged at boot. See [trusted sources](./plugin-installation.md#trusted-sources) for matching, snapshot and digest rules.
 
 **`COVEL_TRACE_RETENTION_DAYS`**
 

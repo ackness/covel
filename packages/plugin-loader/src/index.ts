@@ -153,3 +153,8 @@ export {
   type PluginAssetRoot,
   type PluginAssetFile,
 } from "./ui-assets.js";
+
+export {
+  computePluginCapabilities,
+  packageHasServerCode,
+} from "./capabilities.js";

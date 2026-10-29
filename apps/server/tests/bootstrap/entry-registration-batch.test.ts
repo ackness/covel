@@ -37,6 +37,18 @@ function fixture() {
 const ctx = { event: "TurnStart" as const, sessionId: "s1", turnId: "t1" };
 
 describe("entry publication", () => {
+  it.each(["runtime:reset", "covel:plugin-server-code", "event:reset"])(
+    "rejects an internal approval name during registerRpc publication (%s)",
+    async (action) => {
+      const { batch, params, api } = fixture();
+      api.registerRpc("staged", async () => true);
+      api.registerRpc(action, async () => true);
+      expect(() => batch.commit()).toThrow(/reserved for framework approvals/);
+      await batch.dispose();
+      expect(params.rpcRegistry.list()).toEqual([]);
+    },
+  );
+
   it("publishes all capabilities only after successful initialization", async () => {
     const { batch, params, api } = fixture();
     const hook = vi.fn(async () => ({ action: "continue" as const }));

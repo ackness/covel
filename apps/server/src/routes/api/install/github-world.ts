@@ -2,7 +2,11 @@ import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { z } from "zod";
-import { i18nTextSchema, WORLD_LOCALIZED_TEXT_KEY } from "@covel/shared";
+import {
+  i18nTextSchema,
+  WORLD_LOCALIZED_TEXT_KEY,
+  pluginCapabilitiesSchema,
+} from "@covel/shared";
 import { loadWorldDataSummary } from "../../../world-data/world-load.js";
 import { loadSingleWorld } from "../../../world-seed-loader.js";
 import { validateWorldBundle } from "./worlds.js";
@@ -84,6 +88,18 @@ export async function inspectWorldBundle(
       description: localized.data?.description ?? record.description ?? "",
       author: manifest.author?.name ?? null,
       hasServerCode: false,
+      capabilities: pluginCapabilitiesSchema.parse({
+        serverCode: false,
+        http: [],
+        hooks: [],
+        tools: [],
+        actions: [],
+        services: [],
+        wires: [],
+        extensions: [],
+        forms: [],
+        datasets: [],
+      }),
     };
   } finally {
     await rm(temp, { recursive: true, force: true });

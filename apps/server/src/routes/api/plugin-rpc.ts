@@ -249,6 +249,7 @@ pluginRpcRoutes.post("/:id/plugin-rpc", rateLimiter({ max: 30 }), async (c) => {
     // loader now requires BOTH exact grants. Ask for the server-code grant
     // first when it is missing (same pattern as entry-action dispatch), then
     // the `runtime:<name>` grant; the renderer's retry walks the phases.
+    await c.get("trustedSources")?.ensureFresh(body.pluginId);
     const needsServerCodeGrant =
       trustInfo.source === "community" &&
       !hasServerCodeGrant(gate, session, body.pluginId);

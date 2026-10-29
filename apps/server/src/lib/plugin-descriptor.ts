@@ -120,6 +120,7 @@ export function pluginContractFacts(entry: PluginRegistryEntry) {
 export function buildPluginSummary(
   entry: PluginRegistryEntry,
   isEntryPublished?: (pluginId: string) => boolean,
+  trustedSources?: import("../trust/trusted-source-service.js").TrustedSourceService,
 ): PluginSummary {
   const manifests = pluginRuntimeManifests(entry).map(
     ({ manifest }) => manifest,
@@ -147,6 +148,9 @@ export function buildPluginSummary(
     description: entry.summary.description,
     kind: facts.kind,
     source,
+    ...(source === "community" && trustedSources
+      ? { trust: trustedSources.summary(entry.id) }
+      : {}),
     hostState: isEntryPublished?.(entry.id)
       ? "loaded"
       : entry.status === "error" || entry.error
@@ -225,8 +229,9 @@ function runtimeContract(manifest: RuntimeManifest): RuntimePluginContract {
 export function buildPluginDetail(
   entry: PluginRegistryEntry,
   isEntryPublished?: (pluginId: string) => boolean,
+  trustedSources?: import("../trust/trusted-source-service.js").TrustedSourceService,
 ): PluginDetail {
-  const summary = buildPluginSummary(entry, isEntryPublished);
+  const summary = buildPluginSummary(entry, isEntryPublished, trustedSources);
   const runtimes = pluginRuntimeManifests(entry).map(({ manifest }) =>
     runtimeContract(resolvePluginRuntimeManifest(entry, manifest)),
   );

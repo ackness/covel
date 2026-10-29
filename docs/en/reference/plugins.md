@@ -124,7 +124,7 @@ Session prep groups the plugins by whether they call a model, that is by the der
 | `contributes` field | Registration or resource it maps to |
 | --- | --- |
 | `tools` | Tool names passed to `registerTool` |
-| `actions` | Action names passed to `registerRpc` |
+| `actions` | Nonempty `registerRpc` action names; `covel:`, `runtime:` and `event:` prefixes are reserved for framework approvals and rejected in declarations, registration and action requests. |
 | `commands` | Player command metadata. Its `action` must be listed in `actions`. |
 | `services` | Contract IDs passed to `registerService` |
 | `extensions` | Extensions provided with `provideExtension`, written as `<point>/<id>`, such as `prompt.segment@1/notes`. To set options such as `order` or `slot`, write `{point, id, …}`. |

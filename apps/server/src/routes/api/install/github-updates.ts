@@ -19,6 +19,7 @@ import {
   inspectBundle,
   previewLifetime,
   receiptEntry,
+  sourceIsTrusted,
   signPreview,
   verifyPreview,
 } from "./github-preview.js";
@@ -177,6 +178,8 @@ export function createGithubUpdateRoutes(kind: "plugin" | "world") {
       const plugin = {
         ...summary,
         source: { ...source, ...revision, digest },
+        trustedSource:
+          kind === "plugin" && sourceIsTrusted(c, source.repository),
         expiresAt: Date.now() + previewLifetime,
       };
       return c.json({
@@ -227,7 +230,15 @@ export function createGithubUpdateRoutes(kind: "plugin" | "world") {
         throw httpError(409, "Package identity changed");
       verifyPreview(token);
       c.req.raw.signal.throwIfAborted();
-      const receipt = receiptEntry(plugin);
+      const receipt = receiptEntry(
+        {
+          ...plugin,
+          trustedSource:
+            kind === "plugin" && sourceIsTrusted(c, plugin.source.repository),
+        },
+        previous,
+        kind,
+      );
       const next = packageReceiptSchema.parse(
         JSON.parse(receipt.content.toString("utf8")),
       );

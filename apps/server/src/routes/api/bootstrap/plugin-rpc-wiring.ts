@@ -13,7 +13,9 @@ export interface BootstrapPluginRpc {
   readonly rpcApprovalGate: RpcApprovalGate;
 }
 
-export function createBootstrapPluginRpc(): BootstrapPluginRpc {
+export function createBootstrapPluginRpc(
+  options: import("@covel/approval").RpcApprovalGateOptions = {},
+): BootstrapPluginRpc {
   const rpcRegistry: PluginRpcRegistry = createPluginRpcRegistry();
   rpcRegistry.registerFrameworkDefault(
     "slash-debug",
@@ -46,7 +48,7 @@ export function createBootstrapPluginRpc(): BootstrapPluginRpc {
 
   // Pending approvals + session-cached pre-authorizations live in memory per
   // bootstrap instance; they do not survive a restart or cross processes.
-  const rpcApprovalGate: RpcApprovalGate = createRpcApprovalGate();
+  const rpcApprovalGate: RpcApprovalGate = createRpcApprovalGate(options);
 
   return { rpcRegistry, rpcExecutor, rpcApprovalGate };
 }

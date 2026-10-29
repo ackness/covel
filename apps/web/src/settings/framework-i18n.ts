@@ -77,6 +77,10 @@ function frameworkSettingText(
         "Show the raw Database tab in the side panel. It lists every stored plugin row, including material meant only for the narrator.",
       ),
     },
+    "trust.sources": {
+      label: t("settings.trustedSources.title"),
+      description: t("settings.trustedSources.explanation"),
+    },
     "diagnostics.traceRetention": {
       label: t(
         "settings.frameworkEntries.traceRetention.label",

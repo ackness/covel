@@ -168,8 +168,7 @@ Read [turn flow](docs/internals/flow.md) before changing execution and
   identify the subject runtime, while `ctx.getOwnSettings()` reads the handler
   owner's settings. See [hooks](docs/reference/hooks.md).
 - Resolve session plugins through `resolveSessionPlugins` (requests, exclusions,
-  authorization and contracts). Changes apply next turn. Discovery location
-  determines trust: installed packages, including official ones, are community.
+  authorization and contracts). Changes apply next turn. Trust follows discovery location (`builtin` / `community`) plus the instance’s trusted-source policy: a community package whose trusted source, receipt digest and capability snapshot still match gets server-code and runtime approvals without a prompt; all others prompt as before, and no source is built in. See [plugin installation](docs/reference/plugin-installation.md).
 - Use declared inputs for current results, `recordAs` + committed inputs for
   history, events for follow-up work, and services for request/response. World
   data routes through accepted contracts, never a hardcoded destination namespace.
@@ -235,13 +234,13 @@ Read [security](docs/internals/security.md) before changing trust boundaries.
   host allowlist. Plugin `fetchWithRetry` always uses the strict direct path.
   Server keys attach only to origins matching trusted configuration.
 - Request provider keys arrive in `X-Provider-Keys`; the server never persists them.
-  Community server code is unsandboxed and needs player approval; declared HTTP
-  origins are enforced fail-closed. Reject executable YAML frontmatter directives.
+  Community server code is unsandboxed and needs player approval unless a trusted source covers it (see [plugin installation](docs/reference/plugin-installation.md)); declared HTTP origins are enforced fail-closed. Reject executable YAML frontmatter directives.
 - Route authorization through `apps/server/src/host-profile.ts`, never scattered
   deployment-env checks. Personal instances rely on loopback/Host checks, with
   desktop config/file tokens when configured; browser-private sessions still
   require owner tokens. Hosted `demo` / reserved `commercial` enforce owner and
   operator rules. Do not treat all `self` requests as token-free.
+- `trust.sources` and `COVEL_TRUSTED_SOURCES` follow the server-settings rule; the host profile decides who may write the policy.
 - Never commit `.env`, `.env.llm` or `llm.toml`. Every environment variable belongs
   in `packages/shared/src/env/registry.ts` and [its reference](docs/reference/env-registry.md).
   Desktop paths/config: [desktop config](docs/reference/desktop-config.md);

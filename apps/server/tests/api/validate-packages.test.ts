@@ -520,6 +520,8 @@ describe("package validation endpoints", () => {
         version: null,
         source: null,
         pendingUpdate: null,
+        integrity: "no-receipt",
+        trustedSource: false,
       });
       if (condition === "invalid")
         await writeFile(path.join(dir, "world.yaml"), "name: [unterminated\n");

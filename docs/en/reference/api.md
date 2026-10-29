@@ -349,6 +349,11 @@ Every tier can call it. It needs no token, and it contains no secrets. For each 
       "value": "30",
       "source": "default",
       "settable": true
+    },
+    "trust.sources": {
+      "value": [],
+      "source": "default",
+      "settable": true
     }
   }
 }
@@ -362,11 +367,13 @@ Every tier can call it. It needs no token, and it contains no secrets. For each 
 
 When `source` is `env`, `value` may be a value that the settings screen does not offer to the player. For example, `COVEL_TRACE_RETENTION_DAYS=14` gives `"14"`.
 
+`trust.sources` stores a normalized array of GitHub `owner` or `owner/repo` entries, default `[]`, overridden by `COVEL_TRUSTED_SOURCES`. Only the personal form may write it under the host profile’s `server.settings` rule; browser-private and hosted forms use operator environment configuration. See [trusted sources](./plugin-installation.md#trusted-sources) for syntax and automatic approval conditions.
+
 **`PUT /api/config/server-settings`**
 
 The request body is `{ "entries": { "<key>": <value> | null } }`. It saves each value (`null` deletes the saved value), and returns the same response body as `GET`.
 
-- It is accepted only when `DEPLOYMENT_TIER=self`.
+- It is accepted only on the personal form; browser-private and hosted forms reject writes.
 - If the desktop shell has set a bearer token, you must send it. Otherwise it returns `401 desktop_rest_token_invalid`.
 - If even one entry in a request is rejected, nothing is written.
 - A saved value takes effect at the next submit or cleanup. No restart is needed.
@@ -1082,6 +1089,8 @@ What each endpoint accepts and returns:
 - `POST /api/install/collection`: the response is the same as for batch.
 
 Rollback results for failed batch installations are documented in [Plugin installation](./plugin-installation.md#multi-package-preview-and-batch-install): `details.rolledBack` and `details.retained` list removed and retained packages.
+
+GitHub plugin install and update previews always return `capabilities` and `trustedSource`: the former records code, HTTP, hooks, tools, actions, service contracts, wires, extensions, forms and dataset declarations. Each `GET /api/install/plugins` item also returns `integrity` and `trustedSource`. See [plugin installation](./plugin-installation.md#trusted-sources) for the field and snapshot contract.
 
 - `GET /api/install/plugins`: the list includes plugins that have not yet been loaded after a restart.
 
@@ -3041,6 +3050,8 @@ Sends a structured command to a plugin in a session. It does not go through chat
 
 Calls the handler that the plugin registers in `entry` with `covel.registerRpc`, or a default framework handler (such as `slash-debug`).
 
+`action` must follow the [reserved-prefix rule](./plugins.md#contributes-fields). Submitting an internal approval key as an ordinary action returns `400`, even if a handler with that name exists in the registry.
+
 - The plugin must be one of the session's currently enabled plugins that can run now. The server checks once before approval, and again after taking the session lock. If the plugin is disabled, it returns `404 plugin_not_active`. It does not run the handler and does not add a new approval. A plugin the player confirmed that cannot run now (see `unavailable[]`) gets the same error, and the message gives the reason. A late request from an old panel is also subject to this check.
 - `pluginId: "framework"` means a default framework action. It is not part of the plugin set that is enabled, and it runs under its own entry conditions. `framework` is a reserved ID that no plugin can take, so such a request runs only a framework default action; a request that names a plugin ID runs only an action that plugin registered itself.
 - The handler runs inside the session lock and has 30 seconds. Past that the handler's `ctx.signal` aborts, and every later call it makes to `ctx.store` is refused. Store calls already in progress finish before the request returns `504 handler_timeout` and releases the lock. Data it wrote before the limit is kept, not rolled back.
@@ -3471,6 +3482,8 @@ Two-step approval for community plugins:
 
 ### RPC approval flow
 
+Trusted sources implicitly satisfy only `covel:plugin-server-code` and `runtime:*`, never per-action approval. Revoking session grants does not remove instance source policy.
+
 An RPC action from a third-party plugin (source `community`) needs the player's explicit approval before it runs. This stops code that nobody has audited from acting on the session by itself.
 
 #### Flow
@@ -3830,6 +3843,7 @@ Fields of `PluginSummary`:
 | --- | --- |
 | `id`, `displayName`, `description` | The package's identity and its localizable description |
 | `kind`, `source` | `core \| plugin` and `builtin \| community` |
+| `trust?` | Community package `{ source: string \| null, trustedSource, integrity, autoApproved }`; `source` is the receipt repository, and `integrity` is `verified \| modified \| no-receipt \| unreadable`. |
 | `hostState`, `error?` | Host state `discovered \| installed \| loaded \| error`, and the load error |
 | `disabledRuntimes?`, `ignoredFields?` | Non-fatal load diagnostics, described below |
 | `provides`, `requires`, `optional`, `conflicts` | Package-level contract declarations. `provides` includes the `io.output.contract` of each runtime; Covel works out `optional`: the contracts a runtime refers to that `requires` does not list |
@@ -3886,7 +3900,7 @@ Notes:
 
 Lists the plugins this session can see, and the commands the session can run right now.
 
-- `items[]`: each item adds `active`, `locked`, `sessionState`, and `serverCodeApproved` to `PluginSummary`, and can also include `approvalRequired`, `autoAdded`, and `rejection`.
+- `items[]`: each item adds `active`, `locked`, `sessionState`, and `serverCodeApproved` to `PluginSummary`, and can include `serverCodeApprovedBy: "session" | "trusted-source"`, `approvalRequired`, `autoAdded`, and `rejection`. `serverCodeApprovedBy` distinguishes an explicit session grant from a current implicit source-policy grant.
 - `items[].runtimes` has exactly the same shape as in `GET /api/plugins`.
 - `commands[]`: the only executable command catalog. It is filtered by the plugins that are currently enabled, plus the framework commands. Each command is listed once at the top level, and it is not repeated per plugin.
 - `unavailable[]`: the plugins the player confirmed that cannot run now. Each item is a `rejection` (`pluginId`, `code`, `reason`). The cause can be that the plugin is not installed (`unknown-plugin`), failed to load, or that its installed version lacks a provider or conflicts with another member. The game goes on.

@@ -234,6 +234,15 @@ approvalRoutes.post("/:approvalId/decision", async (c) => {
   // closed if revoke/delete won the race after `decide`.
   let runtimeLoadErrors: readonly { runtimeId: string; error: string }[] = [];
   if (decision.decision === "allow") {
+    const trust = c.get("trustedSources");
+    await trust?.ensureFresh(accepted.pluginId);
+    if (accepted.action === COMMUNITY_SERVER_CODE_ACTION) {
+      try {
+        await trust?.recordSnapshot(accepted.pluginId);
+      } catch (error) {
+        console.warn("[trusted-sources] Snapshot update failed:", error);
+      }
+    }
     try {
       await c.get("activatePluginServerCode")?.(
         accepted.pluginId,

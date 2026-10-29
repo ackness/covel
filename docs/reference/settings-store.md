@@ -53,7 +53,7 @@ SettingsStore 是 `@covel/settings` 包提供的设置存储。它负责四件�
 
 一个 `server` 设置要在两处声明：注册表里的条目写 `SettingEntry.scope: "server"`，同一个键在 `SERVER_SETTINGS`（`packages/shared/src/env/server-settings.ts`：schema、默认值和能覆盖它的环境变量）里有定义。两边不一致时测试失败。
 
-目前只有一个：`diagnostics.traceRetention`（设置 → 通用 →“保留诊断记录”）。取值是 `7` / `30` / `90` / `keep`，默认 `30`。
+目前有 `diagnostics.traceRetention`（设置 → 通用 →“保留诊断记录”：`7` / `30` / `90` / `keep`，默认 `30`），以及 `trust.sources`（设置 → 安装与管理 →“可信来源”：GitHub 所有者或仓库名称数组，默认 `[]`，由 `COVEL_TRUSTED_SOURCES` 覆盖）。来源语法和审批条件见[插件安装](./plugin-installation.md#可信来源)。
 
 - **存在哪里。** 服务端的数据库里，DataStore 的 `server_settings` 表（`listServerSettings` / `setServerSetting` / `deleteServerSetting`，由存储契约测试覆盖）。
   - 桌面应用和自托管的 Web 部署是同一套机制。
@@ -61,7 +61,7 @@ SettingsStore 是 `@covel/settings` 包提供的设置存储。它负责四件�
   - 同一个 PostgreSQL 数据库上的多个服务端进程读到同一个值。
   - 它不会写进 `settings.json` 或 localStorage。
   - `STORE_BACKEND=memory` 时只保留到进程退出。
-- **谁可以写。** 只有 `DEPLOYMENT_TIER=self`：唯一的玩家就是服务器的所有者。桌面壳设置了 token 时，`PUT /api/config/server-settings` 还要求带上它。`demo` / `commercial` 层级下，这些设置归运维方，通过环境变量设定；写入返回 `403`，控件显示为锁定。
+- **谁可以写。** 只有 personal 形态：唯一的玩家就是服务器的所有者。桌面壳设置了 token 时，`PUT /api/config/server-settings` 还要求带上它。browser-private 形态和 `demo` / `commercial` 层级下，这些设置归运维方，通过环境变量设定；写入返回 `403`，控件显示为锁定。
 - **优先级。** 运维方的环境变量，其次是保存的值，最后是默认值。被环境变量固定的键不可设置，写入返回 `409`。
 - **校验。** 一次写入只能包含已知的键，每个值都要通过定义里的 schema。有一项不合法就整体拒绝，什么都不写。
 - **生效。** 服务端从内存里的一份副本读取。这份副本在第一次清理之前填好，每次写入后替换。所以修改在下一次提交或清理时生效，不需要重启。同一个数据库上的其他服务端进程在 30 秒内跟上。

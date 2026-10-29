@@ -36,10 +36,12 @@ After restarting the backend, complete two more steps before the plugin can run:
 1. **Enable it**: select it in the plugin list on the world's session-prep screen, or have the world's gameplay pack include it.
 2. **Authorize it**: the first time a community plugin needs to run code, the "Authorize plugin action" prompt appears. After you authorize it, it starts working. If you choose "Not now", the plugin stays paused, and the rest of the game keeps running as usual.
 
-Authorization lasts only while the server is running. After you restart the backend, a community plugin asks for authorization again.
+Explicit authorization lasts only while the server is running. Trusted-source code and runtime grants can pass automatically; other community plugins ask again after a restart.
 
 > [!NOTE]
-> Plugins that the official project publishes but that you must install separately are treated like community plugins. They are not enabled automatically, and their authorization step is not skipped. Only plugins that ship built into Covel do not need authorization.
+> Official plugins installed separately remain community plugins and are not enabled automatically. No source is trusted by default. You may add sources under "Trusted sources" on this page; the suggestion button only fills the input and does not save it.
+
+The preview lists requested capabilities. "From a trusted source" means the instance trusts that repository; unchanged files with no new capabilities show "auto-approved: trusted source" after enabling. New capabilities and per-action RPCs still ask for approval. A file-difference warning disables automatic approval and leaves normal approval available; see [trusted sources](../reference/plugin-installation.md#trusted-sources).
 
 ## Update and uninstall
 

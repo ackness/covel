@@ -148,6 +148,7 @@ export async function dispatchPluginAction(
 
   // Two-phase approval for every community server module. Ask for the
   // server-code grant first when it is missing, then the precise action grant.
+  await c.get("trustedSources")?.ensureFresh(pluginId);
   const needsServerCodeGrant =
     entryTrust === "community" && !hasServerCodeGrant(gate, session, pluginId);
   // A deferred entry always takes the server-code phase first: we cannot know

@@ -1,3 +1,4 @@
+import { verifyTrustedSourcesAtBoot } from "./trust/boot.js";
 /**
  * Covel Server — Hono application entry point.
  *
@@ -373,6 +374,8 @@ async function initializeServer(): Promise<void> {
       sessionLock,
       memoryIngestLock,
     }));
+
+    await verifyTrustedSourcesAtBoot(api.trustedSources);
 
     await applyPendingPackageUpdates(userDirs.worlds, async (id) => {
       const world = await store.getWorld(id);

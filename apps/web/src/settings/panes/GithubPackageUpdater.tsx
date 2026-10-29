@@ -11,6 +11,7 @@ import {
   updateGithubPackage,
   type InstallResult,
 } from "@/services/api.js";
+import { PluginCapabilitiesPreview } from "./PluginCapabilitiesPreview.js";
 import { GithubPackageRiskConsent } from "./GithubPackageRiskConsent.js";
 
 export function GithubPackageUpdater({
@@ -205,6 +206,9 @@ export function GithubPackageUpdater({
                 </ul>
               </details>
               <p>{t("settings.pluginUpdate.explain")}</p>
+              {kind === "plugin" && (
+                <PluginCapabilitiesPreview preview={preview} update />
+              )}
               <GithubPackageRiskConsent
                 kind={kind}
                 hasServerCode={preview.hasServerCode}

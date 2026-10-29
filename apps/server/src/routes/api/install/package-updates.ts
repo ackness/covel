@@ -38,7 +38,10 @@ async function readPlan(root: string, id: string) {
   return planSchema.parse(
     JSON.parse(
       (
-        await readRegularFile(path.join(directory, "plan.json"), 32 * 1024)
+        await readRegularFile(
+          path.join(directory, "plan.json"),
+          2 * 1024 * 1024,
+        )
       ).toString("utf8"),
     ),
   );

@@ -2,6 +2,7 @@ import { z } from "zod";
 import type { SettingsStoreApi } from "@covel/settings";
 import {
   TRACE_RETENTION_SERVER_SETTING,
+  TRUSTED_SOURCES_SERVER_SETTING,
   WORLD_AUTHORING_IDLE_TIMEOUT_MS,
 } from "@covel/shared";
 import { localeDefinitions, localeRegistry } from "@/i18n/catalog-registry.js";
@@ -43,6 +44,15 @@ export function registerCoreSettings(store: SettingsStoreApi): void {
   });
 
   registerThemeSettings(store);
+  store.register({
+    ...TRUSTED_SOURCES_SERVER_SETTING,
+    scope: "server",
+    group: "general",
+    widget: "custom",
+    label: "Trusted sources",
+    description:
+      "Skip server-code prompts for unchanged packages within their approved capabilities.",
+  });
 
   // Written by the "always load images from this host" choice on a held
   // image; there is no editor for it.

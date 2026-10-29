@@ -18,3 +18,8 @@ export type {
   EvaluateInput,
   EvaluateResult,
 } from "./rpc-approval.js";
+
+export type {
+  ImplicitGrantQuery,
+  RpcApprovalGateOptions,
+} from "./rpc-approval.js";
