@@ -151,7 +151,7 @@ function makeRuntime(name: string): RuntimeManifest {
   };
 }
 
-function statePatchResult(field: string, value: JsonValue) {
+function pluginDataResult(field: string, value: JsonValue) {
   return {
     pluginId: "rt-a",
     runtimeId: "rt-a",
@@ -159,7 +159,7 @@ function statePatchResult(field: string, value: JsonValue) {
     turnId: "t",
     status: "success" as const,
     output: {},
-    effects: { statePatches: [{ table: "stats", field, value }] },
+    effects: { pluginData: [{ namespace: "stats", key: field, value }] },
     toolCalls: [] as const,
     durationMs: 1,
     timestamp: new Date().toISOString(),
@@ -811,18 +811,18 @@ describe("commit transaction & rollback", () => {
       });
 
       const validSetupResult = {
-        ...statePatchResult("hp", attempt),
+        ...pluginDataResult("hp", attempt),
         pluginId: "plug",
         runtimeId: setupRuntimeId,
         turnId,
       };
       const invalidLaterResult = {
-        ...statePatchResult("mp", attempt),
+        ...pluginDataResult("mp", attempt),
         pluginId: "broken",
         runtimeId: "broken/runtime",
         turnId,
         output: {},
-        effects: { statePatches: [{ field: "mp", value: attempt }] },
+        effects: { notifications: [null] },
       };
       const completedSetup = mirrorSetupDone("1.0.0", now, 1, attempt);
 
@@ -856,7 +856,9 @@ describe("commit transaction & rollback", () => {
 
       expect(outcome.status).toBe("failed");
       expect(outcome.failedProposals).toHaveLength(1);
-      expect(await store.getStateEntry(sessionId, "stats", "hp")).toBeNull();
+      expect(
+        await store.getPluginData(sessionId, "plug", "stats", "hp"),
+      ).toBeNull();
       expect(
         await store.getLogicalTurnCompletion(sessionId, logicalTurnId),
       ).toBeNull();
@@ -1216,7 +1218,7 @@ describe("logical-turn counting & ledger", () => {
       sessionId: "s",
       executionContext: PLAYER_CTX("L1", "e1"),
       runtimes: [makeRuntime("rt-a")],
-      results: [statePatchResult("hp", 1)],
+      results: [pluginDataResult("hp", 1)],
       turnIds: [],
       sessionClock: { now: new Date().toISOString() },
     });
@@ -1234,7 +1236,7 @@ describe("logical-turn counting & ledger", () => {
           countPolicy: "none",
         },
         runtimes: [makeRuntime("rt-a")],
-        results: [statePatchResult("hp", 2)],
+        results: [pluginDataResult("hp", 2)],
         turnIds: [],
         sessionClock: { now: new Date().toISOString() },
       });
@@ -1254,7 +1256,7 @@ describe("logical-turn counting & ledger", () => {
         logicalTurnId: "L1",
       },
       runtimes: [makeRuntime("rt-a")],
-      results: [statePatchResult("hp", 3)],
+      results: [pluginDataResult("hp", 3)],
       turnIds: [],
       sessionClock: { now: new Date().toISOString() },
     });

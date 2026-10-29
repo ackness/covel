@@ -350,15 +350,6 @@ export type SessionAction =
   // keeping them would show text that vanishes on refresh (audit A-04).
   | { type: "DISCARD_TURN_STREAMS"; turnId?: string }
   | {
-      type: "ADD_STATE_PATCH";
-      patch: {
-        id: string;
-        summary: string;
-        packageName: string;
-        data?: unknown;
-      };
-    }
-  | {
       type: "MERGE_RECOVERED_MESSAGES";
       messages: StreamMessage[];
       terminalTurnId?: string;

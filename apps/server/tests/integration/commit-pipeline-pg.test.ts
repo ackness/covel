@@ -8,7 +8,7 @@
  *
  *   1. A multi-proposal chain commits atomically (all rows durable).
  *   2. A real DB error mid-chain (duplicate message PK) rolls the WHOLE chain
- *      back — no message and no state-change rows survive.
+ *      back — no message and no plugin-data rows survive.
  *   3. Two concurrent `commitAll` calls on different sessions both commit
  *      without serializing behind a shared begin/commit window.
  *
@@ -128,8 +128,8 @@ describe.skipIf(!isolatedUrl)("commit pipeline on real PG (bug6)", () => {
       ),
       makeProposal(
         {
-          type: "state.patch",
-          payload: { table: "stats", field: "hp", value: 80 },
+          type: "plugin.data",
+          payload: { namespace: "stats", key: "hp", value: 80 },
         },
         "pg-ok-state-1",
         sessionId,
@@ -148,9 +148,9 @@ describe.skipIf(!isolatedUrl)("commit pipeline on real PG (bug6)", () => {
     expect(results.every((r) => r.committed)).toBe(true);
 
     expect(await store.listMessages(sessionId)).toHaveLength(2);
-    expect(await store.listStateChanges(sessionId, "stats", "hp")).toHaveLength(
-      1,
-    );
+    expect(
+      await store.listPluginData(sessionId, SOURCE.pluginId, "stats"),
+    ).toHaveLength(1);
   });
 
   it("rolls back the whole chain when a later write throws (duplicate PK)", async () => {
@@ -161,7 +161,7 @@ describe.skipIf(!isolatedUrl)("commit pipeline on real PG (bug6)", () => {
     // The second narrative re-uses the first message id. addMessage is a plain
     // INSERT (no upsert), so the duplicate PK throws a real PG unique
     // violation mid-chain — which must roll back the earlier message AND the
-    // state-change write.
+    // plugin-data write.
     await expect(
       pipeline.commitAll([
         makeProposal(
@@ -174,8 +174,8 @@ describe.skipIf(!isolatedUrl)("commit pipeline on real PG (bug6)", () => {
         ),
         makeProposal(
           {
-            type: "state.patch",
-            payload: { table: "stats", field: "mp", value: 10 },
+            type: "plugin.data",
+            payload: { namespace: "stats", key: "mp", value: 10 },
           },
           "pg-dup-state",
           sessionId,
@@ -193,9 +193,9 @@ describe.skipIf(!isolatedUrl)("commit pipeline on real PG (bug6)", () => {
 
     // Nothing from the failed chain survives.
     expect(await store.listMessages(sessionId)).toHaveLength(0);
-    expect(await store.listStateChanges(sessionId, "stats", "mp")).toHaveLength(
-      0,
-    );
+    expect(
+      await store.listPluginData(sessionId, SOURCE.pluginId, "stats"),
+    ).toHaveLength(0);
   });
 
   it("runs two concurrent commitAll chains on different sessions", async () => {

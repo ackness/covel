@@ -154,7 +154,7 @@ crownfire:
 
 ## 会话权威与同步
 
-**谁负责、存在哪里。** 内核按契约 `world.dimensions@1` 找到唯一启用的提供者，并在这局游戏里固定下来。每个维度是受保护区域 `plugin_data[_dimensions]` 里的一条 `{definition,value,version,lastTrackedSource?}` 记录。没有新的数据库表，也没有资料库里的常驻副本。通用的插件数据写入和状态补丁都改不了它。
+**谁负责、存在哪里。** 内核按契约 `world.dimensions@1` 找到唯一启用的提供者，并在这局游戏里固定下来。每个维度是受保护区域 `plugin_data[_dimensions]` 里的一条 `{definition,value,version,lastTrackedSource?}` 记录。没有新的数据库表，也没有资料库里的常驻副本。通用的插件数据写入不能修改它。
 
 **两种写入：**
 

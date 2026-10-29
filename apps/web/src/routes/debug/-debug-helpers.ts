@@ -382,10 +382,6 @@ export function extractDetail(event: api.TraceEvent): string {
       const block = payload.block as Record<string, unknown> | undefined;
       return block ? `type: ${block.type || "unknown"}` : "";
     }
-    case "state.patch.applied": {
-      const patch = payload.patch as Record<string, unknown> | undefined;
-      return patch ? `${patch.packageName || ""} - ${patch.summary || ""}` : "";
-    }
     case "flow.completed":
       return payload.retry
         ? `retry from ${payload.retryFromRuntimeId || "all"}`

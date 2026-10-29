@@ -91,8 +91,8 @@ describe("session-kernel hook wire-in", () => {
           "a",
         ),
         makeProposal(
-          "state.patch",
-          { table: "stats", field: "hp", value: 50 },
+          "plugin.data",
+          { namespace: "stats", key: "hp", value: 50 },
           "b",
         ),
       ];
@@ -100,7 +100,7 @@ describe("session-kernel hook wire-in", () => {
       expect(results).toHaveLength(2);
       expect(results.every((r) => r.committed)).toBe(true);
       expect(store.messages).toHaveLength(1);
-      expect(store.stateChanges).toHaveLength(1);
+      expect(store.pluginData).toHaveLength(1);
     });
   });
 
@@ -109,7 +109,7 @@ describe("session-kernel hook wire-in", () => {
       const store = createRecordingStore();
       const hookPipeline = createHookPipeline();
 
-      // Abort the state.patch proposal only
+      // Abort the plugin.data proposal only
       hookPipeline.register({
         id: "test:PreStateCommit:0",
         event: "PreStateCommit",
@@ -117,8 +117,8 @@ describe("session-kernel hook wire-in", () => {
           .fn()
           .mockImplementation(
             async (_ctx, payload: { proposal: { type: string } }) => {
-              if (payload.proposal.type === "state.patch") {
-                return { action: "abort", reason: "state patch blocked" };
+              if (payload.proposal.type === "plugin.data") {
+                return { action: "abort", reason: "plugin data blocked" };
               }
               return { action: "continue" };
             },
@@ -129,8 +129,8 @@ describe("session-kernel hook wire-in", () => {
       const proposals = [
         makeProposal("narrative.append", { content: "ok", kind: "story" }, "a"),
         makeProposal(
-          "state.patch",
-          { table: "stats", field: "hp", value: 50 },
+          "plugin.data",
+          { namespace: "stats", key: "hp", value: 50 },
           "b",
         ),
         makeProposal(
@@ -150,7 +150,7 @@ describe("session-kernel hook wire-in", () => {
 
       // Only the narrative messages were written
       expect(store.messages).toHaveLength(2);
-      expect(store.stateChanges).toHaveLength(0);
+      expect(store.pluginData).toHaveLength(0);
     });
 
     it("continue path: all proposals commit normally", async () => {
@@ -167,8 +167,8 @@ describe("session-kernel hook wire-in", () => {
       const proposals = [
         makeProposal("narrative.append", { content: "ok", kind: "story" }, "a"),
         makeProposal(
-          "state.patch",
-          { table: "stats", field: "hp", value: 50 },
+          "plugin.data",
+          { namespace: "stats", key: "hp", value: 50 },
           "b",
         ),
       ];
@@ -176,7 +176,7 @@ describe("session-kernel hook wire-in", () => {
       const results = await pipeline.commitAll(proposals);
       expect(results.every((r) => r.committed)).toBe(true);
       expect(store.messages).toHaveLength(1);
-      expect(store.stateChanges).toHaveLength(1);
+      expect(store.pluginData).toHaveLength(1);
     });
 
     it("blocks plugin.data proposals before they reach the store", async () => {

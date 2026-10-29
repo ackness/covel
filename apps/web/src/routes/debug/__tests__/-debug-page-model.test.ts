@@ -98,7 +98,7 @@ describe("debug route model", () => {
 
   it("matches both outer trace event types and runtime progress inner types", () => {
     expect(
-      traceEventMatchesCategory(traceEvent("state.patch.applied"), "state"),
+      traceEventMatchesCategory(traceEvent("state.snapshot.created"), "state"),
     ).toBe(true);
     expect(
       traceEventMatchesCategory(

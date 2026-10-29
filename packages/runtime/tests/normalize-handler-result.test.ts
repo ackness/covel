@@ -41,7 +41,6 @@ describe("normalizeHandlerResult", () => {
   it.each([
     ["ui", [{ parts: [null] }], "effects.ui[0].parts[0]"],
     ["interactions", [null], "effects.interactions[0]"],
-    ["statePatches", [null], "effects.statePatches[0]"],
     ["notifications", [{ title: "ok" }, "text"], "effects.notifications[1]"],
   ])(
     "rejects a success envelope whose %s effect holds a non-object entry",
@@ -58,12 +57,76 @@ describe("normalizeHandlerResult", () => {
     },
   );
 
+  it.each([
+    [],
+    [{ table: "stats", field: "hp", value: 1 }],
+    [null],
+    {},
+    null,
+    undefined,
+  ])(
+    "rejects the removed statePatches channel (%j) with plugin data guidance",
+    (statePatches) => {
+      expect(
+        normalizeHandlerResult({
+          outcome: "success",
+          effects: { statePatches },
+        }).outcome,
+      ).toEqual({
+        outcome: "failed",
+        error:
+          "output-schema-invalid: effects.statePatches is no longer supported; use plugin data (effects.pluginData) instead",
+      });
+    },
+  );
+
+  it("preserves a failed handler's error while stripping removed writes", () => {
+    const { outcome, diagnostics } = normalizeHandlerResult({
+      outcome: "failed",
+      error: "Original provider failure",
+      effects: {
+        statePatches: [{ table: "stats", field: "hp", value: 1 }],
+        jobStatus: [{ jobId: "j", state: "failed", sequence: 1 }],
+      },
+    });
+    expect(outcome).toEqual({
+      outcome: "failed",
+      error: "Original provider failure",
+      effects: { jobStatus: [{ jobId: "j", state: "failed", sequence: 1 }] },
+    });
+    expect(diagnostics.map((d) => d.code)).toContain(
+      "non-success-domain-effects-stripped",
+    );
+  });
+
+  it("strips removed writes from a skipped envelope and preserves its reason", () => {
+    const { outcome, diagnostics } = normalizeHandlerResult({
+      outcome: "skipped",
+      skipReason: "already done",
+      effects: { statePatches: [] },
+    });
+    expect(outcome).toEqual({ outcome: "skipped", skipReason: "already done" });
+    expect(diagnostics.map((d) => d.code)).toContain(
+      "non-success-domain-effects-stripped",
+    );
+  });
+
+  it("keeps the suspension reason without committing its effects", () => {
+    expect(
+      normalizeHandlerResult({
+        outcome: "suspended",
+        reason: "Wait for input",
+        effects: { statePatches: [] },
+      }).outcome,
+    ).toEqual({ outcome: "suspended", reason: "Wait for input" });
+  });
+
   it("parses skipped and strips domain effects to observability", () => {
     const { outcome, diagnostics } = normalizeHandlerResult({
       outcome: "skipped",
       skipReason: "cache hit",
       effects: {
-        statePatches: [{ a: 1 }],
+        pluginData: [{ a: 1 }],
         jobStatus: [{ jobId: "j", state: "cancelled", sequence: 2 }],
       },
     });
@@ -72,7 +135,7 @@ describe("normalizeHandlerResult", () => {
     expect(outcome.effects?.jobStatus).toHaveLength(1);
     // domain write dropped
     expect(
-      (outcome.effects as Record<string, unknown> | undefined)?.statePatches,
+      (outcome.effects as Record<string, unknown> | undefined)?.pluginData,
     ).toBeUndefined();
     expect(diagnostics.map((d) => d.code)).toContain(
       "non-success-domain-effects-stripped",
@@ -111,12 +174,12 @@ describe("normalizeHandlerResult", () => {
     const { outcome, diagnostics } = normalizeHandlerResult({
       outcome: "success",
       value: 1,
-      effects: { statePatches: [{ a: 1 }] },
+      effects: { pluginData: [{ a: 1 }] },
     });
     expect(diagnostics).toEqual([]);
     if (outcome.outcome !== "success") throw new Error("expected success");
     expect(
-      (outcome.effects as Record<string, unknown> | undefined)?.statePatches,
+      (outcome.effects as Record<string, unknown> | undefined)?.pluginData,
     ).toEqual([{ a: 1 }]);
   });
 });

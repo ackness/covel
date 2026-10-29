@@ -190,7 +190,7 @@ See: `packages/settings/src/`.
 
 A request from a plugin to write something. The kernel writes it only after validation passes. A plugin never writes to the database directly.
 
-The proposal types are defined in one place: `ProposalPayloadMap` (`packages/shared/src/types/proposal.ts`). They are currently: `narrative.append`, `state.patch`, `event.emit`, `interaction.request`, `ui.render`, `asset.generate`, `plugin.data`, `plugin.data.batch`, `plugin.data.delete`, `character.upsert`, `character.schema.set`, `dimension.initialize`, `dimension.update`, and `lorebook.upsert`.
+The proposal types are defined in one place: `ProposalPayloadMap` (`packages/shared/src/types/proposal.ts`). They are currently: `narrative.append`, `event.emit`, `interaction.request`, `ui.render`, `asset.generate`, `plugin.data`, `plugin.data.batch`, `plugin.data.delete`, `character.upsert`, `character.schema.set`, `dimension.initialize`, `dimension.update`, and `lorebook.upsert`.
 
 See: [transactions](./transactions.md), [turn pipeline](../internals/flow.md).
 

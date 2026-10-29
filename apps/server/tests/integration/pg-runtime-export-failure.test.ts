@@ -82,7 +82,7 @@ describe.skipIf(!database)("PostgreSQL export failure isolation", () => {
           ...(runtime.name === "probe/healthy"
             ? {
                 effects: {
-                  statePatches: [{ table: "stats", field: "hp", value: 7 }],
+                  pluginData: [{ namespace: "stats", key: "hp", value: 7 }],
                 },
               }
             : {}),
@@ -95,9 +95,9 @@ describe.skipIf(!database)("PostgreSQL export failure isolation", () => {
         }),
       });
       expect(outcome.status).toBe("committed");
-      expect((await store.getStateEntry(sessionId, "stats", "hp"))?.value).toBe(
-        7,
-      );
+      expect(
+        (await store.getPluginData(sessionId, "probe", "stats", "hp"))?.value,
+      ).toBe(7);
       expect(
         (await store.listMessages(sessionId)).some(
           (message) => message.content === "A complete scene.",

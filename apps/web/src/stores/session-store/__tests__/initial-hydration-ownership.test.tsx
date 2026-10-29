@@ -91,7 +91,6 @@ function setup(batched = false) {
   const ds = {
     listMessages: vi.fn(async () => []),
     listStatePatches: vi.fn(async () => []),
-    addStatePatch: vi.fn(async () => {}),
     loadExecutionSteps: vi.fn(async () => []),
     loadSubmittedBlocks: vi.fn(async () => ({ ids: [], values: {} })),
   } as unknown as DataService;
@@ -557,7 +556,9 @@ it("accepts an empty authoritative initial view after committed state was delete
   const { restore, stateRef, send } = setup();
   const restoring = restore();
   await waitFor(() => expect(api.getSessionView).toHaveBeenCalledOnce());
-  send("action", "state.changed", { table: "stats", field: "hp", value: 9 });
+  send("action", "character.upserted", {
+    character: { id: "hero", name: "Hero", type: "npc", version: 1 },
+  });
   await act(async () => {
     pending.resolve({
       session,
@@ -640,55 +641,6 @@ it("keeps the view's event cursor for the first subscription, and a new visit dr
     await restore();
   });
   expect(stateRef.current.initialEventCursor).toBeNull();
-});
-
-it("projects committed state changes with the same table/field shape as session views", () => {
-  const { stateRef, send } = setup();
-  stateRef.current = {
-    ...stateRef.current,
-    gameState: {
-      tables: { stats: { hp: 1, mp: 3 }, weather: { sky: "clear" } },
-    },
-  };
-  send("action", "state.changed", { table: "stats", field: "hp", value: 9 });
-  expect(stateRef.current.gameState).toEqual({
-    tables: { stats: { hp: 9, mp: 3 }, weather: { sky: "clear" } },
-  });
-});
-
-it("keeps live state patches when the local fallback returns an older history", async () => {
-  api.getSessionView.mockRejectedValue(new Error("offline"));
-  const pending =
-    deferred<Awaited<ReturnType<DataService["listStatePatches"]>>>();
-  const { restore, stateRef, send, ds } = setup();
-  vi.mocked(ds.listStatePatches).mockReturnValueOnce(pending.promise);
-  const restoring = restore();
-  await waitFor(() => expect(ds.listStatePatches).toHaveBeenCalledOnce());
-  send("action", "state.changed", { table: "stats", field: "hp", value: 9 });
-  await act(async () => {
-    pending.resolve([
-      {
-        id: "history-patch",
-        sessionId: session.id,
-        summary: "Earlier",
-        packageName: "plugin",
-        data: { stats: { hp: 1, mp: 3 } },
-        createdAt: session.createdAt,
-      },
-      {
-        ...stateRef.current.statePatches[0]!,
-        sessionId: session.id,
-        data: { stats: { hp: 1 } },
-        createdAt: session.createdAt,
-      },
-    ]);
-    await restoring;
-  });
-  expect(stateRef.current.gameState).toEqual({
-    tables: { stats: { hp: 9, mp: 3 } },
-  });
-  expect(stateRef.current.statePatches).toHaveLength(2);
-  expect(stateRef.current.hasGameStateSnapshot).toBe(false);
 });
 
 it("does not rebuild deleted fields from cached patches after an authoritative empty snapshot", async () => {

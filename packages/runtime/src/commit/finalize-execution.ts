@@ -62,6 +62,7 @@ import {
   commitPreparedProposals,
   prepareRuntimeProposals,
   type CommittableRuntimeResult,
+  type FailedProposal,
   type PreparedRuntimeProposals,
 } from "../session/session-runtime-result.js";
 import {
@@ -107,12 +108,6 @@ type FinalizeManifest = RuntimeManifest;
 /** Commit results retain the execution identity and status of a runtime result. */
 type FinalizableResult = CommittableRuntimeResult &
   Pick<RuntimeResult, "runId" | "status">;
-
-interface FailedProposal {
-  readonly proposal: Proposal;
-  readonly error: string;
-  readonly code?: string;
-}
 
 export interface FinalizeExecutionArgs {
   /** Execution-level veto/cancellation forbids all domain writes and success fan-out. */

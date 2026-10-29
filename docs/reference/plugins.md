@@ -511,7 +511,8 @@ Function 的输出契约以 handler 返回的 `value` 为准。它可以是标�
 
 - 运行时用 `canonicalValue` 保存原始的业务值。对象投影为 `output`；标量、数组和 `null` 投影为 `{ value }`；没有值时投影为空对象。
 - 业务值里叫 `events`、`pluginData`、`interactions` 或 `preGameDone` 的字段不会发起副作用，也不会完成 setup。这些意图必须通过 `HandlerResult.effects` 和 `HandlerResult.completion` 表达。
-- `effects.interactions`、`effects.notifications` 和 `effects.statePatches` 必须是数组，其中的条目以及 `effects.ui[].parts` 必须是对象。function 返回了不是数组的通道或不是对象的条目时，以 `output-schema-invalid` 失败。其他途径带进来的同类内容，在提交时作为该 runtime 被拒绝的写入处理（见[事务参考](./transactions.md)）。
+- `effects.interactions` 和 `effects.notifications` 必须是数组，其中的条目以及 `effects.ui[].parts` 必须是对象。function 返回了不是数组的通道或不是对象的条目时，以 `output-schema-invalid` 失败。其他途径带进来的同类内容，在提交时作为该 runtime 被拒绝的写入处理（见[事务参考](./transactions.md)）。
+- `effects.statePatches` 已移除；成功结果里的这个字段会被明确拒绝。失败或跳过的 handler 结果会剥离领域 effects，并保留原始错误或跳过原因。插件自己的状态请用 `effects.pluginData` 写入插件数据。
 - 同一轮的输入、公共契约校验和 `recordAs` 发布，读的都是同一个业务值。
 - 没有提供 `value` 时不发布 export。不要靠猜 `output.value` 来拆箱。
 - 普通输入的 `select` 作用在这个业务值上。committed 输入读完整的 export，不支持 `select`。

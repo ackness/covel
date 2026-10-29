@@ -44,13 +44,6 @@ export interface InteractionRequestPayload {
   readonly narrativeTemplate?: string;
 }
 
-export interface StatePatchPayload {
-  readonly table: string;
-  readonly field: string;
-  readonly value: unknown;
-  readonly reason?: string;
-}
-
 export interface EventEmitPayload {
   readonly topic: string;
   readonly data: Readonly<Record<string, unknown>>;
@@ -151,7 +144,6 @@ export interface LorebookUpsertEntry {
 
 export interface ProposalPayloadMap {
   "narrative.append": NarrativeAppendPayload;
-  "state.patch": StatePatchPayload;
   "event.emit": EventEmitPayload;
   "interaction.request": InteractionRequestPayload;
   "ui.render": UIRenderPayload;
@@ -200,7 +192,6 @@ export type Proposal = { [K in ProposalType]: ProposalFor<K> }[ProposalType];
  */
 export const PROPOSAL_TYPES = [
   "narrative.append",
-  "state.patch",
   "event.emit",
   "interaction.request",
   "ui.render",

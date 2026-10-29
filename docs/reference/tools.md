@@ -1712,7 +1712,6 @@ agent:
 当前已注册的类型：
 
 - `narrative.append`
-- `state.patch`
 - `event.emit`
 - `interaction.request`
 - `ui.render`
@@ -1732,13 +1731,7 @@ agent:
 
 没通过的 proposal 不提交，错误码是 `proposal-invalid` 或媒体检查的拒绝原因。它走的是提交失败的路径：跟在一段已提交故事旁边的可选 runtime，只丢掉它自己的写入；没有故事的执行（手动、后台、setup）整次不提交。不会只落下一部分 proposal。
 
-**`state.patch` 和 `plugin.data` 的区别。** `state.patch` 写入的状态表是全会话共享的：
-
-- 提交时只要求 `table` 和 `field` 是非空字符串。
-- 不按插件划分归属，也不按表的 schema 校验值。
-- 每次变更在变更记录里带上来源 `pluginId/runtimeId`。
-
-只属于一个插件的数据放在 `plugin.data`。它按 `(sessionId, pluginId, namespace, key)` 隔离。
+插件数据使用 `plugin.data`，按 `(sessionId, pluginId, namespace, key)` 隔离。
 
 ### `ui.render`
 

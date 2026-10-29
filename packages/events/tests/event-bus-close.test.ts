@@ -145,7 +145,7 @@ describe("EventBus close", () => {
           event: {
             id: "remote:2",
             sessionId: "session",
-            type: "state.changed",
+            type: "character.upserted",
             topic: "state",
             timestamp: "2026-09-19T00:00:00.000Z",
             payload: {},

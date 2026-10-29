@@ -39,19 +39,6 @@ export async function emitCommittedProposal(
         part,
       });
     }
-  } else if (proposal.type === "state.patch") {
-    const p = proposal.payload;
-    await emitter.emit("state.patch.applied", {
-      runtimeId: proposal.source.runtimeId,
-      pluginId: proposal.source.pluginId,
-      proposalId: proposal.id,
-      // packageName / summary follow spec naming; semantically these are DB table / column from the state.patch payload.
-      patch: {
-        packageName: typeof p.table === "string" ? p.table : undefined,
-        summary: typeof p.field === "string" ? p.field : undefined,
-        ops: p,
-      },
-    });
   } else if (proposal.type === "asset.generate") {
     const view = assetGenerateToView(proposal);
     await emitter.emit("asset.generated", {

@@ -169,7 +169,7 @@ it("isolates every plugin table from framework fields in snapshots, live patches
     reducer(initialState, { type: "SET_GAME_STATE", state: snapshot }),
     reducer(
       { ...initialState, gameState: snapshot },
-      { type: "ADD_STATE_PATCH", patch },
+      { type: "MERGE_INITIAL_STATE_PATCHES", patches: [patch] },
     ),
     reducer(
       {

@@ -36,7 +36,7 @@ describe("subscription visibility", () => {
               start(controller) {
                 controller.enqueue(
                   new TextEncoder().encode(
-                    'id: epoch:1\nevent: state.changed\ndata: {"payload":{"privateText":"private-value"}}\n\n',
+                    'id: epoch:1\nevent: state.snapshot.created\ndata: {"payload":{"privateText":"private-value"}}\n\n',
                   ),
                 );
               },
@@ -59,7 +59,7 @@ describe("subscription visibility", () => {
     expect(warn).toHaveBeenCalledTimes(2);
     expect(warn).toHaveBeenCalledWith("[subscription] event handler failed", {
       sessionId: "session",
-      eventType: "state.changed",
+      eventType: "state.snapshot.created",
       eventId: "epoch:1",
       errorType: "Error",
     });

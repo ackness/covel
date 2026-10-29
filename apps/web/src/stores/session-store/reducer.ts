@@ -462,27 +462,6 @@ export function reducer(
     }
     case "SET_EXECUTION_ERROR":
       return { ...state, executionError: action.error };
-    case "ADD_STATE_PATCH": {
-      if (state.recentStatePatchIds.includes(action.patch.id)) return state;
-      const patchData = action.patch.data as
-        Record<string, unknown> | undefined;
-      const newGameState = patchData
-        ? deepMerge(state.gameState, { tables: patchData })
-        : state.gameState;
-      return {
-        ...state,
-        statePatches: compactStatePatches([
-          ...state.statePatches,
-          action.patch,
-        ]),
-        statePatchRevision: state.statePatchRevision + 1,
-        recentStatePatchIds: rememberStatePatchIds([
-          ...state.recentStatePatchIds,
-          action.patch.id,
-        ]),
-        gameState: newGameState,
-      };
-    }
     case "MERGE_RECOVERED_MESSAGES": {
       const drafts =
         action.actionGeneration === (state.actionGeneration ?? 0)

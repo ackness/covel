@@ -378,7 +378,7 @@ describe("F-201 subscription incarnation admission", () => {
           id: "remote:1",
           sessionId: old.id,
           sessionIncarnation: publicSessionIncarnation(old),
-          type: "state.changed",
+          type: "character.upserted",
           topic: "state",
           timestamp: new Date().toISOString(),
           payload: { secret: "old-live-secret" },

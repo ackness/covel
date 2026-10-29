@@ -189,38 +189,6 @@ describe("normalizeOutput", () => {
     });
   });
 
-  describe("state.patch", () => {
-    it("should extract statePatches as separate proposals", () => {
-      const effects: RuntimeEffects = {
-        statePatches: [
-          { table: "world", field: "weather", value: "stormy" },
-          { table: "player", field: "hp", value: 80 },
-        ],
-      };
-      const proposals = normalizeOutput(
-        {},
-        SOURCE,
-        TURN_ID,
-        SESSION_ID,
-        "plugin",
-        effects,
-      );
-
-      const stateProposals = proposals.filter((p) => p.type === "state.patch");
-      expect(stateProposals).toHaveLength(2);
-      expect(stateProposals[0]!.payload).toEqual({
-        table: "world",
-        field: "weather",
-        value: "stormy",
-      });
-      expect(stateProposals[1]!.payload).toEqual({
-        table: "player",
-        field: "hp",
-        value: 80,
-      });
-    });
-  });
-
   describe("event.emit", () => {
     it("should extract events array as event.emit proposals", () => {
       const effects: RuntimeEffects = {
@@ -575,7 +543,7 @@ describe("normalizeOutput", () => {
         narrativeOutput: "The story continues.",
       };
       const effects: RuntimeEffects = {
-        statePatches: [{ table: "world", field: "time", value: "night" }],
+        pluginData: [{ namespace: "world", key: "time", value: "night" }],
         interactions: [
           {
             type: "choice",
@@ -598,7 +566,7 @@ describe("normalizeOutput", () => {
       expect(proposals.map((p) => p.type).sort()).toEqual([
         "interaction.request",
         "narrative.append",
-        "state.patch",
+        "plugin.data",
       ]);
     });
 
@@ -799,36 +767,6 @@ describe("createCommitPipeline", () => {
       expect(result.committed).toBe(false);
       expect(result.error).toContain("unknown proposal type");
       expect(store.updateSession).not.toHaveBeenCalled();
-    });
-  });
-
-  describe("state.patch commit", () => {
-    it("should persist state change and emit state.changed event", async () => {
-      const store = createMockStore();
-      const pipeline = createCommitPipeline(store as any);
-      const proposal = makeProposal("state.patch", {
-        table: "world",
-        field: "weather",
-        value: "rain",
-      });
-
-      const result = await pipeline.commit(proposal);
-
-      expect(result.committed).toBe(true);
-      expect(result.event!.type).toBe("state.changed");
-      expect(result.event!.payload.table).toBe("world");
-
-      expect(store.addStateChange).toHaveBeenCalledOnce();
-      // state.patch must also write the current value, not just the change log,
-      // or listStateEntries / getTableSnapshot / fork never see the patch.
-      expect(store.upsertStateEntry).toHaveBeenCalledOnce();
-      expect(store.upsertStateEntry).toHaveBeenCalledWith(
-        expect.objectContaining({
-          tableName: "world",
-          fieldName: "weather",
-          value: "rain",
-        }),
-      );
     });
   });
 
@@ -1181,42 +1119,7 @@ describe("createCommitPipeline", () => {
       });
     });
 
-    it("emits state.patch.applied when a state.patch proposal commits", async () => {
-      const emitter = makeEmitterSpy();
-      const store = createMockStore();
-      const pipeline = createCommitPipeline(
-        store as any,
-        undefined,
-        undefined,
-        emitter,
-      );
-      const proposal = makeProposal("state.patch", {
-        table: "world",
-        field: "weather",
-        value: "rain",
-      });
-
-      const result = await pipeline.commit(proposal);
-
-      expect(result.committed).toBe(true);
-      const stateEvent = emitter.events.find(
-        (e) => e.type === "state.patch.applied",
-      );
-      expect(stateEvent).toBeDefined();
-      expect(stateEvent!.payload).toMatchObject({
-        proposalId: proposal.id,
-        pluginId: "test-plugin",
-        runtimeId: "test-runtime",
-      });
-      expect(
-        (stateEvent!.payload.patch as Record<string, unknown>).packageName,
-      ).toBe("world");
-      expect(
-        (stateEvent!.payload.patch as Record<string, unknown>).summary,
-      ).toBe("weather");
-    });
-
-    it("does not emit block.emitted or state.patch.applied for narrative proposals", async () => {
+    it("does not emit block.emitted for narrative proposals", async () => {
       const emitter = makeEmitterSpy();
       const store = createMockStore();
       const pipeline = createCommitPipeline(
@@ -1234,9 +1137,6 @@ describe("createCommitPipeline", () => {
 
       expect(
         emitter.events.find((e) => e.type === "block.emitted"),
-      ).toBeUndefined();
-      expect(
-        emitter.events.find((e) => e.type === "state.patch.applied"),
       ).toBeUndefined();
     });
 

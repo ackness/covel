@@ -2,7 +2,7 @@
  * Proposal-specific commit handlers — composition root.
  *
  * Handlers live in per-domain modules (commit-narrative / commit-ui /
- * commit-state / commit-event / commit-plugin-data / commit-character /
+ * commit-event / commit-plugin-data / commit-character /
  * commit-memory-lore); each exports a factory taking the store and returning
  * a typed `Pick<CommitHandlerMap, ...>` slice. This module composes them into
  * the exhaustive registry: adding a proposal type to `ProposalPayloadMap`
@@ -22,7 +22,6 @@ import type { CommitHandlerMap } from "./commit-handler-types.js";
 import { createMemoryLoreCommitHandlers } from "./commit-memory-lore.js";
 import { createNarrativeCommitHandlers } from "./commit-narrative.js";
 import { createPluginDataCommitHandlers } from "./commit-plugin-data.js";
-import { createStateCommitHandlers } from "./commit-state.js";
 import { createUiCommitHandlers } from "./commit-ui.js";
 
 export type {
@@ -37,7 +36,6 @@ export function createCommitHandlers(
   return {
     ...createNarrativeCommitHandlers(store),
     ...createUiCommitHandlers(store),
-    ...createStateCommitHandlers(store),
     ...createEventCommitHandlers(store),
     ...createPluginDataCommitHandlers(store),
     ...createCharacterCommitHandlers(store, options),
