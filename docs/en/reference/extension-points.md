@@ -83,7 +83,9 @@ A provider's handler receives two arguments: the input the extension point defin
 - It cannot read other plugins' private namespaces from here.
 - A community provider's `ctx.utils`, like its `covel.http`, reaches only the origins listed in the `permissions.http` of its own package (see [the plugin reference](./plugins.md#runtime-field-groups)).
 
-The read methods of `ctx.pluginData` have the same shape in three places: a function runtime's handler, a runtime's guard, and an extension point's handler. Code can be moved directly between them.
+Service and extension contexts share `sessionId`, `locale`, read-only `pluginData`, `world`, and `getOwnSettings()`; see the [service context](./plugin-extensions.md#what-a-service-can-and-cannot-access) for in-execution visibility rules. Extensions still read their own execution snapshot.
+
+The read methods of `ctx.pluginData` have the same shape in four places: a function runtime's handler, a runtime's guard, an extension point's handler, and a service handler. Code can be moved directly between them.
 
 | Method                | Returns                                                                                                       |
 | --------------------- | ------------------------------------------------------------------------------------------------------------- |

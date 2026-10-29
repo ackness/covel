@@ -298,6 +298,7 @@ A plugin's server-side JavaScript (`entry`, handler, guard, hook, wire) runs in 
 - A media wire a plugin registers carries that plugin, like a text wire: in a session it can be chosen only when the plugin is enabled there; a request that belongs to no session can choose only a builtin plugin's wire, and on the `self` tier a community plugin's as well.
 - `framework` is a reserved ID that no package can take. A request with `pluginId: "framework"` runs only a framework default action, so the route's trust decision and the handler that runs are the same one.
 - The bound session store view, the lookup of tools by plugin, and the proposal pipeline are also permission boundaries of the plugin API, and they have the same limit.
+- A read service's `ctx.pluginData` is bound to the session and provider plugin, filters `_hidden.*`, and returns separate copies. `world` copies the caller's view, and `getOwnSettings()` reads only provider settings. Services receive no write methods or proposal channel; see the [service context](../reference/plugin-extensions.md#what-a-service-can-and-cannot-access).
 
 `ctx.gateway.resolveSlot()` is the same kind of boundary.
 

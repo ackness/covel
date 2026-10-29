@@ -26,13 +26,13 @@
 
 下面是表里装不下的细节。
 
-函数 runtime 改自己的数据时，可以交一串操作而不是算好的整个值：`ctx.pluginData.update(namespace, key, ops)` 产生 `plugin.data.update`，提交时在最新的值上应用（见[事务 · 操作式写入](./transactions.md#操作式写入plugindataupdate)）。这只属于 runtime 的写入边界：扩展点 handler 的 `ctx.pluginData` 只读，服务 handler 根本拿不到 `ctx.pluginData`。
+函数 runtime 改自己的数据时，可以交一串操作而不是算好的整个值：`ctx.pluginData.update(namespace, key, ops)` 产生 `plugin.data.update`，提交时在最新的值上应用（见[事务 · 操作式写入](./transactions.md#操作式写入plugindataupdate)）。这只属于 runtime 的写入边界：扩展点和服务 handler 的 `ctx.pluginData` 都只读。
 
 `ctx.recursiveCall` 的用途是[包内嵌套调用](./plugins.md#嵌套调用ctxrecursivecall)。要请求其他包的结果，使用服务；要触发其他包的后续工作，使用事件。
 
 ### 服务只给函数 runtime
 
-`ctx.services` 目前只向函数 runtime 开放。框架不会把所有公共服务自动暴露给每个 agent。agent 想用服务的结果，有两条路：
+函数 runtime 的 handler 和 agent 的 guard 可以使用 `ctx.services`。框架不会把所有公共服务自动暴露给每个 agent。agent 想用服务的结果，有两条路：
 
 - 让插件自己的一个函数 runtime 去调用服务，agent 再通过 `inputs` 接收结果。
 - 继续用插件自己注册的工具。
@@ -314,12 +314,30 @@ const value = await ctx.services.call(
 
 ### 服务能拿到什么，不能拿到什么
 
+<!-- prettier-ignore -->
+| 字段 | 含义 |
+| --- | --- |
+| `callerPluginId` | 直接发起这次调用的插件；嵌套调用时是上一层提供者。 |
+| `signal` | 调用的取消与截止信号；读取在等待存储前后都会检查。 |
+| `gateway` | 可选的模型访问，不携带调用方的密钥材料。 |
+| `utils` | 可选的 HTTP 辅助能力，继承本次调用的信号。 |
+| `services` | 继续发现和调用其他公共服务。 |
+| `sessionId` | 当前会话。 |
+| `locale` | 会话内容语言；宿主未提供时可省略。 |
+| `pluginData` | 提供者自己的只读数据；`get(namespace, key)` 返回值或 `null`，`list(namespace)` 按存储顺序返回 `{ key, value }[]`。`_hidden.*` 命名空间返回 `null` / 空列表。 |
+| `world` | 调用方 runtime 所见世界的独立只读副本，首次访问时复制。 |
+| `getOwnSettings()` | 提供者本回合已解析、冻结的设置；没有设置时返回空对象。 |
+
 - 输入和输出按 schema 校验，并被复制一份。不能靠对象引用去改对方的状态。
-- 上下文只有 `callerPluginId`、`signal`、`gateway`、`utils`、`services`。没有调用方的 store、工具、设置或写入缓冲。
-- 服务只负责算出结果。怎么把结果写进存储，由发起调用的 runtime 决定。
+- 数据读取每次都返回独立副本，没有调用方的 store、工具、设置或写入缓冲。
+- 服务没有写入方法，也不能产生 proposal。怎么保存结果，由发起调用的 runtime 决定；写服务将在后续提供。
 - 服务调用链不允许循环，最多八层。它继承 runtime 的截止时间和能力撤销。
 - 服务必须把 `signal` 传给异步工作，不能把任务留在脱离调用的后台。
 - 服务端的普通 JavaScript 仍遵循社区代码的授权模型。这不是进程级沙箱。
+
+通过 runtime 客户端调用服务时，`pluginData` 在已提交数据上，按提交顺序叠加本次执行内提供者插件已完成、可提交的上游写入；不重复应用重试或后台任务带来的种子结果。同一层并行 runtime 的写入互不可见。只有提供者就是原始调用 runtime 所属插件时，才继续叠加该 runtime 自己的写入缓冲。列表去掉已删除的键，新键按写入顺序追加。执行外的客户端只读已提交数据，不记录读取依赖。
+
+读到了尚未提交的上游写入，就在调用 runtime 的结果上记录读取依赖。嵌套服务仍读各自提供者的数据，依赖始终记在原始调用 runtime 上。提交时产出方被作废，辅助调用方随之作废；故事调用方照常提交，并在 trace 里记录（见[事务](./transactions.md)）。调用读服务本身不建立新的调度依赖；故事 runtime 可以按需调用并处理服务缺失或失败。
 
 ## 模型与新协议
 

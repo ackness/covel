@@ -7,7 +7,7 @@ import type {
   PluginExtensionApi,
 } from "./extension-points.js";
 import type { FunctionStoreView } from "./function-runtime.js";
-import type { JsonValue, MediaReference } from "./types.js";
+import type { JsonValue, MediaReference, PluginDataReader } from "./types.js";
 import type { withPendingProposals } from "./tool-result.js";
 import type { PluginMessageContext, PluginMessages } from "./messages.js";
 export type { PluginToolResult } from "./tool-result.js";
@@ -287,6 +287,11 @@ export interface PluginServiceClient {
 }
 export interface PluginServiceContext {
   readonly callerPluginId: string;
+  readonly sessionId: string;
+  readonly locale?: string;
+  readonly pluginData: PluginDataReader;
+  readonly world: ExtensionWorldModel;
+  readonly getOwnSettings: () => Readonly<Record<string, unknown>>;
   readonly signal: AbortSignal;
   readonly services: PluginServiceClient;
   readonly gateway?: PluginServiceGateway;

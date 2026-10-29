@@ -641,6 +641,20 @@ export async function executeOneRuntime(
       manifest.pluginId,
       inv.seedResults,
     );
+    const providerWrites = new Map([[manifest.pluginId, upstreamPluginData]]);
+    const upstreamOf = (pluginId: string) => {
+      let writes = providerWrites.get(pluginId);
+      if (!writes) {
+        writes = collectUpstreamPluginDataWrites(
+          completedResults,
+          input.sessionId,
+          pluginId,
+          inv.seedResults,
+        );
+        providerWrites.set(pluginId, writes);
+      }
+      return writes;
+    };
     if (manifest.runtimeType === "function") {
       return await executeFunctionRuntime({
         upstreamPluginData,
@@ -665,6 +679,7 @@ export async function executeOneRuntime(
         runId,
         timeoutMs,
         executionId,
+        upstreamOf,
       });
     }
 
@@ -691,6 +706,7 @@ export async function executeOneRuntime(
       startTime,
       runId,
       timeoutMs,
+      upstreamOf,
     });
     if (guardResult) return guardResult;
 
