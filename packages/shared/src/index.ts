@@ -99,7 +99,18 @@ export {
 } from "./proposals/world-model.js";
 export type { WorldModelView } from "./proposals/world-model.js";
 export { buildFieldsZodFromSchema } from "@covel/plugin-handlers-utils";
-export { DATA_OP_KINDS, type DataOpKind } from "@covel/plugin-handlers-utils";
+export {
+  DATA_OP_KINDS,
+  applyDataOps,
+  dataOpSchema,
+  dataOpsSchema,
+  type DataOp,
+  type DataOpError,
+  type DataOpErrorCode,
+  type DataOpKind,
+  type DataOpsCurrent,
+  type DataOpsResult,
+} from "@covel/plugin-handlers-utils";
 
 // ── Utilities ─────────────────────────────────────────────────────
 export { deepMerge } from "./utils/deep-merge.js";
