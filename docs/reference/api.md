@@ -1052,6 +1052,7 @@ setup runtime 挂起等玩家回答时，这次尝试不占重试次数。挂起
 | --- | --- | --- | --- |
 | POST | `/api/install/plugin` | multipart 字段 `file` | 把插件 `.zip` 解压到用户插件目录 |
 | POST | `/api/install/world` | multipart 字段 `file` | 把世界 `.zip` 解压到用户世界目录 |
+| POST | `/api/install/st-import` | multipart `file`（可重复）、`locale?`、`name?`、`preview?` | 把 SillyTavern 内容转成一个世界；预览不写入 |
 | POST | `/api/install/plugin/github/preview` | `{ url }` | 解析公开的 GitHub 仓库或子目录并返回预览；不安装、不执行插件 |
 | POST | `/api/install/plugin/github` | `{ token, acceptRisk: true }` | 校验已确认的预览并安装 |
 | POST | `/api/install/world/github/preview` | `{ url }` | 同上，对象是世界包 |
@@ -1068,6 +1069,7 @@ setup runtime 挂起等玩家回答时，这次尝试不占重试次数。挂起
 
 - `POST /api/install/plugin`：接受根目录有 `PLUGIN.md` 的 `.zip`（`package.json` 可选，多 runtime 布局也可以），或者只有一个顶层文件夹、`PLUGIN.md` 在那个文件夹里的 `.zip`。返回 `201 { ok, kind: "plugin", id, restartRequired: true, hasServerCode }`。
 - `POST /api/install/world`：接受根目录有 `world.yaml` + `WORLD.md` 的 `.zip`。返回 `201 { ok, kind: "world", id, restartRequired: false }`。
+- `POST /api/install/st-import`：`preview=true` 返回 `200`，否则返回 `201`，响应为 `{ ok: true, preview, kind: "world", id, restartRequired: false, report }`。需要 `host.files` 和 `world.write`。`locale` 是规范化的 BCP 47（默认 `DEFAULT_LOCALE`）；`name` 可选。报告含 `sources`、`world: { id, name, locale, summary }`、`counts: { characters, loreEntries, hasCover }` 和 `items: [{ level, code, source?, field?, count?, message }]`。说明为英文，客户端翻译已知代码。上限：8 个文件、6 张卡、每文件 8 MiB、请求体 20 MiB、解码后的角色卡 JSON 3 MiB、PNG 4096 块、资料条目总计 2000 条（超出部分报告并略过）、单条正文 20000 字符、生成的资料库 YAML 2 MiB。无效内容返回 `400`，单文件超限返回 `413`，ID 候选耗尽返回 `409`；转换错误带 `details: { code }`。复用 ZIP 的清单校验和原子世界激活；并发 ID 冲突返回 `409`，可重试。见[导入指南](../worlds/import-sillytavern.md)。
 - `POST /api/install/plugin/github/preview`：返回固定的提交、摘要和签名预览。
 - `.../github/update/preview`：返回 `{ status: "current" }`、`{ status: "pinned" }`，或 `{ status: "available", ... }` 加预览。更新端点的完整契约见[插件安装](./plugin-installation.md#http-契约)和[世界安装](./world-installation.md)。
 - `POST /api/install/plugin/github`：返回 `201 { ok, kind: "plugin", id, restartRequired: true }`。

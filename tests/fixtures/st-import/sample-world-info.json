@@ -1,0 +1,14 @@
+{
+  "name": "Island almanac",
+  "entries": {
+    "0": {
+      "key": [
+        "harbor"
+      ],
+      "content": "The harbor bell rings at dawn.",
+      "comment": "Harbor",
+      "constant": false,
+      "position": 0
+    }
+  }
+}

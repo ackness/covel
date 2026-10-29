@@ -461,6 +461,8 @@ export type {
   WorldDataDescriptorOverrideInput,
 } from "./schemas/world-data.js";
 
+export * from "./schemas/st-import.js";
+
 // ── Validation Utilities ────────────────────────────────────────
 export {
   validatePluginManifest,

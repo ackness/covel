@@ -485,3 +485,7 @@ The application ships its own fonts (`@fontsource-variable/*`, SIL OFL 1.1), and
 - These changes do not mean that every trace, game content, or log output has been sanitized.
 
 A `bridge: session` view in `contributes.ui.view` can additionally read a validated, bounded session projection with hidden keys removed. Mounting requires explicit player consent for the capability, bound to the plugin ID and the content hash of the spec plus HTML, regardless of source. A world default cannot bypass consent. SettingsStore saves consent on this device; the view bar menu can revoke it. This read capability adds no page write API. See [Plugin views](../reference/ui-panels.md#plugin-views) for scope and limits.
+
+## Importing third-party content: data conversion only
+
+SillyTavern content import uses bounded PNG chunk walking (including remaining-length checks before reading data), bounded JSON with Zod validation, fixed output paths, text sanitizing and fixed macro substitutions. PNG cover files have text and other metadata removed. No extension, script, card regex or executable macro runs. Unsupported fields and conversion losses are reported. Preview writes nothing; import uses the ZIP world's existing validation and activation under the world lock, guarded by `host.files` and `world.write`. Sanitizing does not make prompts trustworthy: lore and narration notes enter model context at the same trust level as other third-party world packages. See [the import guide](../worlds/import-sillytavern.md).

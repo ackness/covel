@@ -172,6 +172,8 @@ const FRAMEWORK_CHINESE_LINES = {
   "apps/server/src/routes/api/plugin-diagnostics.ts": 1,
   "apps/server/src/routes/api/session/commands.ts": 4,
   "apps/server/src/routes/misc-api/plugin-flow.ts": 6,
+  // Player-name locale pair written into imported world content.
+  "apps/server/src/world-import/st/macros.ts": 1,
   "packages/runtime/src/interaction/interaction-submission.ts": 18,
   "packages/plugin-handlers-utils/src/locale-registry.ts": 4,
   // Chinese variants of framework instructions, each beside its English text.

@@ -16,6 +16,7 @@
 
 import { Hono } from "hono";
 import { pluginInstallRoutes } from "./install/plugin.js";
+import { stImportRoutes } from "./install/st-import.js";
 import { worldInstallRoutes } from "./install/worlds.js";
 import { createGithubInstallRoutes } from "./install/github-install.js";
 import { githubCollectionRoutes } from "./install/github-collection.js";
@@ -34,6 +35,7 @@ for (const kind of ["plugin", "world"] as const) {
   installRoutes.route("/", createGithubUpdateRoutes(kind));
 }
 installRoutes.route("/", worldInstallRoutes);
+installRoutes.route("/", stImportRoutes);
 // Mixed plugin + world previews and collection installs: POST /github/preview
 // and POST /github/batch.
 installRoutes.route("/", githubCollectionRoutes);

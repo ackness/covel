@@ -485,3 +485,7 @@ default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-sr
 - 这些改动并不表示所有 trace、游戏内容或日志输出面都做了清理。
 
 `contributes.ui.view` 的 `bridge: session` 另可读取经过校验、裁剪和去除隐藏键的会话投影。挂载前必须逐项取得玩家同意，绑定插件 ID 与 spec + HTML 的内容哈希，所有来源一视同仁；世界默认视图不能绕过。授权通过本设备 SettingsStore 保存，视图栏菜单可撤销。这个只读能力不增加页面写入接口；范围与限制见[插件视图](../reference/ui-panels.md#插件视图)。
+
+## 导入第三方内容：只做数据转换
+
+SillyTavern 内容导入使用有上限的 PNG 块遍历（读数据前先检查剩余长度）、有上限并经 Zod 校验的 JSON、固定输出路径、文本清理和固定宏替换。PNG 封面会移除文本及其他元数据。不执行扩展、脚本、卡片正则或可执行宏，不能映射的字段和转换损失都会报告。预览不写入；导入由 `host.files` 与 `world.write` 保护，复用 ZIP 世界的校验及世界锁内的激活流程。清理不代表提示词可信：资料和叙事备注仍进入模型上下文，信任程度与其他第三方世界包相同。见[导入指南](../worlds/import-sillytavern.md)。

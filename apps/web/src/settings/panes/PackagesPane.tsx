@@ -25,6 +25,7 @@ import { pluginPackageInfo } from "@/lib/package-info.js";
 import { useSessionActions } from "@/stores/session-store.js";
 import { PackageCredits } from "@/components/shared/package-credits.js";
 import { PluginLoadWarnings } from "@/components/shared/plugin-load-warnings.js";
+import { StImportCard } from "./StImportCard.js";
 import { GithubCollectionInstaller } from "./GithubCollectionInstaller.js";
 import type { PluginInstallation, PluginSummary } from "@covel/shared";
 import { ignoreError } from "@/lib/ignore-error.js";
@@ -336,6 +337,15 @@ export function PackagesPane() {
         busy={busy === "world"}
         disabled={githubBusy || !!busy || updateBusy || !!removing}
         onFile={(f) => uploadZip("world", f)}
+      />
+
+      <StImportCard
+        busy={githubBusy || !!busy || updateBusy || !!removing}
+        onBusyChange={setGithubBusy}
+        onImported={() => {
+          void refreshInstalled();
+          refreshWorlds();
+        }}
       />
 
       {rows.length > 0 && (

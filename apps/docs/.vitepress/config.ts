@@ -164,6 +164,7 @@ const guideSidebar: DefaultTheme.SidebarItem[] = [
     items: [
       { text: "世界包是什么", link: "/worlds/" },
       { text: "第一个世界", link: "/worlds/first-world" },
+      { text: "导入 SillyTavern 内容", link: "/worlds/import-sillytavern" },
       { text: "美术方向", link: "/worlds/art-direction" },
       { text: "角色立绘", link: "/worlds/portraits" },
       { text: "场景图", link: "/worlds/scenes" },
@@ -355,6 +356,7 @@ const EN: Record<string, string> = {
   创建世界: "Create a world",
   世界包是什么: "What a world package is",
   第一个世界: "Your first world",
+  "导入 SillyTavern 内容": "Import SillyTavern content",
   美术方向: "Art direction",
   角色立绘: "Character portraits",
   场景图: "Scene pictures",
