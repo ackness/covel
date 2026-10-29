@@ -163,7 +163,7 @@ export const runtimeAuthoringManifestSchema = z
               required: z
                 .boolean()
                 .describe(
-                  "`true` stops this runtime when the upstream value is missing or failed. Defaults to `true`.",
+                  "`true` stops this runtime when the upstream value is missing or failed. Defaults to `true`. A story runtime (`io.visibility: story`) must set it to `false` for contract inputs.",
                 )
                 .optional(),
               accepts: z
@@ -463,6 +463,17 @@ export const runtimeAuthoringManifestSchema = z
               !("kernel" in binding.from) && binding.scope !== "committed",
           )
           .map(([name]) => name),
+        contractInputs: inputs.flatMap(([name, binding]) =>
+          "contract" in binding.from
+            ? [
+                {
+                  name,
+                  contract: binding.from.contract,
+                  required: binding.required !== false,
+                },
+              ]
+            : [],
+        ),
       },
       {
         ...AUTHORING_RULE_FIELD_PATHS,

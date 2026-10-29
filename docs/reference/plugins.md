@@ -292,6 +292,14 @@ runtime 的 `schedule.needs[].contract` 和 `io.inputs.*.from.contract` 引用�
 - 没写进 `requires` 的契约是可选的：会话里有提供者时照常绑定；没有时按门控处理，必需的输入或 `needs` 缺了提供者，这个 runtime 不运行。包内其他 runtime 提供的契约就是这样用的。
 - `schedule.after` 只排序，`from.kernel` 是内核输入。这两者都不会让别的包被激活。
 
+**故事 runtime 不能硬依赖其他插件。** 只要有一个玩家能玩的叙事插件，故事就应当能进行，所以 `io.visibility: story` 的 runtime：
+
+- 绑定契约的输入（`io.inputs.*.from.contract`，`turn` 和 `committed` 范围都算）必须写 `required: false`，不写时默认是 `true`，会被拒绝。
+- `schedule.needs` 不能写契约，要改成可选输入，或者用 `schedule.after` 只排序。
+- 所在包的根 `requires` 不能列插件契约：缺提供者时解析器会关掉整个包。把它删掉，让 runtime 按可选输入读取。
+
+内核扩展契约不受此限。提供者缺失时，这些输入就没有值，runtime 要能在没有它们时照常写出正文。
+
 ### 阶段和调度顺序
 
 阶段按 `setup → pre-turn → narrative → post-turn → audit` 推进。一个阶段全部结束后才进入下一个阶段。
@@ -947,7 +955,7 @@ namespace 声明 `search` 之后，它的记录进入框架的记忆检索（[`m
 - 引用的 entry、handler、guard、JSON Schema 和 UI 文件必须在包里。
 - 每份 JSON UI spec 声明 `view` 或 `webview` 中的一个；`view` 里的组件名必须在[组件目录](./ui-components.md)里；`repeat.statePath` 和 `$item` 的写法必须合法（见 [UI 面板](./ui-panels.md#json-render-绑定速查)）。报错给出 spec 文件和节点的路径。
 - 内置工具名和插件工具声明、包内的 runtime 引用，以及根契约依赖必须一致。
-- 跨字段的规则（例如 `schedule.detached` 只能用在 `post-turn` 或 `audit`）报错时给出文件路径和你写的字段路径，例如 `runtimes/note/RUNTIME.md: schedule.stage: …`。
+- 跨字段的规则（例如 `schedule.detached` 只能用在 `post-turn` 或 `audit`，故事 runtime 的契约输入必须写 `required: false`）报错时给出文件路径和你写的字段路径，例如 `runtimes/note/RUNTIME.md: schedule.stage: …`。
 
 加载、`pnpm validate:plugin` 和安装用同一份清单规则（`@covel/shared` 的 schema），UI spec 也一样：校验通过的面板，游戏里不会因为格式被去掉。
 

@@ -200,6 +200,8 @@ Once it is declared:
 
 `io.concealed: true` cannot be used together with `io.visibility: story`. Loading fails, because story runtime text is meant for the player to read anyway.
 
+A story runtime also cannot hard-depend on another plugin: contract inputs must set `required: false` and `needs` cannot list a contract. See [Scope of dependencies and references](../reference/plugins.md#scope-of-dependencies-and-references).
+
 To pass hidden content to another plugin, send it with an output capability. The receiving plugin stores it in its own hidden data namespace. For examples, see the [story-events plot runtime](../../../plugins/story-events/runtimes/plot/RUNTIME.md) and [world data · hidden data](../reference/world-data.md#hidden-data-visibility-hidden).
 
 ## Data ownership

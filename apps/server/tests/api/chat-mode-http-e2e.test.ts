@@ -259,6 +259,52 @@ describe("HTTP API e2e: haruka academy chat mode", () => {
     await store.upsertWorld(world!);
   });
 
+  /** A player character and a finished setup: the session is ready to play. */
+  async function startPlaying(sessionId: string) {
+    const now = new Date().toISOString();
+    await store.upsertCharacter({
+      id: "player-haruka-e2e",
+      sessionId,
+      name: "藤原悠",
+      type: "player",
+      description: "春季转入遥风学园二年B组的学生。",
+      fields: {
+        class: "二年 B 组",
+        relationshipStage: "初识",
+        affectionFocus: "神代澪",
+      },
+      version: 1,
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    const completedSetup = Object.fromEntries(
+      registry
+        .getActiveRuntimes(sessionId)
+        .filter((runtime) => runtime.stage === "setup")
+        .map((runtime) => [
+          runtime.name,
+          {
+            state: "done" as const,
+            resolution: "completed" as const,
+            generation: 1,
+            attempts: 1,
+            completedAt: now,
+            pluginVersion: runtime.version ?? "0.0.0",
+          },
+        ]),
+    );
+    // Simulate a session that has finished setup and is ready to play. Under
+    // the scheduling redesign, "setup done" is expressed by phase:"playing" +
+    // Simulate the fully-settled current setup mirror and playing clock.
+    await store.updateSession(sessionId, {
+      phase: "playing",
+      completedPlayerTurns: 0,
+      setupRuntimes: completedSetup,
+      updatedAt: now,
+    });
+  }
+
   it("creates a chat-mode session and completes three player rounds through /api/actions", async () => {
     const sessionId = "sess-haruka-chat-http-e2e";
     const createRes = await app.request("/api/sessions", {
@@ -268,8 +314,14 @@ describe("HTTP API e2e: haruka academy chat mode", () => {
         id: sessionId,
         worldId: "haruka-academy",
         locale: "zh-CN",
-        // The narrator requires the stage only; the cards are asked for by name.
-        plugins: ["chat-mode-narrator", "character-blueprint"],
+        // The narrator requires no other plugin: the stage, the suggestions
+        // and the cards are asked for by name.
+        plugins: [
+          "chat-mode-narrator",
+          "scene-stage",
+          "guide",
+          "character-blueprint",
+        ],
       }),
     });
     expect(createRes.status, await createRes.clone().text()).toBe(201);
@@ -324,48 +376,7 @@ describe("HTTP API e2e: haruka academy chat mode", () => {
     );
     expect(mioCharacterPanelMirror).toBeNull();
 
-    const now = new Date().toISOString();
-    await store.upsertCharacter({
-      id: "player-haruka-e2e",
-      sessionId,
-      name: "藤原悠",
-      type: "player",
-      description: "春季转入遥风学园二年B组的学生。",
-      fields: {
-        class: "二年 B 组",
-        relationshipStage: "初识",
-        affectionFocus: "神代澪",
-      },
-      version: 1,
-      createdAt: now,
-      updatedAt: now,
-    });
-
-    const completedSetup = Object.fromEntries(
-      registry
-        .getActiveRuntimes(sessionId)
-        .filter((runtime) => runtime.stage === "setup")
-        .map((runtime) => [
-          runtime.name,
-          {
-            state: "done" as const,
-            resolution: "completed" as const,
-            generation: 1,
-            attempts: 1,
-            completedAt: now,
-            pluginVersion: runtime.version ?? "0.0.0",
-          },
-        ]),
-    );
-    // Simulate a session that has finished setup and is ready to play. Under
-    // the scheduling redesign, "setup done" is expressed by phase:"playing" +
-    // Simulate the fully-settled current setup mirror and playing clock.
-    await store.updateSession(sessionId, {
-      phase: "playing",
-      completedPlayerTurns: 0,
-      setupRuntimes: completedSetup,
-      updatedAt: now,
-    });
+    await startPlaying(sessionId);
 
     const inputs = [
       "神代澪，谢谢你帮我整理课程表。",
@@ -508,5 +519,103 @@ describe("HTTP API e2e: haruka academy chat mode", () => {
 
     const finalSession = await store.getSession(sessionId);
     expect(finalSession?.completedPlayerTurns).toBe(3);
+  });
+
+  it("plays and commits a story without the stage, the suggestions or the cast", async () => {
+    const sessionId = "sess-haruka-chat-no-stage";
+    const createRes = await app.request("/api/sessions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        id: sessionId,
+        worldId: "haruka-academy",
+        locale: "zh-CN",
+        plugins: ["chat-mode-narrator"],
+        // Unrelated setup plugins (character form, pregame, world schema)
+        // would hold the opening back; this session starts with the narrator.
+        excludedPlugins: ["char-creator", "pregame", "world-init"],
+      }),
+    });
+    expect(createRes.status, await createRes.clone().text()).toBe(201);
+    const created = (await createRes.json()) as {
+      activePlugins: readonly string[];
+    };
+    expect(created.activePlugins).toContain("chat-mode-narrator");
+    for (const absent of [
+      "scene-stage",
+      "scene-cast",
+      "scene-prompts",
+      "guide",
+    ])
+      expect(created.activePlugins).not.toContain(absent);
+
+    expect(
+      registry
+        .getActiveRuntimes(sessionId)
+        .filter((runtime) => runtime.stage === "setup")
+        .map((runtime) => runtime.name),
+    ).toEqual([]);
+    const startRes = await app.request("/api/actions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        requestId: "req-haruka-chat-no-stage-start",
+        type: "start_session",
+        sessionId,
+        payload: {},
+      }),
+    });
+    expect(startRes.status, await startRes.clone().text()).toBe(200);
+    const startEvents = await drainActionStream(startRes);
+    expect(startEvents.map((event) => event.type)).not.toContain(
+      "error.occurred",
+    );
+    expect(
+      startEvents.find((event) => event.type === "execution.completed"),
+    ).toMatchObject({ payload: { committed: true } });
+    expect((await store.getSession(sessionId))?.phase).toBe("playing");
+    const narratorMessages = async () =>
+      (await store.listTurnMessages(sessionId)).filter(
+        (message) => message.sourceRuntimeId === "chat-mode-narrator",
+      );
+    // The opening is told without the stage, before any player message.
+    const opening = await narratorMessages();
+    expect(opening).toHaveLength(1);
+    expect(opening[0]?.content.trim().length).toBeGreaterThan(0);
+
+    const turnsBefore =
+      (await store.getSession(sessionId))?.completedPlayerTurns ?? 0;
+    const actionRes = await app.request("/api/actions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        requestId: "req-haruka-chat-no-stage",
+        type: "send_message",
+        sessionId,
+        payload: { content: "神代澪，谢谢你帮我整理课程表。" },
+      }),
+    });
+    expect(actionRes.status).toBe(200);
+    const events = await drainActionStream(actionRes);
+    expect(events.map((event) => event.type)).not.toContain("error.occurred");
+    const turnId = events.find(
+      (event) => event.type === "execution.started",
+    )?.turnId;
+    expect(turnId).toBeDefined();
+    const rows = await turnRuntimeResults(store, sessionId, turnId!);
+    expect(
+      rows.find((row) => row.runtimeId === "chat-mode-narrator")?.status,
+    ).toBe("success");
+    expect(rows.filter((row) => row.status === "failed")).toEqual([]);
+    const stories = await narratorMessages();
+    expect(stories).toHaveLength(2);
+    expect(stories[1]?.content.trim().length).toBeGreaterThan(0);
+    expect(stories[1]?.content).toContain("神代澪");
+    expect(
+      events.find((event) => event.type === "execution.completed"),
+    ).toMatchObject({ payload: { committed: true } });
+    expect((await store.getSession(sessionId))?.completedPlayerTurns).toBe(
+      turnsBefore + 1,
+    );
   });
 });

@@ -775,3 +775,108 @@ describe("the runtime type comes from the function block", () => {
     );
   });
 });
+
+describe("a story runtime does not hard-depend on another package", () => {
+  const story = (parts: {
+    inputs?: Record<string, unknown>;
+    needs?: unknown[];
+    after?: unknown[];
+    visibility?: "story" | "system";
+  }) => ({
+    schedule: {
+      stage: "narrative",
+      ...(parts.needs ? { needs: parts.needs } : {}),
+      ...(parts.after ? { after: parts.after } : {}),
+    },
+    io: {
+      visibility: parts.visibility ?? "story",
+      ...(parts.inputs ? { inputs: parts.inputs } : {}),
+    },
+  });
+  const issues = (value: unknown) => {
+    const result = runtimeAuthoringManifestSchema.safeParse(value);
+    return result.success
+      ? []
+      : result.error.issues.map((issue) => ({
+          path: issue.path.join("."),
+          message: issue.message,
+        }));
+  };
+  const prefix = "a story runtime (io.visibility 'story')";
+
+  it.each([
+    ["required omitted", {}],
+    ["required: true", { required: true }],
+  ])("rejects a contract input with %s", (_name, extra) => {
+    const found = issues(
+      story({ inputs: { cast: { from: { contract: "x@1" }, ...extra } } }),
+    );
+    expect(found).toHaveLength(1);
+    expect(found[0]!.path).toBe("io.inputs.cast.required");
+    expect(found[0]!.message).toContain(prefix);
+    expect(found[0]!.message).toContain("contract x@1");
+  });
+
+  it("rejects a committed contract input recorded with recordAs", () => {
+    const found = issues(
+      story({
+        inputs: {
+          history: {
+            from: { contract: "x@1" },
+            scope: "committed",
+            recordAs: "latest",
+          },
+        },
+      }),
+    );
+    expect(found.map((i) => i.path)).toEqual(["io.inputs.history.required"]);
+  });
+
+  it("accepts an optional contract input", () => {
+    expect(
+      issues(
+        story({
+          inputs: { cast: { from: { contract: "x@1" }, required: false } },
+        }),
+      ),
+    ).toEqual([]);
+  });
+
+  it("accepts a kernel input, a package runtime input and a kernel extension contract", () => {
+    expect(
+      issues(
+        story({
+          inputs: {
+            digest: { from: { kernel: "turn-digest@1" } },
+            prose: { from: { runtime: "probe/other" } },
+            cast: { from: { contract: "stage.cast@1" } },
+          },
+        }),
+      ),
+    ).toEqual([]);
+  });
+
+  it("rejects a contract in needs and accepts runtime needs and contract after", () => {
+    const found = issues(story({ needs: [{ contract: "x@1" }] }));
+    expect(found).toHaveLength(1);
+    expect(found[0]!.path).toBe("schedule.needs.0");
+    expect(found[0]!.message).toContain(prefix);
+    expect(issues(story({ needs: ["probe/other"] }))).toEqual([]);
+    expect(issues(story({ after: [{ contract: "x@1" }] }))).toEqual([]);
+    expect(issues(story({ needs: [{ contract: "stage.cast@1" }] }))).toEqual(
+      [],
+    );
+  });
+
+  it("leaves a system runtime free to require a contract", () => {
+    expect(
+      issues(
+        story({
+          visibility: "system",
+          inputs: { cast: { from: { contract: "x@1" } } },
+          needs: [{ contract: "y@1" }],
+        }),
+      ),
+    ).toEqual([]);
+  });
+});

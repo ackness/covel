@@ -200,6 +200,8 @@ io:
 
 `io.concealed: true` 不能和 `io.visibility: story` 一起用，加载会失败：故事 runtime 的文字本来就是给玩家读的。
 
+故事 runtime 也不能硬依赖别的插件：契约输入要写 `required: false`，不能在 `needs` 里写契约，规则见[依赖和引用的范围](../reference/plugins.md#依赖和引用的范围)。
+
 要把隐藏内容交给别的插件，用输出能力传过去，由接收的插件存进它自己的隐藏数据空间。例子见 [story-events 的 plot runtime](../../plugins/story-events/runtimes/plot/RUNTIME.md) 和[世界数据 · 隐藏数据](../reference/world-data.md#隐藏数据visibility-hidden)。
 
 ## 数据归属

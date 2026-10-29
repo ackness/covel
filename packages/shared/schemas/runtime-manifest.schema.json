@@ -285,7 +285,7 @@
               },
               "required": {
                 "type": "boolean",
-                "description": "`true` stops this runtime when the upstream value is missing or failed. Defaults to `true`."
+                "description": "`true` stops this runtime when the upstream value is missing or failed. Defaults to `true`. A story runtime (`io.visibility: story`) must set it to `false` for contract inputs."
               },
               "accepts": {
                 "type": "string",

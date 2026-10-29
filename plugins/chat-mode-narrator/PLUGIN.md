@@ -12,10 +12,6 @@ author:
   name: Covel Contributors
   url: https://github.com/ackness/covel
 license: MIT
-requires:
-  - scene-cast@1
-  - scene-stage@1
-  - scene-prompts@1
 conflicts:
   - narrative-engine@1
 contracts:
@@ -180,7 +176,7 @@ The `<player-character>` block holds the player character's current sheet.
 
 - Dialogue ratio: {{ userSettings.dialogueRatio }}%
 - Reply length: {{ userSettings.proseLength }}
-- Target active speaker count: defer to the characters actually listed in `runtime-inputs.active-cast.value` (decided by scene-stage from the player's setting)
+- Target active speaker count: defer to the characters actually listed in `runtime-inputs.active-cast.value` (decided by scene-stage from the player's setting). When `active-cast` is absent, no scene stage is active. Voice the characters that the world, history and player input make present. Keep the dialogue-first style.
 
 ## Settled Tabletop Checks
 
