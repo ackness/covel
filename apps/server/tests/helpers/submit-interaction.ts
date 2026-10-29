@@ -12,7 +12,7 @@ export function readActionStream(text: string): ActionStreamEvent[] {
     .map((line) => JSON.parse(line.slice(5)) as ActionStreamEvent);
 }
 
-/** The body of a `submit_interaction` action that answers one form. */
+/** The body of a `submit_actions` action that answers one form. */
 export function formSubmissionAction(
   sessionId: string,
   target: { turnId: string; form: { interactionId?: unknown } },
@@ -21,14 +21,17 @@ export function formSubmissionAction(
   return {
     requestId: crypto.randomUUID(),
     sessionId,
-    type: "submit_interaction",
+    type: "submit_actions",
     payload: {
-      turnId: target.turnId,
-      submissions: [
+      actions: [
         {
-          interactionId: target.form.interactionId,
-          type: "form",
-          values,
+          kind: "act",
+          interaction: {
+            turnId: target.turnId,
+            interactionId: target.form.interactionId,
+            type: "form",
+          },
+          fields: values,
         },
       ],
     },
@@ -36,7 +39,7 @@ export function formSubmissionAction(
 }
 
 /**
- * The outcome of a `submit_interaction` request as one status, for a test
+ * The outcome of a form-answering `submit_actions` request as one status, for a test
  * that asserts the outcome and not the stream. A JSON answer sent before the
  * stream opens (an approval request, a guard's refusal) is returned as it is.
  * A stream is read to its end, so the follow-up turn has run: it becomes 400

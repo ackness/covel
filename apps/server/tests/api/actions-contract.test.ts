@@ -196,9 +196,9 @@ describe("POST /api/actions — action type contract ", () => {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           requestId: "provider-failure",
-          type: "send_message",
+          type: "submit_actions",
           sessionId,
-          payload: { content: "Continue" },
+          payload: { actions: [{ kind: "say", text: "Continue" }] },
         }),
       });
       expect(response.status).toBe(200);
@@ -264,9 +264,9 @@ describe("POST /api/actions — action type contract ", () => {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           requestId: `world-settings-${tone}`,
-          type: "send_message",
+          type: "submit_actions",
           sessionId,
-          payload: { content: tone },
+          payload: { actions: [{ kind: "say", text: tone }] },
         }),
       });
       expect(response.status).toBe(200);
@@ -293,9 +293,9 @@ describe("POST /api/actions — action type contract ", () => {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           requestId: "terminal-contract",
-          type: "send_message",
+          type: "submit_actions",
           sessionId,
-          payload: { content: "Continue" },
+          payload: { actions: [{ kind: "say", text: "Continue" }] },
         }),
       });
       expect(response.status).toBe(200);
@@ -347,9 +347,9 @@ describe("POST /api/actions — action type contract ", () => {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         requestId: "trace-failure",
-        type: "send_message",
+        type: "submit_actions",
         sessionId,
-        payload: { content: "Continue" },
+        payload: { actions: [{ kind: "say", text: "Continue" }] },
       }),
     });
     const envelopes = (await response.text())
@@ -394,28 +394,28 @@ describe("POST /api/actions — action type contract ", () => {
 
   it.each([
     {
-      label: "non-string send_message.content",
+      label: "non-string action text",
       body: {
         requestId: "req-bad-content",
-        type: "send_message",
+        type: "submit_actions",
         sessionId,
-        payload: { content: { text: "hello" } },
+        payload: { actions: [{ kind: "say", text: { text: "hello" } }] },
       },
     },
     {
-      label: "non-string execute_command.command",
+      label: "non-string command text",
       body: {
         requestId: "req-bad-command",
-        type: "execute_command",
+        type: "submit_actions",
         sessionId,
-        payload: { command: 42 },
+        payload: { actions: [{ kind: "command", text: 42 }] },
       },
     },
     {
       label: "array payload",
       body: {
         requestId: "req-array-payload",
-        type: "send_message",
+        type: "submit_actions",
         sessionId,
         payload: [],
       },
@@ -442,29 +442,29 @@ describe("POST /api/actions — action type contract ", () => {
       label: "invalid locale",
       body: {
         requestId: "req-bad-locale",
-        type: "send_message",
+        type: "submit_actions",
         sessionId,
         locale: "../zh-CN",
-        payload: { content: "hello" },
+        payload: { actions: [{ kind: "say", text: "hello" }] },
       },
     },
     {
       label: "model containing a control character",
       body: {
         requestId: "req-bad-model",
-        type: "send_message",
+        type: "submit_actions",
         sessionId,
         model: "story\nadmin",
-        payload: { content: "hello" },
+        payload: { actions: [{ kind: "say", text: "hello" }] },
       },
     },
     {
       label: "empty requestId",
       body: {
         requestId: "",
-        type: "send_message",
+        type: "submit_actions",
         sessionId,
-        payload: { content: "hello" },
+        payload: { actions: [{ kind: "say", text: "hello" }] },
       },
     },
     {
@@ -480,10 +480,10 @@ describe("POST /api/actions — action type contract ", () => {
       label: "unknown top-level field",
       body: {
         requestId: "req-extra-top-level",
-        type: "send_message",
+        type: "submit_actions",
         sessionId,
         debug: true,
-        payload: { content: "hello" },
+        payload: { actions: [{ kind: "say", text: "hello" }] },
       },
     },
     {
@@ -732,9 +732,9 @@ describe("POST /api/actions — action type contract ", () => {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         requestId: "req-lock-busy",
-        type: "send_message",
+        type: "submit_actions",
         sessionId,
-        payload: { content: "Continue" },
+        payload: { actions: [{ kind: "say", text: "Continue" }] },
       }),
     });
     expect(response.status).toBe(200);

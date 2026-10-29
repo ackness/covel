@@ -463,7 +463,7 @@ SqliteStore、MemoryStore 和 PgStore（都在 Node 上）用同一种办法：
 
 **交互回答和后续回合。**
 
-- `submit_interaction` action 在回合的 session lock 里校验回答，并确认它还没有被回答过。然后用一个 store 事务写入批量的 player input 和后续回合的 `turn.started`。
+- `submit_actions` 里回答交互的行动在回合的 session lock 里校验，并确认它还没有被回答过。然后用一个 store 事务写入批量的 player input 和后续回合的 `turn.started`。
 - 所以回答落库和回合开始同成同败。重复提交在锁里看到已有的回答而被拒绝，不会出现“回答已保存而回合没有开始”的状态。
 - 回合自己的结果仍然由 `finalizeExecution` 提交。它失败时回答保留，回合经现有的重试再跑。
 

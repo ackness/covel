@@ -179,7 +179,17 @@ export type TurnDigest = import("zod").infer<
 export interface TurnInput {
   readonly sessionId: string;
   readonly turnId: string;
+  /**
+   * The player's input as the model reads it: the kernel's rendering of
+   * `actions` (`renderActions` in `@covel/context`), empty without input.
+   */
   readonly playerMessage: string;
+  /**
+   * The player's resolved actions. Absent for an execution without player
+   * input: the opening, a manual or event run, a detached job, a nested
+   * recursive call.
+   */
+  readonly actions?: readonly import("./action.js").TurnAction[];
   readonly locale?: string;
   /** API-level model override. Takes highest priority over plugin config. */
   readonly modelOverride?: string;

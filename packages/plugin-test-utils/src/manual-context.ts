@@ -34,6 +34,7 @@ export function makeManualFunctionContext({
   sessionId = `sess-${pluginId}`,
   turnId = `turn-${pluginId}`,
   playerMessage = "",
+  playerActions = [],
   locale,
   store = {},
   manualPayload = {},
@@ -46,6 +47,7 @@ export function makeManualFunctionContext({
     pluginId,
     runtimeId,
     playerMessage,
+    playerActions,
     ...(locale ? { locale } : {}),
     store: {
       getPluginData: missingRead("getPluginData"),

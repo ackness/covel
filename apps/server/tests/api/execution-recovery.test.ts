@@ -48,12 +48,18 @@ async function fixture() {
 describe("foreground execution recovery", () => {
   it.each([
     {
-      type: "send_message",
-      payload: { content: "hello", inputMessageId: "durable-input" },
+      type: "submit_actions",
+      payload: {
+        actions: [{ kind: "say", text: "hello" }],
+        inputMessageId: "durable-input",
+      },
     },
     {
-      type: "execute_command",
-      payload: { command: "/start", inputMessageId: "durable-input" },
+      type: "submit_actions",
+      payload: {
+        actions: [{ kind: "command", text: "/start" }],
+        inputMessageId: "durable-input",
+      },
     },
   ])("retains the durable input id when recovering $type", (action) => {
     expect(
@@ -80,8 +86,8 @@ describe("foreground execution recovery", () => {
         type: "turn.started",
         payload: {
           recoveryAction: {
-            type: "send_message",
-            payload: { content: "Open the door" },
+            type: "submit_actions",
+            payload: { actions: [{ kind: "say", text: "Open the door" }] },
           },
         },
       });
@@ -105,7 +111,10 @@ describe("foreground execution recovery", () => {
         state: "failed",
         turnId: "opening",
         abortReason: "aborted-by-player",
-        retry: { type: "send_message", payload: { content: "Open the door" } },
+        retry: {
+          type: "submit_actions",
+          payload: { actions: [{ kind: "say", text: "Open the door" }] },
+        },
       });
     },
   );
@@ -114,8 +123,8 @@ describe("foreground execution recovery", () => {
     const { store, trace } = await fixture();
     await trace("turn.started", {
       recoveryAction: {
-        type: "send_message",
-        payload: { content: "Open the door" },
+        type: "submit_actions",
+        payload: { actions: [{ kind: "say", text: "Open the door" }] },
       },
     });
     await trace("turn.completed", {
@@ -125,7 +134,10 @@ describe("foreground execution recovery", () => {
     expect(await getSessionExecutionStatus(store, "recovery")).toMatchObject({
       state: "failed",
       abortReason: "aborted-by-player",
-      retry: { type: "send_message", payload: { content: "Open the door" } },
+      retry: {
+        type: "submit_actions",
+        payload: { actions: [{ kind: "say", text: "Open the door" }] },
+      },
     });
     await expect(
       assertRecoverableTurn(store, "recovery", "opening"),
@@ -214,8 +226,8 @@ describe("foreground execution recovery", () => {
       type: "turn.started",
       createdAt: "2026-01-01T00:00:00.000Z",
       payload: {
-        recoveryAction: recoveryAction("send_message", {
-          content: "Open the door",
+        recoveryAction: recoveryAction("submit_actions", {
+          actions: [{ kind: "say", text: "Open the door" }],
           unexpectedKey: "discard",
         }),
       },
@@ -224,7 +236,10 @@ describe("foreground execution recovery", () => {
       await trace("llm.responded", { runtimeId: "story" });
     expect(await getSessionExecutionStatus(store, "recovery")).toMatchObject({
       state: "interrupted",
-      retry: { type: "send_message", payload: { content: "Open the door" } },
+      retry: {
+        type: "submit_actions",
+        payload: { actions: [{ kind: "say", text: "Open the door" }] },
+      },
     });
     await expect(
       assertRecoverableTurn(store, "recovery", "opening"),
@@ -234,8 +249,8 @@ describe("foreground execution recovery", () => {
     ).rejects.toThrow();
     await expect(
       assertRecoverableTurn(store, "recovery", "opening", {
-        type: "send_message",
-        payload: { content: "Changed input" },
+        type: "submit_actions",
+        payload: { actions: [{ kind: "say", text: "Changed input" }] },
       }),
     ).rejects.toThrow();
   });

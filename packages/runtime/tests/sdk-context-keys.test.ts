@@ -20,6 +20,7 @@ const SDK_CONTEXT_KEYS = {
   pluginId: "required",
   runtimeId: "required",
   playerMessage: "required",
+  playerActions: "required",
   logicalTurn: "optional",
   locale: "optional",
   messages: "optional",

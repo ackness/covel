@@ -369,15 +369,18 @@ describe("start-game API lifecycle scenario", () => {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         requestId: "req-followup",
-        type: "submit_interaction",
+        type: "submit_actions",
         sessionId: "sess-start-flow-api",
         payload: {
-          turnId: bootstrapTurnId,
-          submissions: [
+          actions: [
             {
-              interactionId: "form-char-creation",
-              type: "form",
-              values: { name: "Aria", concept: "cartographer" },
+              kind: "act",
+              interaction: {
+                turnId: bootstrapTurnId,
+                interactionId: "form-char-creation",
+                type: "form",
+              },
+              fields: { name: "Aria", concept: "cartographer" },
             },
           ],
         },
@@ -451,9 +454,9 @@ describe("start-game API lifecycle scenario", () => {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         requestId: "req-main-1",
-        type: "send_message",
+        type: "submit_actions",
         sessionId: "sess-start-flow-api",
-        payload: { content: "look around" },
+        payload: { actions: [{ kind: "say", text: "look around" }] },
       }),
     });
     expect(firstMainLoop.status).toBe(200);

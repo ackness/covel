@@ -128,6 +128,7 @@ export type { MentionableCharacter } from "./character-mentions.js";
 export { characterSheetSegments } from "./character-sheets.js";
 export { currentCharacterOf, primarySeat, seatCharacterIds } from "./seats.js";
 export type { Seat, SeatCharacter, SeatController, SeatRole } from "./seats.js";
+export type { TurnAction, TurnActionInteraction } from "./actions.js";
 export {
   characterLabel,
   characterNameKey,

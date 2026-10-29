@@ -164,9 +164,9 @@ describe("POST /api/actions — phase.changed hygiene (Finding 4 regression)", (
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         requestId: "req-1",
-        type: "send_message",
+        type: "submit_actions",
         sessionId,
-        payload: { content: "hello" },
+        payload: { actions: [{ kind: "say", text: "hello" }] },
       }),
     });
     expect(res.status).toBe(200);

@@ -11,6 +11,8 @@ Each English term has only one Chinese term. The Chinese docs, the UI text, and 
 <!-- prettier-ignore -->
 | Term | Chinese | Notes |
 | --- | --- | --- |
+| Action | 行动 | One item of a player's submission: from which seat, as which character, what kind of thing (`submit_actions`). |
+| Action kind | 行动类型 | A kind of action: the kernel's `say`, `act` and so on, or a plugin's `<pluginId>/<name>`. |
 | Alias | 别名 | Another name for the same character (`aliases`). It is not a compatibility name for a field or ID. |
 | Binding | 绑定 |  |
 | Bundled plugin | 内置插件 | A plugin that ships with Covel. Not the same as `kind: core`. |
@@ -73,6 +75,18 @@ These are the words used in prompt bodies to describe what a runtime reads and w
 | scene | 场景 | The place and time where the narrative is now |  |
 | inject | 注入 | The framework puts a piece of data into the prompt | insert, provide |
 | block | 区块 | A tagged section of the prompt, for example `<existing-quests>` | section (section means a heading subsection) |
+
+## Action
+
+One item of a player's submission. It says which seat it is submitted from (`seatId`), as which character (`actorId`), what kind of action it is (`kind`), and its text or structured fields. Answers to forms and choices are actions too. The server checks each action against the seat's role, then renders the actions into the `playerMessage` the model reads; function runtimes read them from `ctx.playerActions`.
+
+See: [HTTP API: submit_actions](./api.md#submit_actions).
+
+## Action kind
+
+A kind of action. The kernel has six base kinds: `say`, `act`, `narrate` (narration), `direct` (a director's instruction), `advance`, and `command` (a slash command). A plugin declares its own kinds in `contributes.actionKinds`, written `<pluginId>/<name>` on the wire. The seat's role decides which kinds it may submit.
+
+See: [Plugin field reference: action kinds](./plugins.md#action-kinds-contributesactionkinds), [World model: seats](./world-model.md#seats).
 
 ## Alias
 

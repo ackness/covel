@@ -214,8 +214,8 @@ test.describe("Stage view mode", () => {
         .click();
       expect((await actionRequest).postDataJSON()).toMatchObject({
         sessionId,
-        type: "send_message",
-        payload: { content: lastChoice },
+        type: "submit_actions",
+        payload: { actions: [{ kind: "say", text: lastChoice }] },
       });
     } finally {
       // Stop the live UI before removing fixtures and deleting its session.

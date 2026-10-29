@@ -1537,9 +1537,9 @@ export default function ({ tool, z, shortId, shortIdBatch }) {
   ↓ 聚合为数组存入 TurnMessage.pendingInput
   ↓ 返回 TurnResult.pendingInputs（支持多插件、多交互）
   ↓ 前端渲染所有交互 UI
-  ↓ 玩家提交 POST /api/actions submit_interaction { turnId, submissions: [...] }
-  ↓ 每个 submission 用 narrativeTemplate 翻译为自然语言
-  ↓ 同一个请求保存回答并运行后续回合，叙事文本是该回合的玩家消息
+  ↓ 玩家提交 POST /api/actions submit_actions { actions: [{ kind, interaction, fields }] }
+  ↓ 每个回答用 narrativeTemplate 翻译为自然语言，作为它的行动文字
+  ↓ 同一个请求保存回答并运行后续回合，行动文字渲染为该回合的玩家消息
     （纯文本，LLM 看到的和普通消息一样）
 ```
 
@@ -1594,13 +1594,12 @@ POST /api/actions
 
 {
   "requestId": "...",
-  "type": "submit_interaction",
+  "type": "submit_actions",
   "sessionId": "...",
   "payload": {
-    "turnId": "...",
-    "submissions": [
-      { "interactionId": "form-1", "type": "form", "values": { "name": "林清风" } },
-      { "interactionId": "choice-1", "type": "choice", "values": { "selectedId": "a", "selectedLabel": "跟随黑袍人" } }
+    "actions": [
+      { "kind": "act", "interaction": { "turnId": "...", "interactionId": "form-1", "type": "form" }, "fields": { "name": "林清风" } },
+      { "kind": "say", "interaction": { "turnId": "...", "interactionId": "choice-1", "type": "choice" }, "fields": { "selectedId": "a", "selectedLabel": "跟随黑袍人" } }
     ]
   }
 }

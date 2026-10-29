@@ -45,8 +45,14 @@ const plugin = {
 
 describe("shared API contracts", () => {
   it.each([
-    { type: "send_message", payload: { content: "hello" } },
-    { type: "execute_command", payload: { command: "/start" } },
+    {
+      type: "submit_actions",
+      payload: { actions: [{ kind: "say", text: "hello" }] },
+    },
+    {
+      type: "submit_actions",
+      payload: { actions: [{ kind: "command", text: "/start" }] },
+    },
   ])("retains and validates durable input ids for $type", (action) => {
     const request = {
       requestId: "req-1",
@@ -86,7 +92,7 @@ describe("shared API contracts", () => {
       actionRequestSchema.safeParse({
         requestId: "req-1",
         sessionId: "session-1",
-        type: "send_message",
+        type: "submit_actions",
         payload: { command: "look" },
       }).success,
     ).toBe(false);

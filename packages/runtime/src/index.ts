@@ -177,6 +177,7 @@ export type {
 export { RpcValidationError } from "./rpc/rpc-validation-error.js";
 export {
   createInteractionSubmitter,
+  interactionSubmissionPayload,
   findCommittedInteraction,
   FormRejectedError,
   FormValidatorFailedError,

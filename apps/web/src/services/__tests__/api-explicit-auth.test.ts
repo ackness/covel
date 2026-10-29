@@ -193,9 +193,9 @@ describe("explicit session auth on indirect routes", () => {
     api.sendAction(
       {
         requestId: "req-1",
-        type: "send_message",
+        type: "submit_actions",
         sessionId: "sess-1",
-        payload: { content: "hello" },
+        payload: { actions: [{ kind: "say", text: "hello" }] },
       },
       () => {},
     );

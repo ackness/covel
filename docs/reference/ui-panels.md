@@ -640,8 +640,8 @@ contributes:
 ```
 玩家填写表单 → 点击提交按钮
   → submitInteraction():
-    1. POST /api/actions (`submit_interaction`)：服务端在一次操作里
-       保存 submission、填充 narrativeTemplate 并开始后续回合
+    1. POST /api/actions (`submit_actions`，回答交互的行动)：服务端在
+       一次操作里保存回答、填充 narrativeTemplate 并开始后续回合
     2. SSE `interaction.submitted`：表单标成已提交；交互没有声明
        `submitBehavior.echoFilledNarrative: false` 时回显自然语言
     3. 同一条流上的后续回合由对应插件读取 `player.lastFormValues` 完成业务写入

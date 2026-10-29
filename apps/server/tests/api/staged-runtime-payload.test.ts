@@ -18,6 +18,7 @@ it("restores the source digest through the shared schema and rejects obsolete or
       turnDigest: {
         turnId: "source",
         playerMessage: "Go",
+        actions: [],
         lastPlayerInput: {
           id: "input-a",
           sessionId: "session",

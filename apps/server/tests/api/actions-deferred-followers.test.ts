@@ -215,9 +215,9 @@ describe("POST /api/actions — deferred background followers (main path)", () =
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         requestId: "req-1",
-        type: "send_message",
+        type: "submit_actions",
         sessionId: SESSION_ID,
-        payload: { content: "go" },
+        payload: { actions: [{ kind: "say", text: "go" }] },
       }),
     });
     expect(res.status).toBe(200);
@@ -410,9 +410,9 @@ describe("POST /api/actions — deferred background followers (main path)", () =
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         requestId: "req-lock",
-        type: "send_message",
+        type: "submit_actions",
         sessionId: SESSION_ID,
-        payload: { content: "go" },
+        payload: { actions: [{ kind: "say", text: "go" }] },
       }),
     });
     const reader = res.body?.getReader();
@@ -607,9 +607,9 @@ describe("POST /api/actions — deferred background followers (main path)", () =
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         requestId: "req-dropped",
-        type: "send_message",
+        type: "submit_actions",
         sessionId: SESSION_ID,
-        payload: { content: "go" },
+        payload: { actions: [{ kind: "say", text: "go" }] },
       }),
     });
     const events = (await res.text())

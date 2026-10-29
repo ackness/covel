@@ -7,6 +7,11 @@ import {
 } from "@covel/shared";
 import path from "node:path";
 import { datasetKeyIssue, datasetSchemaIssues } from "./dataset-rules.js";
+import {
+  actionKindDeclarationIssues,
+  actionKindSchemaField,
+  isSchemaObject,
+} from "./action-kinds.js";
 import type { ParsedPluginMd, ParsedRuntimeMd } from "./types.js";
 
 /** Every declared server module, relative to the manifest that owns it. */
@@ -227,6 +232,26 @@ export function validatePluginFiles(
     plugin.contributes,
   );
   if (schemaIssue) throw new Error(schemaIssue);
+  const [actionKindIssue] = actionKindDeclarationIssues(
+    packageManifest.sourcePath,
+    plugin.contributes?.actionKinds,
+  );
+  if (actionKindIssue) throw new Error(actionKindIssue);
+  for (const [index, declaration] of (
+    plugin.contributes?.actionKinds ?? []
+  ).entries()) {
+    const field = actionKindSchemaField(index);
+    const document = file(
+      packageManifest.sourcePath,
+      field,
+      declaration.schema,
+      true,
+    );
+    if (declaration.schema && !isSchemaObject(document))
+      throw new Error(
+        `${packageManifest.sourcePath}: ${field}: ${declaration.schema} must hold a JSON Schema object`,
+      );
+  }
   // The same rules decide whether the game shows the panel (`loadPluginUiSpecs`).
   const viewIds = new Set<string>();
   for (const slot of ["right", "message", "view"] as const)

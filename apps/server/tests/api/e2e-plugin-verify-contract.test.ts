@@ -203,14 +203,17 @@ describe("e2e plugin verification CLI HTTP contract", () => {
         path: "/api/actions",
         body: expect.objectContaining({
           sessionId: "contract-session",
-          type: "submit_interaction",
+          type: "submit_actions",
           payload: {
-            turnId: "contract-turn-1",
-            submissions: [
+            actions: [
               {
-                interactionId: "contract-form",
-                type: "form",
-                values: { characterName: "Contract Player" },
+                kind: "act",
+                interaction: {
+                  turnId: "contract-turn-1",
+                  interactionId: "contract-form",
+                  type: "form",
+                },
+                fields: { characterName: "Contract Player" },
               },
             ],
           },

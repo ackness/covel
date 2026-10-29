@@ -134,6 +134,7 @@ Session prep groups the plugins by whether they call a model, that is by the der
 | `settings` | Player settings. The runtime reads them through `ctx.userSettings`. |
 | `data` | The schema, version, accepts, and search settings for this plugin's data namespace |
 | `datasets` | Typed datasets the package owns: the name is the namespace, with schema, key and ops. See [Datasets](#datasets-contributesdatasets) |
+| `actionKinds` | Action kinds players may submit: name, roles, text rule, `fields` schema and display label. See [Action kinds](#action-kinds-contributesactionkinds) |
 | `ui` | Paths, relative to the package root, of the `right/message/view` UI spec files |
 | `ui.view` | Full-column view spec paths relative to the package root; see [Plugin views](./ui-panels.md#plugin-views) for declarations and consent |
 | `worldProjections` | Declarations of world data projections |
@@ -556,7 +557,8 @@ An agent's side effects come only from its tools. What the model can write is de
 
 | Field                            | Meaning                                                                                                                                                                                                                                                                                                                               |
 | -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `ctx.playerMessage`              | The text of the current input, as a string                                                                                                                                                                                                                                                                                            |
+| `ctx.playerMessage`              | The player's input for this turn: the text the kernel renders from `ctx.playerActions`. A single player's ordinary input is the text as written; several characters, a host or a plugin kind name the character and the kind. See [API · How the player message is rendered](./api.md#how-the-player-message-is-rendered)             |
+| `ctx.playerActions`              | The player's resolved actions of this turn, in submission order, each `{ seatId, kind, actorId?, text?, fields?, interaction?, source }`. Empty for the opening, a manual run, an event, a detached job, and a nested `ctx.recursiveCall` run                                                                                         |
 | `ctx.logicalTurn`                | The scheduler's logical turn: the number of committed main-loop player turns, plus one. It is in the context of function handlers and plugin tools. Setup, the opening continuation, and the first player message are all turn 1. `startTurn` and `every` also count by it.                                                           |
 | `turnNumber` in the tool context | The number of player messages recorded in the session, including the form submission during setup                                                                                                                                                                                                                                     |
 | `ctx.session.lastPlayerInput`    | The most recent `PlayerInputSubmission \| null` when the source execution starts. It includes `id/sessionId/turnId/formId/values/createdAt`.                                                                                                                                                                                          |
@@ -651,7 +653,8 @@ The kernel input `turn-digest@1` freezes the facts of the source turn. A foregro
 | Field               | Meaning                                                                       |
 | ------------------- | ----------------------------------------------------------------------------- |
 | `turnId`            | The ID of the source turn                                                     |
-| `playerMessage`     | The player's input for that turn                                              |
+| `playerMessage`     | The player's input for that turn (the text rendered from the actions)         |
+| `actions`           | The player's resolved actions of that turn; empty without player input        |
 | `lastPlayerInput`   | The same snapshot as `ctx.session.lastPlayerInput`, or `null`                 |
 | `narrativeText`     | The story text of the turn's successful story runtimes, joined by blank lines |
 | `toolCallSummaries` | One short line per successful, visible tool call                              |
@@ -1032,6 +1035,7 @@ The directory-level command `pnpm validate:plugin <dir>` and the ZIP install sha
 - The referenced entry, handler, guard, JSON Schema, and UI files must be inside the package.
 - Each JSON UI spec declares one of `view` and `webview`. Component names in `view` must be in the [component catalogue](./ui-components.md). `repeat.statePath` and `$item` must have a legal form (see [UI panels](./ui-panels.md#json-render-binding-cheat-sheet)). The error gives the spec file and the path of the node.
 - The built-in tool names and the plugin tool declarations, the runtime references inside the package, and the root contract dependencies must all be consistent.
+- A `contributes.actionKinds` `name` must not be a base action kind or repeat; its `schema` file must be in the package and be a JSON object.
 - Each `contributes.datasets` schema file must be in the package and valid JSON. `key` must be a required property in the schema's top-level `properties` (skipped when the schema has none). A name that is also in `contributes.data` must use the same schema in both.
 - An error from a cross-field rule (for example, `schedule.detached` is only allowed on `post-turn` or `audit`, or a story runtime's contract input must set `required: false`) gives the file path and the field path you wrote, for example `runtimes/note/RUNTIME.md: schedule.stage: …`.
 
@@ -1196,6 +1200,31 @@ At commit, every proposal a plugin writes into a dataset namespace it declares i
 - Writes outside the commit pipeline skip these checks: world data import and sync (validated against the source's `schema`, see [World Data · Companion plugin data](./world-data.md#companion-plugin-data)), `context.store.setPluginData` in a plugin action RPC, and the management API `PUT`.
 
 See [Transactions · Operation-based writes](./transactions.md#operation-based-writes-plugindataupdate).
+
+### Action kinds (`contributes.actionKinds`)
+
+What a player submits each time is a list of actions (see [API · submit_actions](./api.md#submit_actions)). The kernel has six base kinds: `say`, `act`, `narrate`, `direct`, `advance`, `command`. A plugin can declare more kinds of its own, without server code:
+
+```yaml
+contributes:
+  actionKinds:
+    - name: whisper
+      roles: [player] # optional: which seat roles may use it, default [player]
+      text: required # optional: required / optional (default) / none
+      actor: true # optional: whether it is taken as a character, default true
+      schema: ./schemas/whisper.json # optional: the JSON Schema fields must match
+      display:
+        label: { zh: 耳语, en: whispers }
+        icon: ear
+        placeholder: { zh: 对谁说悄悄话, en: Whisper to someone }
+```
+
+- **The wire kind is `<pluginId>/<name>`.** In `whisper-pack`, the example is `whisper-pack/whisper`. Two plugins may use the same `name` without a conflict. `name` is lower-case kebab-case, must not be a base kind's name, and must be unique in the package.
+- `roles` must not be empty. Which role may submit which base kind is in [seats](./world-model.md#seats).
+- `schema` is a JSON file in the package. Loading, `pnpm validate:plugin` and installation read it; a missing file, a file that is not a JSON object, or a path that leaves the package root is an error. A kind without `schema` takes no `fields`.
+- `display.label` is the name in the composer and the kind label rendered for the model, chosen by the session language. For example `[Aya · whispers] Over here.`.
+- Only the kinds that the session's runnable plugins declare are available. The server checks each action against that catalogue; see [`GET /api/sessions/:id/action-kinds`](./api.md#action-kind-catalogue).
+- Function runtimes read the actions from `ctx.playerActions`, with `fields` as submitted; see [turn information in the handler context](#turn-information-in-the-handler-context).
 
 ### Reserved data namespaces
 

@@ -1539,9 +1539,9 @@ Tool execute() returns { ..., interaction: InteractionPayload }
   ↓ aggregated into an array and stored in TurnMessage.pendingInput
   ↓ TurnResult.pendingInputs is returned (supports multiple plugins and multiple interactions)
   ↓ the front end renders the UI for all interactions
-  ↓ the player submits POST /api/actions submit_interaction { turnId, submissions: [...] }
-  ↓ each submission is translated into natural language with its narrativeTemplate
-  ↓ the same request saves the answers and runs the following turns; the narrative text is the player's message for that turn
+  ↓ the player submits POST /api/actions submit_actions { actions: [{ kind, interaction, fields }] }
+  ↓ each answer is translated into natural language with its narrativeTemplate, as its action text
+  ↓ the same request saves the answers and runs the following turns; the action texts are rendered as the player's message for that turn
     (plain text, which the LLM sees the same way as an ordinary message)
 ```
 
@@ -1596,13 +1596,12 @@ POST /api/actions
 
 {
   "requestId": "...",
-  "type": "submit_interaction",
+  "type": "submit_actions",
   "sessionId": "...",
   "payload": {
-    "turnId": "...",
-    "submissions": [
-      { "interactionId": "form-1", "type": "form", "values": { "name": "林清风" } },
-      { "interactionId": "choice-1", "type": "choice", "values": { "selectedId": "a", "selectedLabel": "跟随黑袍人" } }
+    "actions": [
+      { "kind": "act", "interaction": { "turnId": "...", "interactionId": "form-1", "type": "form" }, "fields": { "name": "林清风" } },
+      { "kind": "say", "interaction": { "turnId": "...", "interactionId": "choice-1", "type": "choice" }, "fields": { "selectedId": "a", "selectedLabel": "跟随黑袍人" } }
     ]
   }
 }

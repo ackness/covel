@@ -26,6 +26,7 @@ import type {
   InputSlot,
   RuntimeManifest,
   RuntimeResult,
+  TurnAction,
   TurnInput,
 } from "@covel/shared";
 import type { HookPipeline } from "./pipeline.js";
@@ -124,7 +125,10 @@ function makeObserveHook<P>(
 // ── TurnStart ────────────────────────────────────────────────────
 
 export interface TurnStartPayload {
+  /** The kernel's rendering of `actions`. */
   readonly playerMessage: string;
+  /** The player's resolved actions; empty for a turn without player input. */
+  readonly actions: readonly TurnAction[];
   readonly activeRuntimes: readonly string[];
 }
 

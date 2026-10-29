@@ -116,8 +116,8 @@ describe("plugin floor gates", () => {
     // Player messages settle as an empty committed execution, twice: the
     // session stays usable after the first one.
     for (const expectedTurns of [1, 2]) {
-      const turn = await action(session.id, "send_message", {
-        content: "Look around.",
+      const turn = await action(session.id, "submit_actions", {
+        actions: [{ kind: "say", text: "Look around." }],
       });
       expect(turn.status).toBe(200);
       const events = parseJsonFrames<Frame>(await turn.text());
@@ -157,8 +157,8 @@ describe("plugin floor gates", () => {
     };
     expect([...session.activePlugins].sort()).toEqual([...requested].sort());
 
-    const turn = await action(session.id, "send_message", {
-      content: "Walk north.",
+    const turn = await action(session.id, "submit_actions", {
+      actions: [{ kind: "say", text: "Walk north." }],
     });
     expect(turn.status).toBe(200);
     const events = parseJsonFrames<Frame>(await turn.text());

@@ -1842,7 +1842,7 @@ async function runMain(
 
   // Auto form handling: setup can chain forms (character creation, then a
   // rules plugin's point allocation). Answer each form the last request
-  // surfaced with a submit_interaction action, until setup asks for no more.
+  // surfaced with a submit_actions answer, until setup asks for no more.
   const submittedForms = new Set<string>();
   const nextSetupForm = (): DetectedForm | null => {
     for (const record of exec.turnRecords) {
@@ -1871,18 +1871,21 @@ async function runMain(
     // One action stores the answer and runs the turn that reads it.
     console.log("");
     console.log(
-      `  Turn ${ctx.turnNumber + 1}: submit_interaction (phase=${bandLabel()}, completedPlayerTurns=${ctx.completedPlayerTurns})`,
+      `  Turn ${ctx.turnNumber + 1}: form answer (phase=${bandLabel()}, completedPlayerTurns=${ctx.completedPlayerTurns})`,
     );
     console.log(DIV);
     exec = await runTurn(args, session.id, {
-      type: "submit_interaction",
+      type: "submit_actions",
       payload: {
-        turnId: detectedForm.turnId,
-        submissions: [
+        actions: [
           {
-            interactionId: detectedForm.interactionId,
-            type: "form",
-            values,
+            kind: "act",
+            interaction: {
+              turnId: detectedForm.turnId,
+              interactionId: detectedForm.interactionId,
+              type: "form",
+            },
+            fields: values,
           },
         ],
       },
@@ -1930,13 +1933,13 @@ async function runMain(
       defaultPlayerMessages[i % defaultPlayerMessages.length];
     console.log("");
     console.log(
-      `  Turn ${ctx.turnNumber + 1}: send_message #${i + 1} (phase=${bandLabel()}, completedPlayerTurns=${ctx.completedPlayerTurns})`,
+      `  Turn ${ctx.turnNumber + 1}: say #${i + 1} (phase=${bandLabel()}, completedPlayerTurns=${ctx.completedPlayerTurns})`,
     );
     console.log(DIV);
     console.log(`  Player: ${truncate(content, 72)}`);
 
     exec = await runTurn(args, session.id, {
-      type: "send_message",
+      type: "submit_actions",
       payload: { content },
     });
     reportTurn(ctx, exec);

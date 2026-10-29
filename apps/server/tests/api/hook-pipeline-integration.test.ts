@@ -226,9 +226,9 @@ describe("POST /api/actions — hook pipeline wired through commit chain", () =>
       },
       body: JSON.stringify({
         requestId: "settings",
-        type: "send_message",
+        type: "submit_actions",
         sessionId,
-        payload: { content: "look around" },
+        payload: { actions: [{ kind: "say", text: "look around" }] },
       }),
     });
     expect(response.status).toBe(200);
@@ -284,9 +284,9 @@ describe("POST /api/actions — hook pipeline wired through commit chain", () =>
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         requestId: "request-shaping",
-        type: "send_message",
+        type: "submit_actions",
         sessionId,
-        payload: { content: "look around" },
+        payload: { actions: [{ kind: "say", text: "look around" }] },
       }),
     });
     const events = await drainActionStream(response);
@@ -320,9 +320,9 @@ describe("POST /api/actions — hook pipeline wired through commit chain", () =>
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         requestId: "stop-at-commit",
-        type: "send_message",
+        type: "submit_actions",
         sessionId,
-        payload: { content: "look around" },
+        payload: { actions: [{ kind: "say", text: "look around" }] },
       }),
     });
     const events = await drainActionStream(response);
@@ -364,9 +364,9 @@ describe("POST /api/actions — hook pipeline wired through commit chain", () =>
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         requestId: "req-hooks",
-        type: "send_message",
+        type: "submit_actions",
         sessionId,
-        payload: { content: "look around" },
+        payload: { actions: [{ kind: "say", text: "look around" }] },
       }),
     });
     expect(res.status).toBe(200);
@@ -407,9 +407,9 @@ describe("POST /api/actions — hook pipeline wired through commit chain", () =>
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         requestId: "req-scope",
-        type: "send_message",
+        type: "submit_actions",
         sessionId,
-        payload: { content: "scope test" },
+        payload: { actions: [{ kind: "say", text: "scope test" }] },
       }),
     });
     expect(res.status).toBe(200);
@@ -433,9 +433,9 @@ describe("POST /api/actions — hook pipeline wired through commit chain", () =>
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         requestId: "req-abort",
-        type: "send_message",
+        type: "submit_actions",
         sessionId,
-        payload: { content: "try again" },
+        payload: { actions: [{ kind: "say", text: "try again" }] },
       }),
     });
     expect(res.status).toBe(200);
@@ -478,9 +478,9 @@ describe("POST /api/actions — hook pipeline wired through commit chain", () =>
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           requestId,
-          type: "send_message",
+          type: "submit_actions",
           sessionId,
-          payload: { content: requestId },
+          payload: { actions: [{ kind: "say", text: requestId }] },
         }),
       });
 
@@ -507,9 +507,9 @@ describe("POST /api/actions — hook pipeline wired through commit chain", () =>
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         requestId: "req-auto-snapshot",
-        type: "send_message",
+        type: "submit_actions",
         sessionId,
-        payload: { content: "snapshot this turn" },
+        payload: { actions: [{ kind: "say", text: "snapshot this turn" }] },
       }),
     });
     await drainActionStream(res);

@@ -1,4 +1,10 @@
 import { datasetKeyIssue, datasetSchemaIssues } from "./dataset-rules.js";
+import {
+  actionKindDeclarationIssues,
+  actionKindSchemaField,
+  compileActionKinds,
+  isSchemaObject,
+} from "./action-kinds.js";
 import { assertInsideRoot } from "./path-containment.js";
 import { fileExists } from "./file-system.js";
 import { provideHostModules } from "./host-modules.js";
@@ -394,6 +400,32 @@ export async function loadPluginDefinition(
     parsedPackage.plugin.contributes,
   );
   if (schemaIssue) throw new Error(schemaIssue);
+  const actionKindDeclarations = parsedPackage.plugin.contributes?.actionKinds;
+  const [actionKindIssue] = actionKindDeclarationIssues(
+    rootPath,
+    actionKindDeclarations,
+  );
+  if (actionKindIssue) throw new Error(actionKindIssue);
+  const actionKindSchemas: Record<
+    string,
+    Readonly<Record<string, unknown>>
+  > = {};
+  for (const [index, declaration] of (actionKindDeclarations ?? []).entries()) {
+    if (!declaration.schema) continue;
+    const field = actionKindSchemaField(index);
+    const schemaPath = path.resolve(discovery.rootPath, declaration.schema);
+    await assertInsideRoot(
+      discovery.rootPath,
+      schemaPath,
+      "Action kind schema path traversal rejected",
+    );
+    const document = await readSchemaFile(schemaPath, field);
+    if (!isSchemaObject(document))
+      throw new Error(
+        `${rootPath}: ${field}: ${declaration.schema} must hold a JSON Schema object`,
+      );
+    actionKindSchemas[declaration.name] = document;
+  }
   if (parsedPackage.plugin.id !== discovery.id)
     throw new Error(
       `${rootPath}: id must match plugin directory ${discovery.id}`,
@@ -449,6 +481,11 @@ export async function loadPluginDefinition(
     ),
     contractSchemas,
     datasetSchemas,
+    actionKinds: compileActionKinds(
+      parsedPackage.plugin.id,
+      actionKindDeclarations,
+      actionKindSchemas,
+    ),
   };
   const plugin = packageManifest.plugin;
   validateRuntimeDeclarations(packageManifest, manifests);

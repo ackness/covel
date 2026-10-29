@@ -1,6 +1,7 @@
 import * as api from "@/services/api.js";
 import { ApiError } from "@/services/api/request.js";
 import type { SessionWorkspace } from "@/services/data-service.js";
+import { interactionActionKind, type JsonValue } from "@covel/shared";
 import type { SessionActions } from "./context.js";
 import {
   enrichGameStateFromSnapshot,
@@ -54,7 +55,8 @@ function readFormIssues(
 }
 
 /**
- * Sends the answer as one `submit_interaction` action: the server stores it
+ * Sends the answer as one `submit_actions` action whose action answers the
+ * interaction: the server stores it
  * and runs the follow-up turn on the same stream, so there is no moment where
  * the answer is stored and its turn was never asked for.
  *
@@ -139,10 +141,15 @@ export async function submitInteractionBlock(
           {
             requestId: owner.requestId,
             sessionId: sid,
-            type: "submit_interaction",
+            type: "submit_actions",
             payload: {
-              turnId,
-              submissions: [{ interactionId, type, values }],
+              actions: [
+                {
+                  kind: interactionActionKind(type),
+                  interaction: { turnId, interactionId, type },
+                  fields: values as Record<string, JsonValue>,
+                },
+              ],
             },
           },
           onEvent,

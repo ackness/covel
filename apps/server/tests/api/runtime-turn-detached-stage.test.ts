@@ -98,6 +98,7 @@ function descriptor(): DeferredRuntimeJob {
     turnDigest: {
       turnId: "source-turn",
       playerMessage: "",
+      actions: [],
       lastPlayerInput: null,
       narrativeText: "",
       toolCallSummaries: [],

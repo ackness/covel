@@ -207,8 +207,10 @@ export async function executeOneRuntime(
       // never read from the delta — the nested execution inherits them.
       const delta = readRecursiveCallDelta(rawDelta, manifest.pluginId);
 
+      // A nested execution has no player input of its own.
+      const { actions: _parentActions, ...parentInput } = input;
       const nestedInput: RecursiveTurnInput = {
-        ...input,
+        ...parentInput,
         ...(delta.manualTrigger ? { manualTrigger: delta.manualTrigger } : {}),
         sessionId: input.sessionId,
         turnId: input.turnId,

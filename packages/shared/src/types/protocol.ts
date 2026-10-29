@@ -697,8 +697,7 @@ export interface SessionExecutionStatus {
   readonly retry?: {
     readonly type:
       | "start_session"
-      | "send_message"
-      | "execute_command"
+      | "submit_actions"
       | "retry_turn"
       | "retry_failed_runtimes"
       | "retry_runtime";
@@ -739,7 +738,7 @@ export interface SessionSnapshot {
   readonly messagesCursor?: PageCursor | null;
   /**
    * The forms, choices and confirmations of the turns in `messages` that the
-   * player already answered through the `submit_interaction` action, with the
+   * player already answered through a `submit_actions` answer, with the
    * values the server stored. Answers to older turns are left out. An
    * entry is written in the transaction that starts the follow-up turn, so
    * each one has a turn. The client marks the matching message blocks as

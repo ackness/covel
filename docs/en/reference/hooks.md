@@ -137,7 +137,7 @@ Payload: `{ sessionId, worldId? }`.
 
 Fires at the start of each execution, before any runtime is selected. A player turn, a manual run, and a background job each count as one execution.
 
-Payload: `{ playerMessage, activeRuntimes }`. `activeRuntimes` is the list of runtime IDs for this session.
+Payload: `{ playerMessage, actions, activeRuntimes }`. `playerMessage` is the text the kernel renders from the player's actions; `actions` is the resolved actions (each `{ seatId, kind, actorId?, text?, fields?, interaction?, source }`), an empty array for an execution without player input; `activeRuntimes` is the list of runtime IDs for this session.
 
 `abort` ends this execution, and no runtime runs. `reason` is returned to the client as the reason the turn was stopped.
 

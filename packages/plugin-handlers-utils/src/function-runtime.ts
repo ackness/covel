@@ -5,6 +5,7 @@ import type {
   PluginServiceClient,
   PluginServiceGateway,
 } from "./plugin-api.js";
+import type { TurnAction } from "./actions.js";
 import type { ExtensionWorldModel } from "./extension-points.js";
 import type { HandlerResult, JobStatusEffect } from "./handler-result.js";
 import type { PluginToolResult } from "./tool-result.js";
@@ -153,7 +154,10 @@ export interface PluginPlayerInputSubmission {
  */
 export interface PluginTurnDigest {
   readonly turnId: string;
+  /** The kernel's rendering of `actions`, as the model reads it. */
   readonly playerMessage: string;
+  /** The player's resolved actions of the turn; empty without player input. */
+  readonly actions: readonly TurnAction[];
   readonly lastPlayerInput: PluginPlayerInputSubmission | null;
   /** Story text of the turn's successful story runtimes, joined by blank lines. */
   readonly narrativeText: string;
@@ -271,7 +275,18 @@ export interface PluginFunctionContext {
   readonly turnId: string;
   readonly pluginId: string;
   readonly runtimeId: string;
+  /**
+   * The player's input as the model reads it: the kernel's rendering of
+   * `playerActions`. A single player's message is its text unchanged; other
+   * submissions name the acting character and the kind.
+   */
   readonly playerMessage: string;
+  /**
+   * The player's resolved actions of this turn, in submission order. Empty
+   * for an execution without player input: the opening, a manual or event
+   * run, a detached job, a nested `recursiveCall`.
+   */
+  readonly playerActions: readonly TurnAction[];
   /**
    * The scheduler's logical turn: committed main-loop player turns plus one.
    * Setup and the opening continuation share turn 1 with the first message;

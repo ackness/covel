@@ -195,6 +195,7 @@ describe("scheduler-driven detached turn completion", () => {
         turnDigest: {
           turnId: "source-turn",
           playerMessage: "",
+          actions: [],
           lastPlayerInput: null,
           narrativeText: "",
           toolCallSummaries: [],

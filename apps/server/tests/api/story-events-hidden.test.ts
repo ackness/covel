@@ -289,9 +289,9 @@ describe("hidden world data and story events", () => {
       },
       body: JSON.stringify({
         requestId: `hidden-${requestIndex}`,
-        type: "send_message",
+        type: "submit_actions",
         sessionId: id,
-        payload: { content },
+        payload: { actions: [{ kind: "say", text: content }] },
       }),
     });
     expect(res.status).toBe(200);

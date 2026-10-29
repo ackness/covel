@@ -134,6 +134,7 @@ Extract facts supported by runtime-inputs.narrative.value, then call save-facts.
 | `settings` | 玩家配置项，运行时通过 `ctx.userSettings` 读取 |
 | `data` | 本插件数据 namespace 的 schema、version、accepts、search |
 | `datasets` | 本插件拥有的带类型数据集：名字即 namespace，写 schema、key、ops，见[数据集](#数据集contributesdatasets) |
+| `actionKinds` | 玩家能提交的行动类型：名字、可用身份、文字规则、`fields` 的 schema、显示名称，见[行动类型](#行动类型contributesactionkinds) |
 | `ui` | 包根相对的 `right/message/view` UI spec 路径 |
 | `ui.view` | 包根相对的完整故事栏视图 spec 路径；声明与授权见[插件视图](./ui-panels.md#插件视图) |
 | `worldProjections` | 世界数据投影声明 |
@@ -556,7 +557,8 @@ Agent 的副作用只来自工具：模型能写什么，以 `agent.tools` 白�
 
 | 字段                          | 含义                                                                                                                                                                                                                                                         |
 | ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `ctx.playerMessage`           | 当前输入的文本字符串                                                                                                                                                                                                                                         |
+| `ctx.playerMessage`           | 玩家这一回合的输入：内核从 `ctx.playerActions` 渲染出的文字。单人玩家的普通输入是原文；多个角色、主持人或插件类型会标出角色名和类型名，见 [API · 玩家消息怎么渲染](./api.md#玩家消息怎么渲染)                                                                |
+| `ctx.playerActions`           | 这一回合玩家解析后的行动，按提交顺序，每个是 `{ seatId, kind, actorId?, text?, fields?, interaction?, source }`。开场、手动运行、事件、后台作业和 `ctx.recursiveCall` 的嵌套运行是空数组                                                                     |
 | `ctx.logicalTurn`             | 调度器的逻辑回合：已提交的主循环玩家回合数加一。函数 handler 和插件工具的上下文里都有。setup、开场续写和第一条玩家消息同为第 1 回合，`startTurn` / `every` 也按它计数                                                                                        |
 | 工具上下文的 `turnNumber`     | 会话里已记录的玩家消息数，包括 setup 的表单提交                                                                                                                                                                                                              |
 | `ctx.session.lastPlayerInput` | 源执行开始时最近的一条 `PlayerInputSubmission \| null`，包含 `id/sessionId/turnId/formId/values/createdAt`                                                                                                                                                   |
@@ -651,7 +653,8 @@ Agent 的副作用只来自工具：模型能写什么，以 `agent.tools` 白�
 | 字段                | 含义                                                   |
 | ------------------- | ------------------------------------------------------ |
 | `turnId`            | 源回合的 ID                                            |
-| `playerMessage`     | 玩家这一回合的输入                                     |
+| `playerMessage`     | 玩家这一回合的输入（行动渲染出的文字）                 |
+| `actions`           | 玩家这一回合解析后的行动；没有玩家输入时是空数组       |
 | `lastPlayerInput`   | 和 `ctx.session.lastPlayerInput` 同一份快照，或 `null` |
 | `narrativeText`     | 这一回合成功的 story runtime 写的正文，用空行连接      |
 | `toolCallSummaries` | 成功、可见的工具调用，每次一行简短摘要                 |
@@ -1032,6 +1035,7 @@ namespace 声明 `search` 之后，它的记录进入框架的记忆检索（[`m
 - 引用的 entry、handler、guard、JSON Schema 和 UI 文件必须在包里。
 - 每份 JSON UI spec 声明 `view` 或 `webview` 中的一个；`view` 里的组件名必须在[组件目录](./ui-components.md)里；`repeat.statePath` 和 `$item` 的写法必须合法（见 [UI 面板](./ui-panels.md#json-render-绑定速查)）。报错给出 spec 文件和节点的路径。
 - 内置工具名和插件工具声明、包内的 runtime 引用，以及根契约依赖必须一致。
+- `contributes.actionKinds` 的 `name` 不能是基础行动类型、不能重复；`schema` 文件必须在包里并且是 JSON 对象。
 - `contributes.datasets` 的 schema 文件必须在包里并且是合法 JSON；`key` 必须是 schema 顶层 `properties` 里的必填属性（schema 顶层没有 `properties` 时跳过）；同名出现在 `contributes.data` 时两边必须用同一份 schema。
 - 跨字段的规则（例如 `schedule.detached` 只能用在 `post-turn` 或 `audit`，故事 runtime 的契约输入必须写 `required: false`）报错时给出文件路径和你写的字段路径，例如 `runtimes/note/RUNTIME.md: schedule.stage: …`。
 
@@ -1196,6 +1200,31 @@ contributes:
 - 不经过提交流水线的写入不做这些检查：世界数据的导入和同步（按 source 的 `schema` 校验，见 [World Data · 配套插件数据](./world-data.md#配套插件数据)）、plugin action RPC 的 `context.store.setPluginData`，以及管理 API 的 `PUT`。
 
 详见[事务 · 操作式写入](./transactions.md#操作式写入plugindataupdate)。
+
+### 行动类型（`contributes.actionKinds`）
+
+玩家每次提交的是一组行动（见 [API · submit_actions](./api.md#submit_actions)）。内核有六个基础类型：`say`、`act`、`narrate`、`direct`、`advance`、`command`。插件可以再声明自己的类型，不用写服务端代码：
+
+```yaml
+contributes:
+  actionKinds:
+    - name: whisper
+      roles: [player] # 可选：哪些座位身份能用，默认 [player]
+      text: required # 可选：required / optional（默认）/ none
+      actor: true # 可选：是否以角色的身份进行，默认 true
+      schema: ./schemas/whisper.json # 可选：fields 要符合的 JSON Schema
+      display:
+        label: { zh: 耳语, en: whispers }
+        icon: ear
+        placeholder: { zh: 对谁说悄悄话, en: Whisper to someone }
+```
+
+- **线上的类型名是 `<pluginId>/<name>`。** 上例在 `whisper-pack` 里就是 `whisper-pack/whisper`。两个插件可以用同一个 `name`，不会冲突。`name` 用小写 kebab-case，不能是基础类型的名字，在包里不能重复。
+- `roles` 不能为空。身份和基础类型的对应见[座位](./world-model.md#座位)。
+- `schema` 是包内的 JSON 文件，加载、`pnpm validate:plugin` 和安装都会读取它；缺文件、不是 JSON 对象、路径越出包根都会报错。没有 `schema` 的类型不接受 `fields`。
+- `display.label` 是输入框里的名称，也是渲染给模型看的类型名，按会话语言选。例如 `【阿雅·耳语】在这边。`。
+- 只有这局可运行的插件声明的类型可用。服务端按目录校验每个行动，见 [`GET /api/sessions/:id/action-kinds`](./api.md#行动类型目录)。
+- 函数 runtime 从 `ctx.playerActions` 读到行动，`fields` 原样保留，见[handler 上下文里的回合信息](#handler-上下文里的回合信息)。
 
 ### 保留的数据命名空间
 

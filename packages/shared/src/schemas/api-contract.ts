@@ -20,23 +20,18 @@ import {
 } from "./plugin-schemas.js";
 import { i18nTextSchema, worldDimensionsSchema } from "./world.js";
 import { packageCreditFields } from "./package-info.js";
+import { turnActionRequestsSchema } from "./action.js";
 
-/**
- * The longest message a player's action may carry, in characters. A form
- * answer becomes such a message, so a submission is held to the same limit.
- */
-export const MAX_PLAYER_MESSAGE_CHARS = 100_000;
+export { MAX_PLAYER_MESSAGE_CHARS } from "./action.js";
 
 const ACTION_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:/-]*$/;
 const SAFE_WORLD_ID_PATTERN = /^[a-z0-9_-]{1,64}$/i;
 const ACTION_TYPES = [
-  "send_message",
-  "execute_command",
+  "submit_actions",
   "start_session",
   "retry_runtime",
   "retry_failed_runtimes",
   "retry_turn",
-  "submit_interaction",
 ] as const;
 
 function requiredActionString(
@@ -85,30 +80,12 @@ export const actionRequestSchema = z.discriminatedUnion("type", [
   z
     .object({
       ...actionBase,
-      type: z.literal("send_message"),
+      type: z.literal("submit_actions"),
+      // Seats, kinds, actors and fields are checked against the session on
+      // the server; an interaction answer against its committed interaction.
       payload: z
         .object({
-          content: requiredActionString(
-            "send_message.content",
-            MAX_PLAYER_MESSAGE_CHARS,
-          ),
-          inputMessageId: requiredActionString(
-            "inputMessageId",
-            128,
-            ACTION_ID_PATTERN,
-          ).optional(),
-          ...actionRecoveryPayload,
-        })
-        .strict(),
-    })
-    .strict(),
-  z
-    .object({
-      ...actionBase,
-      type: z.literal("execute_command"),
-      payload: z
-        .object({
-          command: requiredActionString("execute_command.command", 10_000),
+          actions: turnActionRequestsSchema,
           inputMessageId: requiredActionString(
             "inputMessageId",
             128,
@@ -187,40 +164,6 @@ export const actionRequestSchema = z.discriminatedUnion("type", [
       ...actionBase,
       type: z.literal("retry_turn"),
       payload: z.object(actionRecoveryPayload).strict(),
-    })
-    .strict(),
-  z
-    .object({
-      ...actionBase,
-      type: z.literal("submit_interaction"),
-      // The answer itself is checked against the committed interaction under
-      // the session lock; a refusal there is written for the player.
-      payload: z
-        .object({
-          turnId: requiredActionString(
-            "submit_interaction.turnId",
-            256,
-            ACTION_ID_PATTERN,
-          ),
-          submissions: z
-            .array(
-              // Not strict: what a client adds beside these three is dropped,
-              // never read (a form's provider comes from the committed message).
-              z.object({
-                interactionId: requiredActionString(
-                  "submit_interaction.interactionId",
-                  256,
-                ),
-                type: z.enum(["form", "choice", "confirmation"]),
-                values: z.record(z.string(), z.unknown()),
-              }),
-            )
-            .min(1, {
-              message: "submit_interaction.submissions must not be empty",
-            })
-            .max(20),
-        })
-        .strict(),
     })
     .strict(),
 ]);

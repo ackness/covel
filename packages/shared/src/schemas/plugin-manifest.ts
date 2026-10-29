@@ -5,6 +5,7 @@ import {
 } from "../extension-points/contracts.js";
 import { z } from "zod";
 import { rpcActionNameSchema } from "./rpc-action.js";
+import { actionKindDeclarationSchema } from "./action.js";
 import { FRAMEWORK_PLUGIN_ID } from "../framework-plugin-id.js";
 import { hostVersionRangeSchema } from "../utils/host-version-range.js";
 import { packageCreditFields } from "./package-info.js";
@@ -397,6 +398,12 @@ export const pluginManifestSchema = z.strictObject({
         )
         .optional(),
       commands: pluginCommandsSchema.optional(),
+      actionKinds: z
+        .array(actionKindDeclarationSchema)
+        .describe(
+          "Action kinds players may submit besides the base kinds. Pure declaration: the server checks each action against its roles, text rule and fields schema. The wire kind is `<pluginId>/<name>`.",
+        )
+        .optional(),
       services: z
         .array(contractIdSchema)
         .describe(

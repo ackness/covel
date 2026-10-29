@@ -212,6 +212,42 @@ export function registerRuntimeRecordStoreSuites(
       expect(input.metadata).toEqual({ local: true });
     });
 
+    it("keeps a submission's resolved actions in metadata", async () => {
+      // A player's message carries the actions it submitted beside its turn.
+      const actions = [
+        {
+          seatId: "main",
+          kind: "say",
+          actorId: "char-hero",
+          text: "Open the gate.",
+          source: "player",
+        },
+        {
+          seatId: "main",
+          kind: "act",
+          text: "I plan to climb.",
+          fields: { plan: "climb", steps: 3, ready: true, gear: ["rope"] },
+          interaction: { turnId: "ask", interactionId: "plan", type: "form" },
+          source: "player",
+        },
+      ];
+      const adopted = makeMessage({ role: "user" });
+      await store.addMessage(adopted);
+      await store.commitPlayerInputMessage({
+        ...adopted,
+        metadata: { turnId: "committed", actions },
+      });
+      const inserted = makeMessage({
+        role: "user",
+        metadata: { turnId: "server-only", actions },
+      });
+      await store.commitPlayerInputMessage(inserted);
+      expect(await store.listMessages("sess-1")).toEqual([
+        { ...adopted, metadata: { turnId: "committed", actions } },
+        inserted,
+      ]);
+    });
+
     it("treats an identical same-turn commit as a no-op", async () => {
       const input = makeMessage({
         role: "user",

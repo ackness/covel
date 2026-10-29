@@ -129,15 +129,18 @@ describe("interaction submission", () => {
 
     expect(api.sendAction).toHaveBeenCalledOnce();
     expect(stream().request).toMatchObject({
-      type: "submit_interaction",
+      type: "submit_actions",
       sessionId: "session-1",
       payload: {
-        turnId: "turn-1",
-        submissions: [
+        actions: [
           {
-            interactionId: "form-1",
-            type: "form",
-            values: { name: "Player", points: "3" },
+            kind: "act",
+            interaction: {
+              turnId: "turn-1",
+              interactionId: "form-1",
+              type: "form",
+            },
+            fields: { name: "Player", points: "3" },
           },
         ],
       },

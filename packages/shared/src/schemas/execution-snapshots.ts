@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { turnActionSchema } from "./action.js";
 
 /** Source execution facts; never reconstructed from a worker's later state. */
 export const playerInputSubmissionSchema = z
@@ -16,6 +17,7 @@ export const turnDigestSchema = z
   .strictObject({
     turnId: z.string(),
     playerMessage: z.string(),
+    actions: z.array(turnActionSchema).readonly(),
     lastPlayerInput: playerInputSubmissionSchema.nullable(),
     narrativeText: z.string(),
     toolCallSummaries: z.array(z.string()).readonly(),

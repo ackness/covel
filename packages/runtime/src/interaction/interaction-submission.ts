@@ -15,6 +15,7 @@ import {
   resolveI18nText,
   type I18nText,
   type InteractionType,
+  type TurnAction,
 } from "@covel/shared";
 import type { FormIssue, ValidatePluginForm } from "../rpc/form-validator.js";
 import type { DataStore } from "@covel/store";
@@ -43,11 +44,12 @@ export interface PreparedInteractionSubmission {
     readonly filledNarrative: string;
   }>;
   /**
-   * What the follow-up turn takes as the player's message: the filled
-   * narratives, one per line. Empty when every interaction declares
-   * `submitBehavior.echoFilledNarrative: false`.
+   * The text of each submitted answer, in submission order: its filled
+   * narrative, or empty when the interaction declares
+   * `submitBehavior.echoFilledNarrative: false` or the entry repeats an
+   * earlier one. The route uses it as the text of the answering action.
    */
-  readonly playerMessage: string;
+  readonly texts: readonly string[];
   /** Store the answers. Call it in the transaction that starts the turn. */
   persist(target: Pick<DataStore, "savePlayerInput">): Promise<void>;
 }
@@ -608,6 +610,38 @@ export class InteractionAlreadySubmittedError extends InteractionSubmissionError
 }
 
 /**
+ * The submitter's payload for the interaction answers among `actions`, in
+ * order: `undefined` when none answers an interaction. One submission answers
+ * the interactions of one turn, so answers to two turns are refused.
+ */
+export function interactionSubmissionPayload(
+  actions: readonly Pick<TurnAction, "interaction" | "fields">[],
+):
+  | {
+      readonly turnId: string;
+      readonly submissions: readonly Submission[];
+    }
+  | undefined {
+  const answers = actions.flatMap(({ interaction, fields }) =>
+    interaction ? [{ interaction, fields }] : [],
+  );
+  const turnId = answers[0]?.interaction.turnId;
+  if (turnId === undefined) return undefined;
+  if (answers.some(({ interaction }) => interaction.turnId !== turnId))
+    throw new InteractionSubmissionError(
+      "All interaction answers of one submission must answer the same turn",
+    );
+  return {
+    turnId,
+    submissions: answers.map(({ interaction, fields }) => ({
+      interactionId: interaction.interactionId,
+      type: interaction.type,
+      values: { ...fields },
+    })),
+  };
+}
+
+/**
  * Call the submitter under the session lock: the "already answered" check and
  * the caller's `persist` are one decision only while no other request writes.
  */
@@ -682,6 +716,7 @@ export function createInteractionSubmitter(
       readonly echo: boolean;
     }> = [];
     const preparedByKey = new Map<string, (typeof prepared)[number]>();
+    const texts: string[] = [];
 
     for (const sub of submissions) {
       const located = findCommittedInteraction(
@@ -756,6 +791,7 @@ export function createInteractionSubmitter(
             `Interaction ${sub.interactionId} is submitted more than once with conflicting values`,
           );
         }
+        texts.push("");
         continue;
       }
 
@@ -784,14 +820,12 @@ export function createInteractionSubmitter(
       };
       prepared.push(item);
       preparedByKey.set(key, item);
+      texts.push(item.echo ? item.filledNarrative : "");
     }
 
-    const playerMessage = prepared
-      .filter((item) => item.echo && item.filledNarrative)
-      .map((item) => item.filledNarrative)
-      .join("\n");
     // Fields that each fit can still add up to more than one message holds.
-    if (playerMessage.length > MAX_PLAYER_MESSAGE_CHARS) {
+    const total = texts.reduce((sum, text) => sum + text.length, 0);
+    if (total > MAX_PLAYER_MESSAGE_CHARS) {
       throw new FormRejectedError([
         {
           message: resolveLabel(ANSWER_TOO_LONG, locale).replace(
@@ -810,7 +844,7 @@ export function createInteractionSubmitter(
         values: item.values,
         filledNarrative: item.filledNarrative,
       })),
-      playerMessage,
+      texts,
       persist: async (target) => {
         const createdAt = new Date().toISOString();
         for (const item of prepared) {
