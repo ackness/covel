@@ -327,7 +327,7 @@ Authorization is not kept across a backend restart. In particular, an old author
 
 Players without a source checkout or pnpm can open **Settings → Install & manage** and click **Validate** on an installed package, or select plugin or world and drop a ZIP. ZIP validation does not install the package. The API also accepts directory paths within allowed roots; the UI has no directory picker yet.
 
-ZIP validation uses the [installation rules for plugin IDs](#what-the-installer-does-and-does-not-do), preserving identities derived from the package directory or `package.json.name` instead of using the temporary directory name.
+ZIP validation uses the [installation rules for plugin IDs](#what-the-installer-does-and-does-not-do), preserving identities derived from the package directory or `package.json.name` instead of using the temporary directory name. When no valid ID can be resolved, the report omits `id` and returns an `identity-invalid` error with `ok: false`. The static validator reports manifest parsing errors separately.
 
 Validation reads manifests and referenced files, checking fields, files, languages and static declarations. It never imports or executes package code, and changes no world or save. It shares the CLI validation core; the plugin CLI displays the first failure, while the app continues collecting problems that can be checked independently.
 

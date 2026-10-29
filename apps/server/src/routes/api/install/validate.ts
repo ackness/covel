@@ -120,14 +120,17 @@ for (const kind of ["plugin", "world"] as const) {
     let source: Awaited<ReturnType<typeof resolveValidationSource>> | undefined;
     try {
       source = await resolveValidationSource(c, kind, c.req.raw);
-      const { dir, id } = source;
+      const { dir, id, issues: sourceIssues = [] } = source;
       const report = await runSerial(async () => {
         if (kind === "plugin") {
           const result = await validatePluginPackage(dir);
-          return validationReport(kind, dir, result.issues, id ?? result.id, {
-            version: result.version,
-            languages: result.languages,
-          });
+          return validationReport(
+            kind,
+            dir,
+            [...sourceIssues, ...result.issues],
+            id === null ? undefined : (id ?? result.id),
+            { version: result.version, languages: result.languages },
+          );
         }
         const catalogue = c.get("pluginRegistry") ?? (await bundledCatalogue());
         const result = await validateWorldPackage({
@@ -149,7 +152,12 @@ for (const kind of ["plugin", "world"] as const) {
             hint: diagnostic.hint,
           }),
         );
-        return validationReport(kind, dir, issues, id ?? result.worldId);
+        return validationReport(
+          kind,
+          dir,
+          [...sourceIssues, ...issues],
+          id === null ? undefined : (id ?? result.worldId),
+        );
       });
       return c.json(report);
     } catch (error) {

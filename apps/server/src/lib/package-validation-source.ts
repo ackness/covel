@@ -1,12 +1,13 @@
-import { lstat, mkdir, mkdtemp, realpath, rename, rm } from "node:fs/promises";
+import { lstat, mkdtemp, realpath, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import type { Context } from "hono";
 import { z } from "zod";
 import { parse as parseYaml } from "yaml";
 import { isPathInside, readPlainYamlFrontmatter } from "@covel/plugin-loader";
+import type { PackageValidationIssue } from "@covel/shared";
 import { resolveUserResourceDirs } from "./user-resource-dirs.js";
-import { SAFE_WORLD_ID_RE } from "./validators.js";
+import { SAFE_WORLD_ID_DESC, SAFE_WORLD_ID_RE } from "./validators.js";
 import { findWorldPackageRoots } from "../world-data/session-import/utils.js";
 import {
   installPluginId,
@@ -30,17 +31,26 @@ function uploadIdentity(
   entries: readonly ExtractedEntry[],
   directory: string | undefined,
   fileName: string | undefined,
-): string | undefined {
+): { id: string | null; issues: PackageValidationIssue[] } {
+  const file = kind === "plugin" ? "PLUGIN.md" : "world.yaml";
+  const unresolved = { id: null, issues: [] };
+  const manifest = entries.find((entry) => entry.relativePath === file);
+  if (!manifest) return unresolved;
+  let frontmatter: Record<string, unknown>;
   try {
-    const manifest = entries.find(
-      (entry) =>
-        entry.relativePath === (kind === "plugin" ? "PLUGIN.md" : "world.yaml"),
-    );
-    if (!manifest) return undefined;
+    frontmatter =
+      kind === "plugin"
+        ? readPlainYamlFrontmatter(manifest.content.toString("utf8")).data
+        : z
+            .object({ id: z.unknown().optional() })
+            .passthrough()
+            .parse(parseYaml(manifest.content.toString("utf8")));
+  } catch {
+    // Malformed manifests belong to the static validator, not identity issues.
+    return unresolved;
+  }
+  try {
     if (kind === "plugin") {
-      const frontmatter = readPlainYamlFrontmatter(
-        manifest.content.toString("utf8"),
-      ).data;
       const packageJson = entries.find(
         (entry) => entry.relativePath === "package.json",
       );
@@ -53,18 +63,31 @@ function uploadIdentity(
       } catch {
         // An unreadable package.json does not hide manifest diagnostics.
       }
-      return installPluginId(frontmatter, directory, metadata);
+      return {
+        id: installPluginId(frontmatter, directory, metadata),
+        issues: [],
+      };
     }
-    const { id } = z
-      .object({ id: z.unknown().optional() })
-      .parse(parseYaml(manifest.content.toString("utf8")));
+    const { id } = frontmatter;
     const identity = id === undefined ? (directory ?? fileName) : id;
-    return typeof identity === "string" && SAFE_WORLD_ID_RE.test(identity)
-      ? identity
-      : undefined;
-  } catch {
-    // The static validator reports invalid manifests as structured issues.
-    return undefined;
+    if (typeof identity !== "string" || !SAFE_WORLD_ID_RE.test(identity))
+      throw new Error(
+        `World package identity must match ${SAFE_WORLD_ID_DESC}; write id in world.yaml or use a valid package folder or ZIP filename`,
+      );
+    return { id: identity, issues: [] };
+  } catch (error) {
+    return {
+      id: null,
+      issues: [
+        {
+          severity: "error",
+          code: "identity-invalid",
+          file,
+          field: "id",
+          message: error instanceof Error ? error.message : String(error),
+        },
+      ],
+    };
   }
 }
 
@@ -83,7 +106,9 @@ const sourceSchema = z
   .strict();
 export interface ValidationSource {
   dir: string;
-  id?: string;
+  /** null means upload identity is unresolved; never infer it from the temp path. */
+  id?: string | null;
+  issues?: readonly PackageValidationIssue[];
   cleanup(): Promise<void>;
 }
 
@@ -138,26 +163,18 @@ export async function resolveValidationSource(
       "name" in file && typeof file.name === "string"
         ? path.parse(file.name).name
         : undefined;
-    const id = uploadIdentity(kind, entries, directory, fileName);
+    const identity = uploadIdentity(kind, entries, directory, fileName);
     const tmpRoot = await mkdtemp(path.join(os.tmpdir(), "covel-validate-"));
     const cleanup = () => rm(tmpRoot, { recursive: true, force: true });
-    let dir = path.join(tmpRoot, "package");
+    // An unresolved upload must not acquire a valid ID from its staging name.
+    const dir = path.join(tmpRoot, identity.id ?? ".unresolved");
     try {
       await materializeEntries(dir, entries);
-      if (id) {
-        // Static loading checks directory identity. Preserve it without rewriting
-        // package bytes or using an author-controlled name for the temp root.
-        const parent = path.join(tmpRoot, "identity");
-        await mkdir(parent);
-        const named = path.join(parent, id);
-        await rename(dir, named);
-        dir = named;
-      }
     } catch (error) {
       await cleanup();
       throw error;
     }
-    return { dir, cleanup };
+    return { dir, cleanup, ...identity };
   }
   const { source } = sourceSchema.parse(await readInstallationJson(c));
   const user = resolveUserResourceDirs();

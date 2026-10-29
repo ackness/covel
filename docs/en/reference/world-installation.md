@@ -117,6 +117,8 @@ Players without a source checkout or pnpm can open **Settings → Install & mana
 
 A world ZIP without `id` takes its single package folder’s name, or the ZIP filename without `.zip` when files are at the archive root. An installed world with an unreadable or missing manifest can still be validated by its directory ID from Settings, returning `manifest-invalid`. Multiple candidate directories remain ambiguous, and containment and symlink checks still apply.
 
+When no valid upload ID can be resolved, the report omits `id` and returns an `identity-invalid` error with `ok: false`, without using the temporary directory name. The static validator reports manifest parsing errors separately.
+
 Validation reads manifests and referenced files, checking fields, files, languages and static declarations. It never imports or executes package code, and changes no world or save. It shares the CLI validation core; the plugin CLI displays the first failure, while the app continues collecting problems that can be checked independently.
 
 Reports contain `kind`, `id` when available, `ok`, `counts.errors`, `counts.warnings` and `issues`. Each issue has `severity`, `code`, `message`, and, when known, a package-relative `file`, manifest field path or JSON pointer `field`, and repair `hint`. The summary may include version and languages. Messages are limited to 2000 characters; the first 200 issues are retained, with an additional `issues-truncated` warning and omitted count when necessary. Headings and known codes use the UI language; other messages stay in English. Reports can be copied as plain text.

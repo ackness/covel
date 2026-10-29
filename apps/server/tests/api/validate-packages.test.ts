@@ -286,6 +286,90 @@ describe("package validation endpoints", () => {
       });
     },
   );
+  it.each([undefined, "Invalid Name"])(
+    "rejects a flat ID-less plugin ZIP with package.json name %s",
+    async (name) => {
+      const entries = {
+        "PLUGIN.md": manifest({ id: undefined }),
+        "package.json": JSON.stringify({ name, type: "module" }),
+      };
+      expect(() =>
+        validatePluginBundle(
+          Object.entries(entries).map(([relativePath, content]) => ({
+            relativePath,
+            content: Buffer.from(content),
+          })),
+          new Set(),
+        ),
+      ).toThrow(/write id in PLUGIN.md/);
+      const response = await upload("plugin", await zip(entries));
+      expect(response.status).toBe(200);
+      const report = packageValidationReportSchema.parse(await response.json());
+      expect(report.ok).toBe(false);
+      expect(report.id).toBeUndefined();
+      expect(report.id).not.toBe("package");
+      expect(report.issues).toContainEqual(
+        expect.objectContaining({
+          severity: "error",
+          code: "identity-invalid",
+          file: "PLUGIN.md",
+          field: "id",
+        }),
+      );
+    },
+  );
+  it("rejects an ID-less world ZIP whose filename cannot supply its identity", async () => {
+    const response = await upload(
+      "world",
+      await zip({
+        "world.yaml": world.replace("id: sample\n", ""),
+        "WORLD.md": "Lore",
+      }),
+      "My World.zip",
+    );
+    expect(response.status).toBe(200);
+    const report = packageValidationReportSchema.parse(await response.json());
+    expect(report.ok).toBe(false);
+    expect(report.id).toBeUndefined();
+    expect(report.id).not.toBe("package");
+    expect(report.issues).toContainEqual(
+      expect.objectContaining({
+        severity: "error",
+        code: "identity-invalid",
+        file: "world.yaml",
+        field: "id",
+      }),
+    );
+  });
+  it.each([
+    {
+      kind: "plugin",
+      file: "PLUGIN.md",
+      content: "---\nid: [\n---\n",
+      code: "plugin-load",
+    },
+    {
+      kind: "world",
+      file: "world.yaml",
+      content: "id: [\n",
+      code: "manifest-invalid",
+    },
+  ] as const)(
+    "keeps malformed $kind manifest diagnostics separate from identity errors",
+    async ({ kind, file, content, code }) => {
+      const response = await upload(kind, await zip({ [file]: content }));
+      expect(response.status).toBe(200);
+      const report = packageValidationReportSchema.parse(await response.json());
+      expect(report.ok).toBe(false);
+      expect(report.id).toBeUndefined();
+      expect(report.issues).toContainEqual(
+        expect.objectContaining({ severity: "error", code }),
+      );
+      expect(report.issues.map((issue) => issue.code)).not.toContain(
+        "identity-invalid",
+      );
+    },
+  );
   it("validates installed worlds using the injected catalogue", async () => {
     await plugin(
       {
