@@ -71,6 +71,7 @@ beforeEach(async () => {
     "style.css": "body {color:red}",
     "img/logo.png": "image",
     "icon.svg": "<svg/>",
+    "font.woff2": Buffer.from("wOF2"),
     ".secret": "secret",
     "node_modules/x.js": "secret",
     "app.map": "secret",
@@ -125,9 +126,10 @@ describe("public plugin assets", () => {
     ["style.css", "text/css; charset=utf-8"],
     ["img/logo.png", "image/png"],
     ["icon.svg", "image/svg+xml"],
+    ["font.woff2", "font/woff2"],
     [bridgeName, "text/javascript; charset=utf-8"],
   ])(
-    "serves %s with immutable headers, conditional GET and HEAD",
+    "serves %s with its cache policy, conditional GET and HEAD",
     async (file, mime) => {
       for (const origin of ["null", "http://localhost:5173"]) {
         const response = await request(file, { headers: { Origin: origin } });
@@ -136,7 +138,9 @@ describe("public plugin assets", () => {
         expect(response.headers.get("x-content-type-options")).toBe("nosniff");
         expect(response.headers.get("x-frame-options")).toBe("SAMEORIGIN");
         expect(response.headers.get("cache-control")).toBe(
-          "public, max-age=31536000, immutable",
+          file === "index.html"
+            ? "no-cache"
+            : "public, max-age=31536000, immutable",
         );
         expect(response.headers.get("referrer-policy")).toBe("no-referrer");
         expect(response.headers.get("cross-origin-resource-policy")).toBeNull();
@@ -165,6 +169,9 @@ describe("public plugin assets", () => {
         expect(head.status).toBe(200);
         expect(await head.text()).toBe("");
         expect(head.headers.get("etag")).toBe(etag);
+        expect(head.headers.get("cache-control")).toBe(
+          response.headers.get("cache-control"),
+        );
         expect(head.headers.get("content-length")).toBe(
           String(body.byteLength),
         );
@@ -175,6 +182,61 @@ describe("public plugin assets", () => {
       }
     },
   );
+  it("revalidates unchanged plugin HTML after a host bridge upgrade", async () => {
+    const original = await request("index.html");
+    const originalHtml = await original.text();
+    expect(original.headers.get("cache-control")).toBe("no-cache");
+    expect(originalHtml).toContain(bridgeName);
+    const oldEtag = original.headers.get("etag");
+    if (!oldEtag) throw new Error("Entry response has no ETag");
+
+    const shared = await import("@covel/shared");
+    const upgradedBridge = `${shared.PLUGIN_BRIDGE_SCRIPT}\n// upgraded host bridge`;
+    const upgradedName = `__covel__/bridge-${hash8(upgradedBridge)}.js`;
+    vi.resetModules();
+    vi.doMock("@covel/shared", () => ({
+      ...shared,
+      PLUGIN_BRIDGE_SCRIPT: upgradedBridge,
+    }));
+    try {
+      const { createPluginAssetRoutes: upgradedRoutes } =
+        await import("../../src/routes/plugin-assets.js");
+      const upgraded = upgradedRoutes(registry);
+      // Same URL, digest and plugin files: only the host's bridge changed.
+      const response = await upgraded.request(`${prefix}index.html`, {
+        headers: { "If-None-Match": oldEtag },
+      });
+      expect(response.status).toBe(200);
+      expect(response.headers.get("cache-control")).toBe("no-cache");
+      expect(response.headers.get("etag")).not.toBe(oldEtag);
+      const html = await response.text();
+      expect(html).toContain(upgradedName);
+      expect(html).not.toContain(bridgeName);
+      expect(response.headers.get("content-length")).toBe(
+        String(Buffer.byteLength(html)),
+      );
+      const bridge = await upgraded.request(`${prefix}${upgradedName}`);
+      expect(bridge.status).toBe(200);
+      expect(bridge.headers.get("cache-control")).toBe(
+        "public, max-age=31536000, immutable",
+      );
+      expect(await bridge.text()).toBe(upgradedBridge);
+      expect((await upgraded.request(`${prefix}${bridgeName}`)).status).toBe(
+        404,
+      );
+      const currentEtag = response.headers.get("etag");
+      if (!currentEtag) throw new Error("Upgraded entry response has no ETag");
+      const cached = await upgraded.request(`${prefix}index.html`, {
+        headers: { "If-None-Match": currentEtag },
+      });
+      expect(cached.status).toBe(304);
+      expect(cached.headers.get("cache-control")).toBe("no-cache");
+      expect(await cached.text()).toBe("");
+    } finally {
+      vi.doUnmock("@covel/shared");
+      vi.resetModules();
+    }
+  });
   it("injects the shared bridge immediately after head under the exact page policy", async () => {
     const response = await request("index.html", {
       headers: { Origin: "null", "Sec-Fetch-Dest": "iframe" },
@@ -295,7 +357,13 @@ describe("public plugin assets", () => {
     "neither indexes links nor serves a file replaced by a link",
     async () => {
       vi.spyOn(console, "warn").mockImplementation(() => {});
-      await put("secret.js", "secret");
+      const original = await request("app.js");
+      expect(original.status).toBe(200);
+      const originalBytes = Buffer.from(await original.arrayBuffer());
+      const replacement = Buffer.alloc(originalBytes.byteLength, "s");
+      expect(replacement.byteLength).toBe(originalBytes.byteLength);
+      expect(replacement.equals(originalBytes)).toBe(false);
+      await put("secret.js", replacement);
       await symlink(
         path.join(root, "p/secret.js"),
         path.join(root, "p/ui/app/link.js"),
@@ -309,6 +377,7 @@ describe("public plugin assets", () => {
       prefix = await index();
       await missing("link.js");
       await missing("linked/secret.js");
+      expect((await request("app.js")).status).toBe(200);
       await rm(path.join(root, "p/ui/app/app.js"));
       await symlink(
         path.join(root, "p/secret.js"),

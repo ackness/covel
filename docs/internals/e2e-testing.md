@@ -60,7 +60,7 @@ spec 分在两个 project 里。配置按文件内容自动归类，你不用手
 
 打包后的页面带内容安全策略，开发服务器没有。`tests/e2e/page-policy.spec.ts` 在主要页面和带插件面板的会话上检查没有任何策略违规。新 spec 想做同样的检查时，在第一次导航前调用 `watchPolicyViolations(page)`（`tests/e2e/helpers/page-policy.ts`），结束时断言返回的列表为空。
 
-`tests/e2e/plugin-assets-isolation.spec.ts` 在 `chromium-dev` 的 PAGE_CSP 宿主页下检查经典页面资源、注入桥接和 sandbox/CSP 隔离。
+`tests/e2e/plugin-assets-isolation.spec.ts` 在 `chromium-dev` 的 PAGE_CSP 宿主页下检查经典页面资源、注入桥接、sandbox/CSP 隔离，以及内嵌字体可用而无 CORS 的 URL 字体被拒绝。
 
 ### 可访问性用例
 

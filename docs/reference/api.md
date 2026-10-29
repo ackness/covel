@@ -1544,7 +1544,7 @@ fork 和社区插件的授权：
 
 所有宿主配置中均公开，不验证会话、令牌或 cookie。只读取当前非错误插件的已索引 UI 根目录。依次检查 ID 和摘要、原始及解码路径段、发布清单和读取时的真实路径边界。隐藏路径、遍历、编码分隔符、链接、未发布文件、大小变化和过期摘要都返回同一份 `404 { "error": "File not found" }`，带 `Cache-Control: no-store` 和 `X-Content-Type-Options: nosniff`。
 
-成功的 GET 和 HEAD 带清单中的 MIME、`nosniff`、`Cache-Control: public, max-age=31536000, immutable`、`ETag`、`Content-Length`、`Referrer-Policy: no-referrer`。精确匹配的 `If-None-Match` 返回 304、无响应体。不发送 Set-Cookie、CORS 允许头或 Cross-Origin-Resource-Policy。入口 HTML 使用[页面 CSP 和宿主注入的桥](./ui-panels.md#多文件页面)；其他文件使用 `Content-Security-Policy: sandbox`。保留 `X-Frame-Options: SAMEORIGIN`。不走媒体令牌处理。
+成功的 GET 和 HEAD 带清单中的 MIME、`nosniff`、`ETag`、`Content-Length`、`Referrer-Policy: no-referrer`。入口 HTML 使用 `Cache-Control: no-cache`，其余资源使用 `Cache-Control: public, max-age=31536000, immutable`。入口 ETag 包含宿主桥脚本的摘要，使宿主升级能在同一个插件 URL 上刷新 HTML。精确匹配的 `If-None-Match` 返回 304、无响应体，并保留相应缓存策略。不发送 Set-Cookie、CORS 允许头或 Cross-Origin-Resource-Policy。入口 HTML 使用[页面 CSP 和宿主注入的桥](./ui-panels.md#多文件页面)；其他文件使用 `Content-Security-Policy: sandbox`。保留 `X-Frame-Options: SAMEORIGIN`。不走媒体令牌处理。
 
 #### GET /api/ui-specs
 

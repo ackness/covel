@@ -1,9 +1,11 @@
 import { expect, test, type Page } from "@playwright/test";
+import { readFileSync } from "node:fs";
 import {
   PLUGIN_ASSET_PAGE_CSP,
   PLUGIN_BRIDGE_SCRIPT,
 } from "../../packages/shared/src/plugin-frame.js";
 import { PAGE_CSP } from "../../apps/web/src/lib/page-csp.js";
+import { startPluginAssetFontServer } from "../../apps/server/tests/helpers/plugin-asset-font-server.js";
 
 const harness = "/__plugin-assets-harness";
 const prefix = `/plugin-assets/p/${"a".repeat(32)}`;
@@ -11,6 +13,13 @@ const entryUrl = `${prefix}/index.html`;
 const navigationTarget = "https://example.invalid/";
 const navigationOrigin = new URL(navigationTarget).origin;
 const attemptMarker = "covel:test:navigation-attempt";
+// Use the same valid, locally installed font for data: and URL probes.
+const fontBytes = readFileSync(
+  new URL(
+    "../../apps/web/node_modules/@fontsource-variable/inter/files/inter-latin-wght-normal.woff2",
+    import.meta.url,
+  ),
+);
 const attempts = {
   location: "location.href = target",
   open: "window.open(target)",
@@ -147,6 +156,39 @@ test("multi-file pages load classic resources and the bridge without network or 
   await expect(status).toContainText('"style":"rgb(12, 34, 56)"');
   await expect(status).toContainText('"image":2');
   expect(escaped).toEqual([]);
+});
+test("multi-file pages load embedded fonts and reject URL fonts without CORS over real HTTP", async ({
+  page,
+}) => {
+  // route.fulfill() automatically grants CORS to Origin: null. Use the real
+  // asset route over HTTP, without interception, to exercise browser CORS checks.
+  const server = await startPluginAssetFontServer(fontBytes, PAGE_CSP);
+  try {
+    await page.goto(server.url);
+    const report = page.frameLocator("iframe").locator("#fonts");
+    await expect(report).toHaveText(
+      JSON.stringify({ embedded: "loaded", url: "error", origin: "null" }),
+    );
+    // The unique server/port and observed request rule out a memory-cache result.
+    await expect
+      .poll(() => server.responses)
+      .toEqual([
+        {
+          origin: "null",
+          mode: "cors",
+          status: 200,
+          allowOrigin: null,
+          allowCredentials: null,
+          contentType: "font/woff2",
+        },
+      ]);
+  } finally {
+    try {
+      await page.goto("about:blank");
+    } finally {
+      await server.dispose();
+    }
+  }
 });
 for (const [name, attempt] of Object.entries(attempts))
   test(`multi-file page blocks ${name} escape`, async ({ page }) => {

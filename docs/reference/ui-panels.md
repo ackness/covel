@@ -786,7 +786,7 @@ contributes:
 | --- | --- |
 | HTML | 只发布声明的入口；其他 `.html` 不发布。静态规划不限内联 HTML 的 512 KiB，入口响应上限为 2 MiB，超出返回 404 |
 | 经典脚本、样式、数据 | `.js`、`.css`、`.json`、`.txt` |
-| 图片和字体 | `.png`、`.jpg`、`.jpeg`、`.gif`、`.webp`、`.avif`、`.svg`、`.woff2`、`.woff` |
+| 图片和字体文件 | `.png`、`.jpg`、`.jpeg`、`.gif`、`.webp`、`.avif`、`.svg`、`.woff2`、`.woff`；字体文件可发布，但页面不能通过 URL 加载它们，见下文 |
 | 其他类型 | `.mjs`、`.wasm`、`.map`、无扩展名文件等不发布；扩展名按小写比较 |
 | 隐藏和链接 | 不发布任一级以 `.` 开头的名称、`node_modules`、符号链接、Windows junction 或特殊文件；不跟随链接 |
 | 保留名称 | 任一级的 `__covel__` 都是错误，留给宿主桥接脚本 |
@@ -809,11 +809,11 @@ contributes:
 | `sandbox` | `allow-scripts` |
 | `frame-ancestors` | `'self'` |
 
-使用经典外部脚本 `<script src="app.js"></script>`，不使用模块脚本、内联脚本、事件属性或 `eval`。内联样式允许；跨源字体和网络请求不允许。`'self'` 按浏览器看到的源工作，兼容 Vite 和反向代理，不限制到某个路径前缀；文件边界由路由的发布清单检查。主页面的 `frame-src 'self'` 限制 iframe 导航，`/api` 另有不透明源和嵌入目标拒绝规则，见[安全边界](../internals/security.md#plugin-pages-loaded-by-url)。
+使用经典外部脚本 `<script src="app.js"></script>`，不使用模块脚本、内联脚本、事件属性或 `eval`。内联样式允许；网络请求不允许。自定义字体要以内嵌 `data:font/woff2;base64,...`（或 WOFF）写入 CSS 的 `@font-face`。字体 URL 请求使用 CORS，而沙箱文档是不透明源，连相对 `.woff` / `.woff2` URL 也跨源；资源路由不发送 CORS 允许头，所以这些 URL 无法加载。`font-src 'self' data:` 保持不变，发布字体文件不代表可以用 URL 加载。`'self'` 按浏览器看到的源工作，兼容 Vite 和反向代理，不限制到某个路径前缀；文件边界由路由的发布清单检查。主页面的 `frame-src 'self'` 限制 iframe 导航，`/api` 另有不透明源和嵌入目标拒绝规则，见[安全边界](../internals/security.md#plugin-pages-loaded-by-url)。
 
 宿主在入口 `<head>` 后注入经典桥接脚本 `__covel__/bridge-<hash8>.js`。没有 `<head>` 时依次放在 `<html>`、doctype 后，或文档开头；嵌套入口自动添加 `../`。作者不用复制桥接代码。收到端口后脚本回报 `ready`，URL 页面等待 8 秒；超时在 iframe 上方显示失败和“重试”。宿主用不带凭据的 HEAD 探测：404 显示“此页面已更新，请重新加载。”，其他失败显示“页面加载失败。”。迟到的 `ready` 会清除错误。重试重新获取 spec 并重建 iframe；宿主的返回按钮始终可用。
 
-摘要是按相对路径排序的 `[relativePath, size, sha256(content)]` JSON 行的 SHA-256 前 32 位小写十六进制。注册表首次投影时计算，重新注册插件时重算；生产文件应只在重启时改变，不保留旧文件副本。重新注册后旧摘要 URL 返回 404，新 URL 可加载。资源使用一年不可变缓存；入口 ETag 还包含桥接脚本摘要，宿主升级不会复用旧桥接脚本地址。
+摘要是按相对路径排序的 `[relativePath, size, sha256(content)]` JSON 行的 SHA-256 前 32 位小写十六进制。注册表首次投影时计算，重新注册插件时重算；生产文件应只在重启时改变，不保留旧文件副本。重新注册后旧摘要 URL 返回 404，新 URL 可加载。入口 HTML 使用 `Cache-Control: no-cache`，每次重用都须重新验证；其 ETag 包含桥接脚本摘要。因此插件文件和 URL 未变时，宿主升级也会返回引用新版桥的 HTML。其余资源（包括带哈希文件名的桥接脚本）仍使用一年不可变缓存。
 
 `bridge: "session"` 的逐能力授权不变。整份 spec 的授权哈希包含 URL，而 URL 的摘要覆盖所有发布文件；任一文件变化都会使旧授权失效。没有桥接授权就不挂载读取会话的页面。没有新增任何会话写操作，也不保存每会话的视图选择。开发模式未获服务端代码批准的插件可能要重启才能重算摘要。
 

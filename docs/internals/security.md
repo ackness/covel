@@ -446,7 +446,7 @@ default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-sr
 | 威胁 | 边界 |
 | --- | --- |
 | 读取应用存储、cookie 或 preload API | 不透明源，没有 `allow-same-origin`；不向 frame 提供 Electron IPC 或供应商凭据 |
-| 网络、子框架、表单、base 修改和内联代码 | 响应 CSP 阻止连接、框架、表单、base、object、内联脚本和 eval；只加载同源经典脚本、样式、图片和字体 |
+| 网络、子框架、表单、base 修改和内联代码 | 响应 CSP 阻止连接、框架、表单、base、object、内联脚本和 eval；可加载同源经典脚本、样式和图片；自定义字体使用内嵌 data: URI，相对字体 URL 因不透明源和无 CORS 允许头而加载失败 |
 | 读取包文件或逃出根目录 | 索引时 realpath 边界检查，lstat 排除链接和 junction；路由只读清单文件，再检查 O_NOFOLLOW、普通文件、索引大小和真实路径 |
 | 直接打开 SVG 执行脚本 | 非入口响应使用 `Content-Security-Policy: sandbox` |
 | 不透明文档访问 API | 所有 `/api` 方法在 CORS 前拒绝 `Origin: null`，代码为 `foreign_request_refused` |
@@ -455,7 +455,7 @@ default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-sr
 | 内容变化和会话读取 | URL 摘要覆盖全部发布文件；授权仍经 SettingsStore 绑定插件 ID、能力和完整 spec 哈希 |
 | 页面缺失、过期或加载失败 | 8 秒 ready 握手、不带凭据的 HEAD 探测和重试覆盖层；宿主返回按钮始终可用 |
 
-`script-src 'self'` 有意采用浏览器看到的源，不采用绝对路径来源：服务端无法从 Vite 或反向代理背后推断这个源。页面可以加载其他同源公开静态文件，包括其他插件的资源和应用脚本，但不能读取应用存储、调用 API 或建立连接。作者不能把密钥或服务端代码放进发布根目录。公开资源不需要 cookie、令牌、第二个源或媒体令牌特例。资源路由不发 CORP，以便不透明源页面加载自己的经典子资源。桥接代码与单文件视图共享，由宿主注入，不增加写能力。
+`script-src 'self'` 有意采用浏览器看到的源，不采用绝对路径来源：服务端无法从 Vite 或反向代理背后推断这个源。页面可以加载其他同源公开静态文件，包括其他插件的资源和应用脚本，但不能读取应用存储、调用 API 或建立连接。作者不能把密钥或服务端代码放进发布根目录。公开资源不需要 cookie、令牌、第二个源或媒体令牌特例。资源路由不发 CORP，以便不透明源页面加载自己的经典子资源。它也不发 CORS 允许头；字体请求需要 CORS，所以自定义字体必须以内嵌 `data:` URI 加载。入口 HTML 每次重用都重新验证，ETag 包含宿主桥摘要；宿主升级可刷新注入的桥脚本地址。桥接代码与单文件视图共享，由宿主注入，不增加写能力。
 
 ## Other server guards
 

@@ -17,10 +17,15 @@ import {
   MAX_PLUGIN_ASSET_FILE_BYTES,
 } from "../src/ui-assets.js";
 const specialFiles = vi.hoisted(() => new Set<string>());
+const enumeration = vi.hoisted(() => ({ reversed: false }));
 vi.mock("node:fs", async (importOriginal) => {
   const actual = await importOriginal<typeof import("node:fs")>();
   return {
     ...actual,
+    readdirSync: (directory: import("node:fs").PathLike) => {
+      const names = actual.readdirSync(directory).sort();
+      return enumeration.reversed ? names.reverse() : names;
+    },
     lstatSync: (file: import("node:fs").PathLike) => {
       const stat = actual.lstatSync(file);
       // Model a device/FIFO without requiring native mknod or a listening socket.
@@ -37,6 +42,7 @@ vi.mock("node:fs", async (importOriginal) => {
 const roots: string[] = [];
 afterEach(async () => {
   specialFiles.clear();
+  enumeration.reversed = false;
   for (const root of roots.splice(0))
     await rm(root, { recursive: true, force: true });
 });
@@ -160,9 +166,6 @@ describe("UI asset disk scanner", () => {
     const first = await scan(root, "index.html");
     expect(first.digest).toMatch(/^[a-f0-9]{32}$/);
     expect((await scan(root, "index.html")).digest).toBe(first.digest);
-    await rm(path.join(root, "b.js"));
-    await writeFile(path.join(root, "b.js"), "ab");
-    expect((await scan(root, "index.html")).digest).toBe(first.digest);
     await writeFile(path.join(root, "b.js"), "ac");
     expect((await scan(root, "index.html")).digest).not.toBe(first.digest);
     await writeFile(path.join(root, "b.js"), "ab");
@@ -171,6 +174,22 @@ describe("UI asset disk scanner", () => {
     await rename(path.join(root, "c.js"), path.join(root, "b.js"));
     await writeFile(path.join(root, "extra.css"), "");
     expect((await scan(root, "index.html")).digest).not.toBe(first.digest);
+  });
+  it("keeps the same digest when every directory is enumerated in reverse order", async () => {
+    const root = await fixture();
+    await mkdir(path.join(root, "assets"));
+    await writeFile(path.join(root, "a.js"), "a");
+    await writeFile(path.join(root, "assets/b.js"), "b");
+    await writeFile(path.join(root, "assets/a.css"), "body {}");
+    const forward = await scan(root, "index.html");
+    enumeration.reversed = true;
+    const reverse = await scan(root, "index.html");
+    // Verify that the scanner actually saw a different traversal order.
+    expect([...reverse.listed.keys()]).not.toEqual([...forward.listed.keys()]);
+    expect([...reverse.listed.keys()].sort()).toEqual(
+      [...forward.listed.keys()].sort(),
+    );
+    expect(reverse.digest).toBe(forward.digest);
   });
   it.skipIf(process.platform === "win32")(
     "never follows file or directory links",

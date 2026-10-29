@@ -34,7 +34,7 @@ function injectBridge(html: string, entry: string): string {
   return script + html;
 }
 
-/** Public immutable files, limited to the registry snapshot's published listing. */
+/** Public files, limited to the registry snapshot's published listing. */
 export function createPluginAssetRoutes(registry: PluginRegistry): Hono {
   const app = new Hono();
   app.get(`${PLUGIN_ASSETS_PATH}/:pluginId/:digest/*`, async (c) => {
@@ -126,7 +126,12 @@ export function createPluginAssetRoutes(registry: PluginRegistry): Hono {
     );
     c.header("Content-Length", String(size));
     c.header("X-Content-Type-Options", "nosniff");
-    c.header("Cache-Control", "public, max-age=31536000, immutable");
+    // The plugin digest excludes the injected host bridge. Revalidate HTML so
+    // a host upgrade can replace its bridge URL even when plugin files are unchanged.
+    c.header(
+      "Cache-Control",
+      entry ? "no-cache" : "public, max-age=31536000, immutable",
+    );
     c.header("Referrer-Policy", "no-referrer");
     c.header(
       "Content-Security-Policy",

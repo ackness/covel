@@ -446,7 +446,7 @@ A multi-file view loads directly from `/plugin-assets/<pluginId>/<digest>/<entry
 | Threat | Boundary |
 | --- | --- |
 | Reading app storage, cookies or preload APIs | Opaque origin, without `allow-same-origin`; the frame receives no Electron IPC or provider credentials |
-| Network, nested frames, forms, base changes and inline code | Response CSP blocks connections, frames, forms, base URLs, objects, inline scripts and eval; only classic same-origin scripts, styles, images and fonts can load |
+| Network, nested frames, forms, base changes and inline code | Response CSP blocks connections, frames, forms, base URLs, objects, inline scripts and eval; classic same-origin scripts, styles and images can load; custom fonts use embedded data: URIs because relative font URLs fail without CORS permission for the opaque origin |
 | Reading package files or escaping the root | Realpath containment at indexing; lstat omits links and junctions; the route serves only listed files and checks O_NOFOLLOW, regular-file status, indexed size and realpath again |
 | Running a directly opened SVG | Non-entry responses use `Content-Security-Policy: sandbox` |
 | API calls from opaque documents | Every `/api` method rejects `Origin: null` before CORS with `foreign_request_refused` |
@@ -455,7 +455,7 @@ A multi-file view loads directly from `/plugin-assets/<pluginId>/<digest>/<entry
 | Content changes and session reads | URL digest covers every published file; consent remains plugin ID + capability + whole-spec hash through SettingsStore |
 | Missing, stale or failed pages | 8-second ready handshake, credential-free HEAD probe and Retry overlay; host back controls remain available |
 
-`script-src 'self'` deliberately uses the browser-visible origin rather than an absolute path source: the server cannot infer that origin behind Vite or a reverse proxy. A page can load other same-origin public static files, including another plugin's published assets or app scripts, but still cannot read app storage, use the API or make connections. Authors must keep secrets and server code out of the published root. Public delivery needs no cookies, token, second origin or media-token exception. The asset route omits CORP because an opaque-origin page must load its own classic subresources. The bridge source is shared with single-file views and injected by the host; it adds no write capability.
+`script-src 'self'` deliberately uses the browser-visible origin rather than an absolute path source: the server cannot infer that origin behind Vite or a reverse proxy. A page can load other same-origin public static files, including another plugin's published assets or app scripts, but still cannot read app storage, use the API or make connections. Authors must keep secrets and server code out of the published root. Public delivery needs no cookies, token, second origin or media-token exception. The asset route omits CORP because an opaque-origin page must load its own classic subresources. It also omits CORS allow headers; font requests require CORS, so custom fonts must use embedded `data:` URIs. Entry HTML revalidates on every reuse with an ETag that includes the host bridge hash, allowing host upgrades to refresh the injected script address. The bridge source is shared with single-file views and injected by the host; it adds no write capability.
 
 ## Other server guards
 
