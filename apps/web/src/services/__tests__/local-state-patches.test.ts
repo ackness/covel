@@ -6,7 +6,12 @@ import { getStatePatches, removeStatePatches } from "../app-kv-store.js";
 import { LocalDataService } from "../data-service/local.js";
 import { BrowserVault } from "../storage/browser-vault.js";
 
-vi.mock("../api.js", () => ({ deleteSession: vi.fn(async () => {}) }));
+const api = await vi.hoisted(async () => {
+  const { fakeSessionServer } =
+    await import("./support/fake-session-server.js");
+  return fakeSessionServer();
+});
+vi.mock("../api.js", () => api);
 
 let vault: BrowserVault;
 let service: LocalDataService;

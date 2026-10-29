@@ -2,10 +2,9 @@
 import type { DataService } from "@/services/data-service.js";
 import type { SessionWorkspace } from "@/services/data-service.js";
 import type { SessionRecord, WorldRecord } from "@/services/api.js";
-import { ApiError } from "@/services/api/request.js";
 import { LocalDataService } from "@/services/data-service/local.js";
 import { BrowserVault } from "@/services/storage/browser-vault.js";
-import { isInitialBrowserCheckpoint } from "@covel/store/browser-sync";
+import { fakeSessionServer } from "@/services/__tests__/support/fake-session-server.js";
 import { createSessionWorkspace } from "@/services/data-service/workspace.js";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -17,6 +16,7 @@ const api = vi.hoisted(() => ({
   takeCreatedWorldDataNotices: vi.fn(() => []),
   getSession: vi.fn(),
   createSession: vi.fn(),
+  deleteSession: vi.fn(),
   getWorld: vi.fn(),
   updateWorld: vi.fn(),
   uploadBrowserCheckpoint: vi.fn(),
@@ -228,34 +228,20 @@ describe("startGameSession bootstrap order", () => {
       const ds = new LocalDataService(vault);
       api.getWorld.mockResolvedValue(world);
       api.updateWorld.mockResolvedValue(world);
-      api.getSession
-        .mockRejectedValueOnce(new ApiError(404, "/api/sessions/local", ""))
-        .mockResolvedValue(session);
-      api.createSession.mockResolvedValue({ ...session, phase: "playing" });
+      // The server resolves setup while creating the session; its first
+      // export is the browser's revision 1.
+      const server = fakeSessionServer({
+        vault: () => vault,
+        initialize: () => ({ phase: "playing" }),
+      });
+      api.getSession.mockResolvedValue(session);
+      api.createSession.mockImplementation(server.createSession);
+      api.fetchBrowserCommit.mockImplementation(server.fetchBrowserCommit);
       api.uploadBrowserCheckpoint.mockImplementation(
         async (_id, checkpoint) => ({
           ok: true,
-          ...(isInitialBrowserCheckpoint(checkpoint)
-            ? { reconcileRequired: true }
-            : {}),
+          revision: checkpoint.revision,
         }),
-      );
-      api.fetchBrowserCommit.mockImplementation(
-        async (id, actionId, baseRevision) => {
-          const current = await vault.getLatestCheckpoint(id);
-          if (!current) throw new Error("missing checkpoint");
-          return {
-            baseRevision,
-            revision: baseRevision + 1,
-            actionId,
-            checkpoint: {
-              ...current,
-              revision: baseRevision + 1,
-              actionId,
-              session: { ...current.session, phase: "playing" },
-            },
-          };
-        },
       );
       const dispatch = vi.fn((action: { type: string }) => {
         if (action.type !== "SET_SESSION") return;

@@ -3,6 +3,13 @@ import { expect, it, vi } from "vitest";
 import { LocalDataService } from "../data-service/local.js";
 import { BrowserVault } from "../storage/browser-vault.js";
 
+const api = await vi.hoisted(async () => {
+  const { fakeSessionServer } =
+    await import("./support/fake-session-server.js");
+  return fakeSessionServer();
+});
+vi.mock("../api.js", () => api);
+
 it("creates readable local session IDs without weak randomness", async () => {
   const vault = new BrowserVault({
     dbName: `session-id-${crypto.randomUUID()}`,

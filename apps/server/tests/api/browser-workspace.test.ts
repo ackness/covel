@@ -82,13 +82,7 @@ beforeEach(async () => {
 });
 
 describe("browser-private workspace exchange", () => {
-  it("adopts initialized world data and dependencies without overwriting them", async () => {
-    const browser = createMemoryStore();
-    await seed(browser);
-    const initial = await exportSessionCheckpoint(browser, SESSION_ID, {
-      revision: 1,
-      actionId: `local:create:${SESSION_ID}`,
-    });
+  async function initializeServerSession() {
     await store.updateSession(SESSION_ID, {
       activePlugins: ["consumer", "provider"],
     });
@@ -102,32 +96,72 @@ describe("browser-private workspace exchange", () => {
       createdAt: "2026-08-25T00:00:00.000Z",
       updatedAt: "2026-08-25T00:00:00.000Z",
     });
+  }
 
-    for (let attempt = 0; attempt < 2; attempt++) {
-      expect(await (await upload(initial)).json()).toMatchObject({
-        ok: true,
-        revision: 1,
-        reconcileRequired: true,
-      });
-    }
-    const response = await commit("hydrate:1", 1);
+  it("exports the server's initialization as a new save's revision 1", async () => {
+    await initializeServerSession();
+    const requestFirst = () => commit(`local:create:${SESSION_ID}`, 0);
+
+    const response = await requestFirst();
     expect(response.status).toBe(200);
-    const hydrated = (await response.json()) as SessionCommit;
-    expect(hydrated.checkpoint.session.activePlugins).toEqual([
+    const first = (await response.json()) as SessionCommit;
+    expect(first).toMatchObject({ baseRevision: 0, revision: 1 });
+    expect(first.checkpoint.session.activePlugins).toEqual([
       "consumer",
       "provider",
     ]);
-    expect(hydrated.checkpoint.pluginData).toContainEqual(
-      expect.objectContaining({
-        key: "radio",
-        value: { quantity: 1 },
-      }),
+    expect(first.checkpoint.pluginData).toContainEqual(
+      expect.objectContaining({ key: "radio", value: { quantity: 1 } }),
     );
-    expect(hydrated.checkpoint.session.metadata).not.toHaveProperty(
+    expect(first.checkpoint.session.metadata).not.toHaveProperty(
       "ownerTokenHash",
     );
-    // Once adopted, the initial save is stale and cannot initialize again.
-    expect((await upload(initial)).status).toBe(409);
+    // A lost reply retries with the same action and gets the same commit.
+    expect(await (await requestFirst()).json()).toEqual(first);
+    // Uploading that save back is the same head, not a replacement.
+    expect(await (await upload(first.checkpoint)).json()).toMatchObject({
+      ok: true,
+      revision: 1,
+      unchanged: true,
+    });
+  });
+
+  it("refuses a first export that is not a new save's", async () => {
+    await initializeServerSession();
+    const refused = async (actionId: string, baseRevision: number) => {
+      const response = await commit(actionId, baseRevision);
+      expect(response.status).toBe(409);
+      return response.json();
+    };
+    expect(await refused("turn-1", 0)).toMatchObject({
+      code: "browser_checkpoint_required",
+    });
+    expect(await refused(`local:create:${SESSION_ID}`, 1)).toMatchObject({
+      code: "browser_checkpoint_required",
+    });
+    await store.updateSession(SESSION_ID, { completedPlayerTurns: 1 });
+    expect(await refused(`local:create:${SESSION_ID}`, 0)).toMatchObject({
+      code: "browser_checkpoint_required",
+    });
+  });
+
+  it("restores a revision-1 save whole, even with the initial action", async () => {
+    await initializeServerSession();
+    const browser = createMemoryStore();
+    await seed(browser);
+    const save = await exportSessionCheckpoint(browser, SESSION_ID, {
+      revision: 1,
+      actionId: `local:create:${SESSION_ID}`,
+    });
+
+    expect(await (await upload(save)).json()).toEqual({
+      ok: true,
+      revision: 1,
+    });
+    expect((await store.getSession(SESSION_ID))?.activePlugins).toEqual([]);
+    expect(await store.listPluginDataSessionScope(SESSION_ID)).toEqual([]);
+    // With a head in place, the initial action can no longer export.
+    expect((await commit(`local:create:${SESSION_ID}`, 0)).status).toBe(409);
   });
 
   async function queuedCheckpoint(): Promise<BrowserCheckpoint> {

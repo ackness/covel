@@ -1,6 +1,5 @@
 import {
   DEFAULT_LOCALE,
-  characterSchemaSchema,
   summarizeWorld,
   worldDimensionsSchema,
   worldWireRecordSchema,
@@ -11,7 +10,6 @@ import {
 import type {
   BrowserCheckpoint,
   MessageRecord as StoreMessageRecord,
-  SessionRecord as StoreSessionRecord,
   WorldRecord as StoreWorldRecord,
 } from "@covel/store/browser-sync";
 import {
@@ -113,145 +111,6 @@ function humanSessionId(): string {
 
 function jsonCheckpoint(checkpoint: BrowserCheckpoint): BrowserCheckpoint {
   return JSON.parse(JSON.stringify(checkpoint)) as BrowserCheckpoint;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === "object" && !Array.isArray(value);
-}
-
-function portableWorldContent(
-  session: StoreSessionRecord,
-  world: StoreWorldRecord | null,
-  now: string,
-): Pick<BrowserCheckpoint, "characters" | "lorebookEntries"> {
-  const metadata = isRecord(world?.metadata) ? world.metadata : {};
-  const rawCharacters = Array.isArray(metadata.embeddedCharacters)
-    ? metadata.embeddedCharacters.slice(0, 64)
-    : [];
-  const characters = rawCharacters.flatMap((value) => {
-    if (
-      !isRecord(value) ||
-      typeof value.id !== "string" ||
-      typeof value.name !== "string"
-    )
-      return [];
-    return [
-      {
-        // Same ids as the server importer: character keys are per session.
-        id: value.id,
-        sessionId: session.id,
-        name: value.name,
-        type: typeof value.type === "string" ? value.type : "npc",
-        ...(typeof value.description === "string"
-          ? { description: value.description }
-          : {}),
-        ...(isRecord(value.fields) ? { fields: value.fields } : {}),
-        version: 1,
-        createdAt: now,
-        updatedAt: now,
-      },
-    ];
-  });
-
-  const rawLorebook = Array.isArray(metadata.embeddedLorebook)
-    ? metadata.embeddedLorebook.slice(0, 128)
-    : [];
-  const seenLoreIds = new Set<string>();
-  const lorebookEntries = rawLorebook.flatMap((value, index) => {
-    if (!isRecord(value)) return [];
-    if (
-      typeof value.id !== "string" ||
-      !value.id ||
-      seenLoreIds.has(value.id) ||
-      typeof value.content !== "string" ||
-      !value.content
-    ) {
-      return [];
-    }
-    seenLoreIds.add(value.id);
-    const keys = Array.isArray(value.keys)
-      ? value.keys
-          .filter((key): key is string => typeof key === "string")
-          .slice(0, 32)
-      : [];
-    return [
-      {
-        id: value.id,
-        sessionId: session.id,
-        owner: { kind: "world" } as const,
-        keys,
-        content: value.content,
-        strategy:
-          value.strategy === "selective"
-            ? ("selective" as const)
-            : ("constant" as const),
-        position:
-          value.position === "before_plugin" ? "before_plugin" : "after_plugin",
-        insertionOrder:
-          typeof value.insertionOrder === "number"
-            ? value.insertionOrder
-            : 100 + index,
-        enabled: value.enabled !== false,
-        ...(value.extra !== undefined ? { extra: value.extra } : {}),
-        createdAt: now,
-        updatedAt: now,
-      },
-    ];
-  });
-  return { characters, lorebookEntries };
-}
-
-function initialCheckpoint(
-  session: StoreSessionRecord,
-  world: StoreWorldRecord | null,
-): BrowserCheckpoint {
-  const committedAt = new Date().toISOString();
-  const portableContent = portableWorldContent(session, world, committedAt);
-  // The same seed as POST /api/sessions: the world's preset becomes the
-  // session's schema, at the kernel's first version.
-  const preset = world?.metadata?.characterSchema;
-  const characterSchema = preset
-    ? {
-        ...characterSchemaSchema.parse({
-          ...(preset as Record<string, unknown>),
-          version: 1,
-        }),
-        sessionId: session.id,
-        createdAt: committedAt,
-        updatedAt: committedAt,
-      }
-    : null;
-  return jsonCheckpoint({
-    schemaVersion: BROWSER_CHECKPOINT_SCHEMA_VERSION,
-    sessionId: session.id,
-    profile: "browser-private",
-    session,
-    world,
-    messages: [],
-    turnMessages: [],
-    turnResults: [],
-    toolCalls: [],
-    runtimeOutputs: [],
-    interactions: [],
-    events: [],
-    traceEvents: [],
-    characters: portableContent.characters,
-    characterSchema,
-    pluginData: [],
-    lorebookEntries: portableContent.lorebookEntries,
-    sessionSummaries: [],
-    playerInputs: [],
-    suspensions: [],
-    snapshots: [],
-    worldDataLedger: [],
-    logicalTurnLedger: [],
-    setupAttempts: [],
-    jobStatus: [],
-    runtimeExports: [],
-    revision: 1,
-    actionId: initialBrowserCheckpointActionId(session.id),
-    committedAt,
-  });
 }
 
 export class LocalDataService implements DataService {
@@ -542,48 +401,53 @@ export class LocalDataService implements DataService {
   ): Promise<SessionRecord> {
     worldWireRecordSchema.shape.lore.parse(loreOverride);
     const vault = await this.ready();
-    const nowIso = new Date().toISOString();
-    const session: SessionRecord = {
-      id: _id ?? humanSessionId(),
-      worldId,
-      status: "active",
-      locale: locale ?? DEFAULT_LOCALE,
-      phase: "setup",
-      completedPlayerTurns: 0,
-      setupRuntimes: {},
-      activePlugins: _plugins ?? [],
-      createdAt: nowIso,
-      updatedAt: nowIso,
-    };
-    const storeSession: StoreSessionRecord = {
-      id: session.id,
-      worldId,
-      status: "active",
-      phase: "setup",
-      completedPlayerTurns: 0,
-      setupRuntimes: {},
-      locale: locale ?? DEFAULT_LOCALE,
-      activePlugins: _plugins ?? [],
-      metadata: {
-        ...(loreOverride !== undefined ? { loreOverride } : {}),
-        pluginSelection: {
-          requested: _plugins ?? [],
-          excluded: excludedPlugins ?? [],
-        },
-      },
-      createdAt: nowIso,
-      updatedAt: nowIso,
-    };
-    await this.withSessionWorkspaceLock(
-      session.id,
+    const sessionId = _id ?? humanSessionId();
+    return this.withSessionWorkspaceLock(
+      sessionId,
       async () => {
         const world = await vault.getWorld(worldId);
         if (!world) throw new Error(`World not found: ${worldId}`);
-        await vault.saveCheckpoint(initialCheckpoint(storeSession, world));
+        await syncWorldToServer(world);
+        // The server initializes the session (resolved dependencies, world
+        // data, lifecycle hooks); its first export is the browser's revision 1.
+        try {
+          await api.createSession(
+            worldId,
+            sessionId,
+            _plugins ?? [],
+            locale ?? DEFAULT_LOCALE,
+            loreOverride,
+            excludedPlugins ?? [],
+          );
+          const commit = await api.fetchBrowserCommit(
+            sessionId,
+            initialBrowserCheckpointActionId(sessionId),
+            0,
+          );
+          const { checkpoint } = await vault.applySessionCommit(
+            {
+              ...commit,
+              checkpoint: jsonCheckpoint({ ...commit.checkpoint, world }),
+            },
+            { digestOf: commit.checkpoint },
+          );
+          return toFrontendSession(checkpoint.session);
+        } catch (error) {
+          // Startup rollback never learns this id, so remove the server copy here.
+          await api
+            .deleteSession(sessionId, { silentErrors: true })
+            .catch((cleanupError: unknown) => {
+              if (!isNotFound(cleanupError)) {
+                ignoreError("delete server session after failed create")(
+                  cleanupError,
+                );
+              }
+            });
+          throw error;
+        }
       },
       worldId,
     );
-    return session;
   }
 
   async updateSession(
@@ -876,8 +740,8 @@ export class LocalDataService implements DataService {
       );
     }
 
-    // The server keeps its initialization for a new save (revision 1), with
-    // world data and resolved dependencies. Established saves restore their own.
+    // Every save starts from the server's first export, so the upload restores
+    // it whole; a retained input delta asks the browser to reconcile.
     const uploaded = await api.uploadBrowserCheckpoint(serverSessionId, {
       ...checkpoint,
       world: serverCheckpointWorld(world),

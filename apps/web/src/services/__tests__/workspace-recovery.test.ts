@@ -2,17 +2,19 @@ import "fake-indexeddb/auto";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { BrowserVault } from "../storage/browser-vault.js";
 import { ApiError } from "../api/request.js";
+import type { SessionCommit } from "@covel/store/browser-sync";
 import { createSessionWorkspace } from "../data-service/workspace.js";
 import { createSessionSubscription } from "../subscription.js";
 
-const api = vi.hoisted(() => ({
-  getWorld: vi.fn(),
-  updateWorld: vi.fn(),
-  getSession: vi.fn(),
-  createSession: vi.fn(),
-  uploadBrowserCheckpoint: vi.fn(),
-  fetchBrowserCommit: vi.fn(),
-}));
+const api = await vi.hoisted(async () => {
+  const { fakeSessionServer } =
+    await import("./support/fake-session-server.js");
+  return {
+    ...fakeSessionServer({ vault: () => vault }),
+    getSession: vi.fn(),
+    uploadBrowserCheckpoint: vi.fn(),
+  };
+});
 vi.mock("../api.js", () => api);
 const { LocalDataService } = await import("../data-service/local.js");
 let vault: BrowserVault;
@@ -28,36 +30,25 @@ beforeEach(async () => {
     description: "",
     createdAt: "2026-09-01T00:00:00.000Z",
   });
-  api.getWorld.mockResolvedValue({ id: "world" });
-  api.updateWorld.mockResolvedValue({ id: "world" });
   api.getSession.mockResolvedValue({ id: "session" });
-  api.createSession.mockResolvedValue({
-    phase: "playing",
-    completedPlayerTurns: 0,
-    setupRuntimes: {},
-  });
   api.uploadBrowserCheckpoint.mockResolvedValue({ ok: true });
-  api.fetchBrowserCommit.mockImplementation(
-    async (_id: string, actionId: string, baseRevision: number) => ({
-      baseRevision,
-      revision: baseRevision + 1,
-      actionId,
-      checkpoint: {
-        ...(await vault.getLatestCheckpoint("session")),
-        revision: baseRevision + 1,
-        actionId,
-      },
-    }),
-  );
 });
 afterEach(async () => {
   vi.restoreAllMocks();
   await vault.deleteDatabase();
 });
 
+/** Create the save, then count only the exchanges a test makes itself. */
+async function createSave(
+  service: InstanceType<typeof LocalDataService>,
+): Promise<void> {
+  await service.createSession("world", "session", [], "en-US");
+  vi.clearAllMocks();
+}
+
 async function failedDownload() {
   const service = new LocalDataService(vault);
-  await service.createSession("world", "session", [], "en-US");
+  await createSave(service);
   await service.addMessage({
     id: "durable-input",
     sessionId: "session",
@@ -79,7 +70,7 @@ async function failedDownload() {
 describe("workspace durable pending-commit recovery", () => {
   it("owns input persistence and the server exchange without acquiring the same lock twice", async () => {
     const service = new LocalDataService(vault);
-    await service.createSession("world", "session", [], "en-US");
+    await createSave(service);
     const mutate = vi.fn(async () => "done");
     await expect(
       createSessionWorkspace(service, "local").run(
@@ -179,7 +170,7 @@ describe("workspace durable pending-commit recovery", () => {
 
   it("restores the browser checkpoint before reconnecting a restarted server stream", async () => {
     const service = new LocalDataService(vault);
-    await service.createSession("world", "session", [], "en-US");
+    await createSave(service);
     await service.addMessage({
       id: "retained",
       sessionId: "session",
@@ -280,9 +271,9 @@ describe("workspace durable pending-commit recovery", () => {
 
   it("recovers a commit applied before its pending action was cleared, after a world edit", async () => {
     const service = new LocalDataService(vault);
-    await service.createSession("world", "session", [], "en-US");
+    await createSave(service);
     // The server answers an actionId with the commit it cached for it.
-    const answered = new Map<string, unknown>();
+    const answered = new Map<string, SessionCommit>();
     const exportCommit = api.fetchBrowserCommit.getMockImplementation()!;
     api.fetchBrowserCommit.mockImplementation(
       async (id: string, actionId: string, baseRevision: number) => {
@@ -291,7 +282,7 @@ describe("workspace durable pending-commit recovery", () => {
             actionId,
             await exportCommit(id, actionId, baseRevision),
           );
-        return answered.get(actionId);
+        return answered.get(actionId)!;
       },
     );
     const base = (await vault.getLatestCheckpoint("session"))!;

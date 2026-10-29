@@ -1,6 +1,3 @@
-import { appendDimensionPlan } from "../../world-data/session-import/dimensions.js";
-import { applyPreparedWorldDataImportForSession } from "../../world-data/session-import.js";
-import { DIMENSION_DATA_NAMESPACE } from "@covel/shared";
 import { withMemoryIngestLock } from "../../lib/memory-ingest-lock.js";
 import { scheduleMemoryIngest } from "./commit-execution.js";
 import {
@@ -17,7 +14,7 @@ import {
   RevisionConflictError,
   SessionRecordScopeConflictError,
   exportSessionCheckpoint,
-  isInitialBrowserCheckpoint,
+  initialBrowserCheckpointActionId,
   replaceSessionFromCheckpoint,
   validateBrowserCheckpoint,
   type BrowserCheckpoint,
@@ -226,9 +223,6 @@ export function createBrowserWorkspaceRoutes(
         400,
       );
     }
-    // A save that has never adopted a server commit initializes the mirror.
-    const initialize = isInitialBrowserCheckpoint(checkpoint);
-
     return withLockedSessionMutation({
       c,
       store: c.get("store"),
@@ -322,26 +316,6 @@ export function createBrowserWorkspaceRoutes(
                 errorBody("World not found", { code: "world_not_found" }),
                 404,
               );
-            }
-            if (initialize) {
-              if (checkpoint.session.worldId !== live.worldId) {
-                return c.json(
-                  errorBody("Initialization world does not match the session", {
-                    code: "invalid_checkpoint_scope",
-                  }),
-                  400,
-                );
-              }
-              // POST /sessions has already resolved dependencies, imported the
-              // world's data, and run lifecycle hooks. The empty browser seed
-              // only establishes a revision; downloading the first commit must
-              // retain all that initialized state. Retries keep the same head.
-              if (!head) cache.set(sessionId, newHead(incarnation, checkpoint));
-              return c.json({
-                ok: true,
-                revision: checkpoint.revision,
-                reconcileRequired: true,
-              });
             }
             const admittedCheckpoint = {
               ...checkpoint,
@@ -449,49 +423,6 @@ export function createBrowserWorkspaceRoutes(
                   c.get("store"),
                   admittedCheckpoint,
                   {
-                    afterRestoreInTx: async (tx) => {
-                      if (
-                        checkpoint.session.phase !== "setup" ||
-                        checkpoint.session.completedPlayerTurns !== 0 ||
-                        checkpoint.pluginData.some(
-                          (row) => row.namespace === DIMENSION_DATA_NAMESPACE,
-                        ) ||
-                        checkpoint.worldDataLedger.some(
-                          (row) => row.namespace === DIMENSION_DATA_NAMESPACE,
-                        )
-                      )
-                        return;
-                      const world = checkpoint.session.worldId
-                        ? await tx.getWorld(checkpoint.session.worldId)
-                        : null;
-                      if (!world?.metadata?.dimensions) return;
-                      const plan = appendDimensionPlan(
-                        {
-                          writes: [],
-                          diagnostics: [],
-                          mergeEvents: [],
-                          deferredProjectionOutputs: [],
-                        },
-                        world.metadata.dimensions,
-                        {
-                          registry: c.get("pluginRegistry"),
-                          activePlugins: checkpoint.session.activePlugins,
-                        },
-                        checkpoint.session.locale,
-                      );
-                      await applyPreparedWorldDataImportForSession({
-                        store: tx,
-                        sessionId,
-                        worldId: world.id,
-                        now: checkpoint.committedAt,
-                        prepared: {
-                          imported: true,
-                          diagnostics: [],
-                          mediaRefs: [],
-                          plan,
-                        },
-                      });
-                    },
                     writeWorld,
                     session: {
                       ...checkpoint.session,
@@ -566,8 +497,16 @@ export function createBrowserWorkspaceRoutes(
       expectedSession: guard.session,
       allowedStatuses: "any",
       mutate: async (live) => {
-        const head = cache.get(sessionId, sessionIncarnationIdentity(live));
-        if (!head) {
+        const incarnation = sessionIncarnationIdentity(live);
+        const existingHead = cache.get(sessionId, incarnation);
+        // A new browser save starts from the server's own initialization: its
+        // first export becomes revision 1. Anything else needs an upload first.
+        const firstExport =
+          !existingHead &&
+          baseRevision === 0 &&
+          actionId === initialBrowserCheckpointActionId(sessionId) &&
+          live.completedPlayerTurns === 0;
+        if (!existingHead && !firstExport) {
           return c.json(
             errorBody(
               "Upload a browser checkpoint before requesting a commit",
@@ -578,12 +517,13 @@ export function createBrowserWorkspaceRoutes(
             409,
           );
         }
-        const cached = head.commits.get(actionId);
+        const cached = existingHead?.commits.get(actionId);
         if (cached) return c.json(cached);
-        if (head.revision !== baseRevision) {
+        const headRevision = existingHead?.revision ?? 0;
+        if (headRevision !== baseRevision) {
           const conflict = new RevisionConflictError(
             sessionId,
-            head.revision,
+            headRevision,
             baseRevision as number,
           );
           return c.json(
@@ -599,7 +539,7 @@ export function createBrowserWorkspaceRoutes(
         }
 
         try {
-          const revision = head.revision + 1;
+          const revision = headRevision + 1;
           const exportsReadableFrom = await earliestUnfinishedJobSourceStart(
             c.get("store"),
             sessionId,
@@ -623,14 +563,16 @@ export function createBrowserWorkspaceRoutes(
             },
           });
           const commit: SessionCommit = {
-            baseRevision: head.revision,
+            baseRevision: headRevision,
             revision,
             actionId,
             checkpoint,
           };
+          const head = existingHead ?? newHead(incarnation, checkpoint);
           head.revision = revision;
           head.actionId = actionId;
           head.checkpoint = checkpoint;
+          if (!existingHead) cache.set(sessionId, head);
           cacheCommit(head, commit);
           return c.json(commit);
         } catch (error) {
