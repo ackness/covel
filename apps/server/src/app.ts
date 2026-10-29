@@ -52,6 +52,7 @@ import { mountApiRoutes } from "./host-routes.js";
 import { createPerRequestLlmMiddleware } from "./middleware/per-request-llm.js";
 import { createModelRelayRegistry } from "./model-relay/registry.js";
 import { localModelRelayPagePolicy } from "./middleware/page-relay-policy.js";
+import { createConsumeUnreadBodyMiddleware } from "./middleware/consume-unread-body.js";
 import { createRequestBodyLimitMiddleware } from "./middleware/request-body-limit.js";
 import { createOriginGuardMiddleware } from "./middleware/origin-guard.js";
 import { createHostGuardMiddleware } from "./middleware/host-guard.js";
@@ -122,6 +123,9 @@ configureProviderHostPolicy(hostProfile.credentials.provider);
 const applicationWork = createApplicationWork();
 app.use("*", hostProfileMiddleware(hostProfile));
 app.use("*", applicationWork.middleware);
+// Outermost after work ownership: a body an inner layer left unread is read
+// before the response, so the keep-alive connection survives for the next request.
+app.use("*", createConsumeUnreadBodyMiddleware());
 
 // ── Global error handler ────────────────────────────────────────
 const isDev = env.nodeEnv !== "production";
