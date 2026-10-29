@@ -34,6 +34,7 @@ import {
 
 import {
   AFFINITY_MIN,
+  AFFINITY_MAX,
   clampScore,
   getTier,
   tierLabel as labelOfTier,
@@ -143,6 +144,7 @@ export default function ({ tool, z, shortIdBatch }) {
       // ── 3. Apply changes sequentially (duplicate names accumulate) ──
       /** @type {Map<string, any>} */
       const writes = new Map();
+      const opsByKey = new Map();
       const results = [];
       const messageChanges = [];
 
@@ -194,6 +196,36 @@ export default function ({ tool, z, shortIdBatch }) {
         };
 
         writes.set(key, value);
+        // Preserve author fields through the current record rather than
+        // overwriting them with the snapshot this tool read.
+        const fields = {
+          id: value.id,
+          scoreBar: value.scoreBar,
+          tier: value.tier,
+          tierLabel: value.tierLabel,
+          tierColor: value.tierColor,
+          lastDelta: value.lastDelta,
+          lastDeltaColor: value.lastDeltaColor,
+          lastReason: value.lastReason,
+          history: value.history,
+          updatedAt: value.updatedAt,
+        };
+        const ops = existing
+          ? [
+              typeof prior.score === "number" && Number.isFinite(prior.score)
+                ? {
+                    op: "inc",
+                    path: "/score",
+                    by: change.delta,
+                    min: AFFINITY_MIN,
+                    max: AFFINITY_MAX,
+                    onBound: "clamp",
+                  }
+                : { op: "merge", value: { score } },
+              { op: "merge", value: fields },
+            ]
+          : [{ op: "set", value }];
+        opsByKey.set(key, [...(opsByKey.get(key) ?? []), ...ops]);
         recordByName.set(lookup, { key, value });
         results.push({
           id: key,
@@ -214,12 +246,15 @@ export default function ({ tool, z, shortIdBatch }) {
         });
       }
 
-      // ── 4. Persist records + this turn's toast payload in one batch ──
-      const items = [...writes].map(([key, value]) => ({
-        namespace: "affinity",
-        key,
-        value,
-      }));
+      // ── 4. Submit ordered operations per NPC, then the toast payload ──
+      const proposals = [...opsByKey].map(([key, ops]) =>
+        makeProposal(context, now, "plugin.data.update", {
+          namespace: "affinity",
+          key,
+          ops,
+        }),
+      );
+      const items = [];
       items.push({
         namespace: "message",
         key: "__turnId",
@@ -236,7 +271,10 @@ export default function ({ tool, z, shortIdBatch }) {
           applied: results.length,
           results,
         },
-        [makeProposal(context, now, "plugin.data.batch", { items })],
+        [
+          ...proposals,
+          makeProposal(context, now, "plugin.data.batch", { items }),
+        ],
       );
     },
   });

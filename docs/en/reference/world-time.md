@@ -222,7 +222,8 @@ The narrative is written according to the world's `prompt`. It states clearly ho
 
 ### Where the clock is stored
 
-- The clock is saved in the plugin's single data item `clock/current`. Like ordinary session data, it goes into snapshots, save points, and branches.
+- The clock is saved in `clock/current` in the plugin's `clock` dataset (数据集). Like ordinary session data, it goes into snapshots, save points, and branches. The dataset allows `set`, `merge`, and `inc`: initialization writes a whole record, existing clock ticks advance with `inc`, and derived display fields use `merge`.
+- Records are checked against `schemas/clock.schema.json` when saved. An invalid record is rejected with `dataset-violation`, together with the other writes in that turn's time-settlement unit. Concurrent commits combine tick deltas; display fields still follow the tool's predicted value.
 - The definition is copied into the session the first time it is saved. Later edits to the world or a new import of the definition do not reset an existing clock. Loading a save also does not reinterpret old ticks just because the world file changed.
 - `lastTurnId` prevents the tool from being called twice in the same turn. `lastDelta` and `reason` record this change.
 - All writes go through proposals. If the narrative fails or the save fails, the time is rolled back together with it.

@@ -159,7 +159,7 @@ Items that the story clearly gives you, takes from you, or equips are recorded i
 - Type `/bag` (or `/inventory`) to see your current bag and open the panel.
 - The session summary says "Your bag contains N item entries."
 
-Only item changes that clearly happen in the story are recorded.
+Only item changes that clearly happen in the story are recorded. Inventory dataset (数据集) records are checked when the turn is saved. An invalid record skips that bookkeeping step for this turn; the story is still saved.
 
 ### When it is on
 
@@ -188,6 +188,8 @@ Records your relationship with each NPC. When you have a clear interaction with 
 
 - An "Affinity" panel on the right, with one row per NPC showing the score and level. Scores range from -100 to 100, and 0 is neutral.
 - In a turn where a score changes, an "Affinity changes" note appears in the story text.
+
+Affinity dataset (数据集) records are checked when the turn is saved. An invalid record skips that bookkeeping step for this turn; the story is still saved.
 
 Levels are set by score:
 

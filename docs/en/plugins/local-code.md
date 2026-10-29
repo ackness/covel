@@ -438,6 +438,8 @@ try {
 const gold = await ctx.pluginData.get("wallet", "gold"); // the value after the ops
 ```
 
+The bundled [inventory ledger](../../../plugins/inventory/lib/update-inventory.js) and [affinity tool](../../../plugins/affinity/tools/update-affinity.js) are complete examples of operation-based dataset (数据集) writes: existing counters use `inc`, new records use `set`, and derived fields such as affinity tiers and progress bars are computed from the read value plus the delta, then written with `merge`. Concurrent commits combine the counter deltas; derived fields and history written as a whole array still follow the tool’s prediction and can lag the final counter.
+
 - The operations apply at commit to the latest stored value. When two runs each take 3 at the same time, both take effect; neither overwrites the other.
 - The call first tries them on the value it sees now. When they fail (for example the result is below `min`), it throws and writes nothing, so you can handle it right there.
 - It returns nothing. Read the key again for the new value.

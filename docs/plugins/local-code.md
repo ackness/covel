@@ -438,6 +438,8 @@ try {
 const gold = await ctx.pluginData.get("wallet", "gold"); // the value after the ops
 ```
 
+内置的 [inventory 台账](../../plugins/inventory/lib/update-inventory.js)和 [affinity 工具](../../plugins/affinity/tools/update-affinity.js)是数据集操作式写入的完整例子：已有记录的计数用 `inc`，新记录用 `set`，好感档位、进度条等派生字段由读取值加增量算出，再用 `merge` 写入。并发提交时计数增量会累加，派生字段和整数组写入的历史仍取工具预测的值，可能落后于最终计数。
+
 - 操作在提交时作用在最新存的值上。两次运行同时各扣 3，两次都会扣到，不会一次覆盖另一次。
 - 调用时先拿当前看到的值试一遍。失败（比如结果小于 `min`）就直接抛错，什么都不写，你可以当场处理。
 - 它不返回新值。想要新值，再 `get` 一次。

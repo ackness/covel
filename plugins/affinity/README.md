@@ -17,15 +17,15 @@
 - `tier-metadata.js`：分数范围、六档 tier 与展示元数据的唯一来源。
 - `tools/update-affinity.js`：按名字去重的批量好感变更工具。
 - `server/index.js`：entry 模块，注册本地工具。
-- `schemas/affinity.schema.json`：worldData 导入形状。
+- `schemas/affinity.schema.json`：`affinity` 数据集与 worldData 导入共用的 schema。
 - `ui/affinity-panel.json`：右侧好感面板。
 - `ui/affinity-toast.json`：聊天区变更消息卡。
 
 ## 数据与行为
 
-- 好感记录写入 `plugin_data[affinity][affinity]`，key 为稳定短 ID（`shortIdBatch` 生成，或世界预置的 `id`），按 NPC 名字大小写不敏感去重。
-- `score` 累计并 clamp 在 [-100, 100]；档位阈值：≤ -60 敌视 / -59..-20 冷淡 / -19..19 中立 / 20..59 友好 / 60..84 亲密 / ≥ 85 挚爱。`tier` / `tierLabel` / `tierColor` / `scoreBar`（进度条用的 [0,200] 位移值，中点为中立）每次写入时由工具重新派生。
-- `history` 追加 `{turn, delta, reason}`，只保留最近 10 条。
+- 好感记录写入 `affinity` 数据集（`plugin_data[affinity][affinity]`），新记录用 `set`，提交时按 schema 校验最终记录；key 为稳定短 ID（`shortIdBatch` 生成，或世界预置的 `id`），按 NPC 名字大小写不敏感去重。
+- 已有记录的 `score` 以 `inc` 累计并 clamp 在 [-100, 100]，派生展示字段以 `merge` 写入；档位阈值：≤ -60 敌视 / -59..-20 冷淡 / -19..19 中立 / 20..59 友好 / 60..84 亲密 / ≥ 85 挚爱。`tier` / `tierLabel` / `tierColor` / `scoreBar`（进度条用的 [0,200] 位移值，中点为中立）每次写入时由工具重新派生。
+- `history` 追加 `{turn, delta, reason}`，只保留最近 10 条，以 `merge` 整数组写入。并发提交时分数增量会累加，展示字段和历史仍取工具读取时算出的预测值，可能暂时落后于最终分数。
 - 名字先按会话角色的名字和别名解析（`resolveCharacter`）：模型用别名称呼某个角色时，变更记在该角色名下的同一条记录上，不会多出一条。不在世界模型里的名字按原样匹配。
 - 本回合变更同时写入 `message` namespace（`__turnId` + `changes`），供聊天区消息卡渲染。
 - 没有明确互动的回合不调用工具、不产生任何写入。

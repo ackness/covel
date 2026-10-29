@@ -1076,6 +1076,7 @@ pnpm lint
 | --- | --- |
 | 叙事提供者与用户设置 | [narrator](../../plugins/narrator/PLUGIN.md) |
 | 本地工具和 UI 消息 | [guide](../../plugins/guide/PLUGIN.md) |
+| 数据集与操作式写入 | [inventory](../../plugins/inventory/PLUGIN.md)、[affinity](../../plugins/affinity/PLUGIN.md) |
 | World Model 初始化 | [world-init](../../plugins/world-init/PLUGIN.md) |
 | 角色创建与跟踪 | [char-creator](../../plugins/char-creator/PLUGIN.md) |
 | 函数运行时与公开输出 | [world-time](../../plugins/world-time/PLUGIN.md) |

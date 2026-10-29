@@ -1,5 +1,5 @@
 ---
-version: 0.0.39
+version: 0.0.40
 displayName: Inventory
 description: >-
   Records explicit item gains, losses, and equipment changes from each turn's
@@ -19,6 +19,11 @@ contributes:
         - inventory
       description: View the current bag and open the inventory panel.
       action: open-bag
+  datasets:
+    items:
+      schema: ./schemas/items.schema.json
+      key: id
+      ops: [set, merge, inc]
   data:
     items:
       schema: ./schemas/items.schema.json
