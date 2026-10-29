@@ -113,11 +113,13 @@ export default async function updateInventory(params, context) {
   // ── 3. Apply changes sequentially (later changes see earlier ones) ──
   /** @type {Map<string, any>} staged item writes, key → value */
   const staged = new Map();
+  const opsByKey = new Map();
   const results = [];
   const messageChanges = [];
 
-  const stage = (key, value) => {
+  const stage = (key, value, ops) => {
     staged.set(key, value);
+    opsByKey.set(key, [...(opsByKey.get(key) ?? []), ...ops]);
     itemByKey.set(key, value);
     if (typeof value.name === "string") {
       keyByName.set(value.name.toLowerCase(), key);
@@ -146,13 +148,31 @@ export default async function updateInventory(params, context) {
         const amount = change.quantity ?? 1;
         if (live) {
           const base = typeof live.quantity === "number" ? live.quantity : 0;
-          stage(key, {
-            ...live,
-            quantity: base + amount,
-            description: change.description ?? live.description,
-            tags: mergeTags(live.tags, change.tags),
-            updatedAt: now,
-          });
+          stage(
+            key,
+            {
+              ...live,
+              quantity: base + amount,
+              description: change.description ?? live.description,
+              tags: mergeTags(live.tags, change.tags),
+              updatedAt: now,
+            },
+            [
+              typeof live.quantity === "number"
+                ? { op: "inc", path: "/quantity", by: amount }
+                : { op: "merge", value: { quantity: amount } },
+              {
+                op: "merge",
+                value: {
+                  ...(change.description !== undefined && {
+                    description: change.description,
+                  }),
+                  tags: mergeTags(live.tags, change.tags),
+                  updatedAt: now,
+                },
+              },
+            ],
+          );
           results.push({
             op: change.op,
             name: live.name,
@@ -163,14 +183,32 @@ export default async function updateInventory(params, context) {
         } else if (existing) {
           // Revive a tombstone: same name → same ID, fresh quantity.
           const { removed: _removed, ...rest } = existing;
-          stage(key, {
-            ...rest,
-            quantity: amount,
-            equipped: false,
-            description: change.description ?? rest.description,
-            tags: change.tags ?? rest.tags ?? [],
-            updatedAt: now,
-          });
+          stage(
+            key,
+            {
+              ...rest,
+              quantity: amount,
+              equipped: false,
+              description: change.description ?? rest.description,
+              tags: change.tags ?? rest.tags ?? [],
+              updatedAt: now,
+            },
+            [
+              { op: "inc", path: "/quantity", by: amount },
+              {
+                op: "merge",
+                value: {
+                  removed: null,
+                  equipped: false,
+                  ...(change.description !== undefined && {
+                    description: change.description,
+                  }),
+                  tags: change.tags ?? rest.tags ?? [],
+                  updatedAt: now,
+                },
+              },
+            ],
+          );
           results.push({
             op: change.op,
             name: existing.name,
@@ -180,7 +218,7 @@ export default async function updateInventory(params, context) {
           });
         } else {
           const id = idForNewName.get(change.name.toLowerCase());
-          stage(id, {
+          const value = {
             id,
             name: change.name,
             quantity: amount,
@@ -188,7 +226,8 @@ export default async function updateInventory(params, context) {
             tags: change.tags ?? [],
             equipped: false,
             updatedAt: now,
-          });
+          };
+          stage(id, value, [{ op: "set", value }]);
           results.push({
             op: change.op,
             name: change.name,
@@ -215,14 +254,31 @@ export default async function updateInventory(params, context) {
         const base = typeof live.quantity === "number" ? live.quantity : 0;
         const lost = Math.min(amount, base);
         const remaining = base - amount;
+        const decrement = {
+          op: "inc",
+          path: "/quantity",
+          by: -amount,
+          min: 0,
+          onBound: "clamp",
+        };
         if (remaining <= 0) {
-          stage(key, {
-            ...live,
-            quantity: 0,
-            equipped: false,
-            removed: true,
-            updatedAt: now,
-          });
+          stage(
+            key,
+            {
+              ...live,
+              quantity: 0,
+              equipped: false,
+              removed: true,
+              updatedAt: now,
+            },
+            [
+              decrement,
+              {
+                op: "merge",
+                value: { equipped: false, removed: true, updatedAt: now },
+              },
+            ],
+          );
           results.push({
             op: change.op,
             name: live.name,
@@ -233,7 +289,10 @@ export default async function updateInventory(params, context) {
               : {}),
           });
         } else {
-          stage(key, { ...live, quantity: remaining, updatedAt: now });
+          stage(key, { ...live, quantity: remaining, updatedAt: now }, [
+            decrement,
+            { op: "merge", value: { updatedAt: now } },
+          ]);
           results.push({
             op: change.op,
             name: live.name,
@@ -268,7 +327,9 @@ export default async function updateInventory(params, context) {
           });
           break;
         }
-        stage(key, { ...live, equipped, updatedAt: now });
+        stage(key, { ...live, equipped, updatedAt: now }, [
+          { op: "merge", value: { equipped, updatedAt: now } },
+        ]);
         results.push({
           op: change.op,
           name: live.name,
@@ -281,21 +342,29 @@ export default async function updateInventory(params, context) {
     }
   }
 
-  // ── 4. Persist item writes + per-turn message summary in one batch ──
-  const items = [...staged].map(([key, value]) => ({
-    namespace: "items",
-    key,
-    value,
-  }));
+  // ── 4. Submit ordered operations per item, then the per-turn message ──
+  const proposals = [...opsByKey].map(([key, ops]) =>
+    makeProposal(context, now, "plugin.data.update", {
+      namespace: "items",
+      key,
+      ops,
+    }),
+  );
   if (messageChanges.length > 0) {
     const merged = [...previousMessageChanges, ...messageChanges].map(
       (entry, index) => ({ ...entry, seq: index }),
     );
-    items.push({
-      namespace: "message",
-      key: context.turnId,
-      value: { turnId: context.turnId, changes: merged },
-    });
+    proposals.push(
+      makeProposal(context, now, "plugin.data.batch", {
+        items: [
+          {
+            namespace: "message",
+            key: context.turnId,
+            value: { turnId: context.turnId, changes: merged },
+          },
+        ],
+      }),
+    );
   }
 
   const summary = {
@@ -303,11 +372,9 @@ export default async function updateInventory(params, context) {
     skipped: results.filter((r) => r.status === "skipped").length,
     results,
   };
-  if (items.length === 0) return summary;
+  if (proposals.length === 0) return summary;
 
-  return withPendingProposals(summary, [
-    makeProposal(context, now, "plugin.data.batch", { items }),
-  ]);
+  return withPendingProposals(summary, proposals);
 }
 
 function mergeTags(existing, newTags) {

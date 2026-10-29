@@ -9,7 +9,7 @@
 - `runtimes/ledger/`：post-turn function runtime，读取本轮 WorldIR 的 `inventory_change` 事件并记账。
 - `lib/world-ir.js`：把主角持有的物品事件映射为台账变化（`gain` → add、`lose` → remove、`equip` / `unequip`）。
 - `lib/update-inventory.js`：批量提交物品变化（add / remove / set / equip / unequip）的台账逻辑。
-- `schemas/items.schema.json`：`items` namespace 的导入 schema（世界包可预置开局装备）。
+- `schemas/items.schema.json`：`items` 数据集与世界包导入共用的 schema（世界包可预置开局装备）。
 - `ui/inventory-panel.json`：右侧行囊面板（已装备分组 + 背包列表）。
 - `ui/inventory-message.json`：聊天区的本回合得失摘要块。
 - `rpc/open-bag.js`：`/bag`（别名 `/inventory`）命令处理器，统计当前物品并打开右侧行囊面板。
@@ -17,8 +17,8 @@
 ## 数据与行为
 
 - 只记录 WorldIR 中归属主角的 `inventory_change` 事件；物品名取事件引用的 item 实体，数量缺省为 1。其他角色的物品变化不进背包。事件的固定字段由 `world-ir` 约定并校验。
-- 物品写入 `plugin_data[inventory][items]`，按名称去重、数量自动叠加，name 映射为稳定短 ID。
-- 减到 0 的物品写 tombstone（`quantity: 0, removed: true`）而非删除行：proposal 管道没有删除类型，UI 会隐藏 tombstone，同名物品再次获得时复用同一条记录。
+- 物品写入 `items` 数据集（`plugin_data[inventory][items]`），按名称查找记录，新物品由 `shortIdBatch` 分配稳定短 ID。新记录用 `set`，已有记录的数量变化用 `inc`；移除时以 0 为下界并 clamp。提交时按数据集 schema 校验最终记录。
+- 减到 0 时用 `merge` 标记 tombstone（`quantity: 0, removed: true`）并取消装备；装备变化也用 `merge`。UI 隐藏 tombstone，同名物品再次获得时复用同一条记录并清除标记。
 - 货币也是物品；item 实体 `attributes.tags` 中的标签会随获得写入。
 - 每回合的得失摘要写入 `plugin_data[inventory][message]`（key 为 turnId），驱动聊天区 toast。
 - 携带的物品会出现在状态摘要里（`session.summary@1` 槽位）：已装备的在前，最多 8 件，其余显示为数量。面板显示整个背包。

@@ -1106,6 +1106,7 @@ To see a real example of a given pattern, look here:
 | --- | --- |
 | Narrative provider and user settings | [narrator](../../../plugins/narrator/PLUGIN.md) |
 | Local tools and UI messages | [guide](../../../plugins/guide/PLUGIN.md) |
+| Datasets (数据集) and operation-based writes | [inventory](../../../plugins/inventory/PLUGIN.md), [affinity](../../../plugins/affinity/PLUGIN.md) |
 | World Model initialization | [world-init](../../../plugins/world-init/PLUGIN.md) |
 | Character creation and tracking | [char-creator](../../../plugins/char-creator/PLUGIN.md) |
 | Function runtime and public output | [world-time](../../../plugins/world-time/PLUGIN.md) |

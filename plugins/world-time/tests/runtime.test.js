@@ -2,6 +2,9 @@ import { createMemoryStore } from "@covel/store/memory";
 import {
   getToolContent,
   getPendingProposals,
+  applyDataOps,
+  makeProposal,
+  withPendingProposals,
 } from "@covel/plugin-handlers-utils";
 import path from "node:path";
 import { describe, expect, it, vi } from "vitest";
@@ -23,7 +26,7 @@ import {
 
 import { tool } from "@covel/tools";
 import createAdvance from "../tools/advance-world-time.js";
-import { DEFAULT_TIME, initialTick, loadTime } from "../clock.js";
+import { DEFAULT_TIME, initialTick, loadTime, describeTime } from "../clock.js";
 
 const now = "2026-09-18T00:00:00Z";
 const clockReader = (store) =>
@@ -33,7 +36,10 @@ const clockReader = (store) =>
     runtimeId: "world-time/context",
     turnId: "test",
   });
-async function fixture({ withReader = false } = {}) {
+async function fixture({
+  withReader = false,
+  request = { amount: 1, unit: "hour", reason: "An hour-long walk." },
+} = {}) {
   const store = createMemoryStore();
   await store.createSession({
     id: "s",
@@ -89,17 +95,20 @@ async function fixture({ withReader = false } = {}) {
     promptTemplate: "",
   });
   const advance = createAdvance({ tool });
+  const advanceResults = [];
+  const executeAdvance = advance.execute;
+  advance.execute = async (params, ctx) => {
+    const result = await executeAdvance(params, ctx);
+    advanceResults.push(result);
+    return result;
+  };
   const generate = vi.fn(async () => ({
     content: null,
     toolCalls: [
       {
         id: "advance",
         name: advance.name,
-        arguments: JSON.stringify({
-          amount: 1,
-          unit: "hour",
-          reason: "An hour-long walk.",
-        }),
+        arguments: JSON.stringify(request),
       },
     ],
     finishReason: "tool_calls",
@@ -128,7 +137,7 @@ async function fixture({ withReader = false } = {}) {
       promptTemplate: "",
     });
   const runtimes = [
-    ...manifests,
+    ...manifests.map((manifest) => loaded.get(manifest.name).manifest),
     story,
     ...(withReader ? [loaded.get("ledger").manifest] : []),
   ];
@@ -165,12 +174,23 @@ async function fixture({ withReader = false } = {}) {
       },
       extraInTx,
     });
-  return { store, run, commit, storyHandler, readerHandler, generate, advance };
+  return {
+    store,
+    run,
+    commit,
+    storyHandler,
+    readerHandler,
+    generate,
+    advance,
+    loaded,
+    advanceResults,
+  };
 }
 
 describe("world-time pipeline", () => {
   it("discovers the core plugin, binds the current time before narration, and commits after narration", async () => {
-    const { store, run, commit, storyHandler, generate } = await fixture();
+    const { store, run, commit, storyHandler, generate, advanceResults } =
+      await fixture();
     const result = await run();
     expect(
       result.result.runtimeResults.map((item) => [item.runtimeId, item.status]),
@@ -198,7 +218,29 @@ describe("world-time pipeline", () => {
     const restored = createMemoryStore();
     await replaceSessionFromCheckpoint(restored, checkpoint);
     expect((await loadTime(clockReader(restored), "en")).tick).toBe(value.tick);
-    await commit(await run("next-turn"));
+    const later = await run("next-turn");
+    const [update] = getPendingProposals(advanceResults.at(-1));
+    expect(update.type).toBe("plugin.data.update");
+    expect(update.payload.ops.map((op) => op.op)).toEqual(["inc", "merge"]);
+    expect(update.payload.ops[0]).toEqual({ op: "inc", path: "/tick", by: 60 });
+    expect(update.payload.ops[1].value).not.toHaveProperty("schemaVersion");
+    const predicted = {
+      ...value,
+      tick: value.tick + 60,
+      ...describeTime(value.definition, value.tick + 60, "en"),
+      lastTurnId: "next-turn",
+      lastDelta: 60,
+      reason: "An hour-long walk.",
+    };
+    expect(applyDataOps({ exists: true, value }, update.payload.ops)).toEqual({
+      ok: true,
+      exists: true,
+      value: predicted,
+    });
+    await commit(later);
+    expect(
+      (await store.getPluginData("s", "world-time", "clock", "current")).value,
+    ).toEqual({ ...predicted, locale: "en", units: ["minute", "hour", "day"] });
     expect((await loadTime(clockReader(restored), "en")).tick).toBe(value.tick);
     expect((await loadTime(clockReader(store), "en")).tick).toBe(
       value.tick + 60,
@@ -294,6 +336,9 @@ describe("world-time pipeline", () => {
     const first = await advance.execute({ reason: "conversation" }, ctx);
     const pendingProposals = getPendingProposals(first);
     expect(pendingProposals).toHaveLength(1);
+    expect(pendingProposals[0].type).toBe("plugin.data");
+    const { summary: _summary, ...expected } = getToolContent(first);
+    expect(pendingProposals[0].payload.value).toEqual(expected);
     const second = await advance.execute(
       { reason: "duplicate" },
       {
@@ -304,5 +349,205 @@ describe("world-time pipeline", () => {
     );
     expect(getPendingProposals(second)).toHaveLength(0);
     expect(getToolContent(second).tick).toBe(initialTick(DEFAULT_TIME) + 10);
+  });
+  it("loads the permissive clock dataset for both real runtimes", async () => {
+    const { loaded } = await fixture();
+    for (const id of ["world-time/context", "world-time/advance"]) {
+      const runtime = loaded.get(id);
+      expect(runtime.manifest.datasets.clock).toEqual({
+        namespace: "clock",
+        schema: "./schemas/clock.schema.json",
+        ops: ["set", "merge", "inc"],
+      });
+      expect(runtime.datasetSchemas.clock).toMatchObject({
+        required: ["schemaVersion", "definition", "tick"],
+        additionalProperties: true,
+      });
+    }
+  });
+
+  it("advances on top of a pending context set before either write commits", async () => {
+    const { store, advance, run, commit } = await fixture();
+    const ctx = {
+      sessionId: "s",
+      turnId: "buffered",
+      pluginId: "world-time",
+      runtimeId: "world-time/advance",
+    };
+    const base = await loadTime(clockReader(store), "en");
+    const init = makeProposal(
+      { ...ctx, runtimeId: "world-time/context" },
+      now,
+      "plugin.data",
+      {
+        namespace: "clock",
+        key: "current",
+        value: {
+          schemaVersion: 1,
+          definition: base.definition,
+          tick: base.tick,
+          ...describeTime(base.definition, base.tick, "en"),
+        },
+      },
+    );
+    const result = await advance.execute(
+      { amount: 1, unit: "hour", reason: "Walked" },
+      {
+        ...ctx,
+        inputSlots: {
+          currentTime: { value: base },
+          narrative: { value: "They walk for an hour." },
+        },
+        store: createFunctionStoreView(store, ctx, [init]),
+      },
+    );
+    const [update] = getPendingProposals(result);
+    expect(update.type).toBe("plugin.data.update");
+    const { summary: _summary, ...expected } = getToolContent(result);
+    expect(
+      applyDataOps(
+        { exists: true, value: init.payload.value },
+        update.payload.ops,
+      ),
+    ).toEqual({ ok: true, exists: true, value: expected });
+    // Use the real context handler's initialization and the buffered tool's
+    // update in one pipeline execution, in that order.
+    const original = advance.execute;
+    advance.execute = async () => result;
+    const execution = await run("buffered");
+    advance.execute = original;
+    expect(execution.result.runtimeResults[0].status).toBe("success");
+    expect((await commit(execution)).status).toBe("committed");
+    expect(
+      (await store.getPluginData("s", "world-time", "clock", "current")).value,
+    ).toEqual({ ...expected, locale: "en", units: ["minute", "hour", "day"] });
+  });
+
+  it.each([
+    [0, "forward", 0],
+    [1, "backward", -60],
+  ])(
+    "commits amount %i in direction %s as inc by %i",
+    async (amount, direction, delta) => {
+      const { store, run, commit, advanceResults, advance } = await fixture({
+        request: { amount, unit: "hour", direction, reason: "Time shifts." },
+      });
+      const definition = {
+        ...DEFAULT_TIME,
+        evolution: { ...DEFAULT_TIME.evolution, mode: "bidirectional" },
+      };
+      const base = {
+        schemaVersion: 1,
+        definition,
+        tick: initialTick(definition),
+        ...describeTime(definition, initialTick(definition), "en"),
+        extra: "preserved",
+      };
+      await store.setPluginData({
+        id: "clock",
+        sessionId: "s",
+        pluginId: "world-time",
+        namespace: "clock",
+        key: "current",
+        value: base,
+        createdAt: now,
+        updatedAt: now,
+      });
+      const execution = await run();
+      const [update] = getPendingProposals(advanceResults.at(-1));
+      expect(update.payload.ops[0]).toEqual({
+        op: "inc",
+        path: "/tick",
+        by: delta,
+      });
+      expect((await commit(execution)).status).toBe("committed");
+      const value = (
+        await store.getPluginData("s", "world-time", "clock", "current")
+      ).value;
+      expect(value).toEqual({
+        ...base,
+        locale: "en",
+        units: ["minute", "hour", "day"],
+        tick: base.tick + delta,
+        ...describeTime(definition, base.tick + delta, "en"),
+        lastTurnId: "turn",
+        lastDelta: delta,
+        reason: "Time shifts.",
+      });
+      const replay = await advance.execute(
+        { amount, unit: "hour", direction, reason: "Replay" },
+        {
+          sessionId: "s",
+          turnId: "turn",
+          pluginId: "world-time",
+          runtimeId: "world-time/advance",
+          inputSlots: {
+            currentTime: { value: { ...base, locale: "en" } },
+            narrative: { value: "Time shifts." },
+          },
+          store: clockReader(store),
+        },
+      );
+      expect(getPendingProposals(replay)).toEqual([]);
+      expect(getToolContent(replay).tick).toBe(value.tick);
+    },
+  );
+
+  it("rejects an advance when the clock changed since narration started", async () => {
+    const { store, advance } = await fixture();
+    const base = await loadTime(clockReader(store), "en");
+    await expect(
+      advance.execute(
+        { reason: "Walked" },
+        {
+          sessionId: "s",
+          turnId: "changed",
+          pluginId: "world-time",
+          runtimeId: "world-time/advance",
+          inputSlots: {
+            currentTime: { value: base },
+            narrative: { value: "Walked." },
+          },
+          store: {
+            getPluginData: async () => ({ value: { tick: base.tick + 1 } }),
+          },
+        },
+      ),
+    ).rejects.toThrow("World time changed since this narrative started");
+  });
+
+  it("refuses a clock without tick as a dataset violation and keeps the story", async () => {
+    const { store, run, commit, advance } = await fixture();
+    const original = advance.execute;
+    advance.execute = async (params, ctx) => {
+      const result = await original(params, ctx);
+      return withPendingProposals(getToolContent(result), [
+        makeProposal(ctx, now, "plugin.data", {
+          namespace: "clock",
+          key: "current",
+          value: { schemaVersion: 1, definition: DEFAULT_TIME },
+        }),
+      ]);
+    };
+    const execution = await run();
+    const outcome = await commit(execution);
+    expect(outcome.status).toBe("committed");
+    expect(outcome.failedProposals).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ code: "dataset-violation" }),
+      ]),
+    );
+    expect(outcome.isolatedRuntimes.map((entry) => entry.runtimeId)).toEqual([
+      "world-time/advance",
+    ]);
+    expect(
+      (await store.getPluginData("s", "world-time", "clock", "current")).value
+        .tick,
+    ).toBe(initialTick(DEFAULT_TIME));
+    expect(
+      execution.result.runtimeResults.find(
+        (entry) => entry.runtimeId === "story",
+      ).status,
+    ).toBe("success");
   });
 });

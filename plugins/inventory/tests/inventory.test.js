@@ -1,12 +1,13 @@
 import {
   getToolContent,
   getPendingProposals,
+  applyDataOps,
 } from "@covel/plugin-handlers-utils";
 import { readFileSync as readContractFile } from "node:fs";
 import {
   bindToolStore,
   createPluginTestStore,
-  executeToolAndCommit as executeAndCommit,
+  executeToolAndCommit as runAndCommit,
   commitToolResults,
   makeRandom,
 } from "@covel/plugin-test-utils";
@@ -42,6 +43,108 @@ import ledger from "../runtimes/ledger/handler.js";
 import vocabulary from "../runtimes/vocabulary/handler.js";
 
 const PLUGINS_DIR = path.resolve(import.meta.dirname, "../..");
+
+// Compare both the operation projection and the committed row to the old
+// sequential whole-record simulation, using the proposal's own timestamp.
+async function assertInventoryOps(result, initial, changes, store) {
+  const expected = new Map(initial.map((row) => [row.key, row.value]));
+  const proposals = getPendingProposals(result);
+  const updates = proposals.filter(
+    (proposal) => proposal.type === "plugin.data.update",
+  );
+  const now = updates[0]?.timestamp;
+  const results = getToolContent(result).results;
+  for (const [index, change] of changes.entries()) {
+    const outcome = results[index];
+    if (outcome.status === "skipped") continue;
+    const key = outcome.itemId;
+    const prior = expected.get(key);
+    const amount = change.quantity ?? 1;
+    let value;
+    if (change.op === "add") {
+      const live = prior && prior.removed !== true;
+      const { removed: _removed, ...rest } = prior ?? {};
+      value = {
+        ...rest,
+        id: prior?.id ?? key,
+        name: prior?.name ?? change.name,
+        quantity:
+          (live && typeof prior.quantity === "number" ? prior.quantity : 0) +
+          amount,
+        description:
+          change.description ?? prior?.description ?? (prior ? undefined : ""),
+        tags: live
+          ? !change.tags?.length
+            ? (prior.tags ?? [])
+            : [...new Set([...(prior.tags ?? []), ...change.tags])].slice(0, 5)
+          : (change.tags ?? prior?.tags ?? []),
+        ...(live ? {} : { equipped: false }),
+        updatedAt: now,
+      };
+    } else if (change.op === "remove") {
+      const quantity = Math.max(
+        0,
+        (typeof prior.quantity === "number" ? prior.quantity : 0) - amount,
+      );
+      value = {
+        ...prior,
+        quantity,
+        ...(quantity === 0 && { equipped: false, removed: true }),
+        updatedAt: now,
+      };
+    } else {
+      value = { ...prior, equipped: change.op === "equip", updatedAt: now };
+    }
+    expected.set(key, JSON.parse(JSON.stringify(value)));
+  }
+  expect(updates.map((proposal) => proposal.payload.key)).toEqual([
+    ...new Set(
+      results
+        .filter((item) => item.status !== "skipped")
+        .map((item) => item.itemId),
+    ),
+  ]);
+  for (const proposal of updates) {
+    const { namespace, key, ops } = proposal.payload;
+    expect(namespace).toBe("items");
+    expect(ops.every((op) => ["set", "merge", "inc"].includes(op.op))).toBe(
+      true,
+    );
+    const prior = initial.find((row) => row.key === key);
+    const projected = applyDataOps(
+      prior ? { exists: true, value: prior.value } : { exists: false },
+      ops,
+    );
+    expect(projected).toEqual({
+      ok: true,
+      exists: true,
+      value: expected.get(key),
+    });
+    if (store)
+      expect(
+        (await store.getPluginData("sess-1", "inventory", namespace, key))
+          .value,
+      ).toEqual(expected.get(key));
+  }
+  for (const proposal of proposals.filter(
+    (item) => item.type === "plugin.data.batch",
+  )) {
+    expect(
+      proposal.payload.items.every((item) => item.namespace === "message"),
+    ).toBe(true);
+  }
+}
+
+async function executeAndCommit(tool, params, ctx, store) {
+  const initial = await store.listPluginData(
+    ctx.sessionId,
+    ctx.pluginId,
+    "items",
+  );
+  const result = await runAndCommit(tool, params, ctx, store);
+  await assertInventoryOps(result, initial, params.changes, store);
+  return result;
+}
 
 // ── Tool unit tests ──────────────────────────────────────────────
 
@@ -401,6 +504,22 @@ describe("update-inventory", () => {
       itemId,
     });
     await commitToolResults([first, second], ctx, mockStore);
+    await assertInventoryOps(
+      first,
+      [],
+      [{ op: "add", name: "Iron Sword" }],
+      undefined,
+    );
+    const initial = applyDataOps(
+      { exists: false },
+      getPendingProposals(first)[0].payload.ops,
+    ).value;
+    await assertInventoryOps(
+      second,
+      [{ key: itemId, value: initial }],
+      [{ op: "equip", name: "Iron Sword" }],
+      mockStore,
+    );
     const stored = await mockStore.getPluginData(
       "sess-1",
       "inventory",
@@ -415,6 +534,158 @@ describe("update-inventory", () => {
       "turn-1",
     );
     expect(message.value.changes.map((c) => c.op)).toEqual(["add", "equip"]);
+  });
+  it("repairs a non-numeric quantity with merge before stacking", async () => {
+    await mockStore.setPluginData({
+      id: "seed",
+      sessionId: ctx.sessionId,
+      pluginId: ctx.pluginId,
+      namespace: "items",
+      key: "torch",
+      value: {
+        id: "torch",
+        name: "Torch",
+        quantity: "unknown",
+        description: "Old",
+        tags: ["tool"],
+      },
+      createdAt: "now",
+      updatedAt: "now",
+    });
+    const result = await executeAndCommit(
+      updateInventoryTool,
+      { changes: [{ op: "add", name: "Torch", quantity: 2 }] },
+      ctx,
+      mockStore,
+    );
+    expect(getPendingProposals(result)[0].payload.ops[0]).toEqual({
+      op: "merge",
+      value: { quantity: 2 },
+    });
+    expect(
+      getPendingProposals(result)[0].payload.ops[1].value,
+    ).not.toHaveProperty("description");
+  });
+
+  it("keeps set first when a new item is added then removed in one batch", async () => {
+    const result = await executeAndCommit(
+      updateInventoryTool,
+      {
+        changes: [
+          { op: "add", name: "Torch", quantity: 2 },
+          { op: "remove", name: "torch", quantity: 2 },
+        ],
+      },
+      ctx,
+      mockStore,
+    );
+    expect(
+      getPendingProposals(result)[0].payload.ops.map((op) => op.op),
+    ).toEqual(["set", "inc", "merge"]);
+  });
+
+  it("clamps an excessive removal and keeps the only-N-held note and toast", async () => {
+    await executeAndCommit(
+      updateInventoryTool,
+      { changes: [{ op: "add", name: "Torch", quantity: 2 }] },
+      ctx,
+      mockStore,
+    );
+    const result = await executeAndCommit(
+      updateInventoryTool,
+      { changes: [{ op: "remove", name: "Torch", quantity: 5 }] },
+      { ...ctx, turnId: "turn-2" },
+      mockStore,
+    );
+    expect(getToolContent(result).results[0].note).toBe(
+      "only 2 held — removed all",
+    );
+    expect(getPendingProposals(result)[0].payload.ops[0]).toEqual({
+      op: "inc",
+      path: "/quantity",
+      by: -5,
+      min: 0,
+      onBound: "clamp",
+    });
+    expect(
+      (
+        await mockStore.getPluginData(
+          ctx.sessionId,
+          ctx.pluginId,
+          "message",
+          "turn-2",
+        )
+      ).value.changes[0].text,
+    ).toBe("− Torch ×2");
+  });
+
+  it("accumulates duplicate adds, tags and descriptions under one key in first-touched order", async () => {
+    const result = await executeAndCommit(
+      updateInventoryTool,
+      {
+        changes: [
+          {
+            op: "add",
+            name: "Torch",
+            quantity: 2,
+            description: "First",
+            tags: ["tool", "light"],
+          },
+          { op: "add", name: "Rope" },
+          {
+            op: "add",
+            name: "torch",
+            quantity: 3,
+            description: "Second",
+            tags: ["light", "new"],
+          },
+          { op: "equip", name: "Torch" },
+          { op: "unequip", name: "Torch" },
+        ],
+      },
+      ctx,
+      mockStore,
+    );
+    const updates = getPendingProposals(result).filter(
+      (proposal) => proposal.type === "plugin.data.update",
+    );
+    expect(updates).toHaveLength(2);
+    expect(updates[0].payload.ops.map((op) => op.op)).toEqual([
+      "set",
+      "inc",
+      "merge",
+      "merge",
+      "merge",
+    ]);
+  });
+
+  it("revives with inc and clears the tombstone via merge", async () => {
+    const result = await executeAndCommit(
+      updateInventoryTool,
+      {
+        changes: [
+          { op: "add", name: "Torch", tags: ["tool"] },
+          { op: "remove", name: "Torch" },
+          { op: "add", name: "Torch", quantity: 3, description: "Relit" },
+        ],
+      },
+      ctx,
+      mockStore,
+    );
+    const ops = getPendingProposals(result)[0].payload.ops;
+    expect(ops.map((op) => op.op)).toEqual([
+      "set",
+      "inc",
+      "merge",
+      "inc",
+      "merge",
+    ]);
+    expect(ops.at(-1).value).toMatchObject({
+      removed: null,
+      equipped: false,
+      description: "Relit",
+      tags: ["tool"],
+    });
   });
 });
 
@@ -632,12 +903,16 @@ describe("inventory from WorldIR", () => {
       value: { applied: 1 },
     });
     const [proposal] = getPendingProposals(result);
-    expect(proposal.payload.items).toContainEqual(
-      expect.objectContaining({
-        namespace: "items",
-        value: expect.objectContaining({ name: "Torch", quantity: 1 }),
-      }),
-    );
+    expect(proposal.type).toBe("plugin.data.update");
+    expect(proposal.payload).toMatchObject({
+      namespace: "items",
+      ops: [
+        {
+          op: "set",
+          value: expect.objectContaining({ name: "Torch", quantity: 1 }),
+        },
+      ],
+    });
   });
 
   it("names the changes beyond the per-turn cap instead of dropping them silently", async () => {

@@ -78,11 +78,34 @@ export default function ({ tool }) {
         base.locale,
       );
       return withPendingProposals({ ...value, summary }, [
-        makeProposal(context, new Date().toISOString(), "plugin.data", {
-          namespace: "clock",
-          key: "current",
-          value,
-        }),
+        previous
+          ? makeProposal(
+              context,
+              new Date().toISOString(),
+              "plugin.data.update",
+              {
+                namespace: "clock",
+                key: "current",
+                ops: [
+                  { op: "inc", path: "/tick", by: next.delta },
+                  {
+                    op: "merge",
+                    value: {
+                      definition,
+                      ...describeTime(definition, next.tick, base.locale),
+                      lastTurnId: context.turnId,
+                      lastDelta: next.delta,
+                      reason: request.reason,
+                    },
+                  },
+                ],
+              },
+            )
+          : makeProposal(context, new Date().toISOString(), "plugin.data", {
+              namespace: "clock",
+              key: "current",
+              value,
+            }),
       ]);
     },
   });

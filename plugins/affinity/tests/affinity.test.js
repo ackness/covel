@@ -2,12 +2,14 @@ import {
   getToolContent,
   getPendingProposals,
   shortIdBatch,
+  applyDataOps,
 } from "@covel/plugin-handlers-utils";
 import { readFileSync as readContractFile } from "node:fs";
 import {
   bindToolStore,
   createPluginTestStore,
-  executeToolAndCommit as executeAndCommit,
+  executeToolAndCommit as runAndCommit,
+  commitToolResults,
 } from "@covel/plugin-test-utils";
 /**
  * affinity plugin tests.
@@ -69,6 +71,90 @@ async function seedRecord(store, key, value) {
 }
 
 const PLUGINS_DIR = path.resolve(import.meta.dirname, "../..");
+
+async function assertAffinityOps(result, initial, changes, ctx, store) {
+  const expected = new Map(initial.map((row) => [row.key, row.value]));
+  const proposals = getPendingProposals(result);
+  const updates = proposals.filter(
+    (proposal) => proposal.type === "plugin.data.update",
+  );
+  const results = getToolContent(result).results;
+  const now = updates[0]?.timestamp;
+  for (const [index, change] of changes.entries()) {
+    const outcome = results[index];
+    const prior = expected.get(outcome.id) ?? {
+      id: outcome.id,
+      name: outcome.name,
+      score: 0,
+    };
+    const score = clampScore(
+      (typeof prior.score === "number" && Number.isFinite(prior.score)
+        ? prior.score
+        : 0) + change.delta,
+    );
+    const tier = getTier(score);
+    expected.set(outcome.id, {
+      ...prior,
+      id: prior.id ?? outcome.id,
+      score,
+      scoreBar: score + 100,
+      tier: tier.id,
+      tierLabel: tierLabel(ctx, tier.id),
+      tierColor: tier.color,
+      lastDelta: change.delta > 0 ? "+" + change.delta : String(change.delta),
+      lastDeltaColor: change.delta < 0 ? "red" : "green",
+      lastReason: change.reason,
+      history: [
+        ...(Array.isArray(prior.history) ? prior.history : []),
+        {
+          turn: ctx.logicalTurn ?? -1,
+          delta: change.delta,
+          reason: change.reason,
+        },
+      ].slice(-10),
+      updatedAt: now,
+    });
+  }
+  expect(updates.map((proposal) => proposal.payload.key)).toEqual([
+    ...new Set(results.map((item) => item.id)),
+  ]);
+  for (const proposal of updates) {
+    const { namespace, key, ops } = proposal.payload;
+    expect(namespace).toBe("affinity");
+    expect(ops.every((op) => ["set", "merge", "inc"].includes(op.op))).toBe(
+      true,
+    );
+    const prior = initial.find((row) => row.key === key);
+    expect(
+      applyDataOps(
+        prior ? { exists: true, value: prior.value } : { exists: false },
+        ops,
+      ),
+    ).toEqual({ ok: true, exists: true, value: expected.get(key) });
+    if (store)
+      expect(
+        (await store.getPluginData(ctx.sessionId, ctx.pluginId, namespace, key))
+          .value,
+      ).toEqual(expected.get(key));
+  }
+  const message = proposals.at(-1);
+  expect(message.type).toBe("plugin.data.batch");
+  expect(message.payload.items.map((item) => item.namespace)).toEqual([
+    "message",
+    "message",
+  ]);
+}
+
+async function executeAndCommit(tool, params, ctx, store) {
+  const initial = await store.listPluginData(
+    ctx.sessionId,
+    ctx.pluginId,
+    "affinity",
+  );
+  const result = await runAndCommit(tool, params, ctx, store);
+  await assertAffinityOps(result, initial, params.changes, ctx, store);
+  return result;
+}
 
 // ── Tier metadata tests ──────────────────────────────────────────
 
@@ -518,12 +604,110 @@ describe("update-affinity", () => {
       { ...ctx, pendingProposals: getPendingProposals(first) },
     );
 
+    await assertAffinityOps(
+      first,
+      [],
+      [{ name: "莉安", delta: 5, reason: "你替她挡了债主" }],
+      ctx,
+    );
+    const initial = applyDataOps(
+      { exists: false },
+      getPendingProposals(first)[0].payload.ops,
+    ).value;
+    await commitToolResults([first, second], ctx, mockStore);
+    await assertAffinityOps(
+      second,
+      [{ key: id, value: initial }],
+      [{ name: "莉安", delta: 3, reason: "你送她回家" }],
+      ctx,
+      mockStore,
+    );
+
     // The second call saw the uncommitted score of 5, not a fresh record.
     expect(getToolContent(second).results[0]).toMatchObject({
       id,
       score: 8,
       status: "updated",
     });
+  });
+  it.each(["unknown", null, Infinity, NaN])(
+    "repairs a non-finite or non-numeric score %s with merge",
+    async (score) => {
+      await seedRecord(mockStore, "aff-lian", {
+        id: "aff-lian",
+        name: "Lian",
+        score,
+      });
+      const result = await executeAndCommit(
+        updateAffinityTool,
+        { changes: [{ name: "Lian", delta: 5, reason: "Helped" }] },
+        ctx,
+        mockStore,
+      );
+      expect(getPendingProposals(result)[0].payload.ops[0]).toEqual({
+        op: "merge",
+        value: { score: 5 },
+      });
+    },
+  );
+
+  it.each([
+    [95, 20, 100],
+    [-95, -20, -100],
+  ])("clamps score %i in the increment itself", async (score, delta, final) => {
+    await seedRecord(mockStore, "aff-lian", {
+      id: "aff-lian",
+      name: "Lian",
+      score,
+    });
+    const result = await executeAndCommit(
+      updateAffinityTool,
+      { changes: [{ name: "Lian", delta, reason: "Major event" }] },
+      ctx,
+      mockStore,
+    );
+    const { ops } = getPendingProposals(result)[0].payload;
+    expect(ops[0]).toEqual({
+      op: "inc",
+      path: "/score",
+      by: delta,
+      min: -100,
+      max: 100,
+      onBound: "clamp",
+    });
+    expect(applyDataOps({ exists: true, value: { score } }, [ops[0]])).toEqual({
+      ok: true,
+      exists: true,
+      value: { score: final },
+    });
+  });
+
+  it("accumulates inc/merge pairs for repeated existing names", async () => {
+    await seedRecord(mockStore, "aff-lian", {
+      id: "aff-lian",
+      name: "Lian",
+      score: 10,
+      notes: "Seeded",
+    });
+    const result = await executeAndCommit(
+      updateAffinityTool,
+      {
+        changes: [
+          { name: "Lian", delta: 5, reason: "Helped" },
+          { name: "lian", delta: -3, reason: "Argued" },
+        ],
+      },
+      ctx,
+      mockStore,
+    );
+    const { ops } = getPendingProposals(result)[0].payload;
+    expect(ops.map((op) => op.op)).toEqual(["inc", "merge", "inc", "merge"]);
+    expect(ops.at(-1).value.history).toEqual([
+      { turn: 3, delta: 5, reason: "Helped" },
+      { turn: 3, delta: -3, reason: "Argued" },
+    ]);
+    expect(ops[1].value).not.toHaveProperty("notes");
+    expect(ops[1].value).not.toHaveProperty("name");
   });
 });
 
@@ -603,6 +787,13 @@ describe("affinity plugin manifest", () => {
   });
 
   it("accepts world data into the affinity namespace via dataSchemas", () => {
+    expect(loaded.manifest.datasets.affinity).toEqual({
+      namespace: "affinity",
+      schema: "./schemas/affinity.schema.json",
+      key: "id",
+      ops: ["set", "merge", "inc"],
+    });
+    expect(loaded.datasetSchemas.affinity).toBeDefined();
     expect(packageManifest.dataSchemas?.affinity).toMatchObject({
       schemaVersion: 1,
       acceptsWorldData: true,

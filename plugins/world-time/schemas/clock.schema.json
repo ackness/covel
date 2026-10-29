@@ -1,0 +1,12 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "plugin://world-time/clock",
+  "type": "object",
+  "required": ["schemaVersion", "definition", "tick"],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "definition": { "type": "object" },
+    "tick": { "type": "integer" }
+  },
+  "additionalProperties": true
+}
