@@ -40,16 +40,21 @@ test("every package that runs Vitest gives the run a temp directory of its own",
   assert.deepEqual(missing, []);
 });
 
-test("a run's temp directory is removed at exit, and so is one a killed run left", (t) => {
+test("a run's temp directory is removed at exit, and so is one a killed run left long ago", (t) => {
   const base = fs.mkdtempSync(path.join(os.tmpdir(), "covel-temp-dir-test-"));
   t.after(() => fs.rmSync(base, { recursive: true, force: true }));
   // A process that has exited: its ID belongs to no running process.
   const gone = spawnSync(process.execPath, ["--eval", ""]).pid;
   const abandoned = path.join(base, `covel-test-${gone}-killed`);
+  // Same dead-looking owner but touched recently: a run in another PID
+  // namespace (a sandboxed agent) must keep its directory.
+  const recent = path.join(base, `covel-test-${gone}-other-namespace`);
   const inUse = path.join(base, `covel-test-${process.pid}-running`);
   const unrelated = path.join(base, "something-else");
-  for (const directory of [abandoned, inUse, unrelated])
+  for (const directory of [abandoned, recent, inUse, unrelated])
     fs.mkdirSync(path.join(directory, "nested"), { recursive: true });
+  const longAgo = new Date(Date.now() - 7 * 60 * 60 * 1000);
+  fs.utimesSync(abandoned, longAgo, longAgo);
 
   const env = { ...process.env, TMPDIR: base, TMP: base, TEMP: base };
   delete env.COVEL_TEST_TEMP_DIR;
@@ -76,6 +81,7 @@ test("a run's temp directory is removed at exit, and so is one a killed run left
   assert.match(path.basename(runDirectory), /^covel-test-\d+-/);
   assert.equal(fs.existsSync(runDirectory), false);
   assert.equal(fs.existsSync(abandoned), false);
+  assert.equal(fs.existsSync(recent), true);
   assert.equal(fs.existsSync(inUse), true);
   assert.equal(fs.existsSync(unrelated), true);
 });
