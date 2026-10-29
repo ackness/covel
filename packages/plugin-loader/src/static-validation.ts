@@ -1,5 +1,6 @@
 import {
   FRAMEWORK_TOOL_NAMES,
+  isKernelExtensionContract,
   MAX_UI_WEBVIEW_BYTES,
   pluginUiSpecIssues,
 } from "@covel/shared";
@@ -58,6 +59,19 @@ export function validateRuntimeDeclarations(
       );
     outputs.add(contract);
   }
+  // A story package must keep playing without any other package. `requires`
+  // turns the whole package off when a provider is missing, so it cannot name
+  // a plugin contract. The same rule on a runtime's inputs and `needs` is a
+  // manifest rule (@covel/shared).
+  const story = manifests.find(
+    ({ runtime }) => runtime?.io?.visibility === "story",
+  );
+  if (story)
+    for (const contract of plugin.requires ?? [])
+      if (!isKernelExtensionContract(contract))
+        throw new Error(
+          `${packageManifest.sourcePath}: requires: a package with a story runtime (${story.sourcePath}) cannot require contract ${contract}: remove it from requires and bind it as an optional input (required: false), so the story still runs when no provider is active`,
+        );
   for (const parsed of manifests) {
     const runtimeReferences = [
       ...(["needs", "after"] as const).flatMap((field) =>

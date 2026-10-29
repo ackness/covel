@@ -292,6 +292,14 @@ The contracts that a runtime's `schedule.needs[].contract` and `io.inputs.*.from
 - A contract not listed in `requires` is optional: when the session has a provider, it binds as usual; when it has none, the gates apply, and a runtime whose required input or `needs` has no provider does not run. This is how a contract that another runtime in the same package provides is used.
 - `schedule.after` only orders work, and `from.kernel` is a kernel input. Neither one activates another package.
 
+**A story runtime must not hard-depend on another plugin.** One narrative plugin is enough to play, so a runtime with `io.visibility: story`:
+
+- must set `required: false` on every input bound to a contract (`io.inputs.*.from.contract`, in both `turn` and `committed` scope). The default is `true`, which is rejected.
+- cannot list a contract in `schedule.needs`; bind it as an optional input, or use `schedule.after` to order only.
+- belongs to a package whose root `requires` lists no plugin contract: with a missing provider the resolver turns the whole package off. Remove the entry and let the runtime read the contract as an optional input.
+
+Kernel extension contracts are exempt. When a provider is missing the input has no value, and the runtime must still write its story without it.
+
 ### Stages and scheduling order
 
 Stages run in this order: `setup → pre-turn → narrative → post-turn → audit`. The next stage starts only after every runtime in the current stage has finished.
@@ -932,7 +940,7 @@ The directory-level command `pnpm validate:plugin <dir>` and the ZIP install sha
 - The referenced entry, handler, guard, JSON Schema, and UI files must be inside the package.
 - Each JSON UI spec declares one of `view` and `webview`. Component names in `view` must be in the [component catalogue](./ui-components.md). `repeat.statePath` and `$item` must have a legal form (see [UI panels](./ui-panels.md#json-render-binding-cheat-sheet)). The error gives the spec file and the path of the node.
 - The built-in tool names and the plugin tool declarations, the runtime references inside the package, and the root contract dependencies must all be consistent.
-- An error from a cross-field rule (for example, `schedule.detached` is only allowed on `post-turn` or `audit`) gives the file path and the field path you wrote, for example `runtimes/note/RUNTIME.md: schedule.stage: …`.
+- An error from a cross-field rule (for example, `schedule.detached` is only allowed on `post-turn` or `audit`, or a story runtime's contract input must set `required: false`) gives the file path and the field path you wrote, for example `runtimes/note/RUNTIME.md: schedule.stage: …`.
 
 Loading, `pnpm validate:plugin` and installation use one copy of the manifest rules (the schemas in `@covel/shared`), and the same holds for UI specs: a panel that passes the check is not dropped in the game for its format.
 

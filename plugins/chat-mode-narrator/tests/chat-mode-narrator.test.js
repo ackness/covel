@@ -69,6 +69,14 @@ describe(`${PLUGIN_ID} package`, () => {
     expect(placeholders(chinese)).toEqual(placeholders(english));
   });
 
+  it("requires no other package and reads every contract input as optional", () => {
+    expect(definition.packageManifest.plugin.requires ?? []).toEqual([]);
+    const inputs = Object.values(manifest.inputs ?? {});
+    expect(inputs.length).toBeGreaterThan(0);
+    for (const input of inputs) expect(input.required).toBe(false);
+    expect(manifest.needs ?? []).toEqual([]);
+  });
+
   it("needs no companion plugin that the player may turn off", () => {
     const companions = [
       "branch-reply@1",

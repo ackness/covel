@@ -334,14 +334,14 @@ In the path headings below, `[]` is a list item and `.*` is a map value.
 
 ## `runtime.io.inputs.*`
 
-| Field      | Type                      | Required | Description                                                                                                                                                                   |
-| ---------- | ------------------------- | -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `from`     | object                    | yes      | Producer of the value: a runtime in this package, a contract, or a kernel input. A kernel input takes no other field.                                                         |
-| `scope`    | `"turn"` or `"committed"` | no       | `turn` reads the same execution's upstream result. `committed` reads the latest committed export and needs `recordAs`. Defaults to `turn`.                                    |
-| `select`   | string                    | no       | JSON Pointer applied to the upstream value. Declaring `select` with `scope: committed` is rejected; committed inputs read the complete export. Example: `"/narrativeOutput"`. |
-| `required` | boolean                   | no       | `true` stops this runtime when the upstream value is missing or failed. Defaults to `true`.                                                                                   |
-| `accepts`  | string                    | no       | Schema the bound value must satisfy: a local path or `contract:<contractId>`. It adds to the public contract check.                                                           |
-| `recordAs` | string                    | no       | Export key to read from the producer. Required with `scope: committed`.                                                                                                       |
+| Field      | Type                      | Required | Description                                                                                                                                                                      |
+| ---------- | ------------------------- | -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `from`     | object                    | yes      | Producer of the value: a runtime in this package, a contract, or a kernel input. A kernel input takes no other field.                                                            |
+| `scope`    | `"turn"` or `"committed"` | no       | `turn` reads the same execution's upstream result. `committed` reads the latest committed export and needs `recordAs`. Defaults to `turn`.                                       |
+| `select`   | string                    | no       | JSON Pointer applied to the upstream value. Declaring `select` with `scope: committed` is rejected; committed inputs read the complete export. Example: `"/narrativeOutput"`.    |
+| `required` | boolean                   | no       | `true` stops this runtime when the upstream value is missing or failed. Defaults to `true`. A story runtime (`io.visibility: story`) must set it to `false` for contract inputs. |
+| `accepts`  | string                    | no       | Schema the bound value must satisfy: a local path or `contract:<contractId>`. It adds to the public contract check.                                                              |
+| `recordAs` | string                    | no       | Export key to read from the producer. Required with `scope: committed`.                                                                                                          |
 
 ## `runtime.io.inputs.*.from` (form 1 of 3)
 
