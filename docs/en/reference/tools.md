@@ -1720,7 +1720,7 @@ Types registered so far:
 - `interaction.request`
 - `ui.render`
 - `asset.generate`
-- `plugin.data`, `plugin.data.batch`, `plugin.data.delete`
+- `plugin.data`, `plugin.data.batch`, `plugin.data.delete`, `plugin.data.update`
 - `character.upsert`, `character.schema.set`
 - `dimension.initialize`, `dimension.update`
 - `lorebook.upsert`

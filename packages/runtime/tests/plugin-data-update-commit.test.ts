@@ -27,6 +27,7 @@ import {
   type DatasetSchemas,
 } from "../src/commit/commit-plugin-data.js";
 import { createHookPipeline } from "../src/hooks/pipeline.js";
+import type { MediaOwnershipStore } from "../src/media/canonicalize-media-refs.js";
 
 const SESSION = "s";
 const PLUGIN = "probe";
@@ -590,6 +591,121 @@ describe("dataset rules at commit", () => {
         code: "dataset-violation",
         error: `${write.type}: dataset schema of notes is unavailable`,
       });
+  });
+});
+
+describe("malformed dataset schemas at commit", () => {
+  it("refuses the write with dataset-violation instead of throwing", async () => {
+    const store = await setup();
+    await seed(store, 1);
+    const pipeline = createCommitPipeline(
+      store,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      {
+        datasetPolicy: datasetPolicyResolver(
+          [
+            {
+              pluginId: PLUGIN,
+              datasets: {
+                wallet: { namespace: "wallet", ops: ["set", "inc"] as const },
+              },
+            },
+          ],
+          { [PLUGIN]: { wallet: { type: "invalid" } } },
+        ),
+      },
+    );
+    for (const write of [update([{ op: "inc", by: 1 }]), set(2)]) {
+      const result = await pipeline.commit(write);
+      expect(result).toMatchObject({
+        committed: false,
+        code: "dataset-violation",
+      });
+      expect(result.error).toContain("dataset wallet: schema is invalid");
+    }
+    expect(await stored(store)).toEqual({ exists: true, value: 1 });
+  });
+});
+
+describe("MediaRefs in an update result", () => {
+  const own = { id: "a".repeat(64), mime: "image/webp", size: 10 };
+  const foreignId = "b".repeat(64);
+  const mediaStore: MediaOwnershipStore = {
+    async lookup(id) {
+      return id === own.id || id === foreignId
+        ? { mime: "image/webp", size: 42 }
+        : null;
+    },
+    async isReferencedBy(id, sessionId) {
+      return id === own.id && sessionId === SESSION;
+    },
+  };
+  const pipelineFor = (store: DataStore) =>
+    createCommitPipeline(store, undefined, undefined, undefined, undefined, {
+      mediaStore,
+    });
+
+  it("refuses a partial merge that turns a stored ref into a foreign one", async () => {
+    const store = await setup();
+    await seed(store, { ...own, size: 42 }, "gallery", "cover");
+    const result = await pipelineFor(store).commit(
+      update([{ op: "merge", value: { id: foreignId } }], "gallery", "cover"),
+    );
+    expect(result).toMatchObject({
+      committed: false,
+      code: "media-ownership-invalid",
+    });
+    expect(await stored(store, "gallery", "cover")).toEqual({
+      exists: true,
+      value: { ...own, size: 42 },
+    });
+  });
+
+  it("refuses a foreign ref assembled across operations", async () => {
+    const store = await setup();
+    const result = await pipelineFor(store).commit(
+      update(
+        [
+          { op: "set", value: { pic: { id: foreignId } } },
+          { op: "merge", path: "/pic", value: { mime: "image/webp" } },
+          { op: "merge", path: "/pic", value: { size: 10 } },
+        ],
+        "gallery",
+        "cover",
+      ),
+    );
+    expect(result).toMatchObject({
+      committed: false,
+      code: "media-ownership-invalid",
+    });
+    expect(await stored(store, "gallery", "cover")).toEqual({ exists: false });
+  });
+
+  it("stores an owned assembled ref in canonical form", async () => {
+    const store = await setup();
+    expect(
+      await pipelineFor(store).commit(
+        update(
+          [
+            { op: "set", value: { pic: { id: own.id, mime: own.mime } } },
+            {
+              op: "merge",
+              path: "/pic",
+              value: { size: 1, url: "https://example.test/x" },
+            },
+          ],
+          "gallery",
+          "cover",
+        ),
+      ),
+    ).toEqual({ committed: true });
+    expect(await stored(store, "gallery", "cover")).toEqual({
+      exists: true,
+      value: { pic: { ...own, size: 42 } },
+    });
   });
 });
 

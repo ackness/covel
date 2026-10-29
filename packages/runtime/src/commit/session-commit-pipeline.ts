@@ -114,10 +114,11 @@ export function createCommitPipeline(
   signal?: AbortSignal,
   options: CommitPipelineOptions = {},
 ): CommitPipeline {
-  const datasetPolicy = options.datasetPolicy
-    ? { datasetPolicy: options.datasetPolicy }
-    : {};
-  const handlers = createCommitHandlers(store, datasetPolicy);
+  const handlerOptions = {
+    ...(options.datasetPolicy ? { datasetPolicy: options.datasetPolicy } : {}),
+    ...(options.mediaStore ? { mediaStore: options.mediaStore } : {}),
+  };
+  const handlers = createCommitHandlers(store, handlerOptions);
 
   function commit(proposal: Proposal): Promise<CommitResult> {
     return commitWith(handlers, store, proposal);
@@ -336,7 +337,7 @@ export function createCommitPipeline(
       const results = await store.withTransaction(async (tx) => {
         const txHandlers = createCommitHandlers(tx, {
           singleBatch: true,
-          ...datasetPolicy,
+          ...handlerOptions,
         });
         const txResults: CommitResult[] = [];
         for (const entry of screened) {
@@ -385,7 +386,7 @@ export function createCommitPipeline(
     // PreStateCommit runs between the records unless the caller ran it
     // beforehand; only then is the batch the sole writer for its whole length.
     const batchHandlers = options.preStateCommitApplied
-      ? createCommitHandlers(store, { singleBatch: true, ...datasetPolicy })
+      ? createCommitHandlers(store, { singleBatch: true, ...handlerOptions })
       : handlers;
     const results: CommitResult[] = [];
     for (const p of proposals) {

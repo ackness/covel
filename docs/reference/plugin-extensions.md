@@ -26,6 +26,8 @@
 
 下面是表里装不下的细节。
 
+函数 runtime 改自己的数据时，可以交一串操作而不是算好的整个值：`ctx.pluginData.update(namespace, key, ops)` 产生 `plugin.data.update`，提交时在最新的值上应用（见[事务 · 操作式写入](./transactions.md#操作式写入plugindataupdate)）。这只属于 runtime 的写入边界：扩展点 handler 的 `ctx.pluginData` 只读，服务 handler 根本拿不到 `ctx.pluginData`。
+
 `ctx.recursiveCall` 的用途是[包内嵌套调用](./plugins.md#嵌套调用ctxrecursivecall)。要请求其他包的结果，使用服务；要触发其他包的后续工作，使用事件。
 
 ### 服务只给函数 runtime

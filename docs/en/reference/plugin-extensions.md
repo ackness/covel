@@ -26,6 +26,8 @@ Start by finding your need in the table and reading the matching interface:
 
 The details that do not fit in the table come next.
 
+A function runtime that changes its own data can submit a list of operations instead of a computed whole value: `ctx.pluginData.update(namespace, key, ops)` produces `plugin.data.update`, which applies to the latest value at commit (see [Transactions · Operation-based writes](./transactions.md#operation-based-writes-plugindataupdate)). This belongs only to the runtime write boundary: an extension point handler's `ctx.pluginData` is read-only, and a service handler gets no `ctx.pluginData` at all.
+
 `ctx.recursiveCall` is for [nested calls within one package](./plugins.md#nested-calls-ctxrecursivecall). Use a service to request a result from another package, or an event to trigger its follow-up work.
 
 ### Services are only for function runtimes

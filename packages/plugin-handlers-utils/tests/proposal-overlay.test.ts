@@ -75,7 +75,7 @@ describe("overlayPluginDataValue", () => {
     ).toEqual({ hit: true, exists: false });
   });
 
-  it("reports hit only when a write changed the key", () => {
+  it("reports hit whenever a write targets the key", () => {
     const base = { exists: true, value: 4 } as const;
     expect(value([], base)).toEqual({ hit: false, exists: true, value: 4 });
     expect(value([set(1, "other")], base)).toEqual({
@@ -84,7 +84,7 @@ describe("overlayPluginDataValue", () => {
       value: 4,
     });
     expect(value([update([{ op: "inc", by: 1, max: 4 }])], base)).toEqual({
-      hit: false,
+      hit: true,
       exists: true,
       value: 4,
     });

@@ -1382,6 +1382,48 @@ describe("finalizeExecution — plugin.data.update", () => {
     expect(await commitStatusOf(store)).toBe("failed");
   });
 
+  it("drops an auxiliary runtime whose dataset schema does not compile and keeps the story", async () => {
+    const store = createMemoryStore();
+    await savePendingTurn(store);
+    await seedGold(store, "aux", 1);
+    const outcome = await finalizeExecution({
+      executionContext: manual(),
+      store,
+      sessionId: SESSION_ID,
+      runtimes: [
+        makeRuntime("story", "story"),
+        {
+          ...makeRuntime("aux"),
+          datasets: {
+            wallet: {
+              namespace: "wallet",
+              ops: ["inc"],
+              schema: "schemas/wallet.json",
+            },
+          },
+        },
+      ],
+      datasetSchemas: { aux: { wallet: { type: "invalid" } } },
+      results: [
+        makeResult("story", { narrativeOutput: "The till rings." }),
+        withProposals(makeResult("aux"), [
+          update("aux", [{ op: "inc", by: 1 }]),
+        ]),
+      ],
+      turnIds: [TURN_ID],
+    });
+    expect(outcome).toMatchObject({
+      status: "committed",
+      isolatedRuntimes: [{ runtimeId: "aux", error: expect.any(String) }],
+    });
+    expect(outcome.failedProposals).toEqual([
+      expect.objectContaining({ code: "dataset-violation" }),
+    ]);
+    expect(await gold(store, "aux")).toBe(1);
+    expect(await store.listMessages(SESSION_ID)).toHaveLength(1);
+    expect(await commitStatusOf(store)).toBe("committed");
+  });
+
   describe("through executeTurn and commitExecution", () => {
     const wallet = (extra: Partial<RuntimeManifest> = {}): RuntimeManifest => ({
       name: "bank/main",

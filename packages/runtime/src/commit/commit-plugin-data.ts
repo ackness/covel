@@ -10,6 +10,10 @@ import {
   type ProposalFor,
 } from "@covel/shared";
 import { validateOutput } from "@covel/tools";
+import {
+  canonicalizeMediaRefs,
+  type MediaOwnershipStore,
+} from "../media/canonicalize-media-refs.js";
 import type { KernelStore } from "../session/session-kernel-store.js";
 import type { CommitHandlerMap } from "./commit-handler-types.js";
 import {
@@ -114,6 +118,12 @@ export function datasetPolicyResolver(
 export interface PluginDataCommitOptions {
   /** Enforces declared datasets; without it no namespace is checked. */
   readonly datasetPolicy?: DatasetPolicyResolver;
+  /**
+   * Canonicalizes the MediaRefs of a `plugin.data.update` result. The payload
+   * check sees only the operations, and a reference can be assembled across
+   * them or from the stored value, so the result is checked again.
+   */
+  readonly mediaStore?: MediaOwnershipStore;
 }
 
 const MAX_SCHEMA_ERRORS = 3;
@@ -140,7 +150,15 @@ function datasetFailure(
       `dataset ${policy.namespace}: operation kind ${refused} is not allowed`,
     );
   if (!result) return undefined;
-  const check = validateOutput(result.value, policy.schema);
+  let check: ReturnType<typeof validateOutput>;
+  try {
+    check = validateOutput(result.value, policy.schema);
+  } catch (error) {
+    // A schema Ajv cannot compile is a data problem of this write, so it
+    // rejects the proposal instead of rolling back the whole execution.
+    const reason = error instanceof Error ? error.message : String(error);
+    return fail(`dataset ${policy.namespace}: schema is invalid (${reason})`);
+  }
   if (check.valid) return undefined;
   const errors = (check.errors ?? []).slice(0, MAX_SCHEMA_ERRORS).join("; ");
   return fail(
@@ -383,15 +401,30 @@ export function createPluginDataCommitHandlers(
       }
       return { committed: true };
     }
+    let value: JsonValue = result.value;
+    if (options.mediaStore) {
+      const media = await canonicalizeMediaRefs(value, {
+        store: options.mediaStore,
+        sessionId: proposal.sessionId,
+      });
+      const [first] = media.rejections;
+      if (first) {
+        return commitError(
+          `${type}: ${media.rejections.map((rejection) => rejection.message).join("; ")}`,
+          first.reason,
+        );
+      }
+      value = media.value;
+    }
     const resultInvalid = firstFailure(
       oversizedValueFailure(
         type,
         pluginId,
         payload.namespace,
         payload.key,
-        result.value,
+        value,
       ),
-      datasetFailure(type, policy, [], { value: result.value }),
+      datasetFailure(type, policy, [], { value }),
     );
     if (resultInvalid) return resultInvalid;
 
@@ -401,7 +434,7 @@ export function createPluginDataCommitHandlers(
       pluginId,
       namespace: payload.namespace,
       key: payload.key,
-      value: result.value,
+      value,
       createdAt: proposal.timestamp,
       updatedAt: proposal.timestamp,
     });

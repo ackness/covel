@@ -57,8 +57,8 @@ function applyWrite(
  * Whole-value writes replace the state, deletes remove it, and
  * `plugin.data.update` applies its operations to the state with the same
  * `applyDataOps` the commit uses. An update whose operations fail is skipped,
- * as the commit rejects it. `hit` is true when a buffered write changed the
- * key's state. Only the given plugin's own writes are considered; the store
+ * as the commit rejects it, and the state stays as it was. `hit` is true when
+ * any buffered write targets the key, including a skipped update. Only the given plugin's own writes are considered; the store
  * read is already plugin-scoped and the overlay must not widen that. Returned
  * values are not copies.
  */
@@ -75,10 +75,8 @@ export function overlayPluginDataValue(
     if (proposal.source.pluginId !== pluginId) continue;
     for (const write of keyWrites(proposal)) {
       if (write.namespace !== namespace || write.key !== key) continue;
-      const next = applyWrite(write, state);
-      if (next === undefined) continue;
       hit = true;
-      state = next;
+      state = applyWrite(write, state) ?? state;
     }
   }
   return state.exists

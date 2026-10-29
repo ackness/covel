@@ -516,19 +516,20 @@ await store.withTransaction(async (tx) => {
 **在提交事务里读改写。** 提交时，`plugin.data.update` 的处理器在提交事务里读出这个键当前存的值，用 `applyDataOps` 依次应用这些操作，再把结果写回：
 
 - 结果是“不存在”（比如最后一个操作是 `delete`）时，有行就删掉，没有行就什么都不做，提交照样成功。
-- 结果存在时，先按单个值的大小上限检查**结果**，再按数据集规则检查（见下），然后写回。改写保留原来那一行的 ID 和 `createdAt`。
+- 结果存在时，先把**结果**里的每个 `MediaRef` 按会话校验并规范化，再按单个值的大小上限检查结果，再按数据集规则检查（见下），然后写回。提交前的载荷检查只看到操作本身，而引用可能由多个操作拼出来，或者由操作改写已存的值得到，所以结果要再查一遍。改写保留原来那一行的 ID 和 `createdAt`。
 - 执行中的覆盖读（runtime 读自己还没提交的写入）用同一个 `applyDataOps` 投影这些操作。所以 runtime 读到的值，和提交存下的值一致。
 
 **每个 proposal 全有或全无。** 一串操作里任何一个失败，整个 proposal 被拒，这个键保持原样。被拒的 proposal 按上面的提交单元规则处理：有成功 story 时只丢弃它所在的可选单元，没有 story 的执行整体回滚。处理器不会为数据问题抛异常；只有 store 错误会抛出，并像其他写入一样回滚整次执行。
 
 **错误码。** 被拒时 `CommitResult.code` 是下面之一：
 
-| `code`              | 原因                                                                                  | `error` 的样子                                                                                                         |
-| ------------------- | ------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
-| `data-op-rejected`  | 操作作用在当前值上失败，比如 `inc` 越过 `min`                                         | `plugin.data.update: inc result is outside the allowed range (op 0, out-of-bounds)`，有路径时写成 `(op 1 at /gold, …)` |
-| `dataset-violation` | 违反了声明的数据集：操作种类不允许、结果不符合记录 schema，或数据集的 schema 文档缺失 | `plugin.data.update: dataset inventory: operation kind append is not allowed`                                          |
+| `code`                                                                | 原因                                                                                            | `error` 的样子                                                                                                         |
+| --------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| `data-op-rejected`                                                    | 操作作用在当前值上失败，比如 `inc` 越过 `min`                                                   | `plugin.data.update: inc result is outside the allowed range (op 0, out-of-bounds)`，有路径时写成 `(op 1 at /gold, …)` |
+| `dataset-violation`                                                   | 违反了声明的数据集：操作种类不允许、结果不符合记录 schema，或数据集的 schema 文档缺失、无法编译 | `plugin.data.update: dataset inventory: operation kind append is not allowed`                                          |
+| `media-not-found` / `media-ownership-invalid` / `media-mime-mismatch` | 结果里的 `MediaRef` 指向不存在的资源、本会话没有引用的资源，或 MIME 类型不符                    | `plugin.data.update: session … has no reference to media …`                                                            |
 
-保留命名空间、缺少 namespace / key 和超过大小上限的拒绝没有 `code`，只有 `error`。
+缺少 namespace / key、空的或不合法的操作列表在处理器之前就被载荷检查拒绝，`code` 是 `proposal-invalid`。保留命名空间和超过大小上限的拒绝发生在处理器里，没有 `code`，只有 `error`。
 
 **数据集检查。** 插件在 `contributes.datasets` 里声明了某个命名空间时，这个插件写入该命名空间的**每一种**插件数据 proposal 都要检查：
 
