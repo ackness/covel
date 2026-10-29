@@ -149,12 +149,20 @@ async function useFakeModel(
   });
 }
 
+/**
+ * How long a final state may take to show. The generations here end within
+ * a few seconds; the limit only keeps a slow machine from failing the spec.
+ */
+const SETTLED = { timeout: 15_000 };
+
 /** Open the generator, describe a world, and start the generation. */
 async function startGeneration(page: Page, holdHealthUntilStart = false) {
   await seedAppSettings(page);
   await page.goto("/session");
   const createButton = page.locator("button", { hasText: "AI 创建世界" });
-  await expect(createButton).toBeVisible();
+  // A full run once timed out here with the page still loading after the
+  // previous spec's stalled generation; allow a final state's time.
+  await expect(createButton).toBeVisible(SETTLED);
   let releaseHealth = () => {};
   const health = new Promise<void>((resolve) => {
     releaseHealth = resolve;
@@ -173,11 +181,6 @@ async function startGeneration(page: Page, holdHealthUntilStart = false) {
   return dialog;
 }
 
-/**
- * How long a final state may take to show. The generations here end within
- * a few seconds; the limit only keeps a slow machine from failing the spec.
- */
-const SETTLED = { timeout: 15_000 };
 
 test.describe("AI world generation with a fake provider", () => {
   // The route admits one generation at a time.

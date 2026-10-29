@@ -12,26 +12,24 @@ import path from "node:path";
 import crossSpawn from "cross-spawn";
 import { isDocsOnly } from "./lib/change-scope.mjs";
 import { selectTests } from "./lib/push-scope.mjs";
+import { requireProjectNode, resolveOnPath } from "./lib/project-node.mjs";
 
 const repoRoot = execFileSync("git", ["rev-parse", "--show-toplevel"], {
   encoding: "utf8",
 }).trim();
 
-// The suites run on whichever Node starts this script. Another Node manager
-// ahead of mise on PATH would fail them in confusing ways, so refuse instead.
-const miseToml = path.join(repoRoot, "mise.toml");
-const pinnedNode = existsSync(miseToml)
-  ? /^\s*node\s*=\s*"([^"]+)"/m.exec(readFileSync(miseToml, "utf8"))?.[1]
-  : undefined;
-if (pinnedNode && process.versions.node !== pinnedNode) {
-  console.error(
-    `[pre-push] Node ${process.versions.node} is running this check, but mise.toml pins Node ${pinnedNode}. ` +
-      "Run `mise install`, and make sure no other Node manager (such as nvm) comes before mise on PATH.",
-  );
-  process.exit(1);
-}
+// The suites run on whichever Node starts this script.
+requireProjectNode(repoRoot, "pre-push");
 
 const env = { ...process.env, CI: "true", VITEST_MAX_WORKERS: "2" };
+// Find pnpm on the caller's PATH first: Node's directory also holds `npm -g`
+// globals, which must not replace mise's pnpm. Then put that Node first, so
+// pnpm, Turbo and every suite they start run on the Node checked above.
+const pnpm = resolveOnPath("pnpm", env);
+const pathKey =
+  Object.keys(env).find((key) => key.toLowerCase() === "path") ?? "PATH";
+env[pathKey] =
+  `${path.dirname(process.execPath)}${path.delimiter}${env[pathKey] ?? ""}`;
 // Hooks can inherit Git paths and developer database settings. Neither belongs
 // in the disposable checkout used to validate the committed source.
 for (const name of execFileSync("git", ["rev-parse", "--local-env-vars"], {
@@ -380,7 +378,7 @@ function verifyCommit(pushed) {
     }
     for (const args of commands) {
       console.log(`\n[pre-push] pnpm ${args.join(" ")}`);
-      const result = crossSpawn.sync("pnpm", args, {
+      const result = crossSpawn.sync(pnpm, args, {
         cwd: checkout,
         env,
         stdio: "inherit",

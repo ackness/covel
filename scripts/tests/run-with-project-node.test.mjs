@@ -52,3 +52,40 @@ test("propagates a failed command's exit status", () => {
   );
   assert.equal(result.status, 7, result.stderr);
 });
+
+function repoPinning(t, node) {
+  const repo = mkdtempSync(path.join(os.tmpdir(), "covel-node-pin-"));
+  t.after(() => rmSync(repo, { recursive: true, force: true }));
+  crossSpawn.sync("git", ["init", "-q", repo]);
+  writeFileSync(path.join(repo, "mise.toml"), `[tools]\nnode = "${node}"\n`);
+  return repo;
+}
+
+test("refuses to run on a Node other than the one mise.toml pins", (t) => {
+  const repo = repoPinning(t, "0.0.1");
+  const result = crossSpawn.sync(
+    process.execPath,
+    [runner, "node", "-e", "process.stdout.write('ran')"],
+    { cwd: repo, encoding: "utf8" },
+  );
+  assert.equal(result.status, 1);
+  assert.equal(result.stdout, "");
+  assert.match(
+    result.stderr,
+    new RegExp(
+      `\\[pre-commit\\] Node ${process.versions.node.replaceAll(".", "\\.")} is running this check, but mise\\.toml pins Node 0\\.0\\.1`,
+    ),
+  );
+  assert.match(result.stderr, /mise install/);
+});
+
+test("runs the command on the Node that mise.toml pins", (t) => {
+  const repo = repoPinning(t, process.versions.node);
+  const result = crossSpawn.sync(
+    process.execPath,
+    [runner, "node", "-e", "process.stdout.write('ran')"],
+    { cwd: repo, encoding: "utf8" },
+  );
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(result.stdout, "ran");
+});

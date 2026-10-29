@@ -37,6 +37,9 @@ test("manual check validates committed HEAD in a clean temporary checkout", (t) 
     assert.equal(call.databaseUrl, undefined);
     assert.equal(call.requirePg, undefined);
     assert.equal(call.gitDir, undefined);
+    // The suites run on the Node that passed the version check, while pnpm
+    // still comes from the caller's PATH (here, the fixture's fake).
+    assert.equal(call.firstPath, path.dirname(process.execPath));
     // Task results come from the cache the repository's worktrees share.
     assert.equal(
       call.turboCacheDir,

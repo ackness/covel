@@ -82,6 +82,7 @@ fs.appendFileSync(${JSON.stringify(log)}, JSON.stringify({
   requirePg: process.env.COVEL_REQUIRE_PG_TESTS,
   gitDir: process.env.GIT_DIR,
   turboCacheDir: process.env.TURBO_CACHE_DIR,
+  firstPath: (process.env.PATH ?? process.env.Path ?? "").split(path.delimiter)[0],
 }) + "\\n");
 if (process.env.FAIL_ON === process.argv.slice(2).join(" ")) process.exit(7);
 `,
