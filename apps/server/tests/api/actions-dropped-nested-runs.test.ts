@@ -73,8 +73,18 @@ describe("droppedRunPayloads", () => {
           nestedRuntimeResults: [run(SHARED, "nested-run")],
         },
         [
-          { runtimeId: SHARED, runId: "nested-run", error: "child rejected" },
-          { runtimeId: PARENT, runId: "parent-run", error: "dropped" },
+          {
+            runtimeId: SHARED,
+            runId: "nested-run",
+            cause: "nested",
+            error: "child rejected",
+          },
+          {
+            runtimeId: PARENT,
+            runId: "parent-run",
+            cause: "rejected",
+            error: "dropped",
+          },
         ],
       ),
     ).toEqual([
@@ -99,8 +109,18 @@ describe("droppedRunPayloads", () => {
           nestedRuntimeResults: [run(SHARED, "nested-run")],
         },
         [
-          { runtimeId: SHARED, runId: "nested-run", error: "rejected" },
-          { runtimeId: PARENT, runId: "parent-run", error: "rejected" },
+          {
+            runtimeId: SHARED,
+            runId: "nested-run",
+            cause: "nested",
+            error: "rejected",
+          },
+          {
+            runtimeId: PARENT,
+            runId: "parent-run",
+            cause: "rejected",
+            error: "rejected",
+          },
         ],
       ).map((payload) => payload.runId),
     ).toEqual(["parent-run"]);

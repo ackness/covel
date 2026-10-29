@@ -224,10 +224,16 @@ describe("read dependencies at commit", () => {
 
     expect(outcome.status).toBe("committed");
     expect(outcome.isolatedRuntimes).toEqual([
-      { runtimeId: a.name, runId: runOf(a.name), error: "a refused" },
+      {
+        runtimeId: a.name,
+        runId: runOf(a.name),
+        cause: "rejected",
+        error: "a refused",
+      },
       {
         runtimeId: b.name,
         runId: runOf(b.name),
+        cause: "read",
         error: `read data of ${a.name} that did not commit`,
       },
     ]);
@@ -340,7 +346,12 @@ describe("read dependencies at commit", () => {
     );
 
     expect(outcome.isolatedRuntimes).toEqual([
-      { runtimeId: a.name, runId: runOf(a.name), error: "a-refused refused" },
+      {
+        runtimeId: a.name,
+        runId: runOf(a.name),
+        cause: "rejected",
+        error: "a-refused refused",
+      },
     ]);
     expect(await notes()).toEqual({ a: "b's own" });
   });
@@ -370,6 +381,7 @@ describe("read dependencies at commit", () => {
       {
         runtimeId: prelude.name,
         runId: runOf(prelude.name),
+        cause: "rejected",
         error: "mood refused",
       },
     ]);
@@ -543,15 +555,22 @@ describe("read dependencies of lists", () => {
     expect(outcome.status).toBe("committed");
     expect(byRuntime(outcome.isolatedRuntimes)).toEqual(
       [
-        { runtimeId: a.name, runId: runOf(a.name), error: "a refused" },
+        {
+          runtimeId: a.name,
+          runId: runOf(a.name),
+          cause: "rejected",
+          error: "a refused",
+        },
         {
           runtimeId: listsNotes.name,
           runId: runOf(listsNotes.name),
+          cause: "read",
           error: `read data of ${a.name} that did not commit`,
         },
         {
           runtimeId: listsAll.name,
           runId: runOf(listsAll.name),
+          cause: "read",
           error: `read data of ${a.name} that did not commit`,
         },
       ].sort((x, y) => x.runtimeId.localeCompare(y.runtimeId)),
@@ -627,6 +646,7 @@ for (const [backend, create] of BACKENDS) {
         {
           runtimeId: a.name,
           runId: runOf(a.name),
+          cause: "rejected",
           error: expect.stringMatching(
             /^plugin\.data\.update: .*\(op 0, out-of-bounds\)$/,
           ),
@@ -634,6 +654,7 @@ for (const [backend, create] of BACKENDS) {
         {
           runtimeId: b.name,
           runId: runOf(b.name),
+          cause: "read",
           error: `read data of ${a.name} that did not commit`,
         },
       ]);

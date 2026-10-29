@@ -3936,6 +3936,7 @@ runtime 报告失败时，它的原始错误保留在 `result.runtimeResults` �
 列出这个会话能看到的插件，以及会话当前可执行的命令。
 
 - `items[]`：每项在 `PluginSummary` 的基础上增加 `active`、`locked`、`sessionState`、`serverCodeApproved`，以及可选的 `serverCodeApprovedBy: "session" | "trusted-source"`、`approvalRequired`、`autoAdded`、`rejection`。`serverCodeApprovedBy` 区分显式会话批准与当前来源策略的隐式批准。
+- `items[].paused?: { reason }`：只在本会话因故障暂停时出现；`active` 仍表示已选择的插件。重新启用见下方端点。
 - `items[].runtimes` 与 `GET /api/plugins` 的形状完全相同。
 - `commands[]`：唯一的可执行命令目录。它按当前启用的插件过滤，再加上框架命令。命令只在顶层列一次，不按插件重复返回。
 - `unavailable[]`：玩家确认的插件里现在不能运行的那些，每项是一个 `rejection`（`pluginId`、`code`、`reason`）。原因可能是没有安装（`unknown-plugin`）、加载失败，或者当前版本缺少提供者、和别的成员冲突。游戏照常进行。
@@ -3988,6 +3989,14 @@ runtime 报告失败时，它的原始错误保留在 `result.runtimeResults` �
   ]
 }
 ```
+
+#### `POST /api/sessions/:id/plugins/:pluginId/resume-fault`
+
+在 `session.access` 鉴权下重新启用本会话因故障暂停的插件，并把计数清零。无需请求体。返回与 `GET /plugins` 相同的插件视图和命令目录；该插件不再带 `paused`。下次执行起重新运行。
+
+- `404 session_not_found`：会话不存在；`404 plugin_not_found`：插件未知。
+- `409 plugin_not_paused`：插件当前没有因故障暂停。
+- 不改动保存的插件选择、授权或插件数据，也不写入快照。规则见[插件故障熔断](./protocol.md#插件故障熔断)。
 
 #### `PUT /api/sessions/:id/plugins/:pluginId`
 
@@ -6054,6 +6063,9 @@ SSE 是服务器向客户端持续推送事件的方式。Covel 有两条独立�
 | `turn.resumed` | 流程控制 | `POST /api/sessions/:id/suspensions/:suspensionId/resume` 重启 runtime 时发出 |
 | `proposal.failed` | 流程控制 | 单条 proposal 提交失败。明确上报，不悄悄丢弃；由提交方直接写入 action stream |
 | `job-status.updated` | 流程控制 | 后台 function runtime 通过 `ctx.progress` 汇报进度；只追加，转发到 action stream |
+| `plugin.fault.counted` | 插件故障 | 自身故障计数；只进 trace，不转发到 action stream |
+| `plugin.fault.latched` | 插件故障 | 插件因反复故障暂停；转发到 action stream，其他执行通过会话事件流通知 |
+| `plugin.fault.cleared` | 插件故障 | 正常运行或玩家重新启用清零；投递方式同上 |
 | `context.pruned` | 系统 | 提示词超出 slot 预算，历史被硬裁剪；只进 trace（`/debug` 用），不进 action stream |
 | `context.compaction.failed` | 系统 | 历史压缩失败和原因；只进 trace（`/debug` 用） |
 | `commit.fanout.failed` | 系统 | 回合已提交，但部分提交后的事件没能发布；只进 trace，订阅流同时收到 `system.reset` |
@@ -6067,10 +6079,15 @@ SSE 是服务器向客户端持续推送事件的方式。Covel 有两条独立�
 | ---------------------------------------------------------------------- | --------------------------------- | :-------------------: | ------------------------------------------------------------------------------------------------------------------------- |
 | `runtime.skipped`                                                      | `actions.ts`                      |          否           | runtime 因 cooldown / startTurn / maxTriggerCount 被跳过                                                                  |
 | `character.upserted`                                                   | `session-commit-emitter.ts`       |          是           | `character.upsert` proposal 提交后发出                                                                                    |
+| `domain-event.previewed`                                               | ToolExecutor                      |          是           | 成功工具调用产生的事件预览，不代表领域提交                                                                                |
+| `step.started` / `step.completed`                                      | TurnEmitter                       |          是           | agent 工具循环的步骤 trace                                                                                                |
+| `plugin.fault.latched` / `plugin.fault.cleared`                        | 宿主故障熔断                      |          是           | 插件暂停或清零时的固定玩家提示                                                                                            |
+| `plugin.fault.counted`                                                 | 宿主故障熔断                      |          否           | 插件自身故障计数，只进 trace                                                                                              |
 | `tool.calling` / `tool.completed` / `tool.failed`                      | TurnEmitter                       |          是           | 工具调用 trace（调试时间线用）                                                                                            |
 | `llm.calling` / `llm.responded` / `message.completed`                  | TurnEmitter                       |          是           | LLM 调用 trace                                                                                                            |
 | `block.emitted`                                                        | TurnEmitter                       |          是           | 块发出的 trace                                                                                                            |
-| `hook.fired` / `hook.rewrote` / `hook.aborted`                         | TurnEmitter                       |          是           | Hook 行为 trace                                                                                                           |
+| `hook.fired` / `hook.aborted`                                          | TurnEmitter                       |          是           | Hook 行为 trace                                                                                                           |
+| `hook.rewrote`                                                         | TurnEmitter                       |          否           | Hook 内容改写的 trace；不转发到 action stream                                                                             |
 | `gateway.calling` / `gateway.responded` / `gateway.failed`             | TurnEmitter（`withGatewayTrace`） |          是           | function runtime 和扩展点提供方通过 `ctx.gateway` 调 provider 的 trace（与 `llm.*` 对等）；失败时带服务商已报告的 `usage` |
 | `function.executing` / `function.completed`                            | TurnEmitter                       |          否           | function runtime handler 的起止 trace；只走订阅通道和 `trace_events`                                                      |
 | `recursive.calling` / `recursive.completed` / `recursive.failed`       | TurnEmitter                       |          否           | 递归 runtime 的 trace；只走订阅通道（topic `trace`）                                                                      |

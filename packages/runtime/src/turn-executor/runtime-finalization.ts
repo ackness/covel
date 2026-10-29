@@ -1,6 +1,7 @@
 import { stopOf } from "../agent-loop/stop-reason.js";
 import {
   CONCEALED_FAILURE_MESSAGE,
+  isSetupRuntime,
   type LLMTargetIdentity,
   type RuntimeManifest,
   type RuntimeResult,
@@ -290,6 +291,36 @@ export async function finalizeRuntimeResult(
   const thrownStop = stopOf(options.cause);
   if (finalized.status === "failed" && thrownStop)
     finalized = { ...finalized, stop: thrownStop };
+  // Derive this after hooks and stop attribution; provider errorKind also
+  // classifies ordinary plugin exceptions and cannot establish ownership.
+  const { fault: _untrustedFault, ...withoutFault } = finalized;
+  finalized = withoutFault;
+  if (
+    finalized.status === "failed" &&
+    !isSetupRuntime(manifest) &&
+    !signal?.aborted
+  ) {
+    const stop = finalized.stop?.reason;
+    if (stop === "deadline") finalized = { ...finalized, fault: "timeout" };
+    else if (stop !== "cancelled" && stop !== "model-error") {
+      if (
+        stop === "max-steps" ||
+        stop === "invalid-output" ||
+        stop === "loop-detected" ||
+        stop === "context-overflow"
+      )
+        finalized = { ...finalized, fault: "runtime" };
+      else if (
+        !finalized.failureTarget &&
+        !finalized.error?.startsWith("[provider:")
+      ) {
+        if (options.cause instanceof RuntimeTimeoutError)
+          finalized = { ...finalized, fault: "timeout" };
+        else if (options.cause !== undefined)
+          finalized = { ...finalized, fault: "runtime" };
+      }
+    }
+  }
   await reportRuntimeResult(deps, input.sessionId, finalized);
   return finalized;
 }

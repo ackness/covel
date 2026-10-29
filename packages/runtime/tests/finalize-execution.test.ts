@@ -659,7 +659,9 @@ describe("finalizeExecution", () => {
 
     expect(outcome).toMatchObject({
       status: "committed",
-      isolatedRuntimes: [{ runtimeId: "rt-b", error: expect.any(String) }],
+      isolatedRuntimes: [
+        { runtimeId: "rt-b", cause: "rejected", error: expect.any(String) },
+      ],
     });
     expect(outcome.failedProposals).toHaveLength(1);
     expect(await store.listMessages(SESSION_ID)).toHaveLength(1);
@@ -1129,8 +1131,12 @@ describe("finalizeExecution — dependents of a dropped runtime", () => {
       expect(outcome).toMatchObject({
         status: "committed",
         isolatedRuntimes: [
-          { runtimeId: "up", error: expect.any(String) },
-          { runtimeId: "down", error: "upstream up did not commit" },
+          { runtimeId: "up", cause: "rejected", error: expect.any(String) },
+          {
+            runtimeId: "down",
+            cause: "upstream",
+            error: "upstream up did not commit",
+          },
         ],
       });
       expect(

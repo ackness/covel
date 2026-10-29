@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 import { createMemoryStore } from "@covel/store/memory";
 import { createPluginRegistry, parsePluginMd } from "@covel/plugin-loader";
-import { PluginServiceRegistry } from "@covel/runtime";
+import { PluginServiceRegistry, createPluginFaultLatch } from "@covel/runtime";
 import { createPluginServiceAdmission } from "../../src/routes/api/bootstrap/plugin-service-admission.js";
 import { rotateSessionApprovalScope } from "../../src/routes/api/session/session-guard.js";
 
@@ -51,7 +51,9 @@ async function fixture() {
   const ensurePluginEntry = vi.fn(async () => {});
   const deferred = new Set<string>();
   const getSession = vi.spyOn(store, "getSession");
+  const pluginFaults = createPluginFaultLatch({ threshold: 1 });
   const host = createPluginServiceAdmission({
+    pluginFaults,
     store,
     registry,
     ensurePluginEntry,
@@ -80,6 +82,7 @@ async function fixture() {
   return {
     store,
     registry,
+    pluginFaults,
     host,
     services,
     ensurePluginEntry,
@@ -90,6 +93,19 @@ async function fixture() {
 }
 
 describe("production plugin service admission", () => {
+  it("refuses a latched provider from the next capture while preserving the running execution", async () => {
+    const f = await fixture();
+    const running = await f.host.capture("session");
+    f.pluginFaults.recordHookFault("session", "provider", "turn", "hook");
+    await expect(running.run(f.call)).resolves.toBe("old-generation");
+    const next = await f.host.capture("session");
+    await expect(next.run(f.call)).rejects.toThrow("Plugin is unavailable");
+    expect(await next.run(() => f.host.admission.list("session"))).toEqual([]);
+    f.pluginFaults.clear("session", "provider", "player");
+    const resumed = await f.host.capture("session");
+    await expect(resumed.run(f.call)).resolves.toBe("old-generation");
+  });
+
   it("resolves the captured active set once per discovery list", async () => {
     const f = await fixture();
     const captured = await f.host.capture("session");

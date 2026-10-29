@@ -1,3 +1,4 @@
+import { FaultRecovery } from "./fault-recovery.js";
 import { useState } from "react";
 import {
   AlertTriangle,
@@ -133,6 +134,13 @@ export function SessionPluginItem({
               ].join(" ")}
             />
           </button>
+        )}
+        {plugin.paused && (
+          <FaultRecovery
+            pluginId={plugin.id}
+            sessionId={sessionId}
+            executing={executing}
+          />
         )}
         <SetupRecovery
           pluginId={plugin.id}

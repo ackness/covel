@@ -181,12 +181,25 @@ export async function executeTurn(
   deps: ExecutionDeps,
   options?: TurnExecutorOptions,
 ): Promise<ExecutedTurn> {
+  // Freeze admission once. A hook may latch a plugin during this execution.
+  const paused = new Set(
+    [
+      ...(deps.hookScope?.activePluginIds ??
+        runtimes.map((runtime) => runtime.pluginId)),
+    ].filter((pluginId) =>
+      deps.pluginFaults?.isLatched(input.sessionId, pluginId),
+    ),
+  );
+  runtimes = runtimes.filter((runtime) => !paused.has(runtime.pluginId));
   const captured = captureSchemas(deps);
   const userSettings = snapshotUserSettings(input.userSettings);
   const hookScope = {
+    logicalKey: input.logicalTurnId ?? input.turnId,
     activePluginIds: new Set(
-      deps.hookScope?.activePluginIds ??
-        runtimes.map((runtime) => runtime.pluginId),
+      [
+        ...(deps.hookScope?.activePluginIds ??
+          runtimes.map((runtime) => runtime.pluginId)),
+      ].filter((pluginId) => !paused.has(pluginId)),
     ),
     settings: deps.hookScope
       ? snapshotUserSettings(deps.hookScope.settings)
@@ -332,11 +345,19 @@ export async function resumeSuspendedRuntime(
   deps: ExecutionDeps,
   options?: ResumeSuspendedRuntimeOptions,
 ): Promise<ExecutedRuntime> {
+  if (deps.pluginFaults?.isLatched(suspension.sessionId, manifest.pluginId))
+    throw new Error("Plugin is unavailable in this session");
   const captured = captureSchemas(deps);
   const userSettings = snapshotUserSettings(options?.userSettings);
   const hookScope = {
+    logicalKey:
+      suspension.pendingContinuation.executionContext.logicalTurnId ??
+      suspension.turnId,
     activePluginIds: new Set(
-      deps.hookScope?.activePluginIds ?? [manifest.pluginId],
+      [...(deps.hookScope?.activePluginIds ?? [manifest.pluginId])].filter(
+        (pluginId) =>
+          !deps.pluginFaults?.isLatched(suspension.sessionId, pluginId),
+      ),
     ),
     settings: deps.hookScope
       ? snapshotUserSettings(deps.hookScope.settings)

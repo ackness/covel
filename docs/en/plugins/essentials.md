@@ -353,6 +353,8 @@ Keep an entity together with references to it. See the [plugin reference](../ref
 | A write fails, with a message that the size limit was exceeded                  | A value is over 256 KiB. Split it into several keys.                                                                              |
 | In a game in Chinese, changes to the prompt have no effect                      | You changed only the English body. A game in Chinese reads `*.zh.md`.                                                             |
 
+An auxiliary plugin that repeatedly fails in one session because of its own exceptions, timeouts, invalid agent stops or rejected proposals is paused. Use “Resume” in the plugin list to reset and retry. Provider/model errors, cancellations, dependency cascades and version conflicts do not count; setup, story providers and dimension providers receive special protection. A deliberate Hook veto is not a Hook fault; throws and timeouts count against the Hook owner. See the [fault latch](../reference/protocol.md#plugin-fault-latch) for the full rules. State lives in memory and clears on restart.
+
 ## Next
 
 - Write only configuration and prompts: [prompt-only plugins](./prompt-only.md)

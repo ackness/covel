@@ -169,6 +169,9 @@ export interface PluginDetail extends Omit<PluginSummary, "runtimes"> {
 }
 
 export interface SessionPlugin extends PluginSummary {
+  readonly paused?: {
+    readonly reason: import("./execution.js").PluginFaultReason;
+  };
   readonly serverCodeApprovedBy?: "session" | "trusted-source";
   /** Live authorization for this session, independent of host publication. */
   readonly serverCodeApproved: boolean;

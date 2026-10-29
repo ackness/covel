@@ -78,6 +78,7 @@ const ROUTES: Record<string, RouteAccess> = {
     onlyWhen: "plugin.community: enabling a community plugin",
   },
   "DELETE /api/sessions/:id/plugins/:pluginId": SESSION,
+  "POST /api/sessions/:id/plugins/:pluginId/resume-fault": SESSION,
   "GET /api/sessions/:id/memory-index": SESSION,
   "POST /api/sessions/:id/memory-index/rebuild": SESSION,
   "PATCH /api/sessions/:id/seats/:seatId": SESSION,

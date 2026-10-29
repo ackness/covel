@@ -769,6 +769,7 @@ sessionRoutes.patch("/:id", async (c) => {
       updated.hookScope,
       "ended",
     );
+    c.get("pluginFaults")?.forgetSession(id);
   }
 
   let responseSession: SessionRecord | Response = updated.merged;

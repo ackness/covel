@@ -1,0 +1,246 @@
+import { describe, expect, it, vi } from "vitest";
+import { createMemoryStore } from "@covel/store/memory";
+import type { RuntimeManifest } from "@covel/shared";
+import { z } from "zod";
+import { tool } from "@covel/tools";
+import type { ToolCallContext } from "../src/agent-loop/tool-executor.js";
+import { createToolExecutor } from "../src/agent-loop/tool-executor.js";
+import { commitExecution } from "../src/commit/commit-execution.js";
+import { classifyExecutionFaults } from "../src/faults/classify.js";
+import { executeTurn } from "../src/execution.js";
+import { createHookPipeline } from "../src/hooks/pipeline.js";
+import { createPluginFaultLatch } from "../src/faults/plugin-fault-latch.js";
+import { buildSessionSnapshot } from "../src/snapshot/snapshot-builder.js";
+
+const p: RuntimeManifest = {
+  pluginId: "p",
+  name: "p/run",
+  description: "P",
+  stage: "pre-turn",
+  runtimeType: "function",
+  trigger: { type: "auto" },
+  tools: { plugin: ["p-tool"] },
+};
+const q: RuntimeManifest = {
+  pluginId: "q",
+  name: "q/run",
+  description: "Q",
+  stage: "narrative",
+  trigger: { type: "auto" },
+  tools: { plugin: ["q-tool"] },
+  inputs: {
+    upstream: { from: { capability: "p.context@1" }, required: false },
+  },
+};
+async function fixture() {
+  const store = createMemoryStore();
+  const now = new Date().toISOString();
+  await store.createSession({
+    id: "s",
+    locale: "en-US",
+    status: "active",
+    phase: "playing",
+    activePlugins: ["p", "q"],
+    setupRuntimes: {},
+    seats: [
+      { id: "main", controller: "human", role: "player", characters: "auto" },
+    ],
+    completedPlayerTurns: 0,
+    createdAt: now,
+    updatedAt: now,
+  });
+  return store;
+}
+describe("fault latch execution admission", () => {
+  it("omits a latched runtime and hooks while another agent keeps its own tools", async () => {
+    const store = await fixture();
+    const latch = createPluginFaultLatch({ threshold: 1 });
+    latch.recordHookFault("s", "p", "previous", "hook");
+    const hookPipeline = createHookPipeline({
+      isPluginLatched: latch.isLatched,
+    });
+    const pHook = vi.fn(async () => ({ action: "continue" as const }));
+    hookPipeline.register({
+      id: "p-hook",
+      pluginId: "p",
+      event: "TurnStart",
+      handler: pHook,
+    });
+    const requests: string[][] = [];
+    const findTool = vi.fn((name: string, context: ToolCallContext) =>
+      name === `${context.pluginId}-tool`
+        ? tool({
+            name,
+            description: name,
+            parameters: z.object({}),
+            execute: async () => ({}),
+          })
+        : undefined,
+    );
+    const loadRuntime = vi.fn(async (manifest: RuntimeManifest) => ({
+      manifest,
+      promptTemplate: "Return {}.",
+      handler: async () => ({ outcome: "success" as const, value: {} }),
+    }));
+    const execution = await executeTurn(
+      { sessionId: "s", turnId: "turn", playerMessage: "go", origin: "player" },
+      [p, q],
+      {
+        store,
+        pluginFaults: latch,
+        hookPipeline,
+        hookScope: { activePluginIds: new Set(["p", "q"]) },
+        loadRuntime,
+        toolExecutor: createToolExecutor({ store, findTool }),
+        llm: {
+          generate: async (request) => {
+            requests.push((request.tools ?? []).map((tool) => tool.name));
+            return {
+              content: "{}",
+              toolCalls: [],
+              finishReason: "stop",
+              usage: { inputTokens: 1, outputTokens: 1 },
+            };
+          },
+        },
+      },
+    );
+    expect(
+      execution.result.runtimeResults.map((result) => result.runtimeId),
+    ).toEqual([q.name]);
+    expect(
+      loadRuntime.mock.calls.map(([manifest]) => manifest.pluginId),
+    ).not.toContain("p");
+    expect(pHook).not.toHaveBeenCalled();
+    expect(execution.commit.activePluginIds?.has("p")).toBe(false);
+    expect(requests[0]).toContain("q-tool");
+    expect(requests.flat()).not.toContain("p-tool");
+    expect(
+      JSON.stringify(await buildSessionSnapshot(store, "s")),
+    ).not.toContain('"paused"');
+  });
+  it("keeps current runtime and hook admission frozen when a hook latches mid-execution", async () => {
+    const store = await fixture();
+    const latch = createPluginFaultLatch({ threshold: 1 });
+    const hookPipeline = createHookPipeline({
+      isPluginLatched: latch.isLatched,
+    });
+    const post = vi.fn(async () => ({ action: "continue" as const }));
+    hookPipeline.register({
+      id: "latch",
+      pluginId: "p",
+      event: "TurnStart",
+      handler: async () => {
+        latch.recordHookFault("s", "p", "turn", "hook");
+        return { action: "continue" };
+      },
+    });
+    hookPipeline.register({
+      id: "post",
+      pluginId: "p",
+      event: "PostRuntime",
+      handler: post,
+    });
+    const execution = await executeTurn(
+      { sessionId: "s", turnId: "turn", playerMessage: "go", origin: "player" },
+      [p],
+      {
+        store,
+        pluginFaults: latch,
+        hookPipeline,
+        loadRuntime: async (manifest) => ({
+          manifest,
+          promptTemplate: "",
+          handler: async () => ({ outcome: "success", value: {} }),
+        }),
+        llm: {
+          generate: async () => {
+            throw new Error("no model");
+          },
+        },
+      },
+    );
+    expect(execution.result.runtimeResults).toHaveLength(1);
+    expect(post).toHaveBeenCalledOnce();
+    expect(latch.isLatched("s", "p")).toBe(true);
+  });
+});
+
+it.each(["throw", "timeout", "veto"] as const)(
+  "attributes a PreStateCommit %s without blaming an innocent proposal owner",
+  async (mode) => {
+    const store = await fixture();
+    const outcomes: string[] = [];
+    const latch = createPluginFaultLatch();
+    const hookPipeline = createHookPipeline({
+      onHandlerOutcome: (event) => {
+        if (event.outcome !== "ok") {
+          expect(event.logicalKey).toBe("turn");
+          outcomes.push(event.pluginId);
+          latch.recordHookFault(
+            event.sessionId,
+            event.pluginId,
+            event.logicalKey ?? "",
+            event.outcome === "timeout" ? "timeout" : "hook",
+          );
+        }
+      },
+    });
+    hookPipeline.register({
+      id: "policy",
+      pluginId: "p",
+      event: "PreStateCommit",
+      timeoutMs: 1,
+      handler: async () => {
+        if (mode === "throw") throw new Error("broken");
+        if (mode === "timeout") return new Promise(() => {});
+        return { action: "abort", reason: "policy veto" };
+      },
+    });
+    const execution = await executeTurn(
+      { sessionId: "s", turnId: "turn", playerMessage: "go", origin: "player" },
+      [{ ...q, runtimeType: "function", tools: undefined }],
+      {
+        store,
+        hookPipeline,
+        hookScope: { activePluginIds: new Set(["p", "q"]) },
+        loadRuntime: async (manifest) => ({
+          manifest,
+          promptTemplate: "",
+          handler: async () => ({
+            outcome: "success",
+            value: {},
+            effects: {
+              pluginData: [{ namespace: "data", key: "key", value: 1 }],
+            },
+          }),
+        }),
+        llm: {
+          generate: async () => {
+            throw new Error("no model");
+          },
+        },
+      },
+    );
+    const outcome = await commitExecution({
+      store,
+      execution,
+      hookPipeline,
+      completion: { kind: "turn", turnId: "turn", durationMs: 0 },
+    });
+    expect(outcome.status).toBe("failed");
+    if (mode === "veto") {
+      expect(outcomes).toEqual([]);
+      expect(
+        classifyExecutionFaults(execution.commit.results, outcome).get("q"),
+      ).toEqual({ kind: "fault", reason: "proposal-rejected" });
+    } else {
+      expect(outcomes).toEqual(["p"]);
+      expect(outcome.failedProposals[0]?.code).toBe("hook-failed");
+      expect(
+        classifyExecutionFaults(execution.commit.results, outcome).get("q")
+          ?.kind,
+      ).toBe("neutral");
+    }
+  },
+);

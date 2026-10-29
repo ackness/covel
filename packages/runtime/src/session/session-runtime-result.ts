@@ -333,7 +333,11 @@ export async function prepareRuntimeProposals(
       ...(opts.emitter ? { emitter: opts.emitter } : {}),
     });
     if ("error" in hooked) {
-      failedProposals.push({ proposal, error: hooked.error });
+      failedProposals.push({
+        proposal,
+        error: hooked.error,
+        ...(hooked.code ? { code: hooked.code } : {}),
+      });
       continue;
     }
     // A hook may replace the payload, so the guard reads the final proposal.

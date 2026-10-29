@@ -99,6 +99,8 @@ If a handler throws an error, times out, or returns a result in the wrong format
 - **Events that can be intercepted**: a failure is treated as `abort`. A broken rule cannot let through an operation that it was supposed to block.
 - **Other events**: the handler is skipped. Any rewrites made by earlier handlers are kept, and the failure is recorded in the trace (`hook.error`).
 
+Throws, timeouts and malformed results count toward the registering plugin's [fault latch](./protocol.md#plugin-fault-latch). A deliberate `abort` / veto is not a Hook fault; a deliberate `PreStateCommit` veto is a rejection of the proposal owner. Parent cancellation is not a Hook fault.
+
 ## Events
 
 The "Scope" column says what the event is about: `session` (the whole session), `turn` (one execution), or `runtime` (one runtime). For events with scope `runtime`, `ctx.pluginId` and `ctx.runtimeId` are that runtime.
@@ -303,3 +305,5 @@ Payload: `{ sessionId, reason }`, where `reason` is `ended` or `deleted`.
 - A hook has no write path of its own. A plugin's data is written by its runtimes and tools. A hook's return value can rewrite a result and a proposal's payload, but it cannot add a write.
 - A handler cannot depend on the order of other plugins' handlers. Its own `enforce` group is the exception.
 - For a runtime that declares `io.concealed`, the prompt and the reply do not appear in the trace or the live stream. However, the hooks of enabled plugins still receive them in the payload. A community plugin's hooks run only after the player has approved its server code.
+
+- A plugin paused by faults runs no Hooks from the next execution; the current execution keeps its frozen admission set.

@@ -138,6 +138,7 @@ export type {
   ToolCallRecord,
   TokenUsage,
   RuntimeResult,
+  PluginFaultReason,
   StopReason,
   LoopStop,
   RuntimeRetryScope,

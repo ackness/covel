@@ -22,6 +22,7 @@
 | Dataset | 数据集 | 插件声明的带类型数据（`contributes.datasets`）。不是安装用的 **Collection**。 |
 | Deployment form | 部署形态 | 桌面客户端、自部署网页版、官方网页版。不是 `DEPLOYMENT_TIER`。 |
 | Edition | 语言版本 | 世界的一种语言：`defaultLocale`，以及根目录里每个 `world.<locale>.yaml` 或 `WORLD.<locale>.md` 的语言。 |
+| Fault latch | 熔断 | 辅助插件在同一会话连续因自身故障失败后暂停，可由玩家重新启用；只在进程内存中保存。见[协议](./protocol.md#插件故障熔断)。 |
 | Finalizer step | 收尾步骤 | agent 用完步数后关掉工具、要求直接给出答案的那一次请求。 |
 | Kernel | 内核 |  |
 | Local model relay | 本地模型中继 | 共享形态的服务端经玩家浏览器访问玩家电脑或局域网上的模型。见[安全边界](../internals/security.md#local-model-relay)。 |

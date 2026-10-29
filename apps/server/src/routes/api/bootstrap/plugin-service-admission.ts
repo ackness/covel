@@ -10,6 +10,9 @@ import { runnablePluginIds } from "../session/plugins.js";
 /** Keep an execution's graph while checking revocation against live authority. */
 export function createPluginServiceAdmission(args: {
   readonly store: Pick<DataStore, "getSession">;
+  readonly pluginFaults?: {
+    isLatched(sessionId: string, pluginId: string): boolean;
+  };
   readonly registry: Pick<PluginRegistry, "getActivePlugins" | "getAll">;
   readonly ensurePluginEntry: (
     pluginId: string,
@@ -19,6 +22,7 @@ export function createPluginServiceAdmission(args: {
   readonly isEntryRetryDeferred?: (pluginId: string) => boolean;
 }) {
   const executions = new AsyncLocalStorage<SessionRecord>();
+  const pausedByExecution = new WeakMap<SessionRecord, ReadonlySet<string>>();
   const activeIds = (session: SessionRecord): readonly string[] =>
     executions.getStore()
       ? args.registry.getActivePlugins(session.id)
@@ -46,6 +50,12 @@ export function createPluginServiceAdmission(args: {
           sessionApprovalScope(live, pluginId))
     )
       throw new Error("Plugin service execution authority was revoked");
+    if (
+      captured
+        ? pausedByExecution.get(captured)?.has(pluginId)
+        : args.pluginFaults?.isLatched(sessionId, pluginId)
+    )
+      throw new Error(`Plugin is unavailable: ${pluginId}`);
     if (!active.includes(pluginId))
       throw new Error(`Plugin is not active: ${pluginId}`);
     await args.ensurePluginEntry(pluginId, sessionId);
@@ -64,6 +74,14 @@ export function createPluginServiceAdmission(args: {
       const session = await args.store.getSession(sessionId);
       if (!session) throw new Error("Plugin service session is unavailable");
       const captured = structuredClone(session);
+      pausedByExecution.set(
+        captured,
+        new Set(
+          activeIds(session).filter((pluginId) =>
+            args.pluginFaults?.isLatched(sessionId, pluginId),
+          ),
+        ),
+      );
       return { run: <T>(fn: () => T): T => executions.run(captured, fn) };
     },
     admission: {
