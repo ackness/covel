@@ -4,8 +4,10 @@ import {
   SESSION_BRIDGE_STREAM_INTERVAL_MS,
   type StreamFeed,
 } from "./session-bridge-stream.js";
-import { useEffect, useMemo, useRef } from "react";
-import { PLUGIN_FRAME_PATH } from "@covel/shared";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
+import { Button } from "@/components/ui/button.js";
+import { PLUGIN_FRAME_PATH, PLUGIN_PAGE_READY_TIMEOUT_MS } from "@covel/shared";
 import { useThemeSnapshot } from "@/theme-system/use-theme-snapshot.js";
 import {
   connectPluginBridge,
@@ -14,7 +16,7 @@ import {
 } from "./plugin-bridge.js";
 
 /**
- * Plugin HTML runs two frames down, both `sandbox="allow-scripts"` and so
+ * Single-file plugin HTML runs two frames down, both `sandbox="allow-scripts"` and so
  * opaque origins without the app's storage, cookies or API. The outer frame
  * is the static frame host, loaded by URL so that it has a policy of its own
  * (the main page allows no inline script); it puts the plugin's HTML into the
@@ -24,7 +26,9 @@ const FRAME_URL = `${import.meta.env.BASE_URL.replace(/\/$/, "")}${PLUGIN_FRAME_
 
 export function PluginWebview(props: {
   title: string;
-  html: string;
+  html?: string;
+  src?: string;
+  onRetry?: () => void;
   height?: number;
   /** Take the room of a large container instead of the declared height. */
   expanded?: boolean;
@@ -34,6 +38,21 @@ export function PluginWebview(props: {
   locked: boolean;
   handlers: Readonly<Record<string, PluginBridgeHandler>>;
 }) {
+  const { t } = useTranslation();
+  const [attempt, setAttempt] = useState(0);
+  const [pageStatus, setPageStatus] = useState<"loading" | "ready" | "failed">(
+    "loading",
+  );
+  const [updated, setUpdated] = useState(false);
+  const pageReady = useRef(false);
+  const readyTimer = useRef<ReturnType<typeof setTimeout> | undefined>(
+    undefined,
+  );
+  const src =
+    props.src === undefined
+      ? FRAME_URL
+      : `${import.meta.env.BASE_URL.replace(/\/$/, "")}${props.src}`;
+  const frameKey = JSON.stringify([src, props.html, attempt]);
   const frame = useRef<HTMLIFrameElement>(null);
   const bridge = useRef<PluginBridge | null>(null);
   // The widget cannot see the host's stylesheet, so the active style scheme
@@ -131,32 +150,77 @@ export function PluginWebview(props: {
       sessionSent.current = false;
       connectedFrame.current = null;
     },
-    [props.html],
+    [frameKey],
   );
+
+  useEffect(() => {
+    pageReady.current = false;
+    setPageStatus("loading");
+    setUpdated(false);
+    if (props.src === undefined) return;
+    const controller = new AbortController();
+    readyTimer.current = setTimeout(() => {
+      setPageStatus("failed");
+      // A main-page probe distinguishes an expired digest from other failures.
+      void fetch(src, {
+        method: "HEAD",
+        credentials: "omit",
+        signal: controller.signal,
+      })
+        .then((response) => {
+          if (!controller.signal.aborted && !pageReady.current) {
+            setUpdated(response.status === 404);
+            setPageStatus("failed");
+          }
+        })
+        .catch(() => {
+          if (!controller.signal.aborted && !pageReady.current)
+            setPageStatus("failed");
+        });
+    }, PLUGIN_PAGE_READY_TIMEOUT_MS);
+    return () => {
+      clearTimeout(readyTimer.current);
+      controller.abort();
+    };
+  }, [frameKey, props.src, src]);
 
   // One connection per frame element: a later navigation gets no port.
   const connect = () => {
-    const target = frame.current?.contentWindow;
-    if (!target || connectedFrame.current === frame.current) return;
-    connectedFrame.current = frame.current;
+    const element = frame.current;
+    const target = element?.contentWindow;
+    if (!target || connectedFrame.current === element) return;
+    connectedFrame.current = element;
     bridge.current?.close();
     const initialState = fullState();
-    bridge.current = connectPluginBridge(target, current.current.html, () => ({
-      ...current.current,
-      state: initialState,
-    }));
+    bridge.current = connectPluginBridge(
+      target,
+      props.src === undefined ? current.current.html : undefined,
+      () => ({
+        ...current.current,
+        state: initialState,
+      }),
+      {
+        onReady: () => {
+          if (frame.current !== element || connectedFrame.current !== element)
+            return;
+          pageReady.current = true;
+          clearTimeout(readyTimer.current);
+          setPageStatus("ready");
+        },
+      },
+    );
     sessionSent.current = Boolean(initialState.session);
     bindStream();
   };
 
-  return (
+  const iframe = (
     <iframe
-      key={props.html}
+      key={frameKey}
       ref={frame}
       title={props.title}
       sandbox="allow-scripts"
       referrerPolicy="no-referrer"
-      src={FRAME_URL}
+      src={src}
       onLoad={connect}
       className="w-full border-0"
       style={{
@@ -167,5 +231,32 @@ export function PluginWebview(props: {
             : Math.max(80, Math.min(800, props.height ?? 280)),
       }}
     />
+  );
+  if (props.src === undefined) return iframe;
+  return (
+    <div
+      className="relative w-full"
+      style={props.fill ? { height: "100%" } : undefined}
+      data-page-status={pageStatus}
+    >
+      {iframe}
+      {pageStatus === "failed" && (
+        <div
+          className="absolute inset-0 z-1 flex flex-col items-center justify-center gap-3 bg-background/95 p-4"
+          role="alert"
+        >
+          <p>{t(updated ? "session.pageUpdated" : "session.pageLoadFailed")}</p>
+          <Button
+            onClick={() => {
+              // Also remount if the refreshed projection has the same digest.
+              setAttempt((value) => value + 1);
+              props.onRetry?.();
+            }}
+          >
+            {t("session.pageRetry")}
+          </Button>
+        </div>
+      )}
+    </div>
   );
 }

@@ -93,6 +93,11 @@ export function SessionPluginItem({
           <span className="text-xs font-medium truncate flex-1 min-w-0">
             {displayName}
           </span>
+          {plugin.serverCodeApprovedBy === "trusted-source" && (
+            <Badge variant="outline" className="text-xs">
+              {t("plugin.trustedSourceApproved")}
+            </Badge>
+          )}
           {isLocked && (
             <span title={t("plugin.locked")}>
               <Lock className="w-3 h-3 shrink-0 text-muted-foreground/50" />

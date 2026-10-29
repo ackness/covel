@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   pluginViewMode,
   parsePluginViewMode,
@@ -20,6 +20,7 @@ export interface PluginViewEntry {
   spec: UISlotSpec;
 }
 export interface PluginViews {
+  reload(): void;
   views: readonly PluginViewEntry[];
   status: "loading" | "ready" | "error";
 }
@@ -28,6 +29,8 @@ export function usePluginViews(
   sessionPlugins: readonly SessionPlugin[],
   language: string,
 ): PluginViews {
+  const [revision, setRevision] = useState(0);
+  const reload = useCallback(() => setRevision((value) => value + 1), []);
   const activePluginKey = sessionPlugins
     .filter((plugin) => plugin.active)
     .map((plugin) => plugin.id)
@@ -38,7 +41,7 @@ export function usePluginViews(
     entries: readonly { pluginId: string; specs: UISlotSpec[] }[];
     status: PluginViews["status"];
   }>({ key: "", entries: [], status: "loading" });
-  const key = JSON.stringify([sessionId, activePluginKey, language]);
+  const key = JSON.stringify([sessionId, activePluginKey, language, revision]);
   useEffect(() => {
     let cancelled = false;
     setLoaded((previous) => ({ ...previous, key, status: "loading" }));
@@ -83,5 +86,9 @@ export function usePluginViews(
       }),
     [loaded.entries, sessionPlugins, language],
   );
-  return { views, status: loaded.key === key ? loaded.status : "loading" };
+  return {
+    views,
+    reload,
+    status: loaded.key === key ? loaded.status : "loading",
+  };
 }

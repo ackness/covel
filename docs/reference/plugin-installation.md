@@ -9,10 +9,53 @@
 - 内置插件随 Covel 一起安装。官方扩展和社区插件按需安装。
 - 维护者标签和功能分类只用于展示，不参与权限判定。
 - 根清单的 `kind: core | plugin` 说明插件的角色。`source: builtin | community` 由插件被发现的目录决定。
-- 从外部安装的官方插件也属于 `community`：不自动启用，也不跳过会话的代码授权。
+- 从外部安装的官方插件也属于 `community`，不自动启用。代码审批由发现位置与实例的可信来源策略共同决定，满足下述条件时可免提示。
 
 > [!WARNING]
 > 插件的服务端 JavaScript 没有运行在进程沙箱里。公共 API 的权限检查限制不了任意第三方 JavaScript 对进程文件、环境变量和网络的访问。被目录收录、通过源码摘要比对、通过静态清单检查，都不等于做过安全审计。
+
+## 可信来源
+
+默认没有可信来源，官方仓库也不例外。在 **设置 → 安装与管理 → 可信来源** 添加 GitHub 所有者或 `owner/repo`。建议按钮只填入官方仓库，必须再按“添加”才保存。条目会去掉两端空白、转为小写、去重并排序；最多 100 条，每条最多 100 个字符，所有者最多 39 个字符。只接受 GitHub 名称，不接受 URL。
+
+`owner` 匹配该所有者的全部仓库；`owner/repo` 只匹配这个仓库。匹配不分大小写，按完整名称比较，`owner-evil`、`repo-evil` 不会匹配；非 GitHub HTTPS 地址、`.git` 后缀、末尾斜杠、额外路径、查询和片段都不匹配。合集的每个插件按它自己的安装记录 `source.repository` 判断，包括固定到其他仓库的成员。
+
+个人形态（桌面和自部署 Web）的实例所有者通过现有 `PUT /api/config/server-settings` 保存 `trust.sources`；桌面壳设置了令牌时仍要带上它。托管与 browser-private 形态只使用运营者的 `COVEL_TRUSTED_SOURCES`（逗号分隔），忽略数据库里的值。环境变量覆盖存储值，界面显示锁定，写入回答 `409 server_setting_fixed`；共享形态的写入回答 `403 server_settings_operator_only`。变量有一条不合法就整体视为未设置，并在启动日志报告。修改环境变量需要重启；个人形态修改存储值立即生效，其他服务端进程通过设置缓存刷新跟上。
+
+### 能力快照
+
+GitHub 插件预览始终包含 `capabilities` 和 `trustedSource`。确认安装可信来源的插件时，`.covel-install.json` 增加可选的 `capabilities`，内容就是预览过的能力：
+
+- `serverCode`：是否含服务端代码或模块引用。
+- `http`：根清单及每个 runtime 声明的来源与方法并集，省略方法表示 `GET`。
+- `hooks`：事件与 `enforce`（默认 `normal`）的组合。
+- `tools`：贡献的工具名与 runtime 的 `tools.builtin`。
+- `actions`、`services`（契约 ID）、`wires`、`extensions`（`<point>/<id>`）、`forms`。
+- `datasets`：`contributes.datasets` 的命名空间与允许的写操作，不是安装用的合集。
+
+所有列表排序去重。当前能力必须是快照的子集：HTTP 方法、数据集写操作也要逐项包含，钩子换阶段算新增能力。更新可信来源的插件时，原快照原样带到新记录；原记录没有快照就仍然没有。因此更新不能默默扩大批准范围。非可信来源不写入新快照，世界包不写快照。
+
+### 文件验证与自动授权
+
+启动时对每个已登记、带路径的社区包验证安装记录与内容摘要，不 import 代码。启用、执行预检和延迟加载服务端代码之前再次检查；路径、大小、修改时间等 stat 签名未变时复用摘要结果。
+
+<!-- prettier-ignore -->
+| `integrity` | 含义与处理 |
+| --- | --- |
+| `verified` | 文件摘要与记录一致；还要检查当前来源策略与能力快照。 |
+| `modified` | 文件改动、新增、删除，或有链接、特殊文件；列表显示警告，使用普通审批。 |
+| `no-receipt` | 没有安装记录，例如 ZIP 导入或手工复制；不警告，使用普通审批。 |
+| `unreadable` | 记录损坏、带未知字段或其他读取失败；记录日志并显示警告，使用普通审批。 |
+
+只有社区包**现在**的来源受信任、摘要为 `verified`、有能力快照且当前能力没有超出快照，才隐式授予 `covel:plugin-server-code` 和该包的 `runtime:*`。缺少任一条件、登记后还未重新验证或读取异常，都回到普通提示。移除来源立即停止隐式授权；已有的显式会话授权仍按原规则生效。共享宿主的 operator 检查仍先执行，来源策略不会替代它。
+
+普通的服务端代码审批被允许后，仅对可信且摘要匹配的社区包原子更新快照为当前能力；写失败只记日志，不撤销审批。这个改写使更早签发的更新预览失效：确认更新回答 `409 Installed package changed; check for updates again`，需要重新检查更新。旧安装记录没有快照时，第一次符合上述条件的普通批准会记录一份；记录仅增加可选字段，不需要重建数据。
+
+恢复已有活动会话时，第一次回合的延迟 entry 发布也走同一激活入口；发布重新登记插件后再次验证，保持随后的 runtime 快照授权有效，无须额外启用请求。
+
+开发热重载重新登记包时，验证结果立即失效。改过本地文件的包变成 `modified`，失去来源隐式授权，直到普通审批通过；只要摘要仍不符，该审批也不会更新快照。撤销会话授权只清除显式授权，不能按会话撤销实例的来源策略。
+
+可信来源不改变 `builtin | community` 分类，不添加 API 或权限，也不自动选中插件。ZIP、手工目录、世界包、逐操作的 RPC 授权和载荷绑定的一次性授权不在此机制内。快照是声明的上界，不是沙箱或代码审计；GitHub 账号失窃不在保护范围内。发布签名、密钥、回滚、过期与撤销元数据尚未实现；预览 token 的宿主签名只是确认本次安装内容。
 
 ## 用户流程
 
@@ -152,15 +195,15 @@ GitHub 源码归档带的一层外目录会被去掉，再提取指定的插件�
 
 请求和响应的 Zod schema 在 `@covel/shared` 的 `plugin-install` 导出里。
 
-| 接口                                      | 请求                           | 响应                                                            |
-| ----------------------------------------- | ------------------------------ | --------------------------------------------------------------- |
-| `POST /api/install/plugin/github/preview` | `{ url }`                      | `{ items: GithubPluginPreview[] }`                              |
-| `POST /api/install/plugin/github`         | `{ token, acceptRisk: true }`  | `{ ok: true, kind: "plugin", id, restartRequired: true }`，201  |
-| `GET /api/install/plugins`                | 无                             | `{ items: [{ id, version, source, pendingUpdate }] }`           |
-| `POST /api/install/plugin`                | multipart `file`               | ZIP 安装响应                                                    |
-| `POST /api/install/github/preview`        | `{ url }`                      | `{ collection, items: GithubPackagePreview[], problems }`       |
-| `POST /api/install/github/batch`          | `{ tokens, acceptRisk: true }` | `{ ok: true, installed: [{ kind, id }], restartRequired }`，201 |
-| `POST /api/install/collection`            | multipart `file`               | 同 batch 响应，201                                              |
+| 接口                                      | 请求                           | 响应                                                                            |
+| ----------------------------------------- | ------------------------------ | ------------------------------------------------------------------------------- |
+| `POST /api/install/plugin/github/preview` | `{ url }`                      | `{ items: GithubPluginPreview[] }`                                              |
+| `POST /api/install/plugin/github`         | `{ token, acceptRisk: true }`  | `{ ok: true, kind: "plugin", id, restartRequired: true }`，201                  |
+| `GET /api/install/plugins`                | 无                             | `{ items: [{ id, version, source, pendingUpdate, integrity, trustedSource }] }` |
+| `POST /api/install/plugin`                | multipart `file`               | ZIP 安装响应                                                                    |
+| `POST /api/install/github/preview`        | `{ url }`                      | `{ collection, items: GithubPackagePreview[], problems }`                       |
+| `POST /api/install/github/batch`          | `{ tokens, acceptRisk: true }` | `{ ok: true, installed: [{ kind, id }], restartRequired }`，201                 |
+| `POST /api/install/collection`            | multipart `file`               | 同 batch 响应，201                                                              |
 
 ### 多包预览和批量安装
 
@@ -184,7 +227,7 @@ GitHub 源码归档带的一层外目录会被去掉，再提取指定的插件�
 
 预览包含 ID、包版本（`PLUGIN.md` 的 `version`）、描述、作者名（`author`，清单没有声明时为 `null`）、代码存在提示、来源、签名 token 和 `expiresAt`。
 
-- 来源为 `{ repository, commit, path, digest, tracking }`。
+- 来源为 `{ repository, commit, path, digest, tracking }`；`capabilities` 始终列出请求的能力，`trustedSource` 标记预览时来源是否被信任。
 - `tracking` 为 `{ kind: "default-branch" }`、`{ kind: "branch", ref }` 或 `{ kind: "pinned", ref }`。仓库根链接跟踪默认分支；tree 链接先尝试解析为明确的分支；其余的 tag 和 commit 保持锁定。
 - `description` 返回 `I18nText`，保留 `locales/<locale>.yaml`（也支持 `.yml`）为 `PLUGIN.md` 提供的描述翻译。客户端按界面语言调用 `resolveI18nText`。
 - `hasServerCode` 使用加载器的模块路径枚举：entry（没写时是存在的 `server/index.js`）、function handler（没写时是 `RUNTIME.md` 旁边存在的 `handler.js`）、guard、世界投影 handler；也扫描代码文件（包括 `.mts`、`.cts`）。ZIP 安装响应返回同一字段。这是保守提示，不是完整的代码审计；测试或构建源码也可能触发它。
@@ -201,7 +244,7 @@ GitHub 源码归档带的一层外目录会被去掉，再提取指定的插件�
 ### 落盘和安装记录
 
 - 确认安装之后，才通过临时目录加 rename 的流程落盘，并附加 `.covel-install.json`，记录来源、版本和安装时间。
-- 这个文件只用于展示和追溯，不授予信任。插件包不能自带这个文件，文件名的大小写变体也会被拒绝。
+- 这个文件记录来源和可选的能力快照；是否免提示还取决于当前策略与文件验证。插件包不能自带这个文件，文件名的大小写变体也会被拒绝。
 - 用 ZIP 或手工安装的插件没有来源记录，接口返回 `source: null`。
 - 取消预览不会写入插件目录。确认安装之后没有“取消提交”的操作。
 

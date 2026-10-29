@@ -166,6 +166,7 @@ export const pluginUiSpecSchema = z
       .optional(),
     webview: z
       .strictObject({
+        root: z.string().min(1).optional(),
         entry: z.string().regex(/\.html$/, {
           message: "must reference a local .html document",
         }),
@@ -196,6 +197,26 @@ export const pluginUiSpecSchema = z
           message: `${JSON.stringify(value)} must not start with a slash; write the item's field name (${JSON.stringify(value.slice(1))})`,
         });
     });
+    if (spec.webview?.root !== undefined) {
+      for (const [field, value] of [
+        ["root", spec.webview.root],
+        ["entry", spec.webview.entry],
+      ] as const) {
+        if (
+          value.startsWith("/") ||
+          value.includes("\\") ||
+          /^[a-z]:/i.test(value) ||
+          value.includes("\0") ||
+          value.split("/").includes("..") ||
+          !value.split("/").some((segment) => segment !== "." && segment !== "")
+        )
+          ctx.addIssue({
+            code: "custom",
+            path: ["webview", field],
+            message: `webview.${field} must be a package-relative path without ..`,
+          });
+      }
+    }
     const hasView = spec.view !== undefined && spec.view !== null;
     const hasWebview = spec.webview !== undefined && spec.webview !== null;
     if (spec.bridge && !hasWebview)
@@ -246,6 +267,17 @@ export function pluginUiSpecIssues(
       }));
   if (spec && typeof spec === "object" && !Array.isArray(spec)) {
     const record = spec as Record<string, unknown>;
+    const webview = record.webview;
+    if (
+      slot !== "view" &&
+      webview &&
+      typeof webview === "object" &&
+      "root" in webview
+    )
+      issues.push({
+        path: "webview.root",
+        message: "webview.root is only valid in contributes.ui.view",
+      });
     if (slot === "view") {
       for (const field of ["id", "label"])
         if (record[field] === undefined)

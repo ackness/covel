@@ -96,6 +96,8 @@ The code is in the entry file. The entry file is `server/index.js` by default; p
 | `covel.registerFormValidator(name, …)` | `forms`                        |
 | `covel.registerWires(...)`             | `wires`                        |
 
+Action names must follow the [reserved-prefix rule](../reference/plugins.md#contributes-fields); `registerRpc` and request validation enforce the same check.
+
 Three more items only need a declaration, with no code:
 
 - `contributes.commands`: commands that the player uses in the input box. Each command points to a name in `actions`, so that name must also appear in `actions`.

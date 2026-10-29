@@ -13,11 +13,11 @@ import { runnablePluginIds } from "../session/plugins.js";
 import { requireAccess } from "../../../host-profile.js";
 
 /** Ask before opening the stream or making any turn/domain writes. */
-export function preflightActionApprovals(
+export async function preflightActionApprovals(
   c: Context,
   session: SessionRecord,
   request: ValidatedActionRequest,
-): Response | undefined {
+): Promise<Response | undefined> {
   // Manual runtimes need their own RPC grant unless explicitly retried.
   const retryTargets =
     request.type === "retry_runtime"
@@ -37,11 +37,11 @@ export function preflightActionApprovals(
 }
 
 /** Check only the requested continuations, including manual runtimes. */
-export function preflightRuntimeApprovals(
+export async function preflightRuntimeApprovals(
   c: Context,
   session: SessionRecord,
   runtimeIds: readonly string[],
-): Response | undefined {
+): Promise<Response | undefined> {
   return preflightApprovals(
     c,
     session,
@@ -50,12 +50,12 @@ export function preflightRuntimeApprovals(
   );
 }
 
-function preflightApprovals(
+async function preflightApprovals(
   c: Context,
   session: SessionRecord,
   selected: (manifest: RuntimeManifest) => boolean,
   operation: string,
-): Response | undefined {
+): Promise<Response | undefined> {
   const registry = c.get("pluginRegistry");
   const gate = c.get("rpcApprovalGate");
   const manifests = resolveRuntimeProviders(
@@ -66,6 +66,7 @@ function preflightApprovals(
         : [];
     }),
   );
+  const refreshed = new Set<string>();
   for (const manifest of manifests) {
     if (!selected(manifest)) continue;
     const trust = getPluginTrustInfo(
@@ -75,6 +76,10 @@ function preflightApprovals(
     if (trust.autoLoad) continue;
     const denied = requireAccess(c, "plugin.community");
     if (denied) return denied;
+    if (!refreshed.has(manifest.pluginId)) {
+      await c.get("trustedSources")?.ensureFresh(manifest.pluginId);
+      refreshed.add(manifest.pluginId);
+    }
     const scope = sessionApprovalScope(session, manifest.pluginId);
     for (const action of [
       COMMUNITY_SERVER_CODE_ACTION,

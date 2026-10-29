@@ -340,6 +340,7 @@ v0.0.42 调整了插件扩展契约，旧的开发数据不会自动升级。桌
 | `COVEL_COMPACTOR_CONTEXT_WINDOW` | 按模型能力计算            | 固定压缩和提示词预算使用的上下文窗口                  |
 | `COVEL_SNAPSHOT_INTERVAL_TURNS`  | `5`                       | 每隔几个玩家回合写一份自动快照                        |
 | `COVEL_AUTO_SNAPSHOT_RETENTION`  | `20`                      | 每个会话保留几份自动快照                              |
+| `COVEL_TRUSTED_SOURCES`          | 未设置                    | 逗号分隔的可信 GitHub 所有者或仓库                    |
 | `COVEL_TRACE_RETENTION_DAYS`     | `30`                      | trace 和事件流水保留多少天                            |
 | `COVEL_PLUGIN_LOG_LEVEL`         | 开发 `debug`，生产 `info` | 插件日志写入存储的最低级别                            |
 
@@ -524,6 +525,10 @@ v0.0.42 调整了插件扩展契约，旧的开发数据不会自动升级。桌
 - 默认 `20`：每个会话保留的自动快照数。`0` 或负数保留全部。
 - 每次写入检查点后，删除更早的 `kind=auto` 快照。被分叉作为 `parentId` 引用的快照不删。手动快照和分叉快照不受影响。
 - 快照内容不包含框架自己的控制数据（命名空间 `_jobs`、`_runtime_jobs`、`_runtime_job_control`、`_logs`）。
+
+**`COVEL_TRUSTED_SOURCES`**
+
+逗号分隔的 GitHub `owner` 或 `owner/repo`，默认不信任任何来源。覆盖 `trust.sources` 并锁定该设置；共享形态只读此环境值。任一条目不合法时，整个变量视为未设置并在启动日志报告。匹配、快照和摘要规则见[可信来源](./plugin-installation.md#可信来源)。
 
 **`COVEL_TRACE_RETENTION_DAYS`**
 

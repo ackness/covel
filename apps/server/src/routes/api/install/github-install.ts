@@ -16,6 +16,7 @@ import {
   inspectBundle,
   previewLifetime,
   receiptEntry,
+  sourceIsTrusted,
   signPreview,
   verifyPreview,
 } from "./github-preview.js";
@@ -90,6 +91,7 @@ export function createGithubInstallRoutes(kind: "plugin" | "world") {
             digest: digestEntries(bundle),
             tracking,
           },
+          trustedSource: kind === "plugin" && sourceIsTrusted(c, repository),
           expiresAt: Date.now() + previewLifetime,
         };
         items.push({
@@ -143,11 +145,24 @@ export function createGithubInstallRoutes(kind: "plugin" | "world") {
           kind === "world"
             ? activateWorldPackage(c, summary.id, [
                 ...entries,
-                receiptEntry(preview),
+                receiptEntry(
+                  { ...preview, trustedSource: false },
+                  undefined,
+                  kind,
+                ),
               ])
             : materializeEntries(path.join(root, summary.id), [
                 ...entries,
-                receiptEntry(preview),
+                receiptEntry(
+                  {
+                    ...preview,
+                    trustedSource:
+                      kind === "plugin" &&
+                      sourceIsTrusted(c, preview.source.repository),
+                  },
+                  undefined,
+                  kind,
+                ),
               ]),
         root,
       );

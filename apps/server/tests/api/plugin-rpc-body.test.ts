@@ -2,6 +2,24 @@ import { describe, expect, it } from "vitest";
 import { validatePluginRpcBody } from "../../src/routes/api/plugin-rpc/body.js";
 
 describe("plugin-rpc body validation", () => {
+  it.each(["runtime:reset", "covel:plugin-server-code", "event:reset"])(
+    "rejects the internal approval key %s as a plugin action",
+    (action) => {
+      expect(
+        validatePluginRpcBody({
+          kind: "action",
+          pluginId: "probe",
+          action,
+          payload: { reset: true },
+        }),
+      ).toMatchObject({
+        ok: false,
+        status: 400,
+        error: expect.stringContaining("reserved for framework approvals"),
+      });
+    },
+  );
+
   it("accepts action, runtime, and command requests", () => {
     expect(
       validatePluginRpcBody({

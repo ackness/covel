@@ -14,6 +14,16 @@ vi.mock("../plugin-panel.js", () => ({
   PluginPanel: (props: unknown) => {
     mocks.panel(props);
     if (mocks.throws) throw new Error("bad view");
+    const panel = props as {
+      spec: { webview?: { url?: string } };
+      onRetry?: () => void;
+    };
+    if (panel.spec.webview?.url)
+      return (
+        <div role="alert">
+          Page failed<button onClick={panel.onRetry}>Retry</button>
+        </div>
+      );
     return <div>Plugin content</div>;
   },
 }));
@@ -102,4 +112,39 @@ it("offers consent revocation in the host view menu", () => {
     screen.getByRole("button", { name: i18n.t("session.revokeViewConsent") }),
   );
   expect(revoke).toHaveBeenCalledOnce();
+});
+it("gates a URL page and wires Retry outside the always-present host back control", () => {
+  const entry = {
+    ...viewEntry,
+    spec: {
+      ...viewEntry.spec,
+      webview: { url: `/plugin-assets/p/${"a".repeat(32)}/index.html` },
+    },
+  };
+  const retry = vi.fn();
+  const fallback = vi.fn();
+  const view = render(
+    <PluginViewHost
+      entry={entry}
+      sessionId="s"
+      onFallback={fallback}
+      onRetry={retry}
+    />,
+  );
+  expect(mocks.panel).not.toHaveBeenCalled();
+  view.rerender(
+    <PluginViewHost
+      entry={entry}
+      sessionId="s"
+      onFallback={fallback}
+      onRetry={retry}
+      sessionBridgeAllowed
+    />,
+  );
+  expect(screen.getByRole("alert").textContent).toContain("Page failed");
+  fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+  expect(retry).toHaveBeenCalledOnce();
+  expect(
+    screen.getByRole("button", { name: i18n.t("session.backToDefaultView") }),
+  ).toBeTruthy();
 });

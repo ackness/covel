@@ -591,3 +591,62 @@ See the [plugin view reference](../reference/ui-panels.md#plugin-views) for proj
 | The menu has no view             | Enable the plugin in this session and inspect `/api/ui-specs` diagnostics                           |
 | The page is blank after consent  | Check that HTML uses a classic script and `window.covel.subscribe`; leave with the host back button |
 | A page stays hidden without data | Add `alwaysRender: true` to a json-render page without a data source                                |
+
+## Multi-file pages
+
+For a view with separate scripts, styles and images, register a JSON spec under `contributes.ui.view`:
+
+```text
+my-plugin/
+  PLUGIN.md
+  ui/view.json
+  ui/app/index.html
+  ui/app/app.js
+  ui/app/style.css
+  ui/app/img/logo.png
+```
+
+```yaml
+contributes:
+  ui:
+    view: [./ui/view.json]
+```
+
+```json
+{
+  "id": "console",
+  "label": "Console",
+  "webview": { "root": "./ui/app", "entry": "index.html" },
+  "bridge": "session"
+}
+```
+
+```html
+<!doctype html>
+<html>
+  <head>
+    <link rel="stylesheet" href="style.css" />
+    <script src="app.js" defer></script>
+  </head>
+  <body>
+    <img src="img/logo.png" alt="Logo" />
+    <p id="story"></p>
+  </body>
+</html>
+```
+
+```js
+window.covel.subscribe((state) => {
+  document.querySelector("#story").textContent =
+    state.session?.messages.map((message) => message.text).join("\n") ?? "";
+});
+```
+
+Translate the label through the package message catalog:
+
+```yaml
+messages:
+  Console: 控制台
+```
+
+`root` is relative to the package, while `entry` is relative to `root`. Use external classic scripts: inline scripts and modules do not run. The host injects `window.covel`; remove `bridge` when the page needs no session data. A session-reading page is mounted only after player consent. The player keeps the host back button and can retry a failed page. See [multi-file pages](../reference/ui-panels.md#multi-file-pages) for the file rules, limits, CSP and cache contract. Keep private files out of the published root. For custom fonts, use an embedded `data:font/woff2;base64,...` (or WOFF) in CSS `@font-face`. Even a relative font URL under the published root fails because the sandboxed document has an opaque origin and the route supplies no CORS allow headers.

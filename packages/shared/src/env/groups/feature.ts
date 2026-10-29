@@ -49,6 +49,14 @@ export const FEATURE_ENV_VARS = [
       "Auto-snapshot checkpoint cadence: save a kind=auto snapshot every N completed player turns (the first one always snapshots). 1 = every turn.",
   },
   {
+    name: "COVEL_TRUSTED_SOURCES",
+    group: "feature",
+    type: "string",
+    status: "active",
+    description:
+      "Comma-separated trusted GitHub owners or owner/repo entries. Overrides trust.sources; shared hosts use only this environment policy. Invalid entries invalidate the whole value.",
+  },
+  {
     name: "COVEL_TRACE_RETENTION_DAYS",
     group: "feature",
     type: "integer",

@@ -115,3 +115,7 @@ describe("the plugin frame host", () => {
     expect(PLUGIN_FRAME_RESPONSE_CSP).not.toContain("allow-same-origin");
   });
 });
+it("allows URL frames only from this origin without a child-src override", () => {
+  expect(directive(PAGE_CSP, "frame-src")).toEqual(["'self'"]);
+  expect(directive(PAGE_CSP, "child-src")).toEqual([]);
+});

@@ -1,3 +1,4 @@
+import { createPluginAssetRoutes } from "./routes/plugin-assets.js";
 import type { Hono } from "hono";
 import type { DataStore } from "@covel/store";
 import type { AiStack } from "./ai-setup.js";
@@ -36,6 +37,7 @@ export interface HostRouteDeps {
  */
 export function mountApiRoutes(app: Hono, deps: HostRouteDeps): void {
   app.route("/", deps.api.app);
+  app.route("/", createPluginAssetRoutes(deps.api.registry));
   app.route("/", createModelDbRoutes(deps.ai));
   app.route(
     "/",

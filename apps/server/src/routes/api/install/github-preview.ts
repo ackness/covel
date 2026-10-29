@@ -4,6 +4,7 @@ import { compileManifestLabels, parseLocaleFile } from "@covel/plugin-loader";
 import {
   githubPluginPreviewSchema,
   i18nTextSchema,
+  trustedSourceMatches,
   type GithubPluginPreview,
 } from "@covel/shared";
 import {
@@ -12,7 +13,8 @@ import {
   type ExtractedEntry,
 } from "./shared.js";
 import { validatePluginBundle } from "./plugin-bundle.js";
-import { packageReceiptSchema } from "./package-files.js";
+import type { Context } from "hono";
+import { packageReceiptSchema, type PackageReceipt } from "./package-files.js";
 
 const signingKey = randomBytes(32);
 export const previewLifetime = 15 * 60_000;
@@ -52,8 +54,17 @@ export function verifyPreview(token: string): SignedPreview {
     throw httpError(409, "Plugin preview expired; preview again");
   return result;
 }
+export function sourceIsTrusted(c: Context, repository: string): boolean {
+  return trustedSourceMatches(
+    c.get("trustedSources")?.policy() ?? [],
+    repository,
+  );
+}
+
 export function receiptEntry(
   preview: Omit<GithubPluginPreview, "token">,
+  previous?: PackageReceipt,
+  kind: "plugin" | "world" = "plugin",
 ): ExtractedEntry {
   return {
     relativePath: INSTALL_RECEIPT_FILE,
@@ -63,6 +74,15 @@ export function receiptEntry(
           source: preview.source,
           version: preview.version,
           installedAt: new Date().toISOString(),
+          ...(kind === "plugin" &&
+          preview.trustedSource &&
+          (previous ? previous.capabilities : preview.capabilities)
+            ? {
+                capabilities: previous
+                  ? previous.capabilities
+                  : preview.capabilities,
+              }
+            : {}),
         },
         null,
         2,
@@ -77,11 +97,8 @@ export function inspectBundle(
   /** Name of the directory that holds the package; see `packageDirectoryName`. */
   directory?: string,
 ) {
-  const { pluginId, manifest, version, hasServerCode } = validatePluginBundle(
-    entries,
-    reserved,
-    directory,
-  );
+  const { pluginId, manifest, version, hasServerCode, capabilities } =
+    validatePluginBundle(entries, reserved, directory);
   const labels = entries
     .filter((entry) => /^locales\/[^/]+\.ya?ml$/.test(entry.relativePath))
     .sort((a, b) => a.relativePath.localeCompare(b.relativePath))
@@ -109,5 +126,6 @@ export function inspectBundle(
           ),
     author: manifest.plugin.author?.name ?? null,
     hasServerCode,
+    capabilities,
   };
 }

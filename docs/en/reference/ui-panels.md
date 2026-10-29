@@ -292,12 +292,12 @@ Session sources update from complete snapshots and committed character/schema ev
 A UI spec is **untrusted plugin input**. Its rules exist once: `pluginUiSpecIssues` in `@covel/shared` (`packages/shared/src/schemas/ui-spec.ts`). `pnpm validate:plugin`, the ZIP install and `/api/ui-specs` all use it when they load a panel, so a spec that passes the check is not dropped in the game for its format.
 
 - **Versions.** `specVersion` can be left out, and then it is treated as v1. A version higher than the host supports (currently `CURRENT_UI_SPEC_VERSION = 1`) is rejected. This way, an old host that meets a new plugin package reports a clear error instead of drawing a broken panel.
-- **`webview`.** `entry` points to an `.html` file in the package of at most 512 KiB; `height` is an integer from 80 to 800. `surfaces` can only be `panel` and `stage`.
+- **`webview`.** Single-file `entry` points to an `.html` file in the package of at most 512 KiB; views also support [multi-file pages](#multi-file-pages); `height` is an integer from 80 to 800. `surfaces` can only be `panel` and `stage`.
 - **Data ownership.** `pluginId`, `sourcePlugin` and `sourcePluginId` can only name this plugin's ID; `dataSource.bindings` can only be fixed namespaces of this plugin, at most 8.
 - **Either `view` or `webview`, not both.** Each spec must declare `view` (an object) or `webview` (an HTML document). If both are present or both are missing, validation fails.
 - **Recursive validation of `view`.** The checks cover `component` / `type`, `children`, named `slots`, `repeat`, and the structure of the action bindings in `on` / `watch`. Component names must be in the shared `PLUGIN_UI_COMPONENT_NAMES`. An unknown component produces a diagnostic with its path on the server. `props` and directive expressions are not restricted. They are parsed at runtime by the components and json-render, so plugins can extend the shape of their data.
 - **Declarations that are not JSON.** `contributes.ui` accepts only `.json` files. `pnpm validate:plugin` and installation reject any other file; at load such an entry gets a diagnostic, and the other valid JSON specs from the same plugin are still shown. The browser never runs a plugin's component file.
-- **When a custom component is needed.** Declare `webview.entry` and provide a separate HTML file. Or compose catalog components and bind the framework's actions. The browser does not import a plugin's `.tsx` / `.js` modules directly.
+- **When a custom component is needed.** Declare `webview.entry` and provide a separate HTML file. Or compose catalog components and bind the framework's actions. The browser does not import a plugin's `.tsx` / `.js` modules directly; multi-file pages may load classic `.js` scripts from their published root.
 - **One bad spec does not break the whole response.** A spec that fails validation is removed from where it sits, and the top-level `diagnostics[]` of the response gives the specific diagnostic:
 
   ```ts
@@ -764,6 +764,61 @@ Write source text in English and translations under `messages` in `locales/<loca
 - While views load, the host view is shown. Missing views, disabled plugins, request failures and render errors fall back to it. The host default is `stage` only when the world’s default is exactly `stage`, otherwise `parsed`. A plugin view is never a fallback target. The player’s selection survives a transient request failure and can recover on a later successful load. Render errors select the host default and show a toast.
 - The choice lasts for the current mount and is not saved per session. Plugin views do not use stage immersion and do not show the host composer.
 
+### Multi-file pages
+
+Pages are plugin views; there is no `contributes.ui.pages`. Only `contributes.ui.view` accepts `webview.root`; right panels and message blocks keep single-file HTML. Pages keep the story-column layout and do not replace a host main-view or composer system position.
+
+Authors declare this in the spec:
+
+```json
+{
+  "id": "console",
+  "label": "Console",
+  "webview": { "root": "./ui/console/", "entry": "pages/index.html" },
+  "bridge": "session"
+}
+```
+
+`root` is relative to the package root, regardless of the spec JSON directory. `entry` is relative to `root` and must end in `.html`. Neither may be absolute or contain a `..` segment; `root` cannot be `.`, `./` or the package root. Without `root`, `entry` stays relative to the spec file.
+
+Authoring and API output have separate shapes: single-file output is `webview: { html, height? }`; multi-file output is `webview: { url, height? }`. The URL is `/plugin-assets/<pluginId>/<digest>/<entry>`, with each segment encoded separately. Multi-file pages load directly into a `sandbox="allow-scripts"` iframe, without `srcdoc` or an outer frame host.
+
+<!-- prettier-ignore -->
+| Publication rule | Limit |
+| --- | --- |
+| HTML | Only the declared entry is published; other `.html` files are omitted. Static planning does not apply the inline HTML limit of 512 KiB; entry responses are capped at 2 MiB and return 404 above it |
+| Classic scripts, styles, data | `.js`, `.css`, `.json`, `.txt` |
+| Images and font files | `.png`, `.jpg`, `.jpeg`, `.gif`, `.webp`, `.avif`, `.svg`, `.woff2`, `.woff`; font files may be published but pages cannot load their URLs, as explained below |
+| Other types | `.mjs`, `.wasm`, `.map`, extensionless files and other types are omitted; extensions are compared in lowercase |
+| Hidden files and links | Names starting with `.`, `node_modules`, symlinks, Windows junctions and special files are omitted at every depth; links are never followed |
+| Reserved name | `__covel__` at any depth is an error; it belongs to the host bridge script |
+| Root check | Direct `PLUGIN.md`, `RUNTIME.md` or `.covel-install.json` entries are rejected; the root cannot be the package root |
+| Count and size | At most 512 published files, 32 MiB total, 8 MiB per file; exact boundary values are valid |
+
+Every eligible file in the root is publicly downloadable. Keep keys, server code and private data out of it. Files outside the listing always return 404. See the [asset API](./api.md#get-plugin-assetspluginiddigest).
+
+The entry response CSP is:
+
+<!-- prettier-ignore -->
+| Directive | Value |
+| --- | --- |
+| `default-src` | `'none'` |
+| `script-src` | `'self'` |
+| `style-src` | `'self' 'unsafe-inline'` |
+| `img-src` | `'self' data: blob:` |
+| `font-src` | `'self' data:` |
+| `connect-src` / `frame-src` / `form-action` / `base-uri` / `object-src` | `'none'` |
+| `sandbox` | `allow-scripts` |
+| `frame-ancestors` | `'self'` |
+
+Use classic external scripts such as `<script src="app.js"></script>`, without modules, inline scripts, event attributes or `eval`. Inline styles are allowed; network requests are blocked. Embed custom fonts as `data:font/woff2;base64,...` (or WOFF) in CSS `@font-face`. Font URL requests use CORS, and the sandboxed document has an opaque origin, so even relative `.woff` / `.woff2` URLs are cross-origin. The asset route sends no CORS allow headers, so those URLs cannot load. `font-src 'self' data:` is unchanged; publishing a font file does not make its URL usable. `'self'` uses the browser-visible origin, supporting Vite and reverse proxies without a path-prefix restriction. The route checks the published listing for containment. The main page's `frame-src 'self'` limits iframe navigation; `/api` separately rejects opaque origins and embedded destinations. See the [security boundary](../internals/security.md#plugin-pages-loaded-by-url).
+
+The host injects the classic bridge script `__covel__/bridge-<hash8>.js` after the entry's `<head>`. With no `<head>`, it uses `<html>`, then the doctype, then the start of the document. Nested entries get the required `../` prefix. Authors do not copy bridge code. The script acknowledges its port with `ready`; URL pages wait 8 seconds, then show a failure overlay with Retry over the iframe. A credential-free HEAD probe distinguishes 404 ("This page was updated; reload it.") from other failures ("This page could not be loaded."). A late `ready` clears the error. Retry fetches the spec again and remounts the iframe; host back controls stay available.
+
+The digest is the first 32 lowercase hexadecimal characters of SHA-256 over JSON lines of `[relativePath, size, sha256(content)]`, sorted by relative path. It is computed on the first registry projection and recomputed on re-registration. Production files should change only on restart; old file copies are not retained. After re-registration old digest URLs return 404 and the new URL works. Entry HTML uses `Cache-Control: no-cache` and must revalidate on every reuse; its ETag includes the bridge script hash. A host upgrade therefore returns HTML referencing the new bridge even when plugin files and the URL are unchanged. Other assets, including the bridge script with its hashed filename, keep a one-year immutable cache.
+
+Per-capability consent for `bridge: "session"` is unchanged. The whole-spec consent hash includes the URL, whose digest covers every published file; any file change invalidates old consent. A session-reading page is not mounted before consent. No session write operation or per-session view persistence is added. In development, an unapproved server-code plugin may need a restart to recompute its digest.
+
 ### Consent before reading a session
 
 Only a `webview` in `contributes.ui.view` can declare `bridge: "session"`. Until the player consents, the page is not mounted and no session projection is sent. A world default naming it also opens the consent prompt while showing `parsed` / `stage` underneath.
@@ -804,7 +859,7 @@ Nested values recursively drop every key starting with `_`, plus `hidden`, `conc
 
 KiB counts UTF-8 bytes. State changes push a full projection. Streaming uses coalesced `{ type: "stream", seq, append }` messages at 100 ms intervals, with an immediate tail flush at completion. Every full push includes the current streaming text for resynchronization. A narrative reset invalidates the old append baseline: the next push replaces the discarded draft with the full current text, even when replacement text outgrows it within 100 ms. Normal completion still flushes the final tail.
 
-**The session bridge is read-only in this version.** It adds no `submitAction`, form submission, abort or open-panel capability. Existing `invokeRuntime`, `invokePluginAction`, `invokeCommand`, `emitEvent` and `setUiState` handlers are unchanged. Images travel only as references, without bytes or blob URLs, so the sample page shows no art. There is no composer. HTML remains a single file; an unconnected page has no handshake timeout fallback, but host back controls remain available.
+**The session bridge is read-only in this version.** It adds no `submitAction`, form submission, abort or open-panel capability. Existing `invokeRuntime`, `invokePluginAction`, `invokeCommand`, `emitEvent` and `setUiState` handlers are unchanged. Images travel only as references, without bytes or blob URLs, so the sample page shows no art. There is no composer. Single-file pages have no handshake timeout notice; see [multi-file pages](#multi-file-pages) for timeout and Retry behaviour. Host back controls remain available.
 
 ## Component Catalogue
 
@@ -896,7 +951,7 @@ When the components in the catalog are not enough, a plugin can bring its own HT
 - **Enlarging.** Every plugin panel in the right-side panel can be "enlarged" to show in a large dialog.
 - **Showing on the stage.** A `ui.right` spec can declare `surfaces: ["panel", "stage"]`. When it is not written, it shows only in the right-side panel.
 - **Player confirmation and loading failures.** A stage plugin panel’s `sendMessage` fills the input for the player to edit and send. The stage reuses the session’s loaded panel definitions. If loading fails, it shows a message and Retry while the player can still use the input.
-- **Isolation.** The HTML sits in a sandboxed iframe with two layers of opaque origin:
+- **Isolation.** Single-file HTML sits in two sandboxed opaque-origin frames; views can also use [multi-file pages](#multi-file-pages):
   - The outer layer is the static document `/plugin-frame.html` in the web build. It is loaded by URL, so it has its own CSP and does not inherit the main page's policy (the main page does not allow inline scripts). Its CSP stops the plugin document from navigating itself to a network address, and the port is handed over only once.
   - The inner layer is the plugin's HTML. It keeps inline scripts and the `window.covel` data / action bridge. The structure of the component code and of the business state belongs to the plugin.
 

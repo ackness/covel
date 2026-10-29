@@ -142,3 +142,19 @@ export {
   redactPaths,
   type PluginPackageValidation,
 } from "./package-validation.js";
+
+export {
+  planPluginAssetRoot,
+  scanPluginAssetRoot,
+  listPluginAssetFiles,
+  MAX_PLUGIN_ASSET_FILES,
+  MAX_PLUGIN_ASSET_BYTES,
+  MAX_PLUGIN_ASSET_FILE_BYTES,
+  type PluginAssetRoot,
+  type PluginAssetFile,
+} from "./ui-assets.js";
+
+export {
+  computePluginCapabilities,
+  packageHasServerCode,
+} from "./capabilities.js";

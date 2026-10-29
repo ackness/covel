@@ -9,10 +9,53 @@ The official catalogue is [covel-ai/covel-plugins](https://github.com/covel-ai/c
 - Built-in plugins ship with Covel. Official extensions and community plugins are installed when needed.
 - Maintainer labels and feature categories are for display only. They take no part in permission decisions.
 - The root manifest's `kind: core | plugin` says what role the plugin plays. `source: builtin | community` is decided by the directory where the plugin is found.
-- An official plugin installed from outside is also `community`. It is not enabled automatically, and it does not skip the session's code authorization.
+- An official plugin installed from outside is also `community` and is not enabled automatically. Discovery location and the instance trusted-source policy determine whether code approval needs a prompt, under the conditions below.
 
 > [!WARNING]
 > A plugin's server-side JavaScript does not run in a process sandbox. The permission checks of the public API cannot stop arbitrary third-party JavaScript from accessing the process's files, environment variables, and network. Being listed in the catalogue, passing a source digest comparison, and passing a static manifest check do not amount to a security audit.
+
+## Trusted sources
+
+No source is trusted by default, including the official repository. Add a GitHub owner or `owner/repo` in **Settings → Install & manage → Trusted sources**. The suggestion button only fills the official repository; press Add to save it. Entries are trimmed, lowercased, deduplicated and sorted: at most 100 entries, 100 characters each, and 39 characters per owner. Only GitHub names are accepted, not URLs.
+
+`owner` matches all repositories of that owner; `owner/repo` matches only that repository. Matching is case-insensitive and compares complete names: `owner-evil` and `repo-evil` do not match. Non-GitHub HTTPS addresses, `.git` suffixes, trailing slashes, extra paths, queries and fragments do not match. Each plugin in a collection is judged by its own receipt's `source.repository`, including members pinned to another repository.
+
+On the personal form (desktop and self-hosted Web), the instance owner saves `trust.sources` through the existing `PUT /api/config/server-settings`; the desktop shell's token is still required when configured. Hosted and browser-private forms use only the operator's comma-separated `COVEL_TRUSTED_SOURCES`, ignoring stored values. The environment overrides storage and locks the control; writes return `409 server_setting_fixed`, while writes on shared forms return `403 server_settings_operator_only`. One invalid entry invalidates the whole variable, treating it as unset and logging it at boot. Environment changes require a restart; personal stored changes apply immediately, with other server processes following the settings cache refresh.
+
+### Capability snapshot
+
+GitHub plugin previews always contain `capabilities` and `trustedSource`. Confirming an install from a trusted source adds optional `capabilities` to `.covel-install.json`, containing the capabilities shown in the preview:
+
+- `serverCode`: whether code files or module references are present.
+- `http`: the union of origins and methods declared by the root and every runtime; omitted methods mean `GET`.
+- `hooks`: event and `enforce` pairs, defaulting to `normal`.
+- `tools`: contributed tool names and runtime `tools.builtin`.
+- `actions`, `services` (contract IDs), `wires`, `extensions` (`<point>/<id>`), and `forms`.
+- `datasets`: namespaces and allowed write operations from `contributes.datasets`, separate from installation collections.
+
+All lists are sorted and deduplicated. Current capabilities must be subsets of the snapshot, including HTTP methods and dataset operations. Changing a hook's phase counts as growth. Updating a trusted-source plugin carries the previous snapshot forward unchanged; no previous snapshot means none is written. Updates therefore cannot silently widen consent. Untrusted sources receive no new snapshot, and worlds receive none.
+
+### File verification and automatic approval
+
+Boot verifies the receipt and content digest of every registered community package with a path, without importing code. The server checks again before enable, execution preflight and lazy server-code activation, reusing digest results only while the stat signature of paths, sizes, modification times and related metadata is unchanged.
+
+<!-- prettier-ignore -->
+| `integrity` | Meaning and handling |
+| --- | --- |
+| `verified` | The digest matches the receipt; current policy and capabilities still need checking. |
+| `modified` | Edited, added or deleted files, links or special files; show a warning and use normal approval. |
+| `no-receipt` | No receipt, such as ZIP imports or hand-copied directories; no warning, normal approval. |
+| `unreadable` | Damaged or unknown receipt fields, or another read failure; log, warn and use normal approval. |
+
+A community package implicitly receives `covel:plugin-server-code` and its `runtime:*` grants only when its source is trusted **now**, integrity is `verified`, a snapshot exists, and current capabilities stay within it. Any missing condition, stale registration or read error uses the normal prompt. Removing a source immediately stops implicit grants; existing explicit session grants keep their normal meaning. The shared host's operator check still runs first and is never replaced by source policy.
+
+After normal server-code approval is allowed, only a trusted, verified community package gets its snapshot atomically replaced with current capabilities. A write failure is logged without failing approval. This rewrite invalidates an earlier signed update preview: confirming returns `409 Installed package changed; check for updates again`, requiring another update check. For older receipts without a snapshot, the first normal approval satisfying these conditions records one. Receipts gain only an optional field; no stored data needs recreation.
+
+For a restored active session, first-turn lazy entry publication uses the same activator. It re-verifies after publication re-registers the package, keeping authorization valid for the runtime snapshot without another enable request.
+
+Development reload re-registers the package and immediately invalidates verification. Local edits become `modified` and lose implicit approval until normal approval is given; that approval cannot update the snapshot while the digest still differs. Revoking session grants clears explicit grants only; instance source policy cannot be revoked per session.
+
+Trusted sources preserve `builtin | community`, add no API or privilege, and do not select plugins automatically. ZIP imports, hand-copied directories, worlds, per-action RPC approvals and payload-bound one-time grants are outside this mechanism. A snapshot bounds declarations; it is not a sandbox or code audit and does not protect against a stolen GitHub account. Signed publication metadata, keys, rollback, expiry and revocation metadata are not implemented; the host's preview-token signature only confirms the content of this installation.
 
 ## User flow
 
@@ -152,15 +195,15 @@ The outer directory layer that a GitHub source archive carries is removed, and t
 
 The Zod schemas for requests and responses are in the `plugin-install` export of `@covel/shared`.
 
-| Interface                                 | Request                        | Response                                                        |
-| ----------------------------------------- | ------------------------------ | --------------------------------------------------------------- |
-| `POST /api/install/plugin/github/preview` | `{ url }`                      | `{ items: GithubPluginPreview[] }`                              |
-| `POST /api/install/plugin/github`         | `{ token, acceptRisk: true }`  | `{ ok: true, kind: "plugin", id, restartRequired: true }`, 201  |
-| `GET /api/install/plugins`                | None                           | `{ items: [{ id, version, source, pendingUpdate }] }`           |
-| `POST /api/install/plugin`                | multipart `file`               | ZIP installation response                                       |
-| `POST /api/install/github/preview`        | `{ url }`                      | `{ collection, items: GithubPackagePreview[], problems }`       |
-| `POST /api/install/github/batch`          | `{ tokens, acceptRisk: true }` | `{ ok: true, installed: [{ kind, id }], restartRequired }`, 201 |
-| `POST /api/install/collection`            | multipart `file`               | Same as the batch response, 201                                 |
+| Interface                                 | Request                        | Response                                                                        |
+| ----------------------------------------- | ------------------------------ | ------------------------------------------------------------------------------- |
+| `POST /api/install/plugin/github/preview` | `{ url }`                      | `{ items: GithubPluginPreview[] }`                                              |
+| `POST /api/install/plugin/github`         | `{ token, acceptRisk: true }`  | `{ ok: true, kind: "plugin", id, restartRequired: true }`, 201                  |
+| `GET /api/install/plugins`                | None                           | `{ items: [{ id, version, source, pendingUpdate, integrity, trustedSource }] }` |
+| `POST /api/install/plugin`                | multipart `file`               | ZIP installation response                                                       |
+| `POST /api/install/github/preview`        | `{ url }`                      | `{ collection, items: GithubPackagePreview[], problems }`                       |
+| `POST /api/install/github/batch`          | `{ tokens, acceptRisk: true }` | `{ ok: true, installed: [{ kind, id }], restartRequired }`, 201                 |
+| `POST /api/install/collection`            | multipart `file`               | Same as the batch response, 201                                                 |
 
 ### Multi-package preview and batch install
 
@@ -184,7 +227,7 @@ A plugin's root manifest can declare a `covel` version range (for example `">=0.
 
 The preview includes the ID, package version (the `version` of `PLUGIN.md`), description, author name (`author`, `null` when the manifest does not declare one), a hint about whether code is present, the source, the signed token, and `expiresAt`.
 
-- The source is `{ repository, commit, path, digest, tracking }`.
+- The source is `{ repository, commit, path, digest, tracking }`; `capabilities` always lists requested capabilities, and `trustedSource` marks whether the source was trusted at preview time.
 - `tracking` is `{ kind: "default-branch" }`, `{ kind: "branch", ref }`, or `{ kind: "pinned", ref }`. A repository root link tracks the default branch. A tree link first tries to resolve to an explicit branch. Anything else, such as a tag or a commit, stays locked.
 - `description` is `I18nText`, retaining description translations for `PLUGIN.md` from `locales/<locale>.yaml` (`.yml` also works). Clients call `resolveI18nText` with the UI language.
 - `hasServerCode` uses the loader’s module-path enumeration: entry (when not written, an existing `server/index.js`), function handler (when not written, an existing `handler.js` next to `RUNTIME.md`), guard, and world projection handler. It also scans code files, including `.mts` and `.cts`. ZIP installation returns the same field. This is a conservative hint, not a complete code audit; test or build sources can also trigger it.
@@ -201,7 +244,7 @@ The preview includes the ID, package version (the `version` of `PLUGIN.md`), des
 ### Writing to disk and install records
 
 - Only after the installation is confirmed is the package written to disk, through a temporary directory followed by a rename. A `.covel-install.json` is attached, recording the source, version, and installation time.
-- This file is only for display and tracing. It grants no trust. A plugin package cannot bring this file with it, including variations in filename case.
+- This file records the source and optional capability snapshot; skipping prompts also requires current policy and file verification. A plugin package cannot bring this file with it, including variations in filename case.
 - A plugin installed from a ZIP or by hand has no source record, and the interface returns `source: null`.
 - Cancelling a preview does not write to the plugin directory. After an installation is confirmed, there is no "cancel submission" action.
 

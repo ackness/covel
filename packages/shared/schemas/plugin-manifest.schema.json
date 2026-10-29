@@ -286,7 +286,9 @@
           "type": "array",
           "items": {
             "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "pattern": "^(?!(?:covel|runtime|event):)[\\s\\S]+$",
+            "description": "RPC action name. The covel:, runtime: and event: prefixes are reserved for framework approvals."
           },
           "description": "Names of RPC actions the entry registers with `registerRpc`."
         },

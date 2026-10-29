@@ -55,7 +55,7 @@ export interface UISlotSpec {
   dataSource?: { namespace: string };
   emptyState?: { message: unknown };
   view?: Record<string, unknown>;
-  webview?: { html: string; height?: number };
+  webview?: { html?: string; url?: string; height?: number };
   surfaces?: readonly ("panel" | "stage")[];
 }
 

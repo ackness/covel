@@ -97,6 +97,10 @@ function upload(
 }
 beforeEach(async () => {
   root = await mkdtemp(path.join(os.tmpdir(), "validation-api-"));
+  const tempDir = path.join(root, "tmp");
+  await mkdir(tempDir);
+  // Cleanup assertions must not count other test workers' live directories.
+  vi.spyOn(os, "tmpdir").mockReturnValue(tempDir);
   vi.stubEnv("COVEL_HOME", root);
   vi.stubEnv("COVEL_USER_PLUGINS_DIR", path.join(root, "plugins"));
   vi.stubEnv("COVEL_USER_WORLDS_DIR", path.join(root, "worlds"));
@@ -520,6 +524,8 @@ describe("package validation endpoints", () => {
         version: null,
         source: null,
         pendingUpdate: null,
+        integrity: "no-receipt",
+        trustedSource: false,
       });
       if (condition === "invalid")
         await writeFile(path.join(dir, "world.yaml"), "name: [unterminated\n");

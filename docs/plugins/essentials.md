@@ -96,6 +96,8 @@ Write one observation grounded in runtime-inputs.narrative.value.
 | `covel.registerFormValidator(name, …)` | `forms`                 |
 | `covel.registerWires(...)`             | `wires`                 |
 
+`actions` 的名字还须遵守[保留前缀规则](../reference/plugins.md#contributes-字段)；`registerRpc` 和请求端使用同一校验。
+
 另外三项只需要声明，不需要代码：
 
 - `contributes.commands`：玩家在输入框里用的命令。每条命令指向一个 `actions` 里的名字，所以那个名字也必须出现在 `actions` 里。

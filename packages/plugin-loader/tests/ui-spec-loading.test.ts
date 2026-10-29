@@ -172,7 +172,11 @@ Prompt.
     const discoveries = await discoverPlugins(tmpDir);
     const discovery = discoveries.find((d) => d.id === "no-ui-plugin")!;
 
-    expect(await loadUi(discovery)).toEqual({ slots: {}, diagnostics: [] });
+    expect(await loadUi(discovery)).toEqual({
+      slots: {},
+      diagnostics: [],
+      assets: [],
+    });
   });
 
   it("does not read a spec outside the plugin root", async () => {
@@ -322,4 +326,111 @@ contributes:
       }
     },
   );
+});
+
+describe("multi-file view loading", () => {
+  let root: string;
+  beforeAll(async () => {
+    root = await fs.mkdtemp(path.join(os.tmpdir(), "covel-page-load-"));
+    await fs.mkdir(path.join(root, "ui/app/pages"), { recursive: true });
+    await fs.writeFile(
+      path.join(root, "ui/app/pages/two.html"),
+      "<head></head>",
+    );
+    await fs.writeFile(
+      path.join(root, "ui/app/app.js"),
+      "window.loaded = true",
+    );
+    await fs.writeFile(
+      path.join(root, "ui/view.json"),
+      JSON.stringify({
+        id: "page",
+        label: "Page",
+        bridge: "session",
+        webview: { root: "./ui/app/", entry: "pages/two.html", height: 400 },
+      }),
+    );
+  });
+  afterAll(async () => {
+    await fs.rm(root, { recursive: true, force: true });
+  });
+  it("resolves root from the package rather than the spec and collects its listing", async () => {
+    const loaded = await loadPluginUiSpecs(root, "p", {
+      view: ["./ui/view.json"],
+    });
+    expect(loaded.diagnostics).toEqual([]);
+    expect(loaded.slots.view?.[0]?.webview).toEqual({
+      url: expect.stringMatching(
+        /^\/plugin-assets\/p\/[a-f0-9]{32}\/pages\/two.html$/,
+      ),
+      height: 400,
+    });
+    expect(loaded.assets).toHaveLength(1);
+    expect(loaded.assets[0]).toMatchObject({
+      pluginId: "p",
+      rootDir: await fs.realpath(path.join(root, "ui/app")),
+      entry: "pages/two.html",
+    });
+    expect([...(loaded.assets[0]?.files.keys() ?? [])]).toEqual([
+      "app.js",
+      "pages/two.html",
+    ]);
+  });
+  it("still diagnoses duplicate view ids without publishing the rejected spec's root", async () => {
+    const loaded = await loadPluginUiSpecs(root, "p", {
+      view: ["ui/view.json", "ui/view.json"],
+    });
+    expect(loaded.slots.view).toHaveLength(1);
+    expect(loaded.assets).toHaveLength(1);
+    expect(loaded.diagnostics[0]?.issues[0]?.path).toBe("id");
+  });
+  it("rejects parent escapes and the package root", async () => {
+    for (const assetRoot of ["../outside", "."]) {
+      await fs.writeFile(
+        path.join(root, "bad.json"),
+        JSON.stringify({
+          id: "bad",
+          label: "Bad",
+          webview: { root: assetRoot, entry: "index.html" },
+        }),
+      );
+      expect(
+        (await loadPluginUiSpecs(root, "p", { view: ["bad.json"] }))
+          .diagnostics[0]?.issues[0]?.path,
+      ).toBe("webview.root");
+    }
+  });
+  it.skipIf(process.platform === "win32")(
+    "rejects a root symlink pointing outside the package",
+    async () => {
+      await fs.symlink(os.tmpdir(), path.join(root, "outside"), "dir");
+      await fs.writeFile(
+        path.join(root, "outside.json"),
+        JSON.stringify({
+          id: "outside",
+          label: "Outside",
+          webview: { root: "outside", entry: "index.html" },
+        }),
+      );
+      const loaded = await loadPluginUiSpecs(root, "p", {
+        view: ["outside.json"],
+      });
+      expect(loaded.slots.view).toBeUndefined();
+      expect(loaded.assets).toEqual([]);
+      expect(loaded.diagnostics[0]?.issues[0]?.message).toContain(
+        "escapes plugin root",
+      );
+    },
+  );
+  it("reports a reserved directory and publishes no asset root", async () => {
+    await fs.mkdir(path.join(root, "ui/app/__covel__"));
+    const loaded = await loadPluginUiSpecs(root, "p", {
+      view: ["ui/view.json"],
+    });
+    expect(loaded.assets).toEqual([]);
+    expect(loaded.diagnostics[0]?.issues).toContainEqual({
+      path: "webview.root",
+      message: "the name __covel__ is reserved",
+    });
+  });
 });

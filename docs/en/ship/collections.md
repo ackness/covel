@@ -9,6 +9,8 @@ When to use it:
 
 A collection matters only at install time. After installation, each world and plugin in it is independent, and each can be updated and uninstalled on its own. For the world list’s "Update available" badge and how to apply a package version, see [World installation and updates](../reference/world-installation.md#updates-and-data-protection).
 
+A collection does not pass its trust to members: each plugin is judged by its own receipt repository, including members pinned to another repository. Offline ZIP collections receive no trusted-source automatic approval; see [trusted sources](../reference/plugin-installation.md#trusted-sources).
+
 ## Make a Collection
 
 Below, the things made in [the first world](../worlds/first-world.md) and [the first plugin](../plugins/first-plugin.md) are packed into one collection. Run the commands from the root directory of the Covel repository.

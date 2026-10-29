@@ -1,5 +1,5 @@
 import { loadPluginUiSpecs, pluginDeclarations } from "@covel/plugin-loader";
-import type { PluginRegistry } from "@covel/plugin-loader";
+import type { PluginAssetRoot, PluginRegistry } from "@covel/plugin-loader";
 import type { DataStore, SessionRecord } from "@covel/store";
 import { runnablePluginIds } from "../api/session/plugins.js";
 import { type UiSlotName } from "./shared.js";
@@ -26,6 +26,7 @@ interface PluginSlotSpecs {
 }
 
 interface ValidatedSpecs {
+  readonly assets: ReadonlyMap<string, ReadonlyMap<string, PluginAssetRoot>>;
   readonly pluginSpecs: readonly PluginSlotSpecs[];
   readonly diagnostics: readonly UiSpecDiagnostic[];
 }
@@ -45,6 +46,7 @@ async function projectRegistryUiSpecs(
   registry: PluginRegistry,
 ): Promise<ValidatedSpecs> {
   const pluginSpecs: PluginSlotSpecs[] = [];
+  const assets = new Map<string, Map<string, PluginAssetRoot>>();
   const diagnostics: UiSpecDiagnostic[] = [];
 
   for (const entry of registry.getAll().values()) {
@@ -61,6 +63,12 @@ async function projectRegistryUiSpecs(
         entry.id,
         manifest.ui,
       );
+      for (const asset of loaded.assets) {
+        const roots =
+          assets.get(entry.id) ?? new Map<string, PluginAssetRoot>();
+        roots.set(asset.digest, asset);
+        assets.set(entry.id, roots);
+      }
       for (const diagnostic of loaded.diagnostics) {
         console.warn(
           `[ui-specs] ${entry.id}: contributes.ui.${diagnostic.slot}: ${diagnostic.declaredPath} is not shown: ${diagnostic.issues
@@ -120,7 +128,7 @@ async function projectRegistryUiSpecs(
     }
   }
 
-  return { pluginSpecs, diagnostics };
+  return { pluginSpecs, diagnostics, assets };
 }
 
 async function loadValidatedSpecs(
@@ -186,4 +194,12 @@ export async function buildUiSpecsResponse(params: {
     (diagnostic) => !activeFilter || activeFilter.has(diagnostic.pluginId),
   );
   return { right, message, view, diagnostics };
+}
+
+export async function findPluginAssetRoot(
+  registry: PluginRegistry,
+  pluginId: string,
+  digest: string,
+): Promise<PluginAssetRoot | undefined> {
+  return (await loadValidatedSpecs(registry)).assets.get(pluginId)?.get(digest);
 }

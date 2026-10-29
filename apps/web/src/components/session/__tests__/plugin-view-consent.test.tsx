@@ -19,7 +19,11 @@ import {
 import { useGameViewMode } from "../game-view/use-game-view-mode.js";
 import { PluginViewHost } from "../plugin-view-host.js";
 import { PluginWebview } from "../plugin-webview.js";
-import { viewEntry, projection } from "./plugin-view-fixtures.js";
+import {
+  viewEntry,
+  pageViewEntry,
+  projection,
+} from "./plugin-view-fixtures.js";
 const mocks = vi.hoisted(() => ({
   store: undefined as SettingsStoreApi | undefined,
   posted: [] as unknown[],
@@ -34,10 +38,11 @@ vi.mock("../use-session-bridge.js", () => ({
   }),
 }));
 vi.mock("../plugin-panel.js", () => ({
-  PluginPanel: () => (
+  PluginPanel: ({ spec }: { spec: typeof viewEntry.spec }) => (
     <PluginWebview
       title="Consented page"
-      html="<p>reader</p>"
+      html={spec.webview?.html}
+      src={spec.webview?.url}
       locked={false}
       handlers={{}}
       state={{ session: projection }}
@@ -122,50 +127,84 @@ it("hashes canonical spec plus HTML and persists per-plugin, per-capability cons
   await act(() => result.current.revoke(changed));
   expect(result.current.isAllowed(changed)).toBe(false);
 });
-it("a bridge world default falls back and posts no projection before the player consents", async () => {
-  function Host() {
-    const consent = usePluginViewConsent([viewEntry]);
-    const [mode, , info] = useGameViewMode(
-      { metadata: { defaultViewMode: viewEntry.mode } },
-      { views: [viewEntry], status: "ready" },
-      consent.isAllowed,
+it.each([viewEntry, pageViewEntry])(
+  "a bridge world default falls back and posts no projection before the player consents ($spec.webview)",
+  async (entry) => {
+    function Host() {
+      const consent = usePluginViewConsent([entry]);
+      const [mode, , info] = useGameViewMode(
+        { metadata: { defaultViewMode: entry.mode } },
+        { views: [entry], status: "ready", reload: () => {} },
+        consent.isAllowed,
+      );
+      return (
+        <>
+          <span data-testid="mode">{mode}</span>
+          <button
+            disabled={!consent.ready(entry)}
+            onClick={() => void consent.grant(entry)}
+          >
+            Allow
+          </button>
+          {mode === entry.mode && (
+            <PluginViewHost
+              entry={entry}
+              sessionId="s"
+              sessionBridgeAllowed={consent.isAllowed(entry)}
+              onFallback={() => {}}
+            />
+          )}
+          {info.consentView && <p>Consent required</p>}
+        </>
+      );
+    }
+    render(<Host />);
+    expect(screen.getByTestId("mode").textContent).toBe("parsed");
+    await waitFor(() =>
+      expect((screen.getByText("Allow") as HTMLButtonElement).disabled).toBe(
+        false,
+      ),
     );
-    return (
-      <>
-        <span data-testid="mode">{mode}</span>
-        <button
-          disabled={!consent.ready(viewEntry)}
-          onClick={() => void consent.grant(viewEntry)}
-        >
-          Allow
-        </button>
-        {mode === viewEntry.mode && (
-          <PluginViewHost
-            entry={viewEntry}
-            sessionId="s"
-            sessionBridgeAllowed={consent.isAllowed(viewEntry)}
-            onFallback={() => {}}
-          />
-        )}
-        {info.consentView && <p>Consent required</p>}
-      </>
+    expect(screen.queryByTitle("Consented page")).toBeNull();
+    expect(mocks.posted).toEqual([]);
+    fireEvent.click(screen.getByText("Allow"));
+    await waitFor(() =>
+      expect(screen.getByTestId("mode").textContent).toBe(entry.mode),
     );
-  }
-  render(<Host />);
-  expect(screen.getByTestId("mode").textContent).toBe("parsed");
-  await waitFor(() =>
-    expect((screen.getByText("Allow") as HTMLButtonElement).disabled).toBe(
-      false,
-    ),
+    fireEvent.load(screen.getByTitle("Consented page"));
+    expect(mocks.posted).toEqual([
+      expect.objectContaining({ session: projection }),
+    ]);
+  },
+);
+it("binds page consent to every published file through the URL digest", async () => {
+  const entry = {
+    ...viewEntry,
+    spec: {
+      ...viewEntry.spec,
+      webview: { url: `/plugin-assets/p/${"a".repeat(32)}/index.html` },
+    },
+  };
+  const changed = {
+    ...entry,
+    spec: {
+      ...entry.spec,
+      webview: { url: `/plugin-assets/p/${"b".repeat(32)}/index.html` },
+    },
+  };
+  const hash = await hashPluginViewContent(pluginViewContent(entry.spec));
+  expect(await hashPluginViewContent(pluginViewContent(changed.spec))).not.toBe(
+    hash,
   );
-  expect(screen.queryByTitle("Consented page")).toBeNull();
-  expect(mocks.posted).toEqual([]);
-  fireEvent.click(screen.getByText("Allow"));
-  await waitFor(() =>
-    expect(screen.getByTestId("mode").textContent).toBe(viewEntry.mode),
+  const { result, rerender } = renderHook(
+    ({ entry }) => usePluginViewConsent([entry]),
+    { initialProps: { entry } },
   );
-  fireEvent.load(screen.getByTitle("Consented page"));
-  expect(mocks.posted).toEqual([
-    expect.objectContaining({ session: projection }),
-  ]);
+  await waitFor(() => expect(result.current.ready(entry)).toBe(true));
+  await act(() => result.current.grant(entry));
+  expect(result.current.isAllowed(entry)).toBe(true);
+  rerender({ entry: changed });
+  expect(result.current.isAllowed(changed)).toBe(false);
+  await waitFor(() => expect(result.current.ready(changed)).toBe(true));
+  expect(result.current.isAllowed(changed)).toBe(false);
 });

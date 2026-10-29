@@ -190,7 +190,7 @@ resumeRoutes.post("/:id/suspensions/:suspensionId/resume", async (c) => {
     return c.json(errorBody("Suspension already resolved"), 409);
   }
 
-  const approval = preflightRuntimeApprovals(c, guard.session, [
+  const approval = await preflightRuntimeApprovals(c, guard.session, [
     suspension.runtimeId,
   ]);
   if (approval) return approval;
@@ -253,7 +253,7 @@ resumeRoutes.post("/:id/suspensions/:suspensionId/resume", async (c) => {
       if (liveSuspension.resolvedAt) {
         return c.json(errorBody("Suspension already resolved"), 409);
       }
-      const liveApproval = preflightRuntimeApprovals(c, liveSession, [
+      const liveApproval = await preflightRuntimeApprovals(c, liveSession, [
         liveSuspension.runtimeId,
       ]);
       if (liveApproval) return liveApproval;

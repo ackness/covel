@@ -92,6 +92,7 @@ export async function preflightFormApprovals(
     if (trust.autoLoad) continue;
     const denied = requireAccess(c, "plugin.community");
     if (denied) return denied;
+    await c.get("trustedSources")?.ensureFresh(pluginId);
     const scope = sessionApprovalScope(session, pluginId);
     if (hasServerCodeGrant(gate, session, pluginId)) continue;
     const verdict = gate.evaluate({

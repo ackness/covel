@@ -1,5 +1,5 @@
 /** Static package validation shared by the CLI and the host. Never imports entries. */
-import { readFileSync } from "node:fs";
+import { readFileSync, realpathSync } from "node:fs";
 import fs from "node:fs/promises";
 import path from "node:path";
 import type { PackageValidationIssue } from "@covel/shared";
@@ -12,6 +12,8 @@ import {
 import { validatePluginLabels } from "./locale-labels.js";
 import { describePluginLanguages } from "./plugin-languages.js";
 import { authoringWarnings } from "./authoring-warnings.js";
+import { isPathInside } from "./path-containment.js";
+import { listPluginAssetFiles } from "./ui-assets.js";
 
 export interface PluginPackageValidation {
   readonly ok: boolean;
@@ -221,6 +223,12 @@ export async function validatePluginPackage(
       definition.packageManifest,
       definition.manifests,
       (file) => readFileSync(file, "utf8"),
+      (directory) => {
+        const realDirectory = realpathSync(directory);
+        if (!isPathInside(realpathSync(rootPath), realDirectory))
+          throw new Error("UI asset escapes plugin root");
+        return listPluginAssetFiles(directory);
+      },
     );
   } catch (error) {
     fail("plugin-files", error);

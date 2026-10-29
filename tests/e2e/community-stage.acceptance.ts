@@ -113,30 +113,42 @@ test("isolated community package projects stage and portrait through GET/SSE, th
       displayName: "Proof Hero",
       sprite: mediaRef,
     });
-    const projected = await request.get(`/api/sessions/${sessionId}/ui-slots`);
-    expect(projected.ok(), await projected.text()).toBeTruthy();
-    const { items } = (await projected.json()) as {
-      items: { slot: string; key?: string; value: Record<string, unknown> }[];
-    };
-    expect(items).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          slot: "stage.backdrop@1",
-          value: expect.objectContaining({ name: "Committed Cove" }),
-        }),
-        expect.objectContaining({
-          slot: "stage.cast@1",
-          value: expect.objectContaining({
-            actors: [expect.objectContaining({ characterId: "proof-hero" })],
+    // Committed writes invalidate projections through asynchronous events and
+    // a debounce; an immediate GET can still contain an earlier empty slot.
+    await expect
+      .poll(async () => {
+        const projected = await request.get(
+          `/api/sessions/${sessionId}/ui-slots`,
+        );
+        expect(projected.ok(), await projected.text()).toBeTruthy();
+        const { items } = (await projected.json()) as {
+          items: {
+            slot: string;
+            key?: string;
+            value: Record<string, unknown>;
+          }[];
+        };
+        return items;
+      })
+      .toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            slot: "stage.backdrop@1",
+            value: expect.objectContaining({ name: "Committed Cove" }),
           }),
-        }),
-        expect.objectContaining({
-          slot: "character.visual@1",
-          key: "proof-hero",
-          value: expect.objectContaining({ sprite: mediaRef }),
-        }),
-      ]),
-    );
+          expect.objectContaining({
+            slot: "stage.cast@1",
+            value: expect.objectContaining({
+              actors: [expect.objectContaining({ characterId: "proof-hero" })],
+            }),
+          }),
+          expect.objectContaining({
+            slot: "character.visual@1",
+            key: "proof-hero",
+            value: expect.objectContaining({ sprite: mediaRef }),
+          }),
+        ]),
+      );
 
     // With `world-init` active the session is still in setup, and no model is
     // configured here to finish it; the stage opens only once play has

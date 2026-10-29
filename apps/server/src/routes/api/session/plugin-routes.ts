@@ -153,8 +153,10 @@ export function registerSessionPluginRoutes(
         409,
       );
     }
+    await c.get("trustedSources")?.verifyAll();
     const view = buildSessionPluginView(guard.session, pluginRegistry, {
       isEntryPublished: c.get("isPluginEntryPublished"),
+      trustedSources: c.get("trustedSources"),
       authorized: authorizedSessionPluginIds(
         pluginRegistry,
         c.get("rpcApprovalGate"),
@@ -189,6 +191,7 @@ export function registerSessionPluginRoutes(
       const operatorDenied = requireAccess(c, "plugin.community");
       if (operatorDenied) return operatorDenied;
     }
+    await c.get("trustedSources")?.ensureFresh(pluginId);
     const approvalScope = sessionApprovalScope(guard.session, pluginId);
     const verdict = c.get("rpcApprovalGate").evaluate({
       sessionId: id,

@@ -4,6 +4,7 @@ import {
   kernelConflictMessage,
 } from "../extension-points/contracts.js";
 import { z } from "zod";
+import { rpcActionNameSchema } from "./rpc-action.js";
 import { FRAMEWORK_PLUGIN_ID } from "../framework-plugin-id.js";
 import { hostVersionRangeSchema } from "../utils/host-version-range.js";
 import { packageCreditFields } from "./package-info.js";
@@ -390,7 +391,7 @@ export const pluginManifestSchema = z.strictObject({
         .describe("Names of tools the entry registers with `registerTool`.")
         .optional(),
       actions: z
-        .array(z.string().min(1))
+        .array(rpcActionNameSchema)
         .describe(
           "Names of RPC actions the entry registers with `registerRpc`.",
         )

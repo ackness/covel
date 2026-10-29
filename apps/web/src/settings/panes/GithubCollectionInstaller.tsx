@@ -11,6 +11,8 @@ import {
   installGithubPackages,
   previewGithubCollection,
 } from "@/services/api.js";
+import { PluginCapabilitiesPreview } from "./PluginCapabilitiesPreview.js";
+import { SUGGESTED_PLUGIN_REPOSITORY } from "./package-suggestions.js";
 import { GithubPackageRiskConsent } from "./GithubPackageRiskConsent.js";
 
 /**
@@ -119,7 +121,7 @@ export function GithubCollectionInstaller({
         <span className="flex flex-wrap gap-3 text-xs">
           <a
             className="underline"
-            href="https://github.com/covel-ai/covel-plugins"
+            href={`https://github.com/${SUGGESTED_PLUGIN_REPOSITORY}`}
             target="_blank"
             rel="noopener noreferrer"
           >
@@ -259,6 +261,9 @@ export function GithubCollectionInstaller({
                         ? ` · ${t("settings.github.hasCode")}`
                         : ""}
                     </span>
+                    {item.kind === "plugin" && (
+                      <PluginCapabilitiesPreview preview={item} />
+                    )}
                     {item.author && (
                       <span className="block text-muted-foreground">
                         {t("package.authorLine", { author: item.author })}

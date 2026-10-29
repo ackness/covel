@@ -1,10 +1,11 @@
 import path from "node:path";
 import { z } from "zod";
-import { pluginIdSchema } from "@covel/shared";
+import { pluginIdSchema, type PluginCapabilities } from "@covel/shared";
 import {
   missingDefaultHandler,
   packageModuleTypeProblem,
-  pluginImportReferences,
+  computePluginCapabilities,
+  packageHasServerCode,
   type ParsedPluginMd,
   readPlainYamlFrontmatter,
   runtimeDirectoryDiagnostics,
@@ -45,6 +46,8 @@ interface PluginManifestSummary {
   /** The `version` of PLUGIN.md. */
   readonly version: string | null;
   readonly hasServerCode: boolean;
+  readonly declarations: readonly ParsedRuntimeMd[];
+  readonly capabilities: PluginCapabilities;
 }
 
 /** What installation reads from an optional `package.json`. */
@@ -266,17 +269,32 @@ export function validatePluginBundle(
     }
     const root = withDerivedPackageFields(parsed, declarations, exists);
     validatePluginDeclarations(root);
-    validatePluginFiles(root, declarations, (absolutePath) => {
-      const relative = path
-        .relative(path.resolve(pluginId), absolutePath)
-        .split(path.sep)
-        .join("/");
-      const entry = entries.find(
-        (candidate) => candidate.relativePath === relative,
-      );
-      if (!entry) throw new Error("File not found");
-      return entry.content.toString("utf8");
-    });
+    validatePluginFiles(
+      root,
+      declarations,
+      (absolutePath) => {
+        const relative = path
+          .relative(path.resolve(pluginId), absolutePath)
+          .split(path.sep)
+          .join("/");
+        const entry = entries.find(
+          (candidate) => candidate.relativePath === relative,
+        );
+        if (!entry) throw new Error("File not found");
+        return entry.content.toString("utf8");
+      },
+      (absoluteDir) =>
+        entries.flatMap((entry) => {
+          const file = path.resolve(pluginId, entry.relativePath);
+          const relative = path.relative(absoluteDir, file);
+          return relative &&
+            relative !== ".." &&
+            !relative.startsWith(`..${path.sep}`) &&
+            !path.isAbsolute(relative)
+            ? [{ path: file, size: entry.content.byteLength }]
+            : [];
+        }),
+    );
     // `package.json` is optional: a package without one is ESM and bundles
     // no dependencies.
     if (packageJson) {
@@ -321,11 +339,21 @@ export function validatePluginBundle(
       version: root.plugin.version ?? null,
       // The resolved entry counts: `server/index.js` is the entry of a
       // package that names none.
-      hasServerCode:
-        pluginImportReferences(root, declarations).length > 0 ||
-        entries.some((entry) =>
-          /\.(?:[cm]?[jt]s|tsx|node|wasm)$/i.test(entry.relativePath),
+      declarations,
+      hasServerCode: packageHasServerCode(
+        entries.map((entry) => entry.relativePath),
+        root,
+        declarations,
+      ),
+      capabilities: computePluginCapabilities({
+        root,
+        runtimes: declarations,
+        hasServerCode: packageHasServerCode(
+          entries.map((entry) => entry.relativePath),
+          root,
+          declarations,
         ),
+      }),
     };
   } catch (error) {
     throw httpError(

@@ -1,3 +1,4 @@
+import { installTrustPolicy } from "../trust/fixtures.js";
 import { lstat, mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -128,11 +129,14 @@ beforeEach(async () => {
   vi.stubEnv("COVEL_DESKTOP_REST_TOKEN", "");
   vi.stubEnv("DEPLOYMENT_TIER", "self");
   vi.stubEnv("NODE_ENV", "test");
+  vi.stubEnv("COVEL_TRUSTED_SOURCES", "");
+  const trustedSources = await installTrustPolicy(pluginRoot);
   app = new Hono();
   app.use("*", async (c, next) => {
     c.set("store", store);
     c.set("sessionLock", lock);
     c.set("worldsDirs", [worldRoot]);
+    c.set("trustedSources", trustedSources);
     c.set("reservedPluginIds", new Set(["narrator"]));
     await next();
   });
@@ -629,4 +633,50 @@ describe("collection ZIP import", () => {
     expect(await exists(path.join(worldRoot, "barrow"))).toBe(false);
     expect(await store.getWorld("barrow")).toBeFalsy();
   });
+});
+
+it("judges each collection member by its own repository, including pinned members", async () => {
+  vi.stubEnv("COVEL_TRUSTED_SOURCES", "example/pack");
+  archives[`example/pack@${sha}`] = await zip(
+    {
+      ...collection({
+        plugins: [
+          { path: "plugins/local" },
+          {
+            repository: "example/other",
+            commit: otherSha,
+            path: "plugins/remote",
+          },
+        ],
+      }),
+      ...pluginFiles("local"),
+    },
+    "root",
+  );
+  archives[`example/other@${otherSha}`] = await zip(
+    pluginFiles("remote"),
+    "remote-root",
+  );
+  const result = await preview();
+  expect(result.items.find((item) => item.id === "local")?.trustedSource).toBe(
+    true,
+  );
+  expect(result.items.find((item) => item.id === "remote")?.trustedSource).toBe(
+    false,
+  );
+  const response = await request("github/batch", {
+    tokens: result.items.map((item) => item.token),
+    acceptRisk: true,
+  });
+  expect(response.status, await response.clone().text()).toBe(201);
+  const local = JSON.parse(
+    await readFile(path.join(pluginRoot, "local/.covel-install.json"), "utf8"),
+  );
+  const remote = JSON.parse(
+    await readFile(path.join(pluginRoot, "remote/.covel-install.json"), "utf8"),
+  );
+  expect(local.capabilities).toEqual(
+    result.items.find((item) => item.id === "local")?.capabilities,
+  );
+  expect(remote).not.toHaveProperty("capabilities");
 });
