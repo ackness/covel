@@ -17,6 +17,9 @@ async function seed() {
       status: "active",
       phase: "playing",
       setupRuntimes: {},
+      seats: [
+        { id: "main", controller: "human", role: "player", characters: "auto" },
+      ],
       activePlugins: [],
       completedPlayerTurns: 0,
       createdAt: "2026-01-01T00:00:00Z",

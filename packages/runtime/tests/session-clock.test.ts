@@ -29,6 +29,9 @@ async function seedSession(
     phase: clock.phase,
     completedPlayerTurns: clock.completedPlayerTurns,
     setupRuntimes: clock.setupRuntimes ?? {},
+    seats: [
+      { id: "main", controller: "human", role: "player", characters: "auto" },
+    ],
     locale: "zh-CN",
     activePlugins: [],
     createdAt: now,

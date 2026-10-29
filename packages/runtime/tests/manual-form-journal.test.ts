@@ -34,6 +34,14 @@ describe.each(["function", "agent"] as const)(
           status: "active",
           completedPlayerTurns: 1,
           setupRuntimes: {},
+          seats: [
+            {
+              id: "main",
+              controller: "human",
+              role: "player",
+              characters: "auto",
+            },
+          ],
           activePlugins: ["external"],
           createdAt: now,
           updatedAt: now,

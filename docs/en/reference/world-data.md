@@ -1071,7 +1071,7 @@ characterSchema:
       category: social
 ```
 
-- `types` lists the character types other than the player. `player` is a reserved type, so do not write it in `types`. Each game has at most one player character.
+- `types` lists the character types other than the player. `player` is a reserved type, so do not write it in `types`. A world can have several player characters; which one the player plays right now is decided by the [seats](./world-model.md#seats).
 - `attributes` are the attributes a character can have.
 - When a session is created, the schema is copied into the session. A character's `fields` must match it, and a non-player character's type must be in `types`. Tools, plugin reads and the final save all use the same validation.
 - Changing a world's `characterSchema` affects only new sessions. An existing session must be changed explicitly inside the session.
@@ -1630,7 +1630,7 @@ Output when it passes:
 
 **Checks that do not depend on the schema:**
 
-- The character source and `effects: [characters]` check types and attributes against the world's `characterSchema`, and check that after merging there is at most one player character.
+- The character source and `effects: [characters]` check types and attributes against the world's `characterSchema`.
 - Lorebook records imported directly must have `content`.
 - Records imported directly, and `selective` entries produced by the `+lorebook` projection, must both have a non-empty `keys`.
 - Error messages include the file, the record number and the key. When an error is found before import, the whole plan is rejected, and the other valid records are not written either.

@@ -268,6 +268,14 @@ describe("function output schema gate", () => {
         phase: "playing",
         completedPlayerTurns: 1,
         setupRuntimes: {},
+        seats: [
+          {
+            id: "main",
+            controller: "human",
+            role: "player",
+            characters: "auto",
+          },
+        ],
         activePlugins: ["fn-plugin"],
         createdAt: new Date().toISOString(),
       });
@@ -357,6 +365,14 @@ describe("function output schema gate", () => {
         phase: "playing",
         completedPlayerTurns: 1,
         setupRuntimes: {},
+        seats: [
+          {
+            id: "main",
+            controller: "human",
+            role: "player",
+            characters: "auto",
+          },
+        ],
         activePlugins: ["fn-plugin"],
         createdAt: new Date().toISOString(),
       });

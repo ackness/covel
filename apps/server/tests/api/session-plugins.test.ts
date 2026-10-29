@@ -361,6 +361,9 @@ describe("Session plugin routes (real sessionRoutes)", () => {
     await store.createSession({
       phase: "playing",
       setupRuntimes: {},
+      seats: [
+        { id: "main", controller: "human", role: "player", characters: "auto" },
+      ],
       metadata: {
         pluginSelection: {
           requested: ["narrator", "optional-plugin"],
@@ -658,6 +661,14 @@ describe("Session plugin routes (real sessionRoutes)", () => {
       await store.createSession({
         phase: "playing",
         setupRuntimes: {},
+        seats: [
+          {
+            id: "main",
+            controller: "human",
+            role: "player",
+            characters: "auto",
+          },
+        ],
         metadata: {
           approvalScopeNonce: globalThis.crypto.randomUUID(),
           sessionIncarnationNonce: globalThis.crypto.randomUUID(),

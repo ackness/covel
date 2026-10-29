@@ -215,7 +215,7 @@ describe("execution World Model", () => {
       });
     const pending: Proposal[] = [write("a", 1)];
     const view = overlayWorldModelView(
-      { ...base, dimensions: {} },
+      { ...base, dimensions: {}, seats: [] },
       sessionId,
       pending,
     );
@@ -272,21 +272,6 @@ describe("execution World Model", () => {
       ],
     ],
     [
-      "second player",
-      () => [
-        proposal("character.upsert", {
-          id: "one",
-          name: "One",
-          type: "player",
-        }),
-        proposal("character.upsert", {
-          id: "two",
-          name: "Two",
-          type: "player",
-        }),
-      ],
-    ],
-    [
       "invalid expected version",
       () => [
         schema(),
@@ -306,9 +291,6 @@ describe("execution World Model", () => {
       const committed = await createCommitPipeline(store).commitAll(pending);
       expect(committed.some((result) => !result.committed)).toBe(true);
       const stored = await store.listCharacters(sessionId);
-      expect(
-        stored.filter((record) => record.type === "player").length,
-      ).toBeLessThanOrEqual(1);
       expect(stored.every((record) => record.type !== "undeclared")).toBe(true);
       expect(
         stored.every(
@@ -318,6 +300,26 @@ describe("execution World Model", () => {
       ).toBe(true);
     },
   );
+
+  it("accepts a second player character at read and commit", async () => {
+    const pending = [
+      proposal("character.upsert", { id: "one", name: "One", type: "player" }),
+      proposal("character.upsert", { id: "two", name: "Two", type: "player" }),
+    ];
+    expect(
+      materializeWorldModel(base, pending, sessionId).characters.map(
+        (record) => record.id,
+      ),
+    ).toEqual(["one", "two"]);
+    const store = createMemoryStore();
+    const committed = await createCommitPipeline(store).commitAll(pending);
+    expect(committed.every((result) => result.committed)).toBe(true);
+    expect(
+      (await store.listCharacters(sessionId)).filter(
+        (record) => record.type === "player",
+      ),
+    ).toHaveLength(2);
+  });
 
   it("ignores failed/suspended results and rebinds completed proposal identity like commit", () => {
     const result = (status: RuntimeResult["status"]): RuntimeResult => ({
@@ -475,6 +477,47 @@ describe("execution World Model", () => {
     );
     expect(seen).toEqual([{ hp: 5 }]);
     expect(await store.listCharacters(sessionId)).toEqual([]);
+  });
+});
+
+describe("seats in the execution view", () => {
+  it("reads the session's seats, frozen, and keeps them through own-write overlays", async () => {
+    const store = createMemoryStore();
+    const seats = [
+      {
+        id: "main",
+        controller: "human" as const,
+        role: "player" as const,
+        characters: "auto" as const,
+        currentCharacterId: "merchant-1",
+      },
+    ];
+    await store.createSession({
+      id: sessionId,
+      status: "active",
+      phase: "playing",
+      completedPlayerTurns: 0,
+      setupRuntimes: {},
+      seats,
+      locale: "en-US",
+      activePlugins: [],
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    });
+    const pending: Proposal[] = [schema()];
+    const view = await createWorldModelView(store, sessionId, [], pending);
+    expect(view.seats).toEqual(seats);
+    expect(Object.isFrozen(view.seats)).toBe(true);
+    expect(Object.isFrozen(view.seats[0])).toBe(true);
+    pending.push(character());
+    expect(view.characters).toHaveLength(1);
+    expect(view.seats).toEqual(seats);
+    const overlay = overlayWorldModelView(view, sessionId, []);
+    expect(overlay.seats).toEqual(seats);
+    expect(overlay.seats).not.toBe(view.seats);
+    expect(await createWorldModelView(store, "missing", [])).toMatchObject({
+      seats: [],
+    });
   });
 });
 

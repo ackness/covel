@@ -161,6 +161,53 @@ describe("validate:plugin warnings for a field written with its default", () => 
     expect(warnings.join("\n")).not.toContain("agent.loop.timeoutMs");
   });
 
+  it("compares loop behaviour keys with the profile they override", async () => {
+    const dir = await plugin(
+      { version: "1.0.0" },
+      {
+        narrator: {
+          ...agent,
+          schedule: { stage: "narrative" },
+          io: {
+            visibility: "story",
+            output: { contract: "narrative-engine@1" },
+          },
+          agent: {
+            loop: {
+              profile: "story",
+              stream: true,
+              // Not the story preset's value: kept.
+              steering: false,
+              finalizer: { maxSteps: true, deadlineReserveMs: 5000 },
+            },
+          },
+        },
+        helper: {
+          ...agent,
+          schedule: { stage: "post-turn" },
+          agent: {
+            // An actor's fallback is answer-without-tools; system's is fail.
+            loop: { profile: "actor", fallback: "answer-without-tools" },
+          },
+        },
+      },
+    );
+    const { status, warnings } = await validate(dir);
+    expect(status).toBe(0);
+    const fields = warnings.map(
+      (line) =>
+        line.replace(/^ {2}warning: .*?RUNTIME\.md: /, "").split(":")[0],
+    );
+    expect(fields.sort()).toEqual(
+      [
+        "agent.loop.fallback",
+        "agent.loop.finalizer.maxSteps",
+        "agent.loop.profile",
+        "agent.loop.stream",
+      ].sort(),
+    );
+  });
+
   it("reads an inline runtime and the package contributions", async () => {
     const dir = await plugin({
       version: "1.0.0",

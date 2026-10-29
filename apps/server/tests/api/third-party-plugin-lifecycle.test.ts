@@ -159,6 +159,9 @@ describe("standalone third-party plugin ZIP lifecycle", () => {
       id: sessionId,
       phase: "playing",
       setupRuntimes: {},
+      seats: [
+        { id: "main", controller: "human", role: "player", characters: "auto" },
+      ],
       status: "active",
       completedPlayerTurns: 0,
       activePlugins: [],

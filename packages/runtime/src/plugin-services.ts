@@ -19,6 +19,11 @@ import {
 } from "./function-runtime/runtime-abort-boundaries.js";
 import type { TurnEmitter } from "./trace/turn-emitter.js";
 import { withGatewayTrace } from "./function-runtime/gateway-trace.js";
+import { currentOwnSettings } from "./hooks/hook-scope.js";
+import {
+  readProviderData,
+  type PluginDataVisibility,
+} from "./function-runtime/upstream-plugin-data.js";
 
 class ServiceOutputValidationError extends Error {
   constructor() {
@@ -54,6 +59,17 @@ interface Caller {
   readonly signal: AbortSignal;
   readonly gateway?: PluginServiceContext["gateway"];
   readonly utils?: PluginServiceContext["utils"];
+  /** Kernel-only read scope, inherited unchanged through nested calls. */
+  readonly reads?: {
+    readonly locale?: string;
+    readonly world?: PluginServiceContext["world"];
+    readonly store?: Pick<
+      import("@covel/store").DataStore,
+      "getPluginData" | "listPluginData"
+    >;
+    readonly visibility?: PluginDataVisibility;
+    readonly writeBuffer?: readonly import("@covel/shared").Proposal[];
+  };
 }
 
 export interface PluginServiceCallEvent {
@@ -557,8 +573,28 @@ export class PluginServiceRegistry {
                 ? withDefaultUtilsSignal(caller.utils, signal)
                 : undefined;
               errorCode = "invocation-error";
+              let providerWorld: PluginServiceContext["world"] | undefined;
               const context: PluginServiceContext = {
                 callerPluginId: caller.pluginId,
+                sessionId: caller.sessionId,
+                locale: caller.reads?.locale,
+                pluginData: readProviderData({
+                  ...caller.reads,
+                  sessionId: caller.sessionId,
+                  pluginId: entry.pluginId,
+                  signal,
+                }),
+                get world() {
+                  return (providerWorld ??= structuredClone(
+                    caller.reads?.world ?? {
+                      characterSchema: null,
+                      characters: [],
+                      dimensions: {},
+                      seats: [],
+                    },
+                  ));
+                },
+                getOwnSettings: () => currentOwnSettings(entry.pluginId),
                 signal,
                 gateway,
                 utils,

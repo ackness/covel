@@ -16,6 +16,9 @@ it("only retains still-active execution hooks at commit and preserves their capt
     status: "active",
     phase: "playing",
     setupRuntimes: {},
+    seats: [
+      { id: "main", controller: "human", role: "player", characters: "auto" },
+    ],
     activePlugins: ["a", "b"],
     completedPlayerTurns: 0,
     createdAt: timestamp,

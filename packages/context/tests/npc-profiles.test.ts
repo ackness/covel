@@ -3,20 +3,38 @@ import { describe, expect, it } from "vitest";
 import { renderNpcProfiles } from "../src/prompt-internals.js";
 
 describe("characters.npcs", () => {
-  it("lists each non-player character's description and fields by name", () => {
+  it("lists each character but the current one by description and fields", () => {
     expect(
-      renderNpcProfiles([
-        { id: "char-ren", name: "Ren", type: "player" },
-        {
-          id: "npc-tomas-reed",
-          name: "Tomas Reed",
-          type: "npc",
-          description: "Chief technician.",
-          fields: { trust: 2 },
-        },
-        { id: "npc-eli", name: "Eli", type: "npc" },
-      ]),
+      renderNpcProfiles(
+        [
+          { id: "char-ren", name: "Ren", type: "player" },
+          {
+            id: "npc-tomas-reed",
+            name: "Tomas Reed",
+            type: "npc",
+            description: "Chief technician.",
+            fields: { trust: 2 },
+          },
+          { id: "npc-eli", name: "Eli", type: "npc" },
+        ],
+        undefined,
+        "char-ren",
+      ),
     ).toBe('- Tomas Reed [npc] | Chief technician. | {"trust":2}\n- Eli [npc]');
+  });
+
+  it("lists the other player characters with their tag", () => {
+    expect(
+      renderNpcProfiles(
+        [
+          { id: "char-ren", name: "Ren", type: "player" },
+          { id: "char-ada", name: "Ada", type: "player" },
+          { id: "npc-eli", name: "Eli", type: "npc" },
+        ],
+        undefined,
+        "char-ada",
+      ),
+    ).toBe("- Ren [player]\n- Eli [npc]");
   });
 
   it("filters nested bookkeeping before serializing fields without removing semantic ids", () => {

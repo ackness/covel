@@ -98,6 +98,9 @@ describe("POST /api/actions — a mid-turn interjection follows the turn", () =>
       phase: "playing",
       status: "active",
       setupRuntimes: {},
+      seats: [
+        { id: "main", controller: "human", role: "player", characters: "auto" },
+      ],
       metadata: {
         approvalScopeNonce: crypto.randomUUID(),
         sessionIncarnationNonce: crypto.randomUUID(),

@@ -119,6 +119,9 @@ describe("tool-carried proposal rebinding", () => {
       phase: "playing",
       completedPlayerTurns: 1,
       setupRuntimes: {},
+      seats: [
+        { id: "main", controller: "human", role: "player", characters: "auto" },
+      ],
       createdAt: new Date().toISOString(),
     });
 
@@ -176,6 +179,9 @@ describe("PreStateCommit replacement is payload-only", () => {
       phase: "playing",
       completedPlayerTurns: 1,
       setupRuntimes: {},
+      seats: [
+        { id: "main", controller: "human", role: "player", characters: "auto" },
+      ],
       createdAt: new Date().toISOString(),
     });
 

@@ -8,9 +8,10 @@
  * kernel zod schemas.
  */
 
-import type { JsonValue, MediaReference, PluginDataReader } from "./types.js";
+import type { JsonValue, MediaReference } from "./types.js";
 import type { PluginServiceContext } from "./plugin-api.js";
 import type { PluginMessages } from "./messages.js";
+import type { Seat } from "./seats.js";
 import type {
   ExtensionDimensionSnapshot,
   ExtensionWorldDimensions,
@@ -408,25 +409,23 @@ export type ExtensionWorldModel = {
   readonly characters: readonly ExtensionWorldCharacter[];
   readonly dimensions: ExtensionDimensionSnapshot;
   readonly dimensionProviderPluginId?: string;
+  /**
+   * The session's seats, read-only. `currentCharacterOf(primarySeat(seats),
+   * characters, seats)` is the character the player acts as.
+   */
+  readonly seats: readonly Seat[];
 };
 
 /**
  * Context handed to an extension provider. Service capabilities are shared
- * with registered services; extension-specific reads are bound to this call.
+ * with registered services; extension reads are bound to this call's snapshot.
  */
 export interface ExtensionHandlerContext extends PluginServiceContext {
   readonly services: ExtensionServiceClient;
-  readonly world: ExtensionWorldModel;
-  readonly sessionId: string;
   readonly locale: string;
   /** This plugin's translations, read by `translate` and `labelText`. */
   readonly messages?: PluginMessages;
   readonly turnId?: string;
-  /**
-   * Read-only, own-plugin data snapshot for this execution; `get` and `list`
-   * return fresh copies shaped as in a function handler.
-   */
-  readonly pluginData: PluginDataReader;
 }
 
 // ── provideExtension ─────────────────────────────────────────────

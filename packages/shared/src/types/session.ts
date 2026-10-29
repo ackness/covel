@@ -3,6 +3,7 @@
  * DB record `SessionRecord` in `@covel/store` is a superset with backend fields.
  */
 
+import type { Seat } from "@covel/plugin-handlers-utils";
 import type { SetupRuntimeState } from "./runtime-lifecycle.js";
 
 export type SessionStatus = "active" | "paused" | "ended";
@@ -56,6 +57,11 @@ export interface Session {
   readonly completedPlayerTurns: number;
   /** Per-runtime setup lifecycle mirror, keyed by runtimeId. */
   readonly setupRuntimes: Readonly<Record<string, SetupRuntimeState>>;
+  /**
+   * Who plays and which characters they control. A new session has one human
+   * player seat that binds every `type: player` character (`"auto"`).
+   */
+  readonly seats: readonly Seat[];
   readonly activePlugins: readonly string[];
   readonly locale: string;
   readonly createdAt: string;

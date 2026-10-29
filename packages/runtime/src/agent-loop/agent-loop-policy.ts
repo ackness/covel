@@ -3,7 +3,8 @@
  *
  * Everything the loop needs to decide HOW to run — tool surface, response
  * format, model override, streaming gate, step/retry budgets, tool-use
- * enforcement — is derived here, in one place, from the manifest + turn
+ * enforcement, and the loop profile (streaming to the player, steering,
+ * truncation, fallback, finalizer) — is derived here, in one place, from the manifest + turn
  * input. The loop body (`turn-agent-tool-loop.ts`) only consumes the
  * resulting `AgentLoopPolicy`, so its `while` reads as control flow rather
  * than policy derivation, and the loop core can be instantiated in tests
@@ -19,6 +20,10 @@ import {
 } from "../turn-executor/turn-executor-helpers.js";
 import { declaredToolNames, resolveDeferredToolNames } from "./tool-search.js";
 import { buildRetryPolicy, type RetryPolicy } from "../retry/retry-common.js";
+import {
+  resolveLoopProfile,
+  type ResolvedLoopProfile,
+} from "./loop-profile.js";
 import type { AgentLoopDeps } from "../turn-executor/turn-executor-types.js";
 
 export const DEFAULT_MAX_TOOL_STEPS = 20;
@@ -52,10 +57,10 @@ export interface AgentLoopPolicy {
   readonly runtimeModelOverride: string | undefined;
   /**
    * Stream whenever the LLM client can stream (`deps.llm.stream`), for every
-   * runtime kind. Only story-output runtimes forward the streamed text to the
-   * player's narrative feed: a plugin runtime's raw text is reasoning chatter
-   * that feeds into structured tool calls, so it is consumed without being
-   * shown. The request layer falls back to generate() when the provider
+   * runtime kind. Only a profile with `stream` (the `story` preset) forwards
+   * the streamed text to the player's narrative feed: a plugin runtime's raw
+   * text is reasoning chatter that feeds into structured tool calls, so it is
+   * consumed without being shown. The request layer falls back to generate() when the provider
    * cannot parse tool calls out of stream chunks.
    */
   readonly useStreaming: boolean;
@@ -75,11 +80,12 @@ export interface AgentLoopPolicy {
   /** Successful tool names that complete the runtime after the response batch. */
   readonly completeAfterTools: ReadonlySet<string>;
   /**
-   * Whether queued player steering messages are merged into the transcript
-   * before each LLM step. Story runtimes only — plugin runtimes run
-   * structured tasks a player interjection would corrupt.
+   * The resolved loop profile: whether text reaches the player, whether
+   * queued player interjections are merged (the `story` preset only — plugin
+   * runtimes run structured tasks an interjection would corrupt), whether a
+   * cut reply is kept, the tool-loop fallback and the finalizer.
    */
-  readonly acceptsSteering: boolean;
+  readonly profile: ResolvedLoopProfile;
   /**
    * The runtime's exact execution authorization set: its declared
    * tool names (deferred names included — deferring only withholds the
@@ -126,6 +132,7 @@ export function buildAgentLoopPolicy({
     : undefined;
 
   const authorizedToolNames = new Set(declaredToolNames(manifest));
+  // Output contract, not loop behaviour.
   // A story runtime is not offered `runtime-done` (see `usesRuntimeDone`),
   // but a model may call it from habit. The call stays authorized so that the
   // loop can answer it by asking for the story, not with a tool error.
@@ -136,12 +143,14 @@ export function buildAgentLoopPolicy({
     authorizedToolNames.add("runtime-done");
   }
 
+  // Output contract, not loop behaviour.
   const sessionRuntimeSlot = input.runtimeModelOverrides?.[manifest.name];
   const runtimeModelOverride =
     input.modelOverride && manifest.outputKind === "story"
       ? input.modelOverride
       : sessionRuntimeSlot;
   const completeAfterTools = new Set(manifest.completeAfterTools ?? []);
+  // Output contract, not loop behaviour.
   const outputFromCompletingTool = Boolean(
     loaded.outputSchema &&
     manifest.outputKind !== "story" &&
@@ -177,7 +186,7 @@ export function buildAgentLoopPolicy({
     }),
     requireToolUse: manifest.requireToolUse === true,
     completeAfterTools,
-    acceptsSteering: manifest.outputKind === "story",
+    profile: resolveLoopProfile(manifest),
     authorizedToolNames,
   };
 }

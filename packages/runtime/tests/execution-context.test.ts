@@ -34,6 +34,9 @@ async function freshActiveStore(
     phase,
     completedPlayerTurns: 0,
     setupRuntimes: {},
+    seats: [
+      { id: "main", controller: "human", role: "player", characters: "auto" },
+    ],
     locale: "zh-CN",
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),

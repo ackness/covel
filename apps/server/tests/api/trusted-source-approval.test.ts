@@ -5,6 +5,7 @@ import { Hono } from "hono";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import {
   apiListResponseSchema,
+  defaultSessionSeats,
   pluginSummarySchema,
   readRuntimeEnv,
 } from "@covel/shared";
@@ -64,6 +65,7 @@ async function session(
     completedPlayerTurns: 0,
     activePlugins,
     locale: "en-US",
+    seats: defaultSessionSeats(),
     createdAt: now,
     updatedAt: now,
     metadata: {

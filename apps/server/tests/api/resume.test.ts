@@ -105,6 +105,9 @@ async function createSession(store: DataStore, sessionId = "sess-1") {
     locale: "zh-CN",
     phase: "playing",
     setupRuntimes: {},
+    seats: [
+      { id: "main", controller: "human", role: "player", characters: "auto" },
+    ],
     metadata: {
       approvalScopeNonce: globalThis.crypto.randomUUID(),
       sessionIncarnationNonce: globalThis.crypto.randomUUID(),
@@ -1285,6 +1288,14 @@ describe("Resume Routes", () => {
           locale: "zh-CN",
           phase: "playing",
           setupRuntimes: {},
+          seats: [
+            {
+              id: "main",
+              controller: "human",
+              role: "player",
+              characters: "auto",
+            },
+          ],
           id: "sess-1",
           worldId: "test-world",
           status: "active",

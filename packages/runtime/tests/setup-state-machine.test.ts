@@ -52,6 +52,9 @@ async function setupSession(
     phase: "setup",
     completedPlayerTurns: 0,
     setupRuntimes,
+    seats: [
+      { id: "main", controller: "human", role: "player", characters: "auto" },
+    ],
     activePlugins: [],
     createdAt: now,
     updatedAt: now,
@@ -391,6 +394,9 @@ describe("main-loop dependency-cycle SCC", () => {
       phase: "playing",
       completedPlayerTurns: 1,
       setupRuntimes: {},
+      seats: [
+        { id: "main", controller: "human", role: "player", characters: "auto" },
+      ],
       activePlugins: [],
       createdAt: now,
       updatedAt: now,
@@ -482,6 +488,9 @@ describe("plugin version mismatch", () => {
       phase: "playing",
       completedPlayerTurns: 1,
       setupRuntimes: { "plug/setup": mirrorSetupDone("1.0.0", now, 1, 1) },
+      seats: [
+        { id: "main", controller: "human", role: "player", characters: "auto" },
+      ],
       activePlugins: ["plug"],
       createdAt: now,
       updatedAt: now,

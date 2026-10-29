@@ -87,6 +87,7 @@ export default function makeSaveNote({ tool, z, withPendingProposals }) {
   return tool({
     name: "save-note",
     description: "Save one short fact that the current narrative states.",
+    annotations: { idempotent: true },
     parameters: z.object({
       id: z.string().min(1).describe("Stable short key, e.g. gate-is-locked"),
       text: z.string().min(1).max(300),
@@ -118,6 +119,8 @@ This file exports one function. Covel passes a set of helpers to it:
 | `shortId`              | Generates a short ID. Pass `context.random` as the fourth argument                                      |
 
 The tool does not write to the save directly. It returns a **write request** (a proposal). Its type is `plugin.data`, and its content means "write this one record into `notes`". Covel checks and saves all write requests when the turn ends. If the turn fails, none of them are saved.
+
+This tool overwrites the same record by a stable key, so it declares `idempotent: true`. Read tools can also declare `readOnly` and `concurrencySafe`; use `timeoutMs` for a per-call limit. See [Annotations and timeout](../reference/tools.md#annotations-and-timeout) for defaults and validation rules.
 
 Three rules:
 
@@ -370,7 +373,7 @@ Things a function often uses:
 | `ctx.playerMessage`                                                           | The player's input for this turn                                                                                                                                                                                                         |
 | `ctx.manualPayload`                                                           | The data the UI sends with a manual trigger                                                                                                                                                                                              |
 | `ctx.pluginData.get/list/set/update`                                          | Reads and writes your own data; see [change data](#change-data)                                                                                                                                                                          |
-| `ctx.world`                                                                   | Characters, character field definitions, lorebook. Read-only                                                                                                                                                                             |
+| `ctx.world`                                                                   | Characters, character field definitions, lorebook and the session's seats, `seats`. Read-only. For the character the player is acting as, see [Who the player is](#who-the-player-is)                                                    |
 | `ctx.userSettings`                                                            | The player's settings                                                                                                                                                                                                                    |
 | `ctx.random`                                                                  | Random numbers. Use only this for dice rolls                                                                                                                                                                                             |
 | `ctx.locale`                                                                  | The language of this game                                                                                                                                                                                                                |
@@ -401,6 +404,24 @@ The data space here belongs to the current plugin. Covel decides which session i
 Character data that a tool or a function reads already includes the changes that earlier steps of this turn proposed and that are not saved yet. So "write first, then read" returns what was just written. Do not get around this by reading old saved data, and do not submit the earlier steps' write requests a second time.
 
 Plugin data works the same way: what you read includes what earlier, completed runtimes of the same plugin wrote in this execution and has not been saved yet. When such a write is refused at save time, the runtimes that read it are dropped too (the story excepted). The rules are under [In-execution plugin-data visibility](../reference/plugins.md#in-execution-plugin-data-visibility).
+
+### Who the player is
+
+A session may have several `type: player` characters (one person playing two characters, for example). The session's seats decide which one the player is acting as right now, and you read them on `ctx.world.seats`. Find that character with the SDK helpers:
+
+```js
+import { currentCharacterOf, primarySeat } from "@covel/plugin-handlers-utils";
+
+const player = currentCharacterOf(
+  primarySeat(ctx.world.seats),
+  ctx.world.characters,
+  ctx.world.seats,
+); // the character record, or undefined when nobody is seated or bound
+```
+
+- Do not use `ctx.world.characters.find((c) => c.type === "player")`: with several player characters it finds only the first.
+- `seatCharacterIds(seat, characters, seats)` gives every character ID bound to a seat, including the other characters the player controls.
+- Seats are read-only. After the player switches the current character, reads see the new one from the next turn. For the binding and current-character rules, see [Seats](../reference/world-model.md#seats).
 
 ### Read the complete story record
 

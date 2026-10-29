@@ -71,6 +71,9 @@ describe("GET /api/ui-specs plugin views", () => {
       locale: "en-US",
       completedPlayerTurns: 0,
       setupRuntimes: {},
+      seats: [
+        { id: "main", controller: "human", role: "player", characters: "auto" },
+      ],
       activePlugins: [],
       createdAt: "2026-10-29",
       updatedAt: "2026-10-29",

@@ -226,6 +226,26 @@ describe("builtin character tools", () => {
     expect(caller.pending).toEqual([]);
   });
 
+  it("creates a second player character beside a committed one", async () => {
+    await loop.call("create-character", { name: "Alex", type: "player" });
+    loop.commit();
+    const second = await loop.call("create-character", {
+      name: "Brook",
+      type: "player",
+    });
+    expect(second).toMatchObject({ success: true, existed: false });
+    loop.commit();
+    expect(
+      (await store.listCharacters("sess-1")).map(({ name, type }) => [
+        name,
+        type,
+      ]),
+    ).toEqual([
+      ["Alex", "player"],
+      ["Brook", "player"],
+    ]);
+  });
+
   it("ignores pending characters from a different session", async () => {
     await loop.call("create-character", { name: "Alex", type: "player" });
     loop.pending = loop.pending.map((p) => ({

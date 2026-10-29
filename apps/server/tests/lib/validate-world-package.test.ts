@@ -27,7 +27,9 @@ async function makeWorld(
   files: Record<string, string>,
   manifest = MANIFEST,
 ): Promise<string> {
-  const parent = await mkdtemp(path.join(tmpdir(), "covel-validate-world-"));
+  const parent = await mkdtemp(
+    path.join(tmpdir(), "covel-world-fixture-world-"),
+  );
   const worldDir = path.join(parent, "sample-world");
   for (const [name, content] of Object.entries({
     "world.yaml": manifest,
@@ -490,7 +492,9 @@ describe("validateWorldPackage", () => {
   });
 
   it("requires lore for every edition and a fallback for the rest", async () => {
-    const parent = await mkdtemp(path.join(tmpdir(), "covel-validate-lore-"));
+    const parent = await mkdtemp(
+      path.join(tmpdir(), "covel-world-fixture-lore-"),
+    );
     const worldDir = path.join(parent, "sample-world");
     await mkdir(worldDir, { recursive: true });
     await writeFile(path.join(worldDir, "world.yaml"), MANIFEST);
@@ -688,7 +692,7 @@ describe("validateWorldPackage", () => {
 
   it("reports a translation that the main file has no place for", async () => {
     const worldDir = path.join(
-      await mkdtemp(path.join(tmpdir(), "covel-validate-overlay-")),
+      await mkdtemp(path.join(tmpdir(), "covel-world-fixture-overlay-")),
       "mistport",
     );
     await cp(path.join(repoRoot, "worlds/mistport"), worldDir, {
@@ -807,7 +811,7 @@ describe("validateWorldPackage", () => {
 
   it("warns about text of another script left in a locale file", async () => {
     const worldDir = path.join(
-      await mkdtemp(path.join(tmpdir(), "covel-validate-script-")),
+      await mkdtemp(path.join(tmpdir(), "covel-world-fixture-script-")),
       "lantern-barrow",
     );
     await cp(path.join(repoRoot, "worlds/lantern-barrow"), worldDir, {
@@ -845,7 +849,7 @@ describe("validateWorldPackage", () => {
 
   it("warns when an edition does not translate every text", async () => {
     const worldDir = path.join(
-      await mkdtemp(path.join(tmpdir(), "covel-validate-edition-")),
+      await mkdtemp(path.join(tmpdir(), "covel-world-fixture-edition-")),
       "lantern-barrow",
     );
     await cp(path.join(repoRoot, "worlds/lantern-barrow"), worldDir, {
@@ -869,7 +873,7 @@ describe("validateWorldPackage", () => {
 
   it("rejects a main file that still writes translations inline", async () => {
     const worldDir = path.join(
-      await mkdtemp(path.join(tmpdir(), "covel-validate-inline-")),
+      await mkdtemp(path.join(tmpdir(), "covel-world-fixture-inline-")),
       "mistport",
     );
     await cp(path.join(repoRoot, "worlds/mistport"), worldDir, {

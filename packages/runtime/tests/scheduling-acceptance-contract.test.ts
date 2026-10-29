@@ -92,6 +92,9 @@ async function scheduledRuntimeTriggers(
     phase: "playing",
     completedPlayerTurns,
     setupRuntimes: {},
+    seats: [
+      { id: "main", controller: "human", role: "player", characters: "auto" },
+    ],
     activePlugins: [],
     createdAt: now,
     updatedAt: now,
@@ -179,6 +182,9 @@ async function seedPlaying(
     phase: "playing",
     completedPlayerTurns,
     setupRuntimes: {},
+    seats: [
+      { id: "main", controller: "human", role: "player", characters: "auto" },
+    ],
     activePlugins: [],
     createdAt: now,
     updatedAt: now,
@@ -202,6 +208,9 @@ describe("setup frozen snapshot (cross-execution read of committed setup data)",
       phase: "setup",
       completedPlayerTurns: 0,
       setupRuntimes: {},
+      seats: [
+        { id: "main", controller: "human", role: "player", characters: "auto" },
+      ],
       activePlugins: ["p"],
       createdAt: now,
       updatedAt: now,
@@ -344,6 +353,9 @@ describe("setup gating across trigger paths (setup-incomplete skip)", () => {
       phase: "playing",
       completedPlayerTurns: 1,
       setupRuntimes: {},
+      seats: [
+        { id: "main", controller: "human", role: "player", characters: "auto" },
+      ],
       activePlugins: ["plug-a", "plug-b"],
       createdAt: now,
       updatedAt: now,
@@ -518,6 +530,14 @@ describe("setup gating across trigger paths (setup-incomplete skip)", () => {
         phase: "playing",
         completedPlayerTurns: 1,
         setupRuntimes: {},
+        seats: [
+          {
+            id: "main",
+            controller: "human",
+            role: "player",
+            characters: "auto",
+          },
+        ],
         activePlugins: ["plug-a"],
         createdAt: now,
         updatedAt: now,
@@ -782,6 +802,9 @@ describe("commit transaction & rollback", () => {
       status: "active",
       phase: "setup",
       completedPlayerTurns: 0,
+      seats: [
+        { id: "main", controller: "human", role: "player", characters: "auto" },
+      ],
       setupRuntimes: {
         [setupRuntimeId]: {
           state: "pending",
@@ -921,6 +944,9 @@ describe("current snapshot clock", () => {
       phase: "playing",
       completedPlayerTurns: 3,
       setupRuntimes: { pregame: mirrorSetupDone("1.0.0", now, 1, 1) },
+      seats: [
+        { id: "main", controller: "human", role: "player", characters: "auto" },
+      ],
       activePlugins: [],
       createdAt: now,
       updatedAt: now,
@@ -943,6 +969,9 @@ describe("current snapshot clock", () => {
       phase: "playing",
       completedPlayerTurns: 1,
       setupRuntimes: {},
+      seats: [
+        { id: "main", controller: "human", role: "player", characters: "auto" },
+      ],
       activePlugins: ["media"],
       locale: "zh-CN",
       createdAt: now,
@@ -984,6 +1013,9 @@ describe("blocked control (maxTriggerCount / retry / waive)", () => {
       phase: "setup",
       completedPlayerTurns: 0,
       setupRuntimes: {},
+      seats: [
+        { id: "main", controller: "human", role: "player", characters: "auto" },
+      ],
       activePlugins: ["plug"],
       createdAt: now,
       updatedAt: now,

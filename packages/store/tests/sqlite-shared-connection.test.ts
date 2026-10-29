@@ -125,6 +125,14 @@ describe("sqlite shared connection", () => {
           phase: "setup",
           completedPlayerTurns: 0,
           setupRuntimes: {},
+          seats: [
+            {
+              id: "main",
+              controller: "human",
+              role: "player",
+              characters: "auto",
+            },
+          ],
           locale: "zh-CN",
           activePlugins: [],
           createdAt: "2026-06-29T00:00:00.000Z",

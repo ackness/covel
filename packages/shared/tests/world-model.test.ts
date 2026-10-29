@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { materializeWorldModel } from "../src/proposals/world-model.js";
+import {
+  materializeWorldModel,
+  validateWorldModel,
+} from "../src/proposals/world-model.js";
 
 describe("world model ownership", () => {
   it("detaches the base world and dimensions before exposing a materialized view", () => {
@@ -30,5 +33,68 @@ describe("world model ownership", () => {
         "session",
       ).dimensions,
     ).toEqual({});
+  });
+});
+
+describe("player characters", () => {
+  const player = (id: string) => ({
+    id,
+    sessionId: "session",
+    name: id,
+    type: "player",
+    version: 1,
+    createdAt: "2026-10-29",
+    updatedAt: "2026-10-29",
+  });
+
+  it("accepts several player characters", () => {
+    expect(() =>
+      validateWorldModel({
+        characters: [player("Ada"), player("Lin")],
+        characterSchema: null,
+        dimensions: {},
+      }),
+    ).not.toThrow();
+    const view = materializeWorldModel(
+      { characters: [player("Ada")], characterSchema: null },
+      [
+        {
+          id: "p",
+          type: "character.upsert",
+          source: { pluginId: "creator", runtimeId: "creator" },
+          turnId: "t",
+          sessionId: "session",
+          payload: { id: "Lin", name: "Lin", type: "player" },
+          timestamp: "2026-10-29",
+        },
+      ],
+      "session",
+    );
+    expect(view.characters.map((character) => character.id)).toEqual([
+      "Ada",
+      "Lin",
+    ]);
+  });
+
+  it("carries the seats through as given and never changes them", () => {
+    const seats = [
+      {
+        id: "main",
+        controller: "human" as const,
+        role: "player" as const,
+        characters: "auto" as const,
+      },
+    ];
+    const view = materializeWorldModel(
+      { characters: [], characterSchema: null, seats },
+      [],
+      "session",
+    );
+    expect(view.seats).toEqual(seats);
+    expect(view.seats).not.toBe(seats);
+    expect(
+      materializeWorldModel({ characters: [], characterSchema: null }, [], "s")
+        .seats,
+    ).toEqual([]);
   });
 });

@@ -13,6 +13,9 @@ import {
   authoringSourceKind,
   defaultAgentLoop,
   defaultAgentModel,
+  defaultLoopPreset,
+  LOOP_PRESETS,
+  type LoopPresetId,
   type RuntimeVisibility,
 } from "@covel/shared";
 import { isDerivedTag } from "./package-defaults.js";
@@ -119,6 +122,25 @@ function runtimeWarnings(runtime: Raw, prefix: string, out: Findings): void {
   const defaults = defaultAgentLoop(visibility);
   for (const field of ["timeoutMs", "callTimeoutMs", "maxRetries"] as const)
     out.check(at(`agent.loop.${field}`), loop?.[field], defaults[field]);
+  // A loop behaviour key is compared with the profile it overrides.
+  const visibilityPreset = defaultLoopPreset(visibility);
+  out.check(at("agent.loop.profile"), loop?.profile, visibilityPreset);
+  const named = loop?.profile;
+  const preset =
+    LOOP_PRESETS[
+      typeof named === "string" && Object.hasOwn(LOOP_PRESETS, named)
+        ? (named as LoopPresetId)
+        : visibilityPreset
+    ];
+  for (const field of ["stream", "steering", "truncation", "fallback"] as const)
+    out.check(at(`agent.loop.${field}`), loop?.[field], preset[field]);
+  const finalizer = record(loop?.finalizer);
+  for (const field of ["maxSteps", "deadlineReserveMs"] as const)
+    out.check(
+      at(`agent.loop.finalizer.${field}`),
+      finalizer?.[field],
+      preset.finalizer[field],
+    );
 }
 
 /**

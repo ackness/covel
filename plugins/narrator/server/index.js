@@ -1,6 +1,8 @@
 import {
   characterSheetSegments,
   createNarrativeReview,
+  currentCharacterOf,
+  primarySeat,
 } from "@covel/plugin-handlers-utils";
 
 export default function (covel) {
@@ -9,6 +11,11 @@ export default function (covel) {
   covel.provideExtension("prompt.segment@1", "character-sheets", {
     handler: (_input, ctx) =>
       characterSheetSegments(ctx.world.characters, {
+        currentCharacterId: currentCharacterOf(
+          primarySeat(ctx.world.seats),
+          ctx.world.characters,
+          ctx.world.seats,
+        )?.id,
         profiles: true,
         locale: ctx.locale,
         schema: ctx.world.characterSchema,

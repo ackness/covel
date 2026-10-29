@@ -637,6 +637,7 @@ Cascade delete is not one database transaction that covers all sessions:
 | DELETE | `/api/sessions/:id`                      | Delete a session                                                         |
 | GET    | `/api/sessions/:id/memory-index`         | The vector model of the memory index, and whether it is still configured |
 | POST   | `/api/sessions/:id/memory-index/rebuild` | Rebuild the memory index with the configured vector model                |
+| PATCH  | `/api/sessions/:id/seats/:seatId`        | Switch the character a seat plays; see [session seats](#session-seats)   |
 
 #### Session identity `incarnation`
 
@@ -993,6 +994,29 @@ Both endpoints return `{ ok, runtimeId, state }`.
 | 400         | `confirm_required` | The body of `waive` is missing `{ confirm: true }`                                                                                              |
 | 404         | —                  | The session does not exist                                                                                                                      |
 | 409         | —                  | The target is not `blocked` (for example `done{completed}` or `pending`). `error` explains that only blocked runtimes can be retried or skipped |
+
+### Session seats
+
+The `seats` of a session record are the session's [seats](./world-model.md#seats): who plays, in which role, and which characters they control. A new session has one default seat, `[{ "id": "main", "controller": "human", "role": "player", "characters": "auto" }]`, which binds every character of type `player`.
+
+| Method | Path                              | Description                       |
+| ------ | --------------------------------- | --------------------------------- |
+| PATCH  | `/api/sessions/:id/seats/:seatId` | Switch the character a seat plays |
+
+The body must be exactly `{ "currentCharacterId": "<character id>" }`. Any other field returns 400.
+
+- Authentication is the same as for the other session endpoints (owner token).
+- The write holds the session lock, so it is serialized with turns, and it applies from the next turn. No event is published.
+- The session must be `active` or `paused`.
+- On success it returns `200 { "seats": [...] }`, all the seats after the write.
+
+| Status code | `code`                   | When                                                      |
+| ----------- | ------------------------ | --------------------------------------------------------- |
+| 400         | `invalid_body`           | The body is not `{ currentCharacterId }`                  |
+| 404         | `session_not_found`      | The session does not exist                                |
+| 404         | `seat_not_found`         | The session has no such seat                              |
+| 409         | `seat_not_human`         | No human controls the seat (`controller` is not `human`)  |
+| 409         | `seat_character_unbound` | The character does not exist or is not bound to this seat |
 
 ### Player interaction
 
@@ -2408,6 +2432,14 @@ Notes:
   "phase": "setup",
   "completedPlayerTurns": 0,
   "setupRuntimes": {},
+  "seats": [
+    {
+      "id": "main",
+      "controller": "human",
+      "role": "player",
+      "characters": "auto"
+    }
+  ],
   "activePlugins": ["pregame", "narrator", "codex"],
   "createdAt": "2025-01-15T10:00:00.000Z",
   "updatedAt": "2025-01-15T10:00:00.000Z",
@@ -2433,6 +2465,7 @@ The response is the session record, plus a one-time `ownerToken`.
 | `phase`                | `'setup' \| 'playing'`                              | Whether the session is in opening setup or in normal play. It starts as `setup` if the active set has a setup runtime, otherwise `playing`. It becomes `playing` once all setup runtimes are done                                                                                                                                                                                                                                |
 | `completedPlayerTurns` | number                                              | The number of committed player turns in normal play. Interaction during setup is not counted. The same turn is never counted twice                                                                                                                                                                                                                                                                                               |
 | `setupRuntimes`        | `Record<runtimeId, SetupRuntimeState>`              | The state of each setup runtime. See the table below                                                                                                                                                                                                                                                                                                                                                                             |
+| `seats`                | `Seat[]`                                            | The session's seats. A new session has one human player seat that binds every player character; see [session seats](#session-seats)                                                                                                                                                                                                                                                                                              |
 
 `worldDataNotices` is returned only in the session creation response. The server does not save it, so these notices disappear after a page refresh.
 
@@ -2563,6 +2596,8 @@ Updates session fields. Right now you can change `status` and `runtimeModelOverr
 
 - If it is not a valid value, the response is 400.
 - `ended` is a final state. It cannot go back to `active` or `paused` (the response is `409 session_ended`).
+
+`seats` cannot be changed with this PATCH. To switch the current character, use [`PATCH /api/sessions/:id/seats/:seatId`](#session-seats).
 
 `phase`, `completedPlayerTurns`, and `setupRuntimes` cannot be changed with PATCH. The server maintains them when a turn is committed:
 

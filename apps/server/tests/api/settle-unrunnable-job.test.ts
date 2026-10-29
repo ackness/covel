@@ -37,6 +37,9 @@ it("does not hold the next request to the settle wait of a job no model can run"
     locale: "en-US",
     completedPlayerTurns: 1,
     setupRuntimes: {},
+    seats: [
+      { id: "main", controller: "human", role: "player", characters: "auto" },
+    ],
     activePlugins: [pluginId],
     metadata: {
       approvalScopeNonce: "approval",

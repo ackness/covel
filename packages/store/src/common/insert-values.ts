@@ -45,6 +45,7 @@ import type {
   WorldRecord,
 } from "../types.js";
 import { lorebookOwnerKey } from "./lorebook-owner.js";
+import { requireSeats } from "./mappers/session-mappers.js";
 import { assertStoreIdentifiers, withoutNul } from "./without-nul.js";
 import { normalizeWorldRecord } from "../records/world-records.js";
 
@@ -66,6 +67,7 @@ export type SessionUpdatePatch = Partial<
     | "phase"
     | "completedPlayerTurns"
     | "setupRuntimes"
+    | "seats"
   >
 >;
 
@@ -524,7 +526,8 @@ function buildInsertValues(json: JsonWriter): InsertValueBuilders {
     },
 
     // ── Sessions ──────────────────────────────────────────────────
-    // `activePlugins` and `setupRuntimes` are required JSON values. `metadata`
+    // `activePlugins`, `setupRuntimes` and `seats` are required JSON values; the
+    // seats are validated before they are written. `metadata`
     // and `runtimeModelOverrides` are optional → `writeNullableJson`, so an
     // absent override map is stored as SQL NULL on every backend rather than an
     // empty-object literal.
@@ -547,6 +550,7 @@ function buildInsertValues(json: JsonWriter): InsertValueBuilders {
         phase: record.phase,
         completedPlayerTurns: record.completedPlayerTurns,
         setupRuntimes: json.writeJson(record.setupRuntimes),
+        seats: json.writeJson(requireSeats(record.seats)),
       };
     },
 
@@ -578,6 +582,9 @@ function buildInsertValues(json: JsonWriter): InsertValueBuilders {
       }
       if ("setupRuntimes" in patch) {
         values.setupRuntimes = json.writeJson(patch.setupRuntimes);
+      }
+      if ("seats" in patch) {
+        values.seats = json.writeJson(requireSeats(patch.seats));
       }
       return values;
     },

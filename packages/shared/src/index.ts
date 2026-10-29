@@ -22,6 +22,22 @@ export type {
   CharacterResolution,
   NamedCharacter,
 } from "@covel/plugin-handlers-utils";
+export {
+  currentCharacterOf,
+  primarySeat,
+  seatCharacterIds,
+} from "@covel/plugin-handlers-utils";
+export type {
+  Seat,
+  SeatCharacter,
+  SeatController,
+  SeatRole,
+} from "@covel/plugin-handlers-utils";
+export {
+  assertSeatsValid,
+  defaultSessionSeats,
+  seatsSchema,
+} from "./schemas/seat.js";
 export type {
   CharacterSchema,
   CharacterSchemaRecord,
@@ -590,7 +606,11 @@ export {
   DEFAULT_RUNTIME_VISIBILITY,
   defaultAgentLoop,
   defaultAgentModel,
+  defaultLoopPreset,
+  LOOP_PRESETS,
   type AgentLoopDefaults,
+  type LoopPresetId,
+  type LoopPresetValues,
   type RuntimeVisibility,
 } from "./schemas/runtime-defaults.js";
 

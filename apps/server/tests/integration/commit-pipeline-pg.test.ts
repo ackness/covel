@@ -88,6 +88,9 @@ async function seedSession(store: DataStore, id: string): Promise<void> {
     phase: "playing",
     completedPlayerTurns: 1,
     setupRuntimes: {},
+    seats: [
+      { id: "main", controller: "human", role: "player", characters: "auto" },
+    ],
     locale: "en",
     activePlugins: [],
     metadata: {

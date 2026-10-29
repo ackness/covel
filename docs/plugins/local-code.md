@@ -87,6 +87,7 @@ export default function makeSaveNote({ tool, z, withPendingProposals }) {
   return tool({
     name: "save-note",
     description: "Save one short fact that the current narrative states.",
+    annotations: { idempotent: true },
     parameters: z.object({
       id: z.string().min(1).describe("Stable short key, e.g. gate-is-locked"),
       text: z.string().min(1).max(300),
@@ -118,6 +119,8 @@ export default function makeSaveNote({ tool, z, withPendingProposals }) {
 | `shortId`              | 生成短 ID。第四个参数传 `context.random`            |
 
 工具不直接写存档。它返回一条**写入请求**（proposal）：类型是 `plugin.data`，内容是“往 `notes` 里写这一条”。Covel 在回合结束时检查并保存所有请求。回合失败时，一条都不会保存。
+
+这个工具按稳定 key 覆盖同一条记录，所以声明 `idempotent: true`。只读工具还可以声明 `readOnly`、`concurrencySafe`；单次时限用 `timeoutMs`。默认值和检查规则见[工具注解与超时](../reference/tools.md#注解与超时)。
 
 三条规则：
 
@@ -370,7 +373,7 @@ export default async function handler(ctx) {
 | `ctx.playerMessage`                                                           | 玩家这一回合的输入                                                                                                                                                         |
 | `ctx.manualPayload`                                                           | 手动触发时界面传来的数据                                                                                                                                                   |
 | `ctx.pluginData.get/list/set/update`                                          | 读写自己的数据，见[改数据](#改数据)                                                                                                                                        |
-| `ctx.world`                                                                   | 角色、角色的字段定义、资料库。只读                                                                                                                                         |
+| `ctx.world`                                                                   | 角色、角色的字段定义、资料库和会话的座位 `seats`。只读。玩家正在扮演的角色见[谁是玩家](#谁是玩家)                                                                          |
 | `ctx.userSettings`                                                            | 玩家的设置项                                                                                                                                                               |
 | `ctx.random`                                                                  | 随机数。掷骰只用它                                                                                                                                                         |
 | `ctx.locale`                                                                  | 这一局游戏的语言                                                                                                                                                           |
@@ -401,6 +404,24 @@ const characters = ctx.world?.characters ?? [];
 工具和函数读到的角色数据，已经包含这一回合里前面的步骤提出、但还没保存的修改。所以“先写后读”能读到刚写的内容。不要自己绕过它去读已保存的旧数据，也不要把前面步骤的写入请求再提交一遍。
 
 插件数据同样如此：读到的值包含这次执行里同一个插件前面已经完成的 runtime 写下、还没保存的内容。前面的写入在保存时被拒绝的话，读过它的 runtime 也一起作废（故事除外）。规则见[执行内的插件数据可见性](../reference/plugins.md#执行内的插件数据可见性)。
+
+### 谁是玩家
+
+一局游戏可以有多个 `type: player` 的角色（例如一个人同时扮演两个角色）。玩家此刻扮演哪一个，由会话的座位决定，`ctx.world.seats` 里能读到。用 SDK 的辅助函数找它：
+
+```js
+import { currentCharacterOf, primarySeat } from "@covel/plugin-handlers-utils";
+
+const player = currentCharacterOf(
+  primarySeat(ctx.world.seats),
+  ctx.world.characters,
+  ctx.world.seats,
+); // the character record, or undefined when nobody is seated or bound
+```
+
+- 不要用 `ctx.world.characters.find((c) => c.type === "player")`：有多个玩家角色时它只找到第一个。
+- `seatCharacterIds(seat, characters, seats)` 给出一个座位绑定的全部角色 `id`，玩家控制的其他角色也在里面。
+- 座位只读。玩家换当前角色后，下一回合起读到新的角色。绑定和当前角色的规则见[座位](../reference/world-model.md#座位)。
 
 ### 读取完整的故事记录
 

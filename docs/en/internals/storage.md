@@ -483,7 +483,7 @@ Both backends declare the same indexes (PostgreSQL's names carry a `pg_` prefix)
 - PostgreSQL uses a separate sequence for each table to assign positions for messages, traces and turn artifacts, and this still works when several connections write at the same time.
 - SQLite assigns them inside the write boundary it serializes.
 - A gap in sequence numbers after a rollback is normal. When importing in order, new positions are assigned in the order of the import list. Cursor pagination and full lists use the same positions.
-- The data schema version is 5 for both SQL backends. It is checked at startup; see [The data schema version is checked at startup](#capabilities-and-migrations).
+- The data schema version is 7 for both SQL backends. It is checked at startup; see [The data schema version is checked at startup](#capabilities-and-migrations). Version 7 added the `seats` column to `sessions`; a version 6 database is refused, and development databases and browser saves must be recreated.
 
 **Vector retrieval.** The results are first filtered by session, plugin and namespace, and then the top-K is picked exactly. Memory, SQLite and PostgreSQL all return Euclidean L2 distance. PostgreSQL materializes the filtered candidates instead of using a global approximate index, because the latter can miss matches after filtering.
 
@@ -495,6 +495,7 @@ Both backends declare the same indexes (PostgreSQL's names carry a `pg_` prefix)
 - A character's identity is `(sessionId, id)`.
 - A lorebook entry's identity also includes its owner: the world, the player, or a specific plugin. A plugin can change only its own lorebook entries, even if another owner uses the same entry ID.
 - Each session has one authoritative `characterSchema`. Character types are open, and attributes are validated.
+- The session's [seats](../reference/world-model.md#seats) live in `sessions.seats`: JSON in `TEXT` on SQLite and `jsonb` on PostgreSQL, NOT NULL, with the default seat as the column default. Every write and read validates them with `seatsSchema` from `@covel/shared`, binding rules included (`assertSeatsValid`); a write that breaks them is refused whole. A write replaces them wholesale, with no deep merge. Seats are saved with snapshots (`SnapshotSessionState.seats`), forks and browser checkpoints. Bound characters are derived when read, so creating a player character writes no seat.
 
 MemoryStore, SQLite, PostgreSQL and browser checkpoints all keep these identities. So browser persistence and the server share the domain shape, but they do not share the server's table structures or each backend's create, read, update and delete implementations.
 
@@ -575,7 +576,7 @@ When adding a table or session field, register its owner and persistence scope i
 - Tables marked `exported` exactly match checkpoint domains, including record arrays, lifecycle arrays, singletons and nested `state` arrays. This means the checkpoint has that domain; it does not promise to copy every row. For example, tool-call and event arrays are currently exported empty.
 - Session-field snapshot policies match the same-name fields in `SnapshotSessionState`. Type checking also requires new `SessionRecord`, snapshot or checkpoint fields to have corresponding registry entries or test mappings.
 
-Rows in `plugin_data` belong to their `plugin_id`; `_` namespaces and `__kernel:` owners are kernel partitions. Control-plane namespaces are excluded from snapshots and forks. `state_schemas`, `state_entries` and `state_changes` are registered as kernel-owned: the plugin write path has been removed, and they will be reworked or removed later.
+Rows in `plugin_data` belong to their `plugin_id`; `_` namespaces and `__kernel:` owners are kernel partitions. Control-plane namespaces are excluded from snapshots and forks. `state_schemas`, `state_entries` and `state_changes` are registered as kernel-owned: the plugin write path has been removed. Kernel session state such as the seats now lives on the session record, and these three tables will be removed.
 
 Fork behavior is recorded, but store tests cannot depend on `apps/server`, so they do not verify the fork implementation. Session `metadata` sub-keys are outside field coverage. There is currently no reset path, and the operation-record table has not been created yet. This inventory declares no behavior for them.
 

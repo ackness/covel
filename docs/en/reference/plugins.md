@@ -195,6 +195,8 @@ Leave out a field whose value is the default. When you write one, `pnpm validate
 | `agent.reasoning` | `true`: the model's own reasoning setting applies |
 | `agent.toolChoice` (with `finishWith`) | `required` |
 | `agent.loop.timeoutMs`, `callTimeoutMs`, `maxRetries` | a runtime with `io.visibility: story`: 240000, 120000, 1; any other: 120000, 60000, 3 |
+| `agent.loop.profile` | `story` for a runtime with `io.visibility: story`, `system` for any other |
+| `agent.loop.stream`, `steering`, `truncation`, `fallback`, `finalizer.*` | the chosen profile's value; see [Loop profile](#loop-profile-agentloopprofile) |
 | `contributes.data.*.version` | `1` |
 | `contributes.hooks[].enforce` | `normal` |
 | `contributes.extensions[].order` | `0` |
@@ -370,13 +372,13 @@ A streaming call is limited by how long it goes without output: a model that kee
 
 - The call is retried as a new attempt, with one added line that says "write only what the task needs". A model that loops or repeats itself usually finishes on a second try.
 - The call fails only if it is cut off again. The error message suggests raising the output limit. If the limit is really too small, the second attempt will not finish either.
-- The one exception: a runtime with `io.visibility: story` produced only story text and no tool calls. In that case the text is kept and committed, and the player sees a notice that it may have stopped mid-sentence.
+- The one exception: a runtime on the `story` profile (`truncation: accept`) produced only story text and no tool calls. In that case the text is kept and committed, and the player sees a notice that it may have stopped mid-sentence. A runtime with `io.visibility: story` uses this profile by default.
 
-**The provider did not say why it stopped (`finishReason: other`).** The reply may stop anywhere. As with a cut-off reply, a runtime with `io.visibility: story` that produced only story text and no tool calls keeps and commits the text, and the player sees a notice that it is not finished and the turn can be retried. Anything else fails and is not retried. See [slots.md](./slots.md#finish-reasons-diagnostics-and-refusals).
+**The provider did not say why it stopped (`finishReason: other`).** The reply may stop anywhere. As with a cut-off reply, a runtime on the `story` profile that produced only story text and no tool calls keeps and commits the text, and the player sees a notice that it is not finished and the turn can be retried. Anything else fails and is not retried. See [slots.md](./slots.md#finish-reasons-diagnostics-and-refusals).
 
 **A streaming call is interrupted after it has already produced output** (the connection drops, or it goes silent for longer than `idleTimeoutMs`).
 
-- A runtime with `io.visibility: story` is not retried, because the player has already read that text.
+- A runtime that streams its text to the player (the `story` profile, `stream: true`) is not retried, because the player has already read that text.
 - For other runtimes, the output was not shown to anyone, so it is discarded and the call is retried according to `maxRetries`. The time spent producing the output that was already written does not count toward `timeoutMs`. Silence after that does count.
 
 **A non-streaming call** gives no progress signal, so `callTimeoutMs` limits the total duration of a single call.
@@ -552,15 +554,16 @@ An agent's side effects come only from its tools. What the model can write is de
 
 #### Turn information in the handler context
 
-| Field                            | Meaning                                                                                                                                                                                                                                                                     |
-| -------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `ctx.playerMessage`              | The text of the current input, as a string                                                                                                                                                                                                                                  |
-| `ctx.logicalTurn`                | The scheduler's logical turn: the number of committed main-loop player turns, plus one. It is in the context of function handlers and plugin tools. Setup, the opening continuation, and the first player message are all turn 1. `startTurn` and `every` also count by it. |
-| `turnNumber` in the tool context | The number of player messages recorded in the session, including the form submission during setup                                                                                                                                                                           |
-| `ctx.session.lastPlayerInput`    | The most recent `PlayerInputSubmission \| null` when the source execution starts. It includes `id/sessionId/turnId/formId/values/createdAt`.                                                                                                                                |
-| `ctx.execution.origin`           | Why this execution runs: `player`, `continuation`, `manual`, `background`, `recursive`, or `resume`                                                                                                                                                                         |
-| `ctx.execution.sourceTurnId`     | When a committed turn is retried, the ID of that turn. Use it as a key so a retry reuses the earlier rolls and reveals instead of drawing again                                                                                                                             |
-| `ctx.recursionDepth`             | `0` for a top-level execution, one more for each level of `ctx.recursiveCall`                                                                                                                                                                                               |
+| Field                            | Meaning                                                                                                                                                                                                                                                                                                                               |
+| -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ctx.playerMessage`              | The text of the current input, as a string                                                                                                                                                                                                                                                                                            |
+| `ctx.logicalTurn`                | The scheduler's logical turn: the number of committed main-loop player turns, plus one. It is in the context of function handlers and plugin tools. Setup, the opening continuation, and the first player message are all turn 1. `startTurn` and `every` also count by it.                                                           |
+| `turnNumber` in the tool context | The number of player messages recorded in the session, including the form submission during setup                                                                                                                                                                                                                                     |
+| `ctx.session.lastPlayerInput`    | The most recent `PlayerInputSubmission \| null` when the source execution starts. It includes `id/sessionId/turnId/formId/values/createdAt`.                                                                                                                                                                                          |
+| `ctx.execution.origin`           | Why this execution runs: `player`, `continuation`, `manual`, `background`, `recursive`, or `resume`                                                                                                                                                                                                                                   |
+| `ctx.execution.sourceTurnId`     | When a committed turn is retried, the ID of that turn. Use it as a key so a retry reuses the earlier rolls and reveals instead of drawing again                                                                                                                                                                                       |
+| `ctx.recursionDepth`             | `0` for a top-level execution, one more for each level of `ctx.recursiveCall`                                                                                                                                                                                                                                                         |
+| `ctx.world.seats`                | The session's [seats](./world-model.md#seats), read-only. The character the player plays now is the SDK's `currentCharacterOf(primarySeat(seats), ctx.world.characters, seats)`; `seatCharacterIds` gives the characters bound to one seat. Guards, tools (`context.world`) and extension providers (`ctx.world`) read the same seats |
 
 `ctx.session.lastPlayerInput` may come from an earlier turn. Having this record does not mean that a form was submitted in this turn.
 
@@ -678,6 +681,7 @@ No bundled plugin uses the fields below, and a first plugin does not need them. 
 | `agent.loop.firstTokenTimeoutMs`, `idleTimeoutMs` | The wait limits of a streaming call. See [Wait limits of a streaming call](#wait-limits-of-a-streaming-call). |
 | `agent.loop.loopDetection` | How many identical calls in a row count as a loop. The default is 3; `0` turns the check off. |
 | `agent.loop.maxRecursionDepth` | How deep `ctx.recursiveCall()` may nest. The default is 10. |
+| `agent.loop.profile`, `stream`, `steering`, `truncation`, `fallback`, `finalizer` | How the loop behaves; see [Loop profile](#loop-profile-agentloopprofile) |
 
 ### Wait limits of a streaming call
 
@@ -696,6 +700,46 @@ How long to wait for the first output:
 | 240 s       | 1            | 120, 120 s                    |
 
 So when a provider accepts the request but never produces any text, there is still time to send the retries. A model that is slow to give its first output (a reasoning model that does not stream its reasoning) should set `firstTokenTimeoutMs` explicitly, and set `timeoutMs` large enough.
+
+### Loop profile (`agent.loop.profile`)
+
+A profile decides how an agent loop runs: whether its text is shown to the player as it is written, whether it reads the player's interjections, whether a reply cut off at the output limit is kept, what happens when the model keeps calling the same tool, and when the tools are turned off to ask for a final answer. Without one, the profile follows `io.visibility`: `story` for a story runtime, `system` for any other. Both bundled narrative runtimes get theirs this way, with nothing written in their manifests.
+
+When only one thing differs from the profile, write only that key; the rest keep the profile's values:
+
+<!-- prettier-ignore -->
+| Field | Effect |
+| --- | --- |
+| `profile` | `story`, `actor` or `system`; the other keys override it |
+| `stream` | Show the model's text to the player as it is written |
+| `steering` | Merge the player's queued interjections into the conversation before each step and after the story text is written |
+| `truncation` | `accept`: story text cut off at the output limit is kept; `reject`: it fails |
+| `fallback` | When the model keeps calling the same tool: `answer-without-tools` turns the tools off and asks for the answer; `fail` fails with `loop-detected` |
+| `finalizer.maxSteps` | At the step limit, turn the tools off and ask once more for the final answer. With `false` the step limit always fails |
+| `finalizer.deadlineReserveMs` | With this many milliseconds left before the time limit, start no new step and ask for the final answer with tools off. `0` turns it off |
+
+The values of the three profiles:
+
+<!-- prettier-ignore -->
+| Field | `story` | `actor` | `system` |
+| --- | --- | --- | --- |
+| `stream` | `true` | `false` | `false` |
+| `steering` | `true` | `false` | `false` |
+| `truncation` | `accept` | `reject` | `reject` |
+| `fallback` | `answer-without-tools` | `answer-without-tools` | `fail` |
+| `finalizer.maxSteps` | `true` | `true` | `true` |
+| `finalizer.deadlineReserveMs` | `0` | `0` | `0` |
+
+`actor` is for an agent that only answers a brief and writes no story text, such as the sub-agents still to come.
+
+Loading checks these rules and rejects a manifest that breaks one:
+
+- `profile: story` requires `io.visibility: story`.
+- A `stream` or `steering` that ends up `true` requires `io.visibility: story`: only a story writes the narrative feed and reads the player's interjections.
+- A `truncation` that ends up `accept` requires a `stream` that ends up `true`: only text the player read as it was written is kept. A story that writes `stream: false` therefore also writes `truncation: reject`.
+- `finalizer.deadlineReserveMs` is a non-negative integer smaller than `timeoutMs` (compared with the default time limit when `timeoutMs` is not written).
+
+**Finishing before the time limit (`deadlineReserveMs`).** When less time than this is left, and text alone could complete the runtime at that moment (no unmet `requireToolUse` or explicit completion, and no output handed over by a completing tool) and at least 3 seconds remain to write it, the loop starts no new step and asks for the final answer with tools off. With `steering` on, player interjections queued during the last step are merged first, so that request reads them. When the answer is written, the runtime succeeds with stop reason `deadline` and `finalizer: true`. When it is not, the runtime still fails with a timeout. The reserve used is at most half of `timeoutMs`, and the time left is measured against the deadline as queue and streaming time have moved it. When the conditions do not hold, the loop runs to the real time limit as usual.
 
 ### Author information
 
@@ -739,6 +783,7 @@ The character schema, the characters, and the world record belong to the kernel'
 - Legal upstream proposals in these domains, and the proposals this runtime has already buffered, are visible to later reads.
 - Writes go through proposals, and they are validated together at commit time.
 - `ctx.world.dimensions` is different. It is a snapshot of the current public values published by a provider, and it follows the separate freezing rules in [Dynamic dimensions](#dynamic-dimensions) below.
+- `ctx.world.seats` holds the session's seats, frozen as well. No proposal changes them; the player switches the current character through the [switch endpoint](./api.md#session-seats), and it applies from the next turn.
 
 **Finding a character by name.** Besides `name`, a character can have `aliases` (other names for the same person).
 
@@ -751,7 +796,7 @@ The rules are in [Aliases and name resolution](./world-model.md#aliases-and-name
 
 **Character types and schema.**
 
-- A character type is an open string declared in the schema. `player` is a reserved type, and each session has at most one.
+- A character type is an open string declared in the schema. `player` is a reserved type, and a session can have several. To find the character the player plays now, use `currentCharacterOf` (see [seats](./world-model.md#seats)), not `find(type === "player")`.
 - Character fields follow the attributes of the CharacterSchema.
 - The proposal that changes the schema is `character.schema.set`. Its payload contains `types` and `attributes` directly. The kernel increments the version.
 

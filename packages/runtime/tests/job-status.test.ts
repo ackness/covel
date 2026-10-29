@@ -341,6 +341,9 @@ describe("job status after the execution commit", () => {
       phase: "playing",
       completedPlayerTurns: 0,
       setupRuntimes: {},
+      seats: [
+        { id: "main", controller: "human", role: "player", characters: "auto" },
+      ],
       activePlugins: [PLUGIN],
       createdAt: now,
       updatedAt: now,

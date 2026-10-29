@@ -85,6 +85,9 @@ const sessionRecord = (phase: "setup" | "playing"): SessionRecord => ({
   phase,
   completedPlayerTurns: phase === "playing" ? 1 : 0,
   setupRuntimes: {},
+  seats: [
+    { id: "main", controller: "human", role: "player", characters: "auto" },
+  ],
   activePlugins: [],
   locale: "en-US",
   createdAt: "2026-05-09T00:00:00.000Z",

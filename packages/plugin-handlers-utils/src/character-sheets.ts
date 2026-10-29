@@ -54,14 +54,16 @@ function withRanges(
 }
 
 /**
- * One line per non-player character: `- name [type] | description | fields`,
- * the name followed by `(aka …)` when the character has aliases. Past the
- * budget the rest are listed by name only, to be looked up when needed. No
- * ids: a model looks characters up by name or alias. The format of the
- * `{{ characters.npcs }}` template variable.
+ * One line per character other than the current one: `- name [type] |
+ * description | fields`, the name followed by `(aka …)` when the character
+ * has aliases. Other player characters are listed too, with their `[player]`
+ * tag. Past the budget the rest are listed by name only, to be looked up when
+ * needed. No ids: a model looks characters up by name or alias. The format of
+ * the `{{ characters.npcs }}` template variable.
  */
 function profileLines(
   characters: readonly ExtensionWorldCharacter[],
+  currentCharacterId: string | undefined,
   locale: string | undefined,
   schema: ExtensionCharacterSchema | null | undefined,
 ): string {
@@ -69,7 +71,7 @@ function profileLines(
   const unlisted: string[] = [];
   let used = 0;
   for (const character of characters) {
-    if (character.type === "player") continue;
+    if (character.id === currentCharacterId) continue;
     const parts = [`- ${characterLabel(character)} [${character.type}]`];
     if (character.description) parts.push(capped(character.description));
     if (hasFields(character.fields))
@@ -98,9 +100,10 @@ function profileLines(
 }
 
 /**
- * The characters of the session as a turn-volatile prompt segment: the
- * player's sheet in `<player-character>` and, with `profiles`, one line per
- * non-player character in `<character-profiles>`.
+ * The characters of the session as a turn-volatile prompt segment: the sheet
+ * of the character the player acts as (`currentCharacterId`) in
+ * `<player-character>` and, with `profiles`, one line per other character in
+ * `<character-profiles>`.
  *
  * A prompt body can interpolate the same data with `{{ player.character }}`
  * and `{{ characters.npcs }}`, but then the system prompt changes whenever a
@@ -113,10 +116,18 @@ function profileLines(
  * covel.provideExtension("prompt.segment@1", "cast", {
  *   handler: (_input, ctx) =>
  *     characterSheetSegments(ctx.world.characters, {
+ *       currentCharacterId: currentCharacterOf(
+ *         primarySeat(ctx.world.seats),
+ *         ctx.world.characters,
+ *         ctx.world.seats,
+ *       )?.id,
  *       schema: ctx.world.characterSchema,
  *     }),
  * });
  * ```
+ *
+ * Without `currentCharacterId` there is no `<player-character>` block, and
+ * the player characters are listed among the profiles.
  *
  * Returns no segment when the session has no character to show. Pass
  * `ctx.locale` as `locale`: the one sentence this writes (the names of the
@@ -129,12 +140,19 @@ export function characterSheetSegments(
   characters: readonly ExtensionWorldCharacter[],
   options: {
     readonly profiles?: boolean;
+    /** The character whose sheet is shown; see `currentCharacterOf`. */
+    readonly currentCharacterId?: string;
     readonly locale?: string;
     readonly schema?: ExtensionCharacterSchema | null;
   } = {},
 ): PromptSegment[] {
   const blocks: string[] = [];
-  const player = characters.find((character) => character.type === "player");
+  const player =
+    options.currentCharacterId === undefined
+      ? undefined
+      : characters.find(
+          (character) => character.id === options.currentCharacterId,
+        );
   if (player) {
     const { id, name, aliases, type, description, fields } = player;
     const projected = modelFacingJson({
@@ -151,7 +169,7 @@ export function characterSheetSegments(
     blocks.push(`<player-character>\n${escapeXml(sheet)}\n</player-character>`);
   }
   const profiles = options.profiles
-    ? profileLines(characters, options.locale, options.schema)
+    ? profileLines(characters, player?.id, options.locale, options.schema)
     : "";
   if (profiles)
     blocks.push(

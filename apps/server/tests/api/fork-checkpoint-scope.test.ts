@@ -229,6 +229,14 @@ describe("fork with a bound dimension provider", () => {
           activePlugins: [PROVIDER],
           completedPlayerTurns: 1,
           setupRuntimes: {},
+          seats: [
+            {
+              id: "main",
+              controller: "human",
+              role: "player",
+              characters: "auto",
+            },
+          ],
           dimensionProviderPluginId: PROVIDER,
         },
       }),

@@ -105,6 +105,9 @@ async function setup(handlers: {
     phase: "playing",
     completedPlayerTurns: 1,
     setupRuntimes: {},
+    seats: [
+      { id: "main", controller: "human", role: "player", characters: "auto" },
+    ],
     locale: "en-US",
     activePlugins: [PLUGIN_ID],
     metadata: {

@@ -143,6 +143,9 @@ describe("POST /api/actions — hook pipeline wired through commit chain", () =>
       locale: "zh-CN",
       phase: "playing",
       setupRuntimes: {},
+      seats: [
+        { id: "main", controller: "human", role: "player", characters: "auto" },
+      ],
       metadata: {
         approvalScopeNonce: globalThis.crypto.randomUUID(),
         sessionIncarnationNonce: globalThis.crypto.randomUUID(),

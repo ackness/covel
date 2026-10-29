@@ -249,6 +249,7 @@ function createPluginDataSetBatchTool(): ToolModule {
 function createPluginDataGetTool(store: PluginDataStore): ToolModule {
   return tool({
     name: "plugin-data-get",
+    annotations: { readOnly: true, concurrencySafe: true, idempotent: true },
     description: "Read one entry from this plugin's persistent store.",
     parameters: z.object({
       namespace: z.string().min(1).describe("Data namespace"),
@@ -310,6 +311,7 @@ function createPluginDataGetTool(store: PluginDataStore): ToolModule {
 function createPluginDataListTool(store: PluginDataStore): ToolModule {
   return tool({
     name: "plugin-data-list",
+    annotations: { readOnly: true, concurrencySafe: true, idempotent: true },
     description:
       "List every entry of one namespace in this plugin's persistent store.",
     parameters: z.object({

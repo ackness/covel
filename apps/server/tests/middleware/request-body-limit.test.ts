@@ -160,6 +160,14 @@ describe("request body limits", () => {
         phase: "playing",
         status: "active",
         setupRuntimes: {},
+        seats: [
+          {
+            id: "main",
+            controller: "human",
+            role: "player",
+            characters: "auto",
+          },
+        ],
         completedPlayerTurns: 0,
         activePlugins: [],
         locale: "zh-CN",

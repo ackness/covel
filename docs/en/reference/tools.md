@@ -16,46 +16,80 @@ There are two kinds of tool:
 ## Overview
 
 <!-- prettier-ignore -->
-| Tool name | Source | Plugin | Approval policy | Description |
-| --- | --- | --- | --- | --- |
-| create-form | builtin | — | auto-allow | Create a player form |
-| create-choices | builtin | — | auto-allow | Create a list of choices |
-| create-notification | builtin | — | auto-allow | Show a notification message |
-| render-ui | builtin | — | auto-allow | Render a UI block with its own part states |
-| plugin-data-set | builtin | — | auto-allow | Write one item of persistent plugin data |
-| plugin-data-set-batch | builtin | — | auto-allow | Write several items of persistent plugin data at once |
-| plugin-data-get | builtin | — | auto-allow | Read the current plugin's persistent data |
-| plugin-data-list | builtin | — | auto-allow | List the current plugin's persistent data |
-| **create-character** | builtin | — | auto-allow | Create a world model character. The type is checked against the schema, and the character is written to characters |
-| **update-character** | builtin | — | auto-allow | Update a character's description or fields by id, name, or alias (shallow merge). Can add aliases. Increments version automatically |
-| **sync-characters** | builtin | — | auto-allow | Create or update characters in one atomic batch. Up to 5 new characters and up to 10 updated characters |
-| **list-characters** | builtin | — | auto-allow | List all characters in this session (session scope, visible across plugins) |
-| **get-character** | builtin | — | auto-allow | Find one character by id, name, or alias |
-| **get-character-schema** | builtin | — | auto-allow | Read the character attribute schema of the current session. Lets character creation resume across turns |
-| **world-dimension-get** | builtin | — | auto-allow | Read current dimension values, frozen for the turn, by ID or path, with paging |
-| **world-dimension-list** | builtin | — | auto-allow | List open dimensions with their ID, name, type, and version. Does not dump values or rules |
-| **emit-event** | builtin | — | auto-allow | Emit a domain event that the current session has declared (one topic at a time). Checks the topic and payload schema |
-| **suspend** | builtin | — | auto-allow | Suspend the current runtime to wait for player input. Writes to the `suspensions` table. Can be resumed through the resume API |
-| **runtime-done** | builtin | — | auto-allow | The end signal for the agent tool loop. Call it after the business tool calls are done to end this runtime |
-| **search-tools** | injected | — | auto-allow | Deferred tool search. The framework injects it automatically when a manifest declares `tools.defer`. It uses BM25 search to find and activate tools that were not preloaded |
-| **memory-search** | builtin | — | auto-allow | Search memory: conversation history and past summaries (recall), plus the long-term knowledge base (archival), which includes lorebook data, characters, and data that plugins declare as searchable |
-| initialize-world | local | world-init | auto-allow | Initialize the world by combining the character attribute schema and the dimension declarations |
-| create-character-form | local | char-creator | auto-allow | Create the opening character form. It collects only the character name and the declared string and enum attributes. Numeric and composite attributes keep their defaults |
-| update-affinity | local | affinity | auto-allow | Apply this turn's affinity changes between the player and NPCs in one batch. An unknown name starts at 0. Scores add up across turns and are limited to [-100, 100] |
-| advance-world-time | local | world-time | auto-allow | Settle the world time that passes in this turn's narrative. Submits a duration, not calendar math. In random mode the amount is left out. Submitted together with the story |
-| dimension-rule-get | local | world-init | auto-allow | During maintenance, read private rules or value schemas with paging |
-| update-dimensions | local | world-init | auto-allow | Bind to this turn's narrative. Update the whole batch with compare-and-swap (CAS), or explicitly settle that nothing changed |
-| submit-world-facts | local | world-ir | auto-allow | Submit and validate a complete `contract:world-ir@1` as function calling arguments |
-| sync-codex-entries | local | codex | auto-allow | Submit this turn's codex changes at once. Creates or adds to entries by title |
-| generate-guide | local | guide | auto-allow | Write a plot summary, the current decisions, and quick replies in the player's voice, atomically |
-| upsert-npc-graph | local | npc-graph | auto-allow | Write NPC nodes and relationship edges in one batch. Refers to nodes by name. The tool removes duplicates and assigns short IDs |
-| plan-story-events | local | story-events | auto-allow | Validate the hidden future story events the plot plans (up to 2 per call). Can withdraw planned events that have not happened yet |
-| submit-dashscope-text-prompt | local | dashscope-image-gen | auto-allow | Submit a text scene prompt and emit the fixed DashScope image event |
-| submit-dashscope-structured-prompt | local | dashscope-image-gen | auto-allow | Submit a structured scene prompt and emit the fixed DashScope image event |
-| submit-openai-image-text-prompt | local | openai-image-gen | auto-allow | Submit a text scene prompt and emit the fixed OpenAI-compatible image event |
-| submit-openai-image-structured-prompt | local | openai-image-gen | auto-allow | Submit a structured scene prompt and emit the fixed OpenAI-compatible image event |
+| Tool name | Source | Plugin | Approval policy | Description | annotations |
+| --- | --- | --- | --- | --- | --- |
+| create-form | builtin | — | auto-allow | Create a player form | defaults |
+| create-choices | builtin | — | auto-allow | Create a list of choices | defaults |
+| create-notification | builtin | — | auto-allow | Show a notification message | defaults |
+| render-ui | builtin | — | auto-allow | Render a UI block with its own part states | defaults |
+| plugin-data-set | builtin | — | auto-allow | Write one item of persistent plugin data | defaults |
+| plugin-data-set-batch | builtin | — | auto-allow | Write several items of persistent plugin data at once | defaults |
+| plugin-data-get | builtin | — | auto-allow | Read the current plugin's persistent data | `readOnly`, `idempotent`, `concurrencySafe` |
+| plugin-data-list | builtin | — | auto-allow | List the current plugin's persistent data | `readOnly`, `idempotent`, `concurrencySafe` |
+| **create-character** | builtin | — | auto-allow | Create a world model character. The type is checked against the schema, and the character is written to characters | defaults |
+| **update-character** | builtin | — | auto-allow | Update a character's description or fields by id, name, or alias (shallow merge). Can add aliases. Increments version automatically | defaults |
+| **sync-characters** | builtin | — | auto-allow | Create or update characters in one atomic batch. Up to 5 new characters and up to 10 updated characters | defaults |
+| **list-characters** | builtin | — | auto-allow | List all characters in this session (session scope, visible across plugins) | defaults |
+| **get-character** | builtin | — | auto-allow | Find one character by id, name, or alias | defaults |
+| **get-character-schema** | builtin | — | auto-allow | Read the character attribute schema of the current session. Lets character creation resume across turns | defaults |
+| **world-dimension-get** | builtin | — | auto-allow | Read current dimension values, frozen for the turn, by ID or path, with paging | `readOnly`, `idempotent`, `concurrencySafe` |
+| **world-dimension-list** | builtin | — | auto-allow | List open dimensions with their ID, name, type, and version. Does not dump values or rules | `readOnly`, `idempotent`, `concurrencySafe` |
+| **emit-event** | builtin | — | auto-allow | Emit a domain event that the current session has declared (one topic at a time). Checks the topic and payload schema | defaults |
+| **suspend** | builtin | — | auto-allow | Suspend the current runtime to wait for player input. Writes to the `suspensions` table. Can be resumed through the resume API | defaults |
+| **runtime-done** | builtin | — | auto-allow | The end signal for the agent tool loop. Call it after the business tool calls are done to end this runtime | defaults |
+| **search-tools** | injected | — | auto-allow | Deferred tool search. The framework injects it automatically when a manifest declares `tools.defer`. It uses BM25 search to find and activate tools that were not preloaded | — |
+| **memory-search** | builtin | — | auto-allow | Search memory: conversation history and past summaries (recall), plus the long-term knowledge base (archival), which includes lorebook data, characters, and data that plugins declare as searchable | `readOnly`, `idempotent`, `concurrencySafe` |
+| initialize-world | local | world-init | auto-allow | Initialize the world by combining the character attribute schema and the dimension declarations | defaults |
+| create-character-form | local | char-creator | auto-allow | Create the opening character form. It collects only the character name and the declared string and enum attributes. Numeric and composite attributes keep their defaults | defaults |
+| update-affinity | local | affinity | auto-allow | Apply this turn's affinity changes between the player and NPCs in one batch. An unknown name starts at 0. Scores add up across turns and are limited to [-100, 100] | defaults |
+| advance-world-time | local | world-time | auto-allow | Settle the world time that passes in this turn's narrative. Submits a duration, not calendar math. In random mode the amount is left out. Submitted together with the story | defaults |
+| dimension-rule-get | local | world-init | auto-allow | During maintenance, read private rules or value schemas with paging | defaults |
+| update-dimensions | local | world-init | auto-allow | Bind to this turn's narrative. Update the whole batch with compare-and-swap (CAS), or explicitly settle that nothing changed | defaults |
+| submit-world-facts | local | world-ir | auto-allow | Submit and validate a complete `contract:world-ir@1` as function calling arguments | defaults |
+| sync-codex-entries | local | codex | auto-allow | Submit this turn's codex changes at once. Creates or adds to entries by title | defaults |
+| generate-guide | local | guide | auto-allow | Write a plot summary, the current decisions, and quick replies in the player's voice, atomically | defaults |
+| upsert-npc-graph | local | npc-graph | auto-allow | Write NPC nodes and relationship edges in one batch. Refers to nodes by name. The tool removes duplicates and assigns short IDs | defaults |
+| plan-story-events | local | story-events | auto-allow | Validate the hidden future story events the plot plans (up to 2 per call). Can withdraw planned events that have not happened yet | defaults |
+| submit-dashscope-text-prompt | local | dashscope-image-gen | auto-allow | Submit a text scene prompt and emit the fixed DashScope image event | defaults |
+| submit-dashscope-structured-prompt | local | dashscope-image-gen | auto-allow | Submit a structured scene prompt and emit the fixed DashScope image event | defaults |
+| submit-openai-image-text-prompt | local | openai-image-gen | auto-allow | Submit a text scene prompt and emit the fixed OpenAI-compatible image event | defaults |
+| submit-openai-image-structured-prompt | local | openai-image-gen | auto-allow | Submit a structured scene prompt and emit the fixed OpenAI-compatible image event | defaults |
 
 Every tool of a bundled plugin must appear in this table. `apps/server/tests/lib/reference-tables.test.ts` checks this.
+
+## Annotations and timeout
+
+Use `tool({ annotations, timeoutMs, ... })` to describe a tool's side effects and per-call time limit. `tool()` resolves four booleans. Without annotations, a tool is treated as writing and unsafe for concurrent execution.
+
+<!-- prettier-ignore -->
+| Annotation | Default | Meaning |
+| --- | --- | --- |
+| `readOnly` | `false` | Only reads data; returns no write proposals or domain events |
+| `stagesWrites` | `!readOnly` | Stages writes for the execution transaction to commit |
+| `idempotent` | `false` | Repeating the call with identical arguments adds no side effects |
+| `concurrencySafe` | `false` | Safe to execute concurrently with other reads; requires `readOnly: true` |
+
+```js
+tool({
+  name: "lookup-note",
+  description: "Read one saved note.",
+  parameters: z.object({ key: z.string() }),
+  annotations: { readOnly: true, idempotent: true, concurrencySafe: true },
+  timeoutMs: 5000,
+  execute: async ({ key }, context) =>
+    context.store.getPluginData("notes", key),
+});
+```
+
+These definitions throw when `tool()` is called, with an error starting with `Tool "<name>":`: combining `readOnly: true` and `stagesWrites: true`; setting `concurrencySafe: true` without `readOnly: true`; or a `timeoutMs` that is not an integer in `[1, 600000]`. The registry also validates all four annotations and the timeout. Hand-built `ToolModule` objects must supply complete annotations; plugins using `tool()` receive the defaults automatically. Annotations and timeouts are framework metadata. Model definitions still contain only the name, description and parameter schema.
+
+Omitting `timeoutMs` sets no per-tool limit; the runtime deadline still applies. A tool timeout returns `success: false`, `code: "TIMEOUT"`, records a failed call and emits `tool.failed`. The tool loop can continue. The invocation's authority and signal are revoked; proposals, domain events and late results are discarded. The executor retains ownership of the callback and waits for it during shutdown. Parent cancellation from a runtime deadline, player stop or executor shutdown still produces `CANCELLED`.
+
+If a `readOnly: true` tool returns proposals or domain events, the call fails with `EXECUTION_ERROR` and a message containing `read-only tool returned writes`. This check runs before recording success or emitting `tool.completed`, and all writes are discarded. Other annotations are author declarations and do not imply that storage has committed.
+
+In the overview table, “defaults” means the default combination above; `—` means the loop handles the call directly without module annotations. Character tools currently retain defaults too. The SDK's `FRAMEWORK_TOOL_NAMES` is the single source of reserved names. A test checks equality in both directions against the default registry, optional memory tools and `search-tools`.
+
+If a declared `tools.plugin` tool is not registered, even when deferred by `tools.defer`, the runtime fails before calling the model: `runtime "<id>" declares plugin tool "<name>", but its plugin did not register it`. A builtin capability absent from the host is still omitted with a warning: `builtin tool "<name>" is not installed on this host — not offered`.
 
 ## How tool calls work
 
@@ -829,7 +863,7 @@ The id of a new character is made from its name, and it is a readable word form 
 - Names are compared by the [normalization rules](./world-model.md#aliases-and-name-resolution). Differences in case, full-width and half-width characters, whitespace, and the middle dot do not count.
 - When the name is an **alias** of any existing character, the tool returns that character and creates nothing, whatever the type.
 - When creating `type: "player"`, if the name is the name or alias of another character, the tool reports an error and asks for a different name for the player. A player cannot be an NPC that already exists in the world.
-- There is at most one player per session. The other types come from the schema's `types`.
+- A session can have several players. A new player character is bound to the default seat automatically (see [seats](./world-model.md#seats)). The other types come from the schema's `types`.
 
 **Example `_text` the model sees**:
 

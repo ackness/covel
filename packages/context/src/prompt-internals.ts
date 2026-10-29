@@ -355,22 +355,25 @@ const capped = (text: string) =>
     : text;
 
 /**
- * `{{ characters.npcs }}`: every non-player character's description and
- * fields, one line each, so a template can give the model the profiles up
- * front instead of a `get-character` round trip per person. Past the budget
- * the rest are listed by name only, to be looked up when needed. A name is
- * followed by `(aka …)` when the character has aliases. No ids: a model
- * looks characters up by name or alias.
+ * `{{ characters.npcs }}`: the description and fields of every character
+ * except the one the player acts as, one line each, so a template can give
+ * the model the profiles up front instead of a `get-character` round trip per
+ * person. Other player characters are listed with their `[player]` tag. Past
+ * the budget the rest are listed by name only, to be looked up when needed. A
+ * name is followed by `(aka …)` when the character has aliases. No ids: a
+ * model looks characters up by name or alias.
  */
 export function renderNpcProfiles(
   characters: readonly CharacterSummary[],
   locale?: string,
+  currentCharacterId?: string,
 ): string {
   const lines: string[] = [];
   const unlisted: string[] = [];
   let used = 0;
   for (const character of characters) {
-    if (character.type === "player") continue;
+    if (currentCharacterId !== undefined && character.id === currentCharacterId)
+      continue;
     const parts = [`- ${characterLabel(character)} [${character.type}]`];
     if (character.description) parts.push(capped(character.description));
     if (character.fields && Object.keys(character.fields).length > 0)
@@ -424,8 +427,13 @@ export function assemblePromptVariables(
     byRuntime[runtimeId] = result.output;
   }
 
+  // The character the player acts as: the primary seat's current character.
+  const currentCharacterId = sessionMeta?.currentCharacterId;
   const playerChar =
-    sessionMeta?.characters?.find((c) => c.type === "player") ?? null;
+    currentCharacterId === undefined
+      ? null
+      : (sessionMeta?.characters?.find((c) => c.id === currentCharacterId) ??
+        null);
 
   // The latest form submission renders as JSON, and as nothing when the form
   // had no values.
@@ -444,7 +452,11 @@ export function assemblePromptVariables(
       turnNumber: sessionMeta?.turnNumber ?? 0,
     },
     characters: {
-      npcs: renderNpcProfiles(sessionMeta?.characters ?? [], turnInput.locale),
+      npcs: renderNpcProfiles(
+        sessionMeta?.characters ?? [],
+        turnInput.locale,
+        currentCharacterId,
+      ),
     },
     player: {
       message: turnInput.playerMessage,

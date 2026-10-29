@@ -41,6 +41,9 @@ const session: SessionRecord = {
   phase: "setup",
   completedPlayerTurns: 0,
   setupRuntimes: {},
+  seats: [
+    { id: "main", controller: "human", role: "player", characters: "auto" },
+  ],
   activePlugins: ["pregame", "world-init"],
   locale: "en-US",
   createdAt: "2026-08-09T00:00:00.000Z",

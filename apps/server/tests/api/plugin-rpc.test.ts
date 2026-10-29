@@ -157,6 +157,9 @@ async function seedSession(
   await store.createSession({
     phase: "playing",
     setupRuntimes: {},
+    seats: [
+      { id: "main", controller: "human", role: "player", characters: "auto" },
+    ],
     metadata: {
       approvalScopeNonce: globalThis.crypto.randomUUID(),
       sessionIncarnationNonce: globalThis.crypto.randomUUID(),
@@ -1300,6 +1303,9 @@ async function seedRuntimeSession(
   await store.createSession({
     phase: "playing",
     setupRuntimes: {},
+    seats: [
+      { id: "main", controller: "human", role: "player", characters: "auto" },
+    ],
     metadata: {
       approvalScopeNonce: globalThis.crypto.randomUUID(),
       sessionIncarnationNonce: globalThis.crypto.randomUUID(),
@@ -2611,6 +2617,9 @@ describe("POST /api/sessions/:id/plugin-rpc — runtime mode (M8b)", () => {
     await store.createSession({
       phase: "playing",
       setupRuntimes: {},
+      seats: [
+        { id: "main", controller: "human", role: "player", characters: "auto" },
+      ],
       metadata: {
         approvalScopeNonce: globalThis.crypto.randomUUID(),
         sessionIncarnationNonce: globalThis.crypto.randomUUID(),
@@ -2867,6 +2876,9 @@ describe("POST /api/sessions/:id/plugin-rpc — runtime mode (M8b)", () => {
     await store.createSession({
       phase: "playing",
       setupRuntimes: {},
+      seats: [
+        { id: "main", controller: "human", role: "player", characters: "auto" },
+      ],
       metadata: {
         approvalScopeNonce: globalThis.crypto.randomUUID(),
         sessionIncarnationNonce: globalThis.crypto.randomUUID(),

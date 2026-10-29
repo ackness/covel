@@ -91,6 +91,9 @@ async function run(
     status: "active",
     phase: "playing",
     setupRuntimes: options.setupRuntimes ?? {},
+    seats: [
+      { id: "main", controller: "human", role: "player", characters: "auto" },
+    ],
     activePlugins: ["probe"],
     completedPlayerTurns: 0,
     createdAt: timestamp,
@@ -479,6 +482,9 @@ describe("recursiveCall results at commit", () => {
       status: "active",
       phase: "playing",
       setupRuntimes: {},
+      seats: [
+        { id: "main", controller: "human", role: "player", characters: "auto" },
+      ],
       activePlugins: ["probe"],
       completedPlayerTurns: 0,
       createdAt: timestamp,
@@ -814,6 +820,14 @@ describe("recursiveCall results at commit", () => {
         status: "active",
         phase: "playing",
         setupRuntimes: {},
+        seats: [
+          {
+            id: "main",
+            controller: "human",
+            role: "player",
+            characters: "auto",
+          },
+        ],
         activePlugins: ["probe"],
         completedPlayerTurns: 0,
         createdAt: "2026-10-29T00:00:00.000Z",

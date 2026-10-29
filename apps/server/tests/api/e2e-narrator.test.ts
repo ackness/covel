@@ -284,6 +284,80 @@ describe("E2E: Narrator game flow", () => {
     expect(userMsgs.at(-1)?.content).toContain("走进了黑暗的森林");
   });
 
+  it("renders the character a seat switch selected in the next turn's sheet", async () => {
+    const startRes = await app.request("/api/sessions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ locale: "en-US", plugins: ["narrator"] }),
+    });
+    const { id: sessionId } = (await startRes.json()) as { id: string };
+    await markPreGameComplete(sessionId);
+    const now = new Date().toISOString();
+    for (const [id, name] of [
+      ["pc-ada", "Ada Vane"],
+      ["pc-lin", "Lin Moor"],
+    ] as const)
+      await store.upsertCharacter({
+        id,
+        sessionId,
+        name,
+        type: "player",
+        version: 1,
+        createdAt: now,
+        updatedAt: now,
+      });
+
+    const sheetOfTurn = async (requestId: string) => {
+      const before = mockLLM.allMessages.length;
+      const res = await app.request("/api/actions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          requestId,
+          type: "send_message",
+          sessionId,
+          payload: { content: "look around" },
+        }),
+      });
+      expect(
+        (await drainActionStream(res)).map((event) => event.type),
+      ).not.toContain("error.occurred");
+      const text = mockLLM.allMessages
+        .slice(before)
+        .flat()
+        .map((message) => message.content)
+        .find((content) => content.includes("<player-character>\n"));
+      expect(text).toBeDefined();
+      const sheet = text!.slice(
+        text!.indexOf("<player-character>"),
+        text!.indexOf("</player-character>"),
+      );
+      const profiles = text!.slice(text!.indexOf("<character-profiles>"));
+      return { sheet, profiles };
+    };
+
+    // The default seat binds both; the first one is current.
+    const first = await sheetOfTurn("req-seat-1");
+    expect(first.sheet).toContain("Ada Vane");
+    expect(first.profiles).toContain("- Lin Moor [player]");
+
+    const switched = await app.request(
+      `/api/sessions/${sessionId}/seats/main`,
+      {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ currentCharacterId: "pc-lin" }),
+      },
+    );
+    expect(switched.status).toBe(200);
+
+    const second = await sheetOfTurn("req-seat-2");
+    expect(second.sheet).toContain("Lin Moor");
+    expect(second.sheet).not.toContain("Ada Vane");
+    expect(second.profiles).toContain("- Ada Vane [player]");
+    expect(second.profiles).not.toContain("Lin Moor");
+  });
+
   it("should handle multiple turns in sequence", async () => {
     // Create session
     const startRes = await app.request("/api/sessions", {

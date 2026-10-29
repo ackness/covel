@@ -65,6 +65,11 @@ export const sessions = sqliteTable("sessions", {
   phase: text("phase").notNull().default("setup"),
   completedPlayerTurns: integer("completed_player_turns").notNull().default(0),
   setupRuntimes: text("setup_runtimes").notNull().default("{}"), // JSON Record<runtimeId, SetupRuntimeState>
+  seats: text("seats")
+    .notNull()
+    .default(
+      '[{"id":"main","controller":"human","role":"player","characters":"auto"}]',
+    ), // JSON Seat[]
 });
 
 // ── Turn Results ────────────────────────────────────────────────

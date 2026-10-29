@@ -182,6 +182,14 @@ runtime:
         locale: "en-US",
         completedPlayerTurns: 0,
         setupRuntimes: {},
+        seats: [
+          {
+            id: "main",
+            controller: "human",
+            role: "player",
+            characters: "auto",
+          },
+        ],
         activePlugins: [pluginId],
         metadata: {
           ownerTokenHash: hashSessionOwnerToken(owner),

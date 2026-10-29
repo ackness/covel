@@ -98,7 +98,12 @@ describe("entry publication", () => {
 
   it("rolls back a failed publication across tools, hooks, RPC, and every wire kind", async () => {
     const { batch, params, api } = fixture();
-    const existing = { name: "existing", _type: "covel-tool" } as ToolModule;
+    const existing: ToolModule = api.toolkit.tool({
+      name: "existing",
+      description: "Existing tool.",
+      parameters: api.toolkit.z.object({}),
+      execute: async () => ({}),
+    });
     params.tools.pluginTools.set("other", new Map([["existing", existing]]));
     const hook = vi.fn(async () => ({ action: "continue" as const }));
     api.registerTool(

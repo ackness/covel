@@ -59,6 +59,9 @@ const snapshot = {
     phase: "playing" as const,
     completedPlayerTurns: 2,
     setupRuntimes: {},
+    seats: [
+      { id: "main", controller: "human", role: "player", characters: "auto" },
+    ] as const,
   },
   messages: [],
   submittedInteractions: [],

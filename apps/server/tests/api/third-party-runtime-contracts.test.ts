@@ -119,6 +119,9 @@ describe("runtime contracts through an installed community package", () => {
       id: sessionId,
       phase: "playing",
       setupRuntimes: {},
+      seats: [
+        { id: "main", controller: "human", role: "player", characters: "auto" },
+      ],
       status: "active",
       completedPlayerTurns: 0,
       activePlugins: [],

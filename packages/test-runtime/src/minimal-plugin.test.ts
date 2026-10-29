@@ -56,6 +56,9 @@ async function runTurn(pluginsDir: string, pluginId: string, llm: MockLLM) {
       phase: "playing",
       completedPlayerTurns: 0,
       setupRuntimes: {},
+      seats: [
+        { id: "main", controller: "human", role: "player", characters: "auto" },
+      ],
       activePlugins: bundle.pluginIds,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),

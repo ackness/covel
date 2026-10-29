@@ -201,7 +201,12 @@ export class PluginExtensionHost {
     scope: PluginExtensionExecutionScope,
   ): PluginExtensionExecution {
     const world = structuredClone(
-      scope.world ?? { characterSchema: null, characters: [], dimensions: {} },
+      scope.world ?? {
+        characterSchema: null,
+        characters: [],
+        dimensions: {},
+        seats: [],
+      },
     );
     const reads = new Map<
       string,

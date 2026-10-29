@@ -121,6 +121,9 @@ async function fixture(withRuntime = false, activateEntry = true) {
       pluginSelection: { requested: [id], excluded: [] },
     },
     setupRuntimes: {},
+    seats: [
+      { id: "main", controller: "human", role: "player", characters: "auto" },
+    ],
     completedPlayerTurns: 0,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),

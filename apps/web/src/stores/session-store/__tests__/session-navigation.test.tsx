@@ -38,6 +38,9 @@ const session: SessionRecord = {
   phase: "setup",
   completedPlayerTurns: 0,
   setupRuntimes: {},
+  seats: [
+    { id: "main", controller: "human", role: "player", characters: "auto" },
+  ],
   activePlugins: [],
   locale: "en-US",
   createdAt: world.createdAt,

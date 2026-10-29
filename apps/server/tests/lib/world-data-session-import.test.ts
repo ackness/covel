@@ -84,6 +84,9 @@ async function makeStore(activePlugins: readonly string[]): Promise<DataStore> {
   await store.createSession({
     phase: "playing",
     setupRuntimes: {},
+    seats: [
+      { id: "main", controller: "human", role: "player", characters: "auto" },
+    ],
     metadata: {
       approvalScopeNonce: globalThis.crypto.randomUUID(),
       sessionIncarnationNonce: globalThis.crypto.randomUUID(),
@@ -110,6 +113,9 @@ async function addSession(
   await store.createSession({
     phase: "playing",
     setupRuntimes: {},
+    seats: [
+      { id: "main", controller: "human", role: "player", characters: "auto" },
+    ],
     metadata: {
       approvalScopeNonce: globalThis.crypto.randomUUID(),
       sessionIncarnationNonce: globalThis.crypto.randomUUID(),
@@ -2753,6 +2759,9 @@ describe("world data session importer", () => {
     await store.createSession({
       phase: "playing",
       setupRuntimes: {},
+      seats: [
+        { id: "main", controller: "human", role: "player", characters: "auto" },
+      ],
       metadata: {
         approvalScopeNonce: globalThis.crypto.randomUUID(),
         sessionIncarnationNonce: globalThis.crypto.randomUUID(),
@@ -2819,6 +2828,9 @@ describe("world data session importer", () => {
     await store.createSession({
       phase: "playing",
       setupRuntimes: {},
+      seats: [
+        { id: "main", controller: "human", role: "player", characters: "auto" },
+      ],
       metadata: {
         approvalScopeNonce: globalThis.crypto.randomUUID(),
         sessionIncarnationNonce: globalThis.crypto.randomUUID(),
@@ -2927,6 +2939,14 @@ describe("world data session importer", () => {
       await store.createSession({
         phase: "playing",
         setupRuntimes: {},
+        seats: [
+          {
+            id: "main",
+            controller: "human",
+            role: "player",
+            characters: "auto",
+          },
+        ],
         metadata: {
           approvalScopeNonce: globalThis.crypto.randomUUID(),
           sessionIncarnationNonce: globalThis.crypto.randomUUID(),
@@ -3228,6 +3248,25 @@ describe("plugin data in character records", () => {
         "contract:character.blueprints@1:npc-mara",
       ]),
     );
+  });
+
+  it("imports several player characters across the world's sources", async () => {
+    const { store, result } = await importCast(
+      await castWorld([
+        { id: "pc-ada", name: "艾达", type: "player" },
+        { id: "pc-lin", name: "林", type: "player" },
+        rook,
+      ]),
+      [],
+    );
+    expect(result.diagnostics.filter((d) => d.level === "error")).toEqual([]);
+    expect(
+      (await store.listCharacters("sess-1")).map(({ id, type }) => [id, type]),
+    ).toEqual([
+      ["pc-ada", "player"],
+      ["pc-lin", "player"],
+      ["npc-rook", "npc"],
+    ]);
   });
 
   it("creates the same characters without the plugin, and leaves the notes out", async () => {

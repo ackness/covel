@@ -66,7 +66,10 @@ export { WORLD_LORE_TOKEN_BUDGET, fitWorldLore } from "./world-lore.js";
 export type { FittedWorldLore } from "./world-lore.js";
 
 // ── Session Context Snapshot Loader (Sprint 1) ───────────────────
-export { buildSessionContextSnapshot } from "./session-context.js";
+export {
+  buildSessionContextSnapshot,
+  currentCharacterField,
+} from "./session-context.js";
 export type { BuildSessionContextSnapshotOpts } from "./session-context.js";
 
 // ── Branch Reply History Projection ─────────────────────────────

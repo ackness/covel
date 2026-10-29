@@ -11,6 +11,9 @@ const baseSession: SessionRecord = {
   phase: "playing",
   completedPlayerTurns: 1,
   setupRuntimes: {},
+  seats: [
+    { id: "main", controller: "human", role: "player", characters: "auto" },
+  ],
   activePlugins: [],
   locale: "en-US",
   createdAt: "2026-05-23T00:00:00.000Z",

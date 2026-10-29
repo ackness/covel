@@ -74,6 +74,9 @@ it("creates a third-party form from the real world-init guard in the first setup
       status: "active",
       phase: "setup",
       setupRuntimes: {},
+      seats: [
+        { id: "main", controller: "human", role: "player", characters: "auto" },
+      ],
       completedPlayerTurns: 0,
       activePlugins: ["world-init", tabletopProbeId],
       locale: "en-US",

@@ -58,6 +58,14 @@ describe("source player input snapshot", () => {
         phase: "playing",
         completedPlayerTurns: 0,
         setupRuntimes: {},
+        seats: [
+          {
+            id: "main",
+            controller: "human",
+            role: "player",
+            characters: "auto",
+          },
+        ],
         activePlugins: ["function", "guard"],
         createdAt: form.createdAt,
         updatedAt: form.createdAt,

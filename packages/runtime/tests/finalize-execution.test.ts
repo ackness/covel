@@ -787,6 +787,9 @@ describe("finalizeExecution", () => {
       status: "active",
       completedPlayerTurns: 0,
       setupRuntimes: {},
+      seats: [
+        { id: "main", controller: "human", role: "player", characters: "auto" },
+      ],
       activePlugins: ["rt-a", "rt-b"],
       createdAt: now,
       updatedAt: now,
@@ -1455,6 +1458,14 @@ describe("finalizeExecution — plugin.data.update", () => {
         status: "active",
         phase: "playing",
         setupRuntimes: {},
+        seats: [
+          {
+            id: "main",
+            controller: "human",
+            role: "player",
+            characters: "auto",
+          },
+        ],
         activePlugins: ["bank"],
         completedPlayerTurns: 0,
         createdAt: new Date().toISOString(),

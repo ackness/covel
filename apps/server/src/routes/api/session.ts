@@ -4,7 +4,11 @@ import {
   sessionEventBus,
 } from "./session/session-events.js";
 import { withSettledSessionLock } from "./plugin-rpc/settled-request.js";
-import { characterSchemaSchema, sessionContentLocale } from "@covel/shared";
+import {
+  characterSchemaSchema,
+  defaultSessionSeats,
+  sessionContentLocale,
+} from "@covel/shared";
 /**
  * Session routes — RESTful CRUD + session-scoped plugin management.
  *
@@ -88,6 +92,7 @@ import type { SessionRouteEnv } from "./session/route-env.js";
 import { registerSessionViewRoute } from "./session/view-route.js";
 import { registerSessionDeleteRoute } from "./session/delete-route.js";
 import { registerSessionMemoryIndexRoutes } from "./session/memory-index-route.js";
+import { registerSessionSeatRoutes } from "./session/seat-routes.js";
 import {
   fireSessionEnd,
   lifecycleLeaseIsFresh,
@@ -167,6 +172,7 @@ registerSessionPluginRoutes(sessionRoutes);
 registerSessionViewRoute(sessionRoutes);
 registerSessionDeleteRoute(sessionRoutes);
 registerSessionMemoryIndexRoutes(sessionRoutes);
+registerSessionSeatRoutes(sessionRoutes);
 
 /**
  * Whether any plugin in the set declares a setup-stage runtime. Discovered by
@@ -372,6 +378,7 @@ sessionRoutes.post("/", async (c) => {
     phase,
     completedPlayerTurns: 0,
     setupRuntimes: {},
+    seats: defaultSessionSeats(),
     // Persist selection; execution and lifecycle hooks use only live grants.
     activePlugins: plugins,
     createdAt: now,

@@ -232,6 +232,8 @@ Limits to remember:
 
 Characters, character field definitions and the lorebook are kept by Covel and shared by all plugins. Read them through `ctx.world`. To change them, submit a request. Do not copy characters into your own data namespace, and do not read another plugin's private data.
 
+A session may have several `type: player` characters, and the session's seats decide which one the player is acting as right now. To find "the player's character", use the SDK helpers rather than `find(type === "player")`; see [Local code · Who the player is](./local-code.md#who-the-player-is).
+
 ### When you want the world author to supply this data
 
 Declare `version`, `schema` and `accepts` for a data namespace in `contributes.data`. Then a world package can import content into it. Adding `authoring` lets world authors and authoring tools know how to write the content. For how to do this, see [advanced · data contracts and world import](./advanced.md#data-contracts-and-world-import) and the [world data reference](../reference/world-data.md).

@@ -26,6 +26,9 @@ async function fixture(
     phase: "playing",
     completedPlayerTurns: 1,
     setupRuntimes: {},
+    seats: [
+      { id: "main", controller: "human", role: "player", characters: "auto" },
+    ],
     activePlugins: ["alpha", "beta"],
     metadata: { sessionIncarnationNonce: "ui-incarnation" },
     createdAt: "2026-01-01",

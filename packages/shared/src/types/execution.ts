@@ -74,7 +74,10 @@ export type StopReason =
 /** How an agent loop ended: the reason, and the details that qualify it. */
 export interface LoopStop {
   readonly reason: StopReason;
-  /** A final answer without tools produced the output after the step limit. */
+  /**
+   * A final answer without tools produced the output after the step limit
+   * or the deadline reserve.
+   */
   readonly finalizer?: true;
   /** Who cancelled the loop; set only with `reason: "cancelled"`. */
   readonly cancelledBy?: "player" | "parent" | "hook" | "host";

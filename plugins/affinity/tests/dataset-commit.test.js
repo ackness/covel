@@ -70,6 +70,9 @@ async function fixture(invalidWrite) {
     status: "active",
     phase: "playing",
     setupRuntimes: {},
+    seats: [
+      { id: "main", controller: "human", role: "player", characters: "auto" },
+    ],
     completedPlayerTurns: 0,
     activePlugins: ["affinity", "story", "facts"],
     createdAt: now,

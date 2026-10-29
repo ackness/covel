@@ -651,6 +651,12 @@ describe("runAgentToolLoop core", () => {
         initialState: {
           completionCalls: [{ name, success: true, done: false }],
         },
+        deps: {
+          toolExecutor: createToolExecutor({
+            findTool: (tool) =>
+              tool === "submit" ? { ...markTool, name: "submit" } : markTool,
+          }),
+        },
       });
       expect(result.requiredToolUseUnmet).toBe(name !== "submit");
       expect(llm.calls).toBe(name === "submit" ? 1 : 2);

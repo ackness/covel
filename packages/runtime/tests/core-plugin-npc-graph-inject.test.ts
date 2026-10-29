@@ -57,6 +57,9 @@ async function createMainLoopStore(sessionId: string): Promise<DataStore> {
     phase: "playing",
     completedPlayerTurns: 1,
     setupRuntimes: {},
+    seats: [
+      { id: "main", controller: "human", role: "player", characters: "auto" },
+    ],
     locale: "zh-CN",
     activePlugins: ["npc-graph", "narrator"],
     createdAt: "2026-01-01T00:00:00.000Z",

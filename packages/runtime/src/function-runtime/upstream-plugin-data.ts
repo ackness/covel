@@ -24,11 +24,16 @@
 
 import {
   applyDataOps,
+  isHiddenPluginDataNamespace,
   type DataOpsCurrent,
+  type JsonValue,
   type Proposal,
   type RuntimeResult,
 } from "@covel/shared";
+import type { PluginServiceContext } from "@covel/shared/plugin-runtime";
+import type { DataStore } from "@covel/store";
 import { overlayPluginDataValue } from "@covel/tools";
+import { mergePluginDataRows } from "./execution-write-buffer.js";
 import { inCommitOrder } from "../turn-executor/nested-results.js";
 import { commitEligibility } from "../session/session-runtime-result.js";
 import {
@@ -131,6 +136,10 @@ export interface PluginDataVisibility {
   readonly runtimeId: string;
   readonly runId: string | undefined;
   readonly writes: readonly UpstreamPluginDataWrite[];
+  /** Kernel-only snapshot of another provider's upstream writes. */
+  readonly upstreamOf?: (
+    pluginId: string,
+  ) => readonly UpstreamPluginDataWrite[];
   /** Shared by every read of the invocation: handler, store, tools. */
   readonly recorder: ReadRecorder;
   readonly probe?: PluginDataReadProbe;
@@ -142,6 +151,7 @@ export function createPluginDataVisibility(options: {
   readonly runtimeId: string;
   readonly runId?: string;
   readonly writes?: readonly UpstreamPluginDataWrite[];
+  readonly upstreamOf?: PluginDataVisibility["upstreamOf"];
   readonly probe?: PluginDataReadProbe;
 }): PluginDataVisibility {
   return {
@@ -149,8 +159,98 @@ export function createPluginDataVisibility(options: {
     runtimeId: options.runtimeId,
     runId: options.runId,
     writes: options.writes ?? [],
+    ...(options.upstreamOf ? { upstreamOf: options.upstreamOf } : {}),
     recorder: createReadRecorder(),
     ...(options.probe ? { probe: options.probe } : {}),
+  };
+}
+
+/** A service reads its provider's data but records on the calling invocation. */
+export function readProviderData(options: {
+  readonly sessionId: string;
+  readonly pluginId: string;
+  readonly signal: AbortSignal;
+  readonly store?: Pick<DataStore, "getPluginData" | "listPluginData">;
+  readonly visibility?: PluginDataVisibility;
+  readonly writeBuffer?: readonly Proposal[];
+}): PluginServiceContext["pluginData"] {
+  const { sessionId, pluginId, signal, store, visibility } = options;
+  const provider = visibility
+    ? { ...visibility, writes: visibility.upstreamOf?.(pluginId) ?? [] }
+    : undefined;
+  // The read scope survives nested calls; the immediate service caller is
+  // not necessarily the runtime that owns this buffer.
+  const buffer =
+    visibility?.pluginId === pluginId ? (options.writeBuffer ?? []) : [];
+  return {
+    async get(namespace, key) {
+      signal.throwIfAborted();
+      if (isHiddenPluginDataNamespace(namespace)) return null;
+      const row = await store?.getPluginData(
+        sessionId,
+        pluginId,
+        namespace,
+        key,
+      );
+      signal.throwIfAborted();
+      const base: DataOpsCurrent = row
+        ? { exists: true, value: row.value as JsonValue }
+        : { exists: false };
+      const { current, producers } = readPluginDataKey(
+        provider,
+        buffer,
+        pluginId,
+        namespace,
+        key,
+        base,
+      );
+      const visible = current.exists ? current.value : null;
+      noteRead(provider, {
+        kind: "get",
+        namespace,
+        key,
+        visible,
+        producers,
+        withoutUpstream: () => {
+          const own = readPluginDataKey(
+            undefined,
+            buffer,
+            pluginId,
+            namespace,
+            key,
+            base,
+          );
+          return own.current.exists ? own.current.value : null;
+        },
+      });
+      return structuredClone(visible);
+    },
+    async list(namespace) {
+      signal.throwIfAborted();
+      if (isHiddenPluginDataNamespace(namespace)) return [];
+      const rows =
+        (await store?.listPluginData(sessionId, pluginId, namespace)) ?? [];
+      signal.throwIfAborted();
+      const merged = mergePluginDataRows(
+        rows,
+        buffer,
+        sessionId,
+        pluginId,
+        namespace,
+        provider?.writes,
+      );
+      noteRead(provider, {
+        kind: "list",
+        namespace,
+        visible: observedRows(merged),
+        producers: listPluginDataProducers(provider, namespace),
+        withoutUpstream: () =>
+          observedRows(
+            mergePluginDataRows(rows, buffer, sessionId, pluginId, namespace),
+          ),
+      });
+      return structuredClone(merged.map(({ key, value }) => ({ key, value })));
+    },
   };
 }
 

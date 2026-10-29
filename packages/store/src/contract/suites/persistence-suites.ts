@@ -557,6 +557,27 @@ export function registerPersistenceStoreSuites(
       expect(result.session).toEqual(payload.session);
     });
 
+    it("captures the session's seats in a snapshot", async () => {
+      const seats = [
+        {
+          id: "main",
+          controller: "human" as const,
+          role: "player" as const,
+          characters: ["char-lin", "char-ada"],
+          currentCharacterId: "char-ada",
+        },
+      ];
+      const base = makeSnapshotPayload();
+      const payload = makeSnapshotPayload({
+        session: { ...base.session, seats },
+      });
+      const snap = makeSnapshot({ sessionId: "sess-snap-seats", payload });
+      await store.saveSnapshot(snap);
+      const result = (await store.getSnapshot(snap.id))!
+        .payload as SnapshotPayload;
+      expect(result.session.seats).toEqual(seats);
+    });
+
     it("keeps optional session fields absent after round-trip", async () => {
       // Optional runtimeModelOverrides must not reappear as null after JSON
       // serialization (store-backend parity contract).
@@ -568,6 +589,14 @@ export function registerPersistenceStoreSuites(
           phase: "setup",
           completedPlayerTurns: 0,
           setupRuntimes: {},
+          seats: [
+            {
+              id: "main",
+              controller: "human",
+              role: "player",
+              characters: "auto",
+            },
+          ],
         },
       });
       const snap = makeSnapshot({ sessionId: "sess-snap-current", payload });

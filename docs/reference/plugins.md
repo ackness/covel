@@ -195,6 +195,8 @@ permissions:
 | `agent.reasoning` | `true`：沿用模型自己的思考设置 |
 | `agent.toolChoice`（写了 `finishWith` 时） | `required` |
 | `agent.loop.timeoutMs`、`callTimeoutMs`、`maxRetries` | `io.visibility: story` 的 runtime：240000、120000、1；其他：120000、60000、3 |
+| `agent.loop.profile` | `io.visibility: story` 的 runtime 用 `story`，其他用 `system` |
+| `agent.loop.stream`、`steering`、`truncation`、`fallback`、`finalizer.*` | 所选 profile 的值，见[循环 profile](#循环-profileagentloopprofile) |
 | `contributes.data.*.version` | `1` |
 | `contributes.hooks[].enforce` | `normal` |
 | `contributes.extensions[].order` | `0` |
@@ -370,13 +372,13 @@ Agent 的超时和重试都在 `agent.loop` 里。不写时按 `io.visibility` �
 
 - 这次调用以一次新的尝试重试一遍，附一句“只写任务需要的内容”的提示。打转或重复输出的模型重来一次通常就能写完。
 - 再次被截断才判为失败，错误信息提示调大输出上限。额度真的太小时，第二次也写不完。
-- 唯一的例外：`io.visibility: story` 的 runtime 只输出了正文、没有工具调用。这时正文保留并提交，玩家看到一条“可能停在半句”的提示。
+- 唯一的例外：`story` profile 的 runtime（`truncation: accept`）只输出了正文、没有工具调用。这时正文保留并提交，玩家看到一条“可能停在半句”的提示。`io.visibility: story` 的 runtime 默认用这个 profile。
 
-**服务商没说清为什么停（`finishReason: other`）。** 回复可能停在任何地方。和截断一样，`io.visibility: story` 的 runtime 只输出了正文、没有工具调用时，正文保留并提交，玩家会看到提示：这段没写完，可以重试这一回合。其他情况判为失败，不重试。详见 [slots.md](./slots.md#结束原因诊断与拒绝)。
+**服务商没说清为什么停（`finishReason: other`）。** 回复可能停在任何地方。和截断一样，`story` profile 的 runtime 只输出了正文、没有工具调用时，正文保留并提交，玩家会看到提示：这段没写完，可以重试这一回合。其他情况判为失败，不重试。详见 [slots.md](./slots.md#结束原因诊断与拒绝)。
 
 **流式调用在已有输出之后中断**（连接断开，或静默超过 `idleTimeoutMs`）。
 
-- `io.visibility: story` 的 runtime 不重试，因为玩家已经读到那段文字。
+- 把文字流式显示给玩家的 runtime（`story` profile，`stream: true`）不重试，因为玩家已经读到那段文字。
 - 其他 runtime 的输出没有给任何人看，丢弃后按 `maxRetries` 重试。已经写出内容的那段时间同样不计入 `timeoutMs`，之后的静默计入。
 
 **非流式调用**没有进度信号，由 `callTimeoutMs` 限制单次调用的总时长。
@@ -552,15 +554,16 @@ Agent 的副作用只来自工具：模型能写什么，以 `agent.tools` 白�
 
 #### handler 上下文里的回合信息
 
-| 字段                          | 含义                                                                                                                                                                  |
-| ----------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `ctx.playerMessage`           | 当前输入的文本字符串                                                                                                                                                  |
-| `ctx.logicalTurn`             | 调度器的逻辑回合：已提交的主循环玩家回合数加一。函数 handler 和插件工具的上下文里都有。setup、开场续写和第一条玩家消息同为第 1 回合，`startTurn` / `every` 也按它计数 |
-| 工具上下文的 `turnNumber`     | 会话里已记录的玩家消息数，包括 setup 的表单提交                                                                                                                       |
-| `ctx.session.lastPlayerInput` | 源执行开始时最近的一条 `PlayerInputSubmission \| null`，包含 `id/sessionId/turnId/formId/values/createdAt`                                                            |
-| `ctx.execution.origin`        | 这次执行因何而起：`player`、`continuation`、`manual`、`background`、`recursive` 或 `resume`                                                                           |
-| `ctx.execution.sourceTurnId`  | 重试一个已提交的回合时，是那个回合的 ID。用它做键，重试时复用上次的掷骰和揭示，不重新抽                                                                               |
-| `ctx.recursionDepth`          | 顶层执行是 `0`，`ctx.recursiveCall` 每嵌套一层加一                                                                                                                    |
+| 字段                          | 含义                                                                                                                                                                                                                                                         |
+| ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `ctx.playerMessage`           | 当前输入的文本字符串                                                                                                                                                                                                                                         |
+| `ctx.logicalTurn`             | 调度器的逻辑回合：已提交的主循环玩家回合数加一。函数 handler 和插件工具的上下文里都有。setup、开场续写和第一条玩家消息同为第 1 回合，`startTurn` / `every` 也按它计数                                                                                        |
+| 工具上下文的 `turnNumber`     | 会话里已记录的玩家消息数，包括 setup 的表单提交                                                                                                                                                                                                              |
+| `ctx.session.lastPlayerInput` | 源执行开始时最近的一条 `PlayerInputSubmission \| null`，包含 `id/sessionId/turnId/formId/values/createdAt`                                                                                                                                                   |
+| `ctx.execution.origin`        | 这次执行因何而起：`player`、`continuation`、`manual`、`background`、`recursive` 或 `resume`                                                                                                                                                                  |
+| `ctx.execution.sourceTurnId`  | 重试一个已提交的回合时，是那个回合的 ID。用它做键，重试时复用上次的掷骰和揭示，不重新抽                                                                                                                                                                      |
+| `ctx.recursionDepth`          | 顶层执行是 `0`，`ctx.recursiveCall` 每嵌套一层加一                                                                                                                                                                                                           |
+| `ctx.world.seats`             | 会话的[座位](./world-model.md#座位)，只读。玩家当前扮演的角色是 SDK 的 `currentCharacterOf(primarySeat(seats), ctx.world.characters, seats)`；`seatCharacterIds` 给出一个座位绑定的角色。guard、工具（`context.world`）和扩展提供者（`ctx.world`）读到同一份 |
 
 `ctx.session.lastPlayerInput` 可能来自更早的回合。有这条记录不等于本回合提交了表单。
 
@@ -678,6 +681,7 @@ Agent 的副作用只来自工具：模型能写什么，以 `agent.tools` 白�
 | `agent.loop.firstTokenTimeoutMs`、`idleTimeoutMs` | 流式调用的等待时限，见[流式调用的等待时限](#流式调用的等待时限) |
 | `agent.loop.loopDetection` | 模型连续重复同一个调用多少次算打转。默认 3，`0` 关闭检测 |
 | `agent.loop.maxRecursionDepth` | `ctx.recursiveCall()` 最多嵌套几层。默认 10 |
+| `agent.loop.profile`、`stream`、`steering`、`truncation`、`fallback`、`finalizer` | 循环的行为，见[循环 profile](#循环-profileagentloopprofile) |
 
 ### 流式调用的等待时限
 
@@ -696,6 +700,46 @@ Agent 的副作用只来自工具：模型能写什么，以 `agent.tools` 白�
 | 240 秒      | 1            | 120、120 秒       |
 
 所以服务商接了请求却一直不出字时，重试来得及发出。首个输出本来就慢的模型（不流出推理过程的推理模型）应该显式设置 `firstTokenTimeoutMs`，并把 `timeoutMs` 设得足够大。
+
+### 循环 profile（`agent.loop.profile`）
+
+Agent 循环怎么跑由一个 profile 决定：文字是否流式显示给玩家、是否读玩家的插话、被截断的回复是否保留、工具调用打转时怎么办、什么时候关掉工具要最终答案。不写时按 `io.visibility` 取：`story` runtime 用 `story`，其他用 `system`。内置的两个叙事 runtime 都靠这条推导，清单里没有写。
+
+只有一项和 profile 不同时，写那一项即可，其余仍取 profile 的值：
+
+<!-- prettier-ignore -->
+| 字段 | 作用 |
+| --- | --- |
+| `profile` | `story`、`actor` 或 `system`，其他字段在它的基础上覆盖 |
+| `stream` | 把模型的文字边写边显示给玩家 |
+| `steering` | 每步之前、以及写完正文之后，把玩家排队的插话并入对话 |
+| `truncation` | `accept`：在输出上限处被截断的正文保留；`reject`：判为失败 |
+| `fallback` | 模型反复调用同一个工具时：`answer-without-tools` 关掉工具、要答案；`fail` 以 `loop-detected` 失败 |
+| `finalizer.maxSteps` | 到步数上限时，关掉工具再要一次最终答案。`false` 时步数上限总是失败 |
+| `finalizer.deadlineReserveMs` | 离时限只剩这么多毫秒时不再开始新的一步，关掉工具要最终答案。`0` 关闭 |
+
+三个 profile 的取值：
+
+<!-- prettier-ignore -->
+| 字段 | `story` | `actor` | `system` |
+| --- | --- | --- | --- |
+| `stream` | `true` | `false` | `false` |
+| `steering` | `true` | `false` | `false` |
+| `truncation` | `accept` | `reject` | `reject` |
+| `fallback` | `answer-without-tools` | `answer-without-tools` | `fail` |
+| `finalizer.maxSteps` | `true` | `true` | `true` |
+| `finalizer.deadlineReserveMs` | `0` | `0` | `0` |
+
+`actor` 给只回答一段简报、不写正文的 agent 用，例如将来的子 agent。
+
+加载时检查这几条，不满足的清单被拒绝：
+
+- `profile: story` 要求 `io.visibility: story`。
+- 最终取值为 `true` 的 `stream` 或 `steering` 要求 `io.visibility: story`：只有故事写叙事流、读玩家的插话。
+- 最终取值为 `accept` 的 `truncation` 要求最终的 `stream` 为 `true`：只保留玩家边写边读过的正文。所以故事写 `stream: false` 时也要写 `truncation: reject`。
+- `finalizer.deadlineReserveMs` 是非负整数，并且小于 `timeoutMs`（没写时按默认时限比较）。
+
+**时限前的收尾（`deadlineReserveMs`）。** 剩余时间少于这个值、而且这时一段文字就能完成 runtime（没有未完成的 `requireToolUse` 或显式完成要求，最终输出也不是来自完成工具），并且至少还剩 3 秒写答案，循环就不再开始新的一步，改为关掉工具要最终答案。profile 开了 `steering` 时，上一步期间排队的玩家插话先并入对话，收尾请求能读到。写出了答案，runtime 成功，结束原因是 `deadline`，并带 `finalizer: true`。没写出答案时仍按超时失败。实际使用的值最多是 `timeoutMs` 的一半；剩余时间按排队和流式输出顺延后的时限计算。条件不满足时循环照常走到真正的时限。
 
 ### 作者信息
 
@@ -739,6 +783,7 @@ homepage: https://example.com/tidefall
 - 这些领域里合法的上游 proposals，以及本 runtime 已经缓冲的 proposals，对后续的读取可见。
 - 写入通过 proposals，在提交时统一校验。
 - `ctx.world.dimensions` 不一样：它是提供者发布的公共当前值快照，遵守下面[动态维度](#动态维度)里单独的冻结规则。
+- `ctx.world.seats` 是会话的座位，同样冻结。proposal 不改它，玩家用[切换接口](./api.md#会话座位)换当前角色，下一回合生效。
 
 **按名字找角色。** 角色除 `name` 外可以有 `aliases`（同一个人的其他叫法）。
 
@@ -751,7 +796,7 @@ homepage: https://example.com/tidefall
 
 **角色类型和 schema。**
 
-- 角色类型是 schema 里声明的开放字符串。`player` 是保留的类型，每个会话最多一个。
+- 角色类型是 schema 里声明的开放字符串。`player` 是保留的类型，一个会话可以有多个。要找玩家正在扮演的角色，用 `currentCharacterOf`（见[座位](./world-model.md#座位)），不要用 `find(type === "player")`。
 - 角色字段遵守 CharacterSchema 的 attributes。
 - 修改 schema 的 proposal 是 `character.schema.set`，payload 直接包含 `types` 和 `attributes`，版本由内核递增。
 

@@ -16,46 +16,80 @@
 ## 概览
 
 <!-- prettier-ignore -->
-| 工具名 | 来源 | 所属插件 | 审批策略 | 描述 |
-| --- | --- | --- | --- | --- |
-| create-form | builtin | — | auto-allow | 创建玩家表单 |
-| create-choices | builtin | — | auto-allow | 创建选项列表 |
-| create-notification | builtin | — | auto-allow | 显示通知消息 |
-| render-ui | builtin | — | auto-allow | 渲染带独立 part 状态的 UI 块 |
-| plugin-data-set | builtin | — | auto-allow | 写入插件持久化数据（单条） |
-| plugin-data-set-batch | builtin | — | auto-allow | 批量写入插件持久化数据 |
-| plugin-data-get | builtin | — | auto-allow | 读取当前插件持久化数据 |
-| plugin-data-list | builtin | — | auto-allow | 列出当前插件持久化数据 |
-| **create-character** | builtin | — | auto-allow | 创建世界模型角色，类型按 schema 校验，写入 characters |
-| **update-character** | builtin | — | auto-allow | 按 id、名字或别名更新角色描述/字段（shallow merge）并可追加别名，自动 version++ |
-| **sync-characters** | builtin | — | auto-allow | 原子批量创建/更新角色；新角色 ≤5、已有角色更新 ≤10 |
-| **list-characters** | builtin | — | auto-allow | 列出本 session 所有角色（session 作用域，跨插件可见） |
-| **get-character** | builtin | — | auto-allow | 按 id、名字或别名查找单个角色 |
-| **get-character-schema** | builtin | — | auto-allow | 读取当前会话的角色属性 schema，支持跨回合恢复创角 |
-| **world-dimension-get** | builtin | — | auto-allow | 按 ID/path 分页读取回合冻结的当前维度值 |
-| **world-dimension-list** | builtin | — | auto-allow | 列出开放维度 ID、名称、类型与版本，不倾倒值或规则 |
-| **emit-event** | builtin | — | auto-allow | 发射当前 session 已声明的领域事件（一次一个 topic），校验 topic + payload schema |
-| **suspend** | builtin | — | auto-allow | 挂起当前 runtime 等待玩家输入，写 `suspensions` 表，可通过 resume API 恢复 |
-| **runtime-done** | builtin | — | auto-allow | Agent 工具循环的结束信号——业务工具调用完毕后调用以结束本 runtime |
-| **search-tools** | 注入 | — | auto-allow | 延迟工具搜索——manifest 声明 `tools.defer` 时框架自动注入，BM25 检索并激活未预载工具 |
-| **memory-search** | builtin | — | auto-allow | 搜索记忆：对话历史与历史摘要(recall) + 长期知识库(archival，含 lorebook/角色/插件声明可检索的数据) |
-| initialize-world | local | world-init | auto-allow | 组合角色属性 schema 与维度声明初始化 |
-| create-character-form | local | char-creator | auto-allow | 创建开场角色表单：只收集角色名与声明过的字符串/枚举属性，数值与复合属性保留默认值 |
-| update-affinity | local | affinity | auto-allow | 批量应用本回合玩家对 NPC 的好感度变化；未知名字按 0 分新建，分数跨回合累计并限制在 [-100, 100] |
-| advance-world-time | local | world-time | auto-allow | 结算本回合叙事经过的世界时间：提交时长而非日历算术，随机模式省略数量，随故事一并提交 |
-| dimension-rule-get | local | world-init | auto-allow | 维护时分页读取私有规则或值 schema |
-| update-dimensions | local | world-init | auto-allow | 绑定本轮叙事，整批 CAS 更新或明确结算无变化 |
-| submit-world-facts | local | world-ir | auto-allow | 以 Function Calling 参数提交并校验完整 `contract:world-ir@1` |
-| sync-codex-entries | local | codex | auto-allow | 一次提交本轮图鉴变化，按标题新建或补充条目 |
-| generate-guide | local | guide | auto-allow | 原子写入前情摘要、当前决策与玩家口吻快捷回复 |
-| upsert-npc-graph | local | npc-graph | auto-allow | 批量写入 NPC 节点与关系边（按 name 引用，工具内部去重并分配短 ID） |
-| plan-story-events | local | story-events | auto-allow | 校验剧情策划的后续隐藏事件（≤2/次，可撤回未发生的计划） |
-| submit-dashscope-text-prompt | local | dashscope-image-gen | auto-allow | 提交文本画面提示并发射固定 DashScope 出图事件 |
-| submit-dashscope-structured-prompt | local | dashscope-image-gen | auto-allow | 提交结构化画面提示并发射固定 DashScope 出图事件 |
-| submit-openai-image-text-prompt | local | openai-image-gen | auto-allow | 提交文本画面提示并发射固定 OpenAI-compatible 出图事件 |
-| submit-openai-image-structured-prompt | local | openai-image-gen | auto-allow | 提交结构化画面提示并发射固定 OpenAI-compatible 出图事件 |
+| 工具名 | 来源 | 所属插件 | 审批策略 | 描述 | annotations |
+| --- | --- | --- | --- | --- | --- |
+| create-form | builtin | — | auto-allow | 创建玩家表单 | 默认 |
+| create-choices | builtin | — | auto-allow | 创建选项列表 | 默认 |
+| create-notification | builtin | — | auto-allow | 显示通知消息 | 默认 |
+| render-ui | builtin | — | auto-allow | 渲染带独立 part 状态的 UI 块 | 默认 |
+| plugin-data-set | builtin | — | auto-allow | 写入插件持久化数据（单条） | 默认 |
+| plugin-data-set-batch | builtin | — | auto-allow | 批量写入插件持久化数据 | 默认 |
+| plugin-data-get | builtin | — | auto-allow | 读取当前插件持久化数据 | `readOnly`, `idempotent`, `concurrencySafe` |
+| plugin-data-list | builtin | — | auto-allow | 列出当前插件持久化数据 | `readOnly`, `idempotent`, `concurrencySafe` |
+| **create-character** | builtin | — | auto-allow | 创建世界模型角色，类型按 schema 校验，写入 characters | 默认 |
+| **update-character** | builtin | — | auto-allow | 按 id、名字或别名更新角色描述/字段（shallow merge）并可追加别名，自动 version++ | 默认 |
+| **sync-characters** | builtin | — | auto-allow | 原子批量创建/更新角色；新角色 ≤5、已有角色更新 ≤10 | 默认 |
+| **list-characters** | builtin | — | auto-allow | 列出本 session 所有角色（session 作用域，跨插件可见） | 默认 |
+| **get-character** | builtin | — | auto-allow | 按 id、名字或别名查找单个角色 | 默认 |
+| **get-character-schema** | builtin | — | auto-allow | 读取当前会话的角色属性 schema，支持跨回合恢复创角 | 默认 |
+| **world-dimension-get** | builtin | — | auto-allow | 按 ID/path 分页读取回合冻结的当前维度值 | `readOnly`, `idempotent`, `concurrencySafe` |
+| **world-dimension-list** | builtin | — | auto-allow | 列出开放维度 ID、名称、类型与版本，不倾倒值或规则 | `readOnly`, `idempotent`, `concurrencySafe` |
+| **emit-event** | builtin | — | auto-allow | 发射当前 session 已声明的领域事件（一次一个 topic），校验 topic + payload schema | 默认 |
+| **suspend** | builtin | — | auto-allow | 挂起当前 runtime 等待玩家输入，写 `suspensions` 表，可通过 resume API 恢复 | 默认 |
+| **runtime-done** | builtin | — | auto-allow | Agent 工具循环的结束信号——业务工具调用完毕后调用以结束本 runtime | 默认 |
+| **search-tools** | 注入 | — | auto-allow | 延迟工具搜索——manifest 声明 `tools.defer` 时框架自动注入，BM25 检索并激活未预载工具 | — |
+| **memory-search** | builtin | — | auto-allow | 搜索记忆：对话历史与历史摘要(recall) + 长期知识库(archival，含 lorebook/角色/插件声明可检索的数据) | `readOnly`, `idempotent`, `concurrencySafe` |
+| initialize-world | local | world-init | auto-allow | 组合角色属性 schema 与维度声明初始化 | 默认 |
+| create-character-form | local | char-creator | auto-allow | 创建开场角色表单：只收集角色名与声明过的字符串/枚举属性，数值与复合属性保留默认值 | 默认 |
+| update-affinity | local | affinity | auto-allow | 批量应用本回合玩家对 NPC 的好感度变化；未知名字按 0 分新建，分数跨回合累计并限制在 [-100, 100] | 默认 |
+| advance-world-time | local | world-time | auto-allow | 结算本回合叙事经过的世界时间：提交时长而非日历算术，随机模式省略数量，随故事一并提交 | 默认 |
+| dimension-rule-get | local | world-init | auto-allow | 维护时分页读取私有规则或值 schema | 默认 |
+| update-dimensions | local | world-init | auto-allow | 绑定本轮叙事，整批 CAS 更新或明确结算无变化 | 默认 |
+| submit-world-facts | local | world-ir | auto-allow | 以 Function Calling 参数提交并校验完整 `contract:world-ir@1` | 默认 |
+| sync-codex-entries | local | codex | auto-allow | 一次提交本轮图鉴变化，按标题新建或补充条目 | 默认 |
+| generate-guide | local | guide | auto-allow | 原子写入前情摘要、当前决策与玩家口吻快捷回复 | 默认 |
+| upsert-npc-graph | local | npc-graph | auto-allow | 批量写入 NPC 节点与关系边（按 name 引用，工具内部去重并分配短 ID） | 默认 |
+| plan-story-events | local | story-events | auto-allow | 校验剧情策划的后续隐藏事件（≤2/次，可撤回未发生的计划） | 默认 |
+| submit-dashscope-text-prompt | local | dashscope-image-gen | auto-allow | 提交文本画面提示并发射固定 DashScope 出图事件 | 默认 |
+| submit-dashscope-structured-prompt | local | dashscope-image-gen | auto-allow | 提交结构化画面提示并发射固定 DashScope 出图事件 | 默认 |
+| submit-openai-image-text-prompt | local | openai-image-gen | auto-allow | 提交文本画面提示并发射固定 OpenAI-compatible 出图事件 | 默认 |
+| submit-openai-image-structured-prompt | local | openai-image-gen | auto-allow | 提交结构化画面提示并发射固定 OpenAI-compatible 出图事件 | 默认 |
 
 每个内置插件的工具都必须出现在这张表里，`apps/server/tests/lib/reference-tables.test.ts` 会检查。
+
+## 注解与超时
+
+用 `tool({ annotations, timeoutMs, ... })` 描述工具的副作用和单次调用时限。`tool()` 补齐四个布尔值；省略注解时，工具按会写入、不可安全并发处理。
+
+<!-- prettier-ignore -->
+| 注解 | 默认值 | 含义 |
+| --- | --- | --- |
+| `readOnly` | `false` | 只读取数据，不返回写入 proposal 或领域事件 |
+| `stagesWrites` | `!readOnly` | 会暂存写入，交给执行事务提交 |
+| `idempotent` | `false` | 用相同参数重复调用不会增加副作用 |
+| `concurrencySafe` | `false` | 与其他只读调用并发执行是安全的；必须同时声明 `readOnly: true` |
+
+```js
+tool({
+  name: "lookup-note",
+  description: "Read one saved note.",
+  parameters: z.object({ key: z.string() }),
+  annotations: { readOnly: true, idempotent: true, concurrencySafe: true },
+  timeoutMs: 5000,
+  execute: async ({ key }, context) =>
+    context.store.getPluginData("notes", key),
+});
+```
+
+以下定义在调用 `tool()` 时抛错，错误以 `Tool "<name>":` 开头：`readOnly: true` 与 `stagesWrites: true` 同时出现；`concurrencySafe: true` 却没有 `readOnly: true`；`timeoutMs` 不是 `[1, 600000]` 范围内的整数。注册表也检查四个注解和时限，手写的 `ToolModule` 必须提供完整注解。使用 `tool()` 的插件自动得到默认值。注解和时限供框架读取，给模型的定义仍只有名字、描述和参数 schema。
+
+`timeoutMs` 省略时没有单工具时限，runtime 的总时限仍然生效。工具超时返回 `success: false`、`code: "TIMEOUT"`，记录失败调用并发出 `tool.failed`，工具循环可以继续。该调用的权限和信号作废，proposal、领域事件以及晚到的结果全部丢弃。超时回调仍由执行器管理，关闭时等待它结束。上级信号因 runtime 截止、玩家停止或执行器关闭而取消时，错误仍是 `CANCELLED`。
+
+`readOnly: true` 的工具如果返回 proposal 或领域事件，调用以 `EXECUTION_ERROR` 失败，消息包含 `read-only tool returned writes`。检查发生在成功记录和 `tool.completed` 之前，写入全部丢弃。其他注解是作者声明，不代表存储已经提交。
+
+概览表中的“默认”指上表的默认组合；`—` 表示由循环直接处理，没有工具模块注解。角色工具目前也保留默认组合。框架保留名只有 SDK 的 `FRAMEWORK_TOOL_NAMES` 一份来源；测试双向核对默认注册表、可选记忆工具和 `search-tools` 的名字集合。
+
+runtime 声明的 `tools.plugin` 中有工具未注册时，即使它被 `tools.defer` 延迟，runtime 也会在模型调用前失败：`runtime "<id>" declares plugin tool "<name>", but its plugin did not register it`。宿主没有安装的 builtin 能力仍会被省略并告警：`builtin tool "<name>" is not installed on this host — not offered`。
 
 ## 工具调用方向
 
@@ -827,7 +861,7 @@ JSON Schema 只能检查字段的形状，检查不了“这个结果和骰子�
 - 名字按[归一规则](./world-model.md#别名与按名字解析)比较：大小写、全角半角、空白、间隔号的差别不算。
 - 名字是任一已有角色的**别名**时，不论类型，都返回那个角色，不创建。
 - 创建 `type: "player"` 时，名字如果是其他角色的名字或别名，工具报错，并要求向玩家另要一个名字：玩家不会是世界里一个已有的 NPC。
-- 每个会话最多一个 player。其他类型来自 schema 的 `types`。
+- 一个会话可以有多个 player，新建的玩家角色自动绑定到默认座位（见[座位](./world-model.md#座位)）。其他类型来自 schema 的 `types`。
 
 **模型看到的 `_text` 示例**：
 

@@ -43,6 +43,9 @@ async function run(
     phase: "playing",
     activePlugins: ["events"],
     setupRuntimes: {},
+    seats: [
+      { id: "main", controller: "human", role: "player", characters: "auto" },
+    ],
     completedPlayerTurns: 0,
     createdAt: timestamp,
     updatedAt: timestamp,

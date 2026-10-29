@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { mediaImageFlowV1, type MediaImageFlow } from "@covel/shared";
-import type { PluginExtensionHost } from "@covel/runtime";
+import { createWorldModelView, type PluginExtensionHost } from "@covel/runtime";
 import type { DataStore } from "@covel/store";
 import { resolveSessionParam } from "./session/session-guard.js";
 export async function resolveMediaImageFlow(
@@ -17,6 +17,7 @@ export async function resolveMediaImageFlow(
       sessionId,
       locale: session.locale ?? "zh-CN",
       signal,
+      world: await createWorldModelView(store, sessionId),
       readPluginData: (pluginId, namespace) =>
         store.listPluginData(sessionId, pluginId, namespace),
     })

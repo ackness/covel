@@ -10,6 +10,7 @@ import {
 import { createToolExecutor } from "../src/agent-loop/tool-executor.js";
 
 import type { TurnEmitter } from "../src/trace/turn-emitter.js";
+import type { Proposal } from "@covel/shared";
 
 const identity = {
   sessionId: "session",
@@ -18,6 +19,227 @@ const identity = {
   runtimeId: "plugin/main",
 };
 const call = { toolCallId: "call", name: "probe", arguments: "{}" };
+const proposal: Proposal = {
+  id: "pending",
+  type: "plugin.data",
+  sessionId: identity.sessionId,
+  turnId: identity.turnId,
+  source: { pluginId: identity.pluginId, runtimeId: identity.runtimeId },
+  timestamp: "2026-10-29T00:00:00.000Z",
+  payload: { namespace: "test", key: "result", value: true },
+};
+
+describe("tool annotations and per-call timeout", () => {
+  it("times out a never-resolving tool, records TIMEOUT and traces a failure", async () => {
+    vi.useFakeTimers();
+    try {
+      const store = createMemoryStore();
+      const save = vi.spyOn(store, "saveToolCall");
+      const emit = vi.fn(async () => {});
+      const entered = Promise.withResolvers<void>();
+      const module = tool({
+        name: call.name,
+        description: "Never finishes.",
+        parameters: z.object({}),
+        timeoutMs: 20,
+        execute: async () => {
+          entered.resolve();
+          return new Promise<never>(() => {});
+        },
+      });
+      const executor = createToolExecutor({ store, findTool: () => module });
+      const running = executor.execute(call, {
+        ...identity,
+        emitter: { emit } as unknown as TurnEmitter,
+      });
+      await entered.promise;
+      await vi.advanceTimersByTimeAsync(20);
+      const result = await running;
+      expect(result).toMatchObject({ success: false, parsedResult: null });
+      expect(JSON.parse(result.result).code).toBe("TIMEOUT");
+      expect(result.pendingProposals).toBeUndefined();
+      expect(result.emittedEvents).toBeUndefined();
+      expect(save).toHaveBeenCalledOnce();
+      expect(save.mock.calls[0]?.[0].output).toBe(result.result);
+      expect(emit).toHaveBeenLastCalledWith(
+        "tool.failed",
+        expect.objectContaining({ code: "TIMEOUT" }),
+      );
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("classifies a parent abort before the timer as CANCELLED", async () => {
+    vi.useFakeTimers();
+    const entered = Promise.withResolvers<void>();
+    const release = Promise.withResolvers<void>();
+    const controller = new AbortController();
+    const module = tool({
+      name: call.name,
+      description: "Wait for cancellation.",
+      parameters: z.object({}),
+      timeoutMs: 20,
+      execute: async () => {
+        entered.resolve();
+        await release.promise;
+        return {};
+      },
+    });
+    const executor = createToolExecutor({ findTool: () => module });
+    try {
+      const running = executor.execute(call, {
+        ...identity,
+        signal: controller.signal,
+      });
+      await entered.promise;
+      await vi.advanceTimersByTimeAsync(19);
+      controller.abort(new Error("parent cancelled"));
+      const result = await running;
+      expect(JSON.parse(result.result).code).toBe("CANCELLED");
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      release.resolve();
+      await executor.close();
+      vi.useRealTimers();
+    }
+  });
+
+  it("revokes timed-out reads, discards late writes and retains callback ownership", async () => {
+    vi.useFakeTimers();
+    const entered = Promise.withResolvers<void>();
+    const release = Promise.withResolvers<void>();
+    let retained: ToolExecutionContext | undefined;
+    const module = tool({
+      name: call.name,
+      description: "Return writes too late.",
+      parameters: z.object({}),
+      timeoutMs: 20,
+      execute: async (_args, context) => {
+        retained = context;
+        entered.resolve();
+        await release.promise;
+        return withEmittedEvents(
+          withPendingProposals({ ok: true }, [proposal]),
+          [{ topic: "test.done", data: {} }],
+        );
+      },
+    });
+    const store = createMemoryStore();
+    const save = vi.spyOn(store, "saveToolCall");
+    const executor = createToolExecutor({ store, findTool: () => module });
+    try {
+      const running = executor.execute(call, identity);
+      await entered.promise;
+      await vi.advanceTimersByTimeAsync(20);
+      const result = await running;
+      expect(JSON.parse(result.result).code).toBe("TIMEOUT");
+      expect(result.pendingProposals).toBeUndefined();
+      expect(result.emittedEvents).toBeUndefined();
+      await expect(retained?.store?.getSession()).rejects.toThrow("timed out");
+      let closed = false;
+      const closing = executor.close().then(() => {
+        closed = true;
+      });
+      await Promise.resolve();
+      expect(closed).toBe(false);
+      release.resolve();
+      await closing;
+      expect(save).toHaveBeenCalledOnce();
+    } finally {
+      release.resolve();
+      await executor.close();
+      vi.useRealTimers();
+    }
+  });
+
+  it.each(["proposals", "events"])(
+    "rejects read-only tools returning %s before recording success",
+    async (kind) => {
+      const store = createMemoryStore();
+      const save = vi.spyOn(store, "saveToolCall");
+      const emit = vi.fn(async (_type: string, _payload: unknown) => {});
+      const module = tool({
+        name: call.name,
+        description: "Incorrectly annotated read.",
+        parameters: z.object({}),
+        annotations: { readOnly: true },
+        execute: async () =>
+          kind === "proposals"
+            ? withPendingProposals({ ok: true }, [proposal])
+            : withEmittedEvents({ ok: true }, [
+                { topic: "test.done", data: {} },
+              ]),
+      });
+      const executor = createToolExecutor({ store, findTool: () => module });
+      const result = await executor.execute(call, {
+        ...identity,
+        emitter: { emit } as unknown as TurnEmitter,
+      });
+      expect(result.success).toBe(false);
+      expect(JSON.parse(result.result)).toMatchObject({
+        code: "EXECUTION_ERROR",
+        error: expect.stringContaining("read-only tool returned writes"),
+      });
+      expect(result.pendingProposals).toBeUndefined();
+      expect(result.emittedEvents).toBeUndefined();
+      expect(save).toHaveBeenCalledOnce();
+      expect(save.mock.calls[0]?.[0].output).toBe(result.result);
+      expect(emit.mock.calls.map(([type]) => type)).toEqual([
+        "tool.calling",
+        "tool.failed",
+      ]);
+    },
+  );
+
+  it.each([false, true])(
+    "clears the timer when work settles first (throws: %s)",
+    async (throws) => {
+      vi.useFakeTimers();
+      try {
+        const module = tool({
+          name: call.name,
+          description: "Finish before timeout.",
+          parameters: z.object({}),
+          timeoutMs: 20,
+          execute: async () => {
+            if (throws) throw new Error("business failure");
+            return {};
+          },
+        });
+        const executor = createToolExecutor({ findTool: () => module });
+        const result = await executor.execute(call, identity);
+        expect(result.success).toBe(!throws);
+        if (throws)
+          expect(JSON.parse(result.result).code).toBe("EXECUTION_ERROR");
+        expect(vi.getTimerCount()).toBe(0);
+        await executor.close();
+      } finally {
+        vi.useRealTimers();
+      }
+    },
+  );
+
+  it("exposes resolved annotations and timeout through getToolInfo", () => {
+    const module = tool({
+      name: call.name,
+      description: "Safe read.",
+      parameters: z.object({}),
+      annotations: { readOnly: true, concurrencySafe: true, idempotent: true },
+      timeoutMs: 20,
+      execute: async () => ({}),
+    });
+    const executor = createToolExecutor({ findTool: () => module });
+    expect(executor.getToolInfo(call.name, identity)).toEqual({
+      name: module.name,
+      description: module.description,
+      jsonSchema: module.jsonSchema,
+      annotations: module.annotations,
+      timeoutMs: 20,
+    });
+  });
+});
 
 describe("tool execution context", () => {
   it("gives the tool the session's language", async () => {

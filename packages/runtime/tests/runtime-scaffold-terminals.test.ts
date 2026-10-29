@@ -80,6 +80,12 @@ function toolExecutor(results: Record<string, unknown> = {}) {
     getToolInfo: (name: string) => ({
       name,
       description: name,
+      annotations: {
+        readOnly: false,
+        stagesWrites: true,
+        idempotent: false,
+        concurrencySafe: false,
+      },
       jsonSchema: { type: "object" as const, properties: {} },
     }),
     async execute(call: {

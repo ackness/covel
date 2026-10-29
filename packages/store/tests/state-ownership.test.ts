@@ -110,6 +110,7 @@ const SNAPSHOT_SESSION_FIELDS = {
   phase: "phase",
   completedPlayerTurns: "completedPlayerTurns",
   setupRuntimes: "setupRuntimes",
+  seats: "seats",
   locale: "locale",
   activePlugins: "activePlugins",
   runtimeModelOverrides: "runtimeModelOverrides",

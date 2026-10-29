@@ -359,7 +359,6 @@ describe("createWorld", () => {
     ],
     ["field range", "type: npc, fields: { affinity: 101 }", "affinity"],
     ["unknown type", "type: ghost", "Unknown character type: ghost"],
-    ["two players", "type: player", "at most one player"],
     ["non-object fields", "type: npc, fields: [broken]", "fields"],
   ])(
     "retries then discards an invalid character set: %s",
@@ -401,6 +400,21 @@ describe("createWorld", () => {
       ).toMatchObject({ state: "failed", attempt: 3 });
     },
   );
+
+  it("accepts several player characters", async () => {
+    const pack = `characters:\n  - { id: first, name: First, type: player }\n  - { id: second, name: Second, type: player }\n`;
+    const result = await createWorld({
+      llm: new FixedLlm(
+        `===WORLD_YAML===\n${WORLD_YAML}\n===WORLD_MD===\n${WORLD_LORE}\n===WORLD_PACKAGE_YAML===\n${pack}\n===END===`,
+      ),
+      concept: "Synthetic world",
+      brief: { content: ["characters"] },
+    });
+    if (!result.success) throw new Error(result.errors.join("; "));
+    expect(
+      result.packageContent.characters?.map((character) => character.type),
+    ).toEqual(["player", "player"]);
+  });
 
   it("accepts a repaired set and keeps a character to the fields of a character record", async () => {
     const yaml =

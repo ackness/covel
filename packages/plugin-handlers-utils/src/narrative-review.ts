@@ -133,12 +133,14 @@ export function createNarrativeReview(pluginId: string) {
     context(
       ctx: SettingsContext,
       payload: {
-        characters?: readonly { name: string; type: string }[];
+        characters?: readonly { id?: string; name: string; type: string }[];
+        /** The character the player acts as (the primary seat's). */
+        currentCharacterId?: string;
       },
     ) {
-      if (ctx.pluginId === pluginId) {
+      if (ctx.pluginId === pluginId && payload.currentCharacterId) {
         const player = payload.characters?.find(
-          (character) => character.type === "player",
+          (character) => character.id === payload.currentCharacterId,
         );
         if (player) players.set(keyFor(ctx), player.name);
       }

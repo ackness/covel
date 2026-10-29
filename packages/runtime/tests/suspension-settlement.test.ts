@@ -50,6 +50,9 @@ async function createSession(store: DataStore): Promise<void> {
     status: "active",
     phase: "playing",
     setupRuntimes: {},
+    seats: [
+      { id: "main", controller: "human", role: "player", characters: "auto" },
+    ],
     activePlugins: ["probe", "notes"],
     completedPlayerTurns: 0,
     createdAt: timestamp,

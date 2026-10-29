@@ -11,8 +11,8 @@ import {
  * One agent step issues exactly one LLM response. It goes through one of two
  * paths, chosen by `useStreaming` (see agent-loop-policy.ts):
  *   - streaming — with a non-stream fallback when the stream exhausts retries
- *     or finishes empty with tool_calls but no parsed calls. Only story
- *     runtimes forward the text deltas to the player;
+ *     or finishes empty with tool_calls but no parsed calls. Only a loop
+ *     profile with `stream` forwards the text deltas to the player;
  *   - non-streaming — with the shared transient-error retry policy.
  *
  * Extracted from `turn-agent-tool-loop.ts` so the main loop body reads as a
@@ -54,8 +54,13 @@ export interface RequestLLMResponseOptions {
   readonly onStreamTime?: (streamedMs: number) => void;
   /** Called once per forwarded text delta; the DeltaForwarder owns the count. */
   readonly onStreamDelta: (textDelta: string) => Promise<void>;
-  /** Whether `onStreamDelta` shows text to the player (story runtimes). */
+  /** Whether `onStreamDelta` shows text to the player (profile `stream`). */
   readonly deliversDeltas: boolean;
+  /**
+   * Keep a reply cut at the output limit, marked `length` (profile
+   * `truncation: accept`). Otherwise the output must be whole.
+   */
+  readonly allowTruncatedText: boolean;
   /**
    * A correction just asked the model to call a tool, so this request
    * requires one (`toolChoice: "required"`, as in the AI SDK) instead of
@@ -156,7 +161,7 @@ export async function requestLLMResponse(
     ...(opts.promptCacheKey ? { promptCacheKey: opts.promptCacheKey } : {}),
     // The player has read a story as it streamed. Cut at the output limit,
     // it is kept and marked `length`; any other output must be whole.
-    allowTruncatedText: manifest.outputKind === "story",
+    allowTruncatedText: opts.allowTruncatedText,
     policy: retryPolicy,
     deadline,
     requestBudget: requestScope.budget,

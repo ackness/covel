@@ -158,6 +158,9 @@ describe("POST /api/actions — scheduler-detached runtime", () => {
       phase: "playing",
       completedPlayerTurns: 0,
       setupRuntimes: {},
+      seats: [
+        { id: "main", controller: "human", role: "player", characters: "auto" },
+      ],
       activePlugins: [PLUGIN_ID],
       metadata: {
         approvalScopeNonce: crypto.randomUUID(),
@@ -344,6 +347,14 @@ runtime:
           phase: "playing",
           completedPlayerTurns: 0,
           setupRuntimes: {},
+          seats: [
+            {
+              id: "main",
+              controller: "human",
+              role: "player",
+              characters: "auto",
+            },
+          ],
           activePlugins: [pluginId],
           metadata: {
             approvalScopeNonce: crypto.randomUUID(),

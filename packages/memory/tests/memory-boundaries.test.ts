@@ -15,6 +15,9 @@ async function fixture(
     phase: "playing",
     completedPlayerTurns: 0,
     setupRuntimes: {},
+    seats: [
+      { id: "main", controller: "human", role: "player", characters: "auto" },
+    ],
     activePlugins: [],
     createdAt: now,
     updatedAt: now,
@@ -361,7 +364,9 @@ describe("incremental archival ingestion (F-039)", () => {
   });
 
   it("keeps vectors when a changed text field contains the same text", async () => {
-    const { store, memory, sources, archivalKeys } = await searchable([journal]);
+    const { store, memory, sources, archivalKeys } = await searchable([
+      journal,
+    ]);
     await store.setPluginDataBatch(
       facts(3).map((row) => ({
         ...row,

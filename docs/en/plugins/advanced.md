@@ -217,6 +217,13 @@ There are two ways to let other code call yours:
 - The registered name must match the manifest.
 - Fixed fragments in `contributes.prompt` are registered by Covel automatically, so you do not need to declare them as extensions.
 
+A service handler can read its provider's own non-hidden data. It cannot write:
+
+```js
+const item = await ctx.pluginData.get("items", key);
+return { item };
+```
+
 For the inputs and outputs of each extension point, how several providers are combined, and how errors are handled, see [Plugin extensions and communication](../reference/plugin-extensions.md) and the [Extension point reference](../reference/extension-points.md).
 
 > [!IMPORTANT]
@@ -259,6 +266,22 @@ A plugin can only name a role. Which model is used, and where the request goes, 
 | Agent    | `agent.loop.maxRetries`    | How many times to retry when a model call gets no reply. The default is 3, 1 for a `story` runtime, and the maximum is 5.           |
 
 For the full rules, see the [Plugin fields reference](../reference/plugins.md#timeouts-and-retries-agentloop).
+
+### How the loop behaves
+
+The rest of the agent loop's behaviour comes from a loop profile: whether text is shown to the player as it is written, whether the player's interjections are read, and what happens when the model keeps calling the same tool. The profile is worked out from `io.visibility`, so you rarely write it.
+
+An agent that only answers a brief and writes no story text can use `actor`. The difference from `system`: when the model goes in circles, `actor` turns the tools off and answers, while `system` fails.
+
+```yaml
+agent:
+  loop:
+    profile: actor
+    finalizer:
+      deadlineReserveMs: 10000 # with 10 seconds left, stop calling tools and answer
+```
+
+Sub-agents, agents another runtime starts to hand back one answer, will use `actor`. Sub-agents are not available yet; writing `actor` today changes only the behaviour above. Fields, values and checks are in [Plugin reference · Loop profile](../reference/plugins.md#loop-profile-agentloopprofile).
 
 ### When something fails
 

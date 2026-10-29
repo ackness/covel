@@ -64,6 +64,32 @@ function agentLlm(agent: AuthoredAgent | undefined) {
   return Object.keys(llm).length ? llm : undefined;
 }
 
+/**
+ * The loop profile keys the author wrote under `agent.loop`, renamed for the
+ * IR (`profile` → `preset`). Nothing is filled in: the agent loop resolves
+ * the profile when it runs. Undefined when the author wrote none.
+ */
+function agentLoopProfile(agent: AuthoredAgent | undefined) {
+  const loop = agent?.loop;
+  const finalizer = loop?.finalizer && {
+    ...(loop.finalizer.maxSteps !== undefined
+      ? { maxSteps: loop.finalizer.maxSteps }
+      : {}),
+    ...(loop.finalizer.deadlineReserveMs !== undefined
+      ? { deadlineReserveMs: loop.finalizer.deadlineReserveMs }
+      : {}),
+  };
+  const profile = {
+    ...(loop?.profile ? { preset: loop.profile } : {}),
+    ...(loop?.stream !== undefined ? { stream: loop.stream } : {}),
+    ...(loop?.steering !== undefined ? { steering: loop.steering } : {}),
+    ...(loop?.truncation ? { truncation: loop.truncation } : {}),
+    ...(loop?.fallback ? { fallback: loop.fallback } : {}),
+    ...(finalizer && Object.keys(finalizer).length ? { finalizer } : {}),
+  };
+  return Object.keys(profile).length ? profile : undefined;
+}
+
 /** Compile current authoring contracts into the kernel's execution IR. */
 export function compileRuntimeManifest(
   plugin: PluginManifest,
@@ -86,6 +112,7 @@ export function compileRuntimeManifest(
       ? { ...a?.tools, plugin: [...contributed] }
       : a?.tools;
   const loop = a?.loop;
+  const loopProfile = agentLoopProfile(a);
   const completion = agentCompletion(a);
   const visibility = runtime.io?.visibility ?? DEFAULT_RUNTIME_VISIBILITY;
   // An agent that leaves out its slot or loop limits gets the defaults of its
@@ -169,6 +196,7 @@ export function compileRuntimeManifest(
     requireToolUse: completion?.require === "tool-use" || undefined,
     requireExplicitCompletion: completion?.require === "explicit" || undefined,
     completeAfterTools: completion?.afterTools,
+    ...(loopProfile ? { loopProfile } : {}),
     outputKind: visibility,
     ...(runtime.io?.concealed ? { concealed: true } : {}),
     ...(output

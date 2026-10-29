@@ -56,6 +56,9 @@ describe("form provider authorization", () => {
       locale: "zh-CN",
       phase: "playing",
       setupRuntimes: {},
+      seats: [
+        { id: "main", controller: "human", role: "player", characters: "auto" },
+      ],
       completedPlayerTurns: 0,
       activePlugins: providers,
       metadata: {

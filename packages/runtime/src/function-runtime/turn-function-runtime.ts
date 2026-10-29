@@ -34,6 +34,7 @@ import { attachNestedResults } from "../turn-executor/nested-results.js";
 import { attachReadDependencies } from "../read-dependencies.js";
 import {
   createPluginDataVisibility,
+  type PluginDataVisibility,
   type UpstreamPluginDataWrite,
 } from "./upstream-plugin-data.js";
 
@@ -45,6 +46,7 @@ export interface ExecuteFunctionRuntimeOptions {
   readonly upstreamProposals?: readonly import("@covel/shared").Proposal[];
   /** Writes of completed upstream runtimes of this plugin that reads include. */
   readonly upstreamPluginData?: readonly UpstreamPluginDataWrite[];
+  readonly upstreamOf?: PluginDataVisibility["upstreamOf"];
   readonly manifest: RuntimeManifest;
   readonly input: TurnInput;
   readonly loaded: LoadedRuntime;
@@ -101,6 +103,7 @@ export async function executeFunctionRuntime({
   logicalTurn,
   upstreamProposals = [],
   upstreamPluginData = [],
+  upstreamOf,
   manifest,
   input,
   loaded,
@@ -185,6 +188,7 @@ export async function executeFunctionRuntime({
       runtimeId: manifest.name,
       runId,
       writes: upstreamPluginData,
+      ...(upstreamOf ? { upstreamOf } : {}),
       ...(deps.pluginDataReadProbe ? { probe: deps.pluginDataReadProbe } : {}),
     }),
   });

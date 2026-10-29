@@ -1,6 +1,11 @@
 /** Captures committed world state and caller-resolved history summaries once per execution. */
 
-import { compareText } from "@covel/shared";
+import {
+  compareText,
+  currentCharacterOf,
+  primarySeat,
+  type Seat,
+} from "@covel/shared";
 import {
   instructionLocaleFor,
   localizedWorldText,
@@ -55,7 +60,7 @@ export interface BuildSessionContextSnapshotOpts {
    * execution's runtimes got; `null` says the caller looked and found none.
    */
   readonly loaded?: {
-    readonly session?: Pick<SessionRecord, "metadata"> | null;
+    readonly session?: Pick<SessionRecord, "metadata" | "seats"> | null;
     readonly characters?: readonly CharacterSummary[];
     readonly lastFormValues?: Readonly<Record<string, unknown>> | null;
   };
@@ -110,7 +115,12 @@ export async function buildSessionContextSnapshot(
     sessionId,
     turnNumber: opts.turnNumber,
     locale: opts.locale,
-    sessionMeta: { turnNumber: opts.turnNumber, characters, lastFormValues },
+    sessionMeta: {
+      turnNumber: opts.turnNumber,
+      characters,
+      lastFormValues,
+      ...currentCharacterField(sessionRecord?.seats ?? [], characters),
+    },
     world: buildWorldContextView({
       worldId: opts.worldId,
       worldRecord,
@@ -132,6 +142,23 @@ export async function buildSessionContextSnapshot(
       ),
     ],
   };
+}
+
+/**
+ * The current character of the primary seat, as the `currentCharacterId`
+ * field of a session meta: an empty object when no seat binds a character.
+ */
+export function currentCharacterField(
+  seats: readonly Seat[],
+  characters: readonly { readonly id?: string; readonly type: string }[],
+): { readonly currentCharacterId?: string } {
+  const identified = characters.flatMap((character) =>
+    character.id === undefined
+      ? []
+      : [{ id: character.id, type: character.type }],
+  );
+  const id = currentCharacterOf(primarySeat(seats), identified, seats)?.id;
+  return id === undefined ? {} : { currentCharacterId: id };
 }
 
 // ── Per-source loaders ──────────────────────────────────────────────

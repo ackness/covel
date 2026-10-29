@@ -28,6 +28,14 @@ describe("resume commit composition", () => {
         phase: "playing",
         completedPlayerTurns: 2,
         setupRuntimes: {},
+        seats: [
+          {
+            id: "main",
+            controller: "human",
+            role: "player",
+            characters: "auto",
+          },
+        ],
         activePlugins: ["producer"],
         metadata: {
           approvalScopeNonce: "approval-test",
@@ -205,6 +213,14 @@ describe("resume commit composition", () => {
         status: "active",
         phase: "setup",
         completedPlayerTurns: 0,
+        seats: [
+          {
+            id: "main",
+            controller: "human",
+            role: "player",
+            characters: "auto",
+          },
+        ],
         setupRuntimes: otherDone
           ? {
               "setup/other": {

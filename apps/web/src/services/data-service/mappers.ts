@@ -31,6 +31,7 @@ export function toFrontendSession(s: StoreSessionRecord): SessionRecord {
     phase: s.phase,
     completedPlayerTurns: s.completedPlayerTurns,
     setupRuntimes: { ...s.setupRuntimes },
+    seats: s.seats,
     activePlugins: s.activePlugins,
     runtimeModelOverrides: s.runtimeModelOverrides
       ? { ...s.runtimeModelOverrides }

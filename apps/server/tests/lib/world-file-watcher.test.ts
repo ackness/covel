@@ -73,6 +73,14 @@ defaultLocale: en-US
         phase: "playing",
         completedPlayerTurns: 0,
         setupRuntimes: {},
+        seats: [
+          {
+            id: "main",
+            controller: "human",
+            role: "player",
+            characters: "auto",
+          },
+        ],
         activePlugins: [],
         createdAt: now,
         updatedAt: now,
@@ -218,6 +226,9 @@ it("keeps the complete world and emits no notification after a dimension source 
       phase: "playing",
       completedPlayerTurns: 0,
       setupRuntimes: {},
+      seats: [
+        { id: "main", controller: "human", role: "player", characters: "auto" },
+      ],
       activePlugins: [],
       createdAt: now,
       updatedAt: now,

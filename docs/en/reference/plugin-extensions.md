@@ -26,13 +26,15 @@ Start by finding your need in the table and reading the matching interface:
 
 The details that do not fit in the table come next.
 
-A function runtime that changes its own data can submit a list of operations instead of a computed whole value: `ctx.pluginData.update(namespace, key, ops)` produces `plugin.data.update`, which applies to the latest value at commit (see [Transactions · Operation-based writes](./transactions.md#operation-based-writes-plugindataupdate)). This belongs only to the runtime write boundary: an extension point handler's `ctx.pluginData` is read-only, and a service handler gets no `ctx.pluginData` at all.
+A function runtime that changes its own data can submit a list of operations instead of a computed whole value: `ctx.pluginData.update(namespace, key, ops)` produces `plugin.data.update`, which applies to the latest value at commit (see [Transactions · Operation-based writes](./transactions.md#operation-based-writes-plugindataupdate)). This belongs only to the runtime write boundary: `ctx.pluginData` is read-only in both extension and service handlers.
 
 `ctx.recursiveCall` is for [nested calls within one package](./plugins.md#nested-calls-ctxrecursivecall). Use a service to request a result from another package, or an event to trigger its follow-up work.
 
+The session's seats (who is playing and which characters they control) belong to no plugin, so you never ask another plugin for them through a service or an input. Function runtimes, guards, tools (`context.world`) and extension providers (`ctx.world`) all read the same read-only copy on `world.seats`. Derive the character the player acts as with the SDK's `primarySeat`, `currentCharacterOf` and `seatCharacterIds`; the rules are in [Seats](./world-model.md#seats). Plugins cannot write seats; the player switches the current character through the [switch endpoint](./api.md#session-seats).
+
 ### Services are only for function runtimes
 
-`ctx.services` is currently open only to function runtimes. The framework does not expose every public service to every agent. If an agent needs the result of a service, it has two options:
+Function runtime handlers and agent guards can use `ctx.services`. The framework does not expose every public service to every agent. If an agent needs the result of a service, it has two options:
 
 - Let one of the plugin's own function runtimes call the service, and let the agent receive the result through `inputs`.
 - Keep using the plugin's own registered tools.
@@ -314,12 +316,30 @@ Before each call, the framework checks again: that the caller and the provider a
 
 ### What a service can and cannot access
 
+<!-- prettier-ignore -->
+| Field | Meaning |
+| --- | --- |
+| `callerPluginId` | The immediate caller's plugin; in a nested call, the previous provider. |
+| `signal` | Cancellation and deadline signal; reads check it before and after waiting for storage. |
+| `gateway` | Optional model access without the caller's key material. |
+| `utils` | Optional HTTP helpers that inherit this call's signal. |
+| `services` | Discover and call other public services. |
+| `sessionId` | The current session. |
+| `locale` | The session content language; optional when the host supplies none. |
+| `pluginData` | The provider's own read-only data; `get(namespace, key)` returns a value or `null`, and `list(namespace)` returns `{ key, value }[]` in store order. `_hidden.*` namespaces return `null` / an empty list. |
+| `world` | A separate read-only copy of the calling runtime's world view, cloned on first access. |
+| `getOwnSettings()` | The provider's resolved, frozen settings for this turn; an empty object when none exist. |
+
 - Input and output are checked against their schemas and copied. You cannot change the other side's state through an object reference.
-- The context has only `callerPluginId`, `signal`, `gateway`, `utils`, and `services`. It has no caller store, tools, settings, or write buffer.
-- A service only computes the result. How the result is written to storage is decided by the runtime that made the call.
+- Each data read returns a separate copy. The context has no caller store, tools, settings, or write buffer.
+- Services have no write methods and cannot produce proposals. The calling runtime decides how to persist the result; write services will come later.
 - A chain of service calls cannot loop, and it can go at most eight levels deep. It inherits the runtime's deadline and its capability revocation.
 - A service must pass `signal` to asynchronous work. It must not leave tasks running in the background after the call.
 - Ordinary JavaScript on the server still follows the authorization model for community code. This is not a process-level sandbox.
+
+When called through a runtime's client, `pluginData` overlays committed data with the provider plugin's completed, commit-eligible upstream writes in this execution, in commit order. Retry or background seed results are not applied again. Parallel runtimes in the same level cannot see each other's writes. The original runtime's own write buffer is applied last only when the provider belongs to that runtime's plugin. Lists remove deleted keys and append new keys in write order. Clients outside an execution read committed data only and record no read dependencies.
+
+A read that sees an uncommitted upstream write records a read dependency on the calling runtime's result. Nested services read each provider's own data and keep recording on the original runtime. If a producer is dropped at commit, an auxiliary caller is dropped with it; a story caller still commits and the trace records the dependency (see [Transactions](./transactions.md)). Calling a read service creates no new scheduling dependency; a story runtime can call it as needed and handle missing or failed services.
 
 ## Models and new protocols
 

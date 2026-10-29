@@ -1071,7 +1071,7 @@ characterSchema:
       category: social
 ```
 
-- `types` 是除玩家以外的角色类型。`player` 是保留类型，不要写进 `types`；每局游戏最多有一个玩家角色。
+- `types` 是除玩家以外的角色类型。`player` 是保留类型，不要写进 `types`。一个世界可以有多个玩家角色，玩家此刻扮演哪一个由[座位](./world-model.md#座位)决定。
 - `attributes` 是角色可以有的属性。
 - 创建会话时，它被复制进会话。角色的 `fields` 必须符合它；非玩家角色的类型必须在 `types` 里。工具、插件读取和最终保存用的是同一套校验。
 - 修改世界的 `characterSchema` 只影响新开的会话。已有会话要在会话里明确修改。
@@ -1630,7 +1630,7 @@ pnpm validate:world --strict --plugins ~/.covel/plugins ~/.covel/worlds/my-world
 
 **不依赖 schema 的检查：**
 
-- 角色 source 和 `effects: [characters]` 按世界的 `characterSchema` 检查类型与属性，并检查合并后最多只有一个玩家角色。
+- 角色 source 和 `effects: [characters]` 按世界的 `characterSchema` 检查类型与属性。
 - 直接导入的资料库记录必须有 `content`。
 - 直接导入的记录和 `+lorebook` 投影出来的 `selective` 条目都必须有非空的 `keys`。
 - 错误信息包含文件、记录序号和 key。导入之前发现错误就拒绝整个计划，其余合法的记录也不写。

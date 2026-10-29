@@ -68,6 +68,9 @@ async function setupSessionWithModel(
     phase: "setup",
     completedPlayerTurns: 0,
     setupRuntimes: {},
+    seats: [
+      { id: "main", controller: "human", role: "player", characters: "auto" },
+    ],
     locale: "en",
     activePlugins: [],
     createdAt: new Date().toISOString(),
@@ -723,6 +726,14 @@ export function runVectorStoreContractTests(
         phase: "setup",
         completedPlayerTurns: 0,
         setupRuntimes: {},
+        seats: [
+          {
+            id: "main",
+            controller: "human",
+            role: "player",
+            characters: "auto",
+          },
+        ],
         locale: "en",
         activePlugins: [],
         createdAt: recreatedAt,
@@ -758,6 +769,14 @@ export function runVectorStoreContractTests(
         phase: "setup",
         completedPlayerTurns: 0,
         setupRuntimes: {},
+        seats: [
+          {
+            id: "main",
+            controller: "human",
+            role: "player",
+            characters: "auto",
+          },
+        ],
         locale: "en",
         activePlugins: [],
         createdAt: new Date().toISOString(),
@@ -877,6 +896,14 @@ export function runVectorStoreContractTests(
         phase: "setup",
         completedPlayerTurns: 0,
         setupRuntimes: {},
+        seats: [
+          {
+            id: "main",
+            controller: "human",
+            role: "player",
+            characters: "auto",
+          },
+        ],
         locale: "en",
         activePlugins: [],
         createdAt: now,
@@ -1007,6 +1034,14 @@ export function runVectorStoreContractTests(
         phase: "setup",
         completedPlayerTurns: 0,
         setupRuntimes: {},
+        seats: [
+          {
+            id: "main",
+            controller: "human",
+            role: "player",
+            characters: "auto",
+          },
+        ],
         locale: "en",
         activePlugins: [],
         createdAt: new Date().toISOString(),

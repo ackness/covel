@@ -28,6 +28,14 @@ describe.each(["narrator", "chat-mode-narrator"])(
           completedPlayerTurns: 1,
           activePlugins: [id],
           setupRuntimes: {},
+          seats: [
+            {
+              id: "main",
+              controller: "human",
+              role: "player",
+              characters: "auto",
+            },
+          ],
           createdAt: now,
           updatedAt: now,
         });

@@ -57,6 +57,9 @@ const session = {
   status: "active" as const,
   activePlugins: [],
   setupRuntimes: {},
+  seats: [
+    { id: "main", controller: "human", role: "player", characters: "auto" },
+  ] as const,
   locale: "en-US",
   createdAt: "2026-01-01T00:00:00Z",
   updatedAt: "2026-01-01T00:00:00Z",

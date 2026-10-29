@@ -30,6 +30,9 @@ it("gives every hook the session locale, and the runtime identity in the context
     status: "active",
     phase: "playing",
     setupRuntimes: {},
+    seats: [
+      { id: "main", controller: "human", role: "player", characters: "auto" },
+    ],
     activePlugins: ["teller", "ledger"],
     completedPlayerTurns: 1,
     createdAt: timestamp,
@@ -117,6 +120,12 @@ it("gives every hook the session locale, and the runtime identity in the context
         getToolInfo: vi.fn(() => ({
           name: "look",
           description: "Look",
+          annotations: {
+            readOnly: false,
+            stagesWrites: true,
+            idempotent: false,
+            concurrencySafe: false,
+          },
           jsonSchema: { type: "object" },
         })),
       },

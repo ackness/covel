@@ -79,11 +79,14 @@ The root `requires` can list extension points or UI slots. This means "someone i
 A provider's handler receives two arguments: the input the extension point defines, and the context `ctx`.
 
 - `ctx.pluginData` is read-only, and it can read only the provider's own data. It cannot read `_hidden.*` hidden world data, because the output of an extension point goes into the prompt or to the client. It has no `set` or `update`: an extension point handler does not write data. Writes belong to runtimes; a function runtime uses `ctx.pluginData.set` or the operation-based `ctx.pluginData.update`, which commit with the execution's proposals (see [Local code · Change data](../plugins/local-code.md#change-data) and [Transactions · Operation-based writes](./transactions.md#operation-based-writes-plugindataupdate)).
-- `ctx.world` is the session's World Model view.
+- `ctx.world` is the session's World Model view: `characters`, `characterSchema`, `dimensions`, and the session's seats, `seats`. Every call site gives this session's view, including calls outside a turn (the image flow, history compaction, UI slots), which read the committed state.
+- To find the character the player is acting as, use the SDK's `currentCharacterOf(primarySeat(ctx.world.seats), ctx.world.characters, ctx.world.seats)`, not `find(type === "player")`: a session may have several `type: player` characters. For the binding and current-character rules, see [Seats](./world-model.md#seats).
 - It cannot read other plugins' private namespaces from here.
 - A community provider's `ctx.utils`, like its `covel.http`, reaches only the origins listed in the `permissions.http` of its own package (see [the plugin reference](./plugins.md#runtime-field-groups)).
 
-The read methods of `ctx.pluginData` have the same shape in three places: a function runtime's handler, a runtime's guard, and an extension point's handler. Code can be moved directly between them.
+Service and extension contexts share `sessionId`, `locale`, read-only `pluginData`, `world`, and `getOwnSettings()`; see the [service context](./plugin-extensions.md#what-a-service-can-and-cannot-access) for in-execution visibility rules. Extensions still read their own execution snapshot.
+
+The read methods of `ctx.pluginData` have the same shape in four places: a function runtime's handler, a runtime's guard, an extension point's handler, and a service handler. Code can be moved directly between them.
 
 | Method                | Returns                                                                                                       |
 | --------------------- | ------------------------------------------------------------------------------------------------------------- |

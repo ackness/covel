@@ -7,7 +7,7 @@ import type {
   PluginExtensionApi,
 } from "./extension-points.js";
 import type { FunctionStoreView } from "./function-runtime.js";
-import type { JsonValue, MediaReference } from "./types.js";
+import type { JsonValue, MediaReference, PluginDataReader } from "./types.js";
 import type { withPendingProposals } from "./tool-result.js";
 import type { PluginMessageContext, PluginMessages } from "./messages.js";
 export type { PluginToolResult } from "./tool-result.js";
@@ -223,6 +223,12 @@ export interface PluginInputSource {
   readonly runtimeId: string;
   readonly resultId: string;
 }
+export interface PluginToolAnnotations {
+  readonly readOnly: boolean;
+  readonly stagesWrites: boolean;
+  readonly idempotent: boolean;
+  readonly concurrencySafe: boolean;
+}
 export interface PluginToolModule<
   TParams extends ZodType = ZodType,
   TOutput = unknown,
@@ -232,6 +238,8 @@ export interface PluginToolModule<
   readonly description: string;
   readonly parametersSchema: TParams;
   readonly jsonSchema: Readonly<Record<string, unknown>>;
+  readonly annotations: Readonly<PluginToolAnnotations>;
+  readonly timeoutMs?: number;
   execute(
     params: z.input<TParams>,
     context: PluginToolContext,
@@ -241,6 +249,8 @@ export interface PluginToolDefinition<TParams extends ZodType, TOutput> {
   readonly name: string;
   readonly description: string;
   readonly parameters: TParams;
+  readonly annotations?: Partial<PluginToolAnnotations>;
+  readonly timeoutMs?: number;
   execute(
     params: z.infer<TParams>,
     context: PluginToolContext,
@@ -287,6 +297,11 @@ export interface PluginServiceClient {
 }
 export interface PluginServiceContext {
   readonly callerPluginId: string;
+  readonly sessionId: string;
+  readonly locale?: string;
+  readonly pluginData: PluginDataReader;
+  readonly world: ExtensionWorldModel;
+  readonly getOwnSettings: () => Readonly<Record<string, unknown>>;
   readonly signal: AbortSignal;
   readonly services: PluginServiceClient;
   readonly gateway?: PluginServiceGateway;
