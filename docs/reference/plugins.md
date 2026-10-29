@@ -141,6 +141,8 @@ Extract facts supported by runtime-inputs.narrative.value, then call save-facts.
 
 entry 里的注册和清单里的声明双向核对：注册了却没声明，或者声明了却没实现，加载都会失败。包级贡献只属于根文件，不会合并子 runtime 的字段。`wires` 和其他不常用的写法见[高级字段](#高级字段)。
 
+作者可以用 `pnpm plugin:extract <dir>` 从入口生成六组注册声明，用 `--check` 在 CI 检查漂移。它会执行作者自己的代码；安装、审批和静态校验仍只读声明，加载时仍双向核对。改写范围和命令用法见[带本地代码的插件](../plugins/local-code.md#4-写入口文件)。
+
 内置插件也只读当前数据契约。骰子回执必须带 `checks` 数组，`pluginData.get()` 直接返回保存的值。经过 `select: /narrativeOutput` 投影的叙事输入是字符串。世界规则是带 `schemaVersion`、`id`、`content` 的扁平记录，不接受 `{ rule, ... }` 包装。NPC 关系的每个事实只能有一个开放版本；遇到重复开放版本会拒绝写入，不自动修复。立绘替换只匹配完整角色 ID 或当前的 `npc-<blueprintId>` 投影，不匹配任意会话前缀。
 
 ### 契约版本策略

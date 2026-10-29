@@ -114,6 +114,8 @@ workspace dependencies or sibling-plugin imports.
 
 ### 6. Validate
 
+Sync your own entry's declarations with `pnpm plugin:extract plugins/<id>` (executes code with your permissions); use `--check` for CI, and maintain `extensions` / `commands` metadata yourself. See [local code](../../../docs/plugins/local-code.md#4-写入口文件).
+
 ```bash
 pnpm validate:plugin plugins/<id>       # manifest + cross-runtime checks
 pnpm --filter <package-name> test       # focused handler/registration tests

@@ -141,6 +141,8 @@ Session prep groups the plugins by whether they call a model, that is by the der
 
 Registrations in `entry` and declarations in the manifest are checked in both directions. If something is registered but not declared, or declared but not implemented, loading fails. Package-level contributions belong only to the root file. They are not merged with the fields of a child runtime. `wires` and other rarely needed forms are in [Advanced fields](#advanced-fields).
 
+Authors can generate the six registration lists from their entry with `pnpm plugin:extract <dir>` and check drift in CI with `--check`. This executes the author's own code; installation, approval and static validation still read declarations, and loading still checks both directions. See [Plugins with local code](../plugins/local-code.md#4-write-the-entry-file) for the rewrite scope and command usage.
+
 Bundled plugins follow the same current data contracts as external packages. Dice receipts carry a `checks` array, and `pluginData.get()` returns the stored value directly. A narrative binding projected with `select: /narrativeOutput` carries a string. World rules use flat records with `schemaVersion`, `id`, and `content`, without a `{ rule, ... }` wrapper. NPC edge history permits one open version per relation; duplicate open versions are rejected without automatic repair. Portrait replacement matches an exact character ID or the current `npc-<blueprintId>` projection, never an arbitrary session prefix.
 
 ### Contract version policy

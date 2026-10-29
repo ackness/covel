@@ -1,5 +1,6 @@
 import { runRuntimeDebug, runRuntimeCases } from "./runner.js";
 import { hasUnexpectedRunFailure } from "./reporting.js";
+import { EXTRACT_HELP, runExtractCli } from "./extract-cli.js";
 
 import type { RunRuntimeDebugOptions } from "./types.js";
 
@@ -18,6 +19,8 @@ export interface CliOutput {
 const HELP = `Usage:
   covel-test-runtime <pluginId|runtimeId> [options]
   test_runtime <pluginId|runtimeId> [options]
+
+${EXTRACT_HELP}
 
 Options:
   --plugin <id>              Plugin id. Defaults to runtimeId prefix.
@@ -178,13 +181,16 @@ function parseArgs(argv: readonly string[]): CliOptions | "help" {
 /**
  * Runs one CLI invocation and returns its exit code: 0 for a run that passed,
  * 1 for a failed runtime, job, commit, or case, and 2 when the arguments are
- * invalid or the run throws.
+ * invalid or the run throws. Extraction returns 1 on drift in check mode or
+ * on extraction errors, and 2 for invalid arguments.
  */
 export async function runCli(
   argv: readonly string[],
   output: CliOutput = process,
 ): Promise<number> {
   try {
+    if (argv[0] === "extract")
+      return await runExtractCli(argv.slice(1), output);
     const options = parseArgs(argv);
     if (options === "help") {
       output.stdout.write(HELP);

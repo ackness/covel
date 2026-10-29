@@ -159,6 +159,23 @@ export default function register(covel) {
 
 `covel.toolkit` is the set of helpers used in the previous step.
 
+After changing entry registrations, run these commands from the repository root:
+
+```bash
+pnpm plugin:extract ~/.covel/plugins/notebook
+pnpm plugin:extract ~/.covel/plugins/notebook --check
+pnpm plugin:extract ~/.covel/plugins/notebook --check --json
+```
+
+The first command runs the entry factory on the author's machine, writes the six registration lists (`tools`, `actions`, `services`, `forms`, `wires`, `hooks`) into `contributes` in the root `PLUGIN.md`, and prints changed keys. When already in sync, it prints `Declarations are in sync.`. Lists are deduplicated in first-registration order; normal hooks become event names, and other phases become `{ event, enforce }`. Empty list keys are removed. Comments, other fields and the Markdown body are preserved.
+
+`--check` writes nothing and shows removed names with `-` and added names with `+` per key; changes only to order or spelling are described separately. It exits 1 on drift and 0 when in sync, for CI. `--json` emits `extracted` and `drift`. Extraction errors exit 1; invalid arguments exit 2.
+
+Extension registrations and command metadata are reported without rewriting: `extensions` can carry declaration-only options, and `commands` has no entry registration method. Authors still maintain those declarations. Only canonical `PLUGIN.md` is changed; a `PLUGIN.<locale>.md` containing these registration lists, `extensions` or `commands` is reported by filename and left intact. Localized `contributes.prompt` is allowed.
+
+> [!CAUTION]
+> This command executes plugin entry code with your permissions and is meant for your own package. It records registrations without invoking tool, action, service or hook handlers; calling host capabilities such as `covel.http` during registration fails. A throwing factory, an entry path escaping the package or executable frontmatter prevents write-back. Installation and approval still read static declarations, and loading still [checks both directions](../reference/plugins.md#contributes-fields).
+
 ## 5. Validate and run offline
 
 ```bash
