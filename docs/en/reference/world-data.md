@@ -11,6 +11,8 @@ Some terms used throughout this page:
 - **Descriptor**: an optional file (`data/world.data.yaml`) that changes how a conventional file is read, or adds a file outside the conventions. Most worlds do not need it.
 - **Session**: one game that a player starts with this world. The world package's data is copied into the session when the session is created. After that, each session changes on its own. Saves in browser-private mode work the same way ([Browser-private workspace](./api.md#browser-private-workspace)).
 
+SillyTavern character cards and lorebooks can be [converted into this same ordinary package](../worlds/import-sillytavern.md). Conversion reports unmappable fields and creates only fixed content files, without executing extensions or scripts.
+
 ## World Package
 
 **The smallest world package** has two files:
@@ -369,7 +371,7 @@ A world package does not have to use every capability. Let the genre decide the 
 
 These fields change only how the world is shown. You can leave all of them out.
 
-- `defaultViewMode`: the default way to show the session the first time it is played. Write `stage` (full-screen stage mode, see [ui-panels.md](./ui-panels.md#stage-mode-stage-view)) or `parsed`. It is only the starting value. Once the player switches the view at the top of the page, the player's choice wins.
+- `defaultViewMode`: the default way to show the session the first time it is played. Write `stage` (full-screen stage mode, see [ui-panels.md](./ui-panels.md#stage-mode-stage-view)), `parsed` or `plugin:<pluginId>:<viewId>` ([Plugin views](./ui-panels.md#plugin-views); bridge views request consent first). It is only the starting value. Once the player switches the view at the top of the page, the player's choice wins.
 - `version`, `author`, `license`, `homepage`: the version and author information of the world package. The fields, limits and translation rules are the same as for plugins. See [author information](./plugins.md#author-information). They show only on the world card. They do not go into session data or the prompt.
 - `cover`, `accentColor`, `themeMusic`: the cover, the accent color, and the music on the world list. See the end of the [Background Music](#background-music) section.
 

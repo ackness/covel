@@ -1050,8 +1050,11 @@ Authentication:
 <!-- prettier-ignore -->
 | Method | Path | Request | Description |
 | --- | --- | --- | --- |
+| POST | `/api/install/validate/plugin` | multipart `file` or JSON `{source}` | Statically validate a plugin; returns `200 PackageValidationReport` |
+| POST | `/api/install/validate/world` | multipart `file` or JSON `{source}` | Statically validate a world; returns `200 PackageValidationReport` |
 | POST | `/api/install/plugin` | multipart field `file` | Unzip a plugin `.zip` into the user plugins folder |
 | POST | `/api/install/world` | multipart field `file` | Unzip a world `.zip` into the user worlds folder |
+| POST | `/api/install/st-import` | multipart `file` (repeated), `locale?`, `name?`, `preview?` | Convert SillyTavern content into one world; preview writes nothing |
 | POST | `/api/install/plugin/github/preview` | `{ url }` | Parse a public GitHub repository or subfolder and return a preview. Does not install or run the plugin |
 | POST | `/api/install/plugin/github` | `{ token, acceptRisk: true }` | Validate the confirmed preview and install |
 | POST | `/api/install/world/github/preview` | `{ url }` | Same as above, for a world package |
@@ -1068,6 +1071,7 @@ What each endpoint accepts and returns:
 
 - `POST /api/install/plugin`: accepts a `.zip` with `PLUGIN.md` at the root (`package.json` is optional, and a multi-runtime layout works too), or a `.zip` with a single top-level folder that holds `PLUGIN.md`. Returns `201 { ok, kind: "plugin", id, restartRequired: true, hasServerCode }`.
 - `POST /api/install/world`: accepts a `.zip` with `world.yaml` and `WORLD.md` at the root. Returns `201 { ok, kind: "world", id, restartRequired: false }`.
+- `POST /api/install/st-import`: returns `200` for `preview=true`, otherwise `201`, with `{ ok: true, preview, kind: "world", id, restartRequired: false, report }`. Requires `host.files` and `world.write`. `locale` is canonicalized BCP 47 (default `DEFAULT_LOCALE`); `name` is optional. The report includes `sources`, `world: { id, name, locale, summary }`, `counts: { characters, loreEntries, hasCover }`, and `items: [{ level, code, source?, field?, count?, message }]`. Messages are English; clients translate known codes. Limits: 8 files, 6 cards, 8 MiB per file, 20 MiB request body, 3 MiB decoded card JSON, 4096 PNG chunks, 2000 lore entries (excess reported and omitted), 20000 characters per entry and 2 MiB generated lorebook YAML. Invalid content returns `400`, a per-file size violation `413`, and exhausted ID candidates `409`; converter errors include `details: { code }`. Import reuses ZIP manifest validation and atomic world activation; an ID race returns `409` and can be retried. See [the import guide](../worlds/import-sillytavern.md).
 - `POST /api/install/plugin/github/preview`: returns the fixed commit, the summary, and the signed preview.
 - `.../github/update/preview`: returns `{ status: "current" }`, `{ status: "pinned" }`, or `{ status: "available", ... }` plus a preview. The full contract of the update endpoints is in [Plugin install](./plugin-installation.md#http-contract) and [World install](./world-installation.md).
 - `POST /api/install/plugin/github`: returns `201 { ok, kind: "plugin", id, restartRequired: true }`.
@@ -1091,6 +1095,42 @@ Rollback results for failed batch installations are documented in [Plugin instal
 > - At install time, the ID is the `id` in `PLUGIN.md`, else the name of the folder that holds the package, else the package name in `package.json` (without its scope and the exact `plugin-` prefix); see [plugin installation](./plugin-installation.md#what-the-installer-does-and-does-not-do). When `id` is written, the `package.json` name plays no part.
 > - The check for reserved built-in IDs, the install directory, and the returned `id` all use this ID. A package with no `id` and no top-level folder whose `package.json` names `@covel/plugin-narrator` hits a reserved ID and returns `409`.
 > - Plugin discovery at startup takes the directory name as the ID. When `PLUGIN.md` writes a different `id`, the plugin is registered with `hostState: "error"`, and no runtime, tool, hook, or wire is loaded.
+
+### In-app validation
+
+Both validation endpoints reuse installation’s `host.files` authorization. World validation adds no `world.write` requirement. Upload a ZIP as multipart `file`, capped at 20 MiB; the archive reader checks its contents regardless of MIME type. JSON can select an installed package or a directory within allowed roots:
+
+```json
+{ "source": { "kind": "installed", "id": "my-package" } }
+```
+
+```json
+{ "source": { "kind": "path", "path": "/allowed/packages/my-package" } }
+```
+
+Completed validation returns `200` even when errors are found. An installed world with a damaged or missing manifest still returns a report containing `manifest-invalid`; `404` means no package directory was found. Issue paths are relative to the package and contain no host paths.
+
+Upload identity derivation failures also return `200`, with an `identity-invalid` error, `ok: false` and no `id`. The static validator reports manifest parsing failures separately. Example report:
+
+```json
+{
+  "kind": "plugin",
+  "id": "my-package",
+  "ok": false,
+  "counts": { "errors": 1, "warnings": 0 },
+  "issues": [
+    {
+      "severity": "error",
+      "code": "unknown-field",
+      "file": "PLUGIN.md",
+      "field": "future",
+      "message": "unknown field"
+    }
+  ]
+}
+```
+
+Invalid requests return `400`; missing packages `404`; ambiguous world IDs `409`; paths outside allowed roots `403 path-outside-roots`; excessive uploads `413`; unavailable plugin catalogues `503`. See [plugin installation](./plugin-installation.md#in-app-validation) and [world installation](./world-installation.md#in-app-validation) for report and path handling.
 
 ### State query
 
@@ -1524,7 +1564,7 @@ Returns plugins' UI declarations, grouped by slot. The front end calls it at sta
     }
   ],
   "message": [...],
-  "left": [...],
+  "view": [...],
   "diagnostics": []
 }
 ```
@@ -1538,6 +1578,8 @@ Each slot is an array. Its elements are `{ pluginId, specs[] }`. Each item in `s
 - If one spec fails validation, it **does not affect the whole response**. Only that spec is removed from its slot.
 - The reason for failure is written in the top-level `diagnostics[]`. Each item is `{ pluginId, runtimeId, slot, specIndex, specId?, issues[{ path, message, code }] }`. It says which plugin, which field, and what the problem is. A file that cannot be read (missing, not JSON, or pointing outside the plugin directory) is reported here too; `code` is always `invalid`.
 - With `sessionId`, `diagnostics` includes only the plugins active in that session.
+
+`view` is always an array (possibly empty) of `{ pluginId, specs }`. With a session, it lists only active plugins. The first view ID within a plugin wins; later duplicates produce `slot: "view"` diagnostics. Loading reads JSON and HTML without importing plugin code or requiring server-code approval. The browser separately gates mounting on player consent for session reading; see [Plugin views](./ui-panels.md#plugin-views).
 
 **Development hot reload**: `POST /api/plugins/:id/reload` reloads one community plugin.
 

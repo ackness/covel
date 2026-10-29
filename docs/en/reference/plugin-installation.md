@@ -322,3 +322,15 @@ After a session is created or restored, the web sends **one** prompt that asks f
 - Approval follows the enable → approval → enable flow.
 
 Authorization is not kept across a backend restart. In particular, an old authorization must not be carried over after the code has been updated. Built-in plugins load automatically and do not need authorization.
+
+## In-app validation
+
+Players without a source checkout or pnpm can open **Settings → Install & manage** and click **Validate** on an installed package, or select plugin or world and drop a ZIP. ZIP validation does not install the package. The API also accepts directory paths within allowed roots; the UI has no directory picker yet.
+
+ZIP validation uses the [installation rules for plugin IDs](#what-the-installer-does-and-does-not-do), preserving identities derived from the package directory or `package.json.name` instead of using the temporary directory name. When no valid ID can be resolved, the report omits `id` and returns an `identity-invalid` error with `ok: false`. The static validator reports manifest parsing errors separately.
+
+Validation reads manifests and referenced files, checking fields, files, languages and static declarations. It never imports or executes package code, and changes no world or save. It shares the CLI validation core; the plugin CLI displays the first failure, while the app continues collecting problems that can be checked independently.
+
+Reports contain `kind`, `id` when available, `ok`, `counts.errors`, `counts.warnings` and `issues`. Each issue has `severity`, `code`, `message`, and, when known, a package-relative `file`, manifest field path or JSON pointer `field`, and repair `hint`. The summary may include version and languages. Messages are limited to 2000 characters; the first 200 issues are retained, with an additional `issues-truncated` warning and omitted count when necessary. Headings and known codes use the UI language; other messages stay in English. Reports can be copied as plain text.
+
+Access uses the same `host.files` rules as installation: hosted instances require the operator Bearer token; personal instances retain the install API’s desktop token or explicit enablement rules. Paths must resolve to directories within the corresponding plugin or world roots, and symlinked package roots are rejected. Reports make package paths relative and replace other host paths with `<path>`; CLI-only raw text is never returned. See [API](./api.md#in-app-validation) for requests.

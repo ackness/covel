@@ -107,7 +107,7 @@ function validPluginId(id: string): boolean {
  * directory of the archive, the directory of a repository, or the repository
  * itself), and without a usable directory name the `package.json` name.
  */
-function installPluginId(
+export function installPluginId(
   frontmatter: Readonly<Record<string, unknown>>,
   directory: string | undefined,
   packageJson: InstallPackage | undefined,

@@ -20,11 +20,16 @@ import {
   type InstallKind,
   type InstallResult,
 } from "@/services/api.js";
+import {
+  PackageValidationButton,
+  PackageValidationZip,
+} from "./PackageValidation.js";
 import { GithubPackageUpdater } from "./GithubPackageUpdater.js";
 import { pluginPackageInfo } from "@/lib/package-info.js";
 import { useSessionActions } from "@/stores/session-store.js";
 import { PackageCredits } from "@/components/shared/package-credits.js";
 import { PluginLoadWarnings } from "@/components/shared/plugin-load-warnings.js";
+import { StImportCard } from "./StImportCard.js";
 import { GithubCollectionInstaller } from "./GithubCollectionInstaller.js";
 import type { PluginInstallation, PluginSummary } from "@covel/shared";
 import { ignoreError } from "@/lib/ignore-error.js";
@@ -338,6 +343,15 @@ export function PackagesPane() {
         onFile={(f) => uploadZip("world", f)}
       />
 
+      <StImportCard
+        busy={githubBusy || !!busy || updateBusy || !!removing}
+        onBusyChange={setGithubBusy}
+        onImported={() => {
+          void refreshInstalled();
+          refreshWorlds();
+        }}
+      />
+
       {rows.length > 0 && (
         <section className="space-y-2">
           <h3 className="text-xs font-semibold text-muted-foreground">
@@ -399,6 +413,11 @@ export function PackagesPane() {
                       : t("settings.packages.uninstall", "Uninstall")}
                   </Button>
                 </div>
+                <PackageValidationButton
+                  kind="plugin"
+                  id={p.id}
+                  disabled={!!busy || !!removing || githubBusy || updateBusy}
+                />
                 <PluginLoadWarnings
                   diagnostics={installed.find((plugin) => plugin.id === p.id)}
                 />
@@ -427,6 +446,11 @@ export function PackagesPane() {
                   {item.id}
                   {item.version ? ` · ${item.version}` : ""}
                 </p>
+                <PackageValidationButton
+                  kind="world"
+                  id={item.id}
+                  disabled={!!busy || !!removing || githubBusy || updateBusy}
+                />
                 <GithubPackageUpdater
                   kind="world"
                   installation={item}
@@ -443,6 +467,9 @@ export function PackagesPane() {
           </ul>
         </section>
       )}
+      <PackageValidationZip
+        disabled={!!busy || !!removing || githubBusy || updateBusy}
+      />
     </div>
   );
 }

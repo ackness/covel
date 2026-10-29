@@ -23,6 +23,10 @@ debugs/
 .bg-shell
 .gsd/
 fixtures/
+# Original redistributable SillyTavern import samples.
+!tests/fixtures/
+tests/fixtures/*
+!tests/fixtures/st-import/
 output/
 .pi/subagents/
 

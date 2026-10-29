@@ -16,6 +16,8 @@
 
 ## 1. 校验
 
+没有源码的玩家可以在设置的安装与管理里点“校验”。
+
 ```bash
 pnpm validate:plugin ~/.covel/plugins/tavern-rumors
 ```

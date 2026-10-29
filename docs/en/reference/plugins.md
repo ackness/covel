@@ -134,7 +134,8 @@ Session prep groups the plugins by whether they call a model, that is by the der
 | `settings` | Player settings. The runtime reads them through `ctx.userSettings`. |
 | `data` | The schema, version, accepts, and search settings for this plugin's data namespace |
 | `datasets` | Typed datasets the package owns: the name is the namespace, with schema, key and ops. See [Datasets](#datasets-contributesdatasets) |
-| `ui` | Paths, relative to the package root, of the `right/message` UI spec files |
+| `ui` | Paths, relative to the package root, of the `right/message/view` UI spec files |
+| `ui.view` | Full-column view spec paths relative to the package root; see [Plugin views](./ui-panels.md#plugin-views) for declarations and consent |
 | `worldProjections` | Declarations of world data projections |
 | `prompt` | Static prompt sections |
 
@@ -920,7 +921,7 @@ After a namespace declares `search`, its records enter the framework's memory re
 **How a world and a gameplay pack give the initial request.**
 
 - A world's `pluginPolicy` picks a built-in pack with `preset` and adds the plugins it wants with `plus`; see [plugin selection](./world-data.md#plugin-selection-pluginpolicy). A gameplay pack uses `requested` and `recommended`. The initial explicit requests are the `preset` pack's `requested` plus `plus`.
-- A built-in gameplay pack (`packs/builtin.yaml`) can also have `defaultViewMode` (`stage` or `parsed`). When a world is created with AI for this pack, the generated world gets this `defaultViewMode`. The framework makes no decision by pack ID: the choices of AI world creation are all the packs of this catalogue; see `packs` in [`GET /api/framework/authoring`](./api.md#get-apiframeworkauthoring).
+- A built-in gameplay pack (`packs/builtin.yaml`) can also have `defaultViewMode` (`stage`, `parsed` or `plugin:<pluginId>:<viewId>`; bridge views request player consent first). When a world is created with AI for this pack, the generated world gets this `defaultViewMode`. The framework makes no decision by pack ID: the choices of AI world creation are all the packs of this catalogue; see `packs` in [`GET /api/framework/authoring`](./api.md#get-apiframeworkauthoring).
 - A recommendation is not enabled automatically, and it does not override the player's explicit exclusion.
 - `defaultPluginIds` from `GET /api/worlds/:id/plugin-plan` is the initial set of explicit requests. The session-prep screen and the create endpoint then use the same resolver to compute the active set.
 - Each `requested` list and `defaultPluginIds` returned by this endpoint contains only installed plugins. A plugin that a world or pack requests but that is not installed is listed in `missing`. The session-prep screen shows it as a notice, and it is not sent in the create request.

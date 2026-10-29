@@ -333,6 +333,14 @@ export {
   uiMapDirectiveSchema,
   type PluginUiSpecIssue,
 } from "./schemas/ui-spec.js";
+export {
+  PLUGIN_VIEW_ID_PATTERN,
+  parsePluginViewMode,
+  pluginViewMode,
+  viewModeSchema,
+  type PluginViewMode,
+  type DefaultViewMode,
+} from "./schemas/view-mode.js";
 
 // ── World Schemas ───────────────────────────────────────────────
 export {
@@ -452,6 +460,8 @@ export type {
   WorldDataDescriptorInput,
   WorldDataDescriptorOverrideInput,
 } from "./schemas/world-data.js";
+
+export * from "./schemas/st-import.js";
 
 // ── Validation Utilities ────────────────────────────────────────
 export {
@@ -609,3 +619,10 @@ export type {
   CaseExpectations,
   CaseArtifactConfig,
 } from "./schemas/runtime-cases.js";
+
+export {
+  packageValidationIssueSchema,
+  packageValidationReportSchema,
+  type PackageValidationIssue,
+  type PackageValidationReport,
+} from "./schemas/package-validation.js";

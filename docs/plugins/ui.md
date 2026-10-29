@@ -577,3 +577,17 @@ HTML 文件在一个隔离的框里运行。框架给它一个 `window.covel` �
 - **写即时操作、事件和玩家命令。** 见[插件字段参考](../reference/plugins.md)和[插件扩展参考](../reference/plugin-extensions.md)。
 - **给界面的逻辑写测试。** 见[插件测试](./testing.md)。
 - **做一套自己的界面风格。** 见[制作主题](../recipes/themes.md)。
+
+## 做一个插件视图
+
+1. 复制 [session-view-probe](../../tests/third-party/session-view-probe/README.md) 到用户插件目录。它不含 runtime 和服务端入口。
+2. 打开根 `PLUGIN.md` 的 `contributes.ui.view`，查看 `story-view.json` 和 `notes-view.json`。前者用单文件 HTML 读取故事，后者用 `Stack` 和 `Text` 画一个无需会话数据的页面。修改英文标签时，同步修改 `locales/zh.yaml`。
+3. 在会话启用插件，从顶部“插件视图”菜单选择“故事阅读器”。先出现读取授权提示，同意后才显示故事。通过“返回默认视图”回去；通过视图栏菜单撤销授权。修改 spec 或 HTML 后再次选择会要求重新授权。
+
+桥接读取范围、视图字段和当前限制见[插件视图参考](../reference/ui-panels.md#插件视图)。此示例不提交行动或表单，没有输入框，也不显示图片。
+
+| 遇到的问题             | 处理                                                                          |
+| ---------------------- | ----------------------------------------------------------------------------- |
+| 菜单里没有视图         | 确认插件在当前会话启用，检查 `/api/ui-specs` 的 `diagnostics`                 |
+| 读取授权后页面仍为空白 | 检查 HTML 使用 classic script 和 `window.covel.subscribe`；用宿主返回按钮离开 |
+| 页面在数据为空时不显示 | 无数据源的 json-render 页面添加 `alwaysRender: true`                          |

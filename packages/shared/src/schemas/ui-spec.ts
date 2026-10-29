@@ -6,6 +6,7 @@
  * is not dropped in the game.
  */
 import { z } from "zod";
+import { PLUGIN_VIEW_ID_PATTERN } from "./view-mode.js";
 import { PLUGIN_UI_COMPONENT_NAMES } from "../types/plugin-ui.js";
 
 /** The newest `specVersion` this host understands. */
@@ -133,6 +134,8 @@ export const pluginUiSpecSchema = z
     id: z.string().min(1).optional(),
     label: i18nTextSchema.optional(),
     shortLabel: i18nTextSchema.optional(),
+    description: i18nTextSchema.optional(),
+    bridge: z.literal("session").optional(),
     icon: z.string().optional(),
     group: z.string().optional(),
     groupLabel: i18nTextSchema.optional(),
@@ -195,6 +198,13 @@ export const pluginUiSpecSchema = z
     });
     const hasView = spec.view !== undefined && spec.view !== null;
     const hasWebview = spec.webview !== undefined && spec.webview !== null;
+    if (spec.bridge && !hasWebview)
+      ctx.addIssue({
+        code: "custom",
+        path: ["bridge"],
+        message:
+          "bridge applies to a webview; a json-render view reads its own plugin data through dataSource",
+      });
     if (hasView && hasWebview)
       ctx.addIssue({
         code: "custom",
@@ -225,6 +235,7 @@ export interface PluginUiSpecIssue {
 export function pluginUiSpecIssues(
   spec: unknown,
   ownerPluginId: string,
+  slot?: "right" | "message" | "view",
 ): PluginUiSpecIssue[] {
   const result = pluginUiSpecSchema.safeParse(spec);
   const issues: PluginUiSpecIssue[] = result.success
@@ -233,6 +244,41 @@ export function pluginUiSpecIssues(
         path: formatPath(issue.path) || "(root)",
         message: issue.message,
       }));
+  if (spec && typeof spec === "object" && !Array.isArray(spec)) {
+    const record = spec as Record<string, unknown>;
+    if (slot === "view") {
+      for (const field of ["id", "label"])
+        if (record[field] === undefined)
+          issues.push({
+            path: field,
+            message: `${field} is required in contributes.ui.view`,
+          });
+      if (
+        typeof record.id === "string" &&
+        !PLUGIN_VIEW_ID_PATTERN.test(record.id)
+      )
+        issues.push({
+          path: "id",
+          message:
+            "id in contributes.ui.view must match ^[a-z][a-z0-9-]{0,63}$",
+        });
+      for (const field of [
+        "surfaces",
+        "group",
+        "groupLabel",
+        "groupOrder",
+        "shortLabel",
+        "navTarget",
+      ])
+        if (record[field] !== undefined)
+          issues.push({ path: field, message: "not valid in a view" });
+    } else if (record.bridge !== undefined) {
+      issues.push({
+        path: "bridge",
+        message: "bridge is only valid in contributes.ui.view",
+      });
+    }
+  }
   walkSpec(spec, [], (at, key, value) => {
     if (
       (key === "pluginId" ||

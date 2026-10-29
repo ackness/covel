@@ -11,6 +11,8 @@
 - **descriptor**：一份可选的文件（`data/world.data.yaml`），改动约定的读法，或者加上约定之外的文件。大多数世界不需要它。
 - **会话**：玩家用这个世界开的一局游戏。世界包里的数据在创建会话时被复制进会话，之后各局各自变化。浏览器私有模式的存档也一样（[浏览器私有工作区](./api.md#浏览器私有工作区)）。
 
+SillyTavern 角色卡和世界书可以[转换成同样的普通世界包](../worlds/import-sillytavern.md)。转换会报告无法映射的字段，只生成固定的内容文件，不执行扩展或脚本。
+
 ## World Package
 
 **最小的世界包**是两个文件：
@@ -369,7 +371,7 @@ schema:
 
 这些字段只影响世界怎样显示，都可以省略。
 
-- `defaultViewMode`：会话第一次进入游玩时的默认呈现方式，写 `stage`（全屏舞台模式，见 [ui-panels.md](./ui-panels.md#舞台模式stage-view)）或 `parsed`。它只是初始值，玩家在页面顶部切换视图之后以玩家的选择为准。
+- `defaultViewMode`：会话第一次进入游玩时的默认呈现方式，写 `stage`（全屏舞台模式，见 [ui-panels.md](./ui-panels.md#舞台模式stage-view)）、`parsed` 或 `plugin:<pluginId>:<viewId>`（[插件视图](./ui-panels.md#插件视图)，桥接视图先请求授权）。它只是初始值，玩家在页面顶部切换视图之后以玩家的选择为准。
 - `version`、`author`、`license`、`homepage`：世界包的版本和作者信息。字段、限制和翻译规则与插件相同，见[作者信息](./plugins.md#作者信息)。它们只显示在世界卡片上，不进入会话数据和提示词。
 - `cover`、`accentColor`、`themeMusic`：封面、强调色和世界列表上的音乐，见 [Background Music](#background-music) 一节末尾。
 

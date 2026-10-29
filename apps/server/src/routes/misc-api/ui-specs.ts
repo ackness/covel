@@ -5,7 +5,11 @@ import { runnablePluginIds } from "../api/session/plugins.js";
 import { type UiSlotName } from "./shared.js";
 import type { UiSpecDiagnostic } from "./ui-spec-schema.js";
 
-const UI_SLOTS = ["right", "message"] as const satisfies readonly UiSlotName[];
+const UI_SLOTS = [
+  "right",
+  "message",
+  "view",
+] as const satisfies readonly UiSlotName[];
 
 type SlotSpecs = Partial<
   Record<UiSlotName, readonly Readonly<Record<string, unknown>>[]>
@@ -46,6 +50,7 @@ async function projectRegistryUiSpecs(
   for (const entry of registry.getAll().values()) {
     if (entry.status === "error" || !entry.rootPath) continue;
     const runtimes: RuntimeSlotSpecs[] = [];
+    const viewIds = new Set<string>();
 
     for (const { manifest } of pluginDeclarations(entry)) {
       if (!manifest.ui) continue;
@@ -77,7 +82,33 @@ async function projectRegistryUiSpecs(
       const slots: SlotSpecs = {};
       for (const slot of UI_SLOTS) {
         const specs = loaded.slots[slot];
-        if (specs?.length) slots[slot] = specs;
+        if (!specs?.length) continue;
+        if (slot !== "view") {
+          slots[slot] = specs;
+          continue;
+        }
+        slots.view = specs.filter((spec, specIndex) => {
+          const id = spec.id as string;
+          if (!viewIds.has(id)) {
+            viewIds.add(id);
+            return true;
+          }
+          diagnostics.push({
+            pluginId: entry.id,
+            runtimeId: manifest.name,
+            slot,
+            specIndex,
+            specId: id,
+            issues: [
+              {
+                path: "id",
+                code: "invalid",
+                message: `duplicate view id "${id}"`,
+              },
+            ],
+          });
+          return false;
+        });
       }
       if (Object.keys(slots).length > 0) {
         runtimes.push({ runtimeName: manifest.name, slots });
@@ -119,6 +150,7 @@ export async function buildUiSpecsResponse(params: {
     pluginId: string;
     specs: readonly Record<string, unknown>[];
   }>;
+  view: Array<{ pluginId: string; specs: readonly Record<string, unknown>[] }>;
   diagnostics: UiSpecDiagnostic[];
 }> {
   const { sessionId, session: knownSession, registry, store } = params;
@@ -135,6 +167,7 @@ export async function buildUiSpecsResponse(params: {
   };
   const right: SlotEntry[] = [];
   const message: SlotEntry[] = [];
+  const view: SlotEntry[] = [];
 
   for (const plugin of loaded.pluginSpecs) {
     if (activeFilter && !activeFilter.has(plugin.pluginId)) continue;
@@ -143,7 +176,8 @@ export async function buildUiSpecsResponse(params: {
         (runtime) => runtime.slots[slot] ?? [],
       );
       if (specs.length === 0) continue;
-      const target = slot === "right" ? right : message;
+      const target =
+        slot === "right" ? right : slot === "view" ? view : message;
       target.push({ pluginId: plugin.pluginId, specs });
     }
   }
@@ -151,5 +185,5 @@ export async function buildUiSpecsResponse(params: {
   const diagnostics = loaded.diagnostics.filter(
     (diagnostic) => !activeFilter || activeFilter.has(diagnostic.pluginId),
   );
-  return { right, message, diagnostics };
+  return { right, message, view, diagnostics };
 }

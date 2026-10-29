@@ -7,6 +7,7 @@ import {
   Clock,
   Code,
   ListTree,
+  PanelsTopLeft,
   MapPin,
   MoreHorizontal,
   PanelRight,
@@ -15,7 +16,12 @@ import {
   Undo2,
 } from "lucide-react";
 import type { TFunction } from "i18next";
-import type { StageBackdropModel } from "@covel/shared";
+import {
+  parsePluginViewMode,
+  type PluginViewMode,
+  type StageBackdropModel,
+} from "@covel/shared";
+import type { PluginViewEntry } from "./use-plugin-views.js";
 import { Button } from "@/components/ui/button.js";
 import { Toggle } from "@/components/ui/toggle.js";
 import type { SessionRecord, WorldRecord } from "@/services/api.js";
@@ -31,7 +37,8 @@ import {
   type ExecutionPresentation,
 } from "../execution-presentation.js";
 
-export type GameViewMode = "parsed" | "detailed" | "raw" | "stage";
+export type GameViewMode =
+  "parsed" | "detailed" | "raw" | "stage" | PluginViewMode;
 
 interface GameViewHeaderProps {
   t: TFunction;
@@ -45,6 +52,8 @@ interface GameViewHeaderProps {
   executionState?: ExecutionPresentation;
   recoveryNoticeVisible?: boolean;
   viewMode: GameViewMode;
+  pluginViews: readonly PluginViewEntry[];
+  hostDefaultMode: GameViewMode;
   isLeftCollapsed: boolean;
   isRightCollapsed: boolean;
   onViewModeChange: (mode: GameViewMode) => void;
@@ -75,6 +84,8 @@ export function GameViewHeader({
   executionState,
   recoveryNoticeVisible = false,
   viewMode,
+  pluginViews,
+  hostDefaultMode,
   isLeftCollapsed,
   isRightCollapsed,
   onViewModeChange,
@@ -116,7 +127,7 @@ export function GameViewHeader({
   const authorView = viewMode === "detailed" || viewMode === "raw";
 
   return (
-    <div className="ui-session-header ui-panel-header ui-drag-region relative px-2 md:px-3 flex justify-between items-center gap-3 z-10">
+    <div className="ui-session-header ui-panel-header ui-drag-region relative h-auto min-h-(--panel-header-height) py-1 px-2 md:px-3 flex justify-between items-center gap-3 z-10 flex-wrap sm:flex-nowrap">
       <div className="flex items-center gap-2 min-w-0 flex-1">
         <Button
           variant="ghost"
@@ -185,7 +196,7 @@ export function GameViewHeader({
         )}
         <ConnectionStatus />
       </div>
-      <div className="flex items-center gap-1 shrink-0">
+      <div className="ml-auto flex max-w-full flex-wrap items-center gap-1 shrink-0 sm:flex-nowrap">
         <div className="ui-view-switch flex items-center border border-(--rule-color) rounded-(--radius-control) overflow-hidden">
           <Toggle
             pressed={viewMode === "parsed"}
@@ -208,6 +219,37 @@ export function GameViewHeader({
             {t("session.viewStage")}
           </Toggle>
         </div>
+
+        {pluginViews.length > 0 && (
+          <HeaderMenu
+            label={t("session.pluginViews")}
+            active={Boolean(parsePluginViewMode(viewMode))}
+            icon={PanelsTopLeft}
+          >
+            {pluginViews.map((entry) => (
+              <MenuItem
+                key={entry.mode}
+                icon={PanelsTopLeft}
+                label={entry.label}
+                secondary={entry.pluginName}
+                checked={viewMode === entry.mode}
+                onSelect={() => onViewModeChange(entry.mode)}
+              />
+            ))}
+          </HeaderMenu>
+        )}
+        {parsePluginViewMode(viewMode) && (
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-10 w-10 shrink-0 md:h-8 md:w-8"
+            aria-label={t("session.backToDefaultView")}
+            title={t("session.backToDefaultView")}
+            onClick={() => onViewModeChange(hostDefaultMode)}
+          >
+            <Undo2 className="h-4 w-4" />
+          </Button>
+        )}
 
         {suspensionsCount > 0 && (
           <Button
@@ -290,11 +332,13 @@ export function GameViewHeader({
 }
 
 /** A click-away menu; small enough not to warrant a popover dependency. */
-function HeaderMenu({
+export function HeaderMenu({
   label,
   active,
   children,
+  icon: Icon = MoreHorizontal,
 }: {
+  readonly icon?: ComponentType<{ className?: string }>;
   readonly label: string;
   /** Marks the trigger when an option inside is switched on. */
   readonly active: boolean;
@@ -321,7 +365,7 @@ function HeaderMenu({
         aria-label={label}
         title={label}
       >
-        <MoreHorizontal className="w-4 h-4" />
+        <Icon className="w-4 h-4" />
       </Button>
       {open && (
         <div
@@ -341,15 +385,17 @@ function HeaderMenu({
   );
 }
 
-function MenuItem({
+export function MenuItem({
   icon: Icon,
   label,
+  secondary,
   checked,
   disabled,
   onSelect,
 }: {
   readonly icon: ComponentType<{ className?: string }>;
   readonly label: string;
+  readonly secondary?: string;
   readonly checked?: boolean;
   readonly disabled?: boolean;
   readonly onSelect: () => void;
@@ -365,7 +411,12 @@ function MenuItem({
       }`}
     >
       <Icon className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-      {label}
+      <span>{label}</span>
+      {secondary && (
+        <span className="hidden text-xs text-muted-foreground sm:inline">
+          {secondary}
+        </span>
+      )}
     </button>
   );
 }

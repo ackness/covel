@@ -1388,3 +1388,7 @@ How snapshots are saved:
 - Across processes, a large trace frame references the trace row that was saved originally. Ordinary state events keep ordered replay and gap detection.
 - If a live-only trace reference is lost or cannot be read, only a log entry is written. The state replay is not invalidated.
 - If reading a reference for a state event fails, it still triggers a replay reset. The reason: if the event is lost, the committed state the consumer sees would differ.
+
+## Plugin view read-only port
+
+Plugin views reuse the sandbox MessagePort. Full `{ type: "state", value }` messages carry the projection in `value.session`; streaming messages are `{ type: "stream", seq, append }`. This adds no HTTP or SSE endpoint. Reading requires player consent before mounting, bound to the plugin ID and the content hash of the spec plus HTML. Revocation closes the page. Existing page action handlers are unchanged. See [Plugin views](./ui-panels.md#plugin-views) for projection, throttling and consent rules.

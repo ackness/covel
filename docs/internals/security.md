@@ -66,6 +66,8 @@ browser-private 一列只对访客开放他们用自己的密钥和存档做的�
 
 `apps/server/tests/bootstrap/route-access.test.ts` 列出服务端的每一条 API 路由和它要的动作。新加的路由在写进这张表之前，测试不会通过。测试还用一份把所有动作都关上的宿主配置去请求每条路由，自己读环境变量做判断的路由会被发现；除了 `host-profile.ts`，服务端和核心包里的代码都不能读这几个部署变量。
 
+校验端点 `POST /api/install/validate/plugin` 和 `POST /api/install/validate/world` 复用 `host.files`，不导入或执行包内代码。目录请求先解析真实路径，必须位于对应的允许根目录中，并拒绝符号链接包根。上传复用安装的 ZIP 路径和大小检查，临时文件在请求结束时清理。报告中的包内路径变为相对路径，临时目录、用户目录及其他主机路径被隐藏；CLI 的原始错误文本不进入 HTTP 响应。传入实时插件目录时，世界校验不修改进程的全局数据约定。
+
 ## Outbound requests (SSRF guard)
 
 服务端替玩家向模型供应商发请求。SSRF 防护要保证这些请求不会被引到内网或本机上的服务。
@@ -388,7 +390,7 @@ default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-sr
 
 ### Plugin HTML
 
-插件的 `webview` HTML 是玩家批准过的代码，但它绝不能碰到应用所在的源：`localStorage` 里的设置和供应商密钥、cookie，以及带着玩家会话令牌的 API。它运行在应用页面往下的第二层 frame 里。
+插件的 `webview` HTML 在浏览器沙箱运行，它绝不能碰到应用所在的源：`localStorage` 里的设置和供应商密钥、cookie，以及带着玩家会话令牌的 API。它运行在应用页面往下的第二层 frame 里。
 
 1. **frame 宿主**是 `/plugin-frame.html`，Web 构建里的一个静态文件（`apps/web/public/plugin-frame.html`），对所有插件和会话都是同一个。
 
@@ -483,3 +485,9 @@ default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-sr
 - 已经打开的世界翻译流（`routes/api/worlds/translate.ts`）使用同样清理过的错误内容，不改变它的 HTTP 状态。翻译被拒的原因会报告（没有译文、回复不是 JSON、占位符被改动）；意外的存储或供应商错误不会报告。
 - 原因都记在服务端日志里。
 - 这些改动并不表示所有 trace、游戏内容或日志输出面都做了清理。
+
+`contributes.ui.view` 的 `bridge: session` 另可读取经过校验、裁剪和去除隐藏键的会话投影。挂载前必须逐项取得玩家同意，绑定插件 ID 与 spec + HTML 的内容哈希，所有来源一视同仁；世界默认视图不能绕过。授权通过本设备 SettingsStore 保存，视图栏菜单可撤销。这个只读能力不增加页面写入接口；范围与限制见[插件视图](../reference/ui-panels.md#插件视图)。
+
+## 导入第三方内容：只做数据转换
+
+SillyTavern 内容导入使用有上限的 PNG 块遍历（读数据前先检查剩余长度）、有上限并经 Zod 校验的 JSON、固定输出路径、文本清理和固定宏替换。PNG 封面会移除文本及其他元数据。不执行扩展、脚本、卡片正则或可执行宏，不能映射的字段和转换损失都会报告。预览不写入；导入由 `host.files` 与 `world.write` 保护，复用 ZIP 世界的校验及世界锁内的激活流程。清理不代表提示词可信：资料和叙事备注仍进入模型上下文，信任程度与其他第三方世界包相同。见[导入指南](../worlds/import-sillytavern.md)。

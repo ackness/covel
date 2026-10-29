@@ -36,6 +36,12 @@ const BRIDGE = `
         state = data.value;
         applyTheme(state.theme);
         for (const fn of listeners) fn(state);
+      } else if (data?.type === "stream") {
+        if (!state.session) return;
+        state = { ...state, session: { ...state.session, streaming: {
+          seq: data.seq, text: (state.session.streaming?.seq === data.seq ? state.session.streaming.text : "") + data.append
+        } } };
+        for (const fn of listeners) fn(state);
       } else if (data?.type === "result") {
         const request = pending.get(data.id);
         if (!request) return;
@@ -80,6 +86,7 @@ export interface PluginBridgeHost {
 
 export interface PluginBridge {
   pushState(state: Readonly<Record<string, unknown>>): void;
+  pushStream(seq: number, append: string): void;
   close(): void;
 }
 
@@ -138,6 +145,10 @@ export function connectPluginBridge(
   port.postMessage({ type: "state", value: host().state });
   return {
     pushState: (state) => port.postMessage({ type: "state", value: state }),
+    pushStream: (seq, append) => {
+      if (Number.isSafeInteger(seq) && seq > 0 && append)
+        port.postMessage({ type: "stream", seq, append });
+    },
     close: () => port.close(),
   };
 }

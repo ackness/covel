@@ -11,7 +11,7 @@ It takes about twenty minutes. You do not need to write code.
 - A text editor.
 
 > [!NOTE]
-> If you use only the desktop app and do not want the source code, you can still make a world. Write the same files as on this page, put them in `~/.covel/data/worlds/`, and reopen Covel. You just cannot use the validation command, so you find mistakes only when you start a game.
+> You can make a world with the desktop app without a source checkout: create the same files under `~/.covel/worlds/` and reopen Covel. Players without source can click **Validate** in **Settings → Install & manage** to check an installed package or ZIP.
 
 ## What you will make
 

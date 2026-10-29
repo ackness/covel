@@ -41,18 +41,23 @@ Rules:
 
 **Checks made during preview**: the world's manifest, its external dimension file, and its world data references are validated in a temporary directory. This step does not use the local world overrides on your machine, so it checks the package itself.
 
+### Import SillyTavern content
+
+In **Settings → Install & manage**, choose character cards or lorebooks under **Import SillyTavern content**, preview the report, then import them as one world. This performs data conversion without executing scripts. The world is available immediately. See [the import guide](../worlds/import-sillytavern.md) for mapping, omissions and samples. Browser-private BrowserVault import is not supported.
+
 ## API
 
 These endpoints are controlled by the "allow install" switch. Writing a world also has to follow the global world write permission.
 
-| Method | Path                                       | Behavior                                                                           |
-| ------ | ------------------------------------------ | ---------------------------------------------------------------------------------- |
-| POST   | `/api/install/world/github/preview`        | `{url}` → `{items}`                                                                |
-| POST   | `/api/install/world/github`                | `{token, acceptRisk:true}` → `201 {ok:true,kind:"world",id,restartRequired:false}` |
-| GET    | `/api/install/worlds`                      | `{items:[{id,version,source,pendingUpdate}]}`                                      |
-| POST   | `/api/install/world/github/update/preview` | `{id,url?}` → current, pinned, or available + preview                              |
-| POST   | `/api/install/world/github/update`         | `{token,acceptRisk:true}` → `201 {ok:true,kind:"world",id,restartRequired:true}`   |
-| DELETE | `/api/install/world/github/update/:id`     | Cancels a staged update. Returns `{ok:true}`                                       |
+| Method | Path                                       | Behavior                                                                                                                                                                         |
+| ------ | ------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| POST   | `/api/install/st-import`                   | Multipart `file` (repeated), `locale?`, `name?`, `preview?` → `{ok,preview,kind:"world",id,restartRequired:false,report}`; [contract](./api.md#plugin-and-world-install-install) |
+| POST   | `/api/install/world/github/preview`        | `{url}` → `{items}`                                                                                                                                                              |
+| POST   | `/api/install/world/github`                | `{token, acceptRisk:true}` → `201 {ok:true,kind:"world",id,restartRequired:false}`                                                                                               |
+| GET    | `/api/install/worlds`                      | `{items:[{id,version,source,pendingUpdate}]}`                                                                                                                                    |
+| POST   | `/api/install/world/github/update/preview` | `{id,url?}` → current, pinned, or available + preview                                                                                                                            |
+| POST   | `/api/install/world/github/update`         | `{token,acceptRisk:true}` → `201 {ok:true,kind:"world",id,restartRequired:true}`                                                                                                 |
+| DELETE | `/api/install/world/github/update/:id`     | Cancels a staged update. Returns `{ok:true}`                                                                                                                                     |
 
 - **The shape of a preview** is the same as the preview for a plugin package: `id`, `version`, `description`, `author`, `source`, `token`, and `expiresAt`. `author` is the author name from the manifest. It is `null` if none is declared.
 - `description` is `I18nText`, including summary translations merged by the loader from `world.<locale>.yaml`. Clients call `resolveI18nText` with the UI language.
@@ -110,3 +115,19 @@ When files on disk change while the world record keeps its older content, the wo
 - Data in a save that a player or a plugin has changed is handled separately by [world data sync](./world-data.md#preflight-and-sync). It runs a trial first, and then checks for conflicts.
 - Overrides outside the world package are not affected by the file replacement. But they may change what the new package actually does.
 - Rolling back files only swaps the files back. It does not roll back gameplay, and it does not migrate data.
+
+## In-app validation
+
+Players without a source checkout or pnpm can open **Settings → Install & manage** and click **Validate** on an installed package, or select plugin or world and drop a ZIP. ZIP validation does not install the package. The API also accepts directory paths within allowed roots; the UI has no directory picker yet.
+
+A world ZIP without `id` takes its single package folder’s name, or the ZIP filename without `.zip` when files are at the archive root. An installed world with an unreadable or missing manifest can still be validated by its directory ID from Settings, returning `manifest-invalid`. Multiple candidate directories remain ambiguous, and containment and symlink checks still apply.
+
+When no valid upload ID can be resolved, the report omits `id` and returns an `identity-invalid` error with `ok: false`, without using the temporary directory name. The static validator reports manifest parsing errors separately.
+
+Validation reads manifests and referenced files, checking fields, files, languages and static declarations. It never imports or executes package code, and changes no world or save. It shares the CLI validation core; the plugin CLI displays the first failure, while the app continues collecting problems that can be checked independently.
+
+Reports contain `kind`, `id` when available, `ok`, `counts.errors`, `counts.warnings` and `issues`. Each issue has `severity`, `code`, `message`, and, when known, a package-relative `file`, manifest field path or JSON pointer `field`, and repair `hint`. The summary may include version and languages. Messages are limited to 2000 characters; the first 200 issues are retained, with an additional `issues-truncated` warning and omitted count when necessary. Headings and known codes use the UI language; other messages stay in English. Reports can be copied as plain text.
+
+Access uses the same `host.files` rules as installation: hosted instances require the operator Bearer token; personal instances retain the install API’s desktop token or explicit enablement rules. Paths must resolve to directories within the corresponding plugin or world roots, and symlinked package roots are rejected. Reports make package paths relative and replace other host paths with `<path>`; CLI-only raw text is never returned. See [API](./api.md#in-app-validation) for requests.
+
+World validation uses the running server’s installed plugins as its contract catalogue, so missing-plugin or contract warnings may differ from the CLI’s default bundled plugin scan. World validation does not require `world.write`.

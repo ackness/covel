@@ -39,3 +39,69 @@ describe("game view mode", () => {
     expect(result.current[0]).toBe("parsed");
   });
 });
+
+const entry: import("../game-view/use-plugin-views.js").PluginViewEntry = {
+  mode: "plugin:p:v",
+  pluginId: "p",
+  viewId: "v",
+  label: "View",
+  pluginName: "Plugin",
+  spec: { id: "v", label: "View", webview: { html: "<p>view</p>" } },
+};
+it("waits for the plugin list, preserves the chosen view and recovers from errors", () => {
+  const world: World = { metadata: { defaultViewMode: entry.mode } };
+  const { result, rerender } = renderHook(
+    ({ status }: { status: "loading" | "ready" | "error" }) =>
+      useGameViewMode(world, {
+        status,
+        views: status === "error" ? [] : [entry],
+      }),
+    { initialProps: { status: "loading" as "loading" | "ready" | "error" } },
+  );
+  expect(result.current[0]).toBe("parsed");
+  rerender({ status: "ready" });
+  expect(result.current[0]).toBe(entry.mode);
+  rerender({ status: "error" });
+  expect(result.current[0]).toBe("parsed");
+  expect(result.current[2].fellBack).toBe(true);
+  rerender({ status: "ready" });
+  expect(result.current[0]).toBe(entry.mode);
+  act(() => result.current[1]("parsed"));
+  rerender({ status: "ready" });
+  expect(result.current[0]).toBe("parsed");
+});
+it("falls back to stage for a missing selection and ignores unknown choices", () => {
+  const { result, rerender } = renderHook(
+    ({ entries }) =>
+      useGameViewMode(stageWorld, { status: "ready", views: entries }),
+    { initialProps: { entries: [entry] } },
+  );
+  act(() => result.current[1]("plugin:unknown:view"));
+  expect(result.current[0]).toBe("stage");
+  act(() => result.current[1](entry.mode));
+  expect(result.current[0]).toBe(entry.mode);
+  rerender({ entries: [] });
+  expect(result.current[0]).toBe("stage");
+  expect(result.current[2].fellBack).toBe(true);
+});
+it("uses parsed for a missing world default and holds unconsented default views on the host", () => {
+  const world: World = { metadata: { defaultViewMode: entry.mode } };
+  const missing = renderHook(() =>
+    useGameViewMode(world, { views: [], status: "ready" }),
+  );
+  expect(missing.result.current[0]).toBe("parsed");
+  expect(missing.result.current[2].fellBack).toBe(true);
+  const gated = renderHook(
+    ({ allowed }) =>
+      useGameViewMode(
+        world,
+        { views: [entry], status: "ready" },
+        () => allowed,
+      ),
+    { initialProps: { allowed: false } },
+  );
+  expect(gated.result.current[0]).toBe("parsed");
+  expect(gated.result.current[2].consentView).toBe(entry);
+  gated.rerender({ allowed: true });
+  expect(gated.result.current[0]).toBe(entry.mode);
+});

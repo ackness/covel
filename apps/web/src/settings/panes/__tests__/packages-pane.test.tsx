@@ -12,6 +12,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { PluginSummary } from "@covel/shared";
 import i18n from "@/i18n";
 import { PackagesPane } from "../PackagesPane.js";
+import { importStContent } from "@/services/api/st-import.js";
 import {
   getDesktopInfo,
   hasElectronIpc,
@@ -61,6 +62,7 @@ const brokenPlugin: PluginSummary = {
 };
 
 vi.mock("@/lib/confirm-channel.js", () => ({ requestConfirm: vi.fn() }));
+vi.mock("@/services/api/st-import.js", () => ({ importStContent: vi.fn() }));
 
 vi.mock("@/lib/desktop-bridge.js", async (importOriginal) => ({
   ...(await importOriginal<typeof DesktopBridge>()),
@@ -457,5 +459,123 @@ it("F-090 announces a collection ZIP that installs no packages", async () => {
   });
   expect((await screen.findByRole("status")).textContent).toBe(
     i18n.t("settings.packages.nothingInstalled"),
+  );
+});
+
+it("renders the SillyTavern content importer", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () => Response.json({ items: [] })),
+  );
+  render(<PackagesPane />);
+  expect(
+    await screen.findByText(i18n.t("settings.stImport.title")),
+  ).toBeTruthy();
+  cleanup();
+  vi.unstubAllGlobals();
+});
+
+it("refreshes the installed world list after a SillyTavern world import", async () => {
+  const preview = {
+    ok: true,
+    preview: true,
+    kind: "world",
+    id: "mira",
+    restartRequired: false,
+    report: {
+      sources: [{ file: "mira.json", kind: "card-v2" }],
+      world: { id: "mira", name: "Mira", locale: "en-US", summary: "Keeper" },
+      counts: { characters: 1, loreEntries: 0, hasCover: false },
+      items: [],
+    },
+  };
+  vi.mocked(importStContent)
+    .mockResolvedValueOnce(preview as never)
+    .mockResolvedValueOnce({ ...preview, preview: false } as never);
+  const fetchMock = vi
+    .fn()
+    .mockImplementation(async (url: string, init?: RequestInit) => {
+      if (url === "/api/install/worlds") return Response.json({ items: [] });
+      if (url === "/api/install/plugins") return Response.json({ items: [] });
+      if (url === "/api/plugins" && !init?.method)
+        return Response.json({ items: [] });
+      throw new Error(`Unexpected request: ${init?.method ?? "GET"} ${url}`);
+    });
+  vi.stubGlobal("fetch", fetchMock);
+  render(<PackagesPane />);
+  await screen.findByText(i18n.t("settings.stImport.title"));
+  const worldLoads = () =>
+    fetchMock.mock.calls.filter(([url]) => url === "/api/install/worlds")
+      .length;
+  const before = worldLoads();
+  fireEvent.change(screen.getByLabelText("Character cards and lorebooks"), {
+    target: { files: [new File(["{}"], "mira.json")] },
+  });
+  const card = screen
+    .getByLabelText("Character cards and lorebooks")
+    .closest("section")!;
+  fireEvent.click(within(card).getByRole("button", { name: "Preview" }));
+  fireEvent.click(await within(card).findByRole("button", { name: "Import" }));
+  await waitFor(() => expect(boot).toHaveBeenCalledTimes(1));
+  await waitFor(() => expect(worldLoads()).toBeGreaterThan(before));
+  cleanup();
+  vi.unstubAllGlobals();
+});
+
+it("offers validation for installed plugins and worlds and disables it during install", async () => {
+  let finish: (value: Response) => void = () => {};
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (url: string) => {
+      if (url === "/api/plugins")
+        return Response.json({ items: [brokenPlugin] });
+      if (url === "/api/install/plugins")
+        return Response.json({
+          items: [
+            {
+              id: brokenPlugin.id,
+              version: null,
+              source: null,
+              pendingUpdate: null,
+            },
+          ],
+        });
+      if (url === "/api/install/worlds")
+        return Response.json({
+          items: [
+            { id: "sample", version: null, source: null, pendingUpdate: null },
+          ],
+        });
+      if (url === "/api/install/world")
+        return new Promise<Response>((resolve) => {
+          finish = resolve;
+        });
+      throw new Error(`Unexpected request: ${url}`);
+    }),
+  );
+  render(<PackagesPane />);
+  await screen.findByText("Broken plugin");
+  await screen.findByText("sample");
+  const buttons = screen.getAllByRole<HTMLButtonElement>("button", {
+    name: "Validate",
+  });
+  expect(buttons).toHaveLength(2);
+  expect(buttons.every((button) => !button.disabled)).toBe(true);
+  fireEvent.change(screen.getByTestId("install-world-file-input"), {
+    target: { files: [new File(["zip"], "world.zip")] },
+  });
+  await waitFor(() =>
+    expect(buttons.every((button) => button.disabled)).toBe(true),
+  );
+  finish(
+    Response.json({
+      ok: true,
+      kind: "world",
+      id: "sample",
+      restartRequired: false,
+    }),
+  );
+  await waitFor(() =>
+    expect(buttons.every((button) => !button.disabled)).toBe(true),
   );
 });

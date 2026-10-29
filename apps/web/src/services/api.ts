@@ -55,3 +55,5 @@ export * from "./api/approvals.js";
 export * from "./api/traces.js";
 export * from "./api/health.js";
 export * from "./api/install.js";
+export * from "./api/st-import.js";
+export * from "./api/package-validation.js";

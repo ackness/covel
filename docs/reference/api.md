@@ -1050,8 +1050,11 @@ setup runtime 挂起等玩家回答时，这次尝试不占重试次数。挂起
 <!-- prettier-ignore -->
 | 方法 | 路径 | 请求 | 描述 |
 | --- | --- | --- | --- |
+| POST | `/api/install/validate/plugin` | multipart `file` 或 JSON `{source}` | 静态校验插件，返回 `200 PackageValidationReport` |
+| POST | `/api/install/validate/world` | multipart `file` 或 JSON `{source}` | 静态校验世界，返回 `200 PackageValidationReport` |
 | POST | `/api/install/plugin` | multipart 字段 `file` | 把插件 `.zip` 解压到用户插件目录 |
 | POST | `/api/install/world` | multipart 字段 `file` | 把世界 `.zip` 解压到用户世界目录 |
+| POST | `/api/install/st-import` | multipart `file`（可重复）、`locale?`、`name?`、`preview?` | 把 SillyTavern 内容转成一个世界；预览不写入 |
 | POST | `/api/install/plugin/github/preview` | `{ url }` | 解析公开的 GitHub 仓库或子目录并返回预览；不安装、不执行插件 |
 | POST | `/api/install/plugin/github` | `{ token, acceptRisk: true }` | 校验已确认的预览并安装 |
 | POST | `/api/install/world/github/preview` | `{ url }` | 同上，对象是世界包 |
@@ -1068,6 +1071,7 @@ setup runtime 挂起等玩家回答时，这次尝试不占重试次数。挂起
 
 - `POST /api/install/plugin`：接受根目录有 `PLUGIN.md` 的 `.zip`（`package.json` 可选，多 runtime 布局也可以），或者只有一个顶层文件夹、`PLUGIN.md` 在那个文件夹里的 `.zip`。返回 `201 { ok, kind: "plugin", id, restartRequired: true, hasServerCode }`。
 - `POST /api/install/world`：接受根目录有 `world.yaml` + `WORLD.md` 的 `.zip`。返回 `201 { ok, kind: "world", id, restartRequired: false }`。
+- `POST /api/install/st-import`：`preview=true` 返回 `200`，否则返回 `201`，响应为 `{ ok: true, preview, kind: "world", id, restartRequired: false, report }`。需要 `host.files` 和 `world.write`。`locale` 是规范化的 BCP 47（默认 `DEFAULT_LOCALE`）；`name` 可选。报告含 `sources`、`world: { id, name, locale, summary }`、`counts: { characters, loreEntries, hasCover }` 和 `items: [{ level, code, source?, field?, count?, message }]`。说明为英文，客户端翻译已知代码。上限：8 个文件、6 张卡、每文件 8 MiB、请求体 20 MiB、解码后的角色卡 JSON 3 MiB、PNG 4096 块、资料条目总计 2000 条（超出部分报告并略过）、单条正文 20000 字符、生成的资料库 YAML 2 MiB。无效内容返回 `400`，单文件超限返回 `413`，ID 候选耗尽返回 `409`；转换错误带 `details: { code }`。复用 ZIP 的清单校验和原子世界激活；并发 ID 冲突返回 `409`，可重试。见[导入指南](../worlds/import-sillytavern.md)。
 - `POST /api/install/plugin/github/preview`：返回固定的提交、摘要和签名预览。
 - `.../github/update/preview`：返回 `{ status: "current" }`、`{ status: "pinned" }`，或 `{ status: "available", ... }` 加预览。更新端点的完整契约见[插件安装](./plugin-installation.md#http-契约)和[世界安装](./world-installation.md)。
 - `POST /api/install/plugin/github`：返回 `201 { ok, kind: "plugin", id, restartRequired: true }`。
@@ -1091,6 +1095,42 @@ setup runtime 挂起等玩家回答时，这次尝试不占重试次数。挂起
 > - 安装时 ID 依次取 `PLUGIN.md` 的 `id`、包所在的文件夹名、`package.json` 的包名（去掉 scope 和精确的 `plugin-` 前缀），见[插件安装](./plugin-installation.md#安装器做什么不做什么)。写了 `id` 时，`package.json` 的包名不参与。
 > - 内置保留 ID 的检查、安装目录和返回的 `id` 都使用这个 ID。没有写 `id`、也没有顶层文件夹的包，`package.json` 写 `@covel/plugin-narrator` 时会命中保留 ID，返回 `409`。
 > - 启动时的插件发现把目录名作为 ID。`PLUGIN.md` 写了不同的 `id` 时，插件注册为 `hostState: "error"`，不加载任何 runtime、tool、hook 或 wire。
+
+### 应用内校验
+
+两个校验端点复用安装的 `host.files` 权限，世界校验不额外要求 `world.write`。上传使用 multipart 字段 `file`，上限 20 MiB；ZIP 内容由归档读取器检查，不信任 MIME 类型。JSON 可以指定已安装包或允许根目录内的目录：
+
+```json
+{ "source": { "kind": "installed", "id": "my-package" } }
+```
+
+```json
+{ "source": { "kind": "path", "path": "/allowed/packages/my-package" } }
+```
+
+完成校验就返回 `200`，即使发现错误。已安装世界的清单损坏或缺失时，仍返回包含 `manifest-invalid` 的报告；`404` 表示找不到包目录。问题中的路径始终相对于包，不含主机路径。
+
+上传包的 ID 推导失败也返回 `200`，报告含 `identity-invalid` 错误、`ok: false`，不含 `id`。清单解析失败由静态校验器单独报告。报告示例：
+
+```json
+{
+  "kind": "plugin",
+  "id": "my-package",
+  "ok": false,
+  "counts": { "errors": 1, "warnings": 0 },
+  "issues": [
+    {
+      "severity": "error",
+      "code": "unknown-field",
+      "file": "PLUGIN.md",
+      "field": "future",
+      "message": "unknown field"
+    }
+  ]
+}
+```
+
+请求不合法为 `400`；找不到包为 `404`；世界 ID 有多个匹配为 `409`；目录在允许根之外为 `403 path-outside-roots`；上传过大为 `413`；插件目录不可用为 `503`。详细报告与路径处理见[插件安装](./plugin-installation.md#应用内校验)和[世界安装](./world-installation.md#应用内校验)。
 
 ### 状态查询
 
@@ -1524,7 +1564,7 @@ fork 和社区插件的授权：
     }
   ],
   "message": [...],
-  "left": [...],
+  "view": [...],
   "diagnostics": []
 }
 ```
@@ -1538,6 +1578,8 @@ fork 和社区插件的授权：
 - 一个 spec 校验失败，**不会影响整个响应**：只把它从所在的 slot 里去掉。
 - 失败原因写在顶层的 `diagnostics[]` 里，每项是 `{ pluginId, runtimeId, slot, specIndex, specId?, issues[{ path, message, code }] }`，说明是哪个插件、哪个字段、什么问题。文件读不出来（不存在、不是 JSON、指向插件目录以外）也写在这里；`code` 都是 `invalid`。
 - 带 `sessionId` 时，`diagnostics` 只包含该会话已激活的插件。
+
+`view` 始终为数组（可以为空），项为 `{ pluginId, specs }`。仅列出当前会话活跃插件的视图；同一插件重复的视图 ID 保留第一份，其余报告 `slot: "view"` 诊断。这里只读取 JSON 和 HTML，不导入插件代码，不需要服务端代码审批。读取会话的玩家授权在浏览器挂载前单独处理，见[插件视图](./ui-panels.md#插件视图)。
 
 **开发热重载**：`POST /api/plugins/:id/reload` 重新加载一个社区插件。
 

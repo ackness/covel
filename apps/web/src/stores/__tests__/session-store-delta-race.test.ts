@@ -110,6 +110,21 @@ afterEach(() => {
 });
 
 describe("sse-handler narrative delta buffer", () => {
+  it("creates the story placeholder after a reset that precedes the first chunk", () => {
+    const raf = installRafHarness();
+    const harness = createHarness();
+    harness.handle({
+      ...narrativeDelta(""),
+      payload: { ...narrativeDelta("").payload, reset: true },
+    });
+    harness.handle(narrativeDelta("Replacement"));
+    raf.flush(raf.pendingFrameId());
+    expect(harness.state().messages).toMatchObject([
+      { id: "stream_turn-1_narrator", kind: "story" },
+    ]);
+    expect(getStreamingText("stream_turn-1_narrator")).toBe("Replacement");
+  });
+
   it("drops streamed and buffered text on a reset before the next step", () => {
     const raf = installRafHarness();
     const harness = createHarness();

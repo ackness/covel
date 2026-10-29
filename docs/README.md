@@ -88,6 +88,7 @@ pnpm --filter @covel/docs build    # 输出到 apps/docs/dist/，有失效链接
 
 - [世界包是什么](./worlds/index.md)
 - [第一个世界](./worlds/first-world.md)
+- [导入 SillyTavern 内容](./worlds/import-sillytavern.md)
 - [美术方向](./worlds/art-direction.md)
 - [角色立绘](./worlds/portraits.md)
 - [场景图](./worlds/scenes.md)

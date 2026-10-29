@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Story reader</title>
+    <style>
+      :root {
+        color: var(--covel-foreground, inherit);
+        background: var(--covel-background, transparent);
+        font-family: var(--covel-font-sans, serif);
+      }
+      body {
+        margin: 0;
+        padding: 1.5rem;
+      }
+      main {
+        max-width: 48rem;
+        margin: auto;
+      }
+      p {
+        white-space: pre-wrap;
+        line-height: 1.8;
+      }
+      .user {
+        opacity: 0.7;
+      }
+      #status {
+        font-size: 0.8rem;
+        opacity: 0.7;
+      }
+      #pending {
+        border-top: 1px solid currentColor;
+        margin-top: 2rem;
+      }
+      pre {
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Story reader</h1>
+      <p id="status" role="status">Waiting for the host…</p>
+      <section id="messages" aria-label="Story"></section>
+      <section id="pending" aria-label="Pending interactions"></section>
+    </main>
+    <script>
+      // All content is text; a story cannot insert markup into this page.
+      const messages = document.getElementById("messages");
+      const pending = document.getElementById("pending");
+      const status = document.getElementById("status");
+      const paragraph = (role, text) => {
+        const node = document.createElement("p");
+        node.className = role;
+        node.textContent = text;
+        return node;
+      };
+      window.covel.subscribe((state) => {
+        const session = state.session;
+        if (!session) return;
+        status.textContent = session.executing
+          ? "Writing…"
+          : "Turn " + session.turn;
+        messages.replaceChildren();
+        for (const message of session.messages) {
+          messages.append(paragraph(message.role, message.text));
+        }
+        if (session.streaming) {
+          messages.append(paragraph("assistant", session.streaming.text));
+        }
+        pending.replaceChildren();
+        if (session.pending.length) {
+          const heading = document.createElement("h2");
+          heading.textContent = "Waiting for your answer";
+          pending.append(heading);
+        }
+        for (const interaction of session.pending) {
+          const block = document.createElement("pre");
+          block.textContent = JSON.stringify(interaction.block, null, 2);
+          pending.append(block);
+        }
+      });
+    </script>
+  </body>
+</html>

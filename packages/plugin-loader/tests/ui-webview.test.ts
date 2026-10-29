@@ -52,3 +52,30 @@ describe("plugin-owned UI documents", () => {
     );
   });
 });
+
+it("inlines session view HTML, keeps the bridge declaration and enforces its size", async () => {
+  const root = await fs.mkdtemp(
+    path.join(os.tmpdir(), "covel-session-webview-"),
+  );
+  dirs.push(root);
+  const html = path.join(root, "reader.html");
+  const spec = path.join(root, "reader.json");
+  await fs.writeFile(
+    spec,
+    JSON.stringify({
+      id: "reader",
+      label: "Reader",
+      bridge: "session",
+      webview: { entry: "./reader.html" },
+    }),
+  );
+  await fs.writeFile(html, "<p>Reader</p>");
+  expect(await loadPluginUiSpec(root, spec, "owner", "view")).toMatchObject({
+    bridge: "session",
+    webview: { html: "<p>Reader</p>" },
+  });
+  await fs.writeFile(html, "x".repeat(524289));
+  await expect(loadPluginUiSpec(root, spec, "owner", "view")).rejects.toThrow(
+    "512 KiB",
+  );
+});

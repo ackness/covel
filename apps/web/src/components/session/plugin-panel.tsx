@@ -1,3 +1,5 @@
+import type { SessionProjection } from "./session-bridge.js";
+import type { StreamFeed } from "./session-bridge-stream.js";
 /**
  * PluginPanel — renders a single plugin panel from a json-render spec.
  *
@@ -65,6 +67,9 @@ export interface PluginPanelProps {
   enableDevtools?: boolean;
   /** The panel is shown in the large dialog, not the side column. */
   expanded?: boolean;
+  fill?: boolean;
+  sessionBridge?: { projection: SessionProjection; stream: StreamFeed };
+  onRenderError?: () => void;
 }
 
 function resolveEmptyMessage(value: unknown, locale: string): string {
@@ -163,6 +168,9 @@ function PluginPanelView({
   surfaceContext,
   enableDevtools = false,
   expanded = false,
+  fill = false,
+  sessionBridge,
+  onRenderError,
   data,
   sources,
   jobs,
@@ -515,6 +523,8 @@ function PluginPanelView({
           html={webview.html}
           height={webview.height}
           expanded={expanded}
+          fill={fill}
+          stream={spec.bridge === "session" ? sessionBridge?.stream : undefined}
           locked={interactionLocked}
           handlers={allowed}
           state={{
@@ -523,6 +533,9 @@ function PluginPanelView({
             locked: interactionLocked,
             context: surfaceContext ?? {},
             uiState,
+            ...(spec.bridge === "session" && sessionBridge
+              ? { session: sessionBridge.projection }
+              : {}),
           }}
         />
       );
@@ -530,6 +543,7 @@ function PluginPanelView({
   }
 
   if (!flatSpec) {
+    if (fill) throw new Error("Plugin view could not be rendered");
     // Name the offending spec and the concrete reason instead of a generic
     // "Invalid panel spec". Server-side Zod validation already drops most
     // malformed specs (see /api/ui-specs diagnostics); this client-side path
@@ -570,7 +584,7 @@ function PluginPanelView({
     const label = resolveEmptyMessage(spec.label, activeLocale) || pluginId;
     const emptyMsg = customMsg || t("plugin.emptyPlaceholder", { label });
     return (
-      <div className="px-4 pt-6">
+      <div className={fill ? "h-full overflow-y-auto px-4 pt-6" : "px-4 pt-6"}>
         <p className="text-xs text-muted-foreground italic leading-relaxed text-center wrap-break-word max-w-prose mx-auto">
           {emptyMsg}
         </p>
@@ -580,11 +594,10 @@ function PluginPanelView({
 
   return (
     <div
-      className={
-        interactionLocked
-          ? "pointer-events-none opacity-80 select-none"
-          : undefined
-      }
+      className={[
+        fill ? "h-full overflow-y-auto" : "",
+        interactionLocked ? "pointer-events-none opacity-80 select-none" : "",
+      ].join(" ")}
       aria-disabled={interactionLocked}
       inert={interactionLocked}
     >
@@ -643,6 +656,7 @@ function PluginPanelView({
         </div>
       )}
       <PluginSurfaceBoundary
+        onError={onRenderError}
         surfaceLabel={resolveEmptyMessage(spec.label, activeLocale) || pluginId}
       >
         <JSONUIProvider

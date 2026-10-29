@@ -66,6 +66,8 @@ The server refuses to start in these cases, and the error names the variable:
 
 `apps/server/tests/bootstrap/route-access.test.ts` lists every API route of the server and the actions it needs. A new route fails the test until it is added to that table. The test also requests every route under a host profile that closes every action, which catches a route that decides from environment variables on its own; apart from `host-profile.ts`, no code in the server or the core packages may read these deployment variables.
 
+The `POST /api/install/validate/plugin` and `POST /api/install/validate/world` endpoints reuse `host.files` and never import or execute package code. Directory requests resolve real paths, require containment in the corresponding allowed roots, and reject symlinked package roots. Uploads reuse installation’s ZIP path and size checks; temporary files are removed when the request ends. Reports make package paths relative and hide temporary, user and other host paths. Raw CLI errors never enter HTTP responses. World validation with the live plugin catalogue does not change process-global data conventions.
+
 ## Outbound requests (SSRF guard)
 
 The server sends requests to model providers on the player's behalf. The SSRF protection makes sure these requests cannot be pointed at services on the internal network or on the local machine.
@@ -388,7 +390,7 @@ Theme CSS is untrusted content. Themes share the settings document, and CSP does
 
 ### Plugin HTML
 
-A plugin's `webview` HTML is code that the player has approved. But it must never reach the origin the application runs on: the settings and provider keys in `localStorage`, the cookies, and the API with the player's session token. It runs in a second-level frame, below the application page.
+A plugin's `webview` HTML runs in a browser sandbox. It must never reach the origin the application runs on: the settings and provider keys in `localStorage`, the cookies, and the API with the player's session token. It runs in a second-level frame, below the application page.
 
 1. **The frame host** is `/plugin-frame.html`, a static file in the Web build (`apps/web/public/plugin-frame.html`). It is the same for every plugin and every session.
 
@@ -483,3 +485,9 @@ The application ships its own fonts (`@fontsource-variable/*`, SIL OFL 1.1), and
 - A world translation stream that is already open (`routes/api/worlds/translate.ts`) uses the same sanitized error content, and does not change its HTTP status. The reasons a translation is rejected are reported (no translation, the reply is not JSON, a placeholder was changed). Unexpected storage or provider errors are not reported.
 - The causes are all recorded in the server log.
 - These changes do not mean that every trace, game content, or log output has been sanitized.
+
+A `bridge: session` view in `contributes.ui.view` can additionally read a validated, bounded session projection with hidden keys removed. Mounting requires explicit player consent for the capability, bound to the plugin ID and the content hash of the spec plus HTML, regardless of source. A world default cannot bypass consent. SettingsStore saves consent on this device; the view bar menu can revoke it. This read capability adds no page write API. See [Plugin views](../reference/ui-panels.md#plugin-views) for scope and limits.
+
+## Importing third-party content: data conversion only
+
+SillyTavern content import uses bounded PNG chunk walking (including remaining-length checks before reading data), bounded JSON with Zod validation, fixed output paths, text sanitizing and fixed macro substitutions. PNG cover files have text and other metadata removed. No extension, script, card regex or executable macro runs. Unsupported fields and conversion losses are reported. Preview writes nothing; import uses the ZIP world's existing validation and activation under the world lock, guarded by `host.files` and `world.write`. Sanitizing does not make prompts trustworthy: lore and narration notes enter model context at the same trust level as other third-party world packages. See [the import guide](../worlds/import-sillytavern.md).
