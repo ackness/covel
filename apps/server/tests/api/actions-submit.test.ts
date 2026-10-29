@@ -82,6 +82,22 @@ const passKind: ActionKindDescriptor = {
   display: { label: { en: "passes", zh: "让过" } },
 };
 
+/** A plugin kind taken by its fields alone, with a limit a form need not repeat. */
+const offerKind: ActionKindDescriptor = {
+  kind: `${WHISPER_PACK}/offer`,
+  source: "plugin",
+  pluginId: WHISPER_PACK,
+  roles: ["player"],
+  text: "none",
+  actor: true,
+  display: { label: { en: "offers", zh: "出价" } },
+  fieldsSchema: {
+    type: "object",
+    properties: { quantity: { type: "integer", minimum: 1 } },
+    required: ["quantity"],
+  },
+};
+
 function narratorEntry(loaded: LoadedRuntime): PluginRegistryEntry {
   return {
     id: loaded.manifest.pluginId,
@@ -123,7 +139,7 @@ function whisperEntry(): PluginRegistryEntry {
         `---\n${JSON.stringify({ id: WHISPER_PACK, kind: "plugin", description: "Whispers" })}\n---\n`,
         `${WHISPER_PACK}/PLUGIN.md`,
       ),
-      actionKinds: [whisperKind, passKind],
+      actionKinds: [whisperKind, passKind, offerKind],
     },
     manifests: [],
     loadedRuntimes: new Map(),
@@ -746,6 +762,58 @@ describe("submit_actions", () => {
         code: "action_kind_not_allowed",
       });
     });
+    it("checks an answer's stored values against its declared plugin kind's fields schema", async () => {
+      // The form declares no minimum; the kind it is answered as does.
+      await store.appendTurnMessage({
+        id: "ask-offer",
+        sessionId: SESSION_ID,
+        turnId: "offer-turn",
+        sourceType: "runtime",
+        sourcePluginId: NARRATOR,
+        role: "assistant",
+        content: "",
+        order: 6,
+        createdAt: AT,
+        pendingInput: [
+          {
+            interactionId: "offer",
+            type: "form",
+            title: "Offer",
+            submitLabel: "Offer",
+            fields: [{ type: "number", name: "quantity", label: "Quantity" }],
+            narrativeTemplate: "I offer {{quantity}}.",
+            actionKind: offerKind.kind,
+          },
+        ],
+      });
+      const offer = (quantity: unknown) => ({
+        kind: offerKind.kind,
+        interaction: {
+          turnId: "offer-turn",
+          interactionId: "offer",
+          type: "form",
+        },
+        fields: { quantity },
+      });
+      const calls = userMessages.length;
+      const refused = await submit({ actions: [offer("0")] });
+      expect(refused.map((event) => event.type)).toEqual(["error.occurred"]);
+      expect(refused[0]).toMatchObject({
+        payload: { code: "invalid_action_fields" },
+      });
+      expect(userMessages).toHaveLength(calls);
+      expect(await store.listPlayerInputs(SESSION_ID)).toEqual([]);
+      expect(await userRows()).toEqual([]);
+      expect(await journalRows()).toEqual([]);
+      expect(await store.listTurnResults(SESSION_ID)).toEqual([]);
+
+      // The schema reads the stored value: the submitted "2" is the number 2.
+      const events = await submit({ actions: [offer("2")] });
+      expect(completed(events)).toMatchObject({ committed: true });
+      expect((await userRows())[0]?.metadata).toMatchObject({
+        actions: [{ kind: offerKind.kind, fields: { quantity: 2 } }],
+      });
+    });
   });
 
   describe("recovery", () => {
@@ -882,6 +950,7 @@ describe("GET /api/sessions/:id/action-kinds", () => {
       "command",
       whisperKind.kind,
       passKind.kind,
+      offerKind.kind,
     ]);
     expect(body.kinds[0]).toMatchObject({
       source: "framework",
@@ -889,13 +958,20 @@ describe("GET /api/sessions/:id/action-kinds", () => {
       text: "required",
       actor: true,
     });
-    expect(body.kinds.slice(-2)).toEqual([whisperKind, passKind]);
+    expect(body.kinds.slice(-3)).toEqual([whisperKind, passKind, offerKind]);
     expect(body.seats).toEqual([
       {
         seatId: "main",
         role: "player",
         controller: "human",
-        allowed: ["say", "act", "command", whisperKind.kind, passKind.kind],
+        allowed: [
+          "say",
+          "act",
+          "command",
+          whisperKind.kind,
+          passKind.kind,
+          offerKind.kind,
+        ],
       },
       {
         seatId: "host",
@@ -906,5 +982,83 @@ describe("GET /api/sessions/:id/action-kinds", () => {
       { seatId: "empty", role: "spectator", controller: "empty", allowed: [] },
     ]);
     await store.close();
+  });
+
+  describe("on a hosted profile", () => {
+    const ENV_KEYS = ["DEPLOYMENT_TIER", "COVEL_DESKTOP_REST_TOKEN"] as const;
+    let originalEnv: Record<string, string | undefined>;
+
+    beforeEach(() => {
+      originalEnv = Object.fromEntries(
+        ENV_KEYS.map((key) => [key, process.env[key]]),
+      );
+      process.env.DEPLOYMENT_TIER = "commercial";
+      process.env.COVEL_DESKTOP_REST_TOKEN = "operator-secret";
+    });
+
+    afterEach(() => {
+      for (const key of ENV_KEYS) {
+        const original = originalEnv[key];
+        if (original === undefined) delete process.env[key];
+        else process.env[key] = original;
+      }
+    });
+
+    it("requires the owner token of that session", async () => {
+      const store = createMemoryStore();
+      const registry = createPluginRegistry();
+      registry.register(whisperEntry());
+      const app = new Hono();
+      app.use("*", async (c, next) => {
+        c.set("store", store);
+        c.set("pluginRegistry", registry);
+        c.set("sessionLock", createInProcessSessionLock());
+        await next();
+      });
+      app.route("/api/sessions", sessionRoutes);
+      await store.createWorld({
+        id: "w1",
+        name: "Catalogue world",
+        description: "Synthetic world",
+        createdAt: AT,
+      });
+      async function createSession() {
+        const response = await app.request("/api/sessions", {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            authorization: "Bearer operator-secret",
+          },
+          body: JSON.stringify({ worldId: "w1" }),
+        });
+        expect(response.status).toBe(201);
+        return (await response.json()) as { id: string; ownerToken: string };
+      }
+      const mine = await createSession();
+      const theirs = await createSession();
+      const catalogue = (headers: Record<string, string> = {}) =>
+        app.request(`/api/sessions/${mine.id}/action-kinds`, { headers });
+
+      expect((await catalogue()).status).toBe(401);
+      expect(
+        (await catalogue({ authorization: `Bearer ${theirs.ownerToken}` }))
+          .status,
+      ).toBe(401);
+      const allowed = await catalogue({
+        authorization: `Bearer ${mine.ownerToken}`,
+      });
+      expect(allowed.status).toBe(200);
+      const body = (await allowed.json()) as SessionActionKindsResponse;
+      expect(body.kinds.map((kind) => kind.kind)).toContain("say");
+      expect(body.seats).toEqual([
+        {
+          seatId: "main",
+          role: "player",
+          controller: "human",
+          allowed: ["say", "act", "command"],
+        },
+      ]);
+      await store.close();
+    });
   });
 });

@@ -17,9 +17,12 @@
  *   8. the fields match the kind (`invalid_action_fields`, 400).
  *
  * Interaction answers then go through the interaction submitter, which keeps
- * its own errors. The route runs these checks once before its stream opens,
- * for an HTTP status, and again under the session lock against the live
- * session.
+ * its own errors. Their values, as the submitter stores them (defaults
+ * applied, numbers coerced), are then checked against the fields schema of
+ * the kind the interaction declares (`checkAnsweredFields`), still before
+ * anything is stored. The route runs these checks once before its stream
+ * opens, for an HTTP status, and again under the session lock against the
+ * live session.
  */
 
 import {
@@ -163,10 +166,10 @@ function checkFields(
   descriptor: ActionKindDescriptor,
   position: string,
 ): void {
-  // An interaction answer's values are checked by the interaction submitter.
+  // An interaction answer's raw values are checked by the interaction
+  // submitter, and its stored values by `checkAnsweredFields`.
   if (request.interaction) return;
-  const schema = descriptor.fieldsSchema;
-  if (!schema) {
+  if (!descriptor.fieldsSchema) {
     if (request.fields !== undefined)
       throw new ActionValidationError(
         `${position}: kind ${descriptor.kind} takes no fields`,
@@ -175,9 +178,20 @@ function checkFields(
       );
     return;
   }
+  matchFieldsSchema(request.fields, descriptor, position);
+}
+
+/** Refuses `fields` that do not match the kind's fields schema, if it has one. */
+function matchFieldsSchema(
+  fields: TurnAction["fields"],
+  descriptor: ActionKindDescriptor,
+  position: string,
+): void {
+  const schema = descriptor.fieldsSchema;
+  if (!schema) return;
   let result: ReturnType<typeof validateOutput>;
   try {
-    result = validateOutput(request.fields ?? {}, schema);
+    result = validateOutput(fields ?? {}, schema);
   } catch {
     throw new ActionValidationError(
       `${position}: the fields schema of kind ${descriptor.kind} cannot be used`,
@@ -192,6 +206,25 @@ function checkFields(
       400,
       { errors: result.errors ?? [] },
     );
+}
+
+/**
+ * Checks the interaction answers of resolved actions, whose `fields` now hold
+ * the values the interaction submitter stores, against the fields schema of
+ * their kind. A form need not declare every limit its plugin kind sets, so
+ * this runs after the submitter and before anything is stored. Throws
+ * `ActionValidationError` (`invalid_action_fields`).
+ */
+export function checkAnsweredFields(
+  actions: readonly TurnAction[],
+  kinds: readonly ActionKindDescriptor[],
+): void {
+  actions.forEach((action, index) => {
+    if (!action.interaction) return;
+    const descriptor = kinds.find((kind) => kind.kind === action.kind);
+    if (descriptor)
+      matchFieldsSchema(action.fields, descriptor, `actions[${index}]`);
+  });
 }
 
 /**

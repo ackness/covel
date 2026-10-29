@@ -107,6 +107,7 @@ import { preflightActionApprovals } from "./actions/approval-preflight.js";
 import { droppedRunPayloads } from "./actions/dropped-runs.js";
 import {
   ActionValidationError,
+  checkAnsweredFields,
   actionRequestOf,
   interactionKey,
   pluginKindLabels,
@@ -784,6 +785,17 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
                   inputMessageId ?? crypto.randomUUID(),
                 )
               : undefined;
+          // The stored answer values must also satisfy the fields schema of
+          // the kind each interaction declares; the form may not repeat it.
+          if (playerInput && liveActionContext && submission) {
+            try {
+              checkAnsweredFields(playerInput.actions, liveActionContext.kinds);
+            } catch (error) {
+              if (error instanceof ActionValidationError)
+                throw new ActionRejectedError(error.message, error.code);
+              throw error;
+            }
+          }
           // The request schema bounds the typed texts and the submitter the
           // filled answers; together they still share one limit, checked
           // before anything is stored.

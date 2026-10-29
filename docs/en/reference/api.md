@@ -5195,13 +5195,14 @@ Which role may submit which base kind is in [seats](./world-model.md#seats).
 | 7 | The text rule; an answer has the kind its interaction declares and no text; all answers belong to one turn | 400 | `invalid_action` |
 | 8 | `fields` match the plugin kind's schema; a base kind takes no `fields` (except an answer) | 400 | `invalid_action_fields` |
 
-After that, the answering actions go to the interaction submission, whose error codes are in [player interactions](#player-interactions).
+After that, the answering actions go to the interaction submission, whose error codes are in [player interactions](#player-interactions). Once the submission has applied defaults and coerced numbers, an answer to an interaction declared as a plugin kind with a schema must also match that schema (a form need not repeat the plugin kind's limits); otherwise it is refused with `invalid_action_fields` and nothing is saved. This step runs under the session lock, so a failure is an `error.occurred` with that `code`.
 
 ##### How the player message is rendered
 
 A turn's `TurnInput.playerMessage` is the text the kernel renders from the actions; narrators and plugins that read `ctx.playerMessage` read it:
 
-- **A single player's input stays as written.** When all actions come from one player seat that binds at most one character, are taken as the current character (or as none), and are each a `say` without `fields`, a `command` or an interaction answer, the rendering is the actions' texts joined with line breaks. A single-player game's prompts are therefore the same as before, byte for byte.
+- **A single player's input stays as written.** When all actions come from one player seat that binds at most one character, are taken as the current character (or as none), and are each a `say` without `fields`, a `command` or an interaction answered as `say` / `act`, the rendering is the actions' texts joined with line breaks. A single-player game's prompts are therefore the same as before, byte for byte.
+- An interaction answered as a plugin kind does not take this path: it is written in the labelled form below, so the model knows which kind of action it was.
 - **Otherwise the character and the kind are named.** Each action is written `[<character name> · <kind label>] <text>` (in a Chinese session `【<character name>·<kind label>】<text>`), or `[<kind label>] <text>` when it is not taken as a character. For example, the second character speaking is `[Scout · says] Wait for me.`, and a host's narration is `[narration] Rain falls.`.
 - Base-kind labels are in the framework prompt file [`prompts/server/action-labels.md`](../../../prompts/server/action-labels.md), chosen by the session language; a plugin kind uses its `display.label`.
 - A plugin kind always renders, even without text: its label says what the player did, and its `fields` follow the text as JSON. For example `[Hero · passes]` or `[Hero · casts] {"spell":"light"}`.

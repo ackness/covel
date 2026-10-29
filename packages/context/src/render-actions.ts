@@ -81,10 +81,21 @@ function fill(template: string, values: Readonly<Record<string, string>>) {
 }
 
 /**
+ * The base kinds an interaction answer may have and still render as its text
+ * alone: the defaults of choices (`say`) and forms (`act`). An answer
+ * declared as a plugin kind is labelled, so the model knows what it was.
+ */
+const PLAIN_ANSWER_KINDS: ReadonlySet<string> = new Set<BaseActionKind>([
+  "say",
+  "act",
+]);
+
+/**
  * True for a single player's ordinary input: every action comes from one
  * player seat that binds at most one character, is taken as that character
- * (or as none), and is a plain `say`, a slash command or an interaction
- * answer. Its rendering is the texts alone, as before structured input.
+ * (or as none), and is a plain `say`, a slash command or a `say` / `act`
+ * interaction answer. Its rendering is the texts alone, as before structured
+ * input.
  */
 function isSinglePlayerInput(
   actions: readonly TurnAction[],
@@ -101,9 +112,10 @@ function isSinglePlayerInput(
   return actions.every(
     (action) =>
       (action.actorId === undefined || action.actorId === current) &&
-      (action.interaction !== undefined ||
-        action.kind === "command" ||
-        (action.kind === "say" && action.fields === undefined)),
+      (action.interaction !== undefined
+        ? PLAIN_ANSWER_KINDS.has(action.kind)
+        : action.kind === "command" ||
+          (action.kind === "say" && action.fields === undefined)),
   );
 }
 

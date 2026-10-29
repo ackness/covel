@@ -148,6 +148,32 @@ describe("renderActions", () => {
     );
   });
 
+  it("labels a single player's answer declared as a plugin kind", async () => {
+    const kindLabels = new Map([
+      ["whisper-pack/whisper", { en: "whispers", zh: "耳语" }],
+    ]);
+    const answer: TurnAction = {
+      seatId: "main",
+      kind: "whisper-pack/whisper",
+      actorId: "char-hero",
+      text: "hello",
+      fields: { target: "Guide" },
+      interaction: { turnId: "t1", interactionId: "w1", type: "form" },
+      source: "player",
+    };
+    // An answer renders its filled narrative, not its fields.
+    expect(await render([answer], { kindLabels })).toBe(
+      "[Hero · whispers] hello",
+    );
+    expect(await render([answer], { kindLabels, locale: "zh-CN" })).toBe(
+      "【Hero·耳语】hello",
+    );
+    // One labelled action labels the whole submission.
+    expect(
+      await render([say("Psst.", "char-hero"), answer], { kindLabels }),
+    ).toBe("[Hero · says] Psst.\n[Hero · whispers] hello");
+  });
+
   it("renders a plugin kind without text by its label and fields", async () => {
     const kindLabels = new Map([
       ["turn-pack/pass", { en: "passes", zh: "让过" }],
