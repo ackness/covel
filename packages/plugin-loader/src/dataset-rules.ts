@@ -42,7 +42,10 @@ export function datasetSchemaIssues(
 ): string[] {
   const issues: string[] = [];
   for (const [name, dataset] of Object.entries(contributes?.datasets ?? {})) {
-    const data = contributes?.data?.[name];
+    const data =
+      contributes?.data && Object.hasOwn(contributes.data, name)
+        ? contributes.data[name]
+        : undefined;
     if (
       data &&
       path.resolve(rootDir, data.schema) !==

@@ -177,10 +177,28 @@ describe("contributes.datasets load", () => {
   };
 
   it("loads each dataset schema file", async () => {
-    const dir = await plugin(declared, undefined, ["a", "b"]);
+    const notesSchema = {
+      type: "object",
+      properties: { slug: { type: "string" } },
+      required: ["slug"],
+    };
+    const dir = await plugin(
+      {
+        datasets: {
+          journal: { schema: "./schemas/journal.json" },
+          notes: { schema: "./schemas/notes.json" },
+        },
+      },
+      {
+        "schemas/journal.json": journalSchema,
+        "schemas/notes.json": notesSchema,
+      },
+      ["a", "b"],
+    );
     const definition = await load(dir);
     expect(definition.packageManifest.datasetSchemas).toEqual({
       journal: journalSchema,
+      notes: notesSchema,
     });
     expect(definition.manifests).toHaveLength(2);
     for (const { manifest } of definition.manifests)
@@ -191,6 +209,31 @@ describe("contributes.datasets load", () => {
         ).datasets,
       ).toEqual(definition.packageManifest.manifest.datasets);
   });
+
+  it.each(["constructor", "toString", "hasOwnProperty"])(
+    "accepts a dataset named %s beside an empty or unrelated data map",
+    async (name) => {
+      const files = { "schemas/journal.json": journalSchema };
+      const datasets = { [name]: { schema: "./schemas/journal.json" } };
+      for (const data of [
+        {},
+        { other: { schema: "./schemas/other.json" } },
+      ] as const) {
+        const dir = await plugin(
+          { datasets, data },
+          {
+            ...files,
+            "schemas/other.json": journalSchema,
+          },
+        );
+        const definition = await load(dir);
+        expect(Object.keys(definition.packageManifest.datasetSchemas!)).toEqual(
+          [name],
+        );
+        await expect(validate(dir)).resolves.toBeUndefined();
+      }
+    },
+  );
 
   it("names a missing schema file", async () => {
     const dir = await plugin(declared, {});
