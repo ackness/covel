@@ -19,6 +19,11 @@ import type { HookPipeline } from "../hooks/pipeline.js";
 import { createExecutionWriteBuffer } from "../function-runtime/execution-write-buffer.js";
 import { createPluginRuntimeContext } from "../function-runtime/plugin-runtime-context.js";
 import { attachNestedResults } from "../turn-executor/nested-results.js";
+import { attachReadDependencies } from "../read-dependencies.js";
+import {
+  createPluginDataVisibility,
+  type UpstreamPluginDataWrite,
+} from "../function-runtime/upstream-plugin-data.js";
 import { finalizeRuntimeResult } from "../turn-executor/runtime-finalization.js";
 import type { TurnExecutorDeps } from "../turn-executor/turn-executor-types.js";
 import { runLeasedInvocation } from "../turn-executor/runtime-scaffold.js";
@@ -30,6 +35,8 @@ export interface ExecuteAgentGuardOptions {
     import("@covel/shared").PlayerInputSubmission | null;
   readonly logicalTurn?: number;
   readonly upstreamProposals?: readonly import("@covel/shared").Proposal[];
+  /** Writes of completed upstream runtimes of this plugin that reads include. */
+  readonly upstreamPluginData?: readonly UpstreamPluginDataWrite[];
   readonly manifest: RuntimeManifest;
   readonly input: TurnInput;
   readonly loaded: LoadedRuntime;
@@ -73,6 +80,7 @@ export async function executeAgentGuard({
   lastPlayerInput = null,
   logicalTurn,
   upstreamProposals = [],
+  upstreamPluginData = [],
   manifest,
   input,
   loaded,
@@ -117,6 +125,17 @@ export async function executeAgentGuard({
       timeoutMs,
       ...(executionId !== undefined ? { executionId } : {}),
       writeBuffer,
+      // The guard's own recorder: when it lets the agent run, its reads are
+      // discarded with its writes.
+      pluginDataVisibility: createPluginDataVisibility({
+        pluginId: manifest.pluginId,
+        runtimeId: manifest.name,
+        runId,
+        writes: upstreamPluginData,
+        ...(deps.pluginDataReadProbe
+          ? { probe: deps.pluginDataReadProbe }
+          : {}),
+      }),
     });
 
     // Deadline race — the same lease as a function handler: without it a hung
@@ -174,6 +193,8 @@ export async function executeAgentGuard({
       // a guard that lets the agent run discards both.
       if (postResult.status === "skipped")
         attachNestedResults(postResult, runtimeContext.nestedResults);
+      if (postResult.status === "skipped")
+        attachReadDependencies(postResult, runtimeContext.readDependencies());
       const postOutput = postResult.output as Record<string, unknown> | null;
       if (
         deps.store &&

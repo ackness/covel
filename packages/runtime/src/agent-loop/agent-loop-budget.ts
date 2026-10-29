@@ -22,7 +22,11 @@ export function createAgentLoopBudget(
   };
   let deadline = Date.now() + timeoutMs;
   let timer: ReturnType<typeof setTimeout> | undefined;
+  // Set when this budget's own timer fired, as opposed to a parent's abort:
+  // both surface as a RuntimeTimeoutError.
+  let ownTimerFired = false;
   function expire() {
+    if (!controller.signal.aborted) ownTimerFired = true;
     controller.abort(
       new RuntimeTimeoutError(
         `agent runtime "${runtimeId}" timed out after ${timeoutMs}ms`,
@@ -50,6 +54,10 @@ export function createAgentLoopBudget(
       return deadline;
     },
     assertLive,
+    /** Whether this budget's own deadline aborted the loop. */
+    expired() {
+      return ownTimerFired;
+    },
     // The model retry layer owns its per-attempt timers and queue exclusion.
     // Re-arm our timer with its reported queue and stream-output compensation
     // after it returns.

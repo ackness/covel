@@ -19,5 +19,12 @@
     },
     "equipped": { "type": "boolean" }
   },
-  "additionalProperties": true
+  "additionalProperties": true,
+  "if": {
+    "properties": { "removed": { "const": true } },
+    "required": ["removed"]
+  },
+  "then": {
+    "properties": { "quantity": { "const": 0 } }
+  }
 }

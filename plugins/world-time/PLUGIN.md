@@ -1,6 +1,6 @@
 ---
 kind: core
-version: 0.0.7
+version: 0.0.8
 displayName: World Time
 description: >-
   Tracks world-defined calendars, phases and time direction, settling each story
@@ -17,6 +17,10 @@ contracts:
   world-time-evolution@1:
     schema: ./schemas/world-time-evolution.schema.json
 contributes:
+  datasets:
+    clock:
+      schema: ./schemas/clock.schema.json
+      ops: [set, merge, inc]
   data:
     definitions:
       schema: schemas/time-definition.schema.json

@@ -390,14 +390,25 @@ Who calls it:
 
 **Downstream commits only if upstream really commits.** Commit units are committed in execution order. The hard dependents of a dropped runtime are dropped with it (`commit/commit-dependencies.ts`). Dependencies are checked only between top-level runtimes: a nested result depends only on results of its own nested execution, which sit in the same unit and commit or drop with it.
 
-| Relationship                                                                             | When the upstream is dropped                              |
-| ---------------------------------------------------------------------------------------- | --------------------------------------------------------- |
-| The target of a turn-scoped `needs`                                                      | Downstream is dropped with it                             |
-| The source of a required `inputs`                                                        | Downstream is dropped with it                             |
-| An event subscriber, when all emitters of the event that triggered it are dropped        | The subscriber is dropped with it                         |
-| `after`, and inputs with `required: false`                                               | No cascade. They only express order or a best-effort read |
-| A `cardinality: one` capability dependency, when another provider committed successfully | Still satisfied                                           |
-| The hard upstream of a story or setup runtime                                            | The whole turn is rolled back                             |
+| Relationship                                                                             | When the upstream is dropped                               |
+| ---------------------------------------------------------------------------------------- | ---------------------------------------------------------- |
+| The target of a turn-scoped `needs`                                                      | Downstream is dropped with it                              |
+| The source of a required `inputs`                                                        | Downstream is dropped with it                              |
+| An event subscriber, when all emitters of the event that triggered it are dropped        | The subscriber is dropped with it                          |
+| `after`, and inputs with `required: false`                                               | No cascade. They only express order or a best-effort read  |
+| A `cardinality: one` capability dependency, when another provider committed successfully | Still satisfied                                            |
+| The hard upstream of a story or setup runtime                                            | The whole turn is rolled back                              |
+| Read its uncommitted plugin data (auxiliary unit)                                        | The downstream runtime is dropped too                      |
+| Read its uncommitted plugin data (story or setup unit)                                   | Commits as usual; the trace records `read-dependency.kept` |
+
+**Read dependencies.** Within one execution, a runtime that reads its own plugin's data sees the uncommitted writes of upstream runtimes of the same plugin (see [In-execution plugin-data visibility](./plugins.md#in-execution-plugin-data-visibility)). Each read records which upstream writes it actually saw (`read-dependencies.ts`), and the execution carries these dependencies into its commit plan.
+
+- `get` depends only on the upstream writes that still shape the returned value. When the runtime first wrote the whole key itself (`set`, a delete, or an operation list containing either) and then read it, there is no dependency.
+- `list` depends on every upstream that wrote that namespace. A list without a namespace depends on every upstream that wrote plugin data.
+- At commit, an auxiliary unit with any member that read a dropped upstream outside the unit is dropped too, with the error `read data of <upstream runtime> that did not commit`.
+- It shares one dropped set with hard dependencies: its hard dependents, the runtimes that read its writes, `extraInTx` and the jobs a suspension holds back all treat it as dropped.
+- A story or setup unit is never dropped for a read dependency. For each dropped upstream it writes one `read-dependency.kept` trace row in the same transaction, with the payload `runtimeId`, `runId`, `producerRuntimeId`, `producerRunId` and `reason`.
+- A producer always precedes its reader. A dependency on a run later in commit order is a kernel bug; it is logged as a warning and ignored.
 
 The second argument of `extraInTx` gives the dropped runtimes. The main turn uses it so it does not queue detached jobs and background event followers that depend on them. A detached job that is still queued records the dropped runtimes as `failed` in the frozen turn digest and in the upstream results.
 

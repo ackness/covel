@@ -62,6 +62,12 @@ export interface RequestLLMResponseOptions {
    * leaving the choice to a model that already answered in prose.
    */
   readonly requireToolCall?: boolean;
+  /**
+   * This step's tool choice from a PreStep hook. It replaces the manifest's
+   * `llm.toolChoice` for the request; `"auto"` sends none. A correction's
+   * `requireToolCall` still forces a call over `"auto"`.
+   */
+  readonly toolChoice?: "auto" | "required" | { readonly name: string };
 }
 
 /**
@@ -73,10 +79,20 @@ function requestDefaults(
   manifest: RuntimeManifest,
   requireToolCall: boolean | undefined,
   toolDefs: readonly LLMToolDefinition[] | undefined,
+  stepToolChoice?: RequestLLMResponseOptions["toolChoice"],
 ): LLMRequestDefaults | undefined {
-  if (!requireToolCall || !toolDefs?.length || manifest.llm?.toolChoice)
-    return manifest.llm;
-  return { ...manifest.llm, toolChoice: "required" };
+  let defaults = manifest.llm;
+  if (stepToolChoice === "auto") {
+    if (defaults?.toolChoice !== undefined) {
+      const { toolChoice: _manifestChoice, ...rest } = defaults;
+      defaults = rest;
+    }
+  } else if (stepToolChoice !== undefined && toolDefs?.length) {
+    defaults = { ...defaults, toolChoice: stepToolChoice };
+  }
+  if (!requireToolCall || !toolDefs?.length || defaults?.toolChoice)
+    return defaults;
+  return { ...defaults, toolChoice: "required" };
 }
 
 /**
@@ -130,7 +146,12 @@ export async function requestLLMResponse(
     tools: toolDefs,
     responseFormat,
     ...(opts.locale ? { locale: opts.locale } : {}),
-    defaults: requestDefaults(manifest, opts.requireToolCall, toolDefs),
+    defaults: requestDefaults(
+      manifest,
+      opts.requireToolCall,
+      toolDefs,
+      opts.toolChoice,
+    ),
     ...(maxOutputTokens !== undefined ? { maxOutputTokens } : {}),
     ...(opts.promptCacheKey ? { promptCacheKey: opts.promptCacheKey } : {}),
     // The player has read a story as it streamed. Cut at the output limit,

@@ -2,6 +2,7 @@ import { isRecord } from "../utils/is-record.js";
 import { overlayWorldModelView } from "../function-runtime/world-model-view.js";
 import { createAgentLoopBudget } from "./agent-loop-budget.js";
 import type {
+  LoopStop,
   Proposal,
   ExecutionContext,
   RuntimeManifest,
@@ -23,7 +24,7 @@ import {
   parseJsonText,
   type EmittedEvent,
 } from "@covel/tools";
-import type { LLMMessage } from "@covel/shared";
+import type { LLMMessage, LLMToolDefinition } from "@covel/shared";
 import { promptCacheKeyFor } from "../llm/prompt-cache-key.js";
 import type { HookPipeline } from "../hooks/pipeline.js";
 import type { RetryInfo } from "../retry/llm-retry.js";
@@ -44,8 +45,13 @@ import {
   runPreToolUseHook,
   runPostToolUseHook,
   runPreLLMCallHook,
+  runPreStepHook,
   type IncludedPromptSegment,
+  type StepToolChoice,
 } from "../hooks/wire-helpers.js";
+import { createLoopState } from "./loop-state.js";
+import { createStepRecorder, type StepRecorder } from "./step-events.js";
+import { classifyLoopError, tagStop, tagging } from "./stop-reason.js";
 import { createResponseReviewer } from "./response-review.js";
 import {
   extractToolFailureMessage,
@@ -89,7 +95,11 @@ export interface AgentToolLoopCompleted {
   /** Domain events emitted via `emit-event` tool calls this loop — merged into `effects.events` at finalize. */
   readonly emittedEvents: EmittedEvent[];
   readonly streamDeltaCount: number;
-  readonly stoppedWithResponse: boolean;
+  /** How the loop ended. */
+  readonly stop: LoopStop;
+  /** The message a PreStep hook gave when it cancelled the loop. */
+  readonly stopMessage?: string;
+  /** The configured step limit; a PreStep hook may have lowered the one used. */
   readonly effectiveMaxSteps: number;
   readonly deadline: number;
   /** Required business tool work is still missing after the corrective step. */
@@ -112,6 +122,8 @@ export interface AgentToolLoopInitialState {
 export interface RunAgentToolLoopOptions {
   readonly worldBase?: import("@covel/shared").WorldModelView;
   readonly upstreamProposals?: readonly Proposal[];
+  /** Upstream writes of this plugin that tool store reads include, and the recorder. */
+  readonly pluginDataVisibility?: import("../function-runtime/upstream-plugin-data.js").PluginDataVisibility;
   readonly manifest: RuntimeManifest;
   readonly input: TurnInput;
   /** Player messages recorded in the session, forwarded into the tool context. */
@@ -159,19 +171,42 @@ export async function runAgentToolLoop(
     options.manifest.name,
     options.deps.turnControl,
   );
+  const stepEvents = createStepRecorder(options.deps.emitter, {
+    runtimeId: options.manifest.name,
+    pluginId: options.manifest.pluginId,
+    turnId: options.input.turnId,
+    runId: options.runId,
+  });
   try {
-    return await runAgentToolLoopWithinBudget(options, budget);
+    return await runAgentToolLoopWithinBudget(options, budget, stepEvents);
   } catch (error) {
-    budget.assertLive();
-    throw error;
+    // Classify before `assertLive` expires a budget whose clock has run out:
+    // that throws the loop's own timeout in place of `error`.
+    const stop = classifyLoopError(error, budget, options.deps.turnControl);
+    let thrown = error;
+    try {
+      budget.assertLive();
+    } catch (abort) {
+      thrown = abort;
+    }
+    if (stop) tagStop(thrown, stop);
+    await stepEvents.close(stop?.reason, { thrown: true });
+    throw thrown;
   } finally {
     budget.close();
   }
 }
 
+/**
+ * Time a finalizer needs before the deadline. A finalizer that cannot finish
+ * would only turn a step-limit failure into a timeout.
+ */
+const FINALIZER_MIN_REMAINING_MS = 3000;
+
 async function runAgentToolLoopWithinBudget(
   {
     upstreamProposals = [],
+    pluginDataVisibility,
     worldBase,
     manifest,
     input,
@@ -195,6 +230,7 @@ async function runAgentToolLoopWithinBudget(
     allowSuspend = true,
   }: RunAgentToolLoopOptions,
   budget: ReturnType<typeof createAgentLoopBudget>,
+  stepEvents: StepRecorder,
 ): Promise<AgentToolLoopResult> {
   // Resume starts with persisted loop state; ordinary execution starts fresh.
   let finalContent: string | null = initialState?.finalContent ?? null;
@@ -233,9 +269,10 @@ async function runAgentToolLoopWithinBudget(
   const emittedEvents: EmittedEvent[] = [
     ...(initialState?.emittedEvents ?? []),
   ];
-  let steps = 0;
-
-  let stoppedWithResponse = false;
+  // The loop's phase, step count and stop reason.
+  const loop = createLoopState();
+  // Set when a PreStep hook cancels the loop.
+  let stopMessage: string | undefined;
 
   // The policy owns tool surfaces, model settings, and execution budgets.
   const {
@@ -259,6 +296,8 @@ async function runAgentToolLoopWithinBudget(
     maxSteps,
     timeoutMs,
   });
+  // The step limit in force. A PreStep hook may lower it, never raise it.
+  let stepLimit = effectiveMaxSteps;
 
   // search-tools can activate deferred tools for subsequent steps.
   let activeToolDefs = toolDefs;
@@ -276,6 +315,7 @@ async function runAgentToolLoopWithinBudget(
     console.warn(
       `[covel:warn] [runtime-retry] ${manifest.name} attempt=${info.attempt} reason=${info.reason} cause=${cause.slice(0, 200)}`,
     );
+    stepEvents.retry(info);
   };
 
   // Count how many times we injected a perturbation into `messages` due to
@@ -314,22 +354,15 @@ async function runAgentToolLoopWithinBudget(
   // so the persisted narrative keeps both pre- and post-interjection text.
   const steeredProse: string[] = [];
 
-  while (steps < effectiveMaxSteps && Date.now() < budget.deadline) {
-    steps++;
-
-    // ── Player turn control ─────────────────────────────────
-    // Abort: cut before spending another LLM call (the in-flight call is
-    // additionally cut by the retry layer via the same signal). Steering:
-    // merge queued player interjections into the live transcript so the
-    // next LLM step sees them.
-    budget.assertLive();
-    if (acceptsSteering) {
-      for (const steer of deps.turnControl?.drainSteering?.() ?? []) {
-        messages.push({ role: "user", content: steer });
-        currentTurnUserMessages += 1;
-      }
-    }
-
+  /**
+   * One model request: PreLLMCall, pictures, the context budget, then the
+   * provider call. Shared by every step and the finalizer.
+   */
+  const callModel = async (step: {
+    readonly tools: readonly LLMToolDefinition[] | undefined;
+    readonly toolChoice?: StepToolChoice;
+    readonly requireToolCall: boolean;
+  }) => {
     // Model resolution chain for story runtimes:
     // API override > manifest.model (a role the player binds) > undefined.
     // Tool-heavy plugin runtimes stay on their declared slot so E2E story
@@ -344,7 +377,7 @@ async function runAgentToolLoopWithinBudget(
     const hookedRequest = await runPreLLMCallHook(hookOpts, {
       messages,
       model: effectiveModel,
-      tools: activeToolDefs,
+      tools: step.tools,
       ...(promptSegments ? { promptSegments } : {}),
     });
     // Pictures go only to a model known to read images. The hook may have
@@ -362,29 +395,31 @@ async function runAgentToolLoopWithinBudget(
         };
 
     // Budget after hooks and tool results, immediately before each call.
-    const budgetedRequest = await prepareBudgetedRequest({
-      runtimeId: manifest.name,
-      pluginId: manifest.pluginId,
-      messages: llmRequest.messages as LLMMessage[],
-      tools: llmRequest.tools,
-      responseFormat,
-      retryPolicy,
-      estimator,
-      // These limits are a fallback each call replaces, so they are not
-      // checked here.
-      contextBudget: contextBudget && {
-        ...contextBudget,
-        protectLastUserTurns:
-          (contextBudget.protectLastUserTurns ??
-            DEFAULT_PROTECT_LAST_USER_TURNS) +
-          currentTurnUserMessages -
-          1,
-      },
-      locale: input.locale,
-      llm: deps.llm,
-      slot: llmRequest.model,
-      emitter: deps.emitter,
-    });
+    const budgetedRequest = await tagging("context-overflow", () =>
+      prepareBudgetedRequest({
+        runtimeId: manifest.name,
+        pluginId: manifest.pluginId,
+        messages: llmRequest.messages as LLMMessage[],
+        tools: llmRequest.tools,
+        responseFormat,
+        retryPolicy,
+        estimator,
+        // These limits are a fallback each call replaces, so they are not
+        // checked here.
+        contextBudget: contextBudget && {
+          ...contextBudget,
+          protectLastUserTurns:
+            (contextBudget.protectLastUserTurns ??
+              DEFAULT_PROTECT_LAST_USER_TURNS) +
+            currentTurnUserMessages -
+            1,
+        },
+        locale: input.locale,
+        llm: deps.llm,
+        slot: llmRequest.model,
+        emitter: deps.emitter,
+      }),
+    );
 
     const requestMessages =
       budgetedRequest?.messages ?? (llmRequest.messages as LLMMessage[]);
@@ -395,45 +430,179 @@ async function runAgentToolLoopWithinBudget(
     budget.pauseForModel();
     let rawResponse: Awaited<ReturnType<typeof requestLLMResponse>>;
     try {
-      rawResponse = await requestLLMResponse({
-        manifest,
-        deps,
-        messages: sentMessages,
-        effectiveModel: llmRequest.model,
-        toolDefs: llmRequest.tools,
-        responseFormat,
-        locale: input.locale,
-        promptCacheKey: promptCacheKeyFor(input.sessionId, manifest.name),
-        ...(budgetedRequest?.maxOutputTokens
-          ? { maxOutputTokens: budgetedRequest.maxOutputTokens }
-          : {}),
-        retryPolicy,
-        deadline: budget.deadline,
-        // Queue time at the LLM concurrency gate is the framework's cost:
-        // shift the loop deadline by it so later steps keep their budget.
-        onQueueWait: budget.extend,
-        // A model that keeps writing is not cut off: the time its stream
-        // spent delivering output does not count against the loop either.
-        onStreamTime: budget.extend,
-        useStreaming: useStreaming && llmRequest.stream !== false,
-        reportRetry,
-        onStreamDelta:
-          manifest.outputKind === "story" ? delta.forward : async () => {},
-        deliversDeltas: manifest.outputKind === "story",
-        requireToolCall: toolCallRequested,
-      });
+      rawResponse = await tagging("model-error", () =>
+        requestLLMResponse({
+          manifest,
+          deps,
+          messages: sentMessages,
+          effectiveModel: llmRequest.model,
+          toolDefs: llmRequest.tools,
+          responseFormat,
+          locale: input.locale,
+          promptCacheKey: promptCacheKeyFor(input.sessionId, manifest.name),
+          ...(budgetedRequest?.maxOutputTokens
+            ? { maxOutputTokens: budgetedRequest.maxOutputTokens }
+            : {}),
+          retryPolicy,
+          deadline: budget.deadline,
+          // Queue time at the LLM concurrency gate is the framework's cost:
+          // shift the loop deadline by it so later steps keep their budget.
+          onQueueWait: budget.extend,
+          // A model that keeps writing is not cut off: the time its stream
+          // spent delivering output does not count against the loop either.
+          onStreamTime: budget.extend,
+          useStreaming: useStreaming && llmRequest.stream !== false,
+          reportRetry,
+          onStreamDelta:
+            manifest.outputKind === "story" ? delta.forward : async () => {},
+          deliversDeltas: manifest.outputKind === "story",
+          requireToolCall: step.requireToolCall,
+          ...(step.toolChoice ? { toolChoice: step.toolChoice } : {}),
+        }),
+      );
     } finally {
       budget.resumeAfterModel();
     }
     budget.assertLive();
+    stepEvents.responded(rawResponse);
+    return {
+      rawResponse,
+      reviewMessages: budgetedRequest?.messages ?? llmRequest.messages,
+    };
+  };
+
+  /**
+   * The finalizer step: tools off, no tool choice, the same response format,
+   * streamed like any step. Returns its text, or undefined when it wrote
+   * none, its draft was rejected, or the request failed. An abort or the
+   * deadline propagates as in any step. Its tool calls are ignored.
+   */
+  const runFinalizer = async (step: number): Promise<string | undefined> => {
+    await delta.reset();
+    messages.push(
+      manifest.outputKind === "story"
+        ? writeStoryWithoutTools(input.locale)
+        : finalAnswerWithoutTools(input.locale),
+    );
+    await stepEvents.start({
+      step,
+      maxSteps: stepLimit,
+      toolCount: 0,
+      toolChoice: "auto",
+      finalizer: true,
+    });
+    try {
+      const { rawResponse, reviewMessages } = await callModel({
+        tools: undefined,
+        requireToolCall: false,
+      });
+      lastTarget = rawResponse.target;
+      const response = await reviewResponse(rawResponse, reviewMessages);
+      budget.assertLive();
+      const text = response?.content?.trim() ? response.content : undefined;
+      if (!text) await delta.reset();
+      return text;
+    } catch (error) {
+      // Only an abort or the deadline ends the loop here; any other failure
+      // leaves the step-limit failure in place.
+      budget.assertLive();
+      console.warn(
+        `[runtime-loop] ${manifest.name} finalizer failed: ${
+          error instanceof Error ? error.message.slice(0, 200) : String(error)
+        }`,
+      );
+      await delta.reset();
+      return undefined;
+    }
+  };
+
+  while (loop.steps < stepLimit && Date.now() < budget.deadline) {
+    loop.steps++;
+    const step = loop.steps;
+
+    // ── Player turn control ─────────────────────────────────
+    // Abort: cut before spending another LLM call (the in-flight call is
+    // additionally cut by the retry layer via the same signal). Steering:
+    // merge queued player interjections into the live transcript so the
+    // next LLM step sees them.
+    loop.enter("awaiting-pre-step");
+    budget.assertLive();
+    await stepEvents.close();
+    if (acceptsSteering) {
+      for (const steer of deps.turnControl?.drainSteering?.() ?? []) {
+        messages.push({ role: "user", content: steer });
+        currentTurnUserMessages += 1;
+      }
+    }
+
+    // ── PreStep hook ─────────────────────────────────────────────
+    // Shapes this step only: the tool surface it narrows is not carried to
+    // the next step, and execution stays bound by the manifest's surface.
+    const toolNames = (activeToolDefs ?? []).map(
+      (definition) => definition.name,
+    );
+    const loopToolChoice: StepToolChoice =
+      manifest.llm?.toolChoice ??
+      (toolCallRequested && toolNames.length > 0 ? "required" : "auto");
+    const preStep = await runPreStepHook(hookOpts, {
+      step,
+      stepsRemaining: stepLimit - step + 1,
+      maxSteps: stepLimit,
+      toolNames,
+      toolChoice: loopToolChoice,
+    });
+    if (preStep.tools || preStep.ignoredTools > 0)
+      stepEvents.note({
+        kind: "tool-narrowed",
+        count: (preStep.tools ?? toolNames).length,
+        ...(preStep.ignoredTools > 0 ? { ignored: preStep.ignoredTools } : {}),
+      });
+    if (preStep.stop) {
+      // `tool-finished` ends the loop as a PostToolUse `terminate` does: the
+      // completion contract is still judged in settle. `cancelled` returns
+      // the loop's result so the failed runtime keeps its tool calls.
+      if (preStep.stop.reason === "tool-finished")
+        loop.stop = { reason: "tool-finished" };
+      else {
+        loop.stop = { reason: "cancelled", cancelledBy: "hook" };
+        stopMessage = preStep.stop.message;
+      }
+      break;
+    }
+    if (preStep.stepsRemaining !== undefined)
+      stepLimit = Math.min(stepLimit, step + preStep.stepsRemaining - 1);
+    const narrowed = preStep.tools
+      ? (activeToolDefs ?? []).filter((definition) =>
+          preStep.tools!.includes(definition.name),
+        )
+      : undefined;
+    const stepTools = narrowed
+      ? narrowed.length > 0
+        ? narrowed
+        : undefined
+      : activeToolDefs;
+    await stepEvents.start({
+      step,
+      maxSteps: stepLimit,
+      toolCount: stepTools?.length ?? 0,
+      toolChoice: preStep.toolChoice ?? loopToolChoice,
+    });
+
+    loop.enter("requesting-model");
+    const { rawResponse, reviewMessages } = await callModel({
+      tools: stepTools,
+      ...(preStep.toolChoice ? { toolChoice: preStep.toolChoice } : {}),
+      requireToolCall: toolCallRequested,
+    });
 
     lastTarget = rawResponse.target;
-    const response = await reviewResponse(
-      rawResponse,
-      budgetedRequest?.messages ?? llmRequest.messages,
+    loop.enter("reviewing");
+    const response = await tagging("invalid-output", () =>
+      reviewResponse(rawResponse, reviewMessages),
     );
     budget.assertLive();
     if (!response) {
+      stepEvents.note({ kind: "review-rejected" });
       finalContent = null;
       // The rejected draft may already be on screen.
       await delta.reset();
@@ -441,6 +610,7 @@ async function runAgentToolLoopWithinBudget(
     }
 
     if (response.toolCalls.length > 0) {
+      loop.enter("running-tools");
       toolCallRequested = false;
       // Preparation text before tool calls is not the final narrative.
       await delta.reset();
@@ -533,6 +703,10 @@ async function runAgentToolLoopWithinBudget(
             });
             if (search.activated.length > 0) {
               activeToolDefs = [...(activeToolDefs ?? []), ...search.activated];
+              stepEvents.note({
+                kind: "tool-activated",
+                count: search.activated.length,
+              });
             }
             messages.push(
               buildToolResultMessage({
@@ -546,6 +720,7 @@ async function runAgentToolLoopWithinBudget(
               result: search.parsedResult,
               success: true,
             });
+            stepEvents.toolCall(effectiveTc.name, true);
             collectedToolCalls.push({
               toolCallId: effectiveTc.id,
               toolName: effectiveTc.name,
@@ -580,6 +755,7 @@ async function runAgentToolLoopWithinBudget(
               locale: input.locale,
               messages: pluginMessagesFor(loaded.messages, input.locale),
               pendingProposals: pendingProposals,
+              ...(pluginDataVisibility ? { pluginDataVisibility } : {}),
               upstreamProposals,
               world,
               signal: hookOpts.signal,
@@ -677,6 +853,9 @@ async function runAgentToolLoopWithinBudget(
                   }),
                 );
               }
+              loop.enter("suspended");
+              loop.stop = { reason: "suspended" };
+              await stepEvents.close("suspended");
               return handleSuspension({
                 outputContractSchema: loaded.outputContractSchema,
                 sentinel: toolResult.parsedResult,
@@ -712,6 +891,7 @@ async function runAgentToolLoopWithinBudget(
             success: toolResult.success,
             ...(toolResult.refused ? { refused: true as const } : {}),
           });
+          stepEvents.toolCall(effectiveTc.name, toolResult.success);
 
           if (
             effectiveTc.name !== "runtime-done" ||
@@ -771,6 +951,7 @@ async function runAgentToolLoopWithinBudget(
         }
       }
 
+      loop.enter("deciding");
       // Runtime-done early exit. If any tool call in this round was the
       // builtin `runtime-done` tool, the LLM has declared completion —
       // break immediately instead of burning another round-trip for a
@@ -810,6 +991,7 @@ async function runAgentToolLoopWithinBudget(
           finalContent = null;
           activeToolDefs = undefined;
           messages.push(writeStoryWithoutTools(input.locale));
+          stepEvents.note({ kind: "story-without-tools" });
           continue;
         }
         // A `requireToolUse` runtime can reach here having called nothing but
@@ -831,6 +1013,7 @@ async function runAgentToolLoopWithinBudget(
             role: "system",
             content: runtimeDoneCorrection(input.locale),
           });
+          stepEvents.note({ kind: "runtime-done-correction" });
           continue;
         }
         // Preserve streamed / captured prose from earlier steps or this
@@ -850,7 +1033,7 @@ async function runAgentToolLoopWithinBudget(
                 })
               : "";
         }
-        stoppedWithResponse = true;
+        loop.stop = { reason: "tool-finished" };
         break;
       }
 
@@ -858,7 +1041,7 @@ async function runAgentToolLoopWithinBudget(
       // `runtime-done` call still gets its sentinel-strip + envelope cleanup
       // above). The response's prose, if any, is already in finalContent.
       if (terminatedByHook) {
-        stoppedWithResponse = true;
+        loop.stop = { reason: "tool-finished" };
         break;
       }
 
@@ -884,7 +1067,7 @@ async function runAgentToolLoopWithinBudget(
               .map((call) => ({ name: call.toolName, output: call.output })),
           });
         }
-        stoppedWithResponse = true;
+        loop.stop = { reason: "tool-finished" };
         break;
       }
 
@@ -893,6 +1076,7 @@ async function runAgentToolLoopWithinBudget(
       // almost certainly stuck in a KV-cache echo. Inject a perturbation
       // system message to nudge it onto a different path; on the second
       // detection give up so the loop cannot wedge the runtime forever.
+      const perturbationsBefore = loopGuardState.loopPerturbations;
       try {
         guardAgainstToolLoop({
           collectedToolCalls,
@@ -906,20 +1090,26 @@ async function runAgentToolLoopWithinBudget(
         // A failed story fails the whole player turn. A story stuck repeating
         // a tool call (e.g. an event no active plugin consumes) still has
         // what it needs to narrate: take the tools away and ask for prose.
-        if (manifest.outputKind !== "story" || activeToolDefs === undefined)
+        if (manifest.outputKind !== "story" || activeToolDefs === undefined) {
+          tagStop(err, { reason: "loop-detected" });
           throw err;
+        }
         console.warn(
           `[runtime-loop] ${manifest.name} kept repeating a tool call; continuing without tools`,
         );
         finalContent = null;
         activeToolDefs = undefined;
         messages.push(writeStoryWithoutTools(input.locale));
+        stepEvents.note({ kind: "story-without-tools" });
       }
+      if (loopGuardState.loopPerturbations > perturbationsBefore)
+        stepEvents.note({ kind: "loop-perturbation" });
 
       // Continue loop — LLM sees tool results and decides next action
       continue;
     }
 
+    loop.enter("deciding");
     const completion = checkTextCompletion({
       manifest,
       calls: executedToolCalls,
@@ -933,6 +1123,7 @@ async function runAgentToolLoopWithinBudget(
       toolCallRequested = true;
       await delta.reset();
       messages.push({ role: "system", content: completion.correction });
+      stepEvents.note({ kind: "no-tool-correction" });
       continue;
     }
 
@@ -942,9 +1133,10 @@ async function runAgentToolLoopWithinBudget(
     // bare prose finish (the common single-step story turn) ends the loop
     // here. Drain once more and take another step so the player's message
     // lands mid-turn. Bounded by effectiveMaxSteps like any other step.
-    if (acceptsSteering && steps < effectiveMaxSteps) {
+    if (acceptsSteering && loop.steps < stepLimit) {
       const lateSteering = deps.turnControl?.drainSteering?.() ?? [];
       if (lateSteering.length > 0) {
+        stepEvents.note({ kind: "late-steering", count: lateSteering.length });
         if (response.content) {
           messages.push({ role: "assistant", content: response.content });
           // Schema-shaped outputs stay last-wins — the final envelope is
@@ -968,9 +1160,45 @@ async function runAgentToolLoopWithinBudget(
       steeredProse.length > 0
         ? [...steeredProse, response.content].filter(Boolean).join("\n\n")
         : response.content;
-    stoppedWithResponse = true;
+    loop.stop = { reason: "completed" };
     break;
   }
+
+  // No `break` set a reason: the loop ended at its gate. The deadline case
+  // throws at `assertLive` below, and the outer catch tags it.
+  loop.stop ??=
+    loop.steps >= stepLimit ? { reason: "max-steps" } : { reason: "deadline" };
+
+  // ── Finalizer ──────────────────────────────────────────────────
+  // A step limit is never a success by itself: text the model wrote beside a
+  // tool call is scratch. One request with tools off asks for the answer,
+  // when prose can satisfy the runtime's completion contract and there is
+  // time left to write it.
+  if (
+    loop.stop.reason === "max-steps" &&
+    !outputFromCompletingTool &&
+    (!requireToolUse ||
+      hasBusinessWork(manifest, executedToolCalls, seededBusinessWork)) &&
+    (manifest.requireExplicitCompletion !== true ||
+      hasExplicitCompletion(
+        manifest,
+        executedToolCalls,
+        initialState?.completionCalls,
+      )) &&
+    budget.deadline - Date.now() >= FINALIZER_MIN_REMAINING_MS
+  ) {
+    loop.enter("finalizing");
+    const answer = await runFinalizer(loop.steps + 1);
+    if (answer) {
+      finalContent =
+        steeredProse.length > 0
+          ? [...steeredProse, answer].join("\n\n")
+          : answer;
+      loop.stop = { reason: "max-steps", finalizer: true };
+    }
+  }
+  loop.enter("stopped");
+  await stepEvents.close(loop.stop.reason);
 
   budget.assertLive();
   return {
@@ -982,7 +1210,8 @@ async function runAgentToolLoopWithinBudget(
     pendingProposals,
     emittedEvents,
     streamDeltaCount: delta.count(),
-    stoppedWithResponse,
+    stop: loop.stop,
+    ...(stopMessage ? { stopMessage } : {}),
     effectiveMaxSteps,
     deadline: budget.deadline,
     // Judged here, where every way out of the loop ends — a text answer,
@@ -999,6 +1228,17 @@ async function runAgentToolLoopWithinBudget(
         executedToolCalls,
         initialState?.completionCalls,
       ),
+  };
+}
+
+/** Ask a non-story runtime at its step limit for its final answer, tools off. */
+function finalAnswerWithoutTools(locale: string | undefined): LLMMessage {
+  return {
+    role: "system",
+    content:
+      instructionLocaleFor(locale) === "zh"
+        ? "已经没有剩余步数，工具已关闭。现在根据已有的信息直接给出最终答案，按要求的输出格式回复；不要再调用工具或解释处理过程。"
+        : "No steps are left and tools are off. Give your final answer now from the information you already have, in the required output format. Do not call tools or describe the processing steps.",
   };
 }
 

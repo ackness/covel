@@ -20,6 +20,7 @@ export type HookEventName =
   | "PreSchedule"
   | "PreRuntime"
   | "PostContextAssembly"
+  | "PreStep"
   | "PreLLMCall"
   | "PostLLMResponse"
   | "PostRuntime"

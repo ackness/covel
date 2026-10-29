@@ -400,6 +400,8 @@ const characters = ctx.world?.characters ?? [];
 
 工具和函数读到的角色数据，已经包含这一回合里前面的步骤提出、但还没保存的修改。所以“先写后读”能读到刚写的内容。不要自己绕过它去读已保存的旧数据，也不要把前面步骤的写入请求再提交一遍。
 
+插件数据同样如此：读到的值包含这次执行里同一个插件前面已经完成的 runtime 写下、还没保存的内容。前面的写入在保存时被拒绝的话，读过它的 runtime 也一起作废（故事除外）。规则见[执行内的插件数据可见性](../reference/plugins.md#执行内的插件数据可见性)。
+
 ### 读取完整的故事记录
 
 `ctx.store.readTurnMessages` 按页读取已保存的全部消息，包括已经被摘要替代的原文。把读到的位置存起来，下次只读新增的：
@@ -437,6 +439,8 @@ try {
 }
 const gold = await ctx.pluginData.get("wallet", "gold"); // the value after the ops
 ```
+
+内置的 [inventory 台账](../../plugins/inventory/lib/update-inventory.js)和 [affinity 工具](../../plugins/affinity/tools/update-affinity.js)是数据集操作式写入的完整例子：已有记录的计数用 `inc`，新记录用 `set`，好感档位、进度条等派生字段由读取值加增量算出，再用 `merge` 写入。并发提交时计数增量会累加，派生字段和整数组写入的历史仍取工具预测的值，可能落后于最终计数。
 
 - 操作在提交时作用在最新存的值上。两次运行同时各扣 3，两次都会扣到，不会一次覆盖另一次。
 - 调用时先拿当前看到的值试一遍。失败（比如结果小于 `min`）就直接抛错，什么都不写，你可以当场处理。

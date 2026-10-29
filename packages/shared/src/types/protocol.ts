@@ -138,12 +138,72 @@ export interface RuntimeLifecyclePayload {
   readonly runId?: string;
   readonly status: string;
   readonly durationMs?: number;
+  /** How the agent loop ended; agent runtimes only. */
+  readonly stopReason?: import("./execution.js").StopReason;
 }
 
 export interface RuntimeFailedPayload extends RuntimeLifecyclePayload {
   readonly error?: string;
   readonly errorKind?: ProviderFailureKind;
   readonly failureTarget?: import("./execution.js").RuntimeResult["failureTarget"];
+}
+
+/** What a step note records; never a tool name or any model content. */
+export type StepNoteKind =
+  | "review-rejected"
+  | "no-tool-correction"
+  | "runtime-done-correction"
+  | "loop-perturbation"
+  | "story-without-tools"
+  | "late-steering"
+  | "tool-activated"
+  | "tool-narrowed";
+
+/** Something the loop did inside one step that is not a stop. */
+export interface StepNote {
+  readonly kind: StepNoteKind;
+  /** How many tools or messages the note is about, when that applies. */
+  readonly count?: number;
+  /** `tool-narrowed`: names the hook gave that were not offered this step. */
+  readonly ignored?: number;
+}
+
+interface StepIdentity {
+  readonly runtimeId: string;
+  readonly pluginId: string;
+  readonly turnId: string;
+  readonly runId: string;
+  /** 1-based step number; the finalizer step is one past the last step. */
+  readonly step: number;
+  /** Set on the finalizer step: tools off, final answer now. */
+  readonly finalizer?: true;
+}
+
+/** An agent-loop step is about to call the model. */
+export interface StepStartedPayload extends StepIdentity {
+  /** The step limit in force for this step. */
+  readonly maxSteps: number;
+  /** Tools advertised to the model this step. */
+  readonly toolCount: number;
+  readonly toolChoice: "auto" | "required" | { readonly name: string };
+}
+
+/** An agent-loop step ended; emitted exactly once per started step. */
+export interface StepCompletedPayload extends StepIdentity {
+  readonly durationMs: number;
+  readonly finishReason?: string;
+  readonly usage?: import("./llm-adapter.js").LLMUsageSummary;
+  readonly toolCalls: readonly {
+    readonly name: string;
+    readonly success: boolean;
+  }[];
+  readonly retries: readonly {
+    readonly attempt: number;
+    readonly reason: string;
+  }[];
+  readonly notes: readonly StepNote[];
+  /** Set only on the step that ended the loop. */
+  readonly stopReason?: import("./execution.js").StopReason;
 }
 
 export interface AssetProgressPayload {
@@ -377,6 +437,8 @@ export type CovelEvent =
   | { readonly type: "tool.failed"; readonly payload: CovelEventPayload }
   | { readonly type: "llm.calling"; readonly payload: CovelEventPayload }
   | { readonly type: "llm.responded"; readonly payload: CovelEventPayload }
+  | { readonly type: "step.started"; readonly payload: StepStartedPayload }
+  | { readonly type: "step.completed"; readonly payload: StepCompletedPayload }
   | { readonly type: "message.completed"; readonly payload: CovelEventPayload }
   | { readonly type: "block.emitted"; readonly payload: CovelEventPayload }
   | { readonly type: "hook.fired"; readonly payload: CovelEventPayload }
@@ -517,6 +579,8 @@ export const COVEL_EVENT_META = {
   "tool.failed": { forwardToActionStream: true },
   "llm.calling": { forwardToActionStream: true },
   "llm.responded": { forwardToActionStream: true },
+  "step.started": { forwardToActionStream: true },
+  "step.completed": { forwardToActionStream: true },
   "message.completed": { forwardToActionStream: true },
   "block.emitted": { forwardToActionStream: true },
   "hook.fired": { forwardToActionStream: true },

@@ -112,6 +112,7 @@ Gives the world its own calendar. After each turn of the story ends, it judges f
 - If the world does not define time, it uses a generic world calendar: 12 months a year, 30 days a month, 24 hours a day, starting at 08:00 on January 1 of year 1. This is not the Gregorian calendar.
 - Once a game has started recording time, the time definition is fixed. If you change the world file later, existing saves keep their time. The change only applies to a new game.
 - If the narrative fails, or the turn is rolled back, time does not move forward.
+- Time dataset (数据集) settlement records are checked when the turn is saved. An invalid record skips time settlement for this turn; the story is still saved.
 
 ## World Rules (`living-world-rules`)
 

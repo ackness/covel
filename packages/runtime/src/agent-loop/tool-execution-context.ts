@@ -52,8 +52,14 @@ export function createToolExecutionContext(
   }
   let view: FunctionStoreView | undefined;
   if (store) {
-    // Keep the overlay separate from the copy exposed to plugin code.
-    const reads = createFunctionStoreView(store, identity, pending);
+    // Keep the overlay separate from the copy exposed to plugin code. Reads
+    // include the caller plugin's upstream writes and record what they saw.
+    const reads = createFunctionStoreView(
+      store,
+      identity,
+      pending,
+      caller.pluginDataVisibility,
+    );
     view = Object.freeze({
       getPluginData: (namespace: string, key: string) =>
         read(() => reads.getPluginData(namespace, key)),

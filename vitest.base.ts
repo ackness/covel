@@ -1,10 +1,23 @@
-import { mkdtempSync, readdirSync, rmSync } from "node:fs";
+import { mkdtempSync, readdirSync, rmSync, statSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { isHostModule } from "./packages/plugin-loader/src/host-modules.js";
 
 const RUN_DIR_MARKER = "COVEL_TEST_TEMP_DIR";
+
+// A run in another PID namespace (a sandboxed agent, a container) looks dead
+// from here, so a directory only counts as abandoned once nobody has touched
+// it for a while; otherwise a concurrent run could lose its files mid-run.
+const ABANDONED_AFTER_MS = 6 * 60 * 60 * 1000;
+
+function untouchedForLong(dir: string, now: number): boolean {
+  try {
+    return now - statSync(dir).mtimeMs > ABANDONED_AFTER_MS;
+  } catch {
+    return false;
+  }
+}
 
 function isAlive(pid: number): boolean {
   try {
@@ -28,17 +41,20 @@ function isAlive(pid: number): boolean {
  * everything the run creates is under one directory.
  *
  * A run that is killed cannot remove its directory. The name carries the
- * process ID, and the next run removes the directories whose process is gone.
+ * process ID, and a later run removes the directories whose process is gone
+ * and that nobody has touched for six hours.
  */
 export function useRunTempDir(): void {
   // A config can load twice in one process, and a test can start another
   // test run. Both stay in the directory that exists.
   if (process.env[RUN_DIR_MARKER]) return;
   const base = os.tmpdir();
+  const now = Date.now();
   for (const name of readdirSync(base)) {
     const owner = Number(/^covel-test-(\d+)-/.exec(name)?.[1]);
-    if (owner && !isAlive(owner))
-      rmSync(path.join(base, name), { recursive: true, force: true });
+    const dir = path.join(base, name);
+    if (owner && !isAlive(owner) && untouchedForLong(dir, now))
+      rmSync(dir, { recursive: true, force: true });
   }
   const dir = mkdtempSync(path.join(base, `covel-test-${process.pid}-`));
   for (const name of ["TMPDIR", "TMP", "TEMP", RUN_DIR_MARKER])

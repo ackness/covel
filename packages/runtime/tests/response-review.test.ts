@@ -230,8 +230,10 @@ describe("plugin response validation", () => {
 
   it("respects a smaller runtime step budget when corrections are requested", async () => {
     const { result, generate, committed } = await run([], 1);
-    expect(generate).toHaveBeenCalledTimes(1);
+    // The one step, then the finalizer, whose draft is rejected as well.
+    expect(generate).toHaveBeenCalledTimes(2);
     expect(result.runtimeResults[0]?.status).toBe("failed");
+    expect(result.runtimeResults[0]?.stop).toEqual({ reason: "max-steps" });
     expect(committed.status).toBe("failed");
   });
 });

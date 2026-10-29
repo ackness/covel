@@ -285,6 +285,7 @@ describe("HookPipeline", () => {
         PreSchedule: "sequential",
         PreRuntime: "sequential",
         PostContextAssembly: "sequential",
+        PreStep: "sequential",
         PreLLMCall: "sequential",
         PostLLMResponse: "sequential",
         PostRuntime: "sequential",

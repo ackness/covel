@@ -21,6 +21,7 @@
 | Dataset | 数据集 | 插件声明的带类型数据（`contributes.datasets`）。不是安装用的 **Collection**。 |
 | Deployment form | 部署形态 | 桌面客户端、自部署网页版、官方网页版。不是 `DEPLOYMENT_TIER`。 |
 | Edition | 语言版本 | 世界的一种语言：`defaultLocale`，以及根目录里每个 `world.<locale>.yaml` 或 `WORLD.<locale>.md` 的语言。 |
+| Finalizer step | 收尾步骤 | agent 用完步数后关掉工具、要求直接给出答案的那一次请求。 |
 | Kernel | 内核 |  |
 | Local model relay | 本地模型中继 | 共享形态的服务端经玩家浏览器访问玩家电脑或局域网上的模型。见[安全边界](../internals/security.md#local-model-relay)。 |
 | Official web app | 官方网页版 |  |
@@ -37,6 +38,7 @@
 | Server-scoped setting | 服务端设置 | `scope: "server"` 的设置；其余的是本设备设置。 |
 | Session | 会话 |  |
 | Slot | 槽位 | 设置界面里叫“模型用途”。 |
+| Stop reason | 结束原因 | agent 工具循环怎样结束（`RuntimeResult.stop.reason`）。 |
 | Trigger mode | 触发模式 |  |
 | Turn | 回合 | “This turn” 是“本回合”。 |
 | World | 世界 | 世界的安装包叫“世界包”。 |
@@ -144,6 +146,14 @@
 它和插件的 **Contract** 不同：Contract 是一个插件定义、给别的插件用的。
 
 详见：[扩展点](./extension-points.md)、[插件扩展与通信](./plugin-extensions.md)。
+
+## Finalizer step
+
+agent runtime 用完步数之后，内核再发的一次模型请求：关掉工具，要求模型根据已有的信息直接给出最终答案。
+
+步数用完本身不算成功。只有收尾步骤写出了答案，runtime 才成功，结果的 `stop.finalizer` 为 `true`。输出由完成工具交出，或者完成条件还没满足时，不发收尾请求。
+
+详见：[协议参考的结束原因](./protocol.md#stop-reasons)。
 
 ## Kernel
 
@@ -263,6 +273,14 @@
 插件清单里只写槽位的名字；`llm.toml` 或保存下来的“服务商/模型”设置把它绑定到具体的模型。备用模型只在同一类输出之内选择：图像请求不会落到文本模型上。
 
 详见：[模型用途](./slots.md)、`llm.toml.example`。
+
+## Stop reason
+
+agent runtime 的工具循环怎样结束，例如 `completed`（模型给出了最终回复）、`max-steps`（用完了步数）或 `cancelled`（被取消）。一共十个标识符。
+
+它写在 `RuntimeResult.stop` 和 runtime 生命周期事件的 `stopReason` 里。函数 runtime 没有结束原因。
+
+详见：[协议参考的结束原因](./protocol.md#stop-reasons)、[回合管线](../internals/flow.md)。
 
 ## Trigger mode
 

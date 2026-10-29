@@ -262,6 +262,7 @@ When the runtime needs to give up its work for this turn, return the smallest ou
 A guard gets the same `ctx` as a function handler, and a bundled plugin gets the same as a community one:
 
 - It has `ctx.inputs` (this execution's input bindings), `ctx.world`, `ctx.store`, `ctx.pluginData`, `ctx.recursiveCall`, and the other helpers.
+- Its plugin-data reads, like a function handler's, include the writes of upstream runtimes of the same plugin in this execution (see [In-execution plugin-data visibility](#in-execution-plugin-data-visibility)).
 - Write through `ctx.pluginData`, or attach proposals to the skip result with `withPendingProposals`. These writes commit only when the guard skips; otherwise they are dropped, and the model's run decides what to write.
 - Once the guard returns or times out, `ctx.signal` is aborted and all of these stop working.
 
@@ -756,11 +757,40 @@ The rules are in [Aliases and name resolution](./world-model.md#aliases-and-name
 
 **The plugin's own data.**
 
-- Persistent data owned by a plugin is accessed through the bound `ctx.store.getPluginData(namespace, key)` and `listPluginData(namespace)`.
+- Persistent data owned by a plugin is accessed through the bound `ctx.store.getPluginData(namespace, key)` and `listPluginData(namespace)`. What it reads includes writes of this execution that are not committed yet; the rules are under [In-execution plugin-data visibility](#in-execution-plugin-data-visibility) below.
 - A plugin cannot specify an arbitrary sessionId or pluginId to read another plugin's private data.
 - To share data publicly across plugins, use a contract, a service, or an extension. Do not scan the other plugin's namespace.
 
 **Lorebook.** A lorebook entry's identity has two parts, the owner and the ID. The owner is `world`, `plugin`, or `player`. The player editing path over HTTP manages only entries whose owner is `player`. Do not use a character ID, a plugin ID, or an arbitrary namespace to imitate ownership of the character table or the lorebook.
+
+### In-execution plugin-data visibility
+
+Writes made during an execution commit when it ends. Until then, a plugin that reads its own data reads "the committed value plus the writes this execution will commit":
+
+- The writes this runtime has already buffered.
+- The writes of completed upstream runtimes of the same plugin: a successful result, or a guard that skipped its agent and left writes. They apply in commit order: upstream first, then the runtime's own; the results of a nested call before their parent; within one result, `effects.pluginData` first, then buffered writes. `plugin.data.update` operations are computed in the same order and give the value the commit stores.
+
+`ctx.pluginData.get/list`, `ctx.store.getPluginData/listPluginData`, `context.store` in tools (agent tools and `ctx.tools.call`) and the builtin `plugin-data-get/list` all read this way. The early check of `ctx.pluginData.update` uses the same view.
+
+These writes are not visible:
+
+- Other plugins' writes. A plugin reads only its own data.
+- Siblings of the same level. The visible writes are taken when the runtime starts, so runtimes running in parallel in one level do not see each other.
+- Failed results, and the writes of a guard that let its agent run (they never commit).
+- The previous turn's results that a manual retry brings, and the upstream results a background job brings. Their source execution already committed or dropped those writes; applying them again would count an operation such as `inc` twice.
+- A parent execution's upstream inside a nested execution. An execution started by `ctx.recursiveCall` sees only the upstream of that nested execution.
+
+Upstream writes are only read. They never enter the reader's own buffer, so nothing is committed twice.
+
+> [!IMPORTANT]
+> This changes the earlier read contract: each runtime used to see only committed values and its own buffer. Now a later runtime of the same plugin reads what earlier runtimes wrote in this execution, without passing it on through an input binding or an event.
+
+**Read dependencies.** A runtime that read an upstream write depends on it. When that write is dropped at commit (for example, the commit refused its proposal), an auxiliary runtime that read it is dropped too, with the error `read data of <upstream runtime> that did not commit`. The drop carries on to its hard dependents and to the runtimes that read its writes. A story or setup runtime is never dropped for this: it commits as usual, and the trace records a `read-dependency.kept` row. Dependencies are recorded per read:
+
+- `get` depends only on the upstream writes that still shape the returned value. When the runtime first wrote the whole key itself (`set` or a delete) and then read it, it depends on no upstream.
+- `list` depends on every upstream runtime that wrote any key in that namespace; a list without a namespace depends on every upstream that wrote plugin data.
+
+The commit rules are under [Turn-level single transaction](./transactions.md#turn-level-single-transaction).
 
 ### Dynamic dimensions
 
@@ -1076,6 +1106,7 @@ To see a real example of a given pattern, look here:
 | --- | --- |
 | Narrative provider and user settings | [narrator](../../../plugins/narrator/PLUGIN.md) |
 | Local tools and UI messages | [guide](../../../plugins/guide/PLUGIN.md) |
+| Datasets (数据集) and operation-based writes | [inventory](../../../plugins/inventory/PLUGIN.md), [affinity](../../../plugins/affinity/PLUGIN.md) |
 | World Model initialization | [world-init](../../../plugins/world-init/PLUGIN.md) |
 | Character creation and tracking | [char-creator](../../../plugins/char-creator/PLUGIN.md) |
 | Function runtime and public output | [world-time](../../../plugins/world-time/PLUGIN.md) |

@@ -70,6 +70,7 @@ export async function reportRuntimeResult(
     ...(result.status === "failed" && result.failureTarget
       ? { failureTarget: result.failureTarget }
       : {}),
+    ...(result.stop ? { stopReason: result.stop.reason } : {}),
     ...(reason ? { reason } : {}),
   };
   try {

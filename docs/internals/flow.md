@@ -238,7 +238,7 @@ stateDiagram-v2
 为什么这样是安全的：
 
 - 这条路径不写会话时钟：不传 `sessionClock`，并且 `completedPlayerTurns` 只数 `origin: "player"`。
-- 写入先进缓冲区（writeBuffer），最后汇入同一个提交事务，不在执行中零散落库。
+- 写入先进缓冲区（writeBuffer），最后汇入同一个提交事务，不在执行中零散落库。缓冲区只装本 runtime 自己的写入；同插件排在后面的 runtime 读插件数据时能看到它，但不会把它装进自己的缓冲区。
 - 它不追加对话消息。
 - 同一个 runtime 的并发执行由 `<sessionId>::<runtimeId>` 作业锁排成一队。handler 里“是否已经生成过”这类先查后做的逻辑因此不会重复执行，否则会重复计费。
 - 提交前在锁内重新读会话状态。玩家中途暂停或结束了会话，结果就被丢弃，不写入。
@@ -282,7 +282,7 @@ flowchart TB
       RT -->|function| F1["handler(ctx) → HandlerResult<br/>校验 outcome，分别保存 output / effects / completion"]
       F1 --> G6
       RT -->|agent| G4["buildContext<br/>runtime 正文 + prompt.segment 扩展段<br/>+ typed inputs + 投影历史<br/>→ 首个 agent 按真实 system prompt 压缩并重建<br/>→ PostContextAssembly hook 后再次预算"]
-      G4 --> G5["LLM + ToolExecutor loop<br/>PreLLMCall → LLM → PostLLMResponse 审查<br/>接受后才执行工具；拒绝时限次纠正<br/>PreToolUse → execute → PostToolUse"]
+      G4 --> G5["LLM + ToolExecutor loop（每步）<br/>PreStep → PreLLMCall → LLM → PostLLMResponse 审查<br/>接受后才执行工具；拒绝时限次纠正<br/>PreToolUse → execute → PostToolUse<br/>结束时记下结束原因（StopReason）"]
       G5 -->|拆分 agent 协议| G6["RuntimeResult: output / effects / completion"]
       G6 --> G7["PostRuntime hook"]
       G7 --> Final["校验故事输出 / 超时 / 父级取消"]
@@ -548,6 +548,29 @@ LLM: "调用 sync-           ToolExecutor:
 - 它们在检查通过后一次显示整段正文。框架仍然支持其他插件流式输出。
 - 这是有限的文本检查，不保证所有剧情推断都正确。
 
+**工具循环的阶段与结束原因。** agent 的工具循环（`packages/runtime/src/agent-loop/turn-agent-tool-loop.ts`）按固定的阶段走，阶段和合法的转换写在 `agent-loop/loop-state.ts` 里，非法的转换直接抛错（这是循环自身的缺陷，模型和插件触发不了）：
+
+```
+preparing → awaiting-pre-step → requesting-model → reviewing → running-tools → deciding
+              ↑                                       │                          │
+              └───────────── 下一步 ←──────────────────┴──────────────────────────┘
+deciding → finalizing → stopped        running-tools → suspended
+```
+
+每一步的先后：
+
+1. 检查取消，把玩家插话并入对话。
+2. `PreStep` Hook：可以收窄这一步的工具、改工具选择、减少剩余步数，或结束循环（见 [Hook 参考](../reference/hooks.md#prestep)）。
+3. 发 `step.started`。
+4. `PreLLMCall` → 上下文预算 → 模型调用（`llm.calling` / `llm.responded`）。
+5. `PostLLMResponse` 审查；接受后执行工具（`tool.*`）。
+6. 判断是否结束：完成工具、`runtime-done`、Hook 的 `terminate`、没有工具调用的最终回复，否则进入下一步。
+7. 这一步的 `step.completed` 在下一步开始或循环结束时发出，每个开始了的步骤恰好一次。
+
+每一种结束方式对应一个结束原因（`StopReason`），写进 `RuntimeResult.stop` 和 runtime 生命周期事件的 `stopReason`，完整的表见 [协议参考的结束原因](../reference/protocol.md#stop-reasons)。正常的出口（`completed`、`tool-finished`、`max-steps`、`deadline`、PreStep 的 `cancelled`）由循环自己记下，`settleAgentLoop` 按它定结果。抛出的出口保留原来的错误对象，原因挂在错误上（`agent-loop/stop-reason.ts`）：调用点给模型错误、输出无效、上下文超限和循环检测打标，循环外层的 catch 再把玩家停止、自己的超时和上级取消分出来，`finalizeRuntimeResult` 从错误上读出原因，放进失败的结果。
+
+**步数上限不算成功。** 用完步数时，模型在工具调用旁边写的文字只是草稿。只要输出不是由完成工具交出、`requireToolUse` 和 `requireExplicitCompletion` 已满足或没开、离截止时间还有至少 3 秒，内核再发一次关掉工具的收尾请求，要求直接给出最终答案。收尾写出文字时 runtime 成功，结果标明 `stop.finalizer: true`；否则以 `max-steps` 失败，暂存的写入不提交。超时永远是失败，不尝试收尾。
+
 ## 四、插件设计
 
 ### 4.1 插件结构
@@ -624,7 +647,8 @@ io:
 **runtime 读到的数据是哪一刻的。**
 
 - 领域读视图包含三部分：已提交的 CharacterSchema 和 Characters、已校验的上游提案、本 runtime 待提交的写入。所以工具写完之后马上读，读到的是刚写的内容。
-- 扩展提供者看到的 world 和 plugin-data，在这次执行创建时冻结。这样同一个扩展在并行的 runtime 里不会看到不同的内容。
+- 插件数据也是这样：runtime 读自己插件的数据时，读到已提交的值，加上同插件已完成的上游 runtime 会提交的写入（按提交顺序），再加上自己的缓冲。可见的写入在 runtime 开始时取定，同一层的兄弟互相看不到；重试和后台作业带来的上游结果不算。读到上游写入的 runtime 依赖它：上游在提交时被丢弃，辅助 runtime 一起丢弃，story 和 setup 照常提交并记 trace。规则见[执行内的插件数据可见性](../reference/plugins.md#执行内的插件数据可见性)。
+- 扩展提供者看到的 world 和 plugin-data，在这次执行创建时冻结。这样同一个扩展在并行的 runtime 里不会看到不同的内容。服务和扩展提供者看不到上游 runtime 未提交的插件数据。
 
 ### 4.3 插件触发决策树
 

@@ -108,7 +108,7 @@ export interface PluginAPI {
   };
   /** Register a local tool scoped to this plugin. */
   registerTool(toolModule: ToolModule): void;
-  /** Register a lifecycle hook handler (16 events, same semantics as `hooks`). */
+  /** Register a lifecycle hook handler (17 events, same semantics as `hooks`). */
   on(
     event: HookEventName,
     handler: HookHandler,

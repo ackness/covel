@@ -15,9 +15,11 @@
  * rolls back the whole execution, except for optional runtimes next to a
  * committed story: each of those commits in its own savepoint and a rejection
  * drops only its writes, plus the writes of every runtime that hard-depends on
- * it (`commit-dependencies.ts`). A story or setup runtime whose hard upstream
- * was dropped rolls back everything. A thrown store error always rolls back
- * everything.
+ * it (`commit-dependencies.ts`), and of every runtime that read its
+ * uncommitted plugin data (`read-dependencies.ts`). A story or setup runtime
+ * whose hard upstream was dropped rolls back everything; one that read data
+ * of a dropped runtime commits, and the trace records it. A thrown store
+ * error always rolls back everything.
  * `commit_status` for the execution's `turn_results` rows is settled inside
  * that same transaction on success, and best-effort to `failed` outside it on
  * rollback.
@@ -259,6 +261,15 @@ export interface FinalizeExecutionArgs {
    * dataset without a schema here refuses every write.
    */
   readonly datasetSchemas?: DatasetSchemas;
+  /**
+   * Plugin-data read dependencies by reader `runId`: the producer ids whose
+   * uncommitted writes the reader's reads saw (`read-dependencies.ts`). Every
+   * producer id is a `runId` of `results` today. An auxiliary unit with a
+   * member that read a dropped producer outside the unit is dropped too; a
+   * story or setup unit commits, with one `read-dependency.kept` trace row
+   * per dropped producer.
+   */
+  readonly readDependencies?: Readonly<Record<string, readonly string[]>>;
 }
 
 export interface FinalizeExecutionOutcome {
@@ -843,6 +854,52 @@ export async function finalizeExecution(
           })
         : undefined;
     };
+    // Producers precede their readers in commit order: a reader's visible
+    // set is taken from results completed before it started, children
+    // before their parent. Edges inside one unit are ignored, as the unit
+    // commits or drops as one.
+    const resultByRun = new Map(
+      results.map((result) => [result.runId, result]),
+    );
+    const positionOf = new Map(results.map((result, index) => [result, index]));
+    const lostReadsOf = (
+      unit: CommitUnit,
+      prepared: ReadonlyMap<FinalizableResult, PreparedRuntimeProposals>,
+    ): { reader: FinalizableResult; producer: FinalizableResult }[] => {
+      const edges = args.readDependencies;
+      if (
+        !edges ||
+        !(
+          unit.root.status === "success" ||
+          unit.members.some(
+            (member) => prepared.get(member)!.proposals.length > 0,
+          )
+        )
+      )
+        return [];
+      const members = new Set(unit.members);
+      const dropped = droppedRuns();
+      const lost = new Map<
+        FinalizableResult,
+        { reader: FinalizableResult; producer: FinalizableResult }
+      >();
+      for (const reader of unit.members) {
+        for (const producerId of edges[reader.runId] ?? []) {
+          // Only runs produce today; an unknown id has nothing to drop.
+          const producer = resultByRun.get(producerId);
+          if (!producer || members.has(producer)) continue;
+          if (positionOf.get(producer)! > positionOf.get(reader)!) {
+            console.warn(
+              `[finalize-execution] ${reader.runtimeId} read data of ${producer.runtimeId}, which commits after it; the dependency is ignored`,
+            );
+            continue;
+          }
+          if (dropped.has(producer) && !lost.has(producer))
+            lost.set(producer, { reader, producer });
+        }
+      }
+      return [...lost.values()];
+    };
     try {
       if (args.abortReason !== undefined) {
         throw new Error(`Execution aborted: ${args.abortReason}`);
@@ -1013,6 +1070,34 @@ export async function finalizeExecution(
               `[finalize-execution] dropped writes of ${root.runtimeId} for session ${sessionId}: ${error}`,
             );
             continue;
+          }
+          const lostReads = lostReadsOf(unit, prepared);
+          if (lostReads.length > 0 && isolates(unit)) {
+            const error = `read data of ${lostReads[0]!.producer.runtimeId} that did not commit`;
+            isolated.set(unit, error);
+            console.warn(
+              `[finalize-execution] dropped writes of ${root.runtimeId} for session ${sessionId}: ${error}`,
+            );
+            continue;
+          }
+          // A story or setup unit never drops for what it read: it
+          // commits, and the trace says what it stood on.
+          for (const { reader, producer } of lostReads) {
+            await tx.addTraceEvent({
+              id: crypto.randomUUID(),
+              sessionId,
+              type: "read-dependency.kept",
+              traceId: emitter?.traceId ?? root.turnId,
+              turnId: root.turnId,
+              payload: {
+                runtimeId: reader.runtimeId,
+                runId: reader.runId,
+                producerRuntimeId: producer.runtimeId,
+                producerRunId: producer.runId,
+                reason: `read data of ${producer.runtimeId} that did not commit`,
+              },
+              createdAt: new Date().toISOString(),
+            });
           }
           // A unit with a story or setup run stays all-or-nothing with the
           // execution; any other unit gets one savepoint next to a story.

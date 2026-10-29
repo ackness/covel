@@ -400,6 +400,8 @@ The data space here belongs to the current plugin. Covel decides which session i
 
 Character data that a tool or a function reads already includes the changes that earlier steps of this turn proposed and that are not saved yet. So "write first, then read" returns what was just written. Do not get around this by reading old saved data, and do not submit the earlier steps' write requests a second time.
 
+Plugin data works the same way: what you read includes what earlier, completed runtimes of the same plugin wrote in this execution and has not been saved yet. When such a write is refused at save time, the runtimes that read it are dropped too (the story excepted). The rules are under [In-execution plugin-data visibility](../reference/plugins.md#in-execution-plugin-data-visibility).
+
 ### Read the complete story record
 
 `ctx.store.readTurnMessages` reads all saved messages page by page, including the original text that has been replaced by a summary. Store the position you reached, and next time read only what was added:
@@ -437,6 +439,8 @@ try {
 }
 const gold = await ctx.pluginData.get("wallet", "gold"); // the value after the ops
 ```
+
+The bundled [inventory ledger](../../../plugins/inventory/lib/update-inventory.js) and [affinity tool](../../../plugins/affinity/tools/update-affinity.js) are complete examples of operation-based dataset (数据集) writes: existing counters use `inc`, new records use `set`, and derived fields such as affinity tiers and progress bars are computed from the read value plus the delta, then written with `merge`. Concurrent commits combine the counter deltas; derived fields and history written as a whole array still follow the tool’s prediction and can lag the final counter.
 
 - The operations apply at commit to the latest stored value. When two runs each take 3 at the same time, both take effect; neither overwrites the other.
 - The call first tries them on the value it sees now. When they fail (for example the result is below `min`), it throws and writes nothing, so you can handle it right there.
