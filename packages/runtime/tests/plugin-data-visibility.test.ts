@@ -608,6 +608,45 @@ describe("plugin-data visibility within one execution", () => {
     ]);
   });
 
+  it("ends a dependency at a whole-value operation anywhere in a list", async () => {
+    const a = fn("a");
+    const replaces = fn("replaces", { after: [a.name] });
+    const reads = fn("reads", { after: [replaces.name] });
+    const own = fn("own", { after: [a.name] });
+    const seen: Record<string, unknown> = {};
+    const { execution, resultOf } = await run([a, replaces, reads, own], {
+      [a.name]: set("x", 1),
+      [replaces.name]: async (ctx) => {
+        await ctx.pluginData!.update("notes", "x", [
+          { op: "inc", by: 1 },
+          { op: "set", value: 5 },
+        ]);
+        return ok();
+      },
+      [reads.name]: async (ctx) => {
+        seen.reads = await ctx.pluginData!.get("notes", "x");
+        return ok();
+      },
+      [own.name]: async (ctx) => {
+        await ctx.pluginData!.update("notes", "x", [
+          { op: "inc", by: 1 },
+          { op: "set", value: 7 },
+        ]);
+        seen.own = await ctx.pluginData!.get("notes", "x");
+        return ok();
+      },
+    });
+
+    expect(seen).toEqual({ reads: 5, own: 7 });
+    const edges = execution.commit.readDependencies ?? {};
+    // `replaces` overwrote a's value, so only it shapes what `reads` saw.
+    expect(edges[resultOf(reads.name)!.runId]).toEqual([
+      resultOf(replaces.name)!.runId,
+    ]);
+    // `own` overwrote the key itself before it read it.
+    expect(edges[resultOf(own.name)!.runId]).toBeUndefined();
+  });
+
   it("does not attach dependencies to a result that cannot commit", async () => {
     const a = fn("a");
     const b = fn("b", { after: [a.name] });

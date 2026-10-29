@@ -157,7 +157,7 @@ export function createPluginDataVisibility(options: {
 /**
  * Project upstream writes and the buffer onto one key, and find the upstream
  * producers whose writes still shape the result. A whole-value write (`set`,
- * `delete`, or an operation list that starts with either) replaces what came
+ * `delete`, or an operation list that contains either) replaces what came
  * before it, so a later one of the reader's own leaves no dependency. An
  * operation list that fails is skipped, as the commit rejects it, and is not
  * read. The value equals `overlayPluginDataValue` over the same list.
@@ -190,8 +190,10 @@ export function readPluginDataKey(
     if (proposal.type === "plugin.data.update") {
       const { ops } = proposal.payload;
       if (!applyDataOps(state, ops).ok) return;
-      const first = ops[0]?.op;
-      if (first === "set" || first === "delete") producers.clear();
+      // Any `set` or `delete` in a list that applied replaces the whole
+      // value, so what the list keeps of earlier writes ends there.
+      if (ops.some((op) => op.op === "set" || op.op === "delete"))
+        producers.clear();
     } else {
       producers.clear();
     }

@@ -401,7 +401,7 @@ SqliteStore、MemoryStore 和 PgStore（都在 Node 上）用同一种办法：
 
 **读取依赖。** 同一次执行里，runtime 读自己插件的数据时能看到同插件上游 runtime 还没提交的写入（见[执行内的插件数据可见性](./plugins.md#执行内的插件数据可见性)）。每次读取记下它实际看到了哪些上游的写入（`read-dependencies.ts`），执行把这些依赖带进提交计划。
 
-- `get` 只依赖还影响返回值的上游。runtime 自己先整体写了这个键（`set` 或删除）再读，就没有依赖。
+- `get` 只依赖还影响返回值的上游。runtime 自己先整体写了这个键（`set`、删除，或含有其中之一的操作列表）再读，就没有依赖。
 - `list` 依赖写过这个 namespace 的全部上游。不带 namespace 的列表依赖写过插件数据的全部上游。
 - 提交时，辅助单元里任一成员读过单元外、已被丢弃的上游，这个单元就一起丢弃，错误是 `read data of <上游 runtime> that did not commit`。
 - 它和硬依赖共用同一个丢弃集合：它的硬依赖方、读过它的写入的 runtime、`extraInTx` 和挂起保留的作业都把它当作被丢弃。

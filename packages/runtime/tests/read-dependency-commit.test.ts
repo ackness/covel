@@ -8,9 +8,13 @@
  * commits, and one `read-dependency.kept` trace row says what it stood on.
  */
 
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import type { DataStore } from "@covel/store";
 import { createMemoryStore } from "@covel/store/memory";
+import { createSqliteStore } from "@covel/store/sqlite";
+import { createPluginDataTools } from "@covel/tools";
 import type {
+  DeferredRuntimeJob,
   HandlerResult,
   JsonValue,
   Proposal,
@@ -22,6 +26,7 @@ import type {
   FunctionHandlerContext,
 } from "@covel/shared/plugin-runtime";
 import { commitExecution, executeTurn } from "../src/index.js";
+import { createToolExecutor } from "../src/agent-loop/tool-executor.js";
 import { finalizeExecution } from "../src/commit/finalize-execution.js";
 
 const SESSION = "session";
@@ -87,13 +92,56 @@ const refuse =
       : undefined;
   };
 
+const BACKENDS = [
+  ["memory", createMemoryStore],
+  ["sqlite", () => createSqliteStore(":memory:")],
+] as const;
+
+const open: DataStore[] = [];
+afterEach(async () => {
+  await Promise.all(open.splice(0).map((store) => store.close()));
+});
+
+interface RunOptions {
+  readonly create?: () => DataStore;
+  /** Rows the store holds before the execution starts. */
+  readonly stored?: readonly {
+    readonly namespace: string;
+    readonly key: string;
+    readonly value: JsonValue;
+  }[];
+  /** Runs between the execution and its commit, like a concurrent commit. */
+  readonly beforeCommit?: (store: DataStore) => Promise<void>;
+  /** Wire the builtin plugin-data tools into `ctx.tools`. */
+  readonly tools?: boolean;
+}
+
+async function storeRow(
+  store: DataStore,
+  row: { namespace: string; key: string; value: JsonValue },
+  timestamp: string,
+) {
+  await store.setPluginData({
+    id: `${SESSION}:${PLUGIN}:${row.namespace}:${row.key}`,
+    sessionId: SESSION,
+    pluginId: PLUGIN,
+    namespace: row.namespace,
+    key: row.key,
+    value: row.value,
+    createdAt: timestamp,
+    updatedAt: timestamp,
+  });
+}
+
 async function run(
   runtimes: readonly RuntimeManifest[],
   handlers: Record<string, FunctionHandler>,
   proposalGuard?: (proposal: Proposal) => string | undefined,
+  options: RunOptions = {},
 ) {
   vi.spyOn(console, "warn").mockImplementation(() => {});
-  const store = createMemoryStore();
+  const store = (options.create ?? createMemoryStore)();
+  open.push(store);
   const timestamp = "2026-10-29T00:00:00.000Z";
   await store.createSession({
     id: SESSION,
@@ -106,15 +154,27 @@ async function run(
     createdAt: timestamp,
     updatedAt: timestamp,
   });
+  for (const row of options.stored ?? []) await storeRow(store, row, timestamp);
+  const tools = createPluginDataTools(store);
   const execution = await executeTurn(input, runtimes, {
     store,
     llm: { generate: vi.fn() } as never,
+    ...(options.tools
+      ? {
+          toolExecutor: createToolExecutor({
+            store,
+            findTool: (name) => tools.find((tool) => tool.name === name),
+            getToolSource: () => "builtin",
+          }),
+        }
+      : {}),
     loadRuntime: async (runtime) => ({
       manifest: runtime,
       promptTemplate: "",
       handler: handlers[runtime.name],
     }),
   });
+  await options.beforeCommit?.(store);
   const outcome = await commitExecution({
     store,
     execution,
@@ -131,13 +191,14 @@ async function run(
   const runOf = (runtimeId: string) =>
     execution.commit.results.find((result) => result.runtimeId === runtimeId)!
       .runId;
+  const readersOf = () => execution.commit.readDependencies ?? {};
   const kept = async () =>
     (
       await store.queryTraceEvents(SESSION, {
         types: ["read-dependency.kept"],
       })
     ).map((event) => event.payload);
-  return { store, execution, outcome, notes, runOf, kept };
+  return { store, execution, outcome, notes, runOf, kept, readersOf };
 }
 
 describe("read dependencies at commit", () => {
@@ -342,13 +403,17 @@ describe("read dependencies at commit", () => {
 
   it("drops the jobs a surviving continuation holds back on a dropped reader", async () => {
     const asker = fn("asker");
-    const needsB = fn("needs-b", {
-      needs: [b.name],
-      turnCompletion: { mode: "detached" },
-      effects: { writes: ["plugin-data:self:notes"] },
-    } as Partial<RuntimeManifest>);
-    const { store, outcome } = await run(
-      [story, a, b, asker, needsB],
+    const other = fn("other");
+    const detached = (id: string, upstream: string) =>
+      fn(id, {
+        needs: [upstream],
+        turnCompletion: { mode: "detached" },
+        effects: { writes: ["plugin-data:self:notes"] },
+      } as Partial<RuntimeManifest>);
+    const needsB = detached("needs-b", b.name);
+    const needsOther = detached("needs-other", other.name);
+    const { store, execution, outcome } = await run(
+      [story, a, b, other, asker, needsB, needsOther],
       {
         [story.name]: tell,
         [a.name]: async (ctx) => {
@@ -356,24 +421,227 @@ describe("read dependencies at commit", () => {
           return ok();
         },
         [b.name]: readThenWrite("a", "b"),
+        [other.name]: async (ctx) => {
+          await write(ctx, "other");
+          return ok();
+        },
         [asker.name]: async () => ({
           outcome: "suspended",
           reason: "Need an answer",
           resumeSchema: { type: "object" },
         }),
         [needsB.name]: async () => ok(),
+        [needsOther.name]: async () => ok(),
       },
       refuse("a"),
     );
+
+    const jobsOf = (
+      continuation: { readonly withheldRuntimeJobs?: unknown } | undefined,
+    ) =>
+      (
+        (continuation?.withheldRuntimeJobs ??
+          []) as readonly DeferredRuntimeJob[]
+      ).map((job) => job.runtimeId);
+    // Before the commit, the continuation holds back both jobs.
+    expect(execution.commit.suspensions).toHaveLength(1);
+    expect(
+      jobsOf(execution.commit.suspensions?.[0]?.pendingContinuation).sort(),
+    ).toEqual([needsB.name, needsOther.name].sort());
 
     expect(outcome.isolatedRuntimes?.map((item) => item.runtimeId)).toEqual([
       a.name,
       b.name,
     ]);
-    const [saved] = await store.listSuspensions(SESSION);
-    expect(saved?.pendingContinuation.withheldRuntimeJobs ?? []).toEqual([]);
+    const saved = await store.listSuspensions(SESSION);
+    expect(saved).toHaveLength(1);
+    expect(saved[0]!.runtimeId).toBe(asker.name);
+    // The job on the dropped reader is gone; the unrelated one stays.
+    expect(jobsOf(saved[0]!.pendingContinuation)).toEqual([needsOther.name]);
   });
 });
+
+describe("read dependencies of lists", () => {
+  const a = fn("a", { stage: "pre-turn" });
+  const o = fn("o", { stage: "pre-turn" });
+  // Lists only: these readers never get a key.
+  const listsNotes = fn("lists-notes");
+  const listsElsewhere = fn("lists-elsewhere");
+  const listsAll = fn("lists-all", {
+    tools: { builtin: ["plugin-data-list"] },
+  });
+  const outsider = fn("outsider", { stage: "pre-turn" }, "outsider");
+
+  const listThenWrite =
+    (namespace: string, key: string): FunctionHandler =>
+    async (ctx) => {
+      await ctx.pluginData!.list(namespace);
+      await write(ctx, key);
+      return ok();
+    };
+
+  /** Isolated runs by runtime; siblings of one level finish in any order. */
+  const byRuntime = (
+    items: readonly { runtimeId: string }[] | undefined,
+  ): readonly { runtimeId: string }[] =>
+    [...(items ?? [])].sort((x, y) => x.runtimeId.localeCompare(y.runtimeId));
+
+  async function lists(refused: string) {
+    return run(
+      [story, a, o, outsider, listsNotes, listsElsewhere, listsAll],
+      {
+        [story.name]: tell,
+        [a.name]: async (ctx) => {
+          await write(ctx, "a");
+          return ok();
+        },
+        [o.name]: async (ctx) => {
+          await ctx.pluginData!.set("elsewhere", "o", "o");
+          return ok();
+        },
+        [outsider.name]: async (ctx) => {
+          await write(ctx, "outsider");
+          return ok();
+        },
+        [listsNotes.name]: listThenWrite("notes", "lists-notes"),
+        [listsElsewhere.name]: listThenWrite("elsewhere", "lists-elsewhere"),
+        [listsAll.name]: async (ctx) => {
+          // The builtin list without a namespace.
+          await ctx.tools!.call("plugin-data-list", {});
+          await write(ctx, "lists-all");
+          return ok();
+        },
+      },
+      refuse(refused),
+      { tools: true },
+    );
+  }
+
+  it("records the producers of the listed namespace, or of all plugin data", async () => {
+    const { readersOf, runOf } = await lists("never");
+
+    const edges = Object.fromEntries(
+      Object.entries(readersOf()).map(([reader, producers]) => [
+        reader,
+        [...producers].sort(),
+      ]),
+    );
+    // The other plugin's producer is in no reader's set.
+    expect(edges).toEqual({
+      [runOf(listsNotes.name)]: [runOf(a.name)],
+      [runOf(listsElsewhere.name)]: [runOf(o.name)],
+      [runOf(listsAll.name)]: [runOf(a.name), runOf(o.name)].sort(),
+    });
+  });
+
+  it("drops a namespace's readers and every unscoped reader with its producer", async () => {
+    const { outcome, notes, runOf } = await lists("a");
+
+    expect(outcome.status).toBe("committed");
+    expect(byRuntime(outcome.isolatedRuntimes)).toEqual(
+      [
+        { runtimeId: a.name, runId: runOf(a.name), error: "a refused" },
+        {
+          runtimeId: listsNotes.name,
+          runId: runOf(listsNotes.name),
+          error: `read data of ${a.name} that did not commit`,
+        },
+        {
+          runtimeId: listsAll.name,
+          runId: runOf(listsAll.name),
+          error: `read data of ${a.name} that did not commit`,
+        },
+      ].sort((x, y) => x.runtimeId.localeCompare(y.runtimeId)),
+    );
+    // The reader of another namespace commits.
+    expect(await notes()).toEqual({ "lists-elsewhere": "lists-elsewhere" });
+  });
+
+  it("leaves a namespace's readers alone when another namespace's producer drops", async () => {
+    const { outcome, notes } = await lists("o");
+
+    expect(
+      Object.fromEntries(
+        (outcome.isolatedRuntimes ?? []).map((item) => [
+          item.runtimeId,
+          item.error,
+        ]),
+      ),
+    ).toEqual({
+      [o.name]: "o refused",
+      [listsElsewhere.name]: `read data of ${o.name} that did not commit`,
+      [listsAll.name]: `read data of ${o.name} that did not commit`,
+    });
+    expect(await notes()).toEqual({ a: "a", "lists-notes": "lists-notes" });
+  });
+});
+
+for (const [backend, create] of BACKENDS) {
+  describe(`an operation list refused at commit: ${backend}`, () => {
+    const a = fn("a", { stage: "pre-turn" });
+    const b = fn("b");
+    const narrate = fn("story", { stage: "narrative", outputKind: "story" });
+
+    it("rolls the producer back whole, drops its reader and keeps the story", async () => {
+      const { outcome, notes, runOf, store } = await run(
+        [narrate, a, b],
+        {
+          [narrate.name]: async (ctx) => {
+            await write(ctx, "told");
+            return ok({ narrativeOutput: "The story goes on." });
+          },
+          [a.name]: async (ctx) => {
+            // Readable data first, then an operation list that passes the
+            // early check against 5 gold.
+            await write(ctx, "a", "ready");
+            await ctx.pluginData!.update("notes", "gold", [
+              { op: "inc", by: -5, min: 0 },
+            ]);
+            return ok();
+          },
+          [b.name]: async (ctx) => {
+            const seen = await ctx.pluginData!.get("notes", "a");
+            await write(ctx, "b", String(seen));
+            return ok();
+          },
+        },
+        undefined,
+        {
+          create,
+          stored: [{ namespace: "notes", key: "gold", value: 5 }],
+          // A concurrent commit spends gold, so the list goes out of bounds.
+          beforeCommit: (store) =>
+            storeRow(
+              store,
+              { namespace: "notes", key: "gold", value: 3 },
+              "2026-10-29T00:00:01.000Z",
+            ),
+        },
+      );
+
+      expect(outcome.status).toBe("committed");
+      expect(outcome.isolatedRuntimes).toEqual([
+        {
+          runtimeId: a.name,
+          runId: runOf(a.name),
+          error: expect.stringMatching(
+            /^plugin\.data\.update: .*\(op 0, out-of-bounds\)$/,
+          ),
+        },
+        {
+          runtimeId: b.name,
+          runId: runOf(b.name),
+          error: `read data of ${a.name} that did not commit`,
+        },
+      ]);
+      // Neither a's readable write nor b's write survives; the story's does.
+      expect(await notes()).toEqual({ gold: 3, told: "told" });
+      expect(
+        (await store.listMessages(SESSION)).map((message) => message.content),
+      ).toContain("The story goes on.");
+    });
+  });
+}
 
 describe("finalizeExecution read dependencies", () => {
   const TURN = "turn";
