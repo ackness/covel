@@ -24,6 +24,7 @@ import { createMemoryStore } from "@covel/store/memory";
 import { createHookPipeline } from "../src/hooks/pipeline.js";
 import { runTurnPipeline } from "../src/turn-executor/turn-executor.js";
 import { resumeRuntimePipeline } from "../src/resume/turn-resume.js";
+import { executeAgentGuard } from "../src/agent-loop/turn-agent-guard.js";
 import type { TurnExecutorDeps } from "../src/turn-executor/turn-executor-types.js";
 import type { TurnEmitter } from "../src/trace/turn-emitter.js";
 import {
@@ -279,6 +280,96 @@ describe("guard terminals", () => {
       expect(() => captured!.pluginData!.set("notes", "late", "value")).toThrow(
         /revoked/,
       );
+    } finally {
+      await h.close();
+    }
+  });
+});
+
+describe("guard lease", () => {
+  it("rejects a cancelled guard with its own abort text for a non-Error reason", async () => {
+    const controller = new AbortController();
+    const entered = Promise.withResolvers<void>();
+    const release = Promise.withResolvers<void>();
+    const runtime = manifest({ runtimeType: "agent" });
+    const executionContext = {
+      executionId: "exec",
+      origin: "player" as const,
+      countPolicy: "none" as const,
+    };
+    try {
+      const running = executeAgentGuard({
+        manifest: runtime,
+        input,
+        loaded: {
+          manifest: runtime,
+          promptTemplate: "probe",
+          guard: async () => {
+            entered.resolve();
+            await release.promise;
+            return { skip: true };
+          },
+        },
+        deps: {
+          loadRuntime: async () => undefined,
+          llm: { generate: vi.fn(async () => stop("{}")) },
+          turnControl: { executionSignal: controller.signal },
+        },
+        hookPipeline: undefined,
+        triggerEvent: undefined,
+        executionContext,
+        createRecursiveCall: () => async () => {
+          throw new Error("not used");
+        },
+        recursionDepth: 0,
+        startTime: Date.now(),
+        runId: "run",
+        timeoutMs: 5_000,
+      });
+      await entered.promise;
+      controller.abort("stop");
+      await expect(running).rejects.toThrow(
+        new Error('agent guard "probe/main" aborted'),
+      );
+    } finally {
+      release.resolve();
+    }
+  });
+
+  it("revokes a synchronously throwing guard before a microtask it queued runs", async () => {
+    const h = harness({ store: createMemoryStore() });
+    const probe: { error?: string; wrote?: boolean } = {};
+    const probed = Promise.withResolvers<void>();
+    try {
+      const turn = await runTurnPipeline(
+        input,
+        [manifest({ runtimeType: "agent" })],
+        h.deps({
+          guard: (ctx) => {
+            queueMicrotask(() => {
+              void (async () => {
+                try {
+                  await ctx.pluginData!.set("notes", "late", "value");
+                  probe.wrote = true;
+                } catch (err) {
+                  probe.error =
+                    err instanceof Error ? err.message : String(err);
+                } finally {
+                  probed.resolve();
+                }
+              })();
+            });
+            throw new Error("guard broke");
+          },
+        }),
+      );
+      await probed.promise;
+      expect(turn.runtimeResults[0]).toMatchObject({
+        status: "failed",
+        error: "guard broke",
+      });
+      expect(probe.wrote).toBeUndefined();
+      expect(probe.error).toContain('"pluginData.set" is revoked');
     } finally {
       await h.close();
     }
@@ -879,12 +970,14 @@ describe("resume terminals", () => {
 });
 
 describe("agent timeout", () => {
-  it("fails a thrown agent timeout without a failure target", async () => {
+  it("fails a thrown agent timeout without a failure target, even with the target known", async () => {
+    let reachedTool = false;
     const h = harness({
       toolExecutor: {
         ...toolExecutor(),
         execute: (_call: unknown, ctx: { signal?: AbortSignal }) =>
           new Promise((_, reject) => {
+            reachedTool = true;
             ctx.signal?.addEventListener("abort", () =>
               reject(ctx.signal?.reason),
             );
@@ -896,24 +989,31 @@ describe("agent timeout", () => {
       timeoutMs: 30,
       tools: { builtin: ["probe-tool"] },
     });
+    const target = { provider: "probe-provider", model: "probe-model" };
+    const resolveTarget = vi.fn(() => target);
+    const generate = vi.fn(async () => ({
+      content: null,
+      toolCalls: [{ id: "call", name: "probe-tool", arguments: "{}" }],
+      finishReason: "tool_calls" as const,
+      usage: { inputTokens: 1, outputTokens: 1 },
+    }));
     try {
       const turn = await runTurnPipeline(input, [runtime], {
         ...h.deps({}),
-        llm: {
-          generate: vi.fn(async () => ({
-            content: null,
-            toolCalls: [{ id: "call", name: "probe-tool", arguments: "{}" }],
-            finishReason: "tool_calls" as const,
-            usage: { inputTokens: 1, outputTokens: 1 },
-          })),
-        },
+        llm: { generate, resolveTarget },
       });
+      // The model call returned with a resolved target and the loop reached
+      // the tool stage, so the agent knew its target when the deadline hit.
+      expect(resolveTarget).toHaveBeenCalled();
+      expect(generate).toHaveBeenCalledTimes(1);
+      expect(reachedTool).toBe(true);
       const result = turn.runtimeResults[0]!;
       expect(result).toMatchObject({
         status: "failed",
         output: null,
         error: 'agent runtime "probe/main" timed out after 30ms',
       });
+      expect(result.error).not.toContain("[provider:");
       expect(result).not.toHaveProperty("failureTarget");
       expect(h.count("PostRuntime")).toBe(1);
       expect(h.count("runtime.failed")).toBe(1);

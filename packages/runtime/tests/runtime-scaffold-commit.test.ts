@@ -73,6 +73,29 @@ const lateChild: FunctionHandler = async (ctx) => {
   return ok();
 };
 
+/**
+ * A late child that reports whether its write went through, so a test that
+ * expects the write to be discarded first proves the child produced it.
+ */
+function observedLateChild() {
+  const state: { wrote?: boolean; error?: string } = {};
+  const done = Promise.withResolvers<void>();
+  const handler: FunctionHandler = async (ctx) => {
+    try {
+      await later();
+      await note(ctx, "child");
+      state.wrote = true;
+      return ok();
+    } catch (err) {
+      state.error = err instanceof Error ? err.message : String(err);
+      throw err;
+    } finally {
+      done.resolve();
+    }
+  };
+  return { handler, state, done: done.promise };
+}
+
 function observePost(hookPipeline: HookPipeline) {
   const posted: RuntimeResult[] = [];
   hookPipeline.register({
@@ -137,11 +160,10 @@ async function run(
     createdAt: timestamp,
     updatedAt: timestamp,
   });
+  const generate = vi.fn(async () => ({ content: "{}", toolCalls: [] }));
   const execution = await executeTurn(input, runtimes, {
     store,
-    llm: {
-      generate: vi.fn(async () => ({ content: "{}", toolCalls: [] })),
-    } as never,
+    llm: { generate } as never,
     ...(options.hookPipeline ? { hookPipeline: options.hookPipeline } : {}),
     loadRuntime: async (runtime) => ({
       manifest: runtime,
@@ -163,7 +185,7 @@ async function run(
       row.value,
     ]),
   );
-  return { store, execution, outcome, notes };
+  return { store, execution, outcome, notes, generate };
 }
 
 const ids = (results: readonly { readonly runtimeId: string }[]) =>
@@ -269,16 +291,30 @@ describe("un-awaited nested calls and the lease", () => {
       timeoutMs: 40,
     });
     const child = manifest("child");
+    const observed = observedLateChild();
+    const hookPipeline = createHookPipeline();
+    const posted = observePost(hookPipeline);
     const release = Promise.withResolvers<void>();
     try {
-      const { execution, notes } = await run([parent, child], {
-        [parent.name]: async (ctx) => {
-          void launch(ctx, "child");
-          await release.promise;
-          return ok();
+      const { execution, notes } = await run(
+        [parent, child],
+        {
+          [parent.name]: async (ctx) => {
+            void launch(ctx, "child");
+            await release.promise;
+            return ok();
+          },
+          [child.name]: observed.handler,
         },
-        [child.name]: lateChild,
-      });
+        { hookPipeline },
+      );
+      // The child ran to success and buffered its write: only the parent's
+      // timeout discards it.
+      await observed.done;
+      expect(observed.state).toEqual({ wrote: true });
+      expect(
+        posted.find((result) => result.runtimeId === child.name)?.status,
+      ).toBe("success");
       expect(execution.commit.results).toEqual([
         expect.objectContaining({
           runtimeId: parent.name,
@@ -301,9 +337,10 @@ describe("un-awaited nested calls and the lease", () => {
         trigger: { type: "auto" },
       });
       const child = manifest("child");
-      const { execution, notes } = await run(
+      const observed = observedLateChild();
+      const { execution, notes, generate } = await run(
         [guarded, child],
-        { [child.name]: lateChild },
+        { [child.name]: observed.handler },
         {
           guards: {
             [guarded.name]: async (ctx) => {
@@ -313,9 +350,23 @@ describe("un-awaited nested calls and the lease", () => {
           },
         },
       );
+      // Either way the child wrote before the guard's result was read.
+      await observed.done;
+      expect(observed.state).toEqual({ wrote: true });
       expect(ids(execution.commit.results)).toEqual(
         skip ? [child.name, guarded.name] : [guarded.name],
       );
+      const guardedResult = execution.commit.results.find(
+        (result) => result.runtimeId === guarded.name,
+      );
+      if (skip) {
+        expect(guardedResult?.status).toBe("skipped");
+        expect(generate).not.toHaveBeenCalled();
+      } else {
+        // The guard let the agent run, and it succeeded through the model.
+        expect(guardedResult?.status).toBe("success");
+        expect(generate).toHaveBeenCalled();
+      }
       expect(notes).toEqual(skip ? { child: "child" } : {});
     },
   );

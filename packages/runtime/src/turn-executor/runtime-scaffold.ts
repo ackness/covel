@@ -113,7 +113,9 @@ export async function runLeasedInvocation<T>(
       }),
     ]);
   } catch (error) {
-    await opts.onFailure?.(error);
+    // Await only a real callback: an extra tick here would let a microtask
+    // the failed work queued use its capabilities before `finally` revokes.
+    if (opts.onFailure) await opts.onFailure(error);
     throw error;
   } finally {
     clearTimeout(deadlineTimer);
