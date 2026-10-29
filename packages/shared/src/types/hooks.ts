@@ -1,7 +1,7 @@
 /**
  * Single source of truth for the framework's hook lifecycle.
  *
- * `HOOK_EVENTS` is the ONLY place the 16 hook event names are enumerated.
+ * `HOOK_EVENTS` is the ONLY place the 17 hook event names are enumerated.
  * Everything else derives from this tuple so the contract cannot drift:
  *
  *  - `HookEventName` (below)            — the union type, `typeof HOOK_EVENTS[number]`.
@@ -24,6 +24,7 @@ export const HOOK_EVENTS = [
   "PreSchedule",
   "PreRuntime",
   "PostContextAssembly",
+  "PreStep",
   "PreLLMCall",
   "PostLLMResponse",
   "PostRuntime",

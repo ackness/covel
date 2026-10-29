@@ -364,7 +364,7 @@ describe("agent tool deadline", () => {
       const result = await running;
       expect(result).toMatchObject({
         finalContent: "done",
-        stoppedWithResponse: true,
+        stop: { reason: "completed" },
       });
       expect(generate).toHaveBeenCalledOnce();
     } finally {

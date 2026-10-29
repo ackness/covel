@@ -1,6 +1,6 @@
 # Hook
 
-Hook 是一段插件代码。内核在固定的时刻调用它：会话开始或结束、回合开始或结束、某个 runtime 运行前后、每次模型调用前后、每次工具调用前后、每条写入提交前后。本页列出全部 16 个事件，以及每个事件给 handler 什么、handler 可以返回什么。写 Hook 的插件作者需要它。
+Hook 是一段插件代码。内核在固定的时刻调用它：会话开始或结束、回合开始或结束、某个 runtime 运行前后、每次模型调用前后、每次工具调用前后、每条写入提交前后。本页列出全部 17 个事件，以及每个事件给 handler 什么、handler 可以返回什么。写 Hook 的插件作者需要它。
 
 一个 Hook 只做三件事之一：
 
@@ -105,24 +105,25 @@ handler 抛出异常、超时或返回了格式不对的结果，都算这个 ha
 
 表按内核实际触发的先后排列。
 
-| 事件                  | 范围    | 运行方式   | Guard | handler 可以做什么                    |
-| --------------------- | ------- | ---------- | ----- | ------------------------------------- |
-| `SessionStart`        | session | parallel   | no    | 旁观                                  |
-| `TurnStart`           | turn    | sequential | yes   | 中止这个回合                          |
-| `PreCompaction`       | turn    | sequential | yes   | 中止这个回合的历史压缩                |
-| `PostCompaction`      | turn    | parallel   | no    | 旁观                                  |
-| `PreSchedule`         | turn    | sequential | no    | 去掉或重排这个回合选中的 runtime      |
-| `PreRuntime`          | runtime | sequential | yes   | 中止这个 runtime（记为 skipped）      |
-| `PostContextAssembly` | runtime | sequential | no    | 改写系统提示词和历史                  |
-| `PreLLMCall`          | runtime | sequential | no    | 改写一次调用的消息、模型和工具        |
-| `PostLLMResponse`     | runtime | sequential | no    | 改写回答，或要求模型改正              |
-| `PostRuntime`         | runtime | sequential | no    | 改写 runtime 的结果                   |
-| `PreToolUse`          | runtime | sequential | yes   | 中止工具调用，或改写它的名字、参数    |
-| `PostToolUse`         | runtime | sequential | no    | 改写工具结果，或结束工具循环          |
-| `PreStateCommit`      | runtime | sequential | yes   | 中止一条 proposal，或改写它的 payload |
-| `PostStateCommit`     | runtime | parallel   | no    | 旁观                                  |
-| `TurnStop`            | turn    | parallel   | no    | 旁观                                  |
-| `SessionEnd`          | session | parallel   | no    | 旁观                                  |
+| 事件                  | 范围    | 运行方式   | Guard | handler 可以做什么                                     |
+| --------------------- | ------- | ---------- | ----- | ------------------------------------------------------ |
+| `SessionStart`        | session | parallel   | no    | 旁观                                                   |
+| `TurnStart`           | turn    | sequential | yes   | 中止这个回合                                           |
+| `PreCompaction`       | turn    | sequential | yes   | 中止这个回合的历史压缩                                 |
+| `PostCompaction`      | turn    | parallel   | no    | 旁观                                                   |
+| `PreSchedule`         | turn    | sequential | no    | 去掉或重排这个回合选中的 runtime                       |
+| `PreRuntime`          | runtime | sequential | yes   | 中止这个 runtime（记为 skipped）                       |
+| `PostContextAssembly` | runtime | sequential | no    | 改写系统提示词和历史                                   |
+| `PreStep`             | runtime | sequential | no    | 收窄这一步的工具、改工具选择、减少剩余步数，或结束循环 |
+| `PreLLMCall`          | runtime | sequential | no    | 改写一次调用的消息、模型和工具                         |
+| `PostLLMResponse`     | runtime | sequential | no    | 改写回答，或要求模型改正                               |
+| `PostRuntime`         | runtime | sequential | no    | 改写 runtime 的结果                                    |
+| `PreToolUse`          | runtime | sequential | yes   | 中止工具调用，或改写它的名字、参数                     |
+| `PostToolUse`         | runtime | sequential | no    | 改写工具结果，或结束工具循环                           |
+| `PreStateCommit`      | runtime | sequential | yes   | 中止一条 proposal，或改写它的 payload                  |
+| `PostStateCommit`     | runtime | parallel   | no    | 旁观                                                   |
+| `TurnStop`            | turn    | parallel   | no    | 旁观                                                   |
+| `SessionEnd`          | session | parallel   | no    | 旁观                                                   |
 
 下面每个事件一节，依次写：什么时候触发、负载里有什么、返回值有什么效果。
 
@@ -193,9 +194,34 @@ handler 抛出异常、超时或返回了格式不对的结果，都算这个 ha
 
 `replace.systemPrompt` 和 `replace.messages` 有效。框架自己写在系统提示词开头的内容（runtime 框架说明、输出语言指令、完成约定）会被重新放到替换后的系统提示词前面，handler 不用自己带上它们。
 
+### `PreStep`
+
+agent runtime 的工具循环每走一步、调用模型之前触发一次：在玩家插话并入对话之后，在 `PreLLMCall` 之前。步数用完之后的收尾步骤（见 [结束原因](./protocol.md#stop-reasons)）不触发它。从挂起中恢复的运行和普通运行一样，每一步都触发。
+
+负载：`{ step, stepsRemaining, maxSteps, toolNames, toolChoice }`。
+
+| 字段             | 内容                                                             |
+| ---------------- | ---------------------------------------------------------------- |
+| `step`           | 这是第几步，从 1 开始。                                          |
+| `stepsRemaining` | 包括这一步在内还剩几步。                                         |
+| `maxSteps`       | 当前的步数上限。                                                 |
+| `toolNames`      | 这一步提供给模型的工具名。                                       |
+| `toolChoice`     | 循环本来要发出的工具选择：`"auto"`、`"required"` 或 `{ name }`。 |
+
+`replace` 认这四个字段，不合法的部分被丢掉，不会让 runtime 失败：
+
+- `replace.tools`：只给模型这些工具。它只能是 `toolNames` 的子集，不在里面的名字被忽略，并记进这一步的 `step.completed`。收窄只管这一步，下一步又从完整的工具集开始。它也不改变哪些工具可以执行：模型调用了被去掉的工具，只要清单声明了它，仍然会执行。
+- `replace.toolChoice`：这一步的工具选择，替换清单的 `llm.toolChoice`。`"auto"` 表示不指定；`{ name }` 必须是这一步提供的工具。runtime 要求模型改正、必须调用工具的那一步，`"auto"` 不会取消这个要求。
+- `replace.stepsRemaining`：把剩余步数减到这个整数（至少 1，包括这一步）。比当前值大的数被忽略，步数只能减少。用完后循环以 `max-steps` 结束。
+- `replace.stop: { reason, message? }`：在这一步调用模型之前结束循环。`reason` 只能是这两个：
+  - `"tool-finished"`：按成功结束，和 `PostToolUse` 的 `terminate` 一样。runtime 的完成条件（`requireToolUse` 等）照常检查。
+  - `"cancelled"`：runtime 失败，错误是 `Runtime "<id>" was stopped by a PreStep hook`，后面跟 `message`。已经做过的工具调用留在失败的结果里。
+
+`abort` 等于“什么都不变”。`PreStep` 先运行，`PreLLMCall` 再改写这次调用：`PreLLMCall` 的 `replace.tools` 会覆盖 `PreStep` 收窄后的工具。
+
 ### `PreLLMCall`
 
-agent runtime 的每次模型调用之前触发，包括工具结果之后的调用。
+agent runtime 的每次模型调用之前触发，包括工具结果之后的调用和收尾步骤。同一步里，`PreStep` 先运行。
 
 负载：`{ messages, model, tools, stream?, promptSegments? }`。`promptSegments` 和 `PostContextAssembly` 里的是同一份列表。从挂起中恢复的运行不会重新组装上下文，所以它的调用里没有这个字段。
 

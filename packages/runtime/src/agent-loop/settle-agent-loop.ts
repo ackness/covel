@@ -1,4 +1,5 @@
 import type {
+  LoopStop,
   RuntimeManifest,
   RuntimeResult,
   ToolCallRecord,
@@ -38,25 +39,52 @@ export function settleAgentLoop(args: {
     failedToolCalls,
     pendingProposals,
     emittedEvents,
-    stoppedWithResponse,
+    stop,
     effectiveMaxSteps,
-    deadline,
   } = toolLoop;
-  const fail = (error: string) => ({
+  const fail = (error: string, failedStop: LoopStop = stop) => ({
     kind: "failed" as const,
-    result: makeFailedResult(manifest, input, runId, startTime, error, {
-      toolCalls: collectedToolCalls,
-    }),
-  });
-  if (!stoppedWithResponse && !finalContent) {
-    return fail(
-      formatToolLoopFailure({
-        runtimeId: manifest.name,
-        reason: Date.now() >= deadline ? "timeout" : "max_steps",
-        maxSteps: effectiveMaxSteps,
-        failedToolCalls,
+    result: {
+      ...makeFailedResult(manifest, input, runId, startTime, error, {
+        toolCalls: collectedToolCalls,
       }),
-    );
+      stop: failedStop,
+    },
+  });
+  // A step limit or a deadline is never a success by itself, whatever text
+  // the model wrote beside its tool calls. Only a finalizer that produced the
+  // answer turns a step limit into a completion.
+  switch (stop.reason) {
+    case "max-steps":
+      if (stop.finalizer) break;
+      return fail(
+        formatToolLoopFailure({
+          runtimeId: manifest.name,
+          reason: "max_steps",
+          maxSteps: effectiveMaxSteps,
+          failedToolCalls,
+        }),
+      );
+    case "deadline":
+      return fail(
+        formatToolLoopFailure({
+          runtimeId: manifest.name,
+          reason: "timeout",
+          failedToolCalls,
+        }),
+      );
+    case "cancelled":
+      if (stop.cancelledBy !== "hook") break;
+      return fail(
+        formatToolLoopFailure({
+          runtimeId: manifest.name,
+          reason: "stopped_by_hook",
+          ...(toolLoop.stopMessage ? { message: toolLoop.stopMessage } : {}),
+          failedToolCalls,
+        }),
+      );
+    default:
+      break;
   }
   // Required tool work cannot succeed just because the model returned prose.
   const completionError = completionContractError(manifest, toolLoop);
@@ -81,19 +109,23 @@ export function settleAgentLoop(args: {
       outputSchema,
     }),
   });
-  if (finalized.kind === "tool-failed" || finalized.kind === "invalid-output") {
+  if (finalized.kind === "tool-failed") {
     return fail(
-      finalized.kind === "invalid-output"
-        ? finalized.error
-        : formatToolLoopFailure({
-            runtimeId: manifest.name,
-            reason: "tool_failed_without_output",
-            failedToolCalls,
-          }),
+      formatToolLoopFailure({
+        runtimeId: manifest.name,
+        reason: "tool_failed_without_output",
+        failedToolCalls,
+      }),
     );
   }
+  // The output gate failed, not the loop.
+  if (finalized.kind === "invalid-output")
+    return fail(finalized.error, { reason: "invalid-output" });
   if (finalized.kind === "short-circuit")
-    return { kind: "failed", result: finalized.result };
+    return {
+      kind: "failed",
+      result: { ...finalized.result, stop: { reason: "invalid-output" } },
+    };
   return {
     kind: "success",
     result: {
@@ -110,6 +142,7 @@ export function settleAgentLoop(args: {
       ...(finalized.completion ? { completion: finalized.completion } : {}),
       toolCalls: collectedToolCalls,
       durationMs: Date.now() - startTime,
+      stop,
       timestamp: new Date().toISOString(),
     },
   };

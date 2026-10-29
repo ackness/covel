@@ -654,6 +654,8 @@ export function createSseEventHandler(
       case "tool.completed":
       case "tool.failed":
       case "llm.calling":
+      case "step.started":
+      case "step.completed":
       case "message.completed":
       case "block.emitted":
       case "hook.fired":

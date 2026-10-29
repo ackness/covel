@@ -427,7 +427,11 @@ describe("resume completion evidence", () => {
 describe.each(["step limit", "hook stop"] as const)(
   "requireToolUse when the loop ends at the %s",
   (exit) => {
-    async function run(suspended: boolean, succeeds: boolean) {
+    async function run(
+      suspended: boolean,
+      succeeds: boolean,
+      { emptyFinalizer = false } = {},
+    ) {
       const store = await seededStore();
       let workCalls = 0;
       const saveWork = tool({
@@ -481,8 +485,15 @@ describe.each(["step limit", "hook stop"] as const)(
           promptTemplate: "Do the required work.",
         }),
         llm: {
-          generate: async () => {
+          generate: async (request: { tools?: readonly unknown[] }) => {
             modelCalls += 1;
+            if (emptyFinalizer && !request.tools)
+              return {
+                content: "",
+                toolCalls: [],
+                finishReason: "stop" as const,
+                usage,
+              };
             return suspended && modelCalls === 1
               ? {
                   content: "",
@@ -514,7 +525,11 @@ describe.each(["step limit", "hook stop"] as const)(
       try {
         const execution = await executeTurn(turnInput, [manifest], deps);
         if (!suspended)
-          return { result: execution.result.runtimeResults[0]!, workCalls };
+          return {
+            result: execution.result.runtimeResults[0]!,
+            workCalls,
+            modelCalls,
+          };
         const suspension = await suspendThenAdvance(store, execution);
         const resumed = await resumeSuspendedRuntime(
           suspension,
@@ -536,6 +551,7 @@ describe.each(["step limit", "hook stop"] as const)(
         return {
           result: resumed.result,
           workCalls,
+          modelCalls,
           commitStatus: outcome.status,
           resolvedAt: (await store.getSuspension(suspension.id))?.resolvedAt,
         };
@@ -544,18 +560,52 @@ describe.each(["step limit", "hook stop"] as const)(
       }
     }
 
+    // A step limit fails on its own, before the contract is judged: the
+    // text beside the tool call is not an answer. A hook stop is judged by the
+    // contract.
+    const expectedFailure =
+      exit === "step limit"
+        ? "exhausted the tool loop after 1 steps"
+        : "requireToolUse";
+
     it("fails a run whose only business tool call failed", async () => {
-      const { result, workCalls } = await run(false, false);
+      const { result, workCalls, modelCalls } = await run(false, false);
       expect(result.status).toBe("failed");
-      expect(result.error).toContain("requireToolUse");
+      expect(result.error).toContain(expectedFailure);
+      expect(result.stop?.reason).toBe(
+        exit === "step limit" ? "max-steps" : "tool-finished",
+      );
+      // No finalizer: prose cannot satisfy an unmet requireToolUse.
+      expect(modelCalls).toBe(1);
       expect(workCalls).toBe(1);
     });
 
     it("accepts a run whose business tool call succeeded", async () => {
-      const { result, workCalls } = await run(false, true);
+      const { result, workCalls, modelCalls } = await run(false, true);
       expect(result.status).toBe("success");
       expect(workCalls).toBe(1);
+      if (exit === "step limit") {
+        // The contract is met, so the finalizer answers with tools off; its
+        // reply's tool call is ignored.
+        expect(result.stop).toEqual({ reason: "max-steps", finalizer: true });
+        expect(modelCalls).toBe(2);
+      } else {
+        expect(result.stop).toEqual({ reason: "tool-finished" });
+        expect(modelCalls).toBe(1);
+      }
     });
+
+    if (exit === "step limit")
+      it("fails a run whose finalizer writes no answer", async () => {
+        const { result, workCalls, modelCalls } = await run(false, true, {
+          emptyFinalizer: true,
+        });
+        expect(result.status).toBe("failed");
+        expect(result.error).toContain("exhausted the tool loop after 1 steps");
+        expect(result.stop).toEqual({ reason: "max-steps" });
+        expect(modelCalls).toBe(2);
+        expect(workCalls).toBe(1);
+      });
 
     it("fails a resumed run whose tool calls all failed and leaves its suspension open", async () => {
       const { result, workCalls, commitStatus, resolvedAt } = await run(
@@ -563,7 +613,7 @@ describe.each(["step limit", "hook stop"] as const)(
         false,
       );
       expect(result.status).toBe("failed");
-      expect(result.error).toContain("requireToolUse");
+      expect(result.error).toContain(expectedFailure);
       expect(workCalls).toBe(2);
       expect(commitStatus).toBe("failed");
       expect(resolvedAt).toBeUndefined();

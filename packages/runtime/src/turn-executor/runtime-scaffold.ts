@@ -188,6 +188,8 @@ export async function finalizeSuspension(
   suspension: {
     readonly record: SuspensionRecord;
     readonly toolCalls: RuntimeResult["toolCalls"];
+    /** How an agent loop ended; function runtimes leave it out. */
+    readonly stop?: RuntimeResult["stop"];
   },
   finalizeOptions?: FinalizationOptions,
 ): Promise<RuntimeResult> {
@@ -207,6 +209,7 @@ export async function finalizeSuspension(
     },
     toolCalls: suspension.toolCalls,
     durationMs: Date.now() - startTime,
+    ...(suspension.stop ? { stop: suspension.stop } : {}),
     timestamp: new Date().toISOString(),
   };
   const finalResult = await finalizeRuntimeResult(

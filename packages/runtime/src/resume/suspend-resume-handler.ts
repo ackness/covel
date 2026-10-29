@@ -118,7 +118,11 @@ export async function handleSuspension(
   return finalizeSuspension(
     { ...deps, hookPipeline },
     { manifest, input, runId, startTime },
-    { record: suspension, toolCalls: [...collectedToolCalls] },
+    {
+      record: suspension,
+      toolCalls: [...collectedToolCalls],
+      stop: { reason: "suspended" },
+    },
     { outputContractSchema: opts.outputContractSchema },
   );
 }

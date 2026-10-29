@@ -11,6 +11,7 @@ import {
 const RUNTIME_EVENTS = [
   "PreRuntime",
   "PostContextAssembly",
+  "PreStep",
   "PreLLMCall",
   "PostLLMResponse",
   "PreToolUse",

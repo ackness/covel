@@ -44,6 +44,8 @@ export interface TraceRecorder {
     status: string;
     durationMs: number;
     error?: string;
+    /** How the agent loop ended; agent runtimes only. */
+    stopReason?: import("@covel/shared").StopReason;
     /** Why a skipped runtime did not run (a gate code). */
     reason?: string;
   }): Promise<void>;
@@ -55,6 +57,7 @@ export interface TraceRecorder {
     error: string;
     errorKind?: import("@covel/shared").ProviderFailureKind;
     failureTarget?: import("@covel/shared").RuntimeResult["failureTarget"];
+    stopReason?: import("@covel/shared").StopReason;
     status?: string;
     durationMs?: number;
   }): Promise<void>;

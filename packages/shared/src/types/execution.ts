@@ -55,6 +55,31 @@ export interface TokenUsage {
   readonly output: number;
 }
 
+/**
+ * Why an agent loop ended. Every exit of the tool loop maps to exactly one
+ * identifier; see docs/reference/protocol.md for the table.
+ */
+export type StopReason =
+  | "completed"
+  | "tool-finished"
+  | "max-steps"
+  | "deadline"
+  | "context-overflow"
+  | "cancelled"
+  | "model-error"
+  | "invalid-output"
+  | "loop-detected"
+  | "suspended";
+
+/** How an agent loop ended: the reason, and the details that qualify it. */
+export interface LoopStop {
+  readonly reason: StopReason;
+  /** A final answer without tools produced the output after the step limit. */
+  readonly finalizer?: true;
+  /** Who cancelled the loop; set only with `reason: "cancelled"`. */
+  readonly cancelledBy?: "player" | "parent" | "hook" | "host";
+}
+
 export interface RuntimeResult {
   readonly pluginId: string;
   readonly runtimeId: string;
@@ -82,6 +107,11 @@ export interface RuntimeResult {
     readonly provider: string;
     readonly model?: string;
   };
+  /**
+   * How the agent loop ended. Set by agent runtimes only; absent for function
+   * and guard runtimes and for an internal error no call site classified.
+   */
+  readonly stop?: LoopStop;
   readonly timestamp: string;
 }
 

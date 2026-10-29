@@ -5,7 +5,7 @@
  * in `@covel/shared`. If anyone adds, removes, or renames a hook event in just
  * one place, one of these assertions fails:
  *
- *  - `HOOK_EVENTS` is the canonical 16-event list.
+ *  - `HOOK_EVENTS` is the canonical 17-event list.
  *  - The runtime engine's dispatch map `HOOK_SEMANTICS` is keyed by exactly the
  *    same set — i.e. every event actually wired into the pipeline derives from
  *    the SSOT (and vice versa: no orphan semantic without an event).
@@ -26,6 +26,7 @@ const EXPECTED_EVENTS = [
   "PreSchedule",
   "PreRuntime",
   "PostContextAssembly",
+  "PreStep",
   "PreLLMCall",
   "PostLLMResponse",
   "PostRuntime",
@@ -38,9 +39,9 @@ const EXPECTED_EVENTS = [
 ] as const;
 
 describe("hook events single source of truth", () => {
-  it("HOOK_EVENTS is the canonical, unique 16-event list", () => {
-    expect(HOOK_EVENTS).toHaveLength(16);
-    expect(new Set(HOOK_EVENTS).size).toBe(16);
+  it("HOOK_EVENTS is the canonical, unique 17-event list", () => {
+    expect(HOOK_EVENTS).toHaveLength(17);
+    expect(new Set(HOOK_EVENTS).size).toBe(17);
     expect([...HOOK_EVENTS].sort()).toEqual([...EXPECTED_EVENTS].sort());
   });
 

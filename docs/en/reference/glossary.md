@@ -21,6 +21,7 @@ Each English term has only one Chinese term. The Chinese docs, the UI text, and 
 | Dataset | 数据集 | Typed plugin data a plugin declares (`contributes.datasets`). Not the install-time **Collection**. |
 | Deployment form | 部署形态 | The desktop app, the self-hosted web app, the official web app. Not `DEPLOYMENT_TIER`. |
 | Edition | 语言版本 | One language of a world: `defaultLocale`, and the language of each `world.<locale>.yaml` or `WORLD.<locale>.md` at the root. |
+| Finalizer step | 收尾步骤 | The one request, after an agent runs out of steps, that turns tools off and asks for the answer now. |
 | Kernel | 内核 |  |
 | Local model relay | 本地模型中继 | On a shared form, the server reaches a model on the player's computer or local network through the player's browser. See [Security boundaries](../internals/security.md#local-model-relay). |
 | Official web app | 官方网页版 |  |
@@ -37,6 +38,7 @@ Each English term has only one Chinese term. The Chinese docs, the UI text, and 
 | Server-scoped setting | 服务端设置 | A setting with `scope: "server"`. All other settings are per-device settings. |
 | Session | 会话 |  |
 | Slot | 槽位 | In the settings UI it is called "model role". |
+| Stop reason | 结束原因 | How an agent tool loop ended (`RuntimeResult.stop.reason`). |
 | Trigger mode | 触发模式 |  |
 | Turn | 回合 | "This turn" is 本回合 in Chinese. |
 | World | 世界 | A world's installation package is called a "world package". |
@@ -146,6 +148,14 @@ A plugin declares which one it implements in `contributes.extensions`, and then 
 It is different from a plugin's **Contract**. A Contract is defined by a plugin for other plugins to use.
 
 See: [extension points](./extension-points.md), [plugin extensions and communication](./plugin-extensions.md).
+
+## Finalizer step
+
+The one more model request the kernel sends after an agent runtime runs out of steps: tools off, asking the model for its final answer from what it already has.
+
+Running out of steps is not a success by itself. The runtime succeeds only when the finalizer step writes the answer, and its result's `stop.finalizer` is `true`. No finalizer is sent when the output is handed over by a completing tool, or when a completion condition is still unmet.
+
+See: [the protocol reference's stop reasons](./protocol.md#stop-reasons).
 
 ## Kernel
 
@@ -265,6 +275,14 @@ A named routing key used to choose a model (`story`, `plugin`, `memory`, `image`
 A plugin manifest writes only the slot's name. `llm.toml`, or the "provider/model" setting that was saved, binds it to a specific model. Fallback models are chosen only within the same kind of output: an image request never falls back to a text model.
 
 See: [model roles](./slots.md), `llm.toml.example`.
+
+## Stop reason
+
+How an agent runtime's tool loop ended, for example `completed` (the model gave its final reply), `max-steps` (the steps ran out) or `cancelled` (it was cancelled). There are ten identifiers.
+
+It is written to `RuntimeResult.stop` and to the `stopReason` of the runtime lifecycle events. Function runtimes have no stop reason.
+
+See: [the protocol reference's stop reasons](./protocol.md#stop-reasons), [turn pipeline](../internals/flow.md).
 
 ## Trigger mode
 

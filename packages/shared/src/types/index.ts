@@ -137,6 +137,8 @@ export type {
   ToolCallRecord,
   TokenUsage,
   RuntimeResult,
+  StopReason,
+  LoopStop,
   RuntimeRetryScope,
   DeferredRuntimeJob,
   TurnDigest,
@@ -265,6 +267,10 @@ export type {
   CovelEventPayload,
   DomainEventPreviewedPayload,
   RuntimeDeferredPayload,
+  StepNote,
+  StepNoteKind,
+  StepStartedPayload,
+  StepCompletedPayload,
 } from "./protocol.js";
 
 export {
