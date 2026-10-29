@@ -1,0 +1,3 @@
+### Fixed
+
+- **Streams and downloads no longer break after the server refuses a large request.** When a route answered without reading a body over 64 KiB (for example a shared world refusing a browser's world sync with 401, or a rate-limited request), the HTTP layer closed the keep-alive connection half a second later, cutting whatever the browser had sent next on it: the local model relay stream (so the opening's model calls failed), the session event stream, or a code chunk (so a view showed the error screen). The server now reads such a body before answering, up to the largest body any route accepts.
