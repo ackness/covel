@@ -281,3 +281,45 @@ contributes:
     }
   });
 });
+
+describe("null UI spec validation", () => {
+  it.each(["right", "view"] as const)(
+    "reports the file and contributes.ui.%s location",
+    async (slot) => {
+      const parent = await fs.mkdtemp(path.join(os.tmpdir(), "covel-null-ui-"));
+      const root = path.join(parent, "owner");
+      try {
+        await fs.mkdir(path.join(root, "ui"), { recursive: true });
+        await fs.writeFile(path.join(root, "ui/null.json"), "null");
+        await fs.writeFile(
+          path.join(root, "PLUGIN.md"),
+          `---
+id: owner
+description: Null spec
+contributes:
+  ui:
+    ${slot}: [./ui/null.json]
+---
+`,
+        );
+        let stderr = "";
+        expect(
+          await runValidateManifest([root], {
+            stdout: { write: () => {} },
+            stderr: {
+              write: (text) => {
+                stderr += text;
+              },
+            },
+          }),
+        ).toBe(1);
+        expect(stderr).toContain(
+          `PLUGIN.md: contributes.ui.${slot}: ./ui/null.json: (root):`,
+        );
+        expect(stderr).not.toMatch(/TypeError|Cannot read properties/);
+      } finally {
+        await fs.rm(parent, { recursive: true, force: true });
+      }
+    },
+  );
+});

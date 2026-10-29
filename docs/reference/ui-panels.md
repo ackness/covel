@@ -779,11 +779,13 @@ contributes:
 | `phase` | `setup` 或 `playing` |
 | `turn` | 已提交的玩家回合数 `completedPlayerTurns` |
 | `executing` | 是否正在执行 |
-| `messages[]` | `{ seq, role, text, truncated? }`。仅包含 `kind === "story"` 的 assistant 消息和不带 block 的 user 消息。`seq` 是完整可见列表中从 1 开始的位置，窗口滑动时不重新编号 |
-| `streaming` | `{ seq, text }` 或 `null`。`stream_` 占位消息只在这里出现，不进入 `messages` |
-| `pending[]` | `{ seq, block }`。宿主仍等待玩家回答的交互；`seq` 是原消息列表中的位置，block 去掉隐藏字段 |
+| `messages[]` | `{ seq, role, text, truncated? }`。仅包含 `kind === "story"` 的 assistant 消息和不带 block 的 user 消息。`seq` 是首次观测时分配的稳定正整数，宿主淘汰旧消息或补载历史时不重新编号 |
+| `streaming` | `{ seq, text }` 或 `null`。`stream_` 占位消息只在这里出现，不进入 `messages`；最终故事消息沿用占位消息的序号 |
+| `pending[]` | `{ seq, block }`。宿主仍等待玩家回答的交互；`seq` 是同一消息的稳定序号，block 去掉隐藏字段 |
 | `characters[]` | 公开角色的 `id`、`name`、`type`，可选 `aliases`、`description`、`fields`；其余角色字段不传 |
 | `slots[]` | `{ slot, key?, value }`，宿主已经显示的内核 UI 槽位值；媒体引用保持不透明对象 |
+
+序号只在当前会话桥接实例中有效，按首次观测分配，不复用。补载的旧历史会获得新的序号；页面按数组顺序显示消息，不能按 `seq` 排序。
 
 投影不包含消息 `id`、`turnId`、`requestId`、`runtimeId`、时间戳、非故事的内部消息、推理、执行步骤、插件数据行、设置、供应商密钥或会话令牌。投影构造不读 `plugin_data`。角色的公开 `id` 是角色关联标识，不是消息元数据。
 
@@ -798,7 +800,7 @@ contributes:
 | 角色 | 最多 100 个，每个序列化后最多 8 KiB，超过时跳过 |
 | 待答交互 | 最多 8 个，每个 block 序列化后最多 16 KiB，过大的替换为 `{ truncated: true }` |
 
-KiB 按 UTF-8 字节计算。状态变化推送完整投影；流式文本用 `{ type: "stream", seq, append }` 合并推送，间隔 100 ms，结束时立即补齐尾部。完整推送也带当时的流式全文，供页面重新同步。
+KiB 按 UTF-8 字节计算。状态变化推送完整投影；流式文本用 `{ type: "stream", seq, append }` 合并推送，间隔 100 ms，结束时立即补齐尾部。完整推送也带当时的流式全文，供页面重新同步。叙事重置会使旧追加基线失效，下一次推送用完整文本替换旧草稿；即使替换文本在 100 ms 内超过旧文本长度，也不会拼接旧前缀。正常完成仍会补齐最后一段文本。
 
 **此版本的会话桥只读。** 不新增 `submitAction`、表单提交、中止或打开面板能力。原有 `invokeRuntime`、`invokePluginAction`、`invokeCommand`、`emitEvent`、`setUiState` 保持原样。图片只传引用，不传字节或 blob URL，因此示例页不显示图片；也不提供输入框。HTML 仍为单文件，页面未连接时没有握手超时回退，但宿主返回按钮一直可用。
 

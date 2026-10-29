@@ -781,11 +781,13 @@ After consent, the page reads the `session` field of the `window.covel` state ob
 | `phase` | `setup` or `playing` |
 | `turn` | Committed player turns, `completedPlayerTurns` |
 | `executing` | Whether execution is in progress |
-| `messages[]` | `{ seq, role, text, truncated? }`. Only assistant messages with `kind === "story"` and user messages without a block. `seq` is the 1-based position in the full visible list; sliding the window does not renumber it |
-| `streaming` | `{ seq, text }` or `null`. A `stream_` placeholder appears only here, never in `messages` |
-| `pending[]` | `{ seq, block }`. Interactions the host still expects the player to answer. `seq` is the position in the original message list; hidden block fields are removed |
+| `messages[]` | `{ seq, role, text, truncated? }`. Only assistant messages with `kind === "story"` and user messages without a block. `seq` is a stable positive ordinal allocated on first observation; host eviction and history loading do not renumber it |
+| `streaming` | `{ seq, text }` or `null`. A `stream_` placeholder appears only here, never in `messages`; the final story message retains its ordinal |
+| `pending[]` | `{ seq, block }`. Interactions the host still expects the player to answer. `seq` is the stable ordinal of the same message; hidden block fields are removed |
 | `characters[]` | Public `id`, `name`, `type`, with optional `aliases`, `description`, `fields`. Other character fields are excluded |
 | `slots[]` | `{ slot, key?, value }` for kernel UI slots the host already shows; media references stay opaque objects |
+
+Ordinals last for the current session bridge instance and are never reused. Newly loaded older history receives new ordinals. Render messages in array order; do not sort by `seq`.
 
 The projection excludes message `id`, `turnId`, `requestId`, `runtimeId`, timestamps, internal non-story messages, reasoning, execution steps, plugin data rows, settings, provider keys and session tokens. Building it never reads `plugin_data`. A public character `id` identifies a character; it is not message metadata.
 
@@ -800,7 +802,7 @@ Nested values recursively drop every key starting with `_`, plus `hidden`, `conc
 | Characters | At most 100, each at most 8 KiB serialized; oversized records are skipped |
 | Pending interactions | At most 8; each block at most 16 KiB serialized; oversized blocks become `{ truncated: true }` |
 
-KiB counts UTF-8 bytes. State changes push a full projection. Streaming uses coalesced `{ type: "stream", seq, append }` messages at 100 ms intervals, with an immediate tail flush at completion. Every full push includes the current streaming text for resynchronization.
+KiB counts UTF-8 bytes. State changes push a full projection. Streaming uses coalesced `{ type: "stream", seq, append }` messages at 100 ms intervals, with an immediate tail flush at completion. Every full push includes the current streaming text for resynchronization. A narrative reset invalidates the old append baseline: the next push replaces the discarded draft with the full current text, even when replacement text outgrows it within 100 ms. Normal completion still flushes the final tail.
 
 **The session bridge is read-only in this version.** It adds no `submitAction`, form submission, abort or open-panel capability. Existing `invokeRuntime`, `invokePluginAction`, `invokeCommand`, `emitEvent` and `setUiState` handlers are unchanged. Images travel only as references, without bytes or blob URLs, so the sample page shows no art. There is no composer. HTML remains a single file; an unconnected page has no handshake timeout fallback, but host back controls remain available.
 

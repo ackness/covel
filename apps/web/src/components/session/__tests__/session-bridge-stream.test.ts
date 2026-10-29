@@ -92,3 +92,16 @@ it("resyncs only once when a new sequence disappears before its flush", () => {
   expect(resync).toHaveBeenCalledOnce();
   expect(send).not.toHaveBeenCalled();
 });
+
+it("invalidates the old append baseline when reset text overtakes it before the timer", () => {
+  const { pump, send, resync, update } = setup();
+  update({ seq: 1, text: "old" });
+  pump.baseline(1, 3);
+  update({ seq: 1, text: "" });
+  pump.notify("reset");
+  update({ seq: 1, text: "replacement is longer" });
+  pump.notify();
+  vi.advanceTimersByTime(100);
+  expect(resync).toHaveBeenCalledOnce();
+  expect(send).not.toHaveBeenCalled();
+});

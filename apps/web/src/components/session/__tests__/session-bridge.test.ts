@@ -1,8 +1,14 @@
 // @vitest-environment node
 import { describe, expect, it } from "vitest";
+import {
+  initialState,
+  reducer,
+  configureMessagesWindowCap,
+} from "@/stores/session-store/reducer.js";
 import type { StreamMessage } from "@/stores/session-store.js";
 import {
   buildSessionProjection,
+  createSessionMessageOrdinals,
   stripHiddenKeys,
   sessionProjectionSchema,
   type SessionProjectionInput,
@@ -30,6 +36,7 @@ const input = (
   session: { phase: "playing", completedPlayerTurns: 4 },
   executing: false,
   messages: [],
+  messageSeqs: createSessionMessageOrdinals()(extra.messages ?? []),
   submittedBlockIds: new Set(),
   streamingText: undefined,
   characters: [],
@@ -84,6 +91,84 @@ describe("read-only session projection", () => {
     );
     expect(result.messages).toHaveLength(200);
     expect(result.messages[0]?.seq).toBe(6);
+  });
+  it("keeps surviving ordinals across host eviction and restores evicted history identities", () => {
+    configureMessagesWindowCap(200);
+    try {
+      const assign = createSessionMessageOrdinals();
+      const initial = Array.from({ length: 200 }, (_, index) =>
+        message(`m${index + 1}`, `Story ${index + 1}`, {
+          requestId: undefined,
+          timestamp: "2026-10-29T00:00:00Z",
+        }),
+      );
+      const snapshot = (messages: readonly StreamMessage[]) =>
+        buildSessionProjection(
+          input({ messages, messageSeqs: assign(messages) }),
+        );
+      const before = snapshot(initial);
+      const grown = reducer(
+        { ...initialState, messages: initial },
+        { type: "ADD_MESSAGE", message: message("m201", "Story 201") },
+      );
+      expect(grown.messages).toHaveLength(200);
+      const after = snapshot(grown.messages);
+      expect(after.messages.map((row) => row.seq)).toEqual(
+        Array.from({ length: 200 }, (_, index) => index + 2),
+      );
+      expect(after.messages.slice(0, -1)).toEqual(before.messages.slice(1));
+      expect(after.messages.at(-1)).toMatchObject({
+        seq: 201,
+        text: "Story 201",
+      });
+      // Fetching an evicted ID again must not allocate a different identity.
+      const restored = snapshot(initial.slice(0, 2));
+      expect(restored.messages.map((row) => row.seq)).toEqual([1, 2]);
+    } finally {
+      configureMessagesWindowCap(0);
+    }
+  });
+  it("keeps existing ordinals when older history is prepended and never reuses them", () => {
+    const assign = createSessionMessageOrdinals();
+    const current = [message("current-a", "A"), message("current-b", "B")];
+    const before = buildSessionProjection(
+      input({ messages: current, messageSeqs: assign(current) }),
+    );
+    const prepended = reducer(
+      { ...initialState, messages: current },
+      {
+        type: "PREPEND_MESSAGES",
+        messages: [
+          message("older-a", "Older A"),
+          message("older-b", "Older B"),
+        ],
+        cursor: null,
+      },
+    ).messages;
+    const after = buildSessionProjection(
+      input({ messages: prepended, messageSeqs: assign(prepended) }),
+    );
+    expect(after.messages.slice(2)).toEqual(before.messages);
+    expect(after.messages.map((row) => row.text)).toEqual([
+      "Older A",
+      "Older B",
+      "A",
+      "B",
+    ]);
+    expect(new Set(after.messages.map((row) => row.seq)).size).toBe(4);
+    expect(after.messages.slice(0, 2).map((row) => row.seq)).toEqual([3, 4]);
+  });
+  it("carries a streaming ordinal into the durable story message", () => {
+    const assign = createSessionMessageOrdinals();
+    const live = [message("stream_turn_runtime", "draft")];
+    const before = buildSessionProjection(
+      input({ messages: live, messageSeqs: assign(live) }),
+    );
+    const durable = [message("durable", "Final")];
+    const after = buildSessionProjection(
+      input({ messages: durable, messageSeqs: assign(durable) }),
+    );
+    expect(after.messages[0]?.seq).toBe(before.streaming?.seq);
   });
   it("enforces UTF-8 byte limits on individual, total and streaming text", () => {
     const result = buildSessionProjection(

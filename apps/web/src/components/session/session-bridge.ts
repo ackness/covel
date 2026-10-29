@@ -107,6 +107,8 @@ export interface SessionProjectionInput {
   session: Pick<SessionRecord, "phase" | "completedPlayerTurns">;
   executing: boolean;
   messages: readonly StreamMessage[];
+  /** Host-only identity map; only the assigned ordinals cross the port. */
+  messageSeqs: ReadonlyMap<string, number>;
   submittedBlockIds: ReadonlySet<string>;
   streamingText: string | undefined;
   characters: readonly unknown[];
@@ -116,11 +118,48 @@ export interface SessionProjectionInput {
 export function visibleSessionMessages(
   messages: readonly StreamMessage[],
 ): readonly StreamMessage[] {
-  return messages.filter(
-    (message) =>
-      (message.role === "assistant" && message.kind === "story") ||
-      (message.role === "user" && !message.block),
+  return messages.filter(isVisibleSessionMessage);
+}
+
+function isVisibleSessionMessage(message: StreamMessage): boolean {
+  return (
+    (message.role === "assistant" && message.kind === "story") ||
+    (message.role === "user" && !message.block)
   );
+}
+
+/**
+ * Allocate positive ordinals on first observation, never from a window index.
+ * Keep evicted IDs so loading their history restores the same identity. The
+ * message array carries chronology; prepended history can have newer ordinals.
+ */
+export function createSessionMessageOrdinals() {
+  const known = new Map<string, number>();
+  const streaming = new Map<string, number>();
+  let next = 1;
+  return (messages: readonly StreamMessage[]): ReadonlyMap<string, number> => {
+    const current = new Map<string, number>();
+    for (const message of messages) {
+      if (!isVisibleSessionMessage(message) && !message.block) continue;
+      const stream = message.id.startsWith("stream_");
+      const story = message.role === "assistant" && message.kind === "story";
+      const streamKey =
+        story && message.turnId && message.runtimeId
+          ? JSON.stringify([message.turnId, message.runtimeId])
+          : undefined;
+      const seq =
+        known.get(message.id) ??
+        (!stream && streamKey ? streaming.get(streamKey) : undefined) ??
+        next++;
+      known.set(message.id, seq);
+      current.set(message.id, seq);
+      if (streamKey) {
+        if (stream) streaming.set(streamKey, seq);
+        else streaming.delete(streamKey);
+      }
+    }
+    return current;
+  };
 }
 
 export function buildSessionProjection(
@@ -130,8 +169,9 @@ export function buildSessionProjection(
   const messages: ProjectionShape["messages"] = [];
   let streaming: SessionProjection["streaming"] = null;
   let textBytes = 0;
-  for (const [index, message] of visible.entries()) {
-    const seq = index + 1;
+  for (const message of visible) {
+    // Missing ordinals fail the projection schema instead of reusing an index.
+    const seq = input.messageSeqs.get(message.id) ?? 0;
     if (message.id.startsWith("stream_")) {
       streaming = {
         seq,
@@ -163,7 +203,7 @@ export function buildSessionProjection(
   }
   const pending: ProjectionShape["pending"] = [];
   const allMessages = [...input.messages];
-  for (const [index, message] of input.messages.entries()) {
+  for (const message of input.messages) {
     if (pending.length >= SESSION_BRIDGE_MAX_PENDING) break;
     if (
       !isPendingInteractionMessage(
@@ -175,7 +215,7 @@ export function buildSessionProjection(
       continue;
     const block = stripHiddenKeys(message.block);
     pending.push({
-      seq: index + 1,
+      seq: input.messageSeqs.get(message.id) ?? 0,
       block:
         jsonBytes(block) <= SESSION_BRIDGE_MAX_BLOCK_BYTES
           ? block

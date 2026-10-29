@@ -235,7 +235,7 @@ export function validatePluginFiles(
         );
       const spec = file(source, field, reference, true);
       const problems = pluginUiSpecIssues(spec, plugin.id, slot);
-      const id = (spec as { id?: unknown }).id;
+      const id = (spec as { id?: unknown } | null)?.id;
       if (slot === "view" && typeof id === "string") {
         if (viewIds.has(id))
           problems.push({ path: "id", message: `duplicate view id "${id}"` });

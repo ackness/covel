@@ -156,3 +156,37 @@ it("withholds invalid full projections and subsequent stream appends", () => {
   view.unmount();
   warning.mockRestore();
 });
+
+it("forwards reset notifications into the append pump before longer replacement text is flushed", () => {
+  let text = "old";
+  let notify: ((change?: "reset") => void) | undefined;
+  const stream = {
+    read: () => ({ seq: 2, text }),
+    subscribe: (listener: (change?: "reset") => void) => {
+      notify = listener;
+      return () => {};
+    },
+  };
+  render(
+    <PluginWebview
+      title="Reset"
+      html="one"
+      state={{ session: { ...projection, streaming: { seq: 2, text } } }}
+      locked={false}
+      handlers={{}}
+      stream={stream}
+    />,
+  );
+  fireEvent.load(screen.getByTitle("Reset"));
+  act(() => {
+    text = "";
+    notify?.("reset");
+    text = "long replacement";
+    notify?.();
+    vi.advanceTimersByTime(100);
+  });
+  expect(mocks.append).not.toHaveBeenCalled();
+  expect(mocks.push.mock.lastCall?.[0]).toMatchObject({
+    session: { streaming: { seq: 2, text: "long replacement" } },
+  });
+});

@@ -8,6 +8,7 @@ import {
 import {
   boundedSessionText,
   buildSessionProjection,
+  createSessionMessageOrdinals,
   sessionProjectionSchema,
   SESSION_BRIDGE_MAX_STREAM_BYTES,
   visibleSessionMessages,
@@ -23,30 +24,43 @@ export function useSessionBridge(sessionId: string) {
     : EMPTY_CHARACTERS;
   const slots = useUiSlots(sessionId);
   const warned = useRef(false);
+  const assignOrdinals = useMemo(
+    () => createSessionMessageOrdinals(),
+    [sessionId],
+  );
+  const messageSeqs = useMemo(
+    () => assignOrdinals(messages),
+    [assignOrdinals, messages],
+  );
   const visible = useMemo(() => visibleSessionMessages(messages), [messages]);
   const placeholder = [...visible]
     .reverse()
     .find((message) => message.id.startsWith("stream_"));
   const current = useRef({
     placeholder,
-    seq: placeholder ? visible.indexOf(placeholder) + 1 : 0,
+    seq: placeholder ? (messageSeqs.get(placeholder.id) ?? 0) : 0,
   });
   current.current = {
     placeholder,
-    seq: placeholder ? visible.indexOf(placeholder) + 1 : 0,
+    seq: placeholder ? (messageSeqs.get(placeholder.id) ?? 0) : 0,
   };
   const lastRead = useRef<{ id: string; text: string } | null>(null);
   const stream = useMemo<StreamFeed>(
     () => ({
-      subscribe: subscribeToStreamingChanges,
+      subscribe: (listener) =>
+        subscribeToStreamingChanges((change) => {
+          if (change.messageId !== current.current.placeholder?.id) return;
+          listener(change.type === "reset" ? "reset" : undefined);
+        }),
       read: () => {
         const { placeholder: message, seq } = current.current;
         if (!message) {
           lastRead.current = null;
           return null;
         }
-        // Clearing the text cache can precede the reducer removing the
-        // placeholder. Retain its last text until then so the tail can flush.
+        // Completion can clear the cache before removing the placeholder;
+        // retain its tail until then. A reset stores an explicit empty string
+        // and invalidates the pump baseline, so discarded drafts never survive.
         const cached =
           lastRead.current?.id === message.id
             ? lastRead.current.text
@@ -69,6 +83,7 @@ export function useSessionBridge(sessionId: string) {
         session,
         executing,
         messages,
+        messageSeqs,
         submittedBlockIds,
         streamingText: placeholder
           ? getStreamingText(placeholder.id)
@@ -90,6 +105,7 @@ export function useSessionBridge(sessionId: string) {
     sessionId,
     executing,
     messages,
+    messageSeqs,
     submittedBlockIds,
     characters,
     slots,

@@ -1,6 +1,7 @@
 export const SESSION_BRIDGE_STREAM_INTERVAL_MS = 100;
+export type StreamFeedChange = "reset";
 export interface StreamFeed {
-  subscribe(listener: () => void): () => void;
+  subscribe(listener: (change?: StreamFeedChange) => void): () => void;
   read(): { seq: number; text: string } | null;
   onBaseline?(seq: number, length: number): void;
 }
@@ -25,6 +26,7 @@ export function createStreamPump<Timer>({
   let disposed = false;
   let seq = 0;
   let sentLength = 0;
+  let baselineInvalid = false;
   let latest: ReturnType<StreamFeed["read"]> = null;
   const cancel = () => {
     if (timer !== undefined) clearTimer(timer);
@@ -32,7 +34,12 @@ export function createStreamPump<Timer>({
   };
   const deliver = (value: ReturnType<StreamFeed["read"]>) => {
     if (!value) return;
-    if (seq !== value.seq || value.text.length < sentLength) {
+    if (
+      baselineInvalid ||
+      seq !== value.seq ||
+      value.text.length < sentLength
+    ) {
+      baselineInvalid = false;
       seq = value.seq;
       sentLength = value.text.length;
       resync();
@@ -50,9 +57,14 @@ export function createStreamPump<Timer>({
       // Keep the last observed text until turn end, even if the feed has
       // already removed its placeholder before the timer gets to run.
       const hadStream = seq !== 0 || latest !== null;
-      if (latest?.seq === seq && latest.text.length >= sentLength)
+      if (
+        !baselineInvalid &&
+        latest?.seq === seq &&
+        latest.text.length >= sentLength
+      )
         deliver(latest);
       latest = null;
+      baselineInvalid = false;
       seq = 0;
       sentLength = 0;
       if (hadStream) resync();
@@ -62,8 +74,9 @@ export function createStreamPump<Timer>({
     }
   };
   return {
-    notify() {
+    notify(change?: StreamFeedChange) {
       if (disposed) return;
+      if (change === "reset") baselineInvalid = true;
       const value = read();
       if (!value) {
         flush();
@@ -75,6 +88,7 @@ export function createStreamPump<Timer>({
     baseline(nextSeq: number, length: number) {
       seq = nextSeq;
       sentLength = length;
+      baselineInvalid = false;
       latest = read();
     },
     flush,

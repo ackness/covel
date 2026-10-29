@@ -114,7 +114,9 @@ export function PluginWebview(props: {
       clearTimer: (timer) => clearTimeout(timer),
     });
     baseline(fullState());
-    unsubscribe.current = feed.subscribe(() => pump.current?.notify());
+    unsubscribe.current = feed.subscribe((change) =>
+      pump.current?.notify(change),
+    );
   };
   useEffect(() => {
     bindStream();

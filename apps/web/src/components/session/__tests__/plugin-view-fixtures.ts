@@ -1,6 +1,10 @@
 import type { SessionPlugin } from "@/services/api.js";
 import type { PluginViewEntry } from "../game-view/use-plugin-views.js";
-import { buildSessionProjection } from "../session-bridge.js";
+import {
+  buildSessionProjection,
+  createSessionMessageOrdinals,
+  type SessionProjectionInput,
+} from "../session-bridge.js";
 export const viewEntry: PluginViewEntry = {
   mode: "plugin:p:v",
   pluginId: "p",
@@ -38,7 +42,7 @@ export const sessionPlugin: SessionPlugin = {
   sessionState: "active",
   locked: false,
 };
-export const projection = buildSessionProjection({
+const projectionInput: Omit<SessionProjectionInput, "messageSeqs"> = {
   session: { phase: "playing", completedPlayerTurns: 1 },
   executing: false,
   messages: [
@@ -54,4 +58,8 @@ export const projection = buildSessionProjection({
   streamingText: undefined,
   characters: [],
   slots: [],
+};
+export const projection = buildSessionProjection({
+  ...projectionInput,
+  messageSeqs: createSessionMessageOrdinals()(projectionInput.messages),
 });
