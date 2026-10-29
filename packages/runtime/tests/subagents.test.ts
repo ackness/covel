@@ -133,6 +133,32 @@ function routedLLM(routes: Record<string, Reply>) {
   return { llm, requests };
 }
 
+/**
+ * `routedLLM` with a `stream` that delivers each reply as text deltas and
+ * tool-call events, so the loop takes its streaming path.
+ */
+function streamingLLM(routes: Record<string, Reply>) {
+  const routed = routedLLM(routes);
+  const llm: LLMAdapter = {
+    generate: routed.llm.generate,
+    async *stream(params) {
+      const reply = await routed.llm.generate(params);
+      const text = reply.content ?? "";
+      const half = Math.ceil(text.length / 2);
+      for (const textDelta of [text.slice(0, half), text.slice(half)])
+        if (textDelta) yield { type: "text-delta", textDelta };
+      for (const { id, name, arguments: args } of reply.toolCalls)
+        yield { type: "tool-call", id, name, arguments: args };
+      yield {
+        type: "done",
+        finishReason: reply.finishReason,
+        ...(reply.usage ? { usage: reply.usage } : {}),
+      };
+    },
+  };
+  return { llm, requests: routed.requests };
+}
+
 function json(value: unknown): LLMResponse {
   return {
     content: JSON.stringify(value),
@@ -244,7 +270,7 @@ function eventsOf(emitter: EmitterSpy, type: string) {
 // ── ctx.agents.run ──────────────────────────────────────────────────
 
 describe("ctx.agents.run", () => {
-  it("runs the contract's provider with the brief only and returns its output, committing nothing of its own", async () => {
+  it("runs the contract's provider with the brief only and returns its output, with no runtime result of its own", async () => {
     let answer: SubagentResult | undefined;
     const main = caller(async (ctx) => {
       answer = await ctx.agents!.run({
@@ -557,7 +583,6 @@ describe("ctx.agents.run", () => {
 
   it("runs the actor preset unless the provider names a profile", async () => {
     vi.spyOn(console, "warn").mockImplementation(() => {});
-    const onDelta = vi.fn(async () => {});
     const run = async (provider: RuntimeManifest) => {
       let answer: SubagentResult | undefined;
       const main = caller(async (ctx) => {
@@ -578,11 +603,7 @@ describe("ctx.agents.run", () => {
       await runTurnPipeline(
         input,
         [main.manifest, provider],
-        makeDeps({
-          llm,
-          runtimes: [main, { manifest: provider }],
-          extra: { onDelta },
-        }),
+        makeDeps({ llm, runtimes: [main, { manifest: provider }] }),
       );
       return answer;
     };
@@ -594,7 +615,6 @@ describe("ctx.agents.run", () => {
     expect(
       await run(actor(undefined, { tools, loopProfile: { preset: "system" } })),
     ).toMatchObject({ ok: false, error: { code: "internal" } });
-    expect(onDelta).not.toHaveBeenCalled();
   });
 
   it("resolves the provider's own model slot and the session override keyed by its runtimeId", async () => {
@@ -735,6 +755,100 @@ describe("delegate", () => {
       parentCallId: "tc-delegate",
       stopReason: "completed",
     });
+  });
+
+  it("hands a completing delegate's output to the caller's output gate", async () => {
+    const lead: RuntimeManifest = {
+      ...director({ builtin: ["delegate"] }),
+      completeAfterTools: ["delegate"],
+      requireToolUse: true,
+    };
+    const { llm, requests } = routedLLM({
+      [PARENT_MARK]: () =>
+        toolCalls({
+          name: "delegate",
+          args: { target: { contract: CONTRACT }, brief: "Speak for me." },
+          id: "tc-finish",
+        }),
+      [ACTOR_MARK]: () => json({ line: "Who goes there?" }),
+    });
+    const result = await runTurnPipeline(
+      input,
+      [lead, actor()],
+      makeDeps({
+        llm,
+        runtimes: [{ manifest: lead }, { manifest: actor() }],
+      }),
+    );
+    const [leadResult] = result.runtimeResults;
+    expect(leadResult?.status).toBe("success");
+    // The schema `{ line }` holds the sub-agent's output, not an envelope.
+    expect(leadResult?.output).toEqual({ line: "Who goes there?" });
+    expect(leadResult?.stop).toEqual({ reason: "tool-finished" });
+    expect(leadResult?.toolCalls[0]?.output).toEqual({
+      line: "Who goes there?",
+    });
+    expect(requests.filter((r) => r.mark === PARENT_MARK)).toHaveLength(1);
+  });
+
+  it("streams the caller's text to the player and none of the sub-agent's", async () => {
+    // Both runtimes stream from the adapter; only the caller's profile
+    // forwards deltas, and a sub-agent never does, whatever profile it names.
+    const lead: RuntimeManifest = {
+      ...director({ builtin: ["delegate"] }),
+      loopProfile: { preset: "story" },
+    };
+    const run = async (provider: RuntimeManifest) => {
+      const deltas: { runtimeId: string; textDelta: string }[] = [];
+      const { llm, requests } = streamingLLM({
+        [PARENT_MARK]: (_params, index) =>
+          index === 0
+            ? toolCalls({
+                name: "delegate",
+                args: { target: { contract: CONTRACT }, brief: "Speak." },
+                id: "tc-stream",
+              })
+            : json({ line: "LEAD-LINE" }),
+        [ACTOR_MARK]: () => json({ line: "GUARD-LINE" }),
+      });
+      const emitter = makeEmitterSpy();
+      const result = await runTurnPipeline(
+        input,
+        [lead, provider],
+        makeDeps({
+          llm,
+          runtimes: [{ manifest: lead }, { manifest: provider }],
+          emitter,
+          extra: {
+            onDelta: async ({ runtimeId, textDelta }) => {
+              deltas.push({ runtimeId, textDelta });
+            },
+          },
+        }),
+      );
+      return { result, deltas, requests, emitter };
+    };
+
+    for (const provider of [
+      actor(),
+      actor(undefined, { loopProfile: { preset: "story" } }),
+    ]) {
+      const { result, deltas, requests, emitter } = await run(provider);
+      expect(result.runtimeResults[0]?.output).toEqual({ line: "LEAD-LINE" });
+      // The sub-agent answered through the stream path all the same.
+      expect(requests.filter((r) => r.mark === ACTOR_MARK)).toHaveLength(1);
+      expect(
+        eventsOf(emitter, "tool.completed").find(
+          (e) => e.payload.toolName === "delegate",
+        )?.payload.result,
+      ).toBe('{"line":"GUARD-LINE"}');
+      const streamed = deltas.map((d) => d.textDelta).join("");
+      expect(streamed).toContain("LEAD-LINE");
+      expect(streamed).not.toContain("GUARD");
+      expect(new Set(deltas.map((d) => d.runtimeId))).toEqual(
+        new Set(["director/lead"]),
+      );
+    }
   });
 
   it("refuses delegate for a runtime that does not declare it", async () => {

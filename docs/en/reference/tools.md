@@ -829,7 +829,7 @@ An agent runtime uses it to hand a job to a [sub-agent](./plugins.md#sub-agents)
 | data      | object | —        | Facts the sub-agent needs, as a JSON object, at most 32 KB                                         |
 | maxSteps  | number | —        | The sub-agent's step limit; it can only be lower than the provider's own                           |
 
-**Output**: on success the model receives the sub-agent's output as JSON (through `modelFacingJson`, without bookkeeping fields). On failure it receives `{ success: false, error, code }`, where `code` is one of the `ctx.agents.run` error codes. A failure other than `invalid-input` is not a tool failure of this runtime, so the model can try another way.
+**Output**: on success the tool result is the sub-agent's output, and the model receives it as JSON (through `modelFacingJson`, without bookkeeping fields); `stopReason` and usage are recorded only on `subagent.completed`. When `completeAfterTools` lists `delegate`, that output is checked as the caller's own output. On failure it receives `{ success: false, error, code }`, where `code` is one of the `ctx.agents.run` error codes. A failure other than `invalid-input` is not a tool failure of this runtime, so the model can try another way.
 
 **Notes**:
 

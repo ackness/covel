@@ -827,7 +827,7 @@ agent runtime 用它把一件事交给[子 agent](./plugins.md#子-agent)：另�
 | data     | object | —    | 子 agent 需要的事实，JSON 对象，最多 32 KB                                       |
 | maxSteps | number | —    | 子 agent 的步数上限，只能比提供方自己的更低                                      |
 
-**输出**：成功时，模型收到子 agent 的输出 JSON（经过 `modelFacingJson`，不含簿记字段）。失败时收到 `{ success: false, error, code }`，`code` 是 `ctx.agents.run` 的错误码之一。除 `invalid-input` 外的失败不算这个 runtime 的工具失败，模型可以换个办法继续。
+**输出**：成功时，工具结果就是子 agent 的输出，模型收到它的 JSON（经过 `modelFacingJson`，不含簿记字段）；`stopReason` 和用量只记在 `subagent.completed` 里。`delegate` 列在 `completeAfterTools` 里时，这份输出直接作为调用方的输出接受校验。失败时收到 `{ success: false, error, code }`，`code` 是 `ctx.agents.run` 的错误码之一。除 `invalid-input` 外的失败不算这个 runtime 的工具失败，模型可以换个办法继续。
 
 **注意事项**：
 

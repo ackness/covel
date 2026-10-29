@@ -2410,6 +2410,71 @@ describe("POST /api/sessions/:id/plugin-rpc — runtime mode (M8b)", () => {
     expect(handlerCalls).toBe(1);
   });
 
+  it("asks for a community sub-agent provider's grants before a manual run that can delegate to it", async () => {
+    let handlerCalls = 0;
+    const { app, store, gate, pluginRegistry } = setupRuntimeTestEnv({
+      pluginId: PLUGIN_ID,
+      runtimeId: SYNC_RUNTIME,
+      execution: "sync",
+      handler: async () => {
+        handlerCalls += 1;
+        return { ok: true };
+      },
+    });
+    const provider = makeAgentEntry({
+      pluginId: "actor-pkg",
+      runtimeId: "actor-pkg/guard",
+      outputKind: "system",
+      subagentOnly: true,
+      source: "community",
+    });
+    pluginRegistry.register(provider.entry);
+    await seedRuntimeSession(store, PLUGIN_ID, SESSION_ID);
+    await store.updateSession(SESSION_ID, {
+      activePlugins: [PLUGIN_ID, "actor-pkg"],
+    });
+    const runManual = () =>
+      app.request(`/api/sessions/${SESSION_ID}/plugin-rpc`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          kind: "runtime",
+          pluginId: PLUGIN_ID,
+          runtimeId: SYNC_RUNTIME,
+          payload: {},
+        }),
+      });
+
+    // The builtin target needs no grant; the provider needs both of its own.
+    for (const action of [
+      "covel:plugin-server-code",
+      "runtime:actor-pkg/guard",
+    ]) {
+      const pending = await runManual();
+      expect(pending.status).toBe(202);
+      const body = (await pending.json()) as {
+        status: string;
+        approvalId: string;
+        pending?: { action?: string; pluginId?: string };
+      };
+      expect(body.status).toBe("approval-required");
+      expect(body.pending?.action).toBe(action);
+      expect(handlerCalls).toBe(0);
+      const decision = await decideSessionApproval(
+        gate,
+        store,
+        SESSION_ID,
+        "actor-pkg",
+        body.approvalId,
+      );
+      expect(decision.ok).toBe(true);
+    }
+
+    const granted = await runManual();
+    expect(granted.status).toBe(200);
+    expect(handlerCalls).toBe(1);
+  });
+
   it("requires approval for a core package from a community source", async () => {
     const store = createMemoryStore();
     const pluginRegistry = createPluginRegistry();

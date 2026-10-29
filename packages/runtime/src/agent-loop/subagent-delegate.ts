@@ -123,10 +123,14 @@ async function runDelegate(
     ...(context.signal ? { parentSignal: context.signal } : {}),
   });
   if (!result.ok) return failed(call, context, startTime, result);
-  const resultText = JSON.stringify(modelFacingJson(result.output));
+  // The tool's result is the sub-agent's output alone, as the model sees it:
+  // a completing `delegate` hands it to the caller's output gate. Stop reason
+  // and usage stay on the sub-agent's own `subagent.completed` trace.
+  const output = result.output;
+  const resultText = JSON.stringify(modelFacingJson(output));
   await emitToolEvent(context, call, "tool.completed", {
     result: resultText,
-    parsedResult: result,
+    parsedResult: output,
     durationMs: Date.now() - startTime,
     success: true,
   });
@@ -134,7 +138,7 @@ async function runDelegate(
     toolCallId: call.toolCallId,
     name: call.name,
     result: resultText,
-    parsedResult: result,
+    parsedResult: output,
     success: true,
     approvalStatus: APPROVAL,
   };

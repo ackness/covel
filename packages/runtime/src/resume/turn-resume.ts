@@ -37,6 +37,11 @@ export interface ResumeSuspendedRuntimeOptions {
   readonly timeoutMs?: number;
   readonly userSettings?: TurnInput["userSettings"];
   /**
+   * The session's live `runtimeModelOverrides`. The resumed runtime and the
+   * sub-agents it delegates to resolve their slots through it, as in a turn.
+   */
+  readonly runtimeModelOverrides?: TurnInput["runtimeModelOverrides"];
+  /**
    * The session's active runtimes. A resumed setup runtime that completes is
    * checked against them to decide whether setup is finished. Defaults to the
    * resumed runtime alone.
@@ -69,9 +74,9 @@ export async function resumeRuntimePipeline(
   const runId = crypto.randomUUID();
 
   // TurnInput for the resumed runtime: session, turn and content locale come
-  // from the suspension and there is no fresh player message. With no model
-  // overrides the loop resolves the model via
-  // `deps.resolveModel(manifest, undefined)`.
+  // from the suspension and there is no fresh player message. The session's
+  // runtime model overrides apply as in a turn; there is no request-scoped
+  // story override on resume.
   const { locale } = suspension.pendingContinuation;
   const input: TurnInput = {
     sessionId: suspension.sessionId,
@@ -80,6 +85,9 @@ export async function resumeRuntimePipeline(
     origin: "resume",
     ...(locale !== undefined ? { locale } : {}),
     ...(options?.userSettings ? { userSettings: options.userSettings } : {}),
+    ...(options?.runtimeModelOverrides
+      ? { runtimeModelOverrides: options.runtimeModelOverrides }
+      : {}),
   };
 
   // A resumed runtime runs outside `runTurnPipeline`; it gets its own
