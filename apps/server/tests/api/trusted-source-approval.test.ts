@@ -3,7 +3,11 @@ import path from "node:path";
 import { tmpdir } from "node:os";
 import { Hono } from "hono";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { readRuntimeEnv } from "@covel/shared";
+import {
+  apiListResponseSchema,
+  pluginSummarySchema,
+  readRuntimeEnv,
+} from "@covel/shared";
 import { createMemoryStore } from "@covel/store/memory";
 import {
   bootstrapApi,
@@ -176,7 +180,9 @@ it("wires implicit grants through bootstrap for enable and runtime preflight, wh
   });
   expect(rpc.status).toBe(202);
   expect((await rpc.json()).pending.action).toBe("probe");
-  const listed = await (await app.request("/api/plugins")).json();
+  const listed = apiListResponseSchema(pluginSummarySchema).parse(
+    await (await app.request("/api/plugins")).json(),
+  );
   expect(listed.items).toContainEqual(
     expect.objectContaining({
       id,
@@ -193,6 +199,28 @@ it("wires implicit grants through bootstrap for enable and runtime preflight, wh
   ).toMatchObject({
     items: [{ id, integrity: "verified", trustedSource: true }],
   });
+});
+it("returns client-valid discovery for a manually copied community package", async () => {
+  const fixture = await build({ trusted: false });
+  await rm(fixture.receiptPath);
+  await api!.trustedSources.ensureFresh(id);
+  const response = await app.request("/api/plugins");
+  expect(response.status).toBe(200);
+  const listed = apiListResponseSchema(pluginSummarySchema).parse(
+    await response.json(),
+  );
+  expect(listed.items).toContainEqual(
+    expect.objectContaining({
+      id,
+      source: "community",
+      trust: {
+        source: null,
+        trustedSource: false,
+        integrity: "no-receipt",
+        autoApproved: false,
+      },
+    }),
+  );
 });
 it.each([
   "untrusted",
