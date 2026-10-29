@@ -556,6 +556,21 @@ Agent 的副作用只来自工具：模型能写什么，以 `agent.tools` 白�
 
 `ctx.recursiveCall({ playerMessage, manualTrigger: { runtimeId, payload } })` 在当前执行里发起嵌套运行，副作用随父执行一起提交。它只读取这些字段；会话、语言、设置和模型沿用父执行，其他字段被忽略。
 
+子调用的写入跟着父 handler 走：
+
+- 父 handler 成功时，子调用的写入和父写入一起提交，排在父结果之前。
+- 父 handler 失败时（抛错、超时、返回 `failed` 或 `skipped`），子调用的写入一起丢弃。PostRuntime Hook 改写了父结果的状态（例如把失败改成成功）时也丢弃，和父 handler 自己的写入一样。多层嵌套逐层适用：任何一层父 handler 失败，它下面所有层的写入都丢弃。
+- 父 handler 挂起等待输入时，它自己的写入留到恢复后提交，子调用的写入则丢弃。目前子调用的写入不随挂起保存。
+- agent 的 guard 里发起的子调用，只在 guard 返回 `{ skip: true }`、结果仍是跳过时提交；guard 放行、agent 照常运行时丢弃。
+
+提交时，顶层 runtime 和它下面所有层的嵌套调用是一个整体，要么全部提交，要么全部丢弃：
+
+- 有故事的执行里，非故事 runtime 的这个整体在一个 savepoint 里提交。其中任何一条写入被拒，整体一起丢弃，故事照常保存。依赖这个顶层 runtime 的下游按[提交规则](./transactions.md#回合级单事务)跟着丢弃。
+- 整体里有故事或 setup runtime 的运行时，不论它在顶层还是嵌套在里面，整体按故事的规则提交：其中任何写入被拒，整次执行回滚。
+- 整体被丢弃时，其中嵌套调用的挂起也一起作废：不保存，也不能恢复，不会替换已有的挂起。本次执行没有别的挂起留下时，这一回合照常结束并计数，被挂起扣住的 detached 作业照常排入。
+
+`ctx.recursiveCall` 返回的是嵌套结果的副本。改动它不会影响提交的内容和归属。
+
 `manualTrigger.runtimeId` 只能点名调用者自己包里的 runtime：内联 runtime 用包 ID，多 runtime 包用 `<pluginId>/<runtimeId>`。点名别的包会在嵌套执行开始前报错，错误写明目标 runtime 和调用者的包 ID。内置插件和社区插件遵守同一条规则。
 
 跨包请求与响应用[服务](./plugin-extensions.md#公共函数注册与调用)，触发其他包的后续工作用[事件](./plugin-extensions.md#事件怎么触发下游)。

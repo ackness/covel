@@ -1264,6 +1264,8 @@ runtime 的终态：
 - 新执行的 runtime 终态，在 `PostRuntime` 和输出 / 取消校验之后发布：最终失败用 `runtime.failed`，最终成功或暂停用 `runtime.completed`。action SSE 把“跳过”对应成 `runtime.skipped`。
 - 终态的 payload 保留 `turnId` 和 `runId`。它不等于事务提交成功。
 - 回合提交成功、但某个可选 runtime 的写入被单独丢弃时，主回合在 `execution.completed` 之前给它补发一条 `runtime.failed`（带丢弃的原因）。客户端用它覆盖之前的 `runtime.completed`。
+  - 和它一起丢弃的嵌套运行（`ctx.recursiveCall`）也各补发一条。载荷带被丢弃那次运行的 `runId` 和 `turnId`。
+  - 客户端按回合和 runtime 显示一个步骤。所以同一个 runtime 在顶层的那次运行已经提交时，不为它被丢弃的嵌套运行补发，以免把已提交的运行显示成失败。
 - 历史数据里 `runtime.completed` 的 `status: "failed"`、`turn.completed` 的 `committed: false`，仍然属于诊断上的失败。
 - 一次 LLM 尝试失败、重试之后成功，失败记录仍然保留。界面应该把“已恢复的尝试”和任务的最终状态分开显示。
 

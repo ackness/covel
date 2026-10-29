@@ -5,6 +5,11 @@ import type { ExecutionOrigin } from "@covel/shared";
 /** A runtime whose recorded result is settled as failed at commit. */
 export interface FailedRuntimeResult {
   readonly runtimeId: string;
+  /**
+   * The failed run. With it, only the entry of that run settles: the same
+   * runtime can also have run nested in the same turn.
+   */
+  readonly runId?: string;
   readonly error: string;
 }
 
@@ -15,14 +20,22 @@ export function settleFailedRuntimeResults(
 ): unknown {
   if (failed.length === 0 || !Array.isArray(runtimeResults))
     return runtimeResults;
-  const errors = new Map(failed.map((item) => [item.runtimeId, item.error]));
+  const byRun = new Map<string, string>();
+  const byRuntime = new Map<string, string>();
+  for (const item of failed) {
+    if (item.runId !== undefined) byRun.set(item.runId, item.error);
+    else byRuntime.set(item.runtimeId, item.error);
+  }
   return runtimeResults.map((entry: unknown) => {
-    const runtimeId =
+    const { runtimeId, runId } =
       entry && typeof entry === "object"
-        ? (entry as { runtimeId?: unknown }).runtimeId
-        : undefined;
-    return typeof runtimeId === "string" && errors.has(runtimeId)
-      ? { ...(entry as object), status: "failed", error: errors.get(runtimeId) }
+        ? (entry as { runtimeId?: unknown; runId?: unknown })
+        : {};
+    const error =
+      (typeof runId === "string" ? byRun.get(runId) : undefined) ??
+      (typeof runtimeId === "string" ? byRuntime.get(runtimeId) : undefined);
+    return error !== undefined
+      ? { ...(entry as object), status: "failed", error }
       : entry;
   });
 }

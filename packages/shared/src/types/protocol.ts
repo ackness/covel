@@ -139,6 +139,10 @@ export interface RuntimeDeferredPayload {
 export interface RuntimeLifecyclePayload {
   readonly runtimeId: string;
   readonly pluginId: string;
+  /** The turn the run belongs to; nested runs share their parent's. */
+  readonly turnId?: string;
+  /** The run itself: a runtime can run nested and at top level in one turn. */
+  readonly runId?: string;
   readonly status: string;
   readonly durationMs?: number;
 }

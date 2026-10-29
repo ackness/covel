@@ -553,6 +553,39 @@ export function registerCoreStoreSuites(getStore: () => DataStore): void {
         runtimeResults: results,
       });
     });
+
+    it("settles only the named run when a failed runtime carries its runId", async () => {
+      const topRun = {
+        runtimeId: "follower",
+        runId: "run-top",
+        status: "success",
+        output: { n: 1 },
+      };
+      const nestedRun = { ...topRun, runId: "run-nested" };
+      const top = makeTurnResult({
+        turnId: "turn-x",
+        runtimeResults: [topRun],
+      });
+      const nested = makeTurnResult({
+        turnId: "turn-x",
+        origin: "recursive",
+        runtimeResults: [nestedRun],
+        createdAt: ts(1),
+      });
+      await store.saveTurnResult(top);
+      await store.saveTurnResult(nested);
+
+      await store.setTurnResultCommitStatus("sess-1", "turn-x", "committed", [
+        { runtimeId: "follower", runId: "run-nested", error: "dropped" },
+      ]);
+
+      const rows = await store.listTurnResults("sess-1");
+      const byId = new Map(rows.map((row) => [row.id, row]));
+      expect(byId.get(top.id)).toMatchObject({ runtimeResults: [topRun] });
+      expect(byId.get(nested.id)).toMatchObject({
+        runtimeResults: [{ ...nestedRun, status: "failed", error: "dropped" }],
+      });
+    });
   });
 
   describe("ToolCalls", () => {

@@ -9,16 +9,25 @@ import { isSetupRuntime } from "@covel/shared";
 import type { DataStore, SuspensionRecord } from "@covel/store";
 import {
   collectExecutionJournal,
+  collectExecutionJournalRuns,
+  collectExecutionTriggerRuns,
   collectExecutionTriggers,
   attachRuntimeJournal,
 } from "./execution-journal.js";
-import { collectExecutionSuspensions } from "./suspension-artifact.js";
+import {
+  collectExecutionSuspensionRuns,
+  collectExecutionSuspensions,
+} from "./suspension-artifact.js";
 import { runWithHookScope } from "./hooks/hook-scope.js";
 import {
   buildHookSettings,
   snapshotUserSettings,
 } from "./hooks/hook-settings.js";
 import { runTurnPipeline } from "./turn-executor/turn-executor.js";
+import {
+  commitUnitSizes,
+  inCommitOrder,
+} from "./turn-executor/nested-results.js";
 import {
   resumeRuntimePipeline,
   type ResumeSuspendedRuntimeOptions,
@@ -45,9 +54,13 @@ export interface ExecutionCommitPlan extends Pick<
   | "executionContext"
   | "runtimes"
   | "results"
+  | "commitUnits"
   | "journalMessages"
+  | "journalMessageRuns"
   | "runtimeTriggers"
+  | "runtimeTriggerRuns"
   | "suspensions"
+  | "suspensionRuns"
   | "writeBaseline"
   | "turnIds"
   | "activePluginIds"
@@ -177,10 +190,11 @@ export async function executeTurn(
     { ...captured.deps, hookScope },
     options,
   );
-  const results = [
-    ...turn.runtimeResults,
-    ...(turn.nestedRuntimeResults ?? []),
-  ];
+  // Each top-level result commits as one unit with everything nested under
+  // it, children before their parent; finalize settles units in order, so
+  // upstreams settle before the runtimes that depend on them.
+  const results = inCommitOrder(turn.runtimeResults);
+  const commitUnits = commitUnitSizes(turn.runtimeResults);
   const executionSignal = getTurnExecutionSignal(deps.turnControl);
   const abortReason =
     turn.abortReason ??
@@ -245,9 +259,13 @@ export async function executeTurn(
           : turn.executionContext,
         runtimes,
         results,
+        commitUnits,
         ...(abortReason !== undefined ? { abortReason } : {}),
         journalMessages,
+        journalMessageRuns: collectExecutionJournalRuns(turn),
+        suspensionRuns: collectExecutionSuspensionRuns(turn),
         runtimeTriggers: collectExecutionTriggers(turn),
+        runtimeTriggerRuns: collectExecutionTriggerRuns(turn),
         suspensions: executionSuspensions.map((record) => {
           const counted =
             turn.executionContext.countPolicy === "complete-player-turn" &&
