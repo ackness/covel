@@ -3,10 +3,15 @@ import os from "node:os";
 import path from "node:path";
 import type { Context } from "hono";
 import { z } from "zod";
+import { parse as parseYaml } from "yaml";
 import { isPathInside, readPlainYamlFrontmatter } from "@covel/plugin-loader";
 import { resolveUserResourceDirs } from "./user-resource-dirs.js";
+import { SAFE_WORLD_ID_RE } from "./validators.js";
 import { findWorldPackageRoots } from "../world-data/session-import/utils.js";
-import { unwrapPackageDirectory } from "../routes/api/install/plugin-bundle.js";
+import {
+  installPluginId,
+  unwrapPackageDirectory,
+} from "../routes/api/install/plugin-bundle.js";
 import {
   assertNoReservedInstallFiles,
   collectUpload,
@@ -16,7 +21,52 @@ import {
   readAllEntries,
   readInstallationJson,
   rejectByContentLength,
+  type ExtractedEntry,
 } from "../routes/api/install/shared.js";
+
+/** Resolve upload identity without admitting the package or executing its code. */
+function uploadIdentity(
+  kind: "plugin" | "world",
+  entries: readonly ExtractedEntry[],
+  directory: string | undefined,
+  fileName: string | undefined,
+): string | undefined {
+  try {
+    const manifest = entries.find(
+      (entry) =>
+        entry.relativePath === (kind === "plugin" ? "PLUGIN.md" : "world.yaml"),
+    );
+    if (!manifest) return undefined;
+    if (kind === "plugin") {
+      const frontmatter = readPlainYamlFrontmatter(
+        manifest.content.toString("utf8"),
+      ).data;
+      const packageJson = entries.find(
+        (entry) => entry.relativePath === "package.json",
+      );
+      let metadata: { name?: unknown } | undefined;
+      try {
+        if (packageJson)
+          metadata = z
+            .object({ name: z.unknown().optional() })
+            .parse(JSON.parse(packageJson.content.toString("utf8")));
+      } catch {
+        // An unreadable package.json does not hide manifest diagnostics.
+      }
+      return installPluginId(frontmatter, directory, metadata);
+    }
+    const { id } = z
+      .object({ id: z.unknown().optional() })
+      .parse(parseYaml(manifest.content.toString("utf8")));
+    const identity = id === undefined ? (directory ?? fileName) : id;
+    return typeof identity === "string" && SAFE_WORLD_ID_RE.test(identity)
+      ? identity
+      : undefined;
+  } catch {
+    // The static validator reports invalid manifests as structured issues.
+    return undefined;
+  }
+}
 
 const sourceSchema = z
   .object({
@@ -61,6 +111,7 @@ export async function resolveValidationSource(
     );
     const pluginPackage =
       kind === "plugin" ? unwrapPackageDirectory(entries) : undefined;
+    let directory = pluginPackage?.directory;
     if (pluginPackage) entries = [...pluginPackage.entries];
     else if (!entries.some((entry) => entry.relativePath === "world.yaml")) {
       const files = entries.filter(
@@ -69,46 +120,38 @@ export async function resolveValidationSource(
       const roots = new Set(
         files.map((entry) => entry.relativePath.split("/")[0]),
       );
-      const [directory] = roots;
+      [directory] = roots;
       if (
         roots.size !== 1 ||
         !directory ||
         !files.some((entry) => entry.relativePath === `${directory}/world.yaml`)
       )
         throw httpError(400, "No root world.yaml found");
+      const prefixLength = directory.length + 1;
       entries = files.map((entry) => ({
         ...entry,
-        relativePath: entry.relativePath.slice(directory.length + 1),
+        relativePath: entry.relativePath.slice(prefixLength),
       }));
     }
     assertNoReservedInstallFiles(entries);
+    const fileName =
+      "name" in file && typeof file.name === "string"
+        ? path.parse(file.name).name
+        : undefined;
+    const id = uploadIdentity(kind, entries, directory, fileName);
     const tmpRoot = await mkdtemp(path.join(os.tmpdir(), "covel-validate-"));
     const cleanup = () => rm(tmpRoot, { recursive: true, force: true });
     let dir = path.join(tmpRoot, "package");
     try {
       await materializeEntries(dir, entries);
-      if (kind === "plugin") {
+      if (id) {
         // Static loading checks directory identity. Preserve it without rewriting
         // package bytes or using an author-controlled name for the temp root.
-        const manifest = entries.find(
-          (entry) => entry.relativePath === "PLUGIN.md",
-        );
-        let id = pluginPackage?.directory;
-        try {
-          const data =
-            manifest &&
-            readPlainYamlFrontmatter(manifest.content.toString("utf8")).data;
-          if (data && typeof data.id === "string") id = data.id;
-        } catch {
-          // The validator reports malformed frontmatter as a validation result.
-        }
-        if (id && id.length <= 64 && /^[a-z][a-z0-9-]*$/.test(id)) {
-          const parent = path.join(tmpRoot, "identity");
-          await mkdir(parent);
-          const named = path.join(parent, id);
-          await rename(dir, named);
-          dir = named;
-        }
+        const parent = path.join(tmpRoot, "identity");
+        await mkdir(parent);
+        const named = path.join(parent, id);
+        await rename(dir, named);
+        dir = named;
       }
     } catch (error) {
       await cleanup();
@@ -150,6 +193,20 @@ export async function resolveValidationSource(
       ];
       if (matches.length > 1)
         throw httpError(409, "Several world packages declare this id");
+      if (matches.length === 0) {
+        // Settings lists installed directory names even when their manifests
+        // cannot be parsed. Keep those packages available for diagnostics.
+        for (const root of new Set(roots)) {
+          const candidate = path.join(root, source.id);
+          if (await lstat(candidate).catch(() => undefined))
+            matches.push(candidate);
+        }
+        if (matches.length > 1)
+          throw httpError(
+            409,
+            "Several installed world directories have this id",
+          );
+      }
       const [match] = matches;
       if (!match) throw httpError(404, "Package not found");
       dir = match;

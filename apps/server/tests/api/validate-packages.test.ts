@@ -22,6 +22,7 @@ import {
   validatePluginPackage,
 } from "@covel/plugin-loader";
 import { installRoutes } from "../../src/routes/api/install.js";
+import { validatePluginBundle } from "../../src/routes/api/install/plugin-bundle.js";
 import { validationReport } from "../../src/routes/api/install/validate.js";
 import { validateWorldPackage } from "../../src/world-data/validate-world-package.js";
 import { createRequestBodyLimitMiddleware } from "../../src/middleware/request-body-limit.js";
@@ -81,12 +82,16 @@ async function zip(entries: Record<string, string>) {
   archive.end();
   return result;
 }
-function upload(kind: "plugin" | "world", buffer: Buffer) {
+function upload(
+  kind: "plugin" | "world",
+  buffer: Buffer,
+  fileName = "input.zip",
+) {
   const body = new FormData();
   body.append(
     "file",
     new Blob([new Uint8Array(buffer)], { type: "text/plain" }),
-    "input.zip",
+    fileName,
   );
   return app.request(`/api/install/validate/${kind}`, { method: "POST", body });
 }
@@ -188,20 +193,301 @@ describe("package validation endpoints", () => {
       ).toEqual([]);
     },
   );
+  it.each([
+    { directory: undefined, packageName: "@fixture/plugin-probe" },
+    { directory: "probe", packageName: "@fixture/plugin-other" },
+    { directory: "Invalid Folder", packageName: "@fixture/plugin-probe" },
+  ])(
+    "preserves omitted plugin IDs and runtime dependencies for $directory",
+    async ({ directory, packageName }) => {
+      const runtime = (needs: string[] = []) =>
+        `---\n${JSON.stringify({ function: { handler: "./handler.js" }, schedule: { trigger: { type: "manual" }, ...(needs.length ? { needs } : {}) } })}\n---\n`;
+      const entries = {
+        "PLUGIN.md": manifest({ id: undefined }),
+        "package.json": JSON.stringify({ name: packageName, type: "module" }),
+        "runtimes/extract/RUNTIME.md": runtime(),
+        "runtimes/extract/handler.js": "throw new Error('must never run');",
+        "runtimes/read/RUNTIME.md": runtime(["probe/extract"]),
+        "runtimes/read/handler.js": "throw new Error('must never run');",
+      };
+      const installed = validatePluginBundle(
+        Object.entries(entries).map(([relativePath, content]) => ({
+          relativePath,
+          content: Buffer.from(content),
+        })),
+        new Set(),
+        directory,
+      );
+      expect(installed.pluginId).toBe("probe");
+      const response = await upload(
+        "plugin",
+        await zip(
+          Object.fromEntries(
+            Object.entries(entries).map(([file, content]) => [
+              directory ? `${directory}/${file}` : file,
+              content,
+            ]),
+          ),
+        ),
+      );
+      expect(response.status).toBe(200);
+      const report = packageValidationReportSchema.parse(await response.json());
+      expect(report.id).toBe(installed.pluginId);
+      expect(report.ok, JSON.stringify(report.issues)).toBe(true);
+      expect(report.counts.errors).toBe(0);
+      await expect(access(path.join(root, "plugins/probe"))).rejects.toThrow();
+    },
+  );
+  it.each([
+    {
+      directory: undefined,
+      fileName: "sample.zip",
+      id: undefined,
+      expected: "sample",
+    },
+    {
+      directory: "wrapped-world",
+      fileName: "different.zip",
+      id: undefined,
+      expected: "wrapped-world",
+    },
+    {
+      directory: "wrapped-world",
+      fileName: "different.zip",
+      id: "explicit-world",
+      expected: "explicit-world",
+    },
+  ])(
+    "preserves world ZIP identity $expected",
+    async ({ directory, fileName, id, expected }) => {
+      const entries = {
+        "world.yaml": world.replace("id: sample\n", id ? `id: ${id}\n` : ""),
+        "WORLD.md": "Lore",
+      };
+      const response = await upload(
+        "world",
+        await zip(
+          Object.fromEntries(
+            Object.entries(entries).map(([file, content]) => [
+              directory ? `${directory}/${file}` : file,
+              content,
+            ]),
+          ),
+        ),
+        fileName,
+      );
+      expect(response.status).toBe(200);
+      const report = packageValidationReportSchema.parse(await response.json());
+      expect(report).toMatchObject({
+        id: expected,
+        ok: true,
+        counts: { errors: 0, warnings: 0 },
+        issues: [],
+      });
+    },
+  );
   it("validates installed worlds using the injected catalogue", async () => {
+    await plugin(
+      {
+        provides: ["probe-state@1"],
+        contributes: {
+          settings: [
+            { key: "enabled", type: "toggle", default: true, label: "Enabled" },
+          ],
+        },
+      },
+      true,
+    );
     const dir = path.join(root, "worlds/sample");
-    await files(dir, { "world.yaml": world, "WORLD.md": "Lore" });
+    const hostPath = path.join(
+      os.homedir(),
+      "private/validation-secret/cover.png",
+    );
+    await files(dir, {
+      "world.yaml": `${world}cover: ${JSON.stringify(hostPath)}\npluginPolicy:\n  plus: [probe]\n  requires: [probe-state@1]\npluginSettings:\n  probe:\n    enabled: wrong\n    ${JSON.stringify(hostPath)}: true\n`,
+      "WORLD.md": "<!-- narrator-only -->\nUnclosed lore.",
+    });
     const response = await post("world", { kind: "installed", id: "sample" });
     expect(response.status).toBe(200);
-    const report = packageValidationReportSchema.parse(await response.json());
+    const text = await response.text();
+    const report = packageValidationReportSchema.parse(JSON.parse(text));
     const core = await validateWorldPackage({
       worldDir: dir,
       catalogue: registry,
     });
-    expect(report.id).toBe(core.worldId);
-    expect(report.issues).toEqual(core.diagnostics);
-    expect(report.ok).toBe(true);
+    const loreMessage =
+      "this narrator-only block has no closing line; the player sees nothing from here to the end of the file";
+    const loreHint =
+      "Put `<!-- narrator-only -->` on a line of its own before the part, and `<!-- /narrator-only -->` on a line of its own after it.";
+    const coverHint =
+      "Name an existing `.png`, `.jpg` or `.webp` file one directory under `media/`, such as `media/gallery/world-cover.webp`, of at most 20 MB.";
+    const settingMessage =
+      "Value does not satisfy the toggle setting declared by probe";
+    const settingHint =
+      "Use a value allowed by this setting's type, range and options. Default: true.";
+    expect(core).toEqual({
+      worldId: "sample",
+      diagnostics: [
+        {
+          level: "warning",
+          code: "lore-narrator-only",
+          file: "WORLD.md",
+          pointer: "line 1",
+          locales: ["en-US"],
+          message: loreMessage,
+          hint: loreHint,
+        },
+        {
+          level: "error",
+          code: "cover",
+          file: hostPath,
+          message: `\`cover\` names "${hostPath}", which the app cannot show`,
+          hint: coverHint,
+        },
+        {
+          level: "error",
+          code: "invalid-setting",
+          file: "world.yaml",
+          pointer: "pluginSettings.probe.enabled",
+          message: settingMessage,
+          hint: settingHint,
+        },
+        {
+          level: "warning",
+          code: "unknown-setting",
+          file: "world.yaml",
+          pointer: `pluginSettings.probe.${hostPath}`,
+          message: `plugin "probe" declares no setting "${hostPath}"; the value is ignored`,
+          hint: "Declared settings: enabled.",
+        },
+      ],
+    });
+    expect(report).toEqual({
+      kind: "world",
+      id: "sample",
+      ok: false,
+      counts: { errors: 2, warnings: 2 },
+      issues: [
+        {
+          severity: "warning",
+          code: "lore-narrator-only",
+          file: "WORLD.md",
+          field: "line 1",
+          message: `${loreMessage} (locale en-US)`,
+          hint: loreHint,
+        },
+        {
+          severity: "error",
+          code: "cover",
+          file: "<path>",
+          message: '`cover` names "<path>", which the app cannot show',
+          hint: coverHint,
+        },
+        {
+          severity: "error",
+          code: "invalid-setting",
+          file: "world.yaml",
+          field: "pluginSettings.probe.enabled",
+          message: settingMessage,
+          hint: settingHint,
+        },
+        {
+          severity: "warning",
+          code: "unknown-setting",
+          file: "world.yaml",
+          field: "pluginSettings.probe.<path>",
+          message:
+            'plugin "probe" declares no setting "<path>"; the value is ignored',
+          hint: "Declared settings: enabled.",
+        },
+      ],
+    });
+    for (const prefix of [
+      hostPath,
+      root,
+      os.tmpdir(),
+      os.homedir(),
+      path.join(root, "plugins"),
+      path.join(root, "worlds"),
+    ])
+      expect(text).not.toContain(prefix);
+    const withoutProvider = await validateWorldPackage({
+      worldDir: dir,
+      catalogue: createPluginRegistry(),
+    });
+    expect(withoutProvider.diagnostics.map((issue) => issue.code)).toEqual(
+      expect.arrayContaining(["unknown-plugin", "unprovided-contract"]),
+    );
+    expect(
+      withoutProvider.diagnostics.some(
+        (issue) => issue.code === "invalid-setting",
+      ),
+    ).toBe(false);
   });
+  it.each(["invalid", "missing"])(
+    "reports structured diagnostics for an installed world's %s manifest",
+    async (condition) => {
+      const dir = path.join(root, "worlds/sample");
+      await files(dir, { "world.yaml": world, "WORLD.md": "Lore" });
+      expect(
+        (await (await app.request("/api/install/worlds")).json()).items,
+      ).toContainEqual({
+        id: "sample",
+        version: null,
+        source: null,
+        pendingUpdate: null,
+      });
+      if (condition === "invalid")
+        await writeFile(path.join(dir, "world.yaml"), "name: [unterminated\n");
+      else await rm(path.join(dir, "world.yaml"));
+      const response = await post("world", { kind: "installed", id: "sample" });
+      expect(response.status).toBe(200);
+      const text = await response.text();
+      expect(
+        packageValidationReportSchema.parse(JSON.parse(text)),
+      ).toMatchObject({
+        kind: "world",
+        id: "sample",
+        ok: false,
+        counts: { errors: 1, warnings: 0 },
+        issues: [
+          {
+            severity: "error",
+            code: "manifest-invalid",
+            file: "world.yaml",
+            message: expect.any(String),
+          },
+        ],
+      });
+      expect(text).not.toContain(root);
+    },
+  );
+  it("retains ambiguity checks for unreadable installed worlds", async () => {
+    for (const parent of ["worlds", "other-worlds"])
+      await files(path.join(root, parent, "sample"), {
+        "world.yaml": "name: [unterminated\n",
+      });
+    expect(
+      (await post("world", { kind: "installed", id: "sample" })).status,
+    ).toBe(409);
+  });
+  it.each([
+    { escape: false, status: 400 },
+    { escape: true, status: 403 },
+  ])(
+    "retains installed-world symlink checks, escape=$escape",
+    async ({ escape, status }) => {
+      const target = path.join(root, escape ? "outside" : "worlds/actual");
+      await files(target, {
+        "world.yaml": world.replace("id: sample", "id: actual"),
+      });
+      await mkdir(path.join(root, "worlds"), { recursive: true });
+      await symlink(target, path.join(root, "worlds/sample"));
+      expect(
+        (await post("world", { kind: "installed", id: "sample" })).status,
+      ).toBe(status);
+    },
+  );
   it.each([false, true])(
     "uses a static catalogue on a bare host, unavailable=%s",
     async (unavailable) => {

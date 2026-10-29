@@ -1106,7 +1106,7 @@ Both validation endpoints reuse installation’s `host.files` authorization. Wor
 { "source": { "kind": "path", "path": "/allowed/packages/my-package" } }
 ```
 
-Completed validation returns `200` even when errors are found. Issue paths are relative to the package and contain no host paths. Example:
+Completed validation returns `200` even when errors are found. An installed world with a damaged or missing manifest still returns a report containing `manifest-invalid`; `404` means no package directory was found. Issue paths are relative to the package and contain no host paths. Example:
 
 ```json
 {
