@@ -628,6 +628,42 @@ describe("malformed dataset schemas at commit", () => {
     }
     expect(await stored(store)).toEqual({ exists: true, value: 1 });
   });
+
+  it("refuses data an asynchronous schema would reject instead of reading its Promise as success", async () => {
+    const store = await setup();
+    await seed(store, 1);
+    const pipeline = createCommitPipeline(
+      store,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      {
+        datasetPolicy: datasetPolicyResolver(
+          [
+            {
+              pluginId: PLUGIN,
+              datasets: {
+                wallet: { namespace: "wallet", ops: ["set"] as const },
+              },
+            },
+          ],
+          { [PLUGIN]: { wallet: { $async: true, type: "number" } } },
+        ),
+      },
+    );
+    for (const write of [update([{ op: "set", value: "rich" }]), set("rich")]) {
+      const result = await pipeline.commit(write);
+      expect(result).toMatchObject({
+        committed: false,
+        code: "dataset-violation",
+      });
+      expect(result.error).toContain(
+        "asynchronous schemas ($async) are not supported",
+      );
+    }
+    expect(await stored(store)).toEqual({ exists: true, value: 1 });
+  });
 });
 
 describe("MediaRefs in an update result", () => {

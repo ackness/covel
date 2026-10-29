@@ -245,7 +245,9 @@ describe("contributes.datasets load", () => {
     vi.spyOn(console, "warn").mockImplementation(() => {});
     const discovery = (await discoverPluginAt(dir))!;
     const definition = await loadPluginDefinition(discovery);
-    for (const name of definition.manifests.map((m) => m.manifest.name)) {
+    const names = definition.manifests.map((m) => m.manifest.name);
+    expect(names).toHaveLength(2);
+    for (const name of names) {
       const loaded = await loadRuntime(discovery, name, undefined, definition);
       expect(loaded.datasetSchemas).toBe(
         definition.packageManifest.datasetSchemas,

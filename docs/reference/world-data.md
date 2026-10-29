@@ -1443,6 +1443,8 @@ contributes:
 
 - schema 是插件根目录里的 JSON Schema 文件。
 - 同一个 namespace 也可以声明成[数据集](./plugins.md#数据集contributesdatasets)；两边的 `schema` 必须是同一个文件。
+  - 数据集的提交检查（`ops` 允许的操作种类和记录 schema）只管插件在执行中提交的插件数据 proposal：`plugin.data`、`plugin.data.batch`、`plugin.data.delete` 和 `plugin.data.update`。详见[事务 · 操作式写入](./transactions.md#操作式写入plugindataupdate)。
+  - 世界数据的导入和同步有意保持不变，不经过这项检查：记录照旧按 source 声明的 `schema` 校验，不受数据集 `ops` 限制。所以即使数据集的 `ops` 里没有 `set`，世界包预置的记录也照常写入。
 - 接收声明只写在包的根 `PLUGIN.md`，不写进 `RUNTIME.md`。
 - 插件代码用 `ctx.pluginData.get(namespace,key)` / `list(namespace)` 读自己的数据；RPC 用绑定了当前会话和插件的 `ctx.store`。不要去读别的插件的私有数据。
 

@@ -7,3 +7,7 @@
 
 - **`overlayPluginDataValue` takes the stored value.** Its new last parameter `base` (`{ exists: false }` or `{ exists: true, value }`) is the key's stored value, and it returns `{ hit, exists, value? }`; `overlayPluginDataRows` takes optional stored `baseRows` as a fourth parameter. Composite tools that merge local proposals read the store first. See `docs/reference/tools.md`.
 - **A write into a declared dataset namespace is validated.** A plain `ctx.pluginData.set` or `plugin.data` into a dataset whose `ops` exclude `set` is refused, and every written value must match the dataset schema.
+
+### Fixed
+
+- **An asynchronous JSON Schema no longer passes every value.** A schema with `$async: true` (a runtime input or output schema, an export schema or a dataset record schema) used to read its validator's Promise as success. Such a schema is now treated like one that does not compile: a dataset write is rejected with `code: "dataset-violation"`, and other checks fail instead of passing.

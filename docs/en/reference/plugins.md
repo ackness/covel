@@ -1116,6 +1116,7 @@ At commit, every proposal a plugin writes into a dataset namespace it declares i
 - **Record schema.** The written value (for `plugin.data.update`, the result after the operations) must satisfy `schema`.
 - A violation rejects the proposal with `code: "dataset-violation"`, under the commit-unit rules. When the host did not capture the schema document, every write is refused instead of let through.
 - `key` is not checked at commit.
+- Writes outside the commit pipeline skip these checks: world data import and sync (validated against the source's `schema`, see [World Data · Companion plugin data](./world-data.md#companion-plugin-data)), `context.store.setPluginData` in a plugin action RPC, and the management API `PUT`.
 
 See [Transactions · Operation-based writes](./transactions.md#operation-based-writes-plugindataupdate).
 

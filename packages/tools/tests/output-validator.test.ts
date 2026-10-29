@@ -118,6 +118,21 @@ describe("validateOutput", () => {
     expect(validateOutput({ second: true }, second)).toEqual({ valid: true });
   });
 
+  it("throws for an asynchronous schema instead of reading its Promise as success", () => {
+    for (const schema of [
+      { $async: true, type: "number" },
+      {
+        $schema: "https://json-schema.org/draft/2020-12/schema",
+        $async: true,
+        type: "number",
+      },
+    ]) {
+      expect(() => validateOutput("not a number", schema)).toThrow(
+        "asynchronous schemas ($async) are not supported",
+      );
+    }
+  });
+
   it("should accept any object for empty object schema", () => {
     const schema = { type: "object" };
     const output = { anything: "goes", nested: { value: 42 } };
