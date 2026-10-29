@@ -1,6 +1,7 @@
 import * as api from "@/services/api.js";
 import { ApiError } from "@/services/api/request.js";
 import type { SessionWorkspace } from "@/services/data-service.js";
+import { interactionActionKind, type JsonValue } from "@covel/shared";
 import type { SessionActions } from "./context.js";
 import {
   enrichGameStateFromSnapshot,
@@ -15,6 +16,7 @@ import type {
   InteractionSubmitResult,
   SessionDispatch,
   SessionState,
+  StreamMessage,
 } from "./types.js";
 import { canRunSessionAction } from "./selectors.js";
 import {
@@ -54,7 +56,22 @@ function readFormIssues(
 }
 
 /**
- * Sends the answer as one `submit_interaction` action: the server stores it
+ * The action kind the interaction in block `blockId` declares, read from its
+ * block data; `undefined` when the block is not loaded or declares none.
+ */
+function declaredActionKind(
+  messages: readonly StreamMessage[],
+  blockId: string,
+): unknown {
+  const block = messages.find((message) => message.id === blockId)?.block;
+  if (!block) return undefined;
+  const data = (block.data ?? block) as Record<string, unknown>;
+  return data.actionKind;
+}
+
+/**
+ * Sends the answer as one `submit_actions` action whose action answers the
+ * interaction: the server stores it
  * and runs the follow-up turn on the same stream, so there is no moment where
  * the answer is stored and its turn was never asked for.
  *
@@ -139,10 +156,18 @@ export async function submitInteractionBlock(
           {
             requestId: owner.requestId,
             sessionId: sid,
-            type: "submit_interaction",
+            type: "submit_actions",
             payload: {
-              turnId,
-              submissions: [{ interactionId, type, values }],
+              actions: [
+                {
+                  kind: interactionActionKind(
+                    type,
+                    declaredActionKind(deps.stateRef.current.messages, blockId),
+                  ),
+                  interaction: { turnId, interactionId, type },
+                  fields: values as Record<string, JsonValue>,
+                },
+              ],
             },
           },
           onEvent,

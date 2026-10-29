@@ -254,6 +254,7 @@ async function executeTurnImpl(
       },
       {
         playerMessage: input.playerMessage,
+        actions: input.actions ?? [],
         activeRuntimes: activeRuntimes.map((r) => r.name),
       },
     );

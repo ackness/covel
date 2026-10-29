@@ -152,15 +152,15 @@ This lets stage animations react while the narrative is still being generated, a
 
 ### Execution lifecycle events
 
-| Event type              | Dir. | Description                                                                                                            | Payload                                                                                                                 |
-| ----------------------- | ---- | ---------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
-| `execution.started`     | S→C  | A turn execution starts                                                                                                | `{ runtimeCount }`                                                                                                      |
-| `interaction.submitted` | S→C  | The answer to `submit_interaction` is saved and the next turn has started. Sent before that turn's `execution.started` | `{ interactionTurnId, results: [{ submissionId, interactionId, values, filledNarrative }], message?: { id, content } }` |
-| `runtime.started`       | S→C  | One runtime starts                                                                                                     | `{ runtimeId, pluginId, kind, turnId, runId, label, stage? }`                                                           |
-| `runtime.deferred`      | S→C  | A staged runtime was committed with the original turn and moved to the background                                      | `{ runtimeId, pluginId, jobId, sourceTurnId }`                                                                          |
-| `runtime.completed`     | S→C  | One runtime completes                                                                                                  | `{ runtimeId, pluginId, turnId, runId, status, durationMs, stopReason? }`                                               |
-| `runtime.failed`        | S→C  | One runtime fails                                                                                                      | `{ runtimeId, pluginId, turnId, runId, status, durationMs, error, errorKind?, failureTarget?, stopReason? }`            |
-| `execution.completed`   | S→C  | The final state of a turn execution                                                                                    | `{ runtimeCount, resultCount, durationMs, committed, error?, abortReason?, resync? }`, each field explained below       |
+| Event type              | Dir. | Description                                                                                                                    | Payload                                                                                                                 |
+| ----------------------- | ---- | ------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------- |
+| `execution.started`     | S→C  | A turn execution starts                                                                                                        | `{ runtimeCount }`                                                                                                      |
+| `interaction.submitted` | S→C  | The interaction answer in `submit_actions` is saved and the next turn has started. Sent before that turn's `execution.started` | `{ interactionTurnId, results: [{ submissionId, interactionId, values, filledNarrative }], message?: { id, content } }` |
+| `runtime.started`       | S→C  | One runtime starts                                                                                                             | `{ runtimeId, pluginId, kind, turnId, runId, label, stage? }`                                                           |
+| `runtime.deferred`      | S→C  | A staged runtime was committed with the original turn and moved to the background                                              | `{ runtimeId, pluginId, jobId, sourceTurnId }`                                                                          |
+| `runtime.completed`     | S→C  | One runtime completes                                                                                                          | `{ runtimeId, pluginId, turnId, runId, status, durationMs, stopReason? }`                                               |
+| `runtime.failed`        | S→C  | One runtime fails                                                                                                              | `{ runtimeId, pluginId, turnId, runId, status, durationMs, error, errorKind?, failureTarget?, stopReason? }`            |
+| `execution.completed`   | S→C  | The final state of a turn execution                                                                                            | `{ runtimeCount, resultCount, durationMs, committed, error?, abortReason?, resync? }`, each field explained below       |
 
 `runtime.started.stage` records the runtime's stage for that execution: `setup`, `pre-turn`, `narrative`, `post-turn` or `audit`. Event/manual runtimes without a stage omit it. Persisted traces retain it, and clients restore it from live events and historical traces onto the same execution step; later terminal events do not clear the stage. A group with a `stage: "setup"` step keeps a neutral "Opening setup" summary without per-task retries, even after the session enters `playing` or the page reloads. Do not infer a historical execution's stage from the current session phase or a plugin name.
 
@@ -854,14 +854,13 @@ The `type` values `/api/actions` accepts form a closed set, defined by `actionRe
 
 | Command          | Method | Endpoint                                       | Response                  |
 | ---------------- | ------ | ---------------------------------------------- | ------------------------- |
-| `turn.submit`    | POST   | `/api/actions` `type: "send_message"`          | SSE: ProtocolEvent stream |
-| `turn.cmd`       | POST   | `/api/actions` `type: "execute_command"`       | SSE: ProtocolEvent stream |
+| `turn.submit`    | POST   | `/api/actions` `type: "submit_actions"`        | SSE: ProtocolEvent stream |
 | `turn.start`     | POST   | `/api/actions` `type: "start_session"`         | SSE: ProtocolEvent stream |
 | `turn.retry`     | POST   | `/api/actions` `type: "retry_turn"`            | SSE: ProtocolEvent stream |
 | `runtime.retry`  | POST   | `/api/actions` `type: "retry_runtime"`         | SSE: ProtocolEvent stream |
 | `runtimes.retry` | POST   | `/api/actions` `type: "retry_failed_runtimes"` | SSE: ProtocolEvent stream |
 
-Add `submit_interaction` from [Interaction responses](#interaction-responses) and there are seven in total. Any other value returns 400 `Unsupported action type`. To emit an event from a plugin, use the built-in `emit-event` tool.
+There are five in total. The player's speech, acts, slash commands and [interaction responses](#interaction-responses) are all actions of `submit_actions`; see [api.md § submit_actions](./api.md#submit_actions). Any other value returns 400 `Unsupported action type`, including the removed `send_message`, `execute_command`, and `submit_interaction`. To emit an event from a plugin, use the built-in `emit-event` tool.
 
 Each frame in the stream is wrapped in a `SseEnvelope`. See "4. SSE envelope format" below.
 
@@ -871,12 +870,13 @@ It requires the session to already have a non-empty `activePlugins` (chosen when
 
 **`retry_turn`**
 
-- A normal request's payload is empty. It uses an empty player input and the current committed context to start a new main-loop turn. After the submission succeeds, the player's turn count goes up by one.
+- A normal request's payload is empty. It uses the current committed context to start a new main-loop turn, without player input. After the submission succeeds, the player's turn count goes up by one.
+- When it recovers a player turn that answered an interaction, it runs again from the actions that turn recorded in `turn.started`; the answer is not submitted again.
 - It does not resume or regenerate historical turns.
 
 **Recovering an unfinished turn**
 
-- Each of the six actions in the table above can add `payload.recoverFromTurnId`. It must match the original action description the server returns.
+- Each of the five actions in the table above can add `payload.recoverFromTurnId`. It must match the original action description the server returns.
 - The client reads read-only state from `GET /api/sessions/:id/execution`. Refreshing the page does not resubmit the action. The new requestId is sent only after the player explicitly clicks retry.
 - Recovery polls every 3 seconds after success. Failures wait 3, 6, 12, and 24 seconds, then at most once every 30 seconds; success resets the delay. Status requests do not add HTTP retries. Polling pauses while hidden and checks immediately on becoming visible, without overlapping reads for the same observation.
 - The server checks the source turn inside the session lock. An opening recovery keeps the source of the continuation, and does not increase the player's turn count.
@@ -911,7 +911,7 @@ It requires the session to already have a non-empty `activePlugins` (chosen when
 
 **`payload.inputMessageId`**
 
-`send_message` and `execute_command` can provide it. The flow is: the browser saves the player's input first, then sends its ID along with the action.
+`submit_actions` can provide it. The flow is: the browser saves the player's input first, then sends its ID along with the action.
 
 | Case                                                                                             | Result                                                                                                               |
 | ------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------- |
@@ -928,18 +928,18 @@ It requires the session to already have a non-empty `activePlugins` (chosen when
 
 **The difference between a chat turn and a plugin call**
 
-- Natural language from the player goes through `send_message` on `/api/actions`. It triggers the main flow that writes the story.
+- Natural language from the player goes through `submit_actions` (one `say` action) on `/api/actions`. It triggers the main flow that writes the story.
 - The input box first matches slash commands against the session command catalog returned by `GET /api/sessions/:id/plugins`.
   - A known command goes through `/api/sessions/:id/plugin-rpc` as `{ kind: "command", commandId, input }`. It does not go through the main story-writing flow.
-  - An unknown command follows the input box's existing rules (during normal idle submission, it uses `execute_command`).
+  - An unknown command follows the input box's existing rules (during normal idle submission, it is sent as a `command` action).
 - A plugin UI button that declares a command uses JSON-RENDER's `invokeCommand`. It goes through `/api/sessions/:id/plugin-rpc` as `{ kind: "command", commandId, args }`. It does not go through the main story-writing flow. It shares argument validation, context, approval, handler, and trace with input-box commands.
 - Other custom UI actions use `invokePluginAction`.
 
 ### Interaction responses
 
-| Command        | Method | Endpoint       | Response                                                                                                      |
-| -------------- | ------ | -------------- | ------------------------------------------------------------------------------------------------------------- |
-| `input.submit` | POST   | `/api/actions` | SSE stream for `type: "submit_interaction"`: `interaction.submitted`, followed by the events of the next turn |
+| Command        | Method | Endpoint       | Response                                                                                                                                     |
+| -------------- | ------ | -------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| `input.submit` | POST   | `/api/actions` | SSE stream for `type: "submit_actions"` (actions that carry `interaction`): `interaction.submitted`, followed by the events of the next turn |
 
 Saving the answer and starting the next turn is one operation: the same session lock and the same transaction. See [api.md § Player interactions](./api.md#player-interaction).
 
@@ -1043,7 +1043,7 @@ Internal approval keys cannot name ordinary actions; such requests are rejected.
 
 The client shows the approval one stage at a time, and retries the original request. When the same request asks again for the same `(pluginId, action)` authorization, the client stops, and it rejects approval answers that cross sessions.
 
-A batch of answers in `submit_interaction` can involve several source plugins, and there is no limit on the number of stages. Only when the server-code authorization for every source is complete are the answers validated and saved atomically.
+A batch of answers in one `submit_actions` can involve several source plugins, and there is no limit on the number of stages. Only when the server-code authorization for every source is complete are the answers validated and saved atomically.
 
 **Framework default actions:** see the "Framework default actions" section in [api.md](./api.md#post-apisessionsidplugin-rpc).
 

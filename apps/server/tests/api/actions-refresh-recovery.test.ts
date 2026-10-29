@@ -86,7 +86,7 @@ async function fixture() {
   });
   app.route("/api/actions", actionRoutes);
   app.route("/api/sessions", turnControlRoutes);
-  const post = (payload: Record<string, unknown>, type = "send_message") =>
+  const post = (payload: Record<string, unknown>, type = "submit_actions") =>
     app.request("/api/actions", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -105,7 +105,9 @@ async function fixture() {
 describe("refreshing a foreground action", () => {
   it("keeps the original model request alive after the SSE reader is cancelled", async () => {
     const f = await fixture();
-    const response = await f.post({ content: "Open the door" });
+    const response = await f.post({
+      actions: [{ kind: "say", text: "Open the door" }],
+    });
     expect(response.status).toBe(200);
     const reader = response.body!.getReader();
     const first = await reader.read();
@@ -184,7 +186,9 @@ describe("refreshing a foreground action", () => {
       await snapshotFinish.promise;
       return save(snapshot);
     };
-    const response = await f.post({ content: "Open the door" });
+    const response = await f.post({
+      actions: [{ kind: "say", text: "Open the door" }],
+    });
     const body = response.text();
     await f.started.promise;
     f.finish.release();
@@ -214,20 +218,23 @@ describe("refreshing a foreground action", () => {
       createdAt: "2026-01-01T00:00:00.000Z",
       payload: {
         recoveryAction: {
-          type: "send_message",
-          payload: { content: "Open the door", inputMessageId: input.id },
+          type: "submit_actions",
+          payload: {
+            actions: [{ kind: "say", text: "Open the door" }],
+            inputMessageId: input.id,
+          },
         },
       },
     });
     const first = await f.post({
-      content: "Open the door",
+      actions: [{ kind: "say", text: "Open the door" }],
       inputMessageId: input.id,
       recoverFromTurnId: "old-turn",
     });
     const firstBody = first.text();
     await f.started.promise;
     const second = await f.post({
-      content: "Open the door",
+      actions: [{ kind: "say", text: "Open the door" }],
       inputMessageId: input.id,
       recoverFromTurnId: "old-turn",
     });
@@ -240,7 +247,22 @@ describe("refreshing a foreground action", () => {
       (await f.store.listMessages(f.sessionId)).filter(
         (message) => message.role === "user",
       ),
-    ).toEqual([{ ...input, metadata: { turnId: expect.any(String) } }]);
+    ).toEqual([
+      {
+        ...input,
+        metadata: {
+          turnId: expect.any(String),
+          actions: [
+            {
+              seatId: "main",
+              kind: "say",
+              text: "Open the door",
+              source: "player",
+            },
+          ],
+        },
+      },
+    ]);
     expect((await f.store.getSession(f.sessionId))?.completedPlayerTurns).toBe(
       1,
     );

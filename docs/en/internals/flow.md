@@ -15,7 +15,7 @@ Learn these four terms first. They are used all the way through this page:
 
 The player types "I go explore the swamp" and presses send. Then these things happen:
 
-1. **The frontend sends a request.** The browser sends the sentence to `POST /api/actions`. The connection stays open. The server keeps sending events down it one at a time (this is called SSE), and the frontend updates the screen a little with each event.
+1. **The frontend sends a request.** The browser sends the sentence as a `say` action to `POST /api/actions`. The connection stays open. The server keeps sending events down it one at a time (this is called SSE), and the frontend updates the screen a little with each event.
 2. **The server queues the request.** A session does only one thing at a time. Before the server locks the session, it waits for any background work from the previous turn to finish, if that work declared that the next turn must read its result.
 3. **The plugins for this turn are fixed.** The version of each plugin and the tools it provides are fixed when the turn starts, and they stay the same until the turn ends. If a plugin is hot-reloaded in the middle of a turn, the change takes effect only in the next turn.
 4. **The kernel picks the runtimes for this turn.** Each runtime declares when it runs: every turn, every few turns, when an event happens, or only when it is called by name. The kernel picks runtimes by these declarations.
@@ -140,7 +140,7 @@ A setup runtime reports "I am done" with one of three clear signals:
 - an agent outputs `preGameDone: true`;
 - a guard (the check function that runs before a runtime) returns `{ skip: true }`.
 
-The kernel records the result in `setupRuntimes`. The player can move setup forward by submitting a form or a message several times. For example, the form of `char-creator` is submitted through `submit_interaction`.
+The kernel records the result in `setupRuntimes`. The player can move setup forward by submitting a form or a message several times. For example, the form of `char-creator` is submitted as an action of `submit_actions`.
 
 Rules for failure:
 
@@ -469,6 +469,15 @@ Player input              Framework translation layer        What the LLM receiv
 ```
 
 The exact order of the prompt sections is in [Prompt structure](../reference/prompt-structure.md).
+
+**The player's input is first a list of actions.** The frontend sends `submit_actions`: a sentence is a `say` action, a slash command is `command`, and an answer to a form or a choice is an action that carries `interaction`. The server handles it in this order:
+
+1. **Check.** Each action is checked against the seat's role: the seat exists and a human controls it, the session has the action kind, the seat's role may use it, the acting character is bound to the seat, and the text and `fields` follow the kind's rules. If one fails, the whole submission is refused and nothing is saved.
+2. **Fill in.** A missing seat becomes the primary seat, a missing character the seat's current character, and `source` is set to `player`. An answering action goes through the interaction submission, which fills in its narrative text.
+3. **Render.** `renderActions` (`@covel/context`) writes the actions as the text the model reads. A single player's ordinary input stays as written; actions of several characters, a host or a plugin kind name the character and the kind, for example `[Aya · says] ...`.
+4. **Enter the turn.** The rendering is `TurnInput.playerMessage`, and the resolved actions are `TurnInput.actions`. Function runtimes read the actions from `ctx.playerActions`, and the `TurnStart` hook payload carries `actions`. The prompt history keeps the rendered text; the chat message keeps the raw text and `metadata.actions`.
+
+Fields and error codes are in [api.md § submit_actions](../reference/api.md#submit_actions).
 
 ### 3.2 Output direction: LLM → player
 
@@ -865,8 +874,8 @@ The example is the character creation form at the start. It covers everything fr
   │ │                                                                                       │  │
   │ │ Click submit → submitInteraction():                                                   │  │
   │ │   POST /api/actions                                                                   │  │
-  │ │     { type: "submit_interaction",                                                     │  │
-  │ │       payload: { turnId, submissions: [...] } }                                       │  │
+  │ │     { type: "submit_actions",                                                         │  │
+  │ │       payload: { actions: [{ interaction, fields }] } }                               │  │
   │ │                                                                                       │  │
   │ │   The server does all of this inside the session lock:                                │  │
   │ │   ├─ locate the interaction and source plugin; validate fields and cross-field rules  │  │
@@ -1097,7 +1106,7 @@ sequenceDiagram
     Note over Web: Render narrative (Prose) + form (Form)<br/>pluginData updates → right panel + message panel
 
     Player->>Web: Fill in and submit the character creation form
-    Web->>Server: POST /api/actions { type: 'submit_interaction', turnId, submissions }
+    Web->>Server: POST /api/actions { type: 'submit_actions', actions: [{ interaction, fields }] }
     Note over Server: Validate answers inside the session lock, one transaction saves them with turn.started
     Server-->>Web: SSE: interaction.submitted (stored values + filledNarrative player message)
 

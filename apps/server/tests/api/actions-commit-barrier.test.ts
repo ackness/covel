@@ -187,9 +187,9 @@ describe("POST /api/actions — turn commit barrier", () => {
       },
       body: JSON.stringify({
         requestId: "req-barrier",
-        type: "send_message",
+        type: "submit_actions",
         sessionId,
-        payload: { content: "hello" },
+        payload: { actions: [{ kind: "say", text: "hello" }] },
       }),
     });
     expect(res.status).toBe(200);
@@ -198,10 +198,17 @@ describe("POST /api/actions — turn commit barrier", () => {
 
   it.each([
     {
-      type: "send_message",
-      payload: { content: "My name is Player. Begin the adventure." },
+      type: "submit_actions",
+      payload: {
+        actions: [
+          { kind: "say", text: "My name is Player. Begin the adventure." },
+        ],
+      },
     },
-    { type: "execute_command", payload: { command: "/start adventure" } },
+    {
+      type: "submit_actions",
+      payload: { actions: [{ kind: "command", text: "/start adventure" }] },
+    },
   ])(
     "commits opening $type input once across the setup continuation",
     async (action) => {
@@ -209,7 +216,7 @@ describe("POST /api/actions — turn commit barrier", () => {
         phase: "setup",
         setupRuntimes: {},
       });
-      const content = action.payload.content ?? action.payload.command!;
+      const content = action.payload.actions[0]!.text;
       const input = {
         id: "browser-opening",
         sessionId: SESSION_ID,
@@ -238,7 +245,20 @@ describe("POST /api/actions — turn commit barrier", () => {
         (message) => message.role === "user",
       );
       expect(messages).toEqual([
-        { ...input, metadata: { turnId: expect.any(String) } },
+        {
+          ...input,
+          metadata: {
+            turnId: expect.any(String),
+            // The resolved actions: the primary seat, the server's source.
+            actions: [
+              {
+                ...action.payload.actions[0],
+                seatId: "main",
+                source: "player",
+              },
+            ],
+          },
+        },
       ]);
       const turns = await store.listTurnResults(SESSION_ID);
       expect(turns).toHaveLength(2);
@@ -266,8 +286,11 @@ describe("POST /api/actions — turn commit barrier", () => {
       body: JSON.stringify({
         requestId: "mismatch-request",
         sessionId: SESSION_ID,
-        type: "send_message",
-        payload: { content: "changed", inputMessageId: input.id },
+        type: "submit_actions",
+        payload: {
+          actions: [{ kind: "say", text: "changed" }],
+          inputMessageId: input.id,
+        },
       }),
     });
     const events = await drainActionStream(response);
@@ -487,9 +510,9 @@ describe("POST /api/actions — turn accounting follows the commit outcome", () 
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         requestId: "req-fail-commit",
-        type: "send_message",
+        type: "submit_actions",
         sessionId: SESSION_ID,
-        payload: { content: "hello" },
+        payload: { actions: [{ kind: "say", text: "hello" }] },
       }),
     });
     expect(res.status).toBe(200);
@@ -534,9 +557,9 @@ describe("POST /api/actions — turn accounting follows the commit outcome", () 
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         requestId: "req-fail-transaction",
-        type: "send_message",
+        type: "submit_actions",
         sessionId: SESSION_ID,
-        payload: { content: "hello again" },
+        payload: { actions: [{ kind: "say", text: "hello again" }] },
       }),
     });
     const genericFailureEnvelopes = await drainActionStream(

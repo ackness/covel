@@ -33,7 +33,8 @@ Covel 的服务器对外只有一套 HTTP JSON 接口。网页和桌面应用用
 | 建一局、列出、删除会话 | `POST` / `GET /api/sessions`，`DELETE /api/sessions/:id` | [会话管理](#会话管理) |
 | 开局、发消息、提交选择 | `POST /api/actions` | [Turn 执行](#turn-执行) |
 | 打断或引导正在跑的回合 | `POST /api/sessions/:id/abort`、`/steer` | 端点列表的“回合中控制（W4）” |
-| 回答回合里弹出的表单或选项 | `POST /api/actions`（`submit_interaction`） | [玩家交互](#玩家交互) |
+| 回答回合里弹出的表单或选项 | `POST /api/actions`（`submit_actions`） | [玩家交互](#玩家交互) |
+| 查一局能提交哪些行动 | `GET /api/sessions/:id/action-kinds` | [行动类型目录](#行动类型目录) |
 | 读聊天记录 | `GET /api/sessions/:id/messages` | [消息历史](#消息历史) |
 | 读状态表、角色 | `GET /api/sessions/:id/state`、`/characters` | [状态查询](#状态查询)、[角色数据](#角色数据) |
 | 给一局开关插件 | `PUT` / `DELETE /api/sessions/:id/plugins/:pluginId` | [会话插件管理](#会话插件管理) |
@@ -470,9 +471,9 @@ curl -N -X POST http://localhost:3001/api/actions \
   -H "Content-Type: application/json" \
   -d '{
     "requestId": "req-002",
-    "type": "send_message",
+    "type": "submit_actions",
     "sessionId": "<sessionId>",
-    "payload": { "content": "我环顾四周，观察这个陌生的世界" }
+    "payload": { "actions": [{ "kind": "say", "text": "我环顾四周，观察这个陌生的世界" }] }
   }'
 ```
 
@@ -496,30 +497,29 @@ curl -N -X POST http://localhost:3001/api/actions \
   -H "Content-Type: application/json" \
   -d '{
     "requestId": "req-003",
-    "type": "send_message",
+    "type": "submit_actions",
     "sessionId": "<sessionId>",
-    "payload": { "content": "走向远处的城镇" }
+    "payload": { "actions": [{ "kind": "say", "text": "走向远处的城镇" }] }
   }'
 ```
 
 ### 10. 提交玩家交互（如果 Turn 返回了 pendingInputs）
 
-回合有时会停下来等玩家回答，比如让你在几个选项里选一个。这时把答案作为 `submit_interaction` 提交。`turnId` 和 `interactionId` 来自上一条 SSE 流。
+回合有时会停下来等玩家回答，比如让你在几个选项里选一个。这时把答案作为 `submit_actions` 里的一个行动提交，`kind` 用交互声明的 `actionKind`；没有声明时，选项用 `say`，表单和确认框用 `act`。`turnId` 和 `interactionId` 来自上一条 SSE 流。
 
 ```bash
 curl -N -X POST http://localhost:3001/api/actions \
   -H "Content-Type: application/json" \
   -d '{
     "requestId": "req-004",
-    "type": "submit_interaction",
+    "type": "submit_actions",
     "sessionId": "<sessionId>",
     "payload": {
-      "turnId": "<turnId>",
-      "submissions": [
+      "actions": [
         {
-          "interactionId": "<interactionId>",
-          "type": "choice",
-          "values": { "selectedId": "option_1", "selectedLabel": "接受任务" }
+          "kind": "say",
+          "interaction": { "turnId": "<turnId>", "interactionId": "<interactionId>", "type": "choice" },
+          "fields": { "selectedId": "option_1", "selectedLabel": "接受任务" }
         }
       ]
     }
@@ -628,16 +628,17 @@ curl -X DELETE http://localhost:3001/api/sessions/<sessionId>
 
 ### 会话管理
 
-| 方法   | 路径                                     | 描述                                               |
-| ------ | ---------------------------------------- | -------------------------------------------------- |
-| GET    | `/api/sessions`                          | 列出所有会话（可选 `?worldId=` 过滤）              |
-| POST   | `/api/sessions`                          | 创建新会话                                         |
-| GET    | `/api/sessions/:id`                      | 获取会话信息                                       |
-| PATCH  | `/api/sessions/:id`                      | 更新会话字段（`status` / `runtimeModelOverrides`） |
-| DELETE | `/api/sessions/:id`                      | 删除会话                                           |
-| GET    | `/api/sessions/:id/memory-index`         | 记忆索引用的向量模型，以及它是否还是当前配置的模型 |
-| POST   | `/api/sessions/:id/memory-index/rebuild` | 用当前配置的向量模型重建记忆索引                   |
-| PATCH  | `/api/sessions/:id/seats/:seatId`        | 切换座位当前扮演的角色，见[会话座位](#会话座位)    |
+| 方法   | 路径                                     | 描述                                                  |
+| ------ | ---------------------------------------- | ----------------------------------------------------- |
+| GET    | `/api/sessions`                          | 列出所有会话（可选 `?worldId=` 过滤）                 |
+| POST   | `/api/sessions`                          | 创建新会话                                            |
+| GET    | `/api/sessions/:id`                      | 获取会话信息                                          |
+| PATCH  | `/api/sessions/:id`                      | 更新会话字段（`status` / `runtimeModelOverrides`）    |
+| DELETE | `/api/sessions/:id`                      | 删除会话                                              |
+| GET    | `/api/sessions/:id/memory-index`         | 记忆索引用的向量模型，以及它是否还是当前配置的模型    |
+| POST   | `/api/sessions/:id/memory-index/rebuild` | 用当前配置的向量模型重建记忆索引                      |
+| PATCH  | `/api/sessions/:id/seats/:seatId`        | 切换座位当前扮演的角色，见[会话座位](#会话座位)       |
+| GET    | `/api/sessions/:id/action-kinds`         | 这局能提交的行动类型，见[行动类型目录](#行动类型目录) |
 
 #### 会话身份 `incarnation`
 
@@ -848,7 +849,7 @@ curl -X DELETE http://localhost:3001/api/sessions/<sessionId>
 视图的 `submittedInteractions` 列出玩家已经回答过的交互，形状是 `{ turnId, interactionId, values }[]`。`values` 是服务端保存的值。
 
 - 只返回 `messages` 窗口内的消息所在回合的回答（按消息的 `turnId`，或表单块自己的 `meta.turnId`）。它的用途是给窗口里的表单块打标记。更早的表单随历史分页载入，按位置视为已回答。
-- 答案和它的后续回合在同一个 `submit_interaction` 请求里保存和开始。所以列在这里的交互一定已经有回合跟上。
+- 答案和它的后续回合在同一个 `submit_actions` 请求里保存和开始。所以列在这里的交互一定已经有回合跟上。
 - 客户端把对应消息里的表单标成已提交并回填，不再发送。
 - 刷新、换设备或在第二个标签页打开，看到的都和提交的那个浏览器一致。浏览器自己的缓存只在提交和下次恢复之间有效，以服务端记录为准。
 - 提交的响应丢失时，客户端从这里得知答案已经保存，并通过 `execution` 状态观察那个回合。
@@ -872,7 +873,7 @@ curl -X DELETE http://localhost:3001/api/sessions/<sessionId>
 | `startedAt`   | 可选                                                                                                                                                                                                                            |
 | `origin`      | 可选，`player` 或 `continuation`：这个前台动作属于玩家回合还是开场延续，重试按它决定怎样重跑。它不是执行来源：重跑 runtime（`retry_runtime`、`retry_failed_runtimes`）时，回合结果的 `origin` 是 `manual`，这里仍是它所在的流程 |
 | `abortReason` | 可选                                                                                                                                                                                                                            |
-| `retry`       | 可选，`{ type, payload }`，玩家显式重试时使用                                                                                                                                                                                   |
+| `retry`       | 可选，`{ type, payload }`，玩家显式重试时使用。`type` 是 `submit_actions`、`start_session`、`retry_turn`、`retry_runtime` 或 `retry_failed_runtimes`                                                                            |
 
 这个接口不会去等长回合的锁。PostgreSQL 下用非阻塞的 advisory lock 探测：
 
@@ -908,7 +909,7 @@ curl -X DELETE http://localhost:3001/api/sessions/<sessionId>
 - 玩家显式重试时，使用 `retry` 里的描述和一个新的 `requestId`，并在 payload 里加上 `recoverFromTurnId`。
 - 服务端在会话锁内再次核实源回合。重复点击，或原回合已经结束，都不会再执行一次。
 - 开场延续的重试保留 `origin: continuation`，不增加玩家回合数。
-- 新回合的 `turn.started` 只记录恢复所需的动作输入，不记录请求头和凭据。
+- 新回合的 `turn.started` 只记录恢复所需的动作输入，不记录请求头和凭据。玩家回合还记下解析后的行动和聊天消息的 ID（`playerInput`）；回答过交互的回合用 `retry_turn` 从它重跑。
 - 对于旧日志，只有同一请求的 traceId 能证明它是开场延续时，才提供无输入的重试；否则要求玩家重新输入。
 - 批量辅助任务的恢复使用 `retry_failed_runtimes`。中断之后必须按 `retry` 的描述恢复同一组目标。没有提交的成功任务不能算作已恢复，也不能用作上下文。
 
@@ -1017,6 +1018,54 @@ setup runtime 挂起等玩家回答时，这次尝试不占重试次数。挂起
 | 404    | `seat_not_found`         | 会话里没有这个座位                              |
 | 409    | `seat_not_human`         | 座位不是由人控制的（`controller` 不是 `human`） |
 | 409    | `seat_character_unbound` | 角色不存在，或者没有绑定在这个座位上            |
+
+### 行动类型目录
+
+玩家每次提交的是一组**行动**（见 [`submit_actions`](#submit_actions)）。这个端点列出一局能用的行动类型，以及每个座位现在能提交哪些。输入框按它显示可选的模式，服务端校验行动时用的也是同一份目录。
+
+| 方法 | 路径                             | 描述                       |
+| ---- | -------------------------------- | -------------------------- |
+| GET  | `/api/sessions/:id/action-kinds` | 这局的行动类型和各座位权限 |
+
+鉴权和其他会话端点一样（owner token）。响应：
+
+```json
+{
+  "kinds": [
+    {
+      "kind": "say",
+      "source": "framework",
+      "roles": ["player"],
+      "text": "required",
+      "actor": true,
+      "display": { "label": { "zh": "说", "en": "Say" } }
+    },
+    {
+      "kind": "whisper-pack/whisper",
+      "source": "plugin",
+      "pluginId": "whisper-pack",
+      "roles": ["player"],
+      "text": "optional",
+      "actor": true,
+      "display": { "label": { "zh": "耳语", "en": "Whisper" }, "icon": "ear" },
+      "fieldsSchema": { "type": "object", "required": ["target"] }
+    }
+  ],
+  "seats": [
+    {
+      "seatId": "main",
+      "role": "player",
+      "controller": "human",
+      "allowed": ["say", "act", "command", "whisper-pack/whisper"]
+    }
+  ]
+}
+```
+
+- `kinds` 先列六个基础类型（`say`、`act`、`narrate`、`direct`、`advance`、`command`），再按插件顺序列出这局可运行插件在 `contributes.actionKinds` 里声明的类型。插件类型的 `kind` 是 `<pluginId>/<name>`。
+- `text` 是文字规则：`required` 必须有文字，`optional` 可有可无，`none` 不能带文字。`actor` 表示这种行动是否以角色的身份进行。
+- `fieldsSchema` 是插件类型的 `fields` 要符合的 JSON Schema；没有它的类型不接受 `fields`。
+- `seats[].allowed` 是座位身份能提交的类型；没有人控制的座位（`controller` 不是 `human`）为空。身份和基础类型的对应见[座位](./world-model.md#座位)。
 
 ### 玩家交互
 
@@ -2746,7 +2795,7 @@ SSE。先发一个 `ready` 事件，之后每 15 秒发一行注释保持连接�
 - 同一个 stage 里，互不依赖的 runtime 并行执行；有依赖的按 `needs` / `after` / `inputs` 排序。
 - `session.completedPlayerTurns` 是已提交的正式玩家回合数。setup 阶段的执行会保存 `turn_results`，但不计入。`phase` 变成 `playing` 之后，第一个成功的玩家回合把它推进到 `1`。
 - 服务端用 `commitExecution` 在一个事务里提交顶层执行和递归子执行的结果、journal 与挂起。事务里对每个结果先规范化、再提交状态；事务提交之后才发布 SessionEvent。
-- runtime 的输出里有 `pendingInputs` 时，玩家的回答通过 `POST /api/actions` 的 `submit_interaction` 提交。同一个请求既保存回答，又运行读取它的回合。
+- runtime 的输出里有 `pendingInputs` 时，玩家的回答作为 `POST /api/actions` 的 `submit_actions` 里的行动提交。同一个请求既保存回答，又运行读取它的回合。
 - `schedule.detached` 只对通过安全检查的 `post-turn` / `audit` function 叶节点生效：
   - 它的上游结果、来源执行、模型和设置在原始回合里冻结；
   - 排队记录与原始回合在同一个事务里提交；
@@ -2865,36 +2914,39 @@ SSE。先发一个 `ready` 事件，之后每 15 秒发一行注释保持连接�
 
 ### 玩家交互
 
-回合执行后可能产生 `pendingInputs`，例如表单、选择题、确认框。玩家的回答通过 `submit_interaction` action 提交。
+回合执行后可能产生 `pendingInputs`，例如表单、选择题、确认框。玩家的回答是 [`submit_actions`](#submit_actions) 里带 `interaction` 的行动。
 
 **保存回答和开始后续回合是服务端的一次操作：**
 
 1. 在同一把会话锁内校验回答，并确认它还没有被回答过。
 2. 在一个事务里写入玩家输入和后续回合的 `turn.started`。
-3. 在同一条 SSE 流上运行这个回合。回答填成的自然语言就是这个回合的玩家消息。
+3. 在同一条 SSE 流上运行这个回合。回答填成的自然语言是这个行动的 `text`，按[渲染规则](#玩家消息怎么渲染)进入回合的玩家消息。
 
 所以不存在“回答已保存、回合没有开始”的中间状态。第二个标签页或一次重试也不会让回合再跑一遍。
 
 如果这个回合完成了最后一个 setup runtime，服务端会在同一条 SSE 流里，用新的 `turnId` 和独立的事务自动接着跑正式回合。也就是说，setup 完成和第一段正式叙事是两个回合。
 
-#### `POST /api/actions` (`submit_interaction`)
+#### `POST /api/actions`（回答交互）
 
-提交一个或多个玩家交互的回答，并运行读取它们的回合。请求头、SSE 帧格式和开场接力见 [`POST /api/actions`](#post-apiactions)。
+用 `submit_actions` 提交一个或多个玩家交互的回答，并运行读取它们的回合。请求头、SSE 帧格式和开场接力见 [`POST /api/actions`](#post-apiactions)，行动的通用规则见 [`submit_actions`](#submit_actions)。
 
 **请求体:**
 
 ```json
 {
   "requestId": "req-003",
-  "type": "submit_interaction",
+  "type": "submit_actions",
   "sessionId": "mistport-a1b2c3d4",
   "payload": {
-    "turnId": "a1b2c3d4-...",
-    "submissions": [
+    "actions": [
       {
-        "interactionId": "char-creation-form",
-        "type": "form",
-        "values": {
+        "kind": "act",
+        "interaction": {
+          "turnId": "a1b2c3d4-...",
+          "interactionId": "char-creation-form",
+          "type": "form"
+        },
+        "fields": {
           "name": "艾尔文",
           "class": "战士",
           "background": "孤儿出身的流浪剑客"
@@ -2905,31 +2957,35 @@ SSE。先发一个 `ready` 事件，之后每 15 秒发一行注释保持连接�
 }
 ```
 
-| 字段                  | 类型         | 必填 | 说明                          |
-| --------------------- | ------------ | ---- | ----------------------------- |
-| `type`                | string       | 是   | 固定为 `"submit_interaction"` |
-| `payload.turnId`      | string       | 是   | 产生该交互的 Turn ID          |
-| `payload.submissions` | Submission[] | 是   | 提交数组，1–20 项             |
+**回答交互的行动:**
 
-**Submission 对象:**
+| 字段                        | 类型                                       | 说明                                                                  |
+| --------------------------- | ------------------------------------------ | --------------------------------------------------------------------- |
+| `kind`                      | string                                     | 交互声明的 `actionKind`；没有声明时选项用 `say`，表单和确认框用 `act` |
+| `interaction.turnId`        | string                                     | 产生该交互的 Turn ID                                                  |
+| `interaction.interactionId` | string                                     | 交互 ID，来自 Turn 输出的 `pendingInputs`                             |
+| `interaction.type`          | `"form"` \| `"choice"` \| `"confirmation"` | 交互类型                                                              |
+| `fields`                    | object                                     | 玩家输入的值                                                          |
+| `seatId`、`actorId`         | string                                     | 可选，规则同其他行动                                                  |
 
-| 字段            | 类型                                       | 说明                                      |
-| --------------- | ------------------------------------------ | ----------------------------------------- |
-| `interactionId` | string                                     | 交互 ID，来自 Turn 输出的 `pendingInputs` |
-| `type`          | `"form"` \| `"choice"` \| `"confirmation"` | 交互类型                                  |
-| `values`        | object                                     | 玩家输入的值                              |
+- 回答不带 `text`：服务端用交互的叙事模板填出文字。
+- 一次提交里的所有回答必须属于同一个 `turnId`；可以和普通行动混在一起。
+- 回答按它的 `kind` 校验身份，所以旁观者不能回答表单（`action_kind_not_allowed`）。`kind` 必须是已提交的交互声明的类型（或它的默认类型），否则是 `invalid_action`。
+- 行动只接受上表的字段。来源插件、字段定义和模板只从已提交的交互里读取。
 
-Submission 里的其他键会被丢弃。来源插件、字段定义和模板只从已提交的交互里读取。
-
-**三种交互类型的 values 格式：**
+**三种交互类型的 fields 格式：**
 
 **表单 (form):** 每个字段名对应一个值
 
 ```json
 {
-  "interactionId": "create-character",
-  "type": "form",
-  "values": { "name": "艾尔文", "class": "法师" }
+  "kind": "act",
+  "interaction": {
+    "turnId": "t1",
+    "interactionId": "create-character",
+    "type": "form"
+  },
+  "fields": { "name": "艾尔文", "class": "法师" }
 }
 ```
 
@@ -2937,9 +2993,13 @@ Submission 里的其他键会被丢弃。来源插件、字段定义和模板只
 
 ```json
 {
-  "interactionId": "path-choice",
-  "type": "choice",
-  "values": { "selectedId": "forest_path", "selectedLabel": "穿越黑暗森林" }
+  "kind": "say",
+  "interaction": {
+    "turnId": "t1",
+    "interactionId": "path-choice",
+    "type": "choice"
+  },
+  "fields": { "selectedId": "forest_path", "selectedLabel": "穿越黑暗森林" }
 }
 ```
 
@@ -2947,9 +3007,13 @@ Submission 里的其他键会被丢弃。来源插件、字段定义和模板只
 
 ```json
 {
-  "interactionId": "accept-quest",
-  "type": "confirmation",
-  "values": { "confirmed": true }
+  "kind": "act",
+  "interaction": {
+    "turnId": "t1",
+    "interactionId": "accept-quest",
+    "type": "confirmation"
+  },
+  "fields": { "confirmed": true }
 }
 ```
 
@@ -2974,11 +3038,11 @@ Submission 里的其他键会被丢弃。来源插件、字段定义和模板只
 }
 ```
 
-| 字段                | 说明                                                                                                           |
-| ------------------- | -------------------------------------------------------------------------------------------------------------- |
-| `interactionTurnId` | 产生该交互的回合。信封上的 `turnId` 是后续回合                                                                 |
-| `results[].values`  | 服务端保存的值。客户端用它回填表单，而不是用玩家键入的文字                                                     |
-| `message`           | 后续回合的玩家消息：`id` 是保存的 `turn_messages` 行的 ID，`content` 是各 `filledNarrative` 用换行连起来的文字 |
+| 字段                | 说明                                                                                                                                 |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| `interactionTurnId` | 产生该交互的回合。信封上的 `turnId` 是后续回合                                                                                       |
+| `results[].values`  | 服务端保存的值。客户端用它回填表单，而不是用玩家键入的文字                                                                           |
+| `message`           | 后续回合的玩家消息：`id` 是保存的聊天消息的 ID，`content` 是这次提交各行动的文字用换行连起来（回答的文字就是它的 `filledNarrative`） |
 
 - `results[].values` 已经规范化：数字和布尔按字段类型转换，`selectedLabel` 取自原来的 option。
 - 交互声明了 `submitBehavior.echoFilledNarrative: false` 时，它的叙事不计入 `message`。全部不计入时没有 `message`，回合不带玩家消息运行。
@@ -3005,7 +3069,7 @@ Submission 里的其他键会被丢弃。来源插件、字段定义和模板只
 `form_rejected`：
 
 - 校验的内容：必填、数字、范围、步长、选项、文本长度，以及来源插件的表单校验器。
-- 文本长度与 `send_message.content` 用同一个上限：100 000 个字符（`MAX_PLAYER_MESSAGE_CHARS`）。
+- 文本长度与一次提交的行动文字总长用同一个上限：100 000 个字符（`MAX_PLAYER_MESSAGE_CHARS`）。
   - 单个 `text` / `textarea` 字段超过时，按字段拒绝。
   - 各字段填成的整段玩家消息超过时，作为整张表单的错误拒绝。原因是这段文字就是后续回合的玩家消息，回合失败后的重试也把它当作一条消息发送。
 - `message` 是按会话 locale 写给玩家的文字，用字段的 `label` 指出哪一项、该怎么改。
@@ -3046,7 +3110,7 @@ Submission 里的其他键会被丢弃。来源插件、字段定义和模板只
 **连接中断:** 回合一旦开始，就在服务端运行到提交，与这条连接无关。
 
 - 响应丢失的客户端不知道回答有没有保存，所以不重发。它轮询 `GET /api/sessions/:id/execution`，并从聚合视图的 `submittedInteractions` 把表单标成已提交。
-- 后续回合失败时，`execution.retry` 给出的是 `send_message`（内容为那条玩家消息），没有玩家消息时是 `retry_turn`。重试不会再次提交回答。
+- 后续回合失败时，`execution.retry` 给出的是 `retry_turn`。服务端从这个回合在 `turn.started` 里记下的行动重新运行它，不会再次提交回答。
 
 **使用说明:**
 
@@ -4114,7 +4178,7 @@ runtime 报告失败时，它的原始错误保留在 `result.runtimeResults` �
 | ---- | ---- | ------- |
 | `id` | 路径 | 会话 ID |
 
-**响应:** `{ items }`。每项是一条扁平的消息对象：存储里 `metadata` 下的 `turnId`、`runtimeId`、`kind`、`block` 被提到了顶层。
+**响应:** `{ items }`。每项是一条扁平的消息对象：存储里 `metadata` 下的 `turnId`、`runtimeId`、`kind`、`block` 被提到了顶层。玩家消息还带 `actions`：这条消息提交的解析后行动（见 [`submit_actions`](#submit_actions)）。
 
 ```json
 {
@@ -4952,17 +5016,17 @@ id: example-epoch:2
 
 #### `POST /api/actions`
 
-玩家的每一个游戏动作都从这里进来：发消息、执行命令、回答交互、开局、重试。服务端把动作变成一次回合执行，用 SSE 把结果一段一段地返回。内置前端主要用的就是这个端点。
+玩家的每一个游戏动作都从这里进来：说话、行动、执行命令、回答交互、开局、重试。服务端把动作变成一次回合执行，用 SSE 把结果一段一段地返回。内置前端主要用的就是这个端点。
 
 **请求**
 
 ```json
 {
   "requestId": "req-001",
-  "type": "send_message",
+  "type": "submit_actions",
   "sessionId": "mistport-a1b2c3d4",
   "payload": {
-    "content": "我拔出剑，准备迎战"
+    "actions": [{ "kind": "say", "text": "我拔出剑，准备迎战" }]
   }
 }
 ```
@@ -4980,33 +5044,34 @@ id: example-epoch:2
 校验规则：
 
 - 顶层只接受上面五个字段。每种动作的 `payload` 也拒绝没有声明的字段。
-- 支持的 `type` 共七种：`send_message`、`execute_command`、`submit_interaction`、`start_session`、`retry_turn`、`retry_runtime`、`retry_failed_runtimes`。没列出的 `type` 一律返回 `400`。
-- 七种请求都必须带与 `type` 对应的 `payload`，即使它是空对象。
+- 支持的 `type` 共五种：`submit_actions`、`start_session`、`retry_turn`、`retry_runtime`、`retry_failed_runtimes`。没列出的 `type` 一律返回 `400`，包括已经删除的 `send_message`、`execute_command` 和 `submit_interaction`。
+- 五种请求都必须带与 `type` 对应的 `payload`，即使它是空对象。
 - 请求不能带 `locale`。回合一律使用会话创建时确定的内容语言（`session.locale`），带 `locale` 的请求会被拒绝。
 - `requestId`、`sessionId` 和 runtime / 回合 ID 必须是长度有限的安全标识符。
 - 不合法的请求在创建回合或写入消息之前就返回 `400`。
 
 各 `type` 的 `payload`：
 
-| `payload` 字段          | 适用 `type`             | 必填 | 说明                                            |
-| ----------------------- | ----------------------- | ---- | ----------------------------------------------- |
-| `content`               | `send_message`          | 是   | 玩家的自然语言输入                              |
-| `command`               | `execute_command`       | 是   | 以 `/` 开头的命令（如 `/look`）                 |
-| `turnId`, `submissions` | `submit_interaction`    | 是   | 回答某个回合提出的交互，见[玩家交互](#玩家交互) |
-| `loreOverride`          | `start_session`         | 否   | 覆盖世界背景的文本，最多 500000 字符            |
-| —                       | `retry_turn`            | —    | `payload` 为空对象                              |
-| `runtimeId`             | `retry_runtime`         | 是   | 只重跑这一个 runtime                            |
-| `retryFromTurnId`       | `retry_runtime`         | 否   | 指明要修复的是哪个回合里的失败                  |
-| `runtimeIds`            | `retry_failed_runtimes` | 是   | 1–20 个不重复的、已启用的 runtime ID            |
-| `retryFromTurnId`       | `retry_failed_runtimes` | 是   | 这些 runtime 失败时所在的、已提交的原回合       |
+| `payload` 字段    | 适用 `type`             | 必填 | 说明                                                 |
+| ----------------- | ----------------------- | ---- | ---------------------------------------------------- |
+| `actions`         | `submit_actions`        | 是   | 1–8 个行动，见 [`submit_actions`](#submit_actions)   |
+| `inputMessageId`  | `submit_actions`        | 否   | 浏览器先保存的玩家输入的 ID，见[协议](./protocol.md) |
+| `loreOverride`    | `start_session`         | 否   | 覆盖世界背景的文本，最多 500000 字符                 |
+| —                 | `retry_turn`            | —    | `payload` 为空对象                                   |
+| `runtimeId`       | `retry_runtime`         | 是   | 只重跑这一个 runtime                                 |
+| `retryFromTurnId` | `retry_runtime`         | 否   | 指明要修复的是哪个回合里的失败                       |
+| `runtimeIds`      | `retry_failed_runtimes` | 是   | 1–20 个不重复的、已启用的 runtime ID                 |
+| `retryFromTurnId` | `retry_failed_runtimes` | 是   | 这些 runtime 失败时所在的、已提交的原回合            |
 
 > [!NOTE]
-> 玩家输入只有两个字段名：`send_message` 用 `payload.content`，`execute_command` 用 `payload.command`，没有别名。插件里要发事件，请用内置的 `emit-event` 工具。
+> 玩家输入只走 `submit_actions`：发言是 `say`，斜杠命令是 `command`，回答交互是带 `interaction` 的行动。插件里要发事件，请用内置的 `emit-event` 工具。
 
 各类型的补充说明：
 
 - **`start_session` 的 `loreOverride`**：服务端把它保存在会话里。setup、开场接力和之后回合的 `world.lore` 都优先用它。空字符串表示明确清空；省略则保留会话里已经保存的值。Web 的准备页在创建会话时就传入背景，“开始冒险”不再发送世界草稿。
-- **`retry_turn`**：用空的玩家输入开始一个新的主循环回合，使用当前已提交的上下文。提交成功后玩家回合数加一。它不会恢复或重新生成历史回合。
+- **`retry_turn`**：开始一个新的主循环回合，使用当前已提交的上下文。提交成功后玩家回合数加一。它不会恢复或重新生成历史回合。
+  - 带 `recoverFromTurnId` 重试一个回答过交互的玩家回合时，服务端从那个回合在 `turn.started` 里记下的行动（`playerInput`）重新运行，回答不会再次提交。
+  - 其他情况下回合不带玩家输入。
 - **`retry_runtime`**：按手动触发的方式只重跑指定的 runtime，不推进玩家回合数。
   - 带 `retryFromTurnId` 时：这个回合必须是当前故事里已提交的原回合，而且目标 runtime 现在仍然是失败的。回合不存在时直接拒绝，不会改用别的回合。
   - 不带时：按普通的手动调用处理，使用最近一个已提交的玩家回合的结果（如果有）。
@@ -5081,16 +5146,86 @@ id: example-epoch:2
 - `plugin-plan.defaultPluginIds` 的计算规则与会话相同：`requires`、`conflicts`，以及用可信内置核心插件替换的规则。准备页照这个结果显示，不会把已经被替换掉的核心插件重新锁定。
 - 创建会话的接口不再读世界的插件策略。它只补上内置核心插件和 `requires` 关系，并处理 `conflicts`。
 
+##### `submit_actions`
+
+玩家一次提交的是一组**行动**。单人游戏通常只有一个：
+
+```json
+{ "kind": "say", "text": "我拔出剑，准备迎战" }
+```
+
+每个行动的字段：
+
+| 字段          | 类型   | 必填   | 说明                                                                      |
+| ------------- | ------ | ------ | ------------------------------------------------------------------------- |
+| `kind`        | string | 是     | 基础类型，或插件类型 `<pluginId>/<name>`，见[行动类型目录](#行动类型目录) |
+| `seatId`      | string | 否     | 从哪个座位提交。省略时是主座位（第一个由人控制的玩家座位）                |
+| `actorId`     | string | 否     | 以哪个角色的身份。省略时是座位的当前角色；不以角色进行的类型不能带        |
+| `text`        | string | 视类型 | 玩家写的内容                                                              |
+| `fields`      | object | 否     | 插件类型的结构化字段，或交互的回答                                        |
+| `interaction` | object | 否     | 回答哪个交互，见[玩家交互](#玩家交互)                                     |
+
+- 客户端不能发 `source`：服务端一律设为 `player`。
+- 一次最多 8 个行动，文字总长不超过 100 000 个字符。交互回答填出的文字也算在内：服务端在锁内填好回答后再查一次总长，超过时以 `invalid_action` 拒绝，什么都不保存。
+
+基础类型：
+
+<!-- prettier-ignore -->
+| `kind` | 含义 | 文字 | 以角色进行 |
+| --- | --- | --- | --- |
+| `say` | 以角色身份说话 | 必须有 | 是 |
+| `act` | 以角色身份行动 | 必须有 | 是 |
+| `narrate` | 直接写一段旁白 | 必须有 | 否 |
+| `direct` | 给叙述者的导演指示 | 必须有 | 否 |
+| `advance` | 不带文字，只让故事往前走 | 不能有 | 否 |
+| `command` | 斜杠命令，文字以 `/` 开头 | 必须有 | 否 |
+
+哪种身份能提交哪些基础类型见[座位](./world-model.md#座位)。
+
+**校验顺序。** 服务端按下面的顺序检查每个行动。第一个失败就拒绝整次提交，什么都不保存：不写消息、不写交互记录、不开始回合。流开始之前的失败是 JSON 响应；排队等锁期间会话变了，同样的检查在锁内再做一次，失败时是 `error.occurred`，`code` 相同。
+
+<!-- prettier-ignore -->
+| 顺序 | 检查 | 状态码 | `code` |
+| --- | --- | --- | --- |
+| 1 | 请求体符合 schema | 400 | `invalid_action_request` |
+| 2 | 座位存在（省略 `seatId` 时会话要有主座位） | 404 | `seat_not_found` |
+| 3 | 座位由人控制 | 409 | `seat_not_human` |
+| 4 | 这局的目录里有这个类型 | 409 | `unknown_action_kind` |
+| 5 | 座位身份能提交这个类型 | 409 | `action_kind_not_allowed` |
+| 6 | `actorId` 绑定在这个座位上；不以角色进行的类型不能带 | 409 | `actor_not_bound` |
+| 7 | 文字规则；回答交互时类型是交互声明的类型、不带文字；所有回答属于同一个回合 | 400 | `invalid_action` |
+| 8 | `fields` 符合插件类型的 schema；基础类型不接受 `fields`（回答交互除外） | 400 | `invalid_action_fields` |
+
+之后，回答交互的行动交给交互提交流程，它的错误码见[玩家交互](#玩家交互)。交互提交补好默认值、转换好数字之后，如果交互声明的是带 schema 的插件类型，存下来的回答还要符合这个 schema（表单不必重复插件类型的限制），否则以 `invalid_action_fields` 拒绝，什么都不保存。这一步在会话锁内进行，失败时是带这个 `code` 的 `error.occurred`。
+
+##### 玩家消息怎么渲染
+
+回合的 `TurnInput.playerMessage` 是内核从行动渲染出的文字，叙述者和读 `ctx.playerMessage` 的插件都读它：
+
+- **单人输入原样保留。** 所有行动来自同一个玩家座位，座位最多绑定一个角色，行动以当前角色（或不以角色）进行，并且都是不带 `fields` 的 `say`、`command`，或以 `say` / `act` 回答的交互时，渲染结果就是各行动的文字，用换行连起来。单人游戏的提示词因此和以前一字不差。
+- 以插件类型回答的交互不走这条路：它写成下面带类型名的格式，模型才知道这是哪种行动。
+- **其他情况标出角色和类型。** 每个行动写成 `【<角色名>·<类型名>】<文字>`（英文会话是 `[<角色名> · <类型名>] <文字>`）；不以角色进行时是 `【<类型名>】<文字>`。例如第二个角色说话是 `【Scout·说】等等我。`，主持人写旁白是 `【旁白】雨下起来了。`。
+- 基础类型的名称在框架提示词文件 [`prompts/server/action-labels.md`](../../prompts/server/action-labels.md) 里，按会话语言选；插件类型用它的 `display.label`。
+- 插件类型总会渲染，没有文字也一样：类型名说明玩家做了什么，`fields` 以 JSON 跟在文字后面。例如 `【Hero·让过】`、`【Hero·施法】{"spell":"light"}`。
+- 只写角色名，从不写 ID。基础类型和交互回答没有文字时（`advance`、不回显的交互回答）不渲染，所以只有 `advance` 的提交不追加玩家消息。
+
+**保存。** 玩家消息和回合一起提交：
+
+- prompt 历史（`turn_messages`）保存渲染后的文字，所以之后的回合看到谁做了什么。
+- 聊天消息的 `content` 保存原文（各行动的文字用换行连起来；没有任何文字时，例如只有一个不带文字的插件类型，保存渲染后的文字），`metadata.actions` 保存解析后的行动（某个行动的 `fields` 超过 4 KB 时省略它）。消息 API 把它作为 `actions` 返回，见[消息历史](#消息历史-1)。
+
+**重试。** 回合失败时，`execution.retry` 给出的是带着解析后行动（填好了 `seatId` 和 `actorId`）的 `submit_actions`；回答过交互的回合给出的是 `retry_turn`（见上）。
+
 ##### 开场接力（opening continuation）
 
 玩家提交完开局表单后，不用再手动发一条消息，开场叙事会自动出现。
 
-- **什么时候发生**：一次玩家动作（`send_message` / `execute_command` / `submit_interaction` / `start_session`）完成了**最后一个** setup runtime。setup 执行单独提交，`phase` 切换到 `playing`。
+- **什么时候发生**：一次玩家动作（`submit_actions` / `start_session`）完成了**最后一个** setup runtime。setup 执行单独提交，`phase` 切换到 `playing`。从记下的回答重跑这类回合的 `retry_turn` 也一样（例如服务端在保存最后一个开局回答后停止，之后恢复）。
 - **发生什么**：同一个请求在同一条 SSE 流上自动接着跑一个主循环回合。这个回合有全新的 `turnId` 和独立的事务，读取刚刚提交的 setup 状态，让叙事 runtime 写出开场。
 - **计数**：接力回合以 `origin: continuation` 执行，不增加 `completedPlayerTurns`。
 - **事件**：整条流仍然只发**一个** `execution.completed`，用的是接力回合的数据。
 - **不接力的情况**：
-  - 动作是 `retry_turn` / `retry_runtime` / `retry_failed_runtimes`；
+  - 动作是 `retry_runtime` / `retry_failed_runtimes`，或者不重跑玩家回答的 `retry_turn`（例如恢复开场接力本身）；
   - 执行被中止（`abortReason`）；
   - 提交失败；
   - setup 还有没完成的项（后面还有开局交互）。

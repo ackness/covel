@@ -185,7 +185,9 @@ describe("runtime contracts through an installed community package", () => {
           ).status,
         ).toBe(200);
       }
-      await action("send_message", { content: "Approach" });
+      await action("submit_actions", {
+        actions: [{ kind: "say", text: "Approach" }],
+      });
       const [source] = await store.listTurnResults(sessionId);
       expect(source?.commitStatus, JSON.stringify(source?.runtimeResults)).toBe(
         "committed",
@@ -243,7 +245,9 @@ describe("runtime contracts through an installed community package", () => {
       expect((await store.getSession(sessionId))?.completedPlayerTurns).toBe(1);
 
       mode = "prose";
-      await action("send_message", { content: "Wait" });
+      await action("submit_actions", {
+        actions: [{ kind: "say", text: "Wait" }],
+      });
       const latest = (await store.listTurnResults(sessionId)).at(-1)!;
       expect(latest.turnId).not.toBe(source!.turnId);
       expect(

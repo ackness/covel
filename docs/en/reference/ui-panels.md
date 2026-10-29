@@ -640,8 +640,8 @@ A form that appears during execution is temporarily disabled and becomes interac
 ```
 Player fills in the form → clicks the submit button
   → submitInteraction():
-    1. POST /api/actions (`submit_interaction`): in one operation, the server
-       saves the submission, fills in narrativeTemplate and starts the follow-up turn
+    1. POST /api/actions (`submit_actions`, an answering action): in one operation,
+       the server saves the answer, fills in narrativeTemplate and starts the follow-up turn
     2. SSE `interaction.submitted`: the form is marked as submitted; unless the interaction
        declares `submitBehavior.echoFilledNarrative: false`, the natural-language text is echoed
     3. On the same stream, the follow-up turns are handled by the relevant plugin, which reads

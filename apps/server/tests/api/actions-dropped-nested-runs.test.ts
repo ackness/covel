@@ -234,9 +234,9 @@ describe("POST /api/actions — runs dropped with a nested unit", () => {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         requestId: "req-dropped-nested",
-        type: "send_message",
+        type: "submit_actions",
         sessionId: SESSION_ID,
-        payload: { content: "go" },
+        payload: { actions: [{ kind: "say", text: "go" }] },
       }),
     });
     const events = (await res.text())

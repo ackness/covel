@@ -6,12 +6,18 @@ import { createRecoveryActionRequest } from "../execution-recovery-actions.js";
 describe("explicit recovery retries", () => {
   it.each([
     {
-      type: "send_message",
-      payload: { content: "Answer the captain", inputMessageId: "input-1" },
+      type: "submit_actions",
+      payload: {
+        actions: [{ kind: "say", text: "Answer the captain" }],
+        inputMessageId: "input-1",
+      },
     },
     {
-      type: "execute_command",
-      payload: { command: "/roll 1d6", inputMessageId: "input-2" },
+      type: "submit_actions",
+      payload: {
+        actions: [{ kind: "command", text: "/roll 1d6" }],
+        inputMessageId: "input-2",
+      },
     },
     { type: "retry_turn", payload: {} },
     { type: "start_session", payload: {} },

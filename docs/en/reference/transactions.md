@@ -463,7 +463,7 @@ The second argument of `extraInTx` gives the dropped runtimes. The main turn use
 
 **Interaction answers and follow-up turns.**
 
-- The `submit_interaction` action validates the answer inside the turn's session lock, and confirms that it has not been answered before. Then one store transaction writes the batched player input and the `turn.started` of the follow-up turn.
+- An answering action of `submit_actions` is validated inside the turn's session lock, and confirms that it has not been answered before. Then one store transaction writes the batched player input and the `turn.started` of the follow-up turn.
 - So saving the answer and starting the turn succeed or fail together. A duplicate submission sees the existing answer inside the lock and is rejected. A state where "the answer is saved but the turn did not start" cannot happen.
 - The turn's own result is still committed by `finalizeExecution`. If it fails, the answer is kept, and the turn runs again through the existing retry.
 

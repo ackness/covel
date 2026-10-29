@@ -194,14 +194,17 @@ async function harness(options: {
       return post("/api/actions", {
         requestId: crypto.randomUUID(),
         sessionId,
-        type: "submit_interaction",
+        type: "submit_actions",
         payload: {
-          turnId: target.turnId,
-          submissions: [
+          actions: [
             {
-              interactionId: target.form.interactionId,
-              type: "form",
-              values,
+              kind: "act",
+              interaction: {
+                turnId: target.turnId,
+                interactionId: target.form.interactionId,
+                type: "form",
+              },
+              fields: values,
             },
           ],
         },

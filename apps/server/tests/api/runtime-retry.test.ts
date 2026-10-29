@@ -14,8 +14,11 @@ describe("committed runtime recovery projection", () => {
       error: "retry source turn was not found",
     },
     {
-      type: "send_message",
-      payload: { content: "Continue", recoverFromTurnId: "missing" },
+      type: "submit_actions",
+      payload: {
+        actions: [{ kind: "say", text: "Continue" }],
+        recoverFromTurnId: "missing",
+      },
       error: "no longer available for recovery",
     },
   ])(

@@ -843,7 +843,7 @@ describe("POST /api/sessions/:id/plugin-rpc", () => {
   });
 
   it("has no framework action that stores a form answer without its turn", async () => {
-    // Answers go through the `submit_interaction` action, which stores them
+    // Answers go through the `submit_actions` action, which stores them
     // and runs the follow-up turn as one step.
     const res = await app.request("/api/sessions/sess-rpc-1/plugin-rpc", {
       method: "POST",
@@ -1750,7 +1750,7 @@ describe("POST /api/sessions/:id/plugin-rpc — runtime mode (M8b)", () => {
       text: "Accepted branch text.",
     });
 
-    // Advance to the playing band so send_message schedules the main-loop
+    // Advance to the playing band so submit_actions schedules the main-loop
     // narrator (stage narrative).
     await store.updateSession(session.id, {
       phase: "playing",
@@ -1763,9 +1763,9 @@ describe("POST /api/sessions/:id/plugin-rpc — runtime mode (M8b)", () => {
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
         requestId: "req-branch-next",
-        type: "send_message",
+        type: "submit_actions",
         sessionId: session.id,
-        payload: { content: "Continue from there." },
+        payload: { actions: [{ kind: "say", text: "Continue from there." }] },
       }),
     });
     expect(nextTurn.status).toBe(200);

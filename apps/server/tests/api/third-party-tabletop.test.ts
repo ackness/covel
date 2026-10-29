@@ -472,7 +472,9 @@ export default async function (ctx) {
       } else {
         // Late enable during play: rules initialize, the player is untouched
         // and no form is re-asked.
-        await action("send_message", { content: "Continue" });
+        await action("submit_actions", {
+          actions: [{ kind: "say", text: "Continue" }],
+        });
         expect(await store.listCharacters(sessionId)).toEqual(before);
       }
       expect(
@@ -625,8 +627,8 @@ export default async function (ctx) {
       }),
     ]);
     expect((await store.getSession(sessionId))?.phase).toBe("playing");
-    const ordinary = await action("send_message", {
-      content: "Inspect the tide",
+    const ordinary = await action("submit_actions", {
+      actions: [{ kind: "say", text: "Inspect the tide" }],
     });
     expect(
       (await store.listTurnMessages(sessionId)).filter(
@@ -645,7 +647,7 @@ export default async function (ctx) {
     expect(opened.status, await opened.text()).toBe(200);
     const check = await latestForm();
     const resolved = await action(
-      "submit_interaction",
+      "submit_actions",
       formSubmissionAction(sessionId, check, {
         action: "Read the tide",
         attribute: "tideReading",
@@ -816,7 +818,7 @@ export default async function (ctx) {
     });
 
     const settled = await action(
-      "submit_interaction",
+      "submit_actions",
       formSubmissionAction(sessionId, check, {
         action: "Check the receiver wiring for a loose connection",
         attribute: "tideReading",
@@ -849,8 +851,8 @@ export default async function (ctx) {
 
     emit = true;
     expectTabletopReceipt = false;
-    const ordinary = await action("send_message", {
-      content: "Inspect the receiver again",
+    const ordinary = await action("submit_actions", {
+      actions: [{ kind: "say", text: "Inspect the receiver again" }],
     });
     expect(ordinary.runtimeResults).toEqual(
       expect.arrayContaining([

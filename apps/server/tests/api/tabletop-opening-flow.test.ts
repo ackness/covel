@@ -222,13 +222,16 @@ for (const community of [false, true]) {
           target: NonNullable<Awaited<ReturnType<typeof form>>>,
           values: Record<string, unknown>,
         ) {
-          return action("submit_interaction", {
-            turnId: target.turnId,
-            submissions: [
+          return action("submit_actions", {
+            actions: [
               {
-                interactionId: target.form.interactionId,
-                type: "form",
-                values,
+                kind: "act",
+                interaction: {
+                  turnId: target.turnId,
+                  interactionId: target.form.interactionId,
+                  type: "form",
+                },
+                fields: values,
               },
             ],
           });

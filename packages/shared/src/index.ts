@@ -38,6 +38,31 @@ export {
   defaultSessionSeats,
   seatsSchema,
 } from "./schemas/seat.js";
+export {
+  ACTION_KIND_NAME_PATTERN,
+  BASE_ACTION_KINDS,
+  BASE_ACTION_KIND_RULES,
+  MAX_ACTIONS_PER_SUBMISSION,
+  ROLE_ACTION_KINDS,
+  actionKindDeclarationSchema,
+  baseActionKindRoles,
+  interactionActionKind,
+  isBaseActionKind,
+  pluginActionKindId,
+  turnActionRequestSchema,
+  turnActionRequestsSchema,
+  turnActionSchema,
+} from "./schemas/action.js";
+export type {
+  ActionKindDescriptor,
+  ActionKindRule,
+  ActionTextRule,
+  BaseActionKind,
+  SessionActionKindsResponse,
+  TurnAction,
+  TurnActionInteraction,
+  TurnActionRequest,
+} from "./types/action.js";
 export type {
   CharacterSchema,
   CharacterSchemaRecord,

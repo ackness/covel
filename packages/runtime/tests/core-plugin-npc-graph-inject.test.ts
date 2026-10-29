@@ -240,6 +240,7 @@ describe("npc-graph core plugin write-read-inject path", () => {
         runtimeId: "npc-graph/rag-retriever",
         store: scopedContext.store,
         playerMessage: "Alice",
+        playerActions: [],
         locale: "en-US",
         session: { lastPlayerInput: null },
         recursiveCall: async () => {

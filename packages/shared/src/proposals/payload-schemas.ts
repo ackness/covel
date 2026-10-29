@@ -40,6 +40,7 @@ export const proposalPayloadSchemas = {
     title: z.string().optional(),
     data: record.optional(),
     narrativeTemplate: z.string().optional(),
+    actionKind: z.string().min(1).optional(),
   }),
   "ui.render": z.object({ parts: z.array(record).min(1) }),
   "asset.generate": z.object({

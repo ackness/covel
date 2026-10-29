@@ -152,15 +152,15 @@ return { result: execution.result, committed: outcome.status === "committed" };
 
 ### 执行生命周期事件
 
-| 事件类型                | 方向 | 描述                                                                                | 负载                                                                                                                    |
-| ----------------------- | ---- | ----------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
-| `execution.started`     | S→C  | 回合执行开始                                                                        | `{ runtimeCount }`                                                                                                      |
-| `interaction.submitted` | S→C  | `submit_interaction` 的回答已落库、后续回合已开始；先于该回合的 `execution.started` | `{ interactionTurnId, results: [{ submissionId, interactionId, values, filledNarrative }], message?: { id, content } }` |
-| `runtime.started`       | S→C  | 单个 runtime 开始                                                                   | `{ runtimeId, pluginId, kind, turnId, runId, label, stage? }`                                                           |
-| `runtime.deferred`      | S→C  | staged runtime 已随原始回合提交并转入后台                                           | `{ runtimeId, pluginId, jobId, sourceTurnId }`                                                                          |
-| `runtime.completed`     | S→C  | 单个 runtime 完成                                                                   | `{ runtimeId, pluginId, turnId, runId, status, durationMs, stopReason? }`                                               |
-| `runtime.failed`        | S→C  | 单个 runtime 失败                                                                   | `{ runtimeId, pluginId, turnId, runId, status, durationMs, error, errorKind?, failureTarget?, stopReason? }`            |
-| `execution.completed`   | S→C  | 回合执行终态                                                                        | `{ runtimeCount, resultCount, durationMs, committed, error?, abortReason?, resync? }`，各字段见下                       |
+| 事件类型                | 方向 | 描述                                                                                  | 负载                                                                                                                    |
+| ----------------------- | ---- | ------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| `execution.started`     | S→C  | 回合执行开始                                                                          | `{ runtimeCount }`                                                                                                      |
+| `interaction.submitted` | S→C  | `submit_actions` 里的交互回答已落库、后续回合已开始；先于该回合的 `execution.started` | `{ interactionTurnId, results: [{ submissionId, interactionId, values, filledNarrative }], message?: { id, content } }` |
+| `runtime.started`       | S→C  | 单个 runtime 开始                                                                     | `{ runtimeId, pluginId, kind, turnId, runId, label, stage? }`                                                           |
+| `runtime.deferred`      | S→C  | staged runtime 已随原始回合提交并转入后台                                             | `{ runtimeId, pluginId, jobId, sourceTurnId }`                                                                          |
+| `runtime.completed`     | S→C  | 单个 runtime 完成                                                                     | `{ runtimeId, pluginId, turnId, runId, status, durationMs, stopReason? }`                                               |
+| `runtime.failed`        | S→C  | 单个 runtime 失败                                                                     | `{ runtimeId, pluginId, turnId, runId, status, durationMs, error, errorKind?, failureTarget?, stopReason? }`            |
+| `execution.completed`   | S→C  | 回合执行终态                                                                          | `{ runtimeCount, resultCount, durationMs, committed, error?, abortReason?, resync? }`，各字段见下                       |
 
 `runtime.started.stage` 记录这次 runtime 的阶段，取值为 `setup`、`pre-turn`、`narrative`、`post-turn` 或 `audit`；没有阶段的 event/manual runtime 不带此字段。持久 trace 保留它，客户端从实时事件和历史 trace 恢复到同一条执行步骤，后续终态事件不清除阶段。某个执行组有 `stage: "setup"` 的步骤时，时间线显示中性的“开局准备”摘要，不提供单任务重试；会话进入 `playing` 或页面刷新后也不变。不要按当前会话阶段或插件名称推断历史执行的阶段。
 
@@ -854,14 +854,13 @@ data: {
 
 | 命令             | 方法 | 端点                                           | 响应                  |
 | ---------------- | ---- | ---------------------------------------------- | --------------------- |
-| `turn.submit`    | POST | `/api/actions` `type: "send_message"`          | SSE: ProtocolEvent 流 |
-| `turn.cmd`       | POST | `/api/actions` `type: "execute_command"`       | SSE: ProtocolEvent 流 |
+| `turn.submit`    | POST | `/api/actions` `type: "submit_actions"`        | SSE: ProtocolEvent 流 |
 | `turn.start`     | POST | `/api/actions` `type: "start_session"`         | SSE: ProtocolEvent 流 |
 | `turn.retry`     | POST | `/api/actions` `type: "retry_turn"`            | SSE: ProtocolEvent 流 |
 | `runtime.retry`  | POST | `/api/actions` `type: "retry_runtime"`         | SSE: ProtocolEvent 流 |
 | `runtimes.retry` | POST | `/api/actions` `type: "retry_failed_runtimes"` | SSE: ProtocolEvent 流 |
 
-加上[交互响应](#交互响应)里的 `submit_interaction`，一共七种。其他取值一律返回 400 `Unsupported action type`。插件要发事件，请用内置的 `emit-event` 工具。
+一共五种。玩家的发言、行动、斜杠命令和[交互响应](#交互响应)都是 `submit_actions` 里的行动，见 [api.md § submit_actions](./api.md#submit_actions)。其他取值一律返回 400 `Unsupported action type`，包括已经删除的 `send_message`、`execute_command` 和 `submit_interaction`。插件要发事件，请用内置的 `emit-event` 工具。
 
 流里的每一帧外层是 `SseEnvelope`，见下文“四、SSE 信封格式”。
 
@@ -871,12 +870,13 @@ data: {
 
 **`retry_turn`**
 
-- 普通请求的 payload 是空的。它用空的玩家输入和当前已提交的上下文，启动一个新的主循环回合。提交成功之后，玩家回合数加一。
+- 普通请求的 payload 是空的。它用当前已提交的上下文启动一个新的主循环回合，不带玩家输入。提交成功之后，玩家回合数加一。
+- 恢复一个回答过交互的玩家回合时，它从那个回合在 `turn.started` 里记下的行动重新运行，回答不会再次提交。
 - 它不恢复、也不重新生成历史回合。
 
 **恢复没有完成的回合**
 
-- 上表的六种动作都可以附加 `payload.recoverFromTurnId`，并且必须和服务端返回的原 action 描述一致。
+- 上表的五种动作都可以附加 `payload.recoverFromTurnId`，并且必须和服务端返回的原 action 描述一致。
 - 客户端从 `GET /api/sessions/:id/execution` 读取只读的状态。刷新页面不会重新提交动作。玩家明确点了恢复重试之后，才用新的 requestId 发送。
 - 恢复轮询在成功时每 3 秒检查一次；失败后等待 3、6、12、24 秒，之后最多每 30 秒一次，成功后复位。状态请求不叠加 HTTP 重试；页面隐藏时暂停，重新显示时立即检查，同一观察不会并发轮询。
 - 服务端在会话锁里校验来源回合。开场恢复保留 continuation 的来源，不增加玩家回合数。
@@ -911,7 +911,7 @@ data: {
 
 **`payload.inputMessageId`**
 
-`send_message` 和 `execute_command` 可以提供它。流程是：浏览器先保存玩家的输入，再把它的 ID 随动作发出。
+`submit_actions` 可以提供它。流程是：浏览器先保存玩家的输入，再把它的 ID 随动作发出。
 
 | 情况                                                       | 结果                                                                       |
 | ---------------------------------------------------------- | -------------------------------------------------------------------------- |
@@ -928,18 +928,18 @@ data: {
 
 **聊天回合和插件调用的区别**
 
-- 玩家发送的自然语言走 `/api/actions` 的 `send_message`，触发写故事的主流程。
+- 玩家发送的自然语言走 `/api/actions` 的 `submit_actions`（一个 `say` 行动），触发写故事的主流程。
 - 输入框先用 `GET /api/sessions/:id/plugins` 返回的会话命令目录匹配斜线命令。
   - 已知的命令走 `/api/sessions/:id/plugin-rpc` 的 `{ kind: "command", commandId, input }`，不经过写故事的主流程。
-  - 未知的命令按输入框原有的规则处理（普通空闲时提交走 `execute_command`）。
+  - 未知的命令按输入框原有的规则处理（普通空闲时作为 `command` 行动提交）。
 - 声明了 command 的插件 UI 按钮使用 JSON-RENDER 的 `invokeCommand`，走 `/api/sessions/:id/plugin-rpc` 的 `{ kind: "command", commandId, args }`。它不经过写故事的主流程，并且和输入框命令共用参数校验、上下文、审批、handler 和 trace。
 - 其他自定义的 UI action 才使用 `invokePluginAction`。
 
 ### 交互响应
 
-| 命令           | 方法 | 端点           | 响应                                                                                  |
-| -------------- | ---- | -------------- | ------------------------------------------------------------------------------------- |
-| `input.submit` | POST | `/api/actions` | `type: "submit_interaction"` 的 SSE 流：`interaction.submitted`，随后是后续回合的事件 |
+| 命令           | 方法 | 端点           | 响应                                                                                                        |
+| -------------- | ---- | -------------- | ----------------------------------------------------------------------------------------------------------- |
+| `input.submit` | POST | `/api/actions` | `type: "submit_actions"`（带 `interaction` 的行动）的 SSE 流：`interaction.submitted`，随后是后续回合的事件 |
 
 保存回答和开始后续回合是一次操作：同一把会话锁，同一个事务。见 [api.md § 玩家交互](./api.md#玩家交互)。
 
@@ -1043,7 +1043,7 @@ data: {
 
 客户端逐个阶段显示审批，并重试原来的请求。同一个请求重复索取相同的 `(pluginId, action)` 授权时，客户端停止，并拒绝跨会话的审批回答。
 
-`submit_interaction` 的一批回答可以涉及多个来源插件，不限制阶段的数量。所有来源的 server-code 授权都齐了，才校验并原子保存。
+一次 `submit_actions` 里的一批回答可以涉及多个来源插件，不限制阶段的数量。所有来源的 server-code 授权都齐了，才校验并原子保存。
 
 **框架默认 action：** 见 [api.md](./api.md#post-apisessionsidplugin-rpc) 的“框架默认 action”小节。
 

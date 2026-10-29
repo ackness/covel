@@ -22,14 +22,15 @@ describe("form provider authorization", () => {
     () => undefined as readonly { message: string }[] | undefined,
   );
   const now = "2026-01-01T00:00:00.000Z";
-  const payload = {
-    turnId: "forms",
-    submissions: providers.map((id) => ({
-      interactionId: id,
-      type: "form",
-      values: { value: "ok" },
-      pluginId: "forged-client-provider",
-    })),
+  // An answer names no provider: the server reads it from the committed
+  // message. The action schema is strict, so a client cannot add one.
+  const answer = (interactionId: string) => ({
+    kind: "act",
+    interaction: { turnId: "forms", interactionId, type: "form" },
+    fields: { value: "ok" },
+  });
+  const payload: { actions: ReturnType<typeof answer>[] } = {
+    actions: providers.map(answer),
   };
   const submit = async (body = payload, headers: Record<string, string> = {}) =>
     settledSubmission(
@@ -39,7 +40,7 @@ describe("form provider authorization", () => {
         body: JSON.stringify({
           requestId: crypto.randomUUID(),
           sessionId,
-          type: "submit_interaction",
+          type: "submit_actions",
           payload: body,
         }),
       }),
@@ -188,10 +189,7 @@ describe("form provider authorization", () => {
   });
 
   it("does not derive providers from client-supplied form metadata", async () => {
-    const response = await submit({
-      ...payload,
-      submissions: [{ ...payload.submissions[0]!, interactionId: "unknown" }],
-    });
+    const response = await submit({ actions: [answer("unknown")] });
     expect(response.status).toBe(400);
     expect(rpc.rpcApprovalGate.listAllPendingForSession(sessionId)).toEqual([]);
     expect(validate).not.toHaveBeenCalled();
@@ -220,12 +218,7 @@ describe("form provider authorization", () => {
           },
         ],
       });
-      const response = await submit({
-        ...payload,
-        submissions: [
-          { ...payload.submissions[0]!, interactionId: "undeclared" },
-        ],
-      });
+      const response = await submit({ actions: [answer("undeclared")] });
       expect(response.status).toBe(400);
       expect(await response.json()).toMatchObject({
         code: "form_validator_undeclared",

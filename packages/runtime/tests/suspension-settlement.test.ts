@@ -500,6 +500,7 @@ describe("resuming after what it writes changed (F-016)", () => {
           turnDigest: {
             turnId: "turn-0",
             playerMessage: "",
+            actions: [],
             lastPlayerInput: null,
             narrativeText: "",
             toolCallSummaries: [],

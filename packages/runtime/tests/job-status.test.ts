@@ -303,6 +303,7 @@ describe("ctx.progress full chain", () => {
       pluginId: PLUGIN,
       runtimeId: RUNTIME,
       playerMessage: "",
+      playerActions: [],
       store: createFunctionStoreView(undefined, {
         sessionId: SESSION,
         turnId: "turn-1",

@@ -1,5 +1,7 @@
 /** Shared HTTP/SSE transport contracts used by both server and web clients. */
 
+import type { TurnActionRequest } from "./action.js";
+
 export interface ApiErrorResponse<Code extends string = string> {
   readonly error: string;
   readonly code?: Code;
@@ -29,16 +31,13 @@ export type ActionRequest = {
   readonly payload: { readonly recoverFromTurnId?: string };
 } & (
   | (ActionRequestBase & {
-      readonly type: "send_message";
+      /**
+       * The player's input of one turn: what they say, do or command, and
+       * their answers to committed forms, choices and confirmations.
+       */
+      readonly type: "submit_actions";
       readonly payload: {
-        readonly content: string;
-        readonly inputMessageId?: string;
-      };
-    })
-  | (ActionRequestBase & {
-      readonly type: "execute_command";
-      readonly payload: {
-        readonly command: string;
+        readonly actions: readonly TurnActionRequest[];
         readonly inputMessageId?: string;
       };
     })
@@ -63,22 +62,6 @@ export type ActionRequest = {
   | (ActionRequestBase & {
       readonly type: "retry_turn";
       readonly payload: Readonly<Record<never, never>>;
-    })
-  | (ActionRequestBase & {
-      /**
-       * The player's answer to a committed form, choice or confirmation. The
-       * server stores it and runs the follow-up turn on this stream.
-       */
-      readonly type: "submit_interaction";
-      readonly payload: {
-        /** The turn whose message carries the interactions. */
-        readonly turnId: string;
-        readonly submissions: readonly {
-          readonly interactionId: string;
-          readonly type: "form" | "choice" | "confirmation";
-          readonly values: Readonly<Record<string, unknown>>;
-        }[];
-      };
     })
 );
 

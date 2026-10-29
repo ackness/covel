@@ -15,7 +15,7 @@
 
 玩家输入“我去探索沼泽”并按下发送，接下来发生这些事：
 
-1. **前端发出请求。** 浏览器把这句话发到 `POST /api/actions`。这个连接不会马上关掉，服务端沿着它一条一条地推送事件（这种方式叫 SSE），前端收到一条就更新一点画面。
+1. **前端发出请求。** 浏览器把这句话作为一个 `say` 行动发到 `POST /api/actions`。这个连接不会马上关掉，服务端沿着它一条一条地推送事件（这种方式叫 SSE），前端收到一条就更新一点画面。
 2. **服务端排队。** 同一个会话同一时刻只做一件事。服务端先等上一回合留下的、声明了“下一回合必须读到”的后台工作做完，再给会话上锁。
 3. **定住本回合用的插件。** 回合开始时用的是哪一版插件、哪些工具，到回合结束都不变。中途热更新了插件，也要等下一回合才生效。
 4. **挑出这一回合要运行的 runtime。** 每个 runtime 都写了自己什么时候运行：每回合、每隔几回合、某个事件发生时，或者只在被点名时。内核照着这些声明挑。
@@ -141,7 +141,7 @@ stateDiagram-v2
 - agent 输出 `preGameDone: true`；
 - guard（runtime 运行前的检查函数）返回 `{ skip: true }`。
 
-内核把结果记进 `setupRuntimes`。玩家可以多次提交表单或消息来推进，例如 `char-creator` 的表单经 `submit_interaction` 提交。
+内核把结果记进 `setupRuntimes`。玩家可以多次提交表单或消息来推进，例如 `char-creator` 的表单作为 `submit_actions` 里的行动提交。
 
 失败时的规则：
 
@@ -470,6 +470,15 @@ flowchart LR
 ```
 
 提示词各段的精确顺序见 [Prompt 结构](../reference/prompt-structure.md)。
+
+**玩家的输入先是一组行动。** 前端发的是 `submit_actions`：一句话是一个 `say` 行动，斜杠命令是 `command`，表单和选项的回答是带 `interaction` 的行动。服务端按下面的顺序处理：
+
+1. **校验。** 按座位身份检查每个行动：座位存在并且由人控制，这局有这个行动类型，座位身份能用它，行动的角色绑定在座位上，文字和 `fields` 合规。有一个不合格就拒绝整次提交，什么都不保存。
+2. **补全。** 省略的座位取主座位，省略的角色取座位的当前角色，`source` 设为 `player`。回答交互的行动经交互提交流程，填好叙事文字。
+3. **渲染。** `renderActions`（`@covel/context`）把行动写成给模型看的文字。单人玩家的普通输入保持原文；多个角色、主持人或插件类型的行动会标出角色名和类型名，例如 `【阿雅·说】……`。
+4. **进入回合。** 渲染结果是 `TurnInput.playerMessage`，解析后的行动是 `TurnInput.actions`。函数 runtime 从 `ctx.playerActions` 读行动，`TurnStart` hook 的载荷带 `actions`。prompt 历史保存渲染后的文字，聊天消息保存原文和 `metadata.actions`。
+
+字段和错误码见 [api.md § submit_actions](../reference/api.md#submit_actions)。
 
 ### 3.2 输出方向：LLM → 玩家
 
@@ -864,8 +873,8 @@ io:
   │  │                                                            │ │
   │  │ 点击提交 → submitInteraction():                            │ │
   │  │   POST /api/actions                                        │ │
-  │  │     { type: "submit_interaction",                          │ │
-  │  │       payload: { turnId, submissions: [...] } }             │ │
+  │  │     { type: "submit_actions",                              │ │
+  │  │       payload: { actions: [{ interaction, fields }] } }     │ │
   │  │                                                            │ │
   │  │   服务端在会话锁内一次完成:                                │ │
   │  │   ├─ 定位已提交交互、来源插件、字段与跨字段校验             │ │
@@ -1096,7 +1105,7 @@ sequenceDiagram
     Note over Web: 渲染叙事 (Prose) + 表单 (Form)<br/>pluginData 更新 → 右侧面板 + 消息面板
 
     Player->>Web: 填写并提交角色创建表单
-    Web->>Server: POST /api/actions { type: 'submit_interaction', turnId, submissions }
+    Web->>Server: POST /api/actions { type: 'submit_actions', actions: [{ interaction, fields }] }
     Note over Server: 会话锁内校验回答，一个事务保存回答与 turn.started
     Server-->>Web: SSE: interaction.submitted (已存的值 + filledNarrative 玩家消息)
 

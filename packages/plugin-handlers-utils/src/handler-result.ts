@@ -73,6 +73,11 @@ export type PluginFormInteraction = {
     readonly echoFilledNarrative?: boolean;
   };
   /**
+   * The action kind the answer is submitted as: a base kind or a plugin kind
+   * (`<pluginId>/<name>`). Defaults to `act`.
+   */
+  readonly actionKind?: string;
+  /**
    * A note shown above the fields, in the session's language: why the player
    * sees this form again, for example because an earlier submission could not
    * be used. Leave it out on the first offer.

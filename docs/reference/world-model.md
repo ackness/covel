@@ -166,6 +166,18 @@ const player = currentCharacterOf(
 
 **切换当前角色**：`PATCH /api/sessions/:id/seats/:seatId`，请求体 `{ "currentCharacterId": "…" }`。角色必须绑定在这个座位上，座位必须由人控制。从下一回合起生效。见 [API](./api.md#会话座位)。现在游玩界面还没有切换控件。
 
+**身份决定能提交的行动。** 玩家每次提交的是一组行动（见 [API · submit_actions](./api.md#submit_actions)）。服务端按座位身份校验：
+
+| 身份 `role` | 能提交的基础行动类型                      |
+| ----------- | ----------------------------------------- |
+| `player`    | `say`、`act`、`command`                   |
+| `host`      | `narrate`、`direct`、`advance`、`command` |
+| `spectator` | `advance`                                 |
+
+- 这张表在 `@covel/shared` 的 `ROLE_ACTION_KINDS` 里，服务端只读它。
+- 插件的行动类型自己声明哪些身份能用（`contributes.actionKinds[].roles`，默认 `[player]`）。
+- 以角色进行的行动（`say`、`act` 和默认的插件类型）只能用绑定在这个座位上的角色，省略时是座位的当前角色。没有人控制的座位不能提交行动。
+
 还在用 `find(type === "player")` 的内置插件（背包、检定、记忆、建角等）在有多个玩家角色时按第一个处理，之后再改用座位。
 
 ## 动态维度快照

@@ -16,13 +16,18 @@ import {
 /**
  * Actions route — SSE bridge between frontend action protocol and turn executor.
  *
- * Translates action requests (send_message, execute_command, etc.)
+ * Translates action requests (submit_actions, start_session, the retries)
  * into turn execution and streams results back as SSE events.
  */
 
 import { Hono } from "hono";
 import { streamOwnedSSE } from "../../application-work.js";
-import type { DataStore, MediaStore, StoreTransaction } from "@covel/store";
+import type {
+  DataStore,
+  MediaStore,
+  SessionRecord,
+  StoreTransaction,
+} from "@covel/store";
 import type { PluginRegistry, LoadedRuntime } from "@covel/plugin-loader";
 import type { LLMAdapter, ToolExecutor, HookPipeline } from "@covel/runtime";
 import type { EventBus } from "@covel/events";
@@ -33,6 +38,8 @@ import {
   executeTurn,
   settleDroppedInputs,
   createInteractionSubmitter,
+  findCommittedInteraction,
+  interactionSubmissionPayload,
   createTraceRecorder,
   createTurnEmitter,
   InteractionSubmissionError,
@@ -47,13 +54,23 @@ import {
   type RuntimeManifest,
   type RuntimeRetryScope,
   type SseEnvelope,
+  type TurnAction,
+  type TurnActionRequest,
   FORWARDED_EVENT_TYPES,
+  MAX_PLAYER_MESSAGE_CHARS,
   PLAYER_ABORT_REASON,
   concealedRuntimeIds,
+  interactionActionKind,
   readRuntimeEnv,
+  turnActionSchema,
   validateActionRequest,
 } from "@covel/shared";
-import type { CompactorRunner } from "@covel/context";
+import { z } from "zod";
+import {
+  actionsContent,
+  renderActions,
+  type CompactorRunner,
+} from "@covel/context";
 import {
   errorBody,
   logRequestError,
@@ -88,6 +105,16 @@ import { readLockedSession } from "./session/locked-mutation.js";
 import { retryPendingDimensionSettlements } from "./actions/dimension-settlement-retry.js";
 import { preflightActionApprovals } from "./actions/approval-preflight.js";
 import { droppedRunPayloads } from "./actions/dropped-runs.js";
+import {
+  ActionValidationError,
+  checkAnsweredFields,
+  actionRequestOf,
+  interactionKey,
+  pluginKindLabels,
+  resolveSubmittedActions,
+  storedActions,
+} from "./actions/submit-actions.js";
+import { resolveSessionActionKinds } from "./session/action-kinds.js";
 import { preflightFormApprovals } from "./plugin-rpc/form-approvals.js";
 import { buildTurnExecutorDeps } from "./turn-execution-deps.js";
 import { buildSessionHookScope } from "./session/hook-scope.js";
@@ -153,6 +180,128 @@ async function afterCommit(
   }
 }
 
+/** What the session needs to check and render a player's actions. */
+async function actionContext(
+  store: DataStore,
+  registry: PluginRegistry,
+  session: SessionRecord,
+) {
+  return {
+    kinds: resolveSessionActionKinds(session.activePlugins, registry),
+    characters: await store.listCharacters(session.id),
+    seats: session.seats,
+  };
+}
+
+type ActionContext = Awaited<ReturnType<typeof actionContext>>;
+
+/**
+ * The action kinds the interactions answered by `requests` declare, read
+ * from their committed messages, by `interactionKey`.
+ */
+async function declaredInteractionKinds(
+  store: DataStore,
+  sessionId: string,
+  requests: readonly TurnActionRequest[],
+): Promise<Map<string, string>> {
+  const kinds = new Map<string, string>();
+  const turnIds = new Set(
+    requests.flatMap((request) =>
+      request.interaction ? [request.interaction.turnId] : [],
+    ),
+  );
+  for (const turnId of turnIds) {
+    const messages = await store.listTurnMessages(sessionId, { turnId });
+    for (const request of requests) {
+      if (request.interaction?.turnId !== turnId) continue;
+      const { interactionId } = request.interaction;
+      const located = findCommittedInteraction(messages, turnId, interactionId);
+      if (!located) continue;
+      kinds.set(
+        interactionKey(turnId, interactionId),
+        interactionActionKind(
+          located.interaction.type,
+          located.interaction.actionKind,
+        ),
+      );
+    }
+  }
+  return kinds;
+}
+
+/** The submitted actions checked against the session; throws `ActionValidationError`. */
+async function resolveActionsFor(
+  store: DataStore,
+  context: ActionContext,
+  session: Pick<SessionRecord, "id">,
+  requests: readonly TurnActionRequest[],
+): Promise<TurnAction[]> {
+  return resolveSubmittedActions({
+    requests,
+    ...context,
+    interactionKinds: await declaredInteractionKinds(
+      store,
+      session.id,
+      requests,
+    ),
+  });
+}
+
+/** The player's input of one turn, as the turn and its chat row take it. */
+interface PlayerTurnInput {
+  readonly actions: readonly TurnAction[];
+  /** The model-facing rendering: `TurnInput.playerMessage`. */
+  readonly message: string;
+  /**
+   * The chat row's `content`: the raw texts, one per line, or the rendering
+   * when no action carries text (a plugin kind taken by its fields alone).
+   */
+  readonly content: string;
+  readonly messageId: string;
+}
+
+async function playerTurnInput(
+  { kinds, characters, seats }: ActionContext,
+  session: SessionRecord,
+  actions: readonly TurnAction[],
+  messageId: string,
+): Promise<PlayerTurnInput> {
+  const message = await renderActions(actions, {
+    characters,
+    seats,
+    locale: session.locale,
+    kindLabels: pluginKindLabels(kinds),
+  });
+  return {
+    actions,
+    message,
+    content: actionsContent(actions) || message,
+    messageId,
+  };
+}
+
+/** The player input a turn recorded on `turn.started`, for `retry_turn`. */
+const recordedPlayerInputSchema = z.object({
+  actions: z.array(turnActionSchema).min(1),
+  messageId: z.string().min(1),
+});
+
+async function recordedPlayerInput(
+  store: DataStore,
+  sessionId: string,
+  turnId: string,
+): Promise<z.infer<typeof recordedPlayerInputSchema> | undefined> {
+  const [started] = await store.queryTraceEvents(sessionId, {
+    turnId,
+    types: ["turn.started"],
+    newestFirst: true,
+    limit: 1,
+  });
+  const payload = started?.payload as { playerInput?: unknown } | undefined;
+  const parsed = recordedPlayerInputSchema.safeParse(payload?.playerInput);
+  return parsed.success ? parsed.data : undefined;
+}
+
 actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
   const store = c.get("store");
   const pluginRegistry = c.get("pluginRegistry");
@@ -195,13 +344,42 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
     );
   }
 
+  // The actions are checked here, for a status the client can read, and
+  // again under the lock against the live session.
+  let interactionPayload: ReturnType<typeof interactionSubmissionPayload>;
+  if (type === "submit_actions") {
+    try {
+      interactionPayload = interactionSubmissionPayload(
+        await resolveActionsFor(
+          store,
+          await actionContext(store, pluginRegistry, session),
+          session,
+          payload.actions,
+        ),
+      );
+    } catch (error) {
+      if (!(error instanceof ActionValidationError)) throw error;
+      return c.json(
+        errorBody(error.message, {
+          code: error.code,
+          ...(error.details !== undefined ? { details: error.details } : {}),
+        }),
+        error.status,
+      );
+    }
+  }
+
   const eventBus = sessionEventBus(rootEventBus, session);
   const approval = await preflightActionApprovals(c, session, body);
   if (approval) return approval;
   // A form's validator is its provider's server code: ask for that grant
   // before the stream opens. The lock re-checks it against the live session.
-  if (type === "submit_interaction") {
-    const formApproval = await preflightFormApprovals(c, session, payload);
+  if (interactionPayload) {
+    const formApproval = await preflightFormApprovals(
+      c,
+      session,
+      interactionPayload,
+    );
     if (formApproval) return formApproval;
   }
 
@@ -224,12 +402,6 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
     }
   }
 
-  const playerMessage =
-    type === "send_message"
-      ? payload.content
-      : type === "execute_command"
-        ? payload.command
-        : ""; // start/retry carry no new player message
   const turnId = crypto.randomUUID();
 
   // The content locale is fixed when the session is created. A request cannot
@@ -424,7 +596,6 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
 
     const runTurnOnce = async (turnArgs: {
       readonly turnId: string;
-      readonly playerMessage: string;
       readonly suppressPlayerMessage: boolean;
       readonly origin: "player" | "continuation";
     }): Promise<TurnOutcome> => {
@@ -482,14 +653,50 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
             );
             turnOrigin = recovery?.origin ?? turnOrigin;
           }
+          // The player's actions, checked against the live session. A
+          // `retry_turn` of a turn that answered an interaction runs again
+          // from the actions that turn recorded: the answer is stored.
+          let resolvedActions: readonly TurnAction[] | undefined;
+          let inputMessageId: string | undefined;
+          const liveActionContext =
+            turnOrigin === "player" &&
+            (type === "submit_actions" || type === "retry_turn")
+              ? await actionContext(store, pluginRegistry, liveSession)
+              : undefined;
+          if (
+            liveActionContext &&
+            turnOrigin === "player" &&
+            type === "submit_actions"
+          ) {
+            try {
+              resolvedActions = await resolveActionsFor(
+                store,
+                liveActionContext,
+                liveSession,
+                payload.actions,
+              );
+            } catch (error) {
+              if (error instanceof ActionValidationError)
+                throw new ActionRejectedError(error.message, error.code);
+              throw error;
+            }
+            inputMessageId = payload.inputMessageId;
+          } else if (
+            turnOrigin === "player" &&
+            type === "retry_turn" &&
+            payload.recoverFromTurnId
+          ) {
+            const recorded = await recordedPlayerInput(
+              store,
+              sessionId,
+              payload.recoverFromTurnId,
+            );
+            resolvedActions = recorded?.actions;
+            inputMessageId = recorded?.messageId;
+          }
           // A resent input whose turn is already saved would run the whole
           // turn only for the commit to refuse it: refuse it before it runs.
           // The commit's check stays the last line of defence.
-          const inputMessageId =
-            turnOrigin === "player" &&
-            (type === "send_message" || type === "execute_command")
-              ? payload.inputMessageId
-              : undefined;
           if (inputMessageId) {
             const saved = await store.getMessage(sessionId, inputMessageId);
             const savedTurnId =
@@ -524,11 +731,15 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
           // the `turn.started` marker: one decision answers the interaction
           // and starts its turn, so a second submit finds both or neither.
           let submission: PreparedInteractionSubmission | undefined;
-          if (type === "submit_interaction" && turnOrigin === "player") {
+          const answers =
+            type === "submit_actions" && resolvedActions
+              ? interactionSubmissionPayload(resolvedActions)
+              : undefined;
+          if (answers) {
             const denied = await preflightFormApprovals(
               c,
               liveSession,
-              payload,
+              answers,
             );
             if (denied) throw await entryRejection(denied);
             const rpcRegistry = c.get("rpcRegistry");
@@ -542,13 +753,64 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
                   "Form validator is unavailable; activate and approve its plugin first",
                 );
               return validator(request);
-            }, store)(payload, { sessionId, locale: liveSession.locale });
+            }, store)(answers, { sessionId, locale: liveSession.locale });
           }
-          const turnPlayerMessage =
-            submission?.playerMessage ?? turnArgs.playerMessage;
-          const submissionMessageId = submission
-            ? crypto.randomUUID()
-            : undefined;
+          // An answer's text is its filled narrative and its fields the
+          // values as stored (defaults applied, numbers coerced).
+          const answeredTexts = [...(submission?.texts ?? [])];
+          const answeredValues = [...(submission?.results ?? [])];
+          const playerInput =
+            resolvedActions && liveActionContext
+              ? await playerTurnInput(
+                  liveActionContext,
+                  liveSession,
+                  submission
+                    ? resolvedActions.map((action) => {
+                        if (!action.interaction) return action;
+                        const text = answeredTexts.shift() ?? "";
+                        const stored = answeredValues.find(
+                          (result) =>
+                            result.interactionId ===
+                            action.interaction?.interactionId,
+                        );
+                        return {
+                          ...action,
+                          text,
+                          fields: (stored?.values ??
+                            action.fields ??
+                            {}) as TurnAction["fields"],
+                        };
+                      })
+                    : resolvedActions,
+                  inputMessageId ?? crypto.randomUUID(),
+                )
+              : undefined;
+          // The stored answer values must also satisfy the fields schema of
+          // the kind each interaction declares; the form may not repeat it.
+          if (playerInput && liveActionContext && submission) {
+            try {
+              checkAnsweredFields(playerInput.actions, liveActionContext.kinds);
+            } catch (error) {
+              if (error instanceof ActionValidationError)
+                throw new ActionRejectedError(error.message, error.code);
+              throw error;
+            }
+          }
+          // The request schema bounds the typed texts and the submitter the
+          // filled answers; together they still share one limit, checked
+          // before anything is stored.
+          if (playerInput) {
+            const total = playerInput.actions.reduce(
+              (sum, action) => sum + (action.text?.length ?? 0),
+              0,
+            );
+            if (total > MAX_PLAYER_MESSAGE_CHARS)
+              throw new ActionRejectedError(
+                `submit_actions text must be at most ${MAX_PLAYER_MESSAGE_CHARS} characters in total, answers included`,
+                "invalid_action",
+              );
+          }
+          const turnPlayerMessage = playerInput?.message ?? "";
           const registeredTurnControl = control.beginTurn(turnArgs.turnId);
           if (control.signal.aborted) {
             // Stopped while this turn was being admitted: it does not start.
@@ -597,43 +859,49 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
           // Commit the REST message mirror and interaction row with proposals
           // and the TurnMessage journal. Rollback removes new mirror rows and
           // turn attachments, preserving any uploaded browser input intent.
+          // Every action that renders (any text, or any plugin kind, with or
+          // without text) yields a row, so its `metadata.actions` and its
+          // `inputMessageId` are recorded; only an input that renders nothing
+          // (an `advance`, an answer that does not echo) has none.
           const playerInputCreatedAt = new Date().toISOString();
-          const playerInputWrites = turnPlayerMessage
-            ? {
-                message: {
-                  id:
-                    submissionMessageId ??
-                    (type === "send_message" || type === "execute_command"
-                      ? payload.inputMessageId
-                      : undefined) ??
-                    crypto.randomUUID(),
-                  sessionId,
-                  role: "user" as const,
-                  content: turnPlayerMessage,
-                  metadata: { turnId: turnArgs.turnId },
-                  createdAt: playerInputCreatedAt,
-                },
-                interaction: {
-                  id: crypto.randomUUID(),
-                  sessionId,
-                  turnId: turnArgs.turnId,
-                  timestamp: playerInputCreatedAt,
-                  source: "player" as const,
-                  channel: "web" as const,
-                  type:
-                    type === "send_message"
-                      ? ("message" as const)
-                      : type === "submit_interaction"
-                        ? ("form-submit" as const)
-                        : ("rpc-call" as const),
-                  payload: {
-                    content: turnPlayerMessage,
-                    actionType: type,
+          const playerInputWrites =
+            playerInput && turnPlayerMessage
+              ? {
+                  message: {
+                    id: playerInput.messageId,
+                    sessionId,
+                    role: "user" as const,
+                    content: playerInput.content,
+                    metadata: {
+                      turnId: turnArgs.turnId,
+                      actions: storedActions(playerInput.actions),
+                    },
+                    createdAt: playerInputCreatedAt,
                   },
-                  createdAt: playerInputCreatedAt,
-                },
-              }
-            : undefined;
+                  interaction: {
+                    id: crypto.randomUUID(),
+                    sessionId,
+                    turnId: turnArgs.turnId,
+                    timestamp: playerInputCreatedAt,
+                    source: "player" as const,
+                    channel: "web" as const,
+                    type: playerInput.actions.some(
+                      (action) => action.interaction,
+                    )
+                      ? ("form-submit" as const)
+                      : playerInput.actions.every(
+                            (action) => action.kind === "command",
+                          )
+                        ? ("rpc-call" as const)
+                        : ("message" as const),
+                    payload: {
+                      content: playerInput.content,
+                      actionType: type,
+                    },
+                    createdAt: playerInputCreatedAt,
+                  },
+                }
+              : undefined;
 
           // Create trace recorder for this turn (persists all lifecycle events
           // to DB). Carries the SSE traceId so recorder rows correlate with
@@ -672,16 +940,26 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
             runtimeCount: activeRuntimes.length,
             requestId,
             origin: turnOrigin,
-            // A failed follow-up turn is retried as the message it carried:
-            // the answer is already stored and must not be submitted again.
-            recoveryAction: submission
-              ? turnPlayerMessage
-                ? recoveryAction("send_message", {
-                    content: turnPlayerMessage,
-                    inputMessageId: submissionMessageId,
+            // A failed turn is retried with the same resolved actions. One
+            // that answered an interaction is retried as `retry_turn`, from
+            // the actions recorded here: the answer is already stored and
+            // must not be submitted again.
+            recoveryAction: playerInput
+              ? playerInput.actions.some((action) => action.interaction)
+                ? recoveryAction("retry_turn", {})
+                : recoveryAction("submit_actions", {
+                    actions: playerInput.actions.map(actionRequestOf),
+                    inputMessageId: playerInput.messageId,
                   })
-                : recoveryAction("retry_turn", {})
               : recoveryAction(type, payload, turnOrigin === "continuation"),
+            ...(playerInput
+              ? {
+                  playerInput: {
+                    actions: playerInput.actions,
+                    messageId: playerInput.messageId,
+                  },
+                }
+              : {}),
           };
           if (submission) {
             const stored = submission;
@@ -704,11 +982,11 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
             await writeEvent("interaction.submitted", {
               interactionTurnId: submission.turnId,
               results: submission.results,
-              ...(turnPlayerMessage
+              ...(playerInputWrites
                 ? {
                     message: {
-                      id: submissionMessageId,
-                      content: turnPlayerMessage,
+                      id: playerInputWrites.message.id,
+                      content: playerInputWrites.message.content,
                     },
                   }
                 : {}),
@@ -758,6 +1036,7 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
             sessionId,
             turnId: turnArgs.turnId,
             playerMessage: turnPlayerMessage,
+            ...(playerInput ? { actions: playerInput.actions } : {}),
             locale: effectiveLocale,
             modelOverride: model,
             // `turnOrigin` is the flow (player turn or opening) that
@@ -1061,6 +1340,9 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
             commitError,
             fanOutFailed: outcome.fanOutFailed === true,
             wasPreGamePending,
+            // A `retry_turn` that ran again from the player's recorded input.
+            replaysPlayerInput:
+              type === "retry_turn" && playerInput !== undefined,
             queuedRuntimeJobs: committed ? queuedRuntimeJobs : [],
             followerJobs: committed ? followerJobs : [],
           };
@@ -1094,22 +1376,25 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
         commitError,
         fanOutFailed,
         wasPreGamePending,
+        replaysPlayerInput,
         queuedRuntimeJobs,
         followerJobs,
       } = locked;
       // A request that completes the LAST setup runtime commits on its own
       // (turn-wide transaction discipline), so the narrator never ran for it:
-      // the opening continuation follows. Guarded to player actions (both
-      // retry actions keep rerun-only semantics) and skipped when the turn
-      // aborted. Until it starts, a stop reaches this request and the opening
-      // does not start; otherwise a stop from here on has nothing to stop.
+      // the opening continuation follows. Guarded to player actions: a
+      // `retry_turn` that replays the player's recorded answer continues as
+      // its submission would have, while runtime retries and a retried opening
+      // keep rerun-only semantics. Skipped when the turn aborted. Until it
+      // starts, a stop reaches this request and the opening does not start;
+      // otherwise a stop from here on has nothing to stop.
       const continues =
         turnArgs.origin === "player" &&
         committed &&
         wasPreGamePending &&
         !result.abortReason &&
         !isRuntimeRetry &&
-        type !== "retry_turn";
+        (type !== "retry_turn" || replaysPlayerInput);
       if (!continues) control.finish();
 
       // ——— Post-lock tail (per turn) ———
@@ -1161,7 +1446,6 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
         });
       const first = await runTurnOnce({
         turnId,
-        playerMessage,
         suppressPlayerMessage: type === "start_session",
         origin: "player",
       });
@@ -1184,7 +1468,6 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
         if (live && live.status === "active" && live.phase === "playing") {
           finalRun = await runTurnOnce({
             turnId: crypto.randomUUID(),
-            playerMessage: "",
             suppressPlayerMessage: true,
             origin: "continuation",
           });

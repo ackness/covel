@@ -307,6 +307,9 @@ plugin 工具封装插件自己的业务。它的 schema、文案和数据结构
 | validation        | object      |      | `{ name, data? }`，见下             |
 | submitBehavior    | object      |      | `{ echoFilledNarrative? }`          |
 | notice            | string      |      | 字段上方的提示，见下                |
+| actionKind        | string      |      | 回答算哪种行动，默认 `act`，见下    |
+
+`actionKind` 是玩家回答时提交的行动类型：基础类型（如 `say`、`act`）或插件类型 `<pluginId>/<name>`。服务端按它校验回答者的座位身份，客户端提交别的类型会被拒绝（`invalid_action`），见 [API · 玩家交互](./api.md#玩家交互-1)。
 
 **FormField**: `{ type, name, label, placeholder?, options?, required?, defaultValue?, min?, max?, step? }`
 
@@ -391,11 +394,12 @@ plugin 工具封装插件自己的业务。它的 schema、文案和数据结构
 
 创建一组选项让玩家选。适用于决策点、分支剧情、NPC 对话选项。
 
-| 参数     | 类型     | 必需 | 描述                         |
-| -------- | -------- | ---- | ---------------------------- |
-| choiceId | string   | ✓    | 选项组唯一标识               |
-| prompt   | string   | ✓    | 引导文本（如"你要怎么做？"） |
-| choices  | Choice[] | ✓    | 选项列表（至少 2 个）        |
+| 参数       | 类型     | 必需 | 描述                                             |
+| ---------- | -------- | ---- | ------------------------------------------------ |
+| choiceId   | string   | ✓    | 选项组唯一标识                                   |
+| prompt     | string   | ✓    | 引导文本（如"你要怎么做？"）                     |
+| choices    | Choice[] | ✓    | 选项列表（至少 2 个）                            |
+| actionKind | string   |      | 回答算哪种行动，默认 `say`，规则同 `create-form` |
 
 **Choice**: `{ id, label, description?, category? }`
 
@@ -1560,9 +1564,9 @@ export default function ({ tool, z, shortId, shortIdBatch }) {
   ↓ 聚合为数组存入 TurnMessage.pendingInput
   ↓ 返回 TurnResult.pendingInputs（支持多插件、多交互）
   ↓ 前端渲染所有交互 UI
-  ↓ 玩家提交 POST /api/actions submit_interaction { turnId, submissions: [...] }
-  ↓ 每个 submission 用 narrativeTemplate 翻译为自然语言
-  ↓ 同一个请求保存回答并运行后续回合，叙事文本是该回合的玩家消息
+  ↓ 玩家提交 POST /api/actions submit_actions { actions: [{ kind, interaction, fields }] }
+  ↓ 每个回答用 narrativeTemplate 翻译为自然语言，作为它的行动文字
+  ↓ 同一个请求保存回答并运行后续回合，行动文字渲染为该回合的玩家消息
     （纯文本，LLM 看到的和普通消息一样）
 ```
 
@@ -1617,19 +1621,18 @@ POST /api/actions
 
 {
   "requestId": "...",
-  "type": "submit_interaction",
+  "type": "submit_actions",
   "sessionId": "...",
   "payload": {
-    "turnId": "...",
-    "submissions": [
-      { "interactionId": "form-1", "type": "form", "values": { "name": "林清风" } },
-      { "interactionId": "choice-1", "type": "choice", "values": { "selectedId": "a", "selectedLabel": "跟随黑袍人" } }
+    "actions": [
+      { "kind": "act", "interaction": { "turnId": "...", "interactionId": "form-1", "type": "form" }, "fields": { "name": "林清风" } },
+      { "kind": "say", "interaction": { "turnId": "...", "interactionId": "choice-1", "type": "choice" }, "fields": { "selectedId": "a", "selectedLabel": "跟随黑袍人" } }
     ]
   }
 }
 ```
 
-响应是 SSE 流：先是 `interaction.submitted`，随后是后续回合的事件。请求、拒绝和恢复见 [api.md § 玩家交互](./api.md#玩家交互)。
+响应是 SSE 流：先是 `interaction.submitted`，随后是后续回合的事件。请求、拒绝和恢复见 [api.md § 玩家交互](./api.md#玩家交互-1)。
 
 ## 创建新工具
 

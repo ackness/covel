@@ -297,16 +297,19 @@ A form that a manual runtime opens through the plugin's UI works the same way. T
 
 Plugins can use the SDK's `fillNarrativeTemplate(template, values)` for a preview. The submitted `filledNarrative` uses this same function: missing values become empty strings, duplicate full stops at placeholder boundaries are merged, and field text is preserved. Within one agent execution, successful tool results with the same `interactionId` show only the last successful form or choice. A failed call does not replace it.
 
-| Argument          | Type        | Required | Description                                           |
-| ----------------- | ----------- | -------- | ----------------------------------------------------- |
-| formId            | string      | ✓        | Unique ID of the form                                 |
-| title             | string      | ✓        | Form title                                            |
-| fields            | FormField[] | ✓        | List of form fields                                   |
-| submitLabel       | string      | ✓        | Text on the submit button                             |
-| narrativeTemplate | string      | ✓        | Narrative template, with `{{fieldName}}` placeholders |
-| validation        | object      |          | `{ name, data? }`, see below                          |
-| submitBehavior    | object      |          | `{ echoFilledNarrative? }`                            |
-| notice            | string      |          | A note above the fields, see below                    |
+| Argument          | Type        | Required | Description                                               |
+| ----------------- | ----------- | -------- | --------------------------------------------------------- |
+| formId            | string      | ✓        | Unique ID of the form                                     |
+| title             | string      | ✓        | Form title                                                |
+| fields            | FormField[] | ✓        | List of form fields                                       |
+| submitLabel       | string      | ✓        | Text on the submit button                                 |
+| narrativeTemplate | string      | ✓        | Narrative template, with `{{fieldName}}` placeholders     |
+| validation        | object      |          | `{ name, data? }`, see below                              |
+| submitBehavior    | object      |          | `{ echoFilledNarrative? }`                                |
+| notice            | string      |          | A note above the fields, see below                        |
+| actionKind        | string      |          | Which action kind the answer is; default `act`, see below |
+
+`actionKind` is the action kind the player's answer is submitted as: a base kind (such as `say` or `act`) or a plugin kind `<pluginId>/<name>`. The server checks the answering seat's role against it and refuses an answer submitted as another kind (`invalid_action`); see [API · player interactions](./api.md#player-interactions).
 
 **FormField**: `{ type, name, label, placeholder?, options?, required?, defaultValue?, min?, max?, step? }`
 
@@ -391,11 +394,12 @@ The tool returns `filledNarrative` so the model can read each complete sentence 
 
 Create a group of options for the player to choose from. Use it for decision points, branching story lines, and NPC dialogue options.
 
-| Argument | Type     | Required | Description                                    |
-| -------- | -------- | -------- | ---------------------------------------------- |
-| choiceId | string   | ✓        | Unique ID of the group of choices              |
-| prompt   | string   | ✓        | Guiding text (for example "What will you do?") |
-| choices  | Choice[] | ✓        | List of choices (at least 2)                   |
+| Argument   | Type     | Required | Description                                                                     |
+| ---------- | -------- | -------- | ------------------------------------------------------------------------------- |
+| choiceId   | string   | ✓        | Unique ID of the group of choices                                               |
+| prompt     | string   | ✓        | Guiding text (for example "What will you do?")                                  |
+| choices    | Choice[] | ✓        | List of choices (at least 2)                                                    |
+| actionKind | string   |          | Which action kind the answer is; default `say`, with the rules of `create-form` |
 
 **Choice**: `{ id, label, description?, category? }`
 
@@ -1562,9 +1566,9 @@ Tool execute() returns { ..., interaction: InteractionPayload }
   ↓ aggregated into an array and stored in TurnMessage.pendingInput
   ↓ TurnResult.pendingInputs is returned (supports multiple plugins and multiple interactions)
   ↓ the front end renders the UI for all interactions
-  ↓ the player submits POST /api/actions submit_interaction { turnId, submissions: [...] }
-  ↓ each submission is translated into natural language with its narrativeTemplate
-  ↓ the same request saves the answers and runs the following turns; the narrative text is the player's message for that turn
+  ↓ the player submits POST /api/actions submit_actions { actions: [{ kind, interaction, fields }] }
+  ↓ each answer is translated into natural language with its narrativeTemplate, as its action text
+  ↓ the same request saves the answers and runs the following turns; the action texts are rendered as the player's message for that turn
     (plain text, which the LLM sees the same way as an ordinary message)
 ```
 
@@ -1619,13 +1623,12 @@ POST /api/actions
 
 {
   "requestId": "...",
-  "type": "submit_interaction",
+  "type": "submit_actions",
   "sessionId": "...",
   "payload": {
-    "turnId": "...",
-    "submissions": [
-      { "interactionId": "form-1", "type": "form", "values": { "name": "林清风" } },
-      { "interactionId": "choice-1", "type": "choice", "values": { "selectedId": "a", "selectedLabel": "跟随黑袍人" } }
+    "actions": [
+      { "kind": "act", "interaction": { "turnId": "...", "interactionId": "form-1", "type": "form" }, "fields": { "name": "林清风" } },
+      { "kind": "say", "interaction": { "turnId": "...", "interactionId": "choice-1", "type": "choice" }, "fields": { "selectedId": "a", "selectedLabel": "跟随黑袍人" } }
     ]
   }
 }

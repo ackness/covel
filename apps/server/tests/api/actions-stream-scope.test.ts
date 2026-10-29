@@ -210,9 +210,9 @@ describe("POST /api/actions — event forwarding is scoped to the lock tenure", 
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         requestId: "req-scope",
-        type: "send_message",
+        type: "submit_actions",
         sessionId: SESSION_ID,
-        payload: { content: "hello" },
+        payload: { actions: [{ kind: "say", text: "hello" }] },
       }),
     });
     expect(res.status).toBe(200);
@@ -318,9 +318,9 @@ describe("action observation cannot own business finalization", () => {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             requestId: "bounded",
-            type: "send_message",
+            type: "submit_actions",
             sessionId: SESSION_ID,
-            payload: { content: "hello" },
+            payload: { actions: [{ kind: "say", text: "hello" }] },
           }),
         });
         drained = drainActionStream(res);

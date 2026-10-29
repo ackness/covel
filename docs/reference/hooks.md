@@ -137,7 +137,7 @@ handler 抛出异常、超时或返回了格式不对的结果，都算这个 ha
 
 每次执行开始时触发，在选出任何 runtime 之前。玩家回合、手动运行、后台任务都算一次执行。
 
-负载：`{ playerMessage, activeRuntimes }`。`activeRuntimes` 是这个会话的 runtime ID 列表。
+负载：`{ playerMessage, actions, activeRuntimes }`。`playerMessage` 是内核从玩家行动渲染出的文字；`actions` 是解析后的行动（每个是 `{ seatId, kind, actorId?, text?, fields?, interaction?, source }`），没有玩家输入的执行是空数组；`activeRuntimes` 是这个会话的 runtime ID 列表。
 
 `abort` 结束这次执行，不运行任何 runtime。`reason` 作为这个回合的中止原因返回给客户端。
 

@@ -185,6 +185,13 @@ export const createFormTool = tool({
       .describe(
         "Optional note shown above the fields, in the player's language: why the form is offered again (for example an earlier submission could not be used)",
       ),
+    actionKind: z
+      .string()
+      .min(1)
+      .optional()
+      .describe(
+        "Optional action kind the answer is submitted as: a base kind (say, act) or a plugin kind <pluginId>/<name>. Defaults to act.",
+      ),
   }),
   execute: async (params) => {
     for (const field of params.fields) {
@@ -212,6 +219,7 @@ export const createFormTool = tool({
         narrativeTemplate: params.narrativeTemplate,
         submitBehavior: params.submitBehavior,
         ...(params.notice ? { notice: params.notice } : {}),
+        ...(params.actionKind ? { actionKind: params.actionKind } : {}),
       },
     };
   },
@@ -243,6 +251,13 @@ export const createChoicesTool = tool({
       .min(1)
       .describe('Lead-in text, for example "What do you do?"'),
     choices: z.array(choiceSchema).min(2).describe("Choices (at least 2)"),
+    actionKind: z
+      .string()
+      .min(1)
+      .optional()
+      .describe(
+        "Optional action kind the answer is submitted as: a base kind (say, act) or a plugin kind <pluginId>/<name>. Defaults to say.",
+      ),
   }),
   execute: async (params) => ({
     created: true,
@@ -253,6 +268,7 @@ export const createChoicesTool = tool({
       interactionId: params.choiceId,
       prompt: params.prompt,
       choices: params.choices,
+      ...(params.actionKind ? { actionKind: params.actionKind } : {}),
     },
   }),
 });

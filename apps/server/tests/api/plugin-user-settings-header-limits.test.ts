@@ -32,8 +32,8 @@ describe("plugin user-settings header early rejection", () => {
     await expectHeaderRejected(app, "/api/actions", {
       requestId: "request-1",
       sessionId: "session-1",
-      type: "send_message",
-      payload: { content: "hello" },
+      type: "submit_actions",
+      payload: { actions: [{ kind: "say", text: "hello" }] },
     });
   });
 

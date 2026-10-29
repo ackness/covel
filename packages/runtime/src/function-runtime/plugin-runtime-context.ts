@@ -530,6 +530,7 @@ export async function createPluginRuntimeContext({
     pluginId: manifest.pluginId,
     runtimeId: manifest.name,
     playerMessage: input.playerMessage,
+    playerActions: input.actions ?? [],
     ...(logicalTurn !== undefined ? { logicalTurn } : {}),
     session: {
       lastPlayerInput: snapshotPlayerInput(lastPlayerInput),

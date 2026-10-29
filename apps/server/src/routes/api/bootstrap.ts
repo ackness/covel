@@ -205,7 +205,7 @@ export interface ApiBootstrapConfig {
   readonly hostProfile?: HostProfile;
   /**
    * Optional embedding-lock helper. When provided, route handlers that
-   * begin a turn (start_session, send_message, …) call it to lazily
+   * begin a turn (start_session, submit_actions, …) call it to lazily
    * register the session's embedding model in vector_models and lock
    * the session row. No-op when the store has no vector capability or
    * no embed slot is configured.

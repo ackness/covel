@@ -44,6 +44,13 @@ export {
 } from "./prompts-loader.js";
 export type { PromptLoader } from "./prompts-loader.js";
 
+// ── Player actions ───────────────────────────────────────────────
+export { actionsContent, renderActions } from "./render-actions.js";
+export type {
+  RenderActionCharacter,
+  RenderActionsOptions,
+} from "./render-actions.js";
+
 // ── Compactor ────────────────────────────────────────────
 export { maybeCompact } from "./history-budget.js";
 export type {

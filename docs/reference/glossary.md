@@ -11,6 +11,8 @@
 <!-- prettier-ignore -->
 | Term | 中文 | 说明 |
 | --- | --- | --- |
+| Action | 行动 | 玩家一次提交里的一项：从哪个座位、以哪个角色、做哪种事（`submit_actions`）。 |
+| Action kind | 行动类型 | 一种行动：内核的 `say`、`act` 等，或插件声明的 `<pluginId>/<name>`。 |
 | Alias | 别名 | 同一个角色的另一个名字（`aliases`）。不是字段或 ID 的兼容名。 |
 | Binding | 绑定 |  |
 | Bundled plugin | 内置插件 | 随 Covel 一起安装的插件。不等于 `kind: core`。 |
@@ -74,6 +76,18 @@
 | scene | 场景 | 叙事此刻所在的地点和时间 |  |
 | inject | 注入 | 框架把一块数据放进提示词 | insert, provide |
 | block | 区块 | 提示词里带标签的一段，例如 `<existing-quests>` | section（section 指一个标题小节） |
+
+## Action
+
+玩家一次提交里的一项。它写明从哪个座位提交（`seatId`）、以哪个角色（`actorId`）、是哪种行动（`kind`），以及文字或结构化字段。表单和选项的回答也是行动。服务端按座位身份校验每个行动，再渲染成给模型看的 `playerMessage`；函数 runtime 从 `ctx.playerActions` 读到它们。
+
+详见：[HTTP API：submit_actions](./api.md#submit_actions)。
+
+## Action kind
+
+一种行动。内核有六个基础类型：`say`（说话）、`act`（行动）、`narrate`（旁白）、`direct`（导演指示）、`advance`（推进）、`command`（斜杠命令）。插件在 `contributes.actionKinds` 里声明自己的类型，线上写作 `<pluginId>/<name>`。座位身份决定能提交哪些类型。
+
+详见：[插件字段参考：行动类型](./plugins.md#行动类型contributesactionkinds)、[世界模型：座位](./world-model.md#座位)。
 
 ## Alias
 

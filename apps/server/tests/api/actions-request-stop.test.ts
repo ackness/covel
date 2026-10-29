@@ -161,8 +161,8 @@ describe("POST /api/actions — how an action ends", () => {
     try {
       await locked.promise;
       const response = await post({
-        type: "send_message",
-        payload: { content: "never runs" },
+        type: "submit_actions",
+        payload: { actions: [{ kind: "say", text: "never runs" }] },
       });
       const body = response.text();
       // The request is admitted and waits for the lock: a stop reaches it.
@@ -289,12 +289,15 @@ describe("POST /api/actions — how an action ends", () => {
   });
 
   it("refuses a resent input whose turn is saved before any model call", async () => {
-    const input = { content: "go north", inputMessageId: "input-1" };
-    const first = await run({ type: "send_message", payload: input });
+    const input = {
+      actions: [{ kind: "say", text: "go north" }],
+      inputMessageId: "input-1",
+    };
+    const first = await run({ type: "submit_actions", payload: input });
     expect(last(first)?.payload).toMatchObject({ committed: true });
     expect(llmCalls).toHaveLength(1);
 
-    const resent = await run({ type: "send_message", payload: input });
+    const resent = await run({ type: "submit_actions", payload: input });
 
     expect(resent.map((event) => event.type)).toEqual(["error.occurred"]);
     expect(last(resent)?.payload).toMatchObject({

@@ -99,6 +99,11 @@ export interface Message {
   readonly runtimeId?: string;
   readonly kind?: string;
   readonly block?: unknown;
+  /**
+   * On a player's message: the resolved actions it carried (an action's
+   * `fields` are left out when they exceed 4 KB). `content` is the raw text.
+   */
+  readonly actions?: readonly import("./action.js").TurnAction[];
   readonly metadata?: unknown;
   readonly createdAt: string;
 }

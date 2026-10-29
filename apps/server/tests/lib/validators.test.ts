@@ -14,8 +14,8 @@ describe("locale validation", () => {
     const action = {
       requestId: "request-1",
       sessionId: "session-1",
-      type: "send_message",
-      payload: { content: "hello" },
+      type: "submit_actions",
+      payload: { actions: [{ kind: "say", text: "hello" }] },
     };
     expect(validateActionRequest(action).ok).toBe(true);
     // The content locale is fixed when the session is created.

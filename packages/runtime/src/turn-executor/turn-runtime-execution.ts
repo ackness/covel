@@ -215,8 +215,10 @@ export async function executeOneRuntime(
           `recursiveCall cannot run sub-agent-only runtime "${targetId}"; run it with ctx.agents.run`,
         );
 
+      // A nested execution has no player input of its own.
+      const { actions: _parentActions, ...parentInput } = input;
       const nestedInput: RecursiveTurnInput = {
-        ...input,
+        ...parentInput,
         ...(delta.manualTrigger ? { manualTrigger: delta.manualTrigger } : {}),
         sessionId: input.sessionId,
         turnId: input.turnId,

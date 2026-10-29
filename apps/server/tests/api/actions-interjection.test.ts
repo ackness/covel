@@ -150,8 +150,8 @@ describe("POST /api/actions — a mid-turn interjection follows the turn", () =>
       body: JSON.stringify({
         requestId: crypto.randomUUID(),
         sessionId: SESSION_ID,
-        type: "send_message",
-        payload: { content },
+        type: "submit_actions",
+        payload: { actions: [{ kind: "say", text: content }] },
       }),
     });
     const events = parseJsonFrames<Envelope>(await response.text());

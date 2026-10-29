@@ -414,6 +414,92 @@
           },
           "description": "Player slash commands. Each `action` must be listed in `actions`."
         },
+        "actionKinds": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$",
+                "description": "Kind name, unique in the package and not a base kind. The wire kind is `<pluginId>/<name>`."
+              },
+              "roles": {
+                "minItems": 1,
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "enum": ["player", "host", "spectator"]
+                },
+                "description": "Seat roles that may submit this kind. Defaults to `[player]`."
+              },
+              "text": {
+                "type": "string",
+                "enum": ["required", "optional", "none"],
+                "description": "Whether the action carries text: `required`, `optional` (default) or `none`."
+              },
+              "actor": {
+                "type": "boolean",
+                "description": "Whether the action is taken as a character. Defaults to `true`: the seat's current character unless the action names another bound one."
+              },
+              "schema": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Package-relative path of the JSON Schema the action's `fields` must match. Without it the kind takes no fields."
+              },
+              "display": {
+                "type": "object",
+                "properties": {
+                  "label": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "object",
+                        "propertyNames": {
+                          "type": "string"
+                        },
+                        "additionalProperties": {
+                          "type": "string"
+                        }
+                      }
+                    ],
+                    "description": "Name of the kind, for the composer and for the model-facing rendering of the action."
+                  },
+                  "icon": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "Icon name for the composer."
+                  },
+                  "placeholder": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "object",
+                        "propertyNames": {
+                          "type": "string"
+                        },
+                        "additionalProperties": {
+                          "type": "string"
+                        }
+                      }
+                    ],
+                    "description": "Placeholder text for the composer."
+                  }
+                },
+                "required": ["label"],
+                "additionalProperties": false,
+                "description": "How the composer shows the kind."
+              }
+            },
+            "required": ["name", "display"],
+            "additionalProperties": false
+          },
+          "description": "Action kinds players may submit besides the base kinds. Pure declaration: the server checks each action against its roles, text rule and fields schema. The wire kind is `<pluginId>/<name>`."
+        },
         "services": {
           "type": "array",
           "items": {

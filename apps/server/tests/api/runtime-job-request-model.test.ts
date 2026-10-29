@@ -213,6 +213,7 @@ runtime:
           turnDigest: {
             turnId: "source-turn",
             playerMessage: "",
+            actions: [],
             lastPlayerInput: null,
             narrativeText: "",
             toolCallSummaries: [],
@@ -393,6 +394,7 @@ runtime:
           turnDigest: {
             turnId: "source-turn",
             playerMessage: "",
+            actions: [],
             lastPlayerInput: null,
             narrativeText: "",
             toolCallSummaries: [],

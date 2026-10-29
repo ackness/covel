@@ -4,13 +4,13 @@ import { DIMENSION_SETTLEMENT_NAMESPACE } from "@covel/shared";
  *
  * Flow:
  *   POST /api/sessions   → create session, activate narrator
- *   POST /api/actions    → execute a player turn (send_message) over the SSE
+ *   POST /api/actions    → execute a player turn (submit_actions) over the SSE
  *                          stream; we drain it to completion, then read the
  *                          committed store rows for assertions
  *   store assertions     → verify narrative output and turn history
  *
  * `/api/actions` is the single turn-execution entrypoint (the old non-streaming
- * `POST /:id/turn` route was removed); a send_message only schedules the
+ * `POST /:id/turn` route was removed); a submit_actions only schedules the
  * main-loop narrator once the session is in the playing band, so each test
  * settles the current setup mirror first.
  */
@@ -242,9 +242,9 @@ describe("E2E: Narrator game flow", () => {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         requestId: "req-narrator-1",
-        type: "send_message",
+        type: "submit_actions",
         sessionId,
-        payload: { content: "走进了黑暗的森林" },
+        payload: { actions: [{ kind: "say", text: "走进了黑暗的森林" }] },
       }),
     });
     expect(turnRes.status).toBe(200);
@@ -314,9 +314,9 @@ describe("E2E: Narrator game flow", () => {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           requestId,
-          type: "send_message",
+          type: "submit_actions",
           sessionId,
-          payload: { content: "look around" },
+          payload: { actions: [{ kind: "say", text: "look around" }] },
         }),
       });
       expect(
@@ -375,9 +375,9 @@ describe("E2E: Narrator game flow", () => {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         requestId: "req-multi-1",
-        type: "send_message",
+        type: "submit_actions",
         sessionId: session.id,
-        payload: { content: "拔出长剑" },
+        payload: { actions: [{ kind: "say", text: "拔出长剑" }] },
       }),
     });
     expect(turn1Res.status).toBe(200);
@@ -391,9 +391,9 @@ describe("E2E: Narrator game flow", () => {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         requestId: "req-multi-2",
-        type: "send_message",
+        type: "submit_actions",
         sessionId: session.id,
-        payload: { content: "向巨龙发起攻击" },
+        payload: { actions: [{ kind: "say", text: "向巨龙发起攻击" }] },
       }),
     });
     expect(turn2Res.status).toBe(200);
@@ -415,9 +415,9 @@ describe("E2E: Narrator game flow", () => {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         requestId: "req-missing",
-        type: "send_message",
+        type: "submit_actions",
         sessionId: "nonexistent",
-        payload: { content: "test" },
+        payload: { actions: [{ kind: "say", text: "test" }] },
       }),
     });
     expect(res.status).toBe(404);
@@ -480,9 +480,9 @@ describe("E2E: Narrator game flow", () => {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             requestId,
-            type: "send_message",
+            type: "submit_actions",
             sessionId: id,
-            payload: { content: "完成学习" },
+            payload: { actions: [{ kind: "say", text: "完成学习" }] },
           }),
         }),
       );

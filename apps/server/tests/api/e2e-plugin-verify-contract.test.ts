@@ -12,16 +12,18 @@ const script = fileURLToPath(
 );
 
 describe("e2e plugin verification CLI HTTP contract", () => {
-  it("enables plugins, submits a form, and reads the current session view", async ({
+  it("enables plugins, answers setup forms as their declared kinds, plays a turn, and reads the current session view", async ({
     signal,
   }) => {
     const requests: Array<{ method: string; path: string; body: unknown }> = [];
     const fixtureErrors: unknown[] = [];
     let actionCount = 0;
+    // Setup asks for two forms: the first declares no kind, the second a
+    // plugin kind. Answering the second finishes setup.
     const session = {
       id: "contract-session",
       status: "active",
-      phase: "playing",
+      phase: "setup",
       completedPlayerTurns: 0,
       setupRuntimes: {},
       activePlugins: ["contract-plugin"],
@@ -65,6 +67,7 @@ describe("e2e plugin verification CLI HTTP contract", () => {
             const parsed = validateActionRequest(body);
             if (!parsed.ok) return json({ error: parsed.error }, 400);
             actionCount += 1;
+            if (actionCount === 3) session.phase = "playing";
             res.writeHead(200, { "content-type": "text/event-stream" });
             res.end(
               `data: ${JSON.stringify({
@@ -103,7 +106,26 @@ describe("e2e plugin verification CLI HTTP contract", () => {
                               ],
                             },
                           }
-                        : {}),
+                        : actionCount === 2
+                          ? {
+                              effects: {
+                                interactions: [
+                                  {
+                                    type: "form",
+                                    interactionId: "contract-allot",
+                                    actionKind: "contract-rules/allot",
+                                    fields: [
+                                      {
+                                        name: "strength",
+                                        type: "number",
+                                        min: 1,
+                                      },
+                                    ],
+                                  },
+                                ],
+                              },
+                            }
+                          : {}),
                     },
                   ],
                 },
@@ -172,7 +194,9 @@ describe("e2e plugin verification CLI HTTP contract", () => {
           `http://127.0.0.1:${address.port}/api`,
           "--no-log",
           "--turns",
-          "0",
+          "1",
+          "--player-message",
+          "Look around.",
           "--enable-plugins",
           "contract-plugin",
           "--form-values",
@@ -182,7 +206,8 @@ describe("e2e plugin verification CLI HTTP contract", () => {
       );
 
       expect(fixtureErrors).toEqual([]);
-      expect(actionCount).toBe(2);
+      // Setup's start and two form answers, then one playing-phase turn.
+      expect(actionCount).toBe(4);
       // Sessions start from the world's preset pack plus its required plugins.
       expect(requests).toContainEqual({
         method: "POST",
@@ -198,22 +223,57 @@ describe("e2e plugin verification CLI HTTP contract", () => {
         path: "/api/sessions/contract-session/plugins/contract-plugin",
         body: undefined,
       });
+      // A form that declares no kind is answered as `act`.
       expect(requests).toContainEqual({
         method: "POST",
         path: "/api/actions",
         body: expect.objectContaining({
           sessionId: "contract-session",
-          type: "submit_interaction",
+          type: "submit_actions",
           payload: {
-            turnId: "contract-turn-1",
-            submissions: [
+            actions: [
               {
-                interactionId: "contract-form",
-                type: "form",
-                values: { characterName: "Contract Player" },
+                kind: "act",
+                interaction: {
+                  turnId: "contract-turn-1",
+                  interactionId: "contract-form",
+                  type: "form",
+                },
+                fields: { characterName: "Contract Player" },
               },
             ],
           },
+        }),
+      });
+      // A form that declares its answer kind is answered as that kind.
+      expect(requests).toContainEqual({
+        method: "POST",
+        path: "/api/actions",
+        body: expect.objectContaining({
+          sessionId: "contract-session",
+          type: "submit_actions",
+          payload: {
+            actions: [
+              {
+                kind: "contract-rules/allot",
+                interaction: {
+                  turnId: "contract-turn-2",
+                  interactionId: "contract-allot",
+                  type: "form",
+                },
+                fields: { strength: 1 },
+              },
+            ],
+          },
+        }),
+      });
+      expect(requests).toContainEqual({
+        method: "POST",
+        path: "/api/actions",
+        body: expect.objectContaining({
+          sessionId: "contract-session",
+          type: "submit_actions",
+          payload: { actions: [{ kind: "say", text: "Look around." }] },
         }),
       });
       expect(requests).toContainEqual({

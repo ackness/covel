@@ -459,6 +459,7 @@ describe("plugin-data visibility within one execution", () => {
             turnDigest: {
               turnId: "source-turn",
               playerMessage: "",
+              actions: [],
               lastPlayerInput: null,
               narrativeText: "",
               toolCallSummaries: [],

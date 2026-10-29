@@ -931,6 +931,8 @@ interface DetectedForm {
   }>;
   /** The form's declared validator, e.g. `{ name: "point-buy", data }`. */
   validation?: { name?: unknown; data?: unknown };
+  /** The action kind the form declares its answer is submitted as. */
+  actionKind?: string;
 }
 
 /**
@@ -1003,6 +1005,10 @@ function toDetectedForm(
     source.validation && typeof source.validation === "object"
       ? (source.validation as { name?: unknown; data?: unknown })
       : undefined;
+  const actionKind =
+    typeof source.actionKind === "string" && source.actionKind.length > 0
+      ? source.actionKind
+      : undefined;
 
   return {
     turnId,
@@ -1012,6 +1018,7 @@ function toDetectedForm(
     ),
     fields,
     validation,
+    ...(actionKind ? { actionKind } : {}),
   };
 }
 
@@ -1842,7 +1849,7 @@ async function runMain(
 
   // Auto form handling: setup can chain forms (character creation, then a
   // rules plugin's point allocation). Answer each form the last request
-  // surfaced with a submit_interaction action, until setup asks for no more.
+  // surfaced with a submit_actions answer, until setup asks for no more.
   const submittedForms = new Set<string>();
   const nextSetupForm = (): DetectedForm | null => {
     for (const record of exec.turnRecords) {
@@ -1858,6 +1865,9 @@ async function runMain(
     console.log("  Detected interaction form:");
     kv("Runtime", detectedForm.runtimeId);
     kv("Interaction", detectedForm.interactionId);
+    // A form answer is submitted as the kind the form declares, else `act`.
+    const answerKind = detectedForm.actionKind ?? "act";
+    kv("Action kind", answerKind);
     kv(
       "Fields",
       detectedForm.fields
@@ -1871,18 +1881,21 @@ async function runMain(
     // One action stores the answer and runs the turn that reads it.
     console.log("");
     console.log(
-      `  Turn ${ctx.turnNumber + 1}: submit_interaction (phase=${bandLabel()}, completedPlayerTurns=${ctx.completedPlayerTurns})`,
+      `  Turn ${ctx.turnNumber + 1}: form answer (phase=${bandLabel()}, completedPlayerTurns=${ctx.completedPlayerTurns})`,
     );
     console.log(DIV);
     exec = await runTurn(args, session.id, {
-      type: "submit_interaction",
+      type: "submit_actions",
       payload: {
-        turnId: detectedForm.turnId,
-        submissions: [
+        actions: [
           {
-            interactionId: detectedForm.interactionId,
-            type: "form",
-            values,
+            kind: answerKind,
+            interaction: {
+              turnId: detectedForm.turnId,
+              interactionId: detectedForm.interactionId,
+              type: "form",
+            },
+            fields: values,
           },
         ],
       },
@@ -1930,14 +1943,14 @@ async function runMain(
       defaultPlayerMessages[i % defaultPlayerMessages.length];
     console.log("");
     console.log(
-      `  Turn ${ctx.turnNumber + 1}: send_message #${i + 1} (phase=${bandLabel()}, completedPlayerTurns=${ctx.completedPlayerTurns})`,
+      `  Turn ${ctx.turnNumber + 1}: say #${i + 1} (phase=${bandLabel()}, completedPlayerTurns=${ctx.completedPlayerTurns})`,
     );
     console.log(DIV);
     console.log(`  Player: ${truncate(content, 72)}`);
 
     exec = await runTurn(args, session.id, {
-      type: "send_message",
-      payload: { content },
+      type: "submit_actions",
+      payload: { actions: [{ kind: "say", text: content }] },
     });
     reportTurn(ctx, exec);
     ctx.turnNumber += 1;
