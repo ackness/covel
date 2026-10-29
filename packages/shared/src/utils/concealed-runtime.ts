@@ -48,6 +48,13 @@ const CONTENT_FREE_TRACE_FIELDS = new Set([
   "repair",
   "retries",
   "notes",
+  // Sub-agent call tree: identities and how a run ended, never its brief or
+  // output.
+  "subagentCallId",
+  "parentCallId",
+  "parentRuntimeId",
+  "parentPluginId",
+  "cancelledBy",
 ]);
 
 /** Keep only content-free fields of a concealed runtime's trace payload. */

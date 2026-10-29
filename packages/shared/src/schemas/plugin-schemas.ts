@@ -969,6 +969,8 @@ interface ManifestCrossFieldView {
   readonly stage?: string;
   readonly outputKind?: string;
   readonly requireExplicitCompletion?: boolean;
+  readonly subagentOnly?: boolean;
+  readonly guard?: string;
   readonly timeoutMs?: number;
   readonly loopProfile?: {
     readonly preset?: string;
@@ -982,6 +984,7 @@ interface ManifestCrossFieldView {
   };
   readonly trigger?: RuntimeRuleView["trigger"] & { readonly every?: number };
   readonly needs?: RuntimeRuleView["needs"];
+  readonly after?: RuntimeRuleView["after"];
   readonly output?: RuntimeRuleView["output"];
   readonly execution?: string;
   readonly tools?: { readonly builtin?: readonly string[] };
@@ -1197,6 +1200,11 @@ export const runtimeManifestInputSchema = z
     concealed: z.boolean().optional(),
     outputContract: z.string().min(1).optional(),
     defaultProvider: z.boolean().optional(),
+    /**
+     * Runs only as a sub-agent of another runtime (`ctx.agents.run` /
+     * `delegate`); the scheduler never selects it. Omitted when false.
+     */
+    subagentOnly: z.literal(true).optional(),
     /** Coarse scheduling stage: which band this runtime runs in. */
     stage: stageSchema.optional(),
     /** Weak ordering dependencies (no gate). */

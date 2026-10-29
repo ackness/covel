@@ -467,6 +467,17 @@ export type CovelEvent =
       readonly payload: CovelEventPayload;
     }
   | { readonly type: "recursive.failed"; readonly payload: CovelEventPayload }
+  // Sub-agent trace events (TurnEmitter): one sub-agent run of `ctx.agents.run`
+  // or `delegate`. Trace-only (forward:false). The sub-agent's own step, LLM
+  // and tool events carry `subagentCallId` / `parentCallId` / `parentRuntimeId`
+  // so /debug can rebuild the call tree.
+  | { readonly type: "subagent.started"; readonly payload: CovelEventPayload }
+  | { readonly type: "subagent.completed"; readonly payload: CovelEventPayload }
+  | { readonly type: "subagent.failed"; readonly payload: CovelEventPayload }
+  | {
+      readonly type: "subagent.writes-dropped";
+      readonly payload: CovelEventPayload;
+    }
   // Function-runtime trace events (TurnEmitter). `function.*` mark the handler
   // boundary (forward:false, like runtime.started/completed); `gateway.*` wrap
   // the function-runtime `ctx.gateway` provider calls (forward:true, mirroring
@@ -599,6 +610,11 @@ export const COVEL_EVENT_META = {
   "recursive.calling": { forwardToActionStream: false },
   "recursive.completed": { forwardToActionStream: false },
   "recursive.failed": { forwardToActionStream: false },
+  // Sub-agent runs — trace-only, like recursive.*.
+  "subagent.started": { forwardToActionStream: false },
+  "subagent.completed": { forwardToActionStream: false },
+  "subagent.failed": { forwardToActionStream: false },
+  "subagent.writes-dropped": { forwardToActionStream: false },
   // Function-runtime trace events (see CovelEvent union). function.* mark the
   // handler boundary (trace-only); gateway.* wrap provider calls and forward to
   // the action stream for agent/function parity with llm.calling/responded.

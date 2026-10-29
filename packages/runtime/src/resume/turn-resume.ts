@@ -15,6 +15,8 @@ import type { SuspensionRecord } from "@covel/store";
 import type { EmittedEvent } from "@covel/tools";
 import type { LLMMessage } from "@covel/shared";
 import { runAgentToolLoop } from "../agent-loop/turn-agent-tool-loop.js";
+import { createSubagentRunner } from "../agent-loop/subagent-runner.js";
+import { withSubagentDelegate } from "../agent-loop/subagent-delegate.js";
 import { freezeInputSlots } from "../agent-loop/runtime-input-slots.js";
 import { executeFunctionRuntime } from "../function-runtime/turn-function-runtime.js";
 import { createWorldModelView } from "../function-runtime/world-model-view.js";
@@ -34,6 +36,11 @@ export interface ResumeSuspendedRuntimeOptions {
   readonly maxSteps?: number;
   readonly timeoutMs?: number;
   readonly userSettings?: TurnInput["userSettings"];
+  /**
+   * The session's live `runtimeModelOverrides`. The resumed runtime and the
+   * sub-agents it delegates to resolve their slots through it, as in a turn.
+   */
+  readonly runtimeModelOverrides?: TurnInput["runtimeModelOverrides"];
   /**
    * The session's active runtimes. A resumed setup runtime that completes is
    * checked against them to decide whether setup is finished. Defaults to the
@@ -67,9 +74,9 @@ export async function resumeRuntimePipeline(
   const runId = crypto.randomUUID();
 
   // TurnInput for the resumed runtime: session, turn and content locale come
-  // from the suspension and there is no fresh player message. With no model
-  // overrides the loop resolves the model via
-  // `deps.resolveModel(manifest, undefined)`.
+  // from the suspension and there is no fresh player message. The session's
+  // runtime model overrides apply as in a turn; there is no request-scoped
+  // story override on resume.
   const { locale } = suspension.pendingContinuation;
   const input: TurnInput = {
     sessionId: suspension.sessionId,
@@ -78,8 +85,20 @@ export async function resumeRuntimePipeline(
     origin: "resume",
     ...(locale !== undefined ? { locale } : {}),
     ...(options?.userSettings ? { userSettings: options.userSettings } : {}),
+    ...(options?.runtimeModelOverrides
+      ? { runtimeModelOverrides: options.runtimeModelOverrides }
+      : {}),
   };
 
+  // A resumed runtime runs outside `runTurnPipeline`; it gets its own
+  // sub-agent runner over the session's runtimes.
+  if (!deps.subagents && options?.activeRuntimes)
+    deps = {
+      ...deps,
+      subagents: createSubagentRunner({
+        activeRuntimes: options.activeRuntimes,
+      }),
+    };
   try {
     return await executeResumedRuntime(suspension, resumeData, manifest, deps, {
       startTime,
@@ -267,6 +286,27 @@ async function executeResumedRuntime(
   // Re-enter the shared agent tool loop with the persisted write set seeded in.
   // `allowSuspend: false` forbids re-suspending mid-resume (a nested suspend is
   // fed back to the LLM as an error tool result).
+  // `delegate` runs a sub-agent; the wrapper answers it and forwards the rest.
+  const loopDeps =
+    deps.subagents && deps.toolExecutor
+      ? {
+          ...deps,
+          toolExecutor: withSubagentDelegate(
+            deps.toolExecutor,
+            deps.subagents,
+            {
+              caller: {
+                pluginId: manifest.pluginId,
+                runtimeId: manifest.name,
+                depth: 0,
+              },
+              input,
+              deps,
+              executionContext: resumeExecutionContext,
+            },
+          ),
+        }
+      : deps;
   const toolLoop = await runAgentToolLoop({
     worldBase,
     manifest,
@@ -281,7 +321,7 @@ async function executeResumedRuntime(
     inputSlots: pendingContinuation.inputSlots
       ? freezeInputSlots(pendingContinuation.inputSlots)
       : undefined,
-    deps,
+    deps: loopDeps,
     maxSteps,
     timeoutMs: resumeTimeoutMs,
     messages,

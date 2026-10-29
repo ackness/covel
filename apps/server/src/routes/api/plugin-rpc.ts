@@ -96,6 +96,7 @@ import { errorBody, readJsonBody } from "../../api-error.js";
 import { dispatchPluginAction } from "./plugin-rpc/action-dispatch.js";
 import { dispatchPluginEvent } from "./plugin-rpc/event-dispatch.js";
 import { requireAccess } from "../../host-profile.js";
+import { preflightSubagentApprovals } from "./actions/approval-preflight.js";
 
 export const pluginRpcRoutes = new Hono();
 
@@ -231,6 +232,16 @@ pluginRpcRoutes.post("/:id/plugin-rpc", rateLimiter({ max: 30 }), async (c) => {
         400,
       );
     }
+    // A sub-agent-only runtime runs only inside its caller's execution.
+    if (target.subagentOnly) {
+      return c.json(
+        errorBody(
+          `runtime "${body.runtimeId}" runs only as a sub-agent of another runtime`,
+          { code: "runtime_subagent_only" },
+        ),
+        409,
+      );
+    }
 
     // Approval trust comes from discovery source, independent of authored
     // package kind. `entry.source` is set by bootstrap from the
@@ -272,6 +283,10 @@ pluginRpcRoutes.post("/:id/plugin-rpc", rateLimiter({ max: 30 }), async (c) => {
       code: "queue_full",
     });
     if (verdictResponse) return verdictResponse;
+    // The run can delegate to the session's sub-agent providers; they need
+    // their own grants before it starts.
+    const subagentApproval = await preflightSubagentApprovals(c, session);
+    if (subagentApproval) return subagentApproval;
     // Player-authored plugin settings travel with the request
     // as a base64-encoded JSON header (`X-Plugin-User-Settings`) sourced
     // from the unified SettingsStore. The body map keys on pluginId so

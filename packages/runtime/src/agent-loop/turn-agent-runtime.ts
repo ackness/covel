@@ -27,6 +27,7 @@ import { applyHistoryWindow, filterRuntimeHistory } from "./message-filter.js";
 import { finalizeRuntimeResult } from "../turn-executor/runtime-finalization.js";
 import type { TurnExecutorDeps } from "../turn-executor/turn-executor-types.js";
 import { runAgentToolLoop } from "./turn-agent-tool-loop.js";
+import { withSubagentDelegate } from "./subagent-delegate.js";
 import { MAX_PICTURE_ATTACHMENTS } from "./picture-attachments.js";
 import { attachReadDependencies } from "../read-dependencies.js";
 import {
@@ -306,6 +307,27 @@ export async function executeAgentRuntime({
     writes: upstreamPluginData,
     ...(deps.pluginDataReadProbe ? { probe: deps.pluginDataReadProbe } : {}),
   });
+  // `delegate` runs a sub-agent; the wrapper answers it and forwards the rest.
+  const loopDeps =
+    deps.subagents && deps.toolExecutor
+      ? {
+          ...deps,
+          toolExecutor: withSubagentDelegate(
+            deps.toolExecutor,
+            deps.subagents,
+            {
+              caller: {
+                pluginId: manifest.pluginId,
+                runtimeId: manifest.name,
+                depth: 0,
+              },
+              input,
+              deps,
+              executionContext,
+            },
+          ),
+        }
+      : deps;
   const toolLoop = await runAgentToolLoop({
     worldBase,
     upstreamProposals,
@@ -321,7 +343,7 @@ export async function executeAgentRuntime({
     loaded,
     inputSlots: resolvedInputSlots,
     promptSegments: includedSegments,
-    deps,
+    deps: loopDeps,
     maxSteps,
     timeoutMs,
     messages,

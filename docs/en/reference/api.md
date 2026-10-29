@@ -3095,6 +3095,8 @@ Calls the handler that the plugin registers in `entry` with `covel.registerRpc`,
 
 Runs one target runtime by hand. It goes through the full turn flow: it builds the prompt, runs the tool loop, and submits proposals. Downstream runtimes triggered by an event keep running in the same turn. When one event has several subscribers, they run in order of `name`.
 
+A target with `schedule.subagentOnly` returns `409 runtime_subagent_only` and nothing runs: it runs only as a [sub-agent](./plugins.md#sub-agents) inside another runtime. The plugin detail and the execution flow mark such a runtime with `subagentOnly: true`.
+
 How it runs is decided by `schedule.background` in the runtime manifest:
 
 - Left out (default): waits for the runtime to finish and submit its proposals, then returns a summary JSON.
@@ -4340,6 +4342,7 @@ Resume a suspended runtime with the data the player submitted.
 
 - **agent runtime**: Continues from the saved tool-call record.
 - **function runtime**: Calls the handler again. This time's data is passed in through `ctx.resumeData` and `ctx.resumedFromSuspensionId`. It does not enter the model loop.
+- The session's `runtimeModelOverrides` apply as usual: the resumed runtime and the sub-agents it calls each pick their model by their own runtimeId.
 
 **Request**
 
@@ -4353,7 +4356,7 @@ Resume a suspended runtime with the data the player submitted.
 | ------ | ------ | -------- | ---------------------------------------------------------------------------- |
 | `data` | object | Yes      | Data the player submitted. It must match the suspended item's `resumeSchema` |
 
-- If a community plugin lacks execution grants, the server first returns `202 approval-required`, asking for `covel:plugin-server-code` and then `runtime:<runtimeId>`. Only the resumed runtime needs approval; the server rechecks the grants under the session lock. The client approves each request and retries the original submission. Denying approval leaves the suspension pending. Hosted deployments also require an operator credential.
+- If a community plugin lacks execution grants, the server first returns `202 approval-required`, asking for `covel:plugin-server-code` and then `runtime:<runtimeId>`. Only the resumed runtime and the session's sub-agent providers need approval; the server rechecks the grants under the session lock. The client approves each request and retries the original submission. Denying approval leaves the suspension pending. Hosted deployments also require an operator credential.
 - The server checks `data` against `resumeSchema` with full JSON Schema validation (Ajv). This covers `enum`, nested objects, `min` / `max`, `minLength` / `maxLength`, `pattern`, array `items`, `oneOf` / `anyOf`, and more. If the data does not match, the server returns `400 resume_data_invalid`. If the schema is not an object or cannot compile, it returns `400 resume_schema_invalid` without claiming the suspension or running the plugin. The author must correct the schema produced by the plugin and create a new suspension. The player can abandon the original item.
 - A browser client can send an `X-Provider-Keys` header to give model keys for this request. The desktop app and self-hosted clients can leave it out, and the server then uses the keys it was started with. The server never returns keys through this endpoint.
 
@@ -5064,8 +5067,8 @@ If a community plugin in the session has not been approved yet, the server retur
 
 - The client approves the current session through the approval endpoint, and then resends the original request with the **same `requestId`**.
 - You may be asked several times in a row: first `covel:plugin-server-code`, then each `runtime:<name>`.
-- The scope that an ordinary action checks: the runtimes in the selected plugins that take part in automatic runs (after resolving the contract dependencies). An explicit retry checks only the selected targets.
-- An ordinary call to a manual runtime still goes through the plugin RPC approval.
+- The scope that an ordinary action checks: the runtimes in the selected plugins that take part in automatic runs, and the sub-agent providers (`schedule.subagentOnly`, which any execution may call), all after resolving the contract dependencies. An explicit retry checks only the selected targets and the sub-agent providers.
+- An ordinary call to a manual runtime still goes through the plugin RPC approval: first the target's own grants, then those of the session's sub-agent providers.
 - If approval is refused, the turn is not run.
 - The `demo` and `commercial` deployment tiers also require the operator token. Before the code is actually loaded during execution, the approval is checked once more.
 - The web client supports approving several requests in a row. It rejects duplicate approval responses and responses that belong to another session.

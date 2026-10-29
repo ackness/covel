@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   createDefaultToolRegistry,
   createMemoryTools,
+  delegateParametersSchema,
   FRAMEWORK_TOOL_NAMES,
   type DefaultToolRegistryDeps,
 } from "../src/index.js";
@@ -43,6 +44,17 @@ describe("framework tool names", () => {
       ...registry.builtinTools.values(),
       ...createMemoryTools({ search: async () => [] }),
     ]) {
+      // A sub-agent run writes nothing, but two runs are neither the same
+      // answer nor safe to run side by side in one batch.
+      if (module.name === "delegate") {
+        expect(module.annotations).toEqual({
+          readOnly: true,
+          stagesWrites: false,
+          concurrencySafe: false,
+          idempotent: false,
+        });
+        continue;
+      }
       const readOnly = reads.has(module.name);
       expect(module.annotations, module.name).toEqual({
         readOnly,
@@ -51,5 +63,30 @@ describe("framework tool names", () => {
         idempotent: readOnly,
       });
     }
+  });
+
+  it("delegate accepts one target key, never both", () => {
+    const base = { brief: "Act the guard's reply" };
+    expect(
+      delegateParametersSchema.safeParse({
+        ...base,
+        target: { contract: "actor@1" },
+      }).success,
+    ).toBe(true);
+    expect(
+      delegateParametersSchema.safeParse({
+        ...base,
+        target: { runtimeId: "pkg/actor" },
+      }).success,
+    ).toBe(true);
+    expect(
+      delegateParametersSchema.safeParse({
+        ...base,
+        target: { contract: "actor@1", runtimeId: "pkg/actor" },
+      }).success,
+    ).toBe(false);
+    expect(
+      delegateParametersSchema.safeParse({ ...base, target: {} }).success,
+    ).toBe(false);
   });
 });

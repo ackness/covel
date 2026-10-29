@@ -346,6 +346,7 @@ The trigger types are `auto` (the default), `manual`, and `event`.
 - `schedule.every: N` makes an `auto` runtime run only on the logical turns that are a multiple of N. For example, `every: 3` runs on turns 3, 6 and 9.
 - `schedule.trigger` can also set `startTurn` (the first turn it may run), `cooldownTurns` (the least number of turns between two runs) and `maxTriggerCount` (the most runs in one session). When it sets only these, `type` can be left out too.
 - `manual` and `event` runtimes are triggered separately, by a request or by an event. They declare no stage and cannot set `every`. A setup runtime cannot set `every`, `startTurn` or `cooldownTurns`.
+- `schedule.subagentOnly: true` makes an agent runtime run only as a [sub-agent](#sub-agents): the scheduler never selects it, and no manual RPC, batch re-run or `ctx.recursiveCall` can run it. It implies `trigger: manual`, so `type` can be left out, and any other type is rejected. It cannot be a function runtime or `io.visibility: story`, and cannot set `stage`, `needs`, `after`, `background`, `io.output.recordAs` or `guard`: these mean something only for a scheduled runtime.
 - `schedule.background: true` runs a manual or event runtime in the background: the caller gets a job ID at once and does not wait for the result. Such a runtime has no upstream in the same execution, so it cannot read a `scope: turn` input; use `scope: committed` or a kernel input instead.
 - `schedule.detached: true` lets the turn finish first; the runtime then runs as a durable background job. It is allowed only on the `post-turn` and `audit` stages, and not on a runtime with `io.visibility: story`.
 - Written as an object, `schedule.detached` sets the job's options and also makes the runtime detached: `settle: true` makes the player's next action wait until the job is done, for at most `maxSettleWaitMs` (120000 at most); `maxQueueMs` and `maxExecutionMs` limit how long the job may queue and run.
@@ -592,6 +593,58 @@ At commit, a top-level runtime and the nested calls at every level below it are 
 
 Use [services](./plugin-extensions.md#registering-and-calling-public-functions) for requests and responses across packages, or [events](./plugin-extensions.md#how-events-trigger-downstream-work) to trigger work in another package.
 
+A `manualTrigger.runtimeId` that names a `schedule.subagentOnly` runtime is an error; use `ctx.agents.run` instead.
+
+#### Sub-agents
+
+A sub-agent is another agent runtime that the caller runs inside its own execution. It has its own transcript and budget and **returns output only**: it makes no writes, emits no events and forms no top-level runtime result, so it is never a commit unit. A function runtime uses `ctx.agents.run`; an agent runtime uses the builtin tool [`delegate`](./tools.md#sub-agents-delegate).
+
+```ts
+const result = await ctx.agents?.run({
+  target: { contract: "gate-actor@1" }, // or { runtimeId: "my-plugin/guard" }
+  brief: "A stranger asks to pass the gate.",
+  data: { stranger: "Mara" },
+  budget: { maxSteps: 4, timeoutMs: 20000 },
+});
+// { ok: true, output, stopReason, usage? } or { ok: false, error: { code, message }, stopReason? }
+```
+
+<!-- prettier-ignore -->
+| Field | Meaning |
+| --- | --- |
+| `target` | `{ contract }`: the active `subagentOnly` provider whose output contract it is, in any package. `{ runtimeId }`: an active `subagentOnly` runtime of the caller's own package |
+| `brief` | The task, the sub-agent's only user message. 1 to 20 000 characters |
+| `data` | An optional JSON object, serialized after the brief, at most 32 KB |
+| `budget` | Optional `maxSteps` and `timeoutMs`. They can only tighten the provider's own limits, and the time limit never exceeds what the caller has left |
+
+The provider is an agent runtime that names the contract it provides in `io.output.contract` and sets `schedule.subagentOnly: true` (rules under [Triggers](#triggers)). Its prompt is the RUNTIME.md body, as usual.
+
+Rules at run time:
+
+- **Own transcript**: the sub-agent's prompt is the provider's own body, the framework's completion instructions, then the brief. It sees neither the session history nor the caller's conversation.
+- **Read-only tools**: tools in the provider's `agent.tools` without the `readOnly` annotation (plugin tools, write tools such as `plugin-data-set`), `suspend` and `delegate` are taken away. A declared plugin tool that is not registered still fails the run as it always does.
+- **Loop profile**: without `agent.loop.profile` it runs `actor`: no streaming, no player interjections.
+- **Model**: it uses the model role the provider declares. The session's `runtimeModelOverrides` apply by the provider's runtimeId, also in a run resumed after suspension; the caller's override and the request's story model override do not.
+- **Caps**: one execution runs at most 8 sub-agents at a time, nested executions included, and a sub-agent cannot call another one (depth cap 1). A call over a cap gets `unavailable` at once; nothing queues.
+- **Cancellation**: when the caller is cancelled, times out or ends, the sub-agent stops with it, with `cancelled`. A sub-agent the handler did not await is waited for before the runtime finishes.
+- **Output only**: the output is checked against the provider's `io.output.schema` and contract schema; a failure is `internal`. The `PreRuntime`, `PostRuntime` and `PostContextAssembly` hooks do not fire for a sub-agent; the in-loop `PreLLMCall`, `PreStep`, `PreToolUse` and `PostToolUse` fire as usual, with the sub-agent's `ctx.runtimeId`.
+- **Trace**: every event of the sub-agent carries `subagentCallId`, `parentCallId` and `parentRuntimeId`, plus `subagent.started` / `completed` / `failed` (see [protocol](./protocol.md#sub-agent-events)). An `io.concealed` provider has its content hidden as a top-level run does.
+
+A failure does not throw (only a call after the handler has ended throws); it returns an error code:
+
+<!-- prettier-ignore -->
+| `error.code` | Meaning |
+| --- | --- |
+| `invalid-input` | The request is invalid: a missing field, a brief that is too long, `data` that is not JSON or too large |
+| `not-found` | No active provider matches `target` |
+| `ambiguous` | More than one active provider offers the contract |
+| `unavailable` | The depth cap or the execution's concurrency cap is reached |
+| `timeout` | The sub-agent used up its own time limit |
+| `cancelled` | The caller or the player cancelled |
+| `internal` | Any other failure: invalid output, a model error, a tool loop. The message is fixed text; the reason is logged on the server only |
+
+`ctx.agents` exists only in a function runtime; an agent's guard has none.
+
 #### The session view (`store.getSession()`)
 
 `ctx.store.getSession()` (`context.store.getSession()` in a tool or an action) returns `PluginSessionView`, a read-only view of the current session, not the session record itself:
@@ -737,7 +790,7 @@ The values of the three profiles:
 | `finalizer.deadlineReserveMs` | `0` | `0` | `0` |
 | `corrections` | `{ toolUse: 1, review: 2, loopPerturbation: 1, outputRepair: 1 }` | `{ toolUse: 1, review: 2, loopPerturbation: 1, outputRepair: 1 }` | `{ toolUse: 1, review: 2, loopPerturbation: 1, outputRepair: 1 }` |
 
-`actor` is for an agent that only answers a brief and writes no story text, such as the sub-agents still to come.
+`actor` is for an agent that only answers a brief and writes no story text. A [sub-agent](#sub-agents) that names no profile uses it.
 
 Loading checks these rules and rejects a manifest that breaks one:
 

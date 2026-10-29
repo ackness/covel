@@ -197,6 +197,7 @@ it("writes one note", async () => {
 - 它不模拟保存。你传进去的 `pluginData`、`world`、`tools`、`images`、`signal`、`triggerEvent` 会原样交给函数。
 - 没有提供的 `ctx.store` 读取方法，一调用就报错，例如 `store.getPluginData is not configured for this test context`。这样测试不会悄悄读到空数据。
 - 默认带一个固定的 `ctx.random`，每次运行给出相同的数。所以掷骰的结果可以直接断言。
+- 调用子 agent 的函数传 `subagents`：一串按顺序使用的结果，或一个按请求返回结果的函数。不传时 `ctx.agents` 不存在。要断言发出的请求，用 `makeScriptedAgents(results)`，它返回 `{ agents, requests }`。
 - 函数返回的效果在 `result.effects` 里，例如 `result.effects.interactions`。
 - 同时生成模型指令和玩家可见数据的函数，要交叉测试内容语言与 `COVEL_INSTRUCTION_LOCALE`，至少覆盖中文内容配英文指令、英文内容配中文指令。直接调用真实 handler，分别断言指令语言和结果数据；缺值时检查可选字段确实省略。用 `vi.stubEnv` 设置覆盖值，并在 `afterEach` 调用 `vi.unstubAllEnvs` 恢复环境。例子见[骰子判定测试](../../plugins/dice-check/tests/roller.test.js)。语言规则见[多语言参考](../reference/i18n.md#2-本地化插件)。
 
@@ -209,6 +210,7 @@ it("writes one note", async () => {
 | ---------------------------------------------------------------------- | -------------------------------------------------------------------------- |
 | `makeManualFunctionContext`                                            | 造一个函数用的 `ctx`                                                       |
 | `makeRandom(seed?)`                                                    | 测试用的 `ctx.random`。手写 `ctx` 的测试自己放进去                         |
+| `makeScriptedAgents(results)` | 测试用的 `ctx.agents`：按脚本回答 `ctx.agents.run`，并记下每次请求 |
 | `loadPluginMessages(pluginRoot, locale)`                               | 读取插件 `locales/` 里的译文，得到 `ctx.messages`。要断言中文输出时用它    |
 | `createPluginTestStore` / `executeToolAndCommit` / `commitToolResults` | 让工具走真实的执行和保存流程                                               |
 | `MockLLM`                                                              | 假模型。记录每次调用；支持一个默认回复和一串按顺序使用的回复               |

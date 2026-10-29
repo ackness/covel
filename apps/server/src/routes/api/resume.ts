@@ -356,7 +356,13 @@ resumeRoutes.post("/:id/suspensions/:suspensionId/resume", async (c) => {
           data,
           effectiveManifest!,
           resumeDeps,
-          { userSettings, activeRuntimes },
+          {
+            userSettings,
+            activeRuntimes,
+            ...(liveSession.runtimeModelOverrides
+              ? { runtimeModelOverrides: liveSession.runtimeModelOverrides }
+              : {}),
+          },
         );
 
         const { result } = execution;

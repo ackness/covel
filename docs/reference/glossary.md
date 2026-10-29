@@ -41,6 +41,7 @@
 | Session | 会话 |  |
 | Slot | 槽位 | 设置界面里叫“模型用途”。 |
 | Stop reason | 结束原因 | agent 工具循环怎样结束（`RuntimeResult.stop.reason`）。 |
+| Sub-agent | 子 agent | 另一个 runtime 在自己的执行里运行、只交回输出的 agent runtime。 |
 | Trigger mode | 触发模式 |  |
 | Trusted source | 可信来源 | 实例所有者或运营者选定的 GitHub 来源，只减少审批提示。 |
 | Turn | 回合 | “This turn” 是“本回合”。 |
@@ -290,6 +291,12 @@ agent runtime 的工具循环怎样结束，例如 `completed`（模型给出了
 它写在 `RuntimeResult.stop` 和 runtime 生命周期事件的 `stopReason` 里。函数 runtime 没有结束原因。
 
 详见：[协议参考的结束原因](./protocol.md#stop-reasons)、[回合管线](../internals/flow.md)。
+
+## Sub-agent
+
+另一个 runtime 在自己的执行里运行的 agent runtime：函数用 `ctx.agents.run`，agent 用 `delegate` 工具。它拿着调用方给的简报，用自己的对话记录和预算运行，只交回输出，不写数据、不发事件，也不形成提交单位。提供方写 `schedule.subagentOnly: true`，调度器从不自动运行它。
+
+详见：[插件参考 · 子 agent](./plugins.md#子-agent)、[delegate 工具](./tools.md#子-agentdelegate)。
 
 ## Trigger mode
 

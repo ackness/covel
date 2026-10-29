@@ -180,6 +180,81 @@ export interface PluginRecursiveCallDelta {
 export type PluginRuntimeStatus =
   "pending" | "running" | "success" | "failed" | "skipped" | "suspended";
 
+/** Why an agent loop ended. */
+export type PluginStopReason =
+  | "completed"
+  | "tool-finished"
+  | "max-steps"
+  | "deadline"
+  | "context-overflow"
+  | "cancelled"
+  | "model-error"
+  | "invalid-output"
+  | "loop-detected"
+  | "suspended";
+
+/**
+ * Which runtime `ctx.agents.run` runs: the active `subagentOnly` provider of
+ * a contract (any package), or a `subagentOnly` runtime of this package.
+ */
+export type PluginSubagentTarget =
+  { readonly contract: string } | { readonly runtimeId: string };
+
+export interface PluginSubagentRequest {
+  readonly target: PluginSubagentTarget;
+  /** The task, as the sub-agent's only user message (1–20 000 characters). */
+  readonly brief: string;
+  /** Structured context appended to the brief as JSON (at most 32 KB). */
+  readonly data?: Readonly<Record<string, unknown>>;
+  /** Narrows the provider's own limits; it never raises them. */
+  readonly budget?: {
+    readonly maxSteps?: number;
+    readonly timeoutMs?: number;
+  };
+}
+
+/**
+ * Why a sub-agent produced no output. `unavailable` means the depth or
+ * per-execution pool cap was reached: the call is refused at once.
+ */
+export type PluginSubagentErrorCode =
+  | "invalid-input"
+  | "not-found"
+  | "ambiguous"
+  | "unavailable"
+  | "timeout"
+  | "cancelled"
+  | "internal";
+
+export type PluginSubagentResult =
+  | {
+      readonly ok: true;
+      readonly output: Readonly<Record<string, unknown>>;
+      readonly stopReason: PluginStopReason;
+      readonly usage?: {
+        readonly inputTokens: number;
+        readonly outputTokens: number;
+      };
+    }
+  | {
+      readonly ok: false;
+      readonly error: {
+        readonly code: PluginSubagentErrorCode;
+        readonly message: string;
+      };
+      readonly stopReason?: PluginStopReason;
+    };
+
+/** Run sub-agents: agent runtimes with their own transcript and budget. */
+export interface PluginAgents {
+  /**
+   * Run one sub-agent and wait for its output. It produces no writes and no
+   * events. A sub-agent failure resolves with `ok: false`; the call throws
+   * only after this handler's run has ended.
+   */
+  run(request: PluginSubagentRequest): Promise<PluginSubagentResult>;
+}
+
 /** One runtime's result inside a nested execution. */
 export interface PluginNestedRuntimeResult {
   readonly pluginId: string;
@@ -318,6 +393,11 @@ export interface PluginFunctionContext {
   ) => Promise<PluginNestedTurnResult>;
   /** 0 for a top-level execution, one more for each `recursiveCall` level. */
   readonly recursionDepth: number;
+  /**
+   * Run another agent runtime as a sub-agent of this run. Present for a
+   * function runtime; absent for a guard.
+   */
+  readonly agents?: PluginAgents;
   readonly userSettings?: Readonly<Record<string, unknown>>;
   readonly pluginData?: PluginDataWriter;
   readonly logger?: PluginLogger;

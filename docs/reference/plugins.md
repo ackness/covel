@@ -346,6 +346,7 @@ setup runtime 的完成状态按根 `PLUGIN.md` 的 `version` 记录。发布新
 - `schedule.every: N` 让 `auto` runtime 只在逻辑回合是 N 的倍数时运行。例如 `every: 3` 在第 3、6、9 回合运行。
 - `schedule.trigger` 还可以写 `startTurn`（从第几回合开始）、`cooldownTurns`（两次运行至少隔几个回合）和 `maxTriggerCount`（一局最多几次）。只写这些时，`type` 也不用写。
 - `manual` 和 `event` 按请求或事件单独触发，不声明 stage，也不能写 `every`。setup runtime 不能写 `every`、`startTurn` 和 `cooldownTurns`。
+- `schedule.subagentOnly: true` 让 agent runtime 只作为[子 agent](#子-agent) 运行：调度器从不选中它，手动 RPC、批量重跑和 `ctx.recursiveCall` 都不能运行它。它隐含 `trigger: manual`，`type` 不用写，写别的类型会被拒绝。它不能是函数 runtime，不能是 `io.visibility: story`，也不能写 `stage`、`needs`、`after`、`background`、`io.output.recordAs` 和 `guard`：这些只对被调度的 runtime 有意义。
 - `schedule.background: true` 让手动或事件 runtime 在后台执行：调用方立刻拿到一个任务编号，不等它完成。这样的 runtime 没有同一次执行的上游，所以不能读 `scope: turn` 的输入；改用 `scope: committed` 或内核输入。
 - `schedule.detached: true` 让回合先结束，这个 runtime 之后作为持久的后台作业运行。只能用在 `post-turn` 和 `audit` 阶段，`io.visibility: story` 的 runtime 不能用。
 - `schedule.detached` 写成对象时设置作业的选项，同时表示 detached：`settle: true` 让玩家的下一次行动先等它完成，最多等 `maxSettleWaitMs`（不超过 120000）；`maxQueueMs` 和 `maxExecutionMs` 限制作业排队和运行的时间。
@@ -592,6 +593,58 @@ Agent 的副作用只来自工具：模型能写什么，以 `agent.tools` 白�
 
 跨包请求与响应用[服务](./plugin-extensions.md#公共函数注册与调用)，触发其他包的后续工作用[事件](./plugin-extensions.md#事件怎么触发下游)。
 
+`manualTrigger.runtimeId` 点名一个 `schedule.subagentOnly` runtime 时报错，改用 `ctx.agents.run`。
+
+#### 子 agent
+
+子 agent 是调用方在自己这次执行里运行的另一个 agent runtime。它有自己的对话记录和预算，**只交回输出**：不产生写入、不发事件，也不形成顶层 runtime 结果，所以不会成为提交单位。函数 runtime 用 `ctx.agents.run`，agent runtime 用内置工具 [`delegate`](./tools.md#子-agentdelegate)。
+
+```ts
+const result = await ctx.agents?.run({
+  target: { contract: "gate-actor@1" }, // 或 { runtimeId: "my-plugin/guard" }
+  brief: "A stranger asks to pass the gate.",
+  data: { stranger: "Mara" },
+  budget: { maxSteps: 4, timeoutMs: 20000 },
+});
+// { ok: true, output, stopReason, usage? } 或 { ok: false, error: { code, message }, stopReason? }
+```
+
+<!-- prettier-ignore -->
+| 字段 | 含义 |
+| --- | --- |
+| `target` | `{ contract }`：输出契约是它的那个激活的 `subagentOnly` 提供方，可以是别的包。`{ runtimeId }`：调用方自己包里激活的 `subagentOnly` runtime |
+| `brief` | 任务说明，是子 agent 唯一的用户消息。1 到 20 000 个字符 |
+| `data` | 可选的 JSON 对象，序列化后接在简报后面，最多 32 KB |
+| `budget` | 可选的 `maxSteps` 和 `timeoutMs`。只能比提供方自己的上限更紧；时限也不超过调用方剩下的时间 |
+
+提供方的写法：一个 agent runtime，`io.output.contract` 写它提供的契约，再写 `schedule.subagentOnly: true`（规则见[触发方式](#触发方式)）。它的提示词照常写在 RUNTIME.md 正文里。
+
+运行时的规则：
+
+- **独立的对话**：子 agent 的提示词是提供方自己的正文，加上框架的完成说明，再加简报。看不到会话历史，也看不到调用方的对话。
+- **只读工具**：提供方 `agent.tools` 里没有 `readOnly` 注解的工具（插件工具、`plugin-data-set` 这类写入工具）、`suspend` 和 `delegate` 都被拿掉。声明了却没注册的插件工具仍按原规则让这次运行失败。
+- **循环 profile**：没写 `agent.loop.profile` 时用 `actor`，不流式显示，也不读玩家插话。
+- **模型**：用提供方自己声明的模型用途。会话的 `runtimeModelOverrides` 按提供方的 runtimeId 生效，挂起后恢复的运行里也一样；调用方的覆盖和请求里的故事模型覆盖都不生效。
+- **上限**：一次执行最多同时运行 8 个子 agent，嵌套执行也算在内；子 agent 不能再调用子 agent（深度上限 1）。超过上限的调用立刻得到 `unavailable`，不排队。
+- **取消**：调用方被取消、超时或运行结束，子 agent 跟着停下，结果是 `cancelled`。handler 没有等待的子 agent，runtime 收尾前会等它结束。
+- **只交回输出**：输出按提供方的 `io.output.schema` 和契约 schema 检查，没通过算 `internal`。Hook 中的 `PreRuntime`、`PostRuntime` 和 `PostContextAssembly` 不为子 agent 触发；循环里的 `PreLLMCall`、`PreStep`、`PreToolUse` 和 `PostToolUse` 照常触发，`ctx.runtimeId` 是子 agent 的。
+- **trace**：子 agent 的每个事件都带 `subagentCallId`、`parentCallId` 和 `parentRuntimeId`，另有 `subagent.started` / `completed` / `failed`（见[协议](./protocol.md#子-agent-事件)）。`io.concealed` 的提供方和顶层运行一样隐去内容。
+
+失败不会抛异常（只有 handler 结束后再调用才抛），而是返回错误码：
+
+<!-- prettier-ignore -->
+| `error.code` | 含义 |
+| --- | --- |
+| `invalid-input` | 请求不合法：缺字段、简报太长、`data` 不是 JSON 或太大 |
+| `not-found` | 没有符合 `target` 的激活提供方 |
+| `ambiguous` | 有不止一个激活的提供方提供这个契约 |
+| `unavailable` | 达到深度上限或这次执行的并发上限 |
+| `timeout` | 子 agent 用完了自己的时限 |
+| `cancelled` | 调用方或玩家取消了 |
+| `internal` | 其他失败：输出不合格、模型出错、工具打转等。错误文字是固定的，原因只记在服务端日志里 |
+
+`ctx.agents` 只在函数 runtime 里有；agent 的 guard 里没有。
+
 #### 会话视图（`store.getSession()`）
 
 `ctx.store.getSession()`（工具里是 `context.store.getSession()`，action 里是 `context.store.getSession()`）返回当前会话的只读视图 `PluginSessionView`，不是会话记录本身：
@@ -737,7 +790,7 @@ Agent 循环怎么跑由一个 profile 决定：文字是否流式显示给玩�
 | `finalizer.deadlineReserveMs` | `0` | `0` | `0` |
 | `corrections` | `{ toolUse: 1, review: 2, loopPerturbation: 1, outputRepair: 1 }` | `{ toolUse: 1, review: 2, loopPerturbation: 1, outputRepair: 1 }` | `{ toolUse: 1, review: 2, loopPerturbation: 1, outputRepair: 1 }` |
 
-`actor` 给只回答一段简报、不写正文的 agent 用，例如将来的子 agent。
+`actor` 给只回答一段简报、不写正文的 agent 用。[子 agent](#子-agent) 没写 profile 时就用它。
 
 加载时检查这几条，不满足的清单被拒绝：
 

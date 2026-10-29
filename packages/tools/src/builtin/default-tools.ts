@@ -2,6 +2,7 @@
 
 import { ToolRegistry } from "../registry.js";
 import { createCharacterTools } from "./character-tools.js";
+import { delegateTool } from "./delegate.js";
 import { createEmitEventTool, type EventDirectoryLike } from "./emit-event.js";
 import { createPluginDataTools } from "./plugin-data-tools.js";
 import { runtimeDoneTool } from "./runtime-done.js";
@@ -28,6 +29,7 @@ export function createDefaultToolRegistry(
   for (const module of builtinUITools) registry.registerBuiltin(module);
   registry.registerBuiltin(suspendTool);
   registry.registerBuiltin(runtimeDoneTool);
+  registry.registerBuiltin(delegateTool);
   registry.registerBuiltin(worldDimensionGetTool);
   registry.registerBuiltin(worldDimensionListTool);
   for (const module of createPluginDataTools(deps.store)) {

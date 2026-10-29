@@ -310,6 +310,30 @@ describe("POST /api/sessions/:id/plugin-rpc", () => {
     expect(body).not.toHaveProperty("status");
   });
 
+  it("refuses a manual run of a sub-agent-only runtime with 409", async () => {
+    const { entry } = makeAgentEntry({
+      pluginId: "actor-pkg",
+      runtimeId: "actor-pkg/guard",
+      outputKind: "system",
+      subagentOnly: true,
+    });
+    pluginRegistry.register(entry);
+    await store.updateSession("sess-rpc-1", { activePlugins: ["actor-pkg"] });
+    const res = await app.request("/api/sessions/sess-rpc-1/plugin-rpc", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        kind: "runtime",
+        pluginId: "actor-pkg",
+        runtimeId: "actor-pkg/guard",
+        payload: {},
+      }),
+    });
+    expect(res.status).toBe(409);
+    const body = (await res.json()) as Record<string, unknown>;
+    expect(body.code).toBe("runtime_subagent_only");
+  });
+
   it("dispatches a framework default action and returns the result", async () => {
     const res = await app.request("/api/sessions/sess-rpc-1/plugin-rpc", {
       method: "POST",
@@ -1166,12 +1190,15 @@ function makeAgentEntry(args: {
   stage?: RuntimeManifest["stage"];
   source?: PluginSource;
   trigger?: RuntimeManifest["trigger"];
+  subagentOnly?: true;
 }): { entry: PluginRegistryEntry; loaded: LoadedRuntime } {
   const manifest: RuntimeManifest = {
     name: args.runtimeId,
     pluginId: args.pluginId,
     description: "test agent runtime",
-    stage: args.stage ?? "narrative",
+    ...(args.subagentOnly
+      ? { subagentOnly: true as const }
+      : { stage: args.stage ?? "narrative" }),
     runtimeType: "agent",
     outputKind: args.outputKind ?? "story",
     trigger: args.trigger ?? { type: "manual" },
@@ -2380,6 +2407,71 @@ describe("POST /api/sessions/:id/plugin-rpc — runtime mode (M8b)", () => {
     };
     expect(thirdBody.status).toBe("ok");
     expect(thirdBody.runtimeResults[0]?.status).toBe("success");
+    expect(handlerCalls).toBe(1);
+  });
+
+  it("asks for a community sub-agent provider's grants before a manual run that can delegate to it", async () => {
+    let handlerCalls = 0;
+    const { app, store, gate, pluginRegistry } = setupRuntimeTestEnv({
+      pluginId: PLUGIN_ID,
+      runtimeId: SYNC_RUNTIME,
+      execution: "sync",
+      handler: async () => {
+        handlerCalls += 1;
+        return { ok: true };
+      },
+    });
+    const provider = makeAgentEntry({
+      pluginId: "actor-pkg",
+      runtimeId: "actor-pkg/guard",
+      outputKind: "system",
+      subagentOnly: true,
+      source: "community",
+    });
+    pluginRegistry.register(provider.entry);
+    await seedRuntimeSession(store, PLUGIN_ID, SESSION_ID);
+    await store.updateSession(SESSION_ID, {
+      activePlugins: [PLUGIN_ID, "actor-pkg"],
+    });
+    const runManual = () =>
+      app.request(`/api/sessions/${SESSION_ID}/plugin-rpc`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          kind: "runtime",
+          pluginId: PLUGIN_ID,
+          runtimeId: SYNC_RUNTIME,
+          payload: {},
+        }),
+      });
+
+    // The builtin target needs no grant; the provider needs both of its own.
+    for (const action of [
+      "covel:plugin-server-code",
+      "runtime:actor-pkg/guard",
+    ]) {
+      const pending = await runManual();
+      expect(pending.status).toBe(202);
+      const body = (await pending.json()) as {
+        status: string;
+        approvalId: string;
+        pending?: { action?: string; pluginId?: string };
+      };
+      expect(body.status).toBe("approval-required");
+      expect(body.pending?.action).toBe(action);
+      expect(handlerCalls).toBe(0);
+      const decision = await decideSessionApproval(
+        gate,
+        store,
+        SESSION_ID,
+        "actor-pkg",
+        body.approvalId,
+      );
+      expect(decision.ok).toBe(true);
+    }
+
+    const granted = await runManual();
+    expect(granted.status).toBe(200);
     expect(handlerCalls).toBe(1);
   });
 

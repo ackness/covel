@@ -38,6 +38,7 @@ const SDK_CONTEXT_KEYS = {
   execution: "optional",
   recursiveCall: "required",
   recursionDepth: "required",
+  agents: "optional",
   userSettings: "optional",
   pluginData: "optional",
   logger: "optional",

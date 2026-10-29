@@ -160,6 +160,14 @@ export type {
 } from "./execution.js";
 
 export type {
+  SubagentTarget,
+  SubagentRequest,
+  SubagentErrorCode,
+  SubagentResult,
+  SubagentRunApi,
+} from "./subagent.js";
+
+export type {
   StateChangeEntry,
   StateField,
   StateFieldType,

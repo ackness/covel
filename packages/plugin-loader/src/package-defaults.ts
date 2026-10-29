@@ -53,10 +53,10 @@ export function packageProvides(
  * without a model (or, with no runtime, the package runs an entry module or a
  * world projection handler),
  * `ui:right-panel` / `ui:message-block` for declared panels and
- * `ui:manual-action` for something the player starts (a manual runtime, an
- * action or a command). A written tag comes first: the session-prep screen
- * shows the first tags on a plugin's row and groups a plugin with no
- * `cost:*` tag under its first one. `plugin.entry` is the resolved entry, the
+ * `ui:manual-action` for something the player starts (a manual runtime that is
+ * not sub-agent-only, an action or a command). A written tag comes first:
+ * the session-prep screen shows the first tags on a plugin's row and groups a
+ * plugin with no `cost:*` tag under its first one. `plugin.entry` is the resolved entry, the
  * default included.
  */
 export function packageTags(
@@ -88,7 +88,10 @@ export function packageTags(
     ["ui:message-block", Boolean(contributes?.ui?.message?.length)],
     [
       "ui:manual-action",
-      manifests.some((manifest) => manifest.trigger?.type === "manual") ||
+      manifests.some(
+        (manifest) =>
+          manifest.trigger?.type === "manual" && !manifest.subagentOnly,
+      ) ||
         Boolean(contributes?.actions?.length || contributes?.commands?.length),
     ],
   ];

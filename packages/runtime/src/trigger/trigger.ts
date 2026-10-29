@@ -11,6 +11,9 @@ export function shouldTrigger(
   manifest: RuntimeManifest,
   context: TriggerContext,
 ): boolean {
+  // A sub-agent-only runtime runs only inside its caller. The scheduler
+  // drops it before asking; this is the second guard.
+  if (manifest.subagentOnly) return false;
   const trigger = manifest.trigger;
   const type = trigger?.type ?? "auto";
   const logicalTurn = context.logicalTurn;

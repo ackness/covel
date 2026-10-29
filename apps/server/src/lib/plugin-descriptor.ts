@@ -50,6 +50,8 @@ function runtimeSummary(manifest: RuntimeManifest): PluginRuntimeSummary {
     },
     execution: manifest.execution ?? "sync",
     turnCompletion: effectiveTurnCompletion(manifest),
+    // Not a manual run the player can start: another runtime runs it.
+    ...(manifest.subagentOnly ? { subagentOnly: true as const } : {}),
     ...(manifest.model ? { model: manifest.model } : {}),
     outputKind: manifest.outputKind ?? "system",
     ...(manifest.outputContract

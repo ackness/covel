@@ -161,13 +161,16 @@ export function selectTriggeredRuntimes(args: {
     turnNumber,
     logicalTurn,
   } = args;
+  // A sub-agent-only runtime runs only inside its caller (`ctx.agents.run` /
+  // `delegate`): no scheduling path, manual or automatic, selects it.
   if (args.manualRuntimeIds !== undefined) {
     const ids = new Set(args.manualRuntimeIds);
     const targets = activeRuntimes.filter((rt) => ids.has(rt.name));
     const valid =
       ids.size > 0 &&
       ids.size === args.manualRuntimeIds.length &&
-      targets.length === ids.size;
+      targets.length === ids.size &&
+      targets.every((rt) => !rt.subagentOnly);
     return {
       manualTarget: undefined,
       manualTargets: valid ? targets : [],
@@ -189,12 +192,21 @@ export function selectTriggeredRuntimes(args: {
     };
   }
 
+  if (manualTarget?.subagentOnly) {
+    return {
+      manualTarget: undefined,
+      triggered: [],
+      abortReason: `manual-trigger: runtime runs only as a sub-agent: ${manualTarget.name}`,
+    };
+  }
+
   if (manualTarget) {
     return { manualTarget, triggered: [manualTarget], abortReason: undefined };
   }
 
   const activeSetupRuntimes = activeRuntimes.filter(isSetupRuntime);
   const triggered = activeRuntimes.filter((rt) => {
+    if (rt.subagentOnly) return false;
     // Setup runtimes: scheduled by mirror state (pending), not turn cadence,
     // then gated on their `needs(scope: session)` targets being done in the
     // frozen snapshot.

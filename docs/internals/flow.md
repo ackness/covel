@@ -700,6 +700,20 @@ io:
 | `event`        | 它订阅的事件在待处理事件里                                   |
 | `manual`       | 只在被 plugin-rpc 点名时，不看上面的任何门槛                 |
 
+`schedule.subagentOnly` 的 runtime 不在这棵树里：自动、手动点名、批量重跑和 `recursiveCall` 都不选中它。
+
+### 4.4 子 agent
+
+子 agent 由另一个 runtime 在自己的执行里运行：函数用 `ctx.agents.run`，agent 用 `delegate` 工具。
+
+- **同一次执行**：子 agent 没有自己的调度、执行或提交。它用的是调用方这次执行的 trace、取消信号和会话快照；trace 事件带 `parentCallId`，调试页能看出调用树。
+- **不形成提交单位**：它只交回输出、结束原因和用量。工具只剩只读的，没有 proposal 和事件；万一出现也被丢弃，并记一条 `subagent.writes-dropped`。调用方的提交单位只含调用方自己的写入。
+- **上限**：每次顶层执行一个 runner（`runTurnPipeline` 创建，嵌套执行共用），同时最多 8 个子 agent，深度 1。满了立刻拒绝，不排队，所以调用方不会等自己的名额。
+- **取消**：调用方的 `executionSignal`、运行时限和收尾时的撤销都传到子 agent；玩家的中止也一样。
+- **循环**：子 agent 走同一个 `runAgentToolLoop` 和收尾步骤，`allowSuspend: false`，默认 `actor` profile，没有会话历史。`PreRuntime` / `PostRuntime` 不触发，循环内的 Hook 照常触发。
+
+规则和错误码见[插件参考 · 子 agent](../reference/plugins.md#子-agent)。
+
 ## 五、前端交互设计
 
 ### 5.1 渲染管线

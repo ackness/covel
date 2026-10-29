@@ -18,6 +18,8 @@ import type {
   RuntimeActivation,
   RuntimeManifest,
   RuntimeResult,
+  SubagentRequest,
+  SubagentResult,
   TurnInput,
 } from "@covel/shared";
 import type {
@@ -100,6 +102,12 @@ export interface PluginRuntimeContextOptions {
   readonly timeoutMs: number;
   /** Default `progressScopeId` for `ctx.progress`; the turn ID when absent. */
   readonly executionId?: string;
+  /**
+   * The run ID of this invocation. A function runtime passes it; its
+   * sub-agents trace it as `parentCallId`. Without it (a guard) the context
+   * has no `agents`.
+   */
+  readonly runId?: string;
   /** Domain writes collect here and commit with the execution. */
   readonly writeBuffer: ExecutionWriteBuffer;
   /**
@@ -127,7 +135,7 @@ export interface PluginRuntimeContext {
   readDependencies(): readonly string[];
   /** Revoke every capability; a later call throws. */
   revoke(): void;
-  /** Wait for nested turns and tool calls the plugin did not await. */
+  /** Wait for nested turns, sub-agents and tool calls the plugin did not await. */
   drain(): Promise<void>;
   /** Stop relaying the turn's abort to {@link abort}. */
   dispose(): void;
@@ -156,6 +164,7 @@ export async function createPluginRuntimeContext({
   writeBuffer,
   pluginDataVisibility,
   recursionDepth,
+  runId,
 }: PluginRuntimeContextOptions): Promise<PluginRuntimeContext> {
   const helperCtx: HandlerHelperContext = {
     sessionId: input.sessionId,
@@ -403,6 +412,45 @@ export async function createPluginRuntimeContext({
     }
   };
 
+  // Sub-agents end with this invocation: revoking aborts the ones in
+  // flight, and drain waits for the ones the handler did not await.
+  const subagentAbort = new AbortController();
+  const inFlightSubagents = new Set<Promise<unknown>>();
+  const runner = deps.subagents;
+  const runSubagent =
+    runner && runId !== undefined
+      ? (request: SubagentRequest): Promise<SubagentResult> => {
+          const run = runner
+            .run({
+              caller: {
+                pluginId: manifest.pluginId,
+                runtimeId: manifest.name,
+                depth: 0,
+              },
+              request,
+              input,
+              deps,
+              hookPipeline,
+              executionContext,
+              parentCallId: runId,
+              parentSignal: AbortSignal.any([
+                handlerAbort.signal,
+                subagentAbort.signal,
+              ]),
+              parentDeadline: startTime + timeoutMs,
+            })
+            .then((result) => structuredClone(result));
+          inFlightSubagents.add(run);
+          void run.finally(() => inFlightSubagents.delete(run));
+          return run;
+        }
+      : undefined;
+  const drainSubagents = async (): Promise<void> => {
+    while (inFlightSubagents.size > 0) {
+      await Promise.allSettled(inFlightSubagents);
+    }
+  };
+
   const revocable = {
     store: makeRevocableCapability(handlerStore, isRevoked, "store"),
     pluginData: pluginDataHandle
@@ -431,6 +479,9 @@ export async function createPluginRuntimeContext({
       isRevoked,
       "recursiveCall",
     ),
+    agents: runSubagent
+      ? { run: makeRevocableFn(runSubagent, isRevoked, "agents") }
+      : undefined,
     // logger persists to the store and assetProgress emits SSE/trace events —
     // both are side-effecting, so they belong in the revocation set too —
     // otherwise a timed-out handler keeps appending log rows and emitting
@@ -506,6 +557,7 @@ export async function createPluginRuntimeContext({
       : {}),
     recursiveCall: revocable.recursiveCall,
     recursionDepth,
+    ...(revocable.agents ? { agents: revocable.agents } : {}),
     ...(revocable.gateway ? { gateway: revocable.gateway } : {}),
     ...(revocable.utils ? { utils: revocable.utils } : {}),
     ...(revocable.media ? { media: revocable.media } : {}),
@@ -534,9 +586,12 @@ export async function createPluginRuntimeContext({
     readDependencies: () => [...(pluginDataVisibility?.recorder ?? [])],
     revoke: () => {
       capabilitiesRevoked = true;
+      if (!subagentAbort.signal.aborted)
+        subagentAbort.abort(new Error("function runtime context revoked"));
     },
     drain: async () => {
       await drainRecursiveCalls();
+      await drainSubagents();
       await runtimeTools.drain();
     },
     dispose: () =>

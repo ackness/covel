@@ -3095,6 +3095,8 @@ Submission 里的其他键会被丢弃。来源插件、字段定义和模板只
 
 手动运行一次目标 runtime。它走完整的回合流程：组装 prompt、工具循环、提交 proposal。由事件触发的下游 runtime 会在同一回合内接着运行；同一事件有多个订阅者时按 `name` 排序。
 
+目标是 `schedule.subagentOnly` 的 runtime 时返回 `409 runtime_subagent_only`，什么都不执行：它只作为[子 agent](./plugins.md#子-agent) 在别的 runtime 里运行。插件详情和执行流程里这样的 runtime 带 `subagentOnly: true`。
+
 运行方式由 runtime 清单里的 `schedule.background` 决定：
 
 - 不写（默认）：等 runtime 跑完并提交 proposal，然后返回汇总 JSON。
@@ -4340,6 +4342,7 @@ runtime 可以中途停下来等玩家提供数据，这叫挂起。本节的端
 
 - **agent runtime**：从保存下来的工具调用记录接着跑。
 - **function runtime**：重新调用 handler，本次数据通过 `ctx.resumeData` 和 `ctx.resumedFromSuspensionId` 传入，不会进入模型循环。
+- 会话的 `runtimeModelOverrides` 照常生效：恢复的 runtime 和它调用的子 agent 都按各自的 runtimeId 选模型。
 
 **请求**
 
@@ -4353,7 +4356,7 @@ runtime 可以中途停下来等玩家提供数据，这叫挂起。本节的端
 | ------ | ------ | ---- | ----------------------------------------------- |
 | `data` | object | 是   | 玩家提交的数据，必须符合挂起项的 `resumeSchema` |
 
-- 缺少社区插件的运行授权时，先返回 `202 approval-required`，依次请求 `covel:plugin-server-code` 和 `runtime:<runtimeId>`。授权只针对这次恢复的 runtime；持有会话锁后还会重查。客户端逐项审批并重试原请求，拒绝审批则保留挂起项。托管部署还要求运营者凭据。
+- 缺少社区插件的运行授权时，先返回 `202 approval-required`，依次请求 `covel:plugin-server-code` 和 `runtime:<runtimeId>`。授权只针对这次恢复的 runtime 和会话里的子 agent 提供方；持有会话锁后还会重查。客户端逐项审批并重试原请求，拒绝审批则保留挂起项。托管部署还要求运营者凭据。
 - 服务端用 `resumeSchema` 对 `data` 做完整的 JSON Schema 校验（Ajv）：`enum`、嵌套对象、`min` / `max`、`minLength` / `maxLength`、`pattern`、数组 `items`、`oneOf` / `anyOf` 等都会检查。不符合返回 `400 resume_data_invalid`。schema 不是对象或无法编译时，返回 `400 resume_schema_invalid`；不会占用挂起项或运行插件，作者需修正插件产生的 schema，再发起新的挂起请求；玩家可以放弃原挂起项。
 - 浏览器客户端可以带 `X-Provider-Keys` 请求头，为这次请求提供模型密钥。桌面版和自部署客户端可以省略，沿用服务端启动时配置的密钥。服务端不会通过这个接口回传密钥。
 
@@ -5062,8 +5065,8 @@ id: example-epoch:2
 
 - 客户端通过审批接口给当前会话授权，然后用**同一个 `requestId`** 重发原请求。
 - 可能要连续问几次：先是 `covel:plugin-server-code`，再是每个 `runtime:<name>`。
-- 普通动作检查的范围：已选插件里参与自动执行的 runtime（按契约依赖解析后的结果）。明确的重试只检查选定的目标。
-- 手动 runtime 的普通调用仍然走插件 RPC 的授权。
+- 普通动作检查的范围：已选插件里参与自动执行的 runtime，以及子 agent 提供方（`schedule.subagentOnly`，任何执行都可能调用它们），都按契约依赖解析后的结果。明确的重试只检查选定的目标和子 agent 提供方。
+- 手动 runtime 的普通调用仍然走插件 RPC 的授权：先问目标自己的授权，再问会话里子 agent 提供方的授权。
 - 审批被拒绝时不会执行回合。
 - `demo` / `commercial` 部署层级还要求运维 token。执行时真正加载代码之前，还会再检查一次授权。
 - Web 客户端支持连续审批，并拒绝重复的或属于其他会话的审批响应。

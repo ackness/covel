@@ -672,6 +672,11 @@ export function createSseEventHandler(
       case "recursive.calling":
       case "recursive.completed":
       case "recursive.failed":
+      // Sub-agent runs: trace-only, never forwarded to this action stream.
+      case "subagent.started":
+      case "subagent.completed":
+      case "subagent.failed":
+      case "subagent.writes-dropped":
       // Function-runtime trace events: drive the /debug timeline via the
       // subscription channel / trace_events, not this action renderer.
       // gateway.* forward to the action stream (llm.* parity) but the action
