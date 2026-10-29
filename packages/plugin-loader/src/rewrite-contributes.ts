@@ -107,18 +107,57 @@ function pairToken(
   return { ...item, key: item.key, sep: item.sep };
 }
 
+function isMappingPair(item: CST.CollectionItem): boolean {
+  return item.key !== undefined || item.value !== undefined;
+}
+
+function insertPairs(
+  token: CST.BlockMap | CST.FlowCollection,
+  additions: readonly CST.CollectionItem[],
+): void {
+  let insertion = 0;
+  for (const [index, item] of token.items.entries()) {
+    if (isMappingPair(item)) insertion = index + 1;
+  }
+  const pairs = additions.map((item, index) => {
+    if (token.type !== "block-map" || insertion + index === 0) return item;
+    // A standalone document holds its first line's indentation outside the pair.
+    return {
+      ...item,
+      start: [
+        {
+          type: "space" as const,
+          source: " ".repeat(token.indent),
+          indent: 0,
+          offset: 0,
+        },
+        ...item.start,
+      ],
+    };
+  });
+  token.items = [
+    ...token.items.slice(0, insertion),
+    ...pairs,
+    ...token.items.slice(insertion),
+  ];
+}
+
 function delimiters(token: CST.BlockMap | CST.FlowCollection): void {
   if (token.type !== "flow-collection") return;
-  token.items.forEach((item, index) => {
+  let seenPair = false;
+  for (const item of token.items) {
+    if (!isMappingPair(item) && seenPair) continue; // Preserve a trailing comma and its trivia.
     item.start = item.start.filter((part) => part.type !== "comma");
-    if (index > 0)
+    if (!isMappingPair(item)) continue;
+    if (seenPair)
       item.start.unshift({
         type: "comma",
         source: ",",
         indent: token.indent,
         offset: 0,
       });
-  });
+    seenPair = true;
+  }
 }
 
 /**
@@ -283,10 +322,20 @@ export function rewriteContributes(
   }
   if (changed.length === 0) return { text: pluginMd, changed, drift };
   if (contribution) {
-    contribution.items = [
-      ...contribution.items.filter((item) => !deleted.has(item)),
-      ...additions,
-    ];
+    const originalFirst = contribution.items[0];
+    contribution.items = contribution.items.filter(
+      (item) => !deleted.has(item),
+    );
+    insertPairs(contribution, additions);
+    if (
+      contribution.type === "block-map" &&
+      contribution.items[0] !== originalFirst
+    ) {
+      // The parent already supplies the first line's indentation.
+      const leading = contribution.items[0]?.start[0];
+      if (leading?.type === "space")
+        leading.source = leading.source.slice(indent);
+    }
     delimiters(contribution);
     if (removedComments.length) {
       const tokens = commentTokens(removedComments, indent, newline);
@@ -324,7 +373,7 @@ export function rewriteContributes(
         extracted[key],
       ]),
     );
-    root.items.push(
+    insertPairs(root, [
       pairToken(
         "contributes",
         values,
@@ -332,7 +381,7 @@ export function rewriteContributes(
         root.type === "flow-collection",
         newline,
       ),
-    );
+    ]);
     delimiters(root);
   }
   const updated = CST.stringify(root);

@@ -43,7 +43,14 @@ export async function runExtractCli(
     const original = await fs.readFile(file, "utf8");
     const extracted = await extractDeclarations(root);
     const result = rewriteContributes(original, extracted);
-    if (!check && result.changed.length) await fs.writeFile(file, result.text);
+    if (!check && result.changed.length) {
+      // Reparse with the strict YAML reader and verify the declarations before writing.
+      if (rewriteContributes(result.text, extracted).changed.length)
+        throw new Error(
+          "Rewritten PLUGIN.md does not match extracted declarations",
+        );
+      await fs.writeFile(file, result.text);
+    }
     if (json)
       output.stdout.write(
         `${JSON.stringify({ extracted, drift: result.drift }, null, 2)}\n`,

@@ -1,16 +1,14 @@
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
-import {
-  readPlainYamlFrontmatter,
-  rewriteContributes,
-} from "@covel/plugin-loader";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import * as pluginLoader from "@covel/plugin-loader";
 import { extractDeclarations } from "./extract-declarations.js";
 import { runCli } from "./run-cli.js";
 
 const roots: string[] = [];
 afterEach(async () => {
+  vi.restoreAllMocks();
   await Promise.all(
     roots
       .splice(0)
@@ -231,7 +229,7 @@ export default (covel) => {
       if (!directory.isDirectory()) continue;
       const root = path.join(plugins, directory.name);
       const source = await fs.readFile(path.join(root, "PLUGIN.md"), "utf8");
-      const { data } = readPlainYamlFrontmatter(source);
+      const { data } = pluginLoader.readPlainYamlFrontmatter(source);
       const hasDefault = await fs
         .access(path.join(root, "server/index.js"))
         .then(
@@ -241,7 +239,7 @@ export default (covel) => {
       if (!data.entry && !hasDefault) continue;
       const extracted = await extractDeclarations(root);
       expect(
-        rewriteContributes(source, extracted).changed,
+        pluginLoader.rewriteContributes(source, extracted).changed,
         directory.name,
       ).toEqual([]);
       expect(extracted.localizedContributes, directory.name).toEqual([]);
@@ -252,6 +250,46 @@ export default (covel) => {
 });
 
 describe("extract CLI", () => {
+  it.each([
+    "contributes:\n  tools: [save]\n",
+    "contributes: {tools: [save],}\n",
+  ])(
+    "adds an action to the existing mapping without corrupting the manifest: %s",
+    async (header) => {
+      const root = await fixture(
+        `export default (covel) => { covel.registerTool({ name: "save" }); covel.registerRpc("new", () => {}); };`,
+        header,
+      );
+      expect((await cli(["extract", root])).code).toBe(0);
+      const updated = await fs.readFile(path.join(root, "PLUGIN.md"), "utf8");
+      expect(pluginLoader.readPlainYamlFrontmatter(updated).data).toEqual({
+        contributes: { tools: ["save"], actions: ["new"] },
+      });
+      expect((await cli(["extract", root, "--check"])).code).toBe(0);
+      expect(await fs.readFile(path.join(root, "PLUGIN.md"), "utf8")).toBe(
+        updated,
+      );
+    },
+  );
+
+  it.each([
+    "---\ncontributes: {actions: [new],,}\n---\n",
+    "---\ncontributes: {}\nactions: [new]\n---\n",
+  ])("rejects corrupted rewrite output before writing: %s", async (text) => {
+    const root = await fixture(register);
+    const file = path.join(root, "PLUGIN.md");
+    const original = await fs.readFile(file, "utf8");
+    vi.spyOn(pluginLoader, "rewriteContributes").mockReturnValueOnce({
+      text,
+      changed: ["actions"],
+      drift: [{ key: "actions", added: ["new"], removed: [] }],
+    });
+    const result = await cli(["extract", root]);
+    expect(result.code).toBe(1);
+    expect(result.stderr).not.toBe("");
+    expect(await fs.readFile(file, "utf8")).toBe(original);
+  });
+
   it("checks drift with added and removed names, never writes, and writes only by default", async () => {
     const root = await fixture(register, "contributes:\n  actions: [old]\n");
     const file = path.join(root, "PLUGIN.md");

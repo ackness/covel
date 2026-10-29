@@ -102,6 +102,65 @@ contributes:
     expect(rewriteContributes(result.text, extracted).changed).toEqual([]);
   });
 
+  it.each([2, 4])(
+    "adds a missing kind inside an existing block mapping with %i-space indentation",
+    (width) => {
+      const indent = " ".repeat(width);
+      const original = `---\ncontributes:\n${indent}tools: [save]\n${indent}# Trailing comment\ndescription: Keep\n---\nBody\n`;
+      const extracted = { ...empty, tools: ["save"], actions: ["open"] };
+      const result = rewriteContributes(original, extracted);
+      expect(readPlainYamlFrontmatter(result.text).data).toEqual({
+        contributes: { tools: ["save"], actions: ["open"] },
+        description: "Keep",
+      });
+      expect(result.text).toContain(`\n${indent}actions:\n`);
+      expect(result.text).toContain(
+        `${indent}# Trailing comment\ndescription: Keep\n---\nBody\n`,
+      );
+      expect(rewriteContributes(result.text, extracted)).toEqual({
+        text: result.text,
+        changed: [],
+        drift: [],
+      });
+    },
+  );
+
+  it.each([",}", ", # Trailing comment\n}"])(
+    "adds a missing kind before flow-mapping trailing trivia: %s",
+    (ending) => {
+      const original = `---\ncontributes: {tools: [save]${ending}\ndescription: Keep\n---\nBody\n`;
+      const extracted = { ...empty, tools: ["save"], actions: ["open"] };
+      const result = rewriteContributes(original, extracted);
+      expect(readPlainYamlFrontmatter(result.text).data).toEqual({
+        contributes: { tools: ["save"], actions: ["open"] },
+        description: "Keep",
+      });
+      expect(result.text).toContain(
+        `${ending}\ndescription: Keep\n---\nBody\n`,
+      );
+      expect(rewriteContributes(result.text, extracted)).toEqual({
+        text: result.text,
+        changed: [],
+        drift: [],
+      });
+    },
+  );
+
+  it("creates contributes before a root flow mapping's trailing comma", () => {
+    const original = "---\n{description: Keep,}\n---\nBody\n";
+    const extracted = { ...empty, actions: ["open"] };
+    const result = rewriteContributes(original, extracted);
+    expect(readPlainYamlFrontmatter(result.text).data).toEqual({
+      description: "Keep",
+      contributes: { actions: ["open"] },
+    });
+    expect(rewriteContributes(result.text, extracted)).toEqual({
+      text: result.text,
+      changed: [],
+      drift: [],
+    });
+  });
+
   it("preserves flow maps and every untouched value byte", () => {
     const original =
       '---\ncontributes: {tools: [old], data: {notes: {schema: "./note.json"}}, forms: [old]}\n---\nBody\n';
