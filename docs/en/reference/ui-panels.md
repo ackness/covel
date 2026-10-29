@@ -103,7 +103,7 @@ The right-side panels are the main place where plugins show their state. First, 
 ```
 session created → GET /api/ui-specs?sessionId=<id>
   → server filters by the session's active set (session plugin scope)
-  → { right: [...], message: [...], diagnostics: [...] }
+  → { right: [...], message: [...], view: [...], diagnostics: [...] }
   → tabs are generated from right[] (icon + label)
   → each tab maps to one json-render Renderer
   → pluginData[pluginId][namespace] is injected as state
@@ -212,9 +212,11 @@ contributes:
       - ./ui/my-panel.json
 ```
 
-When this page says `ui.right` or `ui.message`, it means these keys under `contributes.ui`. These are the two supported placements; a right panel can also select the stage decision area with `surfaces`. Other placements, including the removed `left`, are ignored with a log message at load and reported as unknown fields by `pnpm validate:plugin`.
+When this page says `ui.right`, `ui.message` or `ui.view`, it means these keys under `contributes.ui`. These are the three supported placements; a right panel can also select the stage decision area with `surfaces`. Other placements, including the removed `left`, are ignored with a log message at load and reported as unknown fields by `pnpm validate:plugin`.
 
 ### JSON Spec Format
+
+`description` is an optional translatable description. `bridge: "session"` is only for a `webview` in `ui.view`; see [Plugin views](#plugin-views) for scope and consent.
 
 ```json
 {
@@ -663,7 +665,7 @@ Stage mode is a visual-novel style screen: a scene background, character portrai
 It is the fourth way to present a session, `viewMode: "stage"`. It sits next to `parsed` / `detailed` / `raw`, and you switch to it in the `GameViewHeader` at the top. When you enter the stage, the three parts of the message area (`ChatMessages`, `PendingDraftsBar` and `MessageComposer`) are all replaced by a full-screen stage. `GameViewHeader` stays.
 
 - **When it renders**: `viewMode === "stage" && (session.phase === "playing" || hasSubmittedForm(...))`. The character creation form is still completed in the original message stream. Once it is submitted, the stage opens right away, and a "Generating" status is shown until the first part of the narrative arrives.
-- **Initial value**: a world package can set `defaultViewMode: stage` at the top level of `world.yaml` (it goes into `WorldRecord.metadata.defaultViewMode`). Then the session opens in stage mode the **first time** it is mounted. After the player switches the view in the header, the player's choice wins. This choice is not saved. See [world-data.md](./world-data.md#world-package).
+- **Initial value**: a world package can set `defaultViewMode: stage` at the top level of `world.yaml` (it goes into `WorldRecord.metadata.defaultViewMode`). Then the session opens in stage mode the **first time** it is mounted. After the player switches the view in the header, the player's choice wins. This choice is not saved. The initial mode can also be `parsed` or `plugin:<pluginId>:<viewId>`; bridge views request consent first, as described below. See [world-data.md](./world-data.md#world-package).
 
 ### Layers and Data Sources
 
@@ -730,6 +732,77 @@ The input is the value of a `stage.backdrop@1` slot, which matches `stageBackdro
 - **Form modal**: the stage dialog takes only options and free text. So when a **form-type** interaction block that has not been submitted yet appears in the messages (`extractPendingFormMessages`), the stage opens a `Dialog` and uses `MessageBlockRenderer` to let the player fill it in. It closes automatically after submission.
 
 Implementation: `apps/web/src/components/session/stage/` (`StageView.tsx` does the assembly. The others are `Stage{Backdrop,Sprites,Hud,Dialog,Choices}.tsx`, `stage-selectors.ts` and `use-typewriter.ts`).
+
+## Plugin views
+
+A plugin view fills the story column. Players choose a page from the header’s “Plugin views” menu, which lists views of active session plugins. A host bar shows the view and plugin names. The host draws a “Back to default view” button in both the header and the view bar. Both remain available during execution, outside the plugin DOM.
+
+Declare spec files in the root `PLUGIN.md`:
+
+```yaml
+contributes:
+  ui:
+    view: [./ui/story-view.json]
+```
+
+```json
+{
+  "id": "story",
+  "label": "Story reader",
+  "description": "Read the current story",
+  "webview": { "entry": "./story-view.html" },
+  "bridge": "session"
+}
+```
+
+Write source text in English and translations under `messages` in `locales/<locale>.yaml`. See [session-view-probe](../../../tests/third-party/session-view-probe/README.md).
+
+- `id` and `label` are required. `id` matches `^[a-z][a-z0-9-]{0,63}$` and is unique within the plugin. The first duplicate wins; later declarations produce diagnostics.
+- Declare exactly one of `view` and `webview`. Optional fields are `icon`, `description`, `dataSource`, `emptyState` and `alwaysRender`. A declarative page without data can use `alwaysRender: true`.
+- `surfaces`, `group`, `groupLabel`, `groupOrder`, `shortLabel` and `navTarget` are not allowed here; they route panels and stage surfaces.
+- The mode is `plugin:<pluginId>:<viewId>`, for example `plugin:session-view-probe:story`. World and pack `defaultViewMode` accept this format, `parsed` and `stage`. Authors can select `detailed` and `raw` manually only.
+- While views load, the host view is shown. Missing views, disabled plugins, request failures and render errors fall back to it. The host default is `stage` only when the world’s default is exactly `stage`, otherwise `parsed`. A plugin view is never a fallback target. The player’s selection survives a transient request failure and can recover on a later successful load. Render errors select the host default and show a toast.
+- The choice lasts for the current mount and is not saved per session. Plugin views do not use stage immersion and do not show the host composer.
+
+### Consent before reading a session
+
+Only a `webview` in `contributes.ui.view` can declare `bridge: "session"`. Until the player consents, the page is not mounted and no session projection is sent. A world default naming it also opens the consent prompt while showing `parsed` / `stage` underneath.
+
+The capability is session reading, bound to the plugin ID and a SHA-256 hash of the entire loaded spec, including inlined HTML. SettingsStore persists the record on this device at `ui.pluginViewConsent.<pluginId>.<hash>.session`. Changing the spec or HTML asks again. Choose “Revoke story access” in the view bar’s “View permissions” menu to revoke and return to the host default. This consent is independent of server-code approval and applies to every plugin source.
+
+### SessionProjection (version 1)
+
+After consent, the page reads the `session` field of the `window.covel` state object, and can also use `window.covel.subscribe` to follow changes. The table below describes that field. The projection does not repeat top-level `locale` and `theme`.
+
+<!-- prettier-ignore -->
+| Field | Content |
+| --- | --- |
+| `version` | Always `1` |
+| `phase` | `setup` or `playing` |
+| `turn` | Committed player turns, `completedPlayerTurns` |
+| `executing` | Whether execution is in progress |
+| `messages[]` | `{ seq, role, text, truncated? }`. Only assistant messages with `kind === "story"` and user messages without a block. `seq` is the 1-based position in the full visible list; sliding the window does not renumber it |
+| `streaming` | `{ seq, text }` or `null`. A `stream_` placeholder appears only here, never in `messages` |
+| `pending[]` | `{ seq, block }`. Interactions the host still expects the player to answer. `seq` is the position in the original message list; hidden block fields are removed |
+| `characters[]` | Public `id`, `name`, `type`, with optional `aliases`, `description`, `fields`. Other character fields are excluded |
+| `slots[]` | `{ slot, key?, value }` for kernel UI slots the host already shows; media references stay opaque objects |
+
+The projection excludes message `id`, `turnId`, `requestId`, `runtimeId`, timestamps, internal non-story messages, reasoning, execution steps, plugin data rows, settings, provider keys and session tokens. Building it never reads `plugin_data`. A public character `id` identifies a character; it is not message metadata.
+
+Nested values recursively drop every key starting with `_`, plus `hidden`, `concealed`, `turnId`, `requestId`, `runtimeId`, `sessionId`, `timestamp`, `createdAt`, `updatedAt` and `uuid`. Values beyond depth 8 become `null`. The host validates the projection; invalid projections are withheld with one warning.
+
+<!-- prettier-ignore -->
+| Content | Limit and handling |
+| --- | --- |
+| Message window | Last 200 messages, at most 256 KiB of message text total; oldest messages drop first |
+| Single message text | 32 KiB, with `truncated: true` when cut |
+| Streaming text | 64 KiB |
+| Characters | At most 100, each at most 8 KiB serialized; oversized records are skipped |
+| Pending interactions | At most 8; each block at most 16 KiB serialized; oversized blocks become `{ truncated: true }` |
+
+KiB counts UTF-8 bytes. State changes push a full projection. Streaming uses coalesced `{ type: "stream", seq, append }` messages at 100 ms intervals, with an immediate tail flush at completion. Every full push includes the current streaming text for resynchronization.
+
+**The session bridge is read-only in this version.** It adds no `submitAction`, form submission, abort or open-panel capability. Existing `invokeRuntime`, `invokePluginAction`, `invokeCommand`, `emitEvent` and `setUiState` handlers are unchanged. Images travel only as references, without bytes or blob URLs, so the sample page shows no art. There is no composer. HTML remains a single file; an unconnected page has no handshake timeout fallback, but host back controls remain available.
 
 ## Component Catalogue
 

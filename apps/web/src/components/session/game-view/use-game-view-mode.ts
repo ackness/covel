@@ -1,17 +1,26 @@
 import { useCallback, useState } from "react";
+import { parsePluginViewMode, type PluginViewMode } from "@covel/shared";
 import type { WorldRecord } from "@/services/api.js";
 import type { GameViewMode } from "./game-view-header.js";
+import type { PluginViewEntry, PluginViews } from "./use-plugin-views.js";
 
-const worldViewMode = (world: Pick<WorldRecord, "metadata"> | null) =>
+type World = Pick<WorldRecord, "metadata"> | null;
+export const hostDefault = (world: World) =>
   world?.metadata?.defaultViewMode === "stage" ? "stage" : "parsed";
+export function worldViewMode(world: World): GameViewMode {
+  const mode = world?.metadata?.defaultViewMode;
+  return typeof mode === "string" && parsePluginViewMode(mode)
+    ? (mode as PluginViewMode)
+    : hostDefault(world);
+}
 
-/**
- * The view a session shows: the world's `defaultViewMode` until the player
- * picks one. The world can arrive after the view mounts, as when a reload
- * restores the session, and its default applies then.
- */
-export function useGameViewMode(world: Pick<WorldRecord, "metadata"> | null) {
-  const [viewMode, setViewMode] = useState<GameViewMode>(() =>
+/** Keep the player's intent through loading/errors; only mount a usable view. */
+export function useGameViewMode(
+  world: World,
+  views?: PluginViews,
+  canUse?: (entry: PluginViewEntry) => boolean,
+) {
+  const [storedMode, setViewMode] = useState<GameViewMode>(() =>
     worldViewMode(world),
   );
   const [awaitingWorld, setAwaitingWorld] = useState(!world);
@@ -19,9 +28,38 @@ export function useGameViewMode(world: Pick<WorldRecord, "metadata"> | null) {
     setAwaitingWorld(false);
     setViewMode(worldViewMode(world));
   }
-  const chooseViewMode = useCallback((mode: GameViewMode) => {
-    setAwaitingWorld(false);
-    setViewMode(mode);
-  }, []);
-  return [viewMode, chooseViewMode] as const;
+  const choose = useCallback(
+    (mode: GameViewMode) => {
+      if (
+        parsePluginViewMode(mode) &&
+        !views?.views.some((entry) => entry.mode === mode)
+      )
+        return;
+      setAwaitingWorld(false);
+      setViewMode(mode);
+    },
+    [views],
+  );
+  const pluginMode = parsePluginViewMode(storedMode);
+  const entry = views?.views.find((entry) => entry.mode === storedMode);
+  const consentView =
+    views?.status === "ready" && entry && canUse && !canUse(entry)
+      ? entry
+      : undefined;
+  const available =
+    !pluginMode || (views?.status === "ready" && entry && !consentView);
+  return [
+    available ? storedMode : hostDefault(world),
+    choose,
+    {
+      hostDefault: hostDefault(world),
+      fellBack: Boolean(
+        pluginMode &&
+        views &&
+        views.status !== "loading" &&
+        (!entry || views?.status === "error" || consentView),
+      ),
+      consentView,
+    },
+  ] as const;
 }

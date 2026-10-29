@@ -577,3 +577,17 @@ To see what data a panel actually receives: in development mode, press `Cmd/Ctrl
 - **Write instant actions, events, and player commands.** See the [Plugin fields reference](../reference/plugins.md) and the [Plugin extension reference](../reference/plugin-extensions.md).
 - **Write tests for interface logic.** See [Plugin testing](./testing.md).
 - **Make your own interface style.** See [Make a theme](../recipes/themes.md).
+
+## Make a plugin view
+
+1. Copy [session-view-probe](../../../tests/third-party/session-view-probe/README.md) to your user plugin directory. It contains no runtime or server entry.
+2. Open `contributes.ui.view` in the root `PLUGIN.md` and inspect `story-view.json` and `notes-view.json`. The former reads the story in single-file HTML; the latter uses `Stack` and `Text` without session data. When editing English labels, update `locales/zh.yaml` too.
+3. Enable the plugin in a session and choose “Story reader” from the header’s “Plugin views” menu. A reading consent prompt appears first. The story is shown only after consent. Use “Back to default view” to return, or revoke access from the view bar menu. Editing the spec or HTML requires consent again.
+
+See the [plugin view reference](../reference/ui-panels.md#plugin-views) for projection scope, fields and limits. This sample submits no actions or forms and has no composer or images.
+
+| Problem                          | What to do                                                                                          |
+| -------------------------------- | --------------------------------------------------------------------------------------------------- |
+| The menu has no view             | Enable the plugin in this session and inspect `/api/ui-specs` diagnostics                           |
+| The page is blank after consent  | Check that HTML uses a classic script and `window.covel.subscribe`; leave with the host back button |
+| A page stays hidden without data | Add `alwaysRender: true` to a json-render page without a data source                                |

@@ -5,6 +5,7 @@ interface ErrorBoundaryProps {
   children: React.ReactNode;
   fallbackMessage?: string;
   onReset?: () => void;
+  onError?: () => void;
   /** Identifies the failing surface in {@link PluginSurfaceBoundary}'s fallback. */
   surfaceLabel?: string;
 }
@@ -49,6 +50,7 @@ abstract class BaseBoundary extends React.Component<
   override componentDidCatch(error: Error, info: React.ErrorInfo): void {
     // eslint-disable-next-line no-console
     console.error("[ErrorBoundary]", error, info.componentStack);
+    this.props.onError?.();
   }
 
   protected handleReset = (): void => {

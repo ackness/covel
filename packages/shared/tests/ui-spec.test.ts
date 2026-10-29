@@ -250,3 +250,84 @@ describe("row template and value-label contracts", () => {
       ).toBeGreaterThan(0);
   });
 });
+
+describe("full-column view placement", () => {
+  const valid = {
+    id: "reader",
+    label: "Reader",
+    webview: { entry: "./reader.html" },
+    bridge: "session",
+  };
+  it("accepts a session bridge webview", () => {
+    expect(pluginUiSpecIssues(valid, "owner", "view")).toEqual([]);
+  });
+  it.each(["id", "label"])("requires %s", (field) => {
+    const spec: Record<string, unknown> = { ...valid };
+    delete spec[field];
+    expect(pluginUiSpecIssues(spec, "owner", "view")).toContainEqual(
+      expect.objectContaining({
+        path: field,
+        message: expect.stringContaining("contributes.ui.view"),
+      }),
+    );
+  });
+  it.each(["1reader", "Reader", "a".repeat(65)])("rejects view id %s", (id) => {
+    expect(
+      pluginUiSpecIssues({ ...valid, id }, "owner", "view").map(
+        (issue) => issue.path,
+      ),
+    ).toContain("id");
+  });
+  it.each([
+    "surfaces",
+    "group",
+    "groupLabel",
+    "groupOrder",
+    "shortLabel",
+    "navTarget",
+  ])("rejects routing field %s", (field) => {
+    expect(
+      pluginUiSpecIssues(
+        {
+          ...valid,
+          [field]:
+            field === "surfaces"
+              ? ["panel"]
+              : field === "groupOrder"
+                ? 1
+                : field === "navTarget"
+                  ? "images"
+                  : "x",
+        },
+        "owner",
+        "view",
+      ),
+    ).toContainEqual({ path: field, message: "not valid in a view" });
+  });
+  it("restricts the bridge to a webview in the view placement", () => {
+    expect(
+      pluginUiSpecIssues(
+        {
+          id: "reader",
+          label: "Reader",
+          view: { component: "Text" },
+          bridge: "session",
+        },
+        "owner",
+        "view",
+      ),
+    ).toContainEqual(
+      expect.objectContaining({
+        path: "bridge",
+        message: expect.stringContaining("webview"),
+      }),
+    );
+    expect(pluginUiSpecIssues(valid, "owner", "right")).toContainEqual({
+      path: "bridge",
+      message: "bridge is only valid in contributes.ui.view",
+    });
+    expect(
+      pluginUiSpecIssues({ view: { component: "Text" } }, "owner"),
+    ).toEqual([]);
+  });
+});

@@ -2,6 +2,7 @@ import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import fs from "node:fs/promises";
 import path from "node:path";
 import os from "node:os";
+import { runValidateManifest } from "../scripts/run-validate-manifest.js";
 import {
   discoverPlugins,
   loadPluginDefinition,
@@ -208,5 +209,75 @@ Prompt.
     expect(
       (globalThis as Record<string, unknown>).__covelUiHandlerImported,
     ).toBe(true);
+  });
+});
+
+describe("view spec loading", () => {
+  it("keeps the first view id and loads right panels despite invalid views", async () => {
+    const parent = await fs.mkdtemp(path.join(os.tmpdir(), "covel-view-list-"));
+    const root = path.join(parent, "owner");
+    await fs.mkdir(root);
+    try {
+      for (const [file, spec] of Object.entries({
+        "first.json": {
+          id: "reader",
+          label: "First",
+          view: { component: "Text" },
+        },
+        "second.json": {
+          id: "reader",
+          label: "Second",
+          view: { component: "Text" },
+        },
+        "invalid.json": { view: { component: "Text" } },
+        "right.json": { view: { component: "Text" } },
+      }))
+        await fs.writeFile(path.join(root, file), JSON.stringify(spec));
+      const result = await loadPluginUiSpecs(root, "owner", {
+        view: ["first.json", "second.json", "invalid.json"],
+        right: ["right.json"],
+      });
+      expect(result.slots.view).toHaveLength(1);
+      expect(result.slots.view?.[0]?.label).toBe("First");
+      expect(result.slots.right).toHaveLength(1);
+      expect(result.diagnostics).toHaveLength(2);
+      expect(result.diagnostics[0]).toMatchObject({
+        slot: "view",
+        specIndex: 1,
+        specId: "reader",
+        issues: [{ path: "id", message: 'duplicate view id "reader"' }],
+      });
+      expect(result.diagnostics[1]?.issues.map((issue) => issue.path)).toEqual([
+        "id",
+        "label",
+      ]);
+      await fs.writeFile(
+        path.join(root, "PLUGIN.md"),
+        `---
+id: owner
+description: View validation
+contributes:
+  ui:
+    view: [./first.json, ./second.json]
+---
+`,
+      );
+      let stderr = "";
+      expect(
+        await runValidateManifest([root], {
+          stdout: { write: () => {} },
+          stderr: {
+            write: (text) => {
+              stderr += text;
+            },
+          },
+        }),
+      ).toBe(1);
+      expect(stderr).toContain(
+        'contributes.ui.view: ./second.json: id: duplicate view id "reader"',
+      );
+    } finally {
+      await fs.rm(parent, { recursive: true, force: true });
+    }
   });
 });

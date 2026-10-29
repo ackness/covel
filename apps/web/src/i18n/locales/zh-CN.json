@@ -489,7 +489,17 @@
       "provider": "{{provider}} 还没有填写 API 密钥，{{slots}}可能会失败。",
       "configure": "填写密钥",
       "startAnyway": "仍然开始"
-    }
+    },
+    "pluginViews": "插件视图",
+    "backToDefaultView": "返回默认视图",
+    "viewReadsStory": "此视图可以读取故事",
+    "viewFailed": "“{{label}}”无法渲染，已返回默认视图。",
+    "viewPermissions": "视图权限",
+    "revokeViewConsent": "撤销故事读取授权",
+    "viewConsentTitle": "允许“{{label}}”读取此会话？",
+    "viewConsentDescription": "{{plugin}} 请求读取故事消息、流式文本、待答交互、公开角色和可见界面槽位。授权只适用于本设备上的此版本视图，可在视图菜单中撤销。",
+    "viewConsentDecline": "使用默认视图",
+    "viewConsentAllow": "允许读取会话"
   },
   "blocks": {
     "actionPlaceholder": "或输入自定义行动...",

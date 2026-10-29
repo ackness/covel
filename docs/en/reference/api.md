@@ -1524,7 +1524,7 @@ Returns plugins' UI declarations, grouped by slot. The front end calls it at sta
     }
   ],
   "message": [...],
-  "left": [...],
+  "view": [...],
   "diagnostics": []
 }
 ```
@@ -1538,6 +1538,8 @@ Each slot is an array. Its elements are `{ pluginId, specs[] }`. Each item in `s
 - If one spec fails validation, it **does not affect the whole response**. Only that spec is removed from its slot.
 - The reason for failure is written in the top-level `diagnostics[]`. Each item is `{ pluginId, runtimeId, slot, specIndex, specId?, issues[{ path, message, code }] }`. It says which plugin, which field, and what the problem is. A file that cannot be read (missing, not JSON, or pointing outside the plugin directory) is reported here too; `code` is always `invalid`.
 - With `sessionId`, `diagnostics` includes only the plugins active in that session.
+
+`view` is always an array (possibly empty) of `{ pluginId, specs }`. With a session, it lists only active plugins. The first view ID within a plugin wins; later duplicates produce `slot: "view"` diagnostics. Loading reads JSON and HTML without importing plugin code or requiring server-code approval. The browser separately gates mounting on player consent for session reading; see [Plugin views](./ui-panels.md#plugin-views).
 
 **Development hot reload**: `POST /api/plugins/:id/reload` reloads one community plugin.
 

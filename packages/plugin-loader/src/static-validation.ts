@@ -224,8 +224,9 @@ export function validatePluginFiles(
   );
   if (schemaIssue) throw new Error(schemaIssue);
   // The same rules decide whether the game shows the panel (`loadPluginUiSpecs`).
-  for (const [slot, paths] of Object.entries(plugin.contributes?.ui ?? {}))
-    for (const reference of paths ?? []) {
+  const viewIds = new Set<string>();
+  for (const slot of ["right", "message", "view"] as const)
+    for (const reference of plugin.contributes?.ui?.[slot] ?? []) {
       const source = packageManifest.sourcePath;
       const field = `contributes.ui.${slot}`;
       if (!reference.endsWith(".json"))
@@ -233,7 +234,13 @@ export function validatePluginFiles(
           `${source}: ${field}: ${reference}: a UI spec is a JSON file; custom component files are not supported`,
         );
       const spec = file(source, field, reference, true);
-      const problems = pluginUiSpecIssues(spec, plugin.id);
+      const problems = pluginUiSpecIssues(spec, plugin.id, slot);
+      const id = (spec as { id?: unknown }).id;
+      if (slot === "view" && typeof id === "string") {
+        if (viewIds.has(id))
+          problems.push({ path: "id", message: `duplicate view id "${id}"` });
+        viewIds.add(id);
+      }
       if (problems.length)
         throw new Error(
           problems

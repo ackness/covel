@@ -39,6 +39,7 @@ export async function loadPluginUiSpec(
   root: string,
   file: string,
   ownerPluginId: string,
+  slot?: PluginUiSlot,
 ): Promise<Record<string, unknown>> {
   const specPath = await containedFile(root, file);
   // The spec holds English text; `locales/<locale>.yaml` translates it.
@@ -47,7 +48,7 @@ export async function loadPluginUiSpec(
     await readMessageCatalogs(root),
   );
   const specId = typeof spec.id === "string" && spec.id ? spec.id : undefined;
-  const issues = pluginUiSpecIssues(spec, ownerPluginId);
+  const issues = pluginUiSpecIssues(spec, ownerPluginId, slot);
   if (issues.length) throw new PluginUiSpecError(issues, specId);
   const webview = spec.webview as
     { entry: string; height?: number } | undefined;
@@ -74,7 +75,7 @@ export async function loadPluginUiSpec(
   return spec;
 }
 
-export type PluginUiSlot = "right" | "message";
+export type PluginUiSlot = "right" | "message" | "view";
 
 /** One declared UI spec the host does not show. */
 export interface PluginUiSpecDiagnostic {
@@ -110,7 +111,8 @@ export async function loadPluginUiSpecs(
     Record<PluginUiSlot, Readonly<Record<string, unknown>>[]>
   > = {};
   const diagnostics: PluginUiSpecDiagnostic[] = [];
-  for (const slot of ["right", "message"] as const)
+  const viewIds = new Set<string>();
+  for (const slot of ["right", "message", "view"] as const)
     for (const [specIndex, declaredPath] of (ui?.[slot] ?? []).entries()) {
       try {
         if (!declaredPath.endsWith(".json"))
@@ -125,7 +127,16 @@ export async function loadPluginUiSpecs(
           root,
           path.resolve(root, declaredPath),
           pluginId,
+          slot,
         );
+        if (slot === "view" && typeof spec.id === "string") {
+          if (viewIds.has(spec.id))
+            throw new PluginUiSpecError(
+              [{ path: "id", message: `duplicate view id "${spec.id}"` }],
+              spec.id,
+            );
+          viewIds.add(spec.id);
+        }
         (slots[slot] ??= []).push(spec);
       } catch (error) {
         diagnostics.push({

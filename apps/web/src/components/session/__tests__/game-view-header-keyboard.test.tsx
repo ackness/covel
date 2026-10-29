@@ -42,6 +42,8 @@ function sessionStatus(
   return (
     <>
       <GameViewHeader
+        pluginViews={[]}
+        hostDefaultMode="parsed"
         recoveryNoticeVisible={executionRecoveryNoticeVisible(recovery)}
         t={i18n.t}
         sessionId="s"
@@ -166,6 +168,8 @@ it("uses native buttons in the overflow disclosure and restores focus on Escape 
   const changeView = vi.fn();
   render(
     <GameViewHeader
+      pluginViews={[]}
+      hostDefaultMode="parsed"
       t={i18n.t}
       sessionId="s"
       sessionPhase="playing"
@@ -233,6 +237,8 @@ it.each(["zh-CN", "en-US"])(
     render(
       <>
         <GameViewHeader
+          pluginViews={[]}
+          hostDefaultMode="parsed"
           t={i18n.t}
           sessionId="translated-session"
           sessionPhase="playing"

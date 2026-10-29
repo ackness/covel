@@ -1,0 +1,16 @@
+{
+  "id": "notes",
+  "label": "Notes",
+  "alwaysRender": true,
+  "view": {
+    "component": "Stack",
+    "children": [
+      {
+        "component": "Text",
+        "props": {
+          "content": "A declarative view without session access."
+        }
+      }
+    ]
+  }
+}

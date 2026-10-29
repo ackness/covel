@@ -535,7 +535,17 @@
       "provider": "No API key is configured for {{provider}}. {{slots}} may fail.",
       "configure": "Add API key",
       "startAnyway": "Start anyway"
-    }
+    },
+    "pluginViews": "Plugin views",
+    "backToDefaultView": "Back to default view",
+    "viewReadsStory": "This view can read the story",
+    "viewFailed": "“{{label}}” could not be rendered. Returned to the default view.",
+    "viewPermissions": "View permissions",
+    "revokeViewConsent": "Revoke story access",
+    "viewConsentTitle": "Allow “{{label}}” to read this session?",
+    "viewConsentDescription": "{{plugin}} requests access to story messages, streaming text, pending interactions, public characters and visible UI slots. Approval applies to this view content on this device. You can revoke it from the view menu.",
+    "viewConsentDecline": "Use default view",
+    "viewConsentAllow": "Allow session reading"
   },
   "blocks": {
     "actionPlaceholder": "Or type your own action...",

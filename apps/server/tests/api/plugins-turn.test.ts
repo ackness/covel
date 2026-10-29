@@ -333,6 +333,7 @@ describe("Plugin Routes", () => {
       expect(body.framework.pluginManifest.uiSlots).toEqual([
         "right",
         "message",
+        "view",
       ]);
       expect(body.framework.scheduling.effectsPolicy).toBe(
         process.env.COVEL_EFFECTS_POLICY === "strict" ? "strict" : "warn",
