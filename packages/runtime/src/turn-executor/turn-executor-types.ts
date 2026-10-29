@@ -198,6 +198,13 @@ export interface TurnExecutorDeps extends AgentLoopDeps {
    * review the effect of that visibility; a throw is logged and ignored.
    */
   readonly pluginDataReadProbe?: import("../function-runtime/upstream-plugin-data.js").PluginDataReadProbe;
+
+  /**
+   * Sub-agent runner of the execution. `runTurnPipeline` creates one per
+   * top-level execution when absent, and nested executions share it, so its
+   * pool cap counts every sub-agent the execution has in flight.
+   */
+  readonly subagents?: import("../agent-loop/subagent-runner.js").SubagentRunner;
 }
 
 export interface TurnExecutorOptions {

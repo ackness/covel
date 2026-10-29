@@ -157,6 +157,12 @@ export const runtimeAuthoringManifestSchema = z
             "`true` runs a `manual` or `event` activation as a durable background job: the caller gets a job ID at once. Defaults to `false`: the caller waits for the result.",
           )
           .optional(),
+        subagentOnly: z
+          .boolean()
+          .describe(
+            "`true` makes this agent runtime a sub-agent provider: the scheduler never runs it, and another runtime runs it with `ctx.agents.run` or the `delegate` tool. It implies `trigger: manual` and allows no `stage`, `needs`, `after`, `background`, `io.output.recordAs`, `guard` or `io.visibility: story`. Defaults to `false`.",
+          )
+          .optional(),
       })
       .describe("When and in what order the runtime runs.")
       .optional(),
@@ -524,6 +530,9 @@ export const runtimeAuthoringManifestSchema = z
         trigger: value.schedule?.trigger,
         every: value.schedule?.every,
         needs: value.schedule?.needs,
+        after: value.schedule?.after,
+        subagentOnly: value.schedule?.subagentOnly,
+        guard: value.guard,
         ...(detached ? { detached: detached === true ? {} : detached } : {}),
         background: value.schedule?.background,
         builtinTools: (value.function ?? value.agent)?.tools?.builtin,

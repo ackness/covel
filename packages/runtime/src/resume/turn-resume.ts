@@ -15,6 +15,8 @@ import type { SuspensionRecord } from "@covel/store";
 import type { EmittedEvent } from "@covel/tools";
 import type { LLMMessage } from "@covel/shared";
 import { runAgentToolLoop } from "../agent-loop/turn-agent-tool-loop.js";
+import { createSubagentRunner } from "../agent-loop/subagent-runner.js";
+import { withSubagentDelegate } from "../agent-loop/subagent-delegate.js";
 import { freezeInputSlots } from "../agent-loop/runtime-input-slots.js";
 import { executeFunctionRuntime } from "../function-runtime/turn-function-runtime.js";
 import { createWorldModelView } from "../function-runtime/world-model-view.js";
@@ -80,6 +82,15 @@ export async function resumeRuntimePipeline(
     ...(options?.userSettings ? { userSettings: options.userSettings } : {}),
   };
 
+  // A resumed runtime runs outside `runTurnPipeline`; it gets its own
+  // sub-agent runner over the session's runtimes.
+  if (!deps.subagents && options?.activeRuntimes)
+    deps = {
+      ...deps,
+      subagents: createSubagentRunner({
+        activeRuntimes: options.activeRuntimes,
+      }),
+    };
   try {
     return await executeResumedRuntime(suspension, resumeData, manifest, deps, {
       startTime,
@@ -267,6 +278,27 @@ async function executeResumedRuntime(
   // Re-enter the shared agent tool loop with the persisted write set seeded in.
   // `allowSuspend: false` forbids re-suspending mid-resume (a nested suspend is
   // fed back to the LLM as an error tool result).
+  // `delegate` runs a sub-agent; the wrapper answers it and forwards the rest.
+  const loopDeps =
+    deps.subagents && deps.toolExecutor
+      ? {
+          ...deps,
+          toolExecutor: withSubagentDelegate(
+            deps.toolExecutor,
+            deps.subagents,
+            {
+              caller: {
+                pluginId: manifest.pluginId,
+                runtimeId: manifest.name,
+                depth: 0,
+              },
+              input,
+              deps,
+              executionContext: resumeExecutionContext,
+            },
+          ),
+        }
+      : deps;
   const toolLoop = await runAgentToolLoop({
     worldBase,
     manifest,
@@ -281,7 +313,7 @@ async function executeResumedRuntime(
     inputSlots: pendingContinuation.inputSlots
       ? freezeInputSlots(pendingContinuation.inputSlots)
       : undefined,
-    deps,
+    deps: loopDeps,
     maxSteps,
     timeoutMs: resumeTimeoutMs,
     messages,

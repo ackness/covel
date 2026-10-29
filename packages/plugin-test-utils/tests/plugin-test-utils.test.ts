@@ -3,6 +3,7 @@ import {
   MockLLM,
   expectAssetGenerated,
   makeManualFunctionContext,
+  makeScriptedAgents,
   makeTurnInput,
   makeTriggerContext,
   makeRuntimeResult,
@@ -92,6 +93,34 @@ describe("makeManualFunctionContext", () => {
     await expect(ctx.store.getSession()).rejects.toThrow(
       "store.getSession is not configured for this test context",
     );
+  });
+
+  it("answers ctx.agents.run from scripted results and has none without them", async () => {
+    expect(makeManualFunctionContext({ pluginId: "p" }).agents).toBeUndefined();
+    const ctx = makeManualFunctionContext({
+      pluginId: "director",
+      subagents: [
+        { ok: true, output: { line: "Halt!" }, stopReason: "completed" },
+      ],
+    });
+    const request = { target: { contract: "actor@1" }, brief: "Speak" };
+    expect(await ctx.agents?.run(request)).toEqual({
+      ok: true,
+      output: { line: "Halt!" },
+      stopReason: "completed",
+    });
+    expect(await ctx.agents?.run(request)).toMatchObject({
+      ok: false,
+      error: { code: "not-found" },
+    });
+
+    const scripted = makeScriptedAgents((req) => ({
+      ok: true,
+      output: { echoed: req.brief },
+      stopReason: "completed",
+    }));
+    await scripted.agents.run(request);
+    expect(scripted.requests).toEqual([request]);
   });
 });
 

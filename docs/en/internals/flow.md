@@ -699,6 +699,20 @@ In one line for each trigger type:
 | `event`        | The event it subscribes to is in the pending events                               |
 | `manual`       | Only when named by plugin-rpc. None of the gates above apply                      |
 
+A `schedule.subagentOnly` runtime is not in this tree: neither the automatic path, a manual target, a batch re-run nor `recursiveCall` selects it.
+
+### 4.4 Sub-agents
+
+Another runtime runs a sub-agent inside its own execution: a function with `ctx.agents.run`, an agent with the `delegate` tool.
+
+- **Same execution**: a sub-agent has no scheduling, execution or commit of its own. It uses the caller's trace, cancellation signal and session snapshot; its trace events carry `parentCallId`, so the debug page can show the call tree.
+- **No commit unit**: it returns output, the stop reason and usage only. It keeps read-only tools only, so it has no proposals or events; any that appear anyway are dropped and recorded as `subagent.writes-dropped`. The caller's commit unit holds the caller's own writes only.
+- **Caps**: one runner per top-level execution (created by `runTurnPipeline`, shared by nested executions), at most 8 sub-agents at a time, depth 1. A full pool refuses at once and nothing queues, so a caller never waits for its own slot.
+- **Cancellation**: the caller's `executionSignal`, its time limit and the revocation at its end reach the sub-agent, and so does the player's abort.
+- **Loop**: a sub-agent runs the same `runAgentToolLoop` and settle step, with `allowSuspend: false`, the `actor` profile by default and no session history. `PreRuntime` / `PostRuntime` do not fire; the in-loop hooks do.
+
+Rules and error codes are in [Plugin reference · Sub-agents](../reference/plugins.md#sub-agents).
+
 ## 5. Front-end interaction design
 
 ### 5.1 Rendering pipeline

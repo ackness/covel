@@ -37,6 +37,7 @@
 | **emit-event** | builtin | — | auto-allow | 发射当前 session 已声明的领域事件（一次一个 topic），校验 topic + payload schema | 默认 |
 | **suspend** | builtin | — | auto-allow | 挂起当前 runtime 等待玩家输入，写 `suspensions` 表，可通过 resume API 恢复 | 默认 |
 | **runtime-done** | builtin | — | auto-allow | Agent 工具循环的结束信号——业务工具调用完毕后调用以结束本 runtime | 默认 |
+| **delegate** | builtin | — | auto-allow | 把一件事交给子 agent 运行并拿回它的输出；子 agent 不写入 | `readOnly` |
 | **search-tools** | 注入 | — | auto-allow | 延迟工具搜索——manifest 声明 `tools.defer` 时框架自动注入，BM25 检索并激活未预载工具 | — |
 | **memory-search** | builtin | — | auto-allow | 搜索记忆：对话历史与历史摘要(recall) + 长期知识库(archival，含 lorebook/角色/插件声明可检索的数据) | `readOnly`, `idempotent`, `concurrencySafe` |
 | initialize-world | local | world-init | auto-allow | 组合角色属性 schema 与维度声明初始化 | 默认 |
@@ -814,6 +815,28 @@ JSON Schema 只能检查字段的形状，检查不了“这个结果和骰子�
 - 适用场景：一个 runtime 的白名单超过大约 10 个工具，每次调用都预载全部 schema 开始挤占提示词预算。
 
 契约声明在 `packages/tools/src/builtin/tool-search.ts`，执行逻辑在 `packages/runtime/src/agent-loop/tool-search.ts`。做法参照 openai/codex 的 `tool_search`（`ToolExposure::Deferred` + BM25）。
+
+### 子 agent（delegate）
+
+agent runtime 用它把一件事交给[子 agent](./plugins.md#子-agent)：另一个 agent runtime 在这次执行里拿着简报运行，交回输出。在 `agent.tools.builtin` 里列出 `delegate` 才能调用。
+
+| 参数     | 类型   | 必需 | 描述                                                                             |
+| -------- | ------ | ---- | -------------------------------------------------------------------------------- |
+| target   | object | ✓    | `{ contract }`（契约的提供方，任何包）或 `{ runtimeId }`（本包），只能写其中一个 |
+| brief    | string | ✓    | 任务说明，子 agent 只看到它和 `data`。1 到 20 000 个字符                         |
+| data     | object | —    | 子 agent 需要的事实，JSON 对象，最多 32 KB                                       |
+| maxSteps | number | —    | 子 agent 的步数上限，只能比提供方自己的更低                                      |
+
+**输出**：成功时，模型收到子 agent 的输出 JSON（经过 `modelFacingJson`，不含簿记字段）。失败时收到 `{ success: false, error, code }`，`code` 是 `ctx.agents.run` 的错误码之一。除 `invalid-input` 外的失败不算这个 runtime 的工具失败，模型可以换个办法继续。
+
+**注意事项**：
+
+- 调用由内核在 agent 循环里接住，不交给工具本身执行。trace 和普通工具一样：`tool.calling` / `tool.completed` / `tool.failed`，`approvalStatus` 是 `auto-allowed`。子 agent 的事件用 `parentCallId` 指回这次调用。
+- 上限：一次执行最多同时运行 8 个子 agent，超过的调用立刻得到 `unavailable`。子 agent 拿不到 `delegate`，不能再往下调用。
+- 子 agent 只能用只读工具，自己的写入工具被拿掉；它不产生 proposal，调用方的提交不受它影响。
+- 注解是 `readOnly`，但不是 `idempotent` 也不是 `concurrencySafe`：两次运行的答案不一样。
+
+契约声明在 `packages/tools/src/builtin/delegate.ts`，执行逻辑在 `packages/runtime/src/agent-loop/subagent-delegate.ts` 和 `subagent-runner.ts`。
 
 ## Character 管理工具
 

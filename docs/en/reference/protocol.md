@@ -609,7 +609,7 @@ A committed `interaction.requested` and `ui.rendered` are also pushed through th
 **Events that go only to the trace**
 
 - `context.compacted` is written only to `trace_events`. It is written by the history compaction orchestration, and it is not in `CovelEvent`. The summary strategy is provided through the `history.compact@2` extension.
-- `recursive.calling/completed/failed` are in `CovelEvent`, but they are delivered only through the `trace` subscription topic. They are not forwarded to `/api/actions`.
+- `recursive.calling/completed/failed` and [`subagent.*`](#sub-agent-events) are in `CovelEvent`, but they are delivered only through the `trace` subscription topic. They are not forwarded to `/api/actions`.
 
 | Event                           | Trigger point                      | Payload                                                                                                                                 |
 | ------------------------------- | ---------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
@@ -1322,6 +1322,22 @@ Privacy boundary:
 - `complete: true` only means the JSON request content is complete. It does not guarantee that the resource stays valid forever, that HTTP headers can be rebuilt, or that the real model result is deterministic.
 - The request body follows the existing trace rules for access to and retention of sensitive content. It contains the player's text, and it must not be treated as a redacted log that can be exported publicly.
 - The `gateway.*` events of a function runtime still record only the shape, and do not widen the range of body content collected.
+
+### Sub-agent events
+
+One run of a [sub-agent](./plugins.md#sub-agents) emits `subagent.*`. Like `recursive.*`, they go to the trace only (`forwardToActionStream: false`).
+
+<!-- prettier-ignore -->
+| Type | Payload |
+| --- | --- |
+| `subagent.started` | `{ subagentCallId, parentCallId, parentRuntimeId, parentPluginId, runtimeId, pluginId, turnId }`. Emitted when a provider is found and the run starts |
+| `subagent.completed` | The fields of `subagent.started` + `{ stopReason, durationMs, usage? }`. `usage` is the sum over the run's steps, `{ inputTokens, outputTokens }` |
+| `subagent.failed` | `{ subagentCallId, parentCallId, parentRuntimeId, parentPluginId, turnId, code, error, durationMs, runtimeId?, pluginId?, stopReason?, cancelledBy? }`. `code` is a `ctx.agents.run` error code and `error` fixed text. A call refused before a provider is found (an invalid request, a cap, no provider or several) has no `runtimeId` / `pluginId`. `cancelledBy` is `parent` or `player` |
+| `subagent.writes-dropped` | The sub-agent's identity + `{ count }`. It should never appear: a sub-agent has read-only tools only. Any writes or events it produces anyway are dropped and counted |
+
+- `subagentCallId` is the ID the kernel gives the run; it is also the `runId` of the sub-agent's `step.*` events. `parentCallId` is the `toolCallId` of the `delegate` call, or the `runId` of the function runtime that called `ctx.agents.run`.
+- The sub-agent's own `step.*`, `llm.*`, `tool.*` and other events are stored as usual, with the sub-agent's `runtimeId`, plus `subagentCallId`, `parentCallId` and `parentRuntimeId`. These IDs are not content: when an `io.concealed` runtime's content is hidden, they are kept together with `cancelledBy`.
+- The `delegate` call itself is an ordinary `tool.calling` / `tool.completed` / `tool.failed` in the caller's trace, with `approvalStatus: auto-allowed`.
 
 ## Event bus lifecycle and client handler failures
 

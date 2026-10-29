@@ -23,6 +23,7 @@ describe("default tool registry", () => {
         "create-notification",
         "suspend",
         "runtime-done",
+        "delegate",
         "plugin-data-set",
         "plugin-data-set-batch",
         "plugin-data-get",

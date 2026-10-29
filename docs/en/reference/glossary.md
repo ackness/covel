@@ -41,6 +41,7 @@ Each English term has only one Chinese term. The Chinese docs, the UI text, and 
 | Session | 会话 |  |
 | Slot | 槽位 | In the settings UI it is called "model role". |
 | Stop reason | 结束原因 | How an agent tool loop ended (`RuntimeResult.stop.reason`). |
+| Sub-agent | 子 agent | An agent runtime another runtime runs inside its own execution, returning output only. |
 | Trigger mode | 触发模式 |  |
 | Trusted source | 可信来源 | A GitHub source chosen by the instance owner or operator to reduce approval prompts. |
 | Turn | 回合 | "This turn" is 本回合 in Chinese. |
@@ -292,6 +293,12 @@ How an agent runtime's tool loop ended, for example `completed` (the model gave 
 It is written to `RuntimeResult.stop` and to the `stopReason` of the runtime lifecycle events. Function runtimes have no stop reason.
 
 See: [the protocol reference's stop reasons](./protocol.md#stop-reasons), [turn pipeline](../internals/flow.md).
+
+## Sub-agent
+
+An agent runtime that another runtime runs inside its own execution: a function with `ctx.agents.run`, an agent with the `delegate` tool. It runs with the caller's brief, its own transcript and its own budget, and returns output only: it writes no data, emits no events and forms no commit unit. The provider sets `schedule.subagentOnly: true`, and the scheduler never runs it on its own.
+
+See: [Plugin reference · Sub-agents](./plugins.md#sub-agents), [the delegate tool](./tools.md#sub-agents-delegate).
 
 ## Trigger mode
 

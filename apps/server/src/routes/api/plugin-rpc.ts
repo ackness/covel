@@ -231,6 +231,16 @@ pluginRpcRoutes.post("/:id/plugin-rpc", rateLimiter({ max: 30 }), async (c) => {
         400,
       );
     }
+    // A sub-agent-only runtime runs only inside its caller's execution.
+    if (target.subagentOnly) {
+      return c.json(
+        errorBody(
+          `runtime "${body.runtimeId}" runs only as a sub-agent of another runtime`,
+          { code: "runtime_subagent_only" },
+        ),
+        409,
+      );
+    }
 
     // Approval trust comes from discovery source, independent of authored
     // package kind. `entry.source` is set by bootstrap from the

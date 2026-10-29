@@ -2,6 +2,7 @@ import type {
   NestedTurnResult,
   RecursiveCallDelta,
   InputSlot,
+  SubagentRunApi,
 } from "../index.js";
 import type {
   PluginFunctionContext,
@@ -43,6 +44,8 @@ export interface FunctionHandlerContext extends PluginFunctionContext {
   ) => Promise<NestedTurnResult>;
   readonly inputs?: Readonly<Record<string, InputSlot>>;
   readonly exports?: Readonly<Record<string, InputSlot>>;
+  /** Sub-agents run inside this execution and return output only. */
+  readonly agents?: SubagentRunApi;
 }
 
 export type FunctionHandler = PluginFunctionHandler<FunctionHandlerContext>;

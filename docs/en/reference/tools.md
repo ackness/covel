@@ -37,6 +37,7 @@ There are two kinds of tool:
 | **emit-event** | builtin | — | auto-allow | Emit a domain event that the current session has declared (one topic at a time). Checks the topic and payload schema | defaults |
 | **suspend** | builtin | — | auto-allow | Suspend the current runtime to wait for player input. Writes to the `suspensions` table. Can be resumed through the resume API | defaults |
 | **runtime-done** | builtin | — | auto-allow | The end signal for the agent tool loop. Call it after the business tool calls are done to end this runtime | defaults |
+| **delegate** | builtin | — | auto-allow | Hand one job to a sub-agent and get its output back; the sub-agent writes nothing | `readOnly` |
 | **search-tools** | injected | — | auto-allow | Deferred tool search. The framework injects it automatically when a manifest declares `tools.defer`. It uses BM25 search to find and activate tools that were not preloaded | — |
 | **memory-search** | builtin | — | auto-allow | Search memory: conversation history and past summaries (recall), plus the long-term knowledge base (archival), which includes lorebook data, characters, and data that plugins declare as searchable | `readOnly`, `idempotent`, `concurrencySafe` |
 | initialize-world | local | world-init | auto-allow | Initialize the world by combining the character attribute schema and the dimension declarations | defaults |
@@ -816,6 +817,28 @@ When a runtime has many tools, putting every tool's schema into every model call
 - When to use it: when a runtime's allow-list has more than about 10 tools, preloading every schema on every call starts to take up the prompt budget.
 
 The contract is declared in `packages/tools/src/builtin/tool-search.ts`, and the execution logic is in `packages/runtime/src/agent-loop/tool-search.ts`. The approach follows openai/codex's `tool_search` (`ToolExposure::Deferred` + BM25).
+
+### Sub-agents (delegate)
+
+An agent runtime uses it to hand a job to a [sub-agent](./plugins.md#sub-agents): another agent runtime runs with the brief inside this execution and returns its output. List `delegate` in `agent.tools.builtin` to call it.
+
+| Parameter | Type   | Required | Description                                                                                        |
+| --------- | ------ | -------- | -------------------------------------------------------------------------------------------------- |
+| target    | object | ✓        | `{ contract }` (the contract's provider, any package) or `{ runtimeId }` (own package), never both |
+| brief     | string | ✓        | The task; the sub-agent sees only this and `data`. 1 to 20 000 characters                          |
+| data      | object | —        | Facts the sub-agent needs, as a JSON object, at most 32 KB                                         |
+| maxSteps  | number | —        | The sub-agent's step limit; it can only be lower than the provider's own                           |
+
+**Output**: on success the model receives the sub-agent's output as JSON (through `modelFacingJson`, without bookkeeping fields). On failure it receives `{ success: false, error, code }`, where `code` is one of the `ctx.agents.run` error codes. A failure other than `invalid-input` is not a tool failure of this runtime, so the model can try another way.
+
+**Notes**:
+
+- The kernel answers the call inside the agent loop; the tool itself never runs. It is traced like any tool: `tool.calling` / `tool.completed` / `tool.failed`, with `approvalStatus: auto-allowed`. The sub-agent's events point back to the call with `parentCallId`.
+- Caps: one execution runs at most 8 sub-agents at a time, and a call over the cap gets `unavailable` at once. A sub-agent does not get `delegate`, so it cannot go one level deeper.
+- The sub-agent can use read-only tools only; its write tools are taken away. It makes no proposals, and the caller's commit does not change because of it.
+- It is annotated `readOnly`, but neither `idempotent` nor `concurrencySafe`: two runs give different answers.
+
+The contract is declared in `packages/tools/src/builtin/delegate.ts`; the execution logic is in `packages/runtime/src/agent-loop/subagent-delegate.ts` and `subagent-runner.ts`.
 
 ## Character management tools
 

@@ -609,7 +609,7 @@ Gemini 原生的思考强度、`providerOptions.google.thinkingConfig`、`cached
 **只进 trace 的事件**
 
 - `context.compacted` 只写进 `trace_events`，由历史压缩的编排写入，不在 `CovelEvent` 里。摘要策略通过 `history.compact@2` 扩展提供。
-- `recursive.calling/completed/failed` 在 `CovelEvent` 里，但只通过订阅 topic `trace` 下发，不转发到 `/api/actions`。
+- `recursive.calling/completed/failed` 和 [`subagent.*`](#子-agent-事件) 在 `CovelEvent` 里，但只通过订阅 topic `trace` 下发，不转发到 `/api/actions`。
 
 | 事件                            | 触发点                | payload                                                                                                                                 |
 | ------------------------------- | --------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
@@ -1322,6 +1322,22 @@ runtime 的终态：
 - `complete: true` 只说明 JSON 请求内容是完整的。它不保证资源永久有效、HTTP 头可以重建，或者真实的模型结果是确定的。
 - 请求正文沿用现有 trace 的敏感内容访问和留存规则。它包含玩家的文字，不能当成可以公开导出的脱敏日志。
 - function runtime 的 `gateway.*` 仍然只记录形状，不扩大正文的收集范围。
+
+### 子 agent 事件
+
+[子 agent](./plugins.md#子-agent) 的一次运行发出 `subagent.*`。它们和 `recursive.*` 一样只进 trace（`forwardToActionStream: false`）。
+
+<!-- prettier-ignore -->
+| Type | Payload |
+| --- | --- |
+| `subagent.started` | `{ subagentCallId, parentCallId, parentRuntimeId, parentPluginId, runtimeId, pluginId, turnId }`。找到提供方、开始运行时发出 |
+| `subagent.completed` | `subagent.started` 的字段 + `{ stopReason, durationMs, usage? }`。`usage` 是这次运行各步之和 `{ inputTokens, outputTokens }` |
+| `subagent.failed` | `{ subagentCallId, parentCallId, parentRuntimeId, parentPluginId, turnId, code, error, durationMs, runtimeId?, pluginId?, stopReason?, cancelledBy? }`。`code` 是 `ctx.agents.run` 的错误码，`error` 是固定的说明文字。还没找到提供方就被拒绝（请求不合法、达到上限、没有或有多个提供方）时没有 `runtimeId` / `pluginId`。`cancelledBy` 是 `parent` 或 `player` |
+| `subagent.writes-dropped` | 子 agent 的标识 + `{ count }`。正常情况下不会出现：子 agent 只有只读工具。万一有写入或事件，它们被丢弃并记下数量 |
+
+- `subagentCallId` 是内核给这次运行分配的 ID，也是子 agent 各步 `step.*` 的 `runId`。`parentCallId` 是 `delegate` 工具调用的 `toolCallId`，或者调用 `ctx.agents.run` 的函数 runtime 的 `runId`。
+- 子 agent 自己发出的 `step.*`、`llm.*`、`tool.*` 等事件照常保存，`runtimeId` 是子 agent 的，另外带 `subagentCallId`、`parentCallId` 和 `parentRuntimeId`。这些 ID 不算内容：`io.concealed` 的 runtime 隐去内容时，它们和 `cancelledBy` 一起保留。
+- `delegate` 调用本身在调用方的 trace 里是普通的 `tool.calling` / `tool.completed` / `tool.failed`，`approvalStatus` 是 `auto-allowed`。
 
 ## Event bus lifecycle and client handler failures
 

@@ -3095,6 +3095,8 @@ Calls the handler that the plugin registers in `entry` with `covel.registerRpc`,
 
 Runs one target runtime by hand. It goes through the full turn flow: it builds the prompt, runs the tool loop, and submits proposals. Downstream runtimes triggered by an event keep running in the same turn. When one event has several subscribers, they run in order of `name`.
 
+A target with `schedule.subagentOnly` returns `409 runtime_subagent_only` and nothing runs: it runs only as a [sub-agent](./plugins.md#sub-agents) inside another runtime. The plugin detail and the execution flow mark such a runtime with `subagentOnly: true`.
+
 How it runs is decided by `schedule.background` in the runtime manifest:
 
 - Left out (default): waits for the runtime to finish and submit its proposals, then returns a summary JSON.
@@ -5064,7 +5066,7 @@ If a community plugin in the session has not been approved yet, the server retur
 
 - The client approves the current session through the approval endpoint, and then resends the original request with the **same `requestId`**.
 - You may be asked several times in a row: first `covel:plugin-server-code`, then each `runtime:<name>`.
-- The scope that an ordinary action checks: the runtimes in the selected plugins that take part in automatic runs (after resolving the contract dependencies). An explicit retry checks only the selected targets.
+- The scope that an ordinary action checks: the runtimes in the selected plugins that take part in automatic runs, and the sub-agent providers (`schedule.subagentOnly`, which any turn may call), all after resolving the contract dependencies. An explicit retry checks only the selected targets.
 - An ordinary call to a manual runtime still goes through the plugin RPC approval.
 - If approval is refused, the turn is not run.
 - The `demo` and `commercial` deployment tiers also require the operator token. Before the code is actually loaded during execution, the approval is checked once more.

@@ -3095,6 +3095,8 @@ Submission 里的其他键会被丢弃。来源插件、字段定义和模板只
 
 手动运行一次目标 runtime。它走完整的回合流程：组装 prompt、工具循环、提交 proposal。由事件触发的下游 runtime 会在同一回合内接着运行；同一事件有多个订阅者时按 `name` 排序。
 
+目标是 `schedule.subagentOnly` 的 runtime 时返回 `409 runtime_subagent_only`，什么都不执行：它只作为[子 agent](./plugins.md#子-agent) 在别的 runtime 里运行。插件详情和执行流程里这样的 runtime 带 `subagentOnly: true`。
+
 运行方式由 runtime 清单里的 `schedule.background` 决定：
 
 - 不写（默认）：等 runtime 跑完并提交 proposal，然后返回汇总 JSON。
@@ -5062,7 +5064,7 @@ id: example-epoch:2
 
 - 客户端通过审批接口给当前会话授权，然后用**同一个 `requestId`** 重发原请求。
 - 可能要连续问几次：先是 `covel:plugin-server-code`，再是每个 `runtime:<name>`。
-- 普通动作检查的范围：已选插件里参与自动执行的 runtime（按契约依赖解析后的结果）。明确的重试只检查选定的目标。
+- 普通动作检查的范围：已选插件里参与自动执行的 runtime，以及子 agent 提供方（`schedule.subagentOnly`，任何回合都可能被调用），都按契约依赖解析后的结果。明确的重试只检查选定的目标。
 - 手动 runtime 的普通调用仍然走插件 RPC 的授权。
 - 审批被拒绝时不会执行回合。
 - `demo` / `commercial` 部署层级还要求运维 token。执行时真正加载代码之前，还会再检查一次授权。

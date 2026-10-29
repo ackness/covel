@@ -1323,6 +1323,10 @@
             "background": {
               "type": "boolean",
               "description": "`true` runs a `manual` or `event` activation as a durable background job: the caller gets a job ID at once. Defaults to `false`: the caller waits for the result."
+            },
+            "subagentOnly": {
+              "type": "boolean",
+              "description": "`true` makes this agent runtime a sub-agent provider: the scheduler never runs it, and another runtime runs it with `ctx.agents.run` or the `delegate` tool. It implies `trigger: manual` and allows no `stage`, `needs`, `after`, `background`, `io.output.recordAs`, `guard` or `io.visibility: story`. Defaults to `false`."
             }
           },
           "additionalProperties": false,

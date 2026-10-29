@@ -416,6 +416,12 @@ export type {
   PluginRuntimeStatus,
   PluginNestedRuntimeResult,
   PluginNestedTurnResult,
+  PluginStopReason,
+  PluginSubagentTarget,
+  PluginSubagentRequest,
+  PluginSubagentErrorCode,
+  PluginSubagentResult,
+  PluginAgents,
 } from "./function-runtime.js";
 export type {
   PluginMediaRef,

@@ -604,6 +604,13 @@ export interface RuntimeManifest {
   readonly outputContract?: string;
   readonly defaultProvider?: boolean;
   /**
+   * The runtime runs only as a sub-agent: another runtime runs it with
+   * `ctx.agents.run` or the `delegate` tool, and it returns output only. The
+   * scheduler never selects it, and no manual route runs it. Implies a
+   * `manual` trigger. Omitted when false.
+   */
+  readonly subagentOnly?: true;
+  /**
    * Named scheduling stage. Required for `auto` runtimes under
    * the strict authoring schema; forbidden for `event` / `manual`. Selects
    * the band the runtime runs in; order *within* the band comes from the

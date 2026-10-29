@@ -26,6 +26,10 @@ export interface RuntimeRuleView {
   readonly stage?: string;
   readonly visibility?: string;
   readonly requireExplicitCompletion?: boolean;
+  /** `true` when the runtime runs only as a sub-agent and is never scheduled. */
+  readonly subagentOnly?: boolean;
+  /** The guard module, if any. */
+  readonly guard?: string;
   /**
    * The agent loop settings the rules read: the profile overrides as written,
    * and the runtime's time limit. Absent for a function runtime.
@@ -62,6 +66,8 @@ export interface RuntimeRuleView {
         readonly capability?: string;
       }
   )[];
+  /** Ordering-only upstreams. */
+  readonly after?: readonly unknown[];
   readonly output?: { readonly schema?: string; readonly recordAs?: string };
   /** `true` when a `manual` / `event` activation runs as a background job. */
   readonly background?: boolean;
@@ -87,6 +93,8 @@ type RuleField =
   | "stage"
   | "visibility"
   | "requireExplicitCompletion"
+  | "subagentOnly"
+  | "guard"
   | "loopPreset"
   | "loop"
   | "timeoutMs"
@@ -94,6 +102,7 @@ type RuleField =
   | "trigger"
   | "every"
   | "needs"
+  | "after"
   | "output"
   | "background"
   | "inputs"
@@ -113,6 +122,8 @@ export const IR_RULE_FIELD_PATHS: RuntimeRuleFieldPaths = {
   stage: ["stage"],
   visibility: ["outputKind"],
   requireExplicitCompletion: ["requireExplicitCompletion"],
+  subagentOnly: ["subagentOnly"],
+  guard: ["guard"],
   loopPreset: ["loopProfile", "preset"],
   loop: ["loopProfile"],
   timeoutMs: ["timeoutMs"],
@@ -120,6 +131,7 @@ export const IR_RULE_FIELD_PATHS: RuntimeRuleFieldPaths = {
   trigger: ["trigger"],
   every: ["trigger", "every"],
   needs: ["needs"],
+  after: ["after"],
   output: ["output"],
   background: ["execution"],
   inputs: ["inputs"],
@@ -135,6 +147,8 @@ export const AUTHORING_RULE_FIELD_PATHS: RuntimeRuleFieldPaths = {
   stage: ["schedule", "stage"],
   visibility: ["io", "visibility"],
   requireExplicitCompletion: ["agent", "completion", "require"],
+  subagentOnly: ["schedule", "subagentOnly"],
+  guard: ["guard"],
   loopPreset: ["agent", "loop", "profile"],
   loop: ["agent", "loop"],
   timeoutMs: ["agent", "loop", "timeoutMs"],
@@ -142,6 +156,7 @@ export const AUTHORING_RULE_FIELD_PATHS: RuntimeRuleFieldPaths = {
   trigger: ["schedule", "trigger"],
   every: ["schedule", "every"],
   needs: ["schedule", "needs"],
+  after: ["schedule", "after"],
   output: ["io", "output"],
   background: ["schedule", "background"],
   inputs: ["io", "inputs"],
@@ -231,6 +246,56 @@ function loopProfileIssues(
     );
 }
 
+/**
+ * A sub-agent-only runtime is never scheduled: another runtime runs it with
+ * `ctx.agents.run` or `delegate`, and it returns output only. Scheduling
+ * fields would do nothing, so each one is an error.
+ */
+function subagentOnlyIssues(
+  m: RuntimeRuleView,
+  at: RulePath,
+  name: (field: RuleField, ...rest: string[]) => string,
+  add: (path: readonly (string | number)[], message: string) => void,
+): void {
+  const runtime = `a sub-agent-only runtime (${name("subagentOnly")})`;
+  if (m.runtimeType === "function")
+    add(
+      at("subagentOnly"),
+      `${runtime} must be an agent runtime; a function runtime calls sub-agents with ctx.agents.run`,
+    );
+  if (m.visibility === "story")
+    add(
+      at("visibility"),
+      `${runtime} returns output to its caller and cannot have ${name("visibility")} 'story'`,
+    );
+  if (m.trigger?.type !== undefined && m.trigger.type !== "manual")
+    add(
+      at("trigger", "type"),
+      `${runtime} is activated by its caller; ${name("trigger", "type")} must be 'manual' or left out`,
+    );
+  if (m.stage !== undefined)
+    add(at("stage"), `${runtime} is never scheduled; remove ${name("stage")}`);
+  if (m.needs?.length)
+    add(at("needs"), `${runtime} is never scheduled; remove ${name("needs")}`);
+  if (m.after?.length)
+    add(at("after"), `${runtime} is never scheduled; remove ${name("after")}`);
+  if (m.background)
+    add(
+      at("background"),
+      `${runtime} answers its caller directly and cannot run in the background; remove ${name("background")}`,
+    );
+  if (m.output?.recordAs !== undefined)
+    add(
+      at("output", "recordAs"),
+      `${runtime} returns output only and records nothing; remove ${name("output", "recordAs")}`,
+    );
+  if (m.guard !== undefined)
+    add(
+      at("guard"),
+      `${runtime} runs without a guard; the caller decides when to run it`,
+    );
+}
+
 export interface RuntimeRuleIssue {
   readonly path: readonly (string | number)[];
   readonly message: string;
@@ -316,9 +381,12 @@ export function runtimeRuleIssues(
       `${name("trigger", "topic")} is required for ${name("trigger", "type")} 'event'`,
     );
 
-  const activated = m.trigger?.type === "event" || m.trigger?.type === "manual";
+  // A sub-agent-only runtime is activated by its caller: `manual` is implied.
+  const triggerType = m.trigger?.type ?? (m.subagentOnly ? "manual" : "auto");
+  const activated = triggerType === "event" || triggerType === "manual";
+  if (m.subagentOnly) subagentOnlyIssues(m, at, name, add);
   // A stage places a runtime in the per-turn DAG; event/manual are detached.
-  if (m.stage !== undefined && activated)
+  if (m.stage !== undefined && activated && !m.subagentOnly)
     add(
       at("stage"),
       `a runtime with ${name("stage")} cannot use ${name("trigger", "type")} 'event' or 'manual'`,
@@ -397,7 +465,7 @@ export function runtimeRuleIssues(
 
   // The scheduler runs `auto` runtimes stage by stage. Without a stage this
   // one would never run; no default is guessed.
-  if ((m.trigger?.type ?? "auto") === "auto" && m.stage === undefined)
+  if (triggerType === "auto" && m.stage === undefined)
     add(
       at("stage"),
       `${name("stage")} is required for ${name("trigger", "type")} 'auto', the default; choose setup, pre-turn, narrative, post-turn or audit, or use trigger 'manual' or 'event'`,

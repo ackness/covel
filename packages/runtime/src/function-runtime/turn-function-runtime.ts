@@ -182,6 +182,7 @@ export async function executeFunctionRuntime({
     startTime,
     timeoutMs,
     ...(executionId !== undefined ? { executionId } : {}),
+    runId,
     writeBuffer,
     pluginDataVisibility: createPluginDataVisibility({
       pluginId: manifest.pluginId,

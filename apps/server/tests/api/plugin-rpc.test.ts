@@ -310,6 +310,30 @@ describe("POST /api/sessions/:id/plugin-rpc", () => {
     expect(body).not.toHaveProperty("status");
   });
 
+  it("refuses a manual run of a sub-agent-only runtime with 409", async () => {
+    const { entry } = makeAgentEntry({
+      pluginId: "actor-pkg",
+      runtimeId: "actor-pkg/guard",
+      outputKind: "system",
+      subagentOnly: true,
+    });
+    pluginRegistry.register(entry);
+    await store.updateSession("sess-rpc-1", { activePlugins: ["actor-pkg"] });
+    const res = await app.request("/api/sessions/sess-rpc-1/plugin-rpc", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        kind: "runtime",
+        pluginId: "actor-pkg",
+        runtimeId: "actor-pkg/guard",
+        payload: {},
+      }),
+    });
+    expect(res.status).toBe(409);
+    const body = (await res.json()) as Record<string, unknown>;
+    expect(body.code).toBe("runtime_subagent_only");
+  });
+
   it("dispatches a framework default action and returns the result", async () => {
     const res = await app.request("/api/sessions/sess-rpc-1/plugin-rpc", {
       method: "POST",
@@ -1166,12 +1190,15 @@ function makeAgentEntry(args: {
   stage?: RuntimeManifest["stage"];
   source?: PluginSource;
   trigger?: RuntimeManifest["trigger"];
+  subagentOnly?: true;
 }): { entry: PluginRegistryEntry; loaded: LoadedRuntime } {
   const manifest: RuntimeManifest = {
     name: args.runtimeId,
     pluginId: args.pluginId,
     description: "test agent runtime",
-    stage: args.stage ?? "narrative",
+    ...(args.subagentOnly
+      ? { subagentOnly: true as const }
+      : { stage: args.stage ?? "narrative" }),
     runtimeType: "agent",
     outputKind: args.outputKind ?? "story",
     trigger: args.trigger ?? { type: "manual" },

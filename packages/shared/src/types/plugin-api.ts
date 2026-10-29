@@ -32,6 +32,8 @@ export interface PluginRuntimeSummary {
   readonly trigger: PluginRuntimeTrigger;
   readonly execution: "sync" | "background";
   readonly turnCompletion: EffectiveTurnCompletion;
+  /** Runs only as a sub-agent of another runtime; no manual run starts it. */
+  readonly subagentOnly?: true;
   readonly model?: string;
   readonly outputKind: "story" | "system";
   readonly outputContract?: string;

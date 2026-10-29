@@ -288,6 +288,7 @@ const pluginRuntimeSummarySchema: z.ZodType<PluginRuntimeSummary> = z
     trigger: triggerConfigSchema,
     execution: z.enum(["sync", "background"]),
     turnCompletion: effectiveTurnCompletionSchema,
+    subagentOnly: z.literal(true).optional(),
     model: z.string().optional(),
     outputKind: z.enum(["story", "system"]),
     outputContract: z.string().optional(),

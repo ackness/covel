@@ -71,6 +71,12 @@ export {
   parameterSchemaSearchText,
 } from "./builtin/tool-search.js";
 export type { ToolSearchDoc } from "./builtin/tool-search.js";
+export {
+  delegateTool,
+  delegateParametersSchema,
+  DELEGATE_TOOL_NAME,
+  SUBAGENT_BRIEF_MAX_CHARS,
+} from "./builtin/delegate.js";
 export { createMemoryTools } from "./builtin/memory-tools.js";
 export type { MemoryToolDeps } from "./builtin/memory-tools.js";
 export { createEmitEventTool } from "./builtin/emit-event.js";

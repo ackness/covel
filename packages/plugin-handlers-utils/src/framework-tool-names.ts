@@ -21,4 +21,5 @@ export const FRAMEWORK_TOOL_NAMES = [
   "memory-search",
   "world-dimension-get",
   "world-dimension-list",
+  "delegate",
 ] as const;

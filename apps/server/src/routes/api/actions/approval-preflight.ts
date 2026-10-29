@@ -31,7 +31,8 @@ export async function preflightActionApprovals(
     (manifest) =>
       retryTargets
         ? retryTargets.includes(manifest.name)
-        : manifest.trigger?.type !== "manual",
+        : // A sub-agent provider can run in any turn its caller runs.
+          manifest.trigger?.type !== "manual" || manifest.subagentOnly === true,
     "session-action",
   );
 }
