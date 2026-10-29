@@ -287,6 +287,7 @@ Web 客户端只发送它的请求用得到的供应商的密钥：
 
 插件的服务端 JavaScript（`entry`、handler、guard、hook、wire）运行在服务端进程里，拥有服务端的全部权限。没有进程沙箱、VM 沙箱或模块沙箱。社区包需要玩家同意，或满足实例的[可信来源策略](../reference/plugin-installation.md#可信来源)，才可执行代码；策略只减少 server-code 与 runtime 提示，不提供沙箱，也不能防住 GitHub 账号失窃，发布签名元数据仍未实现：
 
+- v1 接受的边界是：插件目录必须由可信的本地文件系统写入者控制。能写入该目录的人可以替换包文件，并伪造 `.covel-install.json` 中的来源、摘要和能力快照。完整性验证不能防御本地文件系统写入。
 - 清单读取共用纯 YAML 解析入口，加载、安装、校验和本地化工具都在解析前拒绝 `---js` 等引擎指令。
 - 批准之前，`community` 包只是数据。安装、预览、列表和校验只解析它的文件，一个都不 import。两阶段批准（先 `covel:plugin-server-code`，再授予具体操作，见 [Hosted auth](#hosted-auth)）把守着第一次 import。
 - 批准之后，这些代码能做服务端进程能做的一切：读写服务端系统用户的文件（`keys.env`、`llm.toml`、SQLite 文件），读 `process.env`，打开套接字，启动进程。

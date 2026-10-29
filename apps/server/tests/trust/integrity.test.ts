@@ -1,15 +1,12 @@
-import {
-  mkdtemp,
-  mkdir,
-  readFile,
-  readdir,
-  rm,
-  symlink,
-  writeFile,
-} from "node:fs/promises";
+import { mkdtemp, mkdir, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { afterEach, beforeEach, expect, it } from "vitest";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { createEventBus } from "@covel/events";
+import { createMemoryStore } from "@covel/store/memory";
+import { createServerSettings } from "../../src/lib/server-settings.js";
+import { discoverAndRegisterPlugins } from "../../src/routes/api/bootstrap/plugin-discovery.js";
+import { createTrustedSourceService } from "../../src/trust/trusted-source-service.js";
 import {
   checkPackageIntegrity,
   readReceipt,
@@ -21,14 +18,14 @@ import {
   signPreview,
   verifyPreview,
 } from "../../src/routes/api/install/github-preview.js";
-import { computePluginCapabilities } from "@covel/plugin-loader";
-import { validatePluginBundle } from "../../src/routes/api/install/plugin-bundle.js";
-import { packageFixture } from "./fixtures.js";
+import { id, packageFixture } from "./fixtures.js";
 let root: string;
 beforeEach(async () => {
   root = await mkdtemp(path.join(tmpdir(), "covel-integrity-"));
+  vi.stubEnv("COVEL_TRUSTED_SOURCES", "");
 });
 afterEach(async () => {
+  vi.unstubAllEnvs();
   await rm(root, { recursive: true, force: true });
 });
 it("verifies untouched contents and round-trips snapshots", async () => {
@@ -133,18 +130,67 @@ it("rejects an update preview after a snapshot rewrite", async () => {
 });
 it("computes the same capabilities at installation and registry time", async () => {
   const fixture = await packageFixture(root, {
-    manifest: { entry: "./server.js", contributes: { tools: ["probe"] } },
-    files: { "server.js": "export default function register() {}" },
+    manifest: {
+      runtime: {
+        schedule: { stage: "post-turn" },
+        permissions: {
+          http: [{ origin: "https://runtime.example", methods: ["POST"] }],
+        },
+        agent: { tools: { builtin: ["list-characters"] } },
+      },
+    },
+    files: { "server/index.js": "export default function register() {}" },
   });
-  const bundle = validatePluginBundle(fixture.entries, new Set());
-  expect(inspectBundle(fixture.entries, new Set()).capabilities).toEqual(
-    computePluginCapabilities({
-      root: bundle.manifest,
-      runtimes: bundle.declarations,
-      hasServerCode: bundle.hasServerCode,
-    }),
+  const installed = await readReceipt(fixture.directory);
+  expect(installed.capabilities).toEqual(
+    inspectBundle(fixture.entries, new Set()).capabilities,
   );
-  expect(bundle.capabilities).toEqual(fixture.capabilities);
-  expect(await readdir(fixture.directory)).toContain("server.js");
-  expect(await readFile(fixture.receiptPath, "utf8")).toContain("capabilities");
+  expect(installed.capabilities).toMatchObject({
+    serverCode: true,
+    http: [{ origin: "https://runtime.example", methods: ["POST"] }],
+    tools: ["list-characters"],
+  });
+
+  const store = createMemoryStore();
+  const settings = createServerSettings(store, { playerWritable: true });
+  await settings.load();
+  await settings.write({ "trust.sources": ["example/plugins"] });
+  const { registry } = await discoverAndRegisterPlugins({
+    pluginsDir: root,
+    pluginsDirs: [path.join(root, "builtin"), root],
+    eventBus: createEventBus(store),
+  });
+  const entry = registry.get(id);
+  expect(entry).toMatchObject({ status: "registered", source: "community" });
+  expect(entry?.packageManifest?.plugin.entry).toBe("./server/index.js");
+  expect(entry?.manifests).toHaveLength(1);
+  const trust = createTrustedSourceService({
+    settings,
+    registry,
+    pluginsRoot: root,
+  });
+  await trust.verifyAll();
+  expect(trust.summary(id)).toMatchObject({
+    integrity: "verified",
+    autoApproved: true,
+  });
+  // Snapshot the service's capabilities from the discovered registry entry.
+  await trust.recordSnapshot(id);
+  expect((await readReceipt(fixture.directory)).capabilities).toEqual(
+    installed.capabilities,
+  );
+  for (const dimension of ["http", "tools"] as const) {
+    await writeFile(
+      fixture.receiptPath,
+      JSON.stringify({
+        ...installed,
+        capabilities: { ...installed.capabilities, [dimension]: [] },
+      }),
+    );
+    await trust.ensureFresh(id);
+    expect(trust.summary(id)).toMatchObject({
+      integrity: "verified",
+      autoApproved: false,
+    });
+  }
 });

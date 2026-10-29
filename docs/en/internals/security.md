@@ -287,6 +287,7 @@ Internal approval keys for server code, runtimes and events cannot be registered
 
 A plugin's server-side JavaScript (`entry`, handler, guard, hook, wire) runs in the server process, and has all of the server's permissions. There is no process sandbox, no VM sandbox, and no module sandbox. Execution requires player consent or the instance's [trusted-source policy](../reference/plugin-installation.md#trusted-sources). That policy reduces server-code and runtime prompts, adds no sandbox, and cannot protect against a stolen GitHub account; signed publication metadata is not implemented:
 
+- The accepted v1 boundary requires trusting local writers to the plugin directory. Anyone able to write that directory can replace package files and forge the source, digest and capability snapshot in `.covel-install.json`. Integrity verification does not defend against local filesystem writes.
 - Manifest loading, installation, validation, and localization share one plain YAML reader that rejects engine directives such as `---js` before parsing.
 - Before approval, a `community` package is just data. Installing, previewing, listing, and validating only parse its files. Nothing is imported. The two-step approval (first `covel:plugin-server-code`, then the specific operations; see [Hosted auth](#hosted-auth)) guards the first import.
 - After approval, this code can do anything the server process can do: read and write files that the server's system user can access (`keys.env`, `llm.toml`, the SQLite file), read `process.env`, open sockets, and start processes.
