@@ -41,10 +41,12 @@ import {
 import { executeFunctionRuntime } from "../function-runtime/turn-function-runtime.js";
 import { executeAgentGuard } from "../agent-loop/turn-agent-guard.js";
 import { combineAbortSignals } from "./turn-control.js";
+import { runRuntimePreHook } from "./runtime-finalization.js";
 import {
-  finalizeRuntimeResult,
-  runRuntimePreHook,
-} from "./runtime-finalization.js";
+  finalizeRuntimeFailure,
+  finalizeThrownRuntime,
+  resolveRuntimeTimeoutMs,
+} from "./runtime-scaffold.js";
 import { isScopedRuntimeRecovery } from "./scheduling.js";
 
 export type ExecuteTurnFn = (
@@ -164,7 +166,7 @@ export async function executeOneRuntime(
   } = inv;
   const startTime = Date.now();
   const runId = inv.runId ?? crypto.randomUUID();
-  const timeoutMs = manifest.timeoutMs ?? defaultTimeoutMs;
+  const timeoutMs = resolveRuntimeTimeoutMs(manifest, defaultTimeoutMs);
   // Resolves to the nested execution's kernel-held result. The invocation
   // context keeps those originals for the commit, attached to the parent's
   // result only when its own handler succeeds, and hands the plugin a copy
@@ -420,17 +422,10 @@ export async function executeOneRuntime(
       input.sessionId,
     );
     if (!loaded) {
-      return finalizeRuntimeResult(
+      return finalizeRuntimeFailure(
         { ...deps, hookPipeline },
-        manifest,
-        input,
-        makeFailedResult(
-          manifest,
-          input,
-          runId,
-          startTime,
-          "Runtime not found",
-        ),
+        { manifest, input, runId, startTime },
+        "Runtime not found",
       );
     }
 
@@ -711,20 +706,10 @@ export async function executeOneRuntime(
       runId,
     });
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : String(error);
-    const failedResult = makeFailedResult(
-      manifest,
-      input,
-      runId,
-      startTime,
-      message,
-    );
-    return finalizeRuntimeResult(
+    return finalizeThrownRuntime(
       { ...deps, hookPipeline },
-      manifest,
-      input,
-      failedResult,
-      { cause: error },
+      { manifest, input, runId, startTime },
+      error,
     );
   }
 }
