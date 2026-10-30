@@ -86,16 +86,19 @@ async function mount(page: Page, html: string) {
       const frame = document.createElement("iframe");
       frame.sandbox.add("allow-scripts");
       frame.src = frameUrl;
-      (window as unknown as { actions: unknown[] }).actions = [];
+      (window as unknown as { messages: unknown[] }).messages = [];
       frame.onload = () => {
         const channel = new MessageChannel();
         channel.port1.onmessage = ({ data }) => {
-          (window as unknown as { actions: unknown[] }).actions.push(data);
-          channel.port1.postMessage({
-            type: "result",
-            id: data.id,
-            value: "ok",
-          });
+          (window as unknown as { messages: unknown[] }).messages.push(data);
+          // The bridge announces itself with a bare `ready`; only an action
+          // has a request to answer.
+          if (data?.type === "action")
+            channel.port1.postMessage({
+              type: "result",
+              id: data.id,
+              value: "ok",
+            });
         };
         frame.contentWindow!.postMessage(
           { type: "covel:connect", document: documentHtml },
@@ -142,13 +145,17 @@ for (const delivery of deliveries) {
       });</script></body>`,
       );
       await blocked;
+      // All the host receives over the port: the bridge's own `ready`
+      // announcement, which carries no data, then the one action the plugin
+      // chose to invoke. Nothing else, and in particular no state, may arrive.
       await expect
         .poll(() =>
           page.evaluate(
-            () => (window as unknown as { actions: unknown[] }).actions,
+            () => (window as unknown as { messages: unknown[] }).messages,
           ),
         )
         .toEqual([
+          { type: "ready" },
           { type: "action", id: "1", action: "ready", params: { secret } },
         ]);
       expect(requests).toEqual([]);

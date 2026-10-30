@@ -12,7 +12,7 @@ schedule:
 io:
   inputs:
     narrative:
-      from: {contract: narrative-engine@1}
+      from: {contract: narrative-engine@2}
       select: /narrativeOutput
 ```
 

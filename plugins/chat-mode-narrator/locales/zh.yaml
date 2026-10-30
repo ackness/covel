@@ -6,13 +6,15 @@ PLUGIN.md:
   description: 让故事更像角色对话，适合重视聊天和人物互动的玩法。
   contributes:
     settings:
-      - key: narrativePerson
-        label: 叙事人称
-        description: 旁白如何称呼玩家角色；人物对白保持各自的人称。
+      - key: perspective
+        label: 视角
+        description: 由谁讲述故事、旁白如何称呼玩家角色；人物对白保持各自的人称。
         options:
-          - label: 第一人称（我）
-          - label: 第二人称（你）
-          - label: 第三人称（角色名）
+          - label: 玩家角色·第一人称（我）
+          - label: 玩家角色·第二人称（你）
+          - label: 玩家角色·第三人称（角色名）
+          - label: 全知旁白
+          - label: 主持人（DM）
       - key: dialogueRatio
         label: 对话占比
         description: 回复中人物对白和内心反应的大致占比。

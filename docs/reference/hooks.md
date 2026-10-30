@@ -239,6 +239,8 @@ agent runtime 的每次模型调用之前触发，包括工具结果之后的调
 
 负载：`{ response, messages }`，即回答，以及实际发出去的消息。
 
+要求分段故事的 story runtime（`io.output.schema: contract:narrative-engine@2`）的 `response.content` 是模型写的 JSON，不是正文；审查文字时读各段的 `text`（见[故事输出](./plugins.md#故事输出)）。
+
 - `replace.response` 替换回答。
 - `replace.correction`（非空字符串）退回这份草稿：其中的工具调用不执行，这段文字作为改正要求发给模型，模型重新回答。每次退回消耗一次 `agent.loop.corrections.review` 预算，默认允许纠正两次；预算用尽后再次退回，runtime 以 `invalid-output` 失败。配置见[循环 profile](./plugins.md#循环-profileagentloopprofile)。
 

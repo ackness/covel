@@ -256,7 +256,7 @@ describe("normalize golden (bundled plugin set)", () => {
     // engine. They remain independent of the structured extraction branch.
     const tracker = requireSpec(specs, "char-creator/character-tracker");
     expect(tracker.stage).toBe("post-turn");
-    expect(tracker.deps.needs).toEqual([{ capability: "narrative-engine@1" }]);
+    expect(tracker.deps.needs).toEqual([{ capability: "narrative-engine@2" }]);
 
     const worldIr = requireSpec(specs, "world-ir");
     expect(worldIr.stage).toBe("post-turn");
@@ -266,7 +266,7 @@ describe("normalize golden (bundled plugin set)", () => {
     // `cardinality: one` and `required: true` are the defaults the manifests
     // leave out; the scheduler reads an absent value as them.
     expect(worldIr.bindings.narrative).toEqual({
-      from: { capability: "narrative-engine@1" },
+      from: { capability: "narrative-engine@2" },
       select: "/narrativeOutput",
       accepts: "./schemas/narrative-output.schema.json",
     });
@@ -296,7 +296,7 @@ describe("normalize golden (bundled plugin set)", () => {
     expect(guide.stage).toBe("post-turn");
     expect(guide.deps.needs).toEqual([]);
     expect(guide.bindings.narrative).toEqual({
-      from: { capability: "narrative-engine@1" },
+      from: { capability: "narrative-engine@2" },
       select: "/narrativeOutput",
       accepts: "./schemas/narrative-output.schema.json",
     });
@@ -309,7 +309,7 @@ describe("normalize golden (bundled plugin set)", () => {
     expect(branchReply.deps.needs).toEqual([]);
     expect(branchReply.bindings).toEqual({
       narrative: {
-        from: { capability: "narrative-engine@1" },
+        from: { capability: "narrative-engine@2" },
         select: "/narrativeOutput",
         required: false,
       },

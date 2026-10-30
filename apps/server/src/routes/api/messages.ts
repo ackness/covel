@@ -57,6 +57,8 @@ function flattenMessage(m: {
     block: meta.block,
     // A player's message keeps the resolved actions it carried.
     ...(Array.isArray(meta.actions) ? { actions: meta.actions } : {}),
+    // A story message keeps its segments with resolved speakers.
+    ...(Array.isArray(meta.segments) ? { segments: meta.segments } : {}),
     createdAt: m.createdAt,
   };
 }

@@ -27,7 +27,7 @@ fact-index/
 ```yaml
 ---
 description: Extracts and retrieves narrative facts.
-requires: [narrative-engine@1]
+requires: [narrative-engine@2]
 contributes:
   data:
     facts:
@@ -44,7 +44,7 @@ schedule: { stage: post-turn }
 io:
   inputs:
     narrative:
-      from: { contract: narrative-engine@1 }
+      from: { contract: narrative-engine@2 }
       select: /narrativeOutput
   output:
     contract: facts.index@1

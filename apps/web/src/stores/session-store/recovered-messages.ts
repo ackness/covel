@@ -29,8 +29,13 @@ export function mergeRecoveredMessages(
   for (const [index, message] of recovered.entries()) {
     const existing = byId.get(message.id) ?? -1;
     if (existing >= 0) {
+      const row = messages[existing];
       // A durable same-ID row replaces the client timestamp and echo marker.
-      if (messages[existing]?.requestId) replace(existing, message);
+      if (row?.requestId) replace(existing, message);
+      // A completed story without segments takes the committed speakers;
+      // its text and ownership stay with the live row.
+      else if (row && !isStream(row) && !row.segments && message.segments)
+        replace(existing, { ...row, segments: message.segments });
       // A later live completion may have arrived while the snapshot was read.
       previous = existing;
       continue;

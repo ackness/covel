@@ -170,11 +170,19 @@ class ChatModeMockLLM implements LLMAdapter {
       typeof latestUser?.content === "string" ? latestUser.content : "";
 
     return {
-      content: [
-        `第${this.narratorCalls}轮：神代澪把课程表压在桌角，听见你说“${latestText}”后微微抬眼。`,
-        "朝仓凛在旁边晃了晃采访本，笑着把话题推向文艺部和学园祭。",
-        "教室窗外的海风掀起窗帘，澪等着你继续接话。",
-      ].join(""),
+      content: JSON.stringify({
+        segments: [
+          {
+            kind: "action",
+            speaker: "神代澪",
+            text: [
+              `第${this.narratorCalls}轮：神代澪把课程表压在桌角，听见你说“${latestText}”后微微抬眼。`,
+              "朝仓凛在旁边晃了晃采访本，笑着把话题推向文艺部和学园祭。",
+              "教室窗外的海风掀起窗帘，澪等着你继续接话。",
+            ].join(""),
+          },
+        ],
+      }),
       toolCalls: [],
       finishReason: "stop",
       usage: { inputTokens: 260, outputTokens: 90 },

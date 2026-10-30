@@ -180,7 +180,7 @@ describe("core plugin manifest contract", () => {
     expect(guide.needs ?? []).toEqual([]);
     // `cardinality: one` and `required: true` are the defaults, left out.
     expect(guide.inputs?.narrative).toEqual({
-      from: { capability: "narrative-engine@1" },
+      from: { capability: "narrative-engine@2" },
       select: "/narrativeOutput",
       accepts: "./schemas/narrative-output.schema.json",
     });
@@ -218,10 +218,10 @@ describe("core plugin manifest contract", () => {
     // Presentation and tracker runtimes that still need the prose remain
     // engine-agnostic raw narrative consumers.
     for (const downstream of rawDownstreams) {
-      expect(downstream.needs).toEqual([{ capability: "narrative-engine@1" }]);
+      expect(downstream.needs).toEqual([{ capability: "narrative-engine@2" }]);
       expect(Object.values(downstream.inputs ?? {})).toContainEqual(
         expect.objectContaining({
-          from: expect.objectContaining({ capability: "narrative-engine@1" }),
+          from: expect.objectContaining({ capability: "narrative-engine@2" }),
           select: "/narrativeOutput",
         }),
       );
@@ -232,7 +232,7 @@ describe("core plugin manifest contract", () => {
     // longer duplicate raw narrator injections.
     expect(worldIr.outputContract).toBe("world-ir-provider@1");
     expect(worldIr.inputs?.narrative).toEqual({
-      from: { capability: "narrative-engine@1" },
+      from: { capability: "narrative-engine@2" },
       select: "/narrativeOutput",
       accepts: "./schemas/narrative-output.schema.json",
     });

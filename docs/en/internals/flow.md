@@ -488,8 +488,8 @@ The model's output first becomes proposals. After they are committed, they becom
 What the LLM returns        Framework translation layer         What the player sees
 ────────────────────        ───────────────────────────         ────────────────────
 
-narrativeOutput:      ──►   Session Kernel                ──►   ┌────────────────────────────┐
-"沼泽的雾气..."             │                                   │  Story text                │
+segments:             ──►   Session Kernel                ──►   ┌────────────────────────────┐
+[{narration,"The fog…"}]    │                                   │  Story text                │
                             │ normalizeOutput()                 │  (Prose component)         │
 interactions:         ──►   │ → Proposal[]                ──►   ├────────────────────────────┤
 create-form / form          │                                   │  Character creation form   │
@@ -505,6 +505,8 @@ plugin_data writes    ──►   │ SSE emit()                        │  Plu
                             MessageList renders turn messages
                             MessagePluginSurface / RightPanel render plugin surfaces
 ```
+
+A story runtime returns a segmented story (`segments`; see [Story output](../reference/plugins.md#story-output)). The kernel normalizes it and derives `narrativeOutput` (the segment texts joined by blank lines). At commit it resolves speakers to characters and records the segments and the presence record on the story message. The text the player reads, the conversation journal and downstream inputs all use that text; the stage shows each paragraph's speaker.
 
 ### 3.3 Translation detail: the tool call chain
 
@@ -550,11 +552,11 @@ LLM: "call sync-           ToolExecutor:
 - A function runtime can go through the same tools, permissions, argument validation, and transaction boundary by using a declared `ctx.tools.call()`.
 - A community handler uses `ctx.pluginData`. It does not get a full writable store.
 
-**Output review happens before tools run.** A plugin can ask for the output to be buffered in `PreLLMCall`. Then in `PostLLMResponse` it can reject the draft and give a correction request.
+**Output review happens before tools run.** A plugin can reject the draft in `PostLLMResponse` and give a correction request. `PreLLMCall` can also turn streaming off for that call with `replace.stream: false`, so nothing is shown before the review passes.
 
 - `agent.loop.corrections.review` configures the correction budget, with two corrections by default. A further rejection after that budget is exhausted fails the runtime with `invalid-output`. Corrections remain subject to step and time limits; see [the loop profile](../reference/plugins.md#loop-profile-agentloopprofile).
-- The two built-in narrative plugins use this to check `narrativePerson`. The default is second person. First or third person is allowed, and dialogue keeps its own point of view.
-- After the check passes, they show the whole passage of story text at once. The framework still supports other plugins that stream their output.
+- The two built-in narrative plugins use this to check `perspective`. The default is character-centred second person; first or third person, an omniscient narrator or a game-master voice can be chosen instead, and dialogue keeps its own point of view. A segmented draft is checked by its segment texts.
+- They do not buffer: the draft streams while it is written. When a draft is rejected, the loop sends a `reset`, the client clears the text shown so far and then shows the rewritten draft; after commit, the final text of `narrative.completed` replaces what was streamed.
 - This is a limited text check. It does not guarantee that every plot inference is correct.
 
 **Phases and stop reasons of the tool loop.** An agent's tool loop (`packages/runtime/src/agent-loop/turn-agent-tool-loop.ts`) moves through fixed phases. The phases and their legal transitions are in `agent-loop/loop-state.ts`; an illegal transition throws at once (it is a defect of the loop itself, which no model or plugin can trigger):
@@ -635,7 +637,7 @@ Plugins work together through versioned contracts and the capabilities that the 
 
 | Need                           | Interface                                             | Boundary                                                                                                   |
 | ------------------------------ | ----------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
-| This turn's upstream output    | `io.inputs`, `from: { contract: narrative-engine@1 }` | An agent gets a typed input data block. A function uses `ctx.inputs`. The source information is kept.      |
+| This turn's upstream output    | `io.inputs`, `from: { contract: narrative-engine@2 }` | An agent gets a typed input data block. A function uses `ctx.inputs`. The source information is kept.      |
 | Hard dependencies and order    | `schedule.needs` / `schedule.after`                   | `needs` sets the order and gates it. `after` only sets the order. Turn input bindings also form DAG edges. |
 | Committed exports              | `scope: committed` in `io.inputs`                     | Reads explicit exports. It does not scan other plugins' storage.                                           |
 | Querying a business capability | `ctx.services.discover/call`                          | Uses a service contract and the provider's identity. It is not bound to a private table.                   |
@@ -648,7 +650,7 @@ Example: a `post-turn` runtime wants to read this turn's story text.
 io:
   inputs:
     narrative:
-      from: { contract: narrative-engine@1 }
+      from: { contract: narrative-engine@2 }
       select: /narrativeOutput
 ```
 
@@ -776,7 +778,7 @@ When the frontend receives an SSE event, it first turns the event into a message
 For the list of components, see [UI components](../reference/ui-components.md).
 
 > [!IMPORTANT]
-> `narrative.delta` is sent only by runtimes that have streaming output turned on. The built-in narrative plugins currently buffer and review the story text first. So the client cannot count on receiving deltas in every turn.
+> `narrative.delta` is sent only by runtimes that have streaming output turned on. A plugin can turn streaming off in `PreLLMCall` with `replace.stream: false`, so the client cannot count on receiving deltas in every turn. The built-in narrative plugins stream while they write and send a `reset` first when a draft is rejected.
 >
 > Only `execution.completed.committed` or a committed record confirms that this turn was saved. A success event from a single runtime is not proof that the whole turn was committed.
 
@@ -1006,7 +1008,8 @@ turn_messages (canonical append-only execution log):
   │ turn-2 │ tool         │ tool      │ {"entries":[...]}                        │
   └────────┴──────────────┴───────────┴──────────────────────────────────────────┘
 
-  A runtime row writes only the narrativeOutput / content text into content. It also carries the form
+  A runtime row writes only the narrativeOutput / content text into content (a segmented story writes the
+  derived text, never the JSON). It also carries the form
   (pendingInput) and the UI attachments. Structured output is kept in turn_results. A run that has
   neither text nor attachments (for example, codex, which writes only structured entries) writes no runtime row.
 
@@ -1091,9 +1094,9 @@ sequenceDiagram
             Kernel->>Plugin: guard / buildContext
             Plugin->>LLM: generate() + tool loop
             LLM-->>Plugin: tool result / finishReason=stop
-            Plugin-->>Kernel: RuntimeOutput<br/>(narrativeOutput / interactions / preGameDone)
+            Plugin-->>Kernel: RuntimeOutput<br/>(segments / narrativeOutput / interactions / preGameDone)
         end
-        Kernel-->>Web: SSE: narrative.delta (streaming runtimes only)
+        Kernel-->>Web: SSE: narrative.delta (streaming runtimes only; a segmented story sends only segment text)
         Kernel-->>Web: SSE: narrative.completed
         Kernel-->>Web: SSE: interaction.requested (if there is a form/button)
         Server-->>Web: SSE: runtime.completed / runtime.failed / runtime.skipped { status, runId }

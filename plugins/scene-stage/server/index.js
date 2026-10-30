@@ -98,33 +98,4 @@ export default function (covel) {
       return { actors: actors(speakers), retainWhenEmpty: false };
     },
   });
-  covel.provideExtension("ui.slot@1", "dialogue", {
-    async handler({ events }, ctx) {
-      const preview = events
-        .filter((event) => event.topic === "stage.direction")
-        .at(-1);
-      if (preview) {
-        const mapping = preview.data.dialogue?.paragraphSpeakers;
-        return {
-          turnId: preview.turnId,
-          paragraphSpeakers: Array.isArray(mapping)
-            ? mapping.map((id) =>
-                id === null
-                  ? null
-                  : (ctx.world.characters.find(
-                      (character) => character.id === id,
-                    )?.name ?? null),
-              )
-            : [],
-        };
-      }
-      const latest = await ctx.pluginData.get("dialogue", "current");
-      return {
-        ...(latest?.turnId ? { turnId: latest.turnId } : {}),
-        paragraphSpeakers: (latest?.paragraphSpeakers ?? []).map(
-          (speaker) => speaker?.displayName ?? null,
-        ),
-      };
-    },
-  });
 }

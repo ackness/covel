@@ -248,6 +248,42 @@ export function registerRuntimeRecordStoreSuites(
       ]);
     });
 
+    it("keeps a story message's segments and presence in metadata", async () => {
+      const metadata = {
+        turnId: "turn-story",
+        runtimeId: "narrator",
+        kind: "story",
+        segments: [
+          { kind: "narration", text: "The rain stops." },
+          {
+            kind: "dialogue",
+            speaker: "Aya",
+            speakerId: "char-aya",
+            text: '"Come on."\nShe turns away.',
+          },
+          {
+            kind: "action",
+            speaker: "Stranger",
+            text: "The stranger steps back.",
+          },
+        ],
+        presentCharacterIds: ["char-aya", "char-chen"],
+        cues: {
+          scene: "Old harbour",
+          present: ["Chen Yuan", "Stranger"],
+          mood: "tense",
+        },
+        yield: "user",
+      };
+      const message = makeMessage({
+        content:
+          'The rain stops.\n\n"Come on."\nShe turns away.\n\nThe stranger steps back.',
+        metadata,
+      });
+      await store.addMessage(message);
+      expect(await store.listMessages("sess-1")).toEqual([message]);
+    });
+
     it("treats an identical same-turn commit as a no-op", async () => {
       const input = makeMessage({
         role: "user",

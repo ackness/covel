@@ -175,14 +175,14 @@ describe("char-creator plugin", () => {
 
     it("injects narrativeOutput from both narrative engines ", () => {
       expect(manifest.inputs["narrator-output"]).toEqual({
-        from: { capability: "narrative-engine@1" },
+        from: { capability: "narrative-engine@2" },
         select: "/narrativeOutput",
         required: false,
       });
     });
 
     it("gates on the narrative-engine capability, not an exact runtime ", () => {
-      expect(manifest.needs).toEqual([{ capability: "narrative-engine@1" }]);
+      expect(manifest.needs).toEqual([{ capability: "narrative-engine@2" }]);
     });
   });
 });

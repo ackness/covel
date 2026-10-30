@@ -19,7 +19,7 @@ Each English term has only one Chinese term. The Chinese docs, the UI text, and 
 | Capability | 能力标签 | The `tag` of a model route (`text`, `image`, and so on). Plugins are found by **Contract**, not by capability tag. |
 | Capability snapshot | 能力快照 | The declaration bounds in an install receipt; see [trusted sources](./plugin-installation.md#trusted-sources). |
 | Collection | 合集 |  |
-| Contract | 契约 | A versioned ID, for example `narrative-engine@1`. |
+| Contract | 契约 | A versioned ID, for example `narrative-engine@2`. |
 | Credits | 作者信息 | The `author`, `license`, and `homepage` fields of a package. |
 | Dataset | 数据集 | Typed plugin data a plugin declares (`contributes.datasets`). Not the install-time **Collection**. |
 | Deployment form | 部署形态 | The desktop app, the self-hosted web app, the official web app. Not `DEPLOYMENT_TIER`. |
@@ -31,7 +31,9 @@ Each English term has only one Chinese term. The Chinese docs, the UI text, and 
 | Official web app | 官方网页版 |  |
 | Operation-based write | 操作式写入 | Submitting a list of operations (`plugin.data.update`) instead of a computed whole value. |
 | Pack | 玩法包 |  |
+| Perspective | 视角 | Whose point of view the narration takes: character-centred first, second or third person, an omniscient narrator, or a game master. |
 | PluginType | 插件类型 |  |
+| Presence record | 在场记录 | The IDs of the characters present, recorded on a story message (`presentCharacterIds`). |
 | Preset | 预设 |  |
 | Proposal | 提案 |  |
 | Provider | 提供商 |  |
@@ -39,11 +41,12 @@ Each English term has only one Chinese term. The Chinese docs, the UI text, and 
 | Runtime | runtime | Kept in English. It means one execution unit in a manifest, not the general word "runtime". |
 | Runtime manifest | runtime 清单 |  |
 | Seat | 座位 | Who plays in a session, in which role, and which characters they control (`session.seats`). |
-| Segment | 提示词段 |  |
+| Segment | 提示词段 | One section of an assembled prompt. A part of a story is a **Story segment**. |
 | Server-scoped setting | 服务端设置 | A setting with `scope: "server"`. All other settings are per-device settings. |
 | Session | 会话 |  |
 | Slot | 槽位 | In the settings UI it is called "model role". |
 | Stop reason | 结束原因 | How an agent tool loop ended (`RuntimeResult.stop.reason`). |
+| Story segment | 故事段落 | One part of a story output: narration, dialogue or action. Called just "segment" (段落) when the context is clear. |
 | Sub-agent | 子 agent | An agent runtime another runtime runs inside its own execution, returning output only. |
 | Trigger mode | 触发模式 |  |
 | Trusted source | 可信来源 | A GitHub source chosen by the instance owner or operator to reduce approval prompts. |
@@ -125,7 +128,7 @@ See: [collections](../ship/collections.md), [plugin installation](./plugin-insta
 
 ## Contract
 
-A versioned ID, such as `narrative-engine@1`, that says what ability a plugin provides or needs.
+A versioned ID, such as `narrative-engine@2`, that says what ability a plugin provides or needs.
 
 - The root `PLUGIN.md` lists the contracts it needs and cannot coexist with in `requires` and `conflicts`, and the contracts no runtime outputs in `provides`.
 - A runtime publishes a contract with `io.output.contract`, and reads one with `from: { contract }`.
@@ -212,6 +215,12 @@ It is different from a **Preset**. A Preset packages a model choice, not plugins
 
 See: `packs/builtin.yaml`, `apps/server/src/config/plugin-packs.ts`, [plugin field reference](./plugins.md), [world data](./world-data.md).
 
+## Perspective
+
+Whose point of view the narration takes. The bundled narrators' "Perspective" setting has five values. `character-first`, `character-second` (the default) and `character-third` centre on the player character and refer to them as "I", "you" or by name. `omniscient` is an all-knowing third-person narrator with no line reserved for the player. `dm` is a game master speaking to the players. Dialogue keeps each speaker's own person.
+
+See: [Built-in plugins: story](../builtin/story.md).
+
 ## Plugin kind and source
 
 There are two separate ways to describe a plugin.
@@ -222,6 +231,12 @@ There are two separate ways to describe a plugin.
 A plugin maintained by the project but installed from outside the repository still has the source `community`.
 
 See: [plugin field reference](./plugins.md), [plugin installation](./plugin-installation.md), [tools](./tools.md).
+
+## Presence record
+
+Who was present in a story message: the speakers resolved at commit plus the characters in `cues.present`, stored in order of first mention as `presentCharacterIds`. It is only stored for now, ready for per-character history later.
+
+See: [plugin contracts: story output](./plugins.md#story-output).
 
 ## Preset
 
@@ -275,7 +290,7 @@ See: [World Model: seats](./world-model.md#seats), [HTTP API](./api.md#session-s
 
 ## Segment
 
-One section of an assembled prompt. The prompt-structure spec divides the prompt into 10 segments. Segments relate to caching: stable segments (world setting, plugin prompts) carry a `cache_control` marker, so the provider's prompt cache can be reused across turns.
+One section of an assembled prompt. The prompt-structure spec divides the prompt into 10 segments. Segments relate to caching: stable segments (world setting, plugin prompts) carry a `cache_control` marker, so the provider's prompt cache can be reused across turns. The parts of a story output are something else; see [Story segment](#story-segment).
 
 See: [prompt structure](./prompt-structure.md).
 
@@ -308,6 +323,12 @@ How an agent runtime's tool loop ended, for example `completed` (the model gave 
 It is written to `RuntimeResult.stop` and to the `stopReason` of the runtime lifecycle events. Function runtimes have no stop reason.
 
 See: [the protocol reference's stop reasons](./protocol.md#stop-reasons), [turn pipeline](../internals/flow.md).
+
+## Story segment
+
+One part of a `narrative-engine@2` story output. Its `kind` is `narration`, `dialogue` or `action`; it may name its speaker in `speaker`, and its text is `text`. Each segment is one paragraph the player sees; the segment texts joined by blank lines form `narrativeOutput`.
+
+See: [plugin contracts: story output](./plugins.md#story-output).
 
 ## Sub-agent
 

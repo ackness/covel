@@ -10,7 +10,10 @@ import {
   sourceTurnId,
 } from "./execution-recovery-fixtures.js";
 import check from "../../plugins/tabletop-rules/runtimes/check/handler.js";
-import { createFormTool } from "../../packages/plugin-handlers-utils/src/index.js";
+import {
+  createFormTool,
+  getToolContent,
+} from "../../packages/plugin-handlers-utils/src/index.js";
 import { createMemoryStore } from "../../packages/store/src/memory-entry.js";
 import {
   createInteractionSubmitter,
@@ -68,12 +71,16 @@ for (const width of [1512, 390]) {
         call: async (name: string, args: Record<string, unknown>) => {
           if (name === "list-characters")
             return { characters: [{ id: "player", fields: { combat: 3 } }] };
-          return createFormTool.execute(args, {
-            sessionId: fixture.id,
-            pluginId,
-            runtimeId: `${pluginId}/check`,
-            turnId: "opened",
-          });
+          // Like the runtime's `ctx.tools.call`, hand the handler the tool's
+          // content, not the model-facing result wrapper.
+          return getToolContent(
+            await createFormTool.execute(args, {
+              sessionId: fixture.id,
+              pluginId,
+              runtimeId: `${pluginId}/check`,
+              turnId: "opened",
+            }),
+          );
         },
       },
     };

@@ -23,7 +23,8 @@ vi.mock("@/stores/streaming-text-store.js", () => ({
   clearAllStreamingText: vi.fn(),
 }));
 
-const { restoreSessionState } = await import("../restore-session.js");
+const { restoreSessionState, toStreamMessages } =
+  await import("../restore-session.js");
 
 const session: SessionRecord = {
   id: "sess-1",
@@ -493,5 +494,37 @@ describe("restoreSessionState stale requests", () => {
       await restoring;
     });
     expect(result.current.state.session?.id).toBe(session.id);
+  });
+});
+
+describe("toStreamMessages", () => {
+  it("keeps a story message's segments", () => {
+    const segments = [
+      { kind: "narration" as const, text: "雨停了。" },
+      {
+        kind: "dialogue" as const,
+        speaker: "阿雅",
+        speakerId: "char-aya",
+        text: "「走吧。」",
+      },
+    ];
+    const [story, plain] = toStreamMessages([
+      {
+        id: "story-1",
+        role: "assistant",
+        content: "雨停了。\n\n「走吧。」",
+        kind: "story",
+        segments,
+        createdAt: "2026-10-30T00:00:00.000Z",
+      },
+      {
+        id: "system-1",
+        role: "system",
+        content: "通知",
+        createdAt: "2026-10-30T00:00:01.000Z",
+      },
+    ]);
+    expect(story?.segments).toEqual(segments);
+    expect(plain).not.toHaveProperty("segments");
   });
 });

@@ -80,7 +80,7 @@ describe("plugin flow routes", () => {
       pluginId: "narrator",
       runtimeId: "narrator",
       stage: "narrative",
-      outputContract: "narrative-engine@1",
+      outputContract: "narrative-engine@2",
       outputKind: "story",
     });
     registerRuntime({
@@ -131,7 +131,7 @@ describe("plugin flow routes", () => {
         (step) =>
           step.runtimeId === "narrator" &&
           step.isStoryRuntime &&
-          step.outputContract === "narrative-engine@1" &&
+          step.outputContract === "narrative-engine@2" &&
           step.execution === "sync",
       ),
     ).toBe(true);
@@ -170,7 +170,7 @@ describe("plugin flow routes", () => {
       execution: "background",
       stage: "pre-turn",
       trigger: { type: "auto", every: 3 },
-      outputContract: "narrative-engine@1",
+      outputContract: "narrative-engine@2",
       turnCompletion: {
         mode: "detached",
         maxQueueMs: 30_000,
@@ -198,7 +198,7 @@ describe("plugin flow routes", () => {
         tags: ["mode:dialogue", "cost:llm", "ui:right-panel"],
       },
       packageManifest: parsePluginMd(
-        "---\nid: test-package\nkind: core\ndescription: Test\ntags: [mode:dialogue]\nprovides: [narrative-engine@1]\n---\n",
+        "---\nid: test-package\nkind: core\ndescription: Test\ntags: [mode:dialogue]\nprovides: [narrative-engine@2]\n---\n",
         "test-package/PLUGIN.md",
       ),
       manifests: [parsed],
@@ -239,14 +239,14 @@ describe("plugin flow routes", () => {
       "en-US": "Package from the registry",
     });
     expect(pkg?.source).toBe("builtin");
-    expect(pkg?.provides).toEqual(["narrative-engine@1"]);
+    expect(pkg?.provides).toEqual(["narrative-engine@2"]);
     // Not sorted: the prep screen groups a plugin under its first tag.
     expect(pkg?.tags).toEqual(["mode:dialogue", "cost:llm", "ui:right-panel"]);
     expect(pkg?.runtimes?.[0]?.trigger).toEqual({
       type: "auto",
       every: 3,
     });
-    expect(pkg?.runtimes?.[0]?.outputContract).toBe("narrative-engine@1");
+    expect(pkg?.runtimes?.[0]?.outputContract).toBe("narrative-engine@2");
     expect(pkg?.runtimes?.[0]?.execution).toBe("background");
     expect(pkg?.runtimes?.[0]).not.toHaveProperty("tags");
     expect(pkg?.runtimes?.[0]?.turnCompletion).toEqual({

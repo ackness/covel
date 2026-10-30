@@ -56,7 +56,7 @@ describe("world data schemas", () => {
           reason: "Relationships drive the story.",
         },
         packs: ["dialogue-mode", "low-cost"],
-        requires: ["narrative-engine@1"],
+        requires: ["narrative-engine@2"],
       },
     });
     expect(result.success).toBe(true);

@@ -8,7 +8,7 @@ import {
 describe("collection plugin contract completeness", () => {
   const consumer = collectionPluginFacts({
     id: "observer",
-    requires: ["narrative-engine@1"],
+    requires: ["narrative-engine@2"],
   });
 
   it("reports a missing plugin requirement even without a world", () => {
@@ -19,7 +19,7 @@ describe("collection plugin contract completeness", () => {
         level: "error",
         packageId: "observer",
         message:
-          "Plugin observer requires narrative-engine@1, and no installed or included plugin provides it.",
+          "Plugin observer requires narrative-engine@2, and no installed or included plugin provides it.",
       },
     ]);
   });
@@ -27,7 +27,7 @@ describe("collection plugin contract completeness", () => {
   it.each(["included", "installed"])("accepts an %s provider", (source) => {
     const provider = collectionPluginFacts({
       id: "story",
-      provides: [{ contract: "narrative-engine@1" }],
+      provides: [{ contract: "narrative-engine@2" }],
     });
     expect(
       checkCollection({
@@ -47,7 +47,7 @@ describe("collection plugin contract completeness", () => {
       checkCollection({
         worlds: [],
         plugins: [consumer, observer],
-        available: [{ id: "story", contracts: ["narrative-engine@2"] }],
+        available: [{ id: "story", contracts: ["narrative-engine@3"] }],
       }),
     ).toEqual([
       expect.objectContaining({ level: "error", packageId: "observer" }),

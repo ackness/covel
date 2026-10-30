@@ -78,7 +78,7 @@ describe("scene cast manifests", () => {
       outputKind: "story",
       model: "story",
     });
-    expect(chatNarrator.outputContract).toBe("narrative-engine@1");
+    expect(chatNarrator.outputContract).toBe("narrative-engine@2");
     expect(chatNarrator.inputs["active-cast"]).toMatchObject({
       from: { capability: "scene-cast@1" },
       select: "/activeCastContext",

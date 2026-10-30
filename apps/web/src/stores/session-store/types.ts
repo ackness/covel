@@ -4,6 +4,7 @@ import type {
   SnapshotCharacter,
   SessionExecutionStatus,
   Stage,
+  StoryMessageSegment,
 } from "@covel/shared";
 import type * as api from "@/services/api";
 
@@ -21,6 +22,8 @@ export interface StreamMessage {
   kind?: string;
   /** For UI blocks (choice_set, etc.) */
   block?: Record<string, unknown>;
+  /** A committed story's segments, with resolved speakers. */
+  segments?: readonly StoryMessageSegment[];
 }
 
 export interface ReasoningEntry {

@@ -1,0 +1,18 @@
+### Breaking
+
+- **The narrative contract is now `narrative-engine@2`, and a story is a list of segments.** A story runtime returns `segments` (`narration`, `dialogue` or `action`, each with optional `speaker` and its `text`), optional `cues` and `yield`. The kernel derives `narrativeOutput` (the segment texts joined by blank lines), so consumers that select `/narrativeOutput` only change the contract ID from `narrative-engine@1` to `narrative-engine@2` in `requires`, `needs` and `from`. Prose is still a valid story and becomes one narration segment per paragraph. Rule: `docs/reference/plugins.md`.
+- **`stage.dialogue@1` and the `dialogue` field of `stage.direction` are removed.** The stage reads each paragraph's nameplate from the committed story's segment speakers. A `stage.direction` event now needs at least one cue. Plugins that provided the slot or emitted the field must drop them. Rule: `docs/reference/ui-panels.md`.
+- **The narrators' "Narrative person" setting is replaced by "Perspective".** `narrativePerson` (`first`, `second`, `third`) becomes `perspective` (`character-first`, `character-second`, `character-third`, `omniscient`, `dm`; default `character-second`). An earlier choice is not carried over; choose again in the plugin settings.
+- **Development sessions created before this change must be recreated.** Their story messages have no segments or presence records, so the stage shows no nameplates for them; retrying a turn from before the change seeds story results in the old shape; their settings keep the unused `narrativePerson`; scene-stage `dialogue/current` rows stay orphaned. Local `tests/llm-replay` story recordings must be re-recorded. No store schema or data version changes.
+
+### Added
+
+- **Story segments carry speakers.** Both bundled narrators ask for segments through `io.output.schema: contract:narrative-engine@2`. Speakers and `cues.present` are written as names; at commit the kernel resolves them to characters by exact name or alias, and `/messages` and `/view` return `segments` with the character's current name and `speakerId`. `narrative.completed` carries the same `segments`, so a turn shows its nameplates as soon as it is committed. A name that matches no character, or more than one, stays as written and is listed in `narrative.completed.unresolvedSpeakers`. Rule: `docs/reference/api.md`, `docs/reference/protocol.md`.
+- **Story messages record who was present.** Each committed story keeps its resolved speakers and `cues.present` characters as presence metadata, ready for per-character history later.
+- **Narrators have a perspective setting with omniscient and game-master modes.** `omniscient` narrates in the third person with no player line and rejects "I" and "you" in narration; `dm` addresses the players and skips the pronoun check while keeping the tag check.
+- **A segmented story streams its text live.** The live stream carries only the segment texts, with the same blank-line separators as the committed message, never the JSON, including when the model wraps the JSON in a Markdown code fence.
+
+### Changed
+
+- **Stage nameplates and the HUD speaking marker come from the story.** The nameplate of each paragraph is its segment's speaker, and the HUD marks the speaker of the last attributed segment. Nameplates appear once the story is committed, not while it streams.
+- **A malformed segmented story is repaired, then committed leniently.** A dialogue without a speaker, an unknown kind or prose where segments were asked for gets one repair request; after the repair budget the story commits with unknown kinds read as narration and unattributed lines kept. Only a story with no text fails.

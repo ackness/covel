@@ -15,7 +15,7 @@ Community checkout (`covel-plugins`, https://github.com/covel-ai/covel-plugins):
 - `examples/story-note`: declared context hook with no store access; plugin ID is `story-note`.
 - `examples/notes-workbench`: RPC action + slash command, scoped data writes, optional service discovery.
 - `examples/note-format-clean` and `note-format-outline`: `examples.note-format@1` service providers.
-- `examples/jev-choice-demo`: required `scene-prompts@1`/`narrative-engine@1` inputs and an evaluation service.
+- `examples/jev-choice-demo`: required `scene-prompts@1`/`narrative-engine@2` inputs and an evaluation service.
 - `plugins/openai-image-gen` and `dashscope-image-gen`: `media.image-flow@1`, explicit tools, event followers, generic gallery/job props.
 - `plugins/mimo-tts`: declared speech wire, detached post-turn narration, manual playback.
 

@@ -681,3 +681,21 @@ export {
 export * from "./schemas/trusted-sources.js";
 
 export { rpcActionNameSchema } from "./schemas/rpc-action.js";
+export {
+  STORY_LIMITS,
+  storyCuesSchema,
+  storyMessageSegmentSchema,
+  storyOutputJsonSchema,
+  storyOutputSchema,
+  storySegmentKinds,
+  storySegmentSchema,
+  storyYields,
+} from "./schemas/story-output.js";
+export type {
+  StoryCues,
+  StoryMessageSegment,
+  StoryOutput,
+  StorySegment,
+  StorySegmentKind,
+  StoryYield,
+} from "@covel/plugin-handlers-utils";

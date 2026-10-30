@@ -6,7 +6,7 @@ PLUGIN.md:
   description: 跟踪当前场景、昼夜和在场角色，为舞台背景与立绘提供数据。
   contributes:
     events:
-      - description: 每轮正文前发射一次：cues 合并本轮全部登退场、站位、焦点、视觉变体变化；dialogue.paragraphSpeakers 按正文空行分段顺序逐项填写准确角色 ID（来自 active-cast），旁白、混合对白或不确定时填 null。不同说话人必须分段，正文段数和顺序必须与数组一致。无演员变化时 cues 可为空，但必须提供 dialogue。actor.focus 只控制画面焦点，不决定对白署名。actor.leave 与 stage.clear 应指定离场 transition。
+      - description: 演员有变化的回合在正文前发射一次：cues 合并本轮全部登退场、站位、焦点、视觉变体变化。actor.focus 只控制画面焦点；名牌来自故事段落的说话者。actor.leave 与 stage.clear 应指定离场 transition。
       - description: 发射条件：第一回合开场确立场景时、场景/地点切换时、昼夜变化时——满足任一即须发射（每回合最多一次）。location 用叙事中的地点名；无把握沿用上次值。
     settings:
       - key: activeSpeakerCount

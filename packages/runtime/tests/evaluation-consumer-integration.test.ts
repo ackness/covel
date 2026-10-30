@@ -70,7 +70,7 @@ describe("plugin-owned evaluation integration", () => {
       stage: "narrative",
       runtimeType: "function",
       outputKind: "story",
-      outputContract: "narrative-engine@1",
+      outputContract: "narrative-engine@2",
       trigger: { type: "auto" },
     };
     loaded.set(narrator.name, {

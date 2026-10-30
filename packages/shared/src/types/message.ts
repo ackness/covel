@@ -104,6 +104,12 @@ export interface Message {
    * `fields` are left out when they exceed 4 KB). `content` is the raw text.
    */
   readonly actions?: readonly import("./action.js").TurnAction[];
+  /**
+   * On a story message: its segments in reading order, with each resolved
+   * speaker's current name and character ID. `content` is their texts joined
+   * by blank lines.
+   */
+  readonly segments?: readonly import("@covel/plugin-handlers-utils").StoryMessageSegment[];
   readonly metadata?: unknown;
   readonly createdAt: string;
 }

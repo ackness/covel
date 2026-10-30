@@ -1,4 +1,8 @@
 import { expect, test } from "@playwright/test";
+import {
+  packageCapabilities,
+  verifiedInstallation,
+} from "./helpers/package-fixtures.js";
 import { ONBOARDING_VERSION, seedBrowserSettings } from "./helpers/player.js";
 
 for (const width of [1280, 390]) {
@@ -25,6 +29,8 @@ for (const width of [1280, 390]) {
         version: "1.0.0",
         author: null,
         hasServerCode: true,
+        trustedSource: false,
+        capabilities: packageCapabilities(true),
         source,
         token: "first-token",
         expiresAt: Date.now() + 900_000,
@@ -36,6 +42,8 @@ for (const width of [1280, 390]) {
         version: "1.0.0",
         author: null,
         hasServerCode: true,
+        trustedSource: false,
+        capabilities: packageCapabilities(true),
         source: { ...source, path: "examples/demo" },
         token: "second-token",
         expiresAt: Date.now() + 900_000,
@@ -46,12 +54,9 @@ for (const width of [1280, 390]) {
     await page.route("**/api/install/plugins", (route) =>
       route.fulfill({
         json: {
-          items: installed.map(({ id, version, source }) => ({
-            id,
-            version,
-            source,
-            pendingUpdate: null,
-          })),
+          items: installed.map(({ id, version, source }) =>
+            verifiedInstallation({ id, version, source }),
+          ),
         },
       }),
     );
@@ -96,7 +101,13 @@ for (const width of [1280, 390]) {
     await dialog
       .getByLabel("GitHub URL", { exact: true })
       .fill(source.repository);
-    await dialog.getByRole("button", { name: "Preview", exact: true }).click();
+    // The pane also holds other previews (SillyTavern import): press the one
+    // in the form that owns the GitHub URL field.
+    await dialog
+      .locator("form")
+      .filter({ has: page.getByLabel("GitHub URL", { exact: true }) })
+      .getByRole("button", { name: "Preview", exact: true })
+      .click();
     const install = dialog.getByRole("button", {
       name: /^Install \d+ selected$/,
     });

@@ -1,5 +1,5 @@
 ---
-version: 0.0.38
+version: 0.0.39
 displayName: Reply Variants
 description: Offers several reply options so you can choose the one that fits best.
 author:
@@ -19,7 +19,7 @@ runtime:
     inputs:
       narrative:
         from:
-          contract: narrative-engine@1
+          contract: narrative-engine@2
         select: /narrativeOutput
         required: false
     output:

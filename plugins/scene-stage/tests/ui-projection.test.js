@@ -26,44 +26,8 @@ describe("stage UI projections", () => {
       ),
     ).toEqual({ preload: [ref] });
   });
-  it("maps dialogue speaker ids to kernel character names and preserves narration gaps", async () => {
-    expect(
-      await handlers.get("dialogue")(
-        {
-          events: [
-            {
-              topic: "stage.direction",
-              turnId: "t",
-              data: {
-                dialogue: {
-                  paragraphSpeakers: ["session-hero", null, "unknown"],
-                },
-              },
-            },
-          ],
-        },
-        context({}),
-      ),
-    ).toEqual({ turnId: "t", paragraphSpeakers: ["Hero", null, null] });
-  });
-  it("reads the committed attribution when no direction event is live", async () => {
-    expect(
-      await handlers.get("dialogue")(
-        { events: [] },
-        context({
-          "dialogue/current": {
-            turnId: "t-3",
-            paragraphSpeakers: [
-              { characterId: "session-hero", displayName: "Hero" },
-              null,
-            ],
-          },
-        }),
-      ),
-    ).toEqual({ turnId: "t-3", paragraphSpeakers: ["Hero", null] });
-    expect(await handlers.get("dialogue")({ events: [] }, context({}))).toEqual(
-      { paragraphSpeakers: [] },
-    );
+  it("provides no dialogue slot: nameplates come from story segments", () => {
+    expect(handlers.has("dialogue")).toBe(false);
   });
   it("lets an explicit empty direction clear an earlier cast provider", async () => {
     const value = await handlers.get("direction")(

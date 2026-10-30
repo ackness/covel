@@ -16,10 +16,6 @@ The direction runtime is the authoritative, persistent actor layout for stage
 mode. It is additive to the cast runtime: worlds and narrators that never emit
 `stage.direction` continue to use the deterministic cast selection.
 
-Dialogue attribution is independent from actor focus. The optional
-`dialogue.paragraphSpeakers` array supplies one exact character ID or `null`
-for each blank-line-separated narrative paragraph (1-80 entries). The handler
-resolves IDs against session characters and commits `{ schemaVersion: 1,
-turnId, paragraphSpeakers: [{ characterId, displayName } | null] }` under
-`dialogue/current`. Unknown IDs become `null` with a diagnostic; names are
-never guessed from the prose. Dialogue-only events do not clear actor state.
+Dialogue attribution is not part of a stage direction: the stage reads each
+paragraph's nameplate from the committed story's segment speakers. Actor focus
+only controls the visual spotlight.

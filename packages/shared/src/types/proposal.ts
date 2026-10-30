@@ -19,6 +19,11 @@
  * matching handler at compile time. Never hand-maintain a parallel list.
  */
 
+import type {
+  StoryCues,
+  StorySegment,
+  StoryYield,
+} from "@covel/plugin-handlers-utils";
 import type { MediaRef } from "./media.js";
 import type { UIRenderPartsInstruction } from "./ui.js";
 
@@ -34,6 +39,14 @@ export interface ProposalSource {
 export interface NarrativeAppendPayload {
   readonly content: string;
   readonly kind: string; // 'story' | 'system'
+  /**
+   * A story's segments as the runtime wrote them (speakers are names). The
+   * commit handler resolves speakers and `cues.present` to characters and
+   * stores the result in the message metadata. Absent on system messages.
+   */
+  readonly segments?: readonly StorySegment[];
+  readonly cues?: StoryCues;
+  readonly yield?: StoryYield;
 }
 
 export interface InteractionRequestPayload {

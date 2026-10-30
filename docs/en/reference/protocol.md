@@ -124,14 +124,17 @@ In the tables, "S→C" means sent from the server to the client.
 
 ### Narrative events
 
-| Event type            | Dir. | Description                        | Payload                                             |
-| --------------------- | ---- | ---------------------------------- | --------------------------------------------------- |
-| `narrative.delta`     | S→C  | A streamed piece of narrative text | `{ runtimeId, pluginId, kind, delta }`              |
-| `narrative.completed` | S→C  | The complete narrative message     | `{ content, kind, messageId, runtimeId, pluginId }` |
+| Event type            | Dir. | Description                        | Payload                                                                             |
+| --------------------- | ---- | ---------------------------------- | ----------------------------------------------------------------------------------- |
+| `narrative.delta`     | S→C  | A streamed piece of narrative text | `{ runtimeId, pluginId, kind, delta }`                                              |
+| `narrative.completed` | S→C  | The complete narrative message     | `{ content, kind, messageId, runtimeId, pluginId, segments?, unresolvedSpeakers? }` |
 
 - `narrative.delta`, `narrative.completed`, and `runtime.started` must all carry `kind`; clients read it directly rather than inferring it from `label`.
 - `narrative.delta` can carry `reset: true`. In that case `delta` is an empty string. It means: the text this runtime already streamed was a preparation step before a tool call, or a draft that the review rejected, and it will not become the final narrative. The client should clear the part already shown, then take in the later pieces.
 - The `content` of `narrative.completed` is always the final text after review has passed. It replaces what was shown while streaming.
+- For a segmented story (the `segments` of `narrative-engine@2`), `narrative.delta` carries only segment text, with a blank line between segments, matching `content`. JSON keys, speakers and `cues` never reach `delta`. See [Story output](./plugins.md#story-output).
+- When a speaker or present name in the story could not be resolved to a character (no match, or more than one), `narrative.completed` carries `unresolvedSpeakers`: those names in order of first appearance; it is omitted when there are none.
+- A story's `narrative.completed` carries `segments`: the segments with the speakers resolved at commit, in the same shape as `segments` from `/messages` (see [api.md](./api.md#get-apisessionsidmessages)). The client uses them to show nameplates and the speaker for the turn it just watched without reading messages again; events of other kinds have no such field.
 
 ### Interaction events
 

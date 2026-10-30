@@ -138,7 +138,7 @@ messages
 
 - `audience: self` 覆盖提供插件的全部 runtime。
 - `audience: story` 匹配输出故事的 runtime。
-- `audience: { contract: "narrative-engine@1" }` 匹配 runtime 的输出契约。
+- `audience: { contract: "narrative-engine@2" }` 匹配 runtime 的输出契约。
 
 ### 回合上下文
 

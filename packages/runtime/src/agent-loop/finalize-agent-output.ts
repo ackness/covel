@@ -13,8 +13,8 @@
  *   2. Run the shared schema gate between build and decoration when a private
  *      output schema is declared. A gate hit short-circuits finalize.
  *   3. Drop effect-shaped fields from an envelope the model wrote, extract
- *      tool-emitted effects, sanitize story narrative, attach buffered
- *      proposals to the business output.
+ *      tool-emitted effects, normalize a story into segments and its derived
+ *      `narrativeOutput`, attach buffered proposals to the business output.
  *
  * Effects come from tools only. `agent.tools` is the complete list of what a
  * model can write, so a field of the model's final JSON that is shaped like an
@@ -32,14 +32,17 @@ import type {
   RuntimeResult,
   ToolCallRecord,
 } from "@covel/shared";
-import { storyOutputError } from "./story-output.js";
+import {
+  normalizeStoryOutput,
+  STORY_EMPTY_ERROR,
+  storyOutputProblems,
+} from "./story-output.js";
 import type { EmittedEvent } from "@covel/tools";
 import { collectUiBlocks } from "../session/session-kernel-helpers.js";
 import {
   findLastStructuredToolOutput,
   findPresentableToolOutput,
   parseFinalOutputEnvelope,
-  sanitizeStoryNarrativeText,
   shouldSuppressToolLoopNarrative,
   type ExecutedToolCallState,
   type FailedToolCallState,
@@ -61,6 +64,12 @@ export interface FinalizeAgentOutputParams {
   readonly dedupeInteractions?: boolean;
   /** A validation dry run neither warns nor mutates tool-owned output. */
   readonly silent?: boolean;
+  /**
+   * Check a story strictly, for the repair request: structural segment
+   * problems fail with `problems`. Without it a story is normalized leniently
+   * and fails only when it has no text.
+   */
+  readonly strictStory?: { readonly segmentsRequired: boolean };
   /**
    * Optional schema gate, invoked after any candidate output has been
    * converted into the output envelope. Returning a failed
@@ -90,7 +99,12 @@ export type FinalizeAgentOutput =
       readonly completion?: "done" | "pending";
     }
   | { readonly kind: "tool-failed" }
-  | { readonly kind: "invalid-output"; readonly error: string }
+  | {
+      readonly kind: "invalid-output";
+      readonly error: string;
+      /** Model-facing problems for the repair request. */
+      readonly problems: readonly string[];
+    }
   | { readonly kind: "short-circuit"; readonly result: RuntimeResult };
 
 export function finalizeAgentOutput(
@@ -235,16 +249,25 @@ export function finalizeAgentOutput(
   delete output.preGameDone;
   if (completion) delete output.completion;
 
-  if (
-    manifest.outputKind === "story" &&
-    typeof output.narrativeOutput === "string"
-  ) {
-    output.narrativeOutput = sanitizeStoryNarrativeText(output.narrativeOutput);
+  if (manifest.outputKind === "story") {
+    if (params.strictStory) {
+      const problems = storyOutputProblems(output, {
+        segmentsRequired: params.strictStory.segmentsRequired,
+        prose: !parsedAsJson,
+      });
+      if (problems.length > 0)
+        return { kind: "invalid-output", error: STORY_EMPTY_ERROR, problems };
+    }
+    const story = normalizeStoryOutput(output);
+    if (!story)
+      return {
+        kind: "invalid-output",
+        error: STORY_EMPTY_ERROR,
+        problems: ["the story text is empty"],
+      };
+    output = story;
   }
 
-  const storyError =
-    manifest.outputKind === "story" ? storyOutputError(output) : undefined;
-  if (storyError) return { kind: "invalid-output", error: storyError };
   return {
     kind: "ok",
     output,

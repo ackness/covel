@@ -1,6 +1,6 @@
 ---
 kind: core
-version: 0.0.8
+version: 0.0.9
 displayName: World Time
 description: >-
   Tracks world-defined calendars, phases and time direction, settling each story
@@ -10,7 +10,7 @@ author:
   url: https://github.com/ackness/covel
 license: MIT
 requires:
-  - narrative-engine@1
+  - narrative-engine@2
 contracts:
   world-time-context@1:
     schema: ./schemas/world-time-context.schema.json

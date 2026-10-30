@@ -60,7 +60,7 @@ const agent = {
 describe("validate:plugin warnings for a field written with its default", () => {
   it("names every default a runtime restates and still passes", async () => {
     const dir = await plugin(
-      { version: "1.0.0", requires: ["narrative-engine@1"] },
+      { version: "1.0.0", requires: ["narrative-engine@2"] },
       {
         notes: {
           ...agent,
@@ -74,7 +74,7 @@ describe("validate:plugin warnings for a field written with its default", () => 
             visibility: "system",
             inputs: {
               narrative: {
-                from: { contract: "narrative-engine@1", cardinality: "one" },
+                from: { contract: "narrative-engine@2", cardinality: "one" },
                 required: true,
                 scope: "turn",
               },
@@ -142,7 +142,7 @@ describe("validate:plugin warnings for a field written with its default", () => 
           schedule: { stage: "narrative" },
           io: {
             visibility: "story",
-            output: { contract: "narrative-engine@1" },
+            output: { contract: "narrative-engine@2" },
           },
           agent: {
             model: "story",
@@ -170,7 +170,7 @@ describe("validate:plugin warnings for a field written with its default", () => 
           schedule: { stage: "narrative" },
           io: {
             visibility: "story",
-            output: { contract: "narrative-engine@1" },
+            output: { contract: "narrative-engine@2" },
           },
           agent: {
             loop: {

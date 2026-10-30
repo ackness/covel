@@ -837,6 +837,7 @@ curl -X DELETE http://localhost:3001/api/sessions/<sessionId>
 `GET /api/sessions/:id/view` 有几点要知道：
 
 - **只含最近窗口。** `messages` 和 `executionSteps` 默认是最新的 80 条消息和 600 条 trace 事件，不是全量。
+- **故事消息带 `segments`**，形状和 [`GET /messages`](#get-apisessionsidmessages) 相同，舞台据此显示每段的说话人。
 - **向上翻页。** 视图带一个不透明的 `messagesCursor`。前端向上滚动时，把它原样作为 `?cursor=` 传给 `GET /api/sessions/:id/messages/page`。
 - **窗口外的旧回合**不渲染执行时间线。
 - **会话时钟。** 视图内嵌的 session 对象带有和会话 API 相同的必填时钟：`phase`、`completedPlayerTurns`、`setupRuntimes`。恢复和重连只以这些字段判断进度。
@@ -4037,7 +4038,7 @@ runtime 报告失败时，它的原始错误保留在 `result.runtimeResults` �
       "hostState": "loaded",
       "active": true,
       "locked": false,
-      "provides": ["narrative-engine@1"],
+      "provides": ["narrative-engine@2"],
       "requires": [],
       "optional": [],
       "conflicts": [],
@@ -4208,6 +4209,26 @@ runtime 报告失败时，它的原始错误保留在 `result.runtimeResults` �
 | `id` | 路径 | 会话 ID |
 
 **响应:** `{ items }`。每项是一条扁平的消息对象：存储里 `metadata` 下的 `turnId`、`runtimeId`、`kind`、`block` 被提到了顶层。玩家消息还带 `actions`：这条消息提交的解析后行动（见 [`submit_actions`](#submit_actions)）。
+
+故事消息还带 `segments`：提交时记下的故事段落 `{ kind, speaker?, speakerId?, text }`。解析成角色的段落有 `speakerId`，`speaker` 是角色的当前名字；没解析的名字原样保留，旁白没有 `speaker`。`content` 是各段正文用空行连接的结果。纯文本故事的每个段落是一段 `narration`；这个改动之前创建的消息没有 `segments`。规则见[故事输出](./plugins.md#故事输出)。`/messages/page` 和 `/view` 的 `messages` 用同样的形状。
+
+```json
+{
+  "id": "msg-002",
+  "role": "assistant",
+  "kind": "story",
+  "content": "雨停了。\n\n「走吧，船要开了。」",
+  "segments": [
+    { "kind": "narration", "text": "雨停了。" },
+    {
+      "kind": "dialogue",
+      "speaker": "阿雅",
+      "speakerId": "char-aya",
+      "text": "「走吧，船要开了。」"
+    }
+  ]
+}
+```
 
 ```json
 {
