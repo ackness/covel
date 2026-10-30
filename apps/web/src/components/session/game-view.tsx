@@ -219,6 +219,8 @@ export function GameView({
 
   const {
     inputValue,
+    composerModes,
+    canSubmit,
     setInputValue,
     pendingDrafts,
     suspensions,
@@ -690,6 +692,7 @@ export function GameView({
             <StageView
               recoveryTurnId={recoveryTurnId}
               composerDraft={{ value: inputValue, onChange: setInputValue }}
+              composerModes={composerModes}
               panelState={rightPanelState}
               key={session.id}
               session={session}
@@ -777,6 +780,8 @@ export function GameView({
                 commandExecuting={commandExecuting}
                 commandFeedback={commandFeedback}
                 onCommandSelect={applyCommandCompletion}
+                composerModes={composerModes}
+                canSubmit={canSubmit}
               />
             </div>
           )}

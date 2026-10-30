@@ -53,6 +53,11 @@ export {
   turnActionRequestsSchema,
   turnActionSchema,
 } from "./schemas/action.js";
+export {
+  COMPOSER_TEXTAREA_MIN_LENGTH,
+  composerFieldsOf,
+} from "./action-kind-fields.js";
+export type { ComposerField } from "./action-kind-fields.js";
 export type {
   ActionKindDescriptor,
   ActionKindRule,

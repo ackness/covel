@@ -3,6 +3,8 @@ import type {
   PageCursor,
   PluginMutationResponse,
   RuntimeResult,
+  Seat,
+  SessionActionKindsResponse,
   SessionEvent,
   SessionMemoryIndexStatus,
   SessionPluginsResponse,
@@ -44,6 +46,34 @@ export async function listSessionPlugins(
 ): Promise<SessionPluginsResponse> {
   return request<SessionPluginsResponse>(
     `/api/sessions/${encodeURIComponent(sessionId)}/plugins`,
+  );
+}
+
+/** The action kinds a session accepts and the ones each seat may submit now. */
+export async function getSessionActionKinds(
+  sessionId: string,
+): Promise<SessionActionKindsResponse> {
+  return request<SessionActionKindsResponse>(
+    `/api/sessions/${encodeURIComponent(sessionId)}/action-kinds`,
+  );
+}
+
+/**
+ * Switch the character a human seat acts as. The server waits for the
+ * session lock, so the switch lands between turns and applies from the next
+ * one. Returns the session's seats.
+ */
+export async function setSeatCurrentCharacter(
+  sessionId: string,
+  seatId: string,
+  currentCharacterId: string,
+): Promise<{ seats: Seat[] }> {
+  return request<{ seats: Seat[] }>(
+    `/api/sessions/${encodeURIComponent(sessionId)}/seats/${encodeURIComponent(seatId)}`,
+    {
+      method: "PATCH",
+      body: JSON.stringify({ currentCharacterId }),
+    },
   );
 }
 

@@ -5,6 +5,7 @@ import type {
   SessionExecutionStatus,
   Stage,
   StoryMessageSegment,
+  TurnAction,
 } from "@covel/shared";
 import type * as api from "@/services/api";
 
@@ -24,6 +25,8 @@ export interface StreamMessage {
   block?: Record<string, unknown>;
   /** A committed story's segments, with resolved speakers. */
   segments?: readonly StoryMessageSegment[];
+  /** On a player's message: the resolved actions it carried. */
+  actions?: readonly TurnAction[];
 }
 
 export interface ReasoningEntry {
@@ -171,6 +174,12 @@ export interface SessionState {
   sessionCommands: import("@covel/shared").SessionSlashCommand[];
   /** False until this session's command directory has been read once. */
   sessionCommandsLoaded: boolean;
+  /**
+   * The session's action-kind catalogue, the source of the composer's modes.
+   * `null` until it has been read, and after a read that failed: the
+   * composer then offers `say` only.
+   */
+  sessionActionKinds: import("@covel/shared").SessionActionKindsResponse | null;
   /** Confirmed plugins of this session that cannot run now. */
   unavailableSessionPlugins: readonly import("@covel/shared").PluginResolutionRejection[];
   /**
@@ -213,7 +222,13 @@ export interface SessionState {
   /** Local unsaved prose; never part of history, stage or plugin state. */
   unsavedNarratives?: StreamMessage[];
   /** Input stopped before execution, waiting for the composer to take it. */
-  restoredInput?: { requestId: string; content: string } | null;
+  restoredInput?: {
+    requestId: string;
+    content: string;
+    /** The composer mode and field values of the stopped submission. */
+    kind?: string;
+    fields?: import("./composer-actions.js").ActionFields;
+  } | null;
   /** Browser action generation; rejects recovery reads from an older POST. */
   actionGeneration?: number;
 
@@ -390,6 +405,14 @@ export type SessionAction =
       plugins: api.SessionPlugin[];
       commands?: import("@covel/shared").SessionSlashCommand[];
       unavailable?: readonly import("@covel/shared").PluginResolutionRejection[];
+    }
+  | {
+      type: "SET_SESSION_ACTION_KINDS";
+      catalogue: import("@covel/shared").SessionActionKindsResponse;
+    }
+  | {
+      type: "SET_SESSION_SEATS";
+      seats: readonly import("@covel/shared").Seat[];
     }
   | { type: "TOGGLE_SESSION_PLUGIN"; pluginId: string; active: boolean }
   | {

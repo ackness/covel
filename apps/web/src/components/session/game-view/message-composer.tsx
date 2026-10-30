@@ -6,6 +6,9 @@ import type { SessionRecord } from "@/services/api.js";
 import { resolveDisplayText } from "@/lib/i18n-text.js";
 import { slashCommandUsage } from "./slash-command.js";
 import type { CommandFeedback } from "./use-game-view-composer.js";
+import type { ComposerModes } from "./use-composer-modes.js";
+import { ComposerFields } from "./composer-fields.js";
+import { ComposerModeBar } from "./composer-mode-bar.js";
 import {
   executionTone,
   type ExecutionPresentation,
@@ -33,6 +36,10 @@ interface MessageComposerProps {
   commandFeedback?: CommandFeedback | null;
   pendingDraftCount?: number;
   onCommandSelect?: (command: SessionSlashCommand) => void;
+  /** The seat's modes, fields and character switcher; plain text without it. */
+  composerModes?: ComposerModes;
+  /** Whether the send button is on; derived from the text and mode if omitted. */
+  canSubmit?: boolean;
 }
 
 export function MessageComposer({
@@ -56,10 +63,24 @@ export function MessageComposer({
   commandFeedback,
   pendingDraftCount = 0,
   onCommandSelect,
+  composerModes,
+  canSubmit,
 }: MessageComposerProps) {
   const selectedCommandRef = useRef<HTMLButtonElement>(null);
   const isPlaying = session.status === "active" && session.phase === "playing";
   const isEnded = session.status === "ended";
+  const mode = composerModes?.mode;
+  // A mode that takes no text (an advance) is one button, not an input.
+  const textless = mode?.text === "none";
+  // Steering takes text only, so another mode waits for the turn to end.
+  const waitsForTurn = executing && mode !== undefined && mode.kind !== "say";
+  const sendEnabled =
+    canSubmit ??
+    !(
+      composerDisabled ||
+      commandExecuting ||
+      (!inputValue.trim() && (executing || pendingDraftCount === 0))
+    );
 
   useEffect(() => {
     if (!commandMenuOpen) return;
@@ -151,45 +172,69 @@ export function MessageComposer({
               )}
             </div>
           )}
+          {composerModes && (
+            <>
+              <ComposerModeBar
+                t={t}
+                composerModes={composerModes}
+                executing={executing}
+              />
+              <ComposerFields composerModes={composerModes} />
+            </>
+          )}
           <div className="ui-composer-input flex items-stretch rounded-(--radius-control) border border-(--rule-color) bg-(--surface-inset) focus-within:border-(--accent-primary) transition-colors">
-            <input
-              data-testid="game-composer-input"
-              type="text"
-              value={inputValue}
-              onChange={(e) => onInputValueChange(e.target.value)}
-              onKeyDown={onKeyDown}
-              role="combobox"
-              aria-autocomplete="list"
-              aria-expanded={commandMenuOpen}
-              aria-controls={
-                commandMenuOpen ? "game-composer-command-list" : undefined
-              }
-              aria-activedescendant={
-                commandMenuOpen && commandMatches[selectedCommandIndex]
-                  ? `game-composer-command-${selectedCommandIndex}`
-                  : undefined
-              }
-              aria-label={t(
-                "session.inputAriaLabel",
-                "Story input — press Enter to send",
-              )}
-              placeholder={
-                composerBlocked
-                  ? t("session.composerBlockedPlaceholder")
-                  : awaitingBegin
-                    ? t("session.composerAwaitingBeginPlaceholder")
-                    : executing
-                      ? t("session.steerPlaceholder", "Interject mid-turn...")
-                      : isPlaying
-                        ? t(
-                            "session.inputPlaceholder",
-                            "Enter action or command...",
-                          )
-                        : t("session.inputPlaceholderAny", "Send a message...")
-              }
-              disabled={composerDisabled || commandExecuting}
-              className="flex-1 min-w-0 px-3.5 py-2.5 bg-transparent text-base outline-none disabled:opacity-50 placeholder:text-muted-foreground md:text-sm"
-            />
+            {textless && mode ? (
+              <span
+                data-testid="game-composer-input"
+                className="flex-1 min-w-0 truncate px-3.5 py-2.5 text-base text-muted-foreground md:text-sm"
+              >
+                {mode.placeholder ?? mode.label}
+              </span>
+            ) : (
+              <input
+                data-testid="game-composer-input"
+                type="text"
+                value={inputValue}
+                onChange={(e) => onInputValueChange(e.target.value)}
+                onKeyDown={onKeyDown}
+                role="combobox"
+                aria-autocomplete="list"
+                aria-expanded={commandMenuOpen}
+                aria-controls={
+                  commandMenuOpen ? "game-composer-command-list" : undefined
+                }
+                aria-activedescendant={
+                  commandMenuOpen && commandMatches[selectedCommandIndex]
+                    ? `game-composer-command-${selectedCommandIndex}`
+                    : undefined
+                }
+                aria-label={t(
+                  "session.inputAriaLabel",
+                  "Story input — press Enter to send",
+                )}
+                placeholder={
+                  composerBlocked
+                    ? t("session.composerBlockedPlaceholder")
+                    : awaitingBegin
+                      ? t("session.composerAwaitingBeginPlaceholder")
+                      : executing
+                        ? t("session.steerPlaceholder", "Interject mid-turn...")
+                        : mode?.placeholder
+                          ? mode.placeholder
+                          : isPlaying
+                            ? t(
+                                "session.inputPlaceholder",
+                                "Enter action or command...",
+                              )
+                            : t(
+                                "session.inputPlaceholderAny",
+                                "Send a message...",
+                              )
+                }
+                disabled={composerDisabled || commandExecuting}
+                className="flex-1 min-w-0 px-3.5 py-2.5 bg-transparent text-base outline-none disabled:opacity-50 placeholder:text-muted-foreground md:text-sm"
+              />
+            )}
             {executing && onAbort && (
               <button
                 type="button"
@@ -204,15 +249,18 @@ export function MessageComposer({
             <button
               type="button"
               onClick={onSubmit}
-              disabled={
-                composerDisabled ||
-                commandExecuting ||
-                (!inputValue.trim() && (executing || pendingDraftCount === 0))
-              }
+              disabled={composerDisabled || commandExecuting || !sendEnabled}
               aria-label={
-                executing
-                  ? t("session.steerSend", "interject")
-                  : t("session.inputKbdHint", "to send")
+                waitsForTurn
+                  ? t(
+                      "session.composerModeAfterTurn",
+                      "Available after this turn",
+                    )
+                  : executing
+                    ? t("session.steerSend", "interject")
+                    : textless && mode
+                      ? mode.label
+                      : t("session.inputKbdHint", "to send")
               }
               className="ui-composer-submit shrink-0 inline-flex items-center justify-center w-11 self-stretch border-l border-(--rule-color) text-muted-foreground hover:text-foreground hover:bg-[color-mix(in_oklab,var(--color-foreground)_6%,transparent)] disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-transparent transition-colors"
             >
@@ -233,6 +281,13 @@ export function MessageComposer({
               }`}
             >
               {commandFeedback.message}
+            </p>
+          ) : waitsForTurn ? (
+            <p
+              role="status"
+              className="ui-meta text-[10px] text-muted-foreground/80 px-1 mt-1.5"
+            >
+              {t("session.composerModeAfterTurn", "Available after this turn")}
             </p>
           ) : executionState &&
             !["idle", "completed"].includes(executionState) &&

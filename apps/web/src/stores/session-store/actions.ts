@@ -1,7 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef } from "react";
 import i18n from "i18next";
 import { confirmPluginApproval } from "@/lib/approval-message.js";
-import type { PluginMutationResponse, SessionPlugin } from "@covel/shared";
+import type {
+  PluginMutationResponse,
+  SessionPlugin,
+  TurnActionRequest,
+} from "@covel/shared";
 import * as api from "@/services/api";
 import { ignoreError } from "@/lib/ignore-error.js";
 import { requestChoices, requestConfirm } from "@/lib/confirm-channel.js";
@@ -17,7 +21,14 @@ import {
   setActiveSession as setActivePluginDataSession,
 } from "@/stores/plugin-data-store.js";
 import { invalidateWorldRecord } from "@/services/world-records.js";
+import { sessionCharacters } from "@/lib/session-characters.js";
 import { bootSessionStore } from "./boot.js";
+import {
+  composerActions,
+  echoedActions,
+  textActions,
+  type ComposerSubmission,
+} from "./composer-actions.js";
 import type { SessionActions } from "./context.js";
 import { submitInteractionBlock } from "./interaction-submission.js";
 import { useExecutionRecoveryActions } from "./execution-recovery-actions.js";
@@ -253,13 +264,18 @@ export function useBuildSessionActions({
 
   const runSingleAction = useCallback(
     (
-      content: string,
+      actions: readonly TurnActionRequest[],
       opts: { echoUserMessage: boolean; owner: SessionActionOwner },
     ): Promise<void> => {
-      const session = stateRef.current.session;
+      const { session, gameState, sessionActionKinds } = stateRef.current;
       return session
         ? runSingleSessionAction({
-            content,
+            actions,
+            echoActions: echoedActions(actions, {
+              seats: session.seats,
+              characters: sessionCharacters(gameState),
+              catalogue: sessionActionKinds?.kinds,
+            }),
             ...opts,
             session,
             workspace,
@@ -272,8 +288,8 @@ export function useBuildSessionActions({
     [workspace, dispatch, stateRef, handleSseEvent, sessionIdRef],
   );
 
-  const sendMessage = useCallback(
-    (content: string) => {
+  const sendActions = useCallback(
+    (actions: readonly TurnActionRequest[]) => {
       const state = stateRef.current;
       if (!canRunSessionAction(state) || !state.session) return;
       const owner = claimAction(state.session.id);
@@ -281,7 +297,7 @@ export function useBuildSessionActions({
       dispatch({ type: "SET_EXECUTING", value: true });
       dispatch({ type: "SET_EXECUTION_ERROR", error: null });
 
-      runSingleAction(content, { echoUserMessage: true, owner }).finally(() => {
+      runSingleAction(actions, { echoUserMessage: true, owner }).finally(() => {
         finalizeActionExecution(
           dispatch,
           state.session?.id,
@@ -299,6 +315,38 @@ export function useBuildSessionActions({
       sessionIdRef,
       claimAction,
     ],
+  );
+
+  const sendMessage = useCallback(
+    (content: string) => sendActions(textActions(content)),
+    [sendActions],
+  );
+
+  const submitComposerAction = useCallback(
+    (submission: ComposerSubmission, opts?: { drafts?: string }) =>
+      sendActions(composerActions(submission, opts?.drafts)),
+    [sendActions],
+  );
+
+  const switchSeatCharacter = useCallback(
+    async (seatId: string, characterId: string): Promise<void> => {
+      const sid = sessionIdRef.current;
+      if (!sid) return;
+      const generation = sessionGenerationRef.current;
+      // The checkpoint of a browser-private session is uploaded and taken
+      // back around the write, or the next upload would undo the switch.
+      const { seats } = await workspace.run(
+        sid,
+        `seat-switch:${crypto.randomUUID()}`,
+        () => api.setSeatCurrentCharacter(sid, seatId, characterId),
+      );
+      if (
+        sessionIdRef.current === sid &&
+        sessionGenerationRef.current === generation
+      )
+        dispatch({ type: "SET_SESSION_SEATS", seats });
+    },
+    [workspace, dispatch, sessionIdRef, sessionGenerationRef],
   );
 
   const steerMessage = useCallback(
@@ -586,11 +634,14 @@ export function useBuildSessionActions({
     const sid = sessionIdRef.current;
     if (!sid) return;
     const generation = sessionGenerationRef.current;
-    try {
-      await refreshSessionResource(dispatch, ["plugins", sid], {
-        isCurrent: () =>
-          sessionIdRef.current === sid &&
-          sessionGenerationRef.current === generation,
+    const isCurrent = () =>
+      sessionIdRef.current === sid &&
+      sessionGenerationRef.current === generation;
+    // The catalogue follows the plugin list: the same activations decide
+    // both. Each read stands alone, so one failing leaves the other.
+    await Promise.all([
+      refreshSessionResource(dispatch, ["plugins", sid], {
+        isCurrent,
         read: () => api.listSessionPlugins(sid),
         apply: (res) =>
           dispatch({
@@ -599,10 +650,18 @@ export function useBuildSessionActions({
             commands: [...res.commands],
             unavailable: res.unavailable,
           }),
-      });
-    } catch {
-      // Non-critical: plugins panel is optional.
-    }
+      }).catch(() => {
+        // Non-critical: plugins panel is optional.
+      }),
+      refreshSessionResource(dispatch, ["action-kinds", sid], {
+        isCurrent,
+        read: () => api.getSessionActionKinds(sid),
+        apply: (catalogue) =>
+          dispatch({ type: "SET_SESSION_ACTION_KINDS", catalogue }),
+      }).catch(() => {
+        // Non-critical: the composer offers `say` without it.
+      }),
+    ]);
   }, [dispatch, sessionIdRef, sessionGenerationRef]);
 
   const toggleSessionPlugin = useCallback(
@@ -938,6 +997,8 @@ export function useBuildSessionActions({
       loadWorldSessions,
       deleteSession,
       sendMessage,
+      submitComposerAction,
+      switchSeatCharacter,
       steerMessage,
       abortActiveTurn,
       loadOlderMessages,
@@ -974,6 +1035,8 @@ export function useBuildSessionActions({
       loadWorldSessions,
       deleteSession,
       sendMessage,
+      submitComposerAction,
+      switchSeatCharacter,
       loadOlderMessages,
       steerMessage,
       abortActiveTurn,

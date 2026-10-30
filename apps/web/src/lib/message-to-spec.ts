@@ -166,6 +166,52 @@ function blockToSpec(
   return null;
 }
 
+/** One input of a form, as the form block and the composer declare it. */
+export interface FormFieldDefinition {
+  name: string;
+  label?: string;
+  type: string;
+  required?: boolean;
+  placeholder?: string;
+  options?: string[] | Array<{ value: string; label: string }>;
+  defaultValue?: string | number | boolean;
+  min?: number;
+  max?: number;
+  step?: number;
+}
+
+/**
+ * The inputs of a form as json-render field elements, each bound to
+ * `/form/<name>`. `errors` holds the refusal text to show under a field. The
+ * composer draws an action kind's fields with the same elements.
+ */
+export function formFieldsToSpec(
+  fields: readonly FormFieldDefinition[],
+  errors: ReadonlyMap<string, readonly string[]> = new Map(),
+): NestedSpec[] {
+  return fields.map((field) => {
+    const options = field.options?.map((opt) =>
+      typeof opt === "string" ? { value: opt, label: opt } : opt,
+    );
+    return {
+      type: "FormField",
+      props: {
+        fieldType: field.type,
+        label: field.label ?? field.name,
+        placeholder: field.placeholder,
+        required: field.required,
+        options,
+        defaultValue: field.defaultValue,
+        min: field.min,
+        max: field.max,
+        step: field.step,
+        error: errors.get(field.name)?.join(" "),
+        value: { $bindState: `/form/${field.name}` },
+      },
+    };
+  });
+}
+
 /**
  * Convert a form block to a json-render nested spec.
  */
@@ -174,18 +220,7 @@ function formToSpec(
   issues: readonly FormIssue[] = [],
 ): NestedSpec {
   const title = (data.title as string) ?? tr("form.defaultTitle");
-  const fields = (data.fields ?? []) as Array<{
-    name: string;
-    label?: string;
-    type: string;
-    required?: boolean;
-    placeholder?: string;
-    options?: string[] | Array<{ value: string; label: string }>;
-    defaultValue?: string | number | boolean;
-    min?: number;
-    max?: number;
-    step?: number;
-  }>;
+  const fields = (data.fields ?? []) as FormFieldDefinition[];
   const submitLabel = (data.submitLabel as string) ?? tr("form.submit");
   const narrativeTemplate = data.narrativeTemplate as string | undefined;
 
@@ -239,28 +274,7 @@ function formToSpec(
   }
 
   // Form fields
-  for (const field of fields) {
-    const options = field.options?.map((opt) =>
-      typeof opt === "string" ? { value: opt, label: opt } : opt,
-    );
-
-    children.push({
-      type: "FormField",
-      props: {
-        fieldType: field.type,
-        label: field.label ?? field.name,
-        placeholder: field.placeholder,
-        required: field.required,
-        options,
-        defaultValue: field.defaultValue,
-        min: field.min,
-        max: field.max,
-        step: field.step,
-        error: fieldErrors.get(field.name)?.join(" "),
-        value: { $bindState: `/form/${field.name}` },
-      },
-    });
-  }
+  children.push(...formFieldsToSpec(fields, fieldErrors));
 
   // Submit button
   children.push({

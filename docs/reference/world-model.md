@@ -164,7 +164,7 @@ const player = currentCharacterOf(
 
 `seatCharacterIds(seat, characters, seats)` 返回一个座位绑定的角色 `id`。
 
-**切换当前角色**：`PATCH /api/sessions/:id/seats/:seatId`，请求体 `{ "currentCharacterId": "…" }`。角色必须绑定在这个座位上，座位必须由人控制。从下一回合起生效。见 [API](./api.md#会话座位)。现在游玩界面还没有切换控件。
+**切换当前角色**：`PATCH /api/sessions/:id/seats/:seatId`，请求体 `{ "currentCharacterId": "…" }`。角色必须绑定在这个座位上，座位必须由人控制。从下一回合起生效。见 [API](./api.md#会话座位)。游玩界面在输入框上方（舞台模式在自由输入上方）提供当前角色选择，座位绑定两个或更多角色时显示，见[输入框模式](./ui-panels.md#输入框模式)。
 
 **身份决定能提交的行动。** 玩家每次提交的是一组行动（见 [API · submit_actions](./api.md#submit_actions)）。服务端按座位身份校验：
 

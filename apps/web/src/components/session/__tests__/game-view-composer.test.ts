@@ -2,7 +2,14 @@ import { act, renderHook, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { StreamMessage } from "@/stores/session-store.js";
 import type { SessionRecord } from "@/services/api.js";
-import type { PluginRpcResponse, SessionSlashCommand } from "@covel/shared";
+import type {
+  ActionKindDescriptor,
+  PluginRpcResponse,
+  Seat,
+  SessionActionKindsResponse,
+  SessionSlashCommand,
+} from "@covel/shared";
+import { emitToast } from "@/lib/toast-channel.js";
 import { useGameViewComposer } from "../game-view/use-game-view-composer.js";
 
 const { postPluginRpcWithApproval } = vi.hoisted(() => ({
@@ -11,6 +18,8 @@ const { postPluginRpcWithApproval } = vi.hoisted(() => ({
     result: { ok: true, message: "rolled" },
   })),
 }));
+
+vi.mock("@/lib/toast-channel.js", () => ({ emitToast: vi.fn() }));
 
 vi.mock("@/components/session/plugin-rpc-ui.js", async (importOriginal) => ({
   ...(await importOriginal<
@@ -22,7 +31,16 @@ vi.mock("@/components/session/plugin-rpc-ui.js", async (importOriginal) => ({
 // Composer availability is the player's core affordance, so it gets a
 // deterministic test rather than relying on the live-LLM e2e run.
 const sessionMock = {
-  restoredInput: null as { requestId: string; content: string } | null,
+  restoredInput: null as {
+    requestId: string;
+    content: string;
+    kind?: string;
+    fields?: Record<string, unknown>;
+  } | null,
+  sessionActionKinds: null as SessionActionKindsResponse | null,
+  gameState: {} as Record<string, unknown>,
+  submitComposerAction: vi.fn(),
+  switchSeatCharacter: vi.fn(async () => {}),
   clearRestoredInput: vi.fn(),
   pendingInteractionDrafts: [] as Array<Record<string, unknown>>,
   suspensions: [] as unknown[],
@@ -43,7 +61,11 @@ vi.mock("@/stores/session-store.js", () => ({
       restoredInput: sessionMock.restoredInput,
       pendingInteractionDrafts: sessionMock.pendingInteractionDrafts,
       suspensions: sessionMock.suspensions,
+      sessionActionKinds: sessionMock.sessionActionKinds,
+      gameState: sessionMock.gameState,
     },
+    submitComposerAction: sessionMock.submitComposerAction,
+    switchSeatCharacter: sessionMock.switchSeatCharacter,
     clearInteractionDrafts: sessionMock.clearInteractionDrafts,
     removeInteractionDraft: sessionMock.removeInteractionDraft,
     submitBlock: sessionMock.submitBlock,
@@ -111,15 +133,17 @@ const setup = (
   executing = false,
   phase: "setup" | "playing" = "playing",
   commands: readonly SessionSlashCommand[] = [],
+  seats?: Seat[],
 ) => {
   const onSendMessage = vi.fn();
   const onCommandClientAction = vi.fn();
+  const session = { ...sessionRecord(phase), ...(seats ? { seats } : {}) };
   const view = renderHook(() =>
     useGameViewComposer({
       messages,
       submittedBlockIds: new Set<string>(),
       executing,
-      session: sessionRecord(phase),
+      session,
       onSendMessage,
       commands,
       onCommandClientAction,
@@ -133,6 +157,8 @@ describe("useGameViewComposer", () => {
     vi.clearAllMocks();
     sessionMock.pendingInteractionDrafts = [];
     sessionMock.restoredInput = null;
+    sessionMock.sessionActionKinds = null;
+    sessionMock.gameState = {};
   });
 
   it("returns a stopped input once, ahead of text typed during the request", () => {
@@ -505,5 +531,254 @@ describe("useGameViewComposer", () => {
       expect(result.current.commandFeedback?.tone).toBe("error"),
     );
     expect(result.current.inputValue).toBe("/roll 2d6");
+  });
+});
+
+const baseKind = (
+  kind: string,
+  roles: ActionKindDescriptor["roles"],
+  text: ActionKindDescriptor["text"],
+  actor: boolean,
+): ActionKindDescriptor => ({
+  kind,
+  roles,
+  text,
+  actor,
+  source: "framework",
+  display: { label: kind },
+});
+
+const whisperKind: ActionKindDescriptor = {
+  kind: "whisper-pack/whisper",
+  roles: ["player"],
+  text: "optional",
+  actor: true,
+  source: "plugin",
+  pluginId: "whisper-pack",
+  display: { label: "Whisper" },
+  fieldsSchema: {
+    type: "object",
+    properties: {
+      target: { type: "string", title: "Target" },
+      volume: { type: "integer", minimum: 1, maximum: 10 },
+      secret: { type: "boolean" },
+    },
+    required: ["target"],
+  },
+};
+
+const catalogue = (
+  seatId: string,
+  role: "player" | "host",
+  allowed: string[],
+): SessionActionKindsResponse => ({
+  kinds: [
+    baseKind("say", ["player"], "required", true),
+    baseKind("act", ["player"], "required", true),
+    baseKind("narrate", ["host"], "required", false),
+    baseKind("advance", ["host"], "none", false),
+    baseKind("command", ["player", "host"], "required", false),
+    whisperKind,
+  ],
+  seats: [{ seatId, role, controller: "human", allowed }],
+});
+
+describe("useGameViewComposer modes", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    sessionMock.pendingInteractionDrafts = [];
+    sessionMock.restoredInput = null;
+    sessionMock.gameState = {};
+    sessionMock.sessionActionKinds = catalogue("main", "player", [
+      "say",
+      "act",
+      "command",
+      "whisper-pack/whisper",
+    ]);
+  });
+
+  it("sends a say as the plain text it always was", () => {
+    const { result, onSendMessage } = setup([]);
+    act(() => result.current.setInputValue("Look around"));
+    act(() => result.current.handleSubmit());
+    expect(onSendMessage).toHaveBeenCalledExactlyOnceWith("Look around");
+    expect(sessionMock.submitComposerAction).not.toHaveBeenCalled();
+  });
+
+  it("submits the text as an act in act mode", () => {
+    const { result, onSendMessage } = setup([]);
+    act(() => result.current.composerModes.selectKind("act"));
+    act(() => result.current.setInputValue("  Open the door "));
+    act(() => result.current.handleSubmit());
+    expect(sessionMock.submitComposerAction).toHaveBeenCalledExactlyOnceWith(
+      { kind: "act", text: "Open the door" },
+      undefined,
+    );
+    expect(onSendMessage).not.toHaveBeenCalled();
+    expect(result.current.inputValue).toBe("");
+  });
+
+  it("submits an advance without text, naming the host seat", () => {
+    const host: Seat = {
+      id: "gm",
+      controller: "human",
+      role: "host",
+      characters: [],
+    };
+    sessionMock.sessionActionKinds = catalogue("gm", "host", [
+      "narrate",
+      "advance",
+    ]);
+    const { result } = setup([], false, "playing", [], [host]);
+    expect(result.current.composerModes.modes.map((m) => m.kind)).toEqual([
+      "narrate",
+      "advance",
+    ]);
+    act(() => result.current.composerModes.selectKind("advance"));
+    expect(result.current.canSubmit).toBe(true);
+    act(() => result.current.handleSubmit());
+    expect(sessionMock.submitComposerAction).toHaveBeenCalledExactlyOnceWith(
+      { kind: "advance", seatId: "gm" },
+      undefined,
+    );
+  });
+
+  it("sends a plugin kind with its typed fields", () => {
+    const { result } = setup([]);
+    act(() => result.current.composerModes.selectKind("whisper-pack/whisper"));
+    act(() => result.current.composerModes.setFieldValue("target", "Bo"));
+    act(() => result.current.composerModes.setFieldValue("volume", 3));
+    act(() => result.current.composerModes.setFieldValue("secret", true));
+    act(() => result.current.setInputValue("psst"));
+    act(() => result.current.handleSubmit());
+    expect(sessionMock.submitComposerAction).toHaveBeenCalledExactlyOnceWith(
+      {
+        kind: "whisper-pack/whisper",
+        text: "psst",
+        fields: { target: "Bo", volume: 3, secret: true },
+      },
+      undefined,
+    );
+    expect(result.current.composerModes.fieldValues).toEqual({});
+  });
+
+  it("refuses to send while a required field is empty", () => {
+    const { result } = setup([]);
+    act(() => result.current.composerModes.selectKind("whisper-pack/whisper"));
+    act(() => result.current.setInputValue("psst"));
+    act(() => result.current.handleSubmit());
+    expect(sessionMock.submitComposerAction).not.toHaveBeenCalled();
+    expect(emitToast).toHaveBeenCalledWith(
+      "error",
+      expect.any(String),
+      "Target",
+    );
+    expect(result.current.inputValue).toBe("psst");
+  });
+
+  it("sends queued selections ahead of an act", () => {
+    sessionMock.pendingInteractionDrafts = [
+      { id: "d1", label: "Wait", values: { text: "Wait" } },
+    ];
+    const { result, onSendMessage } = setup([]);
+    act(() => result.current.composerModes.selectKind("act"));
+    act(() => result.current.setInputValue("Draw the sword"));
+    act(() => result.current.handleSubmit());
+    expect(sessionMock.submitComposerAction).toHaveBeenCalledExactlyOnceWith(
+      { kind: "act", text: "Draw the sword" },
+      { drafts: "Wait" },
+    );
+    expect(onSendMessage).not.toHaveBeenCalled();
+    expect(sessionMock.clearInteractionDrafts).toHaveBeenCalledOnce();
+  });
+
+  it("sends only the queued selections as a say when an act has no text", () => {
+    sessionMock.pendingInteractionDrafts = [
+      { id: "d1", label: "Wait", values: { text: "Wait" } },
+    ];
+    const { result, onSendMessage } = setup([]);
+    act(() => result.current.composerModes.selectKind("act"));
+    expect(result.current.canSubmit).toBe(true);
+    act(() => result.current.handleSubmit());
+    expect(onSendMessage).toHaveBeenCalledExactlyOnceWith("Wait");
+    expect(sessionMock.submitComposerAction).not.toHaveBeenCalled();
+  });
+
+  it("disables the send for another mode while a turn executes but still steers a say", () => {
+    const { result } = setup([], true);
+    act(() => result.current.composerModes.selectKind("act"));
+    act(() => result.current.setInputValue("Swing"));
+    expect(result.current.canSubmit).toBe(false);
+    act(() => result.current.handleSubmit());
+    expect(sessionMock.submitComposerAction).not.toHaveBeenCalled();
+    expect(sessionMock.steerMessage).not.toHaveBeenCalled();
+
+    act(() => result.current.composerModes.selectKind("say"));
+    expect(result.current.canSubmit).toBe(true);
+    act(() => result.current.handleSubmit());
+    expect(sessionMock.steerMessage).toHaveBeenCalledWith("Swing");
+  });
+
+  it("runs slash commands in any mode", async () => {
+    const { result, onSendMessage } = setup([], false, "playing", [
+      rollCommand,
+    ]);
+    act(() => result.current.composerModes.selectKind("act"));
+    act(() => result.current.setInputValue("/roll 2d6"));
+    act(() => result.current.handleSubmit());
+    await waitFor(() =>
+      expect(postPluginRpcWithApproval).toHaveBeenCalledOnce(),
+    );
+    expect(sessionMock.submitComposerAction).not.toHaveBeenCalled();
+    expect(onSendMessage).not.toHaveBeenCalled();
+  });
+
+  it("sends an unknown slash line to the command path in any mode", () => {
+    const { result, onSendMessage } = setup([]);
+    act(() => result.current.composerModes.selectKind("act"));
+    act(() => result.current.setInputValue("/unknown"));
+    act(() => result.current.handleSubmit());
+    expect(onSendMessage).toHaveBeenCalledExactlyOnceWith("/unknown");
+    expect(sessionMock.submitComposerAction).not.toHaveBeenCalled();
+  });
+
+  it("takes back the mode, text and fields of a submission stopped before it started", () => {
+    const { result, rerender } = setup([]);
+    sessionMock.restoredInput = {
+      requestId: "stopped",
+      content: "psst",
+      kind: "whisper-pack/whisper",
+      fields: { target: "Bo" },
+    };
+    rerender();
+    expect(result.current.inputValue).toBe("psst");
+    expect(result.current.composerModes.mode.kind).toBe("whisper-pack/whisper");
+    expect(result.current.composerModes.fieldValues).toEqual({ target: "Bo" });
+  });
+
+  it("falls back to the first mode when the selected one leaves the catalogue", () => {
+    const { result, rerender } = setup([]);
+    act(() => result.current.composerModes.selectKind("act"));
+    expect(result.current.composerModes.mode.kind).toBe("act");
+    sessionMock.sessionActionKinds = catalogue("main", "player", ["say"]);
+    rerender();
+    expect(result.current.composerModes.mode.kind).toBe("say");
+    expect(result.current.composerModes.modes).toHaveLength(1);
+  });
+
+  it("offers the character switcher only for a seat with several characters", () => {
+    sessionMock.gameState = {
+      characters: [
+        { id: "aya", name: "Aya", type: "player" },
+        { id: "bo", name: "Bo", type: "player" },
+      ],
+    };
+    const { result } = setup([]);
+    expect(result.current.composerModes.switcher?.options).toEqual([
+      { id: "aya", name: "Aya" },
+      { id: "bo", name: "Bo" },
+    ]);
+    act(() => result.current.composerModes.selectKind("act"));
+    expect(result.current.composerModes.switcher).not.toBeNull();
   });
 });

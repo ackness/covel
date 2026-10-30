@@ -163,6 +163,7 @@ export const initialState: SessionState = {
   sessionPlugins: [],
   sessionCommands: [],
   sessionCommandsLoaded: false,
+  sessionActionKinds: null,
   unavailableSessionPlugins: [],
   worldDataNotices: [],
   messageUiSpecs: [],
@@ -196,6 +197,7 @@ const SESSION_RESET: Partial<SessionState> = {
   sessionPlugins: [],
   sessionCommands: [],
   sessionCommandsLoaded: false,
+  sessionActionKinds: null,
   unavailableSessionPlugins: [],
   worldDataNotices: [],
   messageUiSpecs: [],
@@ -657,6 +659,15 @@ export function reducer(
         unavailableSessionPlugins:
           action.unavailable ?? state.unavailableSessionPlugins,
       };
+    case "SET_SESSION_ACTION_KINDS":
+      return { ...state, sessionActionKinds: action.catalogue };
+    case "SET_SESSION_SEATS":
+      return state.session
+        ? {
+            ...state,
+            session: { ...state.session, seats: [...action.seats] },
+          }
+        : state;
     case "SET_WORLD_DATA_NOTICES":
       return { ...state, worldDataNotices: action.notices };
     case "TOGGLE_SESSION_PLUGIN": {
@@ -683,10 +694,16 @@ export function reducer(
           message.role === "user" && message.requestId === action.requestId,
       );
       if (!input) return state;
+      const stopped = input.actions?.at(-1);
       return {
         ...state,
         messages: state.messages.filter((message) => message !== input),
-        restoredInput: { requestId: action.requestId, content: input.content },
+        restoredInput: {
+          requestId: action.requestId,
+          content: input.content,
+          ...(stopped ? { kind: stopped.kind } : {}),
+          ...(stopped?.fields ? { fields: stopped.fields } : {}),
+        },
       };
     }
     case "CLEAR_RESTORED_INPUT":

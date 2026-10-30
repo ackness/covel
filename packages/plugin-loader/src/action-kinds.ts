@@ -5,6 +5,7 @@
  */
 
 import {
+  composerFieldsOf,
   isBaseActionKind,
   pluginActionKindId,
   type ActionKindDescriptor,
@@ -35,6 +36,27 @@ export function actionKindDeclarationIssues(
     seen.add(declaration.name);
   }
   return issues;
+}
+
+/**
+ * Warnings for the kinds whose fields schema the composer cannot show. Such a
+ * kind still works (the server validates it, and an interaction can submit
+ * it), but the composer leaves it out.
+ */
+export function composerFieldWarnings(
+  source: string | undefined,
+  declarations: ActionKindDeclarations | undefined,
+  kinds: readonly ActionKindDescriptor[] | undefined,
+): string[] {
+  const warnings: string[] = [];
+  for (const [index, declaration] of (declarations ?? []).entries()) {
+    const schema = kinds?.[index]?.fieldsSchema;
+    if (schema && composerFieldsOf(schema) === null)
+      warnings.push(
+        `${source}: ${actionKindSchemaField(index)}: fields schema of ${declaration.name} cannot be shown in the composer; the kind is not offered there (use only a flat object of string, number, integer and boolean properties)`,
+      );
+  }
+  return warnings;
 }
 
 /** The field path of a declaration's schema, for messages. */

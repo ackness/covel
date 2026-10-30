@@ -20,7 +20,11 @@ import {
   type SnapshotTraceEvent,
   type TimeCursor,
 } from "@covel/shared";
-import type { SetupRuntimeState, StoryMessageSegment } from "@covel/shared";
+import type {
+  SetupRuntimeState,
+  StoryMessageSegment,
+  TurnAction,
+} from "@covel/shared";
 
 /**
  * Restore windows: the snapshot ships the most-recent slice, not the whole
@@ -145,6 +149,9 @@ export async function buildSessionSnapshot(
       block: meta.block as Record<string, unknown> | undefined,
       ...(Array.isArray(meta.segments)
         ? { segments: meta.segments as StoryMessageSegment[] }
+        : {}),
+      ...(Array.isArray(meta.actions)
+        ? { actions: meta.actions as TurnAction[] }
         : {}),
       createdAt: m.createdAt,
     };

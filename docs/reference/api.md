@@ -840,6 +840,7 @@ curl -X DELETE http://localhost:3001/api/sessions/<sessionId>
 
 - **只含最近窗口。** `messages` 和 `executionSteps` 默认是最新的 80 条消息和 600 条 trace 事件，不是全量。
 - **故事消息带 `segments`**，形状和 [`GET /messages`](#get-apisessionsidmessages) 相同，舞台据此显示每段的说话人。
+- **玩家消息带 `actions`**：这条消息提交的解析后行动（`SnapshotMessage.actions`，和 `GET /messages` 的 `actions` 相同）。恢复后的聊天据此显示“角色名 · 类型名”署名；没有记录行动的旧消息没有这个字段。
 - **向上翻页。** 视图带一个不透明的 `messagesCursor`。前端向上滚动时，把它原样作为 `?cursor=` 传给 `GET /api/sessions/:id/messages/page`。
 - **窗口外的旧回合**不渲染执行时间线。
 - **会话时钟。** 视图内嵌的 session 对象带有和会话 API 相同的必填时钟：`phase`、`completedPlayerTurns`、`setupRuntimes`。恢复和重连只以这些字段判断进度。
@@ -1065,6 +1066,7 @@ setup runtime 挂起等玩家回答时，这次尝试不占重试次数。挂起
 - `text` 是文字规则：`required` 必须有文字，`optional` 可有可无，`none` 不能带文字。`actor` 表示这种行动是否以角色的身份进行。
 - `fieldsSchema` 是插件类型的 `fields` 要符合的 JSON Schema；没有它的类型不接受 `fields`。
 - `seats[].allowed` 是座位身份能提交的类型；没有人控制的座位（`controller` 不是 `human`）为空。身份和基础类型的对应见[座位](./world-model.md#座位)。
+- 输入框的模式就是输入框所属座位的 `allowed` 里除 `command` 以外的类型，名称、图标和占位符取自 `display`。`fieldsSchema` 在输入框里只显示一个子集，见[输入框模式](./ui-panels.md#输入框模式)。
 
 ### 玩家交互
 

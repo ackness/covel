@@ -164,7 +164,7 @@ const player = currentCharacterOf(
 
 `seatCharacterIds(seat, characters, seats)` returns the IDs of the characters bound to one seat.
 
-**Switching the current character**: `PATCH /api/sessions/:id/seats/:seatId` with the body `{ "currentCharacterId": "…" }`. The character must be bound to that seat, and a human must control the seat. It applies from the next turn. See [API](./api.md#session-seats). The game view has no switch control yet.
+**Switching the current character**: `PATCH /api/sessions/:id/seats/:seatId` with the body `{ "currentCharacterId": "…" }`. The character must be bound to that seat, and a human must control the seat. It applies from the next turn. See [API](./api.md#session-seats). The game view has a current-character selector above the composer (above the free input in stage mode). It appears when the seat binds two or more characters; see [Composer Modes](./ui-panels.md#composer-modes).
 
 **The role decides which actions a seat may submit.** What a player submits each time is a list of actions (see [API · submit_actions](./api.md#submit_actions)). The server checks them against the seat's role:
 

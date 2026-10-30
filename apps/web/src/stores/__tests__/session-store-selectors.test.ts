@@ -34,6 +34,7 @@ function stateFor(
     sessionPlugins: [],
     sessionCommands: [],
     sessionCommandsLoaded: false,
+    sessionActionKinds: null,
     unavailableSessionPlugins: [],
     worldDataNotices: [],
     world: null,

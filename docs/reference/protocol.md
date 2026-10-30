@@ -878,6 +878,8 @@ data: {
 | `session.restore` | GET    | `/api/sessions/:id/view` | JSON: `SessionSnapshot` |
 | `session.delete`  | DELETE | `/api/sessions/:id`      | JSON: `{ deleted }`     |
 
+`SessionSnapshot.messages` 的每一项是 `SnapshotMessage`。玩家消息带 `actions`：这条消息提交的解析后行动（存储里 `metadata.actions`，形状同 `GET /messages` 的 `actions`），故事消息带 `segments`。其他消息没有这两个字段。
+
 `SessionSnapshot` 顶层的 `dimensions` 是[当前值的公开快照](./world-model.md#动态维度快照)。可选的 `dimensionSettlements` 是回执摘要。provider 和 recovery 的元数据由宿主绑定并校验。
 
 > [!WARNING]

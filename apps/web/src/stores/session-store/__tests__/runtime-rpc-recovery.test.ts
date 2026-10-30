@@ -11,6 +11,7 @@ import {
 } from "../sse-handler.js";
 import type { SessionAction, SessionState } from "../types.js";
 import { claimSessionAction } from "../runtime-refs.js";
+import { textActions } from "../composer-actions.js";
 
 const { sendAction } = vi.hoisted(() => ({ sendAction: vi.fn() }));
 vi.mock("@/services/api", () => ({ sendAction }));
@@ -99,7 +100,7 @@ describe("durable player input identity", () => {
       },
     ) =>
       runSingleSessionAction({
-        content,
+        actions: textActions(content),
         ...options,
         dispatch,
         workspace,
@@ -351,7 +352,7 @@ it("does not assign a rejected echo to a subsequent action without an echo", asy
     lastBackfilledTurnIdRef: { current: null },
   });
   const pending = runSingleSessionAction({
-    content: "Rejected input",
+    actions: textActions("Rejected input"),
     echoUserMessage: true,
     owner: claimSessionAction(
       { current: null },

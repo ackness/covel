@@ -1,5 +1,6 @@
 import { createContext, useContext } from "react";
 import type * as api from "@/services/api";
+import type { ComposerSubmission } from "./composer-actions.js";
 import type {
   InteractionSubmitResult,
   PendingInteractionDraft,
@@ -20,6 +21,19 @@ export interface SessionActions {
   loadWorldSessions: () => Promise<void>;
   deleteSession: (sessionId: string) => Promise<void>;
   sendMessage: (content: string) => void;
+  /**
+   * Submit one composer action (a mode's kind, its text and fields). Queued
+   * selections in `drafts` are sent first as a `say`.
+   */
+  submitComposerAction: (
+    submission: ComposerSubmission,
+    opts?: { drafts?: string },
+  ) => void;
+  /**
+   * Switch the character a seat acts as. Rejects with the server's refusal;
+   * the seat keeps its current character then.
+   */
+  switchSeatCharacter: (seatId: string, characterId: string) => Promise<void>;
   /**
    * Interject into the in-flight turn. Resolves false when no turn is
    * active — the composer restores the steered text for the player to re-send.

@@ -16,6 +16,9 @@ import {
 import { useTranslation } from "react-i18next";
 import { useChoiceHotkeys } from "@/hooks/use-choice-hotkeys.js";
 import { isImeComposing } from "@/lib/ime-composition.js";
+import { ComposerFields } from "../game-view/composer-fields.js";
+import { ComposerModeBar } from "../game-view/composer-mode-bar.js";
+import type { ComposerModes } from "../game-view/use-composer-modes.js";
 import {
   mergeChoices,
   type StageChoiceItem,
@@ -28,6 +31,11 @@ export interface StageChoicesProps {
     onDraftMessage: (text: string) => void,
   ) => ReactNode;
   readonly composerDraft?: { value: string; onChange: (value: string) => void };
+  /**
+   * The composer's modes, fields and character switcher. The free input
+   * submits through the selected mode; without it, it sends text as `say`.
+   */
+  readonly composerModes?: ComposerModes;
   readonly visible: boolean;
   readonly executing: boolean;
   readonly interactionChoices: readonly StageInteractionChoice[];
@@ -53,6 +61,7 @@ const CATEGORY_TONES = ["info", "success", "warning", "primary"] as const;
 export function StageChoices({
   extensions,
   composerDraft,
+  composerModes,
   visible,
   executing,
   interactionChoices,
@@ -75,9 +84,20 @@ export function StageChoices({
 
   if (!visible) return null;
 
+  const textless = composerModes?.mode.text === "none";
+  const canSend =
+    !executing &&
+    (composerModes
+      ? composerModes.acceptsInput(draft)
+      : draft.trim().length > 0);
+
   const submitDraft = () => {
     const text = draft.trim();
-    if (!text || executing) return;
+    if (!canSend) return;
+    if (composerModes) {
+      if (composerModes.submit(text)) setDraft("");
+      return;
+    }
     onSendMessage(text);
     setDraft("");
   };
@@ -246,23 +266,50 @@ export function StageChoices({
           {extensions?.(items, setDraft)}
         </div>
 
-        <div className="flex shrink-0 items-end gap-2 border-t border-border/50 px-3 py-2.5">
-          <textarea
-            rows={1}
-            value={draft}
-            disabled={executing}
-            onChange={(event) => setDraft(event.target.value)}
-            onKeyDown={handleTextareaKeyDown}
-            placeholder={t("stage.inputPlaceholder")}
-            aria-label={t("stage.inputPlaceholder")}
-            data-testid="stage-decision-input"
-            className="max-h-24 min-h-11 min-w-0 flex-1 resize-none rounded-(--radius-control) border border-border/60 bg-background/35 px-3 py-2 text-base outline-none transition-colors placeholder:text-muted-foreground focus:border-(--accent-primary) disabled:cursor-wait disabled:opacity-50 md:text-sm"
-          />
+        {composerModes && (
+          <div className="shrink-0 border-t border-border/50 px-3 pt-2.5">
+            <ComposerModeBar
+              t={t}
+              composerModes={composerModes}
+              executing={executing}
+            />
+            <ComposerFields composerModes={composerModes} />
+          </div>
+        )}
+        <div
+          className={clsx(
+            "flex shrink-0 items-end gap-2 px-3 py-2.5",
+            !composerModes && "border-t border-border/50",
+          )}
+        >
+          {textless && composerModes ? (
+            <span className="min-w-0 flex-1 truncate px-1 text-sm text-muted-foreground">
+              {composerModes.mode.placeholder ?? composerModes.mode.label}
+            </span>
+          ) : (
+            <textarea
+              rows={1}
+              value={draft}
+              disabled={executing}
+              onChange={(event) => setDraft(event.target.value)}
+              onKeyDown={handleTextareaKeyDown}
+              placeholder={
+                composerModes?.mode.placeholder ?? t("stage.inputPlaceholder")
+              }
+              aria-label={t("stage.inputPlaceholder")}
+              data-testid="stage-decision-input"
+              className="max-h-24 min-h-11 min-w-0 flex-1 resize-none rounded-(--radius-control) border border-border/60 bg-background/35 px-3 py-2 text-base outline-none transition-colors placeholder:text-muted-foreground focus:border-(--accent-primary) disabled:cursor-wait disabled:opacity-50 md:text-sm"
+            />
+          )}
           <button
             type="button"
             onClick={submitDraft}
-            disabled={executing || !draft.trim()}
-            aria-label={t("stage.sendLabel")}
+            disabled={!canSend}
+            aria-label={
+              textless && composerModes
+                ? composerModes.mode.label
+                : t("stage.sendLabel")
+            }
             className="flex h-11 w-11 shrink-0 items-center justify-center rounded-(--radius-control) bg-(--accent-primary) text-black transition-opacity disabled:cursor-not-allowed disabled:opacity-40"
           >
             {executing ? (
