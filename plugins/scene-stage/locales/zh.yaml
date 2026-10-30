@@ -26,6 +26,8 @@ runtimes/resolver/RUNTIME.md:
   description: 跟踪叙事当前所在的场景与昼夜，为舞台背景提供数据。
 runtimes/seed/RUNTIME.md:
   description: 开局时为舞台种下世界注册表里的第一个场景，避免叙事未发 scene.set 时舞台空白。
+runtimes/story-cues/RUNTIME.md:
+  description: 跟随故事的场景、在场角色与说话人提示更新舞台。
 messages:
   Scene: 场景
   groupLabel|Scene: 当前场景

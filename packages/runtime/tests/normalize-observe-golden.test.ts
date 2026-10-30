@@ -184,6 +184,8 @@ describe("normalize golden (bundled plugin set)", () => {
       "char-creator/character-tracker",
       "guide",
       "memory/extract",
+      "scene-stage/story-cues",
+      "soundtrack/story-cues",
       "world-ir",
       "world-time/advance",
     ]);

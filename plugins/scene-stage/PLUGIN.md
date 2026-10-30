@@ -1,5 +1,5 @@
 ---
-version: 0.0.40
+version: 0.0.41
 displayName: Scene Stage
 description: >-
   Tracks the current scene, time of day, and who is on stage for the visual
@@ -93,9 +93,11 @@ contributes:
           path: media/scenes.registry.json
           key: registryId
   ui:
+    segment:
+      - ./ui/dialogue-line.json
     right:
       - ./runtimes/resolver/ui/scene-stage-panel.json
       - ./runtimes/cast/ui/scene-cast-panel.json
 ---
 
-Scene Stage tracks the current scene/location and time of day for the visual stage, resolving `scene.set` events into `stage/current` against the world's scene registry; an unmatched location has no backdrop. Before each narrative its cast runtime picks the active speakers for `chat-mode-narrator` (`scene-cast@1`). It also applies structured `stage.direction` cues for actor presence, focus, position, and visual variants. This root `PLUGIN.md` is metadata only — executable runtimes live under `runtimes/`.
+Scene Stage's post-turn `story-cues` runtime reads the optional `narrative-engine@2` story input: `cues.scene` selects a backdrop while preserving day/night, and non-empty `cues.present` selects actors with focus from segment speakers. It does not activate a narrator. `scene.set` still sets locations and day/night; `stage.direction` overrides actor presence, focus, position, and visual variants. Before narration, `cast` picks active speakers for `scene-cast@1`; `seed` supplies the opening backdrop. A dialogue segment template adds a nameplate and any available avatar in chat. Executable runtimes live under `runtimes/`.

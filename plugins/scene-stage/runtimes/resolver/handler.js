@@ -1,18 +1,12 @@
-import {
-  makeProposal,
-  withPendingProposals,
-} from "@covel/plugin-handlers-utils";
+import { withPendingProposals } from "@covel/plugin-handlers-utils";
 
 import {
   REGISTRY_KEY,
   SCENES_NS,
   STAGE_KEY,
   STAGE_NS,
-  buildStageRecord,
-  makeStageProposal,
-  sceneIdForLocation,
 } from "../../lib/stage-data.js";
-import { matchScene } from "../../lib/scene-match.js";
+import { sceneChange } from "../../lib/scene-change.js";
 
 /**
  * Resolve the current scene + time of day from a `scene.set` event and
@@ -42,65 +36,20 @@ export default async function handler(ctx) {
       ])
     : [null, null, null];
 
-  const scenes = Array.isArray(registry?.scenes) ? registry.scenes : [];
-  const worldMatch = matchScene(scenes, location);
-  const candidate = worldMatch
-    ? {
-        sceneId: String(worldMatch.sceneId),
-        name: typeof worldMatch.name === "string" ? worldMatch.name : location,
-        source: "world",
-        day: worldMatch.day ?? null,
-        night: worldMatch.night ?? null,
-      }
-    : {
-        sceneId: sceneIdForLocation(location),
-        name: location,
-        source: "none",
-        day: null,
-        night: null,
-      };
-
-  const stage = buildStageRecord(ctx, {
-    sceneId: candidate.sceneId,
-    name: candidate.name,
+  const { stage, changed, proposals } = sceneChange(ctx, {
+    registry,
+    previous,
+    direction,
+    location,
     variant,
-    source: candidate.source,
-    day: candidate.day,
-    night: candidate.night,
-    turnId: ctx.turnId,
   });
-
-  // A repeated scene.set for the same scene, variant and source is a no-op.
-  const isNoOp =
-    previous &&
-    typeof previous === "object" &&
-    previous.sceneId === stage.sceneId &&
-    previous.variant === stage.variant &&
-    previous.source === stage.source;
-  if (isNoOp) {
+  if (!changed) {
     return {
       outcome: "success",
       value: { skipped: true, reason: "no-op: scene/variant unchanged", stage },
     };
   }
 
-  const proposals = [makeStageProposal(ctx, stage)];
-  if (previous?.sceneId && previous.sceneId !== stage.sceneId && direction) {
-    // A new location does not inherit the previous location's actors. The
-    // direction follower runs next and may explicitly place the new cast.
-    proposals.push(
-      makeProposal(ctx, stage.updatedAt, "plugin.data", {
-        namespace: "direction",
-        key: "current",
-        value: {
-          schemaVersion: 1,
-          actors: [],
-          turnId: ctx.turnId,
-          updatedAt: stage.updatedAt,
-        },
-      }),
-    );
-  }
   return withPendingProposals(
     { outcome: "success", value: { stage } },
     proposals,

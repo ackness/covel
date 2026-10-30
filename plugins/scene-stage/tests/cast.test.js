@@ -16,6 +16,9 @@ import { scheduleByDag } from "@covel/runtime";
 import handler from "../runtimes/cast/handler.js";
 
 const PLUGINS_DIR = path.resolve(import.meta.dirname, "../..");
+const seats = [
+  { id: "primary", controller: "human", role: "player", characters: "auto" },
+];
 
 describe("scene cast manifests", () => {
   let sceneCast;
@@ -122,6 +125,34 @@ describe("scene cast manifests", () => {
 // (speakers / activeCastContext) is under `getToolContent(result).value`; pending proposals
 // stay on the envelope (result).
 describe("scene-stage cast handler", () => {
+  it("excludes the primary seat's current character and selects its other bound character", async () => {
+    const result = await handler({
+      sessionId: "sess-chat",
+      turnId: "turn-1",
+      pluginId: "scene-stage",
+      runtimeId: "scene-stage/cast",
+      playerMessage: "Mira and Sol arrive.",
+      world: {
+        characters: [
+          { id: "mira", name: "Mira", type: "player" },
+          { id: "sol", name: "Sol", type: "npc" },
+        ],
+        seats: [
+          {
+            id: "primary",
+            controller: "human",
+            role: "player",
+            characters: ["mira", "sol"],
+            currentCharacterId: "sol",
+          },
+        ],
+      },
+    });
+    expect(getToolContent(result).value.speakers.map(({ id }) => id)).toEqual([
+      "mira",
+    ]);
+  });
+
   it("selects mentioned NPCs and writes active cast plugin data", async () => {
     const characters = [
       {
@@ -166,7 +197,7 @@ describe("scene-stage cast handler", () => {
       runtimeId: "scene-stage/cast",
       playerMessage: "Mira, what do you see?",
       store,
-      world: { characters },
+      world: { characters, seats },
       completedResults: new Map(),
       config: {},
       recursiveCall: async () => {
@@ -260,7 +291,7 @@ describe("scene-stage cast handler", () => {
       runtimeId: "scene-stage/cast",
       playerMessage: "I listen at the door.",
       store,
-      world: { characters },
+      world: { characters, seats },
       completedResults: new Map(),
       config: {},
       recursiveCall: async () => {
@@ -304,7 +335,7 @@ describe("scene-stage cast handler", () => {
           return null;
         },
       },
-      world: { characters },
+      world: { characters, seats },
       completedResults: new Map(),
       config: {},
       recursiveCall: async () => {
@@ -333,7 +364,7 @@ describe("scene-stage cast handler", () => {
             return null;
           },
         },
-        world: { characters },
+        world: { characters, seats },
         completedResults: new Map(),
         config: {},
         recursiveCall: async () => {

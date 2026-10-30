@@ -7,6 +7,7 @@ import { readFileSync } from "node:fs";
 
 import { validateOutput } from "@covel/tools";
 import handler from "../runtimes/direction/handler.js";
+import register from "../server/index.js";
 
 const CHARACTERS = [
   { id: "sess-npc-asakura-rin", name: "朝仓凛", type: "npc" },
@@ -36,6 +37,97 @@ function committedDirection(result) {
 }
 
 describe("scene-stage direction handler", () => {
+  it("excludes only the primary seat's current character from events and their previews", async () => {
+    const ctx = makeCtx([
+      { type: "actor.enter", character: "Viewpoint" },
+      { type: "actor.enter", character: "Companion" },
+    ]);
+    ctx.world = {
+      characters: [
+        { id: "viewpoint", name: "Viewpoint", type: "npc" },
+        { id: "companion", name: "Companion", type: "player" },
+      ],
+      seats: [
+        {
+          id: "primary",
+          controller: "human",
+          role: "player",
+          characters: ["companion", "viewpoint"],
+          currentCharacterId: "viewpoint",
+        },
+      ],
+    };
+    const result = await handler(ctx);
+    expect(
+      committedDirection(result).actors.map(({ characterId }) => characterId),
+    ).toEqual(["companion"]);
+    const handlers = new Map();
+    register({
+      provideExtension: (_point, id, { handler }) => handlers.set(id, handler),
+    });
+    const preview = await handlers.get("direction")(
+      { previous: {}, events: [{ ...ctx.triggerEvent, turnId: ctx.turnId }] },
+      ctx,
+    );
+    expect(preview.actors.map(({ characterId }) => characterId)).toEqual([
+      "companion",
+    ]);
+  });
+
+  it("removes a staged companion after switching the viewpoint to them", async () => {
+    const ctx = makeCtx([
+      { type: "actor.enter", character: "Companion", focus: true },
+    ]);
+    const seat = {
+      id: "primary",
+      controller: "human",
+      role: "player",
+      characters: ["viewpoint", "companion"],
+      currentCharacterId: "viewpoint",
+    };
+    ctx.world = {
+      characters: [
+        { id: "viewpoint", name: "Viewpoint", type: "player" },
+        {
+          id: "companion",
+          name: "Companion",
+          aliases: ["Friend"],
+          type: "player",
+        },
+      ],
+      seats: [seat],
+    };
+    const staged = committedDirection(await handler(ctx));
+    expect(staged.actors.map(({ characterId }) => characterId)).toEqual([
+      "companion",
+    ]);
+    seat.currentCharacterId = "companion";
+    ctx.turnId = "turn-2";
+    ctx.triggerEvent.data.cues = [
+      { type: "actor.update", character: "Friend", expression: "smile" },
+      { type: "actor.focus", character: "companion" },
+    ];
+    ctx.pluginData.get = async (namespace) =>
+      namespace === "direction" ? staged : null;
+    const handlers = new Map();
+    register({
+      provideExtension: (_point, id, { handler }) => handlers.set(id, handler),
+    });
+    for (const events of [[], [{ ...ctx.triggerEvent, turnId: ctx.turnId }]]) {
+      const projected = await handlers.get("direction")(
+        { previous: null, events },
+        ctx,
+      );
+      expect(projected.actors).toEqual([]);
+    }
+    const result = await handler(ctx);
+    expect(committedDirection(result).actors).toEqual([]);
+    expect(getToolContent(result).value.diagnostics).toEqual([
+      "unresolved character: Friend",
+      "unresolved character: companion",
+    ]);
+  });
+
   it("places the character a cue names by an alias, and no one for an alias two characters share", async () => {
     const ctx = makeCtx([
       { type: "actor.enter", character: "班长", position: "left" },

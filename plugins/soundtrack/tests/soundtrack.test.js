@@ -281,12 +281,18 @@ describe("the stage.music@1 projection", () => {
     });
     expect(segment.content).toContain("- battle: 刀已出鞘，胜负未分。");
     // The instruction is in the instruction language of the session.
-    expect(segment.content).toContain("emit `music.cue` with that mood");
+    expect(segment.content).toContain(
+      "write it in `cues.mood` exactly as listed",
+    );
+    expect(segment.content).toContain(
+      "emits `music.cue` with that mood instead",
+    );
     const [chinese] = await segments(
       { "tracks/music-registry": REGISTRY },
       "zh-CN",
     );
     expect(chinese.content).toContain("发射 `music.cue` 并带上这种情绪");
+    expect(chinese.content).toContain("把这种情绪写进 `cues.mood`");
     expect(chinese.content.replace(/<[^>]+>|`[^`]*`|^- .*$/gm, "")).not.toMatch(
       /[A-Za-z]/,
     );
