@@ -5,11 +5,15 @@ const CHUNK_INTERVAL_MS = 50;
 export async function relayResponseBody(
   reader: ReadableStreamDefaultReader<Uint8Array>,
   postChunk: (bytes: Uint8Array) => Promise<boolean>,
+  signal: AbortSignal,
 ): Promise<boolean> {
   let pending: Uint8Array[] = [];
   let pendingBytes = 0;
   let lastFlush = Date.now();
   const flush = async (): Promise<boolean> => {
+    // A prefetched read may already be fulfilled when cancellation arrives.
+    // The next reader.read() would reject, but those buffered bytes must not post.
+    signal.throwIfAborted();
     if (pendingBytes === 0) return true;
     const bytes = new Uint8Array(pendingBytes);
     let offset = 0;
@@ -27,6 +31,7 @@ export async function relayResponseBody(
   };
   let reading: Promise<ReadableStreamReadResult<Uint8Array>> | undefined;
   for (;;) {
+    signal.throwIfAborted();
     reading ??= reader.read();
     let result: ReadableStreamReadResult<Uint8Array> | null;
     if (pendingBytes > 0) {

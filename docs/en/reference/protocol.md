@@ -814,6 +814,8 @@ Like `system.connected` and `system.heartbeat`, this frame **has no `id:` header
 
 The browser batches response bytes into ordered posts of at most 256 KiB. When no post is in flight, buffered bytes are sent within a 50 ms batching window even if the model pauses. A slow acknowledgement starts the next batching window only after it returns, so buffered reads can coalesce. Each response has at most one chunk POST in flight. A `204` acknowledges bytes; it is not player-visible progress or runtime completion.
 
+Cancellation is checked at read and send boundaries: even if a prefetched read has already resolved, its buffered chunk and `end` are not posted after cancellation. An existing POST may finish, but its acknowledgement cannot resume a cancelled transfer.
+
 ### Forwarded runtime internal events (`/api/actions` forwards them, included in `CovelEvent`)
 
 The events below are forwarded by the server through the actions SSE stream. They are used for debugging and tracing.

@@ -2,6 +2,8 @@
 import { afterEach, expect, it, vi } from "vitest";
 import { relayResponseBody } from "../model-relay-body.js";
 
+const activeSignal = new AbortController().signal;
+
 afterEach(() => vi.useRealTimers());
 function source() {
   let controller!: ReadableStreamDefaultController<Uint8Array>;
@@ -16,7 +18,7 @@ it("flushes a small chunk within 50ms even while the next read waits", async () 
   vi.useFakeTimers();
   const { reader, controller } = source();
   const post = vi.fn(async () => true);
-  const done = relayResponseBody(reader, post);
+  const done = relayResponseBody(reader, post, activeSignal);
   controller.enqueue(new Uint8Array([1]));
   await vi.advanceTimersByTimeAsync(50);
   const callsAtDeadline = post.mock.calls.length;
@@ -30,13 +32,17 @@ it("coalesces buffered input after slow posts without reordering or parallel pos
   const chunks: Uint8Array[] = [];
   let active = 0;
   let peak = 0;
-  const done = relayResponseBody(reader, async (bytes) => {
-    chunks.push(bytes);
-    peak = Math.max(peak, ++active);
-    await new Promise((resolve) => setTimeout(resolve, 100));
-    active--;
-    return true;
-  });
+  const done = relayResponseBody(
+    reader,
+    async (bytes) => {
+      chunks.push(bytes);
+      peak = Math.max(peak, ++active);
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      active--;
+      return true;
+    },
+    activeSignal,
+  );
   for (let n = 0; n < 20; n++) {
     controller.enqueue(new Uint8Array([n]));
     await vi.advanceTimersByTimeAsync(10);
@@ -56,10 +62,14 @@ it("bounds every post to 256 KiB and stops after a refused post", async () => {
   controller.close();
   const sizes: number[] = [];
   expect(
-    await relayResponseBody(reader, async (bytes) => {
-      sizes.push(bytes.length);
-      return sizes.length < 2;
-    }),
+    await relayResponseBody(
+      reader,
+      async (bytes) => {
+        sizes.push(bytes.length);
+        return sizes.length < 2;
+      },
+      activeSignal,
+    ),
   ).toBe(false);
   expect(sizes).toEqual([262144, 262144]);
 });
@@ -69,8 +79,8 @@ it("keeps concurrent streams isolated and propagates read cancellation", async (
   const b = source();
   const pa = vi.fn(async () => true);
   const pb = vi.fn(async () => true);
-  const first = relayResponseBody(a.reader, pa);
-  const second = relayResponseBody(b.reader, pb);
+  const first = relayResponseBody(a.reader, pa, activeSignal);
+  const second = relayResponseBody(b.reader, pb, activeSignal);
   const aborted = expect(first).rejects.toThrow("cancelled");
   a.controller.enqueue(new Uint8Array([1]));
   b.controller.enqueue(new Uint8Array([2]));
@@ -91,10 +101,14 @@ it("preserves all bytes across maximum-size boundaries and drains EOF", async ()
   controller.close();
   const chunks: Uint8Array[] = [];
   expect(
-    await relayResponseBody(reader, async (bytes) => {
-      chunks.push(bytes);
-      return true;
-    }),
+    await relayResponseBody(
+      reader,
+      async (bytes) => {
+        chunks.push(bytes);
+        return true;
+      },
+      activeSignal,
+    ),
   ).toBe(true);
   expect(chunks.every((c) => c.length <= 262144)).toBe(true);
   expect(Buffer.concat(chunks)).toEqual(Buffer.from(input));
@@ -107,7 +121,7 @@ it("propagates a failed POST without sending another chunk", async () => {
   const post = vi.fn(async () => {
     throw new Error("network failure");
   });
-  await expect(relayResponseBody(reader, post)).rejects.toThrow(
+  await expect(relayResponseBody(reader, post, activeSignal)).rejects.toThrow(
     "network failure",
   );
   expect(post).toHaveBeenCalledOnce();
@@ -121,7 +135,7 @@ it("keeps one pending read during a slow POST and propagates cancellation before
   const post = vi.fn(
     () => new Promise<boolean>((resolve) => (acknowledge = resolve)),
   );
-  const done = relayResponseBody(reader, post);
+  const done = relayResponseBody(reader, post, activeSignal);
   const cancelled = expect(done).rejects.toThrow("cancelled during POST");
   controller.enqueue(new Uint8Array([1]));
   await vi.advanceTimersByTimeAsync(50);
@@ -134,4 +148,31 @@ it("keeps one pending read during a slow POST and propagates cancellation before
   acknowledge(true);
   await cancelled;
   expect(post).toHaveBeenCalledOnce();
+});
+
+it("does not post a fulfilled prefetched chunk after cancellation during acknowledgement", async () => {
+  vi.useFakeTimers();
+  const { reader, controller } = source();
+  const abort = new AbortController();
+  let acknowledge!: (accepted: boolean) => void;
+  const post = vi.fn(
+    () => new Promise<boolean>((resolve) => (acknowledge = resolve)),
+  );
+  const done = relayResponseBody(reader, post, abort.signal);
+  const cancelled = expect(done).rejects.toMatchObject({ name: "AbortError" });
+  controller.enqueue(new Uint8Array([1]));
+  await vi.advanceTimersByTimeAsync(50);
+  await vi.advanceTimersByTimeAsync(1);
+  controller.enqueue(new Uint8Array(262144));
+  await vi.advanceTimersByTimeAsync(1);
+  abort.abort();
+  controller.error(abort.signal.reason);
+  await vi.advanceTimersByTimeAsync(3);
+  acknowledge(true);
+  await vi.advanceTimersByTimeAsync(0);
+  const postedAfterAcknowledgement = post.mock.calls.length;
+  // Let the old implementation's extra POST settle so its read can fail too.
+  if (postedAfterAcknowledgement > 1) acknowledge(true);
+  await cancelled;
+  expect(postedAfterAcknowledgement).toBe(1);
 });

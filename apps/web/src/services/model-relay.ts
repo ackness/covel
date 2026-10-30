@@ -232,6 +232,7 @@ async function handleRequest(event: RelayRequestEvent): Promise<void> {
       referrerPolicy: "no-referrer",
       mode: "cors",
     });
+    controller.signal.throwIfAborted();
     const headOk = await post(event.id, "head", {
       json: {
         status: response.status,
@@ -251,14 +252,17 @@ async function handleRequest(event: RelayRequestEvent): Promise<void> {
     const reader = response.body?.getReader();
     if (reader) {
       if (
-        !(await relayResponseBody(reader, (bytes) =>
-          post(event.id, "chunk", { bytes }),
+        !(await relayResponseBody(
+          reader,
+          (bytes) => post(event.id, "chunk", { bytes }),
+          controller.signal,
         ))
       ) {
         controller.abort();
         return;
       }
     }
+    controller.signal.throwIfAborted();
     await post(event.id, "end");
   } catch (error) {
     await post(event.id, "fail", {
