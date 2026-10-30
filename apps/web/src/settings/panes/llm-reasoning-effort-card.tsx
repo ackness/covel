@@ -143,11 +143,34 @@ export function ReasoningEffortCard({
             : "settings.reasoningPrecedenceHint",
         )}
       </p>
-      {profile?.family === "deepseek" && effective !== "disabled" && (
+      {profile?.requestDefault &&
+        profile.defaultValue &&
+        effective === undefined && (
+          <p className="text-[10px] leading-relaxed text-muted-foreground">
+            {t("settings.reasoningRequestDefaultHint", {
+              level: t(`settings.reasoningLevel.${profile.requestDefault}`),
+              defaultLevel: t(
+                `settings.reasoningLevel.${profile.defaultValue}`,
+              ),
+            })}
+          </p>
+        )}
+      {profile?.sampling?.ignoredWhileThinking &&
+        effective !== "disabled" &&
+        effective !== "none" && (
+          <p className="border-l-2 border-(--accent-warning)/60 pl-2 text-[10px] leading-relaxed text-muted-foreground">
+            {t("settings.reasoningSamplingIgnoredHint")}
+          </p>
+        )}
+      {profile?.sampling?.fixed?.length ? (
         <p className="border-l-2 border-(--accent-warning)/60 pl-2 text-[10px] leading-relaxed text-muted-foreground">
-          {t("settings.deepseekReasoningSamplingHint")}
+          {t("settings.reasoningSamplingFixedHint", {
+            parameters: profile.sampling.fixed
+              .map((name) => t(`settings.samplingParameter.${name}`))
+              .join(", "),
+          })}
         </p>
-      )}
+      ) : null}
     </div>
   );
 }

@@ -79,7 +79,7 @@ describe("provider parameter overrides", () => {
     await adapter.generateText(
       { baseUrl: "https://api.openai.com/v1", apiKey: "sk-test" },
       {
-        model: "gpt-5-mini",
+        model: "gpt-4.1-mini",
         messages: [{ role: "user", content: "hi", toolCalls: undefined }],
         providerRequestMetadata: {
           parameterOverrides: {

@@ -1351,7 +1351,15 @@
     "reasoningBudgetHint": "Это заданные приложением бюджеты размышления, а не собственные уровни модели. Фактическое число токенов может быть меньше.",
     "reasoningEffortHint": "Доступны только уровни, поддерживаемые текущей моделью семейства {{family}}.",
     "reasoningUnavailable": "Настраиваемые уровни рассуждения не определены. Можно наследовать настройки или использовать настройки провайдера.",
-    "deepseekReasoningSamplingHint": "В режиме рассуждений DeepSeek игнорирует температуру, Top P, штраф за частоту повторений и штраф за наличие.",
+    "reasoningSamplingIgnoredHint": "В режиме рассуждений эта модель игнорирует температуру, Top P, штраф за частоту повторений и штраф за наличие.",
+    "reasoningSamplingFixedHint": "Эта модель сама задаёт {{parameters}}; указанные здесь значения не отправляются.",
+    "reasoningRequestDefaultHint": "Если уровень не выбран, Covel отправляет «{{level}}»: собственный уровень модели по умолчанию, «{{defaultLevel}}», самый медленный.",
+    "samplingParameter": {
+      "temperature": "температуру",
+      "topP": "Top P",
+      "frequencyPenalty": "штраф за частоту повторений",
+      "presencePenalty": "штраф за наличие"
+    },
     "reasoningFamily": {
       "openai": "OpenAI",
       "anthropic": "Anthropic",

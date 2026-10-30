@@ -29,23 +29,29 @@ describe("reasoning model overrides", () => {
   });
 
   it("gives a model the bundled data does not name its levels", () => {
-    expect(levels("kimi-k3")).toBeUndefined();
+    expect(levels("acme-unlisted-1")).toBeUndefined();
     // With no entry, a model of no named family takes any level as selected.
-    expect(sent("kimi-k3", "medium")).toEqual({ reasoning_effort: "medium" });
+    expect(sent("acme-unlisted-1", "medium")).toEqual({
+      reasoning_effort: "medium",
+    });
 
     setReasoningModelOverrides({
       families: [
         {
           id: "compatible",
-          rules: [{ match: "kimi-k3", levels: ["low", "high", "max"] }],
+          rules: [
+            { match: "acme-unlisted-1", levels: ["low", "high", "max"] },
+          ],
         },
       ],
     });
 
-    expect(levels("moonshot/Kimi-K3")).toEqual(["low", "high", "max"]);
-    expect(sent("kimi-k3", "max")).toEqual({ reasoning_effort: "max" });
-    expect(sent("kimi-k3", "medium")).toEqual({});
-    expect(sent("glm-5.2", "medium")).toEqual({ reasoning_effort: "medium" });
+    expect(levels("acme/Acme-Unlisted-1")).toEqual(["low", "high", "max"]);
+    expect(sent("acme-unlisted-1", "max")).toEqual({ reasoning_effort: "max" });
+    expect(sent("acme-unlisted-1", "medium")).toEqual({});
+    expect(sent("acme-unlisted-2", "medium")).toEqual({
+      reasoning_effort: "medium",
+    });
   });
 
   it("reads an override before the bundled rules of the same family", () => {
@@ -103,14 +109,14 @@ describe("reasoning model overrides", () => {
       families: [
         {
           id: "compatible",
-          rules: [{ match: "kimi-k3", levels: ["low"] }],
+          rules: [{ match: "acme-unlisted-1", levels: ["low"] }],
         },
       ],
     };
     setReasoningModelOverrides(valid);
 
     for (const invalid of [
-      { families: [{ id: "moonshot", rules: [] }] },
+      { families: [{ id: "zhipu", rules: [] }] },
       {
         families: [
           { id: "compatible", rules: [{ match: "x", levels: ["ultra"] }] },
@@ -128,7 +134,7 @@ describe("reasoning model overrides", () => {
       expect(() => setReasoningModelOverrides(invalid)).toThrow();
     }
 
-    expect(levels("kimi-k3")).toEqual(["low"]);
+    expect(levels("acme-unlisted-1")).toEqual(["low"]);
     expect(levels("gpt-5.2")).toHaveLength(6);
   });
 });

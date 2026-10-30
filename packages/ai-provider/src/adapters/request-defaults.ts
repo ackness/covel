@@ -1,12 +1,19 @@
 import type { ModelRequestContext, ProviderProtocol } from "../types.js";
 import type { LLMRequestDefaults } from "@covel/shared";
+import type { ReasoningControls } from "../capability/reasoning-models.js";
 import {
   readReasoningEffort,
   resolveReasoningEffortProfile,
+  thinksOnRequest,
 } from "../reasoning-effort.js";
 import type { TextGenerationParams } from "../types.js";
 
-/** User slot/preset metadata and parameter overrides always beat runtime defaults. */
+/**
+ * Fill in the reasoning level when the player chose none: the runtime's
+ * default first, then the model's `requestDefault` for a model whose own
+ * default is costly. User slot/preset metadata and parameter overrides
+ * always win.
+ */
 export function withTextRequestDefaults(
   params: TextGenerationParams,
   context?: ModelRequestContext,
@@ -38,12 +45,23 @@ export function withTextRequestDefaults(
       "reasoning",
       "output_config",
     ].some((key) => metadata?.[key] !== undefined);
-  if (!params.defaults?.reasoningEffort || hasReasoning) return params;
+  if (hasReasoning) return params;
   const profile = resolveReasoningEffortProfile(
-    params.model,
+    context?.preset?.model ?? context?.profile?.model ?? params.model,
     context?.preset?.provider ?? context?.profile?.provider,
     protocol,
+    undefined,
+    context?.preset?.baseUrl,
   );
+  if (!params.defaults?.reasoningEffort) {
+    const level = profile?.requestDefault;
+    if (!level || !profile.options.some((option) => option.value === level))
+      return params;
+    return {
+      ...params,
+      providerRequestMetadata: { ...metadata, reasoningEffort: level },
+    };
+  }
   if (!profile) {
     warn?.(
       `Reasoning controls for ${params.model} are unknown; the runtime default was omitted.`,
@@ -69,23 +87,37 @@ export function withTextRequestDefaults(
 }
 
 /**
- * Qwen and Anthropic thinking only support automatic tool selection. Preserve
- * explicit reasoning settings instead of sending an incompatible forced call.
+ * The runtime's tool choice, narrowed to what the target accepts while it
+ * thinks. Many models (Qwen, Anthropic, DeepSeek) take only automatic choice
+ * then; some (Kimi) also take `required` but not a named tool. Whether the
+ * target thinks comes from the body, or from the model's default when the
+ * body says nothing; the choices come from the reasoning model data.
  * https://help.aliyun.com/en/model-studio/qwen-function-calling
  */
 export function defaultToolChoice(
   defaults: LLMRequestDefaults | undefined,
   body: Record<string, unknown>,
   protocol: "chat" | "responses" | "anthropic",
+  controls?: Pick<
+    ReasoningControls,
+    "thinksByDefault" | "toolChoiceWhileThinking"
+  >,
 ): unknown {
-  const thinking = body.thinking;
-  const thinkingEnabled =
-    body.enable_thinking === true ||
-    (thinking !== null &&
-      typeof thinking === "object" &&
-      "type" in thinking &&
-      (thinking.type === "enabled" || thinking.type === "adaptive"));
-  const choice = thinkingEnabled ? undefined : defaults?.toolChoice;
+  let choice = defaults?.toolChoice;
+  if (
+    choice &&
+    thinksOnRequest(body, {
+      thinksByDefault: controls?.thinksByDefault ?? false,
+    })
+  ) {
+    const accepted = controls?.toolChoiceWhileThinking ?? ["auto"];
+    const kind = choice === "required" ? "required" : "named";
+    if (!accepted.includes(kind))
+      choice =
+        kind === "named" && accepted.includes("required")
+          ? "required"
+          : undefined;
+  }
   if (choice === "required")
     return protocol === "anthropic" ? { type: "any" } : "required";
   const name = choice?.name;

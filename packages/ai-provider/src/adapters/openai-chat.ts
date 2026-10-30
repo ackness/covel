@@ -40,6 +40,7 @@ import {
 import type { OpenAiChatReasoningField } from "./http/openai-readers.js";
 import {
   openAiChatReasoningFields,
+  reasoningControlsFor,
   reasoningRequestFields,
   type ReasoningRequestShape,
 } from "../reasoning-effort.js";
@@ -110,12 +111,17 @@ function extractOpenAiParameterOverrides(
   shape: ReasoningRequestShape = {},
 ): Record<string, unknown> {
   return {
-    ...extractParameterOverrides(meta, {
-      ...OPENAI_PARAMETER_FIELD_MAP,
-      maxOutputTokens: /(?:^|\/)gpt-[5-9]|(?:^|\/)o[134](?:-|$)/i.test(model)
-        ? "max_completion_tokens"
-        : "max_tokens",
-    }),
+    ...extractParameterOverrides(
+      meta,
+      {
+        ...OPENAI_PARAMETER_FIELD_MAP,
+        maxOutputTokens: /(?:^|\/)gpt-[5-9]|(?:^|\/)o[134](?:-|$)/i.test(model)
+          ? "max_completion_tokens"
+          : "max_tokens",
+      },
+      reasoningControlsFor(context, "openai-chat-v1", model).sampling?.fixed,
+      model,
+    ),
     ...reasoningRequestFields(
       openAiChatReasoningFields,
       meta,
@@ -155,38 +161,6 @@ function serializeOpenAiChatContent(content: TextMessageContent): unknown {
   });
 }
 
-function isDeepSeekThinkingRequest(
-  model: string,
-  context: ModelRequestContext | undefined,
-  body: Record<string, unknown>,
-): boolean {
-  const provider = (
-    context?.preset?.provider ??
-    context?.profile?.provider ??
-    ""
-  ).toLowerCase();
-  const models = [model, context?.preset?.model, context?.profile?.model]
-    .filter((value): value is string => typeof value === "string")
-    .map((value) => value.toLowerCase());
-  const isDeepSeek =
-    /(?:^|[-_/])deepseek(?:[-_/]|$)/.test(provider) ||
-    models.some((candidate) =>
-      /(?:^|[-_/])deepseek(?:[-_/]|$)/.test(candidate),
-    );
-  const defaultsToThinking = models.some((candidate) =>
-    /(?:^|[-_/])deepseek-(?:v4(?:[-._/]|$)|flash(?:[-_/]|$))/.test(candidate),
-  );
-  const thinking = body.thinking;
-  const thinkingType =
-    thinking !== null &&
-    typeof thinking === "object" &&
-    (thinking as Record<string, unknown>).type;
-  return (
-    isDeepSeek &&
-    (thinkingType === "enabled" || (!thinkingType && defaultsToThinking))
-  );
-}
-
 function attachOpenAiTools(
   body: Record<string, unknown>,
   tools: ToolDefinition[] | undefined,
@@ -196,9 +170,12 @@ function attachOpenAiTools(
 ): void {
   if (!tools || tools.length === 0) return;
   body.tools = tools;
-  if (!isDeepSeekThinkingRequest(model, context, body)) {
-    body.tool_choice ??= defaultToolChoice(defaults, body, "chat");
-  }
+  body.tool_choice ??= defaultToolChoice(
+    defaults,
+    body,
+    "chat",
+    reasoningControlsFor(context, PROTOCOL, model),
+  );
 }
 
 const PROTOCOL = "openai-chat-v1";
@@ -342,7 +319,7 @@ function openAiChatTextBody(
 export function createOpenAiChatAdapter(): ModelProviderAdapter {
   return {
     async generateText(config, params, context) {
-      params = withTextRequestDefaults(params);
+      params = withTextRequestDefaults(params, context, "openai-chat-v1");
       const body = openAiChatTextBody(config, params, context);
 
       const response = await postJson(config, "/chat/completions", body);
@@ -448,7 +425,7 @@ export function createOpenAiChatAdapter(): ModelProviderAdapter {
     },
 
     async *streamText(config, params, context) {
-      params = withTextRequestDefaults(params);
+      params = withTextRequestDefaults(params, context, "openai-chat-v1");
       const body = {
         ...openAiChatTextBody(config, params, context),
         stream: true,

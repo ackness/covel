@@ -7,8 +7,10 @@ import type {
 import { REASONING_EFFORT_VALUES, type ReasoningEffort } from "@covel/shared";
 import {
   resolveReasoningControls,
+  type ReasoningControls,
   type ReasoningEffortOption,
   type ReasoningEffortProfile,
+  type ReasoningFormat,
   type ReasoningParameterStyle,
   type ReasoningProviderFamily,
 } from "./capability/reasoning-models.js";
@@ -31,9 +33,15 @@ export function resolveReasoningEffortProfile(
   provider?: string,
   protocol?: ProviderProtocol | string,
   features?: readonly ModelFeature[],
+  baseUrl?: string,
 ): ReasoningEffortProfile | null {
-  return resolveReasoningControls(modelId, provider, protocol, features)
-    .profile;
+  return resolveReasoningControls(
+    modelId,
+    provider,
+    protocol,
+    features,
+    baseUrl,
+  ).profile;
 }
 
 /** What a wire needs to place a reasoning selection in its request. */
@@ -46,6 +54,8 @@ export interface ReasoningWireRequest {
    * the level is a budget preset. Absent for a model with no entry.
    */
   option?: ReasoningEffortOption;
+  /** How the target writes a level on an OpenAI-compatible request. */
+  format: ReasoningFormat;
   /** Which of a family's parameter forms the model takes. */
   parameterStyle?: ReasoningParameterStyle;
   model: string;
@@ -87,8 +97,14 @@ export function reasoningRequestFields(
   const provider = context?.preset?.provider ?? context?.profile?.provider;
   const model =
     context?.preset?.model ?? context?.profile?.model ?? requestModel;
-  const { family, profile, parameterStyle, thinkingAlwaysOn, withTools } =
-    resolveReasoningControls(model || requestModel, provider, protocol);
+  const {
+    family,
+    profile,
+    format,
+    parameterStyle,
+    thinkingAlwaysOn,
+    withTools,
+  } = reasoningControlsFor(context, protocol, requestModel);
   const selection =
     shape.tools && withTools && !(selected && withTools.includes(selected))
       ? withTools[0]
@@ -97,7 +113,7 @@ export function reasoningRequestFields(
   const option = profile?.options.find((entry) => entry.value === selection);
   // A model of an unnamed family with no entry takes the level as selected.
   if (!option && (profile || family !== "compatible")) {
-    return family === "qwen" && thinkingAlwaysOn
+    return format === "enable-thinking" && thinkingAlwaysOn
       ? { enable_thinking: true }
       : {};
   }
@@ -105,6 +121,7 @@ export function reasoningRequestFields(
     selection,
     family,
     option,
+    format,
     parameterStyle,
     model,
     provider,
@@ -113,19 +130,29 @@ export function reasoningRequestFields(
   });
 }
 
+/**
+ * Whether a level turns thinking off. Catalog entries name the off level
+ * `none` where Covel's own rules say `disabled`; formats with a separate
+ * switch treat both alike.
+ */
+function isOff(selection: ReasoningEffort): boolean {
+  return selection === "disabled" || selection === "none";
+}
+
 export function anthropicReasoningFields({
   selection,
   family,
+  format,
   parameterStyle,
   metadata,
 }: ReasoningWireRequest): Record<string, unknown> {
-  if (selection === "disabled") {
+  if (isOff(selection)) {
     return { thinking: { type: "disabled" } };
   }
   if (selection === "automatic") return {};
   const adaptive = family === "anthropic" && parameterStyle === "adaptive";
   return {
-    ...(family === "deepseek" ? { thinking: { type: "enabled" } } : {}),
+    ...(format === "thinking-type" ? { thinking: { type: "enabled" } } : {}),
     ...(adaptive
       ? {
           thinking: {
@@ -168,15 +195,15 @@ export function openAiResponsesReasoningFields({
   };
 }
 
-/** OpenAI Chat, with the fields DeepSeek and Qwen use on the same wire. */
+/** OpenAI Chat, written in the target's format (see `ReasoningFormat`). */
 export function openAiChatReasoningFields({
   selection,
-  family,
+  format,
   option,
   parameterStyle,
 }: ReasoningWireRequest): Record<string, unknown> {
-  if (family === "deepseek") {
-    if (selection === "disabled") {
+  if (format === "thinking-type") {
+    if (isOff(selection)) {
       return { thinking: { type: "disabled" } };
     }
     if (selection === "automatic") {
@@ -188,7 +215,7 @@ export function openAiChatReasoningFields({
     };
   }
 
-  if (family === "qwen") {
+  if (format === "enable-thinking") {
     if (option?.thinkingBudgetTokens !== undefined) {
       return {
         enable_thinking: true,
@@ -197,17 +224,62 @@ export function openAiChatReasoningFields({
     }
     if (parameterStyle === "effort" && selection !== "automatic") {
       return {
-        enable_thinking: selection !== "disabled",
-        reasoning_effort: selection === "disabled" ? "none" : selection,
+        enable_thinking: !isOff(selection),
+        reasoning_effort: isOff(selection) ? "none" : selection,
       };
     }
-    return { enable_thinking: selection !== "disabled" };
+    return { enable_thinking: !isOff(selection) };
   }
 
   if (selection === "automatic") return {};
   return {
     reasoning_effort: selection === "disabled" ? "none" : selection,
   };
+}
+
+/**
+ * The reasoning controls of a request's target, from the slot's provider and
+ * model when the context names them.
+ */
+export function reasoningControlsFor(
+  context: ModelRequestContext | undefined,
+  protocol: ProviderProtocol,
+  requestModel: string,
+): ReasoningControls {
+  const provider = context?.preset?.provider ?? context?.profile?.provider;
+  const model =
+    context?.preset?.model ?? context?.profile?.model ?? requestModel;
+  return resolveReasoningControls(
+    model || requestModel,
+    provider,
+    protocol,
+    undefined,
+    context?.preset?.baseUrl,
+  );
+}
+
+/**
+ * Whether a request body turns thinking on or off. `undefined`: it says
+ * nothing, so the model's default applies.
+ */
+export function requestedThinking(
+  body: Record<string, unknown>,
+): boolean | undefined {
+  const thinking = asRecord(body.thinking).type;
+  if (thinking === "enabled" || thinking === "adaptive") return true;
+  if (thinking === "disabled") return false;
+  if (typeof body.enable_thinking === "boolean") return body.enable_thinking;
+  const effort = body.reasoning_effort ?? asRecord(body.reasoning).effort;
+  if (effort === "none") return false;
+  return undefined;
+}
+
+/** Whether the target thinks on a request with this body. */
+export function thinksOnRequest(
+  body: Record<string, unknown>,
+  controls: Pick<ReasoningControls, "thinksByDefault">,
+): boolean {
+  return requestedThinking(body) ?? controls.thinksByDefault;
 }
 
 /** A slot whose target narrows reasoning on requests that carry tools. */

@@ -38,6 +38,7 @@ import { applyCapabilityFallback } from "./capability-fallback.js";
 import { fetchModelIds } from "./model-list.js";
 import {
   anthropicReasoningFields,
+  reasoningControlsFor,
   reasoningRequestFields,
 } from "../reasoning-effort.js";
 import { anthropicModelTraits } from "../anthropic-model-traits.js";
@@ -95,7 +96,12 @@ function requestedToolChoice(
         params.model,
       ),
     };
-    choice = defaultToolChoice(params.defaults, body, "anthropic");
+    choice = defaultToolChoice(
+      params.defaults,
+      body,
+      "anthropic",
+      reasoningControlsFor(context, "anthropic-messages-v1", params.model),
+    );
   }
   if (choice === undefined) return {};
   return {
@@ -162,7 +168,13 @@ function extractAnthropicParameterOverrides(
   model: string,
 ): Record<string, unknown> {
   const fields: Record<string, unknown> = {
-    ...extractParameterOverrides(meta, ANTHROPIC_PARAMETER_FIELD_MAP),
+    ...extractParameterOverrides(
+      meta,
+      ANTHROPIC_PARAMETER_FIELD_MAP,
+      reasoningControlsFor(context, "anthropic-messages-v1", model).sampling
+        ?.fixed,
+      model,
+    ),
     ...reasoningRequestFields(
       anthropicReasoningFields,
       meta,
@@ -405,7 +417,11 @@ function anthropicTextBody(
 export function createAnthropicMessagesAdapter(): ModelProviderAdapter {
   return {
     async generateText(config, params, context) {
-      params = withTextRequestDefaults(params);
+      params = withTextRequestDefaults(
+        params,
+        context,
+        "anthropic-messages-v1",
+      );
       const headers = anthropicHeaders(config.apiKey);
       const configNoKey = { ...config, apiKey: undefined };
       const response = await postJson(
@@ -524,7 +540,11 @@ export function createAnthropicMessagesAdapter(): ModelProviderAdapter {
     },
 
     async *streamText(config, params, context) {
-      params = withTextRequestDefaults(params);
+      params = withTextRequestDefaults(
+        params,
+        context,
+        "anthropic-messages-v1",
+      );
       const headers = anthropicHeaders(config.apiKey);
       const configNoKey = { ...config, apiKey: undefined };
       const response = await postJson(

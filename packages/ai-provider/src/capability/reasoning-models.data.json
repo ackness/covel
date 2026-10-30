@@ -6,6 +6,8 @@
       "provider": ["deepseek"],
       "known": ["deepseek-(?:v4|flash|chat|reasoner|r1)"],
       "tableFlag": true,
+      "format": "thinking-type",
+      "sampling": { "ignoredWhileThinking": true },
       "rules": [{ "default": "high", "levels": ["disabled", "high", "max"] }]
     },
     {
@@ -108,7 +110,7 @@
     },
     {
       "id": "xai",
-      "model": ["grok", "xai/"],
+      "model": ["grok", "(?:^|/)xai/"],
       "provider": ["^xai$", "grok"],
       "known": ["grok-(?:3-mini|4)"],
       "tableFlag": true,
@@ -127,6 +129,7 @@
       "provider": ["dashscope", "qwen", "alibaba"],
       "known": ["qwen3"],
       "tableFlag": true,
+      "format": "enable-thinking",
       "thinkingAlwaysOn": [
         "qwen[^\\s]*[-_/]thinking(?:[-_/]|$)",
         "qwen3\\.8-2\\.4t-a95b",
@@ -180,6 +183,7 @@
         },
         {
           "match": "gpt-[6-9]",
+          "whenUnlisted": true,
           "levels": ["none", "low", "medium", "high", "xhigh", "max"]
         },
         {

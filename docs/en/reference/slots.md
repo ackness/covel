@@ -463,7 +463,7 @@ When Covel looks up model capabilities, it tries these matches in order. A match
 
 ## Thinking strength
 
-The "Generation" page identifies the thinking levels by the upstream vendor name in the model ID. For example, if the provider is `openai` and the model ID is `deepseek/deepseek-v4-flash`, it still uses DeepSeek's `off / high / max` levels. The options depend on the model's capabilities. The page does not assume that every vendor's strength levels are equivalent.
+The thinking levels on the "Generation" page come from the [models.dev](https://models.dev) catalog and Covel's vendor rules (see [Level data](#level-data)). How a request turns thinking on and off follows the upstream vendor name in the model ID: if the provider is `openai` and the model ID is `deepseek/deepseek-v4-flash`, thinking is still switched the DeepSeek way. The options depend on the model's capabilities. The page does not assume that every vendor's strength levels are equivalent.
 
 In `llm.toml`, use `reasoningEffort` to set the default level of a model:
 
@@ -479,6 +479,7 @@ reasoningEffort = "disabled"
 - The values are the same as in the interface. A runtime does not pick a level; it can only turn reasoning off with `agent.reasoning: false`.
 - You write one general level, and the adapter translates it into each vendor's own field. This works like the top-level [`reasoning`](https://ai-sdk.dev/docs/ai-sdk-core/reasoning) option in the AI SDK.
 - If a model does not support a level, a warning is logged, and the provider's default behavior is used.
+- When nothing is chosen and the model's default level is its highest and a slow one (`xhigh` or `max`), the level below it is sent. For example, Kimi K3.1 Pro defaults to `max`; with no level chosen, Covel sends `high`, or every call would think at the slowest level. The interface says so. To use the model's own default, choose "Provider default".
 - This is the same default value as the thinking level you set for the model on the "Providers & Models" page.
 - If you need to write a native field directly, use `providerOptions` below instead.
 
@@ -498,8 +499,9 @@ Explicit override on the role → model / TOML default → task default → prov
 The shared `reasoningEffort` is converted according to the API protocol:
 
 - **OpenAI Chat and compatible APIs**: `reasoning_effort`.
-  - DeepSeek also sends `thinking.type`.
-  - Qwen's on/off switch uses `enable_thinking`.
+  - A rule whose `format` is `thinking-type` (DeepSeek) also sends `thinking.type`. Turning thinking off sends only `thinking: { type: "disabled" }`.
+  - A rule whose `format` is `enable-thinking` (Qwen) switches thinking with `enable_thinking`.
+  - For a model whose catalog entry names the off level `none`, both formats treat it like `disabled`.
   - Qwen3.8 Chat's native levels `low/medium/xhigh` use `reasoning_effort`.
   - The confirmed Qwen3.5–3.7 Max/Plus/Flash models use `thinking_budget` presets (2048/8192/16384). The interface states the token numbers. A budget preset is not a native level of the provider, and the actual use can be less than the budget.
   - An explicit level clears the inherited budget, so Qwen3.8 does not send both kinds of parameter.
@@ -512,7 +514,7 @@ The shared `reasoningEffort` is converted according to the API protocol:
   - For a recognized adaptive-thinking model that has a level chosen, `thinking.type: "adaptive"` is enabled. The default request also asks for a visible summary with `display: "summarized"`.
   - A model that cannot turn thinking off does not show the off option.
   - For Claude requests, sampling parameters that conflict with thinking are removed. When thinking is off, the inherited effort is cleared, to avoid a 400 error from the combination.
-  - DeepSeek's Anthropic-compatible API also sends `thinking.type`.
+  - A rule whose `format` is `thinking-type` (DeepSeek's Anthropic-compatible API) also sends `thinking.type`.
 - **Gemini native `generateContent`**:
   - Gemini 3 uses `generationConfig.thinkingConfig.thinkingLevel`. Gemini 2.5 uses `thinkingBudget`.
   - 3 Pro has only low and high. 3.1 Pro has low, medium, and high. 3 Flash, 3.5/3.6 Flash, and 3.1/3.5 Flash-Lite have minimal, low, medium, and high. 3.7/3.8 Flash has low, medium, and high.
@@ -521,73 +523,117 @@ The shared `reasoningEffort` is converted according to the API protocol:
   - For an unknown Gemini model, no level is guessed.
   - Google's OpenAI-compatible API still sends `reasoning_effort`. On 3.1 Pro, `minimal` maps to low. On 2.5, it maps to 1024 tokens. This does not mean the native protocol supports a `minimal` level for these models.
 
+**Other request parameters while thinking**
+
+Some models reject certain parameters while they think. Covel adjusts the request from data, not from vendor checks in code:
+
+- **Tool choice**: a thinking model may refuse to be forced to call a tool. DeepSeek returns 400 for both `required` and a named tool while thinking and accepts only `auto`; the Kimi K3 series accepts only `auto` and `required`. When a task default forces a tool call, it steps back to the choices the rule or catalog allows: a named tool becomes `required`, or `auto` where that is not allowed. Requests with thinking off are not affected.
+- **Fixed sampling parameters**: when the catalog says a model sets its own temperature or Top P (GPT-5 and later, Kimi K3), requests do not send them. If a value is configured, the server logs one warning per model and parameter.
+- **Sampling ignored while thinking**: DeepSeek ignores temperature, Top P, frequency penalty, and presence penalty while thinking. Requests still send them, and the settings page shows a hint.
+
 **Levels recognized now**
 
-| Vendor      | Levels                                                                                                                                 |
-| ----------- | -------------------------------------------------------------------------------------------------------------------------------------- |
-| OpenAI      | `none/minimal/low/medium/high/xhigh`. GPT-6 and later models are recognized by name, and also have `max`. No default level is recorded |
-| Anthropic   | `low/medium/high/xhigh/max`, depending on the model                                                                                    |
-| Gemini      | A subset limited by model and protocol. See above                                                                                      |
-| xAI         | `low/medium/high`                                                                                                                      |
-| DeepSeek V4 | `high/max`                                                                                                                             |
-| Qwen        | Off / on, native levels, or budget presets                                                                                             |
+The models.dev catalog gives the levels per provider endpoint, so the same model can differ between relays. The table shows the part Covel maintains itself:
 
-The interface lists only the subset that the target model is known to support. A model that is not recognized uses the provider's default behavior. The Gemini levels are based on the [Google thinking guide](https://ai.google.dev/gemini-api/docs/generate-content/thinking) and the [OpenAI compatibility mapping](https://ai.google.dev/gemini-api/docs/openai).
+| Vendor    | Levels                                                                                    |
+| --------- | ----------------------------------------------------------------------------------------- |
+| OpenAI    | GPT-5 / o series by model; on OpenAI's own Chat endpoint GPT-6 must use `none` with tools |
+| Anthropic | `low/medium/high/xhigh/max`, depending on the model                                       |
+| Gemini    | A subset limited by model and protocol, see above                                         |
+| xAI       | `low/medium/high`; Grok 4.20 / multi-agent adds `xhigh`                                   |
+| DeepSeek  | off / `high/max`, plus the catalog's levels (such as `low`) for models it lists           |
+| Qwen      | off / on, native levels, or budget presets                                                |
+
+The interface lists only the subset that the target model is known to support. A model that is not recognized keeps the provider's default behavior. The Gemini levels follow [Google's thinking guide](https://ai.google.dev/gemini-api/docs/generate-content/thinking) and the [OpenAI compatibility mapping](https://ai.google.dev/gemini-api/docs/openai).
 
 #### Level data
 
-"Which model supports which levels" is data, not code.
+"Which model supports which levels" is data, not code. The data has two sources:
 
-- The data is in `packages/ai-provider/src/capability/reasoning-models.data.json`. It lists, for each provider family (`deepseek`, `anthropic`, `google`, `xai`, `qwen`, `openai`, `compatible`), regular expressions for model names and the matching levels.
-- The code (the wire for each protocol in `reasoning-effort.ts`) only writes the chosen level as that protocol's request field.
-- The structure matches the AI SDK. The capability is first resolved from the model name, and then the protocol layer writes the parameter. The difference is that the capability lives in a data file.
+- **The models.dev catalog**: `packages/ai-provider/src/capability/models-dev.data.json`, a trimmed snapshot of the [models.dev](https://github.com/sst/models.dev) (MIT) v2 API. It records, for each model and each provider that serves it: whether thinking can be switched, the levels, the default level, sampling parameters the model fixes itself, and the tool choices each protocol accepts. Per-model levels come from it.
+- **Covel's vendor rules**: `packages/ai-provider/src/capability/reasoning-models.data.json`. Grouped by provider family (`deepseek`, `anthropic`, `google`, `xai`, `qwen`, `openai`, `compatible`), they record how a request is written (`format`), limits while thinking, and models the catalog lacks or gets wrong.
 
-Fields for each family:
+The code (each protocol's wire in `reasoning-effort.ts`) only writes the chosen level into that protocol's request fields. The structure matches the AI SDK: capabilities are resolved from the model first, then the protocol layer writes the parameters.
 
-| Field              | Meaning                                                                                                                                                                                                                                                                                                                                         |
-| ------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `model`            | A lowercase model ID that matches any one of the regular expressions belongs to the family. Families are checked in the order they appear in the file                                                                                                                                                                                           |
-| `provider`         | When no family's `model` matches, the provider ID is checked                                                                                                                                                                                                                                                                                    |
-| `known`            | Names of levels confirmed as supported. When a family has `known` or `tableFlag`, a model must pass one of them before its `rules` are read                                                                                                                                                                                                     |
-| `tableFlag`        | A model that the LiteLLM model table marks as `reasoning` also passes. This applies only when the query includes the model-table feature, which is the level list on the settings page. The request path checks only by name                                                                                                                    |
-| `thinkingAlwaysOn` | A model that cannot turn thinking off. It does not offer `disabled`                                                                                                                                                                                                                                                                             |
-| `rules`            | The first rule that applies is used, in order. `match` (one or more regular expressions, all must match), `protocols` (the protocols it applies to, where `""` means no protocol is specified), `providers` (regular expressions the slot's provider ID must match), `whenThinkingAlwaysOn`, `default`, `levels`, `parameterStyle`, `withTools` |
+**Which source applies**
 
-- An item in `levels` is a level name, or `{ "value", "budget", "protocols" }`. `budget` means this level is sent as a thinking-token budget. `protocols` means it is offered only on these protocols.
-- `parameterStyle` picks one of several ways to write a family. For Anthropic it is `adaptive` (which also sends `thinking.type: "adaptive"`). For Qwen it is `effort` (which also sends `reasoning_effort`).
-- `providers` limits a rule to one provider's own endpoint. A relay of the same model may have different limits, so such rules key on the provider ID the slot declares, not on the model name.
-- `withTools` lists the only levels the target accepts on a request with function tools, first one preferred. A request with tools that chose another level, or none (the provider then applies the model's default), is sent the first one. For example, OpenAI's own Chat API only accepts `reasoning_effort: "none"` with function tools for GPT-6 models, so the bundled data gives GPT-6 on provider `openai` over `openai-chat-v1` `"withTools": ["none"]`. To keep reasoning with tools, give OpenAI slots `openai-responses-v1`. When the server loads `llm.toml`, it logs one warning for each slot such a rule affects.
+1. Rules in `reasoning-models.json` in the user config directory (see below).
+2. A bundled rule with `match` or `whenThinkingAlwaysOn` that applies to the model.
+3. The models.dev catalog. When the catalog has no default level, the default of the family's catch-all rule (the one without `match`) is used, provided the catalog lists that level. When the catalog neither says thinking is always on nor lists an off level, the catch-all rule's `disabled` is kept.
+4. The family's catch-all rule.
 
-**Why it is maintained by hand**
+When looking a model up in the catalog:
 
-The LiteLLM model table provides only one flag, `reasoning`. Its fields such as `supports_*_reasoning_effort` and `reasoning_effort_levels` currently cover only some OpenAI, Anthropic, and a few other models. Gemini has only a few entries. Qwen, DeepSeek, and xAI have none. It also does not include budget presets or the differences between protocols. So the level data is maintained by hand, and the weekly model-table refresh does not change it.
+- The full ID is tried first, then without an aggregator prefix (`deepseek/deepseek-v4-flash` → `deepseek-v4-flash`), then without a snapshot suffix (`gpt-6-luna-2026-09-22`, `-20251001`, `@default`).
+- When several providers serve the model, the entry chosen is, in order: the one whose host matches the slot's `baseUrl`, the one whose provider ID matches the slot's provider, the model maker's own, and the one most providers share.
 
-A refresh regenerates `packages/ai-provider/tests/__snapshots__/reasoning-characterization.snap.txt`. This file records the level and request fields that each model name gets under each protocol. Its diff is a list of "which category a new model falls into".
+Fields of each family:
+
+| Field              | Meaning                                                                                                                                                                                                                                                                                                                                      |
+| ------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `model`            | A model ID (lowercase) belongs to the family if it matches any of these regular expressions. Families are checked in file order                                                                                                                                                                                                              |
+| `provider`         | If no family's `model` matches, the family is chosen by provider ID                                                                                                                                                                                                                                                                          |
+| `known`            | Names confirmed to support levels. If a family has `known` or `tableFlag`, a model must pass one of them (or have levels in the catalog) before `rules` are read                                                                                                                                                                             |
+| `tableFlag`        | Also passes when the LiteLLM model table marks the model as `reasoning` (only when the lookup includes the model table's features, that is, the level list on the settings page; the request path decides by name only)                                                                                                                      |
+| `thinkingAlwaysOn` | Models that cannot turn thinking off: no `disabled` is offered. A catalog model with no switch but a default level other than off also counts                                                                                                                                                                                                |
+| `rules`            | The first applicable rule is used, in order. `match` (one or more regular expressions, all must match), `protocols` (protocols it applies to; `""` means no protocol given), `providers` (regular expressions the slot's provider ID must match), `whenThinkingAlwaysOn`, `whenUnlisted`, `default`, `levels`, `parameterStyle`, `withTools` |
+
+Families and rules can both carry these behaviour fields; the rule's value wins:
+
+| Field                     | Meaning                                                                                                                                                                                                             |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `format`                  | How the request is written: `effort` (default, the level only), `thinking-type` (also `thinking.type`), `enable-thinking` (`enable_thinking`)                                                                       |
+| `thinksByDefault`         | The model thinks when the request has no thinking field. When absent, the catalog's default level decides                                                                                                           |
+| `toolChoiceWhileThinking` | Tool choices accepted while thinking: `auto`, `required`, `named`. When absent, the catalog's (only for always-thinking models), else `auto` only                                                                   |
+| `sampling`                | `ignoredWhileThinking`: the model ignores temperature and similar parameters while thinking (only a settings hint); `fixed`: parameters the model sets itself and that are never sent, from the catalog when absent |
+
+- An item in `levels` is a level name, or `{ "value", "budget", "protocols" }`. `budget` means this level is sent as a thinking token budget. `protocols` means it is offered only on these protocols.
+- `parameterStyle` picks one of several styles in a family: Anthropic's `adaptive` (also sends `thinking.type: "adaptive"`) and `effort` (sends `reasoning_effort` beside the switch). Rules read from the catalog that list levels use `effort`.
+- `whenUnlisted` limits a rule to models the catalog has no levels for: it covers new models the catalog has not listed yet without overriding the catalog's data. The bundled data uses it to give unlisted GPT-6 and later models `none` to `max`.
+- `providers` makes a rule apply only to one provider's own endpoint. When the same model goes through a relay, the relay's limits may differ. So such rules are told apart by the provider ID the slot declares, not by model name.
+- `withTools` lists the only levels this target accepts on a request that carries function tools, with the first one preferred. If a request with tools picks another level, or picks no level (then the provider uses the model's default level), the first one is sent. For example, OpenAI's own Chat endpoint requires `reasoning_effort` to be `none` when GPT-6 models get function tools, so the bundled data gives GPT-6 with `provider` `openai` and protocol `openai-chat-v1` `"withTools": ["none"]`. To keep reasoning with tools, use `openai-responses-v1` for OpenAI slots. When the server loads `llm.toml`, it logs a warning for each slot such a rule affects.
+
+**Refreshing the catalog**
+
+```bash
+pnpm --filter @covel/ai-provider update-models-dev
+```
+
+It fetches the models.dev v2 API, keeps only the fields above (one model per line, so the diff is readable), writes `models-dev.data.json`, and regenerates `packages/ai-provider/tests/__snapshots__/reasoning-characterization.snap.txt`. That snapshot records the levels and request fields each model name gets on each protocol, so its diff is the list of models whose behaviour changed; review it group by group before committing. Releases and the running server read only the committed files and never the network.
+
+The LiteLLM model table has only one `reasoning` flag, with no levels, defaults, or per-provider differences, so it is not used to decide levels, and the weekly model table refresh does not change either file.
 
 **Add levels for a new model without waiting for a release**
 
-Put a `reasoning-models.json` in the same format in the user config folder (on desktop, `~/.covel/`, which is `COVEL_USER_CONFIG_DIR`). The server reads it at startup:
+Put a `reasoning-models.json` with the same format in the user config directory (`~/.covel/` for the desktop app, that is, `COVEL_USER_CONFIG_DIR`). The server reads it at startup:
 
 ```json
 {
   "families": [
     {
       "id": "compatible",
-      "rules": [{ "match": "kimi-k3", "levels": ["low", "high", "max"] }]
+      "rules": [
+        {
+          "match": "acme-reasoner",
+          "default": "high",
+          "levels": ["disabled", "low", "high"],
+          "format": "thinking-type"
+        }
+      ]
     }
   ]
 }
 ```
 
-- The rules in this file are read before the built-in rules, and they do not go through `known` / `tableFlag`. So every rule must have a `match`.
-- `model`, `provider`, and `thinkingAlwaysOn` are added to the built-in lists. `known` and `tableFlag` cannot be set here.
-- If the file is invalid, a warning is logged, and only the built-in data is used.
-- A deployment that does not set `COVEL_USER_CONFIG_DIR` (source development, Docker) does not read this file.
+- Rules in this file are read before the bundled rules and the catalog, and they skip `known` / `tableFlag`. So every rule must have `match`.
+- `model`, `provider`, and `thinkingAlwaysOn` are appended to the bundled lists. `known` and `tableFlag` cannot be written.
+- If the file is invalid, a warning is logged, and only the bundled data is used.
+- Deployments without `COVEL_USER_CONFIG_DIR` (source development, Docker) do not read this file.
 
-A model that no rule matches keeps its current behavior:
+A model that matches no rule and is not in the catalog behaves as before:
 
-- A model that belongs to a named family does not send thinking fields.
-- A model in the `compatible` family (its name and provider do not belong to any family) sends the chosen level as is. If a rule was added for a model in this family, only the levels listed in the rule are sent.
+- If it belongs to a named family, no thinking fields are sent.
+- If it belongs to the `compatible` family (neither its name nor its provider belongs to any family), the chosen level is sent as is. For a model with a rule added in this family, only the levels the rule lists are sent.
 
 ### Responses does not let the provider store the conversation
 

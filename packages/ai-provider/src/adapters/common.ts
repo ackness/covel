@@ -49,9 +49,15 @@ export type ParameterFieldMap = Readonly<Record<string, string>>;
  * Returns `{}` when the overrides are absent or not a plain object — identical
  * to the pre-refactor guard in each adapter.
  */
+const warnedSkips = new Set<string>();
+
 export function extractParameterOverrides(
   meta: Record<string, unknown> | undefined,
   fieldMap: ParameterFieldMap,
+  /** Override keys the target never takes (it fixes their values itself). */
+  skip: readonly string[] = [],
+  /** The model, named in the one-time notice about a skipped key. */
+  model?: string,
 ): Record<string, unknown> {
   const overrides = meta?.parameterOverrides;
   if (!overrides || typeof overrides !== "object" || Array.isArray(overrides)) {
@@ -61,7 +67,19 @@ export function extractParameterOverrides(
   const result: Record<string, unknown> = {};
   for (const [sourceKey, wireKey] of Object.entries(fieldMap)) {
     const value = source[sourceKey];
-    if (typeof value === "number") result[wireKey] = value;
+    if (typeof value !== "number") continue;
+    if (skip.includes(sourceKey)) {
+      const key = `${model ?? ""}\u0000${sourceKey}`;
+      if (!warnedSkips.has(key)) {
+        warnedSkips.add(key);
+        console.warn(
+          `[ai-gateway] ${model ?? "The model"} fixes ${sourceKey} itself; ` +
+            `the configured value ${value} is not sent.`,
+        );
+      }
+      continue;
+    }
+    result[wireKey] = value;
   }
   return result;
 }
