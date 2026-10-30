@@ -7,7 +7,6 @@ import {
 import { deepFreeze } from "../hooks/hook-settings.js";
 import { emitSubEvent } from "../turn-executor/turn-runtime-helpers.js";
 import { saveAutoSnapshot } from "../snapshot/auto-snapshot.js";
-import { finalizeSuspendedJobStatuses } from "../job-status/job-status.js";
 import {
   applyIsolatedRuntimes,
   finalizeExecution,
@@ -110,16 +109,6 @@ export async function commitExecution(
     plan.results,
     outcome.isolatedRuntimes,
   ).some((result) => result.status === "suspended");
-  if (plan.resumedExecution && !suspended) {
-    // The suspended execution's progress jobs end with the resume that
-    // completed it; a failed resume leaves them waiting for the retry, and
-    // one that suspends again leaves them to the next resume.
-    await finalizeSuspendedJobStatuses(
-      { store, ...(eventBus ? { eventBus } : {}) },
-      { sessionId, ...plan.resumedExecution },
-      "success",
-    );
-  }
   if (completion.kind === "resume" && !suspended) {
     try {
       emitSubEvent(eventBus, "game", "turn.resumed", sessionId, {

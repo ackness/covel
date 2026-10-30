@@ -22,7 +22,12 @@ import {
   createPluginRegistry,
   type PluginRegistry,
 } from "@covel/plugin-loader";
-import type { ExecutionContext, RuntimeManifest } from "@covel/shared";
+import type {
+  DeferredRuntimeJob,
+  ExecutionContext,
+  RuntimeManifest,
+} from "@covel/shared";
+import type { FunctionHandler } from "@covel/shared/plugin-runtime";
 import {
   createHookPipeline,
   createToolExecutor,
@@ -31,6 +36,7 @@ import {
 import { suspendTool } from "@covel/tools";
 import { makeErrorHandler } from "../../src/api-error.js";
 import { resumeRoutes } from "../../src/routes/api/resume.js";
+import { listRuntimeJobs } from "../../src/routes/api/plugin-rpc/jobs.js";
 import {
   SessionLockTimeoutError,
   createInProcessSessionLock,
@@ -140,6 +146,7 @@ async function createSuspension(
     executionContext: ExecutionContext;
     takenUnder: SuspensionRecord["pendingContinuation"]["takenUnder"];
     pendingProposals: SuspensionRecord["pendingContinuation"]["pendingProposals"];
+    withheldRuntimeJobs: readonly DeferredRuntimeJob[];
   }>,
 ) {
   const suspension = {
@@ -178,6 +185,9 @@ async function createSuspension(
       pendingProposals: overrides?.pendingProposals ?? [],
       ...(overrides?.executionContext
         ? { executionContext: overrides.executionContext }
+        : {}),
+      ...(overrides?.withheldRuntimeJobs
+        ? { withheldRuntimeJobs: overrides.withheldRuntimeJobs }
         : {}),
       suspendToolCallId: "tc-suspend-1",
     },
@@ -229,10 +239,44 @@ const TEST_MANIFEST: RuntimeManifest = {
   ],
 };
 
+/** A detached runtime of the same plugin, for a job the suspended turn held back. */
+const HELD_BACK_MANIFEST: RuntimeManifest = {
+  name: "test-plugin/later",
+  pluginId: "test-plugin",
+  description: "Detached follow-up fixture",
+  runtimeType: "function",
+  stage: "post-turn",
+  outputKind: "system",
+  trigger: { type: "auto" },
+  turnCompletion: { mode: "detached" },
+};
+
+function heldBackJob(): DeferredRuntimeJob {
+  return {
+    jobId: "held-back-job",
+    runtimeId: HELD_BACK_MANIFEST.name,
+    pluginId: HELD_BACK_MANIFEST.pluginId,
+    sourceTurnId: "turn-1",
+    sourceExecutionId: "execution-before-suspend",
+    sourceExecutionStartedAt: "2026-10-29T00:00:00.000Z",
+    turnDigest: {
+      turnId: "turn-1",
+      playerMessage: "",
+      actions: [],
+      lastPlayerInput: null,
+      narrativeText: "",
+      toolCallSummaries: [],
+      runtimeResults: [],
+    },
+    upstreamResults: [],
+  };
+}
+
 function makeDefaultDeps(
   store: DataStore,
   overrides?: Partial<Deps>,
   manifest: RuntimeManifest = TEST_MANIFEST,
+  others: readonly RuntimeManifest[] = [],
 ): Deps {
   const pluginRegistry = createPluginRegistry();
   // Register the test plugin so resume route can find the runtime manifest
@@ -262,14 +306,12 @@ function makeDefaultDeps(
       promptTemplate: "",
       rawFrontmatter: {},
     },
-    manifests: [
-      {
-        runtime: {},
-        manifest,
-        promptTemplate: "Test prompt",
-        rawFrontmatter: {},
-      },
-    ],
+    manifests: [manifest, ...others].map((declared) => ({
+      runtime: {},
+      manifest: declared,
+      promptTemplate: "Test prompt",
+      rawFrontmatter: {},
+    })),
     loadedRuntimes: new Map(),
     status: "registered",
   });
@@ -1105,7 +1147,7 @@ describe("Resume Routes", () => {
         phase: "playing",
         completedPlayerTurns: 1,
       });
-      await createSuspension(store);
+      await createSuspension(store, { withheldRuntimeJobs: [heldBackJob()] });
       let replies = 0;
       const app = createTestApp(
         makeDefaultDeps(
@@ -1147,6 +1189,7 @@ describe("Resume Routes", () => {
             }) as never,
           },
           { ...TEST_MANIFEST, tools: { builtin: ["suspend"] } },
+          [HELD_BACK_MANIFEST],
         ),
       );
       const resume = (id: string, data: Record<string, string>) =>
@@ -1174,8 +1217,14 @@ describe("Resume Routes", () => {
       expect(nextId).toBeDefined();
       expect(nextId).not.toBe("susp-1");
       expect(await openIds()).toEqual([nextId]);
-      // The logical turn is still open while the runtime waits again.
+      // The logical turn is still open while the runtime waits again, and
+      // the job it held back stays held back with the new record.
       expect((await store.getSession("sess-1"))?.completedPlayerTurns).toBe(1);
+      expect(await listRuntimeJobs(store, { sessionId: "sess-1" })).toEqual([]);
+      expect(
+        (await store.getSuspension(nextId!))?.pendingContinuation
+          .withheldRuntimeJobs,
+      ).toEqual([heldBackJob()]);
 
       const stale = await resume("susp-1", { name: "Alice" });
       expect(stale.status).toBe(409);
@@ -1188,6 +1237,79 @@ describe("Resume Routes", () => {
       };
       expect(secondBody.result.status).toBe("success");
       expect(await openIds()).toEqual([]);
+      expect((await store.getSession("sess-1"))?.completedPlayerTurns).toBe(2);
+      expect(
+        (await listRuntimeJobs(store, { sessionId: "sess-1" })).map(
+          (job) => job.jobId,
+        ),
+      ).toEqual(["held-back-job"]);
+    });
+
+    it("queues a function chain's held-back job once, when the chain ends", async () => {
+      await store.updateSession("sess-1", {
+        phase: "playing",
+        completedPlayerTurns: 1,
+      });
+      await createSuspension(store, { withheldRuntimeJobs: [heldBackJob()] });
+      const asker: RuntimeManifest = {
+        ...TEST_MANIFEST,
+        runtimeType: "function",
+        outputKind: "system",
+      };
+      const handler: FunctionHandler = async (ctx) =>
+        ctx.resumedFromSuspensionId === "susp-1"
+          ? {
+              outcome: "suspended",
+              reason: "Need a surname too",
+              resumeSchema: {
+                type: "object",
+                properties: { surname: { type: "string" } },
+                required: ["surname"],
+              },
+            }
+          : { outcome: "success", value: { content: "Answered." } };
+      const app = createTestApp(
+        makeDefaultDeps(
+          store,
+          {
+            loadRuntimeFn: async () =>
+              ({ manifest: asker, promptTemplate: "", handler }) as never,
+          },
+          asker,
+          [HELD_BACK_MANIFEST],
+        ),
+      );
+      const resume = (id: string, data: Record<string, string>) =>
+        app.request(`/api/sessions/sess-1/suspensions/${id}/resume`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-Provider-Keys": "dGVzdA==",
+          },
+          body: JSON.stringify({ data }),
+        });
+      const queued = async () =>
+        (await listRuntimeJobs(store, { sessionId: "sess-1" })).map(
+          (job) => job.jobId,
+        );
+
+      const first = await resume("susp-1", { name: "Alice" });
+      expect(first.status).toBe(200);
+      const firstBody = (await first.json()) as {
+        result: { status: string; output?: { suspensionId?: string } };
+      };
+      expect(firstBody.result.status).toBe("suspended");
+      const nextId = firstBody.result.output?.suspensionId;
+      expect(nextId).toBeDefined();
+      expect(await queued()).toEqual([]);
+      expect((await store.getSession("sess-1"))?.completedPlayerTurns).toBe(1);
+
+      const second = await resume(nextId!, { surname: "Liddell" });
+      expect(second.status).toBe(200);
+      expect(
+        ((await second.json()) as { result: { status: string } }).result.status,
+      ).toBe("success");
+      expect(await queued()).toEqual(["held-back-job"]);
       expect((await store.getSession("sess-1"))?.completedPlayerTurns).toBe(2);
     });
 

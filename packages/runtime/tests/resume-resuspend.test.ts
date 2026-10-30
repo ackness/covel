@@ -395,6 +395,94 @@ describe("a function that suspends again on resume", () => {
       }
     });
 
+    it("leaves every leg's jobs waiting for input while the chain is suspended", async () => {
+      const f = await session();
+      const { first } = await resuspended(f);
+      const states = await finalStates(
+        f,
+        first.pendingContinuation.executionContext.executionId,
+      );
+      expect([...states.keys()].sort()).toEqual(["job-0", "job-1"]);
+      for (const [jobId, history] of states)
+        expect(history.at(-1), jobId).toBe("waiting-input");
+    });
+
+    it("takes back a leg's claimed success when its resume commit rolls back", async () => {
+      const f = await session();
+      let firstId: string | undefined;
+      const deps = handlerDeps(f, async (ctx) => {
+        if (ctx.resumedFromSuspensionId === undefined) {
+          await ctx.progress!.report({
+            jobId: "asked",
+            state: "running",
+            sequence: 1,
+          });
+          return {
+            outcome: "suspended",
+            reason: "question",
+            resumeSchema: { type: "object" },
+          };
+        }
+        expect(ctx.resumedFromSuspensionId).toBe(firstId);
+        await ctx.progress!.report({
+          jobId: "answered",
+          state: "succeeded",
+          sequence: 1,
+        });
+        await ctx.pluginData!.set("notes", "answer", "saved");
+        return { outcome: "success", value: {} };
+      });
+      const execution = await executeTurn(input, [asker], deps());
+      await commitExecution({
+        store: f.store,
+        eventBus: f.eventBus,
+        execution,
+        completion: { kind: "turn", turnId: input.turnId, durationMs: 0 },
+      });
+      const [first] = await pending(f);
+      firstId = first!.id;
+      const executionId =
+        first!.pendingContinuation.executionContext.executionId;
+
+      const resumed = await resumeSuspendedRuntime(first!, {}, asker, deps(), {
+        activeRuntimes: [asker],
+      });
+      const rejected = await commitExecution({
+        store: f.store,
+        eventBus: f.eventBus,
+        execution: structuredClone(resumed),
+        extraInTx: async () => {
+          throw new Error("commit rejected");
+        },
+        completion: {
+          kind: "resume",
+          turnId: first!.turnId,
+          suspensionId: first!.id,
+          pluginId: first!.pluginId,
+          runtimeId: first!.runtimeId,
+        },
+      });
+      expect(rejected.status).toBe("failed");
+      expect(await f.store.listPluginData(SESSION, "probe", "notes")).toEqual(
+        [],
+      );
+      // The suspension stays open, so its jobs wait for the retry.
+      expect((await pending(f)).map((record) => record.id)).toEqual([
+        first!.id,
+      ]);
+      let states = await finalStates(f, executionId);
+      expect(states.get("asked")?.at(-1)).toBe("waiting-input");
+      expect(states.get("answered")).toEqual(["succeeded", "waiting-input"]);
+
+      const retried = await resumeSuspendedRuntime(first!, {}, asker, deps(), {
+        activeRuntimes: [asker],
+      });
+      expect((await commitResume(f, retried, first!)).status).toBe("committed");
+      states = await finalStates(f, executionId);
+      expect(states.get("asked")?.at(-1)).toBe("succeeded");
+      expect(states.get("answered")?.at(-1)).toBe("succeeded");
+    });
+
     it("cancels every leg's jobs when the chain is abandoned", async () => {
       const f = await session();
       const { first, second } = await resuspended(f);

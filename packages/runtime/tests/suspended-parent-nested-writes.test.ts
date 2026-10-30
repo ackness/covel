@@ -95,13 +95,28 @@ function parentHandler(suspends: boolean): FunctionHandler {
   };
 }
 
+/** The child's output schema, for a child that records its output as an export. */
+const childSchema = {
+  type: "object",
+  properties: { content: { type: "string" } },
+  required: ["content"],
+};
+
 async function fixture(
   options: {
     readonly suspends?: boolean;
     readonly child?: FunctionHandler;
     readonly hookPipeline?: HookPipeline;
+    /** The child declares `output.recordAs` and loads with an output schema. */
+    readonly exportingChild?: boolean;
   } = {},
 ) {
+  const childRuntime = options.exportingChild
+    ? manifest("child", {
+        output: { recordAs: "pick", schema: "./output.json" },
+      })
+    : child;
+  const runtimes = [parent, childRuntime];
   const store = createMemoryStore();
   await store.createSession({
     id: SESSION,
@@ -125,9 +140,14 @@ async function fixture(
       traces.push({ type, payload });
     },
   } as unknown as TurnEmitter;
+  const childRuns = { count: 0 };
+  const childBody = options.child ?? childHandler;
   const handlers: Record<string, FunctionHandler> = {
     [parent.name]: parentHandler(options.suspends ?? true),
-    [child.name]: options.child ?? childHandler,
+    [child.name]: async (ctx) => {
+      childRuns.count += 1;
+      return childBody(ctx);
+    },
   };
   const deps = {
     store,
@@ -138,6 +158,9 @@ async function fixture(
       manifest: runtime,
       promptTemplate: "",
       handler: handlers[runtime.name],
+      ...(options.exportingChild && runtime.name === child.name
+        ? { outputSchema: childSchema }
+        : {}),
     }),
   };
   const execution = await executeTurn(input, runtimes, deps);
@@ -162,6 +185,8 @@ async function fixture(
   return {
     store,
     deps,
+    runtimes,
+    childRuns,
     traces,
     execution,
     suspension,
@@ -234,6 +259,31 @@ describe("nested writes of a suspended parent", () => {
     });
     expect(await direct.childTriggers()).toBe(1);
     expect(await f.childTriggers()).toBe(await direct.childTriggers());
+  });
+
+  it("publish a restored child's export with its resume, without running the child again", async () => {
+    const f = await fixture({ exportingChild: true });
+    expect(f.childRuns.count).toBe(1);
+    expect(
+      await f.store.getLatestRuntimeExport(SESSION, child.name, "pick"),
+    ).toBeNull();
+
+    const resumed = await resumeSuspendedRuntime(
+      f.suspension!,
+      {},
+      parent,
+      f.deps,
+      { activeRuntimes: f.runtimes },
+    );
+    expect(resumed.result.status).toBe("success");
+    expect(resumed.commit.outputSchemas[child.name]).toEqual(childSchema);
+    expect((await commitResume(f, resumed)).status).toBe("committed");
+    expect(f.childRuns.count).toBe(1);
+    expect(await f.keys()).toEqual(["A", "B"]);
+    expect(
+      (await f.store.getLatestRuntimeExport(SESSION, child.name, "pick"))
+        ?.value,
+    ).toMatchObject({ content: "Pick one" });
   });
 
   it("voids the resume when a nested write's target changed after the suspension", async () => {

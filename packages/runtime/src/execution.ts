@@ -74,6 +74,7 @@ export interface ExecutionCommitPlan extends Pick<
   | "abortReason"
   | "datasetSchemas"
   | "readDependencies"
+  | "progressScopeId"
 > {
   readonly outputSchemas: Readonly<Record<string, Schema>>;
   readonly resolvedSuspensionId?: string;
@@ -82,15 +83,6 @@ export interface ExecutionCommitPlan extends Pick<
    * completes it. The host queues them inside the same commit.
    */
   readonly releasedRuntimeJobs?: readonly DeferredRuntimeJob[];
-  /**
-   * The suspended execution a resume continues. Its progress jobs, left
-   * waiting for input, end with the resume's commit.
-   */
-  readonly resumedExecution?: {
-    readonly executionId: string;
-    readonly pluginId: string;
-    readonly runtimeId: string;
-  };
 }
 
 /** Only `result` is a transport payload. The commit plan stays with the host. */
@@ -440,6 +432,22 @@ export async function resumeSuspendedRuntime(
         results.some((nested) => nested.runtimeId === runtime.name),
     ),
   ];
+  // Restored nested results ran in an earlier leg, so this run never loaded
+  // their runtimes. Load each one that declares an export, without running
+  // its handler, so the commit can validate and publish the child's output.
+  for (const runtime of runtimes) {
+    if (
+      runtime === manifest ||
+      !runtime.output?.recordAs ||
+      captured.outputSchemas[runtime.name]
+    )
+      continue;
+    await captured.deps.loadRuntime(
+      runtime,
+      suspension.pendingContinuation.locale,
+      suspension.sessionId,
+    );
+  }
   const setup = await resumedSetupState({
     store: deps.store,
     suspension,
@@ -480,11 +488,9 @@ export async function resumeSuspendedRuntime(
         ...(setup.setupRan ? { setupRan: setup.setupRan } : {}),
         resolvedSuspensionId: suspension.id,
         writeBaseline: suspension.pendingContinuation.takenUnder.writes,
-        resumedExecution: {
-          executionId: inherited.executionId,
-          pluginId: suspension.pluginId,
-          runtimeId: suspension.runtimeId,
-        },
+        // Every leg reports progress under the suspended execution; this
+        // leg's own identity stays in `executionContext`.
+        progressScopeId: inherited.executionId,
         ...(releasedRuntimeJobs?.length ? { releasedRuntimeJobs } : {}),
       }),
       outputSchemas: captured.outputSchemas,
