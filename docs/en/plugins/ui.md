@@ -425,6 +425,8 @@ Validation and errors:
 
 A form can be answered only once. If the player opens the game again in another browser tab or on another device, a form that was already answered shows as answered, with the values it had then.
 
+The built-in Character Creator additionally requires a narrative placeholder for every collected field, keeping edited answers and the echoed opening consistent. This is its own validation; generic `create-form` can still collect structured answers without narrative echo.
+
 To add your own validation rules (for example, two fields must not be the same), or to explain why a form is showing again (`notice`), see `validation` and `notice` in the [Tools reference](../reference/tools.md#create-form).
 
 ## 7. Status the player should see at a glance

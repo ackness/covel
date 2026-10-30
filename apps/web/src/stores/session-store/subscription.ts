@@ -675,6 +675,9 @@ export function useSessionSubscription({
       } else {
         applySubscriptionEvent(event);
       }
+      // Preserve the resume reducer above, then refresh the clock for observers
+      // even when the continuation made no character/dimension writes.
+      if (event.type === "turn.resumed") requestStateRefresh();
     };
 
     const handleConnectionStateChange = (next: ConnectionState): void => {

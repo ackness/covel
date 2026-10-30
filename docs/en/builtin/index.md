@@ -64,7 +64,7 @@ A session may have several player characters. The two narrator plugins follow th
 | Plugin                                                 | What it does                                                              | On by default |
 | ------------------------------------------------------ | ------------------------------------------------------------------------- | ------------- |
 | [Pre-Game Setup](./world.md) `pregame`                 | Collects the player's choices when a game starts                          | Yes           |
-| [Character Creator](./world.md) `char-creator`         | Creates the player character, and updates characters during play          | Yes           |
+| [Character Creator](./world.md) `char-creator`         | Creates the protagonist from form answers and updates character state     | Yes           |
 | [Character Profiles](./world.md) `character-blueprint` | Holds the characters and portraits the world provides                     |               |
 | [World Dimensions](./world.md) `world-init`            | Prepares character attributes and dimensions, and updates dimension state | Yes           |
 | [World Time](./world.md) `world-time`                  | Time passing, day and night, and a rules summary                          | Yes           |
@@ -75,10 +75,10 @@ A session may have several player characters. The two narrator plugins follow th
 
 ### Stage and sound
 
-| Plugin                                  | What it does                                          | On by default |
-| --------------------------------------- | ----------------------------------------------------- | ------------- |
-| [Scene Stage](./stage.md) `scene-stage` | Records the current scene and the characters on stage |               |
-| [Soundtrack](./stage.md) `soundtrack`   | Plays the world's own music for each scene            |               |
+| Plugin                                  | What it does                                           | On by default |
+| --------------------------------------- | ------------------------------------------------------ | ------------- |
+| [Scene Stage](./stage.md) `scene-stage` | Updates scenes and cast as the player changes location |               |
+| [Soundtrack](./stage.md) `soundtrack`   | Plays the world's own music for each scene             |               |
 
 ## The four built-in worlds
 

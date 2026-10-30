@@ -7,11 +7,17 @@
  */
 
 import { labelText, makeProposal } from "@covel/plugin-handlers-utils";
+import { createHash } from "node:crypto";
 
 export const SCENES_NS = "scenes";
 export const REGISTRY_KEY = "scene-registry";
 export const STAGE_NS = "stage";
 export const STAGE_KEY = "current";
+
+/** One identity for an unregistered location in previews and committed state. */
+export function sceneIdForLocation(location) {
+  return `loc-${createHash("sha256").update(location, "utf8").digest("hex").slice(0, 8)}`;
+}
 
 /**
  * The backdrop source's name in every language the plugin ships. Only the

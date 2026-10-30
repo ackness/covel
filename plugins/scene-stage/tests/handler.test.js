@@ -48,11 +48,13 @@ function makeCtx({
   timeOfDay = "day",
   registry = REGISTRY,
   previous = null,
+  direction = null,
   noTriggerEvent = false,
 } = {}) {
   const get = vi.fn(async (namespace, key) => {
     if (namespace === "scenes" && key === "scene-registry") return registry;
     if (namespace === "stage" && key === "current") return previous;
+    if (namespace === "direction" && key === "current") return direction;
     return null;
   });
   return {
@@ -71,6 +73,41 @@ function makeCtx({
 // The handler returns the canonical HandlerResult; the business value (stage /
 // skipped marker) is under `getToolContent(result).value`.
 describe("scene-stage resolver handler", () => {
+  it("clears existing actors atomically with a change of location", async () => {
+    const result = await handler(
+      makeCtx({
+        location: "图书馆",
+        previous: { sceneId: "classroom", variant: "day", source: "world" },
+        direction: {
+          schemaVersion: 1,
+          actors: [{ characterId: "rin", displayName: "凛" }],
+        },
+      }),
+    );
+    expect(
+      getPendingProposals(result).map(({ payload }) => ({
+        namespace: payload.namespace,
+        value: payload.value,
+      })),
+    ).toMatchObject([
+      { namespace: "stage", value: { sceneId: "library" } },
+      { namespace: "direction", value: { actors: [], turnId: "turn-1" } },
+    ]);
+  });
+
+  it("preserves actors across a day/night change at the same location", async () => {
+    const result = await handler(
+      makeCtx({
+        location: "二年 B 组教室",
+        timeOfDay: "night",
+        previous: { sceneId: "classroom", variant: "day", source: "world" },
+        direction: { actors: [{ characterId: "rin", displayName: "凛" }] },
+      }),
+    );
+    expect(getPendingProposals(result)).toHaveLength(1);
+    expect(getPendingProposals(result)[0].payload.namespace).toBe("stage");
+  });
+
   it("1. exact name match writes stage/current with source=world", async () => {
     const ctx = makeCtx({ location: "二年 B 组教室", timeOfDay: "day" });
     const result = await handler(ctx);

@@ -76,7 +76,8 @@ for (const community of [false, true]) {
                   { type: "text", name: "persona", label: "Personality" },
                 ],
                 submitBehavior: { echoFilledNarrative: true },
-                narrativeTemplate: "{{characterName}} begins.",
+                narrativeTemplate:
+                  "{{characterName}} begins, feeling {{persona}}.",
               }),
             },
           ],

@@ -19,6 +19,8 @@
 
 ## 数据与行为
 
+实际 `sceneId` 变化时，resolver 与背景一起提交已有 `direction/current` 的空演员记录；direction 通过 `after` 在其后应用新登场指令。预览采用相同顺序，包括未登记地点的稳定场景 ID。同一地点的昼夜与别名变化不重置演员。世界从未产生 direction 时仍用 cast；已有 direction 而新地点没有登场指令时显示空立绘。
+
 - `scenes` namespace（`contributes.data.scenes`，接收 `stage.scenes@1`）：从世界包导入的场景注册表，key 为固定值 `scene-registry`，一行文档即整份 registry。
 - `stage/current`：解析后的当前场景状态（场景 id、名称、昼夜变体、来源、日/夜 `MediaRef`、解析后的展示图）。命中注册表时写入 `source: "world"`；未命中时写入 `source: "none"`，舞台回退到世界头图。同时写入 `sourceLabel`（`I18nText`，`source` 的展示文案，例如 `none` → "无背景"）与 `variantLabel`（`I18nText`，昼夜文案）供只读面板直接渲染——json-render spec 不支持按枚举值条件选文案，翻译需在 handler 侧算好（对齐 cast runtime 的 `signalView()`/`reasonLabel` 做法）。
 - `active-cast/current`：cast runtime 每回合写入的当前说话人（`speakers[]`，含打分信号及其 `signalViews` 文案）。`stage.cast@1` 的 `cast` 槽位（order 0）由它投影，并保留上一轮演员直到出现新选择。

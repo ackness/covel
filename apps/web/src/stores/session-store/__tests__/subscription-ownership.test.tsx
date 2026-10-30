@@ -251,7 +251,7 @@ it("recovers once when a reconnect opens with a stale-cursor reset", async () =>
 
   // A reset after live traffic still means events were missed.
   await act(async () => {
-    streams[0]!.emit(event("turn.resumed"));
+    streams[0]!.emit(event("runtime.started"));
     streams[0]!.emit(event("system.reset"));
   });
   expect(api.getSessionView).toHaveBeenCalledTimes(2);
@@ -407,6 +407,39 @@ function expectSnapshotReadsOnly(views: number) {
   expect(api.getWorld).not.toHaveBeenCalled();
   expect(api.listSuspensions).not.toHaveBeenCalled();
 }
+
+it("refreshes an observer's clock when a resumed turn has no domain writes", async () => {
+  api.getSessionView.mockResolvedValue({
+    session: { ...session, completedPlayerTurns: 2 },
+    messages: [],
+    characters: [],
+    executionSteps: [],
+    submittedInteractions: [],
+    execution: { state: "idle" },
+  });
+  const { streams, options } = setup();
+  options.dispatch.mockImplementation((action) => {
+    options.stateRef.current = reducer(options.stateRef.current, action);
+  });
+  await act(async () => {
+    streams[0]!.emit({
+      ...event("turn.suspended"),
+      payload: { suspensionId: "form", turnId: "turn", runtimeId: "r" },
+    });
+  });
+  expect(options.stateRef.current.suspensions.map((item) => item.id)).toEqual([
+    "form",
+  ]);
+  await act(async () => {
+    streams[0]!.emit({
+      ...event("turn.resumed"),
+      payload: { suspensionId: "form", turnId: "turn", sessionId: session.id },
+    });
+  });
+  expectSnapshotReadsOnly(1);
+  expect(options.stateRef.current.session?.completedPlayerTurns).toBe(2);
+  expect(options.stateRef.current.suspensions).toEqual([]);
+});
 
 it("reads only the snapshot for committed state and shows what a turn changed", async () => {
   const committed = {

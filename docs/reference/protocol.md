@@ -596,6 +596,8 @@ Gemini 原生的思考强度、`providerOptions.google.thinkingConfig`、`cached
 | `turn.suspended` | S→C  | runtime 创建 suspension artifact；`finalizeExecution` 将记录与同一 execution 的写入提交成功后才发出。回滚不保留记录也不发事件。同一个 runtime 的旧挂起项在这次提交里作废，不另发事件，客户端收到后去掉它。恢复的 runtime 再次挂起时也发出，这时不发 `turn.resumed` | `{ sessionId, turnId, suspensionId, pluginId, runtimeId, suspendedAt, reason, resumeSchema }` |
 | `turn.resumed`   | S→C  | suspension 资源的 `resume` 动作成功后由路由发出                                                                                                                                                                                                                    | `{ sessionId, turnId, suspensionId }`                                                         |
 
+收到 `turn.resumed` 的订阅客户端还会读取权威会话快照，即使这次恢复没有角色或维度写入，也能更新已提交回合数。切换会话后或较新状态发布前发起的迟到读取不会覆盖当前状态。
+
 ### Snapshot / Fork 事件
 
 所有 snapshot 事件由服务端通过 eventBus 广播（topic 是 `session`）。SSE 的命名事件名取自 payload 的 `_subType`。
