@@ -276,7 +276,7 @@ Observations from a reconnect and from execution recovery keep the loaded histor
 - Taking over a narrative in a terminal state clears only the streaming buffer of the matching turn and runtime. A newer, healthy POST stream still takes precedence.
 - An explicit reload of the plugin directory shares the same provider resource ownership and the same access generation check as restore and reconnect reads.
 
-A cached state patch fills the initial state only **before any authoritative snapshot arrives**. An authoritative snapshot, even an empty one, prevents deleted fields from being restored from the cache. Incremental character updates change the reducer state directly.
+Session state is restored from authoritative snapshots. Incremental character updates change the reducer state directly.
 
 ### Remote Deletion
 
@@ -326,7 +326,6 @@ Committed form block IDs and form values are merged in one IndexedDB read-write 
 - When a version change notice arrives, the handle is closed and released so that a delete or an upgrade can proceed. It does not delete data, and it does not replay failed operations automatically.
 - A blocked open fails immediately and does not wait forever. While the native request is still blocked, later calls reuse this failure instead of queuing a new open. An upgrade that is later abandoned is aborted, or its handle is closed.
 - On error, the app KV reports the error. The render cache falls back to an authorized network response.
-- A failure to persist a patch is returned to the caller. The SSE consumer reports it as a "best-effort display cache failure", and it does not change the committed game result.
 
 ### Render Blob Cache
 
@@ -508,7 +507,7 @@ MemoryStore, SQLite, PostgreSQL and browser checkpoints all keep these identitie
 - The snapshot builder collects JSON-serialized data: properties whose value is undefined are omitted, and the live records in MemoryStore are not changed.
 - Checkpoint export validates the stored branch ownership, but it does not repair rows that were historically divided by parent session.
 
-Development caches that contain the old flat state patch need to be rebuilt. There is no compatibility read and no cache migration.
+The old state patch cache remains in IndexedDB but is no longer read and does not need to be rebuilt for this change. The BrowserVault, browser checkpoint, snapshot payload and browser cache versions remain unchanged at 6, 2, 3 and 2, respectively.
 
 **Plugin extension migration.** This migration removed the working-memory table and the character plugin mirror. Memory blocks are now ordinary plugin-owned data. Affected development sessions, snapshots and browser checkpoints must be rebuilt, and old data is not migrated.
 
