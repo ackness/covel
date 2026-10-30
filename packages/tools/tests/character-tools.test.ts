@@ -1010,6 +1010,18 @@ describe("builtin character tools", () => {
       });
     });
 
+    it("reports the closest known name when a character name is misspelled", async () => {
+      await loop.create({ name: "Isolde", type: "npc" });
+      loop.commit();
+
+      await expect(
+        loop.call("get-character", { name: "Isolda" }),
+      ).rejects.toMatchObject({
+        code: "not-found",
+        message: expect.stringContaining("Closest known names: Isolde"),
+      });
+    });
+
     it("reports not-found with correction text when id is missing", async () => {
       await expect(
         loop.call("get-character", { id: "nope" }),

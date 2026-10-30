@@ -77,9 +77,11 @@ describe("session tool definitions", () => {
         properties: { topic: { enum: ["changed.topic"] } },
       });
       env.clearSessionToolOverrides("typed");
-      expect(info("typed")?.jsonSchema).toMatchObject({
-        properties: { topic: { type: "string" } },
-      });
+      const clearedEventSchema = info("typed")?.jsonSchema;
+      expect(clearedEventSchema).toEqual(
+        env.tools.find("emit-event", "probe")!.jsonSchema,
+      );
+      expect(clearedEventSchema).not.toHaveProperty("properties.topic.enum");
       expect(info("typed", "sync-characters")?.jsonSchema).toEqual(
         env.tools.find("sync-characters", "probe")!.jsonSchema,
       );
