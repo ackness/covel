@@ -2,6 +2,7 @@ import { stopOf } from "../agent-loop/stop-reason.js";
 import {
   CONCEALED_FAILURE_MESSAGE,
   isSetupRuntime,
+  type JsonValue,
   type LLMTargetIdentity,
   type RuntimeManifest,
   type RuntimeResult,
@@ -16,7 +17,10 @@ import {
   runPostRuntimeHook,
   runPreRuntimeHook,
 } from "../hooks/wire-helpers.js";
-import { storyOutputError } from "../agent-loop/story-output.js";
+import {
+  normalizeStoryOutput,
+  STORY_EMPTY_ERROR,
+} from "../agent-loop/story-output.js";
 import { withAgentFailureTarget } from "../agent-loop/runtime-completion.js";
 import {
   emitMessageCompleted,
@@ -36,6 +40,39 @@ function unwrapRetryCause(cause: unknown): unknown {
   for (let depth = 0; depth < 8 && current instanceof LLMRetryError; depth++)
     current = current.cause;
   return current;
+}
+
+/**
+ * One story rule for agent, function and guard runtimes, applied after
+ * PostRuntime so a hook rewrite passes the same gate: a success or a
+ * guard-provided story is normalized into segments and its derived
+ * `narrativeOutput` (idempotent), in `output` and in the canonical value when
+ * there is one. A success with no story text fails.
+ */
+function normalizeFinalizedStory(result: RuntimeResult): RuntimeResult {
+  if (isGuardProvided(result)) {
+    const story = normalizeStoryOutput(guardProvidedValue(result.output));
+    return story ? { ...result, output: { skip: true, ...story } } : result;
+  }
+  if (result.status !== "success") return result;
+  const story = normalizeStoryOutput(result.output);
+  if (!story)
+    return {
+      ...result,
+      status: "failed",
+      output: null,
+      error: STORY_EMPTY_ERROR,
+    };
+  const canonical = result.canonicalValue?.value;
+  const canonicalStory =
+    canonical !== undefined ? normalizeStoryOutput(canonical) : undefined;
+  return {
+    ...result,
+    output: story,
+    ...(canonicalStory
+      ? { canonicalValue: { value: canonicalStory as JsonValue } }
+      : {}),
+  };
 }
 
 type FinalizationDeps = Pick<
@@ -129,13 +166,8 @@ export async function finalizeRuntimeResult(
             ? signal.reason.message
             : "Runtime execution was cancelled",
     };
-  } else if (
-    manifest.outputKind === "story" &&
-    finalized.status === "success"
-  ) {
-    const error = storyOutputError(finalized.output);
-    if (error)
-      finalized = { ...finalized, status: "failed", output: null, error };
+  } else if (manifest.outputKind === "story") {
+    finalized = normalizeFinalizedStory(finalized);
   }
   // A hook that turns a failed or skipped result into success must pass the
   // same `output.schema` gate as a normal success. Such a result has no

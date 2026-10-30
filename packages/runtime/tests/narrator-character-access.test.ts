@@ -80,8 +80,16 @@ describe.each(["narrator", "chat-mode-narrator"])(
         expect(text).toContain("二年 A 组");
         expect(text).toContain("吉他手");
         expect(text).not.toContain("PRIVATE OTHER SESSION");
+        // The narrator asks for story segments as its response format.
+        expect(request.responseFormat?.schema).toMatchObject({
+          required: ["segments"],
+        });
         return {
-          content: "夏帆是二年 A 组的吉他手。",
+          content: JSON.stringify({
+            segments: [
+              { kind: "narration", text: "夏帆是二年 A 组的吉他手。" },
+            ],
+          }),
           toolCalls: [],
           finishReason: "stop",
           usage: { inputTokens: 1, outputTokens: 1 },
@@ -110,6 +118,9 @@ describe.each(["narrator", "chat-mode-narrator"])(
         result.runtimeResults[0]?.toolCalls.map((call) => call.toolName),
       ).toContain("get-character");
       expect(generate).toHaveBeenCalledTimes(2);
+      expect(result.runtimeResults[0]?.output).toMatchObject({
+        narrativeOutput: "夏帆是二年 A 组的吉他手。",
+      });
       expect((await store.listCharacters("story"))[0]?.version).toBe(1);
     });
   },

@@ -171,7 +171,6 @@ export type SessionWorldContextOutput = {
 export type UiSlotName =
   | "stage.backdrop@1"
   | "stage.cast@1"
-  | "stage.dialogue@1"
   | "stage.choices@1"
   | "character.visual@1"
   | "session.summary@1"
@@ -206,11 +205,6 @@ export type StageCastModel = {
       "none" | "fade" | "slide-left" | "slide-right" | "dissolve";
   }[];
   readonly retainWhenEmpty: boolean;
-};
-
-export type StageDialogueModel = {
-  readonly turnId?: string;
-  readonly paragraphSpeakers: (string | null)[];
 };
 
 export type StageChoicesModel = {
@@ -304,7 +298,6 @@ export type StageMusicModel = {
 export type UiSlotValue =
   | StageBackdropModel
   | StageCastModel
-  | StageDialogueModel
   | StageChoicesModel
   | CharacterVisualModel
   | CharacterVisualCollectionModel

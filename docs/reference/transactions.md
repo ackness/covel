@@ -184,7 +184,7 @@ compareAndSetPluginDataBatch(
 **故事必须完成。** 故事完成是提交的前提。下面三种情况会在任何缓冲的 proposal、journal 消息或玩家回合计数提交之前，拒绝整次执行的提交：
 
 - `outputKind: story` 的 runtime 失败了。
-- story 的结果成功了，但清理后的 `narrativeOutput` 为空。
+- story 的结果成功了，但按[故事输出](./plugins.md#故事输出)规整后没有正文（没有一段有文字，`narrativeOutput` 为空）。
 - 维度提供者在同一次执行里失败，执行器因此扣住了故事（`dimension-snapshot-unavailable`）。
 
 相关的规则：

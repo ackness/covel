@@ -15,13 +15,17 @@
 ## 数据与行为
 
 - 为对话模式世界生成 `outputKind: story` 的主叙事。
-- 在写正文前通过 `stage.direction` 显式声明每个空行分段的说话人 ID 或 `null` 旁白；正文严格保持相同分段顺序。演员焦点只控制视觉强调，不再用作整轮对白署名。
+- 说话者一变就另起一个段落，段落带说话者名字；舞台名牌来自段落。`stage.direction` 只调整演员登场、离场、站位、造型和聚光，演员焦点只控制视觉强调。
 - 通过 manifest relations 和默认 `narrator` 互斥。
 - 暴露对白占比、回复长度、活跃说话人数等玩家设置。
 
-## 叙事人称
+## 视角
 
-`narrativePerson` 支持 `first`、`second`、`third`，默认 `second`。玩家设置覆盖世界 `pluginSettings` 中的默认值。只调整后续旁白的人称，保留人物对白和玩家自主权；第三人称使用跟随玩家角色的有限视角。
+`perspective` 支持 `character-first`、`character-second`、`character-third`、`omniscient`、`dm`，默认 `character-second`。玩家设置覆盖世界 `pluginSettings` 中的默认值。`character-*` 三种从玩家角色的有限视角讲述，分别用“我”“你”或角色名称呼玩家角色；`omniscient` 是全知第三人称旁白，旁白里不出现“我”和“你”；`dm` 是主持人口吻，可以用“你/你们”称呼玩家，不检查人称。只调整后续旁白，保留人物对白和玩家自主权。
+
+## 故事段落
+
+输出声明 `io.output.schema: contract:narrative-engine@2`，模型以 JSON 返回故事段落（`segments`：`narration`、`dialogue`、`action`，对白和动作带说话者名字），并可在 `cues.present` 列出在场角色。框架把段落文字用空行连接成 `narrativeOutput`，提交时把说话者名字解析成角色，舞台名牌直接读取段落的说话者。格式出错时框架按输出修复预算请求模型改正，只有没有任何正文时才失败。检查草稿时逐段读取段落文字。
 
 ## 开发
 

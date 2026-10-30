@@ -249,7 +249,8 @@ export function formatToolLoopFailure(args: {
   return `Runtime "${args.runtimeId}" ${reasonText}. Last tool failure: ${lastFailure.toolName}${lastFailure.message ? ` - ${lastFailure.message}` : ""}`;
 }
 
-function isMetaChoiceParagraph(paragraph: string): boolean {
+/** A trailing paragraph that offers the player a menu instead of story. */
+export function isMetaChoiceParagraph(paragraph: string): boolean {
   const plain = paragraph.replace(/\*\*/g, "").trim();
   return /^(?:现在，你需要(?:做出选择|做出决定)|你的选择是|你需要决定|你要如何选择|你会怎么做|请选择)/u.test(
     plain,

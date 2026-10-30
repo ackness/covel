@@ -46,7 +46,7 @@
 | 玩家状态量表         | 会话 World Model：`type: "player"` 的角色记录，加角色 schema 里 `category: "stats"`、`type: "number"` 且同时声明 `min` / `max` 的属性；最多 4 项 |
 | 随身物品             | 同一条玩家角色记录里，角色 schema 中 `category: "equipment"`、`type: "array"` 的属性的字符串项，按 schema 顺序合并                               |
 | 在场角色（场景 HUD） | `stage.cast@1` 的未退场演员（最多 3 位）与按角色 ID 取的 `character.visual@1` 头像；没有图时只显示名字                                           |
-| “正在说话”标记       | `stage.dialogue@1` 的 `paragraphSpeakers` 里最后一个有署名的段落；名字与在场演员的 `displayName` 相同才显示                                      |
+| “正在说话”标记       | 最新一条已提交故事里最后一个有说话人的段落；有 `speakerId` 时按角色 ID 匹配在场演员，否则按 `displayName` 匹配；故事还在流式输出时不显示         |
 | 章节横幅             | `backdrop: "banner"` 的布局里，世界头图、世界名和前三个标签，放在第一条消息上方                                                                  |
 | 状态摘要             | `session.summary@1` 槽位：任何插件都可以提供的几行“一眼就该看到”的内容（当前目标、时间、行囊），见下方 [Session summary](#session-summary)       |
 
@@ -676,7 +676,7 @@ guide 分析叙事 → `generate-guide` 写入 `plugin_data[message]`
 | **Backdrop** | `stage.backdrop@1`                                     | 展示背景、场景名称和状态；缺图时使用世界视觉回退   |
 | **Sprites**  | `stage.cast@1` 与按角色 ID 索引的 `character.visual@1` | 站位、高亮、立绘与无图时的占位                     |
 | **Hud**      | `stage.backdrop@1`                                     | 展示名称、变体和来源状态                           |
-| **Dialog**   | 最新 story 正文与 `stage.dialogue@1`                   | 打字、段落切分和逐段署名                           |
+| **Dialog**   | 最新 story 正文与它的 `segments`                       | 打字、段落切分和逐段署名                           |
 | **Choices**  | `stage.choices@1` 与待提交 interaction choice block    | 情境回顾、决策问题、选项（`.ui-choice`）与自由输入 |
 
 **打字与决策面板的切换。**
@@ -702,10 +702,10 @@ guide 分析叙事 → `generate-guide` 写入 `plugin_data[message]`
 
 **对白名牌。**
 
-- 名牌读 `stage.dialogue@1` 的 `paragraphSpeakers`。每项是显示名字符串或 `null`（旁白），不是角色 ID 或对象。提供者负责把自己的数据转成这个形状，见[舞台槽位值](#舞台槽位值)。
-- 同一回合的实时事件可以先预览。旧的已提交映射不会在同一回合重试的流式阶段被复用。
-- 打字机和署名校验共用 `splitStageParagraphs`：CRLF 转成 LF，三个以上的换行算一个空行分隔。正文结束后，分段的数量必须和映射一致。
-- 以下情况不显示人物名牌：旁白、身份未知、旧消息没有映射、回合对不上。演员的焦点不参与署名。
+- 名牌来自已提交故事消息的 `segments`（见 [`narrative-engine@2` 的故事输出](./plugins.md#故事输出)）：每个段落就是一段，名牌是这一段的 `speaker`。内核在提交时把能解析的说话人换成角色的当前名字。没有插件需要为名牌提供数据。
+- 故事流式输出期间没有名牌，提交后才显示。
+- 打字机和署名校验共用 `splitStageParagraphs`：CRLF 转成 LF，三个以上的换行算一个空行分隔。正文结束后，分段的数量必须和段落数一致。
+- 以下情况不显示人物名牌：旁白、没有说话人的段落、没有 `segments` 的旧消息或纯文本故事。演员的焦点不参与署名。
 
 **尺寸与立绘。**
 
@@ -963,7 +963,6 @@ catalog 里的组件不够用时，插件可以带一份自己的 HTML。JSON sp
 
 - `stage.backdrop@1`
 - `stage.cast@1`
-- `stage.dialogue@1`
 - `stage.choices@1`
 - `character.visual@1`
 - `session.summary@1`
@@ -1031,15 +1030,6 @@ catalog 里的组件不够用时，插件可以带一份自己的 HTML。JSON sp
 | `visual`      | `{ variantId?: string, outfit?: string, expression?: string, pose?: string }` | 否   | 请求的立绘变体；四个字段都可省略             |
 | `position`    | `left` / `center-left` / `center` / `center-right` / `right`                  | 否   | 请求的站位                                   |
 | `transition`  | `none` / `fade` / `slide-left` / `slide-right` / `dissolve`                   | 否   | 立绘过渡方式；省略时客户端用 `fade`          |
-
-#### `stage.dialogue@1`
-
-| 字段                | 类型                             | 必填 | 含义                                                                        |
-| ------------------- | -------------------------------- | ---- | --------------------------------------------------------------------------- |
-| `turnId`            | string                           | 否   | 所署名的故事回合。给当前正文署名时应填写它；匹配当前 story 回合时才显示名牌 |
-| `paragraphSpeakers` | `(string \| null)[]`，最多 80 项 | 是   | 逐段的显示名；`null` 表示旁白或不署名                                       |
-
-例如 `{"turnId":"<story-turn-id>","paragraphSpeakers":["Mio",null,"Rin"]}` 表示三段依次由 Mio、旁白、Rin 署名；`turnId` 填当前故事的回合 ID。正文按空行分段，CRLF 先转 LF，三个以上换行折成两个。正文结束时，段落数必须等于数组长度，否则整份映射不显示名牌。实时映射还必须来自当前回合的预览，不能复用重试前的已提交映射。
 
 #### `stage.choices@1`
 

@@ -14,7 +14,14 @@ interface ReviewResponse {
   readonly toolCalls: readonly { readonly name: string }[];
 }
 
-type Person = "first" | "second" | "third";
+/** The `perspective` setting of a narrator that uses this review. */
+export type NarrativePerspective =
+  | "character-first"
+  | "character-second"
+  | "character-third"
+  | "omniscient"
+  | "dm";
+type Person = "first" | "second" | "third" | "omniscient";
 type SettingsContext = {
   getOwnSettings?: () => Readonly<Record<string, unknown>>;
   sessionId?: string;
@@ -29,25 +36,50 @@ type Response<T extends ReviewResponse> = Request & {
   correction?: string;
 };
 
-const perspectives = {
-  first: {
+const perspectives: Record<
+  NarrativePerspective,
+  { readonly zh: string; readonly en: string }
+> = {
+  "character-first": {
     zh: "旁白用玩家角色的第一人称‘我/我的’，不是助手或作者的‘我’。例如：她望着我，雾灯照亮她的袖口。",
     en: "Narrate as the player character in first person (I/me/my), never as the assistant or author. Example: She looks at me; lamplight falls on her sleeve.",
   },
-  second: {
+  "character-second": {
     zh: "旁白用玩家角色的第二人称‘你/你的’。例如：她望着你，雾灯照亮她的袖口。",
     en: "Refer to the player character in second person (you/your). Example: She looks at you; lamplight falls on her sleeve.",
   },
-  third: {
+  "character-third": {
     zh: "旁白用玩家角色名及第三人称代词，保持玩家角色的有限视角，不称玩家为‘我’或‘你’。",
     en: "Refer to the player by character name and third-person pronouns, from that character's limited viewpoint. Do not address the player as I or you.",
   },
-} as const;
+  omniscient: {
+    zh: "旁白是全知的第三人称叙述者：用角色名和第三人称代词称呼每个人物，包括玩家角色；旁白里不出现‘我’或‘你’。",
+    en: "Narrate as an omniscient third-person narrator. Refer to every character, the player character included, by name and third-person pronouns; narration never uses I or you.",
+  },
+  dm: {
+    zh: "以主持人（DM）的口吻向玩家讲述：可以用‘你/你们’称呼玩家，描述场景和非玩家角色的反应，不替玩家做决定。",
+    en: "Narrate as the game master speaking to the players at the table: you may address them as you, describe the scene and the non-player characters' reactions, and never decide for the players.",
+  },
+};
 
-function personFor(ctx: SettingsContext): Person {
-  const value = ctx.getOwnSettings?.().narrativePerson;
-  return value === "first" || value === "third" ? value : "second";
+const PERSPECTIVES = Object.keys(perspectives) as NarrativePerspective[];
+
+function perspectiveFor(ctx: SettingsContext): NarrativePerspective {
+  const value = ctx.getOwnSettings?.().perspective;
+  return (
+    PERSPECTIVES.find((perspective) => perspective === value) ??
+    "character-second"
+  );
 }
+
+/** The pronoun rule a perspective imposes on narration; none for a DM. */
+const personOf: Record<NarrativePerspective, Person | undefined> = {
+  "character-first": "first",
+  "character-second": "second",
+  "character-third": "third",
+  omniscient: "omniscient",
+  dm: undefined,
+};
 
 /** Inspect narration without changing dialogue or the original story text. */
 export function outsideDialogue(text: string): string {
@@ -91,7 +123,12 @@ export function outsideDialogue(text: string): string {
   return openStart >= 0 ? result + text.slice(openStart) : result;
 }
 
-const personNames = { first: "一", second: "二", third: "三" } as const;
+const personNames = {
+  first: { zh: "第一人称", en: "first-person" },
+  second: { zh: "第二人称", en: "second-person" },
+  third: { zh: "第三人称", en: "third-person" },
+  omniscient: { zh: "全知第三人称", en: "omniscient third-person" },
+} as const;
 
 /**
  * Whether the session reads the Chinese prompt body. Every text this review
@@ -100,11 +137,18 @@ const personNames = { first: "一", second: "二", third: "三" } as const;
 const readsChinese = (ctx: SettingsContext): boolean =>
   instructionLocaleFor(ctx.locale) === "zh";
 
+/**
+ * Where narration in `text` breaks the perspective's pronoun rule, as a
+ * correction for the model; undefined when it keeps the rule. Quoted speech
+ * is never checked. A `dm` perspective has no pronoun rule.
+ */
 export function perspectiveError(
   text: string,
-  person: Person,
+  perspective: NarrativePerspective,
   language: "zh" | "en" = "en",
 ): string | undefined {
+  const person = personOf[perspective];
+  if (!person) return undefined;
   const narration = outsideDialogue(text).replace(
     /自我|忘我|无我|你来我往|尔虞我诈|迷你/g,
     "",
@@ -112,7 +156,7 @@ export function perspectiveError(
   const forbidden =
     person === "first"
       ? /[你妳您]|\b(?:you|your|yours|yourself|yourselves)\b/iu
-      : person === "third"
+      : person === "third" || person === "omniscient"
         ? /[我你妳您]|\b(?:I|me|my|mine|myself|we|us|our|ours|you|your|yours)\b/iu
         : /我|\b(?:I|me|my|mine|myself)\b/iu;
   const match = narration.match(forbidden);
@@ -120,8 +164,54 @@ export function perspectiveError(
   const start = Math.max(0, (match.index ?? 0) - 18);
   const near = narration.slice(start, start + 65);
   return language === "zh"
-    ? `旁白在这里违反了第${personNames[person]}人称视角：${near}。只改旁白；引号里说话者的人称保持不变。`
-    : `Narration violates ${person}-person perspective near: ${near}. Fix narration only; keep quoted speakers' pronouns.`;
+    ? `旁白在这里违反了${personNames[person].zh}视角：${near}。只改旁白；引号里说话者的人称保持不变。`
+    : `Narration violates ${personNames[person].en} perspective near: ${near}. Fix narration only; keep quoted speakers' pronouns.`;
+}
+
+const QUOTE_MARK = /["'“”‘’「」『』«»]/u;
+
+/**
+ * The texts of a segmented story draft (JSON with a `segments` array), each
+ * as the review reads it, or undefined for a prose draft. A dialogue text
+ * with no quotation mark at all is spoken words only and is not checked.
+ */
+function storyDraftTexts(text: string): string[] | undefined {
+  const stripped = text
+    .trim()
+    .replace(/^```(?:json)?\s*\n?/i, "")
+    .replace(/\n?```\s*$/i, "");
+  if (!stripped.startsWith("{")) return undefined;
+  let draft: unknown;
+  try {
+    draft = JSON.parse(stripped);
+  } catch {
+    return undefined;
+  }
+  const segments =
+    draft && typeof draft === "object" && !Array.isArray(draft)
+      ? (draft as { segments?: unknown }).segments
+      : undefined;
+  if (!Array.isArray(segments)) return undefined;
+  return segments.flatMap((segment: unknown) => {
+    if (!segment || typeof segment !== "object") return [];
+    const { kind, text: value } = segment as { kind?: unknown; text?: unknown };
+    if (typeof value !== "string") return [];
+    return kind === "dialogue" && !QUOTE_MARK.test(value) ? [] : [value];
+  });
+}
+
+/** The first perspective problem of a prose or segmented draft. */
+function draftPerspectiveError(
+  text: string,
+  perspective: NarrativePerspective,
+  language: "zh" | "en",
+): string | undefined {
+  const texts = storyDraftTexts(text) ?? [text];
+  for (const value of texts) {
+    const error = perspectiveError(value, perspective, language);
+    if (error) return error;
+  }
+  return undefined;
 }
 
 /** Plugin-owned policy using the same public hooks available to community packages. */
@@ -155,7 +245,10 @@ export function createNarrativeReview(pluginId: string) {
     prepare(ctx: SettingsContext, payload: Request) {
       if (ctx.pluginId !== pluginId) return { action: "continue" as const };
       const zh = readsChinese(ctx);
-      const player = players.get(keyFor(ctx));
+      const perspective = perspectiveFor(ctx);
+      // An omniscient narrator follows no one character.
+      const player =
+        perspective === "omniscient" ? undefined : players.get(keyFor(ctx));
       const playerLine = !player
         ? ""
         : zh
@@ -163,7 +256,7 @@ export function createNarrativeReview(pluginId: string) {
           : `Player character: ${JSON.stringify(player)}. `;
       const instruction =
         playerLine +
-        perspectives[personFor(ctx)][zh ? "zh" : "en"] +
+        perspectives[perspective][zh ? "zh" : "en"] +
         (zh
           ? " 人物直接对白保留说话者人称。不要复述玩家输入、替玩家添加行动或内心想法。查询工具时只调用工具，不输出准备说明；工具返回后直接写场景，不写核对档案或写作过程。"
           : " Quoted dialogue keeps each speaker's perspective. Do not restate the player's input or add player actions/thoughts. During lookups call tools without preparation chatter; afterward write the scene directly, with no lookup or writing commentary.");
@@ -213,7 +306,11 @@ export function createNarrativeReview(pluginId: string) {
                 : zh
                   ? "只输出游戏内的故事正文。去掉内部指令标签和说明文字。"
                   : "Output only the in-world story. Remove internal instruction tags and commentary.",
-              perspectiveError(text, personFor(ctx), zh ? "zh" : "en"),
+              draftPerspectiveError(
+                text,
+                perspectiveFor(ctx),
+                zh ? "zh" : "en",
+              ),
             ]
               .filter(Boolean)
               .join("\n"));

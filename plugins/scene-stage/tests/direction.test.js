@@ -179,66 +179,32 @@ describe("scene-stage direction handler", () => {
     expect(getPendingProposals(result)).toHaveLength(0);
   });
 
-  it("persists paragraph speakers and narration independently of actor focus", async () => {
+  it("updates the cast from cues alone and writes no dialogue attribution", async () => {
     const ctx = makeCtx([
       { type: "actor.enter", character: "神代澪", focus: true },
     ]);
-    ctx.triggerEvent.data.dialogue = {
-      paragraphSpeakers: [
-        "sess-npc-kamishiro-mio",
-        "sess-npc-asakura-rin",
-        null,
-      ],
-    };
     const result = await handler(ctx);
-    const dialogue = getPendingProposals(result).find(
-      (proposal) => proposal.payload.namespace === "dialogue",
-    );
-    expect(dialogue.payload).toEqual({
-      namespace: "dialogue",
+    const proposals = getPendingProposals(result);
+    expect(proposals).toHaveLength(1);
+    expect(proposals[0].payload).toMatchObject({
+      namespace: "direction",
       key: "current",
       value: {
-        schemaVersion: 1,
-        turnId: "turn-1",
-        paragraphSpeakers: [
-          { characterId: "sess-npc-kamishiro-mio", displayName: "神代澪" },
-          { characterId: "sess-npc-asakura-rin", displayName: "朝仓凛" },
-          null,
+        actors: [
+          expect.objectContaining({
+            characterId: "sess-npc-kamishiro-mio",
+            active: true,
+          }),
         ],
       },
     });
+    expect(getToolContent(result).value).not.toHaveProperty("dialogue");
   });
 
-  it("accepts dialogue-only events without clearing the stage or guessing names", async () => {
-    const ctx = makeCtx([]);
-    ctx.triggerEvent.data.dialogue = {
-      paragraphSpeakers: ["凛", "missing", null],
-    };
-    const result = await handler(ctx);
-    expect(getPendingProposals(result)).toHaveLength(1);
-    expect(getPendingProposals(result)[0].payload).toMatchObject({
-      namespace: "dialogue",
-      value: { paragraphSpeakers: [null, null, null] },
-    });
-    expect(getToolContent(result).value.diagnostics).toHaveLength(2);
-  });
-
-  it("names the turn in the attribution and supports the player as a speaker", async () => {
-    const ctx = makeCtx([]);
-    ctx.turnId = "turn-2";
-    ctx.world.characters = [
-      ...CHARACTERS,
-      { id: "player-1", name: "Alex", type: "player" },
-    ];
-    ctx.triggerEvent.data.dialogue = { paragraphSpeakers: ["player-1"] };
-    const result = await handler(ctx);
-    expect(getPendingProposals(result)[0].payload).toMatchObject({
-      key: "current",
-      value: {
-        turnId: "turn-2",
-        paragraphSpeakers: [{ characterId: "player-1", displayName: "Alex" }],
-      },
-    });
+  it("skips an event without cues", async () => {
+    const result = await handler(makeCtx([]));
+    expect(getToolContent(result).value).toMatchObject({ skipped: true });
+    expect(getPendingProposals(result)).toHaveLength(0);
   });
 });
 
@@ -250,24 +216,17 @@ describe("stage.direction event schema", () => {
     ),
   );
 
-  it("allows legacy actor events and dialogue-only events but rejects empty events", () => {
+  it("accepts actor cues and rejects empty events and dialogue maps", () => {
     expect(
       validateOutput({ cues: [{ type: "stage.clear" }] }, schema).valid,
     ).toBe(true);
-    expect(
-      validateOutput(
-        { cues: [], dialogue: { paragraphSpeakers: ["npc-1", null] } },
-        schema,
-      ).valid,
-    ).toBe(true);
     expect(validateOutput({ cues: [] }, schema).valid).toBe(false);
     expect(
-      validateOutput({ cues: [], dialogue: { paragraphSpeakers: [] } }, schema)
-        .valid,
-    ).toBe(false);
-    expect(
       validateOutput(
-        { cues: [], dialogue: { paragraphSpeakers: [123] } },
+        {
+          cues: [{ type: "stage.clear" }],
+          dialogue: { speakers: ["npc-1", null] },
+        },
         schema,
       ).valid,
     ).toBe(false);

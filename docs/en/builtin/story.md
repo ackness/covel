@@ -46,23 +46,25 @@ It is a core plugin (`kind: core`) and the default way to tell the story. The "T
 
 ### What you can change
 
-| Setting          | What it does                                                                                                                                                     | Default             |
-| ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------- |
-| Narrative person | How narration refers to your character: first person (I), second person (you), or third person (the character's name). Dialogue keeps each speaker's own person. | Second person (you) |
+| Setting     | What it does                                                                                                                                                                                                                                                                           | Default                               |
+| ----------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------- |
+| Perspective | Who tells the story and how narration refers to your character: the player character in first person (I), second person (you) or third person (the character's name), an omniscient narrator, or a game master (DM) speaking to the players. Dialogue keeps each speaker's own person. | Player character, second person (you) |
 
 A world can set a default for this setting in `pluginSettings`. Your own setting takes priority.
 
 ### Notes
 
-Once the story is written, its narration is checked for the correct person. If it is wrong, the model is asked to rewrite it, up to two extra model calls. You only see the text after it passes the check.
+Once the story is written, its narration is checked for the correct person. If it is wrong, the model is asked to rewrite it, up to two extra model calls. You only see the text after it passes the check. The omniscient narrator may not call characters "I" or "you"; the game-master perspective skips the person check.
+
+The story is written in segments: each one is narration, dialogue or action, and dialogue and action name who it is. The stage uses this to give each paragraph its speaker's name tag. When a name matches no character, the name tag shows that name as written.
 
 ### The character you play
 
-The character sheet the Narrator gives the model is the character **you are currently playing**, and the person check is anchored on it too. When a session has several player characters (you play more than one), the other player characters are listed with the supporting cast in the character profiles, tagged `[player]`. With one player character nothing changes. For how the current character is chosen and switched, see [Seats](../reference/world-model.md#seats); the play screen has no switch control yet.
+The character sheet the Narrator gives the model is the character **you are currently playing**, and the person check is anchored on it too (the omniscient and game-master perspectives do not centre on the player character). When a session has several player characters (you play more than one), the other player characters are listed with the supporting cast in the character profiles, tagged `[player]`. With one player character nothing changes. For how the current character is chosen and switched, see [Seats](../reference/world-model.md#seats); the play screen has no switch control yet.
 
 ## Dialogue Narrator (`chat-mode-narrator`)
 
-Makes the story feel more like a conversation between characters. Each paragraph shows who is speaking, and the highlight on stage follows the speaker.
+Makes the story feel more like a conversation between characters. Each paragraph shows who is speaking, and the stage's name tags and "Speaking" marker follow the speaker.
 
 ### What you will see
 
@@ -74,11 +76,11 @@ Optional. The "Dialogue Mode" gameplay pack includes it.
 
 ### What you can change
 
-| Setting          | What it does                                                                           | Default             |
-| ---------------- | -------------------------------------------------------------------------------------- | ------------------- |
-| Narrative person | Same as "Narrator".                                                                    | Second person (you) |
-| Dialogue ratio   | Roughly how much of a reply is character dialogue and inner reactions. Range 30 to 90. | 70                  |
-| Reply length     | Short, medium or long.                                                                 | Medium              |
+| Setting        | What it does                                                                           | Default                               |
+| -------------- | -------------------------------------------------------------------------------------- | ------------------------------------- |
+| Perspective    | Same as "Narrator".                                                                    | Player character, second person (you) |
+| Dialogue ratio | Roughly how much of a reply is character dialogue and inner reactions. Range 30 to 90. | 70                                    |
+| Reply length   | Short, medium or long.                                                                 | Medium                                |
 
 A world can preset these settings. For example, "Harukaze Academy · Spring Mint" (遥风学园·春日薄荷) sets the dialogue ratio to 80 and the reply length to short.
 

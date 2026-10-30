@@ -71,7 +71,7 @@ pnpm validate:plugin ~/.covel/plugins/observation
 ---
 displayName: Observation
 description: Adds a short observation grounded in the latest narrative.
-requires: [narrative-engine@1]
+requires: [narrative-engine@2]
 contributes:
   settings:
     - key: length
@@ -86,7 +86,7 @@ runtime:
   io:
     inputs:
       narrative:
-        from: { contract: narrative-engine@1 }
+        from: { contract: narrative-engine@2 }
         select: /narrativeOutput
 ---
 Read `runtime-inputs.narrative.value`. Describe one detail that the player can observe.
@@ -99,7 +99,7 @@ You must not add an event, a character, an item or a decision that the narrative
 | 这一段                           | 意思                                                                                                                                                           |
 | -------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `displayName`                    | 玩家看到的名称                                                                                                                                                 |
-| `requires: [narrative-engine@1]` | 需要一个能写故事的插件。启用这个插件时，Covel 会确保有一个                                                                                                     |
+| `requires: [narrative-engine@2]` | 需要一个能写故事的插件。启用这个插件时，Covel 会确保有一个                                                                                                     |
 | `contributes.settings`           | 给玩家一个设置项：最多写几句，默认 2                                                                                                                           |
 | `schedule.stage: post-turn`      | 在每回合的故事之后运行                                                                                                                                         |
 | `io.inputs.narrative`            | 读取这一回合的故事正文。提示词里用 `runtime-inputs.narrative.value` 引用它                                                                                     |

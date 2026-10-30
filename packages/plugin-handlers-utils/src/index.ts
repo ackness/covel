@@ -114,7 +114,6 @@ export type {
   UiSlotProjectionInput,
   StageBackdropModel,
   StageCastModel,
-  StageDialogueModel,
   StageChoicesModel,
   CharacterVisualModel,
   CharacterVisualCollectionModel,
@@ -139,11 +138,21 @@ export {
 } from "./character-names.js";
 export type { CharacterResolution, NamedCharacter } from "./character-names.js";
 
+export type {
+  StoryCues,
+  StoryMessageSegment,
+  StoryOutput,
+  StorySegment,
+  StorySegmentKind,
+  StoryYield,
+} from "./story-output.js";
+
 export {
   createNarrativeReview,
   outsideDialogue,
   perspectiveError,
 } from "./narrative-review.js";
+export type { NarrativePerspective } from "./narrative-review.js";
 
 /**
  * Bound provider work by a timeout while preserving the turn's cancellation

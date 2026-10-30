@@ -382,7 +382,7 @@ describe("confirmed session plugin set", () => {
     const plan = resolveConfirmedSessionPlugins({
       confirmed: ["narrator", "dice"],
       plugins: [
-        p("narrator", { kind: "core", provides: ["narrative-engine@1"] }),
+        p("narrator", { kind: "core", provides: ["narrative-engine@2"] }),
         p("dice"),
         p("new-core", { kind: "core" }),
       ],

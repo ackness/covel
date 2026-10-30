@@ -10,7 +10,13 @@ import {
   isUIRenderPartsInstruction,
   normalizeUIRenderInstruction,
 } from "@covel/shared";
-import type { Proposal, ProposalSource, RuntimeEffects } from "@covel/shared";
+import type {
+  Proposal,
+  ProposalSource,
+  RuntimeEffects,
+  StoryCues,
+  StorySegment,
+} from "@covel/shared";
 import {
   collectAssetGenerations,
   makeProposal,
@@ -154,10 +160,21 @@ export function normalizeOutput(
       : "";
 
   if (narrativeText) {
+    // A story carries its segments, cues and yield; the commit handler
+    // resolves the speaker names and records who was present.
     proposals.push(
       makeProposal("narrative.append", source, turnId, sessionId, {
         content: narrativeText,
         kind,
+        ...(Array.isArray(output.segments)
+          ? { segments: output.segments as StorySegment[] }
+          : {}),
+        ...(output.cues && typeof output.cues === "object"
+          ? { cues: output.cues as StoryCues }
+          : {}),
+        ...(output.yield === "user" || output.yield === "continue"
+          ? { yield: output.yield }
+          : {}),
       }),
     );
   }

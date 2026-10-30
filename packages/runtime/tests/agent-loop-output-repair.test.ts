@@ -363,7 +363,10 @@ describe("output repair", () => {
     expect(llm.requests[1]?.messages.at(-1)?.content).toContain(
       "the story text is empty",
     );
+    // A prose story is published as one narration segment per paragraph.
     expect(result?.output).toEqual({
+      segments: [{ kind: "narration", text: "The lantern lights the stairs." }],
+      yield: "user",
       narrativeOutput: "The lantern lights the stairs.",
     });
     const committed = await commitExecution({
@@ -542,7 +545,11 @@ describe("output repair", () => {
         turnControl: { drainSteering: () => steering.shift() ?? [] },
       },
     });
-    expect(result.output).toEqual({ narrativeOutput: "The repaired story." });
+    expect(result.output).toEqual({
+      segments: [{ kind: "narration", text: "The repaired story." }],
+      yield: "user",
+      narrativeOutput: "The repaired story.",
+    });
     const reset = chunks.findIndex((chunk) => chunk.reset);
     expect(reset).toBeGreaterThan(0);
     expect(

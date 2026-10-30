@@ -1,7 +1,7 @@
 ---
 version: "0.1.0"
 description: "{{pluginDescription}}"
-requires: [narrative-engine@1]
+requires: [narrative-engine@2]
 contributes:
   tools:
     - record-note
@@ -9,12 +9,12 @@ runtime:
   schedule:
     stage: post-turn
     needs:
-      - contract: narrative-engine@1
+      - contract: narrative-engine@2
   io:
     inputs:
       narrator-output:
         from:
-          contract: narrative-engine@1
+          contract: narrative-engine@2
         select: /narrativeOutput
         required: false
 ---

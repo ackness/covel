@@ -94,15 +94,15 @@ describe("scheduleByDag", () => {
 
   it("does not pull a cardinality-one consumer into an alternative provider cycle", () => {
     const available = mk("engine-a", 500, {
-      outputContract: "narrative-engine@1",
+      outputContract: "narrative-engine@2",
     });
     const cyclicProvider = mk("engine-b", 500, {
-      outputContract: "narrative-engine@1",
+      outputContract: "narrative-engine@2",
       needs: ["cycle-peer"],
     });
     const cyclePeer = mk("cycle-peer", 500, { needs: ["engine-b"] });
     const consumer = mk("guide", 500, {
-      needs: [{ capability: "narrative-engine@1", cardinality: "one" }],
+      needs: [{ capability: "narrative-engine@2", cardinality: "one" }],
     });
 
     const { groups, cyclic } = scheduleByDag([
@@ -124,15 +124,15 @@ describe("scheduleByDag", () => {
 
   it("keeps cardinality-all consumers downstream of every provider cycle", () => {
     const available = mk("engine-a", 500, {
-      outputContract: "narrative-engine@1",
+      outputContract: "narrative-engine@2",
     });
     const cyclicProvider = mk("engine-b", 500, {
-      outputContract: "narrative-engine@1",
+      outputContract: "narrative-engine@2",
       needs: ["cycle-peer"],
     });
     const cyclePeer = mk("cycle-peer", 500, { needs: ["engine-b"] });
     const consumer = mk("guide", 500, {
-      needs: [{ capability: "narrative-engine@1", cardinality: "all" }],
+      needs: [{ capability: "narrative-engine@2", cardinality: "all" }],
     });
 
     const { groups, cyclic } = scheduleByDag([

@@ -68,7 +68,7 @@ example/
 ---
 displayName: Example
 description: Records useful facts after each story turn.
-requires: [narrative-engine@1]
+requires: [narrative-engine@2]
 contributes:
   tools: [save-facts]
   data:
@@ -80,7 +80,7 @@ runtime:
   io:
     inputs:
       narrative:
-        from: { contract: narrative-engine@1 }
+        from: { contract: narrative-engine@2 }
         select: /narrativeOutput
     output: { contract: example.facts@1 }
   agent:
@@ -108,7 +108,7 @@ Extract facts supported by runtime-inputs.narrative.value, then call save-facts.
 
 `covel`、`homepage` 这类不常用的根字段见[高级字段](#高级字段)。
 
-契约是一个带版本的名字，形如 `narrative-engine@1`。插件之间靠它互相找到对方，而不是靠插件 ID。几条规则：
+契约是一个带版本的名字，形如 `narrative-engine@2`。插件之间靠它互相找到对方，而不是靠插件 ID。几条规则：
 
 - 本包提供的契约是 `provides` 加上每个 runtime 的 `io.output.contract`。
 - 同一个包里，两个 runtime 不能产出同一个契约（`ambiguous output contract`）。
@@ -148,7 +148,7 @@ entry 里的注册和清单里的声明双向核对：注册了却没声明，�
 
 ### 契约版本策略
 
-契约 ID 中的 `@N` 是版本标识（如 `narrative-engine@1`）。内核只承载当前版本（current-only）：不做版本协商，不同时支持多个版本，也不提供跨版本的兼容读取或双写迁移。
+契约 ID 中的 `@N` 是版本标识（如 `narrative-engine@2`）。内核只承载当前版本（current-only）：不做版本协商，不同时支持多个版本，也不提供跨版本的兼容读取或双写迁移。
 
 - 破坏性变更使用新的契约 ID（例如 `@2`）。提供者和消费者在同一个变更里一起升级，旧版本随即失效。
 - 旧会话的快照和排队中的作业需要重建。
@@ -445,7 +445,7 @@ agent:
 io:
   inputs:
     narrative:
-      from: { contract: narrative-engine@1 }
+      from: { contract: narrative-engine@2 }
       select: /narrativeOutput
       accepts: ./schemas/narrative.schema.json
     previous:
@@ -520,7 +520,45 @@ CLI 和安装器的静态校验对 `scope: turn` 和 `scope: committed` 的输�
 | `effects`    | 显式的副作用        | 提交、事件后继、待处理的交互   |
 | `completion` | `done` 或 `pending` | setup 是否完成的判断           |
 
-`outputKind: story` 的 `output.narrativeOutput` 仍然按声明发布为叙事。
+`outputKind: story` 的输出按下面的[故事输出](#故事输出)规整后发布为叙事。
+
+#### 故事输出
+
+故事的形状由内核负责，对所有 `outputKind: story` 的 runtime（agent、function 和 guard 提前给出的故事）都一样。当前契约是 `narrative-engine@2`：
+
+| 字段       | 类型                                  | 含义                                                                  |
+| ---------- | ------------------------------------- | --------------------------------------------------------------------- |
+| `segments` | 段落数组，最多 60 段                  | 故事正文，按顺序排列                                                  |
+| `cues`     | `{ scene?, present?, mood? }`，可省略 | 场景名（≤200 字符）、在场人物的名字（≤32 个）、氛围（≤80 字符）       |
+| `yield`    | `user` 或 `continue`，默认 `user`     | 写完之后把回合交还玩家；`continue` 为后续使用保留，现在和 `user` 一样 |
+
+每个段落是 `{ kind, speaker?, text }`：
+
+- `kind` 是 `narration`（旁白）、`dialogue`（对白）或 `action`（动作）。
+- `speaker` 是说话或行动的人物名字（≤80 字符），写名字，不写 ID。旁白不写。
+- `text` 是这一段的正文（≤4000 字符）。段落里的空行折成单个换行，所以一段就是玩家看到的一个段落。
+
+内核从 `segments` 推出 `narrativeOutput`：各段 `text` 用空行连接。读故事的插件照旧 `select: /narrativeOutput` 拿到字符串；对话日志、下一回合的历史、`turn-digest@1` 和记忆读的也是这段文字，不会看到 JSON。
+
+**宽松规整。** 提交前，内核这样整理故事：
+
+- 纯文本故事仍然合法：每个段落成为一段 `narration`。
+- 未知的 `kind` 按 `narration` 处理；没写 `speaker` 的对白照样保留，只是不署名。
+- `narration` 段的 `speaker` 被去掉。
+- 超过 4000 字符的 `text` 在换行处拆成几段；超过 60 段时先合并相邻的同类、同说话人段落，仍然超出才丢掉末尾的段落。
+- 末尾“你会怎么做？”一类替玩家列选项的段落被去掉。
+- 没有任何正文的故事以“没有正文”失败，PostRuntime hook 把故事清空也一样。
+
+**修复请求。** 声明 `io.output.schema: contract:narrative-engine@2` 的 story agent 会把这份 schema 作为回复格式交给模型。模型的回复有问题时（对白没写说话人、`kind` 不认识、该写 `segments` 却写了纯文本、`segments` 为空），内核用现有的输出修复流程发一次修复请求，列出最多 5 条问题。修复次数用完后按上面的宽松规则提交。
+
+**说话人解析。** 提交时，内核按名字把 `speaker` 和 `cues.present` 解析成本会话的角色：只认完整的角色 ID、名字或别名，不做部分匹配。
+
+- 解析成功的段落带上 `speakerId`，`speaker` 换成角色的当前名字。
+- 匹配不到角色、或同时匹配到多个角色的名字原样保留，并列在 `narrative.completed` 事件的 `unresolvedSpeakers` 里（见[协议](./protocol.md)）。
+- 故事消息的元数据记下 `segments`、`cues`、`yield`，以及在场记录 `presentCharacterIds`：解析成功的说话人和 `cues.present` 里的角色。在场记录现在只保存，留给以后的按角色历史使用。
+- `/messages` 和 `/view` 的故事消息带 `segments`（见 [API](./api.md)）。角色 ID 不进入模型看到的文字。
+
+**流式显示。** 回复是分段 JSON 时，叙事流只转发各段的 `text`，段与段之间是空行，和提交后的正文一致；JSON 的键、`speaker` 和 `cues` 不会出现在流里。纯文本回复照常流式显示。
 
 #### Function 的输出
 
@@ -551,7 +589,7 @@ Agent 的副作用只来自工具：模型能写什么，以 `agent.tools` 白�
 - 要修改副作用或完成信号，直接改 `effects` 或 `completion`。
 - 失败 runtime 的副作用不提交，它的事件不触发后继 runtime。
 - 普通执行和 resume 共用 agent 的输出 schema 检查。非 story 的 agent 声明私有 `io.output.schema` 后，先校验候选的协议输出，再拆分业务值和副作用。最终没有正文或正文为空也接受校验；不符合 schema 就失败，暂停期间积累的写入不提交。
-- Story agent 保留独立的叙事正文检查，不使用私有 schema 检查。
+- Story agent 不走私有 schema 检查，而是走[故事输出](#故事输出)的检查和修复。
 
 > [!NOTE]
 > 内部结果结构变化之后，受影响的开发期执行结果、exports、后台作业和快照需要重建。旧的平铺副作用结果读不了。
@@ -1186,7 +1224,7 @@ pnpm lint
 | [branch-reply](../../plugins/branch-reply/README.md) | 回复变体 | `plugin` | `branch-reply@1` | 内联 | 提供多条可切换的回复 |
 | [char-creator](../../plugins/char-creator/README.md) | 角色创建 | `core` | `character-creation@1`（默认提供者） | `player-init`、`character-tracker` | 创建主角，并在故事中记录重要角色的变化 |
 | [character-blueprint](../../plugins/character-blueprint/README.md) | 角色资料 | `plugin` | `character-blueprint@1`、`character-presence@1` | `presence` | 保存世界预设的人物资料，以及头像、立绘和声音 |
-| [chat-mode-narrator](../../plugins/chat-mode-narrator/README.md) | 对话叙事 | `plugin` | `narrative-engine@1` | 内联 | 让故事更像角色对话 |
+| [chat-mode-narrator](../../plugins/chat-mode-narrator/README.md) | 对话叙事 | `plugin` | `narrative-engine@2` | 内联 | 让故事更像角色对话 |
 | [codex](../../plugins/codex/README.md) | 设定图鉴 | `plugin` | 无 | 内联 | 整理新发现的地点、人物、物品和传闻 |
 | [core-quest](../../plugins/core-quest/README.md) | 任务日志 | `plugin` | `world-ir.vocabulary@1` | `log`、`vocabulary` | 从叙事中登记和推进任务 |
 | [dice-check](../../plugins/dice-check/README.md) | 骰子判定 | `plugin` | `action-check@1` | `roller`、`recorder` | 为有失败风险的行动做骰子判定 |
@@ -1195,7 +1233,7 @@ pnpm lint
 | [inventory](../../plugins/inventory/README.md) | 行囊 | `plugin` | `world-ir.vocabulary@1` | `ledger`、`vocabulary` | 记录物品得失和装备变化 |
 | [living-world-rules](../../plugins/living-world-rules/README.md) | 世界规则 | `plugin` | `living-world-rules@1`、`world-info@1` | 无 | 展示世界包里长期生效的规则，并让叙事遵守 |
 | [memory](../../plugins/memory/README.md) | 故事记忆 | `core` | 无 | `extract` | 记住剧情、场景、人物关系和主角状态 |
-| [narrator](../../plugins/narrator/README.md) | 叙事 | `core` | `narrative-engine@1`（默认提供者） | 内联 | 根据玩家的行动推进故事 |
+| [narrator](../../plugins/narrator/README.md) | 叙事 | `core` | `narrative-engine@2`（默认提供者） | 内联 | 根据玩家的行动推进故事 |
 | [npc-graph](../../plugins/npc-graph/README.md) | 关系图谱 | `plugin` | `npc-graph@1`、`graph-rag@1` | `extractor`、`rag-retriever` | 记录人物之间的关系 |
 | [pregame](../../plugins/pregame/README.md) | 开局准备 | `core` | `session.opening@1` | 内联 | 开局时读取世界资料，准备第一段冒险 |
 | [scene-stage](../../plugins/scene-stage/README.md) | 场景舞台 | `plugin` | `stage-direction@1`、`scene-stage@1`、`scene-cast@1` | `seed`、`direction`、`resolver`、`cast` | 跟踪当前场景、昼夜和在场角色，供舞台背景和立绘使用 |

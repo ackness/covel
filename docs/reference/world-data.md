@@ -1047,7 +1047,7 @@ handler 的返回值：
 **静态数据和游玩中的抽取**使用同一个 `contract:world-ir@1`，但执行方式不同：
 
 - 静态世界数据走上面的 handler。
-- 游玩中，`world-ir` agent 把叙事输出（`narrative-engine@1`）抽取一次，`codex`、`core-quest/log`、`affinity`、`inventory/ledger` 和 `npc-graph/extractor` 并行读取这一份结果。
+- 游玩中，`world-ir` agent 把叙事输出（`narrative-engine@2`）抽取一次，`codex`、`core-quest/log`、`affinity`、`inventory/ledger` 和 `npc-graph/extractor` 并行读取这一份结果。
   - 任务和物品是只读固定字段的 function runtime，不调用模型。
   - 好感仍由 agent 判断，字段见 [tools.md · submit-world-facts](./tools.md#submit-world-facts)。
   - `inventory/vocabulary` 与 `core-quest/vocabulary` 在 pre-turn 通过 `world-ir.vocabulary@1` 公布已追踪的物品名、任务名和未完成的目标，抽取时沿用同样的名称。

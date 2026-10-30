@@ -56,14 +56,14 @@ pnpm --filter @covel/plugin-my-plugin test
 ```yaml
 ---
 description: Adds a brief observation after narration.
-requires: [narrative-engine@1]
+requires: [narrative-engine@2]
 runtime:
   schedule:
     stage: post-turn
   io:
     inputs:
       narrative:
-        from: { contract: narrative-engine@1 }
+        from: { contract: narrative-engine@2 }
         select: /narrativeOutput
 ---
 Write one observation grounded in runtime-inputs.narrative.value.
@@ -151,15 +151,15 @@ agent:
 
 ## 怎样用别的插件的结果
 
-按能力找，不按名字找。能力有一个带版本号的名字，例如 `narrative-engine@1`。要读“写故事的插件”这一回合的输出，写三处：
+按能力找，不按名字找。能力有一个带版本号的名字，例如 `narrative-engine@2`。要读“写故事的插件”这一回合的输出，写三处：
 
 ```yaml
-requires: [narrative-engine@1]
+requires: [narrative-engine@2]
 runtime:
   io:
     inputs:
       narrative:
-        from: { contract: narrative-engine@1 }
+        from: { contract: narrative-engine@2 }
         select: /narrativeOutput
 ```
 

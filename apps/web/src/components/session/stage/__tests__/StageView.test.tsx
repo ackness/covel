@@ -187,6 +187,49 @@ describe("stage decision lifecycle", () => {
     expect(screen.queryByTestId("stage-thinking")).toBeNull();
   });
 
+  it("names paragraph speakers from the committed story, never while it streams", () => {
+    let props = { ...fixture(), executing: true };
+    const stream: StreamMessage = {
+      ...previousStory,
+      id: "stream_next-turn_narrator",
+      turnId: "next-turn",
+      content: "",
+    };
+    props = { ...props, messages: [previousStory, stream] };
+    const { rerender } = render(<StageView {...props} />);
+    const text = "雨停了。\n\n「走吧。」";
+    act(() => {
+      appendStreamingText(stream.id, text);
+    });
+    expect(screen.getByTestId("stage-dialog")).toBeDefined();
+    expect(screen.queryByTestId("stage-dialog-speaker")).toBeNull();
+
+    props = {
+      ...props,
+      messages: [
+        previousStory,
+        {
+          ...stream,
+          id: "next-story",
+          content: text,
+          segments: [
+            { kind: "narration", text: "雨停了。" },
+            {
+              kind: "dialogue",
+              speaker: "阿雅",
+              speakerId: "char-aya",
+              text: "「走吧。」",
+            },
+          ],
+        },
+      ],
+    };
+    rerender(<StageView {...props} />);
+    expect(screen.queryByTestId("stage-dialog-speaker")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "点击继续对话" }));
+    expect(screen.getByTestId("stage-dialog-speaker").textContent).toBe("阿雅");
+  });
+
   it("shows the decision when the restored history arrives after Stage mounts", () => {
     const props = fixture();
     const { rerender } = render(<StageView {...props} messages={[]} />);

@@ -11,7 +11,7 @@ export interface StageDialogProps {
   readonly turnId?: string;
   readonly storyText: string;
   readonly streamEnded: boolean;
-  readonly paragraphSpeakers?: readonly (string | null)[];
+  readonly segmentSpeakers?: readonly (string | null)[];
   readonly autoPlay: boolean;
   readonly reducedMotion?: boolean;
   /** Fires once when the current turn's text has been fully revealed. */
@@ -25,7 +25,7 @@ export function StageDialog({
   turnId,
   storyText,
   streamEnded,
-  paragraphSpeakers,
+  segmentSpeakers,
   autoPlay,
   reducedMotion = false,
   onAllRead,
@@ -37,7 +37,7 @@ export function StageDialog({
     { turnId, reducedMotion },
   );
   const speakerName = stageParagraphSpeakerName(
-    paragraphSpeakers,
+    segmentSpeakers,
     storyText,
     segmentIndex,
     streamEnded,

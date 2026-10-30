@@ -55,14 +55,14 @@ async function expectNarrativeBinding(pluginsDir: string, pluginId: string) {
 version: 1.0.0
 description: Provides one narrative for the generated analyst.
 contracts:
-  narrative-engine@1:
+  narrative-engine@2:
     schema: ./output.json
 runtime:
   schedule:
     stage: narrative
   io:
     output:
-      contract: narrative-engine@1
+      contract: narrative-engine@2
   function: {}
 ---
 `,

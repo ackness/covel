@@ -46,10 +46,10 @@ A stage starts only after every runtime of the previous stage has finished. Besi
 
 ## How plugins work together
 
-Plugins do not name each other directly. One plugin says what capability it **provides**, and another says what capability it **needs**, and Covel connects them. A capability has a versioned name, for example `narrative-engine@1`, which means "the story-writing capability, version 1".
+Plugins do not name each other directly. One plugin says what capability it **provides**, and another says what capability it **needs**, and Covel connects them. A capability has a versioned name, for example `narrative-engine@2`, which means "the story-writing capability, version 1".
 
 ```yaml
-requires: [narrative-engine@1]
+requires: [narrative-engine@2]
 ```
 
 This line means "I need a plugin that can write the story", not "I need the plugin named narrator". So the narrator can be replaced, and the plugins that depend on it do not have to change.

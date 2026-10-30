@@ -22,7 +22,6 @@ import type {
   StageBackdropModel,
   StageCastModel,
   StageChoicesModel,
-  StageDialogueModel,
   CharacterVisualModel,
 } from "@covel/shared";
 import { useUiSlots } from "@/stores/ui-slot-store.js";
@@ -52,6 +51,7 @@ import type { RightPanelState } from "../right-panel-state.js";
 import { StagePluginPanels } from "./StagePluginPanels.js";
 import { StageChoices } from "./StageChoices.js";
 import { StageExecutionStatus } from "./StageExecutionStatus.js";
+import { storyParagraphSpeakers } from "./stage-dialogue-selectors.js";
 import {
   extractInteractionChoices,
   extractPendingFormMessages,
@@ -145,8 +145,6 @@ export function StageView(props: StageViewProps): ReactElement {
   )?.value as StageBackdropModel | undefined;
   const cast = slots.find((entry) => entry.slot === "stage.cast@1")?.value as
     StageCastModel | undefined;
-  const dialogue = slots.find((entry) => entry.slot === "stage.dialogue@1");
-  const dialogueValue = dialogue?.value as StageDialogueModel | undefined;
   const suggestions = slots.find((entry) => entry.slot === "stage.choices@1")
     ?.value as StageChoicesModel | undefined;
   const speakers: readonly StageSpeaker[] = useMemo(
@@ -185,11 +183,11 @@ export function StageView(props: StageViewProps): ReactElement {
   const storyKey = stageStoryKey(storyMsg);
   const isStreaming =
     executing && (storyMsg?.id.startsWith("stream_") ?? false);
-  const paragraphSpeakers =
-    dialogueValue?.turnId === storyTurnId &&
-    (!isStreaming || dialogue?.previewTurnId === storyTurnId)
-      ? dialogueValue?.paragraphSpeakers
-      : undefined;
+  // Nameplates come from the committed story's segments; a story still
+  // streaming has none yet.
+  const segmentSpeakers = isStreaming
+    ? undefined
+    : storyParagraphSpeakers(storyMsg);
 
   // ── Cross-layer state ─────────────────────────────────────────
   const [autoPlay, setAutoPlay] = useState(false);
@@ -289,7 +287,7 @@ export function StageView(props: StageViewProps): ReactElement {
         executing={executing}
         turnId={storyTurnId}
         streamEnded={!isStreaming}
-        paragraphSpeakers={paragraphSpeakers}
+        segmentSpeakers={segmentSpeakers}
         autoPlay={autoPlay}
         reducedMotion={reducedMotion}
         onAllRead={() => setReadStoryKey(storyKey)}

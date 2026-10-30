@@ -1,3 +1,4 @@
+import type { StoryMessageSegment } from "@covel/plugin-handlers-utils";
 import type { ProviderFailureKind } from "../llm-failure-kind.js";
 import type { Stage } from "./runtime-scheduling.js";
 
@@ -61,6 +62,11 @@ export interface NarrativeCompletedPayload {
   readonly content: string;
   readonly messageId?: string;
   readonly kind: string;
+  /**
+   * Speaker and `cues.present` names of a story that matched no character,
+   * or more than one. They stay as written and are never an error.
+   */
+  readonly unresolvedSpeakers?: readonly string[];
 }
 
 export interface InteractionRequestedPayload {
@@ -825,6 +831,8 @@ export interface SnapshotMessage {
   readonly runtimeId?: string;
   readonly kind?: string;
   readonly block?: Readonly<Record<string, unknown>>;
+  /** A story message's segments; see `Message.segments`. */
+  readonly segments?: readonly StoryMessageSegment[];
   readonly createdAt: string;
 }
 

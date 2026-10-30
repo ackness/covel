@@ -54,14 +54,14 @@ A minimal plugin has only one file: `PLUGIN.md`. `README.md` is for maintainers 
 ```yaml
 ---
 description: Adds a brief observation after narration.
-requires: [narrative-engine@1]
+requires: [narrative-engine@2]
 runtime:
   schedule:
     stage: post-turn
   io:
     inputs:
       narrative:
-        from: { contract: narrative-engine@1 }
+        from: { contract: narrative-engine@2 }
         select: /narrativeOutput
 ---
 Write one observation grounded in runtime-inputs.narrative.value.
@@ -149,15 +149,15 @@ An agent that finishes by calling one tool writes `agent.finishWith: <tool>`. Fo
 
 ## How to use another plugin's results
 
-Find a plugin by capability, not by name. A capability has a versioned name, such as `narrative-engine@1`. To read the output of "the plugin that writes the story" for this turn, write three things:
+Find a plugin by capability, not by name. A capability has a versioned name, such as `narrative-engine@2`. To read the output of "the plugin that writes the story" for this turn, write three things:
 
 ```yaml
-requires: [narrative-engine@1]
+requires: [narrative-engine@2]
 runtime:
   io:
     inputs:
       narrative:
-        from: { contract: narrative-engine@1 }
+        from: { contract: narrative-engine@2 }
         select: /narrativeOutput
 ```
 

@@ -10,6 +10,7 @@ import { formatToolLoopFailure } from "../turn-executor/turn-output-helpers.js";
 import { finalizeAgentOutput } from "./finalize-agent-output.js";
 import { completionContractError } from "./runtime-completion.js";
 import { createAgentSchemaGate } from "./runtime-output-validator.js";
+import { schemaAsksForSegments } from "./story-output.js";
 import type { AgentToolLoopCompleted } from "./turn-agent-tool-loop.js";
 
 interface AgentOutputArgs {
@@ -56,6 +57,14 @@ function evaluateAgentOutput(args: AgentOutputArgs, silent = false) {
     emittedEvents: toolLoop.emittedEvents,
     dedupeInteractions: true,
     silent,
+    // Only the repair check is strict; settlement commits the lenient story.
+    ...(silent
+      ? {
+          strictStory: {
+            segmentsRequired: schemaAsksForSegments(outputSchema),
+          },
+        }
+      : {}),
     schemaGate: createAgentSchemaGate({
       manifest,
       input,
@@ -68,7 +77,7 @@ function evaluateAgentOutput(args: AgentOutputArgs, silent = false) {
       },
     }),
   });
-  if (finalized.kind === "invalid-output") errors = ["the story text is empty"];
+  if (finalized.kind === "invalid-output") errors = finalized.problems;
   return { finalized, errors };
 }
 
