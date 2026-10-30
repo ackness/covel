@@ -81,6 +81,8 @@ describe("GET /api/ui-specs — segment templates", () => {
   let store: DataStore;
   let registry: PluginRegistry;
   const sessionId = "sess-segment-templates";
+  let registryOrder: string[];
+  let sessionOrder: string[];
 
   beforeEach(async () => {
     __resetUiSpecsCache();
@@ -104,6 +106,12 @@ describe("GET /api/ui-specs — segment templates", () => {
     store = createMemoryStore();
     registry = createPluginRegistry();
     await registerTestPlugins(registry, [dir]);
+    // The session lists its plugins opposite to the registry, so the response
+    // order shows which of the two decides ties.
+    registryOrder = [...registry.getAll().keys()].filter((id) =>
+      ["nameplates", "mixed-templates"].includes(id),
+    );
+    sessionOrder = [...registryOrder].reverse();
     await store.createSession({
       phase: "playing",
       setupRuntimes: {},
@@ -118,7 +126,7 @@ describe("GET /api/ui-specs — segment templates", () => {
       status: "active",
       locale: "en",
       completedPlayerTurns: 1,
-      activePlugins: ["nameplates", "mixed-templates"],
+      activePlugins: sessionOrder,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     });
@@ -149,6 +157,17 @@ describe("GET /api/ui-specs — segment templates", () => {
       "nameplates",
     ]);
     for (const entry of body.segment) expect(entry.specs).toEqual([NAMEPLATE]);
+  });
+
+  it("lists segment templates in the session's plugin order", async () => {
+    expect(registryOrder).toHaveLength(2);
+    expect(sessionOrder).not.toEqual(registryOrder);
+    const body = (await (
+      await app.request(`/api/ui-specs?sessionId=${sessionId}`)
+    ).json()) as UiSpecsBody;
+    // Both plugins' nameplates match dialogue equally; the client takes the
+    // first entry's, so the session's first plugin wins the tie.
+    expect(body.segment.map((entry) => entry.pluginId)).toEqual(sessionOrder);
   });
 
   it("reports rejected templates with their declared path", async () => {

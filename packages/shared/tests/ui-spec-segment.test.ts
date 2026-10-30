@@ -76,7 +76,83 @@ describe("segment template rules", () => {
           watch: { "/segment": { action: "refresh" } },
         },
       }),
-    ).toEqual(["view.watch", "view.children[0].on"]);
+    ).toEqual([
+      "view.watch",
+      "view.children[0].component",
+      "view.children[0].on",
+    ]);
+  });
+
+  it("allows only display components, without action props", () => {
+    const match = { kind: "dialogue" };
+    // A literal candidate list would draw Send buttons and call runtimes
+    // through its accept and regenerate actions, with no `on` binding.
+    expect(
+      paths({
+        match,
+        view: {
+          component: "Stack",
+          children: [
+            {
+              component: "CandidateList",
+              props: {
+                candidates: [{ text: "Again" }],
+                acceptAction: { pluginId: "owner", runtimeId: "accept" },
+              },
+            },
+            {
+              type: "SubmitButton",
+              props: { label: "Send" },
+            },
+            {
+              component: "CharacterFieldsView",
+              props: { characterId: { $state: "/segment/speakerId" } },
+            },
+          ],
+        },
+      }),
+    ).toEqual([
+      "view.children[0].component",
+      "view.children[1].type",
+      "view.children[2].component",
+    ]);
+    for (const component of [
+      "Button",
+      "Choice",
+      "Input",
+      "Tabs",
+      "FilterContainer",
+      "SceneCastList",
+      "CharacterAvatar",
+      "PortraitGallery",
+      "MediaGallery",
+      "WorldDimensions",
+      "AssetTurnSidebar",
+    ])
+      expect(paths({ match, view: { component } })).toContain("view.component");
+    expect(
+      segmentIssues({
+        match,
+        view: {
+          component: "Row",
+          children: [
+            {
+              component: "Image",
+              props: { ref: { $state: "/visual/avatar" } },
+            },
+            {
+              component: "Badge",
+              props: { label: { $state: "/character/name" } },
+            },
+            { component: "Prose", props: { content: "x" } },
+          ],
+        },
+      }),
+    ).toEqual([]);
+    // Other placements keep the whole catalogue.
+    expect(
+      pluginUiSpecIssues({ view: { component: "CandidateList" } }, "owner"),
+    ).toEqual([]);
   });
 
   it("leaves other placements unchanged", () => {

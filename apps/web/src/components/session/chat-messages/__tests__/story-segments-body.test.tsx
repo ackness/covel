@@ -127,6 +127,38 @@ describe("story segment templates in the chat view", () => {
     expect(parts[2]!.textContent).toBe("「等等！」");
   });
 
+  it("leaves components that act or read session data inert", () => {
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const acting = {
+      id: "acting",
+      label: undefined,
+      match: { kind: "dialogue" as const },
+      view: {
+        component: "Stack",
+        children: [
+          { component: "Text", props: { content: "plate" } },
+          // Literal candidates would draw Send and Draft buttons, and the
+          // accept action would call a runtime, with no `on` binding.
+          {
+            component: "CandidateList",
+            props: {
+              candidates: [{ text: "Again" }],
+              acceptAction: { pluginId: "plates", runtimeId: "accept" },
+            },
+          },
+          { component: "SubmitButton", props: { label: "Send" } },
+          { component: "Button", props: { label: "Go" } },
+          { component: "SceneCastList" },
+        ],
+      },
+    };
+    renderMessage(story, { specs: [{ pluginId: "plates", specs: [acting] }] });
+    const body = screen.getByTestId("story-segments");
+    expect(within(body).getAllByText("plate")).toHaveLength(2);
+    expect(within(body).queryAllByRole("button")).toEqual([]);
+    expect(body.textContent).not.toContain("Again");
+  });
+
   it("renders a story with no matching template exactly as before", () => {
     const unmatched = renderMessage(story, {
       specs: [

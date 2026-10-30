@@ -6,7 +6,8 @@
  * (`NarrativeMessageBody` of its content). Otherwise each segment renders in
  * order: a matched one through its template, inside a boundary that falls
  * back to that segment's default text, and an unmatched one as default
- * prose. Templates are display-only json-render views with no actions.
+ * prose. Templates are display-only json-render views with no actions,
+ * drawn with the display components alone (`segmentTemplateRegistry`).
  */
 import {
   Component,
@@ -19,7 +20,7 @@ import {
 import { JSONUIProvider, Renderer } from "@json-render/react";
 import type { CharacterVisualModel, SnapshotCharacter } from "@covel/shared";
 import { Markdown } from "@/components/ui/markdown.js";
-import { covelRegistry } from "@/lib/catalog.js";
+import { segmentTemplateRegistry } from "@/lib/catalog.js";
 import { covelDirectives } from "@/lib/json-render-directives.js";
 import { pluginPanelViewToSpec } from "@/lib/plugin-panel-spec.js";
 import {
@@ -140,12 +141,12 @@ function SegmentTemplateView({
     // Keyed by its state: the provider reads state once, on mount.
     <JSONUIProvider
       key={JSON.stringify(state)}
-      registry={covelRegistry}
+      registry={segmentTemplateRegistry}
       initialState={state}
       handlers={NO_ACTIONS}
       directives={covelDirectives}
     >
-      <Renderer spec={spec} registry={covelRegistry} />
+      <Renderer spec={spec} registry={segmentTemplateRegistry} />
     </JSONUIProvider>
   );
 }

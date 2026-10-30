@@ -693,7 +693,8 @@ contributes:
 - **选哪个模板。** 每个段落在所有匹配的模板里选最具体的：`kind + speaker` 优先于只写 `speaker`，只写 `speaker` 优先于只写 `kind`；同一级里按 ID 匹配的优先于按名字匹配的。还相同时，按 `/api/ui-specs?sessionId=` 返回的插件顺序，再按声明顺序。只有在会话里可运行的插件提供模板，与 `ui.message` 的筛选相同。
 - **模板读到的状态。** `/segment` 是已提交的段落 `{ kind, text, speaker?, speakerId? }`；`/index` 是段落位置（从 0 开始）；`/character` 是 `speakerId` 指向会话角色时的 `{ id, name, type }`；`/visual` 是这个角色已有的 `character.visual@1` 槽位值。没有插件数据、设置和别的 ID。
 - **哪里用。** 只在聊天视图的 `parsed` 和 `detailed` 模式、只对带 `segments` 的已提交故事使用。有段落命中模板时，整条故事按段落依次显示：命中的段落用模板，其余段落用默认正文。一个段落都没命中时，消息和以前完全一样。流式输出中的故事、舞台对话框和 `raw` 视图不用模板（`raw` 的 JSON 里能看到 `segments`）。
-- **出错怎么办。** 某个模板渲染失败时，只有这一段退回默认正文。模板写错时（缺少或空的 `match`、写了 `webview`、`dataSource`、`surfaces`、`group*`、`shortLabel`、`navTarget`、`alwaysRender`、`bridge`，或 view 里有 `on` / `watch`），`pnpm validate:plugin` 和安装报错；加载时这一项给出带声明路径的诊断，同一个插件的其他模板照常使用。
+- **能用哪些组件。** 只能用只显示自身 props 的组件：`Stack`、`Row`、`Grid`、`Separator`、`Text`、`Badge`、`Icon`、`TagList`、`Source`、`Image`、`Media`、`AudioPlayer`、`Card`、`CardList`、`EntryCard`、`StatBar`、`Progress`、`Accordion`、`Section`、`JsonView`、`EntryList`、`Prose`、`PlayerMessage`、`Alert`。会发消息、调用运行时、接收输入或读取会话数据的组件（如 `CandidateList`、`Button`、`Choice`、表单与输入组件、`SceneCastList`、`CharacterFieldsView`、`CharacterAvatar`、各类画廊）都不能用；头像用 `Image` 读 `/visual/avatar`。媒体总在当前会话里解析，`sessionId` prop 不生效。
+- **出错怎么办。** 某个模板渲染失败时，只有这一段退回默认正文。模板写错时（缺少或空的 `match`、写了 `webview`、`dataSource`、`surfaces`、`group*`、`shortLabel`、`navTarget`、`alwaysRender`、`bridge`，view 里有 `on` / `watch`，或用了上面列表以外的组件），`pnpm validate:plugin` 和安装报错；加载时这一项给出带声明路径的诊断，同一个插件的其他模板照常使用。
 - `ui.segment` 不派生能力（与 `ui.view` 相同）：模板不运行代码，也不读数据。
 
 ## 舞台模式（Stage View）

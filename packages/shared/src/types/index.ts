@@ -410,7 +410,9 @@ export type { RuntimeExportRecord } from "./runtime-exports.js";
 
 export {
   PLUGIN_UI_COMPONENT_NAMES,
+  SEGMENT_TEMPLATE_COMPONENT_NAMES,
   type PluginUiComponentName,
+  type SegmentTemplateComponentName,
 } from "./plugin-ui.js";
 export type {
   PluginDiagnostic,

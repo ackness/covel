@@ -7,7 +7,10 @@
  */
 import { z } from "zod";
 import { PLUGIN_VIEW_ID_PATTERN } from "./view-mode.js";
-import { PLUGIN_UI_COMPONENT_NAMES } from "../types/plugin-ui.js";
+import {
+  PLUGIN_UI_COMPONENT_NAMES,
+  SEGMENT_TEMPLATE_COMPONENT_NAMES,
+} from "../types/plugin-ui.js";
 import { STORY_LIMITS, storySegmentKinds } from "./story-output.js";
 
 /** The newest `specVersion` this host understands. */
@@ -281,6 +284,13 @@ const SEGMENT_TEMPLATE_EXCLUDED_FIELDS = [
   "alwaysRender",
 ] as const;
 
+const KNOWN_COMPONENTS: ReadonlySet<string> = new Set(
+  PLUGIN_UI_COMPONENT_NAMES,
+);
+const SEGMENT_TEMPLATE_COMPONENTS: ReadonlySet<string> = new Set(
+  SEGMENT_TEMPLATE_COMPONENT_NAMES,
+);
+
 export interface PluginUiSpecIssue {
   /** JSON path inside the spec, such as `view.children[0].component`, or `(root)`. */
   readonly path: string;
@@ -367,7 +377,10 @@ export function pluginUiSpecIssues(
   return issues;
 }
 
-/** A segment template is display-only: a `match`, a view, and no actions. */
+/**
+ * A segment template is display-only: a `match`, a view of display
+ * components, and no actions.
+ */
 function segmentTemplateIssues(
   record: Readonly<Record<string, unknown>>,
 ): PluginUiSpecIssue[] {
@@ -393,6 +406,18 @@ function segmentTemplateIssues(
         message: "not valid in a segment template",
       });
   visitViewNodes(record.view, ["view"], (node, at) => {
+    const field = node.component !== undefined ? "component" : "type";
+    const name = node[field];
+    // An unknown name is already a schema issue.
+    if (
+      typeof name === "string" &&
+      KNOWN_COMPONENTS.has(name) &&
+      !SEGMENT_TEMPLATE_COMPONENTS.has(name)
+    )
+      issues.push({
+        path: formatPath([...at, field]),
+        message: `${name} is not available in a segment template, which only displays; use one of ${SEGMENT_TEMPLATE_COMPONENT_NAMES.join(", ")}`,
+      });
     for (const field of ["on", "watch"])
       if (node[field] !== undefined)
         issues.push({

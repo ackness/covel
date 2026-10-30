@@ -160,7 +160,10 @@ export async function buildUiSpecsResponse(params: {
     specs: readonly Record<string, unknown>[];
   }>;
   view: Array<{ pluginId: string; specs: readonly Record<string, unknown>[] }>;
-  /** Story paragraph templates, in this order for tie-breaks. */
+  /**
+   * Story paragraph templates, in the session's plugin order when a session
+   * is given; the client breaks ties in this order.
+   */
   segment: Array<{
     pluginId: string;
     specs: readonly Record<string, unknown>[];
@@ -170,9 +173,10 @@ export async function buildUiSpecsResponse(params: {
   const { sessionId, session: knownSession, registry, store } = params;
   const session =
     knownSession ?? (sessionId ? await store.getSession(sessionId) : undefined);
-  const activeFilter = session
-    ? new Set(runnablePluginIds(session.activePlugins ?? [], registry))
+  const runnable = session
+    ? runnablePluginIds(session.activePlugins ?? [], registry)
     : undefined;
+  const activeFilter = runnable ? new Set(runnable) : undefined;
   const loaded = await loadValidatedSpecs(registry);
 
   type SlotEntry = {
@@ -195,6 +199,15 @@ export async function buildUiSpecsResponse(params: {
       if (specs.length === 0) continue;
       bySlot[slot].push({ pluginId: plugin.pluginId, specs });
     }
+  }
+
+  // Equally specific templates go to the earlier plugin, so segment entries
+  // follow the session's plugin order, not the registry's.
+  if (runnable) {
+    const position = new Map(runnable.map((id, index) => [id, index]));
+    bySlot.segment.sort(
+      (a, b) => position.get(a.pluginId)! - position.get(b.pluginId)!,
+    );
   }
 
   const diagnostics = loaded.diagnostics.filter(
