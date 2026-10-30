@@ -32,10 +32,20 @@ export function mergeRecoveredMessages(
       const row = messages[existing];
       // A durable same-ID row replaces the client timestamp and echo marker.
       if (row?.requestId) replace(existing, message);
-      // A completed story without segments takes the committed speakers;
-      // its text and ownership stay with the live row.
-      else if (row && !isStream(row) && !row.segments && message.segments)
-        replace(existing, { ...row, segments: message.segments });
+      // A completed story without segments takes the committed speakers; its
+      // text and ownership stay with the live row. A player message shown
+      // without its actions takes the committed ones, so its bubble names the
+      // acting character.
+      else if (row) {
+        const segments =
+          !isStream(row) && !row.segments && message.segments
+            ? { segments: message.segments }
+            : {};
+        const actions =
+          !row.actions && message.actions ? { actions: message.actions } : {};
+        if (segments.segments || actions.actions)
+          replace(existing, { ...row, ...segments, ...actions });
+      }
       // A later live completion may have arrived while the snapshot was read.
       previous = existing;
       continue;

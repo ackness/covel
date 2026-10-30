@@ -189,7 +189,17 @@ export function useComposerModes({
       // plain text request it always was.
       if (mode.kind === "say" || text.startsWith("/")) {
         if (!joined) return false;
-        onSendMessage(joined);
+        // The default player's text request names no seat, as it never has.
+        // A seat the server cannot default to (a host-only session) rides
+        // along, or the line is refused for lack of a player seat.
+        const seat = composerSeat(seats);
+        if (seat && seat !== primarySeat(seats))
+          submitComposerAction({
+            kind: joined.startsWith("/") ? "command" : "say",
+            text: joined,
+            seatId: seat.id,
+          });
+        else onSendMessage(joined);
         setSelected(({ restoredDrafts: _sent, ...current }) => current);
         return true;
       }

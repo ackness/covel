@@ -811,6 +811,29 @@ describe("useGameViewComposer modes", () => {
     expect(sessionMock.submitComposerAction).not.toHaveBeenCalled();
   });
 
+  it("keeps the host seat on an unknown slash line in a host-only session", () => {
+    const host: Seat = {
+      id: "gm",
+      controller: "human",
+      role: "host",
+      characters: [],
+    };
+    sessionMock.sessionActionKinds = catalogue("gm", "host", [
+      "narrate",
+      "advance",
+      "command",
+    ]);
+    const { result, onSendMessage } = setup([], false, "playing", [], [host]);
+    act(() => result.current.setInputValue("/unknown"));
+    act(() => result.current.handleSubmit());
+    expect(sessionMock.submitComposerAction).toHaveBeenCalledExactlyOnceWith({
+      kind: "command",
+      text: "/unknown",
+      seatId: "gm",
+    });
+    expect(onSendMessage).not.toHaveBeenCalled();
+  });
+
   it("takes back the mode, text and fields of a submission stopped before it started", () => {
     const { result, rerender } = setup([]);
     sessionMock.restoredInput = {

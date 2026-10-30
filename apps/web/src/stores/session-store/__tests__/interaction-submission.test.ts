@@ -88,9 +88,24 @@ function makeDeps(): Parameters<typeof submitInteractionBlock>[0] {
     stateRef: {
       current: {
         ...initialState,
-        session: { id: "session-1", status: "active" } as NonNullable<
-          typeof initialState.session
-        >,
+        session: {
+          id: "session-1",
+          status: "active",
+          seats: [
+            {
+              id: "main",
+              controller: "human",
+              role: "player",
+              characters: "auto",
+            },
+          ],
+        } as unknown as NonNullable<typeof initialState.session>,
+        gameState: {
+          characters: [
+            { id: "aya", name: "Aya", type: "player" },
+            { id: "bo", name: "Bo", type: "player" },
+          ],
+        },
       },
     },
     claimAction: (sid) =>
@@ -160,6 +175,20 @@ describe("interaction submission", () => {
         content: "Ready",
         timestamp: stored.timestamp,
         turnId: "follow-up-turn",
+        actions: [
+          {
+            kind: "act",
+            interaction: {
+              turnId: "turn-1",
+              interactionId: "form-1",
+              type: "form",
+            },
+            fields: { name: "Player", points: "3" },
+            seatId: "main",
+            actorId: "aya",
+            source: "player",
+          },
+        ],
       },
     });
     // The rest of the stream is an ordinary turn.
@@ -172,6 +201,27 @@ describe("interaction submission", () => {
     );
     expect(deps.resyncSession).toHaveBeenCalledOnce();
     expect(deps.inFlight.size).toBe(0);
+  });
+
+  it("labels the bubble with the character the seat currently acts as", async () => {
+    const deps = makeDeps();
+    const state = deps.stateRef.current;
+    deps.stateRef.current = {
+      ...state,
+      session: {
+        ...state.session!,
+        seats: [{ ...state.session!.seats[0]!, currentCharacterId: "bo" }],
+      },
+    };
+    answerWith(stored, envelope("execution.completed", { committed: true }));
+    await submitInteractionBlock(deps, submission);
+    expect(deps.dispatch).toHaveBeenCalledWith({
+      type: "ADD_MESSAGE",
+      message: expect.objectContaining({
+        id: "server-message",
+        actions: [expect.objectContaining({ seatId: "main", actorId: "bo" })],
+      }),
+    });
   });
 
   it("submits the answer as the kind its interaction declares", async () => {

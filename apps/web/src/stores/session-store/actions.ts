@@ -52,7 +52,10 @@ import {
   type SessionRuntimeRefs,
 } from "./runtime-refs.js";
 import { refreshSessionActionKinds } from "./action-kinds-refresh.js";
-import { refreshSessionResource } from "./session-resource-reads.js";
+import {
+  invalidateSessionResource,
+  refreshSessionResource,
+} from "./session-resource-reads.js";
 import { canRunSessionAction } from "./selectors.js";
 import type { SseEventHandler } from "./sse-handler.js";
 import { applyResumeEvents as applyResumeSseEvents } from "./sse-handler.js";
@@ -384,8 +387,12 @@ export function useBuildSessionActions({
           if (
             sessionIdRef.current === sid &&
             sessionGenerationRef.current === generation
-          )
+          ) {
+            // A session read that began before the switch holds the old seats
+            // and would restore them when it lands; it reads again instead.
+            invalidateSessionResource(dispatch, ["game-state", sid]);
             dispatch({ type: "SET_SESSION_SEATS", seats });
+          }
           return seats;
         });
       const settled: Promise<readonly Seat[] | undefined> = switching

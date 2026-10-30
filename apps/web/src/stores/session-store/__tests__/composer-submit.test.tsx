@@ -423,6 +423,45 @@ describe("switchSeatCharacter", () => {
     expect(result.current.state.session?.seats).toEqual(seats);
   });
 
+  it("keeps the switch when a session read from before it lands afterwards", async () => {
+    let onComplete!: () => void;
+    vi.spyOn(api, "sendAction").mockImplementation(((
+      _request: unknown,
+      _onEvent: unknown,
+      _onError: unknown,
+      done: () => void,
+    ) => {
+      onComplete = done;
+      return new AbortController();
+    }) as never);
+    const switched = [{ ...session.seats[0]!, currentCharacterId: "bo" }];
+    vi.spyOn(api, "setSeatCurrentCharacter").mockResolvedValue({
+      seats: switched,
+    });
+    let landOld!: (value: api.SessionRecord) => void;
+    vi.mocked(api.getSession)
+      .mockReset()
+      .mockReturnValueOnce(
+        new Promise((resolve) => {
+          landOld = resolve;
+        }),
+      )
+      .mockResolvedValue({ ...session, seats: switched });
+    const { result } = renderActions(passthrough);
+    await act(async () => result.current.actions.sendMessage("Hi"));
+    // The turn ends and its session read starts, still holding the old seats.
+    await act(async () => onComplete());
+    await waitFor(() => expect(api.getSession).toHaveBeenCalledOnce());
+    await act(async () =>
+      result.current.actions.switchSeatCharacter("main", "bo"),
+    );
+    await act(async () => landOld(session));
+    await waitFor(() => expect(api.getSession).toHaveBeenCalledTimes(2));
+    await waitFor(() =>
+      expect(result.current.state.session?.seats).toEqual(switched),
+    );
+  });
+
   it("rejects and keeps the seats when the server refuses", async () => {
     vi.spyOn(api, "setSeatCurrentCharacter").mockRejectedValue(
       new Error("not bound"),
