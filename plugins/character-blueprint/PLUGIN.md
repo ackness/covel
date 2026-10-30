@@ -1,5 +1,5 @@
 ---
-version: 0.0.38
+version: 0.0.39
 displayName: Character Profiles
 description: >-
   Saves the world's preset character profiles along with their portraits,

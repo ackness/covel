@@ -11,6 +11,8 @@
  * write: it is bound the next time the seats are read.
  */
 
+import type { TurnAction } from "./actions.js";
+
 /** Who sits in the seat. An AI controller arrives with orchestration. */
 export type SeatController = "human" | "empty";
 
@@ -86,4 +88,24 @@ export function primarySeat(seats: readonly Seat[]): Seat | undefined {
   return seats.find(
     (seat) => seat.controller === "human" && seat.role === "player",
   );
+}
+
+/**
+ * The character a plugin follows for this turn: the first existing actor of a
+ * player action, otherwise the primary seat's current character, otherwise none.
+ * Pass the source turn's actions when processing a detached job.
+ */
+export function actingCharacterOf<C extends SeatCharacter>(
+  actions: readonly TurnAction[],
+  characters: readonly C[],
+  seats: readonly Seat[],
+): C | undefined {
+  for (const action of actions) {
+    if (action.source !== "player" || !action.actorId) continue;
+    const actor = characters.find(
+      (character) => character.id === action.actorId,
+    );
+    if (actor) return actor;
+  }
+  return currentCharacterOf(primarySeat(seats), characters, seats);
 }

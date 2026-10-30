@@ -11,13 +11,15 @@ export const PLAYER_NAME_VALIDATOR = "player-name";
  * may take none of them: the World Model refuses a name that is an alias of
  * another character, and a player who shares an NPC's full name makes every
  * later lookup of that name ambiguous.
- * @param {readonly { type?: string, name: string, aliases?: readonly string[] }[] | undefined} characters
+ * @param {readonly { id?: string, name: string, aliases?: readonly string[] }[] | undefined} characters
+ * @param {string} [exemptCharacterId]
  * @returns {string[]}
  */
-export function takenNameKeys(characters) {
+export function takenNameKeys(characters, exemptCharacterId) {
   const keys = new Set();
   for (const character of characters ?? []) {
-    if (character.type === "player") continue;
+    if (exemptCharacterId !== undefined && character.id === exemptCharacterId)
+      continue;
     for (const name of [character.name, ...(character.aliases ?? [])]) {
       const key = characterNameKey(name);
       if (key) keys.add(key);
@@ -66,12 +68,13 @@ function nameDigest(salt, key) {
  * suspect, which is what submitting the form tells them too.
  * @param {Parameters<typeof takenNameKeys>[0]} characters
  * @param {string} salt
+ * @param {string} [exemptCharacterId]
  * @returns {{ salt: string, taken: string[] }}
  */
-export function takenNameDigests(characters, salt) {
+export function takenNameDigests(characters, salt, exemptCharacterId) {
   return {
     salt,
-    taken: takenNameKeys(characters)
+    taken: takenNameKeys(characters, exemptCharacterId)
       .map((key) => nameDigest(salt, key))
       .sort(),
   };

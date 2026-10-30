@@ -134,6 +134,8 @@ It does not depend on a particular storytelling plugin. You can use it with eith
 
 After each turn, it records the key points of the story automatically, and includes them when the story is written later. In a long game, it helps the model remember clues, promises and relationships between characters.
 
+The player profile follows the source turn’s actor, falling back to the primary seat’s current character. Recall matching excludes only the primary seat’s current character’s name; other player characters’ names remain included.
+
 ### What you will see
 
 The "Core Memory" panel on the right lists what is remembered, in blocks. There are four blocks by default: Story State, Character Relationships, Current Scene, and Player Profile. At the start of a game the panel is empty. It fills in after the first turn ends.

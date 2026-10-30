@@ -150,7 +150,7 @@ Every write checks these rules: seat IDs are unique; at most one seat uses `"aut
 - The `PostContextAssembly` payload names it in `currentCharacterId` (see [hooks](./hooks.md)).
 - The player status in the game view shows it.
 
-A plugin reads the same rule through three SDK helpers:
+A plugin reads the same rule through the SDK helpers:
 
 ```js
 import { currentCharacterOf, primarySeat } from "@covel/plugin-handlers-utils";
@@ -163,6 +163,8 @@ const player = currentCharacterOf(
 ```
 
 `seatCharacterIds(seat, characters, seats)` returns the IDs of the characters bound to one seat.
+
+`actingCharacterOf(actions, characters, seats)` finds the acting character for a turn: it reads `source: "player"` actions in order and returns the first existing character named by an `actorId`; otherwise it falls back to the primary seat's current character, then `undefined`. Unknown actor IDs and system actions do not select a character. Function runtimes and guards pass `ctx.playerActions`; extension providers and tools have no actions and pass `[]`. Detached jobs pass their source turn's `ctx.inputs.turn.value.actions` (defaulting to `[]`) to retain its actor.
 
 **Switching the current character**: `PATCH /api/sessions/:id/seats/:seatId` with the body `{ "currentCharacterId": "…" }`. The character must be bound to that seat, and a human must control the seat. It applies from the next turn. See [API](./api.md#session-seats). The game view has no switch control yet.
 
@@ -178,7 +180,7 @@ const player = currentCharacterOf(
 - A plugin's action kind declares which roles may use it (`contributes.actionKinds[].roles`, default `[player]`).
 - An action taken as a character (`say`, `act`, and plugin kinds by default) may use only a character bound to the seat; left out, it is the seat's current character. A seat no human controls cannot submit actions.
 
-The bundled plugins that still use `find(type === "player")` (inventory, checks, memory, character creation and others) act on the first player character when there are several, until they move to seats.
+The bundled character profiles, character creator, dice checks, inventory, memory and tabletop rules follow the action’s actor, falling back to the primary seat’s current character. Roleplay notes, recall names and taken names exclude only that character; other player characters remain included. Scene Stage still uses the first player character.
 
 ## Dynamic dimension snapshot
 

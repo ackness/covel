@@ -1,4 +1,5 @@
 import {
+  actingCharacterOf,
   instructionLocaleFor,
   resolveI18nText,
 } from "@covel/plugin-handlers-utils";
@@ -50,8 +51,10 @@ export default async function extractMemory(ctx) {
   }));
   const locale = ctx.locale ?? digest.locale ?? "zh-CN";
   const lang = instructionLocaleFor(locale);
-  const player = ctx.world?.characters.find(
-    (character) => character.type === "player",
+  const player = actingCharacterOf(
+    Array.isArray(digest.actions) ? digest.actions : [],
+    ctx.world?.characters ?? [],
+    ctx.world?.seats ?? [],
   );
   const facts = player
     ? {

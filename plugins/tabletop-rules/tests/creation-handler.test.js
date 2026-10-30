@@ -61,7 +61,13 @@ function makeCtx({
     turnId: "turn-1",
     pluginId: "tabletop-rules",
     locale: "en-US",
-    world: { characterSchema: worldSchema, characters },
+    world: {
+      seats: [
+        { id: "main", controller: "human", role: "player", characters: "auto" },
+      ],
+      characterSchema: worldSchema,
+      characters,
+    },
     store: {
       getSession: async () => sessionRecord,
       listPlayerInputs: async () => playerInputs,
@@ -298,4 +304,31 @@ it("uses the World Model schema without reading a provider output or schema tool
   expect(calls.tools.map((call) => call.name)).not.toContain(
     "get-character-schema",
   );
+});
+
+it("applies allocation to the acting character instead of the first player", async () => {
+  const { ctx, calls } = makeCtx({
+    characters: [
+      { id: "first", type: "player", fields: {} },
+      { id: "second", type: "player", fields: {} },
+    ],
+    playerInputs: [
+      {
+        id: "answer",
+        formId: "tabletop-rules-allocation",
+        values: { tideReading: 4, combat: 2 },
+      },
+    ],
+    pluginData: new Map([
+      ["setup/rules", rules],
+      ["setup/offered", { formId: "tabletop-rules-allocation" }],
+    ]),
+  });
+  ctx.playerActions = [
+    { seatId: "main", kind: "act", source: "player", actorId: "second" },
+  ];
+  expect((await handler(ctx)).value.playerId).toBe("second");
+  expect(calls.updates).toEqual([
+    { id: "second", fields: { tideReading: 4, combat: 2 } },
+  ]);
 });

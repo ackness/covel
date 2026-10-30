@@ -50,7 +50,7 @@ Plugins marked "On by default" are added to every game automatically, and you ca
 | [Story Memory](./story.md) `memory`                   | Remembers the ongoing plot, the current scene and the player character's state | Yes           |
 | [History Compaction](./story.md) `history-compaction` | When the conversation gets long, summarizes the older part                     | Yes           |
 
-A session may have several player characters. The two narrator plugins follow the character you are currently playing (see [Narrator · The character you play](./story.md#the-character-you-play) and [Seats](../reference/world-model.md#seats)). The other bundled plugins that still work with "the player character" (Story Memory, Inventory, Dice Check, Tabletop Rules, Character Creator, Scene Stage, Character Profiles) use the first one when there are several.
+A session may have several player characters. The two narrator plugins follow the character you are currently playing (see [Narrator · The character you play](./story.md#the-character-you-play) and [Seats](../reference/world-model.md#seats)). Story Memory, Inventory, Dice Check, Tabletop Rules, Character Creator and Character Profiles follow the action’s actor, falling back to the primary seat’s current character. Scene Stage still uses the first player character.
 
 ### RPG mechanics
 

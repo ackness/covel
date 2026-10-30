@@ -37,6 +37,8 @@ For full setup steps, see [Point buy and dice checks](../recipes/point-buy.md).
 
 When the player character does something with a risk of failing, such as picking a lock, climbing a wall, or persuading a guard, the result is not left to the model's guess. The dice are rolled before the story is written. The model can only read the result under the rules, and the success or failure it writes must match the dice. If it does not match, the text is sent back for a rewrite. Actions without risk do not roll dice.
 
+Check modifiers use the action’s actor’s attributes, falling back to the primary seat’s current character.
+
 ### What you will see
 
 - A check block in the story text: the action, the calculation, and the result, for example `14 + 4 = 18 vs DC 12`. Critical successes and critical failures are highlighted.
@@ -85,6 +87,8 @@ It takes no world data. What a world can do is define the player character's num
 ## Tabletop Rules (`tabletop-rules`)
 
 Adds one step after character creation: assigning points to the player character's attributes. During play, you can also start a check yourself, choosing the action, the attribute and the difficulty.
+
+Point allocation and checks follow the action’s actor, falling back to the primary seat’s current character.
 
 ### What you will see
 
@@ -151,6 +155,8 @@ Quests are matched by name, so quest names and the names of people who give them
 ## Inventory (`inventory`)
 
 Items that the story clearly gives you, takes from you, or equips are recorded in your bag automatically. You can check it on the right at any time.
+
+Bookkeeping applies only item changes held by the action’s actor, falling back to the primary seat’s current character. Other player characters’ item changes do not enter the bag.
 
 ### What you will see
 

@@ -13,5 +13,5 @@ io:
     contract: tabletop-check@1
 function:
   tools:
-    builtin: [list-characters, create-form]
+    builtin: [create-form]
 ---

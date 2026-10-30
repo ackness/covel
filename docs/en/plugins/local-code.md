@@ -437,19 +437,20 @@ Plugin data works the same way: what you read includes what earlier, completed r
 
 ### Who the player is
 
-A session may have several `type: player` characters (one person playing two characters, for example). The session's seats decide which one the player is acting as right now, and you read them on `ctx.world.seats`. Find that character with the SDK helpers:
+A session may have several `type: player` characters (one person playing two characters, for example). The action's `actorId` identifies the character being played; without an actor, use the primary seat's current character from `ctx.world.seats`. Find that character with the SDK helper:
 
 ```js
-import { currentCharacterOf, primarySeat } from "@covel/plugin-handlers-utils";
+import { actingCharacterOf } from "@covel/plugin-handlers-utils";
 
-const player = currentCharacterOf(
-  primarySeat(ctx.world.seats),
+const player = actingCharacterOf(
+  ctx.playerActions,
   ctx.world.characters,
   ctx.world.seats,
-); // the character record, or undefined when nobody is seated or bound
+); // the character record, or undefined when no actor or current character exists
 ```
 
 - Do not use `ctx.world.characters.find((c) => c.type === "player")`: with several player characters it finds only the first.
+- A detached job uses `ctx.inputs.turn.value.actions ?? []` to retain its source turn’s actor. Tools and extension providers have no actions and pass `[]`. The action’s actor takes precedence over the primary seat’s current character; see [Seats](../reference/world-model.md#seats) for the full rule.
 - `seatCharacterIds(seat, characters, seats)` gives every character ID bound to a seat, including the other characters the player controls.
 - Seats are read-only. After the player switches the current character, reads see the new one from the next turn. For the binding and current-character rules, see [Seats](../reference/world-model.md#seats).
 

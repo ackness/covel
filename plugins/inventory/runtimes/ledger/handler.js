@@ -1,4 +1,5 @@
 import {
+  actingCharacterOf,
   getPendingProposals,
   getToolContent,
   withPendingProposals,
@@ -17,8 +18,10 @@ import {
  * @type {import("@covel/plugin-handlers-utils").PluginFunctionHandler}
  */
 export default async function handler(ctx) {
-  const player = ctx.world?.characters.find(
-    (character) => character.type === "player",
+  const player = actingCharacterOf(
+    ctx.playerActions ?? [],
+    ctx.world?.characters ?? [],
+    ctx.world?.seats ?? [],
   );
   const all = inventoryChangesFromWorldIR(ctx.inputs?.worldIR?.value, player);
   const changes = all.slice(0, MAX_CHANGES);

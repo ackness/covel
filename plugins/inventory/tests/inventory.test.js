@@ -884,7 +884,17 @@ describe("inventory from WorldIR", () => {
         listPluginData: async () => [],
         getPluginData: async () => null,
       },
-      world: { characters: [player] },
+      world: {
+        seats: [
+          {
+            id: "main",
+            controller: "human",
+            role: "player",
+            characters: "auto",
+          },
+        ],
+        characters: [player],
+      },
       inputs: {
         worldIR: {
           value: worldIR([
@@ -915,6 +925,71 @@ describe("inventory from WorldIR", () => {
     });
   });
 
+  it("applies only the acting character's holdings when another player is current", async () => {
+    const other = { id: "mira", name: "Mira", type: "player" };
+    const result = await ledger({
+      sessionId: "sess-1",
+      turnId: "turn-1",
+      pluginId: "inventory",
+      runtimeId: "inventory/ledger",
+      random: makeRandom(),
+      store: {
+        listPluginData: async () => [],
+        getPluginData: async () => null,
+      },
+      world: {
+        characters: [player, other],
+        seats: [
+          {
+            id: "main",
+            controller: "human",
+            role: "player",
+            characters: "auto",
+          },
+        ],
+      },
+      playerActions: [
+        { seatId: "main", kind: "act", source: "player", actorId: "mira" },
+      ],
+      inputs: {
+        worldIR: {
+          value: worldIR([
+            change({
+              item: "torch",
+              holder: "mira",
+              operation: "gain",
+              quantity: 2,
+            }),
+            change({
+              item: "iron-sword",
+              holder: "sess-1-player",
+              operation: "gain",
+            }),
+          ]),
+        },
+      },
+    });
+    expect(getToolContent(result).value.applied).toBe(1);
+    expect(getPendingProposals(result)[0].payload.ops).toEqual([
+      expect.objectContaining({
+        value: expect.objectContaining({ name: "Torch", quantity: 2 }),
+      }),
+    ]);
+    expect(
+      inventoryChangesFromWorldIR(
+        worldIR([
+          change({ item: "torch", holder: "mira", operation: "gain" }),
+          change({
+            item: "iron-sword",
+            holder: "sess-1-player",
+            operation: "gain",
+          }),
+        ]),
+        other,
+      ),
+    ).toEqual([{ op: "add", name: "Torch", quantity: 1 }]);
+  });
+
   it("names the changes beyond the per-turn cap instead of dropping them silently", async () => {
     const events = Array.from({ length: 10 }, (_, index) =>
       change({
@@ -938,7 +1013,17 @@ describe("inventory from WorldIR", () => {
         listPluginData: async () => [],
         getPluginData: async () => null,
       },
-      world: { characters: [player] },
+      world: {
+        seats: [
+          {
+            id: "main",
+            controller: "human",
+            role: "player",
+            characters: "auto",
+          },
+        ],
+        characters: [player],
+      },
       inputs: {
         worldIR: {
           value: {

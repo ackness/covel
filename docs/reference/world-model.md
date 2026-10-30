@@ -150,7 +150,7 @@ interface CharacterRecord {
 - `PostContextAssembly` 的载荷用 `currentCharacterId` 指出它（见[Hook](./hooks.md)）。
 - 游玩界面的玩家状态显示它。
 
-插件用 SDK 的三个辅助函数读同一条规则：
+插件用 SDK 的辅助函数读同一条规则：
 
 ```js
 import { currentCharacterOf, primarySeat } from "@covel/plugin-handlers-utils";
@@ -163,6 +163,8 @@ const player = currentCharacterOf(
 ```
 
 `seatCharacterIds(seat, characters, seats)` 返回一个座位绑定的角色 `id`。
+
+`actingCharacterOf(actions, characters, seats)` 找出本回合行动的角色：按顺序读取 `source: "player"` 的行动，返回第一个 `actorId` 对应的现存角色；没有时退回主座位的当前角色；仍没有时返回 `undefined`。未知的 `actorId` 和系统行动不会选中角色。函数 runtime 和 guard 传 `ctx.playerActions`；扩展提供者和工具没有行动，传 `[]`。后台作业传源回合的 `ctx.inputs.turn.value.actions`（缺省为 `[]`），保留源行动的角色。
 
 **切换当前角色**：`PATCH /api/sessions/:id/seats/:seatId`，请求体 `{ "currentCharacterId": "…" }`。角色必须绑定在这个座位上，座位必须由人控制。从下一回合起生效。见 [API](./api.md#会话座位)。现在游玩界面还没有切换控件。
 
@@ -178,7 +180,7 @@ const player = currentCharacterOf(
 - 插件的行动类型自己声明哪些身份能用（`contributes.actionKinds[].roles`，默认 `[player]`）。
 - 以角色进行的行动（`say`、`act` 和默认的插件类型）只能用绑定在这个座位上的角色，省略时是座位的当前角色。没有人控制的座位不能提交行动。
 
-还在用 `find(type === "player")` 的内置插件（背包、检定、记忆、建角等）在有多个玩家角色时按第一个处理，之后再改用座位。
+内置的角色资料、角色创建、骰子判定、行囊、故事记忆和跑团规则按行动角色处理，没有行动角色时跟随主座位的当前角色。排除角色说明、回忆匹配姓名和建角占用姓名时也只排除这个角色，其他玩家角色照常参与。场景舞台仍按第一个玩家角色处理。
 
 ## 动态维度快照
 

@@ -437,19 +437,20 @@ const characters = ctx.world?.characters ?? [];
 
 ### 谁是玩家
 
-一局游戏可以有多个 `type: player` 的角色（例如一个人同时扮演两个角色）。玩家此刻扮演哪一个，由会话的座位决定，`ctx.world.seats` 里能读到。用 SDK 的辅助函数找它：
+一局游戏可以有多个 `type: player` 的角色（例如一个人同时扮演两个角色）。本次扮演哪一个，先看行动的 `actorId`；没有行动角色时，再看 `ctx.world.seats` 里主座位的当前角色。用 SDK 的辅助函数找它：
 
 ```js
-import { currentCharacterOf, primarySeat } from "@covel/plugin-handlers-utils";
+import { actingCharacterOf } from "@covel/plugin-handlers-utils";
 
-const player = currentCharacterOf(
-  primarySeat(ctx.world.seats),
+const player = actingCharacterOf(
+  ctx.playerActions,
   ctx.world.characters,
   ctx.world.seats,
-); // the character record, or undefined when nobody is seated or bound
+); // the character record, or undefined when no actor or current character exists
 ```
 
 - 不要用 `ctx.world.characters.find((c) => c.type === "player")`：有多个玩家角色时它只找到第一个。
+- 后台作业用 `ctx.inputs.turn.value.actions ?? []`，保留源回合的行动角色；工具和扩展提供者没有行动，传 `[]`。行动角色优先于主座位的当前角色，完整规则见[座位](../reference/world-model.md#座位)。
 - `seatCharacterIds(seat, characters, seats)` 给出一个座位绑定的全部角色 `id`，玩家控制的其他角色也在里面。
 - 座位只读。玩家换当前角色后，下一回合起读到新的角色。绑定和当前角色的规则见[座位](../reference/world-model.md#座位)。
 
