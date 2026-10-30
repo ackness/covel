@@ -92,10 +92,20 @@ describe("segmented stories through the API", () => {
     const created = await app.request("/api/sessions", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ locale: "zh-CN", plugins: ["narrator"] }),
+      body: JSON.stringify({
+        locale: "zh-CN",
+        plugins: ["narrator"],
+        // Explicit requests still include default plugins. This adapter only
+        // implements narration, and the history assertion must inspect it.
+        excludedPlugins: [...boot.registry.getAll().keys()].filter(
+          (pluginId) => pluginId !== "narrator",
+        ),
+      }),
     });
+    expect(created.status).toBe(201);
     sessionId = ((await created.json()) as { id: string }).id;
     const session = (await boot.store.getSession(sessionId))!;
+    expect(session.activePlugins).toEqual(["narrator"]);
     const now = new Date().toISOString();
     await boot.store.upsertCharacterSchema({
       sessionId,
