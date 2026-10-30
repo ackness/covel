@@ -141,7 +141,7 @@ Every failure uses a non-2xx status code, plus this error envelope:
 
 `error` is always present. Endpoints that clients must handle by error code (such as `plugin-rpc` and `media`) also return `code`.
 
-This is the HTTP error format. Public model tool results use `{ok,data}` / `{ok,error:{code,message}}`; see [Tools](./tools.md). An HTTP `error` string is not a tool error object.
+This is the HTTP error format. Public model tool results have no `ok` field: a success is `{summary?, data?, staged?}` and a failure is `{error:{code,message,hint?}}`; see [Tools](./tools.md#unified-result-format-and-error-codes). An HTTP `error` string is not a tool error object.
 
 `code` uses lowercase letters, digits and `_` or `-` separators. Plugin-selection errors keep solver codes such as `missing-provider`.
 

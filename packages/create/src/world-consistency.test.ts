@@ -315,12 +315,14 @@ describe("isolated lore repair", () => {
     expect(JSON.stringify(requests)).not.toContain(secret);
   });
 
-  it.each([
+  const badRepairs = [
     "not a delimited answer",
     `===WORLD_MD===\n<!-- /narrator-only -->\n${secret}\n<!-- narrator-only -->\n===END===`,
     "===WORLD_MD===\nThis lore is model output.\n===END===",
-  ])(
-    "fails a protected repair without an unsafe full-lore retry",
+  ];
+
+  it.each(badRepairs)(
+    "asks a new world for its lore again when the targeted repair fails",
     async (answer) => {
       const source = lore.replace(
         secret,
@@ -330,16 +332,101 @@ describe("isolated lore repair", () => {
         patch(visible, "{}", yaml),
         patch(source),
         answer,
+        patch(lore),
       ]);
       const result = await createWorld({
         llm,
         concept: "Harbor",
         locale: "en-US",
       });
-      expect(result.success).toBe(false);
-      expect(requests).toHaveLength(3);
+      expect(result).toMatchObject({ success: true, lore });
+      expect(requests).toHaveLength(4);
+      // The next request names what was wrong with the lore it replaces.
+      expect(String(requests[3]?.messages[3]?.content)).toContain(
+        "could not be imported",
+      );
     },
   );
+
+  it.each(badRepairs)(
+    "fails a protected revision without a full-lore retry when the targeted repair fails",
+    async (answer) => {
+      const { llm, requests } = scripted([
+        patch(lore.replace(secret, `This lore is model output. ${secret}`)),
+        answer,
+      ]);
+      const result = await createWorld({
+        llm,
+        concept: "Harbor",
+        locale: "en-US",
+        revision: { current, instruction: "Rewrite the hidden witness." },
+      });
+      expect(result.success).toBe(false);
+      expect(requests).toHaveLength(2);
+    },
+  );
+});
+
+describe("new world lore with narrator-only blocks", () => {
+  const missingHook = lore.replace("\n3. Read the letter.", "");
+  const lastMessage = (request: Parameters<LLMAdapter["generate"]>[0]) =>
+    String(request.messages.at(-1)?.content);
+
+  it("asks again when the lore needs a fix and accepts the corrected answer", async () => {
+    const { llm, requests } = scripted([
+      patch(visible, "{}", yaml),
+      patch(missingHook),
+      patch(lore),
+    ]);
+    const result = await createWorld({
+      llm,
+      concept: "Harbor",
+      locale: "en-US",
+    });
+    expect(result).toMatchObject({ success: true, lore });
+    expect(requests).toHaveLength(3);
+    expect(lastMessage(requests[2]!)).toContain(
+      "WORLD.md must include 3 numbered adventure hooks",
+    );
+  });
+
+  it.each([
+    ["an unclosed block", `${visible}\n\n<!-- narrator-only -->\n${secret}`],
+    ["an unopened close", `${visible}\n\n${secret}\n<!-- /narrator-only -->`],
+  ])("asks again when the answer has %s", async (_name, broken) => {
+    const { llm, requests } = scripted([
+      patch(visible, "{}", yaml),
+      patch(broken),
+      patch(lore),
+    ]);
+    const result = await createWorld({
+      llm,
+      concept: "Harbor",
+      locale: "en-US",
+    });
+    expect(result).toMatchObject({ success: true, lore });
+    expect(requests).toHaveLength(3);
+    expect(lastMessage(requests[2]!)).toContain(
+      "narrator-only markers are invalid",
+    );
+  });
+
+  it("stops after the usual number of attempts when the lore stays wrong", async () => {
+    const { llm, requests } = scripted([
+      patch(visible, "{}", yaml),
+      patch(missingHook),
+    ]);
+    const result = await createWorld({
+      llm,
+      concept: "Harbor",
+      locale: "en-US",
+    });
+    expect(result.success).toBe(false);
+    expect(result.errors?.join(" ")).toContain("3 numbered adventure hooks");
+    expect(result.errors?.join(" ")).not.toContain("Protected WORLD.md");
+    // The manifest, then three answers for the lore.
+    expect(requests).toHaveLength(4);
+  });
 });
 
 const contract: WorldGenerationDataContract = {

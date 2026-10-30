@@ -17,6 +17,7 @@ import { parse as parseYaml, stringify as stringifyYaml } from "yaml";
 import {
   canonicalizeLocale,
   DEFAULT_LOCALE,
+  narratorOnlyLoreIssues,
   validateWorldManifest,
   formatValidationErrors,
 } from "@covel/shared";
@@ -177,6 +178,11 @@ function parsePackage(
  * The lore of an answer with its heading normalized, or why it cannot be
  * imported. Explicit generation meta wording gets one targeted repair
  * request; nothing else of the world is written again for it.
+ *
+ * Only a revision of lore that has narrator-only regions is protected: a
+ * rejection ends it, because asking for the whole document again could lose
+ * the hidden regions of the existing world. A new world has nothing to lose,
+ * so a rejection, including unbalanced markers, is asked for again.
  */
 async function checkLore(
   lore: string,
@@ -185,7 +191,17 @@ async function checkLore(
   options: CreateWorldOptions,
   signal: AbortSignal,
 ): Promise<Rejected | { readonly lore: string }> {
-  const protectedLore = hasLoreBoundary(splitLore(lore));
+  if (!options.revision) {
+    const issues = narratorOnlyLoreIssues(lore);
+    if (issues.length > 0)
+      return {
+        errors: [
+          `WORLD.md narrator-only markers are invalid (${issues.map((issue) => `${issue.kind} at line ${issue.line}`).join(", ")}); write <!-- narrator-only --> and <!-- /narrator-only --> each on a line of its own and close every block`,
+        ],
+      };
+  }
+  const protectedLore =
+    options.revision !== undefined && hasLoreBoundary(splitLore(lore));
   const reject = (errors: string[]): Rejected => {
     if (protectedLore)
       throw new LoreBoundaryError(
@@ -196,9 +212,7 @@ async function checkLore(
   // A protected revision's public text has a separate source. Do not add
   // headings from a manifest answer that was allowed to see hidden lore.
   const normalize = (text: string) =>
-    options.revision && protectedLore
-      ? text
-      : normalizeLoreDocument(text, yamlData, locale);
+    protectedLore ? text : normalizeLoreDocument(text, yamlData, locale);
   const normalizedLore = normalize(lore);
   const loreStructureErrors = findLoreStructureErrors(normalizedLore);
   if (loreStructureErrors.length > 0) return reject(loreStructureErrors);
@@ -252,10 +266,17 @@ async function checkLore(
     signal.throwIfAborted();
     if (
       err instanceof LlmIdleTimeoutError ||
-      err instanceof LlmIncompleteOutputError ||
-      err instanceof LoreBoundaryError
+      err instanceof LlmIncompleteOutputError
     )
       throw err;
+    if (err instanceof LoreBoundaryError) {
+      if (protectedLore) throw err;
+      // The repair broke the boundaries of the lore it was given. A new
+      // world is written again as a whole.
+      const repairError = `WORLD.md targeted repair failed: ${err.message}`;
+      log(options, "warn", repairError);
+      return reject([...loreMetaErrors, repairError]);
+    }
     const repairError = `WORLD.md targeted repair LLM error: ${messageOf(err)}`;
     log(options, "error", repairError, err);
     return reject([

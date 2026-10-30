@@ -1,6 +1,6 @@
 # Provider 自管 Wire 指引
 
-本页帮助插件作者选择模型接口、实现非标准协议。模型、地址和凭据由玩家配置；插件只声明用途和协议实现。完整契约见[插件扩展与通信](../../../../docs/reference/plugin-extensions.md#使用已有的模型能力)和[模型用途](../../../../docs/reference/slots.md)。
+本页帮助插件作者选择模型接口、实现非标准协议。模型、地址和凭据由玩家配置；插件只声明用途和协议实现。完整契约见[插件扩展与通信](../../../../docs/reference/plugin-extensions.md#用已有的模型能力)和[模型用途](../../../../docs/reference/slots.md)。
 
 ## 决策树
 

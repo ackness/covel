@@ -51,7 +51,7 @@ PLUGIN.md:
 
 服务端默认允许公网 HTTPS，仍执行地址、DNS 和重定向检查。provider 路由按部署形态处理本地模型；插件的 HTTP helper 则始终走严格的直连路径，还受声明的源和方法约束。两条路径不是同一种访问权限。
 
-不要建议未注册的环境变量或关闭安全检查。完整边界见[安全](../../../../docs/internals/security.md#ssrf-防护)和[环境变量](../../../../docs/reference/env-registry.md)。
+不要建议未注册的环境变量或关闭安全检查。完整边界见[安全](../../../../docs/internals/security.md#outbound-requests-ssrf-guard)和[环境变量](../../../../docs/reference/env-registry.md)。
 
 ## 调试
 

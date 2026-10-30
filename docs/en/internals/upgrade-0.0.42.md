@@ -58,7 +58,7 @@ Confirm the effective values of `STORE_BACKEND`, `MEDIA_ROOT`, and related varia
 
 ### PostgreSQL / Docker
 
-- Deploy the current schema to a **new empty database**. Or use a SQL migration that was designed separately, reviewed, and tested on a copy of the backup.
+- Deploy the current schema to a **new empty database**. Covel provides no migration flow for an old database.
 - Do not treat the generated initial DDL as an upgrade script for an old database.
 - Keep the backups of the old database, volumes, and external media.
 - Check the Compose `DATABASE_URL` together with the volume mappings. Before starting, confirm that the application connects to the new target.
