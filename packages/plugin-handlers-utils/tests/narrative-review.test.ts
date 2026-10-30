@@ -33,6 +33,15 @@ describe("narrative perspective review", () => {
       "my coat",
     );
     expect(
+      perspectiveError("‘Don’t leave me,’ she says.", "character-third"),
+    ).toBeUndefined();
+    expect(
+      perspectiveError(
+        "She takes the guards’ keys. I wait.",
+        "character-second",
+      ),
+    ).toContain("second");
+    expect(
       perspectiveError("她忘我地端详迷你潮灯。", "character-third"),
     ).toBeUndefined();
   });
@@ -306,12 +315,14 @@ describe("narrative perspective review", () => {
         }),
       }),
     ).toEqual({ action: "continue" });
-    // An apostrophe inside a word does not mark speech.
+    // Apostrophes in contractions and possessives do not mark speech.
     const english = { ...ctx, locale: "en" };
     for (const text of [
       "I'm ready.",
       "I’m ready; don’t wait for me.",
       "Aya's coat is mine.",
+      "I'm taking the guards' keys.",
+      "I’m taking the guards’ keys.",
     ])
       expect(
         review.review(english, {
@@ -335,6 +346,21 @@ describe("narrative perspective review", () => {
         }),
       }).replace?.correction,
     ).toContain("violates second-person perspective");
+    // Narration beside quoted speech is still checked, possessives included.
+    for (const text of [
+      '"Take the guards\' keys," I say.',
+      "“Take the guards’ keys,” I say.",
+      "‘Take the guards’ keys,’ I say.",
+    ])
+      expect(
+        review.review(english, {
+          messages: [],
+          response: reply({
+            segments: [{ kind: "dialogue", speaker: "Aya", text }],
+          }),
+        }).replace?.correction,
+        text,
+      ).toContain("violates second-person perspective");
     // Narration beside a quote inside a dialogue segment is still checked.
     expect(
       review.review(ctx, {

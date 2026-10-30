@@ -81,19 +81,39 @@ const personOf: Record<NarrativePerspective, Person | undefined> = {
   dm: undefined,
 };
 
-/** Inspect narration without changing dialogue or the original story text. */
-export function outsideDialogue(text: string): string {
-  const pairs: Record<string, string> = {
-    "“": "”",
-    "‘": "’",
-    "「": "」",
-    "『": "』",
-    "«": "»",
-    '"': '"',
-    "'": "'",
-  };
+const QUOTE_PAIRS: Record<string, string> = {
+  "“": "”",
+  "‘": "’",
+  "「": "」",
+  "『": "』",
+  "«": "»",
+  '"': '"',
+  "'": "'",
+};
+
+/**
+ * A letter of a script that writes apostrophes. Han, kana and Hangul do
+ * not, so a ’ between two of them (‘我的船’吗) closes a quote.
+ */
+const isLetter = (char: string | undefined): boolean =>
+  /\p{L}/u.test(char ?? "") &&
+  !/[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]/u.test(
+    char ?? "",
+  );
+
+/**
+ * Splits narration from quoted speech. `opened` tells whether any quotation
+ * opened, so a text whose only marks are apostrophes has no speech in it.
+ *
+ * A single quote mark (`'` or `’`) is an apostrophe unless it delimits:
+ * between letters (I'm, don’t, Aya's) it never does; after a letter it
+ * closes a single quote that is open and is otherwise a possessive (the
+ * guards' keys); a straight `'` opens a quote only when no letter precedes it.
+ */
+function scanDialogue(text: string): { narration: string; opened: boolean } {
   const stack: string[] = [];
   let result = "";
+  let opened = false;
   // Outermost unmatched opener: the tail from there is validated as
   // narration, while dialogue that closed properly stays stripped.
   // Returning the raw text instead would un-hide closed dialogue and let
@@ -101,26 +121,32 @@ export function outsideDialogue(text: string): string {
   let openStart = -1;
   for (let i = 0; i < text.length; i++) {
     const char = text[i]!;
-    // Apostrophes in contractions/possessives do not start or end speech.
-    const apostrophe =
-      char === "'" &&
-      /\p{L}/u.test(text[i - 1] ?? "") &&
-      /\p{L}/u.test(text[i + 1] ?? "");
+    const single = char === "'" || char === "’";
+    const apostrophe = single && isLetter(text[i - 1]) && isLetter(text[i + 1]);
     if (!apostrophe && char === stack.at(-1)) {
       stack.pop();
       result += " ";
       if (!stack.length) openStart = -1;
     } else if (
       !apostrophe &&
-      pairs[char] &&
-      (char !== "'" || !/\p{L}/u.test(text[i - 1] ?? ""))
+      QUOTE_PAIRS[char] &&
+      (char !== "'" || !isLetter(text[i - 1]))
     ) {
       if (!stack.length) openStart = i;
-      stack.push(pairs[char]!);
+      stack.push(QUOTE_PAIRS[char]!);
+      opened = true;
     } else if (!stack.length) result += char;
   }
   // An unclosed quote cannot hide its remainder from validation.
-  return openStart >= 0 ? result + text.slice(openStart) : result;
+  return {
+    narration: openStart >= 0 ? result + text.slice(openStart) : result,
+    opened,
+  };
+}
+
+/** Inspect narration without changing dialogue or the original story text. */
+export function outsideDialogue(text: string): string {
+  return scanDialogue(text).narration;
 }
 
 const personNames = {
@@ -168,19 +194,11 @@ export function perspectiveError(
     : `Narration violates ${personNames[person].en} perspective near: ${near}. Fix narration only; keep quoted speakers' pronouns.`;
 }
 
-const QUOTE_MARK = /["'“”‘’「」『』«»]/u;
-/** An apostrophe inside a word (I'm, don’t, Aya's) delimits no speech. */
-const WORD_APOSTROPHE = /(?<=\p{L})['’](?=\p{L})/gu;
-
-/** Whether a text marks speech with quotation marks, ignoring apostrophes. */
-const hasSpeechMarks = (text: string): boolean =>
-  QUOTE_MARK.test(text.replace(WORD_APOSTROPHE, ""));
-
 /**
  * The texts of a segmented story draft (JSON with a `segments` array), each
  * as the review reads it, or undefined for a prose draft. A dialogue text
- * with no quotation mark (an apostrophe inside a word is not one) is spoken
- * words only and is not checked.
+ * that opens no quotation (apostrophes in I'm or the guards' keys open none)
+ * is spoken words only and is not checked.
  */
 function storyDraftTexts(text: string): string[] | undefined {
   const stripped = text
@@ -203,7 +221,7 @@ function storyDraftTexts(text: string): string[] | undefined {
     if (!segment || typeof segment !== "object") return [];
     const { kind, text: value } = segment as { kind?: unknown; text?: unknown };
     if (typeof value !== "string") return [];
-    return kind === "dialogue" && !hasSpeechMarks(value) ? [] : [value];
+    return kind === "dialogue" && !scanDialogue(value).opened ? [] : [value];
   });
 }
 
