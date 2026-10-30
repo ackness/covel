@@ -266,7 +266,7 @@ Key fields:
 | `emptyState.message`   | The hint shown when the data is empty. See [Empty state rendering](#empty-state-rendering)                                                                                                                                                                    |
 | `view`                 | The interface itself: a tree built from catalog components. The web interface runs only this declarative kind of spec. Interface declarations that are not JSON, such as `.tsx` or `.js`, are not supported. The API gives a diagnostic and removes that item |
 
-Session sources update from complete snapshots and committed character/schema events without a plugin-owned copy. Plugin state tables live only under front-end `gameState.tables`; World Model fields such as characters, character schema and dimensions remain separate at the top level. Invalid dimension snapshots show a local panel notice; the opening scene still shows the world name and tags.
+Session sources update from complete snapshots and committed character/schema events without a plugin-owned copy. World Model fields such as characters, character schema and dimensions remain separate at the top level. Invalid dimension snapshots show a local panel notice; the opening scene still shows the world name and tags.
 
 **`_jobs`: a virtual data source for background jobs.** When `dataSource.namespace` is set to `_jobs`, the panel receives this plugin's background manual jobs and event jobs (mapped from `_runtime_jobs`). They are keyed by jobId, and each value contains:
 

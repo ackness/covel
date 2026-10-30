@@ -23,7 +23,6 @@ import type {
   DataStore,
   SnapshotPayload,
   CharacterRecord,
-  StateEntryRecord,
   PluginDataRecord,
   SessionSummaryRecord,
   LorebookEntryRecord,
@@ -34,10 +33,8 @@ import { isControlPlanePluginDataNamespace } from "@covel/shared";
 /**
  * Build a full snapshot payload for a session at a given turn.
  *
- * Reads characters, state entries (via state schemas to discover table names),
- * plugin data (walks sessions' rows via the `plugin_data` SQL LIKE fallback in
- * stores that support it, otherwise via plugin-id enumeration), working
- * memory, and the messages cursor.
+ * Reads characters, session-scoped plugin data, runtime exports, working
+ * memory and the messages cursor.
  */
 export async function buildSnapshotPayload(
   store: DataStore,
@@ -52,15 +49,6 @@ export async function buildSnapshotPayload(
   // Characters
   const characters: readonly CharacterRecord[] =
     await store.listCharacters(sessionId);
-
-  // State entries — query all known tables in parallel (audit 2026-06-04
-  // finding M2; previously a serial await-in-loop adding one RTT per table).
-  const stateSchemas = await store.listStateSchemas(sessionId);
-  const stateEntries: StateEntryRecord[] = (
-    await Promise.all(
-      stateSchemas.map((s) => store.listStateEntries(sessionId, s.tableName)),
-    )
-  ).flat();
 
   // Plugin data — union two sources:
   //  1. pluginIds appearing in any runtime_result for the session.
@@ -161,8 +149,6 @@ export async function buildSnapshotPayload(
     },
     characters,
     characterSchema: await store.getCharacterSchema(sessionId),
-    stateSchemas,
-    stateEntries,
     pluginData,
     runtimeExports,
     sessionSummaries,

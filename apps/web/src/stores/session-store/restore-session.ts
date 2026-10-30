@@ -155,9 +155,8 @@ async function restoreLocalFallback(
   sessionId: string,
   dispatch: SessionDispatch,
 ): Promise<void> {
-  const [messagesResult, patchesResult] = await Promise.allSettled([
+  const [messagesResult] = await Promise.allSettled([
     ds.listMessages(sessionId),
-    ds.listStatePatches(sessionId),
   ]);
 
   if (messagesResult.status === "fulfilled") {
@@ -167,12 +166,6 @@ async function restoreLocalFallback(
     });
     // 本地回退走 ds.listMessages 全量恢复，没有更旧要加载 → 游标置空。
     dispatch({ type: "SET_OLDER_MESSAGES_CURSOR", cursor: null });
-  }
-  if (patchesResult.status === "fulfilled") {
-    dispatch({
-      type: "MERGE_INITIAL_STATE_PATCHES",
-      patches: patchesResult.value,
-    });
   }
 }
 

@@ -1,13 +1,11 @@
 import {
   dimensionSnapshotSchema,
   dimensionSettlementSummarySchema,
-  deepMerge,
 } from "@covel/shared";
 import type { SnapshotCharacter, SessionDispatch } from "./types.js";
 import { invalidateSessionResource } from "./session-resource-reads.js";
 
 interface GameStateSnapshotSlice {
-  readonly gameState?: Record<string, unknown>;
   readonly characters: readonly SnapshotCharacter[];
   readonly characterSchema?: unknown;
   readonly dimensions?: unknown;
@@ -31,7 +29,6 @@ export function enrichGameStateFromSnapshot(
   snapshot: GameStateSnapshotSlice,
 ): Record<string, unknown> {
   const enrichedState: Record<string, unknown> = {
-    tables: snapshot.gameState ?? {},
     characters: snapshot.characters,
     dimensions: snapshot.dimensions ?? {},
     ...(snapshot.dimensionProviderPluginId
@@ -143,21 +140,4 @@ export function mergeCommittedDimensions(
     }
   }
   return { ...current, dimensions, dimensionSettlements: summaries };
-}
-
-export function rebuildGameStateFromPatches(
-  patches: readonly {
-    readonly data?: unknown;
-  }[],
-): Record<string, unknown> {
-  let rebuiltGameState: Record<string, unknown> = {};
-  for (const patch of patches) {
-    if (patch.data && typeof patch.data === "object") {
-      rebuiltGameState = deepMerge(
-        rebuiltGameState,
-        patch.data as Record<string, unknown>,
-      );
-    }
-  }
-  return { tables: rebuiltGameState };
 }

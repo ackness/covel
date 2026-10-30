@@ -2,9 +2,7 @@ import "fake-indexeddb/auto";
 import { afterEach, expect, it, vi } from "vitest";
 import { APP_KV_STORE_WORLD_OVERLAYS } from "@covel/store/idb-schema";
 import {
-  appendStatePatch,
   getExecutionSteps,
-  getStatePatches,
   getWorldOverlay,
   removeWorldOverlay,
   removeExecutionSteps,
@@ -24,24 +22,6 @@ it("captures timeline entries before asynchronous storage work", async () => {
   expect(await getExecutionSteps(sessionId)).toEqual([
     { runtimeId: "probe", detail: { progress: 1 } },
   ]);
-});
-
-it("appends atomically even without the service's session lock", async () => {
-  const sessionId = `direct-patches-${crypto.randomUUID()}`;
-  await Promise.all(
-    ["first", "second"].map((id) =>
-      appendStatePatch({
-        id,
-        sessionId,
-        summary: id,
-        packageName: "probe",
-        createdAt: "2026-01-01",
-      }),
-    ),
-  );
-  expect(
-    (await getStatePatches(sessionId))?.map((patch) => patch.id).sort(),
-  ).toEqual(["first", "second"]);
 });
 
 it("does not acknowledge a write whose transaction aborts after request success", async () => {
@@ -139,64 +119,4 @@ it("rejects unkeyed timeline rows without partially overwriting history", async 
     ]),
   ).rejects.toThrow("Invalid execution history identity");
   expect(await getExecutionSteps(sessionId)).toEqual([before]);
-});
-
-it("deduplicates replayed state patches atomically while preserving distinct same-time commits", async () => {
-  const sessionId = `replayed-patches-${crypto.randomUUID()}`;
-  const patch = {
-    id: "sp_trace:1",
-    sessionId,
-    summary: "First",
-    packageName: "probe",
-    data: { stats: { hp: 1 } },
-    createdAt: "2026-09-19T00:00:00Z",
-  };
-  const writes = Promise.all([
-    appendStatePatch(patch),
-    appendStatePatch({ ...patch, data: { stats: { hp: 999 } } }),
-    appendStatePatch({
-      ...patch,
-      id: "sp_trace:2",
-      data: { stats: { mp: 3 } },
-    }),
-  ]);
-  patch.data.stats.hp = 100;
-  await writes;
-  expect(await getStatePatches(sessionId)).toEqual([
-    { ...patch, data: { stats: { hp: 1 } } },
-    { ...patch, id: "sp_trace:2", data: { stats: { mp: 3 } } },
-  ]);
-});
-
-it("retains one latest patch per field after a thousand writes and ignores a recent replay", async () => {
-  const sessionId = `compact-patches-${crypto.randomUUID()}`;
-  const patch = (index: number) => ({
-    id: `event-${index}`,
-    sessionId,
-    summary: "stats.hp",
-    packageName: "probe",
-    createdAt: "2026-01-01",
-    data: { stats: { hp: index } },
-  });
-  for (let i = 0; i < 1000; i++) await appendStatePatch(patch(i));
-  await appendStatePatch(patch(998));
-  expect(await getStatePatches(sessionId)).toEqual([patch(999)]);
-});
-
-it("caps distinct cached fields, preserves independent keys and their latest values", async () => {
-  const sessionId = `bounded-patches-${crypto.randomUUID()}`;
-  for (let i = 0; i < 300; i++) {
-    await appendStatePatch({
-      id: `event-${i}`,
-      sessionId,
-      summary: `stats.${i}`,
-      packageName: "probe",
-      createdAt: "2026-01-01",
-      data: { stats: { [i]: i } },
-    });
-  }
-  const kept = await getStatePatches(sessionId);
-  expect(kept).toHaveLength(256);
-  expect(kept?.[0]?.data).toEqual({ stats: { 44: 44 } });
-  expect(kept?.at(-1)?.data).toEqual({ stats: { 299: 299 } });
 });

@@ -53,7 +53,6 @@ function emptySnapshot() {
     messages: [],
     messagesCursor: null,
     characters: [],
-    gameState: {},
     characterSchema: null,
     executionSteps: [],
     submittedInteractions: [],
@@ -66,7 +65,6 @@ function makeDataService(order: string[]): DataService {
       order.push("sync");
     }),
     listMessages: vi.fn(async () => []),
-    listStatePatches: vi.fn(async () => []),
     loadSubmittedBlocks: vi.fn(async () => ({ ids: [], values: {} })),
     loadExecutionSteps: vi.fn(async () => []),
   } as unknown as DataService;

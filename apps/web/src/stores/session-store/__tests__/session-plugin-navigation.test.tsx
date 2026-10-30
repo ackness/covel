@@ -590,7 +590,6 @@ it.each(["GET", "reconnect"])(
       session,
       messages: [],
       characters: [],
-      gameState: {},
       executionSteps: [],
       submittedInteractions: [],
     });

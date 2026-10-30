@@ -720,7 +720,6 @@ describe("finalizeExecution", () => {
         expect(
           await store.getPluginData(SESSION_ID, "sibling", "stats", "hp"),
         ).toBeNull();
-        expect(await store.getStateEntry(SESSION_ID, "stats", "hp")).toBeNull();
       }
       expect(
         (await store.listMessages(SESSION_ID)).map(

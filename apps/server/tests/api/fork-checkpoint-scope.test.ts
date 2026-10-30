@@ -38,6 +38,18 @@ describe("fork checkpoint scope", () => {
       sessionId: parentId,
       payload: makeSnapshotPayload({
         characters: [makeCharacter({ sessionId: parentId })],
+        pluginData: [
+          {
+            id: "parent-note",
+            sessionId: parentId,
+            pluginId: "probe",
+            namespace: "notes",
+            key: "entry",
+            value: { text: "Hello" },
+            createdAt: "2026-10-01T00:00:00.000Z",
+            updatedAt: "2026-10-01T00:00:00.000Z",
+          },
+        ],
         suspensions: [parentSuspension],
       }),
     });
@@ -66,6 +78,26 @@ describe("fork checkpoint scope", () => {
     expect(childSnapshot?.payload.characters[0]?.sessionId).toBe(
       body.sessionId,
     );
+    expect(childSnapshot?.payload).not.toHaveProperty("stateSchemas");
+    expect(childSnapshot?.payload).not.toHaveProperty("stateEntries");
+    expect(await store.listCharacters(body.sessionId)).toEqual(
+      childSnapshot?.payload.characters,
+    );
+    const childData = await store.listPluginDataSessionScope(body.sessionId);
+    expect(childData).toHaveLength(1);
+    expect(childData[0]).toMatchObject({
+      sessionId: body.sessionId,
+      pluginId: "probe",
+      namespace: "notes",
+      key: "entry",
+      value: { text: "Hello" },
+    });
+    expect(childSnapshot?.payload.pluginData[0]?.sessionId).toBe(
+      body.sessionId,
+    );
+    expect(childSnapshot?.payload.pluginData[0]?.value).toEqual({
+      text: "Hello",
+    });
     expect(await store.getSnapshot(sourceSnapshot.id)).toEqual(sourceSnapshot);
     expect(childSnapshot?.payload.suspensions).toEqual(
       await store.listSuspensions(body.sessionId),

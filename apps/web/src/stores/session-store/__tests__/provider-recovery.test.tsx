@@ -110,7 +110,6 @@ it("the production provider passes ownership and delta refs to terminal recovery
     executionSteps: [],
     submittedInteractions: [],
     characters: [],
-    gameState: {},
   });
   render(
     <SessionProvider>

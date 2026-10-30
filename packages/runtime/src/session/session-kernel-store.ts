@@ -32,25 +32,6 @@ export interface KernelStore {
     payload: unknown;
     createdAt: string;
   }): Promise<void>;
-  addStateChange(record: {
-    id: string;
-    sessionId: string;
-    tableName: string;
-    fieldName: string;
-    value: unknown;
-    changedBy: string;
-    turnId: string;
-    reason?: string;
-    createdAt: string;
-  }): Promise<void>;
-  upsertStateEntry(record: {
-    id: string;
-    sessionId: string;
-    tableName: string;
-    fieldName: string;
-    value: unknown;
-    updatedAt: string;
-  }): Promise<void>;
   addTraceEvent(record: {
     id: string;
     sessionId: string;

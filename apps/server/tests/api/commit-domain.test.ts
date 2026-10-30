@@ -232,7 +232,6 @@ describe("commit-domain fault injection (Batch 2)", () => {
         },
       },
     ]);
-    expect(await store.getStateEntry(SESSION_ID, "stats", "hp")).toBeNull();
   });
 
   it("a blocked proposal emits proposal.failed and withholds turn.completed", async () => {

@@ -14,9 +14,6 @@ import type {
   SetupAttemptRecord,
   SnapshotPayload,
   SnapshotRecord,
-  StateChangeRecord,
-  StateEntryRecord,
-  StateSchemaRecord,
   SuspensionRecord,
   ToolCallRecordRow,
   TraceEventRecord,
@@ -94,49 +91,6 @@ export function makeToolCall(
     output: { bar: 2 },
     durationMs: 10,
     approvalStatus: "approved",
-    createdAt: ts(),
-    ...overrides,
-  };
-}
-
-export function makeStateSchema(
-  overrides?: Partial<StateSchemaRecord>,
-): StateSchemaRecord {
-  return {
-    id: id(),
-    sessionId: "sess-1",
-    tableName: "stats",
-    schema: { fields: ["hp", "mp"] },
-    createdAt: ts(),
-    ...overrides,
-  };
-}
-
-export function makeStateEntry(
-  overrides?: Partial<StateEntryRecord>,
-): StateEntryRecord {
-  return {
-    id: id(),
-    sessionId: "sess-1",
-    tableName: "stats",
-    fieldName: "hp",
-    value: 100,
-    updatedAt: ts(),
-    ...overrides,
-  };
-}
-
-export function makeStateChange(
-  overrides?: Partial<StateChangeRecord>,
-): StateChangeRecord {
-  return {
-    id: id(),
-    sessionId: "sess-1",
-    tableName: "stats",
-    fieldName: "hp",
-    value: 80,
-    changedBy: "combat",
-    turnId: "turn-1",
     createdAt: ts(),
     ...overrides,
   };
@@ -389,11 +343,9 @@ export function makeSnapshotPayload(
     turnId: "turn-1",
     characters: [],
     characterSchema: null,
-    stateSchemas: [],
     runtimeExports: [],
     compactedMessageSummaryIds: {},
     displayMessagesBoundary: null,
-    stateEntries: [],
     pluginData: [],
     sessionSummaries: [],
     lorebookEntries: [],

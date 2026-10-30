@@ -7,14 +7,12 @@ import { getTableName, is } from "drizzle-orm";
 import { PgTable } from "drizzle-orm/pg-core";
 import { SQLiteTable } from "drizzle-orm/sqlite-core";
 import { describe, expect, it } from "vitest";
-import type {
-  BrowserCheckpoint,
-  BrowserCheckpointState,
-} from "../src/browser-sync/browser-sync.js";
+import type { BrowserCheckpoint } from "../src/browser-sync/browser-sync.js";
 import {
   checkpointLifecycleArrays,
   snapshotPayloadSchema,
 } from "../src/browser-sync/checkpoint-lifecycle-schemas.js";
+import { checkpointDomainsSchema } from "../src/browser-sync/checkpoint-domains-schema.js";
 import { checkpointRecordArrays } from "../src/browser-sync/checkpoint-record-schemas.js";
 import * as pgSchema from "../src/postgres/schema.js";
 import type { SessionRecord } from "../src/records/session-records.js";
@@ -41,8 +39,6 @@ const SNAPSHOT_TABLES = {
   turnId: null,
   characterSchema: "character_schemas",
   characters: "characters",
-  stateEntries: "state_entries",
-  stateSchemas: "state_schemas",
   runtimeExports: "runtime_exports",
   pluginData: "plugin_data",
   sessionSummaries: "session_summaries",
@@ -80,12 +76,6 @@ const CHECKPOINT_ARRAY_TABLES = {
   StoreTableName
 >;
 
-const CHECKPOINT_STATE_TABLES = {
-  schemas: "state_schemas",
-  entries: "state_entries",
-  changes: "state_changes",
-} satisfies Record<keyof BrowserCheckpointState, StoreTableName>;
-
 const CHECKPOINT_TABLES = {
   ...CHECKPOINT_ARRAY_TABLES,
   schemaVersion: null,
@@ -94,7 +84,6 @@ const CHECKPOINT_TABLES = {
   session: "sessions",
   world: "worlds",
   characterSchema: "character_schemas",
-  state: Object.values(CHECKPOINT_STATE_TABLES),
   revision: null,
   actionId: null,
   committedAt: null,
@@ -167,7 +156,7 @@ describe("kernel-state ownership", () => {
     }
   });
 
-  it("matches exported checkpoint domains, including singletons and nested state", () => {
+  it("matches exported checkpoint domains, including singletons", () => {
     expect(new Set(Object.keys(CHECKPOINT_ARRAY_TABLES))).toEqual(
       new Set([
         ...Object.keys(checkpointRecordArrays),
@@ -184,6 +173,12 @@ describe("kernel-state ownership", () => {
         exportedTables.has(table),
       );
     }
+  });
+
+  it("omits kernel state fields from payload and checkpoint schemas", () => {
+    expect(snapshotPayloadSchema.shape).not.toHaveProperty("stateEntries");
+    expect(snapshotPayloadSchema.shape).not.toHaveProperty("stateSchemas");
+    expect(checkpointDomainsSchema.shape).not.toHaveProperty("state");
   });
 
   it("matches captured SessionRecord fields", () => {

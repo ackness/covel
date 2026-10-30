@@ -24,9 +24,9 @@ beforeEach(async () => {
 });
 afterEach(cleanup);
 
-for (const trigger of ["automatic refresh", "session switch"] as const) {
+{
   it.each(["success", "failure"] as const)(
-    `ignores a late manual %s after ${trigger}`,
+    "ignores a late manual %s after a session switch",
     async (outcome) => {
       let resolve!: (rows: StateTableEntry[]) => void;
       let reject!: (error: Error) => void;
@@ -38,18 +38,11 @@ for (const trigger of ["automatic refresh", "session switch"] as const) {
         .mockResolvedValueOnce(tables("initial-table"))
         .mockReturnValueOnce(manual)
         .mockResolvedValueOnce(tables("latest-table"));
-      const view = render(
-        <DatabasePanel sessionId="session-a" refreshKey={0} />,
-      );
+      const view = render(<DatabasePanel sessionId="session-a" />);
       expect(await screen.findByText("initial-table")).toBeTruthy();
       fireEvent.click(screen.getByRole("button", { name: "Refresh" }));
       await waitFor(() => expect(api.listStateTables).toHaveBeenCalledTimes(2));
-      view.rerender(
-        <DatabasePanel
-          sessionId={trigger === "session switch" ? "session-b" : "session-a"}
-          refreshKey={trigger === "automatic refresh" ? 1 : 0}
-        />,
-      );
+      view.rerender(<DatabasePanel sessionId="session-b" />);
       expect(await screen.findByText("latest-table")).toBeTruthy();
       await act(async () => {
         if (outcome === "success") resolve(tables("obsolete-table"));

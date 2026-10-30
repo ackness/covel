@@ -90,14 +90,9 @@ function createRecordingStore(): RecordingStore {
       maybeFail("saveEvent");
       events.push(record as Record<string, unknown>);
     },
-    async addStateChange() {},
     async setPluginData(record) {
       maybeFail("setPluginData");
       pluginData.push(record as Record<string, unknown>);
-    },
-    async upsertStateEntry(record) {
-      // Retained state storage is not used by plugin proposals.
-      void record;
     },
     async addTraceEvent(record) {
       traceEvents.push(record as Record<string, unknown>);
@@ -384,9 +379,7 @@ describe("session-kernel commitAll atomicity", () => {
       addMessage: vi.fn().mockResolvedValue(undefined),
       updateSession: vi.fn().mockResolvedValue(undefined),
       saveEvent: vi.fn().mockResolvedValue(undefined),
-      addStateChange: vi.fn().mockResolvedValue(undefined),
       setPluginData: vi.fn().mockResolvedValue(undefined),
-      upsertStateEntry: vi.fn().mockResolvedValue(undefined),
       addTraceEvent: vi.fn().mockResolvedValue(undefined),
     };
 

@@ -1,9 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import type {
-  CharacterRecord,
-  DataStore,
-  StateEntryRecord,
-} from "../../types.js";
+import type { CharacterRecord, DataStore } from "../../types.js";
 import {
   id,
   makeCharacter,
@@ -11,9 +7,6 @@ import {
   makeEvent,
   makeMessage,
   makeSession,
-  makeStateChange,
-  makeStateEntry,
-  makeStateSchema,
   makeSuspension,
   makeToolCall,
   makeTurnResult,
@@ -28,17 +21,53 @@ export function registerCoreStoreSuites(getStore: () => DataStore): void {
     store = getStore();
   });
 
+  it("has no kernel state methods on stores or transaction views", async () => {
+    const removedMethods = [
+      "saveStateSchema",
+      "listStateSchemas",
+      "deleteStateSchema",
+      "getStateEntry",
+      "upsertStateEntry",
+      "listStateEntries",
+      "addStateChange",
+      "listStateChanges",
+    ];
+    for (const name of removedMethods) expect(name in store).toBe(false);
+    await store.withTransaction(async (tx) => {
+      for (const name of removedMethods) expect(name in tx).toBe(false);
+    });
+  });
+
   // An update changes what a row holds, not which row it is or when it began.
   describe("Update keeps identity and creation time", () => {
-    it("keeps a state entry's ID", async () => {
+    it("keeps a plugin data row's ID and creation time", async () => {
       const session = makeSession();
       await store.createSession(session);
-      const first = makeStateEntry({ sessionId: session.id, value: 1 });
-      await store.upsertStateEntry(first);
-      await store.upsertStateEntry({ ...first, id: id(), value: 2 });
+      const first = {
+        id: id(),
+        sessionId: session.id,
+        pluginId: "owner",
+        namespace: "test",
+        key: "value",
+        value: 1,
+        createdAt: ts(),
+        updatedAt: ts(),
+      };
+      await store.setPluginData(first);
+      await store.setPluginData({
+        ...first,
+        id: id(),
+        createdAt: ts(100),
+        value: 2,
+      });
       expect(
-        await store.getStateEntry(session.id, first.tableName, first.fieldName),
-      ).toMatchObject({ id: first.id, value: 2 });
+        await store.getPluginData(
+          session.id,
+          first.pluginId,
+          first.namespace,
+          first.key,
+        ),
+      ).toMatchObject({ id: first.id, createdAt: first.createdAt, value: 2 });
     });
 
     it("keeps a world's creation time", async () => {
@@ -98,20 +127,27 @@ export function registerCoreStoreSuites(getStore: () => DataStore): void {
   });
 
   describe("Text persistence", () => {
-    it("removes NUL from content while preserving fractional order", async () => {
+    it("removes NUL from plugin data while preserving fractional lorebook order", async () => {
       const session = makeSession();
       await store.createSession(session);
-      const entry = makeStateEntry({
+      const entry = {
+        id: id(),
+        pluginId: "owner",
+        namespace: "test",
+        key: "value",
+        createdAt: ts(),
+        updatedAt: ts(),
         sessionId: session.id,
         value: { text: "left\u0000right", nested: ["a\u0000b"] },
-      });
-      await store.upsertStateEntry(entry);
+      };
+      await store.setPluginData(entry);
       expect(
         (
-          await store.getStateEntry(
+          await store.getPluginData(
             session.id,
-            entry.tableName,
-            entry.fieldName,
+            entry.pluginId,
+            entry.namespace,
+            entry.key,
           )
         )?.value,
       ).toEqual({ text: "leftright", nested: ["ab"] });
@@ -134,12 +170,16 @@ export function registerCoreStoreSuites(getStore: () => DataStore): void {
       const session = makeSession();
       await store.createSession(session);
       await expect(
-        store.upsertStateEntry(
-          makeStateEntry({
-            sessionId: session.id,
-            value: { "a\u0000": 1, a: 2 },
-          }),
-        ),
+        store.setPluginData({
+          id: id(),
+          pluginId: "owner",
+          namespace: "test",
+          key: "value",
+          createdAt: ts(),
+          updatedAt: ts(),
+          sessionId: session.id,
+          value: { "a\u0000": 1, a: 2 },
+        }),
       ).rejects.toThrow("duplicate JSON keys");
     });
   });
@@ -605,156 +645,6 @@ export function registerCoreStoreSuites(getStore: () => DataStore): void {
       const list = await store.listToolCalls("sess-1", "turn-1");
       expect(list).toHaveLength(1);
       expect(list[0]!.turnId).toBe("turn-1");
-    });
-  });
-
-  describe("StateSchemas", () => {
-    it("should save and list state schemas by sessionId", async () => {
-      const schema = makeStateSchema({ sessionId: "sess-1" });
-      await store.saveStateSchema(schema);
-      const list = await store.listStateSchemas("sess-1");
-      expect(list).toHaveLength(1);
-      expect(list[0]).toEqual(schema);
-    });
-
-    it("should delete a state schema", async () => {
-      const schema = makeStateSchema({
-        sessionId: "sess-1",
-        tableName: "stats",
-      });
-      await store.saveStateSchema(schema);
-      await store.deleteStateSchema("sess-1", "stats");
-      const list = await store.listStateSchemas("sess-1");
-      expect(list).toHaveLength(0);
-    });
-
-    it("should return empty array for unknown session", async () => {
-      const list = await store.listStateSchemas("unknown");
-      expect(list).toEqual([]);
-    });
-  });
-
-  describe("StateEntries", () => {
-    it("should upsert and get a state entry", async () => {
-      const entry = makeStateEntry({
-        sessionId: "sess-1",
-        tableName: "stats",
-        fieldName: "hp",
-      });
-      await store.upsertStateEntry(entry);
-      const result = await store.getStateEntry("sess-1", "stats", "hp");
-      expect(result).toEqual(entry);
-    });
-
-    it("should preserve state entry null values", async () => {
-      const entry = makeStateEntry({
-        sessionId: "sess-state-null",
-        tableName: "stats",
-        fieldName: "hp",
-        value: null,
-      });
-      await store.upsertStateEntry(entry);
-      const result = await store.getStateEntry(
-        "sess-state-null",
-        "stats",
-        "hp",
-      );
-      expect(result?.value).toBeNull();
-    });
-
-    it("should overwrite on second upsert", async () => {
-      const entry1 = makeStateEntry({
-        sessionId: "sess-1",
-        tableName: "stats",
-        fieldName: "hp",
-        value: 100,
-      });
-      await store.upsertStateEntry(entry1);
-
-      const entry2: StateEntryRecord = {
-        ...entry1,
-        value: 50,
-        updatedAt: ts(100),
-      };
-      await store.upsertStateEntry(entry2);
-
-      const result = await store.getStateEntry("sess-1", "stats", "hp");
-      expect(result?.value).toBe(50);
-    });
-
-    it("should list all entries for a session+table", async () => {
-      const e1 = makeStateEntry({
-        sessionId: "sess-1",
-        tableName: "stats",
-        fieldName: "hp",
-      });
-      const e2 = makeStateEntry({
-        sessionId: "sess-1",
-        tableName: "stats",
-        fieldName: "mp",
-      });
-      const e3 = makeStateEntry({
-        sessionId: "sess-1",
-        tableName: "other",
-        fieldName: "x",
-      });
-      await store.upsertStateEntry(e1);
-      await store.upsertStateEntry(e2);
-      await store.upsertStateEntry(e3);
-      const list = await store.listStateEntries("sess-1", "stats");
-      expect(list).toHaveLength(2);
-    });
-  });
-
-  describe("StateChanges", () => {
-    it("should add and list state changes", async () => {
-      const change = makeStateChange({
-        sessionId: "sess-1",
-        tableName: "stats",
-        fieldName: "hp",
-      });
-      await store.addStateChange(change);
-      const list = await store.listStateChanges("sess-1", "stats", "hp");
-      expect(list).toHaveLength(1);
-      expect(list[0]).toEqual(change);
-    });
-
-    it("should preserve state change null values", async () => {
-      const change = makeStateChange({
-        sessionId: "sess-state-change-null",
-        tableName: "stats",
-        fieldName: "hp",
-        value: null,
-      });
-      await store.addStateChange(change);
-      const list = await store.listStateChanges(
-        "sess-state-change-null",
-        "stats",
-        "hp",
-      );
-      expect(list).toHaveLength(1);
-      expect(list[0]!.value).toBeNull();
-    });
-
-    it("should return changes ordered by createdAt", async () => {
-      const c1 = makeStateChange({
-        sessionId: "sess-1",
-        tableName: "stats",
-        fieldName: "hp",
-        createdAt: ts(0),
-      });
-      const c2 = makeStateChange({
-        sessionId: "sess-1",
-        tableName: "stats",
-        fieldName: "hp",
-        createdAt: ts(100),
-      });
-      await store.addStateChange(c1);
-      await store.addStateChange(c2);
-      const list = await store.listStateChanges("sess-1", "stats", "hp");
-      expect(list).toHaveLength(2);
-      expect(list[0]!.id).toBe(c1.id);
-      expect(list[1]!.id).toBe(c2.id);
     });
   });
 

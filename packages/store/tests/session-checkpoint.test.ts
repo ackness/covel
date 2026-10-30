@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import {
   exportSessionCheckpoint,
   replaceSessionFromCheckpoint,
+  type CharacterRecord,
+  type PluginDataRecord,
 } from "../src/index.js";
 import { createMemoryStore } from "../src/memory-entry.js";
 
@@ -13,6 +15,7 @@ import {
   makeRuntimeExport,
   makeRuntimeOutput,
   makeSession,
+  makeSnapshot,
   makeToolCall,
   makeTurnMessage,
   makeTurnResult,
@@ -224,6 +227,20 @@ describe("session checkpoint transfer", () => {
     const sessionId = "browser-session";
     const world = makeWorld({ id: "browser-world" });
     const session = makeSession({ id: sessionId, worldId: world.id });
+    const character: CharacterRecord = makeCharacter({
+      sessionId,
+      id: "character-1",
+    });
+    const pluginData: PluginDataRecord = {
+      id: "plugin-data-1",
+      sessionId,
+      pluginId: "test-plugin",
+      namespace: "test",
+      key: "value",
+      value: { ok: true },
+      createdAt: "2026-08-25T00:00:00.000Z",
+      updatedAt: "2026-08-25T00:00:00.000Z",
+    };
 
     await source.upsertWorld(world);
     await source.createSession(session);
@@ -232,9 +249,7 @@ describe("session checkpoint transfer", () => {
       makeTurnMessage({ sessionId, id: "turn-message-1" }),
     );
     await source.saveEvent(makeEvent({ sessionId, id: "event-1" }));
-    await source.upsertCharacter(
-      makeCharacter({ sessionId, id: "character-1" }),
-    );
+    await source.upsertCharacter(character);
     await source.upsertCharacterSchema({
       sessionId,
       version: 2,
@@ -251,22 +266,22 @@ describe("session checkpoint transfer", () => {
         owner: { kind: "plugin", pluginId: "writer" },
       }),
     ]);
-    await source.setPluginData({
-      id: "plugin-data-1",
-      sessionId,
-      pluginId: "test-plugin",
-      namespace: "test",
-      key: "value",
-      value: { ok: true },
-      createdAt: "2026-08-25T00:00:00.000Z",
-      updatedAt: "2026-08-25T00:00:00.000Z",
-    });
+    await source.setPluginData(pluginData);
 
+    await source.saveSnapshot(makeSnapshot({ sessionId }));
     const checkpoint = await exportSessionCheckpoint(source, sessionId, {
       revision: 1,
       actionId: "bootstrap",
       committedAt: "2026-08-25T00:00:00.000Z",
     });
+    expect(checkpoint.characters).toEqual([character]);
+    expect(checkpoint.pluginData).toEqual([pluginData]);
+    expect(checkpoint).not.toHaveProperty("state");
+    expect(checkpoint.snapshots).toHaveLength(1);
+    for (const snapshot of checkpoint.snapshots) {
+      expect(snapshot.payload).not.toHaveProperty("stateSchemas");
+      expect(snapshot.payload).not.toHaveProperty("stateEntries");
+    }
     await replaceSessionFromCheckpoint(target, checkpoint, {
       writeWorld: true,
     });
@@ -278,18 +293,16 @@ describe("session checkpoint transfer", () => {
       checkpoint.turnMessages,
     );
     expect(await target.listEvents(sessionId)).toEqual(checkpoint.events);
-    expect(await target.listCharacters(sessionId)).toEqual(
-      checkpoint.characters,
-    );
+    expect(await target.listCharacters(sessionId)).toEqual([character]);
     expect(await target.getCharacterSchema(sessionId)).toEqual(
       checkpoint.characterSchema,
     );
     expect(await target.listSessionLorebookEntries(sessionId)).toEqual(
       checkpoint.lorebookEntries,
     );
-    expect(await target.listPluginDataSessionScope(sessionId)).toEqual(
-      checkpoint.pluginData,
-    );
+    expect(await target.listPluginDataSessionScope(sessionId)).toEqual([
+      pluginData,
+    ]);
   });
 
   it("allows the server to preserve private session metadata", async () => {

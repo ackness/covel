@@ -1,46 +1,13 @@
 /**
- * Backend-agnostic canonical row→record mappers for the state domain
- * (state schemas/entries/changes, events, messages, characters).
+ * Backend-agnostic canonical row→record mappers for events, messages and characters.
  */
 
 import type {
   CharacterRecord,
   EventRecord,
   MessageRecord,
-  StateChangeRecord,
-  StateEntryRecord,
-  StateSchemaRecord,
 } from "../../types.js";
 import type { JsonReader } from "./json-reader.js";
-
-export interface StateSchemaRow {
-  id: string;
-  sessionId: string;
-  tableName: string;
-  schema: unknown;
-  createdAt: string;
-}
-
-export interface StateEntryRow {
-  id: string;
-  sessionId: string;
-  tableName: string;
-  fieldName: string;
-  value: unknown;
-  updatedAt: string;
-}
-
-export interface StateChangeRow {
-  id: string;
-  sessionId: string;
-  tableName: string;
-  fieldName: string;
-  value: unknown;
-  changedBy: string;
-  turnId: string;
-  reason: string | null;
-  createdAt: string;
-}
 
 export interface EventRow {
   id: string;
@@ -72,53 +39,6 @@ export interface CharacterRow {
   version: number;
   createdAt: string;
   updatedAt: string;
-}
-
-export function toStateSchemaRecord(
-  row: StateSchemaRow,
-  json: JsonReader,
-): StateSchemaRecord {
-  return {
-    id: row.id,
-    sessionId: row.sessionId,
-    tableName: row.tableName,
-    schema: json.readRequired(row.schema),
-    createdAt: row.createdAt,
-  };
-}
-
-export function toStateEntryRecord(
-  row: StateEntryRow,
-  json: JsonReader,
-): StateEntryRecord {
-  return {
-    id: row.id,
-    sessionId: row.sessionId,
-    tableName: row.tableName,
-    fieldName: row.fieldName,
-    // Required JSON: SQL NULL must round-trip as `null`, not `undefined`,
-    // across both backends (PG jsonb null and SQLite "null" text).
-    value: json.readRequired(row.value),
-    updatedAt: row.updatedAt,
-  };
-}
-
-export function toStateChangeRecord(
-  row: StateChangeRow,
-  json: JsonReader,
-): StateChangeRecord {
-  return {
-    id: row.id,
-    sessionId: row.sessionId,
-    tableName: row.tableName,
-    fieldName: row.fieldName,
-    // Required JSON: preserve a stored `null` as `null` on both backends.
-    value: json.readRequired(row.value),
-    changedBy: row.changedBy,
-    turnId: row.turnId,
-    reason: row.reason ?? undefined,
-    createdAt: row.createdAt,
-  };
 }
 
 export function toEventRecord(row: EventRow, json: JsonReader): EventRecord {

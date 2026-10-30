@@ -32,24 +32,6 @@ export const executionOrigin = z.enum([
   "resume",
 ]);
 
-export const stateSchemas = createdRow.extend({
-  tableName: z.string(),
-  schema: jsonValue,
-});
-export const stateEntries = sessionRow.extend({
-  tableName: z.string(),
-  fieldName: z.string(),
-  value: jsonValue,
-  updatedAt: timestamp,
-});
-export const stateChanges = createdRow.extend({
-  tableName: z.string(),
-  fieldName: z.string(),
-  value: jsonValue,
-  changedBy: z.string(),
-  turnId: z.string(),
-  reason: z.string().optional(),
-});
 export const characters = createdRow.extend({
   name: z.string(),
   aliases: z.array(z.string()).optional(),

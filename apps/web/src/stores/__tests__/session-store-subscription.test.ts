@@ -66,7 +66,6 @@ const snapshot = {
   messages: [],
   submittedInteractions: [],
   characters: [],
-  gameState: { hp: 7 },
   executionSteps: [],
   plugins: [],
 };
@@ -345,7 +344,7 @@ describe("rehydrateSessionSideState", () => {
     });
     expect(dispatch).toHaveBeenCalledWith({
       type: "SET_GAME_STATE",
-      state: expect.objectContaining({ tables: { hp: 7 } }),
+      state: expect.objectContaining({ characters: [], dimensions: {} }),
     });
     expect(dispatch).toHaveBeenCalledWith({
       type: "UPDATE_WORLD",

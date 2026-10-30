@@ -86,7 +86,6 @@ function snapshot(state: "running" | "completed") {
       },
     ],
     characters: [],
-    gameState: {},
   };
 }
 function setup(overrides: Partial<SessionState> = {}) {

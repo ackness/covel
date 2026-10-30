@@ -20,7 +20,6 @@ import type { SessionStatus } from "../api.js";
 import type {
   MessageRecord,
   SessionRecord,
-  StatePatchRecord,
   WorldRecord,
   WorldSummary,
 } from "../api.js";
@@ -502,9 +501,6 @@ export class LocalDataService implements DataService {
     // race removal. Cache failure still must not undo the domain deletion.
     await Promise.all([
       appKv
-        .removeStatePatches(sessionId)
-        .catch(ignoreError("remove state patches on delete")),
-      appKv
         .removeSubmittedBlocks(sessionId)
         .catch(ignoreError("remove submitted blocks on delete")),
       appKv
@@ -592,12 +588,6 @@ export class LocalDataService implements DataService {
         ],
       }),
     );
-  }
-
-  // State patches
-
-  async listStatePatches(sessionId: string): Promise<StatePatchRecord[]> {
-    return (await appKv.getStatePatches(sessionId)) ?? [];
   }
 
   private async writeSessionCache(

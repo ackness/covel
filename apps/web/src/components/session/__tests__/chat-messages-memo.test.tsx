@@ -75,7 +75,7 @@ it("keeps history rendering stable for unchanged props and unrelated session sta
   const { rerender } = render(view());
   const calls = mocks.group.mock.calls.length;
   rerender(view());
-  rerender(view({ ...initialState, statePatchRevision: 1 }));
+  rerender(view({ ...initialState, initialEventCursor: "epoch:1" }));
   expect(mocks.group).toHaveBeenCalledTimes(calls);
   rerender(
     view(initialState, {

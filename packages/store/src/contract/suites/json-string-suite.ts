@@ -14,8 +14,6 @@ import {
   makeSession,
   makeSnapshot,
   makeSnapshotPayload,
-  makeStateChange,
-  makeStateEntry,
   makeTraceEvent,
   ts,
 } from "../test-fixtures.js";
@@ -64,31 +62,6 @@ export function registerJsonStringStoreSuite(getStore: () => DataStore): void {
           `k${i}`,
         );
         expect(row?.value, JSON.stringify(value)).toBe(value);
-      }
-    });
-
-    it("state entry and state change value", async () => {
-      for (const [i, value] of JSON_LOOKING_STRINGS.entries()) {
-        await store.upsertStateEntry(
-          makeStateEntry({
-            sessionId,
-            tableName: "t",
-            fieldName: `f${i}`,
-            value,
-          }),
-        );
-        const entry = await store.getStateEntry(sessionId, "t", `f${i}`);
-        expect(entry?.value, JSON.stringify(value)).toBe(value);
-        await store.addStateChange(
-          makeStateChange({
-            sessionId,
-            tableName: "t",
-            fieldName: `c${i}`,
-            value,
-          }),
-        );
-        const [change] = await store.listStateChanges(sessionId, "t", `c${i}`);
-        expect(change?.value, JSON.stringify(value)).toBe(value);
       }
     });
 
@@ -147,9 +120,6 @@ export function registerJsonStringStoreSuite(getStore: () => DataStore): void {
 
     it("values nested in a snapshot payload", async () => {
       const payload = makeSnapshotPayload({
-        stateEntries: JSON_LOOKING_STRINGS.map((value, i) =>
-          makeStateEntry({ sessionId, fieldName: `f${i}`, value }),
-        ),
         pluginData: JSON_LOOKING_STRINGS.map((value, i) => ({
           id: `snap-pd-${i}`,
           sessionId,
@@ -164,9 +134,6 @@ export function registerJsonStringStoreSuite(getStore: () => DataStore): void {
       const snapshot = makeSnapshot({ id: "snap-json", sessionId, payload });
       await store.saveSnapshot(snapshot);
       const read = await store.getSnapshot("snap-json");
-      expect(read?.payload.stateEntries.map((e) => e.value)).toEqual([
-        ...JSON_LOOKING_STRINGS,
-      ]);
       expect(read?.payload.pluginData.map((e) => e.value)).toEqual([
         ...JSON_LOOKING_STRINGS,
       ]);

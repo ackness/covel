@@ -184,7 +184,6 @@ describe("agent guard write buffer — whole-execution atomicity", () => {
       }),
     ]);
     expect(await store.listCharacters(SESSION_ID)).toEqual([]);
-    expect(await store.getStateEntry(SESSION_ID, "stats", "hp")).toBeNull();
   });
 
   it("rejects removed effects on a skipped guard that would commit buffered writes", async () => {

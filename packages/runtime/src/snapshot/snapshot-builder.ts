@@ -3,8 +3,8 @@
  *
  * Single entry point: buildSessionSnapshot(store, sessionId) → SessionSnapshot | null
  *
- * Queries in parallel: session, messages, characters, state entries, trace events.
- * Flattens message metadata and aggregates state entries by table.
+ * Queries in parallel: session, messages, characters and trace events.
+ * Flattens message metadata.
  */
 
 import {
@@ -86,15 +86,6 @@ export interface SnapshotStore {
       fields?: unknown;
     }[]
   >;
-  listStateSchemas(
-    sessionId: string,
-  ): Promise<readonly { tableName: string }[]>;
-  listStateEntries(
-    sessionId: string,
-    tableName: string,
-  ): Promise<
-    readonly { tableName: string; fieldName: string; value: unknown }[]
-  >;
   listTraceEventsPage(
     sessionId: string,
     opts: { limit: number; before?: TimeCursor },
@@ -122,12 +113,11 @@ export async function buildSessionSnapshot(
   // Parallel queries for all session data. Messages + trace events are
   // windowed to the most-recent slice (see the *_LIMIT constants); older
   // messages load on demand via the cursor endpoint.
-  const [rawMessages, playerInputs, characters, stateSchemas, traceEvents] =
+  const [rawMessages, playerInputs, characters, traceEvents] =
     await Promise.all([
       store.listMessagesPage(sessionId, { limit: SNAPSHOT_MESSAGE_LIMIT }),
       store.listPlayerInputs(sessionId),
       store.listCharacters(sessionId),
-      store.listStateSchemas(sessionId),
       store.listTraceEventsPage(sessionId, {
         limit: SNAPSHOT_TRACE_EVENT_LIMIT,
       }),
@@ -141,13 +131,6 @@ export async function buildSessionSnapshot(
     rawMessages.length === SNAPSHOT_MESSAGE_LIMIT && oldest
       ? { createdAt: oldest.createdAt, id: oldest.id }
       : null;
-
-  // Query state entries per table (schemas → entries)
-  const stateEntries = (
-    await Promise.all(
-      stateSchemas.map((s) => store.listStateEntries(sessionId, s.tableName)),
-    )
-  ).flat();
 
   // Flatten message metadata
   const messages: SnapshotMessage[] = rawMessages.map((m) => {
@@ -185,13 +168,6 @@ export async function buildSessionSnapshot(
     description: c.description,
     fields: c.fields as Record<string, unknown> | undefined,
   }));
-
-  // Aggregate state entries by table → { table: { field: value } }
-  const gameState: Record<string, Record<string, unknown>> = {};
-  for (const entry of stateEntries) {
-    const table = (gameState[entry.tableName] ??= {});
-    table[entry.fieldName] = entry.value;
-  }
 
   // Map trace events
   const executionSteps: SnapshotTraceEvent[] = traceEvents.map((t) => ({
@@ -266,7 +242,6 @@ export async function buildSessionSnapshot(
         : [],
     ),
     characters: snapshotCharacters,
-    gameState,
     executionSteps,
     plugins: [], // Populated by the route handler from PluginRegistry
   };
