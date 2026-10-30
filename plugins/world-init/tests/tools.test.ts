@@ -79,6 +79,68 @@ describe("world-init domain tools", () => {
     ).rejects.toThrow("A successful authoritative narrative input is required");
   });
 
+  it("classifies overlong dimension values as correctable without staging writes", async () => {
+    const ctx = trackerContext();
+    const schema = {
+      type: "object",
+      properties: { note: { type: "string", maxLength: 240 } },
+      required: ["note"],
+      additionalProperties: false,
+    };
+    const stored = {
+      definition: { ...definition, schema, initialValue: { note: "" } },
+      value: { note: "" },
+      version: 1,
+    };
+    const context = {
+      ...ctx,
+      world: {
+        dimensions: {
+          signalLog: {
+            name: "Signal log",
+            schema,
+            value: stored.value,
+            version: 1,
+          },
+        },
+      },
+      store: {
+        ...ctx.store,
+        listPluginData: async () => [{ key: "signalLog", value: stored }],
+      },
+    };
+    const instance = updateDimensions({ tool, z });
+    await expect(
+      instance.execute(
+        { updates: [{ id: "signalLog", value: { note: "x".repeat(302) } }] },
+        context,
+      ),
+    ).rejects.toMatchObject({
+      code: "invalid-input",
+      message: expect.stringContaining("note"),
+    });
+    expect(stored.value).toEqual({ note: "" });
+    const corrected = await instance.execute(
+      { updates: [{ id: "signalLog", value: { note: "x".repeat(240) } }] },
+      context,
+    );
+    expect(getPendingProposals(corrected)).toHaveLength(1);
+    stored.version = 2;
+    await expect(
+      instance.execute(
+        { updates: [{ id: "signalLog", value: { note: "ok" } }] },
+        context,
+      ),
+    ).rejects.toMatchObject({ name: "DimensionConflictError" });
+    const failure = new Error("store unavailable");
+    context.store.listPluginData = async () => {
+      throw failure;
+    };
+    await expect(instance.execute({ updates: [] }, context)).rejects.toBe(
+      failure,
+    );
+  });
+
   it("registers only tools that a runtime can call", () => {
     const registered: string[] = [];
     register({

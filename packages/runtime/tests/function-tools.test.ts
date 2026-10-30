@@ -636,6 +636,10 @@ describe("governed function tools", () => {
     });
     expect(f.result.runtimeResults[0]?.status).toBe("success");
     expect(f.result.runtimeResults[0]?.toolCalls).toHaveLength(2);
+    expect(f.result.runtimeResults[0]?.toolCalls?.[1]?.output).toMatchObject({
+      count: 1,
+      characters: [expect.objectContaining({ name: "Ada" })],
+    });
     await commit(f);
     expect(await f.store.listCharacters(input.sessionId)).toHaveLength(1);
     expect(

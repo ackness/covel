@@ -326,6 +326,8 @@ runtime 的 `schedule.needs[].contract` 和 `io.inputs.*.from.contract` 引用�
 
 ### setup runtime 的注意事项
 
+开场角色模板须包含每个收集字段的占位符。模板和默认值错误属于可修正的 `invalid-input`，见[角色工具](./tools.md#create-character)。
+
 包级的 `requires` 保证契约的提供者被激活，但不要求提供者每次执行都重新产出。
 
 - 要在后续执行里处理表单的 setup runtime，应该用 `after` 排在一次性的 setup 提供者之后，并读取已提交的状态。
@@ -962,6 +964,7 @@ homepage: https://example.com/tidefall
 | `dimension-clock`   | post-turn function | 不调用模型，按本轮结算后的世界时钟（`world-time-evolution@1`，可选输入）计算 schema 里带 `x-derive` 的字段，值有变化时提交 `dimension.update`                                                         |
 | `edit-dimensions`   | manual function    | 玩家改值、确认人工处理或明确跳过                                                                                                                                                                      |
 
+维度工具把不符合 schema 的值报告为可修正的输入错误，见 [update-dimensions](./tools.md#update-dimensions)。
 **读取。**
 
 - `world.dimensions@1` 和 `session.world-context@1` 提供执行开始时冻结的公共快照。

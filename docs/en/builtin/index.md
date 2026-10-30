@@ -4,6 +4,10 @@ Covel comes with a set of plugins and four worlds. This chapter tells you what e
 
 The built-in plugins and worlds are only demos, and you do not have to use them.
 
+Dimension tools report schema-invalid values as correctable input errors; see [update-dimensions](../reference/tools.md#update-dimensions).
+
+Opening character templates must include a placeholder for every collected field. Template/default errors are correctable `invalid-input` failures; see [character tools](../reference/tools.md#create-character).
+
 ## What is in this chapter
 
 | Page                                   | What it covers                                                                                        |

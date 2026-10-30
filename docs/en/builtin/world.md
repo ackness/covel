@@ -31,6 +31,8 @@ Reads the world material before the game starts, prepares the first part of the 
 
 ## Character Creator (`char-creator`)
 
+Opening character templates must include a placeholder for every collected field. Template/default errors are correctable `invalid-input` failures; see [character tools](../reference/tools.md#create-character).
+
 At the start, it guides you through creating the player character. It gives you an opening passage that describes arriving in the world, then a short form. Once you fill in the form, the story begins. During play, it also records important new people in the story as characters, and updates their status, injuries and equipment.
 
 **What you will see**
@@ -76,6 +78,8 @@ Do not write the portrait mapping by hand. It is produced when you generate port
 **Works with**: roleplay notes are included only for characters with a record in the session. They do not have to be on stage. Each card can have up to 300 characters per line, and the total length is limited. If it does not fit, first delete the sample lines, then delete rules.
 
 ## World Dimensions (`world-init`)
+
+Dimension tools report schema-invalid values as correctable input errors; see [update-dimensions](../reference/tools.md#update-dimensions).
 
 At the start, it prepares the character attributes and the "dimensions" of this world. Dimensions are data that the world records and that can change, such as reputation, the state of the city walls, or a countdown. During play, after each turn ends, it changes the values of the dimensions according to the update rules the world author wrote.
 

@@ -554,16 +554,35 @@ describe("create-character-form narrative defaults", () => {
     ).toBe("Wren arrives, motivated by repaying a debt.");
   });
 
-  it("rejects a hardcoded character name", async () => {
+  it("reports a missing name placeholder as invalid-input before publishing a form", async () => {
+    const execute = vi.fn(createFormTool.execute);
+    const checked = makeCharacterForm({ tool }, { ...createFormTool, execute });
     await expect(
-      createCharacterForm.execute(
-        {
-          ...params,
-          narrativeTemplate: "Wren arrives.",
-        },
+      checked.execute(
+        { ...params, narrativeTemplate: "Wren arrives." },
         context,
       ),
-    ).rejects.toThrow(/must include \{\{characterName\}\}/);
+    ).rejects.toMatchObject({
+      code: "invalid-input",
+      message: expect.stringContaining("must include {{characterName}}"),
+    });
+    expect(execute).not.toHaveBeenCalled();
+    await expect(checked.execute(params, context)).resolves.toBeDefined();
+    expect(execute).toHaveBeenCalledOnce();
+  });
+
+  it("preserves unexpected downstream failures", async () => {
+    const failure = new Error("form publisher unavailable");
+    const checked = makeCharacterForm(
+      { tool },
+      {
+        ...createFormTool,
+        execute: async () => {
+          throw failure;
+        },
+      },
+    );
+    await expect(checked.execute(params, context)).rejects.toBe(failure);
   });
 
   it("rejects missing and long unclosed placeholders without creating a form", async () => {
