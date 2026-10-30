@@ -837,6 +837,7 @@ The following describes the behavior of the web client itself. It is written for
 A few things to know about `GET /api/sessions/:id/view`:
 
 - **It contains only the recent window.** By default `messages` and `executionSteps` hold the latest 80 messages and 600 trace events, not the full history.
+- **Story messages carry `segments`**, in the same shape as [`GET /messages`](#get-apisessionsidmessages); the stage uses them to show each paragraph's speaker.
 - **Paging backward.** The view carries an opaque `messagesCursor`. When the front end scrolls up, it passes this value unchanged as `?cursor=` to `GET /api/sessions/:id/messages/page`.
 - **Older turns outside the window** do not render an execution timeline.
 - **Session clock.** The session object embedded in the view carries the same required clock fields as the session API: `phase`, `completedPlayerTurns`, and `setupRuntimes`. Restore and reconnect judge progress only from these fields.
@@ -4037,7 +4038,7 @@ Lists the plugins this session can see, and the commands the session can run rig
       "hostState": "loaded",
       "active": true,
       "locked": false,
-      "provides": ["narrative-engine@1"],
+      "provides": ["narrative-engine@2"],
       "requires": [],
       "optional": [],
       "conflicts": [],
@@ -4208,6 +4209,26 @@ The rate limit is the same as for `/page`: the same client can make at most 120 
 | `id`      | Path     | Session ID  |
 
 **Response:** `{ items }`. Each item is a flat message object. `turnId`, `runtimeId`, `kind`, and `block` are moved up from `metadata` in storage to the top level. A player message also has `actions`: the resolved actions it submitted (see [`submit_actions`](#submit_actions)).
+
+A story message also has `segments`: the story segments recorded at commit, `{ kind, speaker?, speakerId?, text }`. A segment resolved to a character has `speakerId`, and its `speaker` is the character's current name. An unresolved name is kept as written; narration has no `speaker`. `content` is the segment texts joined by blank lines. A prose story has one `narration` segment per paragraph; messages created before this change have no `segments`. Rules: [Story output](./plugins.md#story-output). `/messages/page` and the `messages` of `/view` use the same shape.
+
+```json
+{
+  "id": "msg-002",
+  "role": "assistant",
+  "kind": "story",
+  "content": "The rain stops.\n\n\"Come on, the boat is leaving.\"",
+  "segments": [
+    { "kind": "narration", "text": "The rain stops." },
+    {
+      "kind": "dialogue",
+      "speaker": "Aya",
+      "speakerId": "char-aya",
+      "text": "\"Come on, the boat is leaving.\""
+    }
+  ]
+}
+```
 
 ```json
 {

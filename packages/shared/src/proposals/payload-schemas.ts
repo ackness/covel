@@ -17,6 +17,11 @@ import { dataOpsSchema } from "@covel/plugin-handlers-utils";
 import type { ProposalPayloadMap, ProposalType } from "../types/proposal.js";
 import { mediaRefSchema } from "../types/media.js";
 import {
+  storyCuesSchema,
+  storySegmentSchema,
+  storyYields,
+} from "../schemas/story-output.js";
+import {
   characterSchemaSetPayloadSchema,
   characterUpsertPayloadSchema,
 } from "./world-model.js";
@@ -31,7 +36,13 @@ const pluginDataItemSchema = z.object({
 });
 
 export const proposalPayloadSchemas = {
-  "narrative.append": z.object({ content: z.string(), kind: nonEmpty }),
+  "narrative.append": z.object({
+    content: z.string(),
+    kind: nonEmpty,
+    segments: z.array(storySegmentSchema).optional(),
+    cues: storyCuesSchema.optional(),
+    yield: z.enum(storyYields).optional(),
+  }),
   "event.emit": z.object({ topic: nonEmpty, data: record.optional() }),
   // A custom `type` renders as a generic interactive block.
   "interaction.request": z.object({

@@ -12,7 +12,7 @@ The loader works out what an author leaves out; `pnpm validate:plugin` warns abo
 ---
 version: 0.1.0
 description: Save selected story notes.
-requires: [narrative-engine@1]
+requires: [narrative-engine@2]
 contributes:
   tools: [save-note]
   actions: [open-notes]
@@ -38,7 +38,7 @@ A hook handler is `async (ctx, payload) => ({action: "continue"})`. `ctx.locale`
 
 Every package has one root manifest. For a single runtime, add `runtime: { ... }` there and use the root Markdown body as its agent prompt. For multiple runtimes, omit root `runtime` and create `runtimes/<local-id>/RUNTIME.md`. The executable ID is `<plugin-id>/<local-id>`. Child manifests contain runtime fields only. Paths for package contributions are package-root relative; handler and runtime schema paths are runtime-directory relative.
 
-Contract IDs use lowercase letters, digits, dots or hyphens followed by `@<positive major>`, for example `narrative-engine@1`. Root `provides`, `requires`, and `conflicts` use those contracts. An output producer declares `io.output.contract`, and the package provides it without a `provides` entry; write `provides` only for a contract no runtime outputs (a service, say) or to mark `{contract, default: true}`. Only one runtime per package may produce a given output contract. A contract a runtime reads but root `requires` does not list is optional: it binds when a provider is active. Root `contracts` maps public schema IDs to `{schema: ./schemas/file.json}`. A data namespace accepting world imports adds `accepts: [contract@1]` and uses the same schema path as that root contract.
+Contract IDs use lowercase letters, digits, dots or hyphens followed by `@<positive major>`, for example `narrative-engine@2`. Root `provides`, `requires`, and `conflicts` use those contracts. An output producer declares `io.output.contract`, and the package provides it without a `provides` entry; write `provides` only for a contract no runtime outputs (a service, say) or to mark `{contract, default: true}`. Only one runtime per package may produce a given output contract. A contract a runtime reads but root `requires` does not list is optional: it binds when a provider is active. Root `contracts` maps public schema IDs to `{schema: ./schemas/file.json}`. A data namespace accepting world imports adds `accepts: [contract@1]` and uses the same schema path as that root contract.
 
 ## Runtime manifest
 
@@ -49,7 +49,7 @@ schedule:
 io:
   inputs:
     narrative:
-      from: {contract: narrative-engine@1}
+      from: {contract: narrative-engine@2}
       select: /narrativeOutput
 function:
   timeoutMs: 30000

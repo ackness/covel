@@ -1,5 +1,5 @@
 ---
-version: 0.0.38
+version: 0.0.39
 displayName: World Fact Extraction
 description: >-
   Extracts people, relationships, events, and clues from each story turn for
@@ -18,7 +18,7 @@ contracts:
   world-ir.vocabulary@1:
     schema: ./schemas/world-ir-vocabulary.schema.json
 requires:
-  - narrative-engine@1
+  - narrative-engine@2
 contributes:
   tools:
     - submit-world-facts
@@ -31,7 +31,7 @@ runtime:
     inputs:
       narrative:
         from:
-          contract: narrative-engine@1
+          contract: narrative-engine@2
         select: /narrativeOutput
         accepts: ./schemas/narrative-output.schema.json
       vocabulary:

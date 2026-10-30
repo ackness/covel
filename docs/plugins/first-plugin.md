@@ -100,7 +100,7 @@ io:
   inputs:
     narrator-output:
       from:
-        contract: narrative-engine@1
+        contract: narrative-engine@2
       select: /narrativeOutput
       required: false
   selfData:
@@ -116,7 +116,7 @@ agent:
 | ---------------------------------------- | -------------------------------------------------------------------------------------------------- |
 | 没有 `function` 块                       | 这是一个由模型驱动的 runtime，文件的正文就是给模型的提示词                                         |
 | `schedule.stage: post-turn`              | 在叙事之后运行                                                                                     |
-| `io.inputs.narrator-output`              | 读取本回合的故事正文。它来自“任何提供 `narrative-engine@1` 的插件”，而不是某个具体的插件           |
+| `io.inputs.narrator-output`              | 读取本回合的故事正文。它来自“任何提供 `narrative-engine@2` 的插件”，而不是某个具体的插件           |
 | `io.selfData`                            | 把自己已有的记录放进提示词，模型据此避免重复记录                                                   |
 | 没写的字段                               | 用默认值：它用 `plugin` 这个模型用途，输出不是故事正文。见[默认值](../reference/plugins.md#默认值) |
 | `agent.tools.builtin: [plugin-data-set]` | 模型只能调用这一个工具：往自己的数据空间写一条记录                                                 |
@@ -247,7 +247,7 @@ pnpm dev
 | 一个文件     | `observer` 只有一个 `PLUGIN.md`，其余由 Covel 推出     |
 | 两种 runtime | `analyst` 是 agent，`note` 是函数                      |
 | 阶段         | `analyst` 在 `post-turn` 自动运行                      |
-| 按能力找插件 | 通过 `narrative-engine@1` 读故事，不点名具体的叙事插件 |
+| 按能力找插件 | 通过 `narrative-engine@2` 读故事，不点名具体的叙事插件 |
 | 限定工具     | agent 只能调用 `plugin-data-set`                       |
 | 自己的数据   | 两个 runtime 都只写自己的 `notes` 空间                 |
 | 界面         | 用 `panel.json` 描述面板长什么样，不需要写前端代码     |

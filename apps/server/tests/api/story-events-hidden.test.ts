@@ -98,7 +98,14 @@ class RecordingLLM implements LLMAdapter {
         usage,
       };
     return {
-      content: "The fog rolls over the pier while you wait.",
+      content: JSON.stringify({
+        segments: [
+          {
+            kind: "narration",
+            text: "The fog rolls over the pier while you wait.",
+          },
+        ],
+      }),
       toolCalls: [],
       finishReason: "stop",
       usage,

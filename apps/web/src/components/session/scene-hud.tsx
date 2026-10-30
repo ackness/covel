@@ -1,13 +1,11 @@
 import { useEffect, useRef, useState, type RefObject } from "react";
 import { useTranslation } from "react-i18next";
-import type {
-  CharacterVisualModel,
-  StageCastModel,
-  StageDialogueModel,
-} from "@covel/shared";
+import type { CharacterVisualModel, StageCastModel } from "@covel/shared";
 import { Media } from "@/components/Media.js";
 import { isMediaRef } from "@/lib/media-ref-utils.js";
 import { useUiSlot, useUiSlots } from "@/stores/ui-slot-store.js";
+import { useSession } from "@/stores/session-store.js";
+import { lastStorySpeaker } from "./stage/stage-dialogue-selectors.js";
 import {
   PlayerItems,
   PlayerStatusMeters,
@@ -58,6 +56,7 @@ function useHasRoom(): [RefObject<HTMLDivElement | null>, boolean] {
  */
 export function SceneHud({ sessionId }: { readonly sessionId: string }) {
   const { t } = useTranslation();
+  const { state } = useSession();
   const status = usePlayerStatus();
   const summary = useSessionSummary(sessionId);
   const hasStatus = status !== null || summary.length > 0;
@@ -65,16 +64,18 @@ export function SceneHud({ sessionId }: { readonly sessionId: string }) {
   const slots = useUiSlots(sessionId);
   const cast = slots.find((entry) => entry.slot === "stage.cast@1")?.value as
     StageCastModel | undefined;
-  const dialogue = slots.find((entry) => entry.slot === "stage.dialogue@1")
-    ?.value as StageDialogueModel | undefined;
   const actors = (cast?.actors ?? [])
     .filter((actor) => !actor.exiting)
     .slice(0, MAX_CAST);
 
-  // The last attributed paragraph of the turn names who is speaking now.
-  const lastSpeaker = dialogue?.paragraphSpeakers.filter(Boolean).at(-1);
-  const speakingId = actors.find(
-    (actor) => actor.displayName === lastSpeaker,
+  // The last attributed segment of the latest story names who is speaking.
+  const lastSpeaker = lastStorySpeaker(
+    state.messages.findLast((message) => message.kind === "story"),
+  );
+  const speakingId = actors.find((actor) =>
+    lastSpeaker?.characterId
+      ? actor.characterId === lastSpeaker.characterId
+      : actor.displayName === lastSpeaker?.name,
   )?.characterId;
   // Otherwise the stage view's highlight rule: explicit flags win; with none
   // set, the first actor on stage is the one in focus.

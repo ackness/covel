@@ -100,7 +100,7 @@ io:
   inputs:
     narrator-output:
       from:
-        contract: narrative-engine@1
+        contract: narrative-engine@2
       select: /narrativeOutput
       required: false
   selfData:
@@ -116,7 +116,7 @@ agent:
 | ---------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
 | No `function` block                      | This is a runtime driven by a model. The body of the file is the prompt for the model                                                    |
 | `schedule.stage: post-turn`              | Runs after the narrative                                                                                                                 |
-| `io.inputs.narrator-output`              | Reads the story text of this turn. It comes from "any plugin that provides `narrative-engine@1`," not from one specific plugin           |
+| `io.inputs.narrator-output`              | Reads the story text of this turn. It comes from "any plugin that provides `narrative-engine@2`," not from one specific plugin           |
 | `io.selfData`                            | Puts the records it already has into the prompt, so the model can avoid recording the same thing twice                                   |
 | Fields left out                          | Take their defaults: it uses the model role `plugin`, and its output is not story text. See [Defaults](../reference/plugins.md#defaults) |
 | `agent.tools.builtin: [plugin-data-set]` | The model can call only this one tool: write one record into its own data space                                                          |
@@ -247,7 +247,7 @@ At this point, your plugin has read the story, called a tool, written data, and 
 | One file                       | `observer` is a single `PLUGIN.md`, and Covel works out the rest                            |
 | Two kinds of runtime           | `analyst` is an agent, `note` is a function                                                 |
 | Stage                          | `analyst` runs automatically at `post-turn`                                                 |
-| Finding a plugin by capability | Reads the story through `narrative-engine@1`, and does not name a specific narrative plugin |
+| Finding a plugin by capability | Reads the story through `narrative-engine@2`, and does not name a specific narrative plugin |
 | Limited tools                  | The agent can call only `plugin-data-set`                                                   |
 | Its own data                   | Both runtimes write only to their own `notes` space                                         |
 | Interface                      | `panel.json` describes what the panel looks like, and no front-end code is needed           |

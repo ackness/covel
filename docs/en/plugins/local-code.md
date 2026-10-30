@@ -43,7 +43,7 @@ No `package.json` is needed: Covel loads the plugin's `.js` files as ES modules,
 ---
 version: 0.1.0
 description: Saves a brief note after narration.
-requires: [narrative-engine@1]
+requires: [narrative-engine@2]
 contributes:
   tools: [save-note]
   data:
@@ -54,7 +54,7 @@ runtime:
   io:
     inputs:
       narrative:
-        from: { contract: narrative-engine@1 }
+        from: { contract: narrative-engine@2 }
         select: /narrativeOutput
   agent:
     history: { maxTurns: 2 }
@@ -359,7 +359,7 @@ runtime:
   io:
     inputs:
       narrative:
-        from: { contract: narrative-engine@1 }
+        from: { contract: narrative-engine@2 }
         select: /narrativeOutput
   function:
     timeoutMs: 30000

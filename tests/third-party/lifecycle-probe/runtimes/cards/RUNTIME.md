@@ -6,7 +6,7 @@ io:
   inputs:
     narrative:
       from:
-        contract: narrative-engine@1
+        contract: narrative-engine@2
       select: /narrativeOutput
   output:
     contract: scene-prompts@1

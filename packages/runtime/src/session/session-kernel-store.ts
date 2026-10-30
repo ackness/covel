@@ -57,6 +57,7 @@ export interface KernelStore {
       id: string;
       sessionId: string;
       name: string;
+      aliases?: readonly string[];
       type: string;
       description?: string;
       fields?: unknown;

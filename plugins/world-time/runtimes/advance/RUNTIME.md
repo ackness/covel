@@ -11,7 +11,7 @@ io:
         contract: world-time-context@1
     narrative:
       from:
-        contract: narrative-engine@1
+        contract: narrative-engine@2
       select: /narrativeOutput
       accepts: ./narrative.schema.json
   output:

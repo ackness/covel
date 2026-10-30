@@ -184,7 +184,7 @@ First, two rules before commit that apply to every backend.
 **The story must complete.** Completing the story is a condition for the commit. In each of the three cases below, the commit of the whole execution is refused before any buffered proposal, journal message, or player-turn count is committed:
 
 - A runtime with `outputKind: story` failed.
-- A story result succeeded, but the cleaned `narrativeOutput` is empty.
+- A story result succeeded, but after normalization under [Story output](./plugins.md#story-output) it has no text (no segment has text, so `narrativeOutput` is empty).
 - A dimension provider failed in the same execution, so the executor held back the story (`dimension-snapshot-unavailable`).
 
 Related rules:

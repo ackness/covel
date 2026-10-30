@@ -170,7 +170,7 @@ describe("debug route components", () => {
           source: "builtin",
           hostState: "loaded",
           runtimeCount: 0,
-          provides: ["narrative-engine@1"],
+          provides: ["narrative-engine@2"],
           requires: [],
           optional: [],
           conflicts: [],

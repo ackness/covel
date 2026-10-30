@@ -14,7 +14,7 @@ const story: RuntimeManifest = {
   stage: "narrative",
   runtimeType: "agent",
   outputKind: "story",
-  outputContract: "narrative-engine@1",
+  outputContract: "narrative-engine@2",
   tools: { builtin: ["emit-event"] },
 };
 const text = (content: string): LLMResponse => ({

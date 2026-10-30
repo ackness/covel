@@ -188,6 +188,8 @@ describe("resume commit composition", () => {
         expect(exports[0]!.value).toEqual({
           ...value,
           portrait: { id: assetId, mime: "image/png", size: 42 },
+          segments: [{ kind: "narration", text: "The journey continues." }],
+          yield: "user",
         });
       expect(isReferencedBy).toHaveBeenCalledWith(assetId, "session");
       expect(

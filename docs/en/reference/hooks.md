@@ -239,6 +239,8 @@ Fires after each model reply, before the tool calls in the reply are run.
 
 Payload: `{ response, messages }`, the reply, and the messages actually sent.
 
+For a story runtime that asks for segments (`io.output.schema: contract:narrative-engine@2`), `response.content` is the JSON the model wrote, not the story text; a text review reads each segment's `text` (see [Story output](./plugins.md#story-output)).
+
 - `replace.response` replaces the reply.
 - `replace.correction` (a non-empty string) sends this draft back: its tool calls are not run, and this text is sent to the model as a correction request, so the model answers again. Each rejection consumes one `agent.loop.corrections.review` unit, allowing two corrections by default. A further rejection after that budget is exhausted fails the runtime with `invalid-output`. See [the loop profile](./plugins.md#loop-profile-agentloopprofile) for configuration.
 

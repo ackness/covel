@@ -3,7 +3,7 @@ id: evaluation-consumer
 kind: plugin
 description: Synthetic evaluation consumer for framework contract tests
 provides: [choice-recommendations@1]
-requires: [scene-prompts@1, narrative-engine@1]
+requires: [scene-prompts@1, narrative-engine@2]
 entry: ./server.js
 contributes:
   services: [test.evaluation@1]
@@ -19,7 +19,7 @@ runtime:
         from: { contract: scene-prompts@1 }
         accepts: ./schemas/choices.schema.json
       narrative:
-        from: { contract: narrative-engine@1 }
+        from: { contract: narrative-engine@2 }
         select: /narrativeOutput
         accepts: ./schemas/narrative.schema.json
 ---

@@ -58,7 +58,7 @@ describe("plugin catalog settings", () => {
     };
     expect(buildPluginSummary(value).userSettings).toEqual([]);
   });
-  it("exposes the real narrator narrative-person setting from the canonical package", async () => {
+  it("exposes the real narrator perspective setting from the canonical package", async () => {
     const discovery = (
       await discoverPlugins(
         path.resolve(import.meta.dirname, "../../../../plugins"),
@@ -72,9 +72,16 @@ describe("plugin catalog settings", () => {
     };
     expect(buildPluginSummary(value).userSettings).toContainEqual(
       expect.objectContaining({
-        key: "narrativePerson",
+        key: "perspective",
         type: "select",
-        default: "second",
+        default: "character-second",
+        options: [
+          expect.objectContaining({ value: "character-first" }),
+          expect.objectContaining({ value: "character-second" }),
+          expect.objectContaining({ value: "character-third" }),
+          expect.objectContaining({ value: "omniscient" }),
+          expect.objectContaining({ value: "dm" }),
+        ],
       }),
     );
   });

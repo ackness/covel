@@ -1,11 +1,68 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "$id": "contract:narrative-engine@1",
-  "title": "Covel narrative engine output v1",
+  "$id": "contract:narrative-engine@2",
+  "title": "Covel narrative engine output v2",
   "type": "object",
-  "required": ["narrativeOutput"],
   "properties": {
-    "narrativeOutput": { "type": "string" }
+    "segments": {
+      "minItems": 1,
+      "maxItems": 60,
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": ["narration", "dialogue", "action"],
+            "description": "narration: scene and description; dialogue: one character's spoken lines; action: what one character does."
+          },
+          "speaker": {
+            "description": "Who speaks or acts, by the name used in the character profiles. Required for dialogue. Names only, never IDs.",
+            "type": "string",
+            "maxLength": 80
+          },
+          "text": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 4000,
+            "description": "Complete prose for this segment, with no blank line inside. Start a new segment when the speaker changes."
+          }
+        },
+        "required": ["kind", "text"]
+      },
+      "description": "The story of this reply, in reading order."
+    },
+    "cues": {
+      "description": "Stage cues for this reply: the scene, who is present, the mood.",
+      "type": "object",
+      "properties": {
+        "scene": {
+          "description": "Where the scene takes place, in a few words.",
+          "type": "string",
+          "maxLength": 200
+        },
+        "present": {
+          "description": "The characters present in the scene, by name. Names only, never IDs.",
+          "maxItems": 32,
+          "type": "array",
+          "items": {
+            "type": "string",
+            "maxLength": 80
+          }
+        },
+        "mood": {
+          "description": "The mood of the scene, in a few words.",
+          "type": "string",
+          "maxLength": 80
+        }
+      }
+    },
+    "yield": {
+      "description": "Who acts next. Leave it out unless asked; defaults to user.",
+      "type": "string",
+      "enum": ["user", "continue"]
+    }
   },
+  "required": ["segments"],
   "additionalProperties": true
 }

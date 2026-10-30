@@ -2,7 +2,10 @@ export default async function (ctx) {
   return {
     outcome: "success",
     value: {
-      narrativeOutput: `A sealed door awaits. Player action: ${ctx.playerMessage}`,
+      segments: [
+        { kind: "narration", text: "A sealed door awaits." },
+        { kind: "narration", text: `Player action: ${ctx.playerMessage}` },
+      ],
     },
   };
 }

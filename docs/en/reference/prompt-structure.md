@@ -138,7 +138,7 @@ Extension segments are first filtered by `audience`. Then they are sorted by `vo
 
 - `audience: self` covers all runtimes of the providing plugin.
 - `audience: story` matches runtimes that output story text.
-- `audience: { contract: "narrative-engine@1" }` matches the output contract of a runtime.
+- `audience: { contract: "narrative-engine@2" }` matches the output contract of a runtime.
 
 ### Turn context
 

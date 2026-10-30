@@ -1,5 +1,5 @@
 ---
-version: 0.0.39
+version: 0.0.40
 displayName: Action Suggestions
 description: >-
   After each story beat, recaps the relevant context, states the current
@@ -9,7 +9,7 @@ author:
   url: https://github.com/ackness/covel
 license: MIT
 requires:
-  - narrative-engine@1
+  - narrative-engine@2
 contributes:
   extensions:
     - point: ui.slot@1
@@ -40,7 +40,7 @@ runtime:
     inputs:
       narrative:
         from:
-          contract: narrative-engine@1
+          contract: narrative-engine@2
         select: /narrativeOutput
         accepts: ./schemas/narrative-output.schema.json
     output:

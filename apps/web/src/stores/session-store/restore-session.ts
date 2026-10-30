@@ -58,6 +58,7 @@ export function toStreamMessages(
     ...(message.block
       ? { block: message.block as Record<string, unknown> }
       : {}),
+    ...(message.segments ? { segments: message.segments } : {}),
   }));
 }
 

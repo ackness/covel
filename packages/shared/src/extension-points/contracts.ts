@@ -14,7 +14,6 @@ export const kernelExtensionPoints = {
 export const kernelUiSlots = {
   backdrop: "stage.backdrop@1",
   cast: "stage.cast@1",
-  dialogue: "stage.dialogue@1",
   choices: "stage.choices@1",
   characterVisual: "character.visual@1",
   summary: "session.summary@1",

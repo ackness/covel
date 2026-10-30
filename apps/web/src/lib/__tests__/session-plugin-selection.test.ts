@@ -46,7 +46,7 @@ const plugins = [
   }),
   plugin("chat-mode-narrator", {
     tags: ["mode:dialogue", "role:narrator"],
-    provides: ["narrative-engine@1", "chat-mode@1"],
+    provides: ["narrative-engine@2", "chat-mode@1"],
   }),
   plugin("scene-cast", { tags: ["mode:dialogue"] }),
 ];
