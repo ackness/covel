@@ -222,3 +222,39 @@ it.each(["success", "suspended"])(
     ]);
   },
 );
+
+it("keeps the cached start of a recovered continuation when the snapshot only carries its terminal event", () => {
+  const traces = [
+    event("runtime.started", { runId: "original" }),
+    event("runtime.completed", { runId: "original", status: "suspended" }),
+    {
+      ...event("runtime.started", { runId: "continuation", resumed: true }),
+      timestamp: "2026-09-05T04:00:01Z",
+    },
+    {
+      ...event("runtime.completed", {
+        runId: "continuation",
+        status: "success",
+      }),
+      timestamp: "2026-09-05T04:00:02Z",
+    },
+  ];
+  const cached = buildSnapshotExecutionSteps(traces);
+  const terminalOnly = buildSnapshotExecutionSteps(traces.slice(3));
+  const steps = reconcileExecutionSteps(cached, traces.slice(3));
+  expect(steps).toEqual([
+    expect.objectContaining({
+      runId: "original",
+      status: "suspended",
+    }),
+    expect.objectContaining({
+      runId: "continuation",
+      status: "completed",
+      startedAt: "2026-09-05T04:00:01Z",
+    }),
+  ]);
+  expect(terminalOnly[0]?.startedAt).toBeUndefined();
+  expect(projectExecutionTurns([], steps).turns[0]?.steps).toEqual([
+    expect.objectContaining({ runId: "continuation", status: "completed" }),
+  ]);
+});

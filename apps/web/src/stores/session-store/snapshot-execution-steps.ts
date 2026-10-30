@@ -170,6 +170,8 @@ export function reconcileExecutionSteps(
     const previous = steps[index];
     const merged: ExecutionStep = {
       ...mergeExecutionStep(previous, step),
+      // A terminal-only snapshot carries no start event; keep the cached start.
+      startedAt: step.startedAt ?? previous?.startedAt,
       ...(step.status === "llm" && previous ? { status: previous.status } : {}),
       ...(previous?.attemptStatus === "committed"
         ? { attemptStatus: "committed" }
