@@ -9,7 +9,7 @@ import { vocabularyEntries } from "./vocabulary.js";
 const MAX_ENTITIES = 32;
 // Keys of the extraction input (see server/extraction-context.js); they are
 // never facts.
-const INPUT_KEYS = ["narrative", "playerInput", "characters", "vocabulary"];
+const INPUT_KEYS = ["narrative", "characters", "vocabulary"];
 // Top-level fields of each fact kind; anything else is a detail.
 const FACT_FIELDS = {
   entities: ["id", "type", "name", "description", "attributes"],

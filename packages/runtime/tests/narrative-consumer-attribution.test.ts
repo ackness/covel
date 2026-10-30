@@ -12,6 +12,37 @@ import { runAttributionTurn } from "./helpers/narrative-attribution.js";
 
 const pluginsDir = path.resolve(import.meta.dirname, "../../../plugins");
 
+it.each(["en-US", "zh-CN"])(
+  "%s scoped extraction retry preserves source segments without mixing player inputs",
+  async (locale) => {
+    const segments = locale === "zh-CN" ? cases[0]!.zh : cases[0]!.en;
+    const result = await runAttributionTurn(
+      pluginsDir,
+      { segments },
+      locale,
+      "narrator",
+      true,
+    );
+    expect(result.commit.status).toBe("committed");
+    expect(result.results.find((r) => r.name === "world-ir")?.status).toBe(
+      "failed",
+    );
+    expect(
+      result.retry?.runtimeResults.find((r) => r.runtimeId === "world-ir")
+        ?.status,
+    ).toBe("success");
+    const calls = result.calls.filter((c) => c.tool === "submit-world-facts");
+    expect(calls).toHaveLength(2);
+    const data = calls.map((c) =>
+      JSON.parse(String(c.messages.at(-1)!.content)),
+    );
+    expect(data[0].narrative.value).toEqual(segments);
+    expect(data[1]).toEqual(data[0]);
+    expect(data[1]).not.toHaveProperty("playerInput");
+    expect(result.messages).toHaveLength(1);
+  },
+);
+
 // These tests prove transport and source separation, not a model's accuracy.
 // Real loaders, contracts, stage execution, context/hooks, writer tools and
 // commit run against an in-memory session. The model only submits empty batches.
@@ -55,10 +86,8 @@ describe.each(["en-US", "zh-CN"])("narrative consumers in %s", (locale) => {
               cardinality: "one",
               value: segments,
             });
-            expect(data.playerInput).toEqual({
-              character: locale === "zh-CN" ? "阿历克斯" : "alex",
-              text: currentPlayerText,
-            });
+            expect(data).not.toHaveProperty("playerInput");
+            expect(allText).not.toContain(currentPlayerText);
             expect(allText).not.toContain("char-player");
             expect(allText).not.toContain("char-mira");
             expect(data).not.toHaveProperty("turn");

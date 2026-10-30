@@ -14,7 +14,11 @@ import {
 } from "../../src/index.js";
 import { loadRuntimeBundle } from "../../../test-runtime/src/runtime-loading.js";
 import { DIMENSION_DATA_NAMESPACE } from "@covel/plugin-handlers-utils/dimensions";
-import type { LLMAdapter, LLMAdapterMessage } from "../../src/index.js";
+import type {
+  LLMAdapter,
+  LLMAdapterMessage,
+  TurnExecutorDeps,
+} from "../../src/index.js";
 
 const now = "2026-01-01T00:00:00Z";
 const segment = {
@@ -28,6 +32,7 @@ export async function runAttributionTurn(
   story: Record<string, unknown> = { segments: [segment] },
   locale = "en-US",
   providerName = "narrator",
+  retryWorldIR = false,
 ) {
   assert.ok(isJsonValue(story));
   const store = createMemoryStore();
@@ -119,6 +124,7 @@ export async function runAttributionTurn(
         : m,
     );
   const calls: { tool: string; messages: readonly LLMAdapterMessage[] }[] = [];
+  let failWorldIR = retryWorldIR;
   const llm: LLMAdapter = {
     async generate(p) {
       const tool = [
@@ -128,6 +134,10 @@ export async function runAttributionTurn(
       ].find((n) => p.tools?.some((t) => t.name === n));
       assert.ok(tool, "only synthetic writer calls are allowed");
       calls.push({ tool, messages: p.messages });
+      if (tool === "submit-world-facts" && failWorldIR) {
+        failWorldIR = false;
+        throw new Error("Synthetic non-retryable extraction failure");
+      }
       const args =
         tool === "submit-world-facts"
           ? {
@@ -171,6 +181,22 @@ export async function runAttributionTurn(
         (e) => e.pluginId === context.pluginId && e.tool.name === name,
       )?.tool,
   });
+  const deps = {
+    store,
+    llm,
+    hookPipeline: bundle.hookPipeline,
+    extensions: bundle.extensions,
+    services: bundle.services,
+    toolExecutor: executor,
+    loadRuntime: async (m) =>
+      m.name === providerName
+        ? {
+            ...bundle.loadedCache.get(providerPackage)!,
+            manifest: m,
+            handler: async () => ({ outcome: "success", value: story }),
+          }
+        : bundle.loadedCache.get(m.name),
+  } satisfies TurnExecutorDeps;
   try {
     const execution = await executeTurn(
       {
@@ -184,29 +210,36 @@ export async function runAttributionTurn(
             : "I have not agreed. I ask: what did you mean by ‘I will guide you’?",
       },
       manifests,
-      {
-        store,
-        llm,
-        hookPipeline: bundle.hookPipeline,
-        extensions: bundle.extensions,
-        services: bundle.services,
-        toolExecutor: executor,
-        loadRuntime: async (m) =>
-          m.name === providerName
-            ? {
-                ...bundle.loadedCache.get(providerPackage)!,
-                manifest: m,
-                handler: async () => ({ outcome: "success", value: story }),
-              }
-            : bundle.loadedCache.get(m.name),
-      },
+      deps,
     );
-    await commitExecution({
+    const commit = await commitExecution({
       store,
       execution,
       completion: { kind: "turn", turnId: "synthetic-turn", durationMs: 1 },
     });
+    const retry = retryWorldIR
+      ? await executeTurn(
+          {
+            sessionId,
+            turnId: "synthetic-retry",
+            origin: "manual",
+            locale,
+            playerMessage: "",
+            manualTrigger: {
+              runtimeId: "world-ir",
+              sourceTurnId: "synthetic-turn",
+              retrySeedResults: execution.result.runtimeResults.filter(
+                (r) => r.status === "success",
+              ),
+            },
+          },
+          manifests,
+          deps,
+        )
+      : undefined;
     return {
+      commit,
+      retry: retry?.result,
       calls,
       results: execution.result.runtimeResults.map((r) => ({
         name: r.runtimeId,

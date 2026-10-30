@@ -16,20 +16,14 @@ import { vocabularyEntries } from "../tools/vocabulary.js";
 export default async function extractionContext(ctx, payload) {
   if (ctx.runtimeId !== "world-ir") return { action: "continue" };
   const narrative = payload.inputSlots?.narrative;
-  const turn = payload.inputSlots?.turn;
   if (
     narrative?.cardinality !== "one" ||
     !Array.isArray(narrative.value) ||
-    turn?.cardinality !== "one" ||
-    typeof turn.value?.playerMessage !== "string" ||
     !payload.promptTemplate
   ) {
     return { action: "continue" };
   }
   const handles = characterHandles(payload.characters ?? []);
-  const player = [...handles].find(
-    ([, character]) => character.id === payload.currentCharacterId,
-  )?.[0];
   const characters = [...handles].map(([handle, { name, type }]) => ({
     id: handle,
     name,
@@ -51,10 +45,6 @@ export default async function extractionContext(ctx, payload) {
               characters,
               ...(vocabulary.length ? { vocabulary } : {}),
               // Keep attribution from the contract, without source bookkeeping.
-              playerInput: {
-                ...(player ? { character: player } : {}),
-                text: turn.value.playerMessage,
-              },
               narrative: {
                 cardinality: narrative.cardinality,
                 value: narrative.value,

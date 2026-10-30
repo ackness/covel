@@ -35,11 +35,9 @@ describe("world-ir plugin contract", () => {
       from: { capability: "narrative-engine@2" },
       select: "/segments",
     });
-    expect(parsed?.manifest.input?.inject).toContainEqual({
-      kind: "kernel",
-      name: "turn",
-      from: "turn-digest@1",
-    });
+    expect(parsed?.manifest.input?.inject ?? []).not.toContainEqual(
+      expect.objectContaining({ from: "turn-digest@1" }),
+    );
     expect(loaded?.bindingAcceptsSchemas?.narrative).toBeUndefined();
     expect(parsed?.manifest.output).toEqual({
       schema: "contract:world-ir@1",

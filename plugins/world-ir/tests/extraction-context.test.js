@@ -54,7 +54,6 @@ describe("world-ir extraction context", () => {
         value: narrative.value,
       },
       characters: [{ id: "mira", name: "Mira", type: "npc" }],
-      playerInput: { text: turn.value.playerMessage },
     });
     expect(JSON.stringify(result.replace)).not.toContain("Old memory");
     expect(payload.messages[0].content).toContain("old quest");
@@ -85,39 +84,18 @@ describe("world-ir extraction context", () => {
     );
   });
 
-  it("identifies the controlled character by the seat, never by player type", async () => {
-    const characters = [
-      { id: "other-player", name: "Alex", type: "player" },
-      { id: "controlled", name: "Mira", type: "npc" },
-    ];
+  it("does not mix a new execution's player input with source narrative", async () => {
     const result = await extractionContext(worldIr, {
       promptTemplate: "Extract facts only.",
       inputSlots: { narrative, turn },
-      characters,
-      currentCharacterId: "controlled",
+      currentCharacterId: "controlled-now",
     });
     const data = JSON.parse(result.replace.messages[0].content);
-    expect(data.playerInput).toEqual({
-      character: "mira",
-      text: turn.value.playerMessage,
-    });
     expect(data.narrative.value).toEqual(narrative.value);
-    expect(result.replace.messages[0].content).not.toMatch(
-      /private-turn|result-1|2026-01-01|other-player|controlled/,
+    expect(data).not.toHaveProperty("playerInput");
+    expect(JSON.stringify(data)).not.toMatch(
+      /I ask Mira for the key|private-turn|controlled-now|2026-01-01/,
     );
-  });
-
-  it("keeps an empty current input empty instead of inventing a player action", async () => {
-    const result = await extractionContext(worldIr, {
-      promptTemplate: "Extract facts only.",
-      inputSlots: {
-        narrative,
-        turn: { ...turn, value: { playerMessage: "" } },
-      },
-    });
-    expect(JSON.parse(result.replace.messages[0].content).playerInput).toEqual({
-      text: "",
-    });
   });
 
   it("adds the tracked vocabulary from every provider when present", async () => {
@@ -153,7 +131,7 @@ describe("world-ir extraction context", () => {
     // What holds from turn to turn comes first, so that the next turn's
     // request repeats this one up to the narrative.
     expect(Object.keys(JSON.parse(result.replace.messages[0].content))).toEqual(
-      ["characters", "vocabulary", "playerInput", "narrative"],
+      ["characters", "vocabulary", "narrative"],
     );
   });
 

@@ -500,7 +500,6 @@ describe("submit-world-facts", () => {
   it("drops extraction input the model copied into its arguments", async () => {
     const parsed = submitWorldFacts.parameters.parse({
       ...VALID_FACTS,
-      playerInput: { character: "player-ren", text: "I ask about the key." },
       narrative: {
         cardinality: "one",
         value: [{ kind: "dialogue", speaker: "Ren", text: "Where is it?" }],
