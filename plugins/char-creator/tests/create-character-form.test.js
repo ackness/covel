@@ -1,9 +1,17 @@
+import { getToolContent, getModelView } from "@covel/plugin-handlers-utils";
 import { describe, expect, it, vi } from "vitest";
 import { createFormTool, tool } from "@covel/tools";
 import makeCharacterForm from "../tools/create-character-form.js";
 import { validatePlayerName } from "../lib/player-name.js";
 
-const createCharacterForm = makeCharacterForm({ tool }, createFormTool);
+const registered = makeCharacterForm({ tool }, createFormTool);
+const createCharacterForm = {
+  ...registered,
+  execute: async (...args) => {
+    const raw = await registered.execute(...args);
+    return { ...getToolContent(raw), model: getModelView(raw) };
+  },
+};
 const context = {
   sessionId: "s",
   turnId: "t",
@@ -178,7 +186,7 @@ describe("create-character-form schema boundary", () => {
       ],
     };
     await expect(
-      createFormTool.execute(invalid, context),
+      createFormTool.execute(invalid, context).then(getToolContent),
     ).resolves.toMatchObject({ created: true });
     await expect(createCharacterForm.execute(invalid, context)).rejects.toThrow(
       /systems/,
@@ -420,7 +428,7 @@ describe("create-character-form narrative defaults", () => {
         openingContext(locale),
       );
       expect(result.filledNarrative).toBe(expected);
-      expect(JSON.parse(result._text)).toEqual({ filledNarrative: expected });
+      expect(result.model.data).toEqual({ filledNarrative: expected });
       expect(result.created).toBe(true);
     },
   );

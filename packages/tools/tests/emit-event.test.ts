@@ -1,4 +1,4 @@
-import { getToolContent } from "@covel/plugin-handlers-utils";
+import { getModelView, ToolError } from "@covel/plugin-handlers-utils";
 import { describe, expect, it, vi } from "vitest";
 import { createEmitEventTool } from "../src/builtin/emit-event.js";
 import { getEmittedEvents, getPendingProposals } from "../src/result.js";
@@ -70,7 +70,8 @@ describe("emit-event tool", () => {
     const error = await tool
       .execute({ topic: "quest.done", data: {} }, ctx)
       .catch((e: unknown) => e as Error);
-    expect(error).toBeInstanceOf(Error);
+    expect(error).toBeInstanceOf(ToolError);
+    expect(error).toMatchObject({ code: "refused" });
     expect((error as Error).message).toContain('unknown topic "quest.done"');
     expect((error as Error).message).toContain("scene.set");
   });
@@ -85,7 +86,8 @@ describe("emit-event tool", () => {
     const error = (await tool
       .execute({ topic: "quest.done", data: {} }, ctx)
       .catch((e: unknown) => e)) as Error;
-    expect(error).toBeInstanceOf(Error);
+    expect(error).toBeInstanceOf(ToolError);
+    expect(error).toMatchObject({ code: "refused" });
     expect(error.message).toContain('unknown topic "quest.done"');
     expect(error.message).toContain("scene.set");
     // The internal topic must not be echoed back in the available-topics hint.
@@ -98,7 +100,10 @@ describe("emit-event tool", () => {
     });
     await expect(
       tool.execute({ topic: "scene.set", data: {} }, ctx),
-    ).rejects.toThrow("missing field location");
+    ).rejects.toMatchObject({
+      code: "invalid-input",
+      message: expect.stringContaining("missing field location"),
+    });
   });
 
   it("never returns event.emit pending proposals (double-emission guard)", async () => {
@@ -118,6 +123,6 @@ describe("emit-event tool", () => {
       { ...ctx, emittedEventTopics: ["scene.set"] },
     )) as { _text: string };
     expect(getEmittedEvents(result)).toBeUndefined();
-    expect(getToolContent(result)._text).toContain("already emitted");
+    expect(getModelView(result)?.summary).toContain("already emitted");
   });
 });

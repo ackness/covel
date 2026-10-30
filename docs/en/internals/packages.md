@@ -166,7 +166,7 @@ The standalone plugin SDK owns these implementations. The host packages only re-
 - Dimension providers import from `@covel/plugin-handlers-utils/dimensions`. Plugins do not go into the shared package to get these operations.
 - The UI tool factories and the character field validation are also in the SDK.
 - Reading files by locale is placed in the `/prompts` entry, which can be used only in Node. The root entry stays usable in the browser.
-- What the host packages re-export includes the error class of tool validation.
+- What the host packages re-export includes the error class of tool validation. `shared` also re-exports the SDK’s `ToolError`, fixed error codes and `ToolModelView`; runtime imports errors and the model view type from `shared` and tool helper types from `tools`, without importing the SDK directly.
 
 ## Compatibility scope during development
 

@@ -213,9 +213,12 @@ export function findLastStructuredToolOutput(
 
 export function extractToolFailureMessage(result: string): string | undefined {
   try {
-    const parsed = JSON.parse(result) as { error?: unknown };
-    if (typeof parsed.error === "string" && parsed.error.length > 0) {
-      return parsed.error;
+    const parsed = JSON.parse(result) as { error?: { message?: unknown } };
+    if (
+      typeof parsed.error?.message === "string" &&
+      parsed.error.message.length > 0
+    ) {
+      return parsed.error.message;
     }
   } catch {
     // Ignore parse failures and fall back to the raw text below.

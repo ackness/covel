@@ -635,6 +635,8 @@ Rules at run time:
 
 A failure does not throw (only a call after the handler has ended throws); it returns an error code:
 
+These codes are a subset of the [tool error codes](./tools.md#unified-result-format-and-error-codes).
+
 <!-- prettier-ignore -->
 | `error.code` | Meaning |
 | --- | --- |
@@ -678,7 +680,7 @@ When the session no longer exists, `getSession()` throws and the current executi
 When the kernel writes records into the prompt, it removes these fields:
 
 - Each row of `io.selfData` is `- <key> | <JSON of the value>` (the `summary` format is cut to 200 characters). An `updatedAt` on the row is not included, and an `id` in the value that is the same as the key is not repeated.
-- The following are passed through the same projection before they reach the model: the values in `<runtime-inputs>` and `<runtime-exports>`, the payload in `<runtime-activation>`, the fields of `{{ world.schema }}` and `{{ characters.npcs }}`, the player sheet and NPC fields of the SDK's `characterSheetSegments()`, and tool results that have no `_text`.
+- The following are passed through the same projection before they reach the model: the values in `<runtime-inputs>` and `<runtime-exports>`, the payload in `<runtime-activation>`, the fields of `{{ world.schema }}` and `{{ characters.npcs }}`, the player sheet and NPC fields of the SDK's `characterSheetSegments()`, and the `data` field of unified tool results.
 
 A property is removed only when both its name and its value match:
 
@@ -700,7 +702,7 @@ A record repeating its own UUID in its properties, arrays or nested objects with
 The records that code reads do not change: the return values of `ctx.inputs`, `ctx.activation`, `ctx.pluginData`, and `ctx.tools.call` are all complete.
 
 - When a plugin builds its own prompt (for example, by calling `ctx.gateway` directly), it does the same thing with `modelFacingJson(value)`, which is exported from `@covel/plugin-handlers-utils`.
-- When a tool must give the model an opaque handle, put it in `_text`.
+- When a tool must give the model an opaque handle, put it in the model view summary with `withModelView(content, { summary })`.
 
 #### The kernel input `turn-digest@1`
 

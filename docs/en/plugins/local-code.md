@@ -83,7 +83,12 @@ This plugin has only one runtime, so you do not need to write `agent.tools.plugi
 ```js
 import { makeProposal } from "@covel/plugin-handlers-utils";
 
-export default function makeSaveNote({ tool, z, withPendingProposals }) {
+export default function makeSaveNote({
+  tool,
+  z,
+  withPendingProposals,
+  withModelView,
+}) {
   return tool({
     name: "save-note",
     description: "Save one short fact that the current narrative states.",
@@ -103,7 +108,10 @@ export default function makeSaveNote({ tool, z, withPendingProposals }) {
           value: { id: params.id, text: params.text },
         },
       );
-      return withPendingProposals({ saved: true, id: params.id }, [proposal]);
+      return withModelView(
+        withPendingProposals({ id: params.id }, [proposal]),
+        { summary: "Queued a note." },
+      );
     },
   });
 }
@@ -116,7 +124,11 @@ This file exports one function. Covel passes a set of helpers to it:
 | `tool`                 | Defines a tool                                                                                          |
 | `z`                    | Describes the shape of the parameters (Zod). If the model passes wrong parameters, the call is rejected |
 | `withPendingProposals` | Hands back "what the tool returns to the model" together with "the data it wants to write"              |
+| `withModelView`        | Select the model-facing summary and/or data without changing content                                    |
+| `ToolError`            | Throw a coded failure with an optional hint                                                             |
 | `shortId`              | Generates a short ID. Pass `context.random` as the fourth argument                                      |
+
+The model reads the [unified tool envelope](../reference/tools.md#unified-result-format-and-error-codes). This example sends only a summary plus the automatic staged notice; code still reads `{id}`. Use `new ToolError("not-found", "The requested note was not found.", { hint: "Check the name." })` for a coded failure. `ctx.tools.call` returns full content on success and rejects with `ToolError` on failure; its message is plain text, and `code` and `hint` are separate fields.
 
 The tool does not write to the save directly. It returns a **write request** (a proposal). Its type is `plugin.data`, and its content means "write this one record into `notes`". Covel checks and saves all write requests when the turn ends. If the turn fails, none of them are saved.
 

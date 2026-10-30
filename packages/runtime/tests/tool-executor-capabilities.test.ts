@@ -366,7 +366,7 @@ describe("tool invocation capabilities", () => {
       signal: controller.signal,
       emitter,
     });
-    expect(JSON.parse(result.result).code).toBe("CANCELLED");
+    expect(JSON.parse(result.result).error.code).toBe("cancelled");
     expect(execute).not.toHaveBeenCalled();
     await expect(
       executor.execute(call, { ...identity, signal: controller.signal }),
@@ -410,7 +410,7 @@ describe("tool invocation capabilities", () => {
     release.resolve();
     const result = await running;
     expect(result.success).toBe(false);
-    expect(JSON.parse(result.result).code).toBe("CANCELLED");
+    expect(JSON.parse(result.result).error.code).toBe("cancelled");
     expect(result.pendingProposals).toBeUndefined();
   });
 

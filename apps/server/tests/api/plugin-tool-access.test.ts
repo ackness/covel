@@ -58,7 +58,7 @@ describe("plugin-scoped tools", () => {
         },
       );
       expect(denied.success).toBe(false);
-      expect(denied.result).toContain("UNAUTHORIZED");
+      expect(denied.result).toContain("unavailable");
     } finally {
       await toolExecutor.close();
     }

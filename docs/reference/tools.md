@@ -84,9 +84,9 @@ tool({
 
 以下定义在调用 `tool()` 时抛错，错误以 `Tool "<name>":` 开头：`readOnly: true` 与 `stagesWrites: true` 同时出现；`concurrencySafe: true` 却没有 `readOnly: true`；`timeoutMs` 不是 `[1, 600000]` 范围内的整数。注册表也检查四个注解和时限，手写的 `ToolModule` 必须提供完整注解。使用 `tool()` 的插件自动得到默认值。注解和时限供框架读取，给模型的定义仍只有名字、描述和参数 schema。
 
-`timeoutMs` 省略时没有单工具时限，runtime 的总时限仍然生效。工具超时返回 `success: false`、`code: "TIMEOUT"`，记录失败调用并发出 `tool.failed`，工具循环可以继续。该调用的权限和信号作废，proposal、领域事件以及晚到的结果全部丢弃。超时回调仍由执行器管理，关闭时等待它结束。上级信号因 runtime 截止、玩家停止或执行器关闭而取消时，错误仍是 `CANCELLED`。
+`timeoutMs` 省略时没有单工具时限，runtime 的总时限仍然生效。工具超时返回 `{error:{code:"timeout",message}}`，记录失败调用并发出 `tool.failed`，工具循环可以继续。该调用的权限和信号作废，proposal、领域事件以及晚到的结果全部丢弃。超时回调仍由执行器管理，关闭时等待它结束。上级信号因 runtime 截止、玩家停止或执行器关闭而取消时，错误仍是 `cancelled`。
 
-`readOnly: true` 的工具如果返回 proposal 或领域事件，调用以 `EXECUTION_ERROR` 失败，消息包含 `read-only tool returned writes`。检查发生在成功记录和 `tool.completed` 之前，写入全部丢弃。其他注解是作者声明，不代表存储已经提交。
+`readOnly: true` 的工具如果返回 proposal 或领域事件，调用以 `internal` 失败，消息包含 `read-only tool returned writes`。检查发生在成功记录和 `tool.completed` 之前，写入全部丢弃。其他注解是作者声明，不代表存储已经提交。
 
 概览表中的“默认”指上表的默认组合；`—` 表示由循环直接处理，没有工具模块注解。角色工具目前也保留默认组合。框架保留名只有 SDK 的 `FRAMEWORK_TOOL_NAMES` 一份来源；测试双向核对默认注册表、可选记忆工具和 `search-tools` 的名字集合。
 
@@ -158,23 +158,23 @@ export default function (covel) {
 
 - `PLUGIN.md` 的 `id`、`kind`、`description` 是必需字段。`entry` 必须是插件根目录内的相对 `.js` 路径。
 - `tools.plugin` 只是让模型看到这个工具。工具的实现必须先由 entry 调用 `registerTool()` 注册。
-- 用框架给的 `covel.toolkit.tool` 和 `covel.toolkit.z`。这样插件不用自己依赖 Zod，参数 schema 和运行时的 `VALIDATION_ERROR` 也来自同一套工具。不要在同一个定义里混用插件自己打包的另一份 Zod。
+- 用框架给的 `covel.toolkit.tool` 和 `covel.toolkit.z`。这样插件不用自己依赖 Zod，参数 schema 和运行时的 `invalid-input` 也来自同一套工具。不要在同一个定义里混用插件自己打包的另一份 Zod。
 
 运行时会发生什么：
 
-- agent 调用 `echo-value` 成功时，得到 `{ "ok": true, "value": "..." }`。
-- 参数先由 `tool()` 生成 JSON Schema 给模型看，执行时再用同一个 Zod schema 校验。缺少 `value`、空字符串或超过 80 个字符时，模型得到 `VALIDATION_ERROR`，`execute` 不会被调用。
+- agent 调用 `echo-value` 成功时，得到 `{ "data": { "ok": true, "value": "..." } }`：返回的正文经过 `modelFacingJson` 放进 `data`。代码（比如 `ctx.tools.call`）读到的仍是 `{ ok, value }`。其他形状见[统一返回格式与错误码](#统一返回格式与错误码)。
+- 参数先由 `tool()` 生成 JSON Schema 给模型看，执行时再用同一个 Zod schema 校验。缺少 `value`、空字符串或超过 80 个字符时，模型得到 `invalid-input`，`execute` 不会被调用。
 
 两件相关的事：
 
-- **要保存数据**：改用 builtin 的 `plugin-data-set`（列在 `tools.builtin` 里）。它返回 `{ success, namespace, key }`，并把写入作为一条 `plugin.data` proposal 交给回合末的提交流程。
+- **要保存数据**：改用 builtin 的 `plugin-data-set`（列在 `tools.builtin` 里）。它返回 `{ namespace, key }`，并把写入作为一条 `plugin.data` proposal 交给回合末的提交流程；模型读到的结果因此带有 `staged` 暂存提示。
 - **要让界面或 HTTP 主动触发插件的一个动作**：那不是工具。在 entry 里用 `covel.registerRpc(action, handler)` 注册，通过 `POST /api/sessions/:id/plugin-rpc` 调用。RPC 不给模型用，不要写进 `tools.plugin`。
 
 #### 模型写错的参数 JSON
 
 模型写出的参数 JSON 有几种反复出现的笔误，而且每种只有一个合理的意思。框架在解析时直接改正它们，省掉让模型重交的一轮。改正后的内容仍然要通过工具的 schema。
 
-修正后的参数会以合法 JSON 写回模型历史，`PreToolUse` 改写的工具名和参数也会同步。无法修正时仍返回 `INVALID_ARGS`，历史把原文保留为 JSON 字符串，不伪装成已执行的空对象。原始响应和工具调用 trace 保留诊断依据。框架不会在服务商拒绝历史参数后原样重发请求。
+修正后的参数会以合法 JSON 写回模型历史，`PreToolUse` 改写的工具名和参数也会同步。无法修正时仍返回 `invalid-input`，历史把原文保留为 JSON 字符串，不伪装成已执行的空对象。原始响应和工具调用 trace 保留诊断依据。框架不会在服务商拒绝历史参数后原样重发请求。
 
 | 笔误                           | 例子                                                   | 怎么改                                                                                                                                                                                                                               |
 | ------------------------------ | ------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
@@ -189,13 +189,13 @@ export default function (covel) {
 - 表里后三条各自单独尝试，不叠加，并且改正后必须原样通过解析。
 - 为什么不叠加：第三条的位置还有另一种读法，即模型漏写了键名（`"summary":"…", {"role":"…"}}]`）。两种读法里只有一种的括号数目对得上。叠加修补会把“漏写键名”的文本读成两个元素。所以按另一种读法写出的文本仍然报错。
 - 这些规则对整段调用参数和字段内的 JSON 文本都适用。
-- 其他错误不猜：输出被截断、两个字符串之间缺逗号、值里的引号后面紧跟 `,` 或 `:`，都不修。整段参数仍不是合法 JSON 时，调用以 `INVALID_ARGS` 失败，模型要重新给出参数。
+- 其他错误不猜：输出被截断、两个字符串之间缺逗号、值里的引号后面紧跟 `,` 或 `:`，都不修。整段参数仍不是合法 JSON 时，调用以 `invalid-input` 失败，模型要重新给出参数。
 
 **把数组或对象写成了一段 JSON 文本。** schema 在某个位置要求数组或对象，模型却给了一个字符串时，`tool()` 先按上面的规则解析这段文本，再校验一次。解析出的内容仍然要通过同一个 schema。
 
 这种字段内的文本多一条规则：**文本结尾还开着的括号会被补上**（`[{"id":"a"},{"id":"b"}`）。理由是外层参数已经解析成功，说明这段文本是模型自己写完的，不是输出被截断。补完后同样必须原样通过解析；没写完的值（`[{"id":"a"},{"id":`）仍然报错。整段调用参数不做这一步，因为它可能真的是被截断的输出。
 
-文本解析不了时，`VALIDATION_ERROR` 会写明解析失败的原因和位置，并要求模型直接传数组或对象本身。
+文本解析不了时，`invalid-input` 会写明解析失败的原因和位置，并要求模型直接传数组或对象本身。
 
 **带 Unicode 属性转义的正则。** `tool()` 生成给模型的 JSON Schema 时，会去掉含 `\p{Letter}` 这类写法的 `pattern`。原因：JSON Schema 的 `pattern` 不带正则标志，而这类写法只有在 `u` 标志下才是作者想要的意思。会校验工具 schema 的服务商会以“不是合法正则”拒绝整个请求，带这个工具的每次调用都会失败。Zod 仍按原来的正则校验参数值。把规则本身写进字段的 `describe()`，让模型看得到。
 
@@ -204,8 +204,8 @@ export default function (covel) {
 | 现象                             | 原因和检查                                                                                                                                                                                   |
 | -------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 工具不在模型的工具清单里         | 检查 runtime 是否在 `tools.builtin` 或 `tools.plugin` 里写了正确的名字。plugin 工具还要确认 entry 加载成功，并且没有插件内重名，也没有占用框架保留名。                                       |
-| `UNAUTHORIZED`                   | 最终的工具名不在该 runtime 的授权集合里，或 Hook 把名字换成了授权之外的工具。先看 runtime 清单，再看 trace 里最终的 tool name。                                                              |
-| `VALIDATION_ERROR`               | 错误行和 `details` 都写明了字段路径和 Zod 消息。不要用同一组参数盲目重试。                                                                                                                   |
+| `unavailable`                    | 最终的工具名不在该 runtime 的授权集合里，或 Hook 把名字换成了授权之外的工具。先看 runtime 清单，再看 trace 里最终的 tool name。                                                              |
+| `invalid-input`                  | 错误行和 `details` 都写明了字段路径和 Zod 消息。不要用同一组参数盲目重试。                                                                                                                   |
 | RPC 返回 `401` / `403`           | 检查会话的 owner / operator token。                                                                                                                                                          |
 | RPC 返回 `202 approval-required` | 社区插件第一次执行通常是这样。批准后重试原请求。                                                                                                                                             |
 | RPC 返回 `404`                   | 通常是 session、action 或 runtime 不存在。                                                                                                                                                   |
@@ -266,7 +266,7 @@ plugin 工具封装插件自己的业务。它的 schema、文案和数据结构
 
 - 调用按顺序执行。后面的工具能读到前面还没提交的写入。
 - **任何一次调用失败，这个 runtime 就失败。** 即使 handler 捕获了异常，也不会提交部分写入。
-- 参数无法序列化（例如 BigInt、循环引用）同样让整个 runtime 失败。
+- 参数无法序列化（例如 BigInt、循环引用）同样让整个 runtime 失败，调用以 `invalid-input` 的 `ToolError` 被拒绝。`PreToolUse` Hook 拦截的调用是 `refused`；`PostToolUse` Hook 终止之后排队的调用是 `cancelled`；宿主没有提供执行器时是 `unavailable`。
 - runtime 超时或结束后，这个调用句柄作废。
 - 只有成功的 runtime 才把领域写入和 `ctx.pluginData` 一起交给执行事务。
 - 这个接口只给函数 runtime，不给 agent 的 guard。
@@ -456,7 +456,7 @@ interface UIRenderPart {
 | key       | string  | ✓    | 数据键名                                         |
 | value     | unknown | ✓    | 要存储的 JSON 数据                               |
 
-**输出**: `{ success, namespace, key }`
+**输出**: `{ namespace, key }`
 
 **治理路径**: 写入不是立即落库。它经会话内核的提交流程提交，和其他写入一样经过 `PreStateCommit` / `PostStateCommit`、trace 和存储事务。
 
@@ -511,7 +511,7 @@ interface UIRenderPart {
 | key       | string  | ✓    | 数据键名           |
 | value     | unknown | ✓    | 要存储的 JSON 数据 |
 
-**输出**: `{ success, count, items: [{ namespace, key }] }`
+**输出**: `{ count, items: [{ namespace, key }] }`
 
 **治理路径**: 和单条写入一样经提交流程提交。整个批次是一条 proposal，Hook、trace 和事务的处理与单条写入一致。
 
@@ -527,6 +527,8 @@ interface UIRenderPart {
 | key       | string | ✓    | 数据键名     |
 
 **输出**: `{ found, namespace, key, value?, updatedAt? }`
+
+`updatedAt` 保留存储中的时间，即使待提交写入改变了读到的值也不更新。只有待提交写入、没有已存记录的行不带它。绑定的 store view 和插件数据列表遵循同样的规则；未存储的行也不带 `createdAt`。
 
 **能读到自己刚写的。** 写入要到执行完成时才提交。但读取会把本次执行里还没提交的 `plugin.data` / `plugin.data.batch` / `plugin.data.delete` / `plugin.data.update` 叠加上去：
 
@@ -552,7 +554,7 @@ interface UIRenderPart {
 | --------- | ------ | ---- | ------------------------------ |
 | namespace | string |      | 数据命名空间（不传则列出所有） |
 
-**输出**: `{ count, items: [{ namespace, key, value, updatedAt }] }`
+**输出**: `{ count, items: [{ namespace, key, value, updatedAt? }] }`
 
 - 和 `plugin-data-get` 一样，叠加本次执行里没提交的写入和删除，包括同插件上游 runtime 的写入。被删除的条目不出现在列表里。
 - 带 `namespace` 的列表依赖写过这个 namespace 的全部上游 runtime；不传时依赖写过插件数据的全部上游 runtime。
@@ -641,7 +643,7 @@ agent 用它告诉框架“我做完了”。业务工具都调用完之后调�
 - 不叠加调用方自己还没提交的写入。
 - 不回退到世界的初值。
 
-模型读取的 `_text` 先用 `modelFacingJson` 投影维度值，再按路径查询和分页。因此直接查询簿记字段也不会读到它；代码读取的 `results` 仍保留完整值。
+模型读取的 `summary` 来自 SDK `queryDimensionSnapshot` 的 `text`，先用 `modelFacingJson` 投影维度值，再按路径查询和分页。因此直接查询簿记字段也不会读到它；代码读取的 `results` 仍保留完整值。
 
 | 参数      | 类型                                       | 必需 | 描述                  |
 | --------- | ------------------------------------------ | ---- | --------------------- |
@@ -671,7 +673,6 @@ agent 用它告诉框架“我做完了”。业务工具都调用完之后调�
 
 ```json
 {
-  "success": true,
   "results": [
     {
       "dimension": "reputation",
@@ -682,17 +683,17 @@ agent 用它告诉框架“我做完了”。业务工具都调用完之后调�
       "version": 2
     }
   ],
-  "_text": "reputation (v2) = 5"
+  "text": "reputation (v2) = 5"
 }
 ```
 
-模型只看到预算内的 `_text`；trace 和调试里保留完整的结构化结果。没有分页的长值会带一条截断提示。这时应该继续查更窄的路径或更小的页，不能把截断的内容当成完整的值。
+模型只看到预算内的 `summary`；trace 和调试里保留完整的结构化结果。没有分页的长值会带一条截断提示。这时应该继续查更窄的路径或更小的页，不能把截断的内容当成完整的值。
 
 公开结果不带 `initialValue`、`updateRule` 或追踪来源。
 
 ### world-dimension-list
 
-和 `world-dimension-get` 在同一个模块。参数为 `{}`，返回 `{dimensions:[{id,name,type,version}], _text}`。`type` 来自 schema 的 `type`，schema 没写时可以缺失。
+和 `world-dimension-get` 在同一个模块。参数为 `{}`，返回 `{dimensions:[{id,name,type,version}]}`。`type` 来自 schema 的 `type`，schema 没写时可以缺失。
 
 这个工具只用来发现有哪些维度和它们的版本，不返回值、规则或初值。先用它找到 ID，再用 `world-dimension-get` 读需要的路径。这样不用把大量数据整个放进提示词。
 
@@ -724,7 +725,7 @@ agent 用它告诉框架“我做完了”。业务工具都调用完之后调�
 
 第 2、3 种是失败的工具调用：错误文本回给模型，这次调用不算“用过工具”（`requireToolUse`），也不算结束工具的完成条件。但它们对 runtime 结果的影响不同：
 
-- **未知 topic（第 2 种）不算 runtime 的失败。** 没有启用的插件声明这个 topic，模型无从改正，这次调用什么也没做。工具用 `ToolRefusal`（`@covel/tools`）拒绝：它不算业务工作（`requireToolUse` 仍未满足，也不触发 `completeAfterTools`），也不算一条“还没解决的失败”。一个 agent 只发了这一次 emit，随后用文字或 `runtime-done` 收尾，结果是正常成功，只是没有事件发出。所以卸掉消费事件的插件，不会让发出事件的 runtime 失败。
+- **未知 topic（第 2 种）不算 runtime 的失败。** 没有启用的插件声明这个 topic，模型无从改正，这次调用什么也没做。工具用 `ToolError("refused", …)`（公开 SDK）拒绝：它不算业务工作（`requireToolUse` 仍未满足，也不触发 `completeAfterTools`），也不算一条“还没解决的失败”。一个 agent 只发了这一次 emit，随后用文字或 `runtime-done` 收尾，结果是正常成功，只是没有事件发出。所以卸掉消费事件的插件，不会让发出事件的 runtime 失败。
 - **payload 不合 schema（第 3 种）是失败。** 约定存在，只是数据不对，模型可以按错误文本重发。同一个工具后来成功的一次调用会抵消它。没有重发成功、也没有其他输出就收尾的 `system` runtime 以 `tool_failed_without_output` 失败。声明了 `requireExplicitCompletion` 的 runtime 在它没解决之前，不能用 `runtime-done` 收尾。
 
 **内部 topic。** 声明为 `advertise: false` 的 topic 不进 `emit-event` 的白名单。它只能由声明它的插件自己的**函数 runtime**通过 `output.events` 发出。agent 不能用 `emit-event` 直接发它，绕过中间的生成步骤。第 2 种结果里回显的可用列表也不包含内部 topic 的名字。
@@ -808,7 +809,7 @@ JSON Schema 只能检查字段的形状，检查不了“这个结果和骰子�
 | query | string | ✓    | 能力关键词（中英文均可），如 `切换场景背景` |
 | limit | number | —    | 最多激活的工具数（默认 8，上限 20）         |
 
-**输出**: 一段文本，列出命中的工具的名字和描述。命中工具的完整 schema 从下一次模型调用起加入工具清单，在本回合的 agent 循环内一直有效。到了下一回合，清单重置为精简的版本。
+**输出**: 模型收到 `{ summary }`，摘要是一段文本，列出命中的工具的名字和描述。命中工具的完整 schema 从下一次模型调用起加入工具清单，在本回合的 agent 循环内一直有效。到了下一回合，清单重置为精简的版本。
 
 **注意事项**：
 
@@ -831,7 +832,7 @@ agent runtime 用它把一件事交给[子 agent](./plugins.md#子-agent)：另�
 | data     | object | —    | 子 agent 需要的事实，JSON 对象，最多 32 KB                                       |
 | maxSteps | number | —    | 子 agent 的步数上限，只能比提供方自己的更低                                      |
 
-**输出**：成功时，工具结果就是子 agent 的输出，模型收到它的 JSON（经过 `modelFacingJson`，不含簿记字段）；`stopReason` 和用量只记在 `subagent.completed` 里。`delegate` 列在 `completeAfterTools` 里时，这份输出直接作为调用方的输出接受校验。失败时收到 `{ success: false, error, code }`，`code` 是 `ctx.agents.run` 的错误码之一。除 `invalid-input` 外的失败不算这个 runtime 的工具失败，模型可以换个办法继续。
+**输出**：成功时，模型收到 `{data: output}`，其中 output 经过 `modelFacingJson`，不含簿记字段；代码仍读取原始输出；`stopReason` 和用量只记在 `subagent.completed` 里。`delegate` 列在 `completeAfterTools` 里时，这份输出直接作为调用方的输出接受校验。失败时收到 `{error:{code,message,hint?}}`，`code` 是 `ctx.agents.run` 的错误码之一。除 `invalid-input` 外的失败不算这个 runtime 的工具失败，模型可以换个办法继续。
 
 **注意事项**：
 
@@ -846,25 +847,61 @@ agent runtime 用它把一件事交给[子 agent](./plugins.md#子-agent)：另�
 
 框架自带的角色管理工具，定义在 `packages/tools/src/builtin/character-tools.ts`。角色写入 `characters` 表。角色属于会话，所有插件都能看到。
 
-### 文本优先（Text-first）约定
+<a id="文本优先text-first约定"></a>
 
-这一组工具的返回值里有一个特殊字段 `_text`。其他工具也可以采用这个约定。
+### 统一返回格式与错误码
 
-- **模型看到的 = `_text` 的原始文本**，不带 JSON 包装。
-- **trace 和调试界面看到的 = 完整的 `parsedResult` 对象**，包括 `_text` 和结构化字段。
+模型读取的每个工具结果都是 JSON 对象。成功结果按 `summary`、`data`、`staged` 的顺序输出；没有摘要、数据或副作用时返回 `{"summary":"Done."}`（中文指令为 `完成。`）。失败结果只有 `error`：
 
-这样模型读到的是紧凑的自然语言（省 token、少干扰），框架仍然有结构化数据用于调试和追踪。
+```json
+{
+  "summary": "Queued a note.",
+  "data": { "key": "gate" },
+  "staged": {
+    "count": 1,
+    "kinds": ["plugin.data"],
+    "notice": "已暂存，回合结束时生效（可能被拒绝）。"
+  }
+}
+```
 
-框架（`packages/runtime/src/agent-loop/tool-executor.ts`）按有没有 `_text` 决定给模型什么：
+```json
+{
+  "error": {
+    "code": "invalid-input",
+    "message": "The name is required.",
+    "hint": "Fix these fields and call the tool again."
+  }
+}
+```
 
-| 结果                  | 给模型的内容                                                                                                                                                                                                                                   |
-| --------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 有 `_text` 且是字符串 | 直接是这段文本。                                                                                                                                                                                                                               |
-| 没有 `_text`          | 结果序列化成 JSON，但去掉两类内容：记账字段（行的 `updatedAt`、消息的 `timestamp`、UUID 形式的 `…Id`、`sessionId`；规则见[记录里的簿记字段](./plugins.md#输入和输出)），以及结果顶层的 `ui` 数组（那是给玩家界面的卡片，内容是模型刚写过的）。 |
+- `summary` 和 `data` 都可省略。没有显式视图时，`data` 是工具正文经过 `modelFacingJson` 的结果，并去掉顶层的 `ui` 数组。
+- `withModelView(content, { summary?, data? })` 明确选择模型看到的内容。有视图时只发送视图指定的字段；只写 `summary` 就不发送正文。`data` 仍经过 `modelFacingJson`，`summary` 原样保留。
+- `withModelView`、`withPendingProposals` 和 `withEmittedEvents` 可以按任意顺序组合，保留正文、视图和两个副作用通道。用 `getModelView` 读取视图。`_text` 不再有特殊含义。
+- `parsedResult`、`ctx.tools.call` 的返回值、完成工具的输出、UI 和交互载荷仍是完整正文。模型结果的包装不会改变它们。
+- 成功调用带有待提交 proposal 或领域事件时，加上 `staged`。`count` 是两者总数；`kinds` 是按首次出现顺序去重的 proposal 类型，有事件时再加 `event`。调用成功只表示暂存，仍可能在提交时被拒绝。
+- 提示由 `instructionLocaleFor(context.locale)` 选择，遵守 `COVEL_INSTRUCTION_LOCALE`：中文为“已暂存，回合结束时生效（可能被拒绝）。”，英文为“Staged: it takes effect when the turn ends and may still be rejected.”。错误消息和 hint 保持英文。
 
-不论哪种情况，`parsedResult` 和 `ctx.tools.call` 的返回值都是完整对象。
+SDK 的 `TOOL_ERROR_CODES` 是唯一错误码列表。工具作者用 `new ToolError(code, message, { hint? })` 抛出可读错误，`isToolError` 也识别子类和另一份 SDK 创建的 Error。`ToolValidationError` 继承它，code 是 `invalid-input`。
 
-其他 builtin 工具（如 `plugin-data-*`、`create-form`）目前返回 JSON。
+<!-- prettier-ignore -->
+| 标识符 | 含义 | 谁产生 | 是否设置 `refused` |
+| --- | --- | --- | --- |
+| `invalid-input` | 参数需要修正 | JSON 解析、Zod、工具或子 agent 请求校验 | 否 |
+| `not-found` | 没有找到目标 | 工具解析、工具或子 agent 解析 | 工具抛出时否；delegate 是 |
+| `ambiguous` | 目标不唯一 | 工具或子 agent 解析 | 工具抛出时否；delegate 是 |
+| `refused` | 调用被拒绝 | 审批、PreToolUse 或工具 | 仅工具自己抛出时是 |
+| `unavailable` | 当前未授权或能力不可用 | 工具授权、无执行器、工具或子 agent | 工具或执行器否；delegate 是 |
+| `timeout` | 工具或子 agent 超时 | 执行器、工具或子 agent | 工具或执行器否；delegate 是 |
+| `conflict` | 写入冲突，保留码 | 当前没有内置产生方 | 否 |
+| `cancelled` | 调用被取消 | 执行器、工具或子 agent | 工具或执行器否；delegate 是 |
+| `internal` | 未预期的执行错误 | 执行器、工具或子 agent | 工具或执行器否；delegate 是 |
+
+错误码和计数标志是两件事。审批拒绝、未授权调用和 Hook 中止仍算失败调用；只有工具自己抛出 `ToolError("refused", …)` 不算 runtime 的失败。`delegate` 延续自己的规则：除 `invalid-input` 外都设置标志。
+
+`ToolCallResult.error` 为代码提供同一份 `{code,message,hint?}`，失败时 `parsedResult` 为 `null`；`delegate` 保留自己的失败结果。`ctx.tools.call` 失败时抛出 `ToolError`，message 是错误消息，不是 JSON。
+
+`internal` 的模型消息为 `Tool "<name>" failed: <text>`：只留原错误第一行，UUID 替换成 `<id>`，错误正文最多 300 字符。作者抛出的 `ToolError.message` 最多 2 000 字符。完整消息仍记入非隐藏 runtime 的 `tool.failed.error`；意外异常也记入服务端日志，不发送堆栈和 cause 链。trace 的 `code` 使用同一错误码，另可带 `hint` 和校验用的 `details`；`tool.completed.result` 是上述 JSON 文本。隐藏 runtime 仍去掉这些内容。
 
 ### create-character
 
@@ -878,7 +915,7 @@ agent runtime 用它把一件事交给[子 agent](./plugins.md#子-agent)：另�
 | description | string                  |      | 角色简短描述                                              |
 | fields      | Record<string, unknown> |      | 属性键值对（应符合世界 schema 中的 character-attributes） |
 
-**输出 (parsedResult)**: `{ _text, success, existed, characterId, name, type }`
+**输出 (parsedResult)**: `{ existed, characterId, name, type }`
 
 新角色的 id 由名字生成，是可读的单词形式（见[短 ID](#短-idllm-友好实体引用)）。
 
@@ -890,7 +927,7 @@ agent runtime 用它把一件事交给[子 agent](./plugins.md#子-agent)：另�
 - 创建 `type: "player"` 时，名字如果是其他角色的名字或别名，工具报错，并要求向玩家另要一个名字：玩家不会是世界里一个已有的 NPC。
 - 一个会话可以有多个 player，新建的玩家角色自动绑定到默认座位（见[座位](./world-model.md#座位)）。其他类型来自 schema 的 `types`。
 
-**模型看到的 `_text` 示例**：
+**模型看到的 `summary` 示例**：
 
 ```
 Created npc "苏婉" as char-abc123. — 青萍宗外门首席弟子，冰灵根修士。
@@ -988,9 +1025,9 @@ Character "苏婉" (npc) already exists as char-abc123. No new record created. U
 - 同一次调用里先去掉再追加，所以一次调用可以换掉一个别名。
 - 在 `sync-characters.updates[]` 里，前一项去掉的别名，后一项可以加给另一个角色。
 
-**成功输出 (parsedResult)**: `{ _text, success: true, characterId, version }`
+**成功输出 (parsedResult)**: `{ characterId, version }`
 
-**模型看到的 `_text` 示例**：
+**模型看到的 `summary` 示例**：
 
 ```
 Updated npc "苏婉" (char-abc123) → v2.
@@ -1006,13 +1043,14 @@ Updated npc "苏婉" (char-abc123) → v2.
 | 名字或别名属于不止一个角色 | 列出各自的 id：`"Maud" names 2 characters: Maud [npc-a]; maud [npc-b]. Pass the id of the one you mean. Nothing was updated.`                                                                                            |
 | 要追加的别名属于别的角色   | 失败，并写明这个别名属于谁。                                                                                                                                                                                             |
 
-这些都是抛出的错误，不是正常返回的 `success: false`。模型在工具循环里收到：
+找不到角色抛出 `ToolError("not-found", …)`，名字不唯一抛出 `ToolError("ambiguous", …)`。模型在工具循环里收到：
 
 ```json
 {
-  "success": false,
-  "error": "Tool \"update-character\" failed during execution: …",
-  "code": "EXECUTION_ERROR"
+  "error": {
+    "code": "not-found",
+    "message": "Character not found. Nothing was updated."
+  }
 }
 ```
 
@@ -1031,7 +1069,7 @@ Updated npc "苏婉" (char-abc123) → v2.
 
 `creates[]` 的每一项和 `create-character` 的参数相同，`updates[]` 的每一项和 `update-character` 的参数相同。
 
-**输出 (parsedResult)**: `{ _text, success: true, created, updated, unchanged }`
+**输出 (parsedResult)**: `{ created, updated, unchanged }`
 
 规则：
 
@@ -1061,17 +1099,17 @@ Updated npc "苏婉" (char-abc123) → v2.
 | ---- | ---- | ---- | ----------------------------------- |
 | type | enum |      | `player` / `npc` / `companion` 过滤 |
 
-**输出 (parsedResult)**: `{ _text, count, characters: CharacterSnapshot[] }`
+**输出 (parsedResult)**: `{ count, characters: CharacterSnapshot[] }`
 
 **排序**：先按 `version` 从高到低（版本越高，被交互的次数越多），再按 `updatedAt` 从新到旧。
 
 **条数上限**：一次最多返回排在前面的 50 个角色（内置世界预置 10 到 16 个）。
 
 - `count` 仍是符合条件的总数。
-- 超出时，`_text` 末尾加一行，说明还有多少个没列出，并提示按 `type` 过滤或用 `get-character` 按名字查找。
+- 超出时，`summary` 末尾加一行，说明还有多少个没列出，并提示按 `type` 过滤或用 `get-character` 按名字查找。
 - `characters` 只含列出的那些。
 
-**模型看到的 `_text` 示例**：
+**模型看到的 `summary` 示例**：
 
 ```
 Characters in session (3 total, sorted by frequency then recency):
@@ -1084,10 +1122,10 @@ Characters in session (3 total, sorted by frequency then recency):
 
 ### get-character-schema
 
-读取会话的角色属性 schema。参数为 `{}`，返回 `{ schema: CharacterSchemaRecord | null, _text }`。
+读取会话的角色属性 schema。参数为 `{}`，返回 `{ schema: CharacterSchemaRecord | null }`。
 
 - schema 属于会话的 World Model，包含 `version` / `types` / `attributes`。不存在时返回 `null`。
-- 模型读取的 `_text` 经过 `modelFacingJson`，不含会话 ID 和写入时间。代码读取的 `schema` 保留完整记录。
+- 模型读取的 `summary` 经过 `modelFacingJson`，不含会话 ID 和写入时间。代码读取的 `schema` 保留完整记录。
 - 读取包括已验证的待提交领域 proposal。它不根据插件私有的 `schema` 数据推断。
 - 这个工具不写数据，也不接受其他会话或插件的 ID。
 
@@ -1108,10 +1146,10 @@ Characters in session (3 total, sorted by frequency then recency):
 
 **输出 (parsedResult)**:
 
-- 找到：`{ _text, found, character: CharacterSnapshot }`
-- 没找到：`{ _text, found: false, candidates: string[] }`。`_text` 和 `update-character` 找不到角色时的信息相同（最相近的名字，或有歧义的候选）。`candidates` 是这些角色的名字。
+- 找到：`{ found, character: CharacterSnapshot }`
+- 没找到：`{ found: false, candidates: string[] }`。`summary` 和 `update-character` 找不到角色时的信息相同（最相近的名字，或有歧义的候选）。`candidates` 是这些角色的名字。
 
-**模型看到的 `_text` 示例**：
+**模型看到的 `summary` 示例**：
 
 ```
 Character: 苏婉 [npc] char-abc123
@@ -1204,7 +1242,7 @@ Attributes:
 | `offset` | integer           |      | 默认 0                                      |
 | `limit`  | integer           |      | 默认 6000，范围 1–6000，按 Unicode 字符分页 |
 
-返回 `{id,version,content,complete,nextOffset?,_text}`。`complete:false` 时要继续取下一页，不能只凭被截断的规则预览就结算。
+返回 `{id,version,content,complete,nextOffset?}`。`complete:false` 时要继续取下一页，不能只凭被截断的规则预览就结算。
 
 ### update-dimensions
 
@@ -1449,16 +1487,16 @@ export default function ({ tool, z, shortId, shortIdBatch }) {
 
 - agent 循环把当前 runtime 的精确授权集合放在 `ToolCallContext.authorizedToolNames` 里传给执行器。集合包括 `tools.*` 声明的全部名字，以及完成契约使用 `runtime-done` 的 runtime 和故事 runtime 的 `runtime-done`。必须通过完成工具结束的 runtime 不再自动获得它的授权。
 - `defer` 名单里的工具也在授权集合里：延迟只影响模型一开始看不看得到，不影响授权。
-- 执行器在解析工具和审批**之前**，先检查最终的工具名是否在授权集合里。“最终”指会话覆盖和 `PreToolUse` 替换之后的名字。不在集合里时返回结构化错误 `UNAUTHORIZED`。
+- 执行器在解析工具和审批**之前**，先检查最终的工具名是否在授权集合里。“最终”指会话覆盖和 `PreToolUse` 替换之后的名字。不在集合里时返回结构化错误 `unavailable`。
 - `search-tools` 在循环内被拦下，到不了执行器。
 - `findTool` 对没有上下文的调用一律从严：没有上下文只能找到 builtin 工具，插件工具全部拒绝。
 
-**故事 runtime 是个例外。** 故事 runtime（`io.visibility: story`）以正文结束。它的工具列表里没有 `runtime-done`，`[COMPLETION]` 段也不提它。但授权仍然保留：模型出于习惯调用了它时，循环用剩下的步数追问正文，而不是返回 `UNAUTHORIZED`。不把 `runtime-done` 列给故事 runtime 的原因：按字面执行指令的模型会只调用它，不写正文。
+**故事 runtime 是个例外。** 故事 runtime（`io.visibility: story`）以正文结束。它的工具列表里没有 `runtime-done`，`[COMPLETION]` 段也不提它。但授权仍然保留：模型出于习惯调用了它时，循环用剩下的步数追问正文，而不是返回 `unavailable`。不把 `runtime-done` 列给故事 runtime 的原因：按字面执行指令的模型会只调用它，不写正文。
 
 ### 取消
 
 - 执行器把调用方的取消和宿主的关闭合并到 `context.signal`。
-- 取消会撤销这次调用的读取能力，并以 `CANCELLED` 结束对工具回调的等待。迟到的返回值、proposal 和事件不会被接受。
+- 取消会撤销这次调用的读取能力，并以 `cancelled` 结束对工具回调的等待。迟到的返回值、proposal 和事件不会被接受。
 - 取消不能强行终止同一个进程里的 JavaScript。执行器会继续跟踪还没完成的回调和读取，包括内置工具占用的宿主能力。
 - 正常完成时，执行器也会等工具已经发起、但自己没有等待的读取结束。
 
@@ -1496,7 +1534,7 @@ export default function ({ tool, z, shortId, shortIdBatch }) {
 - `registerBuiltin()` 注册的框架工具（包括 `builtinUITools`）→ `builtin`
 - 插件 `entry` 通过 `registerTool()` 注册成功的工具 → `local`
 
-只有这两种来源。找不到的工具或其他插件的私有工具，在来源检查之前就返回 `NOT_FOUND`。来源分类不代表插件信任等级；社区代码是否获准执行，由下面的授权流程决定。
+只有这两种来源。找不到的工具或其他插件的私有工具，在来源检查之前就返回 `not-found`。来源分类不代表插件信任等级；社区代码是否获准执行，由下面的授权流程决定。
 
 ### 第三方插件 server-code / plugin tool 审批边界
 
@@ -1722,6 +1760,7 @@ export default register;
 interface PluginToolResult<T> {
   readonly kind: "covel.tool-result";
   readonly content: T;
+  readonly model?: { readonly summary?: string; readonly data?: unknown };
   readonly pendingProposals: readonly PluginProposal[];
   readonly emittedEvents?: readonly {
     topic: string;
@@ -1732,15 +1771,16 @@ interface PluginToolResult<T> {
 
 读取这个结果要用公开 SDK 的函数，不要直接读属性：
 
-| 函数                          | 读什么       |
-| ----------------------------- | ------------ |
-| `getToolContent(result)`      | 业务正文     |
-| `getPendingProposals(result)` | 待提交的写入 |
-| `getEmittedEvents(result)`    | 发出的事件   |
+| 函数                          | 读什么                   |
+| ----------------------------- | ------------------------ |
+| `getToolContent(result)`      | 业务正文                 |
+| `getModelView(result)`        | 模型读取的摘要和数据视图 |
+| `getPendingProposals(result)` | 待提交的写入             |
+| `getEmittedEvents(result)`    | 发出的事件               |
 
 例如测试里写 `getToolContent(result).someField`，不要写 `result.someField`。调用辅助函数之后，必须使用它返回的对象。
 
-`withPendingProposals()` 和 `withEmittedEvents()` 可以按任意顺序组合：
+`withModelView()`、`withPendingProposals()` 和 `withEmittedEvents()` 可以按任意顺序组合：
 
 - 支持普通对象、冻结对象和标量内容。
 - 组合后保留同一份 `content` 和两个副作用通道。再次设置同一个通道会替换它。

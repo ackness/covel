@@ -528,9 +528,9 @@ LLM: "调用 sync-           ToolExecutor:
                               ├─ 工具逻辑执行
                               ├─ 生成领域 proposal / execution-local 写入
                               ├─ commit 成功后发布数据事件 ──► SSE → surface 更新
-                              └─ 返回结构化结果或 `_text`
+                              └─ 返回正文及可选的模型视图
                            4. 结果序列化为 tool message
-                              → `_text` 优先作为 LLM 可读文本
+                              → LLM 读取统一的 summary / data / staged 或 error JSON
                               → 结构化结果保留给 trace / commit / 调试
                            5. LLM 看到结果，决定是否继续调用
 

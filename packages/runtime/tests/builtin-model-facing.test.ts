@@ -236,7 +236,9 @@ describe("builtin model-facing results", () => {
       assertModelText(result.result);
       if (name === "get-character-schema") {
         expect(result.parsedResult).toMatchObject({ schema });
-        expect(JSON.parse(result.result)).toEqual({
+        const model = JSON.parse(result.result);
+        expect(model).toEqual({ summary: expect.any(String) });
+        expect(JSON.parse(model.summary)).toEqual({
           version: 1,
           types: ["npc"],
           attributes: [],
@@ -269,7 +271,9 @@ describe("builtin model-facing results", () => {
     );
     expect(result.success, result.result).toBe(true);
     assertModelText(result.result);
-    expect(JSON.parse(result.result)).toEqual({
+    const model = JSON.parse(result.result);
+    expect(model).toEqual({ summary: expect.any(String) });
+    expect(JSON.parse(model.summary)).toEqual({
       version: 2,
       types: ["npc", "companion"],
       attributes: [],

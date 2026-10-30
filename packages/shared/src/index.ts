@@ -75,6 +75,12 @@ export {
 
 // ── Types ─────────────────────────────────────────────────────────
 export * from "./types/index.js";
+export {
+  TOOL_ERROR_CODES,
+  ToolError,
+  isToolError,
+} from "@covel/plugin-handlers-utils";
+export type { ToolModelView } from "@covel/plugin-handlers-utils";
 export * from "./types/llm-diagnostics.js";
 export * from "./llm-request-budget.js";
 export * from "./llm-slots.js";

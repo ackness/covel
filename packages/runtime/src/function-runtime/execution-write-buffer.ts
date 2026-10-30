@@ -99,6 +99,10 @@ export function bufferPluginDataUpdate(
   });
 }
 
+/** A read overlay has timestamps only when its row already exists in storage. */
+type PluginDataRowView = Omit<PluginDataRecord, "createdAt" | "updatedAt"> &
+  Partial<Pick<PluginDataRecord, "createdAt" | "updatedAt">>;
+
 /**
  * Merge committed plugin-data rows with upstream writes of the same plugin,
  * then buffered writes (later wins). A `plugin.data.update` is applied on top
@@ -111,14 +115,13 @@ export function mergePluginDataRows(
   pluginId?: string,
   namespace?: string,
   visible: readonly UpstreamPluginDataWrite[] = [],
-): PluginDataRecord[] {
+): PluginDataRowView[] {
   const overlay = [...visible.map((write) => write.proposal), ...buffer];
   const pluginIds =
     pluginId === undefined
       ? new Set(overlay.map((proposal) => proposal.source.pluginId))
       : [pluginId];
-  const now = new Date().toISOString();
-  const byKey = new Map<string, PluginDataRecord>();
+  const byKey = new Map<string, PluginDataRowView>();
   const compositeKey = (owner: string, ns: string, key: string) =>
     JSON.stringify([owner, ns, key]);
   for (const row of stored)
@@ -144,8 +147,8 @@ export function mergePluginDataRows(
         namespace: entry.namespace,
         key: entry.key,
         value: entry.value,
-        createdAt: base?.createdAt ?? now,
-        updatedAt: now,
+        ...(base?.createdAt !== undefined ? { createdAt: base.createdAt } : {}),
+        ...(base?.updatedAt !== undefined ? { updatedAt: base.updatedAt } : {}),
       });
     }
   }

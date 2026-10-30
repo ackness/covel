@@ -11,7 +11,7 @@
  * The result is always **permissive** (`.catchall(z.unknown())` on objects
  * and any `z.record`) so storytelling isn't blocked when the LLM tries to
  * set a field the schema hasn't declared yet. Off-schema keys still trigger
- * the soft `_text` warning produced by `schema-validator`.
+ * the soft model-view warning produced by `schema-validator`.
  */
 
 import { z, type ZodType } from "zod";

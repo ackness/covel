@@ -1,3 +1,4 @@
+import { getModelView } from "@covel/plugin-handlers-utils";
 /**
  * Tests for builtin character management tools.
  *
@@ -133,7 +134,10 @@ class Loop {
     if (!t) throw new Error(`Tool not found: ${name}`);
     const result = await t.execute(params, this.ctx(pluginId));
     this.pending.push(...getPendingProposals(result));
-    return getToolContent(result) as Record<string, unknown>;
+    const content = getToolContent(result) as Record<string, unknown>;
+    expect(content).not.toHaveProperty("_text");
+    expect(content).not.toHaveProperty("success");
+    return { ...content, summary: getModelView(result)?.summary };
   }
 
   /** Simulate finalizeExecution committing the buffered proposals. */
@@ -233,7 +237,7 @@ describe("builtin character tools", () => {
       name: "Brook",
       type: "player",
     });
-    expect(second).toMatchObject({ success: true, existed: false });
+    expect(second).toMatchObject({ existed: false });
     loop.commit();
     expect(
       (await store.listCharacters("sess-1")).map(({ name, type }) => [
@@ -256,7 +260,7 @@ describe("builtin character tools", () => {
       name: "Alex",
       type: "player",
     });
-    expect(created).toMatchObject({ success: true, existed: false });
+    expect(created).toMatchObject({ existed: false });
     expect(loop.pending).toHaveLength(2);
     expect(loop.pending[1]?.sessionId).toBe("sess-1");
   });
@@ -367,7 +371,6 @@ describe("builtin character tools", () => {
       });
 
       expect(getToolContent(result)).toMatchObject({
-        success: true,
         characterId: expect.any(String),
         name: "柳无痕",
         type: "player",
@@ -479,31 +482,47 @@ describe("builtin character tools", () => {
       expect(store.characters).toHaveLength(2);
     });
 
-    it("returns a human-readable _text summary (text-first convention)", async () => {
+    it("returns a human-readable summary summary (model view)", async () => {
       const result = (await loop.call("create-character", {
         name: "柳无痕",
         type: "player",
         description: "外门弟子",
-      })) as { _text: string; characterId: string };
-      expect(typeof getToolContent(result)._text).toBe("string");
-      expect(getToolContent(result)._text).toContain("柳无痕");
-      expect(getToolContent(result)._text).toContain("player");
-      expect(getToolContent(result)._text).toContain(
+      })) as { summary: string; characterId: string };
+      expect(typeof getToolContent(result).summary).toBe("string");
+      expect(getToolContent(result).summary).toContain("柳无痕");
+      expect(getToolContent(result).summary).toContain("player");
+      expect(getToolContent(result).summary).toContain(
         getToolContent(result).characterId,
       );
     });
 
-    it("_text reflects existed=true path when duplicate", async () => {
+    it("summary reflects existed=true path when duplicate", async () => {
       await loop.call("create-character", { name: "孙师叔", type: "npc" });
       const r2 = (await loop.call("create-character", {
         name: "孙师叔",
         type: "npc",
-      })) as { _text: string };
-      expect(r2._text).toMatch(/already exists|已存在|existed/i);
+      })) as { summary: string };
+      expect(r2.summary).toMatch(/already exists|已存在|existed/i);
     });
   });
 
   describe("update-character", () => {
+    it("codes unresolved names without staging a write", async () => {
+      await loop.call("create-character", { name: "Mina Park", type: "npc" });
+      await loop.call("create-character", { name: "Mina Okafor", type: "npc" });
+      loop.commit();
+      await expect(
+        loop.call("update-character", { id: "Mina", fields: {} }),
+      ).rejects.toMatchObject({ code: "not-found" });
+      // Imported records may already share an alias; writes must not guess.
+      for (const character of store.characters) character.aliases = ["Mina"];
+      await expect(
+        loop.call("update-character", { id: "Mina", fields: {} }),
+      ).rejects.toMatchObject({ code: "ambiguous" });
+      await expect(
+        loop.call("update-character", { id: "Unknown", fields: {} }),
+      ).rejects.toMatchObject({ code: "not-found" });
+    });
     it("merges fields into buffered character and bumps version", async () => {
       const created = await loop.call("create-character", {
         name: "苏婉",
@@ -519,7 +538,6 @@ describe("builtin character tools", () => {
       });
 
       expect(getToolContent(result)).toMatchObject({
-        success: true,
         characterId: charId,
         version: 2,
       });
@@ -598,7 +616,6 @@ describe("builtin character tools", () => {
       });
 
       expect(getToolContent(result)).toMatchObject({
-        success: true,
         created: [expect.objectContaining({ name: "林昭", type: "npc" })],
         updated: [expect.objectContaining({ characterId: existingId })],
       });
@@ -630,7 +647,7 @@ describe("builtin character tools", () => {
     it("settles an empty sync as no change", async () => {
       await expect(
         loop.call("sync-characters", { creates: [], updates: [] }),
-      ).resolves.toMatchObject({ success: true, created: [], updated: [] });
+      ).resolves.toMatchObject({ created: [], updated: [] });
       expect(loop.pending).toHaveLength(0);
     });
   });
@@ -658,39 +675,39 @@ describe("builtin character tools", () => {
 
     it("returns a text summary listing all session characters", async () => {
       const result = (await loop.call("list-characters", {})) as {
-        _text: string;
+        summary: string;
         count: number;
       };
-      expect(typeof getToolContent(result)._text).toBe("string");
+      expect(typeof getToolContent(result).summary).toBe("string");
       expect(getToolContent(result).count).toBe(3);
-      expect(getToolContent(result)._text).toContain("柳无痕");
-      expect(getToolContent(result)._text).toContain("苏婉");
-      expect(getToolContent(result)._text).toContain("柳娘");
-      expect(getToolContent(result)._text).toContain("外门弟子");
-      expect(getToolContent(result)._text).toContain("player");
-      expect(getToolContent(result)._text).toContain("npc");
+      expect(getToolContent(result).summary).toContain("柳无痕");
+      expect(getToolContent(result).summary).toContain("苏婉");
+      expect(getToolContent(result).summary).toContain("柳娘");
+      expect(getToolContent(result).summary).toContain("外门弟子");
+      expect(getToolContent(result).summary).toContain("player");
+      expect(getToolContent(result).summary).toContain("npc");
     });
 
     it("filters by type when provided", async () => {
       const result = (await loop.call("list-characters", { type: "npc" })) as {
-        _text: string;
+        summary: string;
         count: number;
       };
       expect(getToolContent(result).count).toBe(2);
-      expect(getToolContent(result)._text).toContain("苏婉");
-      expect(getToolContent(result)._text).toContain("柳娘");
-      expect(getToolContent(result)._text).not.toContain("柳无痕");
+      expect(getToolContent(result).summary).toContain("苏婉");
+      expect(getToolContent(result).summary).toContain("柳娘");
+      expect(getToolContent(result).summary).not.toContain("柳无痕");
     });
 
     it("handles empty session with a clear empty message", async () => {
       const emptyStore = createMockStore();
       const emptyLoop = new Loop(createCharacterTools(emptyStore), emptyStore);
       const result = (await emptyLoop.call("list-characters", {})) as {
-        _text: string;
+        summary: string;
         count: number;
       };
       expect(getToolContent(result).count).toBe(0);
-      expect(getToolContent(result)._text.toLowerCase()).toMatch(
+      expect(getToolContent(result).summary.toLowerCase()).toMatch(
         /no character|empty|没有|暂无/,
       );
     });
@@ -698,22 +715,22 @@ describe("builtin character tools", () => {
     it('treats "None" filter values as no filter', async () => {
       const result = (await loop.call("list-characters", {
         type: "None",
-      })) as { _text: string; count: number };
+      })) as { summary: string; count: number };
       expect(getToolContent(result).count).toBe(3);
-      expect(getToolContent(result)._text).toContain("柳无痕");
-      expect(getToolContent(result)._text).toContain("苏婉");
-      expect(getToolContent(result)._text).toContain("柳娘");
+      expect(getToolContent(result).summary).toContain("柳无痕");
+      expect(getToolContent(result).summary).toContain("苏婉");
+      expect(getToolContent(result).summary).toContain("柳娘");
     });
 
     it("sorts by frequency (version) desc, then updatedAt desc", async () => {
       const suwan = (await loop.call("get-character", { name: "苏婉" })) as {
-        _text: string;
+        summary: string;
       };
-      const suwanId = /char-[a-f0-9-]+/.exec(suwan._text)?.[0];
+      const suwanId = /char-[a-f0-9-]+/.exec(suwan.summary)?.[0];
       const liuniang = (await loop.call("get-character", { name: "柳娘" })) as {
-        _text: string;
+        summary: string;
       };
-      const liuniangId = /char-[a-f0-9-]+/.exec(liuniang._text)?.[0];
+      const liuniangId = /char-[a-f0-9-]+/.exec(liuniang.summary)?.[0];
 
       expect(suwanId).toBeDefined();
       expect(liuniangId).toBeDefined();
@@ -733,11 +750,11 @@ describe("builtin character tools", () => {
       loop.commit();
 
       const list = (await loop.call("list-characters", {})) as {
-        _text: string;
+        summary: string;
       };
-      const suwanPos = list._text.indexOf("苏婉");
-      const liuniangPos = list._text.indexOf("柳娘");
-      const liuwuhenPos = list._text.indexOf("柳无痕");
+      const suwanPos = list.summary.indexOf("苏婉");
+      const liuniangPos = list.summary.indexOf("柳娘");
+      const liuwuhenPos = list.summary.indexOf("柳无痕");
       expect(suwanPos).toBeLessThan(liuniangPos);
       expect(liuniangPos).toBeLessThan(liuwuhenPos);
     });
@@ -756,11 +773,11 @@ describe("builtin character tools", () => {
       freshLoop.commit();
 
       const list = (await freshLoop.call("list-characters", {})) as {
-        _text: string;
+        summary: string;
       };
-      const liuniangPos = list._text.indexOf("柳娘");
-      const suwanPos = list._text.indexOf("苏婉");
-      const liuwuhenPos = list._text.indexOf("柳无痕");
+      const liuniangPos = list.summary.indexOf("柳娘");
+      const suwanPos = list.summary.indexOf("苏婉");
+      const liuwuhenPos = list.summary.indexOf("柳无痕");
       expect(liuniangPos).toBeLessThan(suwanPos);
       expect(suwanPos).toBeLessThan(liuwuhenPos);
     });
@@ -774,11 +791,11 @@ describe("builtin character tools", () => {
       loop.commit();
 
       const result = (await loop.call("list-characters", {})) as {
-        _text: string;
+        summary: string;
         count: number;
       };
       expect(getToolContent(result).count).toBe(4);
-      expect(getToolContent(result)._text).toContain("NarratorGhost");
+      expect(getToolContent(result).summary).toContain("NarratorGhost");
     });
   });
 
@@ -797,26 +814,26 @@ describe("builtin character tools", () => {
 
     it("returns full character detail as text when found by id", async () => {
       const result = (await loop.call("get-character", { id: charId })) as {
-        _text: string;
+        summary: string;
         found: boolean;
       };
       expect(getToolContent(result).found).toBe(true);
-      expect(typeof getToolContent(result)._text).toBe("string");
-      expect(getToolContent(result)._text).toContain("柳无痕");
-      expect(getToolContent(result)._text).toContain("player");
-      expect(getToolContent(result)._text).toContain(charId);
-      expect(getToolContent(result)._text).toContain("hp");
-      expect(getToolContent(result)._text).toContain("100");
+      expect(typeof getToolContent(result).summary).toBe("string");
+      expect(getToolContent(result).summary).toContain("柳无痕");
+      expect(getToolContent(result).summary).toContain("player");
+      expect(getToolContent(result).summary).toContain(charId);
+      expect(getToolContent(result).summary).toContain("hp");
+      expect(getToolContent(result).summary).toContain("100");
     });
 
     it("looks up by name and returns full detail", async () => {
       const result = (await loop.call("get-character", { name: "柳无痕" })) as {
-        _text: string;
+        summary: string;
         found: boolean;
       };
       expect(getToolContent(result).found).toBe(true);
-      expect(getToolContent(result)._text).toContain("柳无痕");
-      expect(getToolContent(result)._text).toContain("player");
+      expect(getToolContent(result).summary).toContain("柳无痕");
+      expect(getToolContent(result).summary).toContain("player");
     });
 
     it("resolves a partial name and lists candidates on a miss", async () => {
@@ -828,10 +845,10 @@ describe("builtin character tools", () => {
       loop.commit();
       const found = getToolContent(
         (await loop.call("get-character", { name: "mina park" })) as {
-          _text: string;
+          summary: string;
         },
       );
-      expect(found._text).toContain("Dr. Mina Park");
+      expect(found.summary).toContain("Dr. Mina Park");
 
       const ambiguous = getToolContent(
         (await loop.call("get-character", { name: "Mina" })) as {
@@ -844,21 +861,21 @@ describe("builtin character tools", () => {
 
       const missing = getToolContent(
         (await loop.call("get-character", { name: "Eli" })) as {
-          _text: string;
+          summary: string;
           candidates: string[];
         },
       );
-      expect(missing._text).toContain("Characters in session:");
+      expect(missing.summary).toContain("Characters in session:");
       expect(missing.candidates).toContain("柳无痕");
     });
 
     it("returns text saying not found when id is missing", async () => {
       const result = (await loop.call("get-character", { id: "nope" })) as {
-        _text: string;
+        summary: string;
         found: boolean;
       };
       expect(getToolContent(result).found).toBe(false);
-      expect(getToolContent(result)._text.toLowerCase()).toMatch(
+      expect(getToolContent(result).summary.toLowerCase()).toMatch(
         /not found|未找到|不存在/,
       );
     });
@@ -888,9 +905,9 @@ describe("builtin character tools", () => {
       // Deliberately NOT committed — the overlay must still surface it.
       const result = (await loop.call("get-character", {
         id: bufferedId,
-      })) as { _text: string; found: boolean };
+      })) as { summary: string; found: boolean };
       expect(getToolContent(result).found).toBe(true);
-      expect(getToolContent(result)._text).toContain("未落库者");
+      expect(getToolContent(result).summary).toContain("未落库者");
     });
   });
 
@@ -956,7 +973,7 @@ describe("builtin character tools", () => {
         aliases: ["Keeper Ysolde", "THE KEEPER"],
       });
       loop.commit();
-      expect(result._text).toContain("aliases: + Keeper Ysolde");
+      expect(result.summary).toContain("aliases: + Keeper Ysolde");
       expect(isolde().aliases).toEqual([
         "the keeper",
         "伊索德",
@@ -995,7 +1012,7 @@ describe("builtin character tools", () => {
         id: "Isolde",
         removeAliases: ["The  Keeper", "never an alias", "Isolde"],
       });
-      expect(result._text).toContain("aliases: - the keeper");
+      expect(result.summary).toContain("aliases: - the keeper");
       await loop.call("update-character", {
         id: "Corvin",
         aliases: ["the keeper"],
@@ -1069,15 +1086,15 @@ describe("builtin character tools", () => {
 
     it("shows aliases in get-character and list-characters", async () => {
       const read = await loop.call("get-character", { name: "伊索德" });
-      expect(read._text).toContain("Also known as: the keeper, 伊索德");
+      expect(read.summary).toContain("Also known as: the keeper, 伊索德");
       const list = await loop.call("list-characters", {});
-      expect(list._text).toContain("Isolde (aka the keeper, 伊索德) [npc]");
-      expect(list._text).toMatch(/\d\. Corvin \[npc\]/);
+      expect(list.summary).toContain("Isolde (aka the keeper, 伊索德) [npc]");
+      expect(list.summary).toMatch(/\d\. Corvin \[npc\]/);
     });
   });
 
-  describe("update-character _text output", () => {
-    it("summarizes what changed in the returned _text", async () => {
+  describe("update-character summary output", () => {
+    it("summarizes what changed in the returned summary", async () => {
       const created = await loop.call("create-character", {
         name: "赵铁山",
         type: "npc",
@@ -1089,13 +1106,13 @@ describe("builtin character tools", () => {
         id: charId,
         fields: { hp: 50, status: "wounded" },
         description: "updated desc",
-      })) as { _text: string; version: number };
+      })) as { summary: string; version: number };
 
       expect(getToolContent(result).version).toBe(2);
-      expect(typeof getToolContent(result)._text).toBe("string");
-      expect(getToolContent(result)._text).toContain("赵铁山");
-      expect(getToolContent(result)._text).toMatch(/hp/);
-      expect(getToolContent(result)._text).toMatch(/status/);
+      expect(typeof getToolContent(result).summary).toBe("string");
+      expect(getToolContent(result).summary).toContain("赵铁山");
+      expect(getToolContent(result).summary).toMatch(/hp/);
+      expect(getToolContent(result).summary).toMatch(/status/);
     });
 
     it("reports the missing character id in its rejection", async () => {
@@ -1122,10 +1139,10 @@ describe("builtin character tools", () => {
       // list sees the buffered A
       const list1 = (await loop.call("list-characters", {})) as {
         count: number;
-        _text: string;
+        summary: string;
       };
       expect(list1.count).toBe(1);
-      expect(list1._text).toContain("Aria");
+      expect(list1.summary).toContain("Aria");
 
       // create B — dedup does NOT match A (different name), new proposal
       const b = await loop.call("create-character", {
