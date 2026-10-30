@@ -1,11 +1,25 @@
-import { describe, expect, it } from "vitest";
+import { getPendingProposals } from "@covel/plugin-handlers-utils";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import storyCues from "../runtimes/story-cues/handler.js";
 import register from "../server/index.js";
 const handlers = new Map();
-register({
-  provideExtension: (_point, id, { handler }) => handlers.set(id, handler),
+let dispose;
+beforeEach(() => {
+  handlers.clear();
+  register({
+    onDispose: (cleanup) => {
+      dispose = cleanup;
+    },
+    provideExtension: (_point, id, { handler }) => handlers.set(id, handler),
+  });
+});
+afterEach(() => {
+  dispose();
+  vi.useRealTimers();
 });
 const ref = { id: "a".repeat(64), mime: "image/png", size: 1 };
-const context = (data) => ({
+const context = (data, sessionId = "stage-projection") => ({
+  sessionId,
   world: { characters: [{ id: "session-hero", name: "Hero" }] },
   pluginData: {
     get: async (namespace, key) => data[`${namespace}/${key}`] ?? null,
@@ -34,6 +48,139 @@ describe("stage UI projections", () => {
     },
     "direction/current": { actors: [oldActor], turnId: "old" },
   };
+
+  it("fades a presence departure in projection while storing only the present actors", async () => {
+    vi.useFakeTimers();
+    const departed = {
+      characterId: "lin",
+      displayName: "Lin",
+      active: false,
+      position: "right",
+      visual: { outfit: "uniform" },
+      transition: "slide-right",
+    };
+    const current = {
+      actors: [
+        { characterId: "session-hero", displayName: "Hero", active: true },
+        departed,
+      ],
+      turnId: "old",
+    };
+    const data = { "direction/current": current };
+    const ctx = context(data);
+    ctx.world.characters.push({ id: "lin", name: "Lin" });
+    const project = (events = []) =>
+      handlers.get("direction")({ previous: null, events }, ctx);
+    await project();
+    const result = await storyCues({
+      ...ctx,
+      pluginId: "scene-stage",
+      runtimeId: "scene-stage/story-cues",
+      turnId: "new",
+      inputs: {
+        story: {
+          cardinality: "one",
+          value: { cues: { present: ["Hero"] } },
+          source: {
+            pluginId: "story-fixture",
+            runtimeId: "story-fixture",
+            resultId: "story-result",
+          },
+        },
+      },
+    });
+    const direction = getPendingProposals(result).find(
+      ({ payload }) => payload.namespace === "direction",
+    ).payload.value;
+    expect(direction.actors.map(({ characterId }) => characterId)).toEqual([
+      "session-hero",
+    ]);
+    expect(direction.actors.every((actor) => !actor.exiting)).toBe(true);
+    data["direction/current"] = direction;
+    const projected = await project();
+    expect(projected.actors).toEqual([
+      { characterId: "session-hero", displayName: "Hero", active: true },
+      { ...departed, exiting: true, transition: "fade" },
+    ]);
+    expect(await project()).toEqual(projected);
+    expect(current.actors).toHaveLength(2);
+    vi.advanceTimersByTime(301);
+    expect(
+      (await project()).actors.map(({ characterId }) => characterId),
+    ).toEqual(["session-hero"]);
+  });
+
+  it("isolates departure history by session and clears it when the entry is disposed", async () => {
+    const data = { "direction/current": { actors: [oldActor], turnId: "old" } };
+    const project = (sessionId) =>
+      handlers.get("direction")(
+        { previous: null, events: [] },
+        context(data, sessionId),
+      );
+    await project("first-session");
+    data["direction/current"] = { actors: [], turnId: "new" };
+    expect((await project("second-session")).actors).toEqual([]);
+    expect((await project("first-session")).actors).toEqual([
+      { ...oldActor, active: false, exiting: true, transition: "fade" },
+    ]);
+    dispose();
+    expect((await project("first-session")).actors).toEqual([]);
+  });
+
+  it("keeps failed event previews out of committed departure history", async () => {
+    const data = { "direction/current": { actors: [oldActor], turnId: "old" } };
+    const ctx = context(data);
+    const project = (events = []) =>
+      handlers.get("direction")({ previous: null, events }, ctx);
+    await project();
+    expect(
+      (
+        await project([
+          {
+            topic: "stage.direction",
+            turnId: "failed",
+            data: { cues: [{ type: "stage.clear", transition: "fade" }] },
+          },
+        ])
+      ).actors[0].exiting,
+    ).toBe(true);
+    expect((await project()).actors).toEqual([oldActor]);
+    data["direction/current"] = { actors: [], turnId: "new" };
+    expect((await project()).actors).toEqual([
+      { ...oldActor, active: false, exiting: true, transition: "fade" },
+    ]);
+  });
+
+  it("does not project the new viewpoint from saved cast selection or departure history", async () => {
+    const data = {
+      "direction/current": { actors: [oldActor], turnId: "old" },
+      "active-cast/current": { speakers: [{ id: "rin", name: "Rin" }] },
+    };
+    const ctx = context(data);
+    ctx.world.characters.push({ id: "rin", name: "Rin", type: "player" });
+    ctx.world.seats = [
+      {
+        id: "primary",
+        controller: "human",
+        role: "player",
+        characters: ["session-hero", "rin"],
+        currentCharacterId: "session-hero",
+      },
+    ];
+    await handlers.get("direction")({ previous: null, events: [] }, ctx);
+    ctx.world.seats[0].currentCharacterId = "rin";
+    const cast = await handlers.get("cast")({}, ctx);
+    expect(cast).toEqual({ actors: [], retainWhenEmpty: false });
+    const direction = await handlers.get("direction")(
+      { previous: cast, events: [] },
+      ctx,
+    );
+    expect(direction.actors).toEqual([]);
+    delete data["direction/current"];
+    expect(
+      await handlers.get("direction")({ previous: cast, events: [] }, ctx),
+    ).toEqual(cast);
+  });
 
   it.each([
     [sceneEvent, actorEvent],

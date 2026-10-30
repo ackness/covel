@@ -35,9 +35,12 @@ export default async function handler(ctx) {
   const seats = ctx.world?.seats ?? [];
   const viewpoint = currentCharacterOf(primarySeat(seats), characters, seats);
   const hadDirectionState = previous !== null && previous !== undefined;
-  let actors = normalizeActors(previous?.actors);
+  const previousActors = normalizeActors(previous?.actors);
+  let actors = previousActors.filter(
+    (actor) => actor.characterId !== viewpoint?.id,
+  );
   const diagnostics = [];
-  let changed = false;
+  let changed = actors.length !== previousActors.length;
 
   for (const cue of cues) {
     if (!cue || typeof cue !== "object") continue;

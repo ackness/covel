@@ -1,4 +1,5 @@
 import { currentCharacterOf, primarySeat } from "@covel/plugin-handlers-utils";
+import { createCastProjection } from "../lib/cast-projection.js";
 import {
   applySceneSetPreview,
   applyStageDirectionPreview,
@@ -22,19 +23,30 @@ const actors = (speakers) =>
     ...(speaker.exiting ? { exiting: true } : {}),
   }));
 
+const viewpointId = (ctx) => {
+  const seats = ctx.world.seats ?? [];
+  return currentCharacterOf(primarySeat(seats), ctx.world.characters, seats)
+    ?.id;
+};
+
 export default function (covel) {
+  const castProjection = createCastProjection();
+  covel.onDispose(() => castProjection.clear());
   covel.provideExtension("ui.slot@1", "cast", {
     async handler(_input, ctx) {
       const current = await ctx.pluginData.get("active-cast", "current");
+      const viewpoint = viewpointId(ctx);
+      const selected = current?.speakers ?? [];
+      const visible = selected.filter((speaker) => speaker.id !== viewpoint);
       return {
-        actors: (current?.speakers ?? []).map((speaker, index) => ({
+        actors: visible.map((speaker, index) => ({
           characterId: speaker.id,
           displayName: speaker.name,
           active: index === 0,
           ...(speaker.type ? { type: speaker.type } : {}),
           ...(speaker.description ? { description: speaker.description } : {}),
         })),
-        retainWhenEmpty: true,
+        retainWhenEmpty: visible.length === selected.length,
       };
     },
   });
@@ -67,6 +79,7 @@ export default function (covel) {
   });
   covel.provideExtension("ui.slot@1", "direction", {
     async handler({ previous, events }, ctx) {
+      const viewpoint = viewpointId(ctx);
       let current = await ctx.pluginData.get("direction", "current");
       const stage = await ctx.pluginData.get("stage", "current");
       const registry = await ctx.pluginData.get("scenes", "scene-registry");
@@ -91,17 +104,21 @@ export default function (covel) {
         (event) =>
           event.topic === "stage.direction" && current?.turnId !== event.turnId,
       );
-      if (!current && !previews.length) return previous;
+      if (!current && !previews.length) {
+        castProjection.forget(ctx.sessionId);
+        return previous;
+      }
+      if (current)
+        current = {
+          ...current,
+          actors: (current.actors ?? []).filter(
+            (actor) => actor.characterId !== viewpoint,
+          ),
+        };
       let speakers = resolveStageSpeakers(current, []);
-      const seats = ctx.world.seats ?? [];
-      const viewpoint = currentCharacterOf(
-        primarySeat(seats),
-        ctx.world.characters,
-        seats,
-      );
       const characters = Object.fromEntries(
         ctx.world.characters
-          .filter((character) => character.id !== viewpoint?.id)
+          .filter((character) => character.id !== viewpoint)
           .map((character) => [
             character.id,
             {
@@ -126,7 +143,19 @@ export default function (covel) {
         )
       )
         return previous;
-      return { actors: actors(speakers), retainWhenEmpty: false };
+      const projected = actors(speakers);
+      return {
+        actors:
+          ctx.turnId || events.length
+            ? projected
+            : castProjection.project(
+                ctx.sessionId,
+                current,
+                projected,
+                viewpoint,
+              ),
+        retainWhenEmpty: false,
+      };
     },
   });
 }
