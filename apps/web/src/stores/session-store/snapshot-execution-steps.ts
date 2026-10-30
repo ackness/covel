@@ -110,6 +110,9 @@ export function buildSnapshotExecutionSteps(
       ...(stage.success ? { stage: stage.data } : {}),
       runtimeId,
       ...(runId ? { runId } : {}),
+      ...(event.type === "runtime.started" && payload.resumed === true
+        ? { resumed: true }
+        : {}),
       turnId,
       status,
       errorKind:

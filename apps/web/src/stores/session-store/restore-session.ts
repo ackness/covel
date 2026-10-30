@@ -209,6 +209,8 @@ function toExecutionStep(raw: Record<string, unknown>): ExecutionStep {
       : undefined;
   return {
     runtimeId: (raw.runtimeId as string) ?? "unknown",
+    ...(typeof raw.runId === "string" && raw.runId ? { runId: raw.runId } : {}),
+    ...(raw.resumed === true ? { resumed: true } : {}),
     pluginId: (raw.pluginId as string) ?? "",
     status: raw.status as ExecutionStep["status"],
     reasoning: Array.isArray(raw.reasoning)

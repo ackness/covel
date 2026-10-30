@@ -55,6 +55,8 @@ export interface ExecutionStep {
   runtimeId: string;
   /** Lifecycle identity for nested and top-level runs of the same runtime. */
   runId?: string;
+  /** This run continues an earlier suspended run of the same runtime. */
+  resumed?: true;
   pluginId: string;
   /** Stage recorded by runtime.started, retained for historical setup rows. */
   stage?: Stage;

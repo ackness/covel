@@ -366,3 +366,53 @@ it("keeps an outer run running when a nested run completes", () => {
     expect.objectContaining({ runId: "b", status: "completed" }),
   ]);
 });
+
+it("shows successful resumed runs as completed instead of retaining the earlier suspension", () => {
+  const h = harness(false);
+  h.send("runtime.started", { runId: "original" });
+  h.send("runtime.completed", { runId: "original", status: "suspended" });
+  h.send("runtime.started", { runId: "continuation", resumed: true });
+  const displayed = () =>
+    projectExecutionTurns([], h.getState().executionSteps).turns.find(
+      (turn) => turn.turnId === "attempt",
+    )?.steps;
+  expect(displayed()).toEqual([
+    expect.objectContaining({ runId: "continuation", status: "running" }),
+  ]);
+  h.send("runtime.completed", { runId: "continuation", status: "success" });
+  expect(displayed()).toEqual([
+    expect.objectContaining({
+      runId: "continuation",
+      status: "completed",
+      resumed: true,
+    }),
+  ]);
+  h.send("turn.resumed", { suspensionId: "suspension", status: "success" });
+  expect(displayed()).toEqual([
+    expect.objectContaining({ runId: "continuation", status: "completed" }),
+  ]);
+  expect(
+    h.getState().executionSteps.find((step) => step.runId === "original")
+      ?.status,
+  ).toBe("suspended");
+});
+
+it("supersedes an earlier suspension when only the committed resume notification marks the continuation", () => {
+  const h = harness(false);
+  h.send("runtime.started", { runId: "original" });
+  h.send("runtime.completed", { runId: "original", status: "suspended" });
+  h.send("runtime.started", { runId: "continuation" });
+  h.send("runtime.completed", { runId: "continuation", status: "success" });
+  h.send("turn.resumed", { suspensionId: "suspension", status: "success" });
+  expect(
+    projectExecutionTurns([], h.getState().executionSteps).turns.find(
+      (turn) => turn.turnId === "attempt",
+    )?.steps,
+  ).toEqual([
+    expect.objectContaining({
+      runId: "continuation",
+      status: "completed",
+      resumed: true,
+    }),
+  ]);
+});

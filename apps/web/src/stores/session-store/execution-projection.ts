@@ -152,6 +152,17 @@ export function projectExecutionTurns(
       timestamp(a.turnStartedAt ?? a.startedAt) -
       timestamp(b.turnStartedAt ?? b.startedAt),
   );
+  const runtimeKey = (step: ExecutionStep) =>
+    JSON.stringify([step.turnId, step.runtimeId]);
+  const latestResumes = new Map<string, { time: number; order: number }>();
+  for (const [order, step] of orderedSteps.entries()) {
+    if (!step.resumed) continue;
+    const key = runtimeKey(step);
+    const time = timestamp(step.startedAt);
+    const previous = latestResumes.get(key);
+    if (!previous || time >= previous.time)
+      latestResumes.set(key, { time, order });
+  }
   const summaries = new Map<
     string,
     { turnId?: string; order: number; failed: ReadonlySet<string> }
@@ -178,6 +189,16 @@ export function projectExecutionTurns(
         });
     }
     includeTime(group, step.turnStartedAt ?? step.startedAt);
+    // A continuation replaces earlier suspensions, while a new suspension
+    // from that continuation remains visible until it too is resumed.
+    const resume = latestResumes.get(runtimeKey(step));
+    if (
+      step.status === "suspended" &&
+      resume &&
+      (timestamp(step.startedAt) < resume.time ||
+        (timestamp(step.startedAt) === resume.time && order < resume.order))
+    )
+      continue;
     const existing = group.steps.findIndex(
       (row) => row.runtimeId === step.runtimeId,
     );

@@ -1,6 +1,7 @@
 // @vitest-environment node
 import { describe, expect, it } from "vitest";
 import type { SnapshotTraceEvent } from "@covel/shared";
+import { projectExecutionTurns } from "../execution-projection.js";
 import {
   buildSnapshotExecutionSteps,
   reconcileExecutionSteps,
@@ -180,3 +181,44 @@ it("adopts a snapshot run id into a legacy local row and merges the same run", (
   ]);
   expect(reconcileExecutionSteps(steps, events)).toEqual(steps);
 });
+
+it.each(["success", "suspended"])(
+  "supersedes earlier suspensions when a recovered continuation finishes with %s",
+  (status) => {
+    const traces = [
+      event("runtime.started", { runId: "original" }),
+      event("runtime.completed", { runId: "original", status: "suspended" }),
+      {
+        ...event("runtime.started", { runId: "continuation", resumed: true }),
+        timestamp: "2026-09-05T04:00:01Z",
+      },
+      {
+        ...event("runtime.completed", { runId: "continuation", status }),
+        timestamp: "2026-09-05T04:00:02Z",
+      },
+    ];
+    const steps = buildSnapshotExecutionSteps(traces);
+    expect(steps).toHaveLength(2);
+    expect(projectExecutionTurns([], steps).turns[0]?.steps).toEqual([
+      expect.objectContaining({
+        runId: "continuation",
+        status: status === "success" ? "completed" : "suspended",
+        resumed: true,
+      }),
+    ]);
+    const cached = [
+      { ...running, runId: "original", status: "suspended" as const },
+    ];
+    expect(
+      projectExecutionTurns(
+        [],
+        reconcileExecutionSteps(cached, traces.slice(2)),
+      ).turns[0]?.steps,
+    ).toEqual([
+      expect.objectContaining({
+        runId: "continuation",
+        status: status === "success" ? "completed" : "suspended",
+      }),
+    ]);
+  },
+);

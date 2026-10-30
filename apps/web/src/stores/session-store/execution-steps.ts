@@ -455,6 +455,7 @@ export function buildResumedExecutionStep(
 
   return {
     runtimeId,
+    resumed: true,
     pluginId: typeof payload.pluginId === "string" ? payload.pluginId : "",
     status: toExecutionStepStatus(
       typeof payload.status === "string" ? payload.status : "completed",
