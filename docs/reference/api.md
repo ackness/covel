@@ -141,7 +141,7 @@ PostgreSQL 一列的细节：
 
 `error` 一定有。需要客户端按错误码分别处理的端点（如 `plugin-rpc`、`media`）会同时给 `code`。
 
-这是 HTTP 错误格式。模型工具的公共结果使用 `{ok,data}` / `{ok,error:{code,message}}`，见[工具](./tools.md)；不要把 HTTP 的 `error` 字符串当成工具错误对象。
+这是 HTTP 错误格式。模型工具的公共结果不带 `ok` 字段：成功时是 `{summary?, data?, staged?}`，失败时是 `{error:{code,message,hint?}}`，见[工具](./tools.md#统一返回格式与错误码)；不要把 HTTP 的 `error` 字符串当成工具错误对象。
 
 `code` 使用小写字母、数字以及 `_` 或 `-` 分隔符；插件选择错误会沿用 `missing-provider` 这样的求解器错误码。
 

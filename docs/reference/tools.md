@@ -1888,7 +1888,7 @@ HTTP `POST /api/sessions/:id/characters` 内部也通过这条 proposal 提交�
 
 整体更新会话的角色 schema。payload 是 `{types: string[], attributes: AttributeDef[]}`，不接受 `version`：内核从当前记录递增版本，并保存时间戳。
 
-写入必须和会话里已有的角色兼容。出现未知的角色类型、不符合属性约束的角色，或多个 player，提交都失败。
+写入必须和会话里已有的角色兼容。出现未知的角色类型，或不符合属性约束的角色，提交都失败。
 
 执行过程中的 `ctx.world.characterSchema` 和 `ctx.world.characters` 用和提交相同的规则，校验成功的上游 proposal 和自己待提交的 proposal。
 

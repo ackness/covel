@@ -1890,7 +1890,7 @@ The HTTP `POST /api/sessions/:id/characters` also commits through this proposal 
 
 Replaces the session's character schema as a whole. The payload is `{types: string[], attributes: AttributeDef[]}`, and it does not accept `version`: the kernel increments the version from the current record and saves the timestamp.
 
-The write must be compatible with the characters that already exist in the session. An unknown character type, a character that does not meet the attribute constraints, or more than one player makes the commit fail.
+The write must be compatible with the characters that already exist in the session. An unknown character type, or a character that does not meet the attribute constraints, makes the commit fail.
 
 During execution, `ctx.world.characterSchema` and `ctx.world.characters` validate the upstream proposals that succeeded, and the runtime's own pending proposals, using the same rules as the commit.
 
