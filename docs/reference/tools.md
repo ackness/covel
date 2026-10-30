@@ -885,6 +885,8 @@ agent runtime 用它把一件事交给[子 agent](./plugins.md#子-agent)：另�
 - 成功调用带有待提交 proposal 或领域事件时，加上 `staged`。`count` 是两者总数；`kinds` 是按首次出现顺序去重的 proposal 类型，有事件时再加 `event`。调用成功只表示暂存，仍可能在提交时被拒绝。
 - 提示由 `instructionLocaleFor(context.locale)` 选择，遵守 `COVEL_INSTRUCTION_LOCALE`：中文为“已暂存，回合结束时生效（可能被拒绝）。”，英文为“Staged: it takes effect when the turn ends and may still be rejected.”。错误消息和 hint 保持英文。
 
+持久化工具调用审计的输入/输出会省略值为 `undefined` 的对象属性，包括嵌套可选字段。根值或数组元素为 `undefined`、非有限数字、BigInt、函数、符号、循环引用和非普通对象仍返回诊断。严格 JSON 校验不变。这次审计转换不决定模型信封内容，也不会绕过 `io.concealed`。
+
 SDK 的 `TOOL_ERROR_CODES` 是唯一错误码列表。工具作者用 `new ToolError(code, message, { hint? })` 抛出可读错误，`isToolError` 也识别子类和另一份 SDK 创建的 Error。`ToolValidationError` 继承它，code 是 `invalid-input`。
 
 <!-- prettier-ignore -->
@@ -1254,6 +1256,8 @@ Attributes:
 参数：`{followsClock:[id], updates:[{id, value|changes, reason?}]}`
 
 返回 `{success,updateCount}` 和 `dimension.update` proposal。这个来源已经结算过时，返回 `{success,alreadySettled:true}`，不重复补算。
+
+维度值校验失败（例如字符串超过声明的长度上限）在返回任何 proposal 之前报 `invalid-input`。版本冲突和意外异常不会被归类为输入错误。
 
 #### `updates`
 

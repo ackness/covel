@@ -1,9 +1,11 @@
 import {
   makeProposal,
+  ToolError,
   withPendingProposals,
 } from "@covel/plugin-handlers-utils";
 import {
   DIMENSION_DATA_NAMESPACE,
+  DimensionValidationError,
   DIMENSION_SETTLEMENT_NAMESPACE,
   dimensionRecordSchema,
   dimensionSettlementReceiptSchema,
@@ -295,7 +297,13 @@ export default function ({ tool, z }) {
         "dimension.update",
         payload,
       );
-      materializeDimensionRecords(records, proposal);
+      try {
+        materializeDimensionRecords(records, proposal);
+      } catch (error) {
+        if (error instanceof DimensionValidationError)
+          throw new ToolError("invalid-input", error.message);
+        throw error;
+      }
       return withPendingProposals(
         { success: true, updateCount: updates.length },
         [proposal],

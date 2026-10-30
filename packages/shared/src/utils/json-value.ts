@@ -14,6 +14,9 @@
  *    to a single bounded diagnostic string instead of writing an arbitrary
  *    object (used at the persisted `ToolCallRecord` boundary, where losing the
  *    payload is preferable to persisting something that cannot round-trip).
+ *    Undefined object properties are omitted, as in JSON.stringify; undefined
+ *    roots/array elements and other unsupported values remain diagnostics.
+ *    Strict assertion/predicate callers do not permit this omission.
  */
 
 import type { JsonValue } from "../types/runtime-scheduling.js";
@@ -23,15 +26,20 @@ import type { JsonValue } from "../types/runtime-scheduling.js";
  * is path-scoped (add on descent, remove on ascent), so a value shared by two
  * siblings is allowed — only a true back-reference is rejected.
  */
-function walk(value: unknown, path: string, seen: Set<object>): void {
-  if (value === null) return;
+function walk(
+  value: unknown,
+  path: string,
+  seen: Set<object>,
+  omitUndefinedProperties = false,
+): JsonValue {
+  if (value === null) return null;
   const kind = typeof value;
-  if (kind === "string" || kind === "boolean") return;
+  if (typeof value === "string" || typeof value === "boolean") return value;
   if (kind === "number") {
     if (!Number.isFinite(value)) {
       throw new Error(`${path} is a non-finite number`);
     }
-    return;
+    return value as number;
   }
   if (kind !== "object") {
     // undefined, function, symbol, bigint
@@ -40,18 +48,27 @@ function walk(value: unknown, path: string, seen: Set<object>): void {
   const obj = value as object;
   if (seen.has(obj)) throw new Error(`${path} is circular`);
   seen.add(obj);
+  let result: JsonValue;
   if (Array.isArray(obj)) {
-    obj.forEach((v, i) => walk(v, `${path}[${i}]`, seen));
+    result = Array.from(obj, (v, i) =>
+      walk(v, `${path}[${i}]`, seen, omitUndefinedProperties),
+    );
   } else {
     const prototype = Object.getPrototypeOf(obj);
     if (prototype !== Object.prototype && prototype !== null) {
       throw new Error(`${path} is not a plain JSON object`);
     }
-    for (const [k, v] of Object.entries(obj as Record<string, unknown>)) {
-      walk(v, `${path}.${k}`, seen);
-    }
+    result = Object.fromEntries(
+      Object.entries(obj as Record<string, unknown>)
+        .filter(([, v]) => !(omitUndefinedProperties && v === undefined))
+        .map(([k, v]) => [
+          k,
+          walk(v, `${path}.${k}`, seen, omitUndefinedProperties),
+        ]),
+    );
   }
   seen.delete(obj);
+  return result;
 }
 
 /** Throw if `value` is not a JSON wire value. `path` labels the throw message. */
@@ -78,8 +95,7 @@ export function toJsonValueOrDiagnostic(
   label = "value",
 ): JsonValue {
   try {
-    walk(value, label, new Set());
-    return value as JsonValue;
+    return walk(value, label, new Set(), true);
   } catch (err) {
     const reason = err instanceof Error ? err.message : String(err);
     return `[non-serialisable ${label}: ${reason}]`;

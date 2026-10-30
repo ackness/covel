@@ -162,6 +162,26 @@ async function run(opts: {
 // ── Tests ─────────────────────────────────────────────────────────
 
 describe("runAgentToolLoop core", () => {
+  it("keeps successful tool audit output with absent optional fields", async () => {
+    const module = tool({
+      name: "mark",
+      description: "Fixture",
+      parameters: z.object({}),
+      execute: async () => ({
+        characters: [{ name: "Ada", description: undefined }],
+        entry: { title: "Gate", imageHint: undefined },
+      }),
+    });
+    const result = await run({
+      llm: new ScriptedLLM([toolCall("mark", {}), prose("done")]),
+      deps: { toolExecutor: createToolExecutor({ findTool: () => module }) },
+    });
+    expect(result.collectedToolCalls[0]?.output).toEqual({
+      characters: [{ name: "Ada" }],
+      entry: { title: "Gate" },
+    });
+  });
+
   it("passes cancellation into the tool and rejects its late output", async () => {
     const controller = new AbortController();
     const entered = vi.fn();

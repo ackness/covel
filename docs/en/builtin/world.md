@@ -77,6 +77,8 @@ Do not write the portrait mapping by hand. It is produced when you generate port
 
 ## World Dimensions (`world-init`)
 
+Dimension tools report schema-invalid values as correctable input errors; see [update-dimensions](../reference/tools.md#update-dimensions).
+
 At the start, it prepares the character attributes and the "dimensions" of this world. Dimensions are data that the world records and that can change, such as reputation, the state of the city walls, or a countdown. During play, after each turn ends, it changes the values of the dimensions according to the update rules the world author wrote.
 
 **What you will see**

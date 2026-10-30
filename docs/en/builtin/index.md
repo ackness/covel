@@ -4,6 +4,8 @@ Covel comes with a set of plugins and four worlds. This chapter tells you what e
 
 The built-in plugins and worlds are only demos, and you do not have to use them.
 
+Dimension tools report schema-invalid values as correctable input errors; see [update-dimensions](../reference/tools.md#update-dimensions).
+
 ## What is in this chapter
 
 | Page                                   | What it covers                                                                                        |

@@ -887,6 +887,8 @@ Every tool result the model reads is a JSON object. Success keys appear in the o
 - Successful calls with pending proposals or domain events include `staged`. `count` totals both channels; `kinds` lists distinct proposal types in first-seen order, followed by `event` when there are events. Success means staged; commit can still reject the effects.
 - `instructionLocaleFor(context.locale)` selects the notice and honors `COVEL_INSTRUCTION_LOCALE`: Chinese is “已暂存，回合结束时生效（可能被拒绝）。”; English is “Staged: it takes effect when the turn ends and may still be rejected.” Error messages and hints remain English.
 
+Persisted tool-call audit input/output omits object properties whose value is `undefined`, including nested optional fields. Undefined roots or array elements, non-finite numbers, BigInt, functions, symbols, cycles and non-plain objects still produce a diagnostic. Strict JSON validation is unchanged. This audit conversion does not determine the model envelope and does not bypass `io.concealed`.
+
 The SDK's `TOOL_ERROR_CODES` is the single error-code list. Authors throw `new ToolError(code, message, { hint? })` for readable failures. `isToolError` recognizes subclasses and Errors from another SDK copy. `ToolValidationError` extends it with code `invalid-input`.
 
 <!-- prettier-ignore -->
@@ -1256,6 +1258,8 @@ After each narrative turn, update the current values of the world dimensions, or
 Arguments: `{followsClock:[id], updates:[{id, value|changes, reason?}]}`
 
 It returns `{success,updateCount}` and a `dimension.update` proposal. When this source has already been settled, it returns `{success,alreadySettled:true}`, and it does not calculate again.
+
+Dimension value validation failures (such as a string exceeding its declared maximum length) return `invalid-input` before any proposal is exposed. Version conflicts and unexpected exceptions are not reclassified as input errors.
 
 #### `updates`
 

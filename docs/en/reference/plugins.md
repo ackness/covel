@@ -962,6 +962,7 @@ The built-in `world-init` has four runtimes related to dimensions. `dimension-cl
 | `dimension-clock`   | post-turn function | Calls no model. Using the world clock after this turn's settlement (`world-time-evolution@1`, an optional input), it computes the fields with `x-derive` in the schema. When a value changes, it commits `dimension.update`.                                                                                                                                 |
 | `edit-dimensions`   | manual function    | The player changes a value, confirms a manual handling, or explicitly skips it.                                                                                                                                                                                                                                                                              |
 
+Dimension tools report schema-invalid values as correctable input errors; see [update-dimensions](./tools.md#update-dimensions).
 **Reading.**
 
 - `world.dimensions@1` and `session.world-context@1` expose the public snapshot frozen at the start of the execution.

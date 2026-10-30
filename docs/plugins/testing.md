@@ -6,6 +6,8 @@
 
 所有命令都在 Covel 仓库的根目录运行。
 
+测试维度值超长及修正后的重试。确认失败调用不返回 proposal，版本冲突和意外异常保持原分类，见 [update-dimensions](../reference/tools.md#update-dimensions)。
+
 ## 选哪一种测试
 
 从上到下越来越慢，也越来越接近真实的游戏：

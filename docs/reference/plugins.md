@@ -962,6 +962,7 @@ homepage: https://example.com/tidefall
 | `dimension-clock`   | post-turn function | 不调用模型，按本轮结算后的世界时钟（`world-time-evolution@1`，可选输入）计算 schema 里带 `x-derive` 的字段，值有变化时提交 `dimension.update`                                                         |
 | `edit-dimensions`   | manual function    | 玩家改值、确认人工处理或明确跳过                                                                                                                                                                      |
 
+维度工具把不符合 schema 的值报告为可修正的输入错误，见 [update-dimensions](./tools.md#update-dimensions)。
 **读取。**
 
 - `world.dimensions@1` 和 `session.world-context@1` 提供执行开始时冻结的公共快照。
