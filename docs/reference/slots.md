@@ -507,6 +507,7 @@ reasoningEffort = "disabled"
   - 已识别的 GPT-5 / o3 / o4 模型同时请求 `summary: "auto"`；明确的摘要设置保留。
   - 服务商是否保存对话见 [Responses 不让服务商保存对话](#responses-不让服务商保存对话)。
   - 函数工具带 `strict: false`。原因：这个接口在不带该字段时把工具当成严格模式（Chat 协议相反），所有可选参数都变成必填，模型会给每个可选参数填一个空值，工具随后拒绝这次调用。
+  - 结构化输出的 `text.format` 同样带 `strict: false`。严格模式要求每个对象都写 `additionalProperties: false`、所有属性都必填，否则整次请求返回 400；Covel 的输出 schema 有可选字段，由调用方自己校验解析结果。
 - **Anthropic Messages**：`output_config: { effort }`。
   - 已识别的自适应思考模型选了档位时，启用 `thinking.type: "adaptive"`，默认请求可见的摘要 `display: "summarized"`。
   - 不能关闭思考的模型不显示关闭选项。

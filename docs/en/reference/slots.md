@@ -507,6 +507,7 @@ The shared `reasoningEffort` is converted according to the API protocol:
   - A recognized GPT-5 / o3 / o4 model also requests `summary: "auto"`. An explicit summary setting is kept.
   - Whether the provider stores the conversation is described in [Responses does not let the provider store the conversation](#responses-does-not-let-the-provider-store-the-conversation).
   - Function tools carry `strict: false`. Reason: without this field, this API treats tools as strict mode (the Chat protocol does the opposite). Then every optional parameter becomes required. The model fills each optional parameter with an empty value, and the tool then rejects the call.
+  - Structured output in `text.format` also carries `strict: false`. Strict mode requires `additionalProperties: false` on every object and every property to be required, or the whole request returns 400. Covel output schemas have optional fields, and the caller validates the parsed result itself.
 - **Anthropic Messages**: `output_config: { effort }`.
   - For a recognized adaptive-thinking model that has a level chosen, `thinking.type: "adaptive"` is enabled. The default request also asks for a visible summary with `display: "summarized"`.
   - A model that cannot turn thinking off does not show the off option.

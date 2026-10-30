@@ -291,6 +291,7 @@ describe("providerRequestMetadata cannot override critical fields", () => {
         type: "json_schema",
         name: "World_IR_result",
         schema,
+        strict: false,
       },
     });
   });

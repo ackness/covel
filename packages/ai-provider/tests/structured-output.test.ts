@@ -192,7 +192,14 @@ describe.each(protocols)("$name structured output", ({ name, create }) => {
         expect(body.response_format).toEqual({ type: "json_object" });
       if (name === "responses")
         expect(body.text).toEqual({
-          format: { type: "json_schema", name: "Result_schema", schema },
+          // An absent `strict` means strict to the Responses API, which
+          // rejects schemas with optional fields or open objects.
+          format: {
+            type: "json_schema",
+            name: "Result_schema",
+            schema,
+            strict: false,
+          },
         });
     },
   );

@@ -90,6 +90,12 @@ const sanitizeResponsesMetadata = createMetadataSanitizer(
   RESPONSES_PROTECTED_KEYS,
 );
 
+/**
+ * `strict: false` is explicit for the same reason as function tools below: the
+ * Responses API treats an absent field as strict, and strict mode rejects a
+ * schema with optional properties or open objects outright (HTTP 400).
+ * Callers validate the parsed output themselves.
+ */
 function toResponsesJsonSchema(
   responseFormat: LLMResponseFormat,
 ): Record<string, unknown> {
@@ -104,6 +110,7 @@ function toResponsesJsonSchema(
     type: "json_schema",
     name: name || "structured_output",
     schema: responseFormat.schema,
+    strict: false,
   };
 }
 
