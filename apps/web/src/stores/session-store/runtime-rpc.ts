@@ -17,7 +17,7 @@ import { confirmPluginApproval } from "@/lib/approval-message.js";
 import type { MutableRef, SessionActionOwner } from "./runtime-refs.js";
 import type { SseEventHandler } from "./sse-handler.js";
 import type { SessionDispatch } from "./types.js";
-import { echoContent } from "./composer-actions.js";
+import { actionsText, echoContent } from "./composer-actions.js";
 import { toExecutionStepStatus } from "./execution-steps.js";
 import { refreshSessionResource } from "./session-resource-reads.js";
 
@@ -392,9 +392,11 @@ export async function runSingleSessionAction({
   if (!owner.isCurrent()) return;
   dispatch({ type: "SET_EXECUTION_RECOVERY", recovery: null });
   let input: api.MessageRecord | undefined;
+  let inputMessageId: string | undefined;
   const content = echoContent(actions);
   if (echoUserMessage && content) {
     const id = crypto.randomUUID();
+    inputMessageId = id;
     const timestamp = new Date().toISOString();
     dispatch({
       type: "ADD_MESSAGE",
@@ -407,13 +409,20 @@ export async function runSingleSessionAction({
         ...(echoActions ? { actions: echoActions } : {}),
       },
     });
-    input = {
-      id,
-      sessionId: session.id,
-      role: "user",
-      content,
-      createdAt: timestamp,
-    };
+    // The browser stores the input before the commit, and the commit adopts
+    // that row only when the content is identical. The server's content is
+    // the actions' texts; a fields-only action gets a labelled rendering that
+    // only the server can produce, so it is committed under the same id with
+    // no row stored ahead of it.
+    if (actionsText(actions) === content) {
+      input = {
+        id,
+        sessionId: session.id,
+        role: "user",
+        content,
+        createdAt: timestamp,
+      };
+    }
   }
   if (!owner.isCurrent()) return;
   try {
@@ -434,7 +443,7 @@ export async function runSingleSessionAction({
           type: "submit_actions",
           payload: {
             actions: [...actions],
-            ...(input ? { inputMessageId: input.id } : {}),
+            ...(inputMessageId ? { inputMessageId } : {}),
           },
         };
         return runActionStream(action, handleSseEvent, dispatch, {

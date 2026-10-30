@@ -96,15 +96,26 @@ function fieldSummary(fields: ActionFields): string {
 }
 
 /**
+ * The raw texts of the actions, one per line: the `content` the server gives
+ * the chat row whenever any action carries text. It is the only content the
+ * browser can store ahead of the commit, because the commit must match it.
+ */
+export function actionsText(requests: readonly TurnActionRequest[]): string {
+  return requests
+    .map((request) => request.text ?? "")
+    .filter((text) => text.length > 0)
+    .join("\n");
+}
+
+/**
  * What the echoed bubble shows: the texts, one per line, as the server's
- * chat row does. A plugin kind without text shows its fields, and an action
- * with neither (an `advance`) has no bubble.
+ * chat row does. A plugin kind without text shows a summary of its fields
+ * (the server's row holds a labelled rendering instead, which only the server
+ * can produce), and an action with neither (an `advance`) has no bubble.
  */
 export function echoContent(requests: readonly TurnActionRequest[]): string {
-  const texts = requests
-    .map((request) => request.text ?? "")
-    .filter((text) => text.length > 0);
-  if (texts.length > 0) return texts.join("\n");
+  const texts = actionsText(requests);
+  if (texts.length > 0) return texts;
   return requests
     .filter((request) => !isBaseActionKind(request.kind))
     .map((request) => fieldSummary(request.fields ?? {}))

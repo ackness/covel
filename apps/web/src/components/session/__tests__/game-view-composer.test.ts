@@ -1,4 +1,13 @@
-import { act, renderHook, waitFor } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  renderHook,
+  screen,
+  waitFor,
+} from "@testing-library/react";
+import { createElement } from "react";
+import type { TFunction } from "i18next";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { StreamMessage } from "@/stores/session-store.js";
 import type { SessionRecord } from "@/services/api.js";
@@ -11,6 +20,7 @@ import type {
 } from "@covel/shared";
 import { emitToast } from "@/lib/toast-channel.js";
 import { useGameViewComposer } from "../game-view/use-game-view-composer.js";
+import { MessageComposer } from "../game-view/message-composer.js";
 
 const { postPluginRpcWithApproval } = vi.hoisted(() => ({
   postPluginRpcWithApproval: vi.fn(async (): Promise<PluginRpcResponse> => ({
@@ -694,16 +704,26 @@ describe("useGameViewComposer modes", () => {
     expect(sessionMock.clearInteractionDrafts).toHaveBeenCalledOnce();
   });
 
-  it("sends only the queued selections as a say when an act has no text", () => {
+  it("sends nothing and keeps the queued selections when an act has no text", () => {
     sessionMock.pendingInteractionDrafts = [
       { id: "d1", label: "Wait", values: { text: "Wait" } },
     ];
     const { result, onSendMessage } = setup([]);
     act(() => result.current.composerModes.selectKind("act"));
+    expect(result.current.canSubmit).toBe(false);
+    act(() => result.current.handleSubmit());
+    expect(onSendMessage).not.toHaveBeenCalled();
+    expect(sessionMock.submitComposerAction).not.toHaveBeenCalled();
+    expect(sessionMock.clearInteractionDrafts).not.toHaveBeenCalled();
+
+    // Typing the action's text sends both, the selections first.
+    act(() => result.current.setInputValue("Draw the sword"));
     expect(result.current.canSubmit).toBe(true);
     act(() => result.current.handleSubmit());
-    expect(onSendMessage).toHaveBeenCalledExactlyOnceWith("Wait");
-    expect(sessionMock.submitComposerAction).not.toHaveBeenCalled();
+    expect(sessionMock.submitComposerAction).toHaveBeenCalledExactlyOnceWith(
+      { kind: "act", text: "Draw the sword" },
+      { drafts: "Wait" },
+    );
   });
 
   it("disables the send for another mode while a turn executes but still steers a say", () => {
@@ -719,6 +739,53 @@ describe("useGameViewComposer modes", () => {
     expect(result.current.canSubmit).toBe(true);
     act(() => result.current.handleSubmit());
     expect(sessionMock.steerMessage).toHaveBeenCalledWith("Swing");
+  });
+
+  it("keeps the rendered send button on for a slash command while a turn executes in another mode", async () => {
+    const onSendMessage = vi.fn();
+    const session = sessionRecord("playing");
+    const Harness = () => {
+      const composer = useGameViewComposer({
+        messages: [],
+        submittedBlockIds: new Set<string>(),
+        executing: true,
+        session,
+        onSendMessage,
+        commands: [rollCommand],
+      });
+      return createElement(MessageComposer, {
+        t: ((_key: string, fallback?: string) => fallback ?? _key) as TFunction,
+        session,
+        executing: true,
+        inputValue: composer.inputValue,
+        composerBlocked: composer.composerBlocked,
+        composerDisabled: composer.composerDisabled,
+        awaitingBegin: composer.awaitingBegin,
+        onInputValueChange: composer.setInputValue,
+        onSubmit: composer.handleSubmit,
+        onKeyDown: composer.handleKeyDown,
+        commandMatches: composer.commandMatches,
+        commandMenuOpen: composer.commandMenuOpen,
+        commandExecuting: composer.commandExecuting,
+        composerModes: composer.composerModes,
+        canSubmit: composer.canSubmit,
+      });
+    };
+    render(createElement(Harness));
+    const send = () =>
+      document.querySelector<HTMLButtonElement>(".ui-composer-submit")!;
+    const input = screen.getByTestId("game-composer-input");
+    fireEvent.click(screen.getByTestId("composer-mode-act"));
+    fireEvent.change(input, { target: { value: "Swing" } });
+    expect(send().disabled).toBe(true);
+    fireEvent.change(input, { target: { value: "/roll 2d6" } });
+    expect(send().disabled).toBe(false);
+    fireEvent.click(send());
+    await waitFor(() =>
+      expect(postPluginRpcWithApproval).toHaveBeenCalledOnce(),
+    );
+    expect(sessionMock.steerMessage).not.toHaveBeenCalled();
+    expect(onSendMessage).not.toHaveBeenCalled();
   });
 
   it("runs slash commands in any mode", async () => {
@@ -786,7 +853,8 @@ describe("useGameViewComposer modes", () => {
     );
   });
 
-  it("falls back to the first mode when the selected one leaves the catalogue", () => {
+  it("falls back to the first mode when the selected one leaves the catalogue, and stays there when it returns", () => {
+    const full = sessionMock.sessionActionKinds;
     const { result, rerender } = setup([]);
     act(() => result.current.composerModes.selectKind("act"));
     expect(result.current.composerModes.mode.kind).toBe("act");
@@ -794,6 +862,15 @@ describe("useGameViewComposer modes", () => {
     rerender();
     expect(result.current.composerModes.mode.kind).toBe("say");
     expect(result.current.composerModes.modes).toHaveLength(1);
+
+    // A catalogue read that fails and then succeeds again does not bring the
+    // old mode back.
+    sessionMock.sessionActionKinds = null;
+    rerender();
+    sessionMock.sessionActionKinds = full;
+    rerender();
+    expect(result.current.composerModes.modes.length).toBeGreaterThan(1);
+    expect(result.current.composerModes.mode.kind).toBe("say");
   });
 
   it("offers the character switcher only for a seat with several characters", () => {

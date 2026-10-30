@@ -444,12 +444,15 @@ export function useGameViewComposer({
     ],
   );
 
-  // Steering takes text only: in another mode the send waits for the turn.
+  // Steering takes text only, so in another mode the send waits for the turn.
+  // A slash command is not steering and runs at any time.
+  const commandRunnable =
+    commandQuery !== null && selectedCommand !== undefined;
   const canSubmit =
     composerModes.mode.kind === "say"
       ? inputValue.trim().length > 0 || (!executing && pendingDrafts.length > 0)
-      : !executing &&
-        (composerModes.acceptsInput(inputValue) || pendingDrafts.length > 0);
+      : composerModes.acceptsInput(inputValue) &&
+        (!executing || commandRunnable);
 
   return {
     inputValue,

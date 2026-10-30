@@ -72,8 +72,6 @@ export function MessageComposer({
   const mode = composerModes?.mode;
   // A mode that takes no text (an advance) is one button, not an input.
   const textless = mode?.text === "none";
-  // Steering takes text only, so another mode waits for the turn to end.
-  const waitsForTurn = executing && mode !== undefined && mode.kind !== "say";
   const sendEnabled =
     canSubmit ??
     !(
@@ -81,6 +79,10 @@ export function MessageComposer({
       commandExecuting ||
       (!inputValue.trim() && (executing || pendingDraftCount === 0))
     );
+  // Steering takes text only, so another mode waits for the turn to end;
+  // a slash command is not steering and leaves the send on.
+  const waitsForTurn =
+    executing && mode !== undefined && mode.kind !== "say" && !sendEnabled;
 
   useEffect(() => {
     if (!commandMenuOpen) return;

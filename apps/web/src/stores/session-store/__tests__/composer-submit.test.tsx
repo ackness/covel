@@ -2,6 +2,8 @@ import { useReducer } from "react";
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Seat } from "@covel/shared";
+import { createMemoryStore } from "@covel/store/memory";
+import { createSessionWorkspace } from "@/services/data-service/workspace.js";
 import * as api from "@/services/api";
 import type { DataService, SessionWorkspace } from "@/services/data-service.js";
 import { useBuildSessionActions } from "../actions.js";
@@ -150,6 +152,105 @@ describe("submitComposerAction", () => {
     expect(send.mock.calls[0]?.[0]).toMatchObject({
       payload: { actions: [{ kind: "say", text: "Look around" }] },
     });
+  });
+});
+
+describe("a submission in browser-private mode", () => {
+  /**
+   * The local workspace over a memory store that commits the way the server
+   * does: under the input id, with the chat row's content. The commit adopts
+   * a row stored ahead of it only if the content is identical.
+   */
+  function localWorkspace(committedContent: (sent: string) => string) {
+    const store = createMemoryStore();
+    const stored: string[] = [];
+    const ds = {
+      withSessionWorkspace: (
+        _sessionId: string,
+        operation: (ops: never) => Promise<unknown>,
+      ) =>
+        operation({
+          persistInput: async (
+            message: Parameters<typeof store.addMessage>[0],
+          ) => {
+            stored.push(message.content);
+            await store.addMessage(message);
+          },
+          hydrate: async () => {},
+          stage: async () => {},
+          commit: async () => {},
+        } as never),
+    } as unknown as DataService;
+    const commits: Promise<void>[] = [];
+    const send = vi.spyOn(api, "sendAction").mockImplementation(((
+      request: {
+        payload: { inputMessageId?: string; actions: { text?: string }[] };
+      },
+      _onEvent: unknown,
+      onError: (error: Error) => void,
+      onComplete: () => void,
+    ) => {
+      const id = request.payload.inputMessageId!;
+      const sent = request.payload.actions
+        .map((action) => action.text ?? "")
+        .filter(Boolean)
+        .join("\n");
+      const commit = store
+        .commitPlayerInputMessage({
+          id,
+          sessionId: "session-1",
+          role: "user",
+          content: committedContent(sent),
+          metadata: { turnId: "turn-1", actions: request.payload.actions },
+          createdAt: "2026-01-01T00:00:01Z",
+        })
+        .then(onComplete, (error: Error) => onError(error));
+      commits.push(commit);
+      return new AbortController();
+    }) as never);
+    return {
+      workspace: createSessionWorkspace(ds, "local"),
+      stored,
+      commits,
+      send,
+    };
+  }
+
+  it("commits a fields-only action whose row holds the server's rendering", async () => {
+    const { workspace, stored, commits } = localWorkspace(
+      () => 'Aya whispers: {"target":"Bo"}',
+    );
+    const { result } = renderActions(workspace);
+    await act(async () =>
+      result.current.actions.submitComposerAction({
+        kind: "p/whisper",
+        fields: { target: "Bo" },
+      }),
+    );
+    await act(async () => {
+      await Promise.all(commits);
+    });
+    // The summary is shown, but no row was stored ahead of the commit.
+    expect(result.current.state.messages[0]?.content).toBe("target: Bo");
+    expect(stored).toEqual([]);
+    expect(result.current.state.executionError).toBeNull();
+  });
+
+  it("stores the typed text ahead of the commit and the commit adopts it", async () => {
+    const { workspace, stored, commits } = localWorkspace((sent) => sent);
+    const { result } = renderActions(workspace);
+    await act(async () =>
+      result.current.actions.submitComposerAction({
+        kind: "p/whisper",
+        text: "psst",
+        fields: { target: "Bo" },
+      }),
+    );
+    await act(async () => {
+      await Promise.all(commits);
+    });
+    expect(stored).toEqual(["psst"]);
+    expect(result.current.state.executionError).toBeNull();
   });
 });
 

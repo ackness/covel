@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { primarySeat, type BaseActionKind } from "@covel/shared";
 import { emitToast } from "@/lib/toast-channel.js";
@@ -86,8 +86,21 @@ export function useComposerModes({
     () => deriveComposerModes({ catalogue, seats, language, baseLabel }),
     [catalogue, seats, language, baseLabel],
   );
-  // A mode that left the catalogue gives way to the first one.
+  // A mode that left the catalogue gives way to the first one, and stays
+  // gone if the catalogue comes back.
   const mode = modes.find((m) => m.kind === selected.kind) ?? modes[0]!;
+  useEffect(() => {
+    setSelected((current) =>
+      modes.some((m) => m.kind === current.kind)
+        ? current
+        : {
+            ...current,
+            kind: modes[0]!.kind,
+            values: {},
+            generation: current.generation + 1,
+          },
+    );
+  }, [modes]);
   // A checkbox shows unchecked until it is touched, and unchecked is `false`:
   // the value the form displays is the value that is validated and sent.
   const fieldValues = useMemo<FieldValues>(
@@ -174,16 +187,15 @@ export function useComposerModes({
       const joined = [drafts ?? "", text].filter(Boolean).join("\n");
       // Slash lines keep the command path in every mode, and a `say` is the
       // plain text request it always was.
-      if (
-        mode.kind === "say" ||
-        text.startsWith("/") ||
-        !modeAcceptsInput(mode, text)
-      ) {
+      if (mode.kind === "say" || text.startsWith("/")) {
         if (!joined) return false;
         onSendMessage(joined);
         setSelected(({ restoredDrafts: _sent, ...current }) => current);
         return true;
       }
+      // The selected mode needs text it does not have: nothing is sent as
+      // another kind, and the queued selections stay for a later submission.
+      if (!modeAcceptsInput(mode, text)) return false;
       const missing = mode.fields.filter((field) => {
         if (!field.required) return false;
         const value = fieldValues[field.name];

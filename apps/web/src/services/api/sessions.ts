@@ -49,12 +49,16 @@ export async function listSessionPlugins(
   );
 }
 
-/** The action kinds a session accepts and the ones each seat may submit now. */
+/**
+ * The action kinds a session accepts and the ones each seat may submit now.
+ * A failed read is silent: the composer then offers `say` only.
+ */
 export async function getSessionActionKinds(
   sessionId: string,
 ): Promise<SessionActionKindsResponse> {
   return request<SessionActionKindsResponse>(
     `/api/sessions/${encodeURIComponent(sessionId)}/action-kinds`,
+    { silentErrors: true },
   );
 }
 
