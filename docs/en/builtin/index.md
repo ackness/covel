@@ -89,7 +89,7 @@ Mistport, Harukaze Academy and Lantern Barrow each show one play style: Mistport
 | World                                                       | Gameplay                                                        | What is worth a look                                                                    |
 | ----------------------------------------------------------- | --------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
 | Mistport (雾港・裂潮纪) `mistport`                          | A dark-fantasy investigation in the traditional narrative style | Hidden story events, memory for investigation, portraits                                |
-| Harukaze Academy (遥风学园) `haruka-academy`                | A campus ensemble in stage mode                                 | Dialogue narration, day and night scene pictures, transparent portraits                 |
+| Harukaze Academy (遥风学园) `haruka-academy`                | A campus ensemble in stage mode                                 | Campus timetable, dialogue narration, day/night scenes, transparent portraits           |
 | Emberback Relay `emberback`                                 | Sci-fi frontier mystery, written in English                     | Shows how one world can carry several languages (English first, with a Chinese edition) |
 | Lantern Barrow: The First Delve (提灯古冢) `lantern-barrow` | Classic tabletop dungeon exploration                            | Point buy at the start, dice checks, dungeon panel                                      |
 

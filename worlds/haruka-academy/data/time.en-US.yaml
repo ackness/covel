@@ -30,7 +30,12 @@ definition:
       - name: Afternoon
       - name: Evening
   evolution:
-    prompt: A conversation usually takes a few minutes; classes and club
+    prompt: Morning reading preparation is before 08:20; lunch starts at 12:20;
+      school ends at 15:40; club activities run from 16:00 to 17:30; the school
+      closes at 18:00. When the story skips to lunch, after school or club
+      activities, include the skipped classes and waiting from the current
+      clock, not only the conversation after arrival.
+      A conversation usually takes a few minutes; classes and club
       activities take as long as the story says they do. Sleep or a clear cut to
       the next day moves the clock to the next day. Flashbacks do not change the
       current date.
