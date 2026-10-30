@@ -1,4 +1,5 @@
-import { renderToolError } from "./tool-result-text.js";
+import { renderToolError, renderToolSuccess } from "./tool-result-text.js";
+import type { SkipReason } from "./tool-batch.js";
 import { parseJsonText } from "@covel/tools";
 import type { LLMMessage, LLMResponse, LLMToolCall } from "@covel/shared";
 
@@ -69,6 +70,61 @@ export function buildToolExecutionUnavailableMessage(
     content: renderToolError({
       code: "unavailable",
       message: "Tool execution not available",
+    }),
+  });
+}
+
+export function buildSuspendedPlaceholderMessage(
+  toolCallId: string,
+): LLMMessage {
+  return buildToolResultMessage({
+    toolCallId,
+    content: renderToolSuccess({
+      model: { summary: "Suspended: waiting for the player's answer." },
+    }),
+  });
+}
+
+export function buildSkippedToolMessage(args: {
+  toolCallId: string;
+  reason: Exclude<SkipReason, "hook-aborted">;
+}): LLMMessage {
+  const messages = {
+    suspended:
+      "Not run: an earlier call in this response suspended the runtime.",
+    terminated: "Not run: an earlier tool result ended the run.",
+    aborted: "Not run: this tool batch was aborted.",
+  };
+  return buildToolResultMessage({
+    toolCallId: args.toolCallId,
+    content: renderToolError({
+      code: "cancelled",
+      message: messages[args.reason],
+    }),
+  });
+}
+
+export function buildNestedSuspendMessage(toolCallId: string): LLMMessage {
+  return buildToolResultMessage({
+    toolCallId,
+    content: renderToolError({
+      code: "unavailable",
+      message: "Suspending is not supported inside a sub-agent run.",
+      hint: "Continue without asking the player, or finish with what you have.",
+    }),
+  });
+}
+
+export function buildResumedToolMessage(
+  toolCallId: string,
+  resumeData: unknown,
+): LLMMessage {
+  return buildToolResultMessage({
+    toolCallId,
+    // Preserve every field the player submitted, including identifiers and dates.
+    content: JSON.stringify({
+      summary: "The player answered.",
+      data: resumeData,
     }),
   });
 }

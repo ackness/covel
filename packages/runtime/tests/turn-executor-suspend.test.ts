@@ -367,7 +367,10 @@ describe("TurnExecutor — agent runtime suspend", () => {
       resumed
         .filter((message) => message.role === "tool")
         .map((message) => message.content),
-    ).toEqual(['{"value":17}', '{"resumeData":{"name":"Alice"}}']);
+    ).toEqual([
+      '{"value":17}',
+      '{"summary":"The player answered.","data":{"name":"Alice"}}',
+    ]);
   });
 
   it("should capture partialContent and toolCallsSoFar in pendingContinuation", async () => {
@@ -634,7 +637,10 @@ describe("TurnExecutor — agent runtime suspend", () => {
       resumedMessages.find((message) => message.toolCallId === "tc-suspend"),
     ).toMatchObject({
       role: "tool",
-      content: JSON.stringify({ resumeData: { answer: "continue" } }),
+      content: JSON.stringify({
+        summary: "The player answered.",
+        data: { answer: "continue" },
+      }),
     });
     expect(
       resumedMessages.find((message) => message.toolCallId === "tc-after"),
@@ -1504,7 +1510,7 @@ describe("resumeRuntimePipeline", () => {
     expect(resumedEvent).toBeUndefined();
   });
 
-  it("should append synthetic tool message for agent runtime (suspendToolCallId set)", async () => {
+  it("preserves the complete player answer in the resumed agent tool message", async () => {
     const suspensionId = await createTestSuspension("tc-agent-suspend");
 
     const capturedMessages: unknown[] = [];
@@ -1534,7 +1540,17 @@ describe("resumeRuntimePipeline", () => {
       eventBus,
     };
 
-    await resumeRuntimePipeline(suspension!, { name: "Dave" }, manifest, deps);
+    const resumeData = {
+      name: "Dave",
+      id: "86c20348-fbb5-4908-bc84-9954441a60c0",
+      answeredAt: "2026-10-30T12:00:00.000Z",
+      selected: {
+        characterId: "d18f190a-a926-49c5-aebc-552c8b9d77b7",
+        selectedAt: "2026-10-30T12:01:00.000Z",
+        items: [{ id: "4f343dd6-ec1d-4ead-bf6c-fbd2103de747" }],
+      },
+    };
+    await resumeRuntimePipeline(suspension!, resumeData, manifest, deps);
 
     // There should be a tool message with the suspend tool call ID
     const toolMsg = capturedMessages.find(
@@ -1546,7 +1562,10 @@ describe("resumeRuntimePipeline", () => {
     const content = JSON.parse(
       (toolMsg as Record<string, unknown>).content as string,
     ) as Record<string, unknown>;
-    expect(content.resumeData).toEqual({ name: "Dave" });
+    expect(content).toEqual({
+      summary: "The player answered.",
+      data: resumeData,
+    });
   });
 
   it("resumes a function runtime through its handler with inherited execution responsibility", async () => {

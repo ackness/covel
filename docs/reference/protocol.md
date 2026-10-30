@@ -1277,9 +1277,9 @@ error.occurred        → executionError
 <!-- prettier-ignore -->
 | Type | Payload |
 | --- | --- |
-| `tool.calling` | `{ runtimeId, pluginId, toolName, toolCallId, label, arguments, source, approvalStatus }` |
+| `tool.calling` | `{ runtimeId, pluginId, toolName, toolCallId, label, arguments, source, approvalStatus, skipped?: true, skipReason? }` |
 | `tool.completed` | `{ runtimeId, pluginId, toolName, toolCallId, label, result, parsedResult, durationMs, approvalStatus, success: true }` |
-| `tool.failed` | `{ runtimeId, pluginId, toolName, toolCallId, label, code, error, hint?, details?, durationMs, approvalStatus, success: false }`  `code` 使用 `ToolErrorCode`；`error` 是完整消息，`hint` 是可选修正提示。错误码为 `invalid-input`、`not-found`、`ambiguous`、`refused`、`unavailable`、`timeout`、`conflict`、`cancelled`、`internal`。 |
+| `tool.failed` | `{ runtimeId, pluginId, toolName, toolCallId, label, code, error, hint?, details?, durationMs, approvalStatus, success: false, skipped?: true, skipReason? }`  `code` 使用 `ToolErrorCode`；`error` 是完整消息，`hint` 是可选修正提示。错误码为 `invalid-input`、`not-found`、`ambiguous`、`refused`、`unavailable`、`timeout`、`conflict`、`cancelled`、`internal`。 |
 | `domain-event.previewed` | `{ runtimeId, pluginId, toolCallId, topic, data }`。`emit-event` 校验成功后的临时显示信号；持久的业务状态仍然由正常的事件链提交 |
 | `llm.calling` | `{ runtimeId, pluginId, slot, model, provider?: string \| null, messages, tools, attempt, startedAt, queueWaitMs?, streaming? }`。`slot` 是 runtime 请求的用途；生产环境的 gateway 在调用之前把它解析成 `model` / `provider`。不支持用途解析的自定义 adapter 可以不给 `provider` |
 | `llm.responded` | `{ runtimeId, pluginId, text?, reasoningContent?, toolCalls?, usage, finishReason, durationMs, attempt, error? }`。`usage` 是 `{ inputTokens, outputTokens, cachedInputTokens?, cacheWriteInputTokens? }`，其中 `inputTokens` 是包含缓存读写的总输入，后两项是服务商报告的子集。`agent.loop.truncation: accept` 时可报告 `finishReason: length`：回复在输出上限处被截断，但被保留，仍须通过最终输出和提交检查；`reject` 时按失败上报。story profile 默认接受，其他 profile 默认拒绝，作者可覆盖 |
@@ -1296,7 +1296,7 @@ error.occurred        → executionError
 | `command.completed` | `command.invoked` 的字段 + `{ durationMs, resultOk? }` |
 | `command.failed` | `command.invoked` 的字段 + `{ durationMs, error }` |
 
-`tool.completed` 表示执行器已接受工具结果，不表示 proposal 已提交。接受前取消只报 `tool.failed`；接受后的取消不再为同一调用发失败事件。工具 trace 或领域事件预览发送失败只告警，不把工具成功改为失败。
+`tool.completed` 表示执行器已接受工具结果，不表示 proposal 已提交。接受前取消只报 `tool.failed`；接受后的取消不再为同一调用发失败事件。工具 trace 或领域事件预览发送失败只告警，不把工具成功改为失败。没有执行的调用发出 `tool.calling` / `tool.failed` 一对事件，不发 `tool.completed`；两者都带 `skipped: true`、`skipReason`（`hook-aborted`、`suspended`、`terminated` 或 `aborted`）、`durationMs: 0` 和 `approvalStatus: "auto-allowed"`。它们只进入对话和 trace，不进入已执行工具记录、失败计数或 `step.completed.toolCalls`；concealed runtime 仍会剥除 `code`、`error`、`skipped` 和 `skipReason`。
 
 叙事的片段继续通过 `narrative.delta` 实时发给界面。为了让 `trace_events` 保持精简，只保存 `message.completed`。
 

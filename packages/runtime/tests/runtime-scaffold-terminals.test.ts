@@ -712,7 +712,9 @@ describe("suspension terminal", () => {
             },
             {
               role: "tool",
-              content: JSON.stringify({ suspended: true }),
+              content: JSON.stringify({
+                summary: "Suspended: waiting for the player's answer.",
+              }),
               toolCallId: "call-suspend",
             },
           ],
@@ -850,67 +852,80 @@ describe("resume terminals", () => {
     }
   });
 
-  it("lets a resumed agent suspend again with its whole transcript", async () => {
-    const h = harness({ toolExecutor: toolExecutor({ suspend: sentinel }) });
-    const runtime = manifest({
-      runtimeType: "agent",
-      tools: { builtin: ["suspend"] },
-    });
-    const generate = vi.fn().mockResolvedValueOnce(suspendCall("call-again"));
-    const previous: LLMMessage[] = [
-      { role: "system", content: "probe" },
-      { role: "user", content: "Continue" },
-      {
-        role: "assistant",
-        content: "",
-        toolCalls: [{ id: "call-first", name: "suspend", arguments: "{}" }],
-      },
-      {
-        role: "tool",
-        content: JSON.stringify({ suspended: true }),
-        toolCallId: "call-first",
-      },
-    ];
-    try {
-      const result = await resumeRuntimePipeline(
-        suspension(runtime, {
-          messages: previous,
-          suspendToolCallId: "call-first",
-        }),
-        { answer: 1 },
-        runtime,
-        { ...h.deps({}), llm: { generate } },
-      );
-      expect(result.status).toBe("suspended");
-      expect(generate).toHaveBeenCalledTimes(1);
-      const [record] = collectExecutionSuspensions({
-        runtimeResults: [result],
+  it.each([
+    JSON.stringify({ summary: "Suspended: waiting for the player's answer." }),
+    JSON.stringify({ suspended: true }),
+  ])(
+    "lets a resumed agent suspend again with its whole transcript (%s)",
+    async (placeholder) => {
+      const h = harness({ toolExecutor: toolExecutor({ suspend: sentinel }) });
+      const runtime = manifest({
+        runtimeType: "agent",
+        tools: { builtin: ["suspend"] },
       });
-      expect(record!.pendingContinuation).toMatchObject({
-        suspendToolCallId: "call-again",
-        messages: [
-          ...previous.slice(0, 3),
-          {
-            role: "tool",
-            content: JSON.stringify({ resumeData: { answer: 1 } }),
-            toolCallId: "call-first",
-          },
-          {
-            role: "assistant",
-            toolCalls: [{ id: "call-again", name: "suspend", arguments: "{}" }],
-          },
-          {
-            role: "tool",
-            content: JSON.stringify({ suspended: true }),
-            toolCallId: "call-again",
-          },
-        ],
-      });
-      expect(h.count("PostRuntime")).toBe(0);
-    } finally {
-      await h.close();
-    }
-  });
+      const generate = vi.fn().mockResolvedValueOnce(suspendCall("call-again"));
+      const previous: LLMMessage[] = [
+        { role: "system", content: "probe" },
+        { role: "user", content: "Continue" },
+        {
+          role: "assistant",
+          content: "",
+          toolCalls: [{ id: "call-first", name: "suspend", arguments: "{}" }],
+        },
+        {
+          role: "tool",
+          content: placeholder,
+          toolCallId: "call-first",
+        },
+      ];
+      try {
+        const result = await resumeRuntimePipeline(
+          suspension(runtime, {
+            messages: previous,
+            suspendToolCallId: "call-first",
+          }),
+          { answer: 1 },
+          runtime,
+          { ...h.deps({}), llm: { generate } },
+        );
+        expect(result.status).toBe("suspended");
+        expect(generate).toHaveBeenCalledTimes(1);
+        const [record] = collectExecutionSuspensions({
+          runtimeResults: [result],
+        });
+        expect(record!.pendingContinuation).toMatchObject({
+          suspendToolCallId: "call-again",
+          messages: [
+            ...previous.slice(0, 3),
+            {
+              role: "tool",
+              content: JSON.stringify({
+                summary: "The player answered.",
+                data: { answer: 1 },
+              }),
+              toolCallId: "call-first",
+            },
+            {
+              role: "assistant",
+              toolCalls: [
+                { id: "call-again", name: "suspend", arguments: "{}" },
+              ],
+            },
+            {
+              role: "tool",
+              content: JSON.stringify({
+                summary: "Suspended: waiting for the player's answer.",
+              }),
+              toolCallId: "call-again",
+            },
+          ],
+        });
+        expect(h.count("PostRuntime")).toBe(0);
+      } finally {
+        await h.close();
+      }
+    },
+  );
 
   it("lets manifest.timeoutMs beat options.timeoutMs on resume, as on dispatch", async () => {
     const h = harness();

@@ -89,6 +89,16 @@ tool({
 
 runtime 声明的 `tools.plugin` 中有工具未注册时，即使它被 `tools.defer` 延迟，runtime 也会在模型调用前失败：`runtime "<id>" declares plugin tool "<name>", but its plugin did not register it`。宿主没有安装的 builtin 能力仍会被省略并告警：`builtin tool "<name>" is not installed on this host — not offered`。
 
+## 同一批调用的执行
+
+agent 的一条模型回复可以包含多个工具调用。调用经过 `PreToolUse` 改写后，只有在 runtime 已授权、工具声明 `readOnly: true` 且 `concurrencySafe: true` 时才进入并行池。连续满足条件的调用组成一池，最多同时执行 8 个。`concurrencySafe` 是作者的承诺：工具与其他只读调用并发时不会通过共享状态产生副作用；内核会拒绝只读工具返回的写入和事件，但不能检查外部副作用。
+
+其他调用是屏障，单独执行：先等前一池全部结束，屏障结束后才启动后面的调用。未知工具、未声明的名字和循环内处理的 `search-tools`、`suspend`、`runtime-done` 都是屏障。`delegate` 没有声明安全并发，始终串行。
+
+工具消息、调用记录、proposal 和事件都按模型给出的顺序汇总，不按完成时间排序。池中某个工具触发自己的 `timeoutMs` 时，它返回 `timeout` 并计入失败调用；其他调用和后续循环继续。没有默认的单工具超时，省略时仍受 runtime 总时限约束；会等待网络读取的并发工具应自行设置 `timeoutMs`。
+
+因 Hook、挂起或循环结束而没有执行的调用仍有工具结果和 trace，注明跳过原因；它们不计入已执行调用、失败计数或步骤的工具统计。循环在后续模型请求（包括输出修复）前补齐所有未回答的调用，不重新执行工具。
+
 ## 工具调用方向
 
 本页以这三处的实现为准：`apps/server/src/routes/api/bootstrap/tools.ts`、`packages/tools/src/builtin/`、`plugins/**/tools/`。
@@ -801,7 +811,7 @@ JSON Schema 只能检查字段的形状，检查不了“这个结果和骰子�
 3. 框架发出 `turn.suspended` 事件，整个工具循环立即停止。
 4. 之后通过 `POST /api/sessions/:id/suspensions/:suspensionId/resume` 提交一份符合 `resumeSchema` 的数据，这个 runtime 就从停下的地方继续（详见 [api.md](./api.md)）。
 
-模型的一条回答里有多个工具调用时：`suspend` 那次调用先留一个可以替换的占位结果，它后面还没执行的调用各写入一条“已取消”的结果。这样恢复之后，对话记录仍然满足服务商“工具调用和结果必须成对”的要求。
+模型的一条回答里有多个工具调用时：`suspend` 那次调用先留一个统一工具成功信封中的 `summary` 占位结果，它后面还没执行的调用各写入一条 `error.code: "cancelled"` 的错误信封。恢复时按同一 `toolCallId` 替换占位结果，返回 `summary` 和承载玩家回答的 `data`；保存过旧占位文本的挂起项也按 ID 替换。玩家提交的 `data` 完整保留，包括嵌套标识符和时间戳，不经过 `modelFacingJson`。这样恢复之后，对话记录仍然满足服务商“工具调用和结果必须成对”的要求。
 
 **注意事项**：
 
@@ -916,10 +926,10 @@ SDK 的 `TOOL_ERROR_CODES` 是唯一错误码列表。工具作者用 `new ToolE
 | `unavailable` | 当前未授权或能力不可用 | 工具授权、无执行器、工具或子 agent | 工具或执行器否；delegate 是 |
 | `timeout` | 工具或子 agent 超时 | 执行器、工具或子 agent | 工具或执行器否；delegate 是 |
 | `conflict` | 写入冲突，保留码 | 当前没有内置产生方 | 否 |
-| `cancelled` | 调用被取消 | 执行器、工具或子 agent | 工具或执行器否；delegate 是 |
+| `cancelled` | 调用被取消，包括批里被跳过的调用 | 执行器、工具循环、工具或子 agent | 工具、执行器或批里跳过的调用否；delegate 是 |
 | `internal` | 未预期的执行错误 | 执行器、工具或子 agent | 工具或执行器否；delegate 是 |
 
-错误码和计数标志是两件事。审批拒绝、未授权调用和 Hook 中止仍算失败调用；只有工具自己抛出 `ToolError("refused", …)` 不算 runtime 的失败。`delegate` 延续自己的规则：除 `invalid-input` 外都设置标志。
+错误码和计数标志是两件事。审批拒绝和未授权调用仍算失败调用；agent 循环中被 `PreToolUse` 跳过的调用只记历史和 trace，不计失败，函数 runtime 的 Hook 中止仍使调用失败。对于实际执行的工具，只有工具自己抛出 `ToolError("refused", …)` 不算 runtime 的失败。`delegate` 延续自己的规则：除 `invalid-input` 外都设置标志。
 
 `ToolCallResult.error` 为代码提供同一份 `{code,message,hint?}`，失败时 `parsedResult` 为 `null`；`delegate` 保留自己的失败结果。`ctx.tools.call` 失败时抛出 `ToolError`，message 是错误消息，不是 JSON。
 

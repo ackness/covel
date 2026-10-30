@@ -34,7 +34,10 @@ const input = {
   playerMessage: "Continue",
   origin: "player" as const,
 };
-const ASK = { reason: "Need input", resumeSchema: { type: "object" } };
+const ASK = {
+  reason: "Need input",
+  fields: [{ type: "text", name: "answer", label: "Answer" }],
+};
 
 const parent: RuntimeManifest = {
   name: "probe/parent",

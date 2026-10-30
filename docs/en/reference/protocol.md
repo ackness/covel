@@ -1277,9 +1277,9 @@ These events use the standard SSE envelope, and they are saved to `trace_events`
 <!-- prettier-ignore -->
 | Type | Payload |
 | --- | --- |
-| `tool.calling` | `{ runtimeId, pluginId, toolName, toolCallId, label, arguments, source, approvalStatus }` |
+| `tool.calling` | `{ runtimeId, pluginId, toolName, toolCallId, label, arguments, source, approvalStatus, skipped?: true, skipReason? }` |
 | `tool.completed` | `{ runtimeId, pluginId, toolName, toolCallId, label, result, parsedResult, durationMs, approvalStatus, success: true }` |
-| `tool.failed` | `{ runtimeId, pluginId, toolName, toolCallId, label, code, error, hint?, details?, durationMs, approvalStatus, success: false }`  `code` uses `ToolErrorCode`; `error` is the full message and `hint` is optional correction guidance. Codes: `invalid-input`, `not-found`, `ambiguous`, `refused`, `unavailable`, `timeout`, `conflict`, `cancelled`, `internal`. |
+| `tool.failed` | `{ runtimeId, pluginId, toolName, toolCallId, label, code, error, hint?, details?, durationMs, approvalStatus, success: false, skipped?: true, skipReason? }`  `code` uses `ToolErrorCode`; `error` is the full message and `hint` is optional correction guidance. Codes: `invalid-input`, `not-found`, `ambiguous`, `refused`, `unavailable`, `timeout`, `conflict`, `cancelled`, `internal`. |
 | `domain-event.previewed` | `{ runtimeId, pluginId, toolCallId, topic, data }`. A temporary display signal after `emit-event` passes validation. Persistent business state is still committed by the normal event chain |
 | `llm.calling` | `{ runtimeId, pluginId, slot, model, provider?: string \| null, messages, tools, attempt, startedAt, queueWaitMs?, streaming? }`. `slot` is the role the runtime requests. In production, the gateway resolves it to `model` / `provider` before the call. A custom adapter that does not support role resolution can omit `provider` |
 | `llm.responded` | `{ runtimeId, pluginId, text?, reasoningContent?, toolCalls?, usage, finishReason, durationMs, attempt, error? }`. `usage` is `{ inputTokens, outputTokens, cachedInputTokens?, cacheWriteInputTokens? }`. `inputTokens` is the total input including cache reads and writes. The last two are subsets reported by the provider. With `agent.loop.truncation: accept`, `finishReason: length` can report a reply kept at the output limit; it must still pass final output and commit checks. With `reject`, truncation is reported as failure. The story profile accepts by default; the other profiles reject, and authors can override this |
@@ -1296,7 +1296,7 @@ These events use the standard SSE envelope, and they are saved to `trace_events`
 | `command.completed` | The fields of `command.invoked` + `{ durationMs, resultOk? }` |
 | `command.failed` | The fields of `command.invoked` + `{ durationMs, error }` |
 
-`tool.completed` means the executor accepted the tool result; it does not mean its proposals were committed. Cancellation before acceptance emits only `tool.failed`; cancellation after acceptance does not emit a failure for the same call. Tool trace or domain-event preview delivery failures only warn and do not turn a successful tool result into a failure.
+`tool.completed` means the executor accepted the tool result; it does not mean its proposals were committed. Cancellation before acceptance emits only `tool.failed`; cancellation after acceptance does not emit a failure for the same call. Tool trace or domain-event preview delivery failures only warn and do not turn a successful tool result into a failure. A call that never executed emits a `tool.calling` / `tool.failed` pair without `tool.completed`. Both carry `skipped: true`, `skipReason` (`hook-aborted`, `suspended`, `terminated` or `aborted`), `durationMs: 0` and `approvalStatus: "auto-allowed"`. They appear only in the transcript and trace, not executed tool records, failure accounting or `step.completed.toolCalls`; concealed runtimes still strip `code`, `error`, `skipped` and `skipReason`.
 
 Narrative fragments are still sent live to the interface through `narrative.delta`. To keep `trace_events` lean, only `message.completed` is saved.
 

@@ -15,6 +15,7 @@ import type { SuspensionRecord } from "@covel/store";
 import type { EmittedEvent } from "@covel/tools";
 import type { LLMMessage } from "@covel/shared";
 import { runAgentToolLoop } from "../agent-loop/turn-agent-tool-loop.js";
+import { buildResumedToolMessage } from "../agent-loop/turn-agent-tool-loop-messages.js";
 import { createSubagentRunner } from "../agent-loop/subagent-runner.js";
 import { withSubagentDelegate } from "../agent-loop/subagent-delegate.js";
 import { freezeInputSlots } from "../agent-loop/runtime-input-slots.js";
@@ -246,11 +247,10 @@ async function executeResumedRuntime(
   let currentTurnUserMessages =
     pendingContinuation.currentTurnUserMessages ?? 1;
   if (pendingContinuation.suspendToolCallId) {
-    const resumedToolResult: LLMMessage = {
-      role: "tool",
-      content: JSON.stringify({ resumeData }),
-      toolCallId: pendingContinuation.suspendToolCallId,
-    };
+    const resumedToolResult = buildResumedToolMessage(
+      pendingContinuation.suspendToolCallId,
+      resumeData,
+    );
     // The placeholder is the last result under this ID: an endpoint that
     // repeats an ID across the steps of a loop must not get an earlier
     // step's result rewritten.
