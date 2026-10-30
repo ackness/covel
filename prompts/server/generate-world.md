@@ -92,7 +92,7 @@ dimensions:
 
 Write 180-350 words of focused lore.
 Start with exactly one H1: "# <world name>".
-Include setting overview, factions, power system, daily life, and 3 adventure hooks.
+Include setting overview, factions, power system, daily life, and 3 numbered adventure hooks. Put each hook on its own line, starting with `1. `, `2. `, and `3. ` respectively.
 Anchor the lore around one core anomaly or pressure mechanism that makes this world distinctive.
 
 The player reads WORLD.md too. The narrator reads all of it.

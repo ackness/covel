@@ -5579,7 +5579,7 @@ Language and characters:
 
 ##### Validation and retries
 
-Each part gets a deterministic structure check as soon as it arrives. If a part is not valid, only that part is requested again (up to 3 times). Parts that already passed are not rewritten.
+The generation prompt asks for three adventure hooks starting with `1. `, `2. `, and `3. `, matching the numbered format required by lore validation. Each part gets a deterministic structure check as soon as it arrives. Without hidden regions, an invalid part is requested up to 3 times; accepted parts are not rewritten. Lore with hidden regions stops on a structure failure, avoiding a whole-document rewrite that could change its regions.
 
 If `WORLD.md` clearly contains traces of the generation process (such as test text, prompts, or model output), the server requests targeted repair only for affected fragments and retains hidden boundaries in code. Without hidden regions, invalid repair can retry the lore. With hidden regions, repair failure ends generation instead of rewriting the whole document. Invalid source markers also fail. See [World Data](./world-data.md) for boundary guarantees and revision limits.
 
