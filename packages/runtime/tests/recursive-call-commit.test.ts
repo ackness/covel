@@ -165,8 +165,8 @@ describe("recursiveCall results at commit", () => {
     const child = manifest("child");
 
     /**
-     * Both runtimes report a running task, the child then claims success; the
-     * parent ends as `failure` says.
+     * Both runtimes report a running task; the parent ends as `failure` says,
+     * and a child under a failing parent also claims success.
      */
     async function reported(failure?: "throws" | "returns failed") {
       const { store, execution } = await run([parent, child], {
@@ -187,11 +187,14 @@ describe("recursiveCall results at commit", () => {
             state: "running",
             sequence: 1,
           });
-          await ctx.progress?.report({
-            jobId: "child-job",
-            state: "succeeded",
-            sequence: 2,
-          });
+          // Only a child under a failing parent claims success itself; under
+          // a successful parent the commit is what ends its task.
+          if (failure)
+            await ctx.progress?.report({
+              jobId: "child-job",
+              state: "succeeded",
+              sequence: 2,
+            });
           return ok();
         },
       });

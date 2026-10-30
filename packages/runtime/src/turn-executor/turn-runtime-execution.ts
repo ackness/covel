@@ -752,6 +752,7 @@ export async function executeOneRuntime(
       inputs: inputSlots,
       exports: exportSlots,
       executionContext,
+      ...(progressScopeId !== undefined ? { progressScopeId } : {}),
       startTime,
       runId,
     });

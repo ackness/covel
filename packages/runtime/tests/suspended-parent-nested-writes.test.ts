@@ -58,6 +58,7 @@ function manifest(
 
 const parent = manifest("parent", { trigger: { type: "auto" } });
 const child = manifest("child");
+const grandchild = manifest("grandchild");
 const runtimes = [parent, child];
 const storyRuntime = manifest("story", {
   outputKind: "story",
@@ -116,6 +117,8 @@ async function fixture(
   options: {
     readonly suspends?: boolean;
     readonly child?: FunctionHandler;
+    /** A runtime the child can call, one level below it. */
+    readonly grandchild?: FunctionHandler;
     readonly hookPipeline?: HookPipeline;
     /** The child declares `output.recordAs` and loads with an output schema. */
     readonly exportingChild?: boolean;
@@ -135,6 +138,7 @@ async function fixture(
   const runtimes = [
     parent,
     childRuntime,
+    ...(options.grandchild ? [grandchild] : []),
     ...(options.story ? [storyRuntime] : []),
   ];
   const store = createMemoryStore();
@@ -170,6 +174,7 @@ async function fixture(
       childRuns.count += 1;
       return childBody(ctx);
     },
+    ...(options.grandchild ? { [grandchild.name]: options.grandchild } : {}),
   };
   const deps = {
     store,
@@ -597,6 +602,52 @@ describe("progress of a suspended parent's nested calls", () => {
     const reported = await f.store.listJobStatus(SESSION, {
       progressScopeId: f.execution.commit.executionContext.executionId,
       jobId: "child-job",
+    });
+    expect(reported.map((record) => record.state)).toEqual([
+      "running",
+      "failed",
+    ]);
+  });
+
+  it("end failed, and the suspension holding them is never saved, when the unit around it is dropped at commit", async () => {
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    // The outer handler succeeds but its write is rejected; the child it
+    // called suspends after a call of its own, whose saved result waits in
+    // that suspension.
+    const f = await fixture({
+      suspends: false,
+      story: true,
+      grandchild: async (ctx) => {
+        await ctx.progress?.report({
+          jobId: "grandchild-job",
+          state: "running",
+          sequence: 1,
+        });
+        return ok();
+      },
+      child: async (ctx) => {
+        if (ctx.resumedFromSuspensionId !== undefined) return ok();
+        await ctx.recursiveCall({
+          manualTrigger: { runtimeId: grandchild.name },
+        });
+        return {
+          outcome: "suspended",
+          reason: "The child asks",
+          resumeSchema: { type: "object" },
+        };
+      },
+      proposalGuard: (proposal) =>
+        (proposal.payload as { key?: unknown }).key === "A"
+          ? "outer rejected"
+          : undefined,
+    });
+    const held = f.execution.commit.suspensions?.[0];
+    expect(held?.pendingContinuation.nestedResults).toHaveLength(1);
+    expect(f.suspension).toBeUndefined();
+    expect(await f.store.listSuspensions(SESSION)).toEqual([]);
+    const reported = await f.store.listJobStatus(SESSION, {
+      progressScopeId: f.execution.commit.executionContext.executionId,
+      jobId: "grandchild-job",
     });
     expect(reported.map((record) => record.state)).toEqual([
       "running",
