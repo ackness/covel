@@ -24,7 +24,7 @@
 - `active-cast/current`：cast runtime 每回合写入的当前说话人（`speakers[]`，含打分信号及其 `signalViews` 文案）。`stage.cast@1` 的 `cast` 槽位（order 0）由它投影，并保留上一轮演员直到出现新选择。
 - `direction/current`：权威角色舞台状态。`actors[]` 记录角色、焦点、显式站位与 `variantId/outfit/expression/pose` 请求；`actors: []` 表示明确清空。`direction` 槽位（order 10）在该记录存在时覆盖 `cast` 槽位的演员；未产生该记录时舞台沿用 `active-cast` 的选择。
 - 对白署名不由本插件提供：舞台从已提交故事消息的段落（`segments`）读取每段说话者作为名牌。`stage.direction` 至少带一条 cue，只调整演员。
-- **开场种子**：`scene.set` 的唯一发射方是叙事 LLM（事件目录的【必做】指示是提示词约束，不是保证）。整局不发时 `resolver` 作为 `event` 触发的 runtime 永远不跑，舞台恒空。`seed` runtime 在 `stage: setup` 跑一次补上这条下限：`stage/current` 已存在（恢复会话、setup 重试）或世界没有场景注册表时跳过，否则按白天变体写入注册表第一个场景。它跑在任何叙事输出之前，因此不与 LLM 发的 `scene.set` 竞争——两者若落在同一回合，事件扇出顺序不定，后写的会盖掉正确场景。
+- **开场种子**：内置叙事流程依靠故事模型发出 `scene.set`（事件目录的【必做】指示是提示词约束，不是保证）。没有 runtime 发出该事件时，事件触发的 `resolver` 不会运行，背景就不会随叙事切换。`seed` runtime 在 `stage: setup` 跑一次补上这条下限：`stage/current` 已存在（恢复会话、setup 重试）或世界没有场景注册表时跳过，否则按白天变体写入注册表第一个场景。它跑在任何叙事输出之前，因此不与 LLM 发的 `scene.set` 竞争——两者若落在同一回合，事件扇出顺序不定，后写的会盖掉正确场景。
 
 ## userSettings
 

@@ -49,7 +49,7 @@ pnpm validate:world worlds/<id>
 
 - 每一条发现都是一条能在代码里逐行对上的反例。
 - 光读代码判断不了的逻辑，它会写一个小脚本，喂输入看输出。脚本和日志留在 `debugs/audits/`。
-- 报告写进 `devs/audits/`。这两个目录都不进版本库。
+- 报告写进 `devs/docs/audits/`。这两个目录都不进版本库。
 - 你要求时，它另外生成一页 HTML 框图（`assets/audit-map.html`），用方块说明每部分代码做什么、彼此是什么关系。图表库从 CDN 加载；加载不到时，同样的内容以文字列出。
 
 它不带回合流程的副本。框架承诺了什么，它去读[回合流程](./flow.md)；有哪些 runtime，它从当前的 `PLUGIN.md` 和 `RUNTIME.md` 里读。

@@ -16,14 +16,14 @@ Learn these four terms first. They are used all the way through this page:
 The player types "I go explore the swamp" and presses send. Then these things happen:
 
 1. **The frontend sends a request.** The browser sends the sentence as a `say` action to `POST /api/actions`. The connection stays open. The server keeps sending events down it one at a time (this is called SSE), and the frontend updates the screen a little with each event.
-2. **The server queues the request.** A session does only one thing at a time. Before the server locks the session, it waits for any background work from the previous turn to finish, if that work declared that the next turn must read its result.
+2. **The server queues the request.** Foreground executions and commits are serialized per session. Before taking the session lock, the server waits within the allowed budget for background jobs that require it. Background computation can continue outside the lock, but its commit still queues.
 3. **The plugins for this turn are fixed.** The version of each plugin and the tools it provides are fixed when the turn starts, and they stay the same until the turn ends. If a plugin is hot-reloaded in the middle of a turn, the change takes effect only in the next turn.
 4. **The kernel picks the runtimes for this turn.** Each runtime declares when it runs: every turn, every few turns, when an event happens, or only when it is called by name. The kernel picks runtimes by these declarations.
 5. **The runtimes run in four stages, one after another.** `pre-turn` (prepare the material), `narrative` (write the story text), `post-turn` (sort out what happened in this turn), and `audit` (check). A stage must finish completely before the next one starts. Inside one stage, runtimes that do not depend on each other run at the same time.
 6. **A runtime runs.** The kernel first checks that everything the runtime needs is there. Then it prepares what the runtime can see: the world setting, the earlier conversation, the results of upstream runtimes, and the player's sentence. An `agent` gives all of this to the model. The model can call tools until it gives a final result. A `function` simply runs its function.
-7. **Results become proposals.** Story text, forms, state changes, and the plugin's own data all become proposals first. At this point, nothing has been written to the database yet.
-8. **One write.** The kernel checks all the proposals and writes them in one database transaction. The player's input, the conversation log, and the session's turn count are written in the same transaction. Either everything is written, or nothing is.
-9. **The frontend is told.** After a successful write, the server sends events: the story text, any form to fill in, and the panel data that changed. The frontend uses them to update the message area and the right-hand panel.
+7. **Domain writes are staged.** Story text, forms and plugin data become proposals and have not taken effect yet. Execution results, diagnostics and confirmed player input may already be saved separately; those records do not confirm that domain writes committed.
+8. **The save is committed.** Accepted proposals, the execution journal and the session clock share one transaction. With a valid story, optional runtime writes can be discarded separately. A rejected story or setup unit, or an infrastructure failure, rolls back the whole transaction. Player input saved separately is retained.
+9. **The screen is confirmed.** Story text can stream before commit. Committed events provide the final text, forms and panel data. The frontend confirms that content, or removes results that did not commit.
 10. **Wrap-up.** The last event is `execution.completed`. Its `committed` field says whether this turn was really saved. Slow wrap-up work, such as tidying up memory, can move to the background, so the player does not have to wait for it.
 
 The start is a little different. A new session starts in the "setup" phase (`setup`). Only the runtimes for setup run during this phase, for example the one that generates the character form. When all the setup is done, the session enters the "playing" phase (`playing`) and starts the four-stage turns described above.
@@ -962,7 +962,7 @@ The backend is chosen with `STORE_BACKEND=memory|sqlite|pg`. The default is `sql
 
 **Characters.** The character model is first-class data managed by the kernel.
 
-- `CharacterSchema` stores the open character types and attribute definitions. Character records are validated against this schema. There is always only one `player`.
+- `CharacterSchema` stores the open character types and attribute definitions; character records are validated against it. A session can have several `type: player` characters. The primary seat's current character determines whom the story follows; see [Seats](../reference/world-model.md#seats).
 - `character.schema.set` is versioned by the kernel, and it validates existing characters. `character.upsert` uses the same validator.
 - A plugin does not keep a copy of the world schema or of the characters in its own private data.
 

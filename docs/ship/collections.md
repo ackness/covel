@@ -54,7 +54,7 @@ pnpm validate:collection ~/tidelamp-pack
 ```
 
 ```text
-✓ tidelamp-pack: 1 plugin(s), 1 world(s) checked against Covel 0.0.51
+✓ tidelamp-pack: 1 plugin(s), 1 world(s) checked against Covel 0.0.53
 ```
 
 清单是空的时候，它会这样提示：

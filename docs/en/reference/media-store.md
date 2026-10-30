@@ -63,7 +63,7 @@ Plugins use `ctx.media.put()` to store bytes, `ctx.media.get()` to read bytes, a
 
 **U+0000 in metadata**
 
-- All four backends remove the U+0000 character when they save metadata JSON. They do not change the object the caller passed in.
+- Memory, SQLite and PostgreSQL all remove the U+0000 character when they save metadata JSON. They do not change the object the caller passed in.
 - If removing the characters makes two keys the same, the request is rejected before the file is made public.
 - The file's own bytes are not changed, including bytes whose value is 0. The ID is decided by the original bytes.
 
@@ -336,7 +336,7 @@ Conditions for using this endpoint:
 | `COVEL_MEDIA_CLEANUP_ENABLED=true` is set                         | `403`. The endpoint is off by default              |
 | With `dryRun: false`, the request header `X-Confirm-Cleanup: yes` | `400`                                              |
 
-A `self` deployment keeps the single-user, local behavior, and it does not need a token. Each session has a limit on the number of rows it can scan (`scanLimit`, default 1,000). If a session goes over, the endpoint refuses to run. It does not quietly scan only part of the data.
+A personal host needs no additional token for this route after the host and local-access checks. Production `self` with MemoryStore is browser-private and still requires an operator token; `self` alone does not grant access. The [host profile](../internals/security.md#host-profile) defines these rules centrally. Each session has a limit on the number of rows it can scan (`scanLimit`, default 1,000). If a session goes over, the endpoint refuses to run. It does not quietly scan only part of the data.
 
 **`protectedIds` is a plan, not the final decision**
 

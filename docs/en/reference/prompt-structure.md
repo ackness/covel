@@ -231,6 +231,8 @@ contributes:
 Dynamic content is provided through `prompt.segment@1`. The root manifest declares `contributes.extensions`. The entry calls `provideExtension`, and the handler returns an array of segments:
 
 ```js
+import { modelFacingJson } from "@covel/plugin-handlers-utils";
+
 api.provideExtension("prompt.segment@1", "status", {
   async handler(input, ctx) {
     const status = await ctx.pluginData.get("status", "current");
@@ -238,7 +240,7 @@ api.provideExtension("prompt.segment@1", "status", {
       ? [
           {
             id: "current-status",
-            content: JSON.stringify(status),
+            content: JSON.stringify(modelFacingJson(status)),
             position: "pre-history",
             audience: "self",
             volatility: "turn",
@@ -272,7 +274,7 @@ api.provideExtension("prompt.segment@1", "status", {
 | `[COMPLETION]` | The completion convention. There are three forms depending on how the runtime ends: a runtime with an output schema ends with JSON or a completion tool; a story runtime ends with the story text in its reply; the rest end with `runtime-done` |
 
 - If the `systemPrompt` returned by a hook does not start with it, the framework puts it back at the very front. So a trimming hook that returns only its own body does not need to remove it, and it cannot remove it.
-- `frameworkHead` in the payload is a read-only copy of this text.
+- `frameworkHead` is an internal assembly field. It is not exposed in the Hook payload or accepted as a replacement.
 - Without this segment, the model would not know what language the session uses.
 - The raw localized `promptTemplate`, the resolved `inputSlots`, and the character summary that a hook receives are read-only sources. Hooks cannot replace them.
 - When a runtime is suspended, its input slots are frozen into the continuation. On resume, the same inputs are used.
@@ -524,7 +526,7 @@ Apart from templates and bodies, the assembly code writes a few sentences of its
 
 All of these are written in the session's instruction language. A Simplified Chinese session reads Chinese, and every other session reads English. Tag names, markers such as `[retry N]`, and IDs do not change. For the full list, the way plugin code handles this, and the few kinds of text that are not translated, see [i18n · text that code puts into prompts](./i18n.md#text-the-code-puts-into-prompts).
 
-Tool definitions, the results returned to the model inside the tool loop, and the reasons for refusals are always in English.
+Tool definitions and error messages remain in English. Business content can use the session's language; the framework's `staged` notice uses the instruction language. See [Tool results](./tools.md#unified-result-format-and-error-codes).
 
 ## 7. Related implementation
 

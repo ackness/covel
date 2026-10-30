@@ -148,14 +148,15 @@ html[data-theme="ember"].dark {
 
 When you import, Covel checks the theme file. If it does not meet the rules, the import is refused, and the reason is given.
 
-| Rule                                                                                                                          | Message when it is broken                                          |
-| ----------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------ |
-| The theme ID uses only lowercase letters, numbers and hyphens, starts with a letter or number, and is 2 to 48 characters long | `Theme id must use lowercase letters, numbers, and hyphens.`       |
-| A file uses only one theme ID                                                                                                 | `Theme CSS must use exactly one data-theme id.`                    |
-| Every rule starts with `html[data-theme="your ID"]`                                                                           | `Every theme rule must be scoped to [data-theme="…"] — found "…".` |
-| `@import` is not allowed                                                                                                      | `Theme CSS must not use @import.`                                  |
+<!-- prettier-ignore -->
+| Rule | Message when it is broken |
+| --- | --- |
+| The theme ID uses only lowercase letters, numbers and hyphens, starts with a letter or number, and is 2 to 48 characters long | Use 2–48 lowercase letters, numbers, or hyphens for the theme ID. |
+| A file uses only one theme ID | A theme file must declare exactly one theme ID. |
+| Every ordinary CSS selector is scoped to `[data-theme="your-ID"]` | Scope every rule to `[data-theme="…"]`. The message names the unscoped selector. |
+| `@import` is not allowed | Theme CSS cannot use `@import`. |
 
-Also, do not use the IDs of the built-in themes (`panel`, `book`, `stage`, `paper`, `modern`, `abyss`, `aurora`). Built-in themes always take priority, and a custom theme with the same name is dropped.
+Also, do not use the IDs of the built-in themes (`panel`, `book`, `stage`, `paper`, `modern`, `abyss`, `aurora`). Import rejects these IDs and asks you to choose another.
 
 ### 4. Which Variables to Change First
 
@@ -264,7 +265,7 @@ When you write a font, always list a few candidates, and finish with `serif` or 
 
 Two points to note:
 
-- The fonts that come with the app contain only Latin letters. Chinese body text relies on system fonts.
+- The Latin fonts above contain Latin characters only. The bundled `"ZCOOL XiaoWei"` supports Chinese titles; Chinese body text usually uses system fonts.
 - `"ZCOOL XiaoWei"` has only one weight. Do not set it to bold.
 
 ## Choose the Layout of the Interface
@@ -419,18 +420,19 @@ A theme should express one direction, and the result will be more complete. Thre
 
 ## When Things Do Not Work as Expected
 
-| Symptom                                                                                                | Cause and fix                                                                                                                                         |
-| ------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
-| On import, the message `Theme CSS must include a selector like html[data-theme="your-theme"].` appears | The file has no `data-theme` selector at all. Every rule must start with one                                                                          |
-| On import, the message `Every theme rule must be scoped to …` appears                                  | A rule does not start with your theme ID. The message quotes the start of that rule                                                                   |
-| On import, the message `Theme CSS must use exactly one data-theme id that matches "…".` appears        | The `id` in the JSON differs from the theme ID in `cssText`                                                                                           |
-| On import, the message `Theme CSS must not use @import.` appears                                       | Delete the `@import`. For how to write fonts, see the [Fonts](#fonts) section above                                                                   |
-| Import succeeds, but the theme does not appear, or it disappears later                                 | You used the ID of a built-in theme. Choose another ID                                                                                                |
-| An imported CSS theme cannot switch to dark mode                                                       | The file has no `html[data-theme="…"].dark` block. Add it and import again                                                                            |
-| You changed a variable, but the interface did not change                                               | You changed the same item in "Fine tuning", and that value takes priority there. Click the reset button for that item, or "Reset all"                 |
-| After switching themes, the colors still look odd                                                      | The same cause as above. Changes in "Fine tuning" do not follow the theme                                                                             |
-| Some parts of your color set show the default look                                                     | A color set does not inherit from other members of its style. A variable you do not write uses the framework's base value, so write them all yourself |
-| Chinese text does not use the font you wrote                                                           | The player's system does not have that font. The bundled fonts contain only Latin letters, so list system fonts as candidates for Chinese text        |
+<!-- prettier-ignore -->
+| Symptom | Cause and fix |
+| --- | --- |
+| On import, the message `Theme CSS must include a selector such as html[data-theme="your-theme"].` appears | The file has no `data-theme` selector. Add the theme scope to ordinary CSS selectors |
+| On import, the message `Scope every rule to …` appears | A selector is not scoped to your theme ID. The message names it |
+| On import, the message `CSS selectors must use the theme ID …` appears | The `id` in the JSON differs from the theme ID in `cssText` |
+| On import, the message `Theme CSS cannot use @import.` appears | Delete the `@import`. For how to write fonts, see the [Fonts](#fonts) section above |
+| On import, the message `… is a built-in theme ID. Choose another ID.` appears | You used the ID of a built-in theme. Choose another ID |
+| An imported CSS theme cannot switch to dark mode | The file has no `html[data-theme="…"].dark` block. Add it and import again |
+| You changed a variable, but the interface did not change | You changed the same item in "Fine tuning", and that value takes priority there. Click the reset button for that item, or "Reset all" |
+| After switching themes, the colors still look odd | The same cause as above. Changes in "Fine tuning" do not follow the theme |
+| Some parts of your color set show the default look | A color set does not inherit from other members of its style. A variable you do not write uses the framework's base value, so write them all yourself |
+| Chinese text does not use the font you wrote | The player's system does not have that font. The bundled Latin fonts do not include Chinese; list system fonts as fallbacks for Chinese body text |
 
 ## What Next
 

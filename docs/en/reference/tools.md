@@ -1686,13 +1686,18 @@ Write a plugin tool as a factory function. The factory's argument is `covel.tool
 export default function ({ tool, z, shortId }) {
   return tool({
     name: "my-tool-name",
-    description: "Tool description (injected into the LLM system prompt)",
+    description: "Create a short ID for one item.",
     parameters: z.object({
-      param1: z.string().describe("Parameter description"),
+      param1: z.string().describe("Item label"),
     }),
     execute: async (params, context) => {
       // context: { sessionId, turnId, pluginId, runtimeId }
-      const id = shortId("item", params.param1, context.sessionId);
+      const id = shortId(
+        "item",
+        params.param1,
+        context.sessionId,
+        context.random,
+      );
       return { id, result: params.param1 };
     },
   });
@@ -1742,7 +1747,7 @@ const register: PluginEntryFactory = (covel) => {
   covel.registerTool(
     covel.toolkit.tool({
       name: "my-tool-name",
-      description: "Tool description",
+      description: "Echo the supplied value.",
       parameters: covel.toolkit.z.object({ param1: covel.toolkit.z.string() }),
       execute: async ({ param1 }) => ({ result: param1 }),
     }),

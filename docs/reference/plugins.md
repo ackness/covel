@@ -641,12 +641,12 @@ Agent 的副作用只来自工具：模型能写什么，以 `agent.tools` 白�
 
 ```ts
 const result = await ctx.agents?.run({
-  target: { contract: "gate-actor@1" }, // 或 { runtimeId: "my-plugin/guard" }
+  target: { contract: "gate-actor@1" }, // or { runtimeId: "my-plugin/guard" }
   brief: "A stranger asks to pass the gate.",
   data: { stranger: "Mara" },
   budget: { maxSteps: 4, timeoutMs: 20000 },
 });
-// { ok: true, output, stopReason, usage? } 或 { ok: false, error: { code, message }, stopReason? }
+// { ok: true, output, stopReason, usage? } or { ok: false, error: { code, message }, stopReason? }
 ```
 
 <!-- prettier-ignore -->
@@ -888,7 +888,7 @@ homepage: https://example.com/tidefall
 - 在本次执行缓冲新的写入之前，重复读取返回的是同一份对象。循环里逐个查角色不会每次复制整份列表。
 - 这些领域里合法的上游 proposals，以及本 runtime 已经缓冲的 proposals，对后续的读取可见。
 - 写入通过 proposals，在提交时统一校验。
-- `ctx.world.dimensions` 不一样：它是提供者发布的公共当前值快照，遵守下面[动态维度](#动态维度)里单独的冻结规则。
+- `ctx.world.dimensions` 以提供者发布的冻结快照为底本，并叠加该视图可见的合法维度 proposal。公共读取与执行内预览的区别见下面的[动态维度](#动态维度)。
 - `ctx.world.seats` 是会话的座位，同样冻结。proposal 不改它，玩家用[切换接口](./api.md#会话座位)换当前角色，下一回合生效。
 
 **按名字找角色。** 角色除 `name` 外可以有 `aliases`（同一个人的其他叫法）。
@@ -1279,9 +1279,9 @@ pnpm lint
 contributes:
   datasets:
     journal:
-      schema: ./schemas/journal.json # 必填：包内相对路径，.json
-      key: id # 可选：记录里充当键的顶层字段
-      ops: [upsertItem, delete] # 可选：允许的操作，默认全部
+      schema: ./schemas/journal.json # required: a package-relative .json path
+      key: id # optional: the top-level record field that is the key
+      ops: [upsertItem, delete] # optional: allowed operations, default all
 ```
 
 - **名字就是 namespace。** `journal` 数据集对应插件数据的 `journal` 空间。名字用字母开头，只含字母、数字、`_`、`-`，最长 64 个字符；以 `_` 开头的空间留给内核，不能声明。
@@ -1312,14 +1312,14 @@ contributes:
 contributes:
   actionKinds:
     - name: whisper
-      roles: [player] # 可选：哪些座位身份能用，默认 [player]
-      text: required # 可选：required / optional（默认）/ none
-      actor: true # 可选：是否以角色的身份进行，默认 true
-      schema: ./schemas/whisper.json # 可选：fields 要符合的 JSON Schema
+      roles: [player] # optional: which seat roles may use it, default [player]
+      text: required # optional: required / optional (default) / none
+      actor: true # optional: whether it is taken as a character, default true
+      schema: ./schemas/whisper.json # optional: the JSON Schema fields must match
       display:
-        label: { zh: 耳语, en: whispers }
+        label: whispers
         icon: ear
-        placeholder: { zh: 对谁说悄悄话, en: Whisper to someone }
+        placeholder: Whisper to someone
 ```
 
 - **线上的类型名是 `<pluginId>/<name>`。** 上例在 `whisper-pack` 里就是 `whisper-pack/whisper`。两个插件可以用同一个 `name`，不会冲突。`name` 用小写 kebab-case，不能是基础类型的名字，在包里不能重复。
@@ -1334,7 +1334,7 @@ contributes:
 
 所有以 `_` 开头的 namespace 都保留给内核。
 
-- 插件不能通过通用的 plugin-data API 或 proposal（`set`、`update`、`delete` 都一样）写入或删除它们，包括没见过的 `_` 名字和旧的 `_memory`。
+- 通用 REST 接口和内置模型数据工具不能写入或删除任何 `_` 命名空间。插件 proposal 也受此限制，唯一例外是所属插件代码写自己的 `_hidden.*`；没见过的 `_` 名字和旧的 `_memory` 仍受保护。
 - `_hidden.<namespace>` 存放 `visibility: hidden` 的世界数据，以及插件在剧情中追加的隐藏内容。只有所属插件的 runtime 能读，也只有所属插件自己的代码能写。
 - 插件日志通过受限的 logger API 产生。业务数据使用 `blocks`、`definitions` 这样的普通名字。
 - `__kernel:<subsystem>` 是另一种 owner 分区，插件绑定的读取接口访问不到它。

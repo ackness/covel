@@ -14,44 +14,44 @@ Each English term has only one Chinese term. The Chinese docs, the UI text, and 
 | Action | 行动 | One item of a player's submission: from which seat, as which character, what kind of thing (`submit_actions`). |
 | Action kind | 行动类型 | A kind of action: the kernel's `say`, `act` and so on, or a plugin's `<pluginId>/<name>`. |
 | Alias | 别名 | Another name for the same character (`aliases`). It is not a compatibility name for a field or ID. |
-| Binding | 绑定 |  |
+| Binding | 绑定 | An `io.inputs` connection that supplies an upstream value and its provenance to a runtime. |
 | Bundled plugin | 内置插件 | A plugin that ships with Covel. Not the same as `kind: core`. |
 | Capability | 能力标签 | The `tag` of a model route (`text`, `image`, and so on). Plugins are found by **Contract**, not by capability tag. |
 | Capability snapshot | 能力快照 | The declaration bounds in an install receipt; see [trusted sources](./plugin-installation.md#trusted-sources). |
-| Collection | 合集 |  |
+| Collection | 合集 | An install manifest that distributes worlds and plugins together; distinct from a Pack used during play. |
 | Contract | 契约 | A versioned ID, for example `narrative-engine@2`. |
 | Credits | 作者信息 | The `author`, `license`, and `homepage` fields of a package. |
 | Dataset | 数据集 | Typed plugin data a plugin declares (`contributes.datasets`). Not the install-time **Collection**. |
 | Deployment form | 部署形态 | The desktop app, the self-hosted web app, the official web app. Not `DEPLOYMENT_TIER`. |
 | Edition | 语言版本 | One language of a world: `defaultLocale`, and the language of each `world.<locale>.yaml` or `WORLD.<locale>.md` at the root. |
-| Fault latch | 熔断 | A session-local pause after consecutive self-caused auxiliary plugin faults, cleared by the player or a process restart. See the [protocol](./protocol.md#plugin-fault-latch). |
 | Execution | 执行 | One scheduled run and its commit plan; player turns, manual calls and background jobs can each start one. |
+| Fault latch | 熔断 | A session-local pause after consecutive self-caused auxiliary plugin faults, cleared by the player or a process restart. See the [protocol](./protocol.md#plugin-fault-latch). |
 | Finalizer step | 收尾步骤 | The one request, after an agent runs out of steps, that turns tools off and asks for the answer now. |
-| Kernel | 内核 |  |
+| Kernel | 内核 | The framework core that schedules work, assembles context, runs tools, validates proposals and commits writes. |
 | Local model relay | 本地模型中继 | On a shared form, the server reaches a model on the player's computer or local network through the player's browser. See [Security boundaries](../internals/security.md#local-model-relay). |
-| Official web app | 官方网页版 |  |
+| Official web app | 官方网页版 | A hosted product that is not yet supported; browser-private infrastructure alone is not the complete product. |
 | Operation-based write | 操作式写入 | Submitting a list of operations (`plugin.data.update`) instead of a computed whole value. |
-| Pack | 玩法包 |  |
+| Pack | 玩法包 | A player-selectable set of installed plugins, not an installer. |
 | Perspective | 视角 | Whose point of view the narration takes: character-centred first, second or third person, an omniscient narrator, or a game master. |
-| PluginType | 插件类型 |  |
+| Plugin kind | 插件类型 | The package's `kind` controls default selection; distinct from runtime type and discovery source. |
 | Presence record | 在场记录 | The IDs of the characters present, recorded on a story message (`presentCharacterIds`). |
-| Preset | 预设 |  |
-| Proposal | 提案 |  |
-| Provider | 提供商 |  |
+| Preset | 预设 | An internal model connection plan containing the provider, endpoint, protocol and model ID. |
+| Proposal | 提案 | A runtime’s request to write data, persisted only after kernel validation. |
+| Provider | 提供商 | The model service selected through slot routing. |
 | Recursive call | 嵌套调用 | A same-package runtime call whose writes commit with its parent; distinct from a read-only sub-agent. |
 | Roleplay notes | 扮演说明 | What the world author writes in the `blueprint` field of a character record to tell the narrative how to play the character; read by Character Profiles. Not the character itself. |
 | Runtime | runtime | Kept in English. It means one execution unit in a manifest, not the general word "runtime". |
-| Runtime manifest | runtime 清单 |  |
+| Runtime manifest | runtime 清单 | The internal execution structure compiled from an author’s manifest, not the authoring format. |
 | Seat | 座位 | Who plays in a session, in which role, and which characters they control (`session.seats`). |
 | Segment | 提示词段 | One section of an assembled prompt. A part of a story is a **Story segment**. |
 | Server-scoped setting | 服务端设置 | A setting with `scope: "server"`. All other settings are per-device settings. |
-| Session | 会话 |  |
+| Session | 会话 | One game played in a world, with its own characters, plugin data and progress. |
 | Slot | 槽位 | In the settings UI it is called "model role". |
 | Stop reason | 结束原因 | How an agent tool loop ended (`RuntimeResult.stop.reason`). |
 | Story segment | 故事段落 | One part of a story output: narration, dialogue or action. Called just "segment" (段落) when the context is clear. |
 | Sub-agent | 子 agent | An agent runtime another runtime runs inside its own execution, returning output only. |
 | Tool result | 工具结果 | Code-facing content and model-facing feedback have different shapes; success does not confirm persistence. |
-| Trigger mode | 触发模式 |  |
+| Trigger mode | 触发模式 | How a runtime is triggered: `auto`, `manual` or `event`. |
 | Trusted source | 可信来源 | A GitHub source chosen by the instance owner or operator to reduce approval prompts. |
 | Turn | 回合 | "This turn" is 本回合 in Chinese. |
 | World | 世界 | A world's installation package is called a "world package". |
@@ -63,7 +63,7 @@ These are the words used in prompt bodies to describe what a runtime reads and w
 <!-- prettier-ignore -->
 | Term | Chinese | Meaning | Do not use these words for it |
 | --- | --- | --- | --- |
-| turn | 回合 | One message from the player, and everything each runtime does for it | round |
+| turn | 回合 | One player action submission and the pipeline each runtime runs for it | round |
 | narrative | 叙事 | The story text that the narrative runtime writes in this turn | story text, prose, the output |
 | player | 玩家 | The person who plays the game | user |
 | player character | 玩家角色 | The character the player controls | protagonist, hero, PC |
@@ -111,13 +111,13 @@ A data path: a runtime says "I want to read another runtime's result". It is wri
 - Inside the same package, the upstream runtime is found by runtime ID. Across packages, it is found by a versioned contract.
 - A JSON Pointer (RFC 6901) can take only part of the result.
 - The value taken is checked against `accepts`, and then it is passed to `ctx.inputs` or to the agent's prompt, together with its source.
-- With `scope: committed`, it reads a result that an earlier execution has already saved, not the result of this execution.
+- With `scope: committed`, it reads a result saved by an earlier execution rather than this one. This scope cannot be combined with `select`.
 
 See: [plugin field reference](./plugins.md), [turn pipeline](../internals/flow.md), `packages/shared/src/types/runtime-scheduling.ts`.
 
 ## Bundled plugin
 
-A bundled plugin ships with Covel and lives under `plugins/`. Its source is `builtin`, so its code runs without player approval; a community plugin's code needs the player's approval. The bundled plugins are demos, not part of the framework: the framework must keep working when any one of them is removed. A bundled plugin is not the same thing as a `kind: core` plugin: `kind` decides whether a plugin is added to every game by default.
+A bundled plugin ships with Covel and lives under `plugins/`. Its source is `builtin`, so its code runs without player approval; community code follows the [approval and trusted-source rules](./plugin-installation.md#trusted-sources). The bundled plugins are demos, not part of the framework: the framework must keep working when any one of them is removed. A bundled plugin is not the same thing as a `kind: core` plugin: `kind` decides whether a plugin is added to every game by default.
 
 See: [built-in plugins and features](../builtin/index.md), [plugin field reference](./plugins.md).
 
@@ -164,6 +164,14 @@ It is not the same thing as the deployment tier (`DEPLOYMENT_TIER`): the tier de
 
 See: [storage](../internals/storage.md).
 
+## Execution
+
+One invocation of the execution pipeline, with an identity, a frozen registry and read baseline, runtime results, and a commit plan. Its `execution.origin` records why it started, such as a player action, a manual call, a background job, or a recursive call. Resume continues the suspended logical work with a new `executionId` and `origin: "resume"`, while retaining `logicalTurnId` and the counting responsibility.
+
+`executionId` identifies a pipeline dispatch, `turnId` groups turn artifacts, and `runId` identifies one runtime attempt. Resume retains the source `turnId`, so it cannot distinguish individual resume dispatches. None of these IDs is the logical turn number. Setup, the opening and manual or background work do not advance `completedPlayerTurns`; a committed player turn advances it at most once.
+
+See: [Turn pipeline](../internals/flow.md), [execution and commit](./protocol.md#execution-and-commit-are-two-steps).
+
 ## Extension point
 
 A versioned connection point defined by the kernel, which plugins implement, for example `prompt.segment@1` or `ui.slot@1`.
@@ -173,14 +181,6 @@ A plugin declares which one it implements in `contributes.extensions`, and then 
 It is different from a plugin's **Contract**. A Contract is defined by a plugin for other plugins to use.
 
 See: [extension points](./extension-points.md), [plugin extensions and communication](./plugin-extensions.md).
-
-## Execution
-
-One invocation of the execution pipeline, with an identity, a frozen registry and read baseline, runtime results, and a commit plan. Its `execution.origin` records why it started, such as a player action, a manual call, a background job, or a recursive call. Resuming continues the suspended execution.
-
-`turnId` identifies the execution; `runId` identifies one runtime attempt. Neither is the logical turn number. Setup, the opening and manual or background work do not advance `completedPlayerTurns`; a committed player turn advances it at most once.
-
-See: [Turn pipeline](../internals/flow.md), [execution and commit](./protocol.md#execution-and-commit-are-two-steps).
 
 ## Finalizer step
 
@@ -357,7 +357,7 @@ See: [Plugin reference · Sub-agents](./plugins.md#sub-agents), [the delegate to
 
 The result of one tool call. Plugin code can return business content directly or use the SDK's `covel.tool-result` to separate content, model feedback and staged effects. The executor formats model feedback as a success envelope or an `error` envelope. A staged write can still be rejected at commit.
 
-See: [Tool result contract](./tools.md#工具结果契约tool-result).
+See: [Tool result contract](./tools.md#results-and-writes).
 
 ## Trigger mode
 
@@ -374,7 +374,7 @@ See: [plugin field reference](./plugins.md).
 
 One loop of the session: the player's input → decide which runtimes to trigger → run by stage (the next stage starts only after the current one is fully done; inside a stage, runtimes run in dependency order) → validate proposals → commit → push to the interface over SSE.
 
-Each execution has an opaque `turnId`. A committed player turn advances `completedPlayerTurns`, a count that only goes up, at most once per logical turn. Which group of stages runs is decided by `session.phase`: `setup` runs the setup stage, and `playing` runs `pre-turn → narrative → post-turn → audit`.
+Execution artifacts carry an opaque `turnId`. Resume retains the source `turnId` and uses a new `executionId` for its dispatch. A committed player turn advances `completedPlayerTurns`, a count that only goes up, at most once per logical turn. Which group of stages runs is decided by `session.phase`: `setup` runs the setup stage, and `playing` runs `pre-turn → narrative → post-turn → audit`.
 
 See: [turn pipeline](../internals/flow.md), [SSE protocol](./protocol.md).
 

@@ -49,7 +49,7 @@ It does not start the app, and it does not call a model. Its method is to treat 
 
 - Each finding is a counterexample that can be matched line by line in the code.
 - For logic that cannot be judged by reading the code alone, it writes a small script and feeds it inputs to see the outputs. The scripts and logs are kept in `debugs/audits/`.
-- The report is written to `devs/audits/`. Neither folder is committed to the repository.
+- The report is written to `devs/docs/audits/`. Neither folder is committed to the repository.
 - When you ask for it, it also produces an HTML block-diagram page (`assets/audit-map.html`) that uses boxes to show what each part of the code does and how the parts relate. The chart library loads from a CDN. If it cannot load, the same content is listed as text.
 
 It does not carry its own copy of the turn flow. For what the framework promises, it reads [Turn flow](./flow.md). For which runtimes exist, it reads the current `PLUGIN.md` and `RUNTIME.md` files.

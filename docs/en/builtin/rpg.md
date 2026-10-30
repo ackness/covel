@@ -117,7 +117,7 @@ It has no settings you can change.
 
 If this file is missing, the plugin uses every numeric attribute in the world (category `abilities`, with `min` and `max`) for point buy, and adds 4 extra points. Resources such as health and stamina are not included automatically.
 
-Each attribute `id` must match the one defined in `world.yaml`. A mismatch produces an `attribute-reference` error in `pnpm validate:world`; session import also checks it. For how to write and check the rules, see [Point buy and dice checks](../recipes/point-buy.md). For how data gets into a world package, see [World data](../reference/world-data.md).
+Each attribute `id` must match the one defined in `world.yaml`. `pnpm validate:world` identifies attributes that do not meet these requirements; session import also checks them. For how to write and check the rules, see [Point buy and dice checks](../recipes/point-buy.md). For how data gets into a world package, see [World data](../reference/world-data.md).
 
 ## Quest Log (`core-quest`)
 
@@ -159,7 +159,7 @@ Items that the story clearly gives you, takes from you, or equips are recorded i
 - Type `/bag` (or `/inventory`) to see your current bag and open the panel.
 - The session summary says "Your bag contains N item entries."
 
-Only item changes that clearly happen in the story are recorded. Inventory dataset (数据集) records are checked when the turn is saved. An invalid record skips that bookkeeping step for this turn; the story is still saved.
+Only item changes that clearly happen in the story are recorded. Inventory dataset records are checked when the turn is saved. An invalid record skips that bookkeeping step for this turn; the story is still saved.
 
 ### When it is on
 
@@ -189,7 +189,7 @@ Records your relationship with each NPC. When you have a clear interaction with 
 - An "Affinity" panel on the right, with one row per NPC showing the score and level. Scores range from -100 to 100, and 0 is neutral.
 - In a turn where a score changes, an "Affinity changes" note appears in the story text.
 
-Affinity dataset (数据集) records are checked when the turn is saved. An invalid record skips that bookkeeping step for this turn; the story is still saved.
+Affinity dataset records are checked when the turn is saved. An invalid record skips that bookkeeping step for this turn; the story is still saved.
 
 Levels are set by score:
 

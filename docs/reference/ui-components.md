@@ -93,19 +93,19 @@
 
 ### Interactive
 
-| 组件              | 用途                                                                                                                                                | 主要属性                                                                                                                                                                                                                                                                           |
-| ----------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `Button`          | 可以点击的按钮。插件声明的交互会在按钮上显示“已选中”的反馈。                                                                                        | `label` _(I18nText)_、`variant`（`default` / `primary` / `danger` / `ghost`）、`size`（`compact` / `md`）；`on.click.action` = `draftMessage` / `selectChoice` / …                                                                                                                 |
-| `ChoiceList`      | 一组让玩家挑选的选项。它给里面的 `Choice` 编号；序号显不显示、显示成什么（数字、汉字数字、键帽），由当前主题决定。                                  | 子元素：`Choice`                                                                                                                                                                                                                                                                   |
-| `Choice`          | 一个选项，渲染成一个按钮。它的草稿排队等待发送时显示“已选”，它的 runtime 调用进行中时显示“忙”。在当前回合里，数字键 1–9 点击第 n 个可见的选项。     | `title` _(I18nText，必填)_、`description` _(I18nText)_、`tag` _(I18nText)_、`tone`（给 tag 上色：`primary` / `info` / `success` / `warning` / `danger`，或一个 `Badge` 的颜色名）；`on.click.action` = `draftMessage` / `selectChoice` / `invokeRuntime` / …                       |
-| `Input`           | 单行文本输入。                                                                                                                                      | `label` _(I18nText)_、`placeholder` _(I18nText)_、`value`（用 `$bindState` 绑定）                                                                                                                                                                                                  |
-| `Textarea`        | 多行文本输入（等宽字体，可调大小）。                                                                                                                | `label` _(I18nText)_、`placeholder` _(I18nText)_、`rows`（数字，默认 `8`）、`value`（用 `$bindState` 绑定）                                                                                                                                                                        |
-| `SearchInput`     | 带搜索图标的输入框。                                                                                                                                | `placeholder` _(I18nText)_、`value`                                                                                                                                                                                                                                                |
-| `Select`          | 下拉选择。                                                                                                                                          | `label` _(I18nText)_、`options`（`[{ value, label }]`）、`value`                                                                                                                                                                                                                   |
-| `Switch`          | 布尔开关。                                                                                                                                          | `label` _(I18nText)_、`checked`（用 `$bindState` 绑定）                                                                                                                                                                                                                            |
-| `FilterBar`       | 横向的切换组（多选一）。                                                                                                                            | `options`（`[{ value, label, icon? }]`）、`value`                                                                                                                                                                                                                                  |
-| `Tabs`            | 页签条。用 `$bindState` 绑定当前值；可选的 `counts` 在标签后面加上 `(N)`。                                                                          | `tabs`（`[{ value, label, icon?, color? }]`）、`value`、`counts`（`Record<value, number>`）                                                                                                                                                                                        |
-| `FilterContainer` | 保存搜索词和当前页签，为过滤后的每行渲染一个子树。 | `items`（数组绑定）、`itemTemplate`（节点）、`searchPlaceholder`、`searchFields`（path[]）、`filterField`、`filterTabs`、`itemKeyField`、`emptyMessage`、`showCounts`、`footer`（字符串或 `{ component, props }`） |
+| 组件              | 用途                                                                                                                                            | 主要属性                                                                                                                                                                                                                                                     |
+| ----------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `Button`          | 可以点击的按钮。插件声明的交互会在按钮上显示“已选中”的反馈。                                                                                    | `label` _(I18nText)_、`variant`（`default` / `primary` / `danger` / `ghost`）、`size`（`compact` / `md`）；`on.click.action` = `draftMessage` / `selectChoice` / …                                                                                           |
+| `ChoiceList`      | 一组让玩家挑选的选项。它给里面的 `Choice` 编号；序号显不显示、显示成什么（数字、汉字数字、键帽），由当前主题决定。                              | 子元素：`Choice`                                                                                                                                                                                                                                             |
+| `Choice`          | 一个选项，渲染成一个按钮。它的草稿排队等待发送时显示“已选”，它的 runtime 调用进行中时显示“忙”。在当前回合里，数字键 1–9 点击第 n 个可见的选项。 | `title` _(I18nText，必填)_、`description` _(I18nText)_、`tag` _(I18nText)_、`tone`（给 tag 上色：`primary` / `info` / `success` / `warning` / `danger`，或一个 `Badge` 的颜色名）；`on.click.action` = `draftMessage` / `selectChoice` / `invokeRuntime` / … |
+| `Input`           | 单行文本输入。                                                                                                                                  | `label` _(I18nText)_、`placeholder` _(I18nText)_、`value`（用 `$bindState` 绑定）                                                                                                                                                                            |
+| `Textarea`        | 多行文本输入（等宽字体，可调大小）。                                                                                                            | `label` _(I18nText)_、`placeholder` _(I18nText)_、`rows`（数字，默认 `8`）、`value`（用 `$bindState` 绑定）                                                                                                                                                  |
+| `SearchInput`     | 带搜索图标的输入框。                                                                                                                            | `placeholder` _(I18nText)_、`value`                                                                                                                                                                                                                          |
+| `Select`          | 下拉选择。                                                                                                                                      | `label` _(I18nText)_、`options`（`[{ value, label }]`）、`value`                                                                                                                                                                                             |
+| `Switch`          | 布尔开关。                                                                                                                                      | `label` _(I18nText)_、`checked`（用 `$bindState` 绑定）                                                                                                                                                                                                      |
+| `FilterBar`       | 横向的切换组（多选一）。                                                                                                                        | `options`（`[{ value, label, icon? }]`）、`value`                                                                                                                                                                                                            |
+| `Tabs`            | 页签条。用 `$bindState` 绑定当前值；可选的 `counts` 在标签后面加上 `(N)`。                                                                      | `tabs`（`[{ value, label, icon?, color? }]`）、`value`、`counts`（`Record<value, number>`）                                                                                                                                                                  |
+| `FilterContainer` | 保存搜索词和当前页签，为过滤后的每行渲染一个子树。                                                                                              | `items`（数组绑定）、`itemTemplate`（节点）、`searchPlaceholder`、`searchFields`（path[]）、`filterField`、`filterTabs`、`itemKeyField`、`emptyMessage`、`showCounts`、`footer`（字符串或 `{ component, props }`）                                           |
 
 可访问性：
 
@@ -125,9 +125,7 @@
     "items": {
       "$state": "/entries"
     },
-    "searchFields": [
-      "value/title"
-    ],
+    "searchFields": ["value/title"],
     "searchPlaceholder": "Search…",
     "filterField": "value/status",
     "filterTabs": [
@@ -297,7 +295,7 @@ json-render 提供布局、文字、表单、媒体、数值条、关系图和�
 - `candidates` 是数组。默认的选择器是 `id` 和 `content`。
 - `hiddenWhen: { field, equals }` 隐藏符合条件的记录，但它们仍留在动作能读到的范围里。
 - `acceptedId` 标出当前选中的那一条。
-- “草稿 / 发送”用的是会话动作。可选的 accept / regenerate 动作调用你提供的 RPC。
+- “草稿 / 发送”用的是会话动作。可选的 accept / regenerate 动作通过 runtime RPC 调用你提供的手动 runtime。
 
 **动作的写法。** 一个 catalog 动作是 `{ pluginId, runtimeId, payload, label? }`。
 
@@ -317,7 +315,7 @@ json-render 提供布局、文字、表单、媒体、数值条、关系图和�
 
 **动作怎样执行。**
 
-- RPC 动作走共用的工作区恢复和授权流程。
+- 这些动作走共用的工作区恢复和授权流程，以 `kind: "runtime"` 执行手动 runtime，不是 `registerRpc` 注册的即时 action。
 - 上传只在工作区恢复之后才准备，授权重试时复用。
 - 拥有这个 runtime 的插件负责校验 payload 并实现业务规则，例如替换默认立绘、同时保留其他变体。
 - 这是当前唯一的契约。插件专用的组件名和跨插件的头像绑定已经不存在，开发中的 UI spec 需要按这里的写法更新。

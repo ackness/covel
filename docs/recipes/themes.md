@@ -148,14 +148,15 @@ html[data-theme="ember"].dark {
 
 导入时 Covel 会检查主题文件，不符合就拒绝，并说明原因。
 
-| 规则                                                                    | 写错时的提示                                                       |
-| ----------------------------------------------------------------------- | ------------------------------------------------------------------ |
-| 主题 ID 只用小写字母、数字和连字符，以字母或数字开头，长 2 到 48 个字符 | `Theme id must use lowercase letters, numbers, and hyphens.`       |
-| 一个文件只用一个主题 ID                                                 | `Theme CSS must use exactly one data-theme id.`                    |
-| 每一条规则都以 `html[data-theme="你的ID"]` 开头                         | `Every theme rule must be scoped to [data-theme="…"] — found "…".` |
-| 不能用 `@import`                                                        | `Theme CSS must not use @import.`                                  |
+<!-- prettier-ignore -->
+| 规则 | 写错时的提示 |
+| --- | --- |
+| 主题 ID 只用小写字母、数字和连字符，以字母或数字开头，长 2 到 48 个字符 | 主题 ID 必须为 2–48 个小写字母、数字或连字符。 |
+| 一个文件只用一个主题 ID | 一个主题文件只能声明一个主题 ID。 |
+| 每条普通 CSS 选择器都限定在 `[data-theme="你的ID"]` 内 | 每条规则都必须限定在 `[data-theme="…"]` 内；提示会列出未限定的选择器。 |
+| 不能用 `@import` | 主题 CSS 不能使用 `@import`。 |
 
-另外，不要用内置主题的 ID（`panel`、`book`、`stage`、`paper`、`modern`、`abyss`、`aurora`）。内置主题总是优先，同名的自定义主题会被丢掉。
+另外，不要用内置主题的 ID（`panel`、`book`、`stage`、`paper`、`modern`、`abyss`、`aurora`）。导入时会拒绝这些 ID，并提示换一个。
 
 ### 4. 该先改哪些变量
 
@@ -264,7 +265,7 @@ html[data-theme="ember"][data-turn="executing"] .ui-composer-input {
 
 两点注意：
 
-- 自带的字体只包含拉丁字母。中文正文要靠系统字体。
+- 上面的拉丁字体只包含拉丁字母；中文标题可用自带的 `"ZCOOL XiaoWei"`，中文正文通常使用系统字体。
 - `"ZCOOL XiaoWei"` 只有一种粗细。不要给它设粗体。
 
 ## 选界面的结构
@@ -310,7 +311,7 @@ CSS 只能改外观。导航在顶部还是左侧、页签长什么样、游戏�
   "label": { "zh-CN": "海蓝", "en-US": "Ocean" },
   "group": "panel",
   "layout": { "preset": "panel" },
-  "cssText": "html[data-theme=\"panel-ocean\"] { /* 完整的变量和类名规则 */ }"
+  "cssText": "html[data-theme=\"panel-ocean\"] { /* complete variable and class-name rules */ }"
 }
 ```
 
@@ -419,18 +420,19 @@ html[data-theme="my-theme"].dark {
 
 ## 没有按预期工作时
 
-| 现象                                                                               | 原因和处理                                                                   |
-| ---------------------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
-| 导入时提示 `Theme CSS must include a selector like html[data-theme="your-theme"].` | 文件里没有任何 `data-theme` 选择器。每条规则都要以它开头                     |
-| 导入时提示 `Every theme rule must be scoped to …`                                  | 有一条规则没有以你的主题 ID 开头。提示里引用了那条规则的开头                 |
-| 导入时提示 `Theme CSS must use exactly one data-theme id that matches "…".`        | JSON 的 `id` 和 `cssText` 里的主题 ID 不一样                                 |
-| 导入时提示 `Theme CSS must not use @import.`                                       | 删掉 `@import`。字体的写法见上面的[字体](#fonts)一节                         |
-| 导入成功，但主题没有出现，或者之后不见了                                           | 用了内置主题的 ID。换一个 ID                                                 |
-| 导入的 CSS 主题切不到暗色                                                          | 文件里没有 `html[data-theme="…"].dark` 这一段。加上它再导入一次              |
-| 改了某个变量，界面没变                                                             | 你在“精细调整”里改过同一项，那里的值优先。点那一项的重置按钮，或者“全部重置” |
-| 换了主题，颜色还是怪怪的                                                           | 同上。“精细调整”里的改动不跟着主题走                                         |
-| 我的配色里有些地方变成了默认的样子                                                 | 配色不继承同风格的其他成员。没写的变量用的是框架的基础值，要自己写全         |
-| 中文没有用上我写的字体                                                             | 那款字体玩家的系统里没有。自带的字体只含拉丁字母，中文要列出系统字体作候选   |
+<!-- prettier-ignore -->
+| 现象 | 原因和处理 |
+| --- | --- |
+| 导入时提示“主题 CSS 必须包含 `html[data-theme="your-theme"]` 这样的选择器。” | 文件里没有任何 `data-theme` 选择器。给普通 CSS 选择器加上主题范围 |
+| 导入时提示“每条规则都必须限定在……” | 有一条选择器没有限定在你的主题 ID 内。提示会列出它 |
+| 导入时提示“CSS 选择器必须使用主题 ID ……” | JSON 的 `id` 和 `cssText` 里的主题 ID 不一样 |
+| 导入时提示“主题 CSS 不能使用 `@import`。” | 删掉 `@import`。字体的写法见上面的[字体](#fonts)一节 |
+| 导入时提示“……是内置主题 ID，请使用其他 ID。” | 用了内置主题的 ID。换一个 ID |
+| 导入的 CSS 主题切不到暗色 | 文件里没有 `html[data-theme="…"].dark` 这一段。加上它再导入一次 |
+| 改了某个变量，界面没变 | 你在“精细调整”里改过同一项，那里的值优先。点那一项的重置按钮，或者“全部重置” |
+| 换了主题，颜色还是怪怪的 | 同上。“精细调整”里的改动不跟着主题走 |
+| 我的配色里有些地方变成了默认的样子 | 配色不继承同风格的其他成员。没写的变量用的是框架的基础值，要自己写全 |
+| 中文没有用上我写的字体 | 那款字体玩家的系统里没有。自带的拉丁字体不含中文；中文正文要列出系统字体作候选 |
 
 ## 接下来
 

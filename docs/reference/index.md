@@ -12,7 +12,7 @@
 | [世界数据](./world-data.md)                  | 数据文件的导入规则，可预置的内容，隐藏数据 |
 | [世界模型](./world-model.md)                 | 角色、角色属性、资料库的数据结构           |
 | [动态维度](./dynamic-dimensions.md)          | 会在游玩中变化的世界状态                   |
-| [世界时间](./world-time.md)                  | 时间流逝和日夜                             |
+| [世界时间](./world-time.md)                  | 历法、时段与时间推进                       |
 | [世界包安装](./world-installation.md)        | 安装、更新和卸载                           |
 
 ## 插件

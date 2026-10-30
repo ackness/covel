@@ -489,17 +489,17 @@ pnpm test:plugin-lifecycle
 
 ## 没有按预期工作时
 
-| 现象                                                         | 原因和处理                                                                 |
-| ------------------------------------------------------------ | -------------------------------------------------------------------------- |
-| `has no tests/runtime-cases.json or covel.test.json`         | 多 runtime 的插件没有用例文件。加一个，或者写完整的 runtime 名来直接触发   |
-| 用例 `failed`，`assertions` 里是 `pluginData:<名字>`         | 数据没有按期望保存。核对用例里的 `namespace`、`key`、`field`               |
-| 用例 `failed`，`assertions` 里是 `runtime:<名字>:success`    | runtime 没有成功。看 `runtimeResults` 里它的 `error`                       |
-| `skipped: upstream not success`                              | 它依赖的上游没有运行。只测本地逻辑可加 `--ignore-upstreams`；要读真实上游结果则组装完整回合            |
-| 声明了必须调用工具的 agent 失败                              | 用例没有提供带工具调用的 `llmResponses`                                    |
-| 工具调用被拒绝                                               | 假回复里的 `arguments` 不符合工具的参数，或者不是合法的 JSON 文本          |
-| 打印 `Unsupported rpc` 之类的警告                            | 正常。这部分要在真实的服务端上验证                                         |
-| 单元测试里 `store.… is not configured for this test context` | 函数读了你没有提供的数据。在 `makeManualFunctionContext` 的 `store` 里补上 |
-| 找不到插件                                                   | 插件不在默认目录里。加 `--plugins-dir`                                     |
+| 现象                                                         | 原因和处理                                                                                  |
+| ------------------------------------------------------------ | ------------------------------------------------------------------------------------------- |
+| `has no tests/runtime-cases.json or covel.test.json`         | 多 runtime 的插件没有用例文件。加一个，或者写完整的 runtime 名来直接触发                    |
+| 用例 `failed`，`assertions` 里是 `pluginData:<名字>`         | 数据没有按期望保存。核对用例里的 `namespace`、`key`、`field`                                |
+| 用例 `failed`，`assertions` 里是 `runtime:<名字>:success`    | runtime 没有成功。看 `runtimeResults` 里它的 `error`                                        |
+| `skipped: upstream not success`                              | 它依赖的上游没有运行。只测本地逻辑可加 `--ignore-upstreams`；要读真实上游结果则组装完整回合 |
+| 声明了必须调用工具的 agent 失败                              | 用例没有提供带工具调用的 `llmResponses`                                                     |
+| 工具调用被拒绝                                               | 假回复里的 `arguments` 不符合工具的参数，或者不是合法的 JSON 文本                           |
+| 打印 `Unsupported rpc` 之类的警告                            | 正常。这部分要在真实的服务端上验证                                                          |
+| 单元测试里 `store.… is not configured for this test context` | 函数读了你没有提供的数据。在 `makeManualFunctionContext` 的 `store` 里补上                  |
+| 找不到插件                                                   | 插件不在默认目录里。加 `--plugins-dir`                                                      |
 
 ## 接下来
 

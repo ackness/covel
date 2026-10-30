@@ -1147,6 +1147,7 @@ setup runtime 挂起等玩家回答时，这次尝试不占重试次数。挂起
 | POST | `/api/install/github/batch` | `{ tokens, acceptRisk: true }` | 把已预览的包作为一个整体安装，失败时回滚本次写入 |
 | POST | `/api/install/collection` | multipart 字段 `file` | 导入打包好的合集 ZIP |
 | GET | `/api/install/plugins` | — | 列出用户插件目录中的包及可用的来源记录 |
+| GET | `/api/install/worlds` | — | 列出用户世界目录中的包及可用的来源记录 |
 
 各端点接受什么、返回什么：
 

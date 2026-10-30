@@ -70,7 +70,7 @@ Keeps the roleplay notes the world author has written for the characters: person
 
 Do not write the portrait mapping by hand. It is produced when you generate portraits. For how to do that, see [Character portraits](../worlds/portraits.md). For fields and examples, see [World data](../reference/world-data.md#roleplay-notes-blueprint). You can also run `pnpm describe:authoring` in the repository root.
 
-**Works with**: a character's profile is given to the narrative only when that character is already in the session. Characters who are not present are not included. Each card can have up to 300 characters per line, and the total length is limited. If it does not fit, first delete the sample lines, then delete rules.
+**Works with**: roleplay notes are included only for characters with a record in the session. They do not have to be on stage. Each card can have up to 300 characters per line, and the total length is limited. If it does not fit, first delete the sample lines, then delete rules.
 
 ## World Dimensions (`world-init`)
 

@@ -117,7 +117,7 @@ d20 加上属性修正，达到目标值就成功。自然 20 是大成功，自
 
 不写这个文件时，插件把世界里所有数字属性（分类是 `abilities`，有 `min` 和 `max`）拿来配点，额外给 4 点。健康、体力这类资源不会被自动纳入。
 
-属性 `id` 必须和 `world.yaml` 里定义的一致。写错时，`pnpm validate:world` 会报 `attribute-reference` 错误；会话导入也会检查。规则怎么写、怎么校验，见[开局配点和掷骰判定](../recipes/point-buy.md)，数据怎么进世界包见[世界数据](../reference/world-data.md)。
+属性 `id` 必须和 `world.yaml` 里定义的一致。写错时，`pnpm validate:world` 会指出不符合要求的属性；会话导入也会检查。规则怎么写、怎么校验，见[开局配点和掷骰判定](../recipes/point-buy.md)，数据怎么进世界包见[世界数据](../reference/world-data.md)。
 
 ## 任务日志（`core-quest`）
 

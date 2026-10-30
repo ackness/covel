@@ -63,7 +63,7 @@ interface MediaStore {
 
 **元数据里的 U+0000**
 
-- 四种后端在保存元数据 JSON 时都会去掉 U+0000 字符，但不会改动调用方传进来的对象。
+- Memory、SQLite 和 PostgreSQL 三种后端在保存元数据 JSON 时都会去掉 U+0000 字符，但不会改动调用方传进来的对象。
 - 清理之后会重名的键，在文件公开之前就被拒绝。
 - 文件本身的字节不动，包括值为 0 的字节。ID 由原始字节决定。
 
@@ -336,7 +336,7 @@ SQLite 媒体工厂在构造成功之前，自己持有共享连接的引用。�
 | 设置了 `COVEL_MEDIA_CLEANUP_ENABLED=true`           | `403`，接口默认关闭          |
 | `dryRun: false` 时带请求头 `X-Confirm-Cleanup: yes` | `400`                        |
 
-`self` 部署保持本机单用户的行为，不需要令牌。每个会话扫描的行数有上限（`scanLimit`，默认 1,000）。超过时接口拒绝执行，不会悄悄只扫一部分。
+个人部署（`personal`）通过主机与本地访问检查后不需要此路由的额外令牌；生产环境的 `self` + MemoryStore 属于浏览器私有形态，仍需运维令牌，不能按 `self` 一概放行。规则由[宿主配置](../internals/security.md#host-profile)集中决定。每个会话扫描的行数有上限（`scanLimit`，默认 1,000）。超过时接口拒绝执行，不会悄悄只扫一部分。
 
 **`protectedIds` 只是计划，不是最后的裁决**
 

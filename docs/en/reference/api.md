@@ -1147,6 +1147,7 @@ Authentication:
 | POST | `/api/install/github/batch` | `{ tokens, acceptRisk: true }` | Install the previewed packages as one unit. On failure, roll back this run's writes |
 | POST | `/api/install/collection` | multipart field `file` | Import a packaged collection ZIP |
 | GET | `/api/install/plugins` | — | List the packages in the user plugins folder, with their available source records |
+| GET | `/api/install/worlds` | — | Lists packages in the user worlds directory and available source receipts |
 
 What each endpoint accepts and returns:
 

@@ -63,7 +63,7 @@ Open **Settings → Install & manage**:
 
 1. Browse the community catalogue, or paste a public GitHub repository link, or a `/tree/<ref>/<path>` link.
 2. The link is resolved. The plugins and world packs in that directory are listed together. When the directory has a `covel-collection.yaml`, only the members named in the [collection](../ship/collections.md) manifest are listed, including packages pinned in other repositories.
-3. Tick what you want to install, check the ID, version, source, commit, and code risk, and confirm once. The selected items are installed as one unit: plugins first, then worlds. If any one fails, everything installed in this batch so far is removed.
+3. Tick what you want to install, check the ID, version, source, commit, and code risk, and confirm once. Plugins are installed before worlds. A failure rolls back this batch’s writes, except that a world already used to create a session, or a package that cannot be deleted, is retained and reported. See [batch rollback results](#multi-package-preview-and-batch-install).
 4. After installing a plugin, restart the backend once. Then enable the plugin in a session, and allow it to run through the approval flow. A world is usable right away.
 
 The import entry in the desktop app's menu opens the same package management page. The server runs a static check on a ZIP and shows the result.

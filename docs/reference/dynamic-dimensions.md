@@ -222,7 +222,7 @@ function / guard 的 `ctx.world.dimensions` 在这份底本上叠加已完成上
 状态有五种：`pending-settlement`、`settled`、`no-change`、`manual`、`skipped`，含义见[回合时序与结算回执](./world-model.md#回合时序与结算回执)。
 
 - 失败、没有运行、被调度跳过都不是 `no-change`。
-- 自动结算失败时，叙事和待结算义务保留。其他 proposal 按[提交单元](./transactions.md#commit-失败语义)隔离：可选单元失败时丢弃该单元及其硬依赖下游，数据库异常仍回滚整次提交。
+- 自动结算失败时，叙事和待结算义务保留。其他 proposal 按[提交单元](./transactions.md#回合级单事务)隔离：可选单元失败时丢弃该单元及其硬依赖下游，数据库异常仍回滚整次提交。
 - 已经解决的回执，每局游戏只保留最近 20 条（登记新回执时清理更早的）。待结算的回执不会被清理。
 
 **tracker 会多试几次。** 待结算会挡住之后的回合，所以这里宁可多试。

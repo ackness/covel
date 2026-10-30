@@ -277,6 +277,7 @@ The main job of a theme package is to override the semantic tokens. The full lis
 ### 5.2 Surface tokens
 
 - `--surface-page`
+- `--surface-story`: the story-column background with `backdrop: "scene"`; the layout stylesheet supplies a fallback when it is absent.
 - `--surface-session`: the background color of the central game panel. If it is not set, `--surface-page` is used. You can use a semi-transparent color so the theme's flowing light shows through below it.
 - `--surface-rail`
 - `--surface-inset`

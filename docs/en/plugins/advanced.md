@@ -235,15 +235,15 @@ For the inputs and outputs of each extension point, how several providers are co
 
 There are three ways to keep a runtime from blocking the turn:
 
-| Setting                               | Effect                                                                                                                     |
-| ------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
-| `schedule.detached: true`             | The turn ends first, and this runtime keeps running in the background. Only allowed in the `post-turn` and `audit` stages. |
-| `schedule.detached: { settle: true }` | Keeps running in the background, but the player's next action waits for it to finish.                                      |
-| `schedule.background: true`           | A runtime triggered manually or by an event moves to the background, and the caller gets a task number right away.         |
+| Setting                               | Effect                                                                                                             |
+| ------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| `schedule.detached: true`             | The turn ends first; an eligible function leaf continues in the durable queue. Only for `post-turn` and `audit`.   |
+| `schedule.detached: { settle: true }` | Keeps running in the background, but the player's next action waits for it to finish.                              |
+| `schedule.background: true`           | A runtime triggered manually or by an event moves to the background, and the caller gets a task number right away. |
 
 A runtime triggered by an event is written with `schedule.trigger: { type: event, topic: ... }`.
 
-Not every combination can run in the background. Both validation and the runtime check this.
+A staged detached runtime must be a function with no downstream runtime still waiting in the foreground for its result. It cannot recurse or suspend. Manual and event background jobs are separate executions. Validation and runtime checks enforce these boundaries; an ineligible node stays in the foreground with a diagnostic. See the [turn pipeline](../internals/flow.md) for the full conditions.
 
 A function that runs in the background and calls a model itself must declare which model role it uses:
 

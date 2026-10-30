@@ -1461,7 +1461,7 @@ export default function ({ tool, z, shortId, shortIdBatch }) {
         context.random,
       );
       // Dragon Sword -> item-dragon-sword-<8 hex characters>
-      // 龙息术 -> item-<8 hex characters>
+      // 龙息术 (dragon breath) -> item-<8 hex characters>
       return { id };
     },
   });
@@ -1620,7 +1620,7 @@ export default function ({ tool, z, shortId, shortIdBatch }) {
 ### 返回值示例
 
 ```typescript
-// 表单交互
+// Form interaction
 execute: async (params) => ({
   created: true,
   interaction: {
@@ -1634,7 +1634,7 @@ execute: async (params) => ({
   },
 });
 
-// 选项交互
+// Choice interaction
 execute: async (params) => ({
   created: true,
   interaction: {
@@ -1684,13 +1684,18 @@ POST /api/actions
 export default function ({ tool, z, shortId }) {
   return tool({
     name: "my-tool-name",
-    description: "工具描述（会注入 LLM system prompt）",
+    description: "Create a short ID for one item.",
     parameters: z.object({
-      param1: z.string().describe("参数描述"),
+      param1: z.string().describe("Item label"),
     }),
     execute: async (params, context) => {
       // context: { sessionId, turnId, pluginId, runtimeId }
-      const id = shortId("item", params.param1, context.sessionId);
+      const id = shortId(
+        "item",
+        params.param1,
+        context.sessionId,
+        context.random,
+      );
       return { id, result: params.param1 };
     },
   });
@@ -1740,7 +1745,7 @@ const register: PluginEntryFactory = (covel) => {
   covel.registerTool(
     covel.toolkit.tool({
       name: "my-tool-name",
-      description: "工具描述",
+      description: "Echo the supplied value.",
       parameters: covel.toolkit.z.object({ param1: covel.toolkit.z.string() }),
       execute: async ({ param1 }) => ({ result: param1 }),
     }),
@@ -1796,7 +1801,7 @@ interface PluginToolResult<T> {
 工具分两步接入：**在 `entry` 模块里注册**，再**在使用它的 runtime 清单里声明**。
 
 ```js
-// server/index.js —— 默认的入口模块，根 PLUGIN.md 不用写 `entry`
+// server/index.js — the default entry module; the root PLUGIN.md needs no `entry`
 import makeMyTool from "../tools/my-tool.js";
 
 export default function (covel) {
@@ -1805,7 +1810,7 @@ export default function (covel) {
 ```
 
 ```yaml
-# RUNTIME.md；根 PLUGIN.md 同时声明 contributes.tools: [my-tool-name]
+# RUNTIME.md; the root PLUGIN.md also declares contributes.tools: [my-tool-name]
 agent:
   tools:
     plugin: [my-tool-name]

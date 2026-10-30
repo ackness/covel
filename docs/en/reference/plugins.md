@@ -888,7 +888,7 @@ The character schema, the characters, and the world record belong to the kernel'
 - Until this execution buffers new writes, repeated reads return the same object. A loop that looks up characters one by one does not copy the whole list each time.
 - Legal upstream proposals in these domains, and the proposals this runtime has already buffered, are visible to later reads.
 - Writes go through proposals, and they are validated together at commit time.
-- `ctx.world.dimensions` is different. It is a snapshot of the current public values published by a provider, and it follows the separate freezing rules in [Dynamic dimensions](#dynamic-dimensions) below.
+- `ctx.world.dimensions` starts from the provider's frozen snapshot and overlays the valid dimension proposals visible to that view. See [Dynamic dimensions](#dynamic-dimensions) for the distinction between public reads and execution-local previews.
 - `ctx.world.seats` holds the session's seats, frozen as well. No proposal changes them; the player switches the current character through the [switch endpoint](./api.md#session-seats), and it applies from the next turn.
 
 **Finding a character by name.** Besides `name`, a character can have `aliases` (other names for the same person).
@@ -1317,9 +1317,9 @@ contributes:
       actor: true # optional: whether it is taken as a character, default true
       schema: ./schemas/whisper.json # optional: the JSON Schema fields must match
       display:
-        label: { zh: 耳语, en: whispers }
+        label: whispers
         icon: ear
-        placeholder: { zh: 对谁说悄悄话, en: Whisper to someone }
+        placeholder: Whisper to someone
 ```
 
 - **The wire kind is `<pluginId>/<name>`.** In `whisper-pack`, the example is `whisper-pack/whisper`. Two plugins may use the same `name` without a conflict. `name` is lower-case kebab-case, must not be a base kind's name, and must be unique in the package.
@@ -1334,7 +1334,7 @@ contributes:
 
 Every namespace that starts with `_` is reserved for the kernel.
 
-- A plugin cannot write to or delete them through the generic plugin-data API or through a proposal (`set`, `update` and `delete` alike). This includes names starting with `_` that it has never seen, and the old `_memory`.
+- Generic REST APIs and built-in model data tools cannot write to or delete any `_` namespace. Plugin proposals are subject to the same rule, except that the owning plugin’s code may write its own `_hidden.*` buckets. Unknown underscore names and the old `_memory` remain protected.
 - `_hidden.<namespace>` holds world data declared `visibility: hidden`, along with hidden content a plugin appends during the story. Only the runtimes of the owning plugin can read it, and only the owning plugin's own code can write to it.
 - Plugin logs are produced through the restricted logger API. Business data uses ordinary names such as `blocks` and `definitions`.
 - `__kernel:<subsystem>` is another owner partition. A plugin's bound read interface cannot reach it.

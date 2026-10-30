@@ -224,7 +224,7 @@ io:
 要记住的限制：
 
 - 一个值转成 JSON 后最多 256 KiB。超过时写入失败，错误里写明插件、`namespace/key`、实际大小和上限。原值不变，也不会被截断。会不断变长的列表要拆到多个键里，或者自己裁剪。
-- 以 `_` 开头的数据空间留给 Covel 自己用，插件不能写。
+- 以 `_` 开头的数据空间通常留给内核；本插件自己的 `_hidden.*` 是例外，由函数和本地工具通过正常 proposal 写入隐藏数据，见[隐藏数据](../reference/world-data.md#隐藏数据visibility-hidden)。
 - 想给一个数据空间声明记录的形状（JSON Schema、键、允许的操作），见[数据集](../reference/plugins.md#数据集contributesdatasets)。
 - 想让玩家提交一种新的行动（例如“耳语”），在 `contributes.actionKinds` 里声明它，见[行动类型](../reference/plugins.md#行动类型contributesactionkinds)。
 - 两个插件要共享数据，必须通过公开的能力，不能去读对方的数据空间。
