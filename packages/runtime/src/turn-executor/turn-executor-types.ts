@@ -204,9 +204,9 @@ export interface TurnExecutorDeps extends AgentLoopDeps {
   readonly pluginDataReadProbe?: import("../function-runtime/upstream-plugin-data.js").PluginDataReadProbe;
 
   /**
-   * Sub-agent runner of the execution. `runTurnPipeline` creates one per
-   * top-level execution when absent, and nested executions share it, so its
-   * pool cap counts every sub-agent the execution has in flight.
+   * Sub-agent runner of the execution. Execution entry points create one
+   * with frozen admission and fault collection; pipelines supply a fallback
+   * when absent. Nested executions share its pool cap.
    */
   readonly subagents?: import("../agent-loop/subagent-runner.js").SubagentRunner;
 }

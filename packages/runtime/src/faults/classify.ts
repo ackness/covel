@@ -6,6 +6,13 @@ export type PluginFaultVerdict =
   | { readonly kind: "clean" }
   | { readonly kind: "neutral" };
 
+export interface SubagentRunOutcome {
+  readonly pluginId: string;
+  readonly callerRuntimeId: string;
+  readonly ok: boolean;
+  readonly fault?: "runtime" | "timeout";
+}
+
 /** Attribute only direct faults, never a rolled-back sibling or dependent. */
 export function classifyExecutionFaults(
   results: readonly Pick<
@@ -14,6 +21,7 @@ export function classifyExecutionFaults(
   >[],
   outcome: FinalizeExecutionOutcome,
   setupRuntimeIds: ReadonlySet<string> = new Set(),
+  subagentRuns: readonly SubagentRunOutcome[] = [],
 ): ReadonlyMap<string, PluginFaultVerdict> {
   const verdicts = new Map<string, PluginFaultVerdict>();
   const put = (pluginId: string, verdict: PluginFaultVerdict) => {
@@ -42,6 +50,14 @@ export function classifyExecutionFaults(
     } else {
       put(result.pluginId, { kind: "neutral" });
     }
+  }
+  for (const run of subagentRuns) {
+    if (setupRuntimeIds.has(run.callerRuntimeId)) continue;
+    if (!run.ok && run.fault)
+      put(run.pluginId, { kind: "fault", reason: run.fault });
+    else if (run.ok && outcome.status === "committed")
+      put(run.pluginId, { kind: "clean" });
+    else put(run.pluginId, { kind: "neutral" });
   }
   for (const failed of outcome.failedProposals) {
     if (
