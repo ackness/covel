@@ -448,6 +448,14 @@ describe("submit-world-facts", () => {
     };
     const facts = submitWorldFacts.parameters.parse({
       ...VALID_FACTS,
+      objectiveAssessments: [
+        {
+          quest: "Find the Keeper",
+          objective: "Go up",
+          outcome: "not_addressed",
+          evidence: "",
+        },
+      ],
       events: [
         {
           id: "shows-gear",
@@ -476,7 +484,10 @@ describe("submit-world-facts", () => {
 
     // Without the vocabulary the same references are unknown.
     await expect(
-      submitWorldFacts.execute(facts, { world: { characters: [] } }),
+      submitWorldFacts.execute(
+        { ...facts, objectiveAssessments: [] },
+        { world: { characters: [] } },
+      ),
     ).rejects.toThrow('entity reference "Brass Gear" does not exist');
     // A name the vocabulary does not hold still fails.
     await expect(

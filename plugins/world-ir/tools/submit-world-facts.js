@@ -1,10 +1,14 @@
 import { createHash } from "node:crypto";
 import { z } from "zod";
 import { validateWorldIRV1, worldIRV1Schema } from "../schemas/world-ir.ts";
-import { resolveCharacter } from "@covel/plugin-handlers-utils";
+import { resolveCharacter, ToolError } from "@covel/plugin-handlers-utils";
 import { characterHandles } from "./character-handles.js";
 import { eventProfileIssues } from "./event-profiles.js";
 import { vocabularyEntries } from "./vocabulary.js";
+import {
+  objectiveAssessmentSchema,
+  objectiveCoverageIssues,
+} from "./objective-coverage.js";
 
 const MAX_ENTITIES = 32;
 // Keys of the extraction input (see server/extraction-context.js); they are
@@ -351,9 +355,11 @@ export default function ({ tool }) {
   const facts = worldIRV1Schema
     .extend({
       schemaVersion: worldIRV1Schema.shape.schemaVersion.default(1),
+      objectiveAssessments: z.array(objectiveAssessmentSchema).optional(),
     })
     .superRefine((value, ctx) => {
-      const validation = validateWorldIRV1(value);
+      const { objectiveAssessments: _assessments, ...output } = value;
+      const validation = validateWorldIRV1(output);
       // Undeclared references are settled in `execute`, where the session
       // roster is available.
       const blocking = validation.valid
@@ -379,9 +385,19 @@ export default function ({ tool }) {
   return tool({
     name: "submit-world-facts",
     description:
-      "Submit the people, relationships, events, and explicit knowledge extracted from this story turn. The arguments become the complete World IR output; put non-contract details inside attributes.",
+      "Submit this turn's facts plus objectiveAssessments: one assessment for every open objective in vocabulary, with an exact narrative quote (empty for not_addressed). Achieved objectives must also appear in quest_change.completedObjectives. The tool checks coverage and returns only WorldIR facts; put non-contract fact details inside attributes.",
     parameters,
-    execute: async (facts, context) => {
+    execute: async ({ objectiveAssessments, ...facts }, context) => {
+      const issues = objectiveCoverageIssues(
+        facts,
+        objectiveAssessments,
+        context?.inputSlots,
+      );
+      if (issues.length)
+        throw new ToolError(
+          "invalid-input",
+          `Invalid parameters for tool "submit-world-facts": ${issues.join("; ")}. Review every open objective against narrative.value and retry; do not invent completion evidence.`,
+        );
       const handles = characterHandles(context?.world?.characters ?? []);
       const completed = withEntitySubjects(
         withTrackedThings(

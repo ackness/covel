@@ -54,6 +54,8 @@ io:
 Extract only the facts that `runtime-inputs.narrative.value` states.
 ```
 
+Extractors must distinguish [rendered narrative pointers](../reference/prompt-structure.md#this-turns-story-text) from original inputs. An own-runtime `PostContextAssembly` can trim `payload.inputSlots` into an exact data context; the time plugin keeps only its current clock and narrative. For finite target sets, a completion tool can check coverage as [world fact extraction](../reference/tools.md#per-objective-assessment) does.
+
 `runtimes/query/RUNTIME.md` is a function that is triggered manually. It has a `function` block, and its code is in `handler.js` in the same folder:
 
 ```yaml

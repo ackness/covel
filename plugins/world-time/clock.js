@@ -163,13 +163,38 @@ export function advanceTime(definition, tick, request, random) {
     if (
       request.amount !== undefined ||
       request.direction !== undefined ||
-      request.unit !== undefined
+      request.unit !== undefined ||
+      request.target !== undefined
     )
       throw new Error(
-        "Random time is sampled by the clock; omit amount, unit and direction",
+        "Random time is sampled by the clock; omit amount, unit, direction and target",
       );
     const range = rule.randomRange;
     delta = random.int(range.min, range.max + 1);
+  } else if (request.target !== undefined) {
+    if (
+      request.amount !== undefined ||
+      request.unit !== undefined ||
+      request.direction !== undefined
+    )
+      throw new Error("Submit target or a duration, never both");
+    // Interpret the destination in this world's own calendar. The model names
+    // the time; deterministic code owns subtraction and all calendar arithmetic.
+    const destination = worldTimeSchema.parse({
+      ...definition,
+      initial: {
+        ...request.target,
+        ...(definition.kind === "calendar" && definition.calendar.weekdays
+          ? { weekday: definition.initial.weekday }
+          : {}),
+      },
+    });
+    delta = safe(initialTick(destination) - tick);
+    if (
+      (rule.mode === "forward" && delta < 0) ||
+      (rule.mode === "backward" && delta > 0)
+    )
+      throw new Error(`Time policy only permits ${rule.mode} movement`);
   } else {
     if (request.amount === undefined && request.unit !== undefined) {
       throw new Error(

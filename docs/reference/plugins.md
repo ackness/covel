@@ -413,6 +413,8 @@ agent:
 - 模型每一步都必须调用工具，和写了 `toolChoice: required` 一样。写了 `agent.toolChoice` 时用写的值。
 - 它和 `completion: {require: tool-use, afterTools: [save-facts]}` 加 `toolChoice: required` 的意思相同。
 
+完成工具应在返回成功之前检查任务所需的覆盖条件。例如[世界事实提取](./tools.md#逐目标评估)要求逐项评估已提供的未完成目标；仅有合法 JSON 不证明提取完整。
+
 有几个完成工具，或者没有变化时要调用 `runtime-done`，就写完整的 `completion`。`finishWith` 和 `completion` 只能写一个。
 
 - `completion.afterTools`：列出的工具成功后就结束。

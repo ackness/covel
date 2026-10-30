@@ -413,6 +413,8 @@ agent:
 - The model must call a tool on every step, as with `toolChoice: required`. When `agent.toolChoice` is written, its value is used.
 - It means the same as `completion: {require: tool-use, afterTools: [save-facts]}` with `toolChoice: required`.
 
+Completion tools should check required coverage before reporting success. For example, [world fact extraction](./tools.md#per-objective-assessment) requires an assessment of every supplied open objective. Valid JSON alone does not prove complete extraction.
+
 When there are several completing tools, or the model should call `runtime-done` when nothing changed, write the full `completion`. Write only one of `finishWith` and `completion`.
 
 - `completion.afterTools`: the run finishes once one of the listed tools succeeds.

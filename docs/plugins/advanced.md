@@ -54,6 +54,8 @@ io:
 Extract only the facts that `runtime-inputs.narrative.value` states.
 ```
 
+提取器要区分[渲染后的正文指针](../reference/prompt-structure.md#本回合正文)与原始输入。需要精确数据上下文时，可以在自身 `PostContextAssembly` 中从 `payload.inputSlots` 裁剪；时间插件只保留当前时钟与正文。对有限目标集合，还可像[世界事实提取](../reference/tools.md#逐目标评估)一样，在完成工具里检查逐项覆盖。
+
 `runtimes/query/RUNTIME.md` 是一个手动触发的函数。它有 `function` 块，代码在同一个文件夹的 `handler.js` 里：
 
 ```yaml

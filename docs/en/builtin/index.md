@@ -61,17 +61,17 @@ A session may have several player characters. The two narrator plugins follow th
 
 ### Characters and world
 
-| Plugin                                                 | What it does                                                              | On by default |
-| ------------------------------------------------------ | ------------------------------------------------------------------------- | ------------- |
-| [Pre-Game Setup](./world.md) `pregame`                 | Collects the player's choices when a game starts                          | Yes           |
-| [Character Creator](./world.md) `char-creator`         | Creates the player character, and updates characters during play          | Yes           |
-| [Character Profiles](./world.md) `character-blueprint` | Holds the characters and portraits the world provides                     |               |
-| [World Dimensions](./world.md) `world-init`            | Prepares character attributes and dimensions, and updates dimension state | Yes           |
-| [World Time](./world.md) `world-time`                  | Time passing, day and night, and a rules summary                          | Yes           |
-| [World Rules](./world.md) `living-world-rules`         | Brings the world's rules into every turn, with localized category badges  |               |
-| [Codex](./world.md) `codex`                            | Records people, places and things, with localized category badges         |               |
-| [Relationship Graph](./world.md) `npc-graph`           | Records a graph of relationships between people, groups and factions      |               |
-| [World Fact Extraction](./world.md) `world-ir`         | Sorts out what happened in each turn, for other plugins to use            |               |
+| Plugin                                                 | What it does                                                               | On by default |
+| ------------------------------------------------------ | -------------------------------------------------------------------------- | ------------- |
+| [Pre-Game Setup](./world.md) `pregame`                 | Collects the player's choices when a game starts                           | Yes           |
+| [Character Creator](./world.md) `char-creator`         | Creates the player character, and updates characters during play           | Yes           |
+| [Character Profiles](./world.md) `character-blueprint` | Holds the characters and portraits the world provides                      |               |
+| [World Dimensions](./world.md) `world-init`            | Prepares character attributes and dimensions, and updates dimension state  | Yes           |
+| [World Time](./world.md) `world-time`                  | Time passing, day and night, and a rules summary                           | Yes           |
+| [World Rules](./world.md) `living-world-rules`         | Brings the world's rules into every turn, with localized category badges   |               |
+| [Codex](./world.md) `codex`                            | Records people, places and things, with localized category badges          |               |
+| [Relationship Graph](./world.md) `npc-graph`           | Records a graph of relationships between people, groups and factions       |               |
+| [World Fact Extraction](./world.md) `world-ir`         | Extracts current facts and reviews open quest objectives for other plugins |               |
 
 ### Stage and sound
 

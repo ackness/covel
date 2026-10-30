@@ -38,6 +38,76 @@ const phases = {
 };
 
 describe("world-owned time", () => {
+  it.each([
+    [
+      { year: 1, month: 1, day: 1, hour: 8, minute: 20 },
+      { year: 1, month: 1, day: 1, hour: 12, minute: 20 },
+      240,
+    ],
+    [
+      { year: 1, month: 1, day: 1, hour: 12, minute: 35 },
+      { year: 1, month: 1, day: 1, hour: 16, minute: 0 },
+      205,
+    ],
+  ])(
+    "calculates exact destination differences instead of trusting model subtraction",
+    (start, target, delta) => {
+      const tick = initialTick({ ...DEFAULT_TIME, initial: start });
+      const next = advanceTime(DEFAULT_TIME, tick, { target });
+      expect(next.delta).toBe(delta);
+      expect(describeTime(DEFAULT_TIME, next.tick)).toMatchObject(target);
+    },
+  );
+  it("resolves calendar targets across custom month boundaries and reverse phase targets", () => {
+    const target = { year: 3, month: 2, day: 1, hour: 0, minute: 0 };
+    expect(advanceTime(calendar, initialTick(calendar), { target }).delta).toBe(
+      1,
+    );
+    expect(advanceTime(phases, 0, { target: { cycle: -1, phase: 2 } })).toEqual(
+      { tick: -1, delta: -1 },
+    );
+  });
+  it.each([
+    { target: { year: 1, month: 99, day: 1, hour: 0, minute: 0 } },
+    { target: { year: 1, month: 1, day: 99, hour: 0, minute: 0 } },
+    { target: { year: 1, month: 1, day: 1, hour: 24, minute: 0 } },
+    { target: { year: 1, month: 1, day: 1, hour: 8, minute: 60 } },
+    { target: { year: 1, month: 1, day: 1, hour: 7, minute: 0 } },
+    { target: { cycle: 0, phase: 1 } },
+    { target: { ...DEFAULT_TIME.initial, hour: 9 }, amount: 60 },
+    { target: { ...DEFAULT_TIME.initial, hour: 9 }, direction: "forward" },
+  ])("rejects invalid, backward or conflicting target requests", (request) => {
+    expect(() =>
+      advanceTime(DEFAULT_TIME, initialTick(DEFAULT_TIME), request),
+    ).toThrow();
+  });
+  it("keeps maximum-step and random policies authoritative for target requests", () => {
+    const target = { ...DEFAULT_TIME.initial, hour: 9 };
+    expect(() =>
+      advanceTime(
+        {
+          ...DEFAULT_TIME,
+          evolution: { ...DEFAULT_TIME.evolution, maxStep: 30 },
+        },
+        initialTick(DEFAULT_TIME),
+        { target },
+      ),
+    ).toThrow(/maxStep/);
+    expect(() =>
+      advanceTime(
+        {
+          ...DEFAULT_TIME,
+          evolution: {
+            ...DEFAULT_TIME.evolution,
+            mode: "random",
+            randomRange: { min: 0, max: 5 },
+          },
+        },
+        initialTick(DEFAULT_TIME),
+        { target },
+      ),
+    ).toThrow(/Random/);
+  });
   it("advances and reverses an authored week from its initial anchor", () => {
     const definition = {
       ...calendar,

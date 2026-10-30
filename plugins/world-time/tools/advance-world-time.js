@@ -11,9 +11,31 @@ export default function ({ tool }) {
   return tool({
     name: "advance-world-time",
     description:
-      "Settle this narrative turn's elapsed world time. Submit a duration, never do calendar arithmetic. For random mode omit amount, unit and direction. Zero is valid for a frozen moment. All writes commit with the story.",
+      "Settle this narrative turn's world time. For a stated destination, submit target and let the tool calculate the elapsed duration. Otherwise submit a duration. For random mode submit only reason. All writes commit with the story.",
     parameters: z
       .object({
+        target: z
+          .union([
+            z
+              .object({
+                year: z.number().int().min(-1_000_000).max(1_000_000),
+                month: z.number().int().min(1),
+                day: z.number().int().min(1),
+                hour: z.number().int().min(0),
+                minute: z.number().int().min(0),
+              })
+              .strict(),
+            z
+              .object({
+                cycle: z.number().int().min(-1_000_000).max(1_000_000),
+                phase: z.number().int().min(0),
+              })
+              .strict(),
+          ])
+          .optional()
+          .describe(
+            "Exact destination in the world's calendar (year/month/day/hour/minute), or phase clock (cycle/phase, zero-based). Copy unchanged date fields from currentTime. Omit amount, unit and direction.",
+          ),
         amount: z.number().int().min(0).max(1_000_000).optional(),
         unit: z
           .enum(["minute", "hour", "day", "phase", "cycle"])

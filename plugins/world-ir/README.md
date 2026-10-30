@@ -32,4 +32,4 @@ runtime:
 
 `inventory_change`、`quest_change` 两类事件的 `attributes` 有固定字段（物品与持有者、任务名与状态），由 `submit-world-facts` 校验，字段表见 [tools.md · submit-world-facts](../../docs/reference/tools.md#submit-world-facts)。`inventory` 与 `core-quest` 的 function runtime 只读这些字段记账，不再各自调用模型；`affinity` 仍是 agent，从 `interaction` 等事件自行判断好感变化。
 
-为让抽取沿用会话里已有的名称，`world-ir` 以 `cardinality: all` 可选输入读取 `world-ir.vocabulary@1`：提供者在 pre-turn 发布 `{ entries: [{ type, name, details? }] }`（如 `inventory/vocabulary` 发布物品名，`core-quest/vocabulary` 发布进行中的任务名与未完成目标）。词表只用于对齐名称，不是本轮发生了什么的证据。
+为让抽取沿用会话里已有的名称，`world-ir` 以 `cardinality: all` 可选输入读取 `world-ir.vocabulary@1`：提供者在 pre-turn 发布 `{ entries: [{ type, name, details? }] }`（如 `inventory/vocabulary` 发布物品名，`core-quest/vocabulary` 发布进行中的任务名与未完成目标）。词表只用于对齐名称，不是本轮发生了什么的证据。工具要求对每个未完成目标提交带正文引文的 `objectiveAssessments`，并检查与任务事件一致；评估不进入公开输出，也不写数据。字段和局限见[逐目标评估](../../docs/reference/tools.md#逐目标评估)。
