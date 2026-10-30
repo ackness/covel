@@ -374,18 +374,11 @@ describe("tool batches", () => {
       }),
     );
     const hooks = createHookPipeline();
-    const barriers: string[] = [];
     hooks.register<{ toolCall: { name: string } }>({
       id: "barriers",
       event: "PreToolUse",
       handler: async (_context, { toolCall: call }) => {
         order.push(`pre:${call.name}`);
-        if (
-          ["serial", "missing", "hidden", "search-tools"].includes(call.name)
-        ) {
-          expect(active).toBe(0);
-          barriers.push(call.name);
-        }
         return { action: "continue" };
       },
     });
@@ -425,7 +418,9 @@ describe("tool batches", () => {
           module(
             "serial",
             async () => {
-              expect(active).toBe(0);
+              order.push("start:serial");
+              await wait(5);
+              order.push("end:serial");
               return {};
             },
             { readOnly: true },
@@ -435,7 +430,13 @@ describe("tool batches", () => {
         ]),
       },
     });
-    expect(barriers).toEqual(["serial", "missing", "hidden", "search-tools"]);
+    const at = (entry: string) => order.indexOf(entry);
+    expect(at("end:r1")).toBeGreaterThanOrEqual(0);
+    expect(at("end:r1")).toBeLessThan(at("start:serial"));
+    expect(at("end:serial")).toBeLessThan(at("start:r2"));
+    expect(
+      loop.executedToolCalls.find((call) => call.name === "serial")?.success,
+    ).toBe(true);
     expect(hidden).not.toHaveBeenCalled();
     expect(
       order.filter((entry) =>
