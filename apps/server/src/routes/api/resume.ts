@@ -67,6 +67,7 @@ import {
   snapshotUserSettings,
   createTurnEmitter,
   runWithHookScope,
+  settleFailedResumeJobs,
   suspensionOutdatedReason,
   type SuspensionOutdatedReason,
 } from "@covel/runtime";
@@ -389,6 +390,14 @@ resumeRoutes.post("/:id/suspensions/:suspensionId/resume", async (c) => {
             emitter,
             eventBus,
           });
+          // Nothing it reported landed: its jobs, a claimed success
+          // included, wait for the retry. Settled before the claim is
+          // released, so no retry reports under the same scope meanwhile.
+          await settleFailedResumeJobs(
+            { store, ...(eventBus ? { eventBus } : {}) },
+            liveSuspension,
+            execution.commit.results.map((ran) => ran.runtimeId),
+          );
           await releaseClaim();
           // The runtime's own failure, the text a turn reports to the player
           // in `runtime.failed`. An exception below stays a generic 500.
@@ -493,7 +502,15 @@ resumeRoutes.post("/:id/suspensions/:suspensionId/resume", async (c) => {
   } catch (err: unknown) {
     // Release the claim so legitimate retries can attempt again. The
     // runtime error propagates to the caller; the suspension is back to
-    // `unresolved` and appears in subsequent `listSuspensions`.
+    // `unresolved` and appears in subsequent `listSuspensions`. A claim
+    // still held means the attempt did not commit: what its runtime
+    // reported waits for the retry, as after a failed result.
+    if (ownClaim !== undefined) {
+      await settleFailedResumeJobs(
+        { store, ...(eventBus ? { eventBus } : {}) },
+        suspension,
+      );
+    }
     await releaseClaim();
 
     throw err;

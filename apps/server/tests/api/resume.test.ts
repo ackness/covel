@@ -1313,6 +1313,119 @@ describe("Resume Routes", () => {
       expect((await store.getSession("sess-1"))?.completedPlayerTurns).toBe(2);
     });
 
+    describe("progress reported by a resume that does not commit", () => {
+      const scope: ExecutionContext = {
+        executionId: "suspended-execution",
+        origin: "player",
+        countPolicy: "complete-player-turn",
+        logicalTurnId: "logical-turn-with-progress",
+      };
+      const reporter: RuntimeManifest = {
+        ...TEST_MANIFEST,
+        runtimeType: "function",
+        outputKind: "system",
+        timeoutMs: 50,
+      };
+
+      async function latestStates(): Promise<Record<string, string>> {
+        const rows = await store.listJobStatus("sess-1", {
+          progressScopeId: scope.executionId,
+        });
+        const latest: Record<string, string> = {};
+        for (const row of rows) latest[row.jobId] = row.state;
+        return latest;
+      }
+
+      /** Each attempt reports one job running and claims another succeeded. */
+      function appWith(failFirstAttempt: () => Promise<never>) {
+        let attempt = 0;
+        const handler: FunctionHandler = async (ctx) => {
+          attempt += 1;
+          await ctx.progress!.report({
+            jobId: "working",
+            state: "running",
+            sequence: attempt * 2 - 1,
+          });
+          await ctx.progress!.report({
+            jobId: "claimed",
+            state: "succeeded",
+            sequence: attempt * 2,
+          });
+          if (attempt === 1) await failFirstAttempt();
+          return { outcome: "success", value: { content: "Answered." } };
+        };
+        return createTestApp(
+          makeDefaultDeps(
+            store,
+            {
+              loadRuntimeFn: async () =>
+                ({ manifest: reporter, promptTemplate: "", handler }) as never,
+            },
+            reporter,
+          ),
+        );
+      }
+
+      const resume = (app: ReturnType<typeof createTestApp>) =>
+        app.request("/api/sessions/sess-1/suspensions/susp-1/resume", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ data: { name: "Alice" } }),
+        });
+
+      it("waits for input after the handler fails, and the retry settles it", async () => {
+        vi.spyOn(console, "error").mockImplementation(() => {});
+        await createSuspension(store, { executionContext: scope });
+        const app = appWith(async () => {
+          throw new Error("handler broke after reporting");
+        });
+
+        const failed = await resume(app);
+        expect(failed.status).toBe(500);
+        expect(await failed.text()).toContain("handler broke after reporting");
+        expect(
+          (await store.getSuspension("susp-1"))?.resolvedAt,
+        ).toBeUndefined();
+        expect(await latestStates()).toEqual({
+          working: "waiting-input",
+          claimed: "waiting-input",
+        });
+
+        expect((await resume(app)).status).toBe(200);
+        expect(await latestStates()).toEqual({
+          working: "succeeded",
+          claimed: "succeeded",
+        });
+      });
+
+      it("waits for input after the handler times out, and an abandon cancels it", async () => {
+        vi.spyOn(console, "error").mockImplementation(() => {});
+        await createSuspension(store, { executionContext: scope });
+        const app = appWith(() => new Promise<never>(() => {}));
+
+        const timedOut = await resume(app);
+        expect(timedOut.status).toBe(500);
+        expect(await timedOut.text()).toContain("timed out");
+        expect(
+          (await store.getSuspension("susp-1"))?.resolvedAt,
+        ).toBeUndefined();
+        expect(await latestStates()).toEqual({
+          working: "waiting-input",
+          claimed: "waiting-input",
+        });
+
+        const abandoned = await app.request(
+          "/api/sessions/sess-1/suspensions/susp-1",
+          { method: "DELETE" },
+        );
+        expect(abandoned.status).toBe(200);
+        expect(await latestStates()).toEqual({
+          working: "cancelled",
+          claimed: "cancelled",
+        });
+      });
+    });
+
     it("waits for the final sibling suspension before completing the logical turn", async () => {
       await store.updateSession("sess-1", {
         phase: "playing",

@@ -222,6 +222,70 @@ export async function finalizeJobStatuses(
 }
 
 /**
+ * Return to waiting for input the jobs that some runtimes reported under a
+ * continued progress scope, including a success one of them claimed. Used
+ * when a resume attempt ends without committing: none of its writes landed
+ * and its suspension stays open for a retry, which settles the jobs again.
+ * Only the named runtimes' jobs are touched; the scope also holds jobs that
+ * the suspended execution's own commit settled. Best-effort like every
+ * job-status write: a failure is logged and never changes the outcome.
+ */
+export async function returnJobsToWaitingInput(
+  deps: {
+    readonly store: Pick<DataStore, "appendJobStatus" | "listJobStatus">;
+    readonly eventBus?: EventBus;
+  },
+  scope: {
+    readonly sessionId: string;
+    readonly progressScopeId: string;
+    readonly runtimeIds: ReadonlySet<string>;
+  },
+): Promise<void> {
+  try {
+    const reported = await deps.store.listJobStatus(scope.sessionId, {
+      progressScopeId: scope.progressScopeId,
+    });
+    const groups = new Map<
+      string,
+      { pluginId: string; runtimeId: string; jobIds: Set<string> }
+    >();
+    for (const record of reported) {
+      if (!scope.runtimeIds.has(record.runtimeId)) continue;
+      const key = `${record.pluginId}\u0000${record.runtimeId}`;
+      const group = groups.get(key) ?? {
+        pluginId: record.pluginId,
+        runtimeId: record.runtimeId,
+        jobIds: new Set<string>(),
+      };
+      group.jobIds.add(record.jobId);
+      groups.set(key, group);
+    }
+    for (const group of groups.values()) {
+      await finalizeJobStatuses(
+        {
+          store: deps.store,
+          ...(deps.eventBus ? { eventBus: deps.eventBus } : {}),
+          sessionId: scope.sessionId,
+          progressScopeId: scope.progressScopeId,
+          pluginId: group.pluginId,
+          runtimeId: group.runtimeId,
+        },
+        {
+          outcome: "suspended",
+          reportedJobs: [...group.jobIds],
+          rolledBack: true,
+        },
+      );
+    }
+  } catch (err) {
+    console.warn(
+      "[job-status] returning a failed resume's jobs to waiting failed:",
+      err instanceof Error ? err.message : String(err),
+    );
+  }
+}
+
+/**
  * Settle the jobs a suspended execution reported, which its own finalizer left
  * in `waiting-input`. They live under the suspended execution's progress scope
  * (its `executionId`), not under the resume's. A committed resume ends them as
