@@ -1,5 +1,4 @@
 import { currentCharacterOf, primarySeat } from "@covel/plugin-handlers-utils";
-import { createCastProjection } from "../lib/cast-projection.js";
 import {
   applySceneSetPreview,
   applyStageDirectionPreview,
@@ -30,8 +29,6 @@ const viewpointId = (ctx) => {
 };
 
 export default function (covel) {
-  const castProjection = createCastProjection();
-  covel.onDispose(() => castProjection.clear());
   covel.provideExtension("ui.slot@1", "cast", {
     async handler(_input, ctx) {
       const current = await ctx.pluginData.get("active-cast", "current");
@@ -104,10 +101,7 @@ export default function (covel) {
         (event) =>
           event.topic === "stage.direction" && current?.turnId !== event.turnId,
       );
-      if (!current && !previews.length) {
-        castProjection.forget(ctx.sessionId);
-        return previous;
-      }
+      if (!current && !previews.length) return previous;
       if (current)
         current = {
           ...current,
@@ -143,19 +137,7 @@ export default function (covel) {
         )
       )
         return previous;
-      const projected = actors(speakers);
-      return {
-        actors:
-          ctx.turnId || events.length
-            ? projected
-            : castProjection.project(
-                ctx.sessionId,
-                current,
-                projected,
-                viewpoint,
-              ),
-        retainWhenEmpty: false,
-      };
+      return { actors: actors(speakers), retainWhenEmpty: false };
     },
   });
 }

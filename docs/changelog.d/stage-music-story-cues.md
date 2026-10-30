@@ -9,4 +9,3 @@
 ### Fixed
 
 - **Switching the viewpoint keeps the new viewpoint character off stage.** Saved actors and cast selections no longer bypass the seat-based exclusion.
-- **Presence departures include a fade-out projection.** Outgoing actors appear only in temporary presentation history; saved direction state contains only present actors.

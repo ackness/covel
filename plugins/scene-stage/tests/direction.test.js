@@ -63,7 +63,6 @@ describe("scene-stage direction handler", () => {
     ).toEqual(["companion"]);
     const handlers = new Map();
     register({
-      onDispose() {},
       provideExtension: (_point, id, { handler }) => handlers.set(id, handler),
     });
     const preview = await handlers.get("direction")(
@@ -112,7 +111,6 @@ describe("scene-stage direction handler", () => {
       namespace === "direction" ? staged : null;
     const handlers = new Map();
     register({
-      onDispose() {},
       provideExtension: (_point, id, { handler }) => handlers.set(id, handler),
     });
     for (const events of [[], [{ ...ctx.triggerEvent, turnId: ctx.turnId }]]) {
