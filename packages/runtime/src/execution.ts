@@ -6,6 +6,11 @@ import type {
   TurnResult,
 } from "@covel/shared";
 import { isSetupRuntime } from "@covel/shared";
+import {
+  createSubagentRunner,
+  type SubagentSettledEvent,
+} from "./agent-loop/subagent-runner.js";
+import type { SubagentRunOutcome } from "./faults/classify.js";
 import type { DataStore, SuspensionRecord } from "@covel/store";
 import {
   collectExecutionJournal,
@@ -74,6 +79,7 @@ export interface ExecutionCommitPlan extends Pick<
   | "readDependencies"
 > {
   readonly outputSchemas: Readonly<Record<string, Schema>>;
+  readonly subagentRuns?: readonly SubagentRunOutcome[];
   readonly resolvedSuspensionId?: string;
   /**
    * Detached jobs the suspended turn held back, released by the resume that
@@ -184,13 +190,24 @@ export async function executeTurn(
   // Freeze admission once. A hook may latch a plugin during this execution.
   const paused = new Set(
     [
-      ...(deps.hookScope?.activePluginIds ??
-        runtimes.map((runtime) => runtime.pluginId)),
+      ...(deps.hookScope?.activePluginIds ?? []),
+      ...runtimes.map((runtime) => runtime.pluginId),
     ].filter((pluginId) =>
       deps.pluginFaults?.isLatched(input.sessionId, pluginId),
     ),
   );
+  const pausedRuntimes = runtimes.filter((runtime) =>
+    paused.has(runtime.pluginId),
+  );
   runtimes = runtimes.filter((runtime) => !paused.has(runtime.pluginId));
+  const subagentRuns: SubagentSettledEvent[] = [];
+  const subagents =
+    deps.subagents ??
+    createSubagentRunner({
+      activeRuntimes: runtimes,
+      pausedRuntimes,
+      onSettled: (event) => subagentRuns.push(event),
+    });
   const captured = captureSchemas(deps);
   const userSettings = snapshotUserSettings(input.userSettings);
   const hookScope = {
@@ -209,7 +226,7 @@ export async function executeTurn(
   const turn = await runTurnPipeline(
     { ...input, userSettings },
     runtimes,
-    { ...captured.deps, hookScope },
+    { ...captured.deps, hookScope, subagents },
     options,
   );
   // Each top-level result commits as one unit with everything nested under
@@ -281,6 +298,9 @@ export async function executeTurn(
           : turn.executionContext,
         runtimes,
         results,
+        // Abandoned, cancelled runs that settle after this snapshot are
+        // neutral and do not enter the commit plan.
+        ...(subagentRuns.length ? { subagentRuns } : {}),
         commitUnits,
         ...(abortReason !== undefined ? { abortReason } : {}),
         journalMessages,
@@ -347,6 +367,27 @@ export async function resumeSuspendedRuntime(
 ): Promise<ExecutedRuntime> {
   if (deps.pluginFaults?.isLatched(suspension.sessionId, manifest.pluginId))
     throw new Error("Plugin is unavailable in this session");
+  const activeRuntimes = options?.activeRuntimes ?? [manifest];
+  const paused = new Set(
+    [
+      ...(deps.hookScope?.activePluginIds ?? []),
+      ...activeRuntimes.map((runtime) => runtime.pluginId),
+    ].filter((pluginId) =>
+      deps.pluginFaults?.isLatched(suspension.sessionId, pluginId),
+    ),
+  );
+  const subagentRuns: SubagentSettledEvent[] = [];
+  const subagents =
+    deps.subagents ??
+    createSubagentRunner({
+      activeRuntimes: activeRuntimes.filter(
+        (runtime) => !paused.has(runtime.pluginId),
+      ),
+      pausedRuntimes: activeRuntimes.filter((runtime) =>
+        paused.has(runtime.pluginId),
+      ),
+      onSettled: (event) => subagentRuns.push(event),
+    });
   const captured = captureSchemas(deps);
   const userSettings = snapshotUserSettings(options?.userSettings);
   const hookScope = {
@@ -355,8 +396,7 @@ export async function resumeSuspendedRuntime(
       suspension.turnId,
     activePluginIds: new Set(
       [...(deps.hookScope?.activePluginIds ?? [manifest.pluginId])].filter(
-        (pluginId) =>
-          !deps.pluginFaults?.isLatched(suspension.sessionId, pluginId),
+        (pluginId) => !paused.has(pluginId),
       ),
     ),
     settings: deps.hookScope
@@ -369,7 +409,7 @@ export async function resumeSuspendedRuntime(
       suspension,
       resumeData,
       manifest,
-      { ...captured.deps, hookScope },
+      { ...captured.deps, hookScope, subagents },
       { ...options, userSettings },
     ),
   );
@@ -423,6 +463,7 @@ export async function resumeSuspendedRuntime(
         },
         runtimes: [manifest],
         results: [result],
+        ...(subagentRuns.length ? { subagentRuns } : {}),
         journalMessages: collectExecutionJournal(carrier),
         runtimeTriggers: collectExecutionTriggers(carrier),
         suspensions: collectExecutionSuspensions(carrier),

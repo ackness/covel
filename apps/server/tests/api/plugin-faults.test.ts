@@ -17,7 +17,9 @@ import {
   createTurnEmitter,
   PluginExtensionHost,
   PluginServiceRegistry,
+  createToolExecutor,
 } from "@covel/runtime";
+import { ToolRegistry } from "@covel/tools";
 import {
   COVEL_EVENT_META,
   DIMENSION_CONTRACT,
@@ -215,7 +217,177 @@ async function fixture(
   return { store, eventBus, host, app, run, hookPipeline };
 }
 
+async function subagentFixture(storyProvider = false) {
+  const store = createMemoryStore();
+  const eventBus = createEventBus();
+  const caller: RuntimeManifest = {
+    ...runtime,
+    pluginId: "caller-pkg",
+    name: "caller-pkg/main",
+  };
+  const provider: RuntimeManifest = {
+    pluginId: "actor-pkg",
+    name: "actor-pkg/guard",
+    description: "guard",
+    runtimeType: "agent",
+    subagentOnly: true,
+    outputContract: "test-actor@1",
+    tools: { plugin: ["missing"] },
+  };
+  const runtimes = [
+    caller,
+    provider,
+    ...(storyProvider
+      ? [
+          {
+            ...provider,
+            name: "actor-pkg/story",
+            subagentOnly: undefined,
+            outputKind: "story" as const,
+            outputContract: undefined,
+            trigger: { type: "manual" as const },
+          },
+        ]
+      : []),
+  ];
+  const timestamp = new Date().toISOString();
+  await store.createSession({
+    id: "sub-session",
+    locale: "en-US",
+    status: "active",
+    phase: "playing",
+    setupRuntimes: {},
+    seats: [
+      { id: "main", controller: "human", role: "player", characters: "auto" },
+    ],
+    activePlugins: [caller.pluginId, provider.pluginId],
+    completedPlayerTurns: 0,
+    createdAt: timestamp,
+    updatedAt: timestamp,
+  });
+  const host = createHostPluginFaults({
+    store,
+    eventBus,
+    registry: { getActiveRuntimes: () => runtimes },
+  });
+  const tools = new ToolRegistry();
+  const generate = vi.fn(async () => {
+    throw new Error("model must not run");
+  });
+  const handler: FunctionHandler = async (ctx) => {
+    if (!ctx.agents) throw new Error("sub-agent context missing");
+    const result = await ctx.agents.run({
+      target: { contract: "test-actor@1" },
+      brief: "Challenge the stranger.",
+    });
+    return {
+      outcome: "success",
+      value: { code: result.ok ? "success" : result.error.code },
+    };
+  };
+  const run = async (
+    turnId: string,
+    origin: "player" | "background" = "player",
+  ) => {
+    const emitter = createTurnEmitter({
+      store,
+      eventBus,
+      sessionId: "sub-session",
+      turnId,
+    });
+    const execution = await executeTurn(
+      {
+        sessionId: "sub-session",
+        turnId,
+        logicalTurnId: turnId,
+        playerMessage: "go",
+        origin,
+      },
+      runtimes,
+      {
+        store,
+        emitter,
+        pluginFaults: host.latch,
+        llm: { generate },
+        loadRuntime: async (manifest) => ({
+          manifest,
+          promptTemplate: "",
+          ...(manifest.runtimeType === "function" ? { handler } : {}),
+        }),
+        toolExecutor: createToolExecutor({
+          findTool: (name, context) => tools.find(name, context.pluginId),
+          getToolSource: (name) => tools.source(name),
+        }),
+      },
+    );
+    const outcome = await commitExecution({
+      store,
+      eventBus,
+      emitter,
+      execution,
+      completion:
+        origin === "background"
+          ? { kind: "detached", turnId }
+          : { kind: "turn", turnId, durationMs: 0 },
+    });
+    expect(outcome.status).toBe("committed");
+    return execution;
+  };
+  return { store, host, run, generate };
+}
+
 describe("host plugin fault boundary", () => {
+  it.each(["player", "background"] as const)(
+    "counts a sub-agent provider's faults at the shared boundary and names the provider: %s",
+    async (origin) => {
+      const f = await subagentFixture();
+      try {
+        for (const turnId of ["one", "two", "three"])
+          await f.run(turnId, origin);
+        const traces = await f.store.listTraceEvents("sub-session");
+        const counted = traces.filter(
+          (event) => event.type === "plugin.fault.counted",
+        );
+        expect(counted).toHaveLength(3);
+        for (const event of counted)
+          expect(event.payload).toMatchObject({ pluginId: "actor-pkg" });
+        expect(
+          traces
+            .filter((event) => event.type === "plugin.fault.latched")
+            .map((event) => event.payload),
+        ).toMatchObject([{ pluginId: "actor-pkg" }]);
+        expect(f.host.latch.isLatched("sub-session", "caller-pkg")).toBe(false);
+        const fourth = await f.run("four", origin);
+        expect(fourth.result.runtimeResults).toMatchObject([
+          { pluginId: "caller-pkg", output: { code: "unavailable" } },
+        ]);
+        expect(fourth.commit.subagentRuns).toBeUndefined();
+        expect(f.generate).not.toHaveBeenCalled();
+      } finally {
+        await f.store.close();
+      }
+    },
+  );
+  it("counts sub-agent faults without pausing an active story provider", async () => {
+    const f = await subagentFixture(true);
+    try {
+      for (const turnId of ["one", "two", "three"]) await f.run(turnId);
+      const traces = await f.store.listTraceEvents("sub-session");
+      const counted = traces.filter(
+        (event) => event.type === "plugin.fault.counted",
+      );
+      expect(counted).toHaveLength(3);
+      for (const event of counted)
+        expect(event.payload).toMatchObject({ pluginId: "actor-pkg" });
+      expect(f.host.latch.isLatched("sub-session", "actor-pkg")).toBe(false);
+      expect(
+        traces.filter((event) => event.type === "plugin.fault.latched"),
+      ).toEqual([]);
+      expect(f.generate).not.toHaveBeenCalled();
+    } finally {
+      await f.store.close();
+    }
+  });
   // These prepared executions exercise the commit boundary. The real resume
   // route's pre-commit failure path is covered separately below.
   it.each(["player", "manual", "resume", "background"] as const)(

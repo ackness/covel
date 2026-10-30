@@ -631,6 +631,7 @@ const result = await ctx.agents?.run({
 - **取消**：调用方被取消、超时或运行结束，子 agent 跟着停下，结果是 `cancelled`。handler 没有等待的子 agent，runtime 收尾前会等它结束。
 - **只交回输出**：输出按提供方的 `io.output.schema` 和契约 schema 检查，没通过算 `internal`。Hook 中的 `PreRuntime`、`PostRuntime` 和 `PostContextAssembly` 不为子 agent 触发；循环里的 `PreLLMCall`、`PreStep`、`PreToolUse` 和 `PostToolUse` 照常触发，`ctx.runtimeId` 是子 agent 的。
 - **trace**：子 agent 的每个事件都带 `subagentCallId`、`parentCallId` 和 `parentRuntimeId`，另有 `subagent.started` / `completed` / `failed`（见[协议](./protocol.md#子-agent-事件)）。`io.concealed` 的提供方和顶层运行一样隐去内容。
+- **熔断**：子 agent 自身的失败计在提供方；只有提供方自己的时限最紧（相同时提供方优先）才算它的超时，模型错误和取消不计。父执行失败或回滚仍计故障，清零则必须真正提交；setup runtime 发起的调用既不计数也不清零。暂停的提供方返回 `unavailable`，仍参与歧义检查。详见[协议 · 故障熔断](./protocol.md#插件故障熔断)。
 
 失败不会抛异常（只有 handler 结束后再调用才抛），而是返回错误码：
 
@@ -640,7 +641,7 @@ const result = await ctx.agents?.run({
 | `invalid-input` | 请求不合法：缺字段、简报太长、`data` 不是 JSON 或太大 |
 | `not-found` | 没有符合 `target` 的激活提供方 |
 | `ambiguous` | 有不止一个激活的提供方提供这个契约 |
-| `unavailable` | 达到深度上限或这次执行的并发上限 |
+| `unavailable` | 达到深度上限或这次执行的并发上限，或提供方在本会话已因故障暂停 |
 | `timeout` | 子 agent 用完了自己的时限 |
 | `cancelled` | 调用方或玩家取消了 |
 | `internal` | 其他失败：输出不合格、模型出错、工具打转等。错误文字是固定的，原因只记在服务端日志里 |

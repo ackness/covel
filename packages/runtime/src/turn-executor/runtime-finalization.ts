@@ -31,7 +31,7 @@ import {
 } from "./turn-control.js";
 
 /** The exception behind a failure once retry wrappers are peeled off. */
-function unwrapRetryCause(cause: unknown): unknown {
+export function unwrapRetryCause(cause: unknown): unknown {
   let current = cause;
   for (let depth = 0; depth < 8 && current instanceof LLMRetryError; depth++)
     current = current.cause;

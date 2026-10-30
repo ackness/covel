@@ -321,6 +321,7 @@ export { validatePluginHookRegistration } from "./plugin-hook-registration.js";
 export {
   classifyExecutionFaults,
   type PluginFaultVerdict,
+  type SubagentRunOutcome,
 } from "./faults/classify.js";
 export {
   createPluginFaultLatch,

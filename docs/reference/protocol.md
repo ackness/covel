@@ -329,7 +329,7 @@ agent runtime 的工具循环每一种结束方式都对应一个结束原因（
 
 辅助插件在同一会话里连续三个逻辑输入因自身原因失败时，内核暂停它，并显示固定提示。插件列表显示“已暂停”，玩家可点“重新启用”清零。每个插件每个逻辑输入只计一次；同一输入的自动推进轮合并计数。同一次输入内故障优先于正常结果。一次真正提交的正常 runtime 运行清零；没有 runtime 的插件由正常完成的 Hook 清零。跳过、挂起等中性结果不改变计数。
 
-`RuntimeResult.fault?: "runtime" | "timeout"` 是内核写入的归因标记。只统计插件自己的异常、自己的超时，以及 agent 的 `max-steps`、`invalid-output`、`loop-detected`、`context-overflow` 和自己的 `deadline`。`errorKind` 不能用来判断是不是插件的错。是否提供者错误由原始异常（含重试包装的 `cause`）判定，PostRuntime Hook 改写错误文本不改变归因。模型和提供者错误、所有取消（取消标记只属于被取消的那次运行：上级自己的超时取消子 agent 时，上级仍按自己的超时计数）、依赖或读取引起的连带丢弃、维度版本冲突、过时的挂起基线、无辜插件的整次回滚均不计数。setup runtime 使用自己的重试预算，不参与熔断。子 agent 和服务提供方的故障目前不计入。服务异常保留失败调用的结构化来源；提供方抛错、服务不可用（包括提供方已暂停）、准入失败、服务调用自己的超时或取消均不记在调用方。调用方自己的 runtime 超时、无效调用选项和直接触发调用环或深度上限仍计数；嵌套提供方的调用错误不向外层调用方转嫁。
+`RuntimeResult.fault?: "runtime" | "timeout"` 是内核写入的归因标记。只统计插件自己的异常、自己的超时，以及 agent 的 `max-steps`、`invalid-output`、`loop-detected`、`context-overflow` 和自己的 `deadline`。`errorKind` 不能用来判断是不是插件的错。是否提供者错误由原始异常（含重试包装的 `cause`）判定，PostRuntime Hook 改写错误文本不改变归因。模型和提供者错误、所有取消（取消标记只属于被取消的那次运行：上级自己的超时取消子 agent 时，上级仍按自己的超时计数）、依赖或读取引起的连带丢弃、维度版本冲突、过时的挂起基线、无辜插件的整次回滚均不计数。setup runtime 使用自己的重试预算，不参与熔断。子 agent 的自身故障计在提供方插件：只有提供方自己的时限最紧（相同时提供方优先）时，`deadline` 才算它的超时；调用方更紧的预算或剩余时间不计。setup runtime 调用的子 agent 既不计数也不清零。运行结果随提交计划交到宿主边界：提供方自身故障在父执行失败或回滚时仍计数，但清零必须等执行真正提交；过时挂起基线使整次尝试保持中性。服务提供方的故障仍不计入。服务异常保留失败调用的结构化来源；提供方抛错、服务不可用（包括提供方已暂停）、准入失败、服务调用自己的超时或取消均不记在调用方。调用方自己的 runtime 超时、无效调用选项和直接触发调用环或深度上限仍计数；嵌套提供方的调用错误不向外层调用方转嫁。
 
 Hook 自己抛错或超时记在 Hook 所属插件；主动 `abort` 不是 Hook 故障。插件自己的 proposal 被处理器拒绝或被 `PreStateCommit` 主动否决，记在 proposal 所属插件；其他插件的 Hook 抛错或超时只记 Hook 所属插件。提供当前 `outputKind: "story"` runtime 或维度契约的插件只记 trace，永不暂停。
 
@@ -342,7 +342,7 @@ Hook 自己抛错或超时记在 Hook 所属插件；主动 `abort` 不是 Hook 
 
 `reason` 固定为 `"runtime" | "hook" | "proposal-rejected" | "timeout"`，不包含原始错误文本。`SessionPlugin.paused` 和实时会话视图的 `SnapshotPluginStatus.paused` 仅在暂停时出现，形状为 `{ reason }`。故障计数和暂停状态只在进程内存里，重启、结束或删除会话会清除，不进入保存的快照、fork、导出或 BrowserVault checkpoint。无需重建开发数据。
 
-暂停从下一次执行开始生效：不调度它的 runtime，不运行它的 Hook，也不向它的 runtime 提供工具；服务返回 `unavailable`。当前执行冻结的注册表和启用集合保持到执行结束。玩家重新启用的 API 见[会话插件管理](./api.md#会话插件管理)。提交结果的连带原因见[事务](./transactions.md#回合级单事务)。
+暂停从下一次执行开始生效：不调度它的 runtime，不运行它的 Hook，也不向它的 runtime 提供工具；服务和子 agent 调用返回 `unavailable`；暂停的子 agent 提供方仍参与歧义检查，不会悄悄改用其他提供方。当前执行冻结的注册表和启用集合保持到执行结束。玩家重新启用的 API 见[会话插件管理](./api.md#会话插件管理)。提交结果的连带原因见[事务](./transactions.md#回合级单事务)。
 
 ### 作业进度事件（job-status，实验性）
 
@@ -1354,7 +1354,7 @@ runtime 的终态：
 | --- | --- |
 | `subagent.started` | `{ subagentCallId, parentCallId, parentRuntimeId, parentPluginId, runtimeId, pluginId, turnId }`。找到提供方、开始运行时发出 |
 | `subagent.completed` | `subagent.started` 的字段 + `{ stopReason, durationMs, usage? }`。`usage` 是这次运行各步之和 `{ inputTokens, outputTokens }` |
-| `subagent.failed` | `{ subagentCallId, parentCallId, parentRuntimeId, parentPluginId, turnId, code, error, durationMs, runtimeId?, pluginId?, stopReason?, cancelledBy? }`。`code` 是 `ctx.agents.run` 的错误码，`error` 是固定的说明文字。还没找到提供方就被拒绝（请求不合法、达到上限、没有或有多个提供方）时没有 `runtimeId` / `pluginId`。`cancelledBy` 是 `parent` 或 `player` |
+| `subagent.failed` | `{ subagentCallId, parentCallId, parentRuntimeId, parentPluginId, turnId, code, error, durationMs, runtimeId?, pluginId?, stopReason?, cancelledBy?, fault? }`。`code` 是 `ctx.agents.run` 的错误码，`error` 是固定的说明文字。还没找到提供方就被拒绝（请求不合法、达到上限、没有或有多个提供方）时没有 `runtimeId` / `pluginId`。提供方因会话故障暂停而被拒绝时仍带它的 `runtimeId` / `pluginId`。`fault?` 是内核归因的 `"runtime"` 或 `"timeout"`。`cancelledBy` 是 `parent` 或 `player` |
 | `subagent.writes-dropped` | 子 agent 的标识 + `{ count }`。正常情况下不会出现：子 agent 只有只读工具。万一有写入或事件，它们被丢弃并记下数量 |
 
 - `subagentCallId` 是内核给这次运行分配的 ID，也是子 agent 各步 `step.*` 的 `runId`。`parentCallId` 是 `delegate` 工具调用的 `toolCallId`，或者调用 `ctx.agents.run` 的函数 runtime 的 `runId`。
