@@ -542,7 +542,6 @@ Each execution writes only one or a few rows for these, and they store results r
 - A retry names a source turn.
 - The media reference scan reads every turn result and runtime output.
 - The debug API lists runtime outputs and interactions.
-- The history of a state entry is its change rows.
 - A background job reads the exports as they were at the moment its source execution started.
 
 These rows are not copied in full into browser checkpoints (see [Browser-Private Protocol](#browser-private-protocol)). When to reconsider them: a server-stored session whose database is mostly taken up by these tables, rather than by messages, snapshots and traces. First look at `tool_calls` (no server code reads it) and at the export revisions older than the "earliest unfinished job".
