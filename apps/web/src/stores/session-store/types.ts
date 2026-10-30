@@ -44,7 +44,7 @@ export interface ReasoningEntry {
  * yet" from "event was lost / reordered" — any dropped runtime.completed
  * left the chip spinning forever.
  *
- * The current store uses a status-aggregation model: each runtime has a single row, and
+ * The current store uses a status-aggregation model: each runtime run has a row, and
  * every SSE event upserts the status in-place. A missed event still leaves
  * the row in the best known state, and the next arriving event overwrites
  * cleanly. That is what we adopt here to keep chips from getting stuck.
@@ -53,6 +53,10 @@ export interface ExecutionStep {
   /** Provider-exposed reasoning, one entry per completed model call. */
   reasoning?: readonly ReasoningEntry[];
   runtimeId: string;
+  /** Lifecycle identity for nested and top-level runs of the same runtime. */
+  runId?: string;
+  /** This run continues an earlier suspended run of the same runtime. */
+  resumed?: true;
   pluginId: string;
   /** Stage recorded by runtime.started, retained for historical setup rows. */
   stage?: Stage;

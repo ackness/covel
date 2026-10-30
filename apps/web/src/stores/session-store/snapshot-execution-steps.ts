@@ -7,6 +7,7 @@ import {
 } from "@covel/shared";
 import {
   mergeExecutionStep,
+  findExecutionStepIndex,
   foldBackgroundExecutionSteps,
   toExecutionStepStatus,
   readFailureTarget,
@@ -26,14 +27,10 @@ const lifecycleTypes = new Set([
   "runtime.suspended",
 ]);
 
-function stepKey(step: ExecutionStep): string {
-  return `${step.turnId ?? "__no_turn__"}|${step.runtimeId}`;
-}
-
 export function buildSnapshotExecutionSteps(
   events: readonly SnapshotTraceEvent[],
 ): ExecutionStep[] {
-  const byKey = new Map<string, ExecutionStep>();
+  const steps: ExecutionStep[] = [];
   const seededAttempts = new Set<string>();
   // Database cursors break equal timestamps with random row IDs. A start and
   // terminal event written in one millisecond must still settle as terminal.
@@ -50,11 +47,11 @@ export function buildSnapshotExecutionSteps(
         event.payload as Record<string, unknown>,
         event.turnId,
         event.timestamp,
-        [...byKey.values()],
+        steps,
       );
       if (pending.length) seededAttempts.add(event.turnId);
       for (const step of pending)
-        if (!byKey.has(stepKey(step))) byKey.set(stepKey(step), step);
+        if (findExecutionStepIndex(steps, step) < 0) steps.push(step);
     }
     const reasoning = reasoningAction(
       event.type,
@@ -63,8 +60,10 @@ export function buildSnapshotExecutionSteps(
       event.timestamp,
     );
     if (reasoning) {
-      const key = `${reasoning.turnId}|${reasoning.runtimeId}`;
-      byKey.set(key, appendReasoningStep(byKey.get(key), reasoning));
+      const index = findExecutionStepIndex(steps, reasoning);
+      const step = appendReasoningStep(steps[index], reasoning);
+      if (index < 0) steps.push(step);
+      else steps[index] = step;
     }
     if (!lifecycleTypes.has(event.type)) continue;
     const payload = event.payload as Record<string, unknown>;
@@ -73,12 +72,24 @@ export function buildSnapshotExecutionSteps(
     if (!runtimeId || runtimeId === "__turn__") continue;
     const turnId =
       event.type === "runtime.deferred" &&
-      !byKey.get(`${event.turnId}|${runtimeId}`)?.sourceTurnId &&
+      !steps[findExecutionStepIndex(steps, { turnId: event.turnId, runtimeId })]
+        ?.sourceTurnId &&
       typeof payload.sourceTurnId === "string"
         ? payload.sourceTurnId
         : event.turnId;
-    const key = `${turnId ?? "__no_turn__"}|${runtimeId}`;
-    const prev = byKey.get(key);
+    const runId =
+      typeof payload.runId === "string" &&
+      payload.runId &&
+      [
+        "runtime.started",
+        "runtime.completed",
+        "runtime.failed",
+        "runtime.skipped",
+      ].includes(event.type)
+        ? payload.runId
+        : undefined;
+    const index = findExecutionStepIndex(steps, { turnId, runtimeId, runId });
+    const prev = steps[index];
     const stage = stageSchema.safeParse(payload.stage);
     const status =
       event.type === "runtime.completed"
@@ -94,10 +105,14 @@ export function buildSnapshotExecutionSteps(
               : event.type === "runtime.suspended"
                 ? "suspended"
                 : "deferred";
-    byKey.set(key, {
+    const step: ExecutionStep = {
       ...prev,
       ...(stage.success ? { stage: stage.data } : {}),
       runtimeId,
+      ...(runId ? { runId } : {}),
+      ...(event.type === "runtime.started" && payload.resumed === true
+        ? { resumed: true }
+        : {}),
       turnId,
       status,
       errorKind:
@@ -136,9 +151,11 @@ export function buildSnapshotExecutionSteps(
               typeof payload.jobId === "string" ? payload.jobId : undefined,
           }
         : {}),
-    });
+    };
+    if (index < 0) steps.push(step);
+    else steps[index] = step;
   }
-  return reconcileExecutionAttempts([...byKey.values()], events);
+  return reconcileExecutionAttempts(steps, events);
 }
 
 /** Browser history fills gaps; server lifecycle rows always win for matching keys. */
@@ -147,19 +164,24 @@ export function reconcileExecutionSteps(
   events: readonly SnapshotTraceEvent[],
   execution?: SessionExecutionStatus,
 ): ExecutionStep[] {
-  const steps = new Map(local.map((step) => [stepKey(step), step]));
+  const steps = [...local];
   for (const step of buildSnapshotExecutionSteps(events)) {
-    const previous = steps.get(stepKey(step));
-    steps.set(stepKey(step), {
+    const index = findExecutionStepIndex(steps, step);
+    const previous = steps[index];
+    const merged: ExecutionStep = {
       ...mergeExecutionStep(previous, step),
+      // A terminal-only snapshot carries no start event; keep the cached start.
+      startedAt: step.startedAt ?? previous?.startedAt,
       ...(step.status === "llm" && previous ? { status: previous.status } : {}),
       ...(previous?.attemptStatus === "committed"
         ? { attemptStatus: "committed" }
         : {}),
-    });
+    };
+    if (index < 0) steps.push(merged);
+    else steps[index] = merged;
   }
   return reconcileExecutionAttempts(
-    foldBackgroundExecutionSteps([...steps.values()]),
+    foldBackgroundExecutionSteps(steps),
     events,
     execution,
   ).map((step) => {

@@ -158,7 +158,7 @@ function renderCard(entry, level, names, l) {
  * id of its character. The player's own notes are left out; the narrative
  * does not speak for the player.
  */
-function matchCards(rows, characters) {
+function matchCards(rows, characters, actingCharacterId) {
   const byId = new Map(
     characters.map((character) => [character.id, character]),
   );
@@ -166,7 +166,8 @@ function matchCards(rows, characters) {
   for (const row of rows) {
     const card = row?.value;
     const character = byId.get(row?.key);
-    if (!isRecord(card) || !character || character.type === "player") continue;
+    if (!isRecord(card) || !character || character.id === actingCharacterId)
+      continue;
     entries.push({ id: character.id, card, name: character.name });
   }
   return entries.sort((a, b) => codeUnit(a.id, b.id));
@@ -198,8 +199,14 @@ function dimensionEntryNames(dimensions) {
  * runtimes, or none when no card has a character in the session or no
  * matched card has roleplay material.
  */
-export function roleplayNoteSegments(rows, characters, locale, dimensions) {
-  const entries = matchCards(rows, characters);
+export function roleplayNoteSegments(
+  rows,
+  characters,
+  locale,
+  dimensions,
+  actingCharacterId,
+) {
+  const entries = matchCards(rows, characters, actingCharacterId);
   if (entries.length === 0) return [];
   const l = labels(locale);
   const names = new Map([

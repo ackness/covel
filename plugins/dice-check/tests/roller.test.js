@@ -30,6 +30,14 @@ describe("dice-check roller handler", () => {
     async (locale, instructionLocale) => {
       vi.stubEnv("COVEL_INSTRUCTION_LOCALE", instructionLocale);
       const metersOnly = {
+        seats: [
+          {
+            id: "main",
+            controller: "human",
+            role: "player",
+            characters: "auto",
+          },
+        ],
         characterSchema: {
           attributes: [
             {
@@ -83,6 +91,14 @@ describe("dice-check roller handler", () => {
     async (locale, instructionLocale, attributeName) => {
       vi.stubEnv("COVEL_INSTRUCTION_LOCALE", instructionLocale);
       const world = {
+        seats: [
+          {
+            id: "main",
+            controller: "human",
+            role: "player",
+            characters: "auto",
+          },
+        ],
         characterSchema: {
           attributes: [
             {
@@ -182,6 +198,9 @@ describe("dice-check roller handler", () => {
 
   it("lists the player character's check attributes converted from their ranges", async () => {
     const world = {
+      seats: [
+        { id: "main", controller: "human", role: "player", characters: "auto" },
+      ],
       characterSchema: {
         attributes: [
           {
@@ -231,6 +250,9 @@ describe("dice-check roller handler", () => {
 
   it("excludes meters and unbounded abilities from the modifier list", async () => {
     const world = {
+      seats: [
+        { id: "main", controller: "human", role: "player", characters: "auto" },
+      ],
       characterSchema: {
         attributes: [
           {
@@ -325,4 +347,53 @@ describe("dice-check roller handler", () => {
     const simplified = await handler(makeCtx({ locale: "zh-Hans" }));
     expect(simplified.value.checkContext).toContain("大成功");
   });
+});
+
+it("uses the action's actor, then follows the current character after a switch", async () => {
+  const world = {
+    characters: [
+      { id: "first", type: "player", fields: { grit: 1 } },
+      { id: "second", type: "player", fields: { grit: 4 } },
+    ],
+    seats: [
+      {
+        id: "main",
+        controller: "human",
+        role: "player",
+        characters: "auto",
+        currentCharacterId: "first",
+      },
+    ],
+    characterSchema: {
+      attributes: [
+        {
+          id: "grit",
+          name: "Grit",
+          type: "number",
+          min: 0,
+          max: 5,
+          category: "abilities",
+        },
+      ],
+    },
+  };
+  const acted = await handler(
+    makeCtx({
+      locale: "en-US",
+      world,
+      playerActions: [
+        { seatId: "main", kind: "act", source: "player", actorId: "second" },
+      ],
+    }),
+  );
+  expect(acted.value.checkContext).toContain("Grit 4/5 → +8");
+  expect(acted.value.checkContext).not.toContain("Grit 1/5");
+  world.seats[0].currentCharacterId = "second";
+  expect(
+    (await handler(makeCtx({ locale: "en-US", world }))).value.checkContext,
+  ).toContain("Grit 4/5 → +8");
+  world.seats[0].currentCharacterId = "first";
+  expect(
+    (await handler(makeCtx({ locale: "en-US", world }))).value.checkContext,
+  ).toContain("Grit 1/5 → +2");
 });

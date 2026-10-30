@@ -1,4 +1,4 @@
-import { translate } from "@covel/plugin-handlers-utils";
+import { actingCharacterOf, translate } from "@covel/plugin-handlers-utils";
 import { creationRules, validateAllocation } from "../../lib/rules.js";
 
 export default async function (ctx) {
@@ -7,8 +7,10 @@ export default async function (ctx) {
   const storedRules = await ctx.pluginData.get("setup", "rules");
   const allocated = await ctx.pluginData.get("setup", "allocated");
   const offered = await ctx.pluginData.get("setup", "offered");
-  const player = ctx.world.characters.find(
-    (character) => character.type === "player",
+  const player = actingCharacterOf(
+    ctx.playerActions ?? [],
+    ctx.world?.characters ?? [],
+    ctx.world?.seats ?? [],
   );
   const playerId = player?.id;
 

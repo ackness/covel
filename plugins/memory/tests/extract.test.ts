@@ -1,5 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
 import { z } from "zod";
+import type {
+  Seat,
+  SeatCharacter,
+  TurnAction,
+} from "@covel/plugin-handlers-utils";
 import extract from "../server/extract.js";
 import register from "../server/index.js";
 import { loadDefinitions } from "../server/definitions.js";
@@ -14,6 +19,7 @@ function fixture(response = '{"scene":"At the harbour"}') {
     inputs: {
       turn: {
         value: {
+          actions: [] as TurnAction[],
           turnId: "source",
           playerMessage: "Go",
           narrativeText: "A harbour appears.",
@@ -25,7 +31,16 @@ function fixture(response = '{"scene":"At the harbour"}') {
     locale: "en",
     signal: controller.signal,
     gateway,
-    world: { characters: [], characterSchema: null },
+    world: {
+      seats: [
+        { id: "main", controller: "human", role: "player", characters: "auto" },
+      ] as Seat[],
+      characters: [] as (SeatCharacter & {
+        name: string;
+        fields?: Record<string, unknown>;
+      })[],
+      characterSchema: null,
+    },
     pluginData: {
       get: async (namespace: string, key: string) =>
         rows.get(`${namespace}/${key}`) ?? null,
@@ -593,4 +608,99 @@ describe("memory extraction prompts", () => {
       vi.unstubAllEnvs();
     }
   });
+});
+
+it.each([true, false])(
+  "extracts the source actor's profile, falling back to the current character (actions: %s)",
+  async (hasActions) => {
+    const { ctx, gateway, writes } = fixture(
+      '{"player_profile":"Resting at the harbour"}',
+    );
+    ctx.world.characters = [
+      {
+        id: "first",
+        type: "player",
+        name: "Wren",
+        fields: { occupation: "Clerk" },
+      },
+      {
+        id: "second",
+        type: "player",
+        name: "Rowan",
+        fields: { occupation: "Captain" },
+      },
+    ];
+    ctx.world.seats = [
+      {
+        id: "main",
+        controller: "human",
+        role: "player",
+        characters: "auto",
+        currentCharacterId: hasActions ? "first" : "second",
+      },
+    ];
+    ctx.inputs.turn.value.actions = hasActions
+      ? [{ seatId: "main", kind: "act", source: "player", actorId: "second" }]
+      : [];
+    await extract(ctx);
+    expect(gateway.generateText.mock.calls[0]?.[0].prompt).toContain("Rowan");
+    expect(gateway.generateText.mock.calls[0]?.[0].prompt).not.toContain(
+      "Wren",
+    );
+    expect(
+      writes.find((write) => write.key === "player_profile")?.value,
+    ).toMatchObject({ content: expect.stringContaining("Rowan") });
+  },
+);
+
+it("recalls facts by another player character's name and excludes only the current name", async () => {
+  let handler;
+  register({
+    toolkit: { z },
+    registerService: vi.fn(),
+    provideExtension: (_point, _id, definition) => {
+      handler = definition.handler;
+    },
+  });
+  const ctx = {
+    locale: "en-US",
+    world: {
+      characters: [
+        { id: "first", type: "player", name: "Wren" },
+        { id: "second", type: "player", name: "Rowan" },
+      ],
+      seats: [
+        {
+          id: "main",
+          controller: "human",
+          role: "player",
+          characters: "auto",
+          currentCharacterId: "first",
+        },
+      ],
+    },
+    pluginData: {
+      list: async (namespace: string) =>
+        namespace === "facts"
+          ? [
+              {
+                key: "old",
+                value: { turn: 1, text: "Rowan concealed the golden compass." },
+              },
+              { key: "recent", value: { turn: 20, text: "The day ended." } },
+            ]
+          : [],
+    },
+  };
+  const input = {
+    playerMessage:
+      "Rowan please explain distant mountain expedition tomorrow after breakfast while travelers gather quietly outside",
+  };
+  expect(await handler(input, ctx)).toEqual([
+    expect.objectContaining({
+      content: expect.stringContaining("golden compass"),
+    }),
+  ]);
+  ctx.world.seats[0].currentCharacterId = "second";
+  expect(await handler(input, ctx)).toEqual([]);
 });

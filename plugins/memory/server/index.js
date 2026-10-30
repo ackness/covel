@@ -1,4 +1,4 @@
-import { compareText } from "@covel/plugin-handlers-utils";
+import { actingCharacterOf, compareText } from "@covel/plugin-handlers-utils";
 import { pickLocaleText, resolveI18nText } from "@covel/plugin-handlers-utils";
 import { DEFAULT_CORE_MEMORY_BLOCKS } from "./blocks.js";
 import { recallFacts } from "./facts.js";
@@ -52,12 +52,17 @@ export default function register(covel) {
       }));
       // The blocks hold the present state. The facts that the player's message
       // is about bring back what the blocks and the history no longer show.
+      const player = actingCharacterOf(
+        [],
+        ctx.world?.characters ?? [],
+        ctx.world?.seats ?? [],
+      );
       const recalled = recallFacts(
         await ctx.pluginData.list("facts"),
         input.playerMessage,
         // The player's own name is in most facts and says nothing about which one is meant.
         (ctx.world?.characters ?? [])
-          .filter((character) => character.type !== "player")
+          .filter((character) => character.id !== player?.id)
           .map((character) => character.name),
       );
       if (recalled.length > 0) {

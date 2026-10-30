@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
 import register from "../server/index.js";
 import { estimateTokens } from "@covel/plugin-handlers-utils";
-import { NOTES_TOKEN_BUDGET } from "../lib/roleplay-notes.js";
+import {
+  roleplayNoteSegments,
+  NOTES_TOKEN_BUDGET,
+} from "../lib/roleplay-notes.js";
 
 let notes;
 register({
@@ -44,7 +47,18 @@ const run = (rows, characters, locale = "en-US", dimensions) =>
     { turnId: "t", playerMessage: "" },
     {
       locale,
-      world: { characters, dimensions },
+      world: {
+        seats: [
+          {
+            id: "main",
+            controller: "human",
+            role: "player",
+            characters: "auto",
+          },
+        ],
+        characters,
+        dimensions,
+      },
       pluginData: {
         list: async (namespace) => (namespace === "blueprints" ? rows : []),
       },
@@ -231,4 +245,51 @@ describe("character notes prompt segment", () => {
     );
     expect(content.match(/<\/character-notes>/g)).toHaveLength(1);
   });
+});
+
+it("renders another player character's notes and skips only the acting id", () => {
+  const characters = [
+    { id: "first", name: "Wren", type: "player" },
+    { id: "second", name: "Rowan", type: "player" },
+  ];
+  const rows = [card("first"), card("second")];
+  const [segment] = roleplayNoteSegments(
+    rows,
+    characters,
+    "en-US",
+    {},
+    "second",
+  );
+  expect(segment.content).toContain("## Wren");
+  expect(segment.content).not.toContain("## Rowan");
+  const [all] = roleplayNoteSegments(rows, characters, "en-US", {}, undefined);
+  expect(all.content).toContain("## Wren");
+  expect(all.content).toContain("## Rowan");
+});
+
+it("uses the primary seat's current character for the notes provider", async () => {
+  const [segment] = await notes(
+    {},
+    {
+      locale: "en-US",
+      world: {
+        characters: [
+          { id: "first", name: "Wren", type: "player" },
+          { id: "second", name: "Rowan", type: "player" },
+        ],
+        seats: [
+          {
+            id: "main",
+            controller: "human",
+            role: "player",
+            characters: "auto",
+            currentCharacterId: "second",
+          },
+        ],
+      },
+      pluginData: { list: async () => [card("first"), card("second")] },
+    },
+  );
+  expect(segment.content).toContain("## Wren");
+  expect(segment.content).not.toContain("## Rowan");
 });

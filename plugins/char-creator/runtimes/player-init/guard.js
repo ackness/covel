@@ -1,4 +1,5 @@
 import {
+  actingCharacterOf,
   translate,
   makeProposal,
   withPendingProposals,
@@ -36,9 +37,12 @@ export default async function guard(ctx) {
   const { logger, store } = ctx;
 
   const characters = ctx.world?.characters;
-  const player = Array.isArray(characters)
-    ? characters.find((c) => c.type === "player")
-    : null;
+  const player = actingCharacterOf(
+    ctx.playerActions ?? [],
+    characters ?? [],
+    ctx.world?.seats ?? [],
+  );
+  const playerId = player?.id;
   const schema = ctx.world?.characterSchema ?? null;
   // Ordering alone does not guarantee the schema provider succeeded. Use the
   // execution-local World Model, which includes same-turn schema proposals,
@@ -76,7 +80,7 @@ export default async function guard(ctx) {
       // still arrive here: the world's characters changed since, or the form
       // was made before the validator existed. The World Model would refuse
       // the player at commit on every attempt, so offer the form again.
-      const nameTaken = isNameTaken(takenNameKeys(characters), name);
+      const nameTaken = isNameTaken(takenNameKeys(characters, playerId), name);
       // Merge declared schema defaults into stored fields so the player
       // record the model reads (get-character / prompt context) matches
       // what the character panel shows (the panel overlays defaults at

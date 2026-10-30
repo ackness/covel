@@ -13,6 +13,7 @@ import {
 import {
   buildDurableRuntimeJobExecutionStep,
   foldBackgroundExecutionSteps,
+  findExecutionStepIndex,
   mergeExecutionStep,
 } from "./execution-steps.js";
 import {
@@ -35,10 +36,7 @@ function upsertExecutionStep(
   steps: SessionState["executionSteps"],
   step: SessionState["executionSteps"][number],
 ): SessionState["executionSteps"] {
-  const key = `${step.turnId ?? "__no_turn__"}|${step.runtimeId}`;
-  const idx = steps.findIndex(
-    (item) => `${item.turnId ?? "__no_turn__"}|${item.runtimeId}` === key,
-  );
+  const idx = findExecutionStepIndex(steps, step);
   const next = [...steps];
   // A later transport/trace failure cannot undo a transaction already committed.
   const committed =
@@ -527,10 +525,10 @@ export function reducer(
         gameState: mergeGameStateForReplacement(state.gameState, action.state),
       };
     case "APPEND_REASONING": {
-      const previous = state.executionSteps.find(
-        (step) =>
-          step.turnId === action.turnId && step.runtimeId === action.runtimeId,
-      );
+      const previous =
+        state.executionSteps[
+          findExecutionStepIndex(state.executionSteps, action)
+        ];
       return {
         ...state,
         executionSteps: upsertExecutionStep(
@@ -540,7 +538,7 @@ export function reducer(
       };
     }
     case "UPSERT_EXECUTION_STEP": {
-      // Upsert on (turnId, runtimeId). Transitions running → completed/failed/
+      // Upsert on (turnId, runtimeId, runId). Transitions running → completed/failed/
       // skipped / etc happen in place — missed runtime.completed no longer
       // leaves the chip spinning. New turn creates a new row; existing turn's
       // row is merged so we keep label/startedAt while overwriting status.

@@ -120,3 +120,71 @@ it("rejects unkeyed timeline rows without partially overwriting history", async 
   ).rejects.toThrow("Invalid execution history identity");
   expect(await getExecutionSteps(sessionId)).toEqual([before]);
 });
+
+it("saves and loads separate runs of the same runtime without losing reasoning", async () => {
+  const sessionId = `runs-${crypto.randomUUID()}`;
+  const outer = {
+    turnId: "turn",
+    runtimeId: "story",
+    runId: "outer",
+    status: "running",
+    reasoning: [{ id: "outer-reasoning", content: "Outer reasoning" }],
+  };
+  const nested = {
+    ...outer,
+    runId: "nested",
+    status: "completed",
+    reasoning: [{ id: "nested-reasoning", content: "Nested reasoning" }],
+  };
+  await saveExecutionSteps(sessionId, [outer, nested]);
+  expect(await getExecutionSteps(sessionId)).toEqual([outer, nested]);
+  const failed = { ...outer, status: "failed" };
+  await saveExecutionSteps(sessionId, [failed]);
+  expect(await getExecutionSteps(sessionId)).toEqual([failed, nested]);
+});
+
+it("adopts anonymous cache rows and directs later anonymous observations to the newest run", async () => {
+  const sessionId = `placeholder-${crypto.randomUUID()}`;
+  const placeholder = {
+    turnId: "turn",
+    runtimeId: "story",
+    status: "running",
+    startedAt: "2026-10-01T00:00:00Z",
+  };
+  await saveExecutionSteps(sessionId, [placeholder]);
+  const first = { ...placeholder, runId: "first", status: "completed" };
+  await saveExecutionSteps(sessionId, [first]);
+  expect(await getExecutionSteps(sessionId)).toEqual([first]);
+  const second = {
+    ...placeholder,
+    runId: "second",
+    startedAt: "2026-10-01T00:00:01Z",
+  };
+  await saveExecutionSteps(sessionId, [second]);
+  const anonymous = {
+    ...placeholder,
+    status: "suspended",
+    startedAt: second.startedAt,
+  };
+  await saveExecutionSteps(sessionId, [anonymous]);
+  expect(await getExecutionSteps(sessionId)).toEqual([
+    first,
+    { ...anonymous, runId: "second" },
+  ]);
+});
+
+it.each(["", 42, null])(
+  "rejects an invalid cached run identity %j atomically",
+  async (runId) => {
+    const sessionId = `invalid-run-${crypto.randomUUID()}`;
+    const before = { turnId: "turn", runtimeId: "story", runId: "before" };
+    await saveExecutionSteps(sessionId, [before]);
+    await expect(
+      saveExecutionSteps(sessionId, [
+        { ...before, runId: "new" },
+        { ...before, runId },
+      ]),
+    ).rejects.toThrow("Invalid execution history identity");
+    expect(await getExecutionSteps(sessionId)).toEqual([before]);
+  },
+);

@@ -500,3 +500,82 @@ it("preserves the bound remote timeline when an incoming row has no identity", a
   ).rejects.toThrow("Invalid execution history identity");
   expect(await first.loadExecutionSteps(session.id, session)).toEqual([before]);
 });
+
+it("saves and loads separate runs across remote cache instances without losing reasoning", async () => {
+  const outer = {
+    turnId: "turn",
+    runtimeId: "story",
+    runId: "outer",
+    status: "running",
+    reasoning: [{ id: "outer-reasoning", content: "Outer reasoning" }],
+  };
+  const nested = {
+    ...outer,
+    runId: "nested",
+    status: "completed",
+    reasoning: [{ id: "nested-reasoning", content: "Nested reasoning" }],
+  };
+  await first.saveExecutionSteps(session.id, [outer, nested], session);
+  expect(await second.loadExecutionSteps(session.id, session)).toEqual([
+    outer,
+    nested,
+  ]);
+  const failed = { ...outer, status: "failed" };
+  await second.saveExecutionSteps(session.id, [failed], session);
+  expect(await first.loadExecutionSteps(session.id, session)).toEqual([
+    failed,
+    nested,
+  ]);
+});
+
+it("adopts anonymous remote rows and directs anonymous observations to the newest run", async () => {
+  const placeholder = {
+    turnId: "turn",
+    runtimeId: "story",
+    status: "running",
+    startedAt: "2026-10-01T00:00:00Z",
+  };
+  await first.saveExecutionSteps(session.id, [placeholder], session);
+  const identified = { ...placeholder, runId: "first", status: "completed" };
+  await second.saveExecutionSteps(session.id, [identified], session);
+  expect(await first.loadExecutionSteps(session.id, session)).toEqual([
+    identified,
+  ]);
+  const newer = {
+    ...placeholder,
+    runId: "second",
+    startedAt: "2026-10-01T00:00:01Z",
+  };
+  await first.saveExecutionSteps(session.id, [newer], session);
+  const anonymous = {
+    ...placeholder,
+    status: "suspended",
+    startedAt: newer.startedAt,
+  };
+  await second.saveExecutionSteps(session.id, [anonymous], session);
+  expect(await first.loadExecutionSteps(session.id, session)).toEqual([
+    identified,
+    { ...anonymous, runId: "second" },
+  ]);
+});
+
+it.each(["", 42, null])(
+  "rejects invalid remote run identity %j without changing saved history",
+  async (runId) => {
+    const before = { turnId: "turn", runtimeId: "story", runId: "before" };
+    await first.saveExecutionSteps(session.id, [before], session);
+    await expect(
+      second.saveExecutionSteps(
+        session.id,
+        [
+          { ...before, runId: "new" },
+          { ...before, runId },
+        ],
+        session,
+      ),
+    ).rejects.toThrow("Invalid execution history identity");
+    expect(await first.loadExecutionSteps(session.id, session)).toEqual([
+      before,
+    ]);
+  },
+);

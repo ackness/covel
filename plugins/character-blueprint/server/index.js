@@ -1,3 +1,4 @@
+import { actingCharacterOf } from "@covel/plugin-handlers-utils";
 import { roleplayNoteSegments } from "../lib/roleplay-notes.js";
 
 export default function (covel) {
@@ -10,6 +11,7 @@ export default function (covel) {
         ctx.world.characters,
         ctx.locale,
         ctx.world.dimensions,
+        actingCharacterOf([], ctx.world.characters, ctx.world.seats)?.id,
       );
     },
   });

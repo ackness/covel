@@ -10,4 +10,4 @@
 
 ### Upgrade notes
 
-- **Bundled plugins other than the two narrators still pick the first `type: player` character.** The inventory ledger, tabletop rules, dice checks, memory, character creation, scene stage and character blueprint plugins act on the first player character when a session has several, until they move to seats.
+- **Scene Stage still picks the first `type: player` character.** Its cast and direction filters use the first player character when a session has several, until the plugin moves to seats.

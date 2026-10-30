@@ -31,7 +31,7 @@
 
 `ctx.recursiveCall` 的用途是[包内嵌套调用](./plugins.md#嵌套调用ctxrecursivecall)。要请求其他包的结果，使用服务；要触发其他包的后续工作，使用事件。
 
-会话的座位（谁在玩、控制哪些角色）不归任何插件，也不需要通过服务或输入去问别的插件。函数 runtime、guard、工具（`context.world`）和扩展提供者（`ctx.world`）都在 `world.seats` 上读到同一份，只读。用 SDK 的 `primarySeat`、`currentCharacterOf`、`seatCharacterIds` 推导玩家扮演的角色，规则见[座位](./world-model.md#座位)。插件不能写座位，玩家用[切换接口](./api.md#会话座位)换当前角色。
+会话的座位（谁在玩、控制哪些角色）不归任何插件，也不需要通过服务或输入去问别的插件。函数 runtime、guard、工具（`context.world`）和扩展提供者（`ctx.world`）都在 `world.seats` 上读到同一份，只读。要找本回合行动的角色，用 SDK 的 `actingCharacterOf(actions, world.characters, world.seats)`，不要自己用 `primarySeat` 或 `currentCharacterOf` 拼：它先取玩家行动指明的角色，没有时才退回主座位的当前角色。函数 runtime 和 guard 传 `ctx.playerActions`；扩展提供者和工具拿不到行动，传 `[]`，得到主座位的当前角色；后台作业传源回合的 `ctx.inputs.turn.value.actions`（缺省为 `[]`），保留源行动的角色。`seatCharacterIds` 给出一个座位绑定的全部角色。完整规则见[座位](./world-model.md#座位)。插件不能写座位，玩家用[切换接口](./api.md#会话座位)换当前角色。
 
 ### 服务只给函数 runtime
 

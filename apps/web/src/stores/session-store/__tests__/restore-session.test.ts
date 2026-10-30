@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { act, renderHook } from "@testing-library/react";
 import { useReducer } from "react";
 import { initialState, reducer } from "../reducer.js";
+import { projectExecutionTurns } from "../execution-projection.js";
 import { useSessionRuntimeRefs } from "../runtime-refs.js";
 
 const api = vi.hoisted(() => ({
@@ -526,5 +527,131 @@ describe("toStreamMessages", () => {
     ]);
     expect(story?.segments).toEqual(segments);
     expect(plain).not.toHaveProperty("segments");
+  });
+});
+
+describe("restoreSessionState runtime run identities", () => {
+  it.each([undefined, "", 42])(
+    "keeps cached runs separate and adopts an anonymous row with raw run id %j",
+    async (runId) => {
+      const ds = makeDataService([]);
+      const reasoning = [
+        {
+          id: "nested-reasoning",
+          content: "Nested reasoning",
+          timestamp: "2026-10-01T00:00:01Z",
+        },
+      ];
+      const legacyReasoning = [
+        {
+          id: "legacy-reasoning",
+          content: "Legacy reasoning",
+          timestamp: "2026-10-01T00:00:00Z",
+        },
+      ];
+      vi.mocked(ds.loadExecutionSteps).mockResolvedValue([
+        {
+          turnId: "turn",
+          runtimeId: "story",
+          pluginId: "story",
+          runId: "nested",
+          resumed: true,
+          status: "completed",
+          reasoning,
+        },
+        {
+          turnId: "turn",
+          runtimeId: "legacy",
+          pluginId: "legacy",
+          runId,
+          status: "running",
+          reasoning: legacyReasoning,
+        },
+      ]);
+      api.getSessionView.mockResolvedValue({
+        ...emptySnapshot(),
+        executionSteps: ["story", "legacy"].map((runtimeId) => ({
+          type: "runtime.completed",
+          turnId: "turn",
+          timestamp: "2026-10-01T00:00:02Z",
+          payload: {
+            runtimeId,
+            pluginId: runtimeId,
+            runId: runtimeId === "story" ? "outer" : "identified",
+            status: "success",
+          },
+        })),
+      });
+      let state = initialState;
+      await restoreSessionState({
+        ds,
+        workspace: makeWorkspace(ds),
+        dispatch: (action) => {
+          state = reducer(state, action);
+        },
+        sessionIdRef: { current: null },
+        sessionGenerationRef,
+        worlds: [world],
+        session,
+      });
+      expect(state.executionSteps).toHaveLength(3);
+      expect(
+        state.executionSteps.find((step) => step.runId === "nested"),
+      ).toMatchObject({ status: "completed", reasoning, resumed: true });
+      expect(
+        state.executionSteps.find((step) => step.runId === "outer")?.reasoning,
+      ).toBeUndefined();
+      expect(
+        state.executionSteps.find((step) => step.runtimeId === "legacy"),
+      ).toMatchObject({
+        runId: "identified",
+        status: "completed",
+        reasoning: legacyReasoning,
+      });
+    },
+  );
+
+  it("keeps resume completion visible when restoring only cached lifecycle rows", async () => {
+    const ds = makeDataService([]);
+    vi.mocked(ds.loadExecutionSteps).mockResolvedValue([
+      {
+        turnId: "turn",
+        runtimeId: "story",
+        pluginId: "story",
+        runId: "original",
+        status: "suspended",
+        startedAt: "2026-10-01T00:00:00Z",
+      },
+      {
+        turnId: "turn",
+        runtimeId: "story",
+        pluginId: "story",
+        runId: "continuation",
+        resumed: true,
+        status: "completed",
+        startedAt: "2026-10-01T00:00:01Z",
+      },
+    ]);
+    let state = initialState;
+    await restoreSessionState({
+      ds,
+      workspace: makeWorkspace(ds),
+      dispatch: (action) => {
+        state = reducer(state, action);
+      },
+      sessionIdRef: { current: null },
+      sessionGenerationRef,
+      worlds: [world],
+      session,
+    });
+    expect(
+      projectExecutionTurns([], state.executionSteps).turns[0]?.steps,
+    ).toEqual([
+      expect.objectContaining({
+        runId: "continuation",
+        status: "completed",
+        resumed: true,
+      }),
+    ]);
   });
 });
