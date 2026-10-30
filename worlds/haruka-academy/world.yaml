@@ -1,7 +1,7 @@
 # yaml-language-server: $schema=../../packages/shared/schemas/world-manifest.schema.json
 id: haruka-academy
 name: 遥风学园・春日薄荷
-version: 0.3.0
+version: 0.3.1
 summary: 转入海边私立高中，在二十一天的学园祭倒计时里选择社团、守住约定，也回应那些没能说出口的喜欢。
 defaultLocale: zh-CN
 defaultViewMode: stage

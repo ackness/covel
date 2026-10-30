@@ -1,7 +1,7 @@
 # yaml-language-server: $schema=../../packages/shared/schemas/world-manifest.schema.json
 id: mistport
 name: 雾港・裂潮纪
-version: 0.3.0
+version: 0.3.1
 summary: 潮钟三鸣，失踪的公会长与一把破碎的钥匙，把你卷入永雾港城的四方暗战。
 defaultLocale: zh-CN
 tags:

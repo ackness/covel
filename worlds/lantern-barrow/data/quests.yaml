@@ -14,6 +14,9 @@
     - id: find-ysolde
       text: 在古冢里找到伊索德
       done: false
+    - id: bring-ysolde-home
+      text: 将伊索德活着带回村子
+      done: false
 - id: the-lantern-heart
   name: 消失的灯心
   description: 古冢之灯不是自己熄灭的——点燃它的灯心被人取走了。查清是谁、为什么，然后决定它该回到哪里。
