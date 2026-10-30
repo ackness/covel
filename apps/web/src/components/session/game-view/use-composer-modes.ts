@@ -27,8 +27,15 @@ export interface ComposerModes {
   readonly setFieldValue: (name: string, value: unknown) => void;
   /** Changes whenever the field inputs must start over from `fieldValues`. */
   readonly fieldsKey: string;
-  /** Takes back a stopped submission's mode and fields. */
-  readonly restore: (kind: string | undefined, fields?: ActionFields) => void;
+  /**
+   * Takes back a stopped submission's mode, fields and the queued selections
+   * that rode ahead of it, which go out again with the next submission.
+   */
+  readonly restore: (restored: {
+    kind?: string;
+    fields?: ActionFields;
+    drafts?: string;
+  }) => void;
   readonly switcher: CharacterSwitcherModel | null;
   readonly switchCharacter: (characterId: string) => Promise<void>;
   /** Whether a submission with this text can be sent in the selected mode. */
@@ -67,6 +74,8 @@ export function useComposerModes({
     kind: string;
     values: FieldValues;
     generation: number;
+    /** Selections taken back from a stopped submission, not yet sent again. */
+    restoredDrafts?: string;
   }>({ kind: "say", values: {}, generation: 0 });
 
   const baseLabel = useCallback(
@@ -79,10 +88,23 @@ export function useComposerModes({
   );
   // A mode that left the catalogue gives way to the first one.
   const mode = modes.find((m) => m.kind === selected.kind) ?? modes[0]!;
-  const fieldValues = mode.kind === selected.kind ? selected.values : {};
+  // A checkbox shows unchecked until it is touched, and unchecked is `false`:
+  // the value the form displays is the value that is validated and sent.
+  const fieldValues = useMemo<FieldValues>(
+    () => ({
+      ...Object.fromEntries(
+        mode.fields
+          .filter((field) => field.control === "checkbox")
+          .map((field) => [field.name, false]),
+      ),
+      ...(mode.kind === selected.kind ? selected.values : {}),
+    }),
+    [mode, selected.kind, selected.values],
+  );
 
   const selectKind = useCallback((kind: string) => {
     setSelected((current) => ({
+      ...current,
       kind,
       values: {},
       generation: current.generation + 1,
@@ -95,12 +117,21 @@ export function useComposerModes({
     }));
   }, []);
   const restore = useCallback(
-    (kind: string | undefined, fields?: ActionFields) => {
+    ({
+      kind,
+      fields,
+      drafts,
+    }: {
+      kind?: string;
+      fields?: ActionFields;
+      drafts?: string;
+    }) => {
       if (!kind) return;
       setSelected((current) => ({
         kind,
         values: fields ?? {},
         generation: current.generation + 1,
+        ...(drafts ? { restoredDrafts: drafts } : {}),
       }));
     },
     [],
@@ -136,7 +167,10 @@ export function useComposerModes({
   );
 
   const submit = useCallback(
-    (text: string, drafts?: string): boolean => {
+    (text: string, queued?: string): boolean => {
+      const drafts =
+        [selected.restoredDrafts, queued].filter(Boolean).join("\n") ||
+        undefined;
       const joined = [drafts ?? "", text].filter(Boolean).join("\n");
       // Slash lines keep the command path in every mode, and a `say` is the
       // plain text request it always was.
@@ -147,6 +181,7 @@ export function useComposerModes({
       ) {
         if (!joined) return false;
         onSendMessage(joined);
+        setSelected(({ restoredDrafts: _sent, ...current }) => current);
         return true;
       }
       const missing = mode.fields.filter((field) => {
@@ -194,7 +229,7 @@ export function useComposerModes({
         },
         drafts ? { drafts } : undefined,
       );
-      setSelected((current) => ({
+      setSelected(({ restoredDrafts: _sent, ...current }) => ({
         ...current,
         values: {},
         generation: current.generation + 1,
@@ -202,6 +237,7 @@ export function useComposerModes({
       return true;
     },
     [
+      selected.restoredDrafts,
       fieldValues,
       language,
       mode,

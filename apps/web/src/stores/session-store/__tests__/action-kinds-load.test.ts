@@ -123,4 +123,15 @@ describe("session action-kind catalogue", () => {
     expect(result.current.state.sessionActionKinds).not.toBeNull();
     expect(result.current.state.sessionCommandsLoaded).toBe(false);
   });
+
+  it("drops the catalogue when a later read fails", async () => {
+    vi.spyOn(api, "getSessionActionKinds")
+      .mockResolvedValueOnce(catalogue(["say", "act"]))
+      .mockRejectedValueOnce(new Error("offline"));
+    const { result } = renderActions();
+    await act(async () => result.current.actions.loadSessionPlugins());
+    expect(result.current.state.sessionActionKinds).not.toBeNull();
+    await act(async () => result.current.actions.loadSessionPlugins());
+    expect(result.current.state.sessionActionKinds).toBeNull();
+  });
 });

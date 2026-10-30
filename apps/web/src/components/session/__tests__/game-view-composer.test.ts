@@ -36,6 +36,7 @@ const sessionMock = {
     content: string;
     kind?: string;
     fields?: Record<string, unknown>;
+    drafts?: string;
   } | null,
   sessionActionKinds: null as SessionActionKindsResponse | null,
   gameState: {} as Record<string, unknown>,
@@ -659,7 +660,8 @@ describe("useGameViewComposer modes", () => {
       },
       undefined,
     );
-    expect(result.current.composerModes.fieldValues).toEqual({});
+    // An unchecked checkbox is `false`, before and after.
+    expect(result.current.composerModes.fieldValues).toEqual({ secret: false });
   });
 
   it("refuses to send while a required field is empty", () => {
@@ -753,7 +755,35 @@ describe("useGameViewComposer modes", () => {
     rerender();
     expect(result.current.inputValue).toBe("psst");
     expect(result.current.composerModes.mode.kind).toBe("whisper-pack/whisper");
-    expect(result.current.composerModes.fieldValues).toEqual({ target: "Bo" });
+    expect(result.current.composerModes.fieldValues).toEqual({
+      target: "Bo",
+      secret: false,
+    });
+  });
+
+  it("sends the queued selections of a stopped submission with the action typed again", () => {
+    const { result, rerender } = setup([]);
+    sessionMock.restoredInput = {
+      requestId: "stopped",
+      content: "Draw the sword",
+      kind: "act",
+      drafts: "Wait",
+    };
+    rerender();
+    expect(result.current.inputValue).toBe("Draw the sword");
+    expect(result.current.composerModes.mode.kind).toBe("act");
+    act(() => result.current.handleSubmit());
+    expect(sessionMock.submitComposerAction).toHaveBeenCalledExactlyOnceWith(
+      { kind: "act", text: "Draw the sword" },
+      { drafts: "Wait" },
+    );
+    // Sent once: the next submission carries no old selections.
+    act(() => result.current.setInputValue("Again"));
+    act(() => result.current.handleSubmit());
+    expect(sessionMock.submitComposerAction).toHaveBeenLastCalledWith(
+      { kind: "act", text: "Again" },
+      undefined,
+    );
   });
 
   it("falls back to the first mode when the selected one leaves the catalogue", () => {

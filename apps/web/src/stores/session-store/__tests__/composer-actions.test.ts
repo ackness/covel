@@ -4,7 +4,9 @@ import {
   composerActions,
   echoContent,
   echoedActions,
+  stoppedSubmissionOf,
   textActions,
+  type ComposerSubmission,
 } from "../composer-actions.js";
 
 const seats: Seat[] = [
@@ -106,5 +108,65 @@ describe("echoContent", () => {
   });
   it("is empty for an advance", () => {
     expect(echoContent([{ kind: "advance" }])).toBe("");
+  });
+});
+
+describe("stoppedSubmissionOf", () => {
+  const catalogue = [
+    {
+      kind: "act",
+      roles: ["player"],
+      text: "required",
+      actor: true,
+      source: "framework",
+      display: { label: "act" },
+    },
+  ] as const;
+
+  // What the composer holds again must send the same request.
+  it.each<[string, ComposerSubmission, string | undefined]>([
+    ["a say", { kind: "say", text: "Look around" }, undefined],
+    ["an act", { kind: "act", text: "Draw sword" }, undefined],
+    ["an act after queued selections", { kind: "act", text: "Draw" }, "Wait"],
+    [
+      "a fields-only action after queued selections",
+      { kind: "p/whisper", fields: { target: "Bo", volume: 3 } },
+      "Wait\nListen",
+    ],
+  ])("sends %s again unchanged", (_name, submission, drafts) => {
+    const requests = composerActions(submission, drafts);
+    const echoed = echoedActions(requests, { seats, characters, catalogue });
+    const stopped = stoppedSubmissionOf(echoed);
+    const again = composerActions(
+      {
+        kind: stopped.kind ?? "say",
+        ...(stopped.text ? { text: stopped.text } : {}),
+        ...(stopped.fields ? { fields: stopped.fields } : {}),
+      },
+      stopped.drafts,
+    );
+    expect(again).toEqual(requests);
+  });
+
+  it("keeps a queued say and an act apart, and a fields summary out of the text", () => {
+    const requests = composerActions({ kind: "act", text: "Draw" }, "Wait");
+    expect(stoppedSubmissionOf(requests)).toEqual({
+      text: "Draw",
+      kind: "act",
+      drafts: "Wait",
+    });
+    expect(
+      stoppedSubmissionOf([{ kind: "p/whisper", fields: { target: "Bo" } }]),
+    ).toEqual({ text: "", kind: "p/whisper", fields: { target: "Bo" } });
+  });
+
+  it("restores a joined say as one line, and a command without a mode", () => {
+    expect(stoppedSubmissionOf([{ kind: "say", text: "Wait\nLook" }])).toEqual({
+      text: "Wait\nLook",
+      kind: "say",
+    });
+    expect(stoppedSubmissionOf([{ kind: "command", text: "/roll" }])).toEqual({
+      text: "/roll",
+    });
   });
 });

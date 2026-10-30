@@ -19,6 +19,10 @@ import {
   applyPluginMessageSurface,
   refreshPluginMessageSurfaces,
 } from "./plugin-message-surface.js";
+import {
+  stoppedSubmissionOf,
+  type StoppedSubmission,
+} from "./composer-actions.js";
 import { mergeRecoveredMessages } from "./recovered-messages.js";
 import { settleExecutionAttempt } from "./execution-attempts.js";
 import { orderStoryBeforePluginMessages } from "./message-order.js";
@@ -660,6 +664,8 @@ export function reducer(
           action.unavailable ?? state.unavailableSessionPlugins,
       };
     case "SET_SESSION_ACTION_KINDS":
+      if (action.catalogue === null && state.sessionActionKinds === null)
+        return state;
       return { ...state, sessionActionKinds: action.catalogue };
     case "SET_SESSION_SEATS":
       return state.session
@@ -694,15 +700,18 @@ export function reducer(
           message.role === "user" && message.requestId === action.requestId,
       );
       if (!input) return state;
-      const stopped = input.actions?.at(-1);
+      const stopped: StoppedSubmission = input.actions?.length
+        ? stoppedSubmissionOf(input.actions)
+        : { text: input.content };
       return {
         ...state,
         messages: state.messages.filter((message) => message !== input),
         restoredInput: {
           requestId: action.requestId,
-          content: input.content,
-          ...(stopped ? { kind: stopped.kind } : {}),
-          ...(stopped?.fields ? { fields: stopped.fields } : {}),
+          content: stopped.text,
+          ...(stopped.kind ? { kind: stopped.kind } : {}),
+          ...(stopped.fields ? { fields: stopped.fields } : {}),
+          ...(stopped.drafts ? { drafts: stopped.drafts } : {}),
         },
       };
     }

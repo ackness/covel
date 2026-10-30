@@ -96,7 +96,11 @@ export function useGameViewComposer({
     setInputValue((current) =>
       current ? `${restoredInput.content}\n${current}` : restoredInput.content,
     );
-    restoreComposerMode(restoredInput.kind, restoredInput.fields);
+    restoreComposerMode({
+      kind: restoredInput.kind,
+      fields: restoredInput.fields,
+      drafts: restoredInput.drafts,
+    });
     clearRestoredInput(restoredInput.requestId);
   }, [restoredInput, clearRestoredInput, restoreComposerMode]);
 

@@ -18,6 +18,7 @@ import type { SessionState } from "../types.js";
 
 const api = vi.hoisted(() => ({
   listSessionPlugins: vi.fn(),
+  getSessionActionKinds: vi.fn(),
   listPluginData: vi.fn(),
   listSessionPluginData: vi.fn(),
   getWorld: vi.fn(),
@@ -74,6 +75,11 @@ const world: WorldRecord = {
 const plugins = (id: string) => ({
   items: [{ id, active: true } as SessionPlugin],
   commands: [],
+});
+
+const catalogue = (kind: string) => ({
+  kinds: [{ kind }],
+  seats: [],
 });
 
 function setup() {
@@ -151,6 +157,7 @@ beforeEach(() => {
   vi.restoreAllMocks();
   vi.resetAllMocks();
   api.listSessionPlugins.mockResolvedValue(plugins("current"));
+  api.getSessionActionKinds.mockResolvedValue(catalogue("current"));
   api.listPluginData.mockResolvedValue([]);
   api.listSessionPluginData.mockResolvedValue([]);
   api.getWorld.mockResolvedValue(world);
@@ -164,6 +171,57 @@ beforeEach(() => {
     execution: { state: "idle" },
   });
   api.listSuspensions.mockResolvedValue([]);
+});
+
+it.each(["plugin.activated", "plugin.deactivated"])(
+  "reads the action kinds again on %s and drops them when that read fails",
+  async (type) => {
+    const { streams, options } = setup();
+    await act(async () => {
+      streams[0]!.emit(event(type));
+    });
+    expect(api.getSessionActionKinds).toHaveBeenCalledExactlyOnceWith(
+      session.id,
+    );
+    expect(options.dispatch).toHaveBeenCalledWith({
+      type: "SET_SESSION_ACTION_KINDS",
+      catalogue: catalogue("current"),
+    });
+
+    api.getSessionActionKinds.mockRejectedValueOnce(new Error("offline"));
+    options.dispatch.mockClear();
+    await act(async () => {
+      streams[0]!.emit(event(type));
+    });
+    expect(options.dispatch).toHaveBeenCalledWith({
+      type: "SET_SESSION_ACTION_KINDS",
+      catalogue: null,
+    });
+  },
+);
+
+it("reads the action kinds again when reconnect recovery reloads the plugins", async () => {
+  const { streams } = setup();
+  await act(async () => {
+    streams[0]!.emit(event("system.reset"));
+  });
+  expect(api.listSessionPlugins).toHaveBeenCalled();
+  expect(api.getSessionActionKinds).toHaveBeenCalledExactlyOnceWith(session.id);
+});
+
+it("ignores an action-kind read that a newer plugin event replaced", async () => {
+  const pending = deferred<unknown>();
+  api.getSessionActionKinds.mockReturnValueOnce(pending.promise);
+  const { streams, options } = setup();
+  await act(async () => {
+    streams[0]!.emit(event("plugin.activated"));
+    streams[0]!.emit(event("plugin.deactivated"));
+  });
+  options.dispatch.mockClear();
+  await act(async () => {
+    pending.resolve(catalogue("obsolete"));
+  });
+  expect(options.dispatch).not.toHaveBeenCalled();
 });
 
 it.each(["plugin.activated", "world.dimensions.changed"])(

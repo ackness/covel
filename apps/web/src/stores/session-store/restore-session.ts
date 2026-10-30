@@ -6,6 +6,7 @@ import { setActiveSession as setActivePluginDataSession } from "@/stores/plugin-
 import { clearAllStreamingText } from "@/stores/streaming-text-store.js";
 import type { SessionSnapshot, SnapshotMessage } from "@covel/shared";
 import { reconcileExecutionSteps } from "./snapshot-execution-steps.js";
+import { refreshSessionActionKinds } from "./action-kinds-refresh.js";
 import { refreshSessionResource } from "./session-resource-reads.js";
 import {
   enrichGameStateFromSnapshot,
@@ -279,6 +280,8 @@ function refreshSessionSideData(
         unavailable: res.unavailable,
       }),
   }).catch(ignoreError("list session plugins on restore"));
+
+  void refreshSessionActionKinds(dispatch, sessionId, isCurrent);
 
   void refreshSessionResource(dispatch, ["suspensions", sessionId], {
     isCurrent,

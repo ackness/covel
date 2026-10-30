@@ -3,6 +3,7 @@ import i18n from "i18next";
 import { confirmPluginApproval } from "@/lib/approval-message.js";
 import type {
   PluginMutationResponse,
+  Seat,
   SessionPlugin,
   TurnActionRequest,
 } from "@covel/shared";
@@ -50,6 +51,7 @@ import {
   type SessionActionOwner,
   type SessionRuntimeRefs,
 } from "./runtime-refs.js";
+import { refreshSessionActionKinds } from "./action-kinds-refresh.js";
 import { refreshSessionResource } from "./session-resource-reads.js";
 import { canRunSessionAction } from "./selectors.js";
 import type { SseEventHandler } from "./sse-handler.js";
@@ -86,6 +88,16 @@ export function useBuildSessionActions({
 }: UseSessionActionsOptions): SessionActions {
   const { sessionIdRef, sessionGenerationRef, stateRef } = refs;
   const activeActionRef = useRef<symbol | null>(null);
+  // The character switch under way, which a submission waits for.
+  const pendingSeatSwitch = useRef<Promise<readonly Seat[] | undefined> | null>(
+    null,
+  );
+  const settleSeatSwitches = useCallback(async () => {
+    let seats: readonly Seat[] | undefined;
+    while (pendingSeatSwitch.current)
+      seats = (await pendingSeatSwitch.current) ?? seats;
+    return seats;
+  }, []);
   const claimAction = useCallback(
     (sessionId: string, requestId?: string) =>
       claimSessionAction(
@@ -265,18 +277,24 @@ export function useBuildSessionActions({
   const runSingleAction = useCallback(
     (
       actions: readonly TurnActionRequest[],
-      opts: { echoUserMessage: boolean; owner: SessionActionOwner },
+      opts: {
+        echoUserMessage: boolean;
+        owner: SessionActionOwner;
+        /** Seats a character switch just returned, ahead of the state. */
+        seats?: readonly Seat[];
+      },
     ): Promise<void> => {
       const { session, gameState, sessionActionKinds } = stateRef.current;
+      const { seats, ...rest } = opts;
       return session
         ? runSingleSessionAction({
             actions,
             echoActions: echoedActions(actions, {
-              seats: session.seats,
+              seats: seats ?? session.seats,
               characters: sessionCharacters(gameState),
               catalogue: sessionActionKinds?.kinds,
             }),
-            ...opts,
+            ...rest,
             session,
             workspace,
             dispatch,
@@ -288,8 +306,8 @@ export function useBuildSessionActions({
     [workspace, dispatch, stateRef, handleSseEvent, sessionIdRef],
   );
 
-  const sendActions = useCallback(
-    (actions: readonly TurnActionRequest[]) => {
+  const startActions = useCallback(
+    (actions: readonly TurnActionRequest[], seats?: readonly Seat[]) => {
       const state = stateRef.current;
       if (!canRunSessionAction(state) || !state.session) return;
       const owner = claimAction(state.session.id);
@@ -297,7 +315,11 @@ export function useBuildSessionActions({
       dispatch({ type: "SET_EXECUTING", value: true });
       dispatch({ type: "SET_EXECUTION_ERROR", error: null });
 
-      runSingleAction(actions, { echoUserMessage: true, owner }).finally(() => {
+      runSingleAction(actions, {
+        echoUserMessage: true,
+        owner,
+        ...(seats ? { seats } : {}),
+      }).finally(() => {
         finalizeActionExecution(
           dispatch,
           state.session?.id,
@@ -315,6 +337,25 @@ export function useBuildSessionActions({
       sessionIdRef,
       claimAction,
     ],
+  );
+
+  // A submission waits for a character switch under way: the server acts as
+  // the seat's current character, so a request sent first would act as the
+  // old one while the bubble named the new one (or the reverse).
+  const sendActions = useCallback(
+    (actions: readonly TurnActionRequest[]) => {
+      if (!pendingSeatSwitch.current) return startActions(actions);
+      const sid = sessionIdRef.current;
+      const generation = sessionGenerationRef.current;
+      void settleSeatSwitches().then((seats) => {
+        if (
+          sessionIdRef.current === sid &&
+          sessionGenerationRef.current === generation
+        )
+          startActions(actions, seats);
+      });
+    },
+    [startActions, sessionIdRef, sessionGenerationRef],
   );
 
   const sendMessage = useCallback(
@@ -335,16 +376,29 @@ export function useBuildSessionActions({
       const generation = sessionGenerationRef.current;
       // The checkpoint of a browser-private session is uploaded and taken
       // back around the write, or the next upload would undo the switch.
-      const { seats } = await workspace.run(
-        sid,
-        `seat-switch:${crypto.randomUUID()}`,
-        () => api.setSeatCurrentCharacter(sid, seatId, characterId),
-      );
-      if (
-        sessionIdRef.current === sid &&
-        sessionGenerationRef.current === generation
-      )
-        dispatch({ type: "SET_SESSION_SEATS", seats });
+      const switching = workspace
+        .run(sid, `seat-switch:${crypto.randomUUID()}`, () =>
+          api.setSeatCurrentCharacter(sid, seatId, characterId),
+        )
+        .then(({ seats }) => {
+          if (
+            sessionIdRef.current === sid &&
+            sessionGenerationRef.current === generation
+          )
+            dispatch({ type: "SET_SESSION_SEATS", seats });
+          return seats;
+        });
+      const settled: Promise<readonly Seat[] | undefined> = switching
+        .then(
+          (seats) => seats,
+          () => undefined,
+        )
+        .finally(() => {
+          if (pendingSeatSwitch.current === settled)
+            pendingSeatSwitch.current = null;
+        });
+      pendingSeatSwitch.current = settled;
+      await switching;
     },
     [workspace, dispatch, sessionIdRef, sessionGenerationRef],
   );
@@ -653,14 +707,7 @@ export function useBuildSessionActions({
       }).catch(() => {
         // Non-critical: plugins panel is optional.
       }),
-      refreshSessionResource(dispatch, ["action-kinds", sid], {
-        isCurrent,
-        read: () => api.getSessionActionKinds(sid),
-        apply: (catalogue) =>
-          dispatch({ type: "SET_SESSION_ACTION_KINDS", catalogue }),
-      }).catch(() => {
-        // Non-critical: the composer offers `say` without it.
-      }),
+      refreshSessionActionKinds(dispatch, sid, isCurrent),
     ]);
   }, [dispatch, sessionIdRef, sessionGenerationRef]);
 

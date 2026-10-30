@@ -228,6 +228,8 @@ export interface SessionState {
     /** The composer mode and field values of the stopped submission. */
     kind?: string;
     fields?: import("./composer-actions.js").ActionFields;
+    /** Queued selections that were sent ahead of a non-`say` action. */
+    drafts?: string;
   } | null;
   /** Browser action generation; rejects recovery reads from an older POST. */
   actionGeneration?: number;
@@ -408,7 +410,8 @@ export type SessionAction =
     }
   | {
       type: "SET_SESSION_ACTION_KINDS";
-      catalogue: import("@covel/shared").SessionActionKindsResponse;
+      /** `null` drops the catalogue, so the composer offers `say` only. */
+      catalogue: import("@covel/shared").SessionActionKindsResponse | null;
     }
   | {
       type: "SET_SESSION_SEATS";

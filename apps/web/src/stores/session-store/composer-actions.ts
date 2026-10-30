@@ -111,3 +111,45 @@ export function echoContent(requests: readonly TurnActionRequest[]): string {
     .filter((summary) => summary.length > 0)
     .join("\n");
 }
+
+/** A stopped submission, split the way the composer holds its inputs. */
+export interface StoppedSubmission {
+  /** What goes back into the input line. */
+  readonly text: string;
+  /** The mode to select again; a plain `say` needs none. */
+  readonly kind?: string;
+  readonly fields?: ActionFields;
+  /** Queued selections that rode ahead of a non-`say` action. */
+  readonly drafts?: string;
+}
+
+/**
+ * What the composer takes back when a submission stopped before it started,
+ * so sending it again produces the same actions. The echoed bubble joins the
+ * queued selections and the typed line, and shows a fields-only action as a
+ * summary; neither is what the player typed, so the split comes from the
+ * actions themselves. In `say` the joined text is the request, so it goes
+ * back as one line.
+ */
+export function stoppedSubmissionOf(
+  actions: readonly Pick<TurnActionRequest, "kind" | "text" | "fields">[],
+): StoppedSubmission {
+  const last = actions.at(-1);
+  const texts = (items: typeof actions) =>
+    items
+      .map((action) => action.text ?? "")
+      .filter((text) => text.length > 0)
+      .join("\n");
+  if (!last || last.kind === "say" || last.kind === "command")
+    return {
+      text: texts(actions),
+      ...(last?.kind === "say" ? { kind: "say" } : {}),
+    };
+  const drafts = texts(actions.slice(0, -1));
+  return {
+    text: last.text ?? "",
+    kind: last.kind,
+    ...(last.fields ? { fields: last.fields } : {}),
+    ...(drafts ? { drafts } : {}),
+  };
+}
