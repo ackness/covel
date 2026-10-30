@@ -39,6 +39,7 @@ import {
   withAgentToolSurface,
 } from "../src/agent-loop/agent-tool-surface.js";
 import { SERVICE_IMPORT_TIMEOUT_MS } from "../src/agent-loop/service-import-tools.js";
+import { createHookPipeline } from "../src/hooks/pipeline.js";
 import { makeEmitterSpy } from "./_helpers/emitter-spy.js";
 
 const SESSION = "session";
@@ -386,6 +387,160 @@ describe("an imported service tool", () => {
     }
   });
 
+  it("passes the model's arguments to the provider, so its parser runs once for the handler", async () => {
+    const { services, deps, toolExecutor } = await fixture();
+    const handler = vi.fn((parsed: unknown) => ({ parsed }));
+    services.register(
+      "provider",
+      itemsService({
+        input: z.object({
+          amount: z.string().transform(Number),
+          tags: z.array(z.string()),
+        }),
+        handler,
+      }),
+    );
+    const { llm, requests } = scripted({
+      [AGENT_MARK]: (index) =>
+        index === 0
+          ? // The array arrives as JSON text and is repaired before the call.
+            call("inventory-items", { amount: "2", tags: '["sharp"]' })
+          : text("Two sharp swords."),
+    });
+    try {
+      const execution = await executeTurn(input, [agent()], deps(llm));
+      expect(resultOf(execution)?.status).toBe("success");
+      expect(handler).toHaveBeenCalledOnce();
+      expect(handler.mock.calls[0]![0]).toEqual({ amount: 2, tags: ["sharp"] });
+      expect(toolMessage(requests[1])).toEqual({
+        data: { parsed: { amount: 2, tags: ["sharp"] } },
+      });
+    } finally {
+      await toolExecutor.close();
+    }
+  });
+
+  it("offers a Zod input that has no JSON Schema form through its explicit inputSchema", async () => {
+    const { services, deps, toolExecutor } = await fixture();
+    const bagSchema = {
+      type: "object",
+      properties: { bag: { type: "string", description: "The bag" } },
+      required: ["bag"],
+    };
+    const handler = vi.fn((parsed: unknown) => parsed);
+    services.register(
+      "provider",
+      itemsService({
+        input: z.object({
+          bag: z.custom<string>((value) => typeof value === "string"),
+        }),
+        inputSchema: bagSchema,
+        handler,
+      }),
+    );
+    const { llm, requests } = scripted({
+      [AGENT_MARK]: (index) =>
+        [
+          call("inventory-items", { bag: 3 }, "call-bad"),
+          call("inventory-items", { bag: "leather" }),
+          text("The leather bag."),
+        ][index]!,
+    });
+    try {
+      const execution = await executeTurn(input, [agent()], deps(llm));
+      expect(resultOf(execution)?.status).toBe("success");
+      expect(
+        requests[0]!.tools.find((tool) => tool.name === "inventory-items")
+          ?.parameters,
+      ).toEqual(bagSchema);
+      expect(toolMessage(requests[1])).toMatchObject({
+        error: { code: "invalid-input" },
+      });
+      expect(toolMessage(requests[2])).toEqual({ data: { bag: "leather" } });
+      expect(handler).toHaveBeenCalledOnce();
+    } finally {
+      await toolExecutor.close();
+    }
+  });
+
+  it("goes through PreToolUse and PostToolUse, which can rewrite or stop it", async () => {
+    const { services, deps, toolExecutor } = await fixture();
+    const handler = vi.fn((parsed: unknown) => parsed);
+    services.register("provider", itemsService({ handler }));
+    const seen: { event: string; name: string; arguments: string }[] = [];
+    const hookPipeline = createHookPipeline();
+    hookPipeline.register({
+      id: "test:PreToolUse:bag",
+      event: "PreToolUse",
+      handler: async (_ctx, payload) => {
+        const { toolCall } = payload as {
+          toolCall: { id: string; name: string; arguments: string };
+        };
+        seen.push({ event: "PreToolUse", ...toolCall });
+        if (toolCall.id === "call-blocked")
+          return { action: "abort", reason: "No peeking." };
+        return {
+          action: "continue",
+          replace: {
+            toolCall: { ...toolCall, arguments: '{"bag":"rewritten"}' },
+          },
+        };
+      },
+    });
+    hookPipeline.register({
+      id: "test:PostToolUse:bag",
+      event: "PostToolUse",
+      handler: async (_ctx, payload) => {
+        const { toolCall } = payload as {
+          toolCall: { id: string; name: string; arguments: string };
+        };
+        seen.push({ event: "PostToolUse", ...toolCall });
+        return { action: "continue" };
+      },
+    });
+    const { llm, requests } = scripted({
+      [AGENT_MARK]: (index) =>
+        [
+          call("inventory-items", { bag: "leather" }),
+          call("inventory-items", { bag: "secret" }, "call-blocked"),
+          text("Only one bag opened."),
+        ][index]!,
+    });
+    try {
+      const execution = await executeTurn(input, [agent()], {
+        ...deps(llm),
+        hookPipeline,
+      });
+      expect(resultOf(execution)?.status).toBe("success");
+      expect(handler).toHaveBeenCalledOnce();
+      expect(handler.mock.calls[0]![0]).toEqual({ bag: "rewritten" });
+      expect(toolMessage(requests[1])).toEqual({ data: { bag: "rewritten" } });
+      expect(JSON.stringify(toolMessage(requests[2]))).toContain("No peeking.");
+      expect(seen).toEqual([
+        {
+          event: "PreToolUse",
+          id: "call-inventory-items",
+          name: "inventory-items",
+          arguments: '{"bag":"leather"}',
+        },
+        {
+          event: "PostToolUse",
+          id: "call-inventory-items",
+          name: "inventory-items",
+          arguments: '{"bag":"rewritten"}',
+        },
+        {
+          event: "PreToolUse",
+          id: "call-blocked",
+          name: "inventory-items",
+          arguments: '{"bag":"secret"}',
+        },
+      ]);
+    } finally {
+      await toolExecutor.close();
+    }
+  });
+
   it("times out a provider that never answers", async () => {
     const { services, surface, context, emitter, toolExecutor } =
       await fixture();
@@ -456,6 +611,45 @@ describe("an absent import", () => {
         context,
       );
       expect(result.refused).toBe(true);
+    } finally {
+      await toolExecutor.close();
+    }
+  });
+
+  it("is not found by search-tools when deferred", async () => {
+    vi.spyOn(console, "info").mockImplementation(() => {});
+    const { deps, toolExecutor } = await fixture();
+    const { llm, requests } = scripted({
+      [AGENT_MARK]: (index) =>
+        [
+          call("search-tools", { query: "inventory items in a bag" }),
+          text("Nothing to look in."),
+        ][index]!,
+    });
+    try {
+      const execution = await executeTurn(
+        input,
+        [
+          agent({
+            tools: {
+              builtin: ["suspend"],
+              services: [{ contract: CONTRACT, name: "inventory-items" }],
+              defer: true,
+            },
+          }),
+        ],
+        deps(llm),
+      );
+      expect(resultOf(execution)?.status).toBe("success");
+      const names = requests.map((request) =>
+        request.tools.map((tool) => tool.name),
+      );
+      expect(names[0]).toContain("search-tools");
+      expect(names[0]).not.toContain("inventory-items");
+      expect(names[1]).not.toContain("inventory-items");
+      expect(JSON.stringify(toolMessage(requests[1]))).not.toContain(
+        "inventory-items",
+      );
     } finally {
       await toolExecutor.close();
     }
@@ -636,6 +830,53 @@ describe("imported reads and the commit", () => {
 });
 
 describe("imports in every agent entry", () => {
+  it("are deferred when a defer list names them, and stay offered otherwise", async () => {
+    const { services, deps, toolExecutor } = await fixture();
+    services.register("provider", itemsService());
+    services.register(
+      "provider",
+      itemsService({ name: "weight", contract: "inventory.weight@1" }),
+    );
+    const { llm, requests } = scripted({
+      [AGENT_MARK]: (index) =>
+        [
+          call("search-tools", { query: "items in a bag" }),
+          call("inventory-items", { bag: "leather" }),
+          text("A sword."),
+        ][index]!,
+    });
+    try {
+      await executeTurn(
+        input,
+        [
+          agent({
+            tools: {
+              services: [
+                { contract: CONTRACT, name: "inventory-items" },
+                { contract: "inventory.weight@1", name: "inventory-weight" },
+              ],
+              defer: ["inventory-items"],
+            },
+          }),
+        ],
+        deps(llm),
+      );
+      const names = requests.map((request) =>
+        request.tools.map((tool) => tool.name),
+      );
+      expect(names[0]).toEqual(
+        expect.arrayContaining(["search-tools", "inventory-weight"]),
+      );
+      expect(names[0]).not.toContain("inventory-items");
+      expect(names[1]).toContain("inventory-items");
+      expect(toolMessage(requests[2])).toEqual({
+        data: { items: [{ name: "leather sword" }] },
+      });
+    } finally {
+      await toolExecutor.close();
+    }
+  });
+
   it("are deferred like other tools and found by search-tools", async () => {
     const { services, deps, toolExecutor } = await fixture();
     services.register("provider", itemsService());

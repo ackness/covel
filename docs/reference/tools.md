@@ -1462,7 +1462,7 @@ agent:
 ```
 
 - **名字**：默认是去掉版本号、`.` 换成 `-` 的契约名（`inventory.items@1` → `inventory-items`），`as` 另起名字。名字只能有字母、数字、`_` 和 `-`，最长 64；推导出来的名字太长时要写 `as`。名字不能和框架工具、这个 runtime 的 `tools.builtin` / `tools.plugin`、本包的 `contributes.tools` 或另一个导入重名；同一个契约只能导入一次。重名时清单校验报错。
-- **说明和参数**：说明是提供方注册时的 `description`。参数的 JSON Schema 来自提供方的 Zod 输入（不带 `$schema`），或提供方显式给的 `inputSchema`。Zod 输入的参数先在工具这一侧校验，错误照常写明字段；`inputSchema` 的参数由提供方校验。
+- **说明和参数**：说明是提供方注册时的 `description`。参数的 JSON Schema 来自提供方的 Zod 输入（不带 `$schema`），或提供方显式给的 `inputSchema`。输入是 Zod 时（显式给了 `inputSchema` 也一样），参数先在工具这一侧校验，错误照常写明字段，写成 JSON 文本的数组或对象会被修复；提供方收到的是模型发来的参数（或修复后的参数），由它自己解析一次后交给处理函数，所以 `transform` 只作用一次。输入不是 Zod 时，参数只由提供方校验。
 - **注解**：`{ readOnly: true, stagesWrites: false, idempotent: true, concurrencySafe: true }`。导入的服务只读，可以和其他只读工具一起并发。子 agent 保留导入。
 - **结果**：和其他工具一样回给模型 `{ "data": … }`，ID、UUID 和时间戳由 `modelFacingJson` 去掉。审批、`PreToolUse` / `PostToolUse`、`tool_calls` 记录和 `tool.*` trace 都照常；审批来源按 `local` 算。
 - **时限**：一次调用最多等提供方 15 秒，超时回答 `timeout`。
@@ -1482,7 +1482,7 @@ agent:
 
 ### 服务失败怎样回答
 
-导入的工具，以及任何让服务错误抛出来的插件工具，都按下表回答模型。只有输入错误是模型能改的；其他失败是提供方的问题，结果带 `refused: true`，不算调用方的失败调用，函数 runtime 因此失败时也记在提供方身上。
+导入的工具，以及任何让服务错误抛出来的插件工具，都按下表回答模型。只有输入错误是模型能改的；其他失败是提供方的问题，结果带 `refused: true`，不算调用方的失败调用；函数 runtime 因此失败时，也不算这个 runtime 的错误，服务调用记录里写明提供方。这些失败不会累计到提供方身上让它暂停。
 
 <!-- prettier-ignore -->
 | 服务的结果 | 工具错误码 | `refused` |

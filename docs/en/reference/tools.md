@@ -1464,7 +1464,7 @@ agent:
 ```
 
 - **Name**: by default the contract without its version, dots as dashes (`inventory.items@1` → `inventory-items`); `as` names it otherwise. A name has only letters, digits, `_` and `-`, at most 64; a derived name that is too long needs `as`. A name cannot repeat a framework tool, the runtime's `tools.builtin` / `tools.plugin`, the package's `contributes.tools` or another import, and one contract is imported once. Manifest validation reports a clash.
-- **Description and parameters**: the description is the provider's registered `description`. The parameters' JSON Schema comes from the provider's Zod input (without `$schema`), or from the provider's explicit `inputSchema`. A Zod input is checked on the tool side first, with the usual field-by-field errors; with `inputSchema` the provider checks the arguments.
+- **Description and parameters**: the description is the provider's registered `description`. The parameters' JSON Schema comes from the provider's Zod input (without `$schema`), or from the provider's explicit `inputSchema`. A Zod input (also one shown through an explicit `inputSchema`) is checked on the tool side first, with the usual field-by-field errors and repair of arrays or objects sent as JSON text. The provider receives the arguments the model sent, or their repair, and parses them once for its handler, so a `transform` applies once. An input that is not a Zod schema is checked by the provider only.
 - **Annotations**: `{ readOnly: true, stagesWrites: false, idempotent: true, concurrencySafe: true }`. Imported services are read-only and can run together with other read-only tools. A sub-agent keeps its imports.
 - **Result**: the model gets `{ "data": … }` like any other tool, with IDs, UUIDs and timestamps removed by `modelFacingJson`. Approval, `PreToolUse` / `PostToolUse`, `tool_calls` records and `tool.*` traces work as usual; approval counts the source as `local`.
 - **Time limit**: a call waits at most 15 seconds for the provider and answers `timeout` after that.
@@ -1484,7 +1484,7 @@ The server log has a line with the plugin IDs for the author.
 
 ### How a service failure is answered
 
-An imported tool, and any plugin tool that lets a service error through, answers the model by this table. Only an input error is the model's to fix; the other failures are the provider's, so the result carries `refused: true` and does not count as the caller's failed call. A function runtime that fails because of one is attributed to the provider.
+An imported tool, and any plugin tool that lets a service error through, answers the model by this table. Only an input error is the model's to fix; the other failures are the provider's, so the result carries `refused: true` and does not count as the caller's failed call. A function runtime that fails because of one is not counted as faulty either; the service call trace names the provider. These failures do not count toward pausing the provider.
 
 <!-- prettier-ignore -->
 | Service outcome | Tool error code | `refused` |

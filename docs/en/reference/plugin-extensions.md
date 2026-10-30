@@ -38,7 +38,7 @@ The session's seats (who is playing and which characters they control) belong to
 ### How tools and agents use services
 
 - Function runtime handlers and agent guards use `ctx.services`.
-- Plugin tools use `context.services`, with the same rules as a function runtime: the caller is the tool's plugin and runtime, a call inherits the tool's deadline and cancellation, and its reads use the same scope and read dependencies as the tool's own `context.store` reads. Calls still running when the tool returns are cancelled. A failed service call rejects with the service's error; a tool that lets it through answers the model by the error mapping of [Imported service tools](./tools.md#imported-service-tools), and the failure counts as the provider's, not the caller's.
+- Plugin tools use `context.services`, with the same rules as a function runtime: the caller is the tool's plugin and runtime, a call inherits the tool's deadline and cancellation, and its reads use the same scope and read dependencies as the tool's own `context.store` reads. Calls still running when the tool returns are cancelled. A failed service call rejects with the service's error; a tool that lets it through answers the model by the error mapping of [Imported service tools](./tools.md#imported-service-tools), the service call trace still names the provider, and the failure does not count as the caller's fault.
 - An agent can import **model-facing** services in `agent.tools.services`. Each import becomes a read-only tool; see [Model-facing services](#model-facing-services) below. The framework does not hand every service to every agent.
 
 Services called from a tool or an import get no `gateway` or `utils`: model work belongs to the caller.
@@ -377,7 +377,7 @@ A service can be imported when:
 
 - it is declared as `{ contract, modelFacing: true }` and registered with `modelFacing: true`;
 - it has a non-empty `description`, which is the tool description the model reads;
-- its input exports JSON Schema: a Zod schema is exported automatically (without `$schema` and without patterns a provider cannot read); for an input that is not Zod, give an explicit `inputSchema`. The root must be `type: "object"`.
+- its input exports JSON Schema: a Zod schema is exported automatically (without `$schema` and without patterns a provider cannot read); for an input that is not Zod, or a Zod input that has no JSON Schema form (such as one using `z.custom`), give an explicit `inputSchema`, and the Zod input is then not exported. The root must be `type: "object"`.
 
 These are checked at registration. When one fails, the whole registration batch fails, not a later turn. `modelFacing` stays out of the capability snapshot: the mark gives the provider's code no new power, so a package from a trusted source is not confirmed again.
 

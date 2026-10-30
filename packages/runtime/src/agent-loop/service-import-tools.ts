@@ -43,19 +43,47 @@ export function absentImportMessage(
   return `The tool "${name}" is unavailable in this session: ${why}.`;
 }
 
-function isZodLike(input: unknown): input is z.ZodType {
+type SafeParser = {
+  safeParse(value: unknown):
+    | { success: true }
+    | {
+        success: false;
+        error: { issues: readonly Record<string, unknown>[] };
+      };
+};
+
+function hasSafeParse(input: unknown): input is SafeParser {
   return (
     typeof input === "object" &&
     input !== null &&
-    typeof (input as { safeParse?: unknown }).safeParse === "function" &&
-    typeof (input as { toJSONSchema?: unknown }).toJSONSchema === "function"
+    typeof (input as { safeParse?: unknown }).safeParse === "function"
   );
 }
 
 /**
+ * Checks arguments against the provider's input without keeping its parsed
+ * output: the value passes through unchanged and each problem is reported as
+ * the provider's own issue. `tool()` can then name the bad fields and repair
+ * JSON-text arguments, while only the registry's parse produces what the
+ * handler receives, so a transform is never applied to its own output. The
+ * provider's input is not exported to JSON Schema again either: the import
+ * carries the schema fixed at registration, which may be an explicit one
+ * for an input Zod cannot export.
+ */
+function argumentCheck(input: SafeParser): z.ZodType {
+  return z.any().superRefine((value, ctx) => {
+    const result = input.safeParse(value);
+    if (!result.success)
+      for (const issue of result.error.issues)
+        ctx.addIssue({ ...issue } as Parameters<typeof ctx.addIssue>[0]);
+  });
+}
+
+/**
  * The tool of a resolved import. A Zod input gets the usual argument checks
- * (named fields, JSON-text repair); an explicit `inputSchema` leaves the
- * checking to the provider, whose rejection answers `invalid-input`.
+ * (named fields, JSON-text repair); an input without `safeParse` leaves the
+ * checking to the provider, whose rejection answers `invalid-input`. Either
+ * way the provider receives the arguments the model sent, or their repair.
  */
 export function importedServiceTool(name: string, target: Ready): ToolModule {
   const execute = async (
@@ -84,12 +112,12 @@ export function importedServiceTool(name: string, target: Ready): ToolModule {
       { timeoutMs: SERVICE_IMPORT_TIMEOUT_MS },
     );
   };
-  if (isZodLike(target.input))
+  if (hasSafeParse(target.input))
     return {
       ...tool({
         name,
         description: target.description,
-        parameters: target.input,
+        parameters: argumentCheck(target.input),
         annotations: IMPORTED_TOOL_ANNOTATIONS,
         execute,
       }),

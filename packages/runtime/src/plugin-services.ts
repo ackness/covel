@@ -77,7 +77,7 @@ export type ServiceImportResolution =
       readonly contract: string;
       readonly description: string;
       readonly jsonSchema: Readonly<Record<string, unknown>>;
-      /** The provider's own parser; a Zod schema when it exports JSON Schema. */
+      /** The provider's own parser; the imported tool checks arguments with it. */
       readonly input: { parse(value: unknown): unknown };
     }
   /** No active provider offers the contract. */

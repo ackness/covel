@@ -38,7 +38,7 @@
 ### 工具和 agent 怎样用服务
 
 - 函数 runtime 的 handler 和 agent 的 guard 用 `ctx.services`。
-- 插件工具用 `context.services`，规则和函数 runtime 相同：调用方是工具所属的插件和 runtime，调用继承工具的截止时间和取消，读到的数据和工具自己的 `context.store` 读取用同一个范围、记在同一处读取依赖上。工具返回时还没结束的调用会被取消。服务失败时调用抛出服务的错误；工具不处理就让它抛出，这次工具调用会按[导入的服务工具](./tools.md#导入的服务工具)的错误对应表回答模型，算作提供方的问题，不算调用方的失败。
+- 插件工具用 `context.services`，规则和函数 runtime 相同：调用方是工具所属的插件和 runtime，调用继承工具的截止时间和取消，读到的数据和工具自己的 `context.store` 读取用同一个范围、记在同一处读取依赖上。工具返回时还没结束的调用会被取消。服务失败时调用抛出服务的错误；工具不处理就让它抛出，这次工具调用会按[导入的服务工具](./tools.md#导入的服务工具)的错误对应表回答模型，失败的服务调用记录里仍是这个提供方，这次失败不算调用方的错误。
 - agent 可以在 `agent.tools.services` 里导入**给模型用**的服务，每个导入变成一个只读工具，见下文[给模型用的服务](#给模型用的服务)。框架不会把所有服务自动给每个 agent。
 
 从工具或导入调用的服务拿不到 `gateway` 和 `utils`：需要模型的工作由调用方自己做。
@@ -377,7 +377,7 @@ covel.registerService({
 
 - 声明写成 `{ contract, modelFacing: true }`，注册时也写 `modelFacing: true`。
 - 有非空的 `description`，它就是模型看到的工具说明。
-- 输入能导出 JSON Schema：Zod schema 自动导出（去掉 `$schema` 和服务商读不懂的正则）；输入不是 Zod 时，给出显式的 `inputSchema`。根必须是 `type: "object"`。
+- 输入能导出 JSON Schema：Zod schema 自动导出（去掉 `$schema` 和服务商读不懂的正则）；输入不是 Zod，或 Zod 输入导不出 JSON Schema（比如用了 `z.custom`）时，给出显式的 `inputSchema`；给了它就不再导出 Zod 输入。根必须是 `type: "object"`。
 
 这些在注册时检查，不满足时整批注册失败，不会拖到某个回合才出错。`modelFacing` 不进入能力快照：标记它不给提供方代码新的权限，已信任来源的包不会因此重新确认。
 
