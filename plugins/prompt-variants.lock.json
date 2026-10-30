@@ -4,8 +4,8 @@
     "zh": "b9eb20b9afd19c94"
   },
   "plugins/char-creator/runtimes/character-tracker/RUNTIME.md": {
-    "en": "95fb5939bff19de8",
-    "zh": "2022d3b5436d4610"
+    "en": "4570674ac3e29d89",
+    "zh": "036995df38c5b205"
   },
   "plugins/char-creator/runtimes/player-init/RUNTIME.md": {
     "en": "1975873921722204",
@@ -36,16 +36,16 @@
     "zh": "ac73559d323cb860"
   },
   "plugins/world-init/runtimes/dimension-tracker/RUNTIME.md": {
-    "en": "95b6a63faa0de6ee",
-    "zh": "c33d879a93a41b21"
+    "en": "e3c763612f7e0da2",
+    "zh": "310aa9f6d47682f5"
   },
   "plugins/world-init/runtimes/schema-gen/RUNTIME.md": {
     "en": "085eeb9e3389d1b9",
     "zh": "38f41ad6c64238d2"
   },
   "plugins/world-ir/PLUGIN.md": {
-    "en": "b4d7e2406f222d06",
-    "zh": "074710ae8d0dbbd4"
+    "en": "82cd9a704f1deb8c",
+    "zh": "9b5424dae008fc7f"
   },
   "plugins/world-time/runtimes/advance/RUNTIME.md": {
     "en": "d7e3440be88d6cdb",

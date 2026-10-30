@@ -8,7 +8,7 @@ io:
     narrative:
       from:
         contract: narrative-engine@2
-      select: /narrativeOutput
+      select: /segments
     worldIR:
       from:
         contract: world-ir-provider@1
@@ -33,7 +33,9 @@ agent:
 guard: ./guard.js
 ---
 
-Settle only the facts that `runtime-inputs.narrative.value` states for this turn. WorldIR is supporting evidence; it never replaces the narrative text.
+Settle only the facts that `runtime-inputs.narrative.value` states for this turn. WorldIR is supporting evidence; it never replaces the narrative segments.
+
+`runtime-inputs.narrative.value` is an ordered array of `{ kind, speaker?, text }` segments. A dialogue's `speaker` names who says it; an action's `speaker` names who acts. In direct dialogue, “I” belongs to that speaker, not automatically to the player. Preserve explicit attribution inside nested quotations or reported speech. This does not make the speaker the actor of every event mentioned in the text. Use explicit text for narration or an unattributed segment; leave unresolved actors unknown. The current player message is a separate source for the player's own words and actions, not evidence that an attempted outcome succeeded. A promise belongs to its maker, an invitation is not acceptance, and a promise made is not a promise kept. Apply the author's rule only to the evidenced actor and state; never invent the player's choices or transfer an NPC's commitment to them.
 
 `runtime-inputs.worldTime.value`, when it is present, is the world clock after this turn. It is already settled. `display` is the time now. `elapsedThisTurn` is the time this turn took and `elapsedSinceStart` is the time since the session began, both counted in `unit`. Time that passed is a change of this turn, also when the narrative names no time.
 

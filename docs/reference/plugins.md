@@ -538,7 +538,7 @@ CLI 和安装器的静态校验对 `scope: turn` 和 `scope: committed` 的输�
 - `speaker` 是说话或行动的人物名字（≤80 字符），写名字，不写 ID。旁白不写。
 - `text` 是这一段的正文（≤4000 字符）。段落里的空行折成单个换行，所以一段就是玩家看到的一个段落。
 
-内核从 `segments` 推出 `narrativeOutput`：各段 `text` 用空行连接。读故事的插件照旧 `select: /narrativeOutput` 拿到字符串；对话日志、下一回合的历史、`turn-digest@1` 和记忆读的也是这段文字，不会看到 JSON。
+内核从 `segments` 推出 `narrativeOutput`：各段 `text` 用空行连接。只需要正文的插件可用 `select: /narrativeOutput` 拿到字符串；提取说话、动作或状态归属的插件应选择 `select: /segments`，连同 `kind`、`speaker` 和 `text` 阅读，不能把引语中的第一人称自动归给玩家。公共契约在 `select` 之前校验完整输出，不需要复制段落 schema。当前玩家消息是独立来源；请求、尝试和承诺不等于行动成功。对话日志、下一回合的历史、`turn-digest@1` 和记忆仍读连接后的正文，不会看到 JSON。
 
 **宽松规整。** 提交前，内核这样整理故事：
 

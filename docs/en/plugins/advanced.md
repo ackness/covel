@@ -45,7 +45,7 @@ io:
   inputs:
     narrative:
       from: { contract: narrative-engine@2 }
-      select: /narrativeOutput
+      select: /segments
   output:
     contract: facts.index@1
     schema: ../../schemas/facts.schema.json
@@ -53,6 +53,8 @@ io:
 ---
 Extract only the facts that `runtime-inputs.narrative.value` states.
 ```
+
+Read each segment with its `speaker` to distinguish who speaks or acts; an NPC’s quoted “I” is not the player. See [story output](../reference/plugins.md#story-output) for input selection.
 
 `runtimes/query/RUNTIME.md` is a function that is triggered manually. It has a `function` block, and its code is in `handler.js` in the same folder:
 

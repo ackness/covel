@@ -1,3 +1,4 @@
+import { modelFacingJson } from "@covel/plugin-handlers-utils";
 import { characterHandles } from "../tools/character-handles.js";
 import { vocabularyEntries } from "../tools/vocabulary.js";
 
@@ -15,16 +16,25 @@ import { vocabularyEntries } from "../tools/vocabulary.js";
 export default async function extractionContext(ctx, payload) {
   if (ctx.runtimeId !== "world-ir") return { action: "continue" };
   const narrative = payload.inputSlots?.narrative;
+  const turn = payload.inputSlots?.turn;
   if (
     narrative?.cardinality !== "one" ||
-    typeof narrative.value !== "string" ||
+    !Array.isArray(narrative.value) ||
+    turn?.cardinality !== "one" ||
+    typeof turn.value?.playerMessage !== "string" ||
     !payload.promptTemplate
   ) {
     return { action: "continue" };
   }
-  const characters = [...characterHandles(payload.characters ?? [])].map(
-    ([handle, { name, type }]) => ({ id: handle, name, type }),
-  );
+  const handles = characterHandles(payload.characters ?? []);
+  const player = [...handles].find(
+    ([, character]) => character.id === payload.currentCharacterId,
+  )?.[0];
+  const characters = [...handles].map(([handle, { name, type }]) => ({
+    id: handle,
+    name,
+    type,
+  }));
   const vocabulary = vocabularyEntries(payload.inputSlots?.vocabulary);
   return {
     action: "continue",
@@ -36,16 +46,21 @@ export default async function extractionContext(ctx, payload) {
           // The roster and the vocabulary change on few turns and the
           // narrative on every turn, so they come first: a provider's prompt
           // cache serves a request only as far as it repeats the last one.
-          content: JSON.stringify({
-            characters,
-            ...(vocabulary.length ? { vocabulary } : {}),
-            // Only the text: the result id, plugin id and runtime id are
-            // bookkeeping the model has no use for.
-            narrative: {
-              cardinality: narrative.cardinality,
-              value: narrative.value,
-            },
-          }),
+          content: JSON.stringify(
+            modelFacingJson({
+              characters,
+              ...(vocabulary.length ? { vocabulary } : {}),
+              // Keep attribution from the contract, without source bookkeeping.
+              playerInput: {
+                ...(player ? { character: player } : {}),
+                text: turn.value.playerMessage,
+              },
+              narrative: {
+                cardinality: narrative.cardinality,
+                value: narrative.value,
+              },
+            }),
+          ),
         },
       ],
     },

@@ -39,7 +39,7 @@ function trackerContext(receipt = null) {
     inputSlots: {
       narrative: {
         cardinality: "one",
-        value: "Commission completed.",
+        value: [{ kind: "narration", text: "Commission completed." }],
         source: { pluginId: "story", runtimeId: "story", resultId: "source" },
       },
     },
@@ -61,6 +61,24 @@ function trackerContext(receipt = null) {
   };
 }
 describe("world-init domain tools", () => {
+  it("requires current segment input instead of accepting flattened prose", async () => {
+    const ctx = trackerContext();
+    await expect(
+      updateDimensions({ tool, z }).execute(
+        { updates: [] },
+        {
+          ...ctx,
+          inputSlots: {
+            narrative: {
+              ...ctx.inputSlots.narrative,
+              value: "A flattened quote.",
+            },
+          },
+        },
+      ),
+    ).rejects.toThrow("A successful authoritative narrative input is required");
+  });
+
   it("registers only tools that a runtime can call", () => {
     const registered: string[] = [];
     register({

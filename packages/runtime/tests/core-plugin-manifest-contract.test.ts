@@ -215,14 +215,13 @@ describe("core plugin manifest contract", () => {
       expect(getRuntimeSpec(downstream).stage).toBe("post-turn");
     }
 
-    // Presentation and tracker runtimes that still need the prose remain
-    // engine-agnostic raw narrative consumers.
+    // Character tracking consumes attributed segments from any @2 provider.
     for (const downstream of rawDownstreams) {
       expect(downstream.needs).toEqual([{ capability: "narrative-engine@2" }]);
       expect(Object.values(downstream.inputs ?? {})).toContainEqual(
         expect.objectContaining({
           from: expect.objectContaining({ capability: "narrative-engine@2" }),
-          select: "/narrativeOutput",
+          select: "/segments",
         }),
       );
     }
@@ -233,8 +232,7 @@ describe("core plugin manifest contract", () => {
     expect(worldIr.outputContract).toBe("world-ir-provider@1");
     expect(worldIr.inputs?.narrative).toEqual({
       from: { capability: "narrative-engine@2" },
-      select: "/narrativeOutput",
-      accepts: "./schemas/narrative-output.schema.json",
+      select: "/segments",
     });
     expect(worldIr.output).toEqual({
       schema: "contract:world-ir@1",

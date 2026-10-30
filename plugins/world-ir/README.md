@@ -1,6 +1,6 @@
 # 世界事实提取 (World IR)
 
-`world-ir` 是通用的叙事事实抽取管线。它通过 `runtime.io.inputs.narrative` 按 `narrative-engine@2` 契约获取当前故事输出，并要求模型调用一次 `submit-world-facts`。工具补齐省略的协议常量 `schemaVersion: 1`（显式非法版本仍拒绝），参数按共享 World IR schema 校验，成功的工具结果会直接成为严格校验的 `contract:world-ir@1` 输出。
+`world-ir` 是通用的叙事事实抽取管线。它通过 `runtime.io.inputs.narrative` 按 `narrative-engine@2` 契约选择当前故事的 `/segments`，保留逐段的 `kind`、`speaker` 和 `text`，并要求模型调用一次 `submit-world-facts`。工具补齐省略的协议常量 `schemaVersion: 1`（显式非法版本仍拒绝），参数按共享 World IR schema 校验，成功的工具结果会直接成为严格校验的 `contract:world-ir@1` 输出。
 
 同轮下游 runtime 应声明：
 
@@ -22,9 +22,9 @@ runtime:
 
 该设计不会修改 narrator/story prompt。函数调用避免模型把 `strength`、`actor` 等扩展字段误放到受限顶层；校验失败会把字段路径返回给模型，并允许下一步修正。`maxRetries: 3`：模型调用超时，或遇到网络错误、限流、5xx、服务商报告的生成错误时重试，不让一次瞬时故障丢掉整回合的事实抽取。`callTimeoutMs` 60 秒和 `timeoutMs` 120 秒不变，所以卡住不返回的调用只够再试一次，最坏情况是这个 runtime 在 120 秒时失败（不重试时是 60 秒）；很快返回的失败才用得上三次。参数校验错误不占重试次数，由下一个 agent step 修正。
 
-插件的 `PostContextAssembly` hook 只保留本地化任务、权威 `inputs.narrative`（含来源）、角色单词短名/姓名名册，以及可选的 `vocabulary`（见下文）。用户消息里名册和词表排在正文前面：它们很少变，正文每回合都变，下一回合的请求因此与本回合从头相同到正文为止，服务商的前缀缓存可以覆盖这一段。完整历史、记忆块、旧世界状态不再重复发送；这样既避免把旧变化当作本轮变化，也降低提取请求体积。输出 token 数直接决定这一步的耗时，所以提示要求每个事实只写一次（事件不再复述为关系或陈述）、只登记本轮新出现的实体、attributes 只放下游要用的状态字段，以约 600 tokens 为典型输出目标，保留所有明确的物品、任务与状态变化；硬性 World IR 上限和原有 60 秒单次时限保持不变。
+插件的 `PostContextAssembly` hook 只保留本地化任务、权威 `inputs.narrative` 段落数组、独立的当前玩家输入、角色单词短名/姓名名册，以及可选的 `vocabulary`（见下文）。`turn` 输入绑定现有的 `turn-digest@1`，hook 只取 `playerMessage` 写入 `playerInput.text`，不把整个摘要或来源 ID 送给模型；当前受控角色存在时，用同一套短名写入 `playerInput.character`。玩家输入说明其明确说了或做了什么，请求、尝试和假设不是成功结果；NPC 的台词或承诺不代表玩家接受。完整输出仍由公共 `narrative-engine@2` schema 在选择前校验，无需另复制一份段落 schema。用户消息里名册和词表排在正文前面：它们很少变，正文每回合都变，下一回合的请求因此与本回合从头相同到正文为止，服务商的前缀缓存可以覆盖这一段。完整历史、记忆块、旧世界状态不再重复发送；这样既避免把旧变化当作本轮变化，也降低提取请求体积。输出 token 数直接决定这一步的耗时，所以提示要求每个事实只写一次（事件不再复述为关系或陈述）、只登记本轮新出现的实体、attributes 只放下游要用的状态字段，以约 600 tokens 为典型输出目标，保留所有明确的物品、任务与状态变化；硬性 World IR 上限和原有 60 秒单次时限保持不变。
 
-`agent.reasoning: false` 默认关闭可选推理；`agent.finishWith: submit-world-facts` 要求模型每一步都调用工具，`submit-world-facts` 成功后结束。用户显式推理配置仍优先；对于 thinking 与强制工具不兼容的模型，adapter 保留用户配置并退回自动工具选择。当前叙事和身份数据独立保存在 user JSON，提示要求逐句核对施动者，无法解析的代词不猜姓名。结构校验能保证协议和引用完整，但无法保证所有模型生成事实的语义正确。
+`agent.reasoning: false` 默认关闭可选推理；`agent.finishWith: submit-world-facts` 要求模型每一步都调用工具，`submit-world-facts` 成功后结束。用户显式推理配置仍优先；对于 thinking 与强制工具不兼容的模型，adapter 保留用户配置并退回自动工具选择。叙事段落、玩家输入和身份数据分开保存在 user JSON，提示要求逐句核对施动者，无法解析的代词不猜姓名。结构校验能保证协议和引用完整，但无法保证所有模型生成事实的语义正确。
 
 代价仍是一条额外的串行模型调用；当两个以上结构化插件复用结果时，通常可用更短、更稳定的下游输入抵消。新增只有一个消费者、且确实需要完整原文的独立能力时，可以直接绑定 `narrative-engine@2`，无需为了形式统一强制经过 World IR；现有图鉴、任务、关系、物品和好感插件则统一选择共享契约，以保持组合行为和失败语义一致。
 

@@ -61,6 +61,8 @@ A session may have several player characters. The two narrator plugins follow th
 
 ### Characters and world
 
+Character, fact, and dimension tracking retain each narrative segment’s speaker or actor. The player message remains a separate source; see [Characters and World](./world.md).
+
 | Plugin                                                 | What it does                                                              | On by default |
 | ------------------------------------------------------ | ------------------------------------------------------------------------- | ------------- |
 | [Pre-Game Setup](./world.md) `pregame`                 | Collects the player's choices when a game starts                          | Yes           |
