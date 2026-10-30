@@ -61,13 +61,6 @@ export default function ({ tool, z }) {
         content,
         complete,
         ...(!complete ? { nextOffset: offset + limit } : {}),
-        _text: JSON.stringify({
-          id,
-          version: record.version,
-          content,
-          complete,
-          ...(!complete ? { nextOffset: offset + limit } : {}),
-        }),
       };
     },
   });

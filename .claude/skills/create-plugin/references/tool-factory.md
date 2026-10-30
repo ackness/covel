@@ -33,9 +33,13 @@ export default function ({ tool, z, shortId, shortIdBatch }) {
 |------|------|
 | `tool` | 工具定义包装函数 |
 | `z` | Zod schema 库 |
+| `withModelView(content, { summary?, data? })` | 选择模型可见的摘要和数据，保留代码读取的正文 |
+| `ToolError(code, message, { hint? })` | 抛出使用 SDK 固定错误码的失败 |
 | `withPendingProposals(content, proposals)` | 返回正文并附上待提交的 proposals |
 | `shortId(prefix, label, sessionId, random?)` | 生成 LLM 友好的短 ID（如 `item-fire-sword`）；第四个参数传 `context.random` |
 | `shortIdBatch(prefix, labels, sessionId, random?)` | 批量生成短 ID（自动去重） |
+
+工具结果给模型时统一为 `{summary?,data?,staged?}` 或 `{error:{code,message,hint?}}`。错误码由 SDK 的 `TOOL_ERROR_CODES` 定义；用 `ToolError` 报告，`ctx.tools.call` 失败也抛出它。工具调用成功只代表写入暂存，回合结束时仍可能被拒绝。`withModelView` 可与 proposal 和事件辅助函数按任意顺序组合。完整规则见[统一返回格式与错误码](../../../../docs/reference/tools.md#统一返回格式与错误码)。
 
 ## 带 UI 交互的工具
 

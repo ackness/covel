@@ -271,6 +271,8 @@ Fires after each tool call that was actually executed.
 
 Payload: `{ toolCall, result }`.
 
+`result.result` is the tool envelope JSON text. `result.error` contains `{code,message,hint?}` on failure and is pinned along with effects, `success`, `refused` and approval status. A hook can rewrite the model text or `parsedResult`; it cannot change failure accounting or the structured error.
+
 - `replace.result` replaces the result the model reads (in a function runtime, the value `ctx.tools.call` returns). The writes and events the tool produced, whether it succeeded, and its approval status stay as they were.
 - `replace.terminate: true` ends the tool loop after this result is recorded.
 

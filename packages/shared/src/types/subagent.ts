@@ -1,3 +1,4 @@
+import type { PluginToolErrorCode as ToolErrorCode } from "@covel/plugin-handlers-utils";
 /**
  * Sub-agents: an agent runtime another runtime runs inside its own execution
  * (`ctx.agents.run` in a function runtime, the `delegate` tool in an agent).
@@ -26,17 +27,10 @@ export interface SubagentRequest {
 }
 
 /**
- * Why a sub-agent produced no output. `unavailable` is a depth or pool cap:
- * the call is refused at once, never queued.
+ * Why a sub-agent produced no output. `unavailable` covers a depth or pool cap
+ * and a provider paused in this session; the call is refused at once.
  */
-export type SubagentErrorCode =
-  | "invalid-input"
-  | "not-found"
-  | "ambiguous"
-  | "unavailable"
-  | "timeout"
-  | "cancelled"
-  | "internal";
+export type SubagentErrorCode = Exclude<ToolErrorCode, "refused" | "conflict">;
 
 export type SubagentResult =
   | {

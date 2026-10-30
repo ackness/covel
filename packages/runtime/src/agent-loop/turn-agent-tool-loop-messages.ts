@@ -1,3 +1,4 @@
+import { renderToolError } from "./tool-result-text.js";
 import { parseJsonText } from "@covel/tools";
 import type { LLMMessage, LLMResponse, LLMToolCall } from "@covel/shared";
 
@@ -25,7 +26,7 @@ export function buildAssistantToolCallMessage(
 /** Keep history valid JSON without changing what the executor receives. */
 export function normalizeAssistantToolCall(call: LLMToolCall): LLMToolCall {
   // Replay the same parsed value the executor sees. Keep an invalid call's
-  // original text as a JSON string, paired with its INVALID_ARGS result;
+  // original text as a JSON string, paired with its invalid-input result;
   // never invent an empty object that appears to have been executed.
   let value: unknown;
   try {
@@ -53,8 +54,9 @@ export function buildPreToolAbortMessage(args: {
 }): LLMMessage {
   return buildToolResultMessage({
     toolCallId: args.toolCallId,
-    content: JSON.stringify({
-      error: `pre-tool-use hook aborted: ${args.reason}`,
+    content: renderToolError({
+      code: "refused",
+      message: `pre-tool-use hook aborted: ${args.reason}`,
     }),
   });
 }
@@ -64,8 +66,9 @@ export function buildToolExecutionUnavailableMessage(
 ): LLMMessage {
   return buildToolResultMessage({
     toolCallId,
-    content: JSON.stringify({
-      result: "Tool execution not available",
+    content: renderToolError({
+      code: "unavailable",
+      message: "Tool execution not available",
     }),
   });
 }

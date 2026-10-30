@@ -1,4 +1,8 @@
-import { modelFacingJson, translate } from "@covel/plugin-handlers-utils";
+import {
+  getToolContent,
+  withModelView,
+  translate,
+} from "@covel/plugin-handlers-utils";
 import { checkFormDefaults, defaultNarrative } from "../lib/form-defaults.js";
 import {
   NAME_FIELD,
@@ -172,11 +176,10 @@ export default function ({ tool }, createFormTool) {
         : form;
       const result = await createFormTool.execute(offered, context);
       const filledNarrative = defaultNarrative(offered);
-      return {
-        ...result,
-        filledNarrative,
-        _text: JSON.stringify(modelFacingJson({ filledNarrative })),
-      };
+      return withModelView(
+        { ...getToolContent(result), filledNarrative },
+        { data: { filledNarrative } },
+      );
     },
   });
 }

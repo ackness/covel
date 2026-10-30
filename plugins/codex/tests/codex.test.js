@@ -284,7 +284,7 @@ describe("sync-codex-entries", () => {
 
   it("rejects an empty sync and reserves runtime-done for no-change turns", async () => {
     await expect(syncTool.execute({ entries: [] }, ctx)).rejects.toMatchObject({
-      code: "VALIDATION_ERROR",
+      code: "invalid-input",
     });
   });
 });

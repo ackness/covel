@@ -20,6 +20,8 @@ import {
   shortId,
   shortIdBatch,
   tool,
+  withModelView,
+  ToolError,
   withPendingProposals,
 } from "@covel/tools";
 import { z } from "zod";
@@ -91,6 +93,8 @@ export function buildEntryApi(
     z,
     shortId,
     shortIdBatch,
+    withModelView,
+    ToolError,
     withPendingProposals,
   };
 

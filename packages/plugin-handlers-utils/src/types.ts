@@ -10,8 +10,8 @@ export type JsonValue =
 // assignable to the kernel's loose-object media ref contract.
 /**
  * One entry of a plugin's own data, as `ctx.pluginData.list` returns it in
- * every context. The timestamps are ISO strings; an entry the current
- * execution wrote and has not committed yet carries the time of the read.
+ * every context. Timestamps are the stored ISO strings, preserved when writes
+ * are overlaid. An entry with no stored row has no timestamps until commit.
  */
 export type PluginDataEntry = {
   readonly key: string;

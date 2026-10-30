@@ -6,6 +6,12 @@ export interface EmittedEvent {
   readonly data: Record<string, unknown>;
 }
 
+/** The tool's explicit choice of what the model reads, separate from code-facing content. */
+export interface ToolModelView {
+  readonly summary?: string;
+  readonly data?: unknown;
+}
+
 /**
  * Explicit tool output and effects. All fields are enumerable, so object
  * spread, structuredClone and JSON transport preserve the complete result.
@@ -16,6 +22,7 @@ export interface PluginToolResult<T = unknown> {
   readonly content: T;
   readonly pendingProposals: readonly PluginProposal[];
   readonly emittedEvents?: readonly EmittedEvent[];
+  readonly model?: ToolModelView;
 }
 
 function isToolResult<T>(value: unknown): value is PluginToolResult<T> {
@@ -34,6 +41,7 @@ export function withPendingProposals<T>(
 ): PluginToolResult<T> {
   const emittedEvents = getEmittedEvents(content);
   return {
+    ...(getModelView(content) ? { model: getModelView(content) } : {}),
     kind: "covel.tool-result",
     content: getToolContent(content),
     pendingProposals: [...pendingProposals],
@@ -47,6 +55,7 @@ export function withEmittedEvents<T>(
   emittedEvents: readonly EmittedEvent[],
 ): PluginToolResult<T> {
   return {
+    ...(getModelView(content) ? { model: getModelView(content) } : {}),
     kind: "covel.tool-result",
     content: getToolContent(content),
     pendingProposals: [...getPendingProposals(content)],
@@ -66,4 +75,19 @@ export function getEmittedEvents(
   value: unknown,
 ): readonly EmittedEvent[] | undefined {
   return isToolResult(value) ? value.emittedEvents : undefined;
+}
+
+/** Choose the model-facing summary/data while retaining content and effects. */
+export function withModelView<T>(
+  content: T | PluginToolResult<T>,
+  model: ToolModelView,
+): PluginToolResult<T> {
+  return {
+    ...withPendingProposals(content, getPendingProposals(content)),
+    model: { ...model },
+  };
+}
+
+export function getModelView(value: unknown): ToolModelView | undefined {
+  return isToolResult(value) ? value.model : undefined;
 }

@@ -343,8 +343,8 @@ export function listPluginDataProducers(
 }
 
 /**
- * What a probe sees of a list: namespace, key and value, sorted. Timestamps
- * of overlaid rows are the read's own clock, so they are left out.
+ * What a probe sees of a list: namespace, key and value, sorted. Stored
+ * timestamps describe persistence, not the values this execution depends on.
  */
 export function observedRows(
   rows: readonly {

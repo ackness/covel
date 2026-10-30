@@ -772,6 +772,7 @@ const PINNED_TOOL_RESULT_FIELDS = [
   "pendingProposals",
   "emittedEvents",
   "success",
+  "error",
   "refused",
   "approvalStatus",
 ] as const;

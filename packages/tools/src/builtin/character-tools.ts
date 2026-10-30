@@ -6,13 +6,7 @@
  * buffered character proposals; the commit handler writes the character table
  * and publishes World Model changes to the session.
  *
- * Text-first output convention:
- *   All tools return an object with a `_text` string field that holds a
- *   compact, human-readable summary for the LLM. The framework's tool-executor
- *   sends only `_text` to the LLM as the tool-call result, while `parsedResult`
- *   retains the full structured object for trace/debug consumption. This keeps
- *   LLM prompts short and readable while framework-level code still gets all
- *   the metadata it needs.
+ * Explicit model views keep summaries compact while code reads the full content.
  *
  * Scoping rules:
  *   - writes are attributed to the caller plugin via `context.pluginId`
@@ -32,7 +26,7 @@ import type {
   Proposal,
 } from "@covel/shared";
 import { z } from "zod";
-import { tool } from "@covel/plugin-handlers-utils";
+import { withModelView, ToolError, tool } from "@covel/plugin-handlers-utils";
 import {
   characterLabel,
   characterNameKey,
@@ -210,14 +204,17 @@ function createCreateCharacterTool(
           ),
         );
       if (match) {
-        return {
-          _text: `Character "${characterLabel(match)}" (${match.type}) already exists as ${match.id}. No new record created. Use update-character to modify it.`,
-          success: true,
-          existed: true,
-          characterId: match.id,
-          name: match.name,
-          type: match.type,
-        };
+        return withModelView(
+          {
+            existed: true,
+            characterId: match.id,
+            name: match.name,
+            type: match.type,
+          },
+          {
+            summary: `Character "${characterLabel(match)}" (${match.type}) already exists as ${match.id}. No new record created. Use update-character to modify it.`,
+          },
+        );
       }
 
       // Load the schema BEFORE the write so we can persist declared defaults
@@ -270,7 +267,7 @@ function createCreateCharacterTool(
       );
 
       // Soft schema validation on the stored (default-merged) fields — surfaces
-      // any off-schema keys as _text warnings the LLM can self-correct next turn.
+      // any off-schema keys as summary warnings the LLM can self-correct next turn.
       const { warningText } = validateFieldsAgainstSchema(fields, schema);
 
       const summary = params.description
@@ -278,14 +275,17 @@ function createCreateCharacterTool(
         : "";
       const warning = warningText ? `\n\n${warningText}` : "";
       return withPendingProposals(
-        {
-          _text: `Created ${params.type} "${params.name}" as ${id}.${summary}${warning}`,
-          success: true,
-          existed: false,
-          characterId: id,
-          name: params.name,
-          type: params.type,
-        },
+        withModelView(
+          {
+            existed: false,
+            characterId: id,
+            name: params.name,
+            type: params.type,
+          },
+          {
+            summary: `Created ${params.type} "${params.name}" as ${id}.${summary}${warning}`,
+          },
+        ),
         [proposal],
       );
     },
@@ -339,7 +339,8 @@ function createUpdateCharacterTool(
       // whose name happens to contain the same word.
       const resolution = resolveCharacter(all, params.id);
       if (resolution.status !== "found") {
-        throw new Error(
+        throw new ToolError(
+          resolution.status === "ambiguous" ? "ambiguous" : "not-found",
           `${describeUnresolvedCharacter(params.id, resolution, all)} Nothing was updated.`,
         );
       }
@@ -442,12 +443,15 @@ function createUpdateCharacterTool(
       const warning = warningText ? `\n\n${warningText}` : "";
 
       return withPendingProposals(
-        {
-          _text: `Updated ${existing.type} "${existing.name}" (${existing.id}) → v${newVersion}.${changeBlock}${warning}`,
-          success: true,
-          characterId: existing.id,
-          version: newVersion,
-        },
+        withModelView(
+          {
+            characterId: existing.id,
+            version: newVersion,
+          },
+          {
+            summary: `Updated ${existing.type} "${existing.name}" (${existing.id}) → v${newVersion}.${changeBlock}${warning}`,
+          },
+        ),
         [proposal],
       );
     },
@@ -457,13 +461,11 @@ function createUpdateCharacterTool(
 // ── sync-characters ─────────────────────────────────────────────
 
 interface CharacterWriteOutput {
-  readonly success?: boolean;
   readonly existed?: boolean;
   readonly characterId?: string;
   readonly name?: string;
   readonly type?: string;
   readonly version?: number;
-  readonly _text?: string;
 }
 
 function createSyncCharactersTool(
@@ -494,13 +496,14 @@ function createSyncCharactersTool(
       // An empty batch is the explicit "no character changed" settlement, the
       // same shape a bookkeeping runtime uses when it must call a tool.
       if (creates.length + updates.length === 0) {
-        return {
-          _text: "No character changes this turn.",
-          success: true,
-          created: [],
-          updated: [],
-          unchanged: [],
-        };
+        return withModelView(
+          {
+            created: [],
+            updated: [],
+            unchanged: [],
+          },
+          { summary: "No character changes this turn." },
+        );
       }
       const proposals: Proposal[] = [];
       const created: Array<Record<string, unknown>> = [];
@@ -530,11 +533,6 @@ function createSyncCharactersTool(
       for (const params of creates) {
         const rawResult = await createCharacter.execute(params, batchContext());
         const result = getToolContent(rawResult) as CharacterWriteOutput;
-        if (result.success !== true) {
-          throw new Error(
-            result._text ?? `Character ${params.name} could not be created`,
-          );
-        }
         if (result.existed === true) {
           unchanged.push({
             characterId: result.characterId,
@@ -554,11 +552,6 @@ function createSyncCharactersTool(
       for (const params of updates) {
         const rawResult = await updateCharacter.execute(params, batchContext());
         const result = getToolContent(rawResult) as CharacterWriteOutput;
-        if (result.success !== true) {
-          throw new Error(
-            result._text ?? `Character ${params.id} could not be updated`,
-          );
-        }
         proposals.push(...getPendingProposals(rawResult));
         updated.push({
           characterId: result.characterId,
@@ -567,13 +560,16 @@ function createSyncCharactersTool(
       }
 
       return withPendingProposals(
-        {
-          _text: `Synchronized ${created.length} new and ${updated.length} existing characters.${unchanged.length ? ` Duplicate creates left unchanged: ${JSON.stringify(unchanged)}. Put explicit field changes in updates using these ids.` : ""}`,
-          success: true,
-          created,
-          updated,
-          unchanged,
-        },
+        withModelView(
+          {
+            created,
+            updated,
+            unchanged,
+          },
+          {
+            summary: `Synchronized ${created.length} new and ${updated.length} existing characters.${unchanged.length ? ` Duplicate creates left unchanged: ${JSON.stringify(unchanged)}. Put explicit field changes in updates using these ids.` : ""}`,
+          },
+        ),
         proposals,
       );
     },
@@ -621,11 +617,13 @@ function createListCharactersTool(store: CharacterStore): ToolModule {
 
       if (sorted.length === 0) {
         const filterNote = params.type ? ` of type ${params.type}` : "";
-        return {
-          _text: `No characters${filterNote} in this session yet.`,
-          count: 0,
-          characters: [],
-        };
+        return withModelView(
+          {
+            count: 0,
+            characters: [],
+          },
+          { summary: `No characters${filterNote} in this session yet.` },
+        );
       }
 
       const header = params.type
@@ -645,11 +643,13 @@ function createListCharactersTool(store: CharacterStore): ToolModule {
             ]
           : [];
 
-      return {
-        _text: [header, ...lines, ...more].join("\n"),
-        count: sorted.length,
-        characters: shown.map(toSnapshot),
-      };
+      return withModelView(
+        {
+          count: sorted.length,
+          characters: shown.map(toSnapshot),
+        },
+        { summary: [header, ...lines, ...more].join("\n") },
+      );
     },
   });
 }
@@ -682,16 +682,18 @@ function createGetCharacterTool(store: CharacterStore): ToolModule {
       const query = (params.id || params.name)!;
       const resolution = resolveCharacter(all, query, { partial: true });
       if (resolution.status !== "found") {
-        return {
-          _text: describeUnresolvedCharacter(query, resolution, all),
-          found: false,
-          candidates: (resolution.status === "ambiguous"
-            ? resolution.candidates
-            : resolution.closest.length > 0
-              ? resolution.closest
-              : all.slice(0, MAX_NAMES_ON_MISS)
-          ).map((c) => c.name),
-        };
+        return withModelView(
+          {
+            found: false,
+            candidates: (resolution.status === "ambiguous"
+              ? resolution.candidates
+              : resolution.closest.length > 0
+                ? resolution.closest
+                : all.slice(0, MAX_NAMES_ON_MISS)
+            ).map((c) => c.name),
+          },
+          { summary: describeUnresolvedCharacter(query, resolution, all) },
+        );
       }
       const match = resolution.character;
 
@@ -710,11 +712,13 @@ function createGetCharacterTool(store: CharacterStore): ToolModule {
         lines.push(...fieldLines);
       }
 
-      return {
-        _text: lines.join("\n"),
-        found: true,
-        character: toSnapshot(match),
-      };
+      return withModelView(
+        {
+          found: true,
+          character: toSnapshot(match),
+        },
+        { summary: lines.join("\n") },
+      );
     },
   });
 }
@@ -740,12 +744,16 @@ export function createCharacterTools(
           ...(context.upstreamProposals ?? []),
           ...(context.pendingProposals ?? []),
         ]);
-        return {
-          _text: schema
-            ? JSON.stringify(modelFacingJson(schema))
-            : "No character schema is available.",
-          schema,
-        };
+        return withModelView(
+          {
+            schema,
+          },
+          {
+            summary: schema
+              ? JSON.stringify(modelFacingJson(schema))
+              : "No character schema is available.",
+          },
+        );
       },
     }),
     createCreateCharacterTool(store),

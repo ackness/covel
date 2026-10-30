@@ -4,6 +4,7 @@
 
 import type { ZodType } from "zod";
 import { z, ZodError } from "zod";
+import { ToolError } from "./tool-error.js";
 import { parseJsonText } from "./json-text.js";
 import type {
   PluginToolDefinition as ToolDefinitionInput,
@@ -17,8 +18,8 @@ import type {
  * Carries field-level details so `ToolExecutor` can return a structured
  * error that the LLM can understand and act on (fix the call, not retry blindly).
  */
-export class ToolValidationError extends Error {
-  readonly code = "VALIDATION_ERROR" as const;
+export class ToolValidationError extends ToolError {
+  override readonly name = "ToolValidationError";
   readonly details: Array<{ path: string; message: string }>;
 
   /**
@@ -26,8 +27,7 @@ export class ToolValidationError extends Error {
    *   place of Zod's when one exists.
    */
   constructor(zodError: ZodError, messages?: ReadonlyMap<string, string>) {
-    super("Tool parameter validation failed");
-    this.name = "ToolValidationError";
+    super("invalid-input", "Tool parameter validation failed");
     this.details = zodError.issues.map((issue) => {
       const path = issue.path.join(".");
       return {

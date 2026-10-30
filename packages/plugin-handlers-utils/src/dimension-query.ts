@@ -171,9 +171,8 @@ export function queryDimensionSnapshot(
   });
   const text = answers.map((answer) => answer.line).join("\n");
   return {
-    success: true,
     results: answers.map((answer) => answer.result),
-    _text: text.slice(0, 8192),
+    text: text.slice(0, 8192),
   };
 }
 

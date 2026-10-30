@@ -8,9 +8,16 @@ export {
   withPendingProposals,
   getEmittedEvents,
   withEmittedEvents,
-  ToolRefusal,
+  ToolError,
+  isToolError,
+  withModelView,
+  getModelView,
 } from "./result.js";
-export type { ToolExecutionEnvelope, EmittedEvent } from "./result.js";
+export type {
+  ToolErrorCode,
+  ToolExecutionEnvelope,
+  EmittedEvent,
+} from "./result.js";
 
 // ── Proposal read-through overlays (buffered same-execution writes) ──
 export {

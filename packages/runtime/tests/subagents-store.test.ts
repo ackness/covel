@@ -290,7 +290,7 @@ describe("sub-agents at commit", () => {
       (payload) => payload.toolName === "plugin-data-set",
     );
     expect(refusal).toMatchObject({
-      code: "UNAUTHORIZED",
+      code: "unavailable",
       runtimeId: guard.name,
       subagentCallId: started?.subagentCallId,
       parentRuntimeId: caller.name,
@@ -357,7 +357,7 @@ describe("sub-agents at commit", () => {
       runtimeId: director.name,
       toolCallId: "tc-delegate",
       approvalStatus: "auto-allowed",
-      result: '{"line":"Halt!"}',
+      result: '{"data":{"line":"Halt!"}}',
     });
     const [started] = await persisted(store, "subagent.started");
     const [completed] = await persisted(store, "subagent.completed");

@@ -19,7 +19,10 @@ import { runTurnPipeline } from "../src/turn-executor/turn-executor.js";
 import type { TurnExecutorDeps } from "../src/turn-executor/turn-executor.js";
 import { createToolExecutor } from "../src/agent-loop/tool-executor.js";
 import { buildToolDefinitions } from "../src/turn-executor/turn-executor-helpers.js";
-import { resolveDeferredToolNames } from "../src/agent-loop/tool-search.js";
+import {
+  executeToolSearch,
+  resolveDeferredToolNames,
+} from "../src/agent-loop/tool-search.js";
 import type { LLMAdapter, LLMResponse, LLMToolDefinition } from "@covel/shared";
 
 const SESSION_ID = "sess-tool-search";
@@ -286,4 +289,31 @@ describe("buildToolDefinitions defer shapes", () => {
     for (const t of TOOL_POOL) expect(names).toContain(t.name);
     expect(names).not.toContain(SEARCH_TOOLS_TOOL_NAME);
   });
+});
+
+describe("search tool result envelopes", () => {
+  it.each(["", "no-such-capability", "dice"])(
+    "renders a summary for query %j",
+    async (query) => {
+      const module = echoTool("roll-dice", "Roll dice");
+      const executor = createToolExecutor({ findTool: () => module });
+      const result = executeToolSearch({
+        argumentsJson: JSON.stringify({ query }),
+        deferredNames: new Set(["roll-dice"]),
+        activeNames: new Set(),
+        toolExecutor: executor,
+        context: {
+          sessionId: "s",
+          turnId: "t",
+          pluginId: "p",
+          runtimeId: "p/r",
+        },
+      });
+      expect(JSON.parse(result.resultText)).toEqual({
+        summary: expect.any(String),
+      });
+      expect(result.activated).toHaveLength(query === "dice" ? 1 : 0);
+      await executor.close();
+    },
+  );
 });

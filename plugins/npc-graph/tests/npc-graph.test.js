@@ -197,7 +197,7 @@ describe("upsert-npc-graph", () => {
     await expect(
       upsertTool.execute(edge("师徒/同门"), ctx),
     ).rejects.toMatchObject({
-      code: "VALIDATION_ERROR",
+      code: "invalid-input",
       details: [
         {
           path: "edges.0.relation",
@@ -278,7 +278,7 @@ describe("upsert-npc-graph", () => {
         },
         ctx,
       ),
-    ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
+    ).rejects.toMatchObject({ code: "invalid-input" });
     // Nothing is left of a call that held only places: it records nothing.
     const places = await upsertTool.execute(
       {

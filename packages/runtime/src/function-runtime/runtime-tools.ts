@@ -1,5 +1,6 @@
 import type { FunctionHandlerContext } from "@covel/shared/plugin-runtime";
 import {
+  ToolError,
   toJsonValueOrDiagnostic,
   type InputSlot,
   type RuntimeManifest,
@@ -15,6 +16,15 @@ import {
 import type { ExecutionWriteBuffer } from "./execution-write-buffer.js";
 import type { HandlerHelperContext } from "./plugin-handler-helpers.js";
 import type { PluginDataVisibility } from "./upstream-plugin-data.js";
+
+/** A hook may rewrite the arguments into text that is not JSON. */
+function parseArguments(text: string): unknown {
+  try {
+    return JSON.parse(text);
+  } catch {
+    return text;
+  }
+}
 
 /** Deterministic handlers use the same governed tools as agent runtimes. */
 export function createRuntimeTools(options: {
@@ -56,20 +66,35 @@ export function createRuntimeTools(options: {
       assertLive();
       let argumentsJson: string;
       try {
-        argumentsJson = JSON.stringify(args);
+        // `JSON.stringify` yields `undefined` for a non-serializable root.
+        const serialized: string | undefined = JSON.stringify(args);
+        if (serialized === undefined)
+          throw new TypeError("the value has no JSON form");
+        argumentsJson = serialized;
       } catch (error) {
-        failure = error;
+        const rejection = new ToolError(
+          "invalid-input",
+          `Tool arguments must be JSON-serializable: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+          { hint: "Pass plain JSON values as the tool arguments." },
+        );
+        failure = rejection;
         failed = true;
-        return Promise.reject(error);
+        return Promise.reject(rejection);
       }
       // Serialize calls so tools see earlier buffered writes even with Promise.all.
       const pending = tail.then(async () => {
         assertLive();
         signal.throwIfAborted();
         if (terminated)
-          throw new Error("Tool calls were terminated by PostToolUse");
+          throw new ToolError(
+            "cancelled",
+            "Tool calls were terminated by PostToolUse",
+          );
         if (failed) throw failure;
-        if (!deps.toolExecutor) throw new Error("Tool executor is unavailable");
+        if (!deps.toolExecutor)
+          throw new ToolError("unavailable", "Tool executor is unavailable");
         const started = Date.now();
         const before = await runPreToolUseHook(hookOptions, {
           id: crypto.randomUUID(),
@@ -77,7 +102,11 @@ export function createRuntimeTools(options: {
           arguments: argumentsJson,
         });
         assertLive();
-        if (before.skipped) throw new Error(before.reason);
+        if (before.skipped)
+          throw new ToolError(
+            "refused",
+            before.reason ?? "Tool call was blocked by PreToolUse",
+          );
         const call = before.toolCall;
         const raw = await deps.toolExecutor.execute(
           { toolCallId: call.id, name: call.name, arguments: call.arguments },
@@ -115,13 +144,24 @@ export function createRuntimeTools(options: {
           pluginId: context.pluginId,
           runtimeId: context.runtimeId,
           turnId: context.turnId,
-          input: toJsonValueOrDiagnostic(JSON.parse(call.arguments), "input"),
+          input: toJsonValueOrDiagnostic(
+            parseArguments(call.arguments),
+            "input",
+          ),
           output: toJsonValueOrDiagnostic(result.parsedResult, "output"),
           durationMs: Date.now() - started,
           approvalStatus: result.approvalStatus ?? "auto-allowed",
           timestamp: new Date().toISOString(),
         });
-        if (!result.success) throw new Error(result.result);
+        if (!result.success) {
+          const error = result.error;
+          if (!error)
+            throw new ToolError(
+              "internal",
+              "Tool call failed without an error.",
+            );
+          throw new ToolError(error.code, error.message, { hint: error.hint });
+        }
         buffer.push(...(result.pendingProposals ?? []));
         events.push(...(result.emittedEvents ?? []));
         return result.parsedResult;

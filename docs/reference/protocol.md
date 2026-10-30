@@ -1263,7 +1263,7 @@ error.occurred        → executionError
 | --- | --- |
 | `tool.calling` | `{ runtimeId, pluginId, toolName, toolCallId, label, arguments, source, approvalStatus }` |
 | `tool.completed` | `{ runtimeId, pluginId, toolName, toolCallId, label, result, parsedResult, durationMs, approvalStatus, success: true }` |
-| `tool.failed` | `{ runtimeId, pluginId, toolName, toolCallId, label, code, error, details?, durationMs, approvalStatus, success: false }` |
+| `tool.failed` | `{ runtimeId, pluginId, toolName, toolCallId, label, code, error, hint?, details?, durationMs, approvalStatus, success: false }`  `code` 使用 `ToolErrorCode`；`error` 是完整消息，`hint` 是可选修正提示。错误码为 `invalid-input`、`not-found`、`ambiguous`、`refused`、`unavailable`、`timeout`、`conflict`、`cancelled`、`internal`。 |
 | `domain-event.previewed` | `{ runtimeId, pluginId, toolCallId, topic, data }`。`emit-event` 校验成功后的临时显示信号；持久的业务状态仍然由正常的事件链提交 |
 | `llm.calling` | `{ runtimeId, pluginId, slot, model, provider?: string \| null, messages, tools, attempt, startedAt, queueWaitMs?, streaming? }`。`slot` 是 runtime 请求的用途；生产环境的 gateway 在调用之前把它解析成 `model` / `provider`。不支持用途解析的自定义 adapter 可以不给 `provider` |
 | `llm.responded` | `{ runtimeId, pluginId, text?, reasoningContent?, toolCalls?, usage, finishReason, durationMs, attempt, error? }`。`usage` 是 `{ inputTokens, outputTokens, cachedInputTokens?, cacheWriteInputTokens? }`，其中 `inputTokens` 是包含缓存读写的总输入，后两项是服务商报告的子集。`finishReason` 为 `length` 只出现在 story runtime：正文在输出上限处被截断，但已经保留，客户端据此提示玩家；其他情况下被截断的调用按失败上报 |

@@ -186,7 +186,9 @@ describe("ToolExecutor with ApprovalPipeline", () => {
           ctx,
         );
         expect(result.success).toBe(false);
-        expect(JSON.parse(result.result)).toMatchObject({ code: "NOT_FOUND" });
+        expect(JSON.parse(result.result)).toMatchObject({
+          error: { code: "not-found" },
+        });
       }
     } finally {
       await executor.close();

@@ -16,13 +16,17 @@ export type {
   PluginDataReader,
 } from "./types.js";
 export {
+  getModelView,
+  withModelView,
   getToolContent,
   getPendingProposals,
   getEmittedEvents,
   withPendingProposals,
   withEmittedEvents,
 } from "./tool-result.js";
-export type { EmittedEvent } from "./tool-result.js";
+export { TOOL_ERROR_CODES, ToolError, isToolError } from "./tool-error.js";
+export type { PluginToolErrorCode } from "./tool-error.js";
+export type { ToolModelView, EmittedEvent } from "./tool-result.js";
 export type {
   PluginAPI,
   PluginEntryFactory,

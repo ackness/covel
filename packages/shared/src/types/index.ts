@@ -419,3 +419,5 @@ export type {
 
 export type { PluginManifest, PluginManifestInput } from "./plugin-manifest.js";
 export type { RuntimeAuthoringManifest } from "./runtime-manifest.js";
+
+export type { PluginToolErrorCode as ToolErrorCode } from "@covel/plugin-handlers-utils";

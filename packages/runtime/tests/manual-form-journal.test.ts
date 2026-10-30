@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { createMemoryStore } from "@covel/store/memory";
 import { createFormTool } from "@covel/tools";
 import type { RuntimeManifest } from "@covel/shared";
+import { getToolContent } from "@covel/plugin-handlers-utils";
 import type { PluginFormInteraction } from "@covel/plugin-handlers-utils";
 import { runTurnPipeline } from "../src/turn-executor/turn-executor.js";
 import { createToolExecutor } from "../src/agent-loop/tool-executor.js";
@@ -77,13 +78,15 @@ describe.each(["function", "agent"] as const)(
                       effects: {
                         interactions: [
                           (
-                            (await createFormTool.execute(form, {
-                              sessionId: "s",
-                              pluginId: "external",
-                              runtimeId: manifest.name,
-                              random: { int: (min: number) => min },
-                              turnId: "t",
-                            })) as { interaction: PluginFormInteraction }
+                            getToolContent(
+                              await createFormTool.execute(form, {
+                                sessionId: "s",
+                                pluginId: "external",
+                                runtimeId: manifest.name,
+                                random: { int: (min: number) => min },
+                                turnId: "t",
+                              }),
+                            ) as { interaction: PluginFormInteraction }
                           ).interaction,
                         ],
                       },

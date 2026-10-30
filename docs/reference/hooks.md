@@ -271,6 +271,8 @@ agent runtime 的每次工具调用之前触发，函数 runtime 经 `ctx.tools.
 
 负载：`{ toolCall, result }`。
 
+`result.result` 是统一工具结果的 JSON 文本。失败时 `result.error` 是 `{code,message,hint?}`；它和副作用、`success`、`refused`、审批状态一样不可被替换。Hook 可以改写模型文本或 `parsedResult`，不能改变失败计数和结构化错误。
+
 - `replace.result` 替换模型读到的结果（函数 runtime 里是 `ctx.tools.call` 返回的值）。工具交出的写入和事件、是否成功、审批状态都保持原样。
 - `replace.terminate: true` 在记下这条结果之后结束工具循环。
 

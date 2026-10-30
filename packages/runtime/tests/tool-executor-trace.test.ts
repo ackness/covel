@@ -1,7 +1,7 @@
 /**
  * ToolExecutor trace emission tests — covers tool.calling / tool.completed /
- * tool.failed across the 5 branches (success, NOT_FOUND, DENIED, INVALID_ARGS,
- * VALIDATION_ERROR via Zod, and the emitter-absent backward-compatible path).
+ * tool.failed across the 5 branches (success, not-found, refused, invalid-input,
+ * invalid-input via Zod, and the emitter-absent backward-compatible path).
  */
 
 import { describe, it, expect } from "vitest";
@@ -102,7 +102,7 @@ describe("ToolExecutor trace emissions", () => {
     });
   });
 
-  it("emits tool.failed with NOT_FOUND when tool missing", async () => {
+  it("emits tool.failed with not-found when tool missing", async () => {
     const emitter = makeEmitterSpy();
     const executor = createToolExecutor({ findTool: () => undefined });
     const res = await executor.execute(
@@ -113,12 +113,12 @@ describe("ToolExecutor trace emissions", () => {
     expect(emitter.events).toHaveLength(1);
     expect(emitter.events[0]!.type).toBe("tool.failed");
     expect(emitter.events[0]!.payload).toMatchObject({
-      code: "NOT_FOUND",
+      code: "not-found",
       success: false,
     });
   });
 
-  it("emits tool.failed with INVALID_ARGS when arguments are not valid JSON", async () => {
+  it("emits tool.failed with invalid-input when arguments are not valid JSON", async () => {
     const emitter = makeEmitterSpy();
     const executor = createToolExecutor({
       findTool: () =>
@@ -137,7 +137,7 @@ describe("ToolExecutor trace emissions", () => {
     );
     expect(res.success).toBe(false);
     expect(emitter.events[0]!.type).toBe("tool.failed");
-    expect(emitter.events[0]!.payload.code).toBe("INVALID_ARGS");
+    expect(emitter.events[0]!.payload.code).toBe("invalid-input");
   });
 
   it("runs a call whose arguments have one of the slips the parser settles", async () => {
@@ -186,7 +186,7 @@ describe("ToolExecutor trace emissions", () => {
     );
   });
 
-  it("emits tool.failed with DENIED when approval denies the call", async () => {
+  it("emits tool.failed with refused when approval denies the call", async () => {
     const emitter = makeEmitterSpy();
     const mockTool = tool({
       name: "dangerous",
@@ -212,14 +212,14 @@ describe("ToolExecutor trace emissions", () => {
     expect(emitter.events).toHaveLength(1);
     expect(emitter.events[0]!.type).toBe("tool.failed");
     expect(emitter.events[0]!.payload).toMatchObject({
-      code: "DENIED",
+      code: "refused",
       error: "explicit deny",
       approvalStatus: "policy-denied",
       success: false,
     });
   });
 
-  it("emits tool.failed with VALIDATION_ERROR and details (dedup exercised)", async () => {
+  it("emits tool.failed with invalid-input and details (dedup exercised)", async () => {
     const emitter = makeEmitterSpy();
     // Build a ZodError whose issues include two entries on the same path
     // so the dedup logic in tool-executor collapses them into one detail.
@@ -276,14 +276,14 @@ describe("ToolExecutor trace emissions", () => {
       "tool.failed",
     ]);
     const failPayload = emitter.events[1]!.payload;
-    expect(failPayload.code).toBe("VALIDATION_ERROR");
+    expect(failPayload.code).toBe("invalid-input");
     expect(Array.isArray(failPayload.details)).toBe(true);
     // Dedup means only 2 unique paths survive (name + age), not 3 raw issues.
     expect((failPayload.details as string[]).length).toBe(2);
     // The model reads which fields to fix in the headline as well.
-    const sent = JSON.parse(res.result) as { error: string };
+    const sent = JSON.parse(res.result) as { error: { message: string } };
     for (const detail of failPayload.details as string[])
-      expect(sent.error).toContain(detail);
+      expect(sent.error.message).toContain(detail);
   });
 
   it("does not emit anything when emitter is absent", async () => {

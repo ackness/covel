@@ -70,7 +70,7 @@ describe("tool()", () => {
     // Missing required field 'city'
     await expect(modelCall(mod, {}, ctx)).rejects.toMatchObject({
       name: "ToolValidationError",
-      code: "VALIDATION_ERROR",
+      code: "invalid-input",
       details: [{ path: "city", message: expect.any(String) }],
     });
   });
