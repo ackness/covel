@@ -53,35 +53,26 @@ export function replaceLoreFragment(
   return `${/^\s*/.exec(source)![0]}${replacement.trim()}${/\s*$/.exec(source)![0]}`;
 }
 
-/**
- * A whole-package revision has seen hidden facts. It cannot safely rewrite
- * public prose. Keep that prose fixed, allow story edits inside the existing
- * hidden regions, and reconstruct with source-owned marker lines.
- * This deliberately does not attempt to infer semantic equivalence.
- */
-export function mergeProtectedLore(current: string, revised: string): string {
-  const source = splitLore(current);
+/** Check the number and sequence of boundaries, not the meaning of the text. */
+export function matchingLoreParts(
+  source: readonly LorePart[],
+  revised: string,
+): readonly LorePart[] {
   const target = splitLore(revised);
-  if (!hasLoreBoundary(source)) return revised;
   const error = () =>
     new LoreBoundaryError(
-      "WORLD.md revision cannot remove or move narrator-only boundaries or change player-visible text while hidden regions exist. Only edits inside existing hidden regions or UNCHANGED are supported; edit the source file directly for a visible-text or visibility change",
+      "WORLD.md revision cannot add or remove narrator-only regions; keep the existing boundaries and edit content within each region",
     );
   if (source.length !== target.length) throw error();
-  return source
-    .map((part, index) => {
-      const next = target[index]!;
-      if (part.kind !== next.kind) throw error();
-      if (part.kind === "marker") return part.text;
-      if (next.kind !== "text" || part.hidden !== next.hidden) throw error();
-      if (!part.hidden) {
-        if (part.text.trim() !== next.text.trim()) throw error();
-        return part.text;
-      }
-      assertLoreFragment(next.text);
-      return next.text.trim()
-        ? replaceLoreFragment(part.text, next.text)
-        : "\n";
-    })
-    .join("");
+  for (const [index, part] of source.entries()) {
+    const next = target[index]!;
+    if (part.kind !== next.kind) throw error();
+    if (
+      part.kind === "text" &&
+      next.kind === "text" &&
+      part.hidden !== next.hidden
+    )
+      throw error();
+  }
+  return target;
 }

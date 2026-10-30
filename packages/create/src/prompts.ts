@@ -79,6 +79,19 @@ export async function buildWorldLoreRepairPrompt(
   return interpolate(template, promptLocale);
 }
 
+export async function buildWorldLoreRevisionPrompt(
+  locale: string,
+  loader: PromptLoader = loadPrompt,
+): Promise<string> {
+  const promptLocale = resolvePromptLocale(locale);
+  const template = await loader(
+    "server",
+    "revise-world-lore",
+    promptLocale.locale,
+  );
+  return interpolate(template, promptLocale);
+}
+
 function resolvePromptLocale(locale: string): {
   locale: string;
   language: string;

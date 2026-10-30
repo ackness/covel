@@ -67,6 +67,11 @@ it("the generation template's prose leaves enter translation; machine leaves and
         schema: { type: "string", enum: ["waiting", "ready"] },
         initialValue: "ready",
       },
+      fixed: {
+        name: "固定机器值",
+        schema: { type: "string", const: "stable-mode" },
+        initialValue: "stable-mode",
+      },
       unmarked: {
         name: "未标记正文",
         schema: { type: "string" },
@@ -97,7 +102,7 @@ it("the generation template's prose leaves enter translation; machine leaves and
         "journal.initialValue.harbor.description",
       ]),
     );
-    for (const field of ["count", "identity", "phase", "unmarked"])
+    for (const field of ["count", "identity", "phase", "fixed", "unmarked"])
       expect(pointers).not.toContain(`${field}.initialValue`);
     expect(pointers).not.toContain("journal.initialValue.harbor.visited");
     expect(file.notTranslatable).toContain("unmarked.initialValue");
@@ -119,6 +124,10 @@ it("the generation template's prose leaves enter translation; machine leaves and
     expect(overlay).not.toHaveProperty("identity");
     expect(overlay).not.toHaveProperty("phase");
     expect(overlay).not.toHaveProperty("count");
+    expect(overlay).not.toHaveProperty("fixed");
+    expect(
+      parse(await readFile(path.join(root, "data/dimensions.yaml"), "utf8")),
+    ).toEqual(authored);
   } finally {
     await rm(root, { recursive: true, force: true });
   }
@@ -181,6 +190,78 @@ it("world translation excludes hidden lore from the shared glossary and writes s
     expect(hidden).toHaveLength(1);
     expect(hidden[0]).not.toContain("A light shines");
     expect(hidden[0]).not.toContain("The courier arrives");
+    for (const request of requests.filter(
+      (request) => !request.includes(secret),
+    )) {
+      expect(request).not.toContain("陈舟是匿名证人。");
+    }
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+it("does not write a partially translated protected WORLD.md when a hidden fragment fails", async () => {
+  const root = await mkdtemp(
+    path.join(tmpdir(), "covel-hidden-translation-failure-"),
+  );
+  const source =
+    "# Harbor\nThe light shines.\n<!-- narrator-only -->\nSecret {witness}.\n<!-- /narrator-only -->\nThe gate opens.";
+  const requests: string[] = [];
+  const llm: LLMAdapter = {
+    async generate({ messages }) {
+      const prompt = String(messages[0]?.content);
+      requests.push(prompt);
+      const input = prompt.split("Texts:\n")[1];
+      const units: Record<string, string | { text: string }> = input
+        ? JSON.parse(input)
+        : {};
+      return {
+        content: input
+          ? JSON.stringify(
+              Object.fromEntries(
+                Object.entries(units).map(([id, value]) => [
+                  id,
+                  (typeof value === "string" ? value : value.text).includes(
+                    "Secret",
+                  )
+                    ? "<!-- /narrator-only -->\nA leaked answer."
+                    : "# 港口\n灯亮着。",
+                ]),
+              ),
+            )
+          : "{}",
+        toolCalls: [],
+        finishReason: "stop",
+        usage: { inputTokens: 0, outputTokens: 0 },
+      };
+    },
+  };
+  try {
+    await writeFile(
+      path.join(root, "world.yaml"),
+      "id: harbor\nname: Harbor\nsummary: A harbor.\ndefaultLocale: en-US\n",
+    );
+    await writeFile(path.join(root, "WORLD.md"), source);
+    const result = await translateWorldPackage({
+      worldDir: root,
+      locale: "zh-CN",
+      llm,
+    });
+    expect(result.failed).toContainEqual({
+      id: "WORLD.md#",
+      reason: expect.stringContaining("narrator-only"),
+    });
+    expect(result.written).not.toContain("WORLD.zh-CN.md");
+    await expect(
+      readFile(path.join(root, "WORLD.zh-CN.md")),
+    ).rejects.toMatchObject({ code: "ENOENT" });
+    expect(await readFile(path.join(root, "WORLD.md"), "utf8")).toBe(source);
+    const publicRequests = requests.filter(
+      (prompt) => !prompt.includes("Secret"),
+    );
+    expect(
+      publicRequests.every((prompt) => !prompt.includes("A leaked answer")),
+    ).toBe(true);
   } finally {
     await rm(root, { recursive: true, force: true });
   }

@@ -9,7 +9,8 @@
  * A new world is written one part at a time: the manifest, the lore, then
  * each requested supplement. A part is checked when it arrives and asked for
  * again alone when it cannot be imported, so a bad part does not cost the
- * parts that are already written. A revision is one request.
+ * parts that are already written. Protected revisions independently rewrite
+ * changed public fragments after the package request.
  */
 
 import { parse as parseYaml, stringify as stringifyYaml } from "yaml";
@@ -57,9 +58,9 @@ import { mergeRevision, revisionRequest } from "./revision.js";
 import {
   hasLoreBoundary,
   LoreBoundaryError,
-  mergeProtectedLore,
   splitLore,
 } from "./lore-boundaries.js";
+import { reviseProtectedLore } from "./lore-revision.js";
 
 const MAX_RETRIES = 2;
 /** Least time between two progress reports of an answer that is growing. */
@@ -192,7 +193,13 @@ async function checkLore(
       );
     return { errors };
   };
-  const normalizedLore = normalizeLoreDocument(lore, yamlData, locale);
+  // A protected revision's public text has a separate source. Do not add
+  // headings from a manifest answer that was allowed to see hidden lore.
+  const normalize = (text: string) =>
+    options.revision && protectedLore
+      ? text
+      : normalizeLoreDocument(text, yamlData, locale);
+  const normalizedLore = normalize(lore);
   const loreStructureErrors = findLoreStructureErrors(normalizedLore);
   if (loreStructureErrors.length > 0) return reject(loreStructureErrors);
 
@@ -223,7 +230,7 @@ async function checkLore(
       return reject([...loreMetaErrors, repairError]);
     }
 
-    const repairedLore = normalizeLoreDocument(repair.lore, yamlData, locale);
+    const repairedLore = normalize(repair.lore);
     const repairedErrors = findLoreQualityErrors(repairedLore);
     if (repairedErrors.length > 0) {
       log(
@@ -783,7 +790,11 @@ async function reviseWorld(
           "Failed to parse output — expected ===WORLD_YAML=== and ===WORLD_MD=== delimiters",
         ];
       }
-      const parsed = mergeRevision(output, revision.current);
+      const parsed = mergeRevision(
+        output,
+        revision.current,
+        options.dataContracts,
+      );
       log(
         options,
         "info",
@@ -813,18 +824,21 @@ async function reviseWorld(
       );
       if (characterErrors.length > 0) return characterErrors;
 
+      const protectedLore = await reviseProtectedLore({
+        ...options,
+        revision,
+        proposed: parsed.lore,
+        locale,
+        signal,
+      });
       const lore = await checkLore(
-        parsed.lore,
+        protectedLore,
         checked.yamlData,
         locale,
         options,
         signal,
       );
       if ("errors" in lore) return lore.errors;
-      const protectedLore = mergeProtectedLore(
-        revision.current.lore,
-        lore.lore,
-      );
 
       const id = checked.manifest.id as string;
       log(options, "info", `validation passed id=${id}`);
@@ -832,7 +846,7 @@ async function reviseWorld(
         success: true,
         id,
         manifest: checked.manifest,
-        lore: protectedLore,
+        lore: lore.lore,
         locale,
         packageContent: generatedPackage.content,
         warnings: [...checked.warnings, ...generatedPackage.warnings],

@@ -5697,14 +5697,14 @@ Web 前端每次生成前先等 `/api/health` 成功，再根据 `storage.data.f
 
 - 没改的段写 `UNCHANGED`，整段沿用；
 - `WORLD_YAML` 里只写改动的字段，`dimensions` 按维度 ID 合并（写 `null` 表示删除这个维度）；
-- `WORLD_PACKAGE_YAML` 里只写新增或改动的条目，按 `id` 合并进所在列表（`contractData` 按 `contract` + `key`）；删除角色、资料库或规则条目写 `{ id, remove: true }`；删除契约记录写 `{ contract, key, remove: true }`。
+- `WORLD_PACKAGE_YAML` 里只写新增或改动的条目，按 `id` 合并进所在列表（`contractData` 按 `contract` + `key`）；删除角色、资料库或规则条目写 `{ id, remove: true }`；删除契约记录写 `{ contract, key, remove: true }`，也适用于通过 `characterField` 内嵌在角色上的契约；删除最后一条不会要求补回。
 
 所以“加一个角色”不会改动其他角色，也不会丢掉模型没有重复写出的设定条目。合并后的结果与新生成的世界走同一套校验，世界的 `id` 不变。
 
 - 角色校验覆盖合并后的完整集合，包括没改动的角色。整包不合法时会重试，最终仍不合法就返回失败。服务端不会靠丢掉现有角色来让修订成功。
 - 新建世界时“只声明一种语言”的规范化，不用于修订。
 - 修订提示词提供可用契约的 schema、hint 和 example，包括已有记录所用但不再开放新建生成的契约；不套用新建简报的空数组或数量要求。列出契约不代表必须添加记录，未提及的记录保持不变。
-- `WORLD.md` 已有隐藏段时，仅支持段内内容修改或 `UNCHANGED`，可见片段保持原文。删除／移动隐藏边界或改写可见片段会使修订失败，不保存半成品；作者可直接编辑源文件完成这类改动。详见 [World Data](./world-data.md)。
+- `WORLD.md` 已有隐藏段时，公开润色与隐藏故事修改仍可用。程序保留边界；变化的公开片段由独立请求从原公开源和作者原话重写，不直接采用读过秘密的整包公开草稿。边界结构或片段校验失败时不保存半成品。保障范围与可见性改动限制见 [World Data](./world-data.md)。
 
 **请求**
 
@@ -5763,7 +5763,7 @@ Web 前端每次生成前先等 `/api/health` 成功，再根据 `storage.data.f
 
 **响应**
 
-SSE 事件与 `generate-world` 相同（`progress` → `done` / `error`）。修订是一次模型请求，`parts` 里只有一个 `revision`。
+SSE 事件与 `generate-world` 相同（`progress` → `done` / `error`）。`parts` 里只有一个 `revision`；已有隐藏段且公开片段需要改写时，每个变化的公开片段会增加一次独立模型请求。所有片段校验完成后才进入保存阶段。
 
 **并发修改**
 

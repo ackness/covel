@@ -153,6 +153,20 @@ function normalizeLorebookEntry(
     errors.push(`${sourceKind}[${index}].content is required`);
     return null;
   }
+  for (const [field, choices] of [
+    ["strategy", ["constant", "selective"]],
+    ["position", ["before_plugin", "after_plugin"]],
+  ] as const) {
+    if (
+      value[field] !== undefined &&
+      !choices.some((choice) => choice === value[field])
+    ) {
+      errors.push(
+        `${sourceKind}[${index}].${field} must be ${choices.join(" or ")}`,
+      );
+      return null;
+    }
+  }
   const strategy = value.strategy === "selective" ? "selective" : "constant";
   const keys = strings(value.keys);
   if (strategy === "selective" && !keys) {

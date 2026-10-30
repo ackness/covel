@@ -5699,14 +5699,14 @@ The model gets the world's full current content and the request. It returns the 
 
 - A part that is not changed is written as `UNCHANGED`, and the whole part is kept as it was.
 - In `WORLD_YAML`, only the changed fields are written. `dimensions` are merged by dimension ID (writing `null` deletes that dimension).
-- In `WORLD_PACKAGE_YAML`, only new or changed entries are written. They are merged into their list by `id` (`contractData` is merged by `contract` + `key`). To delete a character, lorebook entry, or rule, write `{ id, remove: true }`; to delete a contract record, write `{ contract, key, remove: true }`.
+- In `WORLD_PACKAGE_YAML`, only new or changed entries are written. They are merged into their list by `id` (`contractData` is merged by `contract` + `key`). To delete a character, lorebook entry, or rule, write `{ id, remove: true }`; to delete a contract record, write `{ contract, key, remove: true }`, including contracts embedded in a character through `characterField`. Deleting the last record does not require a replacement.
 
 So "add a character" does not change the other characters, and it does not drop the setting entries the model did not write again. After the merge, the result goes through the same validation as a newly generated world, and the world's `id` does not change.
 
 - The character validation covers the full set after the merge, including characters that were not changed. If the whole package is not valid, the request is retried. If it is still not valid at the end, the request fails. The server does not make a revision succeed by dropping existing characters.
 - The normalization that makes a new world declare "only one language" does not apply to revisions.
 - Revision prompts provide available contracts' schemas, hints, and examples, including contracts already used by records even when they no longer offer new generation. New-creation empty-array defaults and quantities do not apply. Listing a contract does not require adding records; unmentioned records remain unchanged.
-- When `WORLD.md` already has hidden regions, only edits inside them or `UNCHANGED` are supported; visible fragments keep their original text. Removing or moving hidden boundaries, or rewriting visible fragments, fails the revision without saving a partial result. Authors can edit the source file directly for these changes. See [World Data](./world-data.md).
+- When `WORLD.md` already has hidden regions, public prose and hidden stories remain editable. The program retains the boundaries; each changed public fragment is rewritten independently from its original public source and the author's own request, rather than adopting the public draft from a package answer that saw secrets. Boundary structure or fragment validation failures prevent saving a partial result. See [World Data](./world-data.md) for the guarantee and limits on visibility changes.
 
 **Request**
 
@@ -5765,7 +5765,7 @@ How a revision affects language versions and sessions:
 
 **Response**
 
-The SSE events are the same as for `generate-world` (`progress` → `done` / `error`). A revision is one model request, so `parts` contains only one `revision`.
+The SSE events are the same as for `generate-world` (`progress` → `done` / `error`). `parts` contains only one `revision`; when hidden regions exist, each changed public fragment adds an independent model request. Saving starts only after all fragments pass validation.
 
 **Concurrent changes**
 

@@ -38,21 +38,52 @@ function scripted(replies: readonly string[]) {
 }
 
 describe("protected world revisions", () => {
+  it("does not synthesize public headings from the secret-aware manifest answer", async () => {
+    const { llm, requests } = scripted([
+      patch(
+        lore.replace("A courier arrives.", "Rain falls."),
+        "UNCHANGED",
+        `name: ${secret}`,
+      ),
+      `===WORLD_MD===\n${visible.replace("# Harbor\n\n", "")}\n===END===`,
+    ]);
+    const result = await createWorld({
+      llm,
+      concept: "Harbor",
+      locale: "en-US",
+      revision: { current, instruction: "Polish the first paragraph." },
+    });
+    expect(result.success).toBe(false);
+    expect(result.errors?.join(" ")).toContain("H1 title");
+    expect(requests).toHaveLength(2);
+    expect(JSON.stringify(requests[1]?.messages)).not.toContain(secret);
+  });
+  it("allows a public first-paragraph edit without changing hidden lore", async () => {
+    const changed = lore.replace(
+      "A courier arrives.",
+      "A courier arrives through the rain.",
+    );
+    const { llm } = scripted([
+      patch(changed),
+      `===WORLD_MD===\n${visible.replace("A courier arrives.", "A courier arrives through the rain.")}\n===END===`,
+    ]);
+    const result = await createWorld({
+      llm,
+      concept: "Harbor",
+      locale: "en-US",
+      revision: {
+        current,
+        instruction:
+          "Polish the public first paragraph; keep secrets and boundaries unchanged.",
+      },
+    });
+    expect(result).toMatchObject({ success: true, lore: changed });
+  });
   it.each([
     ["missing markers", lore.replace(/<!--[^\n]*-->/g, "")],
     [
-      "same marker count with relocated secret",
-      lore
-        .replace(secret, "Wait for the reveal.")
-        .replace("A courier arrives.", `A courier arrives. ${secret}`),
-    ],
-    [
-      "visible-only rewrite",
-      lore.replace("A courier arrives.", "Two couriers arrive."),
-    ],
-    [
-      "reordered hidden region",
-      `<!-- narrator-only -->\n${secret}\n<!-- /narrator-only -->\n${visible}`,
+      "extra region",
+      `${lore}\n<!-- narrator-only -->\nAnother secret.\n<!-- /narrator-only -->`,
     ],
   ])(
     "refuses %s without full-document regeneration",
@@ -66,11 +97,92 @@ describe("protected world revisions", () => {
       });
       expect(result.success).toBe(false);
       expect(result.errors?.join(" ")).toContain(
-        "Only edits inside existing hidden regions",
+        "cannot add or remove narrator-only regions",
       );
       expect(requests).toHaveLength(1);
     },
   );
+
+  it("discards a contaminated public draft and isolates both public replacement requests", async () => {
+    const changed = lore
+      .replace("A courier arrives.", `A courier arrives. ${secret}`)
+      .replace(
+        "The gate opens at dusk.",
+        "Whole-package public draft after hidden content.",
+      );
+    const { llm, requests } = scripted([
+      patch(changed),
+      "===WORLD_MD===\nUNCHANGED\n===END===",
+      "===WORLD_MD===\nThe gate opens at nightfall.\n===END===",
+    ]);
+    const instruction =
+      "Polish the last public sentence; keep hidden facts hidden.";
+    const result = await createWorld({
+      llm,
+      concept: "PRIVATE_CONCEPT_CANARY",
+      locale: "en-US",
+      revision: { current, instruction },
+    });
+    expect(result).toMatchObject({
+      success: true,
+      lore: lore.replace("at dusk", "at nightfall"),
+    });
+    expect(requests).toHaveLength(3);
+    for (const request of requests.slice(1)) {
+      const text = JSON.stringify(request.messages);
+      expect(text).not.toContain(secret);
+      expect(text).not.toContain("PRIVATE_CONCEPT_CANARY");
+      expect(text).not.toContain("Whole-package public draft");
+      expect(text).not.toContain("at nightfall");
+      expect(JSON.parse(String(request.messages[1]?.content))).toMatchObject({
+        authorInstruction: instruction,
+        publicContext: playerVisibleLore(lore),
+      });
+    }
+  });
+
+  it.each([
+    "not a delimited answer",
+    "===WORLD_MD===\n<!-- narrator-only -->\nUnexpected boundary\n<!-- /narrator-only -->\n===END===",
+    "===WORLD_MD===\n<!-- /narrator-only -->\nEscape\n===END===",
+  ])(
+    "fails an invalid isolated reply without whole-package fallback: %s",
+    async (reply) => {
+      const { llm, requests } = scripted([
+        patch(lore.replace("A courier arrives.", "A courier arrives in rain.")),
+        reply,
+      ]);
+      const result = await createWorld({
+        llm,
+        concept: "Harbor",
+        locale: "en-US",
+        revision: { current, instruction: "Polish the first paragraph." },
+      });
+      expect(result.success).toBe(false);
+      expect(requests).toHaveLength(2);
+    },
+  );
+
+  it("reconstructs source boundaries when the package answer moves a secret across them", async () => {
+    const moved = lore.replace(
+      `<!-- narrator-only -->\n${secret}`,
+      `${secret}\n<!-- narrator-only -->`,
+    );
+    const { llm, requests } = scripted([
+      patch(moved),
+      "===WORLD_MD===\nUNCHANGED\n===END===",
+    ]);
+    const result = await createWorld({
+      llm,
+      concept: "Harbor",
+      locale: "en-US",
+      revision: { current, instruction: "Keep the public text unchanged." },
+    });
+    expect(result.success).toBe(true);
+    if (result.success)
+      expect(playerVisibleLore(result.lore)).toBe(playerVisibleLore(lore));
+    expect(JSON.stringify(requests[1])).not.toContain(secret);
+  });
 
   it.each([
     "UNCHANGED",
@@ -137,6 +249,28 @@ describe("protected world revisions", () => {
 });
 
 describe("isolated lore repair", () => {
+  it("repairs a public fragment through createWorld without sharing hidden source or answers", async () => {
+    const source = lore.replace(
+      "A courier arrives.",
+      "This lore is model output. A courier arrives.",
+    );
+    const { llm, requests } = scripted([
+      patch(visible, "{}", yaml),
+      patch(source),
+      `===WORLD_MD===\n${visible}\n===END===`,
+    ]);
+    const result = await createWorld({
+      llm,
+      concept: "Harbor",
+      locale: "en-US",
+    });
+    expect(result).toMatchObject({ success: true, lore });
+    expect(requests).toHaveLength(3);
+    expect(JSON.stringify(requests[2]?.messages)).not.toContain(secret);
+    expect(JSON.stringify(requests[2]?.messages)).not.toContain(
+      "The gate opens",
+    );
+  });
   it("repairs only the contaminated hidden fragment and restores the original boundary", async () => {
     const source = lore.replace(secret, `This lore is model output. ${secret}`);
     const { llm, requests } = scripted([
@@ -227,6 +361,43 @@ const record = (key: string, count: number) => ({
 });
 
 describe("world revision contract plan", () => {
+  it("deletes an embedded character contract by contract/key while preserving other characters", async () => {
+    const notes: WorldGenerationDataContract = {
+      contract: "review.notes@1",
+      characterField: "notes",
+      schema: { type: "object" },
+      validate: (value) => value !== null && typeof value === "object",
+    };
+    const characters = [
+      { id: "lin", name: "Lin", type: "npc", notes: { voice: "Quiet." } },
+      { id: "chen", name: "Chen", type: "npc", notes: { voice: "Loud." } },
+    ];
+    const { llm } = scripted([
+      patch(
+        "UNCHANGED",
+        stringify({
+          contractData: [
+            { contract: notes.contract, key: "lin", remove: true },
+          ],
+        }),
+      ),
+    ]);
+    const result = await createWorld({
+      llm,
+      concept: "Harbor",
+      locale: "en-US",
+      dataContracts: [notes],
+      revision: {
+        current: { ...current, packageYaml: stringify({ characters }) },
+        instruction: "Remove Lin's notes only.",
+      },
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.packageContent.characters[0]).not.toHaveProperty("notes");
+      expect(result.packageContent.characters[1]).toEqual(characters[1]);
+    }
+  });
   it("provides schema/hint/example, retries invalid data and preserves omitted records", async () => {
     const pack = {
       contractData: [record("key", 1), record("seal", 3)],
@@ -336,6 +507,42 @@ describe("world revision contract plan", () => {
 });
 
 describe("accepted generation context", () => {
+  it.each([
+    { strategy: "选择性", position: "before_plugin" },
+    { strategy: "selective", position: "插件之前" },
+  ])(
+    "retries translated machine enums rather than silently defaulting: %j",
+    async (invalid) => {
+      const entry = { id: "gate", content: "The gate opens.", keys: ["gate"] };
+      const { llm, requests } = scripted([
+        patch(visible, "{}", yaml),
+        patch(visible),
+        patch("UNCHANGED", stringify({ lorebook: [{ ...entry, ...invalid }] })),
+        patch(
+          "UNCHANGED",
+          stringify({
+            lorebook: [
+              { ...entry, strategy: "selective", position: "before_plugin" },
+            ],
+          }),
+        ),
+      ]);
+      const result = await createWorld({
+        llm,
+        concept: "Harbor",
+        locale: "en-US",
+        brief: { content: ["lorebook"] },
+      });
+      expect(result.success).toBe(true);
+      expect(requests).toHaveLength(4);
+      expect(JSON.stringify(requests[3]?.messages)).toContain("must be");
+      if (result.success)
+        expect(result.packageContent.lorebook[0]).toMatchObject({
+          strategy: "selective",
+          position: "before_plugin",
+        });
+    },
+  );
   it("uses normalized IDs and permits references to existing characters", async () => {
     const notes: WorldGenerationDataContract = {
       contract: "review.notes@1",
