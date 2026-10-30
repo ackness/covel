@@ -77,9 +77,38 @@ describe("world-owned time", () => {
     { target: { ...DEFAULT_TIME.initial, hour: 9 }, amount: 60 },
     { target: { ...DEFAULT_TIME.initial, hour: 9 }, direction: "forward" },
   ])("rejects invalid, backward or conflicting target requests", (request) => {
+    let error;
+    try {
+      advanceTime(DEFAULT_TIME, initialTick(DEFAULT_TIME), request);
+    } catch (caught) {
+      error = caught;
+    }
+    // The model retries from this text, so it must be correctable and readable.
+    expect(error).toMatchObject({ code: "invalid-input" });
+    expect(error.message).not.toMatch(/^\s*[[{]/);
+    expect(error.message.split("\n")).toHaveLength(1);
+  });
+  it("names the bad target field and the clock's valid ranges", () => {
+    const tick = initialTick(DEFAULT_TIME);
+    const target = { ...DEFAULT_TIME.initial, month: 99 };
+    expect(() => advanceTime(DEFAULT_TIME, tick, { target })).toThrow(
+      /target\.month: month is outside calendar/,
+    );
+    expect(() => advanceTime(DEFAULT_TIME, tick, { target })).toThrow(
+      expect.objectContaining({ hint: expect.stringMatching(/month is 1-12/) }),
+    );
+    const earlier = { ...DEFAULT_TIME.initial, hour: 7 };
+    expect(() => advanceTime(DEFAULT_TIME, tick, { target: earlier })).toThrow(
+      expect.objectContaining({
+        code: "invalid-input",
+        message: expect.stringMatching(/earlier than currentTime/),
+      }),
+    );
     expect(() =>
-      advanceTime(DEFAULT_TIME, initialTick(DEFAULT_TIME), request),
-    ).toThrow();
+      advanceTime(phases, 0, { target: { cycle: 0, phase: 99 } }),
+    ).toThrow(
+      expect.objectContaining({ hint: expect.stringMatching(/phase is 0-/) }),
+    );
   });
   it("keeps maximum-step and random policies authoritative for target requests", () => {
     const target = { ...DEFAULT_TIME.initial, hour: 9 };

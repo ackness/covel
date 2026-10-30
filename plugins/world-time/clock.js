@@ -1,4 +1,4 @@
-import { translate } from "@covel/plugin-handlers-utils";
+import { ToolError, translate } from "@covel/plugin-handlers-utils";
 import { resolveI18nText } from "@covel/plugin-handlers-utils";
 import { worldTimeSchema, timeDefinitionRecordSchema } from "./schema.js";
 
@@ -156,6 +156,25 @@ function unitError(definition, unit) {
     : `Unit ${unit} is not available: this world counts time in phases, not in minutes or hours. Use unit ${usable}. Use amount 0 when the events stay in the current phase.`;
 }
 
+/** A request the model can correct, with the reason it can read. */
+function invalidRequest(message, hint) {
+  return new ToolError("invalid-input", message, hint ? { hint } : undefined);
+}
+
+/** The valid ranges of a destination, so a rejected target can be fixed. */
+function targetRanges(definition, target) {
+  if (definition.kind !== "calendar")
+    return `phase is 0-${definition.phases.length - 1}.`;
+  const { calendar } = definition;
+  const month = calendar.months[(target?.month ?? 0) - 1];
+  return [
+    `month is 1-${calendar.months.length}`,
+    ...(month ? [`day is 1-${month.days} in that month`] : []),
+    `hour is 0-${calendar.hoursPerDay - 1}`,
+    `minute is 0-${calendar.minutesPerHour - 1}.`,
+  ].join(", ");
+}
+
 export function advanceTime(definition, tick, request, random) {
   const rule = definition.evolution;
   let delta;
@@ -166,7 +185,7 @@ export function advanceTime(definition, tick, request, random) {
       request.unit !== undefined ||
       request.target !== undefined
     )
-      throw new Error(
+      throw invalidRequest(
         "Random time is sampled by the clock; omit amount, unit, direction and target",
       );
     const range = rule.randomRange;
@@ -177,10 +196,13 @@ export function advanceTime(definition, tick, request, random) {
       request.unit !== undefined ||
       request.direction !== undefined
     )
-      throw new Error("Submit target or a duration, never both");
+      throw invalidRequest(
+        "Submit target or a duration, never both",
+        "Keep target and omit amount, unit and direction.",
+      );
     // Interpret the destination in this world's own calendar. The model names
     // the time; deterministic code owns subtraction and all calendar arithmetic.
-    const destination = worldTimeSchema.parse({
+    const parsed = worldTimeSchema.safeParse({
       ...definition,
       initial: {
         ...request.target,
@@ -189,21 +211,38 @@ export function advanceTime(definition, tick, request, random) {
           : {}),
       },
     });
-    delta = safe(initialTick(destination) - tick);
+    if (!parsed.success) {
+      const reasons = parsed.error.issues.map((issue) => {
+        const field = issue.path[0] === "initial" ? issue.path.slice(1) : [];
+        return field.length
+          ? `target.${field.join(".")}: ${issue.message}`
+          : `target: ${issue.message}`;
+      });
+      throw invalidRequest(
+        `This target is not a time on this world's clock: ${[...new Set(reasons)].join("; ")}`,
+        `Use a destination that exists: ${targetRanges(definition, request.target)} Copy unchanged fields from currentTime.`,
+      );
+    }
+    delta = safe(initialTick(parsed.data) - tick);
     if (
       (rule.mode === "forward" && delta < 0) ||
       (rule.mode === "backward" && delta > 0)
     )
-      throw new Error(`Time policy only permits ${rule.mode} movement`);
+      throw invalidRequest(
+        `Time policy only permits ${rule.mode} movement; this target is ${delta < 0 ? "earlier" : "later"} than currentTime`,
+        rule.mode === "forward"
+          ? "Name a destination at or after currentTime, or submit amount 0 when no time passes."
+          : "Name a destination at or before currentTime, or submit amount 0 when no time passes.",
+      );
   } else {
     if (request.amount === undefined && request.unit !== undefined) {
-      throw new Error(
+      throw invalidRequest(
         "Specify amount with unit, or omit both to use defaultStep in base units",
       );
     }
     const amount = request.amount ?? rule.defaultStep;
     if (!Number.isSafeInteger(amount) || amount < 0)
-      throw new Error("amount must be a non-negative safe integer");
+      throw invalidRequest("amount must be a non-negative safe integer");
     const units =
       definition.kind === "calendar"
         ? {
@@ -215,18 +254,24 @@ export function advanceTime(definition, tick, request, random) {
     const unit = request.unit ?? timeUnits(definition)[0];
     // Zero is the same duration in every unit.
     if (!Object.hasOwn(units, unit) && amount !== 0)
-      throw new Error(unitError(definition, unit));
+      throw invalidRequest(unitError(definition, unit));
     const unitSize = Object.hasOwn(units, unit) ? units[unit] : 0;
     const direction =
       request.direction ?? (rule.mode === "backward" ? "backward" : "forward");
     if (!["forward", "backward"].includes(direction))
-      throw new Error("Invalid time direction");
+      throw invalidRequest('direction is "forward" or "backward"');
     if (rule.mode !== "bidirectional" && direction !== rule.mode)
-      throw new Error(`Time policy only permits ${rule.mode} movement`);
+      throw invalidRequest(
+        `Time policy only permits ${rule.mode} movement`,
+        `Submit direction "${rule.mode}" or omit it.`,
+      );
     delta = safe(amount * unitSize) * (direction === "backward" ? -1 : 1);
   }
   if (Math.abs(delta) > rule.maxStep)
-    throw new Error(`Time change exceeds maxStep (${rule.maxStep} base units)`);
+    throw invalidRequest(
+      `Time change exceeds maxStep (${rule.maxStep} base units)`,
+      "Settle only the time this narrative covers.",
+    );
   return { tick: safe(tick + delta), delta };
 }
 
