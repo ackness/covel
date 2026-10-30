@@ -13,6 +13,8 @@
       text: Go through the open bronze tomb doors
     - id: find-ysolde
       text: Find Ysolde in the barrow
+    - id: bring-ysolde-home
+      text: Bring Ysolde back to the village alive
 - id: the-lantern-heart
   name: The Missing Lantern Heart
   description:

@@ -669,5 +669,5 @@ startingConditions:
     playerConstraints:
       - You are Emberback's newest linekeeper, trained but not yet trusted to run a crisis alone.
       - Crownfire reaches the ridge in three hours.
-      - The medical convoy is already moving and long-range communication is failing.
+      - The medical convoy is already moving and long-range communication is down.
     startingLocation: Emberback Relay, Signal Room

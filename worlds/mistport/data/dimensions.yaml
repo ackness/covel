@@ -292,7 +292,7 @@ geography:
         climate: 雾气稀薄，偶见天光
         landmarks:
           - name: 议事厅
-            description: 议会权力中枢，穹顶嵌有远古潮石灯——全城唯一不靠火焰的光源。
+            description: 议会权力中枢，穹顶嵌有不靠火焰发光的远古潮石灯。
           - name: 验潮师公会塔
             description: 鉴定远古遗物的学术要地，也是雾港唯一的图书馆与档案库。
           - name: 封档库

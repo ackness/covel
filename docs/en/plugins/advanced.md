@@ -45,7 +45,7 @@ io:
   inputs:
     narrative:
       from: { contract: narrative-engine@2 }
-      select: /narrativeOutput
+      select: /segments
   output:
     contract: facts.index@1
     schema: ../../schemas/facts.schema.json
@@ -53,6 +53,8 @@ io:
 ---
 Extract only the facts that `runtime-inputs.narrative.value` states.
 ```
+
+Read each segment with its `speaker` to distinguish who speaks or acts; an NPC’s quoted “I” is not the player. See [story output](../reference/plugins.md#story-output) for input selection.
 
 Extractors must distinguish [rendered narrative pointers](../reference/prompt-structure.md#this-turns-story-text) from original inputs. An own-runtime `PostContextAssembly` can trim `payload.inputSlots` into an exact data context; the time plugin keeps only its current clock and narrative. For finite target sets, a completion tool can check coverage as [world fact extraction](../reference/tools.md#per-objective-assessment) does.
 

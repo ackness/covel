@@ -240,7 +240,7 @@ mechanics:
         back.
       - A torch burns for about one phase of the day. Without light in the barrow, you
         cannot see where you are going or spot traps.
-      - Noise, firelight, and resting inside the tomb all raise the Barrow Alarm.
+      - Noise, lighting a flame in the Choir Gallery, and resting too long inside the tomb all raise the Barrow Alarm.
 startingConditions:
   name: Opening
   schema:

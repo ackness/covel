@@ -65,4 +65,4 @@ Risky actions are resolved with dice: a d20 plus your relevant attribute modifie
 
 The right-hand panels track what is at stake: the Crownfire countdown, the relay grid's reserve and which systems are powered, a structured log of every signal, and the convoy's position and cargo. The narrator reads those values; make your choices with them in view.
 
-You are Emberback's newest linekeeper. You have a field radio, a crawler key, three hours of daylight, and a warning in your own voice that nobody else has heard. The future has made its call. What you do next decides who answers.
+You are Emberback's newest linekeeper. You have a field radio, a crawler key, three hours before Crownfire, and a warning in your own voice that nobody can yet explain. The future has made its call. What you do next decides who answers.

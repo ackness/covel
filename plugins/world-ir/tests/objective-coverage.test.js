@@ -12,7 +12,10 @@ const source =
   "你将原始呼叫复制到独立介质，设为只读。副本完整播放，校验与原件一致。声纹比对支持录音者是你，但不能确认来源。";
 const context = {
   inputSlots: {
-    narrative: { cardinality: "one", value: source },
+    narrative: {
+      cardinality: "one",
+      value: [{ kind: "narration", text: source }],
+    },
     vocabulary: {
       cardinality: "all",
       items: [
@@ -48,6 +51,59 @@ const submit = (args, ctx = context) =>
   tool.execute(tool.parameters.parse(args), ctx);
 
 describe("objective coverage before extraction succeeds", () => {
+  it("checks evidence within individual source segments without using attribution or retry input", async () => {
+    const ctx = structuredClone(context);
+    ctx.inputSlots.narrative.value = [
+      { kind: "dialogue", speaker: "Mira", text: "I will copy it." },
+      { kind: "action", speaker: "Alex", text: source },
+    ];
+    ctx.inputSlots.turn = {
+      cardinality: "one",
+      value: { playerMessage: "I finished everything." },
+    };
+    for (const [outcome, evidence] of [
+      ["planned", "I will copy it."],
+      ["achieved", source],
+    ]) {
+      const events =
+        outcome === "achieved" ? [event(quest, [objectives[0]])] : [];
+      await expect(
+        submit(
+          {
+            ...empty,
+            events,
+            objectiveAssessments: [
+              assessment(objectives[0], outcome, evidence),
+              ...reviews().slice(1),
+            ],
+          },
+          ctx,
+        ),
+      ).resolves.toEqual({ ...empty, events });
+    }
+    for (const evidence of [
+      "Mira",
+      "Alex",
+      "I finished everything.",
+      `I will copy it.\n\n${source}`,
+      JSON.stringify(ctx.inputSlots.narrative.value),
+    ]) {
+      await expect(
+        submit(
+          {
+            ...empty,
+            events: [event(quest, [objectives[0]])],
+            objectiveAssessments: [
+              assessment(objectives[0], "achieved", evidence),
+              ...reviews().slice(1),
+            ],
+          },
+          ctx,
+        ),
+      ).rejects.toThrow("exact current narrative");
+    }
+  });
+
   it("rejects the real omission shape: generic interactions with no objective review", async () => {
     await expect(
       submit({

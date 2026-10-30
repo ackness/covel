@@ -3,7 +3,7 @@
     {
       "label": "relationships",
       "displayName": "Relationships",
-      "extractionHint": "What has actually happened between each character and the player: which line or which moment changed the distance between them, and what they said or kept to themselves. Affection is tracked in the affinity panel, and stage, trust and pressure in the Heart Routes dimension; write only the details worth remembering here, never the numbers."
+      "extractionHint": "Record the interactions, promises and memorable details that actually happened between each character and the player. Numeric affinity belongs to the Affinity panel; stage, trust and pressure for the five route characters belong to Heart Routes; supporting characters’ trust, pressure and non-romantic relationship state, and all eight characters’ Public Closeness, belong to their character profiles. Do not keep a second current copy of these numbers or stages here."
     },
     {
       "label": "campus_schedule",

@@ -162,7 +162,9 @@ describe("the tracker beside a derived field", () => {
         inputSlots: {
           narrative: {
             cardinality: "one",
-            value: "The front rolls off to the east.",
+            value: [
+              { kind: "narration", text: "The front rolls off to the east." },
+            ],
             source: { pluginId: "story", runtimeId: "story", resultId: "r" },
           },
         },

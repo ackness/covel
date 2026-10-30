@@ -1,7 +1,7 @@
 # yaml-language-server: $schema=../../packages/shared/schemas/world-manifest.schema.json
 id: lantern-barrow
 name: 提灯古冢・初次远征
-version: 0.1.0
+version: 0.1.1
 summary: 守了百年的古冢之灯熄灭，守灯人失踪，青铜墓门洞开。在灰苇村的酒馆里组队、分配点数、掷骰下墓——经典跑团，从第一次远征开始。
 defaultLocale: zh-CN
 tags:

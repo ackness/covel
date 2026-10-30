@@ -3,6 +3,12 @@ import type { PromptLoader } from "@covel/context";
 import { parseWorldLoreRepairOutput } from "./lore-processor.js";
 import { requestLlmResponse } from "./llm-request.js";
 import { buildWorldLoreRepairPrompt } from "./prompts.js";
+import {
+  assertLoreFragment,
+  replaceLoreFragment,
+  splitLore,
+} from "./lore-boundaries.js";
+import { findLoreMetaErrors } from "./validation-helpers.js";
 
 interface WorldLoreRepairOptions {
   readonly llm: LLMAdapter;
@@ -23,6 +29,24 @@ export type WorldLoreRepairResult =
 export async function repairWorldLore(
   options: WorldLoreRepairOptions,
 ): Promise<WorldLoreRepairResult> {
+  const parts = splitLore(options.lore);
+  const output: string[] = [];
+  for (const part of parts) {
+    if (part.kind === "marker" || findLoreMetaErrors(part.text).length === 0) {
+      output.push(part.text);
+      continue;
+    }
+    const result = await repairFragment({ ...options, lore: part.text.trim() });
+    if (!result.success) return result;
+    assertLoreFragment(result.lore);
+    output.push(replaceLoreFragment(part.text, result.lore));
+  }
+  return { success: true, lore: output.join("") };
+}
+
+async function repairFragment(
+  options: WorldLoreRepairOptions,
+): Promise<WorldLoreRepairResult> {
   const systemPrompt = await buildWorldLoreRepairPrompt(
     options.locale,
     options.loadPrompt,
@@ -38,7 +62,7 @@ export async function repairWorldLore(
       {
         role: "user",
         content: [
-          "Repair the WORLD.md below.",
+          "Repair only this isolated WORLD.md fragment. Preserve its existing headings and hooks; do not add missing ones.",
           `Validation errors:\n${options.errors.join("\n")}`,
           "",
           "===WORLD_MD_INPUT===",

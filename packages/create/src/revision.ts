@@ -4,8 +4,13 @@
  */
 
 import { parse as parseYaml, stringify as stringifyYaml } from "yaml";
-import type { WorldRevision, WorldSections } from "./types.js";
+import type {
+  WorldGenerationDataContract,
+  WorldRevision,
+  WorldSections,
+} from "./types.js";
 import { isRecord } from "./validation-helpers.js";
+import { hasLoreBoundary, splitLore } from "./lore-boundaries.js";
 
 const UNCHANGED = /^\s*UNCHANGED\s*\.?\s*$/i;
 
@@ -20,7 +25,12 @@ export function revisionRequest(revision: WorldRevision): string {
     "Return the three sections in the same format, and write only what you change:",
     "- A section that the request does not change: write the single word UNCHANGED as its body.",
     "- In WORLD_YAML, write only the fields you change. In `dimensions`, write only the dimensions you change, each one whole. A field or a dimension you leave out stays as it is.",
-    "- In WORLD_PACKAGE_YAML, write only the items you add or change, under their list (`characters`, `lorebook`, `rules`, `contractData`). An item is matched by its `id` (in `contractData`, by `contract` and `key`) and is written whole. An item or a list you leave out stays as it is. To remove an item, write it as `{ id: <its id>, remove: true }`.",
+    "- In WORLD_PACKAGE_YAML, write only the items you add or change, under their list (`characters`, `lorebook`, `rules`, `contractData`). An item is matched by its `id` (in `contractData`, by `contract` and `key`) and is written whole. An item or a list you leave out stays as it is. Remove a character, lorebook entry or rule with `{ id: <its id>, remove: true }`. Remove a contract record with `{ contract: <contract ID>, key: <record key>, remove: true }`.",
+    ...(hasLoreBoundary(splitLore(current.lore))
+      ? [
+          "- WORLD_MD has narrator-only regions. Preserve their sequence and keep each fact in its existing public or hidden region; edit story content within those regions as requested. Do not change visibility. The caller retains the marker lines and independently rewrites changed public fragments from their original public source and the author's request; it does not publish your public draft directly.",
+        ]
+      : []),
     "- Do not rewrite text that the request does not concern. Keep the `id` of the world.",
     "",
     "===WORLD_YAML===",
@@ -117,14 +127,33 @@ function mergeList(
 function mergePackage(
   current: Record<string, unknown>,
   revised: Record<string, unknown>,
+  contracts: readonly WorldGenerationDataContract[],
 ): Record<string, unknown> {
   const merged = { ...current };
   for (const [key, value] of Object.entries(revised)) {
     if (typeof value === "string" && UNCHANGED.test(value)) continue;
-    merged[key] =
-      Array.isArray(value) && Array.isArray(current[key])
-        ? mergeList(key, current[key], value)
-        : value;
+    merged[key] = Array.isArray(value)
+      ? mergeList(key, Array.isArray(current[key]) ? current[key] : [], value)
+      : value;
+  }
+  // Character contracts are stored inside character records, not in the
+  // portable contractData list. Apply the same explicit deletion there.
+  if (Array.isArray(revised.contractData) && Array.isArray(merged.characters)) {
+    const removals = revised.contractData.filter(
+      (item) => isRecord(item) && item.remove === true,
+    );
+    merged.characters = merged.characters.map((item: unknown) => {
+      if (!isRecord(item)) return item;
+      const character = { ...item };
+      for (const removal of removals) {
+        if (removal.key !== character.id) continue;
+        const field = contracts.find(
+          (contract) => contract.contract === removal.contract,
+        )?.characterField;
+        if (field !== undefined) delete character[field];
+      }
+      return character;
+    });
   }
   return merged;
 }
@@ -141,6 +170,7 @@ function mergePackage(
 export function mergeRevision(
   output: WorldSections,
   current: WorldSections,
+  contracts: readonly WorldGenerationDataContract[] = [],
 ): WorldSections {
   const merge = (
     written: string | undefined,
@@ -157,7 +187,7 @@ export function mergeRevision(
   const packageYaml = merge(
     output.packageYaml,
     current.packageYaml,
-    mergePackage,
+    (base, patch) => mergePackage(base, patch, contracts),
   );
   return {
     yaml: merge(output.yaml, current.yaml, mergeManifest) ?? output.yaml,

@@ -254,7 +254,7 @@ export default function ({ tool, z }) {
       const narrative = ctx.inputSlots?.narrative;
       if (
         narrative?.cardinality !== "one" ||
-        typeof narrative.value !== "string"
+        !Array.isArray(narrative.value)
       )
         throw new Error(
           "A successful authoritative narrative input is required",

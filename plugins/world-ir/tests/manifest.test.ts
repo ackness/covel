@@ -33,9 +33,12 @@ describe("world-ir plugin contract", () => {
     expect(parsed?.manifest.callTimeoutMs).toBe(60_000);
     expect(parsed?.manifest.inputs?.narrative).toEqual({
       from: { capability: "narrative-engine@2" },
-      select: "/narrativeOutput",
-      accepts: "./schemas/narrative-output.schema.json",
+      select: "/segments",
     });
+    expect(parsed?.manifest.input?.inject ?? []).not.toContainEqual(
+      expect.objectContaining({ from: "turn-digest@1" }),
+    );
+    expect(loaded?.bindingAcceptsSchemas?.narrative).toBeUndefined();
     expect(parsed?.manifest.output).toEqual({
       schema: "contract:world-ir@1",
       recordAs: "world-ir-v1",

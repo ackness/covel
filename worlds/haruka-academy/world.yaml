@@ -1,7 +1,7 @@
 # yaml-language-server: $schema=../../packages/shared/schemas/world-manifest.schema.json
 id: haruka-academy
 name: 遥风学园・春日薄荷
-version: 0.3.0
+version: 0.3.1
 summary: 转入海边私立高中，在二十一天的学园祭倒计时里选择社团、守住约定，也回应那些没能说出口的喜欢。
 defaultLocale: zh-CN
 defaultViewMode: stage
@@ -53,34 +53,24 @@ characterSchema:
       category: bio
       description: 所在班级
     - id: relationshipStage
-      name: 关系阶段
+      name: 支持角色关系
       type: string
       category: social
-      description: 与玩家的当前关系阶段
-    - id: affection
-      name: 好感度
-      type: number
-      min: 0
-      max: 100
-      defaultValue: 0
-      category: social
-      description: 对玩家的好感
+      description: "仅三枝遥、小野寺千寻和森川奏太适用：与玩家的非恋爱关系状态。五位恋爱路线角色的阶段只记录在「心之路线」。"
     - id: trust
-      name: 信任
+      name: 支持角色信任
       type: number
       min: 0
       max: 100
-      defaultValue: 0
       category: social
-      description: 对玩家的信任
+      description: "仅三枝遥、小野寺千寻和森川奏太适用：愿意向玩家托付秘密的程度，沿用 0–100。五位恋爱路线角色只使用「心之路线」的信任（0–5），两种量程不换算。"
     - id: pressure
-      name: 压力
+      name: 支持角色压力
       type: number
       min: 0
       max: 100
-      defaultValue: 0
       category: stats
-      description: 当前承受的心理压力
+      description: "仅三枝遥、小野寺千寻和森川奏太适用：当前现实负担，沿用 0–100。五位恋爱路线角色只使用「心之路线」的压力（0–5），两种量程不换算。"
     - id: publicCloseness
       name: 公开亲密度
       type: number

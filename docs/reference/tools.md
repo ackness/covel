@@ -1338,7 +1338,7 @@ schema 里带 `x-derive` 的字段由 `world-init/dimension-clock` 按时钟计�
 
 #### 逐目标评估
 
-词表有未完成任务目标时，还必须提交工具专用的 `objectiveAssessments`。每项含 `quest`、`objective`、`outcome` 和 `evidence`：任务名和目标照抄词表；结果为 `achieved`、`planned`、`partial`、`failed`、`unverified` 或 `not_addressed`。除未涉及时引文为空外，其余结果必须引用本轮 `narrative.value` 中一段连续原文。
+词表有未完成任务目标时，还必须提交工具专用的 `objectiveAssessments`。每项含 `quest`、`objective`、`outcome` 和 `evidence`：任务名和目标照抄词表；结果为 `achieved`、`planned`、`partial`、`failed`、`unverified` 或 `not_addressed`。除未涉及时引文为空外，其余结果必须引用本轮 `narrative.value` 中单个段落的 `text` 内的一段连续原文，不拼接不同段落。
 
 工具逐项检查覆盖、重复项、原文名称、引文是否出自当前正文，以及评估与 `quest_change.completedObjectives` 是否一致。判断为达成却只提交普通互动，会被退回；计划、部分、失败或未核实的目标不能同时写为完成。词表列出的目标仍有未达成项时不能把任务标为完成。可能被消费者解析为词表已有项的任务简称和目标改写会被拒绝，包括有歧义的目标匹配；必须用词表原文。这种比对只拒绝别名，不推断目标完成。没有词表目标时可省略或传空数组。词表是有界上下文，不是完整任务账本：覆盖校验只约束实际提供的任务和目标；未列出的内容沿用原有 WorldIR 与消费者校验。
 

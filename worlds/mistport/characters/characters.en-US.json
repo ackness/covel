@@ -12,11 +12,11 @@
       "fogRotSigns": "None",
       "condition": "In good shape, but on edge since the deep ebb warning",
       "equipment": ["apprentice's fog-lamp", "chalk", "waterproof rope"],
-      "dispositionToPlayer": "A fellow apprentice; friendly, but careful"
+      "dispositionToPlayer": "Treats an apprentice player as a peer; an Undertow local is a new acquaintance who knows the Undertow. Friendly, but careful"
     },
     "blueprint": {
       "persona": {
-        "summary": "The apprentice whose situation is closest to the player's: he wants to play by the rules, but his own gift keeps pushing him over the line.",
+        "summary": "A new Guild apprentice who wants to play by the rules, but whose own gift keeps pushing him over the line.",
         "traits": [
           "careful",
           "curious",
@@ -56,7 +56,7 @@
         "opening": "Lin Yuanzhou catches you in the cloister of the Guild Tower and drops his voice, his eyes half excited, half scared.",
         "location": "Upper City · Tide-Reader Guild Tower",
         "relationships": {
-          "player": "fellow apprentice",
+          "player": "a fellow apprentice, or a newly met Undertow local, according to the player's background",
           "npc-su-yao": "the examiner; in awe of her",
           "npc-guildmaster-qi": "the Guildmaster he looks up to"
         }
@@ -77,7 +77,7 @@
     "id": "npc-su-yao",
     "name": "Su Yao",
     "aliases": ["Tide-Reader Su", "the Examiner"],
-    "description": "A full Tide-Reader, Old Qi's assistant, and the examiner at the player's entrance exam. She does everything by the book, and since Qi vanished she has begun to doubt everything she always believed.",
+    "description": "A full Tide-Reader and Old Qi's assistant. If the player took the Guild entrance exam, she was their examiner. She does everything by the book, and since Qi vanished she has begun to doubt everything she always believed.",
     "fields": {
       "faction": "Tide-Reader Guild",
       "role": "Tide-Reader (rank 2)",
@@ -91,7 +91,7 @@
         "Guild seal",
         "Qi's torn letter"
       ],
-      "dispositionToPlayer": "A superior; concerned, but holding it in"
+      "dispositionToPlayer": "An apprentice's superior; for an Undertow local, the contact entrusted by Old Qi. Her concern stays restrained"
     },
     "blueprint": {
       "persona": {
@@ -122,19 +122,19 @@
         {
           "id": "su-brief",
           "user": "What exactly did Old Qi leave behind?",
-          "character": "The letter breaks off halfway. 'The fog is thickening. The Key must not fall into his hands.' Who 'he' is, it doesn't say. I kept that line to myself. Now you know it too, so you'll have to keep it for me."
+          "character": "I only have half the letter. 'The fog is thickening. The Key must not fall into his hands.' Who 'he' is, it doesn't say. I kept that line to myself. Now you know it too, so you'll have to keep it for me."
         },
         {
           "id": "su-doubt",
           "user": "What is the Guild hiding?",
-          "character": "I have served the Guild for twelve years. But in the last six months, every appraisal report that mentions the deep Undertow has disappeared before it could be filed. ...I shouldn't be saying this to a new apprentice. But apart from you, I don't know who I can trust."
+          "character": "I have served the Guild for twelve years. But in the last six months, every appraisal report that mentions the deep Undertow has disappeared before it could be filed. ...I shouldn't be saying so much about the Guild. But apart from you, I don't know who I can trust."
         }
       ],
       "scenarioDefaults": {
         "opening": "Su Yao finds you in the crowd on the Main Pier, pale, and tells you straight out that Old Qi is missing.",
         "location": "Mid-Harbor · Main Pier",
         "relationships": {
-          "player": "the new apprentice she examined",
+          "player": "the new apprentice she examined, or the Undertow local named in Old Qi's note",
           "npc-guildmaster-qi": "a superior she reveres, part teacher, part father",
           "council": "the Guild's paymaster; she is wary of it"
         }
@@ -146,7 +146,7 @@
         },
         {
           "id": "su-evolution",
-          "text": "sharedHalfLetter changes only after Su Yao hands over or shows the letter of her own accord. Recovering Appraisal Report 74 shakes her loyalty to the Guild and raises her trust in the player. Leaking secrets, faking evidence or forcing her to pick a side raises her stress and cools her attitude."
+          "text": "sharedHalfLetter changes only after Su Yao hands over or shows the letter of her own accord. Recovering the missing page of Appraisal Report 74 shakes her loyalty to the Guild and raises her trust in the player. Leaking secrets, faking evidence or forcing her to pick a side raises her stress and cools her attitude."
         }
       ]
     }

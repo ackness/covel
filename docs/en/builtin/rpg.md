@@ -191,6 +191,8 @@ Records your relationship with each NPC. When you have a clear interaction with 
 
 Affinity dataset records are checked when the turn is saved. An invalid record skips that bookkeeping step for this turn; the story is still saved.
 
+The narrator can read committed current scores directly, including seeded records that have no tier yet. This read adds no model call. Scores and tiers are not romance-route stages; an omitted NPC is not assumed to have a score of 0. Turning the plugin off also removes this context.
+
 Levels are set by score:
 
 | Score       | Level    |
@@ -202,7 +204,7 @@ Levels are set by score:
 | 60 to 84    | Close    |
 | 85 to 100   | Devoted  |
 
-Only named NPCs that you have actually interacted with are recorded. Passersby and people who are just present are not. A routine interaction changes the score by 1 to 5. A major event can change it by up to 20.
+Worlds can seed starting affinity; during play, new records are created only for named NPCs you actually interact with. Passersby and people who are just present are not. A routine interaction changes the score by 1 to 5. A major event can change it by up to 20.
 
 ### When it is on
 

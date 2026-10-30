@@ -14,6 +14,8 @@
 - `lib/`：`initialize-world` 复用的属性 schema 和初始化 proposal helpers，不注册为工具。
 - `tools/`：`initialize-world`（原子初始化 schema+维度）、`update-dimensions`（tracker 提交）、`dimension-rule-get`（provider 内读规则/Schema）。
 
+维度追踪从 `narrative-engine@2` 选择 `/segments`，保留每段的说话者或行动者；当前玩家消息仍独立提供，WorldIR 只作辅证。承诺属于承诺者，邀请不等于接受，承诺不等于履约；具体是否记入维度仍由世界作者的规则决定。没有改动维度 schema、阈值或玩家可见正文。
+
 ## 数据与行为
 
 - 维度声明来自世界包（开放自定义 ID，`{name, description?, schema, initialValue, updateRule?}`）；当前值保存在受保护的 `_dimensions` namespace，会话级、版本化，经 `dimension.initialize`/`dimension.update` proposal + 批量 CAS 写入，冲突不覆盖。

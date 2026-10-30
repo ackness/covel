@@ -1,5 +1,5 @@
 ---
-version: 0.0.40
+version: 0.0.41
 displayName: Affinity
 description: >-
   Tracks numeric player-to-NPC affinity, with scores, tiers, and recent changes
@@ -13,6 +13,8 @@ license: MIT
 requires:
   - world-ir-provider@1
 contributes:
+  extensions:
+    - prompt.segment@1/current-affinity
   datasets:
     affinity:
       schema: ./schemas/affinity.schema.json

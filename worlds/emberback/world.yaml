@@ -1,7 +1,7 @@
 # yaml-language-server: $schema=../../packages/shared/schemas/world-manifest.schema.json
 id: emberback
 name: Emberback Relay
-version: 1.2.1
+version: 1.2.2
 summary: A lonely relay on a tidally locked world receives a distress call in
   your own voice—sent from seventy-two hours in the future.
 defaultLocale: en-US

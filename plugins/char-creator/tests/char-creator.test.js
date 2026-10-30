@@ -173,10 +173,10 @@ describe("char-creator plugin", () => {
       ).toBe(false);
     });
 
-    it("injects narrativeOutput from both narrative engines ", () => {
+    it("injects attributed segments from narrative-engine@2", () => {
       expect(manifest.inputs["narrator-output"]).toEqual({
         from: { capability: "narrative-engine@2" },
-        select: "/narrativeOutput",
+        select: "/segments",
         required: false,
       });
     });

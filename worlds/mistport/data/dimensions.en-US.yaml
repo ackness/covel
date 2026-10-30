@@ -222,8 +222,8 @@ geography:
         landmarks:
           - name: Council Hall
             description:
-              The seat of the Council's power. An ancient tide-stone lamp is set
-              in its dome — the only light in the city that needs no flame.
+              The seat of the Council's power. An ancient tide-stone lamp that needs no flame is set
+              in its dome.
           - name: Tide-Reader Guild Tower
             description:
               The scholarly center for appraising ancient relics, and Mistport's

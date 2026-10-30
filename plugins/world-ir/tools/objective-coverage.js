@@ -18,7 +18,7 @@ export const objectiveAssessmentSchema = z.strictObject({
   evidence: z
     .string()
     .describe(
-      "Exact contiguous quote from narrative.value supporting this judgment; empty only for not_addressed. Never quote the vocabulary or player intent as proof of completion.",
+      "Exact contiguous quote from one segment's text in narrative.value supporting this judgment; empty only for not_addressed. Never quote the vocabulary or player intent as proof of completion.",
     ),
 });
 
@@ -59,10 +59,10 @@ export function objectiveCoverageIssues(facts, assessments, inputSlots) {
     ),
   );
   const narrative = inputSlots?.narrative;
-  const source =
-    narrative?.cardinality === "one" && typeof narrative.value === "string"
+  const segments =
+    narrative?.cardinality === "one" && Array.isArray(narrative.value)
       ? narrative.value
-      : "";
+      : [];
   const issues = [];
   const reviewed = new Map();
   for (const [index, assessment] of (assessments ?? []).entries()) {
@@ -80,7 +80,11 @@ export function objectiveCoverageIssues(facts, assessments, inputSlots) {
         issues.push(`${path}.evidence: use an empty string for not_addressed`);
     } else if (
       !assessment.evidence.trim() ||
-      !source.includes(assessment.evidence)
+      !segments.some(
+        (segment) =>
+          typeof segment?.text === "string" &&
+          segment.text.includes(assessment.evidence),
+      )
     ) {
       issues.push(
         `${path}.evidence: quote the exact current narrative text supporting the outcome`,
