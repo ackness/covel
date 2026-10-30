@@ -717,7 +717,7 @@ io:
 
 - **同一次执行**：子 agent 没有自己的调度、执行或提交。它用的是调用方这次执行的 trace、取消信号和会话快照；trace 事件带 `parentCallId`，调试页能看出调用树。
 - **不形成提交单位**：它只交回输出、结束原因和用量。工具只剩只读的，没有 proposal 和事件；万一出现也被丢弃，并记一条 `subagent.writes-dropped`。调用方的提交单位只含调用方自己的写入。
-- **上限**：每次顶层执行一个 runner（`runTurnPipeline` 创建，嵌套执行共用），同时最多 8 个子 agent，深度 1。满了立刻拒绝，不排队，所以调用方不会等自己的名额。
+- **上限**：每次顶层执行一个 runner（`executeTurn` / `resumeSuspendedRuntime` 在入口冻结激活和暂停的提供方集合并创建，`runTurnPipeline` 只提供缺省 runner，嵌套执行共用），同时最多 8 个子 agent，深度 1。满了立刻拒绝，不排队，所以调用方不会等自己的名额。
 - **取消**：调用方的 `executionSignal`、运行时限和收尾时的撤销都传到子 agent；玩家的中止也一样。
 - **循环**：子 agent 走同一个 `runAgentToolLoop` 和收尾步骤，`allowSuspend: false`，默认 `actor` profile，没有会话历史。`PreRuntime` / `PostRuntime` 不触发，循环内的 Hook 照常触发。
 
@@ -1198,6 +1198,6 @@ sequenceDiagram
 
 ## 插件故障熔断
 
-宿主共享的 `recordExecutionFaults` 负责归因和发布熔断事件。`commitExecution` 在玩家、手动、恢复和后台提交之后调用它；恢复的 runtime 失败、尚未进入提交时，恢复路由也在返回错误前调用它，不提交缓冲写入或解决挂起项。Hook 管线在 handler 完成时单独报告所属插件的故障。内存里的 latch 按会话和插件计数，以 `logicalTurnId ?? turnId` 合并同一输入。详细计数、豁免和事件见[协议](../reference/protocol.md#插件故障熔断)。
+宿主共享的 `recordExecutionFaults` 负责归因和发布熔断事件。`commitExecution` 在玩家、手动、恢复和后台提交之后调用它；恢复的 runtime 失败、尚未进入提交时，恢复路由也在返回错误前调用它，不提交缓冲写入或解决挂起项。子 agent 的已结算结果通过提交计划的 `subagentRuns` 交给 `recordExecutionFaults`，与顶层结果一起归因；runner 结算时不修改 latch。Hook 管线在 handler 完成时单独报告所属插件的故障。内存里的 latch 按会话和插件计数，以 `logicalTurnId ?? turnId` 合并同一输入。详细计数、豁免和事件见[协议](../reference/protocol.md#插件故障熔断)。
 
 `executeTurn` 在执行入口过滤已暂停插件的 runtime 和 Hook 启用集合，恢复入口和服务准入也检查暂停状态。注册表快照不在运行中修改；服务捕获同一执行的暂停集合。重启、会话结束和删除只清内存，不写入领域数据或快照。

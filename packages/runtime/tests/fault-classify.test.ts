@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
 import type { LoopStop, RuntimeManifest, RuntimeResult } from "@covel/shared";
 import type { FinalizeExecutionOutcome } from "../src/commit/finalize-execution.js";
-import { classifyExecutionFaults } from "../src/faults/classify.js";
+import {
+  classifyExecutionFaults,
+  type SubagentRunOutcome,
+} from "../src/faults/classify.js";
 import { finalizeRuntimeResult } from "../src/turn-executor/runtime-finalization.js";
 import { RuntimeTimeoutError } from "../src/turn-executor/turn-control.js";
 import { AiProviderError } from "@covel/ai-provider";
@@ -54,6 +57,107 @@ const manifest: RuntimeManifest = {
   stage: "post-turn",
   description: "probe",
 };
+
+describe("sub-agent runs", () => {
+  const failed: SubagentRunOutcome = {
+    pluginId: "actor-pkg",
+    callerRuntimeId: "caller-pkg/main",
+    ok: false,
+    fault: "runtime",
+  };
+  const clean: SubagentRunOutcome = { ...failed, ok: true, fault: undefined };
+
+  it("attributes a provider fault separately from its successful caller", () => {
+    expect(
+      classifyExecutionFaults(
+        [
+          faultResult({
+            pluginId: "caller-pkg",
+            runtimeId: failed.callerRuntimeId,
+            status: "success",
+          }),
+        ],
+        committed,
+        undefined,
+        [failed],
+      ),
+    ).toEqual(
+      new Map([
+        ["caller-pkg", { kind: "clean" }],
+        ["actor-pkg", { kind: "fault", reason: "runtime" }],
+      ]),
+    );
+  });
+  it.each(["committed", "failed"] as const)(
+    "resets only under a committed outcome: %s",
+    (status) => {
+      expect(
+        classifyExecutionFaults([], { ...committed, status }, undefined, [
+          clean,
+        ]).get("actor-pkg"),
+      ).toEqual({ kind: status === "committed" ? "clean" : "neutral" });
+      expect(
+        classifyExecutionFaults([], { ...committed, status }, undefined, [
+          failed,
+        ]).get("actor-pkg"),
+      ).toEqual({ kind: "fault", reason: "runtime" });
+    },
+  );
+  it.each([
+    [failed, clean],
+    [clean, failed],
+  ])("gives faults priority in either run order: %j", (...runs) => {
+    expect(
+      classifyExecutionFaults([], committed, undefined, runs).get("actor-pkg"),
+    ).toEqual({ kind: "fault", reason: "runtime" });
+  });
+  it("does not count or reset providers called by setup runtimes", () => {
+    expect(
+      classifyExecutionFaults(
+        [],
+        committed,
+        new Set([failed.callerRuntimeId]),
+        [failed, clean],
+      ).size,
+    ).toBe(0);
+  });
+  it("keeps the entire stale suspension attempt neutral", () => {
+    expect(
+      classifyExecutionFaults(
+        [],
+        { ...committed, status: "failed", code: "suspension-data-changed" },
+        undefined,
+        [failed],
+      ).size,
+    ).toBe(0);
+  });
+  it("keeps an unattributed provider failure neutral", () => {
+    expect(
+      classifyExecutionFaults([], committed, undefined, [
+        { ...failed, fault: undefined },
+      ]).get("actor-pkg"),
+    ).toEqual({ kind: "neutral" });
+  });
+  it("allows a provider to reset even if the caller's commit unit was isolated", () => {
+    expect(
+      classifyExecutionFaults(
+        [],
+        {
+          ...committed,
+          isolatedRuntimes: [
+            {
+              runtimeId: failed.callerRuntimeId,
+              cause: "nested",
+              error: "caller isolated",
+            },
+          ],
+        },
+        undefined,
+        [clean],
+      ).get("actor-pkg"),
+    ).toEqual({ kind: "clean" });
+  });
+});
 
 describe("self-caused runtime attribution", () => {
   it.each<{

@@ -10,7 +10,7 @@
  * list to read-only tools, caps how deep and how many sub-agents run, and
  * passes the caller's cancellation down.
  *
- * One runner exists per top-level execution (`runTurnPipeline`); nested
+ * One runner exists per top-level execution; nested
  * executions share it, so the pool cap counts every sub-agent the execution
  * has in flight.
  */
@@ -27,6 +27,7 @@ import type {
 } from "@covel/shared";
 import { modelFacingJson } from "@covel/shared";
 import { buildContext } from "@covel/context";
+import { AiProviderError } from "@covel/ai-provider";
 import {
   DELEGATE_TOOL_NAME,
   SUBAGENT_BRIEF_MAX_CHARS,
@@ -36,6 +37,7 @@ import { z } from "zod";
 import { createWorldModelView } from "../function-runtime/world-model-view.js";
 import { resolveUserSettings } from "../turn-executor/turn-executor-helpers.js";
 import { DEFAULT_RUNTIME_TIMEOUT_MS } from "../turn-executor/runtime-scaffold.js";
+import { unwrapRetryCause } from "../turn-executor/runtime-finalization.js";
 import { combineAbortSignals } from "../turn-executor/turn-control.js";
 import type { TurnExecutorDeps } from "../turn-executor/turn-executor-types.js";
 import type { HookPipeline } from "../hooks/pipeline.js";
@@ -84,7 +86,10 @@ export interface SubagentRunArgs {
 export interface SubagentSettledEvent {
   readonly pluginId: string;
   readonly runtimeId: string;
+  readonly callerPluginId: string;
+  readonly callerRuntimeId: string;
   readonly ok: boolean;
+  readonly fault?: "runtime" | "timeout";
   readonly stopReason?: StopReason;
   readonly code?: SubagentErrorCode;
 }
@@ -99,9 +104,11 @@ export interface SubagentRunner {
 export interface CreateSubagentRunnerOptions {
   /** The execution's active runtimes, after provider resolution. */
   readonly activeRuntimes: readonly RuntimeManifest[];
+  /** Paused providers still participate in target resolution and ambiguity. */
+  readonly pausedRuntimes?: readonly RuntimeManifest[];
   /**
-   * Called once per run that reached a provider. Seam for the fault latch:
-   * it will count a provider's failures and refuse a latched provider.
+   * Called once per run that reached a provider. The host collects these
+   * outcomes for fault attribution at the execution's commit boundary.
    */
   readonly onSettled?: (event: SubagentSettledEvent) => void;
 }
@@ -151,9 +158,13 @@ export function createSubagentRunner(
       const refuse = async (
         code: SubagentErrorCode,
         message: string,
+        provider?: RuntimeManifest,
       ): Promise<SubagentResult> => {
         await emitSafely(args.deps.emitter, "subagent.failed", {
           ...trace,
+          ...(provider
+            ? { runtimeId: provider.name, pluginId: provider.pluginId }
+            : {}),
           error: message,
           code,
           durationMs: Date.now() - startTime,
@@ -173,14 +184,16 @@ export function createSubagentRunner(
         return refuse("cancelled", MESSAGES.cancelled);
       const target = resolveTarget(
         options.activeRuntimes,
+        options.pausedRuntimes ?? [],
         parsed.target,
         args.caller,
       );
-      if ("code" in target) return refuse(target.code, target.message);
+      if ("code" in target)
+        return refuse(target.code, target.message, target.provider);
 
       inFlight++;
       try {
-        const result = await runProvider({
+        const { fault, ...result } = await runProvider({
           args,
           request: parsed,
           provider: target.provider,
@@ -192,7 +205,10 @@ export function createSubagentRunner(
         options.onSettled?.({
           pluginId: target.provider.pluginId,
           runtimeId: target.provider.name,
+          callerPluginId: args.caller.pluginId,
+          callerRuntimeId: args.caller.runtimeId,
           ok: result.ok,
+          ...(fault ? { fault } : {}),
           ...(result.stopReason ? { stopReason: result.stopReason } : {}),
           ...(result.ok ? {} : { code: result.error.code }),
         });
@@ -234,29 +250,49 @@ function parseRequest(raw: unknown): ParsedRequest | string {
  */
 function resolveTarget(
   activeRuntimes: readonly RuntimeManifest[],
+  pausedRuntimes: readonly RuntimeManifest[],
   target: ParsedRequest["target"],
   caller: SubagentCaller,
 ):
   | { readonly provider: RuntimeManifest }
-  | { readonly code: SubagentErrorCode; readonly message: string } {
-  const providers = activeRuntimes.filter(
-    (runtime) => runtime.subagentOnly && runtime.runtimeType !== "function",
+  | {
+      readonly code: SubagentErrorCode;
+      readonly message: string;
+      readonly provider?: RuntimeManifest;
+    } {
+  const providers = [
+    ...activeRuntimes.map((provider) => ({ provider, paused: false })),
+    ...pausedRuntimes.map((provider) => ({ provider, paused: true })),
+  ].filter(
+    ({ provider }) =>
+      provider.subagentOnly && provider.runtimeType !== "function",
   );
+  const resolved = ({ provider, paused }: (typeof providers)[number]) =>
+    paused
+      ? {
+          code: "unavailable" as const,
+          message:
+            "runtimeId" in target
+              ? `The sub-agent runtime "${target.runtimeId}" is paused in this session after repeated errors`
+              : `The sub-agent provider for contract "${target.contract}" is paused in this session after repeated errors`,
+          provider,
+        }
+      : { provider };
   if ("runtimeId" in target) {
     const provider = providers.find(
-      (runtime) =>
-        runtime.name === target.runtimeId &&
-        runtime.pluginId === caller.pluginId,
+      ({ provider }) =>
+        provider.name === target.runtimeId &&
+        provider.pluginId === caller.pluginId,
     );
     return provider
-      ? { provider }
+      ? resolved(provider)
       : {
           code: "not-found",
           message: `No active sub-agent runtime "${target.runtimeId}" in plugin "${caller.pluginId}"`,
         };
   }
   const matches = providers.filter(
-    (runtime) => runtime.outputContract === target.contract,
+    ({ provider }) => provider.outputContract === target.contract,
   );
   const [provider] = matches;
   if (!provider)
@@ -269,7 +305,7 @@ function resolveTarget(
       code: "ambiguous",
       message: `More than one active sub-agent provider for contract "${target.contract}"`,
     };
-  return { provider };
+  return resolved(provider);
 }
 
 /**
@@ -332,7 +368,9 @@ async function runProvider({
   startTime,
   trace,
   runner,
-}: ProviderRun): Promise<SubagentResult> {
+}: ProviderRun): Promise<
+  SubagentResult & { readonly fault?: "runtime" | "timeout" }
+> {
   const { deps } = args;
   const depth = args.caller.depth + 1;
   const identity = {
@@ -347,7 +385,32 @@ async function runProvider({
     message: string,
     stop?: LoopStop,
     cause?: unknown,
-  ): Promise<SubagentResult> => {
+  ): Promise<SubagentResult & { readonly fault?: "runtime" | "timeout" }> => {
+    let fault: "runtime" | "timeout" | undefined;
+    if (
+      !args.parentSignal?.aborted &&
+      !deps.turnControl?.executionSignal?.aborted &&
+      !deps.turnControl?.signal?.aborted
+    ) {
+      if (stop?.reason === "deadline") {
+        if (timeoutSource === "provider") fault = "timeout";
+      } else if (
+        stop?.reason === "max-steps" ||
+        stop?.reason === "invalid-output" ||
+        stop?.reason === "loop-detected" ||
+        stop?.reason === "context-overflow"
+      ) {
+        fault = "runtime";
+      } else if (
+        !stop &&
+        cause !== undefined &&
+        !(unwrapRetryCause(cause) instanceof AiProviderError)
+      ) {
+        // Loading, context and world-view throws count just like top-level
+        // runtime failures. Provider errors and cancellations remain neutral.
+        fault = "runtime";
+      }
+    }
     if (code === "internal")
       // The real reason stays in the server log; the caller and the trace
       // get fixed text (`io.concealed` rule).
@@ -362,12 +425,14 @@ async function runProvider({
       error: message,
       ...(stop ? { stopReason: stop.reason } : {}),
       ...(stop?.cancelledBy ? { cancelledBy: stop.cancelledBy } : {}),
+      ...(fault ? { fault } : {}),
       durationMs: Date.now() - startTime,
     });
     return {
       ok: false,
       error: { code, message },
       ...(stop ? { stopReason: stop.reason } : {}),
+      ...(fault ? { fault } : {}),
     };
   };
 
@@ -392,13 +457,20 @@ async function runProvider({
         : `${request.brief}\n\n${JSON.stringify(modelFacingJson(request.data))}`,
   };
 
-  const timeoutMs = Math.min(
-    request.budget?.timeoutMs ?? Infinity,
-    provider.timeoutMs ?? DEFAULT_RUNTIME_TIMEOUT_MS,
+  const providerTimeout = provider.timeoutMs ?? DEFAULT_RUNTIME_TIMEOUT_MS;
+  const requestTimeout = request.budget?.timeoutMs ?? Infinity;
+  const parentTimeout =
     args.parentDeadline !== undefined
       ? args.parentDeadline - Date.now()
-      : Infinity,
-  );
+      : Infinity;
+  const timeoutMs = Math.min(providerTimeout, requestTimeout, parentTimeout);
+  // The provider wins ties; a caller's tighter limit is not its fault.
+  const timeoutSource =
+    providerTimeout === timeoutMs
+      ? "provider"
+      : requestTimeout === timeoutMs
+        ? "request"
+        : "parent";
   if (timeoutMs <= 0) return fail("timeout", MESSAGES.timeout);
   const maxSteps = Math.min(
     request.budget?.maxSteps ?? Infinity,
@@ -456,8 +528,7 @@ async function runProvider({
       input.locale,
       input.sessionId,
     );
-    if (!loaded)
-      return fail("internal", MESSAGES.internal, undefined, "not loaded");
+    if (!loaded) return fail("internal", MESSAGES.internal);
 
     // The provider's own prompt with no session history: the context
     // builder's framework frame and completion contract, then the brief.

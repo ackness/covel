@@ -631,6 +631,7 @@ Rules at run time:
 - **Cancellation**: when the caller is cancelled, times out or ends, the sub-agent stops with it, with `cancelled`. A sub-agent the handler did not await is waited for before the runtime finishes.
 - **Output only**: the output is checked against the provider's `io.output.schema` and contract schema; a failure is `internal`. The `PreRuntime`, `PostRuntime` and `PostContextAssembly` hooks do not fire for a sub-agent; the in-loop `PreLLMCall`, `PreStep`, `PreToolUse` and `PostToolUse` fire as usual, with the sub-agent's `ctx.runtimeId`.
 - **Trace**: every event of the sub-agent carries `subagentCallId`, `parentCallId` and `parentRuntimeId`, plus `subagent.started` / `completed` / `failed` (see [protocol](./protocol.md#sub-agent-events)). An `io.concealed` provider has its content hidden as a top-level run does.
+- **Fault latch**: a sub-agent’s own faults count against its provider. Only the provider’s own tightest time limit (winning ties) counts as its timeout; model errors and cancellations do not count. Faults count even if the parent execution fails or rolls back; clearing requires a committed execution. Calls from setup runtimes neither count nor clear faults. Paused providers return `unavailable` and still count toward ambiguity. See the [protocol fault latch](./protocol.md#plugin-fault-latch).
 
 A failure does not throw (only a call after the handler has ended throws); it returns an error code:
 
@@ -640,7 +641,7 @@ A failure does not throw (only a call after the handler has ended throws); it re
 | `invalid-input` | The request is invalid: a missing field, a brief that is too long, `data` that is not JSON or too large |
 | `not-found` | No active provider matches `target` |
 | `ambiguous` | More than one active provider offers the contract |
-| `unavailable` | The depth cap or the execution's concurrency cap is reached |
+| `unavailable` | The depth cap or the execution's concurrency cap is reached, or the provider is paused in this session after repeated faults |
 | `timeout` | The sub-agent used up its own time limit |
 | `cancelled` | The caller or the player cancelled |
 | `internal` | Any other failure: invalid output, a model error, a tool loop. The message is fixed text; the reason is logged on the server only |
