@@ -34,7 +34,6 @@ import { createSqliteExportRecords } from "./sqlite-export-records.js";
 import { createSqliteSessions } from "./sqlite-sessions.js";
 import { createSqliteSnapshotRecords } from "./sqlite-snapshot-records.js";
 import { createTables } from "./sqlite-schema-ddl.js";
-import { createSqliteState } from "./sqlite-state.js";
 import {
   createSqliteSavepoint,
   createSqliteTransactions,
@@ -87,7 +86,6 @@ export function createSqliteStore(
   const records = {
     ...createSqliteSessions(sqlite, db, vectorCapability !== null),
     ...createSqliteRuntimeRecords(db),
-    ...createSqliteState(db),
     ...createSqliteSessionRecords(db),
     ...createSqliteDataCrud(db),
     ...createSqliteWorlds(db),

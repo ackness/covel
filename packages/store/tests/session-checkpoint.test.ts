@@ -13,6 +13,7 @@ import {
   makeRuntimeExport,
   makeRuntimeOutput,
   makeSession,
+  makeSnapshot,
   makeToolCall,
   makeTurnMessage,
   makeTurnResult,
@@ -262,11 +263,18 @@ describe("session checkpoint transfer", () => {
       updatedAt: "2026-08-25T00:00:00.000Z",
     });
 
+    await source.saveSnapshot(makeSnapshot({ sessionId }));
     const checkpoint = await exportSessionCheckpoint(source, sessionId, {
       revision: 1,
       actionId: "bootstrap",
       committedAt: "2026-08-25T00:00:00.000Z",
     });
+    expect(checkpoint).not.toHaveProperty("state");
+    expect(checkpoint.snapshots).toHaveLength(1);
+    for (const snapshot of checkpoint.snapshots) {
+      expect(snapshot.payload).not.toHaveProperty("stateSchemas");
+      expect(snapshot.payload).not.toHaveProperty("stateEntries");
+    }
     await replaceSessionFromCheckpoint(target, checkpoint, {
       writeWorld: true,
     });

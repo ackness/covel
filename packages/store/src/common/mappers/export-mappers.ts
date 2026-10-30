@@ -4,7 +4,7 @@
  * Column names already match the camelCase record fields. `value` is the only
  * JSON column: a required `JsonValue` stored in a nullable column, read through
  * the injected {@link JsonReader}'s `readRequired` (PG `null` / SQLite `"null"`
- * → `null`), matching `state_entries.value`. Every other field is a plain
+ * → `null`), matching `plugin_data.value`. Every other field is a plain
  * scalar, so there is nothing to canonicalise — the record has no optional
  * fields and Memory / IDB store it verbatim.
  */

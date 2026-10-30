@@ -307,18 +307,14 @@ Committed form block IDs and form values are merged in one IndexedDB read-write 
 - Form input and timeline snapshots are copied before async storage. Changes the caller makes afterward do not alter a save that has already been requested.
 - Deleting a session's "committed block" records is still the explicit reset method.
 
-### Display History of State Changes
+<a id="display-history-of-state-changes"></a>
 
-The display history of state changes is a read-through cache on IndexedDB. It is not a second, authoritative copy of the game state.
+### Asset Progress and Cache Lifecycle
 
-- Only the latest value of each `table.field` is cached, up to the 256 most recently updated fields. Reading, compaction, and writing share one read-write transaction; the last 256 event IDs deduplicate replays.
-- The reducer uses the same field limit and a separate revision counter to refresh the state panel. Full game state is not capped; authoritative snapshots take precedence.
 - Asset progress is coalesced by asset (or plugin and runtime when the asset ID is absent) and phase, with at most 256 turns and 256 entries per turn. Removing a turn’s last message from the live window also clears that turn’s assets and progress.
-- Retained state patches keep the `table.field` shape; live session-state write events are no longer received.
-- There is no "one array per service" cache, so the history of other tabs is not overwritten, and stale read results are not kept.
-- LocalDataService takes a snapshot for each append, holds the world and session ownership for the whole write, and checks after it is released that the session still exists. Local form and timeline writes use the same ownership and existence checks. Input is copied before waiting for release.
+- LocalDataService form and timeline writes hold world and session ownership throughout, and check that the session still exists after admission. Input is copied before waiting for admission.
 - A write queued after a deletion fails, and does not recreate the cache.
-- Session deletion (including session cleanup during world deletion) releases ownership only after the patch, form and timeline cleanup finishes. A cleanup failure does not undo the domain deletion. It only goes through the existing development-time warning, and you can delete again to retry.
+- Session deletion (including session cleanup during world deletion) releases ownership only after the form and timeline cleanup finishes. A cleanup failure does not undo the domain deletion. It only goes through the existing development-time warning, and you can delete again to retry.
 - Remote mode still uses the browser's form and timeline caches, but it does not have the ownership guarantees of this local vault. Cross-device form state and remote cache cleanup are not provided by this mechanism.
 - Both modes merge different timeline rows transactionally. Competing observations of the same row still have no shared causal revision number.
 
@@ -439,15 +435,14 @@ When a column of an existing table changes in a way an old database cannot follo
 
 **Lists have a complete order.** Rows with the same time are ordered by the bytes of their ID on every backend, so MemoryStore, SQLite and PostgreSQL return the same order, and a `limit` cuts at the same row:
 
-- `listEvents`, `listStateChanges`, `listSnapshots`, `listSuspensions`, `listExpiredSuspensions`: `(createdAt, id)`;
+- `listEvents`, `listSnapshots`, `listSuspensions`, `listExpiredSuspensions`: `(createdAt, id)`;
 - `listInteractionRecords`: `(timestamp, id)`, newest first;
-- `listStateSchemas`: `(tableName, id)`. Updating a row does not move it.
 
 **Display message order.** Full lists, cursor pages and forks are ordered by `createdAt`, preserving write order within a timestamp. Checkpoint arrays preserve this order for timestamp ties. After filtering by the snapshot boundary, a fork keeps the parent’s order and assigns new message IDs. Browser pagination uses the cursor row’s position in the checkpoint array. If no row matches both the cursor ID and timestamp, only earlier timestamps are returned.
 
 **Updates do not change rows.** An update changes what a row holds. It does not replace it with another row:
 
-- Updating an existing state entry keeps its ID.
+- Updating an existing plugin-data row keeps its ID and creation time.
 - Worlds and lorebook entries keep their creation time.
 - A re-saved suspension keeps its turn, runtime, plugin and creation time.
 
@@ -483,7 +478,7 @@ Both backends declare the same indexes (PostgreSQL's names carry a `pg_` prefix)
 - PostgreSQL uses a separate sequence for each table to assign positions for messages, traces and turn artifacts, and this still works when several connections write at the same time.
 - SQLite assigns them inside the write boundary it serializes.
 - A gap in sequence numbers after a rollback is normal. When importing in order, new positions are assigned in the order of the import list. Cursor pagination and full lists use the same positions.
-- The data schema version is 7 for both SQL backends. It is checked at startup; see [The data schema version is checked at startup](#capabilities-and-migrations). Version 7 added the `seats` column to `sessions`; a version 6 database is refused, and development databases and browser saves must be recreated.
+- The data schema version is 8 for both SQL backends. It is checked at startup; see [The data schema version is checked at startup](#capabilities-and-migrations). Version 8 removed the three kernel state tables. Schema-7 SQLite and PostgreSQL development databases and their snapshots must be recreated. Browser save versions are unchanged.
 
 **Vector retrieval.** The results are first filtered by session, plugin and namespace, and then the top-K is picked exactly. Memory, SQLite and PostgreSQL all return Euclidean L2 distance. PostgreSQL materializes the filtered candidates instead of using a global approximate index, because the latter can miss matches after filtering.
 
@@ -505,7 +500,7 @@ MemoryStore, SQLite, PostgreSQL and browser checkpoints all keep these identitie
 
 **Saving the same snapshot again.** Saving the same snapshot ID again for the same session replaces the capture time (`createdAt`) along with the payload and the other refreshed fields. A full read, a time-ordered list, and newest-first metadata pagination all use the refreshed time in memory, SQLite and PostgreSQL. The snapshot ID and its owning session do not change. A transaction rollback restores both the previous payload and the capture time.
 
-**Payload schema v3.** The following fields must exist: `characterSchema` (an object or null), `stateSchemas`, `runtimeExports`, `sessionSummaries`, `compactedMessageSummaryIds` and `displayMessagesBoundary`.
+**Payload schema v3.** The following fields must exist: `characterSchema` (an object or null), `runtimeExports`, `sessionSummaries`, `compactedMessageSummaryIds` and `displayMessagesBoundary`.
 
 - An empty array, an empty map, and a chat boundary whose value is null are all explicitly collected values.
 - A missing field is invalid, including old development-time payloads that carry the same version number. These snapshots must be rebuilt. There is no migration, and there is no fallback to the parent session's current state.
@@ -541,7 +536,7 @@ The bookkeeping data of execution grows with every turn. The categories in the t
 | `trace_events`                              | 30 days by default (`COVEL_TRACE_RETENTION_DAYS`, where `0` keeps everything. When the variable is not set, the player's choice in Settings is used, stored in `server_settings`). Cleaned per session after each commit; cleaned for all sessions at startup and once a day after that. The rows of the latest turn are kept, because execution recovery reads them. |
 | `events` (event records)                    | The same retention as `trace_events`, and cleaned in the same pass. The event bus stores a copy of every event it publishes, including the full value of every changed plugin data row. After an event is published, no code reads these rows again, except that another pod may fetch one oversized event by its ID.                                                 |
 
-**Records kept with the session and deleted with it:** `turn_results`, `runtime_outputs`, `tool_calls`, `interactions`, `player_inputs`, state changes, each revision of runtime exports, and the logical turn ledger and opening-attempt ledger.
+**Records kept with the session and deleted with it:** `turn_results`, `runtime_outputs`, `tool_calls`, `interactions`, `player_inputs`, each revision of runtime exports, and the logical turn ledger and opening-attempt ledger.
 
 Each execution writes only one or a few rows for these, and they store results rather than prompts (the prompts are in `trace_events`). Each category has a place that reads older rows by name:
 
@@ -573,10 +568,10 @@ When adding a table or session field, register its owner and persistence scope i
 
 - Table names exactly match both backend schemas. Session scope includes the registered cascade children, the parent `sessions` table and MediaStore-managed `media_refs`.
 - Tables marked `captured` exactly match the datasets in `SnapshotPayload`. Message cursors, display boundaries and compaction tags are not message-row datasets.
-- Tables marked `exported` exactly match checkpoint domains, including record arrays, lifecycle arrays, singletons and nested `state` arrays. This means the checkpoint has that domain; it does not promise to copy every row. For example, tool-call and event arrays are currently exported empty.
+- Tables marked `exported` exactly match checkpoint domains, including record arrays, lifecycle arrays and singletons. This means the checkpoint has that domain; it does not promise to copy every row. For example, tool-call and event arrays are currently exported empty.
 - Session-field snapshot policies match the same-name fields in `SnapshotSessionState`. Type checking also requires new `SessionRecord`, snapshot or checkpoint fields to have corresponding registry entries or test mappings.
 
-Rows in `plugin_data` belong to their `plugin_id`; `_` namespaces and `__kernel:` owners are kernel partitions. Control-plane namespaces are excluded from snapshots and forks. `state_schemas`, `state_entries` and `state_changes` are registered as kernel-owned: the plugin write path has been removed. Kernel session state such as the seats now lives on the session record, and these three tables will be removed.
+Rows in `plugin_data` belong to their `plugin_id`; `_` namespaces and `__kernel:` owners are kernel partitions. Control-plane namespaces are excluded from snapshots and forks. Kernel session state such as seats lives on the session record. The three kernel state tables were removed in data schema 8. Recreate schema-7 SQLite databases (including the desktop database) and the PostgreSQL development volume; their stored snapshots are removed with them. BrowserVault, checkpoint and snapshot payload versions remain unchanged.
 
 Fork behavior is recorded, but store tests cannot depend on `apps/server`, so they do not verify the fork implementation. Session `metadata` sub-keys are outside field coverage. There is currently no reset path, and the operation-record table has not been created yet. This inventory declares no behavior for them.
 
@@ -615,7 +610,7 @@ Two more kinds of lists that go into a prompt also have a full order on every ba
 - Jobs and logs keep their existing snapshot and branch inclusion policy.
 - Kernel-owned rows (such as each runtime's trigger ledger) travel with snapshots, branches and checkpoints, just like the session's other plugin data.
 
-**Dimension data.** Dimension records and receipts use the existing `plugin_data`. They are not a new table, and they are not a mirror of `state_entries`.
+**Dimension data.** Dimension records and receipts use the existing `plugin_data`.
 
 - The definition and the current value share one versioned record.
 - A receipt keeps the frozen source definition and the version it was read at. It does not copy narrative text.

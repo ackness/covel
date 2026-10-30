@@ -6,7 +6,7 @@ import {
   sortByCursorAsc,
   sortByWriteOrder,
 } from "../common/pagination.js";
-import { characterKey, stateEntryKey } from "../common/keys.js";
+import { characterKey } from "../common/keys.js";
 import type { TurnMessageRecord } from "../types.js";
 import { computeTurnMessageStats } from "../common/turn-message-stats.js";
 import {
@@ -179,84 +179,6 @@ export function createRuntimeMethods(state: MemoryState): MemoryStoreMethods {
         rows = rows.slice(0, filters.limit);
       }
       return rows;
-    },
-
-    async saveStateSchema(record) {
-      // A second save under one `id` replaces that row's schema and nothing
-      // else, as the SQL upsert does.
-      const index = state.stateSchemas.findIndex((r) => r.id === record.id);
-      if (index === -1) {
-        state.stateSchemas.push(record);
-      } else {
-        // Replace instead of mutating: transaction snapshots share row objects.
-        state.stateSchemas[index] = {
-          ...state.stateSchemas[index]!,
-          schema: record.schema,
-        };
-      }
-    },
-
-    async listStateSchemas(sessionId) {
-      return state.stateSchemas
-        .filter((r) => r.sessionId === sessionId)
-        .sort(
-          (a, b) =>
-            compareByteOrder(a.tableName, b.tableName) ||
-            compareByteOrder(a.id, b.id),
-        );
-    },
-
-    async deleteStateSchema(sessionId, tableName) {
-      // Every schema row of the table, as the SQL DELETE removes.
-      replaceArrayContents(
-        state.stateSchemas,
-        state.stateSchemas.filter(
-          (r) => r.sessionId !== sessionId || r.tableName !== tableName,
-        ),
-      );
-    },
-
-    async getStateEntry(sessionId, tableName, fieldName) {
-      return (
-        state.stateEntries.get(
-          stateEntryKey(sessionId, tableName, fieldName),
-        ) ?? null
-      );
-    },
-
-    async upsertStateEntry(record) {
-      const key = stateEntryKey(
-        record.sessionId,
-        record.tableName,
-        record.fieldName,
-      );
-      // Like the SQL update: the row keeps the ID it was inserted with.
-      const existing = state.stateEntries.get(key);
-      state.stateEntries.set(
-        key,
-        existing ? { ...record, id: existing.id } : record,
-      );
-    },
-
-    async listStateEntries(sessionId, tableName) {
-      return [...state.stateEntries.values()]
-        .filter((r) => r.sessionId === sessionId && r.tableName === tableName)
-        .sort((a, b) => compareByteOrder(a.fieldName, b.fieldName));
-    },
-
-    async addStateChange(record) {
-      appendUniqueRow(state.stateChanges, record, "State change");
-    },
-
-    async listStateChanges(sessionId, tableName, fieldName) {
-      return sortByCursorAsc(
-        state.stateChanges.filter(
-          (r) =>
-            r.sessionId === sessionId &&
-            r.tableName === tableName &&
-            r.fieldName === fieldName,
-        ),
-      );
     },
 
     async saveEvent(record) {

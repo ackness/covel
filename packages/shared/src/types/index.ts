@@ -168,14 +168,6 @@ export type {
   SubagentRunApi,
 } from "./subagent.js";
 
-export type {
-  StateChangeEntry,
-  StateField,
-  StateFieldType,
-  StateFieldDef,
-  StateTableSchema,
-} from "./state.js";
-
 export type { MessageType, CovelMessage } from "./events.js";
 
 export type {

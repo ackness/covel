@@ -22,9 +22,6 @@ import {
   makeSessionSummary,
   makeSetupAttempt,
   makeSnapshot,
-  makeStateChange,
-  makeStateEntry,
-  makeStateSchema,
   makeSuspension,
   makeToolCall,
   makeTraceEvent,
@@ -76,28 +73,6 @@ const CASCADE_PROBES: Readonly<Record<SessionScopedMemoryKey, CascadeProbe>> = {
     seed: (store, sessionId) => store.saveToolCall(makeToolCall({ sessionId })),
     count: async (store, sessionId) =>
       (await store.listToolCalls(sessionId)).length,
-  },
-  stateSchemas: {
-    seed: (store, sessionId) =>
-      store.saveStateSchema(makeStateSchema({ sessionId })),
-    count: async (store, sessionId) =>
-      (await store.listStateSchemas(sessionId)).length,
-  },
-  stateEntries: {
-    seed: (store, sessionId) =>
-      store.upsertStateEntry(makeStateEntry({ sessionId })),
-    count: async (store, sessionId) =>
-      (await store.listStateEntries(sessionId, makeStateEntry().tableName))
-        .length,
-  },
-  stateChanges: {
-    seed: (store, sessionId) =>
-      store.addStateChange(makeStateChange({ sessionId })),
-    count: async (store, sessionId) => {
-      const { tableName, fieldName } = makeStateChange();
-      return (await store.listStateChanges(sessionId, tableName, fieldName))
-        .length;
-    },
   },
   events: {
     seed: (store, sessionId) => store.saveEvent(makeEvent({ sessionId })),

@@ -157,72 +157,6 @@ export const toolCalls = pgTable(
   ],
 );
 
-// ── State Schemas ───────────────────────────────────────────────
-
-export const stateSchemas = pgTable(
-  "state_schemas",
-  {
-    id: text("id").primaryKey(),
-    sessionId: text("session_id").notNull(),
-    tableName: text("table_name").notNull(),
-    schema: jsonb("schema").notNull(), // JSON
-    createdAt: text("created_at").notNull(),
-  },
-  (table) => [index("pg_state_schemas_session_id_idx").on(table.sessionId)],
-);
-
-// ── State Entries ───────────────────────────────────────────────
-
-export const stateEntries = pgTable(
-  "state_entries",
-  {
-    id: text("id").primaryKey(),
-    sessionId: text("session_id").notNull(),
-    tableName: text("table_name").notNull(),
-    fieldName: text("field_name").notNull(),
-    value: jsonb("value"), // JSON
-    updatedAt: text("updated_at").notNull(),
-  },
-  (table) => [
-    index("pg_state_entries_session_id_idx").on(table.sessionId),
-    index("pg_state_entries_composite_idx").on(
-      table.sessionId,
-      table.tableName,
-      table.fieldName,
-    ),
-    uniqueIndex("pg_state_entries_unique_idx").on(
-      table.sessionId,
-      table.tableName,
-      table.fieldName,
-    ),
-  ],
-);
-
-// ── State Changes ───────────────────────────────────────────────
-
-export const stateChanges = pgTable(
-  "state_changes",
-  {
-    id: text("id").primaryKey(),
-    sessionId: text("session_id").notNull(),
-    tableName: text("table_name").notNull(),
-    fieldName: text("field_name").notNull(),
-    value: jsonb("value"), // JSON
-    changedBy: text("changed_by").notNull(),
-    turnId: text("turn_id").notNull(),
-    reason: text("reason"),
-    createdAt: text("created_at").notNull(),
-  },
-  (table) => [
-    index("pg_state_changes_session_id_idx").on(table.sessionId),
-    index("pg_state_changes_composite_idx").on(
-      table.sessionId,
-      table.tableName,
-      table.fieldName,
-    ),
-  ],
-);
-
 // ── Events ──────────────────────────────────────────────────────
 
 export const events = pgTable(
@@ -735,7 +669,7 @@ export const jobStatus = pgTable(
 // insert-ignore on conflict, so a re-published revision is a no-op. `value` is a
 // required JsonValue but stored as a NULLABLE jsonb column (a top-level JSON
 // `null` serialises to SQL NULL and reads back as `null` via `readRequired`,
-// exactly like `state_entries.value`). The unique index's left prefix
+// exactly like `plugin_data.value`). The unique index's left prefix
 // (session_id, producer_runtime_id, record_as) also serves getLatest / list.
 
 export const runtimeExports = pgTable(

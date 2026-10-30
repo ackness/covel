@@ -20,7 +20,6 @@ import { createHookPipeline } from "../src/hooks/pipeline.js";
 
 interface RecordingStore extends KernelStore {
   readonly messages: Array<Record<string, unknown>>;
-  readonly stateChanges: Array<Record<string, unknown>>;
   readonly pluginData: Array<Record<string, unknown>>;
   readonly events: Array<Record<string, unknown>>;
   readonly traceEvents: Array<Record<string, unknown>>;
@@ -28,14 +27,12 @@ interface RecordingStore extends KernelStore {
 
 function createRecordingStore(): RecordingStore {
   const messages: Array<Record<string, unknown>> = [];
-  const stateChanges: Array<Record<string, unknown>> = [];
   const pluginData: Array<Record<string, unknown>> = [];
   const events: Array<Record<string, unknown>> = [];
   const traceEvents: Array<Record<string, unknown>> = [];
 
   return {
     messages,
-    stateChanges,
     pluginData,
     events,
     traceEvents,
@@ -46,10 +43,6 @@ function createRecordingStore(): RecordingStore {
     async saveEvent(r) {
       events.push(r as Record<string, unknown>);
     },
-    async addStateChange(r) {
-      stateChanges.push(r as Record<string, unknown>);
-    },
-    async upsertStateEntry() {},
     async setPluginData(r) {
       pluginData.push(r as Record<string, unknown>);
     },

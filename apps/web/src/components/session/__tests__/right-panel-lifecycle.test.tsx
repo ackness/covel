@@ -138,13 +138,7 @@ it.each(["shared", "chat-mode"])(
         shortLabel: "Panel",
       })),
     }));
-    render(
-      <RightPanel
-        sessionId="provider-labels"
-        world={null}
-        statePatchRevision={0}
-      />,
-    );
+    render(<RightPanel sessionId="provider-labels" world={null} />);
     fireEvent.keyDown(
       await screen.findByRole("tab", { name: "Shared panels" }),
       { key: "Enter" },
@@ -157,7 +151,7 @@ it.each(["shared", "chat-mode"])(
   },
 );
 it("keeps shared panel selection stable across provider changes and resets across sessions", async () => {
-  const props = { sessionId: "session-a", world: null, statePatchRevision: 0 };
+  const props = { sessionId: "session-a", world: null };
   const view = render(<RightPanel {...props} />);
   fireEvent.keyDown(await screen.findByRole("tab", { name: "Shared panels" }), {
     key: "Enter",
@@ -168,9 +162,19 @@ it("keeps shared panel selection stable across provider changes and resets acros
   await act(async () => {
     mocks.plugins = [plugin("provider-b")];
     mocks.specs = { ...mocks.specs, right: [spec("provider-b", "details")] };
-    // The mocked store is not reactive and the panel is memoised, so a newer
-    // patch revision stands in for the store update that re-renders it.
-    view.rerender(<RightPanel {...props} statePatchRevision={1} />);
+    // The mocked store is not reactive and the panel is memoised, so a new
+    // world prop stands in for the store update that re-renders it.
+    view.rerender(
+      <RightPanel
+        {...props}
+        world={{
+          id: "world",
+          name: "World",
+          description: "",
+          createdAt: "now",
+        }}
+      />,
+    );
   });
   await waitFor(() =>
     expect(screen.queryByRole("button", { name: "provider-a" })).toBeNull(),
@@ -180,7 +184,7 @@ it("keeps shared panel selection stable across provider changes and resets acros
   expect(await screen.findByText("World content")).toBeTruthy();
 });
 it("returns to World when the active plugin panel disappears", async () => {
-  const props = { sessionId: "session-a", world: null, statePatchRevision: 0 };
+  const props = { sessionId: "session-a", world: null };
   const view = render(<RightPanel {...props} />);
   fireEvent.keyDown(await screen.findByRole("tab", { name: "Shared panels" }), {
     key: "Enter",
@@ -188,7 +192,17 @@ it("returns to World when the active plugin panel disappears", async () => {
   await act(async () => {
     mocks.plugins = [];
     mocks.specs = { ...mocks.specs, right: [] };
-    view.rerender(<RightPanel {...props} statePatchRevision={1} />);
+    view.rerender(
+      <RightPanel
+        {...props}
+        world={{
+          id: "world",
+          name: "World",
+          description: "",
+          createdAt: "now",
+        }}
+      />,
+    );
   });
   expect(await screen.findByText("World content")).toBeTruthy();
   expect(screen.queryByRole("tab", { name: "Shared panels" })).toBeNull();
@@ -202,7 +216,7 @@ it("retains an image navigation request until lazy specs load and supports repea
         release = resolve;
       }),
   );
-  const props = { sessionId: "session-a", world: null, statePatchRevision: 0 };
+  const props = { sessionId: "session-a", world: null };
   const view = render(
     <RightPanel {...props} panelRequest={{ event: "open-images" }} />,
   );
@@ -222,9 +236,7 @@ it("retains an image navigation request until lazy specs load and supports repea
 });
 
 it("lets a side panel queue a line for the composer without sending it", async () => {
-  render(
-    <RightPanel sessionId="session-a" world={null} statePatchRevision={0} />,
-  );
+  render(<RightPanel sessionId="session-a" world={null} />);
   fireEvent.keyDown(await screen.findByRole("tab", { name: "Shared panels" }), {
     key: "Enter",
   });
@@ -241,9 +253,7 @@ it("lets a side panel queue a line for the composer without sending it", async (
 });
 
 it("moves a plugin panel into the large dialog and back", async () => {
-  render(
-    <RightPanel sessionId="session-a" world={null} statePatchRevision={0} />,
-  );
+  render(<RightPanel sessionId="session-a" world={null} />);
   fireEvent.keyDown(await screen.findByRole("tab", { name: "Shared panels" }), {
     key: "Enter",
   });
@@ -263,7 +273,7 @@ it("moves a plugin panel into the large dialog and back", async () => {
 
 it("shows the raw Database tab only when the developer view is on", async () => {
   await initSettings();
-  const props = { sessionId: "session-a", world: null, statePatchRevision: 0 };
+  const props = { sessionId: "session-a", world: null };
   const view = render(<RightPanel {...props} />);
   await screen.findByRole("tab", { name: "Shared panels" });
   expect(screen.queryByRole("tab", { name: "Database" })).toBeNull();
@@ -287,7 +297,7 @@ it("opens the declared image destination instead of an earlier image icon", asyn
     <RightPanel
       sessionId="semantic-nav"
       world={null}
-      statePatchRevision={0}
+
       panelRequest={{ event: "open-images" }}
     />,
   );
@@ -311,7 +321,6 @@ it.each(["images", "plugin"])(
     const props = {
       sessionId: "missing-nav",
       world: null,
-      statePatchRevision: 0,
       panelRequest,
     };
     const view = render(<RightPanel {...props} />);
@@ -324,7 +333,17 @@ it.each(["images", "plugin"])(
     available.specs[0]!.navTarget = "images";
     mocks.specs.right = [available];
     mocks.plugins = [...mocks.plugins, plugin("new-provider")];
-    view.rerender(<RightPanel {...props} statePatchRevision={1} />);
+    view.rerender(
+      <RightPanel
+        {...props}
+        world={{
+          id: "world",
+          name: "World",
+          description: "",
+          createdAt: "now",
+        }}
+      />,
+    );
     await waitFor(() => expect(mocks.fetchSpecs).toHaveBeenCalledTimes(2));
     expect(screen.getByText("World content")).toBeTruthy();
     expect(screen.queryByText("Mounted panel: provider-a")).toBeNull();
@@ -341,7 +360,7 @@ it("keeps navigation intent through a failed spec load and an explicit retry", a
     <RightPanel
       sessionId="retry-nav"
       world={null}
-      statePatchRevision={0}
+
       panelRequest={{ event: "open-images" }}
     />,
   );
@@ -355,7 +374,7 @@ it("translates the memory storage badge", async () => {
   mocks.health = {
     storage: { data: { backend: "memory", frontendMode: "remote" } },
   };
-  render(<RightPanel sessionId="s" world={null} statePatchRevision={0} />);
+  render(<RightPanel sessionId="s" world={null} />);
   expect(await screen.findByText("内存")).toBeTruthy();
   expect(screen.queryByText("Memory")).toBeNull();
 });

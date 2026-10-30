@@ -794,7 +794,6 @@ export interface SessionSnapshot {
    */
   readonly submittedInteractions: readonly SnapshotSubmittedInteraction[];
   readonly characters: readonly SnapshotCharacter[];
-  readonly gameState: Readonly<Record<string, unknown>>;
   readonly executionSteps: readonly SnapshotTraceEvent[];
   readonly execution?: SessionExecutionStatus;
   /**

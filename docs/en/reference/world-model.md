@@ -231,7 +231,7 @@ Rules:
 
 - The declaration and the current value share one version number, which starts at 1.
 - Each game of the same world is isolated from the others. Nothing is written back to the world package.
-- Nothing is stored anywhere else. There is no copy in `state_entries`, and there is no resident lorebook entry.
+- Nothing is stored anywhere else, and there is no resident lorebook entry.
 
 **How it is written.** Only two proposals can write it:
 

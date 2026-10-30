@@ -5,6 +5,12 @@
  */
 
 import { describe, it, expect, vi } from "vitest";
+import { createMemoryStore } from "@covel/store/memory";
+import {
+  makeCharacter,
+  makeSession,
+} from "../../store/src/contract/test-fixtures.js";
+import { buildSnapshotPayload } from "../src/snapshot/snapshot-payload-builder.js";
 import { decodePageCursor } from "@covel/shared";
 import { buildSessionSnapshot } from "../src/snapshot/snapshot-builder.js";
 
@@ -61,23 +67,6 @@ describe("buildSessionSnapshot", () => {
           fields: { class: "warrior" },
         },
       ]),
-      listStateSchemas: vi
-        .fn()
-        .mockResolvedValue([{ tableName: "world" }, { tableName: "player" }]),
-      listStateEntries: vi
-        .fn()
-        .mockImplementation((_sid: string, table: string) => {
-          if (table === "world")
-            return Promise.resolve([
-              { tableName: "world", fieldName: "weather", value: "rain" },
-              { tableName: "world", fieldName: "time", value: "night" },
-            ]);
-          if (table === "player")
-            return Promise.resolve([
-              { tableName: "player", fieldName: "hp", value: 100 },
-            ]);
-          return Promise.resolve([]);
-        }),
       listTraceEventsPage: vi.fn().mockResolvedValue([
         {
           type: "runtime.started",
@@ -116,11 +105,7 @@ describe("buildSessionSnapshot", () => {
     expect(snapshot!.characters).toHaveLength(1);
     expect(snapshot!.characters[0]!.name).toBe("Hero");
 
-    // Game state aggregated from state entries
-    expect(snapshot!.gameState).toEqual({
-      world: { weather: "rain", time: "night" },
-      player: { hp: 100 },
-    });
+    expect(snapshot).not.toHaveProperty("gameState");
 
     // What the player answered in the turns of the returned messages, with
     // the stored values; the answer to an older turn is left out
@@ -149,8 +134,6 @@ describe("buildSessionSnapshot", () => {
     const store = createMockStore();
     store.listMessagesPage.mockResolvedValue([]);
     store.listCharacters.mockResolvedValue([]);
-    store.listStateSchemas.mockResolvedValue([]);
-    store.listStateEntries.mockResolvedValue([]);
     store.listTraceEventsPage.mockResolvedValue([]);
 
     const snapshot = await buildSessionSnapshot(store as any, "sess-1");
@@ -158,7 +141,7 @@ describe("buildSessionSnapshot", () => {
     expect(snapshot).not.toBeNull();
     expect(snapshot!.messages).toEqual([]);
     expect(snapshot!.characters).toEqual([]);
-    expect(snapshot!.gameState).toEqual({});
+    expect(snapshot).not.toHaveProperty("gameState");
     expect(snapshot!.executionSteps).toEqual([]);
     // A short window (< limit) reaches the start of history → no older cursor.
     expect(snapshot!.messagesCursor).toBeNull();
@@ -185,5 +168,31 @@ describe("buildSessionSnapshot", () => {
       createdAt: full[0]!.createdAt,
       id: "m0",
     });
+  });
+});
+
+describe("buildSnapshotPayload", () => {
+  it("captures characters and plugin data without kernel state fields", async () => {
+    const store = createMemoryStore();
+    const session = makeSession();
+    const character = makeCharacter({ sessionId: session.id });
+    const data = {
+      id: "data",
+      sessionId: session.id,
+      pluginId: "owner",
+      namespace: "notes",
+      key: "entry",
+      value: { text: "note" },
+      createdAt: session.createdAt,
+      updatedAt: session.updatedAt,
+    };
+    await store.createSession(session);
+    await store.upsertCharacter(character);
+    await store.setPluginData(data);
+    const payload = await buildSnapshotPayload(store, session.id, "turn");
+    expect(payload).not.toHaveProperty("stateSchemas");
+    expect(payload).not.toHaveProperty("stateEntries");
+    expect(payload.characters).toEqual([character]);
+    expect(payload.pluginData).toEqual([data]);
   });
 });

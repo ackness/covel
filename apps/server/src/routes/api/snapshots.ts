@@ -45,7 +45,6 @@ import type {
   MediaStore,
   SnapshotRecord,
   CharacterRecord,
-  StateEntryRecord,
   PluginDataRecord,
   SessionSummaryRecord,
   SuspensionRecord,
@@ -69,10 +68,6 @@ import {
   ForkCursorMissingError,
   copyForkDisplayMessages,
 } from "./fork-display-messages.js";
-import {
-  ForkStateSchemaMissingError,
-  copyForkStateSchemas,
-} from "./fork-state-schemas.js";
 import { copyForkRuntimeExports } from "./fork-runtime-exports.js";
 import {
   mintSessionOwnerToken,
@@ -458,23 +453,6 @@ snapshotRoutes.post("/:id/fork", rateLimiter({ max: 10 }), async (c) => {
               (pd) => !isControlPlanePluginDataNamespace(pd.namespace),
             );
 
-            const childStateSchemas = await copyForkStateSchemas(
-              tx,
-              snapshot,
-              childSessionId,
-              now,
-            );
-
-            // Copy state entries
-            for (const se of snapshot.payload.stateEntries) {
-              const record: StateEntryRecord = {
-                ...se,
-                id: randomUUID(),
-                sessionId: childSessionId,
-              };
-              await tx.upsertStateEntry(record);
-            }
-
             const pluginDataBatch: PluginDataRecord[] = gamePluginData.map(
               (pd) => ({
                 ...pd,
@@ -666,7 +644,6 @@ snapshotRoutes.post("/:id/fork", rateLimiter({ max: 10 }), async (c) => {
                   childSessionId,
                 ),
                 suspensions: childSuspensions,
-                stateSchemas: childStateSchemas,
                 runtimeExports: childRuntimeExports,
                 sessionSummaries: childSessionSummaries,
                 compactedMessageSummaryIds: childCompactedMessageSummaryIds,
@@ -696,14 +673,6 @@ snapshotRoutes.post("/:id/fork", rateLimiter({ max: 10 }), async (c) => {
             return c.json(
               errorBody("Snapshot cursor no longer exists in parent session", {
                 code: "cursor_missing",
-              }),
-              409,
-            );
-          }
-          if (err instanceof ForkStateSchemaMissingError) {
-            return c.json(
-              errorBody("Snapshot state table definitions are unavailable", {
-                code: "snapshot_schema_missing",
               }),
               409,
             );

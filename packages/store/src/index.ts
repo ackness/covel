@@ -37,7 +37,6 @@ export {
 } from "./browser-sync/browser-sync.js";
 export type {
   BrowserCheckpoint,
-  BrowserCheckpointState,
   BrowserCheckpointSchemaVersion,
   PersistenceProfile,
   SessionCommit,
@@ -96,9 +95,6 @@ export type {
   SessionRecord,
   TurnResultRecord,
   ToolCallRecordRow,
-  StateSchemaRecord,
-  StateEntryRecord,
-  StateChangeRecord,
   EventRecord,
   MessageRecord,
   CharacterRecord,

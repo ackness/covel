@@ -41,7 +41,7 @@ export interface SubscriptionEvent {
    */
   readonly id: string;
   readonly topic: SubscriptionTopic;
-  readonly type: string; // e.g., "runtime.started", "state.entry.changed"
+  readonly type: string; // e.g., "runtime.started", "plugin-data.changed"
   readonly sessionId: string;
   /** Producer incarnation; unscoped bus events are never admitted to session SSE. */
   readonly sessionIncarnation?: string;

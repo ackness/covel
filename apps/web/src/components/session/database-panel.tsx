@@ -1,7 +1,7 @@
 /**
- * DatabasePanel — live view of the current session's state tables.
+ * DatabasePanel — view of session, character and plugin-data virtual tables.
  *
- * Replaces the old State-Patches list with a "ledger" of grouped sections:
+ * Groups the database view into sections:
  *   - § 核心 — built-in tables (`session`, `characters`, …)
  *   - § 插件 — `plugin_data/*` tables grouped by pluginId, then namespace
  *
@@ -10,8 +10,7 @@
  * stack of bordered cards.
  *
  * Data source: GET /api/sessions/:id/state
- * Auto-refreshes whenever a resource invalidation bumps `refreshKey`
- * from the parent (session store exposes statePatchRevision).
+ * Fetches on mount and when the player requests a refresh.
  */
 
 import { useEffect, useMemo, useState } from "react";
@@ -93,18 +92,9 @@ function groupTables(tables: StateTableEntry[]): {
 
 interface DatabasePanelProps {
   sessionId: string;
-  /**
-   * Monotonic counter driven by state SSE events — when it changes the
-   * panel refetches the snapshot. Parent passes `statePatchRevision` or
-   * similar so we stay fresh without subscribing to the event bus here.
-   */
-  refreshKey?: number;
 }
 
-export function DatabasePanel({
-  sessionId,
-  refreshKey = 0,
-}: DatabasePanelProps) {
+export function DatabasePanel({ sessionId }: DatabasePanelProps) {
   const { t } = useTranslation();
   const [tables, setTables] = useState<StateTableEntry[]>([]);
   const [loading, setLoading] = useState(true);
@@ -132,10 +122,10 @@ export function DatabasePanel({
     return () => {
       cancelled = true;
     };
-  }, [sessionId, refreshKey, refreshVersion]);
+  }, [sessionId, refreshVersion]);
 
   const handleRefresh = () => {
-    // Manual and automatic refreshes share the effect's response ownership.
+    // Manual refreshes and session changes share the effect's response ownership.
     setRefreshVersion((version) => version + 1);
   };
 

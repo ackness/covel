@@ -1,14 +1,12 @@
 /**
- * State routes — query session state tables and change history.
+ * State routes — query session, character and plugin-data virtual tables.
  *
  * All routes are mounted at `/api/sessions` by bootstrap.ts.
  *
- *   GET  /api/sessions/:id/state                        — all state tables
- *   GET  /api/sessions/:id/state-patches                — state change patches
+ *   GET  /api/sessions/:id/state                        — session, characters and plugin data
  */
 
 import { Hono } from "hono";
-import type { StateChangeEntry, StateTableSchema } from "@covel/shared";
 import type { DataStore } from "@covel/store";
 import { rateLimiter } from "../../middleware/rate-limit.js";
 import {
@@ -37,7 +35,6 @@ export const stateRoutes = new Hono<Env>();
 //     keyed by character id.
 //   - `plugin_data/<pluginId>:<namespace>`: one virtual table per plugin
 //     namespace — keyed by the record's `key`, value is the full JSON.
-//   - Any state tables registered in the canonical DataStore.
 //
 // The front-end DatabasePanel renders the map as a list of collapsible
 // tables; the `schema.fields` array is derived from the data keys so the
@@ -45,7 +42,7 @@ export const stateRoutes = new Hono<Env>();
 // with no registered schema.
 //
 // Rate-limited like the other whole-session reads: one call reads every
-// character, plugin-data row and state table of the session.
+// character and plugin-data row of the session.
 stateRoutes.get("/:id/state", rateLimiter({ max: 120 }), async (c) => {
   const store = c.get("store");
   const id = c.req.param("id");
@@ -58,15 +55,6 @@ stateRoutes.get("/:id/state", rateLimiter({ max: 120 }), async (c) => {
     string,
     { schema: unknown; data: Record<string, unknown> }
   > = Object.create(null);
-
-  // ── State tables ──────────────────────────────────────────────────
-  const schemas = await getTableSchemas(store, id);
-  await Promise.all(
-    schemas.map(async (schema) => {
-      const data = await getTableSnapshot(store, id, schema.name);
-      tables[schema.name] = { schema, data: { ...data } };
-    }),
-  );
 
   // ── session record ────────────────────────────────────────────────
   const sessionData = {
@@ -154,90 +142,4 @@ function typeOf(v: unknown): string {
   if (v === null) return "null";
   if (Array.isArray(v)) return "array";
   return typeof v;
-}
-
-// ── State patches & snapshots ───────────────────────────────────
-
-// GET /sessions/:id/state-patches — aggregated state change patches
-stateRoutes.get("/:id/state-patches", async (c) => {
-  const store = c.get("store");
-  const id = c.req.param("id");
-
-  const guard = await resolveSessionParam(c);
-  if (!guard.ok) return guard.response;
-
-  // Collect all change logs across all tables into a flat patch list (parallel per field)
-  const schemas = await getTableSchemas(store, id);
-  type Patch = {
-    id: string;
-    summary: string;
-    packageName: string;
-    data?: unknown;
-    createdAt: string;
-  };
-  const fieldQueries: Array<Promise<Patch[]>> = [];
-
-  for (const schema of schemas) {
-    for (const field of schema.fields) {
-      fieldQueries.push(
-        getChangeLog(store, id, schema.name, field.name).then((changes) =>
-          changes.map((change) => {
-            const ts = change.timestamp ?? new Date().toISOString();
-            return {
-              id: `${schema.name}.${field.name}@${ts}`,
-              summary: `${schema.name}.${field.name} → ${JSON.stringify(change.value)}`,
-              packageName: change.changedBy ?? "unknown",
-              data: {
-                table: schema.name,
-                field: field.name,
-                value: change.value,
-                reason: change.reason,
-              },
-              createdAt: ts,
-            };
-          }),
-        ),
-      );
-    }
-  }
-
-  const patches = (await Promise.all(fieldQueries)).flat();
-  return c.json({ items: patches });
-});
-
-async function getTableSchemas(
-  store: DataStore,
-  sessionId: string,
-): Promise<readonly StateTableSchema[]> {
-  const records = await store.listStateSchemas(sessionId);
-  return records.map((record) => record.schema as StateTableSchema);
-}
-
-async function getTableSnapshot(
-  store: DataStore,
-  sessionId: string,
-  tableName: string,
-): Promise<Readonly<Record<string, unknown>>> {
-  const entries = await store.listStateEntries(sessionId, tableName);
-  return Object.fromEntries(
-    entries.map((entry) => [entry.fieldName, entry.value]),
-  );
-}
-
-async function getChangeLog(
-  store: DataStore,
-  sessionId: string,
-  tableName: string,
-  fieldName: string,
-): Promise<readonly StateChangeEntry[]> {
-  const changes = await store.listStateChanges(sessionId, tableName, fieldName);
-  return changes
-    .filter((change) => change.turnId !== "__init__")
-    .map((change) => ({
-      value: change.value,
-      changedBy: change.changedBy,
-      turnId: change.turnId,
-      reason: change.reason,
-      timestamp: change.createdAt,
-    }));
 }

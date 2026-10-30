@@ -928,9 +928,6 @@ io:
 │  ├── character_schemas  会话角色类型与属性定义、version          │
 │  ├── characters        角色记录 (name, type, fields)             │
 │  ├── lorebook_entries  世界 / 玩家 / 插件 owner 的世界书条目     │
-│  ├── state_schemas     动态状态表 schema                        │
-│  ├── state_entries     状态键值对                                │
-│  ├── state_changes     状态变更历史                              │
 │  ├── events            业务事件（append-only）                   │
 │  │                                                              │
 │  插件数据                                                       │

@@ -38,7 +38,6 @@ vi.mock("@/services/api", () => ({
     session: { id: "s", worldId: "w", phase: "playing" },
     messages: [],
     characters: [],
-    gameState: {},
     executionSteps: [],
     submittedInteractions: [],
     plugins: [],

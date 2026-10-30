@@ -34,9 +34,6 @@ export type {
 } from "./records/runtime-records.js";
 
 export type {
-  StateSchemaRecord,
-  StateEntryRecord,
-  StateChangeRecord,
   EventRecord,
   MessageRecord,
   CharacterRecord,
@@ -100,9 +97,6 @@ import type {
   InteractionRecordFilters,
 } from "./records/runtime-records.js";
 import type {
-  StateSchemaRecord,
-  StateEntryRecord,
-  StateChangeRecord,
   EventRecord,
   MessageRecord,
   CharacterRecord,
@@ -254,34 +248,6 @@ export interface RuntimeRecordStore {
     sessionId: string,
     filters?: InteractionRecordFilters,
   ): Promise<InteractionRecordRow[]>;
-}
-
-/** State schemas / entries / changes (`common/sql-state-records.ts`). */
-export interface StateStore {
-  // ── State Schemas ──
-  saveStateSchema(record: StateSchemaRecord): Promise<void>;
-  listStateSchemas(sessionId: string): Promise<StateSchemaRecord[]>;
-  deleteStateSchema(sessionId: string, tableName: string): Promise<void>;
-
-  // ── State Entries ──
-  getStateEntry(
-    sessionId: string,
-    tableName: string,
-    fieldName: string,
-  ): Promise<StateEntryRecord | null>;
-  upsertStateEntry(record: StateEntryRecord): Promise<void>;
-  listStateEntries(
-    sessionId: string,
-    tableName: string,
-  ): Promise<StateEntryRecord[]>;
-
-  // ── State Changes ──
-  addStateChange(record: StateChangeRecord): Promise<void>;
-  listStateChanges(
-    sessionId: string,
-    tableName: string,
-    fieldName: string,
-  ): Promise<StateChangeRecord[]>;
 }
 
 /** Session-scoped event log. Part of `sql-session-content-records`. */
@@ -1006,7 +972,6 @@ export interface DataStore
   extends
     SessionStore,
     RuntimeRecordStore,
-    StateStore,
     EventStore,
     MessageStore,
     CharacterStore,

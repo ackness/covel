@@ -1111,7 +1111,6 @@ data: {
 | 角色列表 | `GET /api/sessions/:id/characters` | `{ items: CharacterRecord[] }` |
 | 插件列表 | `GET /api/sessions/:id/plugins` | `{ active[], available[] }` |
 | 状态查询 | `GET /api/sessions/:id/state` | `{ tables }` |
-| 状态补丁 | `GET /api/sessions/:id/state-patches` | `Patch[]` |
 | 插件数据 | `GET /api/sessions/:id/plugin-data/:pluginId/:ns` | `{ items[] }` |
 | 世界列表 | `GET /api/worlds` | `{ items: WorldRecord[] }` |
 | 执行追踪 | `GET /api/traces/:sessionId` | `{ events[], nextCursor }`（最近 5000 条，游标读更早的） |

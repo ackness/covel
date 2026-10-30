@@ -231,7 +231,7 @@ type DimensionSnapshot = Readonly<Record<string, DimensionSnapshotEntry>>;
 
 - 声明和当前值共用一个版本号，从 1 开始。
 - 同一个世界的各局游戏互相隔离，不回写世界包。
-- 不会再往别处存一份（没有 `state_entries` 副本，也没有常驻的资料库条目）。
+- 不会再往别处存一份，也没有常驻的资料库条目。
 
 **怎么写。** 只有两种 proposal 可以写：
 

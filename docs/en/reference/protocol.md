@@ -1111,7 +1111,6 @@ Read-only data fetches, answered with normal REST GET responses:
 | Character list | `GET /api/sessions/:id/characters` | `{ items: CharacterRecord[] }` |
 | Plugin list | `GET /api/sessions/:id/plugins` | `{ active[], available[] }` |
 | State query | `GET /api/sessions/:id/state` | `{ tables }` |
-| State patches | `GET /api/sessions/:id/state-patches` | `Patch[]` |
 | Plugin data | `GET /api/sessions/:id/plugin-data/:pluginId/:ns` | `{ items[] }` |
 | World list | `GET /api/worlds` | `{ items: WorldRecord[] }` |
 | Execution trace | `GET /api/traces/:sessionId` | `{ events[], nextCursor }` (the latest 5000 events. Use the cursor to read older ones) |

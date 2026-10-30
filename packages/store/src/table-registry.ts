@@ -46,9 +46,6 @@ export type SessionScopedMemoryKey = Extract<
   keyof MemoryState,
   | "turnResults"
   | "toolCalls"
-  | "stateSchemas"
-  | "stateEntries"
-  | "stateChanges"
   | "events"
   | "messages"
   | "characters"
@@ -105,21 +102,6 @@ export const SESSION_SCOPED_TABLES: readonly SessionScopedTable[] = [
   {
     table: "tool_calls",
     memoryKey: "toolCalls",
-    memoryKind: "array",
-  },
-  {
-    table: "state_schemas",
-    memoryKey: "stateSchemas",
-    memoryKind: "array",
-  },
-  {
-    table: "state_entries",
-    memoryKey: "stateEntries",
-    memoryKind: "map",
-  },
-  {
-    table: "state_changes",
-    memoryKey: "stateChanges",
     memoryKind: "array",
   },
   {

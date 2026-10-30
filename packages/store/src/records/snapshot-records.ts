@@ -4,11 +4,7 @@
  * Re-exported through the store's public types entry point.
  */
 
-import type {
-  CharacterRecord,
-  StateEntryRecord,
-  StateSchemaRecord,
-} from "./state-records.js";
+import type { CharacterRecord } from "./state-records.js";
 import type {
   LorebookEntryRecord,
   SessionSummaryRecord,
@@ -47,9 +43,6 @@ export interface SnapshotPayload {
   readonly turnId: string;
   readonly characterSchema: CharacterSchemaRecord | null;
   readonly characters: readonly CharacterRecord[];
-  readonly stateEntries: readonly StateEntryRecord[];
-  /** Frozen table definitions. Empty means no captured tables. */
-  readonly stateSchemas: readonly StateSchemaRecord[];
   /** Latest visible revision of every export series at capture time. */
   readonly runtimeExports: readonly RuntimeExportRecord[];
   readonly pluginData: readonly PluginDataRecord[];

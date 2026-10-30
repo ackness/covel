@@ -1,33 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import { seedAppSettings } from "./helpers/player.js";
 
-async function readPatches(page: Page, sessionId: string) {
-  return page.evaluate(async (sessionId) => {
-    const path = "/src/services/data-service.ts";
-    const { getDataService } = await import(path);
-    return (await getDataService().listStatePatches(sessionId)).map(
-      (patch) => patch.id,
-    );
-  }, sessionId);
-}
-
-async function appendPatch(page: Page, sessionId: string, id: string) {
-  return page.evaluate(
-    async ({ sessionId, id }) => {
-      const path = "/src/services/data-service.ts";
-      const { getDataService } = await import(path);
-      await getDataService().addStatePatch(sessionId, {
-        id,
-        sessionId,
-        summary: id,
-        packageName: "probe",
-        createdAt: "2026-01-01",
-      });
-    },
-    { sessionId, id },
-  );
-}
-
 async function saveForm(page: Page, sessionId: string, blockId: string) {
   return page.evaluate(
     async ({ sessionId, blockId }) => {
@@ -92,20 +65,6 @@ test("session display caches persist across tabs and stay deleted after late wri
       },
       { worldId, sessionId },
     );
-    expect(await readPatches(page, sessionId)).toEqual([]);
-    expect(await readPatches(second, sessionId)).toEqual([]);
-    await Promise.all([
-      appendPatch(page, sessionId, "first"),
-      appendPatch(second, sessionId, "second"),
-    ]);
-    expect((await readPatches(page, sessionId)).sort()).toEqual([
-      "first",
-      "second",
-    ]);
-    expect((await readPatches(second, sessionId)).sort()).toEqual([
-      "first",
-      "second",
-    ]);
     await Promise.all([
       saveForm(page, sessionId, "first"),
       saveForm(second, sessionId, "second"),
@@ -120,19 +79,12 @@ test("session display caches persist across tabs and stay deleted after late wri
     };
     expect(await readUiCache(page, sessionId)).toEqual(expectedUiCache);
     await page.reload();
-    expect((await readPatches(page, sessionId)).sort()).toEqual([
-      "first",
-      "second",
-    ]);
     expect(await readUiCache(page, sessionId)).toEqual(expectedUiCache);
     await page.evaluate(async (sessionId) => {
       const path = "/src/services/data-service.ts";
       const { getDataService } = await import(path);
       await getDataService().deleteSession(sessionId);
     }, sessionId);
-    await expect(appendPatch(second, sessionId, "late")).rejects.toThrow(
-      "Session not found",
-    );
     await expect(saveForm(second, sessionId, "late")).rejects.toThrow(
       "Session not found",
     );
@@ -140,7 +92,6 @@ test("session display caches persist across tabs and stay deleted after late wri
       "Session not found",
     );
     await second.reload();
-    expect(await readPatches(second, sessionId)).toEqual([]);
     expect(await readUiCache(second, sessionId)).toEqual({
       forms: { ids: [], values: {} },
       steps: [],

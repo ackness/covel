@@ -100,7 +100,6 @@ beforeEach(() => {
     messages: [],
     messagesCursor: "latest-cursor",
     characters: [],
-    gameState: {},
     characterSchema: null,
     executionSteps: [],
     submittedInteractions: [],

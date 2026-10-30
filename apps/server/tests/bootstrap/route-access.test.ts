@@ -84,7 +84,6 @@ const ROUTES: Record<string, RouteAccess> = {
   "PATCH /api/sessions/:id/seats/:seatId": SESSION,
   "GET /api/sessions/:id/action-kinds": SESSION,
   "GET /api/sessions/:id/state": SESSION,
-  "GET /api/sessions/:id/state-patches": SESSION,
   "GET /api/sessions/:id/messages": SESSION,
   "GET /api/sessions/:id/messages/page": SESSION,
   "POST /api/sessions/:id/messages/sync": SESSION,

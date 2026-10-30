@@ -58,7 +58,7 @@ Usage is simple: put the writes that must succeed or fail together into `fn`, an
 
 **Message IDs cannot repeat.** A normal `addMessage` insert rejects a global message ID that is already taken, even if another session holds it. The rejection does not change the existing row. When an error leaves a transaction callback, the earlier writes roll back. A failed savepoint rolls back only its own writes. The other method, `commitPlayerInputMessage`, keeps its own explicit "idempotent takeover" rule.
 
-**Append-only record IDs cannot repeat.** The IDs of turn results, tool calls, runtime outputs, interaction records, state changes, events, traces, turn messages, player inputs and session summaries are global primary keys. On every backend, writing an existing ID again is an error, and the existing row is unchanged.
+**Append-only record IDs cannot repeat.** The IDs of turn results, tool calls, runtime outputs, interaction records, events, traces, turn messages, player inputs and session summaries are global primary keys. On every backend, writing an existing ID again is an error, and the existing row is unchanged.
 
 **A batch of lorebook entries is atomic.** If one entry in an `upsertLorebookEntries` batch fails (for example, its ID contains U+0000), nothing in the batch is written.
 

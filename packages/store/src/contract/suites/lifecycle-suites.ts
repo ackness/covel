@@ -598,7 +598,6 @@ export function registerLifecycleStoreSuites(getStore: () => DataStore): void {
       expect(await store.getSnapshot(snapshot.id)).toEqual(snapshot);
     });
     it.each([
-      "stateSchemas",
       "runtimeExports",
       "sessionSummaries",
       "compactedMessageSummaryIds",

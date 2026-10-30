@@ -31,7 +31,6 @@ import { createPgSessionRecords } from "./pg-session-records.js";
 import { createPgSnapshotRecords } from "./pg-snapshot-records.js";
 import { DROP_ALL_SQL } from "./pg-schema-ddl.js";
 import { bootPgSchema, SCHEMA_META_TABLE } from "./pg-schema-boot.js";
-import { createPgStateRecords } from "./pg-state-records.js";
 import { createPgVectorCapability } from "./pg-vector.js";
 import { createPgWorldRecords } from "./pg-world-records.js";
 import { createPgServerSettingRecords } from "./pg-server-setting-records.js";
@@ -55,7 +54,6 @@ function buildPgData(
   const data = {
     ...createPgSessionRecords(getDb),
     ...createPgRuntimeRecords(getDb),
-    ...createPgStateRecords(getDb),
     ...createPgSessionContentRecords(getDb),
     ...createPgDataCrud(getDb),
     ...createPgWorldRecords(getDb),

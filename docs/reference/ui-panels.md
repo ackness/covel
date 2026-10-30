@@ -266,7 +266,7 @@ contributes:
 | `emptyState.message`   | 数据为空时显示的提示，见[空状态渲染](#空状态渲染)                                                                                                                         |
 | `view`                 | 界面本身：一棵用 catalog 组件搭成的树。Web 界面只执行这种声明式的 spec；`.tsx`、`.js` 等不是 JSON 的界面声明不受支持，API 会给出诊断并把这一项去掉                        |
 
-会话来源随完整快照和已提交的角色/schema 事件更新，不要求插件镜像数据。插件的状态表只放在前端 `gameState.tables`；角色、角色 schema 和维度等 World Model 字段独立保留在顶层。维度快照不合规时，面板显示局部提示；开场画面仍显示世界名和标签。
+会话来源随完整快照和已提交的角色/schema 事件更新，不要求插件镜像数据。角色、角色 schema 和维度等 World Model 字段独立保留在顶层。维度快照不合规时，面板显示局部提示；开场画面仍显示世界名和标签。
 
 **`_jobs`：后台任务的虚拟数据源。** 把 `dataSource.namespace` 写成 `_jobs`，面板拿到的是这个插件的后台手动任务和事件任务（由 `_runtime_jobs` 映射而来）。它以 jobId 为键，值里有：
 

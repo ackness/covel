@@ -16,9 +16,6 @@ import type {
   SessionSummaryRecord,
   SetupAttemptRecord,
   SnapshotRecord,
-  StateChangeRecord,
-  StateEntryRecord,
-  StateSchemaRecord,
   SuspensionRecord,
   ToolCallRecordRow,
   TraceEventRecord,
@@ -61,9 +58,6 @@ export interface MemoryState {
   readonly sessions: Map<string, SessionRecord>;
   readonly turnResults: TurnResultRecord[];
   readonly toolCalls: ToolCallRecordRow[];
-  readonly stateSchemas: StateSchemaRecord[];
-  readonly stateEntries: Map<string, StateEntryRecord>;
-  readonly stateChanges: StateChangeRecord[];
   readonly events: EventRecord[];
   readonly messages: MessageRecord[];
   /** Global message ID -> messages offset; deletion and rollback preserve alignment. */

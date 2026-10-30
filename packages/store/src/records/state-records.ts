@@ -1,37 +1,8 @@
 /**
- * State, event, message and character record types.
+ * Event, message and character record types.
  *
  * Split out of `../types.ts` by domain; re-exported there as the public entry point.
  */
-
-export interface StateSchemaRecord {
-  readonly id: string;
-  readonly sessionId: string;
-  readonly tableName: string;
-  readonly schema: unknown; // JSON — StateTableSchema
-  readonly createdAt: string;
-}
-
-export interface StateEntryRecord {
-  readonly id: string;
-  readonly sessionId: string;
-  readonly tableName: string;
-  readonly fieldName: string;
-  readonly value: unknown; // JSON
-  readonly updatedAt: string;
-}
-
-export interface StateChangeRecord {
-  readonly id: string;
-  readonly sessionId: string;
-  readonly tableName: string;
-  readonly fieldName: string;
-  readonly value: unknown; // JSON
-  readonly changedBy: string;
-  readonly turnId: string;
-  readonly reason?: string;
-  readonly createdAt: string;
-}
 
 export interface EventRecord {
   readonly id: string;

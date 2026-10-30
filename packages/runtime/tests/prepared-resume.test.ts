@@ -156,9 +156,6 @@ describe("prepared resume host API", () => {
     expect(
       (await store.getSession(input.sessionId))?.completedPlayerTurns,
     ).toBe(0);
-    expect(
-      await store.getStateEntry(input.sessionId, "stats", "hp"),
-    ).toBeNull();
   });
   it("counts a player turn only when its suspended recursive child finally commits", async () => {
     const { store, child, deps, execution, suspension } =

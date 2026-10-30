@@ -501,16 +501,6 @@ export function registerPersistenceStoreSuites(
             updatedAt: ts(),
           },
         ],
-        stateEntries: [
-          {
-            id: "se-1",
-            sessionId: "sess-snap-pay",
-            tableName: "stats",
-            fieldName: "hp",
-            value: 100,
-            updatedAt: ts(),
-          },
-        ],
         pluginData: [
           {
             id: "pd-1",
@@ -538,7 +528,6 @@ export function registerPersistenceStoreSuites(
       expect(result).not.toBeNull();
       expect(result!.payload.characters).toHaveLength(1);
       expect(result!.payload.characters[0]!.name).toBe("Hero");
-      expect(result!.payload.stateEntries[0]!.value).toBe(100);
       expect(result!.payload.pluginData[0]!.value).toEqual({ a: 1 });
       expect(result!.payload.sessionSummaries).toEqual([
         expect.objectContaining({ id: "summary-1" }),

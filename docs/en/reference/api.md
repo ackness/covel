@@ -36,7 +36,7 @@ This page lists every endpoint, request field, response, and error code. Use it 
 | Answer a form or choice shown during a turn | `POST /api/actions` (`submit_actions`) | [Player interaction](#player-interaction) |
 | See which actions a session accepts | `GET /api/sessions/:id/action-kinds` | [Action kind catalogue](#action-kind-catalogue) |
 | Read the chat history | `GET /api/sessions/:id/messages` | [Message history](#message-history) |
-| Read state tables and characters | `GET /api/sessions/:id/state`, `/characters` | [State query](#state-query), [Character data](#character-data) |
+| Read the database view of session, characters and plugin data | `GET /api/sessions/:id/state`, `/characters` | [State query](#state-query), [Character data](#character-data) |
 | Turn plugins on or off for a session | `PUT` / `DELETE /api/sessions/:id/plugins/:pluginId` | [Session plugin management](#session-plugin-management) |
 | Call a plugin's manual feature | `POST /api/sessions/:id/plugin-rpc` | [Plugin RPC channel](#plugin-rpc-channel) |
 | Approve or reject a plugin's request | `POST /api/approvals/:approvalId/decision` | [RPC approval flow](#rpc-approval-flow) |
@@ -480,9 +480,6 @@ curl -N -X POST http://localhost:3001/api/actions \
 ### 8. Check the game state
 
 ```bash
-# Check the state tables
-curl http://localhost:3001/api/sessions/<sessionId>/state
-
 # Check the character list
 curl http://localhost:3001/api/sessions/<sessionId>/characters
 
@@ -809,12 +806,11 @@ The following describes the behavior of the web client itself. It is written for
 - The Dexie schema v5 upgrade keeps the existing list (including an empty list), and does not add the sample again.
 - Only an explicit clearing of the whole vault resets the initialization marker.
 
-**Display history, forms, and timeline cache.** These live in a separate cache database. They do not replace the checkpoint, and they do not replace game state.
+**Forms and timeline cache.** These live in a separate cache database. They do not replace the checkpoint, and they do not replace game state.
 
-- Display history for state changes: reads query IndexedDB directly. Each single append is merged in a read-write transaction, and counts as complete only after the transaction commits.
-- Appends and saves follow the world and session locks. After the queue ends, the code checks whether the session still exists. A late append or save fails, and does not rebuild the cache of a deleted session.
+- Saves follow the world and session locks. After the queue ends, the code checks whether the session still exists. A late save fails, and does not rebuild the cache of a deleted session.
 - Form and timeline saves copy their input before they are queued. Forms are merged inside a transaction. A timeline replaces the display snapshot.
-- Deleting a session (including cleaning up its sessions when a world is deleted) waits until the display history, form, and timeline caches are all cleaned up.
+- Deleting a session (including cleaning up its sessions when a world is deleted) waits until the form and timeline caches are all cleaned up.
 - A cache failure does not undo a committed game state or a session delete. When cleanup fails, a warning is printed in development. A second delete can retry the cleanup.
 - Remote mode does not get this local vault lifecycle coordination.
 
@@ -1218,10 +1214,9 @@ Invalid requests return `400`; missing packages `404`; ambiguous world IDs `409`
 
 ### State query
 
-| Method | Path                              | Description                                        |
-| ------ | --------------------------------- | -------------------------------------------------- |
-| GET    | `/api/sessions/:id/state`         | Get all state tables                               |
-| GET    | `/api/sessions/:id/state-patches` | Get the list of state change patches (`{ items }`) |
+| Method | Path                      | Description                                            |
+| ------ | ------------------------- | ------------------------------------------------------ |
+| GET    | `/api/sessions/:id/state` | Read session, character and plugin-data virtual tables |
 
 To restore a whole session, use `GET /api/sessions/:id/view`. Creating, listing, and reading materialized saves all use the `/api/sessions/:id/snapshots` resource. See [Snapshot / Fork](#snapshot--fork).
 
@@ -4117,11 +4112,11 @@ When an error happens, the session is not changed.
 
 ### State query
 
-These read-only debug endpoints retain access to existing session-state tables and change records. The tables and store APIs are kernel-owned, with their future use undecided; plugins can no longer write them. Use plugin data for plugin-owned state. Snapshot, browser-vault, and fork handling of existing entries is preserved.
+The Database tab uses this read-only endpoint to inspect the session, characters and plugin data.
 
 #### `GET /api/sessions/:id/state`
 
-Returns all the state tables of this session and the data in them. Table names and data keys are kept with their original names, including legal JSON keys such as `__proto__`.
+Returns a `tables` database view: `session` is always present; `characters` appears when characters exist; public plugin data is grouped as `plugin_data/<pluginId>:<ns>`. Characters are keyed by character ID and plugin data by record key. Table names and data keys retain their original names, including legal JSON keys such as `__proto__`. The Database tab reads on mount and manual refresh.
 
 Rate limit: the same client can make at most 120 requests per minute to the same path. Going over returns `429` (`code: "rate_limit_exceeded"`, with `Retry-After`).
 
@@ -4136,28 +4131,53 @@ Rate limit: the same client can make at most 120 requests per minute to the same
 ```json
 {
   "tables": {
-    "character_stats": {
+    "session": {
       "schema": {
-        "name": "character_stats",
+        "name": "session",
         "fields": [
-          { "name": "hp", "type": "number", "default": 100 },
-          { "name": "mp", "type": "number", "default": 50 }
+          {
+            "name": "phase",
+            "type": "string"
+          }
         ]
       },
       "data": {
-        "hp": 85,
-        "mp": 42
+        "id": "session-1",
+        "phase": "playing"
       }
     },
-    "world_flags": {
+    "characters": {
       "schema": {
-        "name": "world_flags",
+        "name": "characters",
         "fields": [
-          { "name": "gate_opened", "type": "boolean", "default": false }
+          {
+            "name": "name",
+            "type": "string"
+          }
         ]
       },
       "data": {
-        "gate_opened": true
+        "hero": {
+          "id": "hero",
+          "name": "Hero",
+          "type": "player"
+        }
+      }
+    },
+    "plugin_data/example:notes": {
+      "schema": {
+        "name": "plugin_data/example:notes",
+        "fields": [
+          {
+            "name": "chapter",
+            "type": "object"
+          }
+        ]
+      },
+      "data": {
+        "chapter": {
+          "title": "Arrival"
+        }
       }
     }
   }
@@ -4555,7 +4575,7 @@ Saves the session's current state as a snapshot with `kind="manual"`.
 **What a snapshot contains**
 
 - The session's lifecycle and run settings: `status`, `phase`, `completedPlayerTurns`, `setupRuntimes`, `locale`, `activePlugins`, `runtimeModelOverrides`
-- `characters`, `stateEntries`, `pluginData`, `characterSchema`, `lorebookEntries`
+- `characters`, `pluginData`, `characterSchema`, `lorebookEntries`
 - `sessionSummaries`: the compressed summaries that the message cursor actually refers to
 - `compactedMessageSummaryIds`: the mapping from messages to summaries at the time of the snapshot
 - `suspensions`: suspended items that are not yet handled
@@ -4569,7 +4589,7 @@ Saves the session's current state as a snapshot with `kind="manual"`.
 
 **Snapshot format (v3)**
 
-- `stateSchemas`, `runtimeExports`, `sessionSummaries`, `compactedMessageSummaryIds`, and `displayMessagesBoundary` must all be present.
+- `runtimeExports`, `sessionSummaries`, `compactedMessageSummaryIds`, and `displayMessagesBoundary` must all be present.
 - An empty array, an empty map, and a chat boundary set to `null` each have a clear meaning. None of them means "missing".
 - Development-time snapshots that are missing fields must be rebuilt. The server does not migrate them, and it does not fill the gaps with the parent session's current state.
 - Storage writes, SQL reads, and browser checkpoints all use the same payload validation. A summary mapping must point to a summary that is actually in the snapshot. Otherwise the server rejects it.
@@ -4607,8 +4627,6 @@ Returns `201 Created`. The body is the player-visible view of the `SnapshotRecor
       "loreOverride": "The session's captured world lore."
     },
     "characters": [/* ... */],
-    "stateSchemas": [/* StateSchemaRecord[] */],
-    "stateEntries": [/* ... */],
     "runtimeExports": [/* RuntimeExportRecord[] */],
     "pluginData": [/* ... */],
     "characterSchema": null,
@@ -4751,9 +4769,7 @@ The details of each step follow.
 
 **Step 3: Copy the data**
 
-- What is copied: characters, state records, plugin data, the character schema, the state table structure, and suspended items that are not yet handled.
-- The snapshot fixes the table structure with the required `stateSchemas`. An empty array means there were no tables at that time. A fork rebuilds the table IDs and writes the child session's table structure into the child snapshot. Later changes to the parent session do not affect forks made from the snapshot afterward.
-- If any state record cannot find its matching table structure, the server returns `409 snapshot_schema_missing` and rolls back. It does not return a branch with incomplete state.
+- What is copied: characters, plugin data, the character schema, and suspended items that are not yet handled.
 - Control namespaces for background jobs and logs (`_runtime_jobs`, `_runtime_job_control`, `_logs`, `_jobs`) are not copied into the child session or the child snapshot.
 - Characters are isolated by `(sessionId, id)`. The copy keeps the character IDs, so references to characters in plugin data still work.
 - Vectors and ingestion cursors are derived data, so they are not copied directly. After the commit, the child session's index is rebuilt in the background.
@@ -4795,7 +4811,6 @@ Runtime export handling:
 | 404 | `not_found` | The snapshot does not exist, or does not belong to this session |
 | 404 | `world_not_found` | The world linked to the session no longer exists |
 | 409 | `cursor_missing` | The message that `messagesCursor` or the chat boundary points to is no longer in the parent session |
-| 409 | `snapshot_schema_missing` | A state record cannot find its matching table structure |
 | 409 | `dimension_provider_required` | The snapshot's dimension data belongs to a community plugin, and the child session cannot enable it |
 | 409 | `world_deleting` | The world linked to the session is being deleted |
 | 429 | `rate_limit_exceeded` | The fork rate limit was exceeded. Includes `Retry-After` |

@@ -94,12 +94,6 @@ interface RightPanelProps {
   sessionId: string;
   /** Currently loaded world — its `lore` (WORLD.md) is rendered in the World tab. */
   world: WorldRecord | null;
-  /**
-   * State change patches — only used as a freshness signal for the DB
-   * tab. We pass the length as `refreshKey` so the panel re-fetches
-   * whenever a new patch lands.
-   */
-  statePatchRevision: number;
 }
 
 /**
@@ -138,7 +132,6 @@ function OwnedRightPanel(props: RightPanelProps) {
 function SessionRightPanel({
   sessionId,
   world,
-  statePatchRevision,
   panelState,
 }: RightPanelProps & { panelState: RightPanelState }) {
   const { t, i18n } = useTranslation();
@@ -395,10 +388,7 @@ function SessionRightPanel({
                   </h3>
                 </div>
               )}
-              <DatabasePanel
-                sessionId={sessionId}
-                refreshKey={statePatchRevision}
-              />
+              <DatabasePanel sessionId={sessionId} />
             </TabsContent>
           )}
 

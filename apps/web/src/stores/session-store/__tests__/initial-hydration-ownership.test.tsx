@@ -93,7 +93,6 @@ function setup(batched = false) {
   } as unknown as SessionWorkspace;
   const ds = {
     listMessages: vi.fn(async () => []),
-    listStatePatches: vi.fn(async () => []),
     loadExecutionSteps: vi.fn(async () => []),
     loadSubmittedBlocks: vi.fn(async () => ({ ids: [], values: {} })),
   } as unknown as DataService;
@@ -180,7 +179,6 @@ beforeEach(() => {
     session,
     messages: [],
     characters: [],
-    gameState: {},
     executionSteps: [],
     submittedInteractions: [],
   });
@@ -477,7 +475,6 @@ it.each(["server", "local fallback"])(
           session,
           messages: [history],
           characters: [],
-          gameState: {},
           executionSteps: [],
           submittedInteractions: [],
         });
@@ -500,7 +497,7 @@ it.each(["restore", "reconnect"])(
       session,
       messages: [],
       characters: [],
-      gameState: { stats: { hp: 9, mp: 3 } },
+      characterSchema: { version: 9 },
       executionSteps: [],
       submittedInteractions: [],
       execution: { state: "idle" },
@@ -529,24 +526,22 @@ it.each(["restore", "reconnect"])(
       await (first === "restore" ? restoring : recovering);
     });
     expect(stateRef.current.gameState).toEqual({
-      characterSchema: null,
+      characterSchema: currentView.characterSchema,
       dimensions: {},
       dimensionSettlements: [],
-      tables: currentView.gameState,
       characters: [],
     });
     await act(async () => {
       (first === "restore" ? reconnect : initial).resolve({
         ...currentView,
-        gameState: { stats: { hp: 1 } },
+        characterSchema: { version: 1 },
       });
       await Promise.all([restoring, recovering]);
     });
     expect(stateRef.current.gameState).toEqual({
-      characterSchema: null,
+      characterSchema: currentView.characterSchema,
       dimensions: {},
       dimensionSettlements: [],
-      tables: currentView.gameState,
       characters: [],
     });
     expect(api.getSessionView).toHaveBeenCalledTimes(3);
@@ -567,14 +562,12 @@ it("accepts an empty authoritative initial view after committed state was delete
       session,
       messages: [],
       characters: [],
-      gameState: { stats: { hp: 1 } },
       executionSteps: [],
       submittedInteractions: [],
     });
     await restoring;
   });
   expect(stateRef.current.gameState).toEqual({
-    tables: {},
     characterSchema: null,
     dimensions: {},
     dimensionSettlements: [],
@@ -600,7 +593,6 @@ it("keeps newer contents for a shared message ID and adopts the initial history 
     pending.resolve({
       session,
       characters: [],
-      gameState: {},
       executionSteps: [],
       submittedInteractions: [],
       messagesCursor: "older-edge",
@@ -628,7 +620,6 @@ it("keeps the view's event cursor for the first subscription, and a new visit dr
     session,
     messages: [],
     characters: [],
-    gameState: {},
     executionSteps: [],
     submittedInteractions: [],
     eventCursor: "epoch:5",
@@ -644,38 +635,6 @@ it("keeps the view's event cursor for the first subscription, and a new visit dr
     await restore();
   });
   expect(stateRef.current.initialEventCursor).toBeNull();
-});
-
-it("does not rebuild deleted fields from cached patches after an authoritative empty snapshot", async () => {
-  api.getSessionView.mockRejectedValueOnce(new Error("offline"));
-  const pending =
-    deferred<Awaited<ReturnType<DataService["listStatePatches"]>>>();
-  const { restore, stateRef, sessionIdRef, dispatch, ds } = setup();
-  vi.mocked(ds.listStatePatches).mockReturnValueOnce(pending.promise);
-  const restoring = restore();
-  await waitFor(() => expect(ds.listStatePatches).toHaveBeenCalledOnce());
-  await rehydrateSessionSideState(session.id, sessionIdRef, dispatch);
-  await act(async () => {
-    pending.resolve([
-      {
-        id: "history-patch",
-        sessionId: session.id,
-        summary: "Earlier",
-        packageName: "plugin",
-        data: { stats: { hp: 1 } },
-        createdAt: session.createdAt,
-      },
-    ]);
-    await restoring;
-  });
-  expect(stateRef.current.gameState).toEqual({
-    tables: {},
-    characterSchema: null,
-    dimensions: {},
-    dimensionSettlements: [],
-    characters: [],
-  });
-  expect(stateRef.current.statePatches).toHaveLength(1);
 });
 
 it("applies the committed character-schema wire payload through the real reducer", () => {
@@ -698,7 +657,6 @@ it("applies the committed character-schema wire payload through the real reducer
   send("action", "character-schema.changed", payload);
   flush();
   expect(stateRef.current.gameState.characterSchema).toEqual(payload.schema);
-  expect(stateRef.current.hasGameStateSnapshot).toBe(false);
 });
 
 it("preserves independent character commits delivered before React publishes the next state ref", () => {
@@ -711,7 +669,6 @@ it("preserves independent character commits delivered before React publishes the
     send("action", "character.upserted", { character });
   flush();
   expect(stateRef.current.gameState.characters).toEqual(characters);
-  expect(stateRef.current.hasGameStateSnapshot).toBe(false);
 });
 
 it.each([

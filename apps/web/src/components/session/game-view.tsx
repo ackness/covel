@@ -123,7 +123,6 @@ export function GameView({
     worldDataNotices,
     presets,
     llmConfig,
-    statePatchRevision,
     executionSteps,
     worldSessions,
     submittedBlockIds,
@@ -437,7 +436,6 @@ export function GameView({
             panelState={rightPanelState}
             sessionId={session.id}
             world={world}
-            statePatchRevision={statePatchRevision}
           />
         </DialogContent>
       </Dialog>
@@ -806,7 +804,6 @@ export function GameView({
                 panelState={rightPanelState}
                 sessionId={session.id}
                 world={world}
-                statePatchRevision={statePatchRevision}
               />
             </ResizablePanel>
           </>
