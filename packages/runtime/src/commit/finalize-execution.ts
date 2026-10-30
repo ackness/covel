@@ -541,7 +541,9 @@ async function terminalizeExecutionJobs(
       const rolledBack = status === "failed";
       // A runtime that reported jobs and has no result here was a
       // `ctx.recursiveCall` child of a parent that did not succeed: its work
-      // was not committed and nobody failed it.
+      // was not committed and nobody failed it, so a success it claimed is
+      // taken back too.
+      const discarded = !rolledBack && !statusByRuntime.has(group.runtimeId);
       const outcome: ExecutionJobOutcome = rolledBack
         ? continued
           ? "suspended"
@@ -558,7 +560,11 @@ async function terminalizeExecutionJobs(
           pluginId: group.pluginId,
           runtimeId: group.runtimeId,
         },
-        { outcome, reportedJobs: [...group.jobIds], rolledBack },
+        {
+          outcome,
+          reportedJobs: [...group.jobIds],
+          rolledBack: rolledBack || discarded,
+        },
       );
     }
   } catch (err) {

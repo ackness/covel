@@ -319,6 +319,13 @@ export interface SuspensionRecord {
      */
     readonly executionContext: ExecutionContext;
     /**
+     * The `ctx.progress` scope the suspended runtime reported under, when it
+     * is not its own execution: a `ctx.recursiveCall` child reports under the
+     * root execution's scope. Resume, re-suspension and abandon settle the
+     * runtime's tasks there. Absent means `executionContext.executionId`.
+     */
+    readonly progressScopeId?: string;
+    /**
      * What the suspension was taken under. A resume that finds the session or
      * the plugin changed since then is voided instead of running on stale
      * state (`suspensionOutdatedReason` in `@covel/runtime`).

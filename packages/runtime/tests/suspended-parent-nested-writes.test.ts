@@ -59,6 +59,10 @@ function manifest(
 const parent = manifest("parent", { trigger: { type: "auto" } });
 const child = manifest("child");
 const runtimes = [parent, child];
+const storyRuntime = manifest("story", {
+  outputKind: "story",
+  trigger: { type: "auto" },
+});
 
 const ok = (value: Record<string, JsonValue> = {}): HandlerResult => ({
   outcome: "success",
@@ -115,6 +119,12 @@ async function fixture(
     readonly hookPipeline?: HookPipeline;
     /** The child declares `output.recordAs` and loads with an output schema. */
     readonly exportingChild?: boolean;
+    /** A story runtime that succeeds beside the parent. */
+    readonly story?: boolean;
+    /** Commit isolation: the reason to reject a proposal, if any. */
+    readonly proposalGuard?: (proposal: {
+      readonly payload: unknown;
+    }) => string | undefined;
   } = {},
 ) {
   const childRuntime = options.exportingChild
@@ -122,7 +132,11 @@ async function fixture(
         output: { recordAs: "pick", schema: "./output.json" },
       })
     : child;
-  const runtimes = [parent, childRuntime];
+  const runtimes = [
+    parent,
+    childRuntime,
+    ...(options.story ? [storyRuntime] : []),
+  ];
   const store = createMemoryStore();
   await store.createSession({
     id: SESSION,
@@ -150,6 +164,8 @@ async function fixture(
   const childBody = options.child ?? childHandler;
   const handlers: Record<string, FunctionHandler> = {
     [parent.name]: parentHandler(options.suspends ?? true),
+    [storyRuntime.name]: async () =>
+      ok({ narrativeOutput: "The story goes on." }),
     [child.name]: async (ctx) => {
       childRuns.count += 1;
       return childBody(ctx);
@@ -174,6 +190,9 @@ async function fixture(
     store,
     execution,
     completion: { kind: "turn", turnId: input.turnId, durationMs: 0 },
+    ...(options.proposalGuard
+      ? { proposalGuard: options.proposalGuard as never }
+      : {}),
   });
   expect(outcome.status).toBe("committed");
   const keys = async () =>
@@ -417,6 +436,21 @@ function reportingChild(final?: "succeeded"): FunctionHandler {
   };
 }
 
+/** The child reports a task, asks, and finishes when it is answered. */
+const askingChild: FunctionHandler = async (ctx) => {
+  if (ctx.resumedFromSuspensionId !== undefined) return ok();
+  await ctx.progress?.report({
+    jobId: "child-job",
+    state: "running",
+    sequence: 1,
+  });
+  return {
+    outcome: "suspended",
+    reason: "The child asks",
+    resumeSchema: { type: "object" },
+  };
+};
+
 describe("progress of a suspended parent's nested calls", () => {
   type Fixture = Awaited<ReturnType<typeof fixture>>;
 
@@ -541,5 +575,94 @@ describe("progress of a suspended parent's nested calls", () => {
     );
     expect(resumed.result.status).toBe("failed");
     expect(await states(f, "child-job")).toEqual(["running", "waiting-input"]);
+  });
+
+  it("end failed, and the child's suspension is never saved, when the parent's unit is dropped at commit", async () => {
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const f = await fixture({
+      suspends: false,
+      child: askingChild,
+      story: true,
+      proposalGuard: (proposal) =>
+        (proposal.payload as { key?: unknown }).key === "A"
+          ? "parent rejected"
+          : undefined,
+    });
+    // The child did ask, the story committed, and the parent's unit did not.
+    expect(f.childRuns.count).toBe(1);
+    expect(f.execution.commit.suspensions).toHaveLength(1);
+    expect(f.suspension).toBeUndefined();
+    expect(await f.store.listSuspensions(SESSION)).toEqual([]);
+    expect(await f.keys()).toEqual([]);
+    const reported = await f.store.listJobStatus(SESSION, {
+      progressScopeId: f.execution.commit.executionContext.executionId,
+      jobId: "child-job",
+    });
+    expect(reported.map((record) => record.state)).toEqual([
+      "running",
+      "failed",
+    ]);
+  });
+
+  describe("when the child itself suspends and the parent succeeds", () => {
+    async function asked() {
+      const f = await fixture({ suspends: false, child: askingChild });
+      const saved = f.suspension!;
+      expect(saved.runtimeId).toBe(child.name);
+      const scope = f.execution.commit.executionContext.executionId;
+      // Its own execution identity is not the scope its task reports under.
+      expect(saved.pendingContinuation.executionContext.executionId).not.toBe(
+        scope,
+      );
+      const childStates = async () =>
+        (
+          await f.store.listJobStatus(SESSION, {
+            progressScopeId: scope,
+            jobId: "child-job",
+          })
+        ).map((record) => record.state);
+      expect(await childStates()).toEqual(["running", "waiting-input"]);
+      return { f, saved, childStates };
+    }
+
+    it("settles the child's task with its resume", async () => {
+      const { f, saved, childStates } = await asked();
+      expect(await f.store.claimSuspension(saved.id)).not.toBeNull();
+      const resumed = await resumeSuspendedRuntime(saved, {}, child, f.deps, {
+        activeRuntimes: f.runtimes,
+      });
+      expect(resumed.result.status).toBe("success");
+      const outcome = await commitExecution({
+        store: f.store,
+        execution: structuredClone(resumed),
+        completion: {
+          kind: "resume",
+          turnId: saved.turnId,
+          suspensionId: saved.id,
+          pluginId: saved.pluginId,
+          runtimeId: saved.runtimeId,
+        },
+      });
+      expect(outcome.status).toBe("committed");
+      expect(await childStates()).toEqual([
+        "running",
+        "waiting-input",
+        "succeeded",
+      ]);
+    });
+
+    it("cancels the child's task when the suspension is abandoned", async () => {
+      const { f, saved, childStates } = await asked();
+      const plan = await planSuspensionAbandon(f.store, saved);
+      await f.store.withTransaction((tx) =>
+        applySuspensionAbandonTx(tx, plan, timestamp),
+      );
+      await settleAbandonedSuspensionJobs({ store: f.store }, saved);
+      expect(await childStates()).toEqual([
+        "running",
+        "waiting-input",
+        "cancelled",
+      ]);
+    });
   });
 });

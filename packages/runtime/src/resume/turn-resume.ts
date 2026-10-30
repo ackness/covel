@@ -28,6 +28,7 @@ import {
   resolveRuntimeTimeoutMs,
 } from "../turn-executor/runtime-scaffold.js";
 import { restoreNestedResults } from "./suspended-nested-results.js";
+import { suspensionProgressScopeId } from "./suspension-progress-scope.js";
 import { throwIfTurnExecutionAborted } from "../turn-executor/turn-control.js";
 import type { TurnExecutorDeps } from "../turn-executor/turn-executor-types.js";
 
@@ -178,7 +179,7 @@ async function executeResumedRuntime(
   // A resumed run reports progress under the suspended execution, so the
   // resume that ends the chain settles every leg's jobs once and an abandon
   // cancels them.
-  const progressScopeId = inherited.executionId;
+  const progressScopeId = suspensionProgressScopeId(pendingContinuation);
   if (manifest.runtimeType === "function") {
     // Function continuations are deterministic handler invocations, not LLM
     // conversations. Feed resume data through the explicit handler context and

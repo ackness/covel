@@ -43,6 +43,7 @@ import {
   type SuspensionWriteReader,
 } from "./suspension-baseline.js";
 import { nestedRuntimesOf } from "./suspended-nested-results.js";
+import { suspensionProgressScopeId } from "./suspension-progress-scope.js";
 
 /**
  * Whether a suspension still waits for an answer: unresolved, or claimed by a
@@ -295,7 +296,7 @@ export async function settleAbandonedSuspensionJobs(
     deps,
     {
       sessionId: suspension.sessionId,
-      executionId: suspension.pendingContinuation.executionContext.executionId,
+      executionId: suspensionProgressScopeId(suspension.pendingContinuation),
       pluginId: suspension.pluginId,
       runtimeId: suspension.runtimeId,
       alsoSettle: nestedRuntimesOf(suspension),
@@ -323,8 +324,7 @@ export async function settleFailedResumeJobs(
 ): Promise<void> {
   await returnJobsToWaitingInput(deps, {
     sessionId: suspension.sessionId,
-    progressScopeId:
-      suspension.pendingContinuation.executionContext.executionId,
+    progressScopeId: suspensionProgressScopeId(suspension.pendingContinuation),
     runtimeIds: new Set([suspension.runtimeId, ...runtimeIds]),
   });
 }
