@@ -1,5 +1,6 @@
 // @vitest-environment node
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { PLUGIN_BRIDGE_SCRIPT } from "@covel/shared";
 import {
   connectPluginBridge,
   pluginFrameDocument,
@@ -261,10 +262,10 @@ it("the page bridge merges appends and ignores the stream lane without consented
     postMessage: vi.fn(),
     onmessage: undefined as ((event: { data: unknown }) => void) | undefined,
   };
-  const source = pluginFrameDocument("").match(
-    /<script>([\s\S]*?)<\/script>/,
-  )?.[1];
-  runInNewContext(source!, {
+  // Run the exact script the frame document embeds, without parsing HTML.
+  const source = PLUGIN_BRIDGE_SCRIPT;
+  expect(pluginFrameDocument("")).toContain(`<script>${source}</script>`);
+  runInNewContext(source, {
     window: page,
     parent,
     document: {},
