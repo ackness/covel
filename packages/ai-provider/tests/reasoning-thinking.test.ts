@@ -184,7 +184,7 @@ describe("openai-chat adapter — reasoning_content", () => {
     },
   );
 
-  it("omits tool_choice for DeepSeek v4 thinking requests", async () => {
+  it("sends automatic tool choice for DeepSeek v4 thinking requests", async () => {
     const captured = mockOpenAiChatResponse({
       choices: [
         {
@@ -223,13 +223,14 @@ describe("openai-chat adapter — reasoning_content", () => {
     const body = captured[0]?.body as Record<string, unknown>;
     expect(body.tools).toHaveLength(1);
     expect(body.thinking).toEqual({ type: "enabled" });
-    expect(body).not.toHaveProperty("tool_choice");
+    expect(body.tool_choice).toBe("auto");
   });
 
   it.each([
-    { model: "deepseek-flash", effort: undefined, expected: undefined },
-    { model: "deepseek-v4-pro", effort: undefined, expected: undefined },
-    { model: "deepseek-flash", effort: "high", expected: undefined },
+    // Thinking by default or by choice takes only automatic tool choice.
+    { model: "deepseek-flash", effort: undefined, expected: "auto" },
+    { model: "deepseek-v4-pro", effort: undefined, expected: "auto" },
+    { model: "deepseek-flash", effort: "high", expected: "auto" },
     { model: "deepseek-flash", effort: "disabled", expected: "required" },
   ])(
     "honors thinking mode for $model ($effort)",
@@ -319,7 +320,7 @@ describe("openai-chat adapter — reasoning_content", () => {
   });
 
   it.each(["deepseek-v4-flash", "deepseek-flash"])(
-    "omits tool_choice for streaming %s thinking requests",
+    "sends automatic tool choice for streaming %s thinking requests",
     async (model) => {
       let requestBody: Record<string, unknown> = {};
       vi.stubGlobal(
@@ -365,7 +366,7 @@ describe("openai-chat adapter — reasoning_content", () => {
 
       expect(requestBody.tools).toHaveLength(1);
       expect(requestBody.thinking).toEqual({ type: "enabled" });
-      expect(requestBody).not.toHaveProperty("tool_choice");
+      expect(requestBody.tool_choice).toBe("auto");
     },
   );
 

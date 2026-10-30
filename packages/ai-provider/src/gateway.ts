@@ -1191,7 +1191,7 @@ export function createGateway(deps: GatewayDependencies) {
         });
       }
     }
-    if (resolved.usesBuiltinAdapter && input.defaults) {
+    if (resolved.usesBuiltinAdapter) {
       metadata =
         withTextRequestDefaults(
           {

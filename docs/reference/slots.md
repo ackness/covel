@@ -463,7 +463,7 @@ Function runtime 不读取 `runtimeModelOverrides`。`ctx.gateway.generateText` 
 
 ## 思考强度
 
-“生成参数”页面按模型 ID 里的上游厂商名识别思考档位。例如服务商是 `openai`、模型 ID 是 `deepseek/deepseek-v4-flash` 时，仍然使用 DeepSeek 的 `关闭 / high / max` 档位。选项由模型能力决定，不假定各家的强度是等价的。
+“生成参数”页面列出的思考档位来自 [models.dev](https://models.dev) 目录和 Covel 的厂商规则（见[档位数据](#档位数据)）。请求方式按模型 ID 里的上游厂商名判断：例如服务商是 `openai`、模型 ID 是 `deepseek/deepseek-v4-flash` 时，仍然按 DeepSeek 的方式开关思考。选项由模型能力决定，不假定各家的强度是等价的。
 
 TOML 里用 `reasoningEffort` 设置模型的默认档位：
 
@@ -479,6 +479,7 @@ reasoningEffort = "disabled"
 - 取值和界面相同。runtime 不选档位，只能用 `agent.reasoning: false` 关闭思考。
 - 你只写一个通用的档位，适配器把它翻译成各家自己的字段。做法类似 AI SDK 顶层的 [`reasoning`](https://ai-sdk.dev/docs/ai-sdk-core/reasoning) 选项。
 - 模型不支持的档位会记录一条 warning，并沿用服务商的默认行为。
+- 什么都没选、而模型的默认档位是它最高且很慢的一档（`xhigh` 或 `max`）时，发送低一档。例如 Kimi K3.1 Pro 默认 `max`，没选档位时发送 `high`，否则每次调用都按最慢的档位思考。界面会写明这一点；要按模型自己的默认，选“服务商默认”。
 - 它和在“服务商与模型”页面给模型设置的思考档位是同一份默认值。
 - 需要直接写原生字段时，改用下文的 `providerOptions`。
 
@@ -498,8 +499,9 @@ reasoningEffort = "disabled"
 统一的 `reasoningEffort` 按接口协议转换：
 
 - **OpenAI Chat 和兼容接口**：`reasoning_effort`。
-  - DeepSeek 同时发送 `thinking.type`。
-  - Qwen 的开关使用 `enable_thinking`。
+  - 规则的 `format` 为 `thinking-type` 的（DeepSeek）同时发送 `thinking.type`，关闭时只发送 `thinking: { type: "disabled" }`。
+  - `format` 为 `enable-thinking` 的（Qwen）用 `enable_thinking` 开关思考。
+  - 目录里把关闭写成 `none` 的模型，在这两种写法下和 `disabled` 一样处理。
   - Qwen3.8 Chat 的原生档位 `low/medium/xhigh` 使用 `reasoning_effort`。
   - 已确认的 Qwen3.5–3.7 Max/Plus/Flash 使用 `thinking_budget` 预算预设（2048/8192/16384），界面写明 token 数值。预算预设不是服务商的原生档位，实际消耗可以少于预算。
   - 明确的档位会清掉继承来的预算，避免 Qwen3.8 同时发送两种参数。
@@ -512,7 +514,7 @@ reasoningEffort = "disabled"
   - 已识别的自适应思考模型选了档位时，启用 `thinking.type: "adaptive"`，默认请求可见的摘要 `display: "summarized"`。
   - 不能关闭思考的模型不显示关闭选项。
   - Claude 请求会移除和思考冲突的采样参数；关闭思考时清掉继承的 effort，避免组合后返回 400。
-  - DeepSeek 的 Anthropic 兼容接口同时发送 `thinking.type`。
+  - `format` 为 `thinking-type` 的（DeepSeek 的 Anthropic 兼容接口）同时发送 `thinking.type`。
 - **Gemini 原生 `generateContent`**：
   - Gemini 3 使用 `generationConfig.thinkingConfig.thinkingLevel`；Gemini 2.5 使用 `thinkingBudget`。
   - 3 Pro 只有 low/high；3.1 Pro 是 low/medium/high；3 Flash、3.5/3.6 Flash 和 3.1/3.5 Flash-Lite 是 minimal/low/medium/high；3.7/3.8 Flash 是 low/medium/high。
@@ -521,48 +523,85 @@ reasoningEffort = "disabled"
   - 未知的 Gemini 型号不猜测档位。
   - Google 的 OpenAI 兼容接口仍然发送 `reasoning_effort`。其中 `minimal` 在 3.1 Pro 上对应 low，在 2.5 上对应 1024 token。这不代表原生协议支持这些型号的 `minimal` 档位。
 
+**思考时的其他请求参数**
+
+有些模型思考时不接受某些参数，Covel 按数据调整请求，而不是在代码里写厂商判断：
+
+- **工具选择**：思考中的模型可能拒绝强制调用某个工具。DeepSeek 思考时 `required` 和指定工具都会返回 400，只能用 `auto`；Kimi K3 系列只接受 `auto` 和 `required`。任务默认要求强制调用工具时，按规则或目录给出的可选项退一步：指定工具改成 `required`，不允许时改成 `auto`。关闭思考的请求不受影响。
+- **固定的采样参数**：目录标明模型自己决定温度或 Top P 的（如 GPT-5 及之后、Kimi K3），请求不发送这些参数。配置了值时，服务端对每个模型和参数记一次警告。
+- **思考时忽略的采样参数**：DeepSeek 思考时忽略温度、Top P、频率惩罚和存在惩罚。请求照常发送，设置页给出提示。
+
 **目前识别的档位**
 
-| 厂商        | 档位                                                                                           |
-| ----------- | ---------------------------------------------------------------------------------------------- |
-| OpenAI      | `none/minimal/low/medium/high/xhigh`；GPT-6 及之后的型号按名称识别，另有 `max`，不记录默认档位 |
-| Anthropic   | `low/medium/high/xhigh/max`，具体取决于模型                                                    |
-| Gemini      | 按型号和协议限定的子集，见上                                                                   |
-| xAI         | `low/medium/high`                                                                              |
-| DeepSeek V4 | `high/max`                                                                                     |
-| Qwen        | 关闭 / 开启、原生档位，或预算预设                                                              |
+档位由 models.dev 目录按“哪家服务商的接口”给出，同一个模型在不同中转上可以不同。下表是 Covel 自己维护的部分：
+
+| 厂商      | 档位                                                                          |
+| --------- | ----------------------------------------------------------------------------- |
+| OpenAI    | GPT-5 / o 系列按型号；OpenAI 自己的 Chat 接口上的 GPT-6 带工具时只能是 `none` |
+| Anthropic | `low/medium/high/xhigh/max`，具体取决于模型                                   |
+| Gemini    | 按型号和协议限定的子集，见上                                                  |
+| xAI       | `low/medium/high`，Grok 4.20 / multi-agent 另有 `xhigh`                       |
+| DeepSeek  | 关闭 / `high/max`，目录里有的型号加上目录给出的档位（如 `low`）               |
+| Qwen      | 关闭 / 开启、原生档位，或预算预设                                             |
 
 界面只列出目标模型已知支持的子集。没有识别的模型沿用服务商的默认行为。Gemini 的档位依据 [Google thinking 说明](https://ai.google.dev/gemini-api/docs/generate-content/thinking)和 [OpenAI 兼容映射](https://ai.google.dev/gemini-api/docs/openai)。
 
 #### 档位数据
 
-“哪个模型支持哪些档位”是数据，不是代码。
+“哪个模型支持哪些档位”是数据，不是代码。数据有两个来源：
 
-- 数据在 `packages/ai-provider/src/capability/reasoning-models.data.json`。它按服务商系列（`deepseek`、`anthropic`、`google`、`xai`、`qwen`、`openai`、`compatible`）列出模型名称的正则和对应的档位。
-- 代码（`reasoning-effort.ts` 里各协议的 wire）只负责把选中的档位写成该协议的请求字段。
-- 结构和 AI SDK 一致：先按模型名解析出能力，再由协议层写参数。区别是能力放在数据文件里。
+- **models.dev 目录**：`packages/ai-provider/src/capability/models-dev.data.json`，是 [models.dev](https://github.com/sst/models.dev)（MIT）v2 API 的裁剪快照。它按“模型 × 提供它的服务商”记录：能否开关思考、可选档位、默认档位、模型自己固定的采样参数，以及每种协议接受的工具选择。按型号的档位以它为准。
+- **Covel 的厂商规则**：`packages/ai-provider/src/capability/reasoning-models.data.json`。按服务商系列（`deepseek`、`anthropic`、`google`、`xai`、`qwen`、`openai`、`compatible`）记录请求怎么写（`format`）、思考时的限制，以及目录没有或写错的型号。
+
+代码（`reasoning-effort.ts` 里各协议的 wire）只负责把选中的档位写成该协议的请求字段。结构和 AI SDK 一致：先按模型解析出能力，再由协议层写参数。
+
+**取哪一份**
+
+1. 用户配置目录里 `reasoning-models.json` 的规则（见下文）。
+2. 内置规则里写了 `match` 或 `whenThinkingAlwaysOn`、且适用于这个模型的规则。
+3. models.dev 目录。目录没写默认档位时，用系列兜底规则（没有 `match` 的那条）的默认档位，前提是目录也列出了这一档；目录没说思考总是开启、也没列出关闭档位时，沿用兜底规则的 `disabled`。
+4. 系列的兜底规则。
+
+在目录里查模型时：
+
+- 先按完整 ID 查，再去掉聚合前缀（`deepseek/deepseek-v4-flash` → `deepseek-v4-flash`），再去掉快照后缀（`gpt-6-luna-2026-09-22`、`-20251001`、`@default`）。
+- 同一模型有多个服务商时，依次选：地址和槽位 `baseUrl` 相同的、服务商 ID 和槽位服务商相同的、模型出品方自己的、被最多服务商共用的那一份。
 
 每个系列的字段：
 
-| 字段               | 含义                                                                                                                                                                                                                                   |
-| ------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `model`            | 模型 ID（小写）匹配其中任一正则即属于该系列；按文件中的系列顺序判断                                                                                                                                                                    |
-| `provider`         | 没有任何系列的 `model` 匹配时，按服务商 ID 判断                                                                                                                                                                                        |
-| `known`            | 已确认支持档位的名称。系列写了 `known` 或 `tableFlag` 时，模型要先通过其中之一才读 `rules`                                                                                                                                             |
-| `tableFlag`        | LiteLLM 模型表把模型标为 `reasoning` 时也算通过（只在查询带上模型表特性时生效，即设置页的档位列表；请求路径只按名称判断）                                                                                                              |
-| `thinkingAlwaysOn` | 不能关闭思考的模型：不提供 `disabled`                                                                                                                                                                                                  |
-| `rules`            | 按顺序取第一条适用的规则。`match`（一个或多个正则，全部匹配）、`protocols`（适用的协议，`""` 表示未指定协议）、`providers`（槽位的服务商 ID 要匹配的正则）、`whenThinkingAlwaysOn`、`default`、`levels`、`parameterStyle`、`withTools` |
+| 字段               | 含义                                                                                                                                                                                                                                                   |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `model`            | 模型 ID（小写）匹配其中任一正则即属于该系列；按文件中的系列顺序判断                                                                                                                                                                                    |
+| `provider`         | 没有任何系列的 `model` 匹配时，按服务商 ID 判断                                                                                                                                                                                                        |
+| `known`            | 已确认支持档位的名称。系列写了 `known` 或 `tableFlag` 时，模型要先通过其中之一（或在目录里有档位）才读 `rules`                                                                                                                                         |
+| `tableFlag`        | LiteLLM 模型表把模型标为 `reasoning` 时也算通过（只在查询带上模型表特性时生效，即设置页的档位列表；请求路径只按名称判断）                                                                                                                              |
+| `thinkingAlwaysOn` | 不能关闭思考的模型：不提供 `disabled`。目录里没有开关、但写了非关闭默认档位的模型也算                                                                                                                                                                  |
+| `rules`            | 按顺序取第一条适用的规则。`match`（一个或多个正则，全部匹配）、`protocols`（适用的协议，`""` 表示未指定协议）、`providers`（槽位的服务商 ID 要匹配的正则）、`whenThinkingAlwaysOn`、`whenUnlisted`、`default`、`levels`、`parameterStyle`、`withTools` |
+
+系列和规则都可以写下面这些行为字段，规则的优先：
+
+| 字段                      | 含义                                                                                                                       |
+| ------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| `format`                  | 请求怎么写：`effort`（默认，只发档位）、`thinking-type`（另发 `thinking.type`）、`enable-thinking`（用 `enable_thinking`） |
+| `thinksByDefault`         | 请求里没有思考字段时模型也会思考。没写时取目录的默认档位                                                                   |
+| `toolChoiceWhileThinking` | 思考时接受的工具选择：`auto`、`required`、`named`。没写时取目录（只对思考总是开启的模型），再没有就只用 `auto`             |
+| `sampling`                | `ignoredWhileThinking`：思考时忽略温度等采样参数（只用于设置页提示）；`fixed`：模型自己决定、不发送的参数，没写时取目录    |
 
 - `levels` 的一项是档位名，或者 `{ "value", "budget", "protocols" }`。`budget` 表示这一档按思考 token 预算发送，`protocols` 表示只在这些协议上提供。
-- `parameterStyle` 在一个系列有多种写法时选其中一种：Anthropic 的 `adaptive`（同时发送 `thinking.type: "adaptive"`）和 Qwen 的 `effort`（同时发送 `reasoning_effort`）。
+- `parameterStyle` 在一个系列有多种写法时选其中一种：Anthropic 的 `adaptive`（同时发送 `thinking.type: "adaptive"`）和 `effort`（开关之外同时发送 `reasoning_effort`）。从目录读出、列了档位的规则都是 `effort`。
+- `whenUnlisted` 让规则只用于目录里没有档位的模型：给目录还没收录的新型号兜底，又不覆盖目录已有的数据。例如内置数据用它给未收录的 GPT-6 及之后型号提供 `none` 到 `max`。
 - `providers` 让规则只对某个服务商自己的接口生效。同一个模型经过中转时，中转的限制可能不同，所以这类规则按槽位声明的服务商 ID 区分，而不是按模型名。
 - `withTools` 是请求带函数工具时这个目标唯一接受的档位，第一个优先。带工具的请求选了别的档位、或者没选档位（这时服务商按模型默认档位处理）时，发送第一个。例如 OpenAI 自己的 Chat 接口对 GPT-6 模型规定：带函数工具时 `reasoning_effort` 只能是 `none`，所以内置数据给 `provider` 为 `openai`、协议为 `openai-chat-v1` 的 GPT-6 写了 `"withTools": ["none"]`。要在带工具时保留推理，OpenAI 的槽位请用 `openai-responses-v1`。服务端加载 `llm.toml` 时，对受这类规则影响的槽位记一条警告。
 
-**为什么由人工维护**
+**刷新目录**
 
-LiteLLM 模型表只提供 `reasoning` 这一个标记。它的 `supports_*_reasoning_effort`、`reasoning_effort_levels` 等字段目前只覆盖部分 OpenAI、Anthropic 和少数其他模型；Gemini 只有个别条目；Qwen、DeepSeek、xAI 没有；也不包含预算预设和各协议的差异。所以档位数据由人工维护，每周的模型表刷新不会改动它。
+```bash
+pnpm --filter @covel/ai-provider update-models-dev
+```
 
-刷新会重新生成 `packages/ai-provider/tests/__snapshots__/reasoning-characterization.snap.txt`。这个文件记录每个模型名称在每个协议下得到的档位和请求字段，它的 diff 就是“新模型落在哪一类”的清单。
+它从 models.dev 拉取 v2 API，只保留上面这些字段（每行一个模型，diff 可读），写入 `models-dev.data.json`，并重新生成 `packages/ai-provider/tests/__snapshots__/reasoning-characterization.snap.txt`。这个快照记录每个模型名称在每个协议下得到的档位和请求字段，它的 diff 就是“哪些模型的行为变了”的清单，提交前要逐组看。发版和运行时只读已提交的文件，不访问网络。
+
+LiteLLM 模型表只提供 `reasoning` 这一个标记，不包含档位、默认值和各服务商的差异，所以不用它判断档位；每周的模型表刷新也不会改动这两份数据。
 
 **不等发版就给新模型加档位**
 
@@ -573,18 +612,25 @@ LiteLLM 模型表只提供 `reasoning` 这一个标记。它的 `supports_*_reas
   "families": [
     {
       "id": "compatible",
-      "rules": [{ "match": "kimi-k3", "levels": ["low", "high", "max"] }]
+      "rules": [
+        {
+          "match": "acme-reasoner",
+          "default": "high",
+          "levels": ["disabled", "low", "high"],
+          "format": "thinking-type"
+        }
+      ]
     }
   ]
 }
 ```
 
-- 这个文件里的规则先于内置规则读取，并且不经过 `known` / `tableFlag`。所以每条规则必须写 `match`。
+- 这个文件里的规则先于内置规则和目录读取，并且不经过 `known` / `tableFlag`。所以每条规则必须写 `match`。
 - `model`、`provider`、`thinkingAlwaysOn` 追加到内置列表。`known` 和 `tableFlag` 不能写。
 - 文件无效时记一条警告，只使用内置数据。
 - 没有设置 `COVEL_USER_CONFIG_DIR` 的部署（源码开发、Docker）不读取这个文件。
 
-没有任何规则命中的模型，行为不变：
+没有任何规则命中、目录里也没有的模型，行为不变：
 
 - 属于某个已命名系列的，不发送思考字段。
 - 属于 `compatible` 系列的（名称和服务商都不属于任何系列），按所选档位原样发送。在这个系列里加了规则的模型，只发送规则列出的档位。

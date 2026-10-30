@@ -1299,7 +1299,15 @@
     "reasoningBudgetHint": "These levels are reasoning budgets set by the app, not native model effort levels. Actual reasoning may use fewer tokens.",
     "reasoningEffortHint": "Levels are limited to those recognised for the current {{family}} model.",
     "reasoningUnavailable": "No adjustable reasoning level was detected. You can inherit settings or use provider defaults.",
-    "deepseekReasoningSamplingHint": "DeepSeek ignores temperature, Top P, frequency penalty, and presence penalty while thinking is enabled.",
+    "reasoningSamplingIgnoredHint": "This model ignores temperature, Top P, frequency penalty, and presence penalty while thinking is enabled.",
+    "reasoningSamplingFixedHint": "This model sets {{parameters}} itself; values configured here are not sent.",
+    "reasoningRequestDefaultHint": "With no level chosen, Covel sends {{level}}: the model's own default, {{defaultLevel}}, is its slowest level.",
+    "samplingParameter": {
+      "temperature": "temperature",
+      "topP": "Top P",
+      "frequencyPenalty": "frequency penalty",
+      "presencePenalty": "presence penalty"
+    },
     "reasoningFamily": {
       "openai": "OpenAI",
       "anthropic": "Anthropic",

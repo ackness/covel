@@ -41,6 +41,7 @@ import {
 import { applyCapabilityFallback } from "./capability-fallback.js";
 import {
   openAiResponsesReasoningFields,
+  reasoningControlsFor,
   reasoningRequestFields,
   type ReasoningRequestShape,
 } from "../reasoning-effort.js";
@@ -122,7 +123,13 @@ function extractResponsesParameterOverrides(
   shape: ReasoningRequestShape = {},
 ): Record<string, unknown> {
   const fields = {
-    ...extractParameterOverrides(meta, RESPONSES_PARAMETER_FIELD_MAP),
+    ...extractParameterOverrides(
+      meta,
+      RESPONSES_PARAMETER_FIELD_MAP,
+      reasoningControlsFor(context, "openai-responses-v1", model).sampling
+        ?.fixed,
+      model,
+    ),
     ...reasoningRequestFields(
       openAiResponsesReasoningFields,
       meta,
@@ -460,7 +467,7 @@ export function createOpenAiResponsesAdapter(): ModelProviderAdapter {
 
   return {
     async generateText(config, params, context) {
-      params = withTextRequestDefaults(params);
+      params = withTextRequestDefaults(params, context, "openai-responses-v1");
       const messages = applyCapabilityFallback(params.messages, context);
       const body = responsesRequestBody(config, params, messages, context);
       if (params.responseFormat)
@@ -471,6 +478,7 @@ export function createOpenAiResponsesAdapter(): ModelProviderAdapter {
           params.defaults,
           body,
           "responses",
+          reasoningControlsFor(context, "openai-responses-v1", params.model),
         );
       }
       const response = await postResponses(config, body);
@@ -565,7 +573,7 @@ export function createOpenAiResponsesAdapter(): ModelProviderAdapter {
     },
 
     async *streamText(config, params, context) {
-      params = withTextRequestDefaults(params);
+      params = withTextRequestDefaults(params, context, "openai-responses-v1");
       const messages = applyCapabilityFallback(params.messages, context);
       const body = responsesRequestBody(config, params, messages, context);
       body.stream = true;
@@ -577,6 +585,7 @@ export function createOpenAiResponsesAdapter(): ModelProviderAdapter {
           params.defaults,
           body,
           "responses",
+          reasoningControlsFor(context, "openai-responses-v1", params.model),
         );
       }
       const response = await postResponses(config, body);

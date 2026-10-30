@@ -17,6 +17,8 @@ tests/llm-replay/*/recording/
 apps/desktop/staging/
 apps/web/src/routeTree.gen.ts
 packages/ai-provider/data/model-db.json
+# One model per line keeps catalog refresh diffs reviewable.
+packages/ai-provider/src/capability/models-dev.data.json
 
 pnpm-lock.yaml
 skills-lock.json

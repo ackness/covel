@@ -1249,7 +1249,15 @@
     "reasoningBudgetHint": "这些档位是应用预设的思考预算，并非模型原生档位；实际思考长度可能短于预算。",
     "reasoningEffortHint": "已按 {{family}} 的接口规则列出当前模型支持的档位。",
     "reasoningUnavailable": "尚未识别到可调节的思考档位，可以继承设置或选择服务商默认。",
-    "deepseekReasoningSamplingHint": "DeepSeek 开启思考时会忽略温度、Top P、频率惩罚和存在惩罚。",
+    "reasoningSamplingIgnoredHint": "该模型开启思考时会忽略温度、Top P、频率惩罚和存在惩罚。",
+    "reasoningSamplingFixedHint": "该模型自行设定{{parameters}}，这里配置的值不会发送。",
+    "reasoningRequestDefaultHint": "未选择档位时，Covel 发送{{level}}：模型自己的默认档位{{defaultLevel}}是最慢的一档。",
+    "samplingParameter": {
+      "temperature": "温度",
+      "topP": "Top P",
+      "frequencyPenalty": "频率惩罚",
+      "presencePenalty": "存在惩罚"
+    },
     "reasoningFamily": {
       "openai": "OpenAI",
       "anthropic": "Anthropic",

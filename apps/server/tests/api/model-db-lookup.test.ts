@@ -30,7 +30,12 @@ describe("model database lookup", () => {
       reasoning: {
         family: "deepseek",
         defaultValue: "high",
-        options: [{ value: "disabled" }, { value: "high" }, { value: "max" }],
+        options: [
+          { value: "disabled" },
+          { value: "low" },
+          { value: "high" },
+          { value: "max" },
+        ],
       },
     });
   });

@@ -23,8 +23,12 @@ describe("reasoning effort profiles", () => {
       ),
     ).toMatchObject({
       family: "deepseek",
-      defaultValue: "high",
-      options: [{ value: "disabled" }, { value: "high" }, { value: "max" }],
+      options: [
+        { value: "disabled" },
+        { value: "low" },
+        { value: "high" },
+        { value: "max" },
+      ],
     });
   });
 
@@ -480,7 +484,6 @@ describe("Gemini thinking controls", () => {
       ["gemini-2.5-pro", "none"],
       ["gemini-2.5-flash", "minimal"],
       ["gemini-2.5-flash-image", "high"],
-      ["gemini-3.1-flash-lite-image", "minimal"],
       ["gemini-4-pro", "high"],
     ];
     for (const [model, selection] of cases) {

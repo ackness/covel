@@ -150,10 +150,21 @@ export type ReasoningProviderFamily =
   | "qwen"
   | "compatible";
 
+export type ReasoningSamplingParameter =
+  "temperature" | "topP" | "frequencyPenalty" | "presencePenalty";
+
 export interface ReasoningEffortProfile {
   family: ReasoningProviderFamily;
   options: Array<{ value: ReasoningEffort; thinkingBudgetTokens?: number }>;
   defaultValue?: ReasoningEffort;
+  /** Sent when no level is chosen: one below a costly top default. */
+  requestDefault?: ReasoningEffort;
+  sampling?: {
+    /** Sampling parameters the model ignores while it thinks. */
+    ignoredWhileThinking?: boolean;
+    /** Sampling parameters the model sets itself; never sent. */
+    fixed?: ReasoningSamplingParameter[];
+  };
 }
 
 /**

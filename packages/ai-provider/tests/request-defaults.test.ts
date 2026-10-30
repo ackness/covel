@@ -290,7 +290,11 @@ describe("runtime request defaults", () => {
       defaults: undefined,
     });
     expect(captured()).toHaveProperty("tool_choice", "auto");
-    expect(captured()).not.toHaveProperty("enable_thinking");
+    // Its own default (`xhigh`) is its highest level, so one below is sent.
+    expect(captured()).toMatchObject({
+      enable_thinking: true,
+      reasoning_effort: "medium",
+    });
   });
 
   it("applies the same defaults to streamed requests", async () => {

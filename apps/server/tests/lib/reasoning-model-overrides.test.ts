@@ -35,7 +35,7 @@ describe("user reasoning model entries", () => {
   });
 
   const levels = () =>
-    resolveReasoningEffortProfile("kimi-k3")?.options.map(
+    resolveReasoningEffortProfile("acme-reasoner")?.options.map(
       (option) => option.value,
     );
 
@@ -46,7 +46,7 @@ describe("user reasoning model entries", () => {
         families: [
           {
             id: "compatible",
-            rules: [{ match: "kimi-k3", levels: ["low", "high", "max"] }],
+            rules: [{ match: "acme-reasoner", levels: ["low", "high", "max"] }],
           },
         ],
       }),
