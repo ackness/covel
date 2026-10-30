@@ -18,7 +18,8 @@ export function splitLore(lore: string): readonly LorePart[] {
   let hidden = false;
   let text = "";
   for (const line of lore.match(/[^\n]*\n|[^\n]+$/g) ?? []) {
-    const marker = /^<!--\s*(\/?)\s*narrator[\s_-]*only\s*-->$/i.exec(
+    // Keep whitespace before the optional slash in a single quantifier.
+    const marker = /^<!--\s*(\/\s*)?narrator[\s_-]*only\s*-->$/i.exec(
       line.trim(),
     );
     if (!marker) {
@@ -27,7 +28,7 @@ export function splitLore(lore: string): readonly LorePart[] {
     }
     parts.push({ kind: "text", text, hidden }, { kind: "marker", text: line });
     text = "";
-    hidden = marker[1] !== "/";
+    hidden = marker[1] === undefined;
   }
   parts.push({ kind: "text", text, hidden });
   return parts;
@@ -50,7 +51,9 @@ export function replaceLoreFragment(
   replacement: string,
 ): string {
   if (!source.trim()) return `${replacement.trim()}\n`;
-  return `${/^\s*/.exec(source)![0]}${replacement.trim()}${/\s*$/.exec(source)![0]}`;
+  const leading = source.slice(0, source.length - source.trimStart().length);
+  const trailing = source.slice(source.trimEnd().length);
+  return `${leading}${replacement.trim()}${trailing}`;
 }
 
 /** Check the number and sequence of boundaries, not the meaning of the text. */

@@ -1849,7 +1849,9 @@ protocol = "openai-chat-v1"
           `<!-- narrator-only -->\n${secret}`,
           `${secret}\n<!-- narrator-only -->`,
         );
-        const dropped = protectedMd.replace(/<!--[^\n]*-->/g, "");
+        const dropped = protectedMd
+          .replaceAll("<!-- narrator-only -->", "")
+          .replaceAll("<!-- /narrator-only -->", "");
         const proposed =
           change === "hidden edit"
             ? hiddenEdit

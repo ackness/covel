@@ -80,7 +80,12 @@ describe("protected world revisions", () => {
     expect(result).toMatchObject({ success: true, lore: changed });
   });
   it.each([
-    ["missing markers", lore.replace(/<!--[^\n]*-->/g, "")],
+    [
+      "missing markers",
+      lore
+        .replaceAll("<!-- narrator-only -->", "")
+        .replaceAll("<!-- /narrator-only -->", ""),
+    ],
     [
       "extra region",
       `${lore}\n<!-- narrator-only -->\nAnother secret.\n<!-- /narrator-only -->`,
