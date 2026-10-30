@@ -1,3 +1,4 @@
+import { currentCharacterOf, primarySeat } from "@covel/plugin-handlers-utils";
 import {
   applySceneSetPreview,
   applyStageDirectionPreview,
@@ -92,9 +93,15 @@ export default function (covel) {
       );
       if (!current && !previews.length) return previous;
       let speakers = resolveStageSpeakers(current, []);
+      const seats = ctx.world.seats ?? [];
+      const viewpoint = currentCharacterOf(
+        primarySeat(seats),
+        ctx.world.characters,
+        seats,
+      );
       const characters = Object.fromEntries(
         ctx.world.characters
-          .filter((character) => character.type !== "player")
+          .filter((character) => character.id !== viewpoint?.id)
           .map((character) => [
             character.id,
             {

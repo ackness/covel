@@ -134,9 +134,18 @@ describe("stage UI projections", () => {
     expect(handlers.has("dialogue")).toBe(false);
   });
 
-  it("ignores player actor cues in the preview just as the direction handler does", async () => {
+  it("ignores viewpoint actor cues in the preview just as the direction handler does", async () => {
     const ctx = context(scenes);
-    ctx.world.characters.push({ id: "player", name: "Player", type: "player" });
+    ctx.world.characters.push({ id: "player", name: "Player", type: "npc" });
+    ctx.world.seats = [
+      {
+        id: "primary",
+        controller: "human",
+        role: "player",
+        characters: ["player"],
+        currentCharacterId: "player",
+      },
+    ];
     const value = await handlers.get("direction")(
       {
         previous: { actors: [oldActor], retainWhenEmpty: true },

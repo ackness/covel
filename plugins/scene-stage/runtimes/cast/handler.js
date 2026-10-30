@@ -1,8 +1,10 @@
 import {
+  currentCharacterOf,
   labelText,
   makeProposal,
   mentionedCharacterIds,
   pickLocaleText,
+  primarySeat,
   withPendingProposals,
 } from "@covel/plugin-handlers-utils";
 
@@ -23,6 +25,8 @@ export default async function handler(ctx) {
   const maxSpeakers = resolveMaxSpeakers(ctx.userSettings?.activeSpeakerCount);
 
   const characters = normalizeCharacters(ctx.world?.characters);
+  const seats = ctx.world?.seats ?? [];
+  const viewpoint = currentCharacterOf(primarySeat(seats), characters, seats);
   const [messages, previousCast] = await Promise.all([
     listRecentTextMessages(ctx.store, RECENT_MESSAGE_COUNT),
     readPreviousCast(ctx),
@@ -37,7 +41,7 @@ export default async function handler(ctx) {
   );
 
   const candidates = characters
-    .filter((character) => character.type !== "player")
+    .filter((character) => character.id !== viewpoint?.id)
     .map((character) =>
       scoreCharacter(character, {
         mentionedByPlayer: mentionedByPlayer.has(character.id),

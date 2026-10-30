@@ -1,7 +1,7 @@
 /**
  * Shared plugin_data names and the one rule that chooses a track.
  *
- * The two event runtimes only record facts — the mood, the scene — each under
+ * The runtimes only record facts — the mood, the scene — each under
  * its own key, so a turn that sets both cannot lose one to the other. The
  * track is chosen when the `stage.music@1` slot is projected, from those facts
  * and the world's track list. The same facts always give the same track, so a
@@ -56,6 +56,16 @@ function normalize(text) {
     .trim()
     .toLowerCase()
     .replace(/\s+/g, "");
+}
+
+/** Match a story mood to the world's spelling, including the silence cue. */
+export function matchMood(registry, mood) {
+  const wanted = normalize(mood);
+  if (wanted === SILENCE) return SILENCE;
+  return (
+    moodVocabulary(registry).find(({ id }) => normalize(id) === wanted)?.id ??
+    null
+  );
 }
 
 /**

@@ -17,3 +17,5 @@ runtimes/cue/RUNTIME.md:
   description: 记录故事当前的情绪，供背景音乐选曲。
 runtimes/scene/RUNTIME.md:
   description: 记录当前场景，供背景音乐选曲。
+runtimes/story-cues/RUNTIME.md:
+  description: 跟随故事的情绪和场景提示选择背景音乐。
