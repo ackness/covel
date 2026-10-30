@@ -100,6 +100,8 @@ Gives the world its own calendar. After each turn of the story ends, it judges f
 
 For an explicit destination, the tool calculates the difference from the current clock; otherwise it estimates activity duration. The model reads only this turn's story and current clock, excluding previous explanations.
 
+Harukaze Academy's time rules include its lunch, dismissal and club timetable so the model can resolve these transitions to destination times and include skipped classes and waiting.
+
 **What you will see**
 
 - The "World Time" panel: the current time.

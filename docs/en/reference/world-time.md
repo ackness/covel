@@ -90,6 +90,8 @@ Notes:
 | `prompt`      | The timing instructions that the author gives the model. It can be translated. For example, how long a conversation, sleep, or trip takes, and whether a memory affects the current time |
 | `randomRange` | `{min, max}`. Required in `random` mode. A closed range with signs, in base units. The absolute value cannot exceed `maxStep`                                                            |
 
+If the narrative skips to named times such as "lunch" or "after school", also put their timetable in `evolution.prompt`. The time model reads only this turn's narrative and the current clock definition; it does not separately consult `WORLD.md` or world rules. Harukaze Academy's time definition demonstrates a timetable and asks the model to include skipped classes and waiting in the elapsed interval.
+
 In `random` mode, the plugin draws the step through `ctx.random`. The model does not generate random numbers. With a fixed `COVEL_RANDOM_SEED`, the same script repeats its draw sequence regardless of session or turn IDs. Repeated tool calls in one turn reuse the buffered or saved result without drawing again.
 
 An example of a coarse backward time:
