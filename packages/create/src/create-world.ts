@@ -54,6 +54,12 @@ import {
   validateGeneratedCharacters,
 } from "./package-processor.js";
 import { mergeRevision, revisionRequest } from "./revision.js";
+import {
+  hasLoreBoundary,
+  LoreBoundaryError,
+  mergeProtectedLore,
+  splitLore,
+} from "./lore-boundaries.js";
 
 const MAX_RETRIES = 2;
 /** Least time between two progress reports of an answer that is growing. */
@@ -178,9 +184,17 @@ async function checkLore(
   options: CreateWorldOptions,
   signal: AbortSignal,
 ): Promise<Rejected | { readonly lore: string }> {
+  const protectedLore = hasLoreBoundary(splitLore(lore));
+  const reject = (errors: string[]): Rejected => {
+    if (protectedLore)
+      throw new LoreBoundaryError(
+        `${errors.join("; ")}. Protected WORLD.md was not replaced; a full-document retry could lose its hidden regions`,
+      );
+    return { errors };
+  };
   const normalizedLore = normalizeLoreDocument(lore, yamlData, locale);
   const loreStructureErrors = findLoreStructureErrors(normalizedLore);
-  if (loreStructureErrors.length > 0) return { errors: loreStructureErrors };
+  if (loreStructureErrors.length > 0) return reject(loreStructureErrors);
 
   const loreMetaErrors = findLoreMetaErrors(normalizedLore);
   if (loreMetaErrors.length === 0) return { lore: normalizedLore };
@@ -206,7 +220,7 @@ async function checkLore(
     if (!repair.success) {
       const repairError = `WORLD.md targeted repair failed: ${repair.error}`;
       log(options, "warn", repairError);
-      return { errors: [...loreMetaErrors, repairError] };
+      return reject([...loreMetaErrors, repairError]);
     }
 
     const repairedLore = normalizeLoreDocument(repair.lore, yamlData, locale);
@@ -219,7 +233,7 @@ async function checkLore(
         repairedErrors.length,
         "errors",
       );
-      return { errors: repairedErrors };
+      return reject(repairedErrors);
     }
     log(
       options,
@@ -231,17 +245,16 @@ async function checkLore(
     signal.throwIfAborted();
     if (
       err instanceof LlmIdleTimeoutError ||
-      err instanceof LlmIncompleteOutputError
+      err instanceof LlmIncompleteOutputError ||
+      err instanceof LoreBoundaryError
     )
       throw err;
     const repairError = `WORLD.md targeted repair LLM error: ${messageOf(err)}`;
     log(options, "error", repairError, err);
-    return {
-      errors: [
-        ...loreMetaErrors,
-        "WORLD.md repair request failed; check model configuration or server logs",
-      ],
-    };
+    return reject([
+      ...loreMetaErrors,
+      "WORLD.md repair request failed; check model configuration or server logs",
+    ]);
   }
 }
 
@@ -331,7 +344,10 @@ async function askUntilAccepted(args: {
     } catch (err) {
       signal.throwIfAborted();
       if (err instanceof LlmIdleTimeoutError) return silent(err);
-      if (err instanceof LlmIncompleteOutputError) {
+      if (
+        err instanceof LlmIncompleteOutputError ||
+        err instanceof LoreBoundaryError
+      ) {
         args.report({ state: "failed" });
         return { accepted: false, errors: [err.message], idleTimeout: false };
       }
@@ -364,7 +380,10 @@ async function askUntilAccepted(args: {
     } catch (err) {
       // A check may ask the model for a repair, which can stay silent too.
       if (err instanceof LlmIdleTimeoutError) return silent(err);
-      if (err instanceof LlmIncompleteOutputError) {
+      if (
+        err instanceof LlmIncompleteOutputError ||
+        err instanceof LoreBoundaryError
+      ) {
         args.report({ state: "failed" });
         return { accepted: false, errors: [err.message], idleTimeout: false };
       }
@@ -396,8 +415,6 @@ interface Draft {
   lorebook: readonly GeneratedWorldLorebookEntry[];
   rules: readonly GeneratedWorldLorebookEntry[];
   contractData: GeneratedContractData[];
-  /** The package lists as the model wrote them, shown to the later parts. */
-  packageSections: string[];
   warnings: string[];
 }
 
@@ -466,7 +483,6 @@ function listPart(kind: "characters" | "lorebook" | "rules"): PartPlan {
       if (kind === "characters") draft.characters = result.content.characters;
       else if (kind === "lorebook") draft.lorebook = result.content.lorebook;
       else draft.rules = withFreeIds(result.content.rules, draft.lorebook);
-      draft.packageSections.push(section);
       return [];
     },
   };
@@ -521,7 +537,6 @@ function contractPart(
       draft.warnings.push(...result.warnings);
       draft.contractData.push(...(result.content.contractData ?? []));
       draft.characters = result.content.characters;
-      draft.packageSections.push(section);
       return [];
     },
   };
@@ -605,15 +620,30 @@ function partRequest(plan: PartPlan, draft: Draft): string {
         ]
       : []),
     ...(draft.lore ? ["===WORLD_MD===", draft.lore] : []),
-    ...(draft.packageSections.length > 0
-      ? ["===WORLD_PACKAGE_YAML===", ...draft.packageSections]
+    ...(draft.characters.length +
+      draft.lorebook.length +
+      draft.rules.length +
+      draft.contractData.length >
+    0
+      ? [
+          "===WORLD_PACKAGE_YAML===",
+          stringifyYaml(
+            {
+              characters: draft.characters,
+              lorebook: draft.lorebook,
+              rules: draft.rules,
+              contractData: draft.contractData,
+            },
+            { lineWidth: 0 },
+          ).trim(),
+        ]
       : []),
   ];
   return [
     ...(written.length > 0
       ? [
           "",
-          "The parts that are written are below. Keep their names and facts. Do not write them again, and do not use an `id` that is in them.",
+          "The accepted parts are below. Keep their names and facts. Do not define a new record with an ID already used in its namespace (lorebook and rules share one). References to existing characters, dimensions or contract records must use their exact IDs. A character contract's key references a character; it does not define a new character. Do not write completed parts again.",
           "",
           ...written,
           "===END===",
@@ -635,7 +665,6 @@ async function writeNewWorld(
     lorebook: [],
     rules: [],
     contractData: [],
-    packageSections: [],
     warnings: [],
   };
   const plans = planParts(options, locale, signal);
@@ -728,6 +757,12 @@ async function reviseWorld(
   prompt: string,
   signal: AbortSignal,
 ): Promise<CreateResult> {
+  try {
+    splitLore(revision.current.lore);
+  } catch (error) {
+    if (!(error instanceof LoreBoundaryError)) throw error;
+    return { success: false, id: "unknown", errors: [error.message] };
+  }
   let part: WorldGenerationPart = { id: "revision", state: "pending" };
   const revised: { world?: CreateResult } = {};
 
@@ -738,7 +773,7 @@ async function reviseWorld(
     name: "revision",
     request: revisionRequest(revision),
     again:
-      `Regenerate the full package now. Start the answer with ===WORLD_YAML=== on the first line, ` +
+      `Correct the revision patch, preserving omitted items and UNCHANGED sections. Start the answer with ===WORLD_YAML=== on the first line, ` +
       `then ===WORLD_MD===, then ===WORLD_PACKAGE_YAML===, then ===END===. ` +
       `Do not use markdown code fences or any extra prose.`,
     take: async (content) => {
@@ -786,6 +821,10 @@ async function reviseWorld(
         signal,
       );
       if ("errors" in lore) return lore.errors;
+      const protectedLore = mergeProtectedLore(
+        revision.current.lore,
+        lore.lore,
+      );
 
       const id = checked.manifest.id as string;
       log(options, "info", `validation passed id=${id}`);
@@ -793,7 +832,7 @@ async function reviseWorld(
         success: true,
         id,
         manifest: checked.manifest,
-        lore: lore.lore,
+        lore: protectedLore,
         locale,
         packageContent: generatedPackage.content,
         warnings: [...checked.warnings, ...generatedPackage.warnings],
@@ -830,6 +869,7 @@ export async function createWorld(
     options.loadPrompt,
     options.dataContracts,
     options.packs,
+    options.revision,
   );
   log(
     options,

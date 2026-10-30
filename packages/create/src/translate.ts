@@ -1,5 +1,12 @@
 import type { LLMAdapter } from "@covel/shared";
 import { requestLlmResponse } from "./llm-request.js";
+import {
+  assertLoreFragment,
+  hasLoreBoundary,
+  LoreBoundaryError,
+  replaceLoreFragment,
+  splitLore,
+} from "./lore-boundaries.js";
 
 /** One text to translate, with an id the caller knows it by. */
 export interface TranslationUnit {
@@ -86,7 +93,7 @@ function buildPrompt(
     "- Give one translation for each id. Use the same ids.",
     "- Keep each placeholder as it is: {name}, {{name}}. Do not translate the name in it.",
     "- Keep Markdown marks, line breaks, emoji and leading symbols.",
-    "- Keep a line such as `<!-- narrator-only -->` as it is. It is a marker, not text.",
+    "- Do not add narrator-only marker lines. The caller preserves visibility boundaries outside each text.",
     "- Keep text in backticks as it is. It is an identifier.",
     "- Translate the meaning. Do not add an explanation and do not remove information.",
     "- A short label stays short.",
@@ -145,6 +152,12 @@ function translationOf(reply: unknown): string | undefined {
 function rejection(unit: TranslationUnit, value: unknown): string | undefined {
   const reply = translationOf(value);
   if (reply === undefined) return "no translation";
+  try {
+    assertLoreFragment(reply);
+  } catch (error) {
+    if (!(error instanceof LoreBoundaryError)) throw error;
+    return error.message;
+  }
   const source = placeholders(unit.text);
   const target = placeholders(reply);
   if (source.join() !== target.join())
@@ -158,10 +171,69 @@ function rejection(unit: TranslationUnit, value: unknown): string | undefined {
  * with the others that failed; what still fails is returned in `failed` and
  * is left for a person.
  *
- * The same text is translated once, however many units have it, so a name
- * that several files repeat gets one translation.
+ * Ordinary units with the same text share one translation. Protected lore
+ * uses isolated fragments instead; markers never belong to model output.
  */
 export async function translateTexts(
+  options: TranslateTextsOptions,
+): Promise<TranslateTextsResult> {
+  const plain: TranslationUnit[] = [];
+  const protectedUnits: {
+    unit: TranslationUnit;
+    parts: ReturnType<typeof splitLore>;
+  }[] = [];
+  const translations: Record<string, string> = {};
+  const failed: { id: string; reason: string }[] = [];
+  for (const unit of options.units) {
+    try {
+      const parts = splitLore(unit.text);
+      if (hasLoreBoundary(parts)) protectedUnits.push({ unit, parts });
+      else plain.push(unit);
+    } catch (error) {
+      if (!(error instanceof LoreBoundaryError)) throw error;
+      failed.push({ id: unit.id, reason: error.message });
+    }
+  }
+  let done = failed.length;
+  const result = await translatePlainTexts({
+    ...options,
+    units: plain,
+    onProgress: (count) =>
+      options.onProgress?.(done + count, options.units.length),
+  });
+  Object.assign(translations, result.translations);
+  failed.push(...result.failed);
+  done += plain.length;
+  for (const { unit, parts } of protectedUnits) {
+    const output: string[] = [];
+    let reason: string | undefined;
+    for (const part of parts) {
+      if (part.kind === "marker" || !part.text.trim()) {
+        output.push(part.text);
+        continue;
+      }
+      // One fragment per request: a visible response never shares a prompt
+      // with another fragment's hidden source or translated answer.
+      const result = await translatePlainTexts({
+        ...options,
+        units: [{ ...unit, text: part.text.trim() }],
+        onProgress: undefined,
+      });
+      const translated = result.translations[unit.id];
+      if (translated === undefined) {
+        reason = result.failed[0]?.reason ?? "no translation";
+        break;
+      }
+      output.push(replaceLoreFragment(part.text, translated));
+    }
+    if (reason) failed.push({ id: unit.id, reason });
+    else translations[unit.id] = output.join("");
+    options.onProgress?.(++done, options.units.length);
+  }
+  return { translations, failed };
+}
+
+async function translatePlainTexts(
   options: TranslateTextsOptions,
 ): Promise<TranslateTextsResult> {
   const first = new Map<string, TranslationUnit>();

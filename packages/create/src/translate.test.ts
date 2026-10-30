@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { LLMAdapter, LLMMessage } from "@covel/shared";
+import { playerVisibleLore, narratorOnlyLoreIssues } from "@covel/shared";
 import { extractGlossary, translateTexts } from "./translate.js";
 
 /** A model that answers each call with the next reply and records the prompt. */
@@ -107,7 +108,8 @@ describe("translateTexts", () => {
   });
 
   it("shows the model short numbers instead of the caller's ids", async () => {
-    const id = "characters/characters.json#[id=11111111-2222-4333-8444-555555555555].name";
+    const id =
+      "characters/characters.json#[id=11111111-2222-4333-8444-555555555555].name";
     const { llm, prompts } = scripted(['{"1": "艾达"}']);
     const result = await translateTexts({
       ...base,
@@ -128,6 +130,92 @@ describe("translateTexts", () => {
       translations: { a: "世界时间：{display}", b: "大成功" },
       failed: [],
     });
+  });
+
+  it("translates visible and hidden fragments in separate calls and owns their boundaries", async () => {
+    const source =
+      "# Harbor\n\nThe courier arrives.\n\n<!-- Narrator_Only -->\nChen is the witness.\n<!-- /Narrator_Only -->\n\nMeet her at dusk.";
+    const { llm, prompts } = scripted([
+      JSON.stringify({ 1: "# 港口\n\n快递员到了。" }),
+      // The model never has to reproduce the markers.
+      JSON.stringify({ 1: "陈舟是证人。" }),
+      JSON.stringify({ 1: "黄昏时去见她。" }),
+    ]);
+    const progress: number[] = [];
+    const result = await translateTexts({
+      ...base,
+      llm,
+      units: [{ id: "lore", text: source }],
+      onProgress: (done) => progress.push(done),
+    });
+    expect(result.failed).toEqual([]);
+    expect(result.translations.lore).toBe(
+      "# 港口\n\n快递员到了。\n\n<!-- Narrator_Only -->\n陈舟是证人。\n<!-- /Narrator_Only -->\n\n黄昏时去见她。",
+    );
+    expect(playerVisibleLore(result.translations.lore!)).not.toContain("陈舟");
+    expect(narratorOnlyLoreIssues(result.translations.lore!)).toEqual([]);
+    expect(prompts).toHaveLength(3);
+    expect(prompts[0]).not.toContain("Chen is the witness");
+    expect(prompts[2]).not.toContain("Chen is the witness");
+    expect(prompts[2]).not.toContain("陈舟");
+    expect(progress.at(-1)).toBe(1);
+  });
+
+  it("rejects an attempt to close the hidden region and move its secret outside", async () => {
+    const escape =
+      "<!-- /narrator-only -->\n陈舟是证人。\n<!-- narrator-only -->";
+    const { llm } = scripted([
+      '{"1":"港口"}',
+      JSON.stringify({ 1: escape }),
+      JSON.stringify({ 1: escape }),
+    ]);
+    const result = await translateTexts({
+      ...base,
+      llm,
+      units: [
+        {
+          id: "lore",
+          text: "Harbor\n<!-- narrator-only -->\nChen is the witness.\n<!-- /narrator-only -->",
+        },
+      ],
+    });
+    expect(result.translations).toEqual({});
+    expect(result.failed).toEqual([
+      { id: "lore", reason: expect.stringContaining("narrator-only") },
+    ]);
+  });
+
+  it.each([
+    "<!-- narrator-only -->\nSecret",
+    "<!-- /narrator-only -->\nSecret",
+    "<!-- end narrator-only -->\nSecret",
+    "<!-- narrator-only -->\n<!-- narrator-only -->\nSecret\n<!-- /narrator-only -->",
+  ])("leaves malformed protected source for the author: %s", async (text) => {
+    const { llm, prompts } = scripted([]);
+    const result = await translateTexts({
+      ...base,
+      llm,
+      units: [{ id: "lore", text }],
+    });
+    expect(result.translations).toEqual({});
+    expect(result.failed).toHaveLength(1);
+    expect(prompts).toEqual([]);
+  });
+
+  it("does not expose a partial document when a later fragment loses a placeholder", async () => {
+    const { llm } = scripted(['{"1":"港口"}', '{"1":"秘密"}', '{"1":"秘密"}']);
+    const result = await translateTexts({
+      ...base,
+      llm,
+      units: [
+        {
+          id: "lore",
+          text: "Harbor\n<!-- narrator-only -->\nSecret {name}\n<!-- /narrator-only -->",
+        },
+      ],
+    });
+    expect(result.translations).toEqual({});
+    expect(result.failed[0]?.reason).toContain("placeholders changed");
   });
 });
 

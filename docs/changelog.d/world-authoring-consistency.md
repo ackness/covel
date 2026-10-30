@@ -1,0 +1,5 @@
+### Fixed
+
+- **World translation and targeted repair retain narrator-only boundaries in code.** Visible and hidden fragments use separate requests; invalid markers or failed protected repairs stop the transformation. Revisions of lore with hidden regions accept changes inside those regions while preserving visible prose, and reject boundary removal or relocation. Authors can edit source files directly for visible-text or visibility changes. These are structural checks, not guarantees of narrative or translation accuracy.
+- **World revisions receive the applicable contract schemas and patch instructions.** Existing records remain editable when their contracts no longer offer new generation; omitted records and `UNCHANGED` sections remain intact, and contract deletion uses `contract` plus `key`.
+- **World generation keeps ID references and future translations consistent.** Later parts see accepted, normalized records and may reference existing IDs. Natural-language dimension examples mark translatable string leaves with `x-i18n`, including single-language creation, while machine identifiers and values stay unchanged.

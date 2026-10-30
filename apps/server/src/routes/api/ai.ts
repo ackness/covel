@@ -698,10 +698,15 @@ aiRoutes.post(
     }
     const packageIdentity =
       saveTarget === "server-file" ? await stat(worldDir) : undefined;
+    const current = await worldSectionsOf(
+      existing,
+      saveTarget === "server-file" ? worldDir : undefined,
+    );
     const contractWarnings: string[] = [];
     const dataContracts = await worldGenerationDataContracts(
       c.get("pluginRegistry"),
       (message) => contractWarnings.push(message),
+      current,
     );
     return streamWorldAuthoring(
       c,
@@ -715,10 +720,7 @@ aiRoutes.post(
           locale: ownLocale,
           dataContracts,
           revision: {
-            current: await worldSectionsOf(
-              existing,
-              saveTarget === "server-file" ? worldDir : undefined,
-            ),
+            current,
             instruction: instruction.trim(),
           },
           signal,

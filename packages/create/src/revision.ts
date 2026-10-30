@@ -6,6 +6,11 @@
 import { parse as parseYaml, stringify as stringifyYaml } from "yaml";
 import type { WorldRevision, WorldSections } from "./types.js";
 import { isRecord } from "./validation-helpers.js";
+import {
+  hasLoreBoundary,
+  mergeProtectedLore,
+  splitLore,
+} from "./lore-boundaries.js";
 
 const UNCHANGED = /^\s*UNCHANGED\s*\.?\s*$/i;
 
@@ -20,7 +25,12 @@ export function revisionRequest(revision: WorldRevision): string {
     "Return the three sections in the same format, and write only what you change:",
     "- A section that the request does not change: write the single word UNCHANGED as its body.",
     "- In WORLD_YAML, write only the fields you change. In `dimensions`, write only the dimensions you change, each one whole. A field or a dimension you leave out stays as it is.",
-    "- In WORLD_PACKAGE_YAML, write only the items you add or change, under their list (`characters`, `lorebook`, `rules`, `contractData`). An item is matched by its `id` (in `contractData`, by `contract` and `key`) and is written whole. An item or a list you leave out stays as it is. To remove an item, write it as `{ id: <its id>, remove: true }`.",
+    "- In WORLD_PACKAGE_YAML, write only the items you add or change, under their list (`characters`, `lorebook`, `rules`, `contractData`). An item is matched by its `id` (in `contractData`, by `contract` and `key`) and is written whole. An item or a list you leave out stays as it is. Remove a character, lorebook entry or rule with `{ id: <its id>, remove: true }`. Remove a contract record with `{ contract: <contract ID>, key: <record key>, remove: true }`.",
+    ...(hasLoreBoundary(splitLore(current.lore))
+      ? [
+          "- WORLD_MD has narrator-only regions. Only edits inside those existing regions are supported. Keep all player-visible fragments and marker boundaries unchanged. If the request needs a visible-text or visibility change, do not silently ignore it: explain the unsupported change instead of returning a package. The author must edit the source directly for that change.",
+        ]
+      : []),
     "- Do not rewrite text that the request does not concern. Keep the `id` of the world.",
     "",
     "===WORLD_YAML===",
@@ -161,7 +171,9 @@ export function mergeRevision(
   );
   return {
     yaml: merge(output.yaml, current.yaml, mergeManifest) ?? output.yaml,
-    lore: UNCHANGED.test(output.lore) ? current.lore : output.lore,
+    lore: UNCHANGED.test(output.lore)
+      ? current.lore
+      : mergeProtectedLore(current.lore, output.lore),
     ...(packageYaml !== undefined ? { packageYaml } : {}),
   };
 }

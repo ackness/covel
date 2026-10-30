@@ -1,4 +1,4 @@
-import type { WorldGenerationDataContract } from "./types.js";
+import type { WorldGenerationDataContract, WorldRevision } from "./types.js";
 import { interpolate, loadPrompt, type PromptLoader } from "@covel/context";
 import { selectedDataContracts, selectedPack } from "./package-processor.js";
 import type {
@@ -27,6 +27,7 @@ export async function buildWorldPrompt(
   loader: PromptLoader = loadPrompt,
   dataContracts: readonly WorldGenerationDataContract[] = [],
   packs: readonly PluginPack[] = [],
+  revision?: WorldRevision,
 ): Promise<string> {
   const promptLocale = resolvePromptLocale(locale);
 
@@ -39,14 +40,18 @@ export async function buildWorldPrompt(
     concept,
     locale: promptLocale.locale,
     language: promptLocale.language,
-    creationBrief: [
-      // A revision has no brief: it keeps the pack the world has.
-      ...(brief
-        ? [formatPackBrief(selectedPack(brief, packs), promptLocale.locale)]
-        : []),
-      formatCreationBrief(brief),
-      formatContractBrief(selectedDataContracts(brief, dataContracts)),
-    ].join("\n"),
+    creationBrief: revision
+      ? [
+          "This is a revision of the existing world, not a new creation brief. Keep omitted fields, lists and records; UNCHANGED preserves a section. Apply only the author's requested changes. Do not apply creation quantities or empty-array defaults.",
+          formatContractBrief(dataContracts, true),
+        ].join("\n")
+      : [
+          ...(brief
+            ? [formatPackBrief(selectedPack(brief, packs), promptLocale.locale)]
+            : []),
+          formatCreationBrief(brief),
+          formatContractBrief(selectedDataContracts(brief, dataContracts)),
+        ].join("\n"),
   });
 }
 
@@ -94,20 +99,25 @@ function requestedLine(
   return `- ${requested.has(kind) ? "CREATE" : "OMIT"}: ${description}`;
 }
 
-/** One CREATE block per requested contract; schemas of the rest stay out. */
+/** Schemas and author guidance for contracts available in this operation. */
 function formatContractBrief(
   contracts: readonly WorldGenerationDataContract[],
+  revision = false,
 ): string {
   if (contracts.length === 0)
-    return "Plugin data contracts: none requested. Omit contractData.";
+    return revision
+      ? "No editable plugin data contracts are available. Keep existing contract data unchanged."
+      : "Plugin data contracts: none requested. Omit contractData.";
   return [
-    "Plugin data contracts: create contractData records for each contract below, and for no other contract.",
+    revision
+      ? "Available plugin data contracts for revision: the schemas and guidance below apply to existing records and author-requested additions. Do not create records merely because a contract is listed. Keep unmentioned records."
+      : "Plugin data contracts: create contractData records for each contract below, and for no other contract.",
     ...contracts.map((item) =>
       [
-        `- CREATE contract "${item.contract}"${item.title ? ` (${item.title})` : ""}.${item.hint ? ` ${item.hint}` : ""}`,
+        `- ${revision ? "EDITABLE" : "CREATE"} contract "${item.contract}"${item.title ? ` (${item.title})` : ""}.${item.hint ? ` ${item.hint}` : ""}`,
         ...(item.characterField !== undefined
           ? [
-              `  One record for each character: its \`key\` is the character's \`id\`, and its \`value\` has no \`id\`. The record is stored in the character's record as \`${item.characterField}\`.`,
+              `  ${revision ? "For each character record you change" : "One record for each character"}: its \`key\` is the character's \`id\`, and its \`value\` has no \`id\`. The record is stored in the character's record as \`${item.characterField}\`.`,
             ]
           : []),
         `  Record schema: ${JSON.stringify(item.schema)}`,

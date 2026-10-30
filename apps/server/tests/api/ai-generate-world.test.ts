@@ -1666,6 +1666,48 @@ protocol = "openai-chat-v1"
       );
     };
 
+    it.each(["server-file", "server-store"] as const)(
+      "does not publish a %s revision that relocates hidden lore despite preserving marker count",
+      async (target) => {
+        const secret = "证人其实是守钟人。";
+        const protectedMd = `${WORLD_MD}\n<!-- narrator-only -->\n${secret}\n<!-- /narrator-only -->`;
+        const createdAnswer = FULL.replace(WORLD_MD, protectedMd);
+        const unsafe = `${WORLD_MD}\n${secret}\n<!-- narrator-only -->\n等待揭晓。\n<!-- /narrator-only -->`;
+        const llm = new SequenceLlm([
+          ...CREATED.map(() => createdAnswer),
+          `===WORLD_YAML===\nUNCHANGED\n===WORLD_MD===\n${unsafe}\n===WORLD_PACKAGE_YAML===\nUNCHANGED\n===END===`,
+        ]);
+        const created = await generate(target, llm);
+        const original = await store.getWorld(created.id);
+        const events = await readSseJson(
+          await post("revise-world", {
+            worldId: created.id,
+            instruction: "把证人改成守钟人的妹妹，仍然保密。",
+          }),
+        );
+        expect(events.some((event) => event.type === "done")).toBe(false);
+        expect(events).toContainEqual(
+          expect.objectContaining({
+            type: "error",
+            message: expect.stringContaining(
+              "Only edits inside existing hidden regions",
+            ),
+          }),
+        );
+        expect(await store.getWorld(created.id)).toEqual(original);
+        if (target === "server-file")
+          expect(
+            (
+              await readFile(
+                path.join(worldsDir, created.id, "WORLD.md"),
+                "utf8",
+              )
+            ).trim(),
+          ).toBe(protectedMd);
+        expect(llm.requests).toHaveLength(CREATED.length + 1);
+      },
+    );
+
     it.each([
       ["server-store", "deleted"],
       ["server-store", "edited"],

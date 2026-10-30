@@ -130,7 +130,9 @@ Put content that only the narrator should know (hidden threads, answers to myste
   - A marker line inside a code block still counts as a marker.
   - `pnpm validate:world` gives a `lore-narrator-only` warning for these cases and points to the line number.
 - When a player edits the "World Document" on the session-prep screen, the player sees and edits only the visible part. The content between the markers is kept as it is in the lore that this game uses.
-- The AI creation and editing of worlds in the app works on the whole lore text, markers included.
+- AI creation can write hidden regions. Translation and targeted repair split the source at its markers, send one fragment per request, and put each result back inside the original program-owned boundaries. Dropping markers from a hidden fragment's answer cannot make it visible. Targeted repair touches only fragments containing generation meta wording. Invalid source markers reject the transformation; a failed repair of protected lore never falls back to whole-document regeneration.
+- AI revision sees the whole lore. When hidden regions already exist, it supports only story edits inside those regions or `UNCHANGED`. Visible fragments must keep their original text, and the program retains the markers. Removing or moving boundaries, or rewriting visible fragments, fails the revision. To change visible prose or visibility, the author edits the source file directly. Lore without hidden regions can still be revised normally.
+- These checks guarantee fragment structure and boundaries, not story semantics. A model can still invent or change facts, or place information in other fields. Authors must review translations and revisions.
 
 > [!WARNING]
 > This is "no spoilers", not secrecy. The world record, the world package files and the `lore` returned by the API are all the whole lore text. Anyone who reads the files or calls the API can see it. For content that should be revealed only when a condition is met, use [hidden data](#hidden-data-visibility-hidden).
@@ -222,7 +224,7 @@ Validation rules:
 **Translation.** The main file is written in the default language. The translations go in [language files](#language-files-namelocaleext).
 
 - `name` and `description` are the labels on the panel. They are shown in the player's interface language.
-- Text inside values is not translated by default. Only a node that the schema marks with `x-i18n: true` can be translated.
+- Text inside values is not translated by default. Only a node that the schema marks with `x-i18n: true` can be translated. Mark natural-language string leaves such as narrative initial values and nested descriptions, even when creating just one language edition: the mark declares where future translations may go. Do not mark stable IDs, enum/const machine values, code, numbers, or booleans.
 - When a session is imported, these nodes and `updateRule` become plain text in the session's content language. A session stores only one language (see [Dynamic Dimensions](./dynamic-dimensions.md)).
 
 For example:

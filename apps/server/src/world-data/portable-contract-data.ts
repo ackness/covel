@@ -1,6 +1,7 @@
 import { readFile } from "node:fs/promises";
+import { parse as parseYaml } from "yaml";
 import { KERNEL_WORLD_DATA_PATHS, parseWorldDataTarget } from "@covel/shared";
-import type { WorldGenerationDataContract } from "@covel/create";
+import type { WorldGenerationDataContract, WorldSections } from "@covel/create";
 import type { PluginRegistry } from "@covel/plugin-loader";
 import { describeAuthoringSurface } from "../authoring/describe.js";
 import { conventionsOfPlugins } from "./conventions.js";
@@ -104,11 +105,13 @@ export function portableContractSources(
  * The contracts the world generator may be asked to produce: those whose
  * receiving plugin declares `authoring.generate`. Everything the generator
  * learns about a contract comes from that declaration, so no gameplay plugin
- * is named here.
+ * is named here. A revision also needs schemas for contracts already present,
+ * even when their receivers no longer offer new generation.
  */
 export async function worldGenerationDataContracts(
   registry: Pick<PluginRegistry, "get" | "getAll"> | undefined,
   onWarning?: (message: string) => void,
+  current?: WorldSections,
 ): Promise<readonly WorldGenerationDataContract[]> {
   if (!registry) return [];
   const surface = await describeAuthoringSurface(registry);
@@ -119,9 +122,31 @@ export async function worldGenerationDataContracts(
   const conventions = conventionsOfPlugins(registry);
   const result: WorldGenerationDataContract[] = [];
   const seen = new Set<string>();
+  const records: unknown = parseYaml(current?.packageYaml ?? "{}");
+  const existing =
+    records && typeof records === "object" && !Array.isArray(records)
+      ? (records as Record<string, unknown>)
+      : {};
+  const usesContract = (contract: string, characterField?: string) =>
+    (Array.isArray(existing.contractData) &&
+      existing.contractData.some(
+        (record: unknown) =>
+          record !== null &&
+          typeof record === "object" &&
+          "contract" in record &&
+          record.contract === contract,
+      )) ||
+    (characterField !== undefined &&
+      Array.isArray(existing.characters) &&
+      existing.characters.some(
+        (record: unknown) =>
+          record !== null &&
+          typeof record === "object" &&
+          Object.hasOwn(record, characterField),
+      ));
   for (const item of surface.contracts) {
     if (
-      !item.generate ||
+      (!item.generate && !usesContract(item.contract, item.characterField)) ||
       seen.has(item.contract) ||
       registry.get(item.pluginId)?.status === "error"
     )
