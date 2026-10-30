@@ -279,6 +279,42 @@ export const pluginIdSchema = z
     `"${FRAMEWORK_PLUGIN_ID}" is reserved for the framework`,
   );
 
+/**
+ * A `contributes.services` entry: a contract ID, or an object that also says
+ * whether agents may import the service as a tool.
+ */
+export const serviceContributionSchema = z.union([
+  contractIdSchema,
+  z
+    .object({
+      contract: contractIdSchema.describe(
+        "The contract ID the service is registered under.",
+      ),
+      modelFacing: z
+        .boolean()
+        .describe(
+          "`true` lets agents import the service as a tool with `agent.tools.services`. The registration must say the same and give a description and an input that exports JSON Schema.",
+        )
+        .optional(),
+    })
+    .strict(),
+]);
+export type ServiceContribution = z.infer<typeof serviceContributionSchema>;
+
+/** The contract of a `contributes.services` entry. */
+export function serviceContributionContract(
+  entry: ServiceContribution,
+): string {
+  return typeof entry === "string" ? entry : entry.contract;
+}
+
+/** Whether a `contributes.services` entry offers its service to models. */
+export function isModelFacingServiceContribution(
+  entry: ServiceContribution,
+): boolean {
+  return typeof entry !== "string" && entry.modelFacing === true;
+}
+
 export const pluginManifestSchema = z.strictObject({
   id: pluginIdSchema
     .meta({
@@ -405,9 +441,9 @@ export const pluginManifestSchema = z.strictObject({
         )
         .optional(),
       services: z
-        .array(contractIdSchema)
+        .array(serviceContributionSchema)
         .describe(
-          "Contract IDs of services the entry registers with `registerService`.",
+          "Services the entry registers with `registerService`: a contract ID, or `{ contract, modelFacing: true }` for one that agents may import as a tool.",
         )
         .optional(),
       extensions: z

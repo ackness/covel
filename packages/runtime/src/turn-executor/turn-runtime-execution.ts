@@ -723,6 +723,7 @@ export async function executeOneRuntime(
     return await executeAgentRuntime({
       upstreamProposals,
       upstreamPluginData,
+      upstreamOf,
       manifest,
       input,
       loaded,

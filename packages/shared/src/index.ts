@@ -370,6 +370,8 @@ export {
 } from "./schemas/plugin.js";
 export {
   isRuntimeDisablingIssue,
+  SERVICE_IMPORT_NAME_PATTERN,
+  serviceImportName,
   type RuntimeRuleIssue,
 } from "./schemas/runtime-rules.js";
 export {
@@ -622,8 +624,12 @@ export {
 
 export {
   authoringSourceKind,
+  isModelFacingServiceContribution,
   pluginIdSchema,
   pluginManifestSchema,
+  serviceContributionContract,
+  serviceContributionSchema,
+  type ServiceContribution,
 } from "./schemas/plugin-manifest.js";
 export { FRAMEWORK_PLUGIN_ID } from "./framework-plugin-id.js";
 export {

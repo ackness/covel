@@ -227,6 +227,46 @@ contributes:
     });
   });
 
+  it("writes a model-facing service as an object and keeps comments", () => {
+    const original = `---
+contributes:
+  # Services comment
+  services:
+    - inventory.items@1 # Item comment
+    - plain.read@1
+---
+`;
+    const extracted = {
+      ...empty,
+      services: [
+        { contract: "inventory.items@1", modelFacing: true as const },
+        "plain.read@1",
+      ],
+    };
+    const result = rewriteContributes(original, extracted);
+    expect(result.drift).toEqual([
+      {
+        key: "services",
+        added: ["inventory.items@1 (model-facing)"],
+        removed: ["inventory.items@1"],
+      },
+    ]);
+    expect(result.text).toContain("# Services comment");
+    expect(result.text).toContain("# Item comment");
+    expect(readPlainYamlFrontmatter(result.text).data.contributes).toEqual({
+      services: [
+        { contract: "inventory.items@1", modelFacing: true },
+        "plain.read@1",
+      ],
+    });
+    // Both forms round-trip with no further drift.
+    expect(rewriteContributes(result.text, extracted)).toEqual({
+      text: result.text,
+      changed: [],
+      drift: [],
+    });
+  });
+
   it("leaves extension and command metadata untouched", () => {
     const original =
       "---\ncontributes:\n  extensions: [ui.slot@1/summary]\n  commands: [{name: open, action: open}]\n---\n";

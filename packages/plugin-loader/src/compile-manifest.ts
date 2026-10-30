@@ -5,6 +5,7 @@ import {
   defaultAgentModel,
   runtimeManifestInputSchema,
   resolveI18nText,
+  serviceImportName,
 } from "@covel/shared";
 import type {
   PluginManifest,
@@ -112,13 +113,31 @@ export function compileRuntimeManifest(
   // `plugin: []` still means none. A runtime of a multi-runtime package
   // names its tools: each of them gets a different part.
   const contributed = plugin.contributes?.tools;
-  const agentTools =
+  const { services: imports, ...authoredTools } = a?.tools ?? {};
+  const contributedTools =
     runtimeType === "agent" &&
     runtimeId === plugin.id &&
-    !a?.tools?.plugin &&
+    !authoredTools.plugin &&
     contributed?.length
-      ? { ...a?.tools, plugin: [...contributed] }
-      : a?.tools;
+      ? { plugin: [...contributed] }
+      : undefined;
+  const agentTools =
+    a?.tools || contributedTools
+      ? {
+          ...authoredTools,
+          ...contributedTools,
+          // One place derives an import's tool name; the rules and the
+          // kernel read the compiled value.
+          ...(imports
+            ? {
+                services: imports.map((entry) => ({
+                  contract: typeof entry === "string" ? entry : entry.contract,
+                  name: serviceImportName(entry),
+                })),
+              }
+            : {}),
+        }
+      : undefined;
   const loop = a?.loop;
   const loopProfile = agentLoopProfile(a);
   const completion = agentCompletion(a);

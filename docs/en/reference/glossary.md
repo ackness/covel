@@ -27,6 +27,7 @@ Each English term has only one Chinese term. The Chinese docs, the UI text, and 
 | Execution | 执行 | One scheduled run and its commit plan; player turns, manual calls and background jobs can each start one. |
 | Fault latch | 熔断 | A session-local pause after consecutive self-caused auxiliary plugin faults, cleared by the player or a process restart. See the [protocol](./protocol.md#plugin-fault-latch). |
 | Finalizer step | 收尾步骤 | The one request, after an agent runs out of steps, that turns tools off and asks for the answer now. |
+| Imported tool | 导入工具 | A read-only tool generated from another plugin's model-facing service, which an agent imports with `agent.tools.services`. |
 | Kernel | 内核 | The framework core that schedules work, assembles context, runs tools, validates proposals and commits writes. |
 | Local model relay | 本地模型中继 | On a shared form, the server reaches a model on the player's computer or local network through the player's browser. See [Security boundaries](../internals/security.md#local-model-relay). |
 | Official web app | 官方网页版 | A hosted product that is not yet supported; browser-private infrastructure alone is not the complete product. |
@@ -189,6 +190,14 @@ The one more model request the kernel sends after an agent runtime runs out of s
 Running out of steps is not a success by itself. The runtime succeeds only when the finalizer step writes the answer, and its result's `stop.finalizer` is `true`. No finalizer is sent when the output is handed over by a completing tool, or when a completion condition is still unmet.
 
 See: [the protocol reference's stop reasons](./protocol.md#stop-reasons).
+
+## Imported tool
+
+The read-only tool the kernel generates, when an agent runtime starts, for another plugin's model-facing service that the agent imports in `agent.tools.services`. Its name comes from the contract ID by default and its parameters from the service's input schema.
+
+Without exactly one active provider the tool is absent and the runtime runs as usual. It is not in the tool registry and cannot be a completing tool.
+
+See: [Imported service tools](./tools.md#imported-service-tools), [Model-facing services](./plugin-extensions.md#model-facing-services).
 
 ## Kernel
 

@@ -13,17 +13,17 @@
 
 先按需求在表里找接口：
 
-| 需求                             | 接口                                                                | 执行与数据边界                                                                                   |
-| -------------------------------- | ------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
-| 消费本轮上游结果                 | `runtime.io.inputs` + `accepts`                                     | 按版本化 contract/runtime 绑定，建立调度依赖，携带来源；必需输入缺失时跳过                       |
-| 消费已提交的历史结果             | `runtime.io.output.recordAs` + `io.inputs` 的 `scope: committed`    | 读取本次执行开始前的快照                                                                         |
-| 发出事件、触发后续工作           | handler 结果的 events / `emit-event` 工具 + event trigger           | 由调度和提交链路管理；不是内存中任意广播                                                         |
-| 调用其他插件的公共函数或模型协议 | `covel.registerService` + `ctx.services`                            | 请求/响应，校验输入输出，只调用活跃且已获准运行的服务                                            |
-| 让另一个 agent 回答一段简报      | `schedule.subagentOnly` 提供方 + `ctx.agents.run` / `delegate` 工具 | [子 agent](./plugins.md#子-agent) 在调用方的执行里运行，只交回输出，不写入；按契约找跨包的提供方 |
-| Runtime 执行领域写入             | 已声明工具、handler effects / `ctx.pluginData`                      | 走 runtime 的 proposal/commit 边界，不直接写别的插件                                             |
-| UI 触发自己的服务端逻辑          | `invokeRuntime` / `invokePluginAction` / `invokeCommand`            | 复用现有 RPC、会话归属与审批；写入边界见下文                                                     |
-| UI 发出领域事件                  | `emitEvent`                                                         | 只能发本插件声明的 topic，按 schema 校验；订阅的 runtime 以事件任务执行                          |
-| 自由绘制 UI                      | JSON `view` 或 HTML `webview`                                       | HTML 在独立 sandbox 中运行，使用消息桥读取数据、发出动作                                         |
+| 需求                             | 接口                                                                                          | 执行与数据边界                                                                                   |
+| -------------------------------- | --------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| 消费本轮上游结果                 | `runtime.io.inputs` + `accepts`                                                               | 按版本化 contract/runtime 绑定，建立调度依赖，携带来源；必需输入缺失时跳过                       |
+| 消费已提交的历史结果             | `runtime.io.output.recordAs` + `io.inputs` 的 `scope: committed`                              | 读取本次执行开始前的快照                                                                         |
+| 发出事件、触发后续工作           | handler 结果的 events / `emit-event` 工具 + event trigger                                     | 由调度和提交链路管理；不是内存中任意广播                                                         |
+| 调用其他插件的公共函数或模型协议 | `covel.registerService` + `ctx.services` / 工具的 `context.services` / `agent.tools.services` | 请求/响应，校验输入输出，只调用活跃且已获准运行的服务；agent 把给模型用的服务导入成工具          |
+| 让另一个 agent 回答一段简报      | `schedule.subagentOnly` 提供方 + `ctx.agents.run` / `delegate` 工具                           | [子 agent](./plugins.md#子-agent) 在调用方的执行里运行，只交回输出，不写入；按契约找跨包的提供方 |
+| Runtime 执行领域写入             | 已声明工具、handler effects / `ctx.pluginData`                                                | 走 runtime 的 proposal/commit 边界，不直接写别的插件                                             |
+| UI 触发自己的服务端逻辑          | `invokeRuntime` / `invokePluginAction` / `invokeCommand`                                      | 复用现有 RPC、会话归属与审批；写入边界见下文                                                     |
+| UI 发出领域事件                  | `emitEvent`                                                                                   | 只能发本插件声明的 topic，按 schema 校验；订阅的 runtime 以事件任务执行                          |
+| 自由绘制 UI                      | JSON `view` 或 HTML `webview`                                                                 | HTML 在独立 sandbox 中运行，使用消息桥读取数据、发出动作                                         |
 
 下面是表里装不下的细节。
 
@@ -33,12 +33,15 @@
 
 会话的座位（谁在玩、控制哪些角色）不归任何插件，也不需要通过服务或输入去问别的插件。函数 runtime、guard、工具（`context.world`）和扩展提供者（`ctx.world`）都在 `world.seats` 上读到同一份，只读。用 SDK 的 `primarySeat`、`currentCharacterOf`、`seatCharacterIds` 推导玩家扮演的角色，规则见[座位](./world-model.md#座位)。插件不能写座位，玩家用[切换接口](./api.md#会话座位)换当前角色。
 
-### 服务只给函数 runtime
+<a id="服务只给函数-runtime"></a>
 
-函数 runtime 的 handler 和 agent 的 guard 可以使用 `ctx.services`。框架不会把所有公共服务自动暴露给每个 agent。agent 想用服务的结果，有两条路：
+### 工具和 agent 怎样用服务
 
-- 让插件自己的一个函数 runtime 去调用服务，agent 再通过 `inputs` 接收结果。
-- 继续用插件自己注册的工具。
+- 函数 runtime 的 handler 和 agent 的 guard 用 `ctx.services`。
+- 插件工具用 `context.services`，规则和函数 runtime 相同：调用方是工具所属的插件和 runtime，调用继承工具的截止时间和取消，读到的数据和工具自己的 `context.store` 读取用同一个范围、记在同一处读取依赖上。工具返回时还没结束的调用会被取消。服务失败时调用抛出服务的错误；工具不处理就让它抛出，这次工具调用会按[导入的服务工具](./tools.md#导入的服务工具)的错误对应表回答模型，算作提供方的问题，不算调用方的失败。
+- agent 可以在 `agent.tools.services` 里导入**给模型用**的服务，每个导入变成一个只读工具，见下文[给模型用的服务](#给模型用的服务)。框架不会把所有服务自动给每个 agent。
+
+从工具或导入调用的服务拿不到 `gateway` 和 `utils`：需要模型的工作由调用方自己做。
 
 ### 事件怎么触发下游
 
@@ -66,7 +69,7 @@ RPC action 的 handler 收到 `ctx.signal`，到达时限时中止；存储调�
 
 ### 工具不跨插件
 
-插件工具在 `entry` 里用 `covel.registerTool()` 注册，名字在插件内唯一。不同插件用同一个名字不会互相覆盖。一次工具调用只会找到调用方插件自己的实现和框架内置工具。要给别的插件用的能力，做成下文的服务。
+插件工具在 `entry` 里用 `covel.registerTool()` 注册，名字在插件内唯一。不同插件用同一个名字不会互相覆盖。一次工具调用只会找到调用方插件自己的实现、框架内置工具和本 runtime 导入的服务。要给别的插件用的能力，做成下文的服务：别的插件的工具用 `context.services` 调用它；要让别的 agent 的模型直接调用，把它标成给模型用的服务，由对方在 `agent.tools.services` 里导入。
 
 ### 没有 runtime 的包
 
@@ -251,15 +254,16 @@ export default function (covel) {
 服务在 `entry` 工厂运行期间注册。它和工具、Hook、RPC 一起发布：全部成功才生效，失败就全部撤回。宿主关闭时解除注册。
 
 - 服务名在所属插件内唯一。
-- `contract` 是插件作者定义的公开契约标识，建议带上版本号。
+- `contract` 是插件作者定义的公开契约标识，形如 `<名称>@<主版本>`：小写字母开头，只有小写字母、数字、`.` 和 `-`，例如 `my-plugin.rank@1`。
 - 不兼容的修改用一个新的契约，不为开发数据写迁移。
+- 每个注册的服务都要在 `PLUGIN.md` 的 `contributes.services` 里声明，写契约 ID；给模型用的服务写成 `{ contract, modelFacing: true }`。声明和注册对不上时，整批注册失败。
 
 ```js
 export default function (covel) {
   const { z } = covel.toolkit;
   covel.registerService({
     name: "rank",
-    contract: "my-plugin/rank@1",
+    contract: "my-plugin.rank@1",
     input: z.object({ candidates: z.array(z.string()).min(1) }),
     output: z.object({ selected: z.string() }),
     async handler(input, ctx) {
@@ -272,7 +276,7 @@ export default function (covel) {
 
 ### 发现和调用
 
-别的插件先用 `ctx.services.discover("my-plugin/rank@1")` 找到提供者，得到 `{ pluginId, name, contract, description? }[]`，再明确选一个来调用。
+别的插件先用 `ctx.services.discover("my-plugin.rank@1")` 找到提供者，得到 `{ pluginId, name, contract, description? }[]`，再明确选一个来调用。
 
 有多个提供者时，由调用方插件的设置或业务规则决定用哪个。框架不按插件名字猜，也不自动选第一个。
 
@@ -280,7 +284,7 @@ export default function (covel) {
 const value = await ctx.services.call({
   pluginId: configuredProviderId,
   name: "rank",
-  contract: "my-plugin/rank@1",
+  contract: "my-plugin.rank@1",
   input: { candidates: ["Visit the library", "Explore the classroom"] },
 });
 ```
@@ -292,7 +296,7 @@ const value = await ctx.services.call(
   {
     pluginId: configuredProviderId,
     name: "rank",
-    contract: "my-plugin/rank@1",
+    contract: "my-plugin.rank@1",
     input: { candidates: ["Visit the library", "Explore the classroom"] },
   },
   { timeoutMs: 1500, signal: ctx.signal },
@@ -341,6 +345,68 @@ const value = await ctx.services.call(
 通过 runtime 客户端调用服务时，`pluginData` 在已提交数据上，按提交顺序叠加本次执行内提供者插件已完成、可提交的上游写入；不重复应用重试或后台任务带来的种子结果。同一层并行 runtime 的写入互不可见。只有提供者就是原始调用 runtime 所属插件时，才继续叠加该 runtime 自己的写入缓冲。列表去掉已删除的键，新键按写入顺序追加。执行外的客户端只读已提交数据，不记录读取依赖。
 
 读到了尚未提交的上游写入，就在调用 runtime 的结果上记录读取依赖。嵌套服务仍读各自提供者的数据，依赖始终记在原始调用 runtime 上。提交时产出方被作废，辅助调用方随之作废；故事调用方照常提交，并在 trace 里记录（见[事务](./transactions.md)）。调用读服务本身不建立新的调度依赖；故事 runtime 可以按需调用并处理服务缺失或失败。
+
+工具和导入的调用读同样的数据：顶层 agent 的工具和函数 runtime 一样叠加上游写入并记录读取依赖。恢复执行的 runtime 和子 agent 的工具调用服务时只读已提交数据，不记录读取依赖，和它们自己的工具读取一样。
+
+### 给模型用的服务
+
+提供方把服务标成给模型用，agent 就能在 `agent.tools.services` 里导入它，模型直接调用。标记要写两处，而且必须一致：
+
+```yaml
+# PLUGIN.md
+contributes:
+  services:
+    - { contract: inventory.items@1, modelFacing: true }
+```
+
+```js
+covel.registerService({
+  name: "items",
+  contract: "inventory.items@1",
+  modelFacing: true,
+  description: "List the items in one of the player's bags.",
+  input: z.object({ bag: z.string().describe("Bag name") }),
+  output: z.object({ items: z.array(z.object({ name: z.string() })) }),
+  handler: async ({ bag }, ctx) => ({
+    items: (await ctx.pluginData.get("bags", bag)) ?? [],
+  }),
+});
+```
+
+一个服务能被导入，要满足：
+
+- 声明写成 `{ contract, modelFacing: true }`，注册时也写 `modelFacing: true`。
+- 有非空的 `description`，它就是模型看到的工具说明。
+- 输入能导出 JSON Schema：Zod schema 自动导出（去掉 `$schema` 和服务商读不懂的正则）；输入不是 Zod 时，给出显式的 `inputSchema`。根必须是 `type: "object"`。
+
+这些在注册时检查，不满足时整批注册失败，不会拖到某个回合才出错。`modelFacing` 不进入能力快照：标记它不给提供方代码新的权限，已信任来源的包不会因此重新确认。
+
+导入方这样写：
+
+```yaml
+agent:
+  tools:
+    services:
+      - inventory.items@1 # 工具名 inventory-items
+      - { contract: world.map@2, as: look-at-map }
+```
+
+工具名默认是去掉版本号、`.` 换成 `-` 的契约名；`as` 另起名字。名字规则、Schema、注解、超时和错误见[导入的服务工具](./tools.md#导入的服务工具)。函数 runtime 不能写 `tools.services`，它直接用 `ctx.services`。
+
+每次 runtime 开始时，框架为每个导入找提供方。候选是声明了这个契约、给模型用、启用且获准运行的插件，以及因反复出错被暂停的插件：
+
+| 情况                     | 结果                                                             |
+| ------------------------ | ---------------------------------------------------------------- |
+| 恰好一个活跃的提供方     | 生成工具，绑定这个提供方                                         |
+| 没有提供方               | 这个工具不出现；调用它得到 `unavailable`                         |
+| 有提供方，但都不给模型用 | 同上，说明里写提供方不给模型用                                   |
+| 不止一个给模型用的提供方 | 同上，说明里写不止一个插件提供；不按名字猜，也不选第一个         |
+| 唯一的提供方被暂停       | 同上，说明里写提供方因反复出错暂停；下一次执行恢复后工具重新出现 |
+| 一个活跃、一个被暂停     | 算作不止一个提供方：不会悄悄换成活跃的那个                       |
+
+缺少的导入只去掉这一个工具，runtime 照常开始，故事照常提交。导入不建立调度依赖，也不让包依赖提供方；导入的工具不能用来完成 runtime（`finishWith`、`completion.afterTools` 不能写它）。宿主通过准入接口告诉框架哪些插件被暂停；没有这个接口的嵌入方，被暂停的提供方等于不存在。
+
+工具调用的服务调用在 `plugin.service.completed` 里带上 `toolCallId`，嵌套调用继承它，见[协议](./protocol.md)。
 
 ## 模型与新协议
 

@@ -1,5 +1,6 @@
 export { enforcePluginRegistrationContract } from "./plugin-registration-contract.js";
-export { PluginServiceRegistry } from "./plugin-services.js";
+export { PluginServiceRegistry, serviceFailureOf } from "./plugin-services.js";
+export { SERVICE_IMPORT_TIMEOUT_MS } from "./agent-loop/service-import-tools.js";
 export {
   PluginExtensionHost,
   kernelExtensionPoints,
@@ -315,7 +316,10 @@ export type {
 } from "./rpc/form-validator.js";
 export { normalizeFormRefusal } from "./rpc/form-validator.js";
 export { PluginEntryScope } from "./plugin-entry-scope.js";
-export type { PluginServiceCallEvent } from "./plugin-services.js";
+export type {
+  PluginServiceCallEvent,
+  ServiceImportResolution,
+} from "./plugin-services.js";
 
 export { validatePluginHookRegistration } from "./plugin-hook-registration.js";
 

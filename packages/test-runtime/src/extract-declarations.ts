@@ -8,7 +8,13 @@ import {
   EXTRACTED_KINDS,
   type ExtractedDeclarations,
 } from "@covel/plugin-loader";
-import { DEFAULT_PLUGIN_ENTRY, pluginManifestSchema } from "@covel/shared";
+import {
+  DEFAULT_PLUGIN_ENTRY,
+  isModelFacingServiceContribution,
+  pluginManifestSchema,
+  serviceContributionContract,
+  type ServiceContribution,
+} from "@covel/shared";
 import { PluginEntryScope, type PluginAPI } from "@covel/runtime";
 import {
   tool,
@@ -57,7 +63,7 @@ export async function extractDeclarations(
   }
   const tools: string[] = [];
   const actions: string[] = [];
-  const services: string[] = [];
+  const services: ServiceContribution[] = [];
   const forms: string[] = [];
   const wires: string[] = [];
   const hooks: ExtractedDeclarations["hooks"][number][] = [];
@@ -104,7 +110,21 @@ export async function extractDeclarations(
       record(actions, name);
     },
     registerService(definition) {
-      record(services, definition.contract);
+      const contract = z.string().min(1).parse(definition.contract);
+      // A model-facing service is declared as an object; others as a string.
+      const entry: ServiceContribution =
+        definition.modelFacing === true
+          ? { contract, modelFacing: true }
+          : contract;
+      if (
+        !services.some(
+          (service) =>
+            serviceContributionContract(service) === contract &&
+            isModelFacingServiceContribution(service) ===
+              (definition.modelFacing === true),
+        )
+      )
+        services.push(entry);
     },
     registerFormValidator(name) {
       record(forms, name);

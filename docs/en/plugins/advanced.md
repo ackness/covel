@@ -220,6 +220,7 @@ There are two ways to let other code call yours:
 - Both use versioned names, and both inputs and outputs are checked against a schema.
 - The registered name must match the manifest.
 - Fixed fragments in `contributes.prompt` are registered by Covel automatically, so you do not need to declare them as extensions.
+- A function runtime calls services with `ctx.services`, a tool with `context.services`. A read-only service registered with `modelFacing: true` and a `description`, and declared as `{contract, modelFacing: true}`, can also be imported as a tool by an agent in `agent.tools.services`; see [Model-facing services](../reference/plugin-extensions.md#model-facing-services).
 
 A service handler can read its provider's own non-hidden data. It cannot write:
 

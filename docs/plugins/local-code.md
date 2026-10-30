@@ -179,7 +179,7 @@ pnpm plugin:extract ~/.covel/plugins/notebook --check
 pnpm plugin:extract ~/.covel/plugins/notebook --check --json
 ```
 
-第一条命令在作者本机运行入口工厂，把 `tools`、`actions`、`services`、`forms`、`wires`、`hooks` 六组注册写回根 `PLUGIN.md` 的 `contributes`，并打印变化的键。一致时显示 `Declarations are in sync.`。列表按首次注册顺序去重；普通 hook 写成事件名，其他阶段写成 `{ event, enforce }`。空列表的键会删除。注释、其他字段和 Markdown 正文保留。
+第一条命令在作者本机运行入口工厂，把 `tools`、`actions`、`services`、`forms`、`wires`、`hooks` 六组注册写回根 `PLUGIN.md` 的 `contributes`，并打印变化的键。一致时显示 `Declarations are in sync.`。列表按首次注册顺序去重；普通 hook 写成事件名，其他阶段写成 `{ event, enforce }`；普通服务写成契约 ID，给模型用的服务写成 `{ contract, modelFacing: true }`。空列表的键会删除。注释、其他字段和 Markdown 正文保留。
 
 `--check` 不写文件，按键显示 `-` 移除的名字和 `+` 新增的名字；只有顺序或写法变化时单独说明。有漂移时退出 1，一致时退出 0，适合 CI。`--json` 输出 `extracted` 和 `drift`。提取失败退出 1，参数错误退出 2。
 

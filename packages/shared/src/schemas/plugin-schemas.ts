@@ -56,8 +56,14 @@ import { slashCommandSpecSchema } from "./slash-command-schema.js";
 import {
   IR_RULE_FIELD_PATHS,
   runtimeRuleIssues,
+  SERVICE_IMPORT_NAME_PATTERN,
   type RuntimeRuleView,
 } from "./runtime-rules.js";
+
+/** A versioned contract ID: `<name>@<major>`, e.g. `inventory.items@1`. */
+export const contractIdSchema = z
+  .string()
+  .regex(/^[a-z][a-z0-9.-]*@[1-9][0-9]*$/);
 
 // ── Shared path & scheduling primitives ──────────────────────────
 // Hoisted so the Input section (runtime-export inject, data bindings) and the
@@ -433,6 +439,53 @@ export const toolsConfigSchema = z
       .union([z.literal(true), z.array(z.string())])
       .describe(
         "Deferred tool loading. `true` defers the whole whitelist; a list defers only those names.",
+      )
+      .optional(),
+  })
+  .strict();
+
+/** A service an agent imports as a tool: a contract, and optionally the tool name. */
+export const serviceImportSchema = z.union([
+  contractIdSchema,
+  z
+    .object({
+      contract: contractIdSchema.describe(
+        "The contract ID of the model-facing service to import.",
+      ),
+      as: z
+        .string()
+        .regex(SERVICE_IMPORT_NAME_PATTERN)
+        .describe(
+          "The tool name the model sees. Defaults to the contract without its version, dots as dashes (`inventory.items@1` → `inventory-items`).",
+        )
+        .optional(),
+    })
+    .strict(),
+]);
+
+/** An agent's tools as authored: a function runtime has no `services`. */
+export const agentToolsConfigSchema = toolsConfigSchema
+  .extend({
+    services: z
+      .array(serviceImportSchema)
+      .describe(
+        "Services the agent imports as read-only tools. Each names a contract; the one active provider that offers it to models answers the call. Without one the tool is left out for the run.",
+      )
+      .optional(),
+  })
+  .strict();
+
+/** The compiled tool declaration, with each import's tool name resolved. */
+export const runtimeToolsConfigSchema = toolsConfigSchema
+  .extend({
+    services: z
+      .array(
+        z
+          .object({
+            contract: contractIdSchema,
+            name: z.string().regex(SERVICE_IMPORT_NAME_PATTERN),
+          })
+          .strict(),
       )
       .optional(),
   })
@@ -987,7 +1040,15 @@ interface ManifestCrossFieldView {
   readonly after?: RuntimeRuleView["after"];
   readonly output?: RuntimeRuleView["output"];
   readonly execution?: string;
-  readonly tools?: { readonly builtin?: readonly string[] };
+  readonly tools?: {
+    readonly builtin?: readonly string[];
+    readonly plugin?: readonly string[];
+    readonly services?: readonly {
+      readonly contract: string;
+      readonly name: string;
+    }[];
+  };
+  readonly completeAfterTools?: readonly string[];
 }
 
 /** Report the shared runtime rules on the flat IR shape, under IR paths. */
@@ -1002,6 +1063,7 @@ function addIrRuleIssues(
     tools,
     loopProfile,
     timeoutMs,
+    completeAfterTools,
     ...rest
   } = m;
   const { mode, ...detachedOptions } = turnCompletion ?? {};
@@ -1025,6 +1087,9 @@ function addIrRuleIssues(
       ...(mode === "detached" ? { detached: detachedOptions } : {}),
       background: execution === "background",
       builtinTools: tools?.builtin,
+      pluginTools: tools?.plugin,
+      serviceImports: tools?.services,
+      completingTools: completeAfterTools,
     },
     IR_RULE_FIELD_PATHS,
   ))
@@ -1232,7 +1297,7 @@ export const runtimeManifestInputSchema = z
      * via the builtin `emit-event` tool.
      */
     advertiseEvents: z.boolean().optional(),
-    tools: toolsConfigSchema.optional(),
+    tools: runtimeToolsConfigSchema.optional(),
     input: inputConfigSchema.optional(),
     output: outputConfigSchema.optional(),
     trigger: triggerConfigSchema.optional(),

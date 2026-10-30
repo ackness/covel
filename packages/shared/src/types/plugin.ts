@@ -308,6 +308,15 @@ export interface ToolsConfig {
    * dominate the prompt budget.
    */
   readonly defer?: true | readonly string[];
+  /**
+   * Services an agent imports as read-only tools, each with its resolved
+   * tool name. At run start the kernel binds each to the one active provider
+   * that offers the contract to models; without one the tool is left out.
+   */
+  readonly services?: readonly {
+    readonly contract: string;
+    readonly name: string;
+  }[];
 }
 
 // ── User-declared plugin settings ────────────────────────────────

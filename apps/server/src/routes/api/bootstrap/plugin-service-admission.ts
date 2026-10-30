@@ -86,6 +86,25 @@ export function createPluginServiceAdmission(args: {
     },
     admission: {
       ensure,
+      /**
+       * Active plugins paused after repeated errors: inside an execution the
+       * set it captured at start, outside it the live latch. Imports count
+       * them so a paused provider is never silently replaced.
+       */
+      async paused(sessionId: string): Promise<string[]> {
+        const session = await args.store.getSession(sessionId);
+        if (!session) return [];
+        const active = activeIds(session);
+        const captured = executions.getStore();
+        if (captured && captured.id === sessionId) {
+          const paused = pausedByExecution.get(captured);
+          return active.filter((pluginId) => paused?.has(pluginId) === true);
+        }
+        return active.filter(
+          (pluginId) =>
+            args.pluginFaults?.isLatched(sessionId, pluginId) === true,
+        );
+      },
       async list(sessionId: string): Promise<string[]> {
         const session = await args.store.getSession(sessionId);
         if (!session) return [];

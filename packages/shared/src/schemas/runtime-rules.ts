@@ -9,6 +9,7 @@
  * list them in their `description`.
  */
 
+import { FRAMEWORK_TOOL_NAMES } from "@covel/plugin-handlers-utils";
 import { isKernelExtensionContract } from "../extension-points/contracts.js";
 import {
   defaultAgentLoop,
@@ -16,6 +17,22 @@ import {
   LOOP_PRESETS,
   type LoopPresetId,
 } from "./runtime-defaults.js";
+
+/** A model-facing tool name: what providers accept as a function name. */
+export const SERVICE_IMPORT_NAME_PATTERN = /^[A-Za-z0-9_-]{1,64}$/;
+
+/**
+ * The tool name of a service import: `as` when written, else the contract
+ * without its version, dots turned into dashes (`inventory.items@1` →
+ * `inventory-items`). Model-facing names carry no version.
+ */
+export function serviceImportName(
+  entry: string | { readonly contract: string; readonly as?: string },
+): string {
+  if (typeof entry !== "string" && entry.as !== undefined) return entry.as;
+  const contract = typeof entry === "string" ? entry : entry.contract;
+  return contract.replace(/@[^@]*$/, "").replace(/\./g, "-");
+}
 
 /** The manifest fields the rules read, independent of where a manifest writes them. */
 export interface RuntimeRuleView {
@@ -72,6 +89,21 @@ export interface RuntimeRuleView {
   /** `true` when a `manual` / `event` activation runs as a background job. */
   readonly background?: boolean;
   readonly builtinTools?: readonly string[];
+  /** The package's own tools the runtime names. */
+  readonly pluginTools?: readonly string[];
+  /**
+   * Imported services, with the tool name each one gets. `explicit` is set
+   * when the author chose the name (`as`); the derived one is checked here.
+   */
+  readonly serviceImports?: readonly {
+    readonly contract: string;
+    readonly name: string;
+    readonly explicit?: boolean;
+  }[];
+  /** Tools whose successful call completes the run. */
+  readonly completingTools?: readonly string[];
+  /** The authored short form of one completing tool. */
+  readonly finishWith?: string;
   /** Names of the inputs read from the same execution (not committed, not kernel). */
   readonly turnInputs?: readonly string[];
   /**
@@ -106,7 +138,11 @@ type RuleField =
   | "output"
   | "background"
   | "inputs"
-  | "builtinTools";
+  | "builtinTools"
+  | "pluginTools"
+  | "serviceImports"
+  | "completingTools"
+  | "finishWith";
 
 /** Where a manifest format writes each field the rules read. */
 export type RuntimeRuleFieldPaths = Readonly<
@@ -136,6 +172,11 @@ export const IR_RULE_FIELD_PATHS: RuntimeRuleFieldPaths = {
   background: ["execution"],
   inputs: ["inputs"],
   builtinTools: ["tools", "builtin"],
+  pluginTools: ["tools", "plugin"],
+  serviceImports: ["tools", "services"],
+  completingTools: ["completeAfterTools"],
+  // The IR has only the long form; nothing writes this path.
+  finishWith: ["completeAfterTools"],
 };
 
 /** The grouped RUNTIME.md an author writes. */
@@ -161,6 +202,10 @@ export const AUTHORING_RULE_FIELD_PATHS: RuntimeRuleFieldPaths = {
   background: ["schedule", "background"],
   inputs: ["io", "inputs"],
   builtinTools: ["agent", "tools", "builtin"],
+  pluginTools: ["agent", "tools", "plugin"],
+  serviceImports: ["agent", "tools", "services"],
+  completingTools: ["agent", "completion", "afterTools"],
+  finishWith: ["agent", "finishWith"],
 };
 
 type RulePath = (
@@ -296,6 +341,76 @@ function subagentOnlyIssues(
     );
 }
 
+const FRAMEWORK_TOOLS: ReadonlySet<string> = new Set(FRAMEWORK_TOOL_NAMES);
+
+/**
+ * Imported services become tools of their own name. A name must be one a
+ * model provider accepts and must not shadow a framework tool, another tool
+ * of the runtime or another import. A runtime must finish without another
+ * plugin, so an import never completes it.
+ */
+function serviceImportIssues(
+  m: RuntimeRuleView,
+  imports: NonNullable<RuntimeRuleView["serviceImports"]>,
+  at: RulePath,
+  name: (field: RuleField, ...rest: string[]) => string,
+  add: (path: readonly (string | number)[], message: string) => void,
+): void {
+  if (m.runtimeType === "function") {
+    add(
+      at("serviceImports"),
+      `a function runtime calls services with ctx.services; remove ${name("serviceImports")}`,
+    );
+    return;
+  }
+  const own = new Set([...(m.builtinTools ?? []), ...(m.pluginTools ?? [])]);
+  const names = new Set<string>();
+  const contracts = new Set<string>();
+  for (const [i, entry] of imports.entries()) {
+    const field = name("serviceImports");
+    if (contracts.has(entry.contract))
+      add(
+        at("serviceImports", i),
+        `${field} imports ${entry.contract} twice; import each contract once`,
+      );
+    contracts.add(entry.contract);
+    if (!SERVICE_IMPORT_NAME_PATTERN.test(entry.name)) {
+      // The schema reports a written name that breaks the pattern.
+      if (!entry.explicit)
+        add(
+          at("serviceImports", i),
+          `the tool name "${entry.name}" derived from ${entry.contract} is not a valid tool name (letters, digits, _ and -, at most 64); name it with as`,
+        );
+      continue;
+    }
+    const path = entry.explicit
+      ? at("serviceImports", i, "as")
+      : at("serviceImports", i);
+    if (FRAMEWORK_TOOLS.has(entry.name))
+      add(
+        path,
+        `the imported tool "${entry.name}" has the name of a framework tool; name it with as`,
+      );
+    else if (own.has(entry.name))
+      add(
+        path,
+        `the imported tool "${entry.name}" has the name of a tool the runtime already declares; name it with as`,
+      );
+    else if (names.has(entry.name))
+      add(
+        path,
+        `two imports are named "${entry.name}"; name one of them with as`,
+      );
+    names.add(entry.name);
+  }
+  const completes = (tool: string) =>
+    `the imported tool "${tool}" cannot complete the run: it is absent when its provider is; complete with a tool of the runtime's own`;
+  for (const [i, tool] of (m.completingTools ?? []).entries())
+    if (names.has(tool)) add(at("completingTools", i), completes(tool));
+  if (m.finishWith !== undefined && names.has(m.finishWith))
+    add(at("finishWith"), completes(m.finishWith));
+}
+
 export interface RuntimeRuleIssue {
   readonly path: readonly (string | number)[];
   readonly message: string;
@@ -363,6 +478,9 @@ export function runtimeRuleIssues(
     );
 
   if (m.loop) loopProfileIssues(m, m.loop, { authoring }, at, name, add);
+
+  if (m.serviceImports?.length)
+    serviceImportIssues(m, m.serviceImports, at, name, add);
 
   if (m.runtimeType === "function" && !m.handler?.trim())
     add(at("handler"), `${name("handler")} is required for a function runtime`);

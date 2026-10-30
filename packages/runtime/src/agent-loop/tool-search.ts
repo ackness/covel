@@ -29,18 +29,20 @@ import {
 } from "@covel/tools";
 import type { LLMToolDefinition } from "@covel/shared";
 import type { ToolCallContext, ToolExecutor } from "./tool-executor.js";
+import { generatedToolNames } from "./agent-tool-surface.js";
 
 export { SEARCH_TOOLS_TOOL_NAME };
 
 /**
- * The runtime's declared tool names. Single source for both the initial
- * advertisement list and the deferred-pool derivation, so the two can never
- * disagree on a name.
+ * The runtime's declared tool names, the tools it imports included. Single
+ * source for the initial advertisement list, the deferred-pool derivation
+ * and the authorization set, so they can never disagree on a name.
  */
 export function declaredToolNames(manifest: RuntimeManifest): string[] {
   return [
     ...(manifest.tools?.builtin ?? []),
     ...(manifest.tools?.plugin ?? []),
+    ...generatedToolNames(manifest),
   ];
 }
 

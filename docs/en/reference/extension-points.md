@@ -4,7 +4,7 @@ Some work is not done by the kernel itself. Instead, it is handed to plugins: ad
 
 This page explains how to declare and register a provider, how the kernel combines several providers, and the inputs and outputs of two extension points: session world context and history compression. Plugin authors who write providers need it.
 
-For requests or follow-up work between packages, choose a service or event from the [communication guide](./plugin-extensions.md#choose-a-way-to-communicate); [nested calls with `ctx.recursiveCall`](./plugins.md#nested-calls-ctxrecursivecall) stay within one package.
+For requests or follow-up work between packages, choose a service or event from the [communication guide](./plugin-extensions.md#choose-a-way-to-communicate); [nested calls with `ctx.recursiveCall`](./plugins.md#nested-calls-ctxrecursivecall) stay within one package. Function runtimes and tools call services, and an agent can import a model-facing service as a tool; see [How tools and agents use services](./plugin-extensions.md#how-tools-and-agents-use-services).
 
 To have another agent answer a brief, no extension point is needed: the provider is an agent runtime that declares `schedule.subagentOnly` and `io.output.contract`, and the caller runs it as a [sub-agent](./plugins.md#sub-agents) with `ctx.agents.run` or the `delegate` tool. A sub-agent runs inside the caller's execution, can be found by contract in another package, and returns output only, with no writes.
 

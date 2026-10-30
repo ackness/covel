@@ -13,7 +13,10 @@ import { executeTurn } from "../src/execution.js";
 import { createHookPipeline } from "../src/hooks/pipeline.js";
 import { createPluginFaultLatch } from "../src/faults/plugin-fault-latch.js";
 import { saveAutoSnapshot } from "../src/snapshot/auto-snapshot.js";
-import { PluginServiceRegistry } from "../src/plugin-services.js";
+import {
+  PluginServiceRegistry,
+  serviceFailureOf,
+} from "../src/plugin-services.js";
 import { LLMRetryError } from "../src/retry/retry-common.js";
 
 const p: RuntimeManifest = {
@@ -55,6 +58,105 @@ async function fixture() {
   });
   return store;
 }
+describe("a function runtime whose tool's service fails", () => {
+  it("fails with the provider's provenance and is not counted", async () => {
+    const store = await fixture();
+    const latch = createPluginFaultLatch({ threshold: 1 });
+    const services = new PluginServiceRegistry({
+      list: async () => ["p"],
+      ensure: async (_sessionId, pluginId) => {
+        if (pluginId !== "p")
+          throw new Error(`Plugin is not active: ${pluginId}`);
+      },
+    });
+    services.register("q", {
+      name: "probe",
+      contract: "probe@1",
+      input: z.unknown(),
+      output: z.unknown(),
+      handler: () => null,
+    });
+    const pTool = tool({
+      name: "p-tool",
+      description: "Ask q",
+      parameters: z.object({}),
+      execute: (_params, ctx) =>
+        ctx.services!.call({
+          pluginId: "q",
+          name: "probe",
+          contract: "probe@1",
+          input: {},
+        }),
+    });
+    const toolExecutor = createToolExecutor({
+      findTool: (name) => (name === "p-tool" ? pTool : undefined),
+    });
+    let rejection: unknown;
+    const caller = vi.fn<FunctionHandler>(async (ctx) => {
+      try {
+        await ctx.tools!.call("p-tool", {});
+      } catch (error) {
+        rejection = error;
+        throw error;
+      }
+      return { outcome: "success", value: {} };
+    });
+    try {
+      const execution = await executeTurn(
+        {
+          sessionId: "s",
+          turnId: "first",
+          playerMessage: "go",
+          origin: "player",
+        },
+        [p],
+        {
+          store,
+          pluginFaults: latch,
+          services,
+          toolExecutor,
+          loadRuntime: async (manifest) => ({
+            manifest,
+            promptTemplate: "",
+            handler: caller,
+          }),
+          llm: {
+            generate: async () => {
+              throw new Error("no model");
+            },
+          },
+        },
+      );
+      expect(execution.result.runtimeResults).toMatchObject([
+        { pluginId: "p", status: "failed" },
+      ]);
+      expect(serviceFailureOf(rejection)).toMatchObject({
+        callerPluginId: "p",
+        providerPluginId: "q",
+        errorCode: "admission-error",
+      });
+      expect(execution.result.runtimeResults[0]?.fault).toBeUndefined();
+      const outcome = await commitExecution({
+        store,
+        execution,
+        completion: { kind: "turn", turnId: "first", durationMs: 0 },
+      });
+      expect(
+        latch.recordExecution({
+          sessionId: "s",
+          logicalKey: "first",
+          results: execution.commit.results,
+          outcome,
+          exempt: new Set(),
+        }),
+      ).toEqual([]);
+      expect(latch.isLatched("s", "p")).toBe(false);
+    } finally {
+      await toolExecutor.close();
+    }
+  });
+});
+
 describe("fault latch execution admission", () => {
   it("omits a latched runtime and hooks while another agent keeps its own tools", async () => {
     const store = await fixture();

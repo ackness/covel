@@ -220,6 +220,7 @@ Authoring examples match their schemas.
 - 两者都用带版本号的名字，输入输出都会按 schema 检查。
 - 注册的名字必须和清单一致。
 - `contributes.prompt` 里的固定片段由 Covel 自动注册，不用再声明成扩展。
+- 函数 runtime 用 `ctx.services`、工具用 `context.services` 调用服务。注册时写 `modelFacing: true` 和 `description`、在清单里写成 `{contract, modelFacing: true}` 的只读服务，agent 还可以在 `agent.tools.services` 里导入成工具，见[给模型用的服务](../reference/plugin-extensions.md#给模型用的服务)。
 
 服务 handler 可以读取提供者自己的非隐藏数据，不能写入：
 

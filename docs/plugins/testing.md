@@ -165,6 +165,7 @@ it("rejects an empty id", async () => {
 - 写入不合法时（例如写进以 `_` 开头的数据空间），保存失败，并且整次执行的写入都撤销。
 - 要测同一次执行里的多次写入，先分别调用工具，再用 `commitToolResults([first, second], ctx, store)` 一次保存。
 - 它不包含服务端接口、授权和事件目录。那些边界由服务端的测试和真实模型验证覆盖。
+- 工具要调用别的插件的服务时，用 `makeTestServiceRegistry({ activePluginIds, services })` 造一个真的服务注册表，作为 `services` 放进传给 `executeToolAndCommit` 的上下文，工具就有了 `context.services`。`services` 按提供方插件 ID 列出要注册的服务；`pausedPluginIds` 模拟因故障暂停的提供方。
 
 ### 测一个函数
 
@@ -215,6 +216,7 @@ it("writes one note", async () => {
 | `makeManualFunctionContext`                                            | 造一个函数用的 `ctx`                                                       |
 | `makeRandom(seed?)`                                                    | 测试用的 `ctx.random`。手写 `ctx` 的测试自己放进去                         |
 | `makeScriptedAgents(results)` | 测试用的 `ctx.agents`：按脚本回答 `ctx.agents.run`，并记下每次请求 |
+| `makeTestServiceRegistry(options)` | 测试用的服务注册表：列出的插件都算活跃且已获准，给工具的 `context.services` 用 |
 | `loadPluginMessages(pluginRoot, locale)`                               | 读取插件 `locales/` 里的译文，得到 `ctx.messages`。要断言中文输出时用它    |
 | `createPluginTestStore` / `executeToolAndCommit` / `commitToolResults` | 让工具走真实的执行和保存流程                                               |
 | `MockLLM`                                                              | 假模型。记录每次调用；支持一个默认回复和一串按顺序使用的回复               |

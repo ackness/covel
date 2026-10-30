@@ -126,7 +126,7 @@ Session prep groups the plugins by whether they call a model, that is by the der
 | `tools` | Tool names passed to `registerTool` |
 | `actions` | Nonempty `registerRpc` action names; `covel:`, `runtime:` and `event:` prefixes are reserved for framework approvals and rejected in declarations, registration and action requests. |
 | `commands` | Player command metadata. Its `action` must be listed in `actions`. |
-| `services` | Contract IDs passed to `registerService` |
+| `services` | Contract IDs passed to `registerService`. A model-facing service is written as `{contract, modelFacing: true}`; see [Model-facing services](./plugin-extensions.md#model-facing-services) |
 | `extensions` | Extensions provided with `provideExtension`, written as `<point>/<id>`, such as `prompt.segment@1/notes`. To set options such as `order` or `slot`, write `{point, id, …}`. |
 | `hooks` | The hook events the package listens to, written as event names, such as `PreToolUse`. To set `enforce`, write `{event, enforce}`. See [Hooks](./hooks.md). |
 | `forms` | Form IDs passed to `registerFormValidator` |
@@ -254,6 +254,7 @@ The tags the author writes come first, followed by the derived tags in this orde
 - When a package has only one inline runtime (its runtime ID equals the plugin ID), an agent that does not set `agent.tools.plugin` gets all of the tools in `contributes.tools` automatically. Set `plugin: []` to give it none.
 - If you add a tool to such a package that only a UI action should use, also write the agent's allowlist. Otherwise the model can call that tool too.
 - In a package with several runtimes, each runtime must declare its own tools.
+- `agent.tools.services` imports other plugins' model-facing services as tools: write a contract ID, or `{contract, as}` to name it otherwise. An imported tool is read-only; without a provider it is absent and the runtime runs as usual. Names, parameters and failure answers are in [Imported service tools](./tools.md#imported-service-tools). A function runtime cannot set it and uses `ctx.services` directly.
 
 ### Agent guards
 
@@ -417,7 +418,7 @@ agent:
 
 Completion tools should check required coverage before reporting success. For example, [world fact extraction](./tools.md#per-objective-assessment) requires an assessment of every supplied open objective. Valid JSON alone does not prove complete extraction.
 
-When there are several completing tools, or the model should call `runtime-done` when nothing changed, write the full `completion`. Write only one of `finishWith` and `completion`.
+When there are several completing tools, or the model should call `runtime-done` when nothing changed, write the full `completion`. Write only one of `finishWith` and `completion`. An imported service tool cannot be a completing tool: a runtime must not need another plugin to finish.
 
 - `completion.afterTools`: the run finishes once one of the listed tools succeeds.
 - When the model must read the tool result and revise it, use `completion.require: tool-use` without `afterTools`. Character creation, for example, returns the filled narrative for review before the model finishes.
@@ -666,7 +667,7 @@ The provider is an agent runtime that names the contract it provides in `io.outp
 Rules at run time:
 
 - **Own transcript**: the sub-agent's prompt is the provider's own body, the framework's completion instructions, then the brief. It sees neither the session history nor the caller's conversation.
-- **Read-only tools**: tools in the provider's `agent.tools` without the `readOnly` annotation (plugin tools, write tools such as `plugin-data-set`), `suspend` and `delegate` are taken away. A declared plugin tool that is not registered still fails the run as it always does.
+- **Read-only tools**: tools in the provider's `agent.tools` without the `readOnly` annotation (plugin tools, write tools such as `plugin-data-set`), `suspend` and `delegate` are taken away. A declared plugin tool that is not registered still fails the run as it always does. Imported service tools are read-only and stay.
 - **Loop profile**: without `agent.loop.profile` it runs `actor`: no streaming, no player interjections.
 - **Model**: it uses the model role the provider declares. The session's `runtimeModelOverrides` apply by the provider's runtimeId, also in a run resumed after suspension; the caller's override and the request's story model override do not.
 - **Caps**: one execution runs at most 8 sub-agents at a time, nested executions included, and a sub-agent cannot call another one (depth cap 1). A call over a cap gets `unavailable` at once; nothing queues.

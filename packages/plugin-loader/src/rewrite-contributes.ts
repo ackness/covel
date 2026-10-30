@@ -9,7 +9,14 @@ import {
   parseDocument,
   type YAMLSeq,
 } from "yaml";
-import { pluginManifestSchema, type PluginManifest } from "@covel/shared";
+import {
+  isModelFacingServiceContribution,
+  pluginManifestSchema,
+  serviceContributionContract,
+  serviceContributionSchema,
+  type PluginManifest,
+  type ServiceContribution,
+} from "@covel/shared";
 import { readPlainYamlFrontmatter } from "./plain-yaml-frontmatter.js";
 
 export const EXTRACTED_KINDS = [
@@ -25,7 +32,7 @@ type Contributions = NonNullable<PluginManifest["contributes"]>;
 export interface ExtractedDeclarations {
   readonly tools: readonly string[];
   readonly actions: readonly string[];
-  readonly services: readonly string[];
+  readonly services: readonly ServiceContribution[];
   readonly forms: readonly string[];
   readonly wires: readonly string[];
   readonly hooks: readonly (
@@ -46,6 +53,12 @@ interface DeclarationDrift {
 function names(values: readonly unknown[], key: Kind): string[] {
   return values.map((value) => {
     if (key !== "hooks" && typeof value === "string") return value;
+    if (key === "services") {
+      const service = serviceContributionSchema.parse(value);
+      return isModelFacingServiceContribution(service)
+        ? `${serviceContributionContract(service)} (model-facing)`
+        : serviceContributionContract(service);
+    }
     const hook = pluginManifestSchema.shape.contributes
       .unwrap()
       .shape.hooks.unwrap()

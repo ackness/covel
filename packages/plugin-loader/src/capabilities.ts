@@ -1,6 +1,7 @@
 import {
   DATA_OP_KINDS,
   pluginCapabilitiesSchema,
+  serviceContributionContract,
   type PluginCapabilities,
 } from "@covel/shared";
 import type { ParsedPluginMd, ParsedRuntimeMd } from "./types.js";
@@ -46,7 +47,8 @@ export function computePluginCapabilities({
       ...runtimes.flatMap(({ manifest }) => manifest.tools?.builtin ?? []),
     ],
     actions: contributes?.actions ?? [],
-    services: contributes?.services ?? [],
+    // Offering a service to models gives its code no new power.
+    services: (contributes?.services ?? []).map(serviceContributionContract),
     wires: contributes?.wires ?? [],
     forms: contributes?.forms ?? [],
     extensions: (contributes?.extensions ?? []).map(

@@ -106,6 +106,25 @@ describe("production plugin service admission", () => {
     await expect(resumed.run(f.call)).resolves.toBe("old-generation");
   });
 
+  it("reports paused providers from the captured execution, or the live latch outside one", async () => {
+    const f = await fixture();
+    const running = await f.host.capture("session");
+    expect(await f.host.admission.paused!("session")).toEqual([]);
+    f.pluginFaults.recordHookFault("session", "provider", "turn", "hook");
+    // The running execution keeps the set it started with.
+    expect(
+      await running.run(() => f.host.admission.paused!("session")),
+    ).toEqual([]);
+    expect(await f.host.admission.paused!("session")).toEqual(["provider"]);
+    const next = await f.host.capture("session");
+    expect(await next.run(() => f.host.admission.paused!("session"))).toEqual([
+      "provider",
+    ]);
+    // A paused provider is not listed, so discovery never offers it.
+    expect(await next.run(() => f.host.admission.list("session"))).toEqual([]);
+    expect(await f.host.admission.paused!("missing")).toEqual([]);
+  });
+
   it("resolves the captured active set once per discovery list", async () => {
     const f = await fixture();
     const captured = await f.host.capture("session");

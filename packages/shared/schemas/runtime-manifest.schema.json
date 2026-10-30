@@ -461,6 +461,35 @@
                 }
               ],
               "description": "Deferred tool loading. `true` defers the whole whitelist; a list defers only those names."
+            },
+            "services": {
+              "type": "array",
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "pattern": "^[a-z][a-z0-9.-]*@[1-9][0-9]*$"
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "contract": {
+                        "type": "string",
+                        "pattern": "^[a-z][a-z0-9.-]*@[1-9][0-9]*$",
+                        "description": "The contract ID of the model-facing service to import."
+                      },
+                      "as": {
+                        "type": "string",
+                        "pattern": "^[A-Za-z0-9_-]{1,64}$",
+                        "description": "The tool name the model sees. Defaults to the contract without its version, dots as dashes (`inventory.items@1` → `inventory-items`)."
+                      }
+                    },
+                    "required": ["contract"],
+                    "additionalProperties": false
+                  }
+                ]
+              },
+              "description": "Services the agent imports as read-only tools. Each names a contract; the one active provider that offers it to models answers the call. Without one the tool is left out for the run."
             }
           },
           "additionalProperties": false,

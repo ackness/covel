@@ -16,6 +16,7 @@ import {
 import type { ExecutionWriteBuffer } from "./execution-write-buffer.js";
 import type { HandlerHelperContext } from "./plugin-handler-helpers.js";
 import type { PluginDataVisibility } from "./upstream-plugin-data.js";
+import { tagServiceFailure } from "../plugin-services.js";
 
 /** A hook may rewrite the arguments into text that is not JSON. */
 function parseArguments(text: string): unknown {
@@ -128,6 +129,7 @@ export function createRuntimeTools(options: {
             inputSlots: options.inputs,
             emittedEventTopics: events.map((event) => event.topic),
             emitter: deps.emitter,
+            ...(deps.services ? { services: deps.services } : {}),
           },
         );
         assertLive();
@@ -160,7 +162,14 @@ export function createRuntimeTools(options: {
               "internal",
               "Tool call failed without an error.",
             );
-          throw new ToolError(error.code, error.message, { hint: error.hint });
+          const rejection = new ToolError(error.code, error.message, {
+            hint: error.hint,
+          });
+          // A tool that failed because its service failed blames the
+          // provider, as a direct service failure of the handler would.
+          throw raw.serviceFailure
+            ? tagServiceFailure(rejection, raw.serviceFailure)
+            : rejection;
         }
         buffer.push(...(result.pendingProposals ?? []));
         events.push(...(result.emittedEvents ?? []));
