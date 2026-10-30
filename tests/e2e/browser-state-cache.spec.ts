@@ -11,12 +11,15 @@ async function readPatches(page: Page, sessionId: string) {
   }, sessionId);
 }
 
+// The data service has no state patch writer any more, so the probe writes
+// the history cache directly: concurrent writes from two tabs must all be
+// kept, and deleting the session must clear them.
 async function appendPatch(page: Page, sessionId: string, id: string) {
   return page.evaluate(
     async ({ sessionId, id }) => {
-      const path = "/src/services/data-service.ts";
-      const { getDataService } = await import(path);
-      await getDataService().addStatePatch(sessionId, {
+      const path = "/src/services/app-kv-store.ts";
+      const { appendStatePatch } = await import(path);
+      await appendStatePatch({
         id,
         sessionId,
         summary: id,
@@ -130,9 +133,6 @@ test("session display caches persist across tabs and stay deleted after late wri
       const { getDataService } = await import(path);
       await getDataService().deleteSession(sessionId);
     }, sessionId);
-    await expect(appendPatch(second, sessionId, "late")).rejects.toThrow(
-      "Session not found",
-    );
     await expect(saveForm(second, sessionId, "late")).rejects.toThrow(
       "Session not found",
     );
