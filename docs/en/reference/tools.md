@@ -782,6 +782,8 @@ Pause the current runtime until the player gives input, then continue. It is dec
 
 The field objects support `type`, `name`, `label`, `placeholder`, `options`, `required`, `defaultValue`, `min`, `max` and `step`. Select defaults must match an option value.
 
+The player form initializes answers from defaults, including optional fields and `false`, `0` and `""`. Submitting without edits preserves those defaults; optional fields without defaults remain omitted.
+
 | Field type      | Compiled property                                                                                     |
 | --------------- | ----------------------------------------------------------------------------------------------------- |
 | text / textarea | `type: "string"`, `title: label`, `minLength: 1` when required                                        |
