@@ -4549,7 +4549,7 @@ A resumed runtime can suspend again: an agent calls `suspend` once more, or a fu
 - If one logical turn has several parallel suspended items, the count happens only after the last one is resumed. Retries do not count twice.
 - When a resumed runtime suspends again, the turn is still not complete. The whole chain counts once, when its last resume succeeds.
 - When a suspended item is abandoned, expires or is voided, the turn ends the way a normal end does: if it was the last item of the logical turn still waiting, the player's turn count goes up by one and the background jobs the turn held back (`schedule.detached`) are queued as usual. Both happen in the transaction that deletes the record. An item that another request is resuming still counts as waiting.
-- Progress jobs (`ctx.progress`) that the suspended execution reported stay in `waiting-input`. A resumed run reports progress under the original execution too, so the jobs of the whole chain end together: when the last resume commits, they end as `succeeded`; when the item is abandoned, expires or is voided, they end as `cancelled`. While a failed resume can be retried, or after a resume suspends again, they keep waiting.
+- Progress jobs (`ctx.progress`) that the suspended execution reported stay in `waiting-input`, including those reported by the nested calls (`ctx.recursiveCall`) that the suspended runtime made. A resumed run reports progress under the original execution too, so the jobs of the whole chain end together: when the last resume commits, they end as `succeeded`; when the item is abandoned, expires or is voided, they end as `cancelled`. While a failed resume can be retried, or after a resume suspends again, they keep waiting.
 
 ##### Resuming setup runtimes
 

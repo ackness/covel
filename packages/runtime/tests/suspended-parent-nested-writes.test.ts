@@ -24,6 +24,7 @@ import {
   executeTurn,
   planSuspensionAbandon,
   resumeSuspendedRuntime,
+  settleAbandonedSuspensionJobs,
 } from "../src/index.js";
 import type { HookPipeline } from "../src/hooks/pipeline.js";
 import type { TurnEmitter } from "../src/trace/turn-emitter.js";
@@ -82,6 +83,11 @@ const childHandler: FunctionHandler = async (ctx) => {
 function parentHandler(suspends: boolean): FunctionHandler {
   return async (ctx) => {
     if (ctx.resumedFromSuspensionId === undefined) {
+      await ctx.progress?.report({
+        jobId: "parent-job",
+        state: "running",
+        sequence: 1,
+      });
       await ctx.recursiveCall({ manualTrigger: { runtimeId: child.name } });
       await note(ctx, "A");
       if (suspends)
@@ -390,5 +396,150 @@ describe("nested writes of a suspended parent", () => {
         }),
       },
     ]);
+  });
+});
+
+/** A child that reports `child-job` (running, then as told) before it writes. */
+function reportingChild(final?: "succeeded"): FunctionHandler {
+  return async (ctx) => {
+    await ctx.progress?.report({
+      jobId: "child-job",
+      state: "running",
+      sequence: 1,
+    });
+    if (final)
+      await ctx.progress?.report({
+        jobId: "child-job",
+        state: final,
+        sequence: 2,
+      });
+    return childHandler(ctx);
+  };
+}
+
+describe("progress of a suspended parent's nested calls", () => {
+  type Fixture = Awaited<ReturnType<typeof fixture>>;
+
+  const scopeOf = (f: Fixture) =>
+    f.suspension!.pendingContinuation.executionContext.executionId;
+
+  const states = async (f: Fixture, jobId: string) =>
+    (
+      await f.store.listJobStatus(SESSION, {
+        progressScopeId: scopeOf(f),
+        jobId,
+      })
+    ).map((record) => record.state);
+
+  const resumeAndCommit = async (f: Fixture) => {
+    expect(await f.store.claimSuspension(f.suspension!.id)).not.toBeNull();
+    const resumed = await resumeSuspendedRuntime(
+      f.suspension!,
+      {},
+      parent,
+      f.deps,
+      { activeRuntimes: f.runtimes },
+    );
+    return { resumed, outcome: await commitResume(f, resumed) };
+  };
+
+  it("are recorded under the suspended execution's scope with the child's own runtime", async () => {
+    const f = await fixture({ child: reportingChild() });
+    const rows = await f.store.listJobStatus(SESSION, {
+      progressScopeId: scopeOf(f),
+      jobId: "child-job",
+    });
+    expect(rows.length).toBeGreaterThan(0);
+    expect(rows.every((row) => row.runtimeId === child.name)).toBe(true);
+    expect(rows.every((row) => row.pluginId === "probe")).toBe(true);
+  });
+
+  it("wait for input with the parent's own tasks", async () => {
+    const f = await fixture({ child: reportingChild() });
+    expect(await states(f, "parent-job")).toEqual(["running", "waiting-input"]);
+    expect(await states(f, "child-job")).toEqual(["running", "waiting-input"]);
+  });
+
+  it("take back a child's claimed success", async () => {
+    const f = await fixture({ child: reportingChild("succeeded") });
+    expect(await states(f, "child-job")).toEqual([
+      "running",
+      "succeeded",
+      "waiting-input",
+    ]);
+  });
+
+  it("end with the resume's commit, once, with the result they were saved with", async () => {
+    const f = await fixture({ child: reportingChild() });
+    const { outcome } = await resumeAndCommit(f);
+    expect(outcome.status).toBe("committed");
+    expect(await states(f, "child-job")).toEqual([
+      "running",
+      "waiting-input",
+      "succeeded",
+    ]);
+    expect(await states(f, "parent-job")).toEqual([
+      "running",
+      "waiting-input",
+      "succeeded",
+    ]);
+  });
+
+  it("are cancelled with the parent when the suspension is abandoned, and only once", async () => {
+    const f = await fixture({ child: reportingChild() });
+    const plan = await planSuspensionAbandon(f.store, f.suspension!);
+    await f.store.withTransaction((tx) =>
+      applySuspensionAbandonTx(tx, plan, timestamp),
+    );
+    await settleAbandonedSuspensionJobs({ store: f.store }, f.suspension!);
+    const cancelled = ["running", "waiting-input", "cancelled"];
+    expect(await states(f, "child-job")).toEqual(cancelled);
+    expect(await states(f, "parent-job")).toEqual(cancelled);
+
+    await settleAbandonedSuspensionJobs({ store: f.store }, f.suspension!);
+    expect(await states(f, "child-job")).toEqual(cancelled);
+    expect(await states(f, "parent-job")).toEqual(cancelled);
+  });
+
+  it("leave a task that already ended alone when the suspension is abandoned", async () => {
+    const f = await fixture({ child: reportingChild() });
+    await f.store.appendJobStatus({
+      sessionId: SESSION,
+      progressScopeId: scopeOf(f),
+      pluginId: "probe",
+      runtimeId: child.name,
+      jobId: "child-job",
+      sequence: 99,
+      state: "failed",
+      createdAt: timestamp,
+    } as never);
+    await settleAbandonedSuspensionJobs({ store: f.store }, f.suspension!);
+    expect((await states(f, "child-job")).at(-1)).toBe("failed");
+  });
+
+  it("stay waiting for input when a resume fails and the suspension stays open", async () => {
+    const f = await fixture({ child: reportingChild() });
+    expect(await f.store.claimSuspension(f.suspension!.id)).not.toBeNull();
+    const failing = {
+      ...f.deps,
+      loadRuntime: async (runtime: RuntimeManifest) => ({
+        manifest: runtime,
+        promptTemplate: "",
+        handler: (async (ctx) => {
+          if (ctx.resumedFromSuspensionId !== undefined)
+            return { outcome: "failed", error: "still broken" };
+          return ok();
+        }) as FunctionHandler,
+      }),
+    };
+    const resumed = await resumeSuspendedRuntime(
+      f.suspension!,
+      {},
+      parent,
+      failing,
+      { activeRuntimes: f.runtimes },
+    );
+    expect(resumed.result.status).toBe("failed");
+    expect(await states(f, "child-job")).toEqual(["running", "waiting-input"]);
   });
 });

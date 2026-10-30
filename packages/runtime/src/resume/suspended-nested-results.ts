@@ -10,7 +10,7 @@
  */
 
 import type { RuntimeResult } from "@covel/shared";
-import type { SuspendedNestedResult } from "@covel/store";
+import type { SuspendedNestedResult, SuspensionRecord } from "@covel/store";
 import {
   attachExecutionJournal,
   attachRuntimeTrigger,
@@ -63,4 +63,28 @@ export function restoreNestedResults(
       );
     return result;
   });
+}
+
+/**
+ * The runtimes whose results a suspension holds, read from the saved form
+ * without trusting it: an entry without string ids is ignored. Their
+ * `ctx.progress` tasks follow the suspended runtime.
+ */
+export function nestedRuntimesOf(
+  suspension: Pick<SuspensionRecord, "pendingContinuation">,
+): { readonly pluginId: string; readonly runtimeId: string }[] {
+  const seen = new Set<string>();
+  const runtimes: { pluginId: string; runtimeId: string }[] = [];
+  for (const entry of suspension.pendingContinuation.nestedResults ?? []) {
+    const { pluginId, runtimeId } = (entry?.result ?? {}) as {
+      pluginId?: unknown;
+      runtimeId?: unknown;
+    };
+    if (typeof pluginId !== "string" || typeof runtimeId !== "string") continue;
+    const key = `${pluginId}\u0000${runtimeId}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    runtimes.push({ pluginId, runtimeId });
+  }
+  return runtimes;
 }

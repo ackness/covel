@@ -393,6 +393,81 @@ describe("abandoning a suspension", () => {
   });
 });
 
+describe("abandoning a suspension that holds nested calls", () => {
+  const scope = "suspended-execution";
+  const report = (store: DataStore, runtimeId: string, jobId: string) =>
+    store.appendJobStatus({
+      sessionId,
+      progressScopeId: scope,
+      pluginId: "probe",
+      runtimeId,
+      jobId,
+      sequence: 1,
+      state: "waiting-input",
+      createdAt: timestamp,
+    } as never);
+  const statesOf = async (store: DataStore, jobId: string) =>
+    (
+      await store.listJobStatus(sessionId, {
+        progressScopeId: scope,
+        jobId,
+      })
+    ).map((record) => record.state);
+
+  function held(nestedResults: unknown[]): SuspensionRecord {
+    return {
+      id: "held",
+      sessionId,
+      turnId: "turn-1",
+      pluginId: "probe",
+      runtimeId: asker.name,
+      pendingContinuation: {
+        executionContext: { executionId: scope },
+        nestedResults: nestedResults.map((result) => ({ result })),
+      },
+    } as unknown as SuspensionRecord;
+  }
+
+  it("cancels the tasks of the runtimes it holds and leaves a sibling runtime's alone", async () => {
+    const store = createMemoryStore();
+    await createSession(store);
+    await report(store, asker.name, "own-job");
+    await report(store, "probe/nested", "nested-job");
+    await report(store, "probe/sibling", "sibling-job");
+
+    await settleAbandonedSuspensionJobs(
+      { store },
+      held([{ pluginId: "probe", runtimeId: "probe/nested" }]),
+    );
+
+    expect(await statesOf(store, "own-job")).toEqual([
+      "waiting-input",
+      "cancelled",
+    ]);
+    expect(await statesOf(store, "nested-job")).toEqual([
+      "waiting-input",
+      "cancelled",
+    ]);
+    expect(await statesOf(store, "sibling-job")).toEqual(["waiting-input"]);
+  });
+
+  it("ignores a saved result without runtime ids", async () => {
+    const store = createMemoryStore();
+    await createSession(store);
+    await report(store, asker.name, "own-job");
+
+    await settleAbandonedSuspensionJobs(
+      { store },
+      held([{ status: "success" }, null, { runtimeId: "probe/nested" }]),
+    );
+
+    expect(await statesOf(store, "own-job")).toEqual([
+      "waiting-input",
+      "cancelled",
+    ]);
+  });
+});
+
 describe("resuming a suspension", () => {
   it("ends the suspended execution's progress jobs with the resume's commit", async () => {
     const store = createMemoryStore();

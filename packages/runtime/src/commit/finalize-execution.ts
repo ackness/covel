@@ -98,6 +98,7 @@ import {
   registerDimensionSettlements,
 } from "./dimension-finalization.js";
 import { droppedUpstream, settleDroppedInputs } from "./commit-dependencies.js";
+import { nestedRuntimesOf } from "../resume/suspended-nested-results.js";
 import { flushPostCommit } from "./post-commit-fanout.js";
 import {
   datasetPolicyResolver,
@@ -471,7 +472,10 @@ function emitCommittedSuspension(
  * after the domain outcome is settled: a rolled-back execution fails all its
  * jobs; a committed one maps each job to its owning runtime's result status.
  * A suspended runtime's jobs wait for input, a claimed success too, since its
- * writes are held until the suspension is resumed.
+ * writes are held until the suspension is resumed; so do the jobs of the
+ * `ctx.recursiveCall` children saved with it, which share this scope. A
+ * reporting runtime with no result at all (a child whose parent failed) is
+ * cancelled.
  * In a continued scope (a resume) only the jobs of the runtimes this
  * execution ran are settled, and a rollback returns them, including a
  * claimed success whose writes did not land, to waiting for input.
@@ -506,6 +510,16 @@ async function terminalizeExecutionJobs(
         if (roots.has(result) === preferRoot)
           statusByRuntime.set(result.runtimeId, settled[index]!.status);
       });
+    // A suspended runtime's `ctx.recursiveCall` children are not among the
+    // results: their saved results wait inside its suspension. Their tasks
+    // follow the runtime that holds them, its own entry staying first.
+    for (const suspension of args.suspensions ?? []) {
+      const holder = statusByRuntime.get(suspension.runtimeId);
+      if (holder === undefined) continue;
+      for (const { runtimeId } of nestedRuntimesOf(suspension))
+        if (!statusByRuntime.has(runtimeId))
+          statusByRuntime.set(runtimeId, holder);
+    }
     const groups = new Map<
       string,
       { pluginId: string; runtimeId: string; jobIds: Set<string> }
@@ -525,11 +539,16 @@ async function terminalizeExecutionJobs(
       // suspended execution and were settled by its own commit.
       if (continued && !statusByRuntime.has(group.runtimeId)) continue;
       const rolledBack = status === "failed";
+      // A runtime that reported jobs and has no result here was a
+      // `ctx.recursiveCall` child of a parent that did not succeed: its work
+      // was not committed and nobody failed it.
       const outcome: ExecutionJobOutcome = rolledBack
         ? continued
           ? "suspended"
           : "failed"
-        : jobOutcomeForResult(statusByRuntime.get(group.runtimeId));
+        : statusByRuntime.has(group.runtimeId)
+          ? jobOutcomeForResult(statusByRuntime.get(group.runtimeId))
+          : "skipped";
       await finalizeJobStatuses(
         {
           store: args.store,

@@ -42,6 +42,7 @@ import {
   changedSuspensionWrites,
   type SuspensionWriteReader,
 } from "./suspension-baseline.js";
+import { nestedRuntimesOf } from "./suspended-nested-results.js";
 
 /**
  * Whether a suspension still waits for an answer: unresolved, or claimed by a
@@ -279,7 +280,10 @@ export async function settleAbandonedSetupAttempt(
   });
 }
 
-/** After the transaction commits: end the suspended execution's progress jobs. */
+/**
+ * After the transaction commits: end the suspended execution's progress jobs,
+ * and those of the nested calls saved with it.
+ */
 export async function settleAbandonedSuspensionJobs(
   deps: {
     readonly store: Pick<DataStore, "appendJobStatus" | "listJobStatus">;
@@ -294,6 +298,7 @@ export async function settleAbandonedSuspensionJobs(
       executionId: suspension.pendingContinuation.executionContext.executionId,
       pluginId: suspension.pluginId,
       runtimeId: suspension.runtimeId,
+      alsoSettle: nestedRuntimesOf(suspension),
     },
     "skipped",
   );

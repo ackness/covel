@@ -297,7 +297,8 @@ export async function returnJobsToWaitingInput(
  * the resumed runtime ended (`success`); an abandoned, expired or voided
  * suspension ends them `cancelled` (`skipped`). A failed resume that can be
  * retried leaves them waiting. Best-effort like every job-status write: a
- * failure is logged and never changes the outcome it follows.
+ * failure is logged and never changes the outcome it follows. The tasks of
+ * `alsoSettle` runtimes end with the suspended runtime's.
  */
 export async function finalizeSuspendedJobStatuses(
   deps: {
@@ -309,6 +310,14 @@ export async function finalizeSuspendedJobStatuses(
     readonly executionId: string;
     readonly pluginId: string;
     readonly runtimeId: string;
+    /**
+     * Other runtimes whose tasks end with it: the `ctx.recursiveCall`
+     * children saved with the suspension.
+     */
+    readonly alsoSettle?: readonly {
+      readonly pluginId: string;
+      readonly runtimeId: string;
+    }[];
   },
   outcome: "success" | "skipped",
 ): Promise<void> {
@@ -316,25 +325,30 @@ export async function finalizeSuspendedJobStatuses(
     const reported = await deps.store.listJobStatus(suspended.sessionId, {
       progressScopeId: suspended.executionId,
     });
-    const jobIds = reported
-      .filter(
-        (record) =>
-          record.pluginId === suspended.pluginId &&
-          record.runtimeId === suspended.runtimeId,
-      )
-      .map((record) => record.jobId);
-    if (jobIds.length === 0) return;
-    await finalizeJobStatuses(
-      {
-        store: deps.store,
-        ...(deps.eventBus ? { eventBus: deps.eventBus } : {}),
-        sessionId: suspended.sessionId,
-        progressScopeId: suspended.executionId,
-        pluginId: suspended.pluginId,
-        runtimeId: suspended.runtimeId,
-      },
-      { outcome, reportedJobs: jobIds },
-    );
+    for (const runtime of [
+      { pluginId: suspended.pluginId, runtimeId: suspended.runtimeId },
+      ...(suspended.alsoSettle ?? []),
+    ]) {
+      const jobIds = reported
+        .filter(
+          (record) =>
+            record.pluginId === runtime.pluginId &&
+            record.runtimeId === runtime.runtimeId,
+        )
+        .map((record) => record.jobId);
+      if (jobIds.length === 0) continue;
+      await finalizeJobStatuses(
+        {
+          store: deps.store,
+          ...(deps.eventBus ? { eventBus: deps.eventBus } : {}),
+          sessionId: suspended.sessionId,
+          progressScopeId: suspended.executionId,
+          pluginId: runtime.pluginId,
+          runtimeId: runtime.runtimeId,
+        },
+        { outcome, reportedJobs: jobIds },
+      );
+    }
   } catch (err) {
     console.warn(
       "[job-status] settling a suspended execution's jobs failed:",
