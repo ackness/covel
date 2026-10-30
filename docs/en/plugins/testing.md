@@ -8,6 +8,8 @@ Run all the commands from the root directory of the Covel repository.
 
 Test both an overlong dimension value and its corrected retry. Verify that no proposal escapes the failed call and that version conflicts and unexpected exceptions retain their identity; see [update-dimensions](../reference/tools.md#update-dimensions).
 
+For form tools, assert the error code and that failed validation publishes no interaction; then retry with corrected input.
+
 ## Choose a kind of test
 
 From top to bottom, the tests get slower and closer to the real game:

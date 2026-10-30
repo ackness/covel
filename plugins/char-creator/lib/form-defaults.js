@@ -1,4 +1,4 @@
-import { fillNarrativeTemplate } from "@covel/plugin-handlers-utils";
+import { fillNarrativeTemplate, ToolError } from "@covel/plugin-handlers-utils";
 
 // Whole-value matches only: an undecided voter or a story about an unknown
 // parent is a valid character detail. Schema enum values are author choices.
@@ -88,7 +88,8 @@ export function checkFormDefaults(form, attributes, locale = "en") {
     }
   }
   if (issues.length) {
-    throw new Error(
+    throw new ToolError(
+      "invalid-input",
       `${issues.join("\n")}\nFilled narrative: ${defaultNarrative(form)}\nRead the whole sentence, correct the defaults or narrativeTemplate, and call create-character-form again.`,
     );
   }

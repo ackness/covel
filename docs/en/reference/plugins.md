@@ -326,6 +326,8 @@ A provider that already succeeded in an earlier stage or event layer can also sa
 
 ### Notes on setup runtimes
 
+Opening character templates must include a placeholder for every collected field. Template/default errors are correctable `invalid-input` failures; see [character tools](./tools.md#create-character).
+
 A package-level `requires` makes sure the contract's provider is activated. It does not require the provider to produce output again on every execution.
 
 - A setup runtime that handles a form in later executions should use `after` to be placed after the one-time setup provider, and it should read the committed state.

@@ -984,6 +984,8 @@ Character "苏婉" (npc) already exists as char-abc123. No new record created. U
 
 `char-creator/player-init` 用插件工具 `create-character-form` 包装通用的 `create-form`：
 
+`create-character-form` 的模板和默认值检查失败时返回 `invalid-input`，包括缺少 `{{characterName}}` 占位符。模型修正后才能发布交互；下游意外异常保留原分类。
+
 - 只允许必填的 `characterName`，以及世界 schema 里的 string / enum 字段。enum 的提交值必须来自原来的 options。
 - 数字和复合属性保留默认值，不能改成叙事里的 select。
 - 表单里有不能收集的字段时，工具一次列出全部被拒的字段和原因（不是世界属性，或是数值 / 复合属性），并给出这个世界可以收集的属性清单。世界没有 string / enum 属性时，明确说明表单只有 `characterName` 一个字段。

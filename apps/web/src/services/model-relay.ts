@@ -17,16 +17,13 @@
  */
 
 import { isLocalNetworkBaseUrl, isLoopbackHostUrl } from "@covel/shared";
+import { relayResponseBody } from "./model-relay-body.js";
 import { getSettings } from "@/settings/store";
 import { isModelRelaySupported } from "@/services/api/health.js";
 import { parseJsonSseData, readSseStream } from "@/services/sse.js";
 
 const STREAM_URL = "/api/model-relay/stream";
 const CHANNEL_HEADER = "X-Model-Relay";
-/** One post carries at most this much of an answer; the server limit is 1 MiB. */
-const MAX_CHUNK_BYTES = 256 * 1024;
-/** A streamed answer is posted at least this often while it arrives. */
-const CHUNK_INTERVAL_MS = 50;
 const MAX_BACKOFF_MS = 30_000;
 
 /** Request headers the browser sets itself or that would leak this page. */
@@ -253,47 +250,14 @@ async function handleRequest(event: RelayRequestEvent): Promise<void> {
     }
     const reader = response.body?.getReader();
     if (reader) {
-      let pending: Uint8Array[] = [];
-      let pendingBytes = 0;
-      let lastFlush = Date.now();
-      const flush = async (): Promise<boolean> => {
-        if (pendingBytes === 0) return true;
-        const bytes = new Uint8Array(pendingBytes);
-        let offset = 0;
-        for (const part of pending) {
-          bytes.set(part, offset);
-          offset += part.byteLength;
-        }
-        pending = [];
-        pendingBytes = 0;
-        lastFlush = Date.now();
-        return post(event.id, "chunk", { bytes });
-      };
-      for (;;) {
-        const { value, done } = await reader.read();
-        if (done) break;
-        for (
-          let start = 0;
-          start < value.byteLength;
-          start += MAX_CHUNK_BYTES
-        ) {
-          const part = value.subarray(start, start + MAX_CHUNK_BYTES);
-          if (
-            pendingBytes + part.byteLength > MAX_CHUNK_BYTES &&
-            !(await flush())
-          ) {
-            controller.abort();
-            return;
-          }
-          pending.push(part);
-          pendingBytes += part.byteLength;
-        }
-        if (Date.now() - lastFlush >= CHUNK_INTERVAL_MS && !(await flush())) {
-          controller.abort();
-          return;
-        }
+      if (
+        !(await relayResponseBody(reader, (bytes) =>
+          post(event.id, "chunk", { bytes }),
+        ))
+      ) {
+        controller.abort();
+        return;
       }
-      if (!(await flush())) return;
     }
     await post(event.id, "end");
   } catch (error) {

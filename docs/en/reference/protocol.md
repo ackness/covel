@@ -812,6 +812,8 @@ Like `system.connected` and `system.heartbeat`, this frame **has no `id:` header
 
 **The local model relay stream.** This stream belongs to no session and is not part of the event bus: it hands the browser the model requests that the server needs to send to the player's computer or local network, and the browser answers with `POST /api/model-relay/requests/:id/*`. For the format of the events and the answers, see the [API reference](./api.md#local-model-relay-1); for the security boundary, see [Security boundaries](../internals/security.md#local-model-relay).
 
+The browser batches response bytes into ordered posts of at most 256 KiB. When no post is in flight, buffered bytes are sent within a 50 ms batching window even if the model pauses. A slow acknowledgement starts the next batching window only after it returns, so buffered reads can coalesce. Each response has at most one chunk POST in flight. A `204` acknowledges bytes; it is not player-visible progress or runtime completion.
+
 ### Forwarded runtime internal events (`/api/actions` forwards them, included in `CovelEvent`)
 
 The events below are forwarded by the server through the actions SSE stream. They are used for debugging and tracing.

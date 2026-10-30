@@ -986,6 +986,8 @@ Version and argument checks run again at commit time. Seeing a write in the pend
 
 `char-creator/player-init` wraps the general `create-form` with the plugin tool `create-character-form`:
 
+Template/default checks in `create-character-form` return `invalid-input`, including a missing `{{characterName}}` placeholder. The model must correct the template before an interaction is published; unexpected downstream failures retain their original classification.
+
 - It allows only the required `characterName`, plus the string and enum fields in the world schema. The submitted value of an enum must come from its original options.
 - Numeric and composite attributes keep their default values. They cannot be turned into a select in the narrative.
 - When the form has fields that cannot be collected, the tool lists all the rejected fields and the reason at once (not a world attribute, or a numeric or composite attribute). It also gives the list of attributes this world can collect. When the world has no string or enum attributes, it states clearly that the form has only one field, `characterName`.
