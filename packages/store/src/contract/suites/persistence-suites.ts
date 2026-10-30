@@ -9,6 +9,32 @@ import {
   ts,
 } from "../test-fixtures.js";
 
+/** Continuation fields a resume restores beyond the transcript. */
+const resumeParityFields = {
+  loop: {
+    corrections: { toolUse: 1, loopPerturbation: 1 },
+    activatedTools: ["lookup"],
+    steeredProse: ["Before the interjection."],
+    completingToolOutput: { saved: true, items: [1, 2] },
+  },
+  promptSegments: [{ pluginId: "rules", id: "house-rules" }],
+  nestedResults: [
+    {
+      result: {
+        pluginId: "probe",
+        runtimeId: "probe/child",
+        runId: "run-child",
+        turnId: "turn-1",
+        status: "success",
+        output: { content: "child" },
+        pendingProposals: [{ type: "plugin.data", payload: { key: "B" } }],
+      },
+      journal: [{ id: "message-1", content: "" }],
+      trigger: "probe/child",
+    },
+  ],
+} as const;
+
 export function registerPersistenceStoreSuites(
   getStore: () => DataStore,
 ): void {
@@ -28,6 +54,22 @@ export function registerPersistenceStoreSuites(
       expect(result!.sessionId).toBe("sess-susp-1");
       expect(result!.reason).toBe(suspension.reason);
       expect(result!.resolvedAt).toBeUndefined();
+    });
+
+    it("round-trips the loop state, prompt segments and nested results of a continuation", async () => {
+      const base = makeSuspension({ sessionId: "sess-susp-loop" });
+      const suspension = {
+        ...base,
+        pendingContinuation: {
+          ...base.pendingContinuation,
+          ...resumeParityFields,
+        },
+      };
+      await store.saveSuspension(suspension);
+      const result = await store.getSuspension(suspension.id);
+      expect(result?.pendingContinuation).toEqual(
+        suspension.pendingContinuation,
+      );
     });
 
     it("should filter listSuspensions by sessionId", async () => {
@@ -80,6 +122,7 @@ export function registerPersistenceStoreSuites(
           emittedEvents: [{ topic: "t" }],
           locale: "en-US",
           logicalTurn: 3,
+          ...resumeParityFields,
         },
       };
       await store.saveSuspension(suspension);

@@ -781,7 +781,7 @@ Pause the current runtime until the player gives input, then continue. It is dec
 What happens after the call:
 
 1. The agent calls `suspend({ reason, resumeSchema })`, and the tool returns the marker object above.
-2. After each tool execution, the framework checks the result with `isSuspendSentinel()`. When it recognizes the marker, it writes the state of this run to the `suspensions` table: the identity of the execution, the proposals and events already buffered, and the full conversation record with the model.
+2. After each tool execution, the framework checks the result with `isSuspendSentinel()`. When it recognizes the marker, it writes the state of this run to the `suspensions` table: the identity of the execution, the proposals and events already buffered, the full conversation record with the model, and the state of the tool loop (see the notes below).
 3. The framework emits a `turn.suspended` event, and the whole tool loop stops right away.
 4. Afterwards, data that matches `resumeSchema` is submitted through `POST /api/sessions/:id/suspensions/:suspensionId/resume`, and this runtime continues from where it stopped (see [api.md](./api.md) for details).
 
@@ -796,6 +796,9 @@ When one of the model's replies has several tool calls, the `suspend` call first
 - Resuming continues the execution that was suspended:
   - `ctx.locale`, `ctx.logicalTurn`, and `ctx.turnNumber` keep the values from the time of suspension. They do not change with the turn count of the session afterwards.
   - `ctx.world` is the World Model committed at resume time, with the writes buffered in the state added on top.
+  - The tool loop continues from its state before the suspension: the corrections already spent (the four in `agent.loop.corrections`), the deferred tools activated with `search-tools`, the prose written from merged player interjections, the output of a completing tool that already succeeded, and this turn's prompt segments (`promptSegments` of `PreLLMCall`). An activated tool that is no longer deferred is skipped on resume.
+  - The context is not assembled again: the saved conversation record is the context the runtime ran with, and `PostContextAssembly` does not fire again.
+- A resumed runtime can call `suspend` again. The old suspended item is marked handled and the new one continues the same execution; see [Suspending again](./api.md#suspending-again). Sub-agents cannot suspend.
 - `completion.require: tool-use` uses the same rule after resuming: with `afterTools`, only successful calls from that list count; without a list, successful business tool calls count. A tool that failed before the suspension, and was not cancelled out by a successful call of the same name, still counts as not completed. After resuming, it must be completed again.
 
 ### search-tools (injected by the framework, deferred tool loading)

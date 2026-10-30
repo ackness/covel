@@ -2,6 +2,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { SessionWorkspace } from "@/services/data-service.js";
 import { ApiError } from "@/services/api/request.js";
+import type { SessionAction, SessionState } from "../types.js";
 
 const {
   resumeSuspension,
@@ -23,6 +24,8 @@ vi.mock("@/services/api", () => ({
 vi.mock("@/lib/confirm-channel.js", () => ({ requestConfirm }));
 vi.mock("@/lib/toast-channel.js", () => ({ emitToast }));
 const { resumeSessionSuspension } = await import("../runtime-rpc.js");
+const { reducer, initialState } = await import("../reducer.js");
+const { reduceTurnSuspended } = await import("../event-reducers.js");
 
 function fixture() {
   const dispatch = vi.fn();
@@ -236,5 +239,90 @@ describe("resuming with missing approval", () => {
     await expect(fixture().resume()).rejects.toThrow();
     expect(requestConfirm).not.toHaveBeenCalled();
     expect(resolveApproval).not.toHaveBeenCalled();
+  });
+});
+
+describe("a resume that suspends again", () => {
+  const original = {
+    id: "susp-1",
+    sessionId: "session-1",
+    turnId: "turn-1",
+    runtimeId: "external/run",
+    pluginId: "external",
+    createdAt: "2026-10-29T00:00:00.000Z",
+    reason: "Who are you?",
+  };
+  const suspendedAgain = {
+    result: {
+      runtimeId: "external/run",
+      pluginId: "external",
+      status: "suspended",
+      turnId: "turn-1",
+      output: { suspensionId: "susp-2" },
+    },
+    events: [],
+  };
+  // The live event the server emits once the new suspension is committed.
+  const announceNext = (dispatch: (action: SessionAction) => void) =>
+    reduceTurnSuspended(
+      dispatch,
+      {
+        suspensionId: "susp-2",
+        sessionId: "session-1",
+        turnId: "turn-1",
+        runtimeId: "external/run",
+        pluginId: "external",
+        suspendedAt: "2026-10-29T00:01:00.000Z",
+        reason: "And your surname?",
+      },
+      {
+        sessionId: "session-1",
+        timestamp: "2026-10-29T00:01:00.000Z",
+        turnId: "turn-1",
+      },
+    );
+
+  function withReducer() {
+    const state = fixture();
+    let session: SessionState = {
+      ...initialState,
+      suspensions: [original],
+    };
+    const apply = (action: SessionAction) => {
+      session = reducer(session, action);
+    };
+    state.dispatch.mockImplementation(apply);
+    return { ...state, apply, session: () => session };
+  }
+
+  function expectOnlyTheNewSuspension(session: SessionState) {
+    expect(session.suspensions.map((suspension) => suspension.id)).toEqual([
+      "susp-2",
+    ]);
+    expect(session.executionSteps).toEqual([
+      expect.objectContaining({
+        runtimeId: "external/run",
+        turnId: "turn-1",
+        status: "suspended",
+      }),
+    ]);
+  }
+
+  it("keeps only the new suspension when its event arrives before the response", async () => {
+    const state = withReducer();
+    resumeSuspension.mockImplementation(async () => {
+      announceNext(state.apply);
+      return suspendedAgain;
+    });
+    await state.resume();
+    expectOnlyTheNewSuspension(state.session());
+  });
+
+  it("keeps only the new suspension when its event arrives after the response", async () => {
+    const state = withReducer();
+    resumeSuspension.mockResolvedValue(suspendedAgain);
+    await state.resume();
+    announceNext(state.apply);
+    expectOnlyTheNewSuspension(state.session());
   });
 });

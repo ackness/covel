@@ -229,6 +229,38 @@ export interface SuspensionWriteBaseline {
   readonly digest: string | null;
 }
 
+/**
+ * Agent loop state that the transcript cannot carry. Each key is left out
+ * when empty, and an absent key means the empty state.
+ */
+export interface SuspendedLoopState {
+  /** Corrections already spent, by kind; kinds at 0 are left out. */
+  readonly corrections?: Readonly<
+    Partial<
+      Record<"toolUse" | "review" | "loopPerturbation" | "outputRepair", number>
+    >
+  >;
+  /** Deferred tools that `search-tools` activated before the suspension. */
+  readonly activatedTools?: readonly string[];
+  /** Prose written before a late player interjection, in order. */
+  readonly steeredProse?: readonly string[];
+  /** The output of a completing tool that succeeded before the suspension. */
+  readonly completingToolOutput?: Readonly<Record<string, unknown>>;
+}
+
+/**
+ * A `ctx.recursiveCall` result of a suspended function, kept so that it
+ * commits with the parent's successful resume.
+ */
+export interface SuspendedNestedResult {
+  /** The `RuntimeResult`, including its buffered proposals. */
+  readonly result: unknown;
+  /** Conversation rows (`TurnMessageRecord`) it adds when it commits. */
+  readonly journal?: readonly unknown[];
+  /** The runtime it counts one run of in the trigger ledger. */
+  readonly trigger?: string;
+}
+
 /** The session and plugin state a suspension was taken under. */
 export interface SuspensionBasis {
   /**
@@ -321,6 +353,21 @@ export interface SuspensionRecord {
      * completes the turn queues them in its commit transaction.
      */
     readonly withheldRuntimeJobs?: readonly unknown[];
+    /** Agent loop state beyond the transcript (agent runtimes only). */
+    readonly loop?: SuspendedLoopState;
+    /**
+     * The prompt segments of the agent's prompt, handed to `PreLLMCall` hooks
+     * again on resume (agent runtimes only).
+     */
+    readonly promptSegments?: readonly {
+      readonly pluginId: string;
+      readonly id: string;
+    }[];
+    /**
+     * Results of a suspended function's `ctx.recursiveCall`s, in commit order.
+     * They commit with its successful resume, children before the parent.
+     */
+    readonly nestedResults?: readonly SuspendedNestedResult[];
   };
   readonly createdAt: string;
   /** Set to ISO timestamp when resume completes successfully. */

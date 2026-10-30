@@ -211,6 +211,7 @@ Details to remember:
   - The execution record. `turn_results` and each runtime's output are written before the commit; `turn_results` starts as `pending` and is settled to `committed` or `failed` after the commit.
 - `turn.suspended` is sent only after the commit.
 - When a suspension record is saved, an older item of the same runtime that still waits is voided in the same transaction. A resume's commit transaction first checks the record contents noted at the suspension, and writes nothing when one changed.
+- A resumed runtime can suspend again. That commit first marks the old suspended item handled, then saves the new one; the new item continues the same execution and does not abandon the old one. The rules are in [Suspending again](../reference/api.md#suspending-again).
 - The automatic snapshot is taken after all proposals are committed. This makes sure the conversation position, characters, state, and plugin data all belong to the same committed turn.
 - `execution.completed.committed` is the final signal to the client. The frontend uses it to confirm or take back what it showed first.
 - Event publishing after a commit runs one event at a time, and one failure does not roll back data that was already written. On failure, the host records a `commit.fanout.failed` trace. The session's subscribed stream receives `system.reset` (`reason: "publish-failed"`) and reads everything again. The `execution.completed` event carries `resync: true`.
@@ -363,7 +364,7 @@ flowchart LR
 - It can emit events: its `tools.builtin` lists `emit-event`, or it declares `advertiseEvents: true`;
 - It changes characters, state, or interactions directly.
 
-**When the turn has a suspension.** When a runtime in the turn suspends, these jobs are not queued yet: they are saved with the suspended item, and the turn is not counted yet either. The exit that ends the turn queues the jobs and counts the turn: the last suspended item resumes successfully, or it is abandoned, expires, or is voided as out of date. The rules are in [Suspensions and turn counting](../reference/api.md#suspensions-and-turn-counting).
+**When the turn has a suspension.** When a runtime in the turn suspends, these jobs are not queued yet: they are saved with the suspended item, and the turn is not counted yet either. The exit that ends the turn queues the jobs and counts the turn: the last suspended item resumes successfully, or it is abandoned, expires, or is voided as out of date. When a resume suspends again, the jobs move to the new suspended item and the turn is still not counted; a whole chain of suspensions counts once, when it ends. The rules are in [Suspensions and turn counting](../reference/api.md#suspensions-and-turn-counting).
 
 **Writes after a suspension.** While an item is suspended, background jobs and manual runs commit as usual. The suspended item notes the content at that moment of every record its saved writes would change. When one of them is changed later, the resume is refused and the item is voided, so the old writes never overwrite the new ones. The rules are in [Out-of-date suspended items](../reference/api.md#out-of-date-suspended-items).
 

@@ -250,43 +250,33 @@ describe("resumed runtime terminal failures", () => {
     }
   });
 
-  it("cancels PreRuntime before loading the continuation", async () => {
+  it("cancels before loading the continuation, without running PreRuntime", async () => {
     const f = fixture();
     const controller = new AbortController();
-    const entered = Promise.withResolvers<void>();
-    const release = Promise.withResolvers<void>();
-    let hookSignal: AbortSignal | undefined;
+    controller.abort(new Error("host is closing"));
+    const pre = vi.fn(async () => ({ action: "continue" as const }));
     f.deps.hookPipeline!.register({
-      id: "wait-before-resume",
+      id: "pre-runtime",
       event: "PreRuntime",
-      async handler(context) {
-        hookSignal = context.signal;
-        entered.resolve();
-        await release.promise;
-        return { action: "continue" };
-      },
+      handler: pre,
     });
     const loadRuntime = vi.fn(f.deps.loadRuntime!);
-    const running = resumeRuntimePipeline(f.suspension, {}, f.manifest, {
-      ...f.deps,
-      loadRuntime,
-      turnControl: { executionSignal: controller.signal },
-    });
     try {
-      await entered.promise;
-      controller.abort(new Error("host is closing"));
-      expect(hookSignal?.aborted).toBe(true);
-      const result = await running;
+      const result = await resumeRuntimePipeline(f.suspension, {}, f.manifest, {
+        ...f.deps,
+        loadRuntime,
+        turnControl: { executionSignal: controller.signal },
+      });
       expect(result).toMatchObject({
         status: "failed",
         output: null,
         error: "host is closing",
       });
+      // PreRuntime ran once for this runtime, at its original dispatch.
+      expect(pre).not.toHaveBeenCalled();
       expect(loadRuntime).not.toHaveBeenCalled();
       expect(f.failedEvents()).toHaveLength(1);
     } finally {
-      release.resolve();
-      await running.catch(() => {});
       await f.eventBus.close();
     }
   });

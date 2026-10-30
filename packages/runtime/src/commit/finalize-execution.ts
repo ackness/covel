@@ -48,6 +48,7 @@ import { isSetupRuntime } from "@covel/shared";
 import {
   assertSuspensionWritesUnchanged,
   SuspensionDataChangedError,
+  nestedResultProposals,
   takeSuspensionWriteBaseline,
 } from "../resume/suspension-baseline.js";
 import {
@@ -653,11 +654,13 @@ export async function finalizeExecution(
             : {}),
           takenUnder: {
             ...continuation.takenUnder,
-            writes: await takeSuspensionWriteBaseline(
-              tx,
-              sessionId,
-              continuation.pendingProposals,
-            ),
+            writes: await takeSuspensionWriteBaseline(tx, sessionId, [
+              ...continuation.pendingProposals,
+              ...nestedResultProposals(
+                continuation.nestedResults ?? [],
+                sessionId,
+              ),
+            ]),
           },
         },
       };

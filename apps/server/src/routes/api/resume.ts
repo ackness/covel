@@ -39,6 +39,11 @@ import {
  * The records are compared again first in the commit transaction, so a write
  * that lands while the runtime runs voids it too, with nothing committed.
  *
+ * Suspending again: a resumed runtime may suspend once more. The resume then
+ * commits like a success and answers 200 with `result.status: "suspended"`;
+ * the claimed record resolves and the new one, which continues the same
+ * execution, is saved in that transaction.
+ *
  * Expiry: the suspension-touching routes opportunistically fire a
  * time-gated, best-effort global sweep of stale (unresolved, older-than-TTL)
  * suspensions via `maybeSweepExpiredSuspensions`; a one-time forced sweep also
@@ -368,7 +373,12 @@ resumeRoutes.post("/:id/suspensions/:suspensionId/resume", async (c) => {
 
         const { result } = execution;
 
-        if (result.status !== "success" || !result.output) {
+        // A resumed runtime that suspends again commits like a success: the
+        // old record resolves and the new one is saved in one transaction.
+        if (
+          (result.status !== "success" && result.status !== "suspended") ||
+          !result.output
+        ) {
           // No proposals were submitted: count only the runtime's own fault,
           // leaving buffered writes and the unresolved suspension untouched.
           await recordExecutionFaults({

@@ -13,6 +13,7 @@ import {
   collectExecutionTriggerRuns,
   collectExecutionTriggers,
   attachRuntimeJournal,
+  runtimeTriggerOf,
 } from "./execution-journal.js";
 import {
   collectExecutionSuspensionRuns,
@@ -28,6 +29,7 @@ import { runTurnPipeline } from "./turn-executor/turn-executor.js";
 import {
   commitUnitSizes,
   inCommitOrder,
+  nestedResultsOf,
 } from "./turn-executor/nested-results.js";
 import {
   resumeRuntimePipeline,
@@ -383,11 +385,16 @@ export async function resumeSuspendedRuntime(
       ? (suspension.pendingContinuation.withheldRuntimeJobs as
           readonly DeferredRuntimeJob[] | undefined)
       : undefined;
-  const carrier = { runtimeResults: [result] };
+  // Nested results restored from the suspension commit with the resumed
+  // parent, children first, as one unit.
+  const carrier = {
+    runtimeResults: [result],
+    nestedRuntimeResults: nestedResultsOf([result]),
+  };
   if (
     result.status === "success" &&
     result.output &&
-    collectExecutionTriggers(carrier).length === 0
+    runtimeTriggerOf(result) === undefined
   ) {
     attachRuntimeJournal(
       result,
@@ -401,6 +408,38 @@ export async function resumeSuspendedRuntime(
       result.output,
     );
   }
+  // A resumed run that suspends again continues the same logical runtime:
+  // its new record keeps the chain's identity, so the resume that finally
+  // ends it counts the turn once, releases the held-back jobs once and
+  // settles the suspended execution's progress jobs.
+  const suspensions = collectExecutionSuspensions(carrier).map((record) => {
+    const { withheldRuntimeJobs: _own, ...continuation } =
+      record.pendingContinuation;
+    const withheld = suspension.pendingContinuation.withheldRuntimeJobs;
+    return {
+      ...record,
+      pendingContinuation: {
+        ...continuation,
+        executionContext: inherited,
+        takenUnder: {
+          ...continuation.takenUnder,
+          playerTurns: suspension.pendingContinuation.takenUnder.playerTurns,
+        },
+        ...(withheld ? { withheldRuntimeJobs: withheld } : {}),
+      },
+    };
+  });
+  // The commit reads each result's manifest (its output kind, its setup
+  // role), nested results' included.
+  const results = inCommitOrder([result]);
+  const runtimes = [
+    manifest,
+    ...(options?.activeRuntimes ?? []).filter(
+      (runtime) =>
+        runtime.name !== manifest.name &&
+        results.some((nested) => nested.runtimeId === runtime.name),
+    ),
+  ];
   const setup = await resumedSetupState({
     store: deps.store,
     suspension,
@@ -421,11 +460,15 @@ export async function resumeSuspendedRuntime(
             ? { countPolicy: "none" as const }
             : {}),
         },
-        runtimes: [manifest],
-        results: [result],
+        runtimes,
+        results,
+        commitUnits: commitUnitSizes([result]),
         journalMessages: collectExecutionJournal(carrier),
+        journalMessageRuns: collectExecutionJournalRuns(carrier),
         runtimeTriggers: collectExecutionTriggers(carrier),
-        suspensions: collectExecutionSuspensions(carrier),
+        runtimeTriggerRuns: collectExecutionTriggerRuns(carrier),
+        suspensions,
+        suspensionRuns: collectExecutionSuspensionRuns(carrier),
         turnIds: [],
         activePluginIds: hookScope.activePluginIds,
         sessionClock: {

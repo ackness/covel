@@ -237,7 +237,7 @@ describe("prepared resume host API", () => {
     hookPipeline.register({
       id: "inactive",
       pluginId: "inactive",
-      event: "PreRuntime",
+      event: "PostRuntime",
       handler: inactive,
     });
     const settings = { probe: { config: { tone: "original" } } };
@@ -246,7 +246,7 @@ describe("prepared resume host API", () => {
     hookPipeline.register({
       id: "active",
       pluginId: "probe",
-      event: "PreRuntime",
+      event: "PostRuntime",
       handler: async (context) => {
         readSettings = context.getOwnSettings;
         observed.push(context.getOwnSettings!());

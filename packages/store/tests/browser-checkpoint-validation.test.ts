@@ -223,6 +223,50 @@ describe("checkpoint record validation", () => {
       }),
     ).toThrow(/inputSlots.narrative.source.resultId/);
   });
+  it("accepts a continuation's loop state, prompt segments and nested results", () => {
+    const suspension = checkpoint.suspensions[0]!;
+    const withLoop = (loop: unknown) => ({
+      ...checkpoint,
+      suspensions: [
+        {
+          ...suspension,
+          pendingContinuation: {
+            ...suspension.pendingContinuation,
+            loop,
+            promptSegments: [{ pluginId: "rules", id: "house-rules" }],
+            nestedResults: [
+              {
+                result: {
+                  pluginId: "probe",
+                  runtimeId: "probe/child",
+                  runId: "run-child",
+                  turnId: "turn-1",
+                  status: "success",
+                  pendingProposals: [],
+                },
+                journal: [{ id: "message-1" }],
+                trigger: "probe/child",
+              },
+            ],
+          },
+        },
+      ],
+    });
+    const valid = withLoop({
+      corrections: { toolUse: 1, review: 0 },
+      activatedTools: ["lookup"],
+      steeredProse: ["Before."],
+      completingToolOutput: { saved: true },
+    });
+    expect(validateBrowserCheckpoint(valid).suspensions[0]).toEqual(
+      valid.suspensions[0],
+    );
+    for (const count of [-1, 1.5])
+      expect(() =>
+        validateBrowserCheckpoint(withLoop({ corrections: { review: count } })),
+      ).toThrow("suspensions[0].pendingContinuation.loop.corrections.review");
+  });
+
   it("preserves valid records in every durable domain and opaque JSON", () => {
     expect(validateBrowserCheckpoint(checkpoint)).toEqual(checkpoint);
   });

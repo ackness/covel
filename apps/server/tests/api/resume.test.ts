@@ -23,7 +23,12 @@ import {
   type PluginRegistry,
 } from "@covel/plugin-loader";
 import type { ExecutionContext, RuntimeManifest } from "@covel/shared";
-import { createHookPipeline, type HookPipeline } from "@covel/runtime";
+import {
+  createHookPipeline,
+  createToolExecutor,
+  type HookPipeline,
+} from "@covel/runtime";
+import { suspendTool } from "@covel/tools";
 import { makeErrorHandler } from "../../src/api-error.js";
 import { resumeRoutes } from "../../src/routes/api/resume.js";
 import {
@@ -224,7 +229,11 @@ const TEST_MANIFEST: RuntimeManifest = {
   ],
 };
 
-function makeDefaultDeps(store: DataStore, overrides?: Partial<Deps>): Deps {
+function makeDefaultDeps(
+  store: DataStore,
+  overrides?: Partial<Deps>,
+  manifest: RuntimeManifest = TEST_MANIFEST,
+): Deps {
   const pluginRegistry = createPluginRegistry();
   // Register the test plugin so resume route can find the runtime manifest
   pluginRegistry.register({
@@ -256,7 +265,7 @@ function makeDefaultDeps(store: DataStore, overrides?: Partial<Deps>): Deps {
     manifests: [
       {
         runtime: {},
-        manifest: TEST_MANIFEST,
+        manifest,
         promptTemplate: "Test prompt",
         rawFrontmatter: {},
       },
@@ -271,7 +280,7 @@ function makeDefaultDeps(store: DataStore, overrides?: Partial<Deps>): Deps {
     llmAdapter: makeDefaultLLM(),
     loadRuntimeFn: async () =>
       ({
-        manifest: TEST_MANIFEST,
+        manifest,
         promptTemplate: "Test prompt",
       }) as never,
     toolExecutor: {
@@ -602,7 +611,6 @@ describe("Resume Routes", () => {
       });
       await createSuspension(store);
       const hookPipeline = createHookPipeline();
-      let runtimeInputSettings: unknown;
       let hookSettings: unknown;
       const commitSettings: unknown[] = [];
       for (const event of ["PreStateCommit", "PostStateCommit"] as const) {
@@ -616,12 +624,13 @@ describe("Resume Routes", () => {
           },
         });
       }
-      hookPipeline.register<{ input: { userSettings?: unknown } }>({
-        id: "test-plugin:PreRuntime:settings",
-        event: "PreRuntime",
+      // PreRuntime ran when the runtime was first dispatched; the resumed run
+      // ends with PostRuntime, which reads the settings of this request.
+      hookPipeline.register({
+        id: "test-plugin:PostRuntime:settings",
+        event: "PostRuntime",
         pluginId: "test-plugin",
-        handler: async (ctx, payload) => {
-          runtimeInputSettings = payload.input.userSettings;
+        handler: async (ctx) => {
           hookSettings = ctx.getOwnSettings?.();
           return { action: "continue" };
         },
@@ -647,9 +656,6 @@ describe("Resume Routes", () => {
       );
 
       expect(res.status).toBe(200);
-      expect(runtimeInputSettings).toEqual({
-        "test-plugin": { tone: "player", detail: 2 },
-      });
       expect(hookSettings).toEqual({
         tone: "player",
         detail: 2,
@@ -1091,6 +1097,97 @@ describe("Resume Routes", () => {
       expect((await resume()).status).toBe(200);
       expect((await store.getSession("sess-1"))?.completedPlayerTurns).toBe(2);
       expect((await resume()).status).toBe(409);
+      expect((await store.getSession("sess-1"))?.completedPlayerTurns).toBe(2);
+    });
+
+    it("returns a resumed runtime that suspends again as suspended, under a new id", async () => {
+      await store.updateSession("sess-1", {
+        phase: "playing",
+        completedPlayerTurns: 1,
+      });
+      await createSuspension(store);
+      let replies = 0;
+      const app = createTestApp(
+        makeDefaultDeps(
+          store,
+          {
+            llmAdapter: {
+              generate: async () =>
+                ++replies === 1
+                  ? {
+                      content: null,
+                      toolCalls: [
+                        {
+                          id: "tc-suspend-2",
+                          name: "suspend",
+                          arguments: JSON.stringify({
+                            reason: "Need a surname too",
+                            resumeSchema: {
+                              type: "object",
+                              properties: { surname: { type: "string" } },
+                              required: ["surname"],
+                            },
+                          }),
+                        },
+                      ],
+                      finishReason: "tool_calls",
+                      usage: { inputTokens: 5, outputTokens: 5 },
+                    }
+                  : {
+                      content: '{"narrativeOutput": "Resume complete."}',
+                      toolCalls: [],
+                      finishReason: "stop",
+                      usage: { inputTokens: 5, outputTokens: 5 },
+                    },
+            },
+            // The real executor, so the builtin suspend tool runs as usual.
+            toolExecutor: createToolExecutor({
+              findTool: (name) =>
+                name === suspendTool.name ? suspendTool : undefined,
+            }) as never,
+          },
+          { ...TEST_MANIFEST, tools: { builtin: ["suspend"] } },
+        ),
+      );
+      const resume = (id: string, data: Record<string, string>) =>
+        app.request(`/api/sessions/sess-1/suspensions/${id}/resume`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-Provider-Keys": "dGVzdA==",
+          },
+          body: JSON.stringify({ data }),
+        });
+      const openIds = async () => {
+        const res = await app.request("/api/sessions/sess-1/suspensions");
+        const body = (await res.json()) as { items: { id: string }[] };
+        return body.items.map((item) => item.id);
+      };
+
+      const first = await resume("susp-1", { name: "Alice" });
+      expect(first.status).toBe(200);
+      const firstBody = (await first.json()) as {
+        result: { status: string; output?: { suspensionId?: string } };
+      };
+      expect(firstBody.result.status).toBe("suspended");
+      const nextId = firstBody.result.output?.suspensionId;
+      expect(nextId).toBeDefined();
+      expect(nextId).not.toBe("susp-1");
+      expect(await openIds()).toEqual([nextId]);
+      // The logical turn is still open while the runtime waits again.
+      expect((await store.getSession("sess-1"))?.completedPlayerTurns).toBe(1);
+
+      const stale = await resume("susp-1", { name: "Alice" });
+      expect(stale.status).toBe(409);
+      expect(await stale.text()).toContain("already resolved");
+
+      const second = await resume(nextId!, { surname: "Liddell" });
+      expect(second.status).toBe(200);
+      const secondBody = (await second.json()) as {
+        result: { status: string };
+      };
+      expect(secondBody.result.status).toBe("success");
+      expect(await openIds()).toEqual([]);
       expect((await store.getSession("sess-1"))?.completedPlayerTurns).toBe(2);
     });
 

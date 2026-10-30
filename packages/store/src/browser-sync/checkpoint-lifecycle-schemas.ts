@@ -101,6 +101,32 @@ const inputSlots = z.record(
   ]),
 );
 
+const correctionCount = z.number().int().nonnegative();
+const suspendedLoopState = z.strictObject({
+  corrections: z
+    .strictObject({
+      toolUse: correctionCount.optional(),
+      review: correctionCount.optional(),
+      loopPerturbation: correctionCount.optional(),
+      outputRepair: correctionCount.optional(),
+    })
+    .optional(),
+  activatedTools: z.array(nonEmptyString).optional(),
+  steeredProse: z.array(z.string()).optional(),
+  completingToolOutput: jsonObject.optional(),
+});
+const suspendedNestedResult = z.strictObject({
+  result: z.looseObject({
+    pluginId: nonEmptyString,
+    runtimeId: nonEmptyString,
+    runId: nonEmptyString,
+    turnId: z.string(),
+    status: z.string(),
+  }),
+  journal: z.array(jsonValue).optional(),
+  trigger: nonEmptyString.optional(),
+});
+
 const suspensions = createdRow.extend({
   turnId: z.string(),
   runtimeId: z.string(),
@@ -148,6 +174,11 @@ const suspensions = createdRow.extend({
     currentTurnUserMessages: z.number().int().positive().optional(),
     emittedEvents: z.array(jsonValue).optional(),
     suspendToolCallId: z.string().optional(),
+    loop: suspendedLoopState.optional(),
+    promptSegments: z
+      .array(z.strictObject({ pluginId: z.string(), id: z.string() }))
+      .optional(),
+    nestedResults: z.array(suspendedNestedResult).optional(),
   }),
   // All backends use a timestamp-prefixed claim marker while resume is active.
   resolvedAt: z

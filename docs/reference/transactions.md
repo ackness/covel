@@ -448,6 +448,8 @@ SqliteStore、MemoryStore 和 PgStore（都在 Node 上）用同一种办法：
 - resume 通过 `extraInTx` 把助手的回合消息和 suspension 的 resolved 标记放进同一个事务。任何一处失败，连同 proposal 一起回滚；claim 释放之后可以重试。
 - resolved 标记同时清掉这条 suspension 里已被本次 resume 用掉的内容（消息、已缓冲的工具调用和 proposal、输入），只留执行标识、挂起时的玩家回合数和插件版本、语言和回合号。回滚时这些内容随事务恢复。
 - 放弃、过期和作废走同一个出口：删除 suspension、给回合计数（它是这个逻辑回合最后一个还在等待的 suspension 时）、把回合扣下的 detached 作业入队，都在一个事务里。
+- 恢复的 runtime 再次挂起时，这次提交照常进行：同一个事务先给旧 suspension 写 resolved 标记，再保存新的 suspension。旧的那条已经解决，所以保存新挂起项时不会被当成同一个 runtime 的旧挂起项放弃。新的 suspension 沿用旧的执行标识、逻辑回合、挂起时的玩家回合数和扣下的 detached 作业；作业不入队，回合不计数。
+- function runtime 挂起时保存下来的子调用结果，在恢复成功时和它一起作为一个提交单元提交，子调用在前。
 
 **会话时钟写入进同一事务。**
 
@@ -458,7 +460,7 @@ SqliteStore、MemoryStore 和 PgStore（都在 Node 上）用同一种办法：
 - 整回合回滚时（story 或 setup 失败，或者没有 story 的执行里任何一个 proposal 失败），计数、phase 和 setup 镜像都不推进，ledger 不写入。
 - 只丢弃可选 runtime 的提交，照常推进时钟。
 - manual / background 的 finalize 不传 `sessionClock`，时钟不动。
-- resume 会传入。同一个逻辑回合的最后一个 suspension 恢复、被放弃、过期或作废时计数一次。被恢复的是 setup runtime 并且它报告完成时，`done` 镜像和（全部 setup 都完成时的）phase 翻转随这次提交写入；attempt 账本沿用挂起时的那次尝试。
+- resume 会传入。同一个逻辑回合的最后一个 suspension 恢复、被放弃、过期或作废时计数一次。恢复后又挂起的那次提交不计数，挂起链最后一次恢复时才计。被恢复的是 setup runtime 并且它报告完成时，`done` 镜像和（全部 setup 都完成时的）phase 翻转随这次提交写入；attempt 账本沿用挂起时的那次尝试。
 
 **Action 级 plugin-rpc 的锁边界。** action handler 在 session lock 里完成读、校验和写入。所以它不会和同一个 session 的回合穿插。PG 多进程部署也由同一个分布式锁键串行化。
 
@@ -554,7 +556,7 @@ await store.withTransaction(async (tx) => {
 
 **依赖会话内串行提交。** 读改写之所以正确，是因为同一个会话的提交按会话锁串行；PostgreSQL 多进程部署里这把锁是分布式的（见上面的 Action 级 plugin-rpc 锁边界）。两次执行各自准备 `inc +1`，先后提交，最终是两次都加上。会话锁之外的写入者不读当前值，可能覆盖：管理 API 的 `PUT` 插件数据，以及 plugin action RPC 的立即写入。
 
-**挂起的写入基线。** 保存挂起时记录的写入基线（`takenUnder.writes`）只收录含 `set` 或 `delete` 的 `plugin.data.update`。只有相对操作（`merge`、`inc`、数组操作）的更新作用在提交时的最新值上，不会把旧的整个值写回去，所以不收录。
+**挂起的写入基线。** 保存挂起时记录的写入基线（`takenUnder.writes`）只收录含 `set` 或 `delete` 的 `plugin.data.update`。只有相对操作（`merge`、`inc`、数组操作）的更新作用在提交时的最新值上，不会把旧的整个值写回去，所以不收录。基线也覆盖随挂起保存的子调用写入，推导方式和提交时相同。
 
 `isolatedRuntimes[].cause` 是结构化的丢弃原因：`rejected`（本单元提案被拒）、`upstream`（硬依赖未提交）、`read`（读过的生产方未提交）、`nested`（随父单元丢弃）。保留原有 `error` 文本；熔断不靠匹配文本归因。被拒提案按 `proposal.source.pluginId` 归属，不把整个单元都算成有错。
 

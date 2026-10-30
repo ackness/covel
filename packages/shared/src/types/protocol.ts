@@ -119,6 +119,8 @@ export interface RuntimeStartedPayload {
   readonly label?: string;
   /** Stage at execution time; absent for event/manual runtimes. */
   readonly stage?: Stage;
+  /** This run continues a suspended runtime; absent for a fresh dispatch. */
+  readonly resumed?: true;
 }
 
 /** A staged runtime was queued beyond its source turn's foreground barrier. */

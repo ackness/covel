@@ -95,6 +95,11 @@ export async function finalizeRuntimeResult(
      * schema before PostRuntime and is checked again only when a hook rewrote it.
      */
     readonly agentOutputSchema?: Readonly<Record<string, unknown>>;
+    /**
+     * A suspension is not the end of the logical runtime: PostRuntime runs
+     * once, when it really ends.
+     */
+    readonly skipPostRuntime?: boolean;
   } = {},
 ): Promise<RuntimeResult> {
   result = withAgentFailureTarget(result, options.lastTarget);
@@ -103,19 +108,24 @@ export async function finalizeRuntimeResult(
   const providerThrown =
     unwrapRetryCause(options.cause) instanceof AiProviderError;
   const preHookOutput = result.output;
-  let finalized = await runPostRuntimeHook(
-    {
-      pipeline: deps.hookPipeline,
-      signal: getTurnExecutionSignal(deps.turnControl),
-      sessionId: input.sessionId,
-      turnId: input.turnId,
-      pluginId: manifest.pluginId,
-      runtimeId: manifest.name,
-      eventBus: deps.eventBus,
-      emitter: deps.emitter,
-    },
-    result,
-  );
+  // The end of a resumed runtime tells the hook so: PreRuntime ran for this
+  // logical runtime at its original dispatch, before the suspension.
+  let finalized = options.skipPostRuntime
+    ? result
+    : await runPostRuntimeHook(
+        {
+          pipeline: deps.hookPipeline,
+          signal: getTurnExecutionSignal(deps.turnControl),
+          sessionId: input.sessionId,
+          turnId: input.turnId,
+          pluginId: manifest.pluginId,
+          runtimeId: manifest.name,
+          eventBus: deps.eventBus,
+          emitter: deps.emitter,
+        },
+        result,
+        { resumed: input.origin === "resume" },
+      );
   const signal = getTurnExecutionSignal(deps.turnControl);
   if (options.cause instanceof RuntimeTimeoutError || signal?.aborted) {
     finalized = {
