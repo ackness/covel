@@ -20,15 +20,14 @@ import { withSubagentDelegate } from "../agent-loop/subagent-delegate.js";
 import { freezeInputSlots } from "../agent-loop/runtime-input-slots.js";
 import { executeFunctionRuntime } from "../function-runtime/turn-function-runtime.js";
 import { createWorldModelView } from "../function-runtime/world-model-view.js";
-import {
-  finalizeRuntimeResult,
-  runRuntimePreHook,
-} from "../turn-executor/runtime-finalization.js";
+import { finalizeRuntimeResult } from "../turn-executor/runtime-finalization.js";
 import {
   DEFAULT_RUNTIME_TIMEOUT_MS,
   finalizeRuntimeFailure,
   finalizeThrownRuntime,
+  resolveRuntimeTimeoutMs,
 } from "../turn-executor/runtime-scaffold.js";
+import { restoreNestedResults } from "./suspended-nested-results.js";
 import { throwIfTurnExecutionAborted } from "../turn-executor/turn-control.js";
 import type { TurnExecutorDeps } from "../turn-executor/turn-executor-types.js";
 
@@ -129,11 +128,13 @@ async function executeResumedRuntime(
   },
 ): Promise<RuntimeResult> {
   const { startTime, runId, input, options } = execution;
+  // Each leg of a logical runtime gets the step budget and the deadline a
+  // dispatch would give it: the manifest's own values beat the caller's.
   const maxSteps = options?.maxSteps ?? DEFAULT_MAX_TOOL_STEPS;
-  // Resume lets the caller's timeout beat the manifest's, the reverse
-  // of `resolveRuntimeTimeoutMs` for a dispatched runtime.
-  const resumeTimeoutMs =
-    options?.timeoutMs ?? manifest.timeoutMs ?? DEFAULT_RUNTIME_TIMEOUT_MS;
+  const resumeTimeoutMs = resolveRuntimeTimeoutMs(
+    manifest,
+    options?.timeoutMs ?? DEFAULT_RUNTIME_TIMEOUT_MS,
+  );
   const hookPipeline = deps.hookPipeline;
   let lastTarget: LLMTargetIdentity | undefined;
   let deltaCount = 0;
@@ -149,14 +150,8 @@ async function executeResumedRuntime(
   ): Promise<RuntimeResult> =>
     finalizeRuntimeResult(deps, manifest, input, result, postRuntimeOptions());
 
-  const preRuntime = await runRuntimePreHook(
-    deps,
-    manifest,
-    input,
-    runId,
-    startTime,
-  );
-  if (preRuntime) return preRuntime;
+  // PreRuntime ran once for this logical runtime, at its original dispatch.
+  throwIfTurnExecutionAborted(deps.turnControl, "resume entry");
 
   const loaded = await deps.loadRuntime(
     manifest,
@@ -180,6 +175,10 @@ async function executeResumedRuntime(
     executionId: runId,
     origin: "resume",
   };
+  // A resumed run reports progress under the suspended execution, so the
+  // resume that ends the chain settles every leg's jobs once and an abandon
+  // cancels them.
+  const progressScopeId = inherited.executionId;
   if (manifest.runtimeType === "function") {
     // Function continuations are deterministic handler invocations, not LLM
     // conversations. Feed resume data through the explicit handler context and
@@ -214,17 +213,26 @@ async function executeResumedRuntime(
       startTime,
       runId,
       timeoutMs: resumeTimeoutMs,
-      executionId: runId,
+      executionId: progressScopeId,
       resumeData,
       resumedFromSuspensionId: suspension.id,
-      allowSuspend: false,
+      ...(pendingContinuation.nestedResults?.length
+        ? {
+            restoredNested: restoreNestedResults(
+              pendingContinuation.nestedResults,
+            ),
+          }
+        : {}),
     });
   }
 
-  await reportRuntimeStarted(deps, input.sessionId, manifest, {
-    turnId: input.turnId,
-    runId,
-  });
+  await reportRuntimeStarted(
+    deps,
+    input.sessionId,
+    manifest,
+    { turnId: input.turnId, runId },
+    true,
+  );
 
   // Rebuild the mid-turn transcript from the suspension and append the resume
   // payload: a tool result for the suspend tool (agent runtimes) or a user
@@ -283,9 +291,10 @@ async function executeResumedRuntime(
       )
     : undefined;
 
-  // Re-enter the shared agent tool loop with the persisted write set seeded in.
-  // `allowSuspend: false` forbids re-suspending mid-resume (a nested suspend is
-  // fed back to the LLM as an error tool result).
+  // Re-enter the shared agent tool loop with the persisted loop state seeded
+  // in. The context is restored, not assembled again: the transcript already
+  // holds this runtime's system prompt, and the saved prompt segments go to
+  // `PreLLMCall` as before. The loop may suspend again.
   // `delegate` runs a sub-agent; the wrapper answers it and forwards the rest.
   const loopDeps =
     deps.subagents && deps.toolExecutor
@@ -321,6 +330,9 @@ async function executeResumedRuntime(
     inputSlots: pendingContinuation.inputSlots
       ? freezeInputSlots(pendingContinuation.inputSlots)
       : undefined,
+    // An agent's prompt always has a segment list; an empty one is not
+    // stored.
+    promptSegments: pendingContinuation.promptSegments ?? [],
     deps: loopDeps,
     maxSteps,
     timeoutMs: resumeTimeoutMs,
@@ -336,7 +348,6 @@ async function executeResumedRuntime(
     startTime,
     runId,
     executionContext: resumeExecutionContext,
-    allowSuspend: false,
     initialState: {
       finalContent: pendingContinuation.partialContent ?? null,
       collectedToolCalls:
@@ -345,11 +356,11 @@ async function executeResumedRuntime(
       pendingProposals: pendingContinuation.pendingProposals as Proposal[],
       emittedEvents:
         (pendingContinuation.emittedEvents as EmittedEvent[] | undefined) ?? [],
+      ...(pendingContinuation.loop ? { loop: pendingContinuation.loop } : {}),
     },
   });
-  // With allowSuspend:false the loop never suspends, so it cannot return a
-  // terminal RuntimeResult (handleSuspension is unreachable); the guard keeps
-  // the union types honest.
+  // The loop suspended again: its result is final, and PostRuntime waits
+  // for the end of the logical runtime.
   if ("status" in toolLoop) return toolLoop;
   lastTarget = toolLoop.lastTarget;
   deltaCount = toolLoop.streamDeltaCount;
@@ -371,6 +382,7 @@ async function executeResumedRuntime(
   // narrative already in prompt history. The `turn.resumed` event moves
   // with them (it must not announce a resume that then rolls back).
   // PostRuntime runs BEFORE any persistence — the caller persists
-  // the hook-finalized output.
+  // the hook-finalized output. It runs here once for the logical runtime,
+  // with `resumed: true`.
   return finalizeWithPostRuntime(settled.result);
 }

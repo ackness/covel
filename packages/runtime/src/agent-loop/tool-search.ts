@@ -73,6 +73,34 @@ export function buildSearchToolsDefinition(
   };
 }
 
+/**
+ * The definitions of deferred tools a suspended loop had activated, for its
+ * resume. Built from `getToolInfo` as a search builds its pool, so access
+ * rules apply again; a name that no longer resolves or is no longer deferred
+ * is skipped.
+ */
+export function deferredToolDefinitions(
+  names: readonly string[],
+  deferredNames: ReadonlySet<string>,
+  toolExecutor: ToolExecutor,
+  context: ToolCallContext,
+): LLMToolDefinition[] {
+  const definitions: LLMToolDefinition[] = [];
+  const seen = new Set<string>();
+  for (const name of names) {
+    if (seen.has(name) || !deferredNames.has(name)) continue;
+    seen.add(name);
+    const info = toolExecutor.getToolInfo(name, context);
+    if (!info) continue;
+    definitions.push({
+      name: info.name,
+      description: info.description,
+      parameters: info.jsonSchema as Record<string, unknown>,
+    });
+  }
+  return definitions;
+}
+
 export interface ToolSearchExecution {
   /** Tool-result text fed back to the LLM. */
   readonly resultText: string;

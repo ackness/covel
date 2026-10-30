@@ -172,7 +172,7 @@ handler 抛出异常、超时或返回了格式不对的结果，都算这个 ha
 
 ### `PreRuntime`
 
-一个 runtime 开始前触发一次，在它的 guard、agent 循环或函数 handler 之前。
+一个 runtime 开始前触发一次，在它的 guard、agent 循环或函数 handler 之前。每个逻辑 runtime 只触发一次：从挂起中恢复的运行不再触发，不论它挂起过几次。想拦下 agent 的挂起，对 `suspend` 工具用 `PreToolUse`。
 
 负载：`{ manifest, input }`，即这个 runtime 的清单和回合输入。
 
@@ -180,7 +180,7 @@ handler 抛出异常、超时或返回了格式不对的结果，都算这个 ha
 
 ### `PostContextAssembly`
 
-对 agent runtime 触发一次：它的上下文组装好之后、第一次模型调用之前。
+对 agent runtime 触发一次：它的上下文组装好之后、第一次模型调用之前。从挂起中恢复的运行不再组装上下文，也不再触发它：保存下来的对话记录已经带着这次处理的结果。
 
 负载：`{ systemPrompt, messages, outputKind?, promptTemplate?, inputSlots?, characters?, currentCharacterId?, promptSegments? }`。
 
@@ -226,7 +226,7 @@ agent runtime 的工具循环每走一步、调用模型之前触发一次：在
 
 agent runtime 的每次模型调用之前触发，包括工具结果之后的调用和收尾步骤。同一步里，`PreStep` 先运行。
 
-负载：`{ messages, model, tools, stream?, promptSegments? }`。`promptSegments` 和 `PostContextAssembly` 里的是同一份列表。从挂起中恢复的运行不会重新组装上下文，所以它的调用里没有这个字段。
+负载：`{ messages, model, tools, stream?, promptSegments? }`。`promptSegments` 和 `PostContextAssembly` 里的是同一份列表。从挂起中恢复的运行带着挂起前保存的同一份列表。
 
 - `replace.messages`、`replace.model`、`replace.tools` 只改这一次调用，runtime 自己的对话记录不变。
 - 输出修复请求在 Hook 处理后仍会关闭工具；`replace.tools` 不能为修复步骤重新启用工具。
@@ -244,13 +244,13 @@ agent runtime 的每次模型调用之前触发，包括工具结果之后的调
 
 ### `PostRuntime`
 
-一个 runtime 结束后触发一次，不论它以什么状态结束。
+一个 runtime 结束后触发一次，不论它以成功、失败还是跳过结束。runtime 挂起时不触发；它恢复后真正结束时触发，每个逻辑 runtime 只触发一次。
 
-负载：`{ result }`，即 `RuntimeResult`。
+负载：`{ result, resumed? }`。`result` 是 `RuntimeResult`。结束的是从挂起中恢复的运行时，`resumed` 为 `true`；否则没有这个字段。
 
 `replace.result` 替换结果。内核对替换后的结果做这几件事：
 
-- 保留原结果的 `pluginId`、`runtimeId`、`runId`、`turnId`，以及挂起结果的挂起字段。
+- 保留原结果的 `pluginId`、`runtimeId`、`runId`、`turnId`。
 - 写入只来自 runtime 自己：`pendingProposals`、`effects` 和 `completion` 一律取原结果的值，Hook 加的会被丢掉。要拦下一条写入，用 `PreStateCommit`。
 - Hook 改了 `status` 时（比如把失败改成成功），这次运行的 `pendingProposals`、`effects` 和 `completion` 全部丢弃。失败的函数 handler 在失败前攒下的写入也不提交。setup runtime 被 Hook 从失败改成成功，也不记为完成，仍是待完成。
 - handler 改了 `output` 却没动 `canonicalValue` 时，内核丢掉旧的 `canonicalValue`。这样其他 runtime 读到的值不会和改写后的输出对不上。

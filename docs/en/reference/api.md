@@ -4434,8 +4434,10 @@ A runtime can pause partway through and wait for the player to provide data. Thi
 Resume a suspended runtime with the data the player submitted.
 
 - **agent runtime**: Continues from the saved tool-call record.
-- **function runtime**: Calls the handler again. This time's data is passed in through `ctx.resumeData` and `ctx.resumedFromSuspensionId`. It does not enter the model loop.
+- **function runtime**: Calls the handler again. This time's data is passed in through `ctx.resumeData` and `ctx.resumedFromSuspensionId`. It does not enter the model loop. The writes of child runtimes the handler called with `ctx.recursiveCall` before it suspended are saved with the suspended item. They commit with a successful resume, ahead of the handler's own writes. When the resume does not succeed, or the item is abandoned, they are dropped together with the handler's writes.
 - The session's `runtimeModelOverrides` apply as usual: the resumed runtime and the sub-agents it calls each pick their model by their own runtimeId.
+- The time limit is the one of the original dispatch: the runtime manifest's `timeoutMs` when it sets one, otherwise the framework default.
+- A resumed runtime can suspend again; see [Suspending again](#suspending-again) below.
 
 **Request**
 
@@ -4458,6 +4460,8 @@ Resume a suspended runtime with the data the player submitted.
 ```json
 { "result": <ResumeResult>, "events": [ /* events produced by this resume */ ] }
 ```
+
+`result.status` is `success`, or `suspended` when the runtime suspended again. In that case `result.output.suspensionId` is the ID of the new suspended item.
 
 **Errors**
 
@@ -4496,9 +4500,20 @@ The server voids it the way [abandoning](#delete-apisessionsidsuspensionssuspens
 Rules for `data-changed`:
 
 - The records compared are: one plugin data key, one character, the character schema, one lorebook entry. Only the content is compared, so a write to another key does not affect the resume. Dimension changes are not compared here; they check their version themselves when they commit.
+- The child-call writes saved with the suspended item are compared too.
 - A record can also change while the resumed runtime runs. The commit transaction compares again before it writes anything; on a change it writes nothing, voids the item the same way and answers the same `409`.
 
-A runtime has only one suspended item waiting to resume at a time. When it suspends again, the older item is voided the way abandoning does, in the transaction that saves the new one, and no separate event is sent. When the web client receives the new `turn.suspended`, it drops the older item of the same runtime.
+A runtime has only one suspended item waiting to resume at a time. When it suspends again in another execution, the older item is voided the way abandoning does, in the transaction that saves the new one, and no separate event is sent. When the web client receives the new `turn.suspended`, it drops the older item of the same runtime.
+
+##### Suspending again
+
+A resumed runtime can suspend again: an agent calls `suspend` once more, or a function handler returns a suspension once more. The resume commits as usual and answers `200` with `result.status` `suspended`.
+
+- The old suspended item is marked handled and the new one is saved, in one transaction and in that order, so the old item is never treated as abandoned. Resuming the old ID afterwards answers `409`.
+- The new item continues the same execution: the execution identity, the logical turn, the number of player turns in the history at the suspension, and the background jobs the original turn held back all move to it. The jobs are not queued yet.
+- After the commit, `turn.suspended` is sent for the new item. `turn.resumed` is not sent.
+- The writes buffered in every leg wait and commit together with the last successful resume.
+- A chain of suspensions has no length limit: each link waits for an answer from the player, and each new item starts its own expiry time.
 
 ##### Suspensions and turn counting
 
@@ -4506,15 +4521,16 @@ A runtime has only one suspended item waiting to resume at a time. When it suspe
 - When a runtime suspends, the record of "where to continue from" is saved in the same transaction as this request's proposals, log, and session clock. The `turn.suspended` event is sent only after the commit succeeds. So if the commit is rolled back, no suspended item is left behind that can be resumed but has no origin, and no extra events are sent.
 - The original execution's `logicalTurnId` and `countPolicy` are saved with the suspended item. When a resume succeeds, the player's turn count goes up by one, in the same transaction that commits the proposals.
 - If one logical turn has several parallel suspended items, the count happens only after the last one is resumed. Retries do not count twice.
+- When a resumed runtime suspends again, the turn is still not complete. The whole chain counts once, when its last resume succeeds.
 - When a suspended item is abandoned, expires or is voided, the turn ends the way a normal end does: if it was the last item of the logical turn still waiting, the player's turn count goes up by one and the background jobs the turn held back (`schedule.detached`) are queued as usual. Both happen in the transaction that deletes the record. An item that another request is resuming still counts as waiting.
-- Progress jobs (`ctx.progress`) that the suspended execution reported stay in `waiting-input`. When a resume commits, they end as `succeeded`; when the item is abandoned, expires or is voided, they end as `cancelled`. While a failed resume can be retried, they keep waiting.
+- Progress jobs (`ctx.progress`) that the suspended execution reported stay in `waiting-input`. A resumed run reports progress under the original execution too, so the jobs of the whole chain end together: when the last resume commits, they end as `succeeded`; when the item is abandoned, expires or is voided, they end as `cancelled`. While a failed resume can be retried, or after a resume suspends again, they keep waiting.
 
 ##### Resuming setup runtimes
 
 When the runtime being resumed is a setup runtime, the completion signal is handled the same way as in a normal setup run:
 
 - The "done" mark is written in the resume's commit transaction. If it completes the last setup, `phase` also switches in that same transaction. If the commit is rolled back, neither is written.
-- The attempt count is the one from when the runtime suspended. It is not counted again.
+- The attempt count is the one from when the runtime suspended. It is not counted again. The same holds when a resume suspends again: setup stays pending until the last resume completes it.
 - A resume does not hand off the opening turn. If it completes the last setup, the main loop starts from the player's next action.
 
 #### `GET /api/sessions/:id/suspensions`

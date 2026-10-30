@@ -3,9 +3,10 @@
  *
  * When a tool returns the suspend sentinel, the loop must capture its full
  * mid-turn state (messages, partial content, collected tool calls, buffered
- * proposals) into an execution-local {@link SuspensionRecord} artifact, run
- * the PostRuntime hook, emit `runtime.completed`, and exit with a
- * `status: "suspended"` RuntimeResult. Extracted from
+ * proposals, and the loop state the transcript cannot carry) into an
+ * execution-local {@link SuspensionRecord} artifact, emit `runtime.completed`,
+ * and exit with a `status: "suspended"` RuntimeResult. PostRuntime does not
+ * run: it runs once, when the logical runtime really ends. Extracted from
  * `turn-agent-tool-loop.ts` so the main loop stays focused on iteration.
  */
 
@@ -18,7 +19,7 @@ import type {
   TurnInput,
   InputSlot,
 } from "@covel/shared";
-import type { SuspensionRecord } from "@covel/store";
+import type { SuspendedLoopState, SuspensionRecord } from "@covel/store";
 import type { EmittedEvent, SuspendSentinel } from "@covel/tools";
 import type { LLMMessage } from "@covel/shared";
 import type { HookPipeline } from "../hooks/pipeline.js";
@@ -49,6 +50,44 @@ export interface HandleSuspensionOptions {
   readonly startTime: number;
   readonly runId: string;
   readonly outputContractSchema?: Readonly<Record<string, unknown>>;
+  /** Loop state beyond the transcript; empty parts are not stored. */
+  readonly loop?: LoopStateAtSuspension;
+  /** The prompt segments `PreLLMCall` hooks received before the suspension. */
+  readonly promptSegments?: SuspensionRecord["pendingContinuation"]["promptSegments"];
+}
+
+/** What the loop holds at the suspension, before empty parts are dropped. */
+export interface LoopStateAtSuspension {
+  readonly corrections: Readonly<
+    Record<keyof NonNullable<SuspendedLoopState["corrections"]>, number>
+  >;
+  readonly activatedTools: readonly string[];
+  readonly steeredProse: readonly string[];
+  readonly completingToolOutput: Readonly<Record<string, unknown>> | null;
+}
+
+/** The stored loop state: every empty part left out, undefined when all are. */
+export function suspendedLoopState(
+  loop: LoopStateAtSuspension,
+): SuspendedLoopState | undefined {
+  const corrections = Object.fromEntries(
+    Object.entries(loop.corrections).filter(([, count]) => count > 0),
+  ) as SuspendedLoopState["corrections"];
+  const state: SuspendedLoopState = {
+    ...(corrections && Object.keys(corrections).length > 0
+      ? { corrections }
+      : {}),
+    ...(loop.activatedTools.length > 0
+      ? { activatedTools: [...loop.activatedTools] }
+      : {}),
+    ...(loop.steeredProse.length > 0
+      ? { steeredProse: [...loop.steeredProse] }
+      : {}),
+    ...(loop.completingToolOutput
+      ? { completingToolOutput: structuredClone(loop.completingToolOutput) }
+      : {}),
+  };
+  return Object.keys(state).length > 0 ? state : undefined;
 }
 
 /**
@@ -76,6 +115,7 @@ export async function handleSuspension(
   } = opts;
 
   const suspensionId = crypto.randomUUID();
+  const loop = opts.loop ? suspendedLoopState(opts.loop) : undefined;
 
   // Capture the provider-valid transcript (including a placeholder tool result
   // for the suspender and cancellation results for later calls in its batch)
@@ -101,6 +141,15 @@ export async function handleSuspension(
       : {}),
     // Store the suspend tool's call ID so resume can append a proper tool result
     suspendToolCallId,
+    ...(loop ? { loop } : {}),
+    ...(opts.promptSegments?.length
+      ? {
+          promptSegments: opts.promptSegments.map(({ pluginId, id }) => ({
+            pluginId,
+            id,
+          })),
+        }
+      : {}),
   };
 
   const suspension: SuspensionRecord = {

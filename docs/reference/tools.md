@@ -780,7 +780,7 @@ JSON Schema 只能检查字段的形状，检查不了“这个结果和骰子�
 调用之后发生的事：
 
 1. agent 调用 `suspend({ reason, resumeSchema })`，工具返回上面的标记对象。
-2. 框架在每次工具执行后用 `isSuspendSentinel()` 检查结果。认出标记后，它把这次运行的现场写进 `suspensions` 表：执行的身份、已经缓冲的 proposal 和事件、和模型的完整对话记录。
+2. 框架在每次工具执行后用 `isSuspendSentinel()` 检查结果。认出标记后，它把这次运行的现场写进 `suspensions` 表：执行的身份、已经缓冲的 proposal 和事件、和模型的完整对话记录，以及工具循环的状态（见下面的注意事项）。
 3. 框架发出 `turn.suspended` 事件，整个工具循环立即停止。
 4. 之后通过 `POST /api/sessions/:id/suspensions/:suspensionId/resume` 提交一份符合 `resumeSchema` 的数据，这个 runtime 就从停下的地方继续（详见 [api.md](./api.md)）。
 
@@ -795,6 +795,9 @@ JSON Schema 只能检查字段的形状，检查不了“这个结果和骰子�
 - 恢复是接着被挂起的那次执行继续：
   - `ctx.locale`、`ctx.logicalTurn`、`ctx.turnNumber` 取挂起时的值，不随会话之后的回合计数变化。
   - `ctx.world` 是恢复时已提交的 World Model，再叠加现场里缓冲的写入。
+  - 工具循环接着挂起前的状态：已经用掉的纠正次数（`agent.loop.corrections` 的四项）、用 `search-tools` 激活过的延迟工具、并入的玩家插话写出的正文、已经成功的完成工具给出的输出，以及这一回合的提示词片段（`PreLLMCall` 的 `promptSegments`）。激活过的工具后来不再是延迟工具时，恢复时略过它。
+  - 上下文不重新组装：保存下来的对话记录就是 runtime 运行时的上下文，`PostContextAssembly` 不再触发。
+- 恢复后的 runtime 可以再次调用 `suspend`。旧挂起项标为已处理，新挂起项接着同一次执行，见[再次挂起](./api.md#再次挂起)。子 agent 不能挂起。
 - `completion.require: tool-use` 在恢复后沿用同一完成规则：声明了 `afterTools` 时，只承认列表中的成功调用；没有列表时，承认成功的业务工具调用。挂起前失败、又没有被同名的成功调用抵消的工具仍算没完成，恢复后必须重新完成。
 
 ### search-tools（框架注入，延迟工具加载）
