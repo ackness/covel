@@ -43,7 +43,7 @@ There are two kinds of tool:
 | initialize-world | local | world-init | auto-allow | Initialize the world by combining the character attribute schema and the dimension declarations | defaults |
 | create-character-form | local | char-creator | auto-allow | Create the opening character form. It collects only the character name and the declared string and enum attributes. Numeric and composite attributes keep their defaults | defaults |
 | update-affinity | local | affinity | auto-allow | Apply this turn's affinity changes between the player and NPCs in one batch. An unknown name starts at 0. Scores add up across turns and are limited to [-100, 100] | defaults |
-| advance-world-time | local | world-time | auto-allow | Settle the world time that passes in this turn's narrative. Submits a duration, not calendar math. In random mode the amount is left out. Submitted together with the story | defaults |
+| advance-world-time | local | world-time | auto-allow | Settle a reached target time or a duration; the tool computes calendar differences. Random mode takes only a reason. Commits with the story | defaults |
 | dimension-rule-get | local | world-init | auto-allow | During maintenance, read private rules or value schemas with paging | defaults |
 | update-dimensions | local | world-init | auto-allow | Bind to this turn's narrative. Update the whole batch with compare-and-swap (CAS), or explicitly settle that nothing changed | defaults |
 | submit-world-facts | local | world-ir | auto-allow | Submit and validate a complete `contract:world-ir@1` as function calling arguments | defaults |
@@ -1334,9 +1334,17 @@ The model submits the complete facts of this turn through the tool arguments, as
 | `summary`                                          | ✓        | Summary of the facts of this turn                                                                                        |
 | `entities` / `relations` / `events` / `statements` | ✓        | Four arrays of facts. Pass an empty array when there is nothing; put plugin extension fields in each item's `attributes` |
 
-The argument schema reuses `worldIRV1Schema` directly, and it runs the `validateWorldIRV1` semantic checks inside Zod's `superRefine`. So errors such as duplicate global IDs, missing entity references, or going over the depth or node budget are all reported at the specific argument path. The model only has to fix the corresponding field.
+The argument schema extends `worldIRV1Schema` with tool-only assessments, and runs the `validateWorldIRV1` semantic checks inside Zod's `superRefine`. So errors such as duplicate global IDs, missing entity references, or going over the depth or node budget are all reported at the specific argument path. The model only has to fix the corresponding field.
 
-The tool returns the filled-in and validated arguments, and it produces no persistent proposal. `world-ir` declares `completeAfterTools: [submit-world-facts]`. The framework takes the successful result directly as the runtime's typed output, and it checks it once more against the output schema of `contract:world-ir@1`.
+The tool returns the filled-in and validated facts after removing assessments, and produces no persistent proposal. `world-ir` declares `completeAfterTools: [submit-world-facts]`. The framework takes the successful result directly as the runtime's typed output, and it checks it once more against the output schema of `contract:world-ir@1`.
+
+#### Per-objective assessment
+
+When vocabulary supplies open quest objectives, submit the tool-only `objectiveAssessments` array. Each entry contains `quest`, `objective`, `outcome` and `evidence`. Copy quest and objective text verbatim. Outcomes are `achieved`, `planned`, `partial`, `failed`, `unverified`, `not_addressed` or `superseded`. `superseded` means the story completed the whole quest this turn and the objective was no longer needed; it also needs a quote, must accompany a `status: completed` event for that quest, and never marks the objective done. Evidence is an exact contiguous quote within one segment's `text` in this turn's `narrative.value`, without joining segments, or an empty string for an unaddressed objective.
+
+The tool checks coverage, duplicates, canonical names, quote provenance and consistency with `quest_change.completedObjectives`. An achieved assessment with only a generic interaction is rejected. Plans, partial work, failures and unverified claims cannot also finish an objective. A quest cannot be marked completed while a vocabulary objective is neither achieved nor superseded. Shortened quest names and objective paraphrases that could resolve to a supplied entry are rejected, including ambiguous objective matches. Use exact vocabulary text; this comparison never infers completion. Without open objectives, omit the array or submit `[]`. Vocabulary is bounded context, not the entire quest ledger. Coverage checks constrain supplied quests and objectives; unlisted content keeps the existing WorldIR and consumer validation.
+
+Assessments are removed before returning the unchanged public `world-ir@1` shape. The tool does not write quest data. Whether the objective was achieved remains a model judgment; quotations and coverage checks cannot guarantee semantic correctness.
 
 #### Mechanical mistakes fixed automatically
 

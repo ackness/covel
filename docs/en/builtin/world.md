@@ -98,6 +98,8 @@ At the start, it prepares the character attributes and the "dimensions" of this 
 
 Gives the world its own calendar. After each turn of the story ends, it judges from the story how much time has passed, and updates the date and time of day. Before the next turn's narrative begins, it tells the narrative the current time.
 
+For an explicit destination, the tool calculates the difference from the current clock; otherwise it estimates activity duration. The model reads only this turn's story and current clock, excluding previous explanations.
+
 **What you will see**
 
 - The "World Time" panel: the current time.
@@ -164,6 +166,8 @@ You cannot see this plugin, and it has no panel. After each turn ends, it sorts 
 If you use any of these plugins, keep this one on. If you turn it off, the plugins that depend on it get no facts, and they cannot be turned on. It adds one model call per turn. If you want to save money, remove it together with the plugins that depend on it. The "Low Cost" pack is the simplest choice.
 
 **When it is on**: optional. When you turn on a plugin that depends on it, it is turned on automatically. You do not need to select it separately.
+
+World fact extraction assesses each open objective of tracked quests and checks that achievement judgments agree with quest events. Plans, partial work, failures and unverified claims do not count as completion. Semantic judgments can still be wrong; see [per-objective assessment](../reference/tools.md#per-objective-assessment).
 
 ## Next
 

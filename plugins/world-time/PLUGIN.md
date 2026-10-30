@@ -17,6 +17,8 @@ contracts:
   world-time-evolution@1:
     schema: ./schemas/world-time-evolution.schema.json
 contributes:
+  hooks:
+    - PostContextAssembly
   datasets:
     clock:
       schema: ./schemas/clock.schema.json

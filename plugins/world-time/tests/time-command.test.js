@@ -38,6 +38,7 @@ describe("world-time command", () => {
     ).toEqual([expect.objectContaining({ name: "time", action: "time" })]);
     const registerRpc = vi.fn();
     register({
+      on: vi.fn(),
       registerRpc,
       registerTool: vi.fn(),
       provideExtension: vi.fn(),

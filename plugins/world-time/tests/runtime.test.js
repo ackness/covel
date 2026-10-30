@@ -191,6 +191,25 @@ async function fixture({
 }
 
 describe("world-time pipeline", () => {
+  it("stages an exact target and commits its calculated clock atomically", async () => {
+    const target = { ...DEFAULT_TIME.initial, hour: 12, minute: 20 };
+    const { store, run, commit } = await fixture({
+      request: { target, reason: "The lunch bell rings at 12:20." },
+    });
+    const result = await run();
+    expect(
+      result.result.runtimeResults.find(
+        (entry) => entry.runtimeId === "world-time/advance",
+      ).status,
+    ).toBe("success");
+    expect(
+      await store.getPluginData("s", "world-time", "clock", "current"),
+    ).toBeNull();
+    expect((await commit(result)).status).toBe("committed");
+    expect(
+      (await store.getPluginData("s", "world-time", "clock", "current")).value,
+    ).toMatchObject({ ...target, lastDelta: 260 });
+  });
   it("discovers the core plugin, binds the current time before narration, and commits after narration", async () => {
     const { store, run, commit, storyHandler, generate, advanceResults } =
       await fixture();

@@ -1058,7 +1058,7 @@ Execution limits:
 - During play, the `world-ir` agent extracts facts from the narrative output (`narrative-engine@2`) once. Then `codex`, `core-quest/log`, `affinity`, `inventory/ledger` and `npc-graph/extractor` read that one result in parallel.
   - Quests and items are function runtimes that read fixed fields only. They do not call a model.
   - Affinity is still judged by the agent. For its fields, see [tools.md · submit-world-facts](./tools.md#submit-world-facts).
-  - `inventory/vocabulary` and `core-quest/vocabulary` announce, in the pre-turn stage through `world-ir.vocabulary@1`, the item names, quest names and open objectives being tracked. The extraction uses the same names.
+  - `inventory/vocabulary` and `core-quest/vocabulary` announce, in the pre-turn stage through `world-ir.vocabulary@1`, the item names, quest names and open objectives being tracked. The extraction uses the same names. [Per-objective assessment](./tools.md#per-objective-assessment) checks coverage and consistency with quest events.
 - When this shared extraction fails, the runtimes that depend on it are skipped. The narrative for the turn can still be committed successfully.
 - In a session where dimensions are maintained automatically, a `pending-settlement` is still left behind. A failure or a skip must not be treated as "the dimensions did not change". The next narrative is blocked until recovery is complete.
 

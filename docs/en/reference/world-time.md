@@ -156,7 +156,9 @@ The built-in `world-time` is a core plugin, and it has two runtimes:
    - For a world that has an imported definition, the panel shows the rules before the first narrative.
    - When there is no imported definition, the panel shows the description of the default calendar.
 2. **`world-time/advance`** (runs after the narrative, calls a model): reads the successful narrative of this turn and the start of the time, and then calls the tool `advance-world-time`.
-   - The model only proposes "how long to move and in which direction". The plugin does the calendar arithmetic and the rule checks.
+   - For a time actually reached, the model submits `target`: `{ year, month, day, hour, minute }` for calendars, or `{ cycle, phase }` for phases (zero-based). The tool computes the tick difference using the world definition. Do not combine it with `amount`, `unit` or `direction`. Direction, `maxStep`, date and safe-integer checks still apply. Random mode rejects targets and takes only a reason.
+   - Without a destination, the model proposes duration and direction; an omitted duration uses the default step. Plans, recollections and recording timestamps do not establish a current destination.
+   - This plugin's `PostContextAssembly` keeps only its task prompt, the exact bound current narrative and time derived from the authoritative tick. It excludes narrative pointers, old `reason` text, history and player plans. The public input contract stays unchanged; other consumers can still read the full clock record.
    - The unit comes from `currentTime.value.units`.
    - When the duration is 0, any unit is accepted, because a zero duration does not depend on the unit.
    - When the duration is not 0 but a unit that this clock does not have is used, the call is rejected. The error message lists the units that are available.

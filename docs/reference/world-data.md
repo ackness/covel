@@ -1058,7 +1058,7 @@ handler 的返回值：
 - 游玩中，`world-ir` agent 把叙事输出（`narrative-engine@2`）抽取一次，`codex`、`core-quest/log`、`affinity`、`inventory/ledger` 和 `npc-graph/extractor` 并行读取这一份结果。
   - 任务和物品是只读固定字段的 function runtime，不调用模型。
   - 好感仍由 agent 判断，字段见 [tools.md · submit-world-facts](./tools.md#submit-world-facts)。
-  - `inventory/vocabulary` 与 `core-quest/vocabulary` 在 pre-turn 通过 `world-ir.vocabulary@1` 公布已追踪的物品名、任务名和未完成的目标，抽取时沿用同样的名称。
+  - `inventory/vocabulary` 与 `core-quest/vocabulary` 在 pre-turn 通过 `world-ir.vocabulary@1` 公布已追踪的物品名、任务名和未完成的目标，抽取时沿用同样的名称，并通过[逐目标评估](./tools.md#逐目标评估)检查覆盖与任务事件的一致性。
 - 这次共享的抽取失败时，依赖它的 runtime 被跳过，不影响本回合叙事成功提交。
 - 需要自动维护维度的会话，这时仍然留下 `pending-settlement`。失败或跳过不能当成“维度没有变化”；恢复完成之前会阻止下一次叙事。
 

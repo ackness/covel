@@ -3,9 +3,11 @@ import createAdvanceWorldTime from "../tools/advance-world-time.js";
 import time from "../rpc/time.js";
 import { worldTimeSchema } from "../schema.js";
 import { describeTime } from "../clock.js";
+import advanceContext from "./advance-context.js";
 
 export default function register(covel) {
   covel.registerTool(createAdvanceWorldTime(covel.toolkit));
+  covel.on("PostContextAssembly", advanceContext);
   covel.registerRpc("time", time, {
     description: "Read committed world time without advancing it",
   });

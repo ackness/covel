@@ -6,6 +6,7 @@ import { DEFAULT_TIME, describeTime, initialTick } from "../clock.js";
 
 let project;
 register({
+  on: vi.fn(),
   registerRpc: vi.fn(),
   registerTool: vi.fn(),
   toolkit: { tool: (definition) => definition, store: {} },

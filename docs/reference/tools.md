@@ -43,7 +43,7 @@
 | initialize-world | local | world-init | auto-allow | 组合角色属性 schema 与维度声明初始化 | 默认 |
 | create-character-form | local | char-creator | auto-allow | 创建开场角色表单：只收集角色名与声明过的字符串/枚举属性，数值与复合属性保留默认值 | 默认 |
 | update-affinity | local | affinity | auto-allow | 批量应用本回合玩家对 NPC 的好感度变化；未知名字按 0 分新建，分数跨回合累计并限制在 [-100, 100] | 默认 |
-| advance-world-time | local | world-time | auto-allow | 结算本回合叙事经过的世界时间：提交时长而非日历算术，随机模式省略数量，随故事一并提交 | 默认 |
+| advance-world-time | local | world-time | auto-allow | 结算本回合世界时间：提交已抵达的目标时间或时长，工具计算历法差值；随机模式只交原因，随故事提交 | 默认 |
 | dimension-rule-get | local | world-init | auto-allow | 维护时分页读取私有规则或值 schema | 默认 |
 | update-dimensions | local | world-init | auto-allow | 绑定本轮叙事，整批 CAS 更新或明确结算无变化 | 默认 |
 | submit-world-facts | local | world-ir | auto-allow | 以 Function Calling 参数提交并校验完整 `contract:world-ir@1` | 默认 |
@@ -1332,9 +1332,17 @@ schema 里带 `x-derive` 的字段由 `world-init/dimension-clock` 按时钟计�
 | `summary`                                          | ✓    | 本轮事实摘要                                                      |
 | `entities` / `relations` / `events` / `statements` | ✓    | 四类事实数组；无内容时传空数组，插件扩展字段放入各项 `attributes` |
 
-参数 schema 直接复用 `worldIRV1Schema`，并在 Zod 的 `superRefine` 里执行 `validateWorldIRV1` 语义校验。所以全局 ID 重复、实体引用缺失、深度或节点数超预算这些错误，都报在具体的参数路径上，模型只需要修正对应的字段。
+参数 schema 在 `worldIRV1Schema` 上增加工具专用评估字段，并在 Zod 的 `superRefine` 里执行 `validateWorldIRV1` 语义校验。所以全局 ID 重复、实体引用缺失、深度或节点数超预算这些错误，都报在具体的参数路径上，模型只需要修正对应的字段。
 
-工具返回补全并校验后的参数，不产生持久化 proposal。`world-ir` 声明了 `completeAfterTools: [submit-world-facts]`：框架把成功的结果直接作为 runtime 的类型化输出，再用 `contract:world-ir@1` 的输出 schema 检查一次。
+工具移除评估字段后返回补全并校验的事实，不产生持久化 proposal。`world-ir` 声明了 `completeAfterTools: [submit-world-facts]`：框架把成功的结果直接作为 runtime 的类型化输出，再用 `contract:world-ir@1` 的输出 schema 检查一次。
+
+#### 逐目标评估
+
+词表有未完成任务目标时，还必须提交工具专用的 `objectiveAssessments`。每项含 `quest`、`objective`、`outcome` 和 `evidence`：任务名和目标照抄词表；结果为 `achieved`、`planned`、`partial`、`failed`、`unverified`、`not_addressed` 或 `superseded`。`superseded` 表示正文本回合完成了整个任务，这项目标已不再需要；它同样要有引文，且必须和该任务的 `status: completed` 事件一起提交，不会把目标记为已完成。除未涉及时引文为空外，其余结果必须引用本轮 `narrative.value` 中单个段落的 `text` 内的一段连续原文，不拼接不同段落。
+
+工具逐项检查覆盖、重复项、原文名称、引文是否出自当前正文，以及评估与 `quest_change.completedObjectives` 是否一致。判断为达成却只提交普通互动，会被退回；计划、部分、失败或未核实的目标不能同时写为完成。词表列出的目标仍有既非达成、也非已无必要（`superseded`）的项时，不能把任务标为完成。可能被消费者解析为词表已有项的任务简称和目标改写会被拒绝，包括有歧义的目标匹配；必须用词表原文。这种比对只拒绝别名，不推断目标完成。没有词表目标时可省略或传空数组。词表是有界上下文，不是完整任务账本：覆盖校验只约束实际提供的任务和目标；未列出的内容沿用原有 WorldIR 与消费者校验。
+
+评估在返回前移除，公开 `world-ir@1` 形状不变，工具不写任务数据。是否达成仍是模型的语义判断；原文引文和覆盖校验不能证明这个判断必然正确。
 
 #### 自动修正的机械性失误
 
