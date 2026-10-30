@@ -6,6 +6,9 @@ This page is for people still on v0.0.41: players, operators, and authors of plu
 
 v0.0.42 replaces the plugin, world-data, and storage formats. **It does not automatically convert v0.0.41 databases, sessions, snapshots, or browser checkpoints.** Keep the old application and a complete backup, give v0.0.42 a fresh set of data, and create new sessions. Creating a new session in an old database does not repair the old database schema.
 
+> [!NOTE]
+> This page explains the v0.0.42 transition. When upgrading directly to the current version, also read the [breaking changes and upgrade notes](../releases.md) for later releases. Current SQL schema and development-data recreation rules are defined by the [startup schema checks](./storage.md#capabilities-and-migrations). Old fields below help identify old packages; they are not accepted current formats.
+
 The linked reference pages define the exact fields.
 
 ## Preserve the old environment first
@@ -80,7 +83,7 @@ Do not import old checkpoints directly, and do not treat "clear site data" as a 
 
 ### Old data is not current-format data
 
-The old SQLite `lorebook_entries` table uses a `plugin_id` column; the current schema requires `owner`. `CREATE TABLE IF NOT EXISTS` does not change the old table, so creating the new index can fail with `no such column: owner`. Creating a session, deleting a session, or resetting browser checkpoints cannot fix that table. Other old backend schemas are not guaranteed to start either.
+The old SQLite `lorebook_entries` table uses `plugin_id`; the current structure requires `owner`. Startup schema checks reject incompatible databases with `StoreSchemaVersionError` before creating tables. They do not add missing columns. Recreating sessions or clearing browser saves cannot repair server tables. PostgreSQL likewise needs a database with the current schema.
 
 **Do not treat old sessions, memory, execution results, exports, queued jobs, or snapshots as current-format data.** In the new store, import the updated world packages again and recreate sessions and snapshots. An old checkpoint is not a recovery point. Keep the old backups for inspection or for a migration developed separately. The [development-data note](../reference/env-registry.md#plugin-extension-development-data) records the known boundary.
 

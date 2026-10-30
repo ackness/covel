@@ -20,7 +20,7 @@ Read `ctx.inputs.narrative.value`; an `all` binding contains `items[].value`. Th
 
 All plugin stores are scoped to the current session and plugin. Use the read-only methods in the public [FunctionStoreView](../../../../packages/plugin-handlers-utils/src/function-runtime.ts); do not pass session or plugin IDs. Read the world record through `ctx.world.worldRecord`. The raw DataStore is not a plugin API. See [the invocation context](../../../../docs/reference/plugins.md#world-model-与数据边界).
 
-`ctx.world` exposes read-only characters, character schema, and the world record. Its execution view combines committed state, successfully completed upstream domain proposals, and valid buffered changes. It does not expose failed or merely running upstream mutations. Domain writes use proposals/effects and pass kernel validation; one player and the current character schema remain enforced.
+`ctx.world` exposes read-only characters, character schema, and the world record. Its execution view combines committed state, successfully completed upstream domain proposals, and valid buffered changes. It does not expose failed or merely running upstream mutations. Domain writes use proposals/effects and pass kernel validation; the current character schema remains enforced. A session may have several player characters; use `primarySeat` and `currentCharacterOf` to find the one currently being played.
 
 ## Results and effects
 

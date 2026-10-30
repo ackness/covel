@@ -157,7 +157,7 @@ The desktop shell always passes this path to the backend, even before the file e
 
 Model settings made in the UI are stored only in `llm.providers`. Startup and reads neither migrate nor fall back to `llm.customPresets`. Recreate affected model configurations and credentials in the current provider UI; obsolete entries are not deleted automatically.
 
-**Hot reload.** Editing `llm.toml` needs no restart. Go to **Settings → LLM → Model Roles** and click **Reload config**: the backend re-reads the file and applies it to the running gateway (`POST /api/llm-config/reload`), and added or removed slots take effect at once. On desktop this endpoint is protected by the one-time bearer token like the other write endpoints, and the UI attaches it; in development and web deployments without a token it is open.
+**Hot reload.** Editing `llm.toml` needs no restart. Go to **Settings → LLM → Model Roles** and click **Reload config**: the backend re-reads the file and applies it to the running gateway (`POST /api/llm-config/reload`), and added or removed slots take effect at once. This endpoint requires `host.config` access. On a personal instance, the UI supplies the launch token when configured; without one, the local network boundary still applies. Browser-private and hosted instances always require an operator Bearer token. See the [host profile](../internals/security.md#host-profile).
 
 **Parse failures are visible.** When `llm.toml` has a syntax error (a key with `=` and no value, say):
 
@@ -242,7 +242,7 @@ An endpoint that requires the token checks the `Authorization: Bearer <token>` h
 
 - The `GET /api/config/info` response has a `requiresAuth` field; the frontend uses it to decide whether to send the Authorization header.
 - The Electron page gets `restToken` through the `covel:get-info` IPC and adds it to every write request.
-- In development, when the variable is absent, the token gate is off. Plain web deployments and the `pnpm dev:web` flow are unaffected.
+- On a personal instance without this variable, the desktop token check is off and the Host check still applies. A web client follows the connected backend’s host profile; `pnpm dev:web` starts only the frontend and does not change backend authentication.
 
 **How keys appear in the UI.** The Electron UI reads plaintext keys from `keys.env` through `covel:keys:load` IPC. SettingsStore keeps them in memory to build the `X-Provider-Keys` header, without writing them to the desktop page's `localStorage`. Saving sends a patch through `covel:keys:save`: unchanged keys stay, new values are written, and `null` deletes a key. The main process first writes through the sidecar's `PUT /api/config/keys`; in development without a sidecar, or when the sidecar is unavailable, it writes the file directly.
 

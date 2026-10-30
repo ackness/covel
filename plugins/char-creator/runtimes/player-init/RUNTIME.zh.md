@@ -37,6 +37,7 @@
 - 需要解释 select 选项时使用 `{ value, label }`；`value` 保持适合嵌入叙事的短词。被 `narrativeTemplate` 引用的可选字段必须用适合该位置的短语作为 `defaultValue`，select 默认值必须等于某个 option value。不要重复模板已经提供的词。默认 `calling` 必须是世界中真实的职业或身份，不能是“待定”或“尚未定下的冒险者”。
 - 固定传入 `formId: "char-creation"` 和 `submitBehavior: { "echoFilledNarrative": true }`，加上合适的标题、提交文案、字段以及含字段占位符的 `narrativeTemplate`。
 - 总字段数不超过 4。工具报错时按提示修改，结束前重读返回的预览；不要调用 `runtime-done`。
+- 每个收集的字段（包括 `characterName`）都必须在模板中有以字段名命名、两侧各带两层花括号的占位符。修改叙事时保留这些占位符，不要把它们改成默认值的固定文字，因为玩家可以修改每项答案。
 
 本 runtime 工作流：
 

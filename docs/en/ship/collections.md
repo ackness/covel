@@ -54,7 +54,7 @@ pnpm validate:collection ~/tidelamp-pack
 ```
 
 ```text
-✓ tidelamp-pack: 1 plugin(s), 1 world(s) checked against Covel 0.0.51
+✓ tidelamp-pack: 1 plugin(s), 1 world(s) checked against Covel 0.0.53
 ```
 
 When the manifest is empty, it gives this prompt:
@@ -164,7 +164,7 @@ When there are errors, the command ends with a failure, so you can put it direct
 - The player ticks what to install and confirms once. The items are installed as a whole: plugins first, then worlds.
 - If an item fails, packages installed by this request are rolled back. A world that acquired sessions during installation is retained to protect those saves; packages whose deletion fails are retained too. The error names retained packages so you can resolve them before retrying.
 - Installing plugins requires restarting the backend once. Worlds are usable right away.
-- Being installed does not mean being authorized. The first time a plugin runs, the player is still asked to authorize it.
+- Installation does not authorize code to run. Plugins still need session authorization: matching trusted sources can receive automatic grants; other cases ask the player.
 
 When importing from a ZIP, there is no preview step, and a problem causes the install to be refused directly. All collection archives share the [installer’s extraction budget](../reference/plugin-installation.md#archive-limits); exceeding it rejects the request before writing.
 

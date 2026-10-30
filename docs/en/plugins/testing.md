@@ -307,7 +307,7 @@ Fields of a case:
 | `artifacts.saveImages`      | Saves the generated images to a directory so a person can look at them                                              |
 
 > [!NOTE]
-> The runtime in a case is triggered directly, and its upstream runtimes do not run. So the inputs it declares (for example, this turn's story text) are empty, and `message` is only the player's input. To test "what to do after reading an upstream result", load the upstream plugin with `withPlugins`, or [assemble a full turn](#run-a-full-turn-in-a-test) in a test.
+> The runtime in a case is triggered directly, and its upstream runtimes do not run. So the inputs it declares (for example, this turn's story text) are empty, and `message` is only the player's input. To test "what to do after reading an upstream result", [assemble a full turn](#run-a-full-turn-in-a-test) in a test. `withPlugins` loads other plugins but does not automatically run their upstream runtimes.
 
 ### Fake model replies
 
@@ -489,17 +489,17 @@ When you change a character tool, check it against the real character field defi
 
 ## When it does not work as expected
 
-| Symptom                                                             | Cause and fix                                                                                                  |
-| ------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
-| `has no tests/runtime-cases.json or covel.test.json`                | A plugin with several runtimes has no case file. Add one, or give the full runtime name to trigger it directly |
-| A case is `failed`, and `assertions` shows `pluginData:<name>`      | The data was not saved as expected. Check the `namespace`, `key`, and `field` in the case                      |
-| A case is `failed`, and `assertions` shows `runtime:<name>:success` | The runtime did not succeed. Look at its `error` in `runtimeResults`                                           |
-| `skipped: upstream not success`                                     | The upstream it depends on did not run. Add `--ignore-upstreams`, or load the upstream too                     |
-| An agent that must call a tool fails                                | The case does not provide `llmResponses` with a tool call                                                      |
-| A tool call is rejected                                             | The `arguments` in the fake reply do not match the tool's parameters, or they are not valid JSON text          |
-| A warning such as `Unsupported rpc` is printed                      | This is normal. This part must be verified on a real server                                                    |
-| `store.… is not configured for this test context` in a unit test    | The function reads data you did not provide. Add it to `store` in `makeManualFunctionContext`                  |
-| The plugin cannot be found                                          | The plugin is not in the default directory. Add `--plugins-dir`                                                |
+| Symptom                                                             | Cause and fix                                                                                                                |
+| ------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| `has no tests/runtime-cases.json or covel.test.json`                | A plugin with several runtimes has no case file. Add one, or give the full runtime name to trigger it directly               |
+| A case is `failed`, and `assertions` shows `pluginData:<name>`      | The data was not saved as expected. Check the `namespace`, `key`, and `field` in the case                                    |
+| A case is `failed`, and `assertions` shows `runtime:<name>:success` | The runtime did not succeed. Look at its `error` in `runtimeResults`                                                         |
+| `skipped: upstream not success`                                     | The upstream did not run. Use `--ignore-upstreams` for local logic alone; assemble a full turn to read real upstream results |
+| An agent that must call a tool fails                                | The case does not provide `llmResponses` with a tool call                                                                    |
+| A tool call is rejected                                             | The `arguments` in the fake reply do not match the tool's parameters, or they are not valid JSON text                        |
+| A warning such as `Unsupported rpc` is printed                      | This is normal. This part must be verified on a real server                                                                  |
+| `store.… is not configured for this test context` in a unit test    | The function reads data you did not provide. Add it to `store` in `makeManualFunctionContext`                                |
+| The plugin cannot be found                                          | The plugin is not in the default directory. Add `--plugins-dir`                                                              |
 
 ## Next steps
 

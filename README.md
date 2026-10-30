@@ -15,11 +15,11 @@
 
 Covel is an AI RPG framework and playable studio where NPC relationships, lore, quests, inventory, memory, stage direction, and media can evolve between turns. Its architecture has three clear layers: the **kernel provides primitives and orchestration**, **plugins provide behavior**, and **world packs provide settings, resources, and a default plugin composition**.
 
-> **Source version: v0.0.53**, early access. APIs, world data, and plugin manifests may change between versions. Current binaries target macOS Apple Silicon and Windows x64 and are unsigned; macOS builds are not notarized. Each release attaches a `SHA256SUMS.txt` to check a download against. v0.0.53 runs the desktop backend on the bundled Electron runtime and requires macOS 13.5 or later; source and Docker deployments need Node 26.12.1. Read the [breaking changes](./docs/CHANGELOG.md#breaking-changes-in-v0053) and [upgrade notes](./docs/CHANGELOG.md#upgrade-notes-for-v0053) before upgrading. Upgrades from v0.0.51 or earlier also follow the v0.0.52 [breaking changes](./docs/CHANGELOG.md#breaking-changes-in-v0052) and [upgrade notes](./docs/CHANGELOG.md#upgrade-notes-for-v0052): **v0.0.52 and later refuse to start on an SQLite or PostgreSQL database created by v0.0.51 or earlier; recreate it** (sessions are not migrated; browser-private saves are not affected). Older upgrades also follow the [v0.0.51 upgrade notes](./docs/CHANGELOG.md#upgrade-notes-for-v0051), the [v0.0.50 breaking changes](./docs/CHANGELOG.md#breaking-changes-in-v0050) and [upgrade notes](./docs/CHANGELOG.md#upgrade-notes-for-v0050), the [v0.0.49 upgrade notes](./docs/CHANGELOG.md#upgrade-notes-for-v0049) and the [v0.0.48 breaking-change notes](./docs/CHANGELOG.md#breaking-changes-and-upgrade-notes-for-v0048); versions before v0.0.42 also require the [v0.0.42 upgrade guide](./docs/en/internals/upgrade-0.0.42.md). Back up affected storage before upgrading; development data is not automatically migrated.
+> **Source version: v0.0.53**, early access. APIs, world data, and plugin manifests may change between versions. Current binaries target macOS Apple Silicon and Windows x64 and are unsigned; macOS builds are not notarized. Each release attaches a `SHA256SUMS.txt` to check a download against. v0.0.53 runs the desktop backend on the bundled Electron runtime and requires macOS 13.5 or later; source and Docker deployments need Node 26.12.1. Read the [breaking changes](./docs/CHANGELOG.md#breaking-changes-in-v0053) and [upgrade notes](./docs/CHANGELOG.md#upgrade-notes-for-v0053) before upgrading. Upgrades from v0.0.51 or earlier also follow the v0.0.52 [breaking changes](./docs/CHANGELOG.md#breaking-changes-in-v0052) and [upgrade notes](./docs/CHANGELOG.md#upgrade-notes-for-v0052): **v0.0.52 and later refuse to start on an SQLite or PostgreSQL database created by v0.0.51 or earlier; recreate it** (sessions are not migrated; browser-private saves are not affected). Older upgrades also follow the [v0.0.51 upgrade notes](./docs/CHANGELOG.md#upgrade-notes-for-v0051), the [v0.0.50 breaking changes](./docs/CHANGELOG.md#breaking-changes-in-v0050) and [upgrade notes](./docs/CHANGELOG.md#upgrade-notes-for-v0050), the [v0.0.49 upgrade notes](./docs/CHANGELOG.md#upgrade-notes-for-v0049) and the [v0.0.48 breaking-change notes](./docs/CHANGELOG.md#breaking-changes-and-upgrade-notes-for-v0048); versions before v0.0.42 also require the [v0.0.42 upgrade guide](./docs/en/internals/upgrade-0.0.42.md). Back up affected storage before upgrading; development data is not automatically migrated. When following `main`, also check unreleased schema changes; see [data, backups, and upgrades](./docs/en/start/data-and-upgrade.md).
 
 ## Highlights
 
-- 🎭 **Stage mode** — a full-screen visual novel: scene backdrops, character sprites, typewriter dialog, and choice overlays. Backdrops come from the world pack's scene art; a location without one shows the world image. Community illustration plugins add separate prompt-and-gallery workflows; see [image generation](./docs/reference/image-generation.md).
+- 🎭 **Stage mode** — a full-screen visual novel: scene backdrops, character sprites, typewriter dialog, and choice overlays. Backdrops come from the world pack's scene art; a location without one shows the world image. Community illustration plugins add separate prompt-and-gallery workflows; see [image generation](./docs/en/reference/image-generation.md).
 - ⚙️ **Composable plugin runtimes** — combine LLM agents, deterministic functions, UI panels, data schemas, events, and lifecycle hooks in one capability-driven pipeline.
 - 🎲 **RPG mechanics built in** — pre-rolled dice checks with visible receipts, an auto-tracked quest log, a player-managed inventory, and per-NPC affinity meters. All optional plugins; worlds can seed quests, gear, and starting affinity.
 - 🧩 **Plugins stay replaceable** — the kernel resolves versioned contracts and declared output visibility; framework code does not branch on concrete plugin IDs.
@@ -31,10 +31,10 @@ Covel is an AI RPG framework and playable studio where NPC relationships, lore, 
 
 ## Two ways to play
 
-|                                                Stage mode (visual novel)                                                |                                                     Story mode (text)                                                      |
-| :---------------------------------------------------------------------------------------------------------------------: | :------------------------------------------------------------------------------------------------------------------------: |
-| ![Stage mode in Harukaze Academy: backdrop, character sprites, and dialogue](./.assets/images/readme/stage-mode.en.png) |            ![Story mode in Emberback Relay: narration and quest log](./.assets/images/readme/text-mode.en.png)             |
-|               Backdrops, sprites, and typewriter dialog; scene art resolves and generates as you explore                | Narrated turns with suggested actions and inline forms; the default plugins update panels such as the quest log every turn |
+|                                                Stage mode (visual novel)                                                |                                              Story mode (text)                                              |
+| :---------------------------------------------------------------------------------------------------------------------: | :---------------------------------------------------------------------------------------------------------: |
+| ![Stage mode in Harukaze Academy: backdrop, character sprites, and dialogue](./.assets/images/readme/stage-mode.en.png) |     ![Story mode in Emberback Relay: narration and quest log](./.assets/images/readme/text-mode.en.png)     |
+|           Backdrops, sprites, and typewriter dialog; exploration selects scene art already in the world pack            | Narrated turns with suggested actions and inline forms; enabled plugins update panels such as the quest log |
 
 Worlds declare their default (`defaultViewMode: stage`); you can switch any time in-session.
 
@@ -44,7 +44,7 @@ Worlds declare their default (`defaultViewMode: stage`); you can switch any time
 | :------------------------------------------------------: | :--------------------------------------------------------: | :----------------------------------------------------------------: |
 | App-like: icon rail, tagged option cards, a status strip | Reading-first: serif prose, numbered options, margin notes | Scene-first: full-bleed art, the cast on stage, key-capped options |
 
-A style scheme changes structure as well as colour — where navigation sits, how options are drawn, what the session does with world art. Pick one in **Settings → Appearance**; the earlier themes live on as colourways of a fourth, Classic. Schemes are theme packages, so you can save your own or import someone else's ([guide](./docs/recipes/themes.md)). Plugin UI follows whichever scheme is active without knowing about it.
+A style scheme changes structure as well as colour — where navigation sits, how options are drawn, what the session does with world art. Pick one in **Settings → Appearance**; the earlier themes live on as colourways of a fourth, Classic. Schemes are theme packages, so you can save your own or import someone else's ([guide](./docs/en/recipes/themes.md)). Plugin UI follows whichever scheme is active without knowing about it.
 
 ## How the pieces fit together
 
@@ -68,7 +68,7 @@ A plugin is not necessarily one autonomous agent. It may contain one runtime, se
 | **Lifecycle hooks**       | Applies cross-cutting policy around scheduling, models, tools, and commits | `narrator` (draft review), `char-creator` (profile guard) |
 | **UI and data contracts** | Declares panels, memory blocks, schemas, or world-data targets             | `memory`, `character-blueprint`                           |
 
-Root `PLUGIN.md` declares the versioned contracts a package `requires` and shared `contributes` such as tools, events, UI, and settings. The loader works out the rest: the ID is the directory name, the package provides each runtime's `io.output.contract`, and a runtime with a `function` block is a function while one without is an agent. The smallest plugin is a single `PLUGIN.md` with a description, a stage, and a prompt. A single executable runtime goes under its explicit `runtime` field. A multi-runtime package instead places execution manifests under `runtimes/*/RUNTIME.md`:
+Root `PLUGIN.md` declares the versioned contracts a package `requires` and shared `contributes` such as tools, events, UI, and settings. The loader can infer the rest: the ID can come from the directory name, the package provides each runtime's `io.output.contract`, and a runtime with a `function` block is a function while one without is an agent. The smallest plugin is a single `PLUGIN.md` with a description, a stage, and a prompt. A single executable runtime goes under its explicit `runtime` field. A multi-runtime package instead places execution manifests under `runtimes/*/RUNTIME.md`:
 
 ```text
 plugins/npc-graph/
@@ -78,13 +78,13 @@ plugins/npc-graph/
     └── extractor/RUNTIME.md          # post-turn relationship agent
 ```
 
-The two layouts cannot be mixed. Packages containing only entry code, hooks, UI, or data declarations need no runtime. Runtimes declare visibility in `io.visibility` and can publish an output contract through `io.output.contract`; an agent uses its own manifest body as model instructions. Runtime results separate business `output`, explicit `effects`, and `completion`, so an ordinary data field cannot accidentally trigger a write or end setup. See the [plugin contract reference](./docs/reference/plugins.md) for the authoring format and result boundaries.
+The two layouts cannot be mixed. Packages containing only entry code, hooks, UI, or data declarations need no runtime. Runtimes declare visibility in `io.visibility` and can publish an output contract through `io.output.contract`; an agent uses its own manifest body as model instructions. Runtime results separate business `output`, explicit `effects`, and `completion`, so an ordinary data field cannot accidentally trigger a write or end setup. See the [plugin contract reference](./docs/en/reference/plugins.md) for the authoring format and result boundaries.
 
 The kernel connects these pieces through contracts, typed extension points, and public UI slots. Narrators, image providers, stage directors, and rules systems can be replaced without framework branches for a particular plugin ID.
 
 Author and validate extensions as independent community packages, including installation, approval,
-restart and removal. See [plugin testing](./docs/plugins/testing.md) and the
-[player-flow checks](./docs/internals/e2e-testing.md#发版前的玩家流程验收). Framework releases share one version;
+restart and removal. See [plugin testing](./docs/en/plugins/testing.md) and the
+[player-flow checks](./docs/en/internals/e2e-testing.md#player-flow-acceptance-before-a-release). Framework releases share one version;
 plugins and world packs may use their own versions.
 
 ## World packs make a setting playable
@@ -106,7 +106,7 @@ worlds/my-world/
     └── presence and scene indexes
 ```
 
-`pluginPolicy` picks a built-in pack with `preset` and adds the plugins the world also wants with `plus`; versioned contracts resolve their dependencies, and the player can still change the selection before the game starts. `requires` lists contracts the world cannot run without, such as `action-check@1`: any installed plugin that provides the contract satisfies it, and the game cannot start while none does. `pluginSettings` supplies world defaults below player overrides. WorldData imports to `memory.blocks@1` add genre-specific memory definitions such as clues, suspects, signal logs, or countdowns without modifying the memory plugin.
+`pluginPolicy` picks a built-in pack with `preset` and adds the plugins the world also wants with `plus`; versioned contracts resolve their dependencies, and the player can still change the selection before the game starts. `requires` names contracts the world requests, such as `action-check@1`. Any eligible plugin that implements the contract can satisfy it. If no provider can be enabled, the prep screen explains which features are missing and the session can still start. `pluginSettings` supplies world defaults below player overrides. WorldData imports to `memory.blocks@1` add genre-specific memory definitions such as clues, suspects, signal logs, or countdowns without modifying the memory plugin.
 
 `WorldData` is the shared import protocol, not a second world format. Its sources can be YAML, JSON, Markdown, text, or media and can target canonical characters/lorebook data or a plugin namespace that explicitly accepts world data. The in-app AI builder produces the same standard package: it can generate the manifest, lore, dimensions, main cast, lorebook, and rules from a structured creative brief. File-backed packs can include full media; browser/store-backed generated worlds retain a portable text fallback while media remains file- or asset-backed.
 
@@ -125,7 +125,7 @@ worlds/my-world/data/rules/core.ja.yaml
 
 A world pack declares its own language with `defaultLocale`; each `world.<locale>.yaml` or `WORLD.<locale>.md` adds an edition. A text that an edition does not translate falls back to the world's own language, so a partial translation remains playable, and `pnpm validate:world` lists what is missing. The four built-in worlds ship Chinese and English editions; **Emberback Relay** is written in English (`defaultLocale: en-US`) and the other three in Chinese. A world without the player's language can be translated in the app or with `pnpm i18n translate`.
 
-Players, world authors, and plugin authors can follow the [i18n guide](./docs/reference/i18n.md) to add another language. Complete JSON catalogs in `apps/web/src/i18n/locales/` are discovered automatically at build time and appear in Web language selectors without manual registration. Rebuild to include a new catalog; Electron-native messages use English when that language is not bundled. Content support adds locale files as needed: `locales/<lang>.yaml` in a plugin, and `world.<lang>.yaml`, `WORLD.<lang>.md` and source files such as `data/rules/core.<lang>.yaml` in a world. Plugin prompts stay English, with an optional Chinese variant; the model writes in the session language. Only natural-language content is translated—stable IDs, contracts, tools, paths, and scheduling remain canonical. Run `pnpm check:i18n` to validate the result.
+Players, world authors, and plugin authors can follow the [i18n guide](./docs/en/reference/i18n.md) to add another language. Complete JSON catalogs in `apps/web/src/i18n/locales/` are discovered automatically at build time and appear in Web language selectors without manual registration. Rebuild to include a new catalog; Electron-native messages use English when that language is not bundled. Content support adds locale files as needed: `locales/<lang>.yaml` in a plugin, and `world.<lang>.yaml`, `WORLD.<lang>.md` and source files such as `data/rules/core.<lang>.yaml` in a world. Plugin prompts stay English, with an optional Chinese variant; the model writes in the session language. Only natural-language content is translated—stable IDs, contracts, tools, paths, and scheduling remain canonical. Run `pnpm check:i18n` to validate the result.
 
 ## Debug every turn end to end
 
@@ -162,9 +162,9 @@ Your data lives in `~/.covel/` (config, keys, SQLite, custom worlds, logs). If `
 - **[Plugin directory](https://github.com/covel-ai/covel-plugins)** — official image-generation and TTS plugins, the Jev demo, authoring examples, and a separate community list.
 - **[World directory](https://github.com/covel-ai/covel-worlds)** — official world examples and a separate community list of playable settings.
 
-Both directories open in English and link to Chinese and other available translations. In **Settings → Install & manage**, paste a repository or package-directory GitHub URL, preview the plugins and worlds found there, tick what to install, and confirm the risks once. The selection installs as a unit, plugins first, so a world arrives together with the plugins it needs; a [collection](./docs/ship/collections.md) manifest lets an author list such a set, including packages in other repositories. Downloads use your configured proxy. Plugins require a backend restart and session authorization; newly installed worlds are available immediately.
+Both directories open in English and link to Chinese and other available translations. In **Settings → Install & manage**, paste a repository or package-directory GitHub URL, preview the plugins and worlds found there, tick what to install, and confirm the risks once. The selection installs as a unit, plugins first, so a world arrives together with the plugins it needs; a [collection](./docs/en/ship/collections.md) manifest lets an author list such a set, including packages in other repositories. Downloads use your configured proxy. Plugins require a backend restart and session authorization; newly installed worlds are available immediately.
 
-Use **Check for updates** beside an installed package to review changes. Confirmed updates take effect after backend restart; local edits block replacement. See the [plugin installation guide](./docs/reference/plugin-installation.md) and [world installation guide](./docs/reference/world-installation.md).
+Use **Check for updates** beside an installed package to review changes. Confirmed updates take effect after backend restart; local edits block replacement. See the [plugin installation guide](./docs/en/reference/plugin-installation.md) and [world installation guide](./docs/en/reference/world-installation.md).
 
 ### Run from source
 
@@ -176,7 +176,7 @@ cp .env.llm.example .env.llm        # provider API keys
 pnpm dev                            # web :5173 + server :3001 (SQLite)
 ```
 
-Open <http://localhost:5173> — debug tooling lives at `/debug`. For personal use, you can configure a connection, endpoint, model, and key entirely in Settings; `.env.llm` is optional. UI selections override the project `llm.toml` without modifying it. Browser settings and keys stay in this browser; Electron uses personal files under `~/.covel`. SQLite and PostgreSQL store instance-owned sessions. The default Docker profile is a personal instance bound to loopback, not a public multi-player service. Docker setup, in-memory browser checkpoints, and precedence: [env registry](./docs/reference/env-registry.md).
+Open <http://localhost:5173> — debug tooling lives at `/debug`. For personal use, you can configure a connection, endpoint, model, and key entirely in Settings; `.env.llm` is optional. UI selections override the project `llm.toml` without modifying it. Browser settings and keys stay in this browser; Electron uses personal files under `~/.covel`. SQLite and PostgreSQL store instance-owned sessions. The default Docker profile is a personal instance bound to loopback, not a public multi-player service. Docker setup, in-memory browser checkpoints, and precedence: [env registry](./docs/en/reference/env-registry.md).
 
 ## Worlds in the box
 
@@ -198,12 +198,12 @@ Share your work by submitting a directory-entry PR to [covel-plugins](https://gi
 
 ## Develop
 
-- [Plugin authoring guide](./docs/plugins/essentials.md) — start here; bundled plugins under [`plugins/`](./plugins/) are working references
-- [Design principles](./docs/internals/design-principles.md) — what belongs in the kernel and what belongs in a plugin
-- [Architecture & turn pipeline](./docs/internals/flow.md) — how a turn flows through trigger → schedule → runtimes → commit
-- [World data](./docs/reference/world-data.md) and [collections](./docs/ship/collections.md) — author a world pack and ship it with its plugins
+- [Plugin authoring guide](./docs/en/plugins/essentials.md) — start here; bundled plugins under [`plugins/`](./plugins/) are working references
+- [Design principles](./docs/en/internals/design-principles.md) — what belongs in the kernel and what belongs in a plugin
+- [Architecture & turn pipeline](./docs/en/internals/flow.md) — how a turn flows through trigger → schedule → runtimes → commit
+- [World data](./docs/en/reference/world-data.md) and [collections](./docs/en/ship/collections.md) — author a world pack and ship it with its plugins
 - [Gameplay and screenshot acceptance](./docs/en/internals/e2e-testing.md#accepting-local-model-relay-on-desktop-and-deployed-web) — before a release, replay desktop and deployed-relay sessions with default plugins and a restart, then refresh these README images
-- Reference: [plugin contract](./docs/reference/plugins.md) · [extension points](./docs/reference/extension-points.md) · [tools](./docs/reference/tools.md) · [HTTP API](./docs/reference/api.md) · [full doc index](./docs/README.md)
+- Reference: [plugin contract](./docs/en/reference/plugins.md) · [extension points](./docs/en/reference/extension-points.md) · [tools](./docs/en/reference/tools.md) · [HTTP API](./docs/en/reference/api.md) · [full doc index](./docs/README.md)
 
 pnpm workspaces + Turborepo · ESM-only · TypeScript strict · React 19 + Hono + Drizzle. Repo layout and package list → [`AGENTS.md`](./AGENTS.md#monorepo-structure).
 

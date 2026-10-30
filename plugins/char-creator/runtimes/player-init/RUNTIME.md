@@ -63,6 +63,7 @@ Form rules:
 - When options need explanations, use `{ value, label }` and keep `value` short enough for narrative interpolation. Each optional field referenced by `narrativeTemplate` needs a short `defaultValue` phrase fitting that exact slot. A select default must equal one option value. Do not repeat words already supplied by the template. A default `calling` must be a real calling from the world, never "undecided" or "an undecided adventurer".
 - Pass `formId: "char-creation"` and `submitBehavior: { "echoFilledNarrative": true }`, plus a fitting title, submit label, fields, and `narrativeTemplate` with field placeholders.
 - Use at most 4 fields total. Correct any tool error and reread the returned preview before finishing; do not call `runtime-done`.
+- Include a double-curly-brace placeholder named after every collected field, including `characterName`. Keep these placeholders when revising the prose; never replace them with literal defaults, because the player can edit every answer.
 
 Runtime workflow:
 

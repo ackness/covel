@@ -340,7 +340,7 @@ schema:
 - `createWorld({ llm, concept, ... })` 生成并校验内容。成功时返回 `id`、`manifest`、`lore`、`locale`、`packageContent` 与 `warnings`；失败时返回 `success: false` 和 `errors`。`warnings` 包括数量低于简报目标的内容和被丢弃的无效维度。
 - 返回的 `manifest` 已经过 schema 校验并规范化，包含 locale 的规范写法和 `characterSchema.types` 等默认值。三种保存目标使用同一份结果。
 - 生成过程不写文件，也不接收 `outputDir`。生成的清单必须把数据写在清单里，不能引用还没生成的 `worldData` 文件。
-- 简报生成的 `memoryDefinitions` 会转换成 `packageContent.contractData` 里的 `memory.blocks@1/world` 记录。写文件和不写文件两种模式用同一份数据，同一目标重复声明会被拒绝。
+- 生成的插件内容统一放在 `packageContent.contractData`，每条为 `{contract,key,value}`；例如所选的 `memory.blocks@1` 可以生成键为 `world` 的记录。写文件和不写文件两种模式用同一份数据，同一目标重复声明会被拒绝。
 - 需要文件包时显式调用 `await writeWorldPackage(outputDir, result, { dataContracts })`。它返回写出的相对路径，在一份独立的副本里把清单里的数据转换成文件引用，原生成结果不变。已有同名包会被拒绝；并发写同一个包只有一个成功。
 
 **没有文件夹的世界。** 保存在服务端数据库（`server-store`）或浏览器本地的世界没有可以长期读取的包目录。这时：

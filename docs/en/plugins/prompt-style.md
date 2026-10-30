@@ -110,7 +110,7 @@ These are **reminders, and they do not make the check fail**. The rules are the 
 For a prompt that has a Chinese version (`*.zh.md`), change both files together:
 
 1. Change the English body.
-2. Change `*.zh.md` to match. Use the Chinese terms from the glossary, and keep one Chinese sentence for each English sentence.
+2. Change `*.zh.md` to match. Use the Chinese terms from the glossary. Preserve every rule, limit, tool name and example meaning, with natural Chinese phrasing.
 3. For the plugins built into the repository, run `pnpm prompts:lock` again to record that this pair is in sync.
 
 If you change only one side, `pnpm check:prompts` fails.

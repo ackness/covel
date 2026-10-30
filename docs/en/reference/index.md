@@ -12,7 +12,7 @@ The tutorials are in the earlier chapters: [Create a world](../worlds/index.md),
 | [World data](./world-data.md)                            | Import rules for data files, content that can be seeded in advance, hidden data |
 | [World model](./world-model.md)                          | Data structures for characters, character attributes and the lorebook           |
 | [Dynamic dimensions](./dynamic-dimensions.md)            | World state that changes during play                                            |
-| [World time](./world-time.md)                            | Time passing, and day and night                                                 |
+| [World time](./world-time.md)                            | Calendars, phases, and time advancement                                         |
 | [World package installation](./world-installation.md)    | Install, update and uninstall                                                   |
 
 ## Plugins

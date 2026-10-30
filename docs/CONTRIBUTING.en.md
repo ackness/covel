@@ -10,8 +10,8 @@ Everyone taking part in the project follows the [Code of Conduct](../CODE_OF_CON
 
 ## Development environment
 
-- Node.js 26.x
-- pnpm 12.14.0 (see the root `package.json` `packageManager`)
+- Node.js and pnpm: use the requirements in the root `mise.toml` and `package.json`; the current Node.js requirement is at least 26.12.1 within the 26.x line
+- Run `mise install` to prepare the project toolchain
 - Optional: Docker (for PostgreSQL mode)
 
 ```bash
@@ -26,7 +26,7 @@ After `pnpm install --frozen-lockfile`, run `pnpm hooks:install` once in each ne
 
 The root `.pre-commit-config.yaml` defines commit checks. Install pre-commit and run `pre-commit install` to enable them, or run `pre-commit run --all-files` manually. Oxlint is pinned in the root `devDependencies` and `pnpm-lock.yaml`. Like Prettier, it uses the project toolchain through `mise exec` without creating a separate Node environment. `scripts/run-with-project-node.mjs` first checks the Node version like the pre-push hook and refuses when it differs from `mise.toml`, then prepends the selected Node directory to the child PATH so CLI shims and subsequent commands use the same version. Existing hooks read the updated configuration automatically; no global cache cleanup is needed. Oxlint rules live in the root `.oxlintrc.jsonc`, with one line of reason for each rule that is off. The hook checks the changed files and `pnpm check` checks the whole repository, both with `--deny-warnings`, so a warning fails the check. The commit hook runs no type check; `pnpm check`, the pre-push hook and CI do.
 
-New files are limited to 3 MiB by default. World gallery originals at `worlds/*/media/gallery/*.png` have a separate 4 MiB limit to preserve lossless 1536×1024 images; each needs a WebP of the same name beside it, and the installers and the Docker image carry only the WebP. World portraits and scenes are tracked as WebP only (see [`guide/world-art-direction.md`](./worlds/art-direction.md)).
+New files are limited to 3 MiB by default. World gallery originals at `worlds/*/media/gallery/*.png` have a separate 4 MiB limit to preserve lossless 1536×1024 images; each needs a WebP of the same name beside it, and the installers and the Docker image carry only the WebP. World portraits and scenes are tracked as WebP only (see [World art direction](./worlds/art-direction.md)).
 
 ### PostgreSQL 18 development environment
 

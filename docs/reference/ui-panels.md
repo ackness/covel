@@ -37,18 +37,18 @@
 
 ## 会话工具条、玩家状态与场景 HUD
 
-会话顶部的工具条和状态显示只用内核自己的数据，不读任何插件的数据。所以它对每个世界都成立；某项没有数据时，对应的部分不显示。
+会话顶部的工具条和状态显示读取 World Model 与公开的内核 UI 槽位，不直接读取插件私有 namespace。插件通过槽位提供数据，因此不同世界和插件组合可以共用这套界面；某项没有数据时，对应部分不显示。
 
-| 显示内容             | 数据来源                                                                                                                                         |
-| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
-| 世界名、回合数       | `WorldRecord.name`、`SessionRecord.completedPlayerTurns`                                                                                         |
-| 当前场景名           | `stage.backdrop@1` 槽位的 `name`                                                                                                                 |
-| 玩家状态量表         | 会话 World Model：`type: "player"` 的角色记录，加角色 schema 里 `category: "stats"`、`type: "number"` 且同时声明 `min` / `max` 的属性；最多 4 项 |
-| 随身物品             | 同一条玩家角色记录里，角色 schema 中 `category: "equipment"`、`type: "array"` 的属性的字符串项，按 schema 顺序合并                               |
-| 在场角色（场景 HUD） | `stage.cast@1` 的未退场演员（最多 3 位）与按角色 ID 取的 `character.visual@1` 头像；没有图时只显示名字                                           |
-| “正在说话”标记       | 最新一条已提交故事里最后一个有说话人的段落；有 `speakerId` 时按角色 ID 匹配在场演员，否则按 `displayName` 匹配；故事还在流式输出时不显示         |
-| 章节横幅             | `backdrop: "banner"` 的布局里，世界头图、世界名和前三个标签，放在第一条消息上方                                                                  |
-| 状态摘要             | `session.summary@1` 槽位：任何插件都可以提供的几行“一眼就该看到”的内容（当前目标、时间、行囊），见下方 [Session summary](#session-summary)       |
+| 显示内容             | 数据来源                                                                                                                                                                         |
+| -------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 世界名、回合数       | `WorldRecord.name`、`SessionRecord.completedPlayerTurns`                                                                                                                         |
+| 当前场景名           | `stage.backdrop@1` 槽位的 `name`                                                                                                                                                 |
+| 玩家状态量表         | 会话 World Model：主座位当前扮演的角色记录（见[座位](./world-model.md#座位)），加角色 schema 里 `category: "stats"`、`type: "number"` 且同时声明 `min` / `max` 的属性；最多 4 项 |
+| 随身物品             | 同一条玩家角色记录里，角色 schema 中 `category: "equipment"`、`type: "array"` 的属性的字符串项，按 schema 顺序合并                                                               |
+| 在场角色（场景 HUD） | `stage.cast@1` 的未退场演员（最多 3 位）与按角色 ID 取的 `character.visual@1` 头像；没有图时只显示名字                                                                           |
+| “正在说话”标记       | 最新一条已提交故事里最后一个有说话人的段落；有 `speakerId` 时按角色 ID 匹配在场演员，否则按 `displayName` 匹配；故事还在流式输出时不显示                                         |
+| 章节横幅             | `backdrop: "banner"` 的布局里，世界头图、世界名和前三个标签，放在第一条消息上方                                                                                                  |
+| 状态摘要             | `session.summary@1` 槽位：任何插件都可以提供的几行“一眼就该看到”的内容（当前目标、时间、行囊），见下方 [Session summary](#session-summary)                                       |
 
 这些内容放在哪：
 
@@ -188,10 +188,10 @@ session 建立 → GET /api/ui-specs?sessionId=<id>
 
 “世界”页签由框架自己提供。它和插件的页签并列，但不受 `/api/ui-specs` 影响。
 
-- **数据源**：当前会话的 `WorldRecord.lore`，也就是 `worlds/<id>/WORLD.md`。它按 `defaultLocale` 解析：先找完全相同的 locale，再找同一种文字的主语言，最后用主文件 `WORLD.md`。内容由 `world-seed-loader` 在启动时写入 store。
+- **数据源**：当前世界记录的 `lore` 与 `metadata` 中的语言版本，由 `localizedWorldText` 按会话内容语言选择；不跟随游玩中切换的界面语言。内容由世界加载与导入流程写入 store。文件选择和语言回退见[会话语言](./i18n.md#会话语言在创建时锁定)。
 - **交互**：按 Markdown 渲染（`@/components/ui/markdown`，`react-markdown` + `remark-gfm`）。`lore` 为空时显示 `description`，再为空则显示“暂无世界文档”（`worldDocumentEmpty`）。
 - **只给叙事者的正文**：`<!-- narrator-only -->` 和 `<!-- /narrator-only -->` 之间的内容不显示（`playerVisibleLore`，在 `@covel/shared`）。整篇都被标记时，按 `lore` 为空处理。开局准备页的“世界文档”和世界详情页用的是同一个函数。写法见 [World Data](./world-data.md#只给叙事者的正文narrator-only)。
-- **实现**：`apps/web/src/components/session/world-document-panel.tsx`。它在 `right-panel.tsx` 里作为 `world` 页签挂载，`game-view.tsx` 把当前的 `world: WorldRecord | null` 传给它。
+- **实现**：`apps/web/src/components/session/world-document-panel.tsx`。它在 `right-panel.tsx` 里作为 `world` 页签挂载，`game-view.tsx` 传入当前世界摘要和会话语言；面板再按世界 ID 读取完整记录。
 - **隔离规则**：这个页签的代码属于框架，只依赖 `WorldRecord` 的公开字段，不认识任何插件 ID。
 
 > [!IMPORTANT]
@@ -868,7 +868,8 @@ KiB 按 UTF-8 字节计算。状态变化推送完整投影；流式文本用 `{
 ### 右侧面板数据流
 
 ```
-插件 local tool / builtin tool / function handler 写入 plugin_data
+插件 local tool / builtin tool / function handler 提出 plugin_data 写入
+  → proposal 校验与执行提交
   → store 写入
   → eventBus 发射 plugin-data.changed
   → SSE 推送到前端
@@ -910,8 +911,8 @@ Turn 执行 → 各 Runtime 按 stage 屏障 + stage 内 DAG 运行
 
 添加一个绑定到回合的交互块：
 
-1. 在 runtime 的输出或 tool 的返回值里写 `interaction`。
-2. session-kernel 把它归一化成 `interaction.request`。
+1. 函数返回 `effects.interactions`，或工具返回待提交的 `interaction.request` proposal。agent 通过 `create-form`、`create-choices` 等工具提出交互。
+2. 内核校验并提交交互；仅在业务 `output` 中写一个同名字段不会生效。
 3. `chat-messages.tsx` 经 `messageToSpec()` 渲染表单、选择或确认界面。
 
 ### Gameplay completion and reading order
@@ -1012,6 +1013,8 @@ catalog 里的组件不够用时，插件可以带一份自己的 HTML。JSON sp
 
 值是 `{ actors, retainWhenEmpty }`，两项都必须写。
 
+内置场景舞台在实际换地点时，先清空已有的方向演员记录，再应用本轮新指令；预览与提交使用相同场景身份和顺序。已有方向状态而没有新登场指令时，返回空演员与 `retainWhenEmpty: false`，防止旧场景立绘残留。没有方向状态时继续使用原来的 cast 提供者。
+
 | 字段              | 类型                       | 必填 | 含义                                                                                  |
 | ----------------- | -------------------------- | ---- | ------------------------------------------------------------------------------------- |
 | `actors`          | 下表对象的数组，最多 64 项 | 是   | 当前舞台上的演员，空数组合法                                                          |
@@ -1030,6 +1033,10 @@ catalog 里的组件不够用时，插件可以带一份自己的 HTML。JSON sp
 | `visual`      | `{ variantId?: string, outfit?: string, expression?: string, pose?: string }` | 否   | 请求的立绘变体；四个字段都可省略             |
 | `position`    | `left` / `center-left` / `center` / `center-right` / `right`                  | 否   | 请求的站位                                   |
 | `transition`  | `none` / `fade` / `slide-left` / `slide-right` / `dissolve`                   | 否   | 立绘过渡方式；省略时客户端用 `fade`          |
+
+<a id="stagedialogue1"></a>
+
+逐段署名随故事消息的 `segments` 保存，不再使用 `stage.dialogue@1` 槽位。写法见[故事输出](./plugins.md#故事输出)。
 
 #### `stage.choices@1`
 

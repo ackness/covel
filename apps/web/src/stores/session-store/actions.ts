@@ -895,12 +895,24 @@ export function useBuildSessionActions({
     async (suspensionId: string) => {
       const sid = sessionIdRef.current;
       if (!sid) return;
+      const generation = sessionGenerationRef.current;
+      const isCurrent = () =>
+        sessionIdRef.current === sid &&
+        sessionGenerationRef.current === generation;
       await workspace.run(sid, `cancel-suspension:${crypto.randomUUID()}`, () =>
         api.cancelSuspension(sid, suspensionId),
       );
+      if (!isCurrent()) return;
       dispatch({ type: "REMOVE_SUSPENSION", suspensionId });
+      await resyncSessionRecord(
+        sid,
+        sessionIdRef,
+        dispatch,
+        sessionGenerationRef,
+        isCurrent,
+      );
     },
-    [dispatch, workspace, sessionIdRef],
+    [dispatch, workspace, sessionIdRef, sessionGenerationRef],
   );
 
   const refreshSuspensions = useCallback(async () => {

@@ -8,7 +8,7 @@ This page lists every endpoint, request field, response, and error code. Use it 
 
 - Address: after `pnpm dev:server` starts, it is `http://localhost:3001/api/`.
 - Request body: JSON, with `Content-Type: application/json`.
-- Authentication: a local machine needs no token by default. Only a hosted deployment (`DEPLOYMENT_TIER=demo` or `commercial`) needs the session's owner token or the operator token. See [Authentication: session owner token](#authentication-session-owner-token).
+- Authentication: a default local personal instance does not check session tokens; desktop configuration and file APIs may require the launch token. Browser-private and hosted instances also check session or operator tokens. See [Authentication: session owner token](#authentication-session-owner-token).
 - A turn is not a plain request and response. Sending a message, starting a game, and submitting a choice all go through `POST /api/actions`. The response is an SSE stream.
 
 **How this page is organized**
@@ -141,6 +141,8 @@ Every failure uses a non-2xx status code, plus this error envelope:
 
 `error` is always present. Endpoints that clients must handle by error code (such as `plugin-rpc` and `media`) also return `code`.
 
+This is the HTTP error format. Public model tool results use `{ok,data}` / `{ok,error:{code,message}}`; see [Tools](./tools.md). An HTTP `error` string is not a tool error object.
+
 `code` uses lowercase letters, digits and `_` or `-` separators. Plugin-selection errors keep solver codes such as `missing-provider`.
 
 Some errors are the same across the whole site:
@@ -167,7 +169,7 @@ Some errors are the same across the whole site:
 
 ### Authentication: session owner token
 
-On your own machine (`DEPLOYMENT_TIER=self`, the default) and in the desktop app, you can use every endpoint without any token. The rules below mainly affect hosted deployments.
+Session authentication follows the [host profile](../internals/security.md#host-profile). A default local personal instance relies on loopback binding and the Host check rather than session owner tokens. Configuration and file APIs still require the desktop launch token when configured. A production MemoryStore uses the browser-private form and checks owner tokens even with `DEPLOYMENT_TIER=self`.
 
 **What the owner token is**
 
@@ -175,7 +177,7 @@ When `POST /api/sessions` creates a session, the server generates an owner token
 
 Metadata private to the framework never appears in any response. The owner hash, approval and session incarnation, lifecycle, and delete lease are removed from the session create, read, update, and delete responses, from snapshots, and from the virtual tables in `/state`.
 
-**How each deployment tier is checked**
+**How each deployment tier checks the session owner token**
 
 | `DEPLOYMENT_TIER`          | Behavior                                                                                                                |
 | -------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
@@ -239,7 +241,7 @@ A web-only client can enter or clear this token under **Settings → Operator Ac
 - The credential is stored only in the `localStorage` of the current browser.
 - It is sent as `Authorization: Bearer <token>` only on same-origin requests that need the operator token, as listed above.
 - After saving or clearing, the client reloads, and uses the new credential to fetch sessions and world data again.
-- Development mode and the desktop single-user mode can still run without a token. Production MemoryStore follows the exception above.
+- Ordinary personal-session requests need no owner token; desktop configuration and file endpoints still follow the per-launch token gates above. Production MemoryStore follows the exception above.
 
 **How the web client saves the owner token**
 
@@ -1145,6 +1147,7 @@ Authentication:
 | POST | `/api/install/github/batch` | `{ tokens, acceptRisk: true }` | Install the previewed packages as one unit. On failure, roll back this run's writes |
 | POST | `/api/install/collection` | multipart field `file` | Import a packaged collection ZIP |
 | GET | `/api/install/plugins` | — | List the packages in the user plugins folder, with their available source records |
+| GET | `/api/install/worlds` | — | Lists packages in the user worlds directory and available source receipts |
 
 What each endpoint accepts and returns:
 
@@ -4483,6 +4486,8 @@ Resume a suspended runtime with the data the player submitted.
 ```
 
 `result.status` is `success`, or `suspended` when the runtime suspended again. In that case `result.output.suspensionId` is the ID of the new suspended item.
+
+After a successful resume, another suspension, abandonment, or `suspension_outdated`, the client rereads the session record and displays the server’s committed `completedPlayerTurns` rather than incrementing it locally. Another suspension may leave the count unchanged. A failed read must not retry an already successful resume request.
 
 **Errors**
 

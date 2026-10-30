@@ -588,7 +588,7 @@ A model that no rule matches keeps its current behavior:
 
 ### Responses does not let the provider store the conversation
 
-Every request on the Responses protocol carries `store: false` by default. The provider does not keep the prompt or the answer of that request. The player's conversation stays only in Covel's own storage.
+Every Responses request carries `store: false` by default, asking the provider not to retain response state for retrieval by later API calls. Covel stores its own session history. This field does not guarantee that the provider keeps no safety logs or other retained data.
 
 OpenAI's Responses API stores data for a period when this field is absent. So Covel does not rely on the provider's default. The Chat protocol is not affected: it sends `store` only when the role sets it.
 
@@ -802,13 +802,13 @@ Before it sends a request, `gateway.generateObject({ schema, messages })` conver
 
 Every agent runtime uses streaming whenever the adapter offers a streaming interface. Only the story runtime forwards text deltas to the player's screen. This leads to these rules:
 
-| Situation                                                                               | What happens                                                                                                                                                                                   |
-| --------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| The stream breaks after some output has already arrived                                 | The story runtime does not retry. Other runtimes discard the partial output and retry according to `maxRetries`                                                                                |
-| The result is cut off by `length` / `max_tokens`                                        | It cannot count as a success. It is retried once. If it is cut off again, it fails with an error that says to raise the output limit. It does not switch to a non-streaming call to start over |
-| The stream fails before any output, and the retries are used up                         | Switches to one non-streaming call                                                                                                                                                             |
-| The provider clearly rejects the request itself (401, 400, or a config or schema error) | Does not switch to a non-streaming call, because the same request would fail the same way                                                                                                      |
-| An HTTP 200 response carries a provider error                                           | Keeps the message and the code/type. A definite rejection does not turn into an empty, retryable error                                                                                         |
+| Situation                                                                               | What happens                                                                                                                                                                                                                                                              |
+| --------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| The stream breaks after some output has already arrived                                 | The story runtime does not retry. Other runtimes discard the partial output and retry according to `maxRetries`                                                                                                                                                           |
+| The result is cut off by `length` / `max_tokens`                                        | Handled by the profile: a story may retain its text with an incomplete warning, subject to output checks and commit. Runtimes requiring complete results correct or fail according to their truncation policy without saving partial structures. No non-streaming restart |
+| The stream fails before any output, and the retries are used up                         | Switches to one non-streaming call                                                                                                                                                                                                                                        |
+| The provider clearly rejects the request itself (401, 400, or a config or schema error) | Does not switch to a non-streaming call, because the same request would fail the same way                                                                                                                                                                                 |
+| An HTTP 200 response carries a provider error                                           | Keeps the message and the code/type. A definite rejection does not turn into an empty, retryable error                                                                                                                                                                    |
 
 Other rules:
 

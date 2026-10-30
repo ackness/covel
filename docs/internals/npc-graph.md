@@ -117,7 +117,7 @@ World IR 里类型是 `character` 的实体对应图里的 `individual` 节点�
 - 已有的节点 ID、边的两端和首次出现的回合，在重启后保持不变。
 - 已经被覆盖的历史数据只能靠完好的备份找回，安装新版本无法重建它。
 
-两个工具都采用“依赖由宿主注入、文件自身不带依赖”的写法，由 `server/index.js` 用 `covel.registerTool(...)` 注册：
+工具采用“依赖由宿主注入、文件自身不带依赖”的写法，由 `server/index.js` 用 `covel.registerTool(...)` 注册：
 
 ```js
 export default function ({ tool, z, shortIdBatch }) {

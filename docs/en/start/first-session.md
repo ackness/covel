@@ -47,7 +47,7 @@ During one turn, you will see these things, in order:
 
 1. The story text appears one character at a time.
 2. After the story text is finished, the state keeps updating. Panels such as quests, inventory, and affinity change accordingly.
-3. "Turn complete" appears. At this point, all the results of this turn have been saved.
+3. "Turn complete" appears. The story and completed task results are saved; background tasks such as story memory may still be running.
 
 > [!TIP]
 > Wait for "Turn complete" before you send the next message. The story text being finished does not mean the turn is over. Plugins are still updating the state after it.

@@ -588,7 +588,7 @@ Agent 的副作用只来自工具：模型能写什么，以 `agent.tools` 白�
 
 - `PostRuntime` 如果改变 function 的 `output`，应该同时明确提供匹配的 `canonicalValue`。新值会重新接受私有和公共 schema 的校验。
 - 只改写 `output` 会撤销业务值，停止 export 和下游的值绑定。有公共输出契约时，还会因为缺少契约值而失败。
-- 要修改副作用或完成信号，直接改 `effects` 或 `completion`。
+- `PostRuntime` 不能新增或改写 `pendingProposals`、`effects` 或 `completion`；这些通道始终来自 runtime 原结果。要拦截或改写一条提案，用 [`PreStateCommit`](./hooks.md#prestatecommit)。
 - 失败 runtime 的副作用不提交，它的事件不触发后继 runtime。
 - 普通执行和 resume 共用 agent 的输出 schema 检查。非 story 的 agent 声明私有 `io.output.schema` 后，先校验候选的协议输出，再拆分业务值和副作用。最终没有正文或正文为空也接受校验；不符合 schema 就失败，暂停期间积累的写入不提交。
 - Story agent 不走私有 schema 检查，而是走[故事输出](#故事输出)的检查和修复。
@@ -643,12 +643,12 @@ Agent 的副作用只来自工具：模型能写什么，以 `agent.tools` 白�
 
 ```ts
 const result = await ctx.agents?.run({
-  target: { contract: "gate-actor@1" }, // 或 { runtimeId: "my-plugin/guard" }
+  target: { contract: "gate-actor@1" }, // or { runtimeId: "my-plugin/guard" }
   brief: "A stranger asks to pass the gate.",
   data: { stranger: "Mara" },
   budget: { maxSteps: 4, timeoutMs: 20000 },
 });
-// { ok: true, output, stopReason, usage? } 或 { ok: false, error: { code, message }, stopReason? }
+// { ok: true, output, stopReason, usage? } or { ok: false, error: { code, message }, stopReason? }
 ```
 
 <!-- prettier-ignore -->
@@ -890,7 +890,7 @@ homepage: https://example.com/tidefall
 - 在本次执行缓冲新的写入之前，重复读取返回的是同一份对象。循环里逐个查角色不会每次复制整份列表。
 - 这些领域里合法的上游 proposals，以及本 runtime 已经缓冲的 proposals，对后续的读取可见。
 - 写入通过 proposals，在提交时统一校验。
-- `ctx.world.dimensions` 不一样：它是提供者发布的公共当前值快照，遵守下面[动态维度](#动态维度)里单独的冻结规则。
+- `ctx.world.dimensions` 以提供者发布的冻结快照为底本，并叠加该视图可见的合法维度 proposal。公共读取与执行内预览的区别见下面的[动态维度](#动态维度)。
 - `ctx.world.seats` 是会话的座位，同样冻结。proposal 不改它，玩家用[切换接口](./api.md#会话座位)换当前角色，下一回合生效。
 
 **按名字找角色。** 角色除 `name` 外可以有 `aliases`（同一个人的其他叫法）。
@@ -964,8 +964,8 @@ homepage: https://example.com/tidefall
 
 **读取。**
 
-- 同一次执行里，公共的维度读取是冻结的。
-- setup 初始化和写入者自己的 proposal 可以形成局部预览。预览不替换公共快照，也不泄露给并行的其他 runtime。
+- `world.dimensions@1` 和 `session.world-context@1` 提供执行开始时冻结的公共快照。
+- 函数 handler 和 guard 的 `ctx.world` 在这个底本上叠加已完成上游及自己的合法领域 proposal，供后续计算读取，例如让时钟推导看到本轮维度维护的结果。这是执行内的预览，不是已提交值，也不替换公共快照。
 - 内置工具 `world-dimension-get` / `world-dimension-list` 始终读冻结的快照，不叠加调用者自己的写入，也不回退到初值。
 - 模板里用 `{{ world.dimensions.<id>.value }}` 取值。默认的提示词段是预算内的投影，不是全量记录。
 
@@ -1227,7 +1227,7 @@ pnpm lint
 | --- | --- | --- | --- | --- | --- |
 | [affinity](../../plugins/affinity/README.md) | 好感度 | `plugin` | 无 | 内联 | 追踪玩家和 NPC 之间的数值好感度，右栏显示分数、档位和变化 |
 | [branch-reply](../../plugins/branch-reply/README.md) | 回复变体 | `plugin` | `branch-reply@1` | 内联 | 提供多条可切换的回复 |
-| [char-creator](../../plugins/char-creator/README.md) | 角色创建 | `core` | `character-creation@1`（默认提供者） | `player-init`、`character-tracker` | 创建主角，并在故事中记录重要角色的变化 |
+| [char-creator](../../plugins/char-creator/README.md) | 角色创建 | `core` | `character-creation@1`（默认提供者） | `player-init`、`character-tracker` | 创建主角并逐项回填表单答案，记录故事中的角色变化 |
 | [character-blueprint](../../plugins/character-blueprint/README.md) | 角色资料 | `plugin` | `character-blueprint@1`、`character-presence@1` | `presence` | 保存世界预设的人物资料，以及头像、立绘和声音 |
 | [chat-mode-narrator](../../plugins/chat-mode-narrator/README.md) | 对话叙事 | `plugin` | `narrative-engine@2` | 内联 | 让故事更像角色对话 |
 | [codex](../../plugins/codex/README.md) | 设定图鉴 | `plugin` | 无 | 内联 | 整理新发现的地点、人物、物品和传闻 |
@@ -1241,7 +1241,7 @@ pnpm lint
 | [narrator](../../plugins/narrator/README.md) | 叙事 | `core` | `narrative-engine@2`（默认提供者） | 内联 | 根据玩家的行动推进故事 |
 | [npc-graph](../../plugins/npc-graph/README.md) | 关系图谱 | `plugin` | `npc-graph@1`、`graph-rag@1` | `extractor`、`rag-retriever` | 记录人物之间的关系 |
 | [pregame](../../plugins/pregame/README.md) | 开局准备 | `core` | `session.opening@1` | 内联 | 开局时读取世界资料，准备第一段冒险 |
-| [scene-stage](../../plugins/scene-stage/README.md) | 场景舞台 | `plugin` | `stage-direction@1`、`scene-stage@1`、`scene-cast@1` | `seed`、`direction`、`resolver`、`cast` | 跟踪当前场景、昼夜和在场角色，供舞台背景和立绘使用 |
+| [scene-stage](../../plugins/scene-stage/README.md) | 场景舞台 | `plugin` | `stage-direction@1`、`scene-stage@1`、`scene-cast@1` | `seed`、`direction`、`resolver`、`cast` | 跟踪场景与昼夜，换地点先清理旧方向演员，再应用新指令 |
 | [soundtrack](../../plugins/soundtrack/README.md) | 配乐 | `plugin` | 无 | `scene`、`cue` | 播放世界自带的背景音乐，随场景和情绪切换 |
 | [story-events](../../plugins/story-events/README.md) | 隐藏事件 | `plugin` | `story-event-cue@1`、`story-event.plan@1` | `intake`、`evaluate`、`plot` | 条件满足前隐藏世界包声明的剧情，满足时交给叙事演出 |
 | [tabletop-rules](../../plugins/tabletop-rules/README.md) | 跑团规则 | `plugin` | `tabletop-check@1` | `creation`、`check` | 开局配点，并用程序结算属性检定 |
@@ -1281,9 +1281,9 @@ pnpm lint
 contributes:
   datasets:
     journal:
-      schema: ./schemas/journal.json # 必填：包内相对路径，.json
-      key: id # 可选：记录里充当键的顶层字段
-      ops: [upsertItem, delete] # 可选：允许的操作，默认全部
+      schema: ./schemas/journal.json # required: a package-relative .json path
+      key: id # optional: the top-level record field that is the key
+      ops: [upsertItem, delete] # optional: allowed operations, default all
 ```
 
 - **名字就是 namespace。** `journal` 数据集对应插件数据的 `journal` 空间。名字用字母开头，只含字母、数字、`_`、`-`，最长 64 个字符；以 `_` 开头的空间留给内核，不能声明。
@@ -1314,14 +1314,14 @@ contributes:
 contributes:
   actionKinds:
     - name: whisper
-      roles: [player] # 可选：哪些座位身份能用，默认 [player]
-      text: required # 可选：required / optional（默认）/ none
-      actor: true # 可选：是否以角色的身份进行，默认 true
-      schema: ./schemas/whisper.json # 可选：fields 要符合的 JSON Schema
+      roles: [player] # optional: which seat roles may use it, default [player]
+      text: required # optional: required / optional (default) / none
+      actor: true # optional: whether it is taken as a character, default true
+      schema: ./schemas/whisper.json # optional: the JSON Schema fields must match
       display:
-        label: { zh: 耳语, en: whispers }
+        label: whispers
         icon: ear
-        placeholder: { zh: 对谁说悄悄话, en: Whisper to someone }
+        placeholder: Whisper to someone
 ```
 
 - **线上的类型名是 `<pluginId>/<name>`。** 上例在 `whisper-pack` 里就是 `whisper-pack/whisper`。两个插件可以用同一个 `name`，不会冲突。`name` 用小写 kebab-case，不能是基础类型的名字，在包里不能重复。
@@ -1336,7 +1336,7 @@ contributes:
 
 所有以 `_` 开头的 namespace 都保留给内核。
 
-- 插件不能通过通用的 plugin-data API 或 proposal（`set`、`update`、`delete` 都一样）写入或删除它们，包括没见过的 `_` 名字和旧的 `_memory`。
+- 通用 REST 接口和内置模型数据工具不能写入或删除任何 `_` 命名空间。插件 proposal 也受此限制，唯一例外是所属插件代码写自己的 `_hidden.*`；没见过的 `_` 名字和旧的 `_memory` 仍受保护。
 - `_hidden.<namespace>` 存放 `visibility: hidden` 的世界数据，以及插件在剧情中追加的隐藏内容。只有所属插件的 runtime 能读，也只有所属插件自己的代码能写。
 - 插件日志通过受限的 logger API 产生。业务数据使用 `blocks`、`definitions` 这样的普通名字。
 - `__kernel:<subsystem>` 是另一种 owner 分区，插件绑定的读取接口访问不到它。

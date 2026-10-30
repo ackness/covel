@@ -55,7 +55,7 @@ rg -n "ponytail:" apps packages plugins
 
 ## Oversized modules
 
-Below are the non-test source files over 800 lines. 800 lines is a review reference line in [AGENTS.md](../../../AGENTS.md). It is not a hard limit.
+Below are the non-test source files over 800 lines. 800 lines is only the threshold for this inventory. [AGENTS.md](../../../AGENTS.md) asks for splits by responsibility and maintenance cost, without a line limit.
 
 - Split a file only when its responsibilities or its maintenance cost really require it. Length by itself is not a defect.
 - Line counts change. Measure again with `wc -l` before you start.
@@ -64,32 +64,34 @@ Below are the non-test source files over 800 lines. 800 lines is a review refere
 <!-- prettier-ignore -->
 | File | Lines |
 | --- | ---: |
-| `packages/shared/src/schemas/plugin-schemas.ts` | 1258 |
-| `packages/ai-provider/src/gateway.ts` | 1225 |
-| `apps/server/src/routes/api/actions.ts` | 1165 |
-| `packages/runtime/src/turn-executor/turn-executor.ts` | 1065 |
-| `apps/server/src/world-data/session-import.ts` | 1005 |
+| `apps/server/src/routes/api/actions.ts` | 1594 |
+| `packages/runtime/src/agent-loop/turn-agent-tool-loop.ts` | 1496 |
+| `apps/server/src/world-data/validate-world-package.ts` | 1359 |
+| `packages/runtime/src/commit/finalize-execution.ts` | 1295 |
+| `packages/ai-provider/src/gateway.ts` | 1266 |
+| `packages/shared/src/schemas/plugin-schemas.ts` | 1246 |
+| `packages/runtime/src/turn-executor/turn-executor.ts` | 1082 |
+| `apps/server/src/routes/api/bootstrap.ts` | 1028 |
+| `packages/store/src/types.ts` | 1026 |
+| `apps/server/src/routes/api/plugin-rpc/runtime-job-worker.ts` | 1025 |
+| `apps/server/src/world-data/session-import.ts` | 1009 |
 | `packages/settings/src/store.ts` | 996 |
-| `apps/server/src/routes/api/plugin-rpc/runtime-job-worker.ts` | 996 |
-| `apps/server/src/world-data/validate-world-package.ts` | 988 |
-| `packages/runtime/src/agent-loop/turn-agent-tool-loop.ts` | 979 |
-| `packages/store/src/types.ts` | 976 |
-| `apps/web/src/stores/session-store/actions.ts` | 958 |
-| `apps/web/src/services/data-service/local.ts` | 954 |
-| `packages/plugin-handlers-utils/src/plugin-api.ts` | 950 |
-| `apps/server/src/routes/api/bootstrap.ts` | 944 |
-| `packages/events/src/event-bus.ts` | 918 |
-| `apps/server/src/routes/api/bootstrap/plugin-entry.ts` | 889 |
-| `packages/runtime/src/retry/llm-retry.ts` | 875 |
-| `packages/runtime/src/interaction/interaction-submission.ts` | 845 |
-| `packages/plugin-handlers-utils/src/dimension-schemas.ts` | 845 |
-| `packages/runtime/src/commit/finalize-execution.ts` | 838 |
-| `apps/web/src/stores/session-store/reducer.ts` | 837 |
-| `apps/web/src/stores/session-store/sse-handler.ts` | 827 |
-| `packages/create/src/create-world.ts` | 823 |
-| `packages/runtime/src/schedule/input-bindings.ts` | 821 |
-| `apps/server/src/routes/api/ai.ts` | 817 |
-| `apps/server/src/routes/api/plugin-rpc/jobs.ts` | 815 |
-| `apps/server/src/routes/api/plugin-rpc/runtime-turn.ts` | 803 |
+| `apps/web/src/stores/session-store/actions.ts` | 992 |
+| `packages/events/src/event-bus.ts` | 982 |
+| `packages/plugin-handlers-utils/src/plugin-api.ts` | 980 |
+| `apps/server/src/world-data/session-import/planning.ts` | 926 |
+| `apps/web/src/stores/session-store/reducer.ts` | 915 |
+| `packages/runtime/src/retry/llm-retry.ts` | 903 |
+| `packages/plugin-loader/src/load.ts` | 898 |
+| `packages/shared/src/types/protocol.ts` | 872 |
+| `apps/server/src/routes/api/plugin-rpc/jobs.ts` | 867 |
+| `packages/runtime/src/interaction/interaction-submission.ts` | 863 |
+| `apps/server/src/routes/api/plugin-rpc/runtime-turn.ts` | 861 |
+| `packages/plugin-handlers-utils/src/dimension-schemas.ts` | 852 |
+| `packages/create/src/create-world.ts` | 849 |
+| `apps/server/src/routes/api/ai.ts` | 841 |
+| `apps/server/src/routes/api/bootstrap/plugin-entry.ts` | 838 |
+| `apps/desktop/src/main.ts` | 820 |
+| `packages/runtime/src/turn-executor/turn-runtime-execution.ts` | 816 |
 
 This list follows the comments in the current source. Historical counts and line numbers are not the current contract.

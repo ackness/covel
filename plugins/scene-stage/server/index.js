@@ -66,28 +66,42 @@ export default function (covel) {
   });
   covel.provideExtension("ui.slot@1", "direction", {
     async handler({ previous, events }, ctx) {
-      const current = await ctx.pluginData.get("direction", "current");
+      let current = await ctx.pluginData.get("direction", "current");
+      const stage = await ctx.pluginData.get("stage", "current");
+      const registry = await ctx.pluginData.get("scenes", "scene-registry");
+      if (current && stage?.sceneId) {
+        // Resolve the scene preview before actor cues, matching the event
+        // followers' DAG even when the model emitted actor cues first.
+        let nextStage = stage;
+        for (const event of events) {
+          if (event.topic === "scene.set" && stage.turnId !== event.turnId)
+            nextStage = applySceneSetPreview(
+              ctx,
+              nextStage,
+              registry,
+              event.data,
+              event.turnId,
+            );
+        }
+        if (nextStage.sceneId !== stage.sceneId)
+          current = { ...current, actors: [] };
+      }
       const previews = events.filter(
         (event) =>
           event.topic === "stage.direction" && current?.turnId !== event.turnId,
       );
       if (!current && !previews.length) return previous;
-      let speakers = resolveStageSpeakers(
-        current,
-        (previous?.actors ?? []).map((actor) => ({
-          id: actor.characterId,
-          name: actor.displayName,
-          ...actor,
-        })),
-      );
+      let speakers = resolveStageSpeakers(current, []);
       const characters = Object.fromEntries(
-        ctx.world.characters.map((character) => [
-          character.id,
-          {
-            characterId: character.id,
-            displayName: character.name,
-          },
-        ]),
+        ctx.world.characters
+          .filter((character) => character.type !== "player")
+          .map((character) => [
+            character.id,
+            {
+              characterId: character.id,
+              displayName: character.name,
+            },
+          ]),
       );
       for (const event of previews)
         speakers = applyStageDirectionPreview(
@@ -95,6 +109,16 @@ export default function (covel) {
           characters,
           event.data.cues,
         );
+      if (
+        !current &&
+        !speakers.length &&
+        !previews.some(
+          (event) =>
+            Array.isArray(event.data.cues) &&
+            event.data.cues.some((cue) => cue?.type === "stage.clear"),
+        )
+      )
+        return previous;
       return { actors: actors(speakers), retainWhenEmpty: false };
     },
   });

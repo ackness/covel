@@ -8,7 +8,7 @@ Covel 的服务器对外只有一套 HTTP JSON 接口。网页和桌面应用用
 
 - 地址：`pnpm dev:server` 启动后是 `http://localhost:3001/api/`。
 - 请求体：JSON，带 `Content-Type: application/json`。
-- 鉴权：本机默认不需要任何 token。只有托管部署（`DEPLOYMENT_TIER=demo` 或 `commercial`）才要带会话的 owner token 或运维 token，见[鉴权：Session owner token](#鉴权session-owner-token)。
+- 鉴权：默认的本机 personal 实例不检查会话 token；桌面配置和文件接口可能要求启动令牌。browser-private 与托管实例还检查会话或运维令牌，见[鉴权：Session owner token](#鉴权session-owner-token)。
 - 回合不是普通的请求-响应：发消息、开局、提交选择都走 `POST /api/actions`，响应是一条 SSE 流。
 
 **这一页怎么组织**
@@ -141,6 +141,8 @@ PostgreSQL 一列的细节：
 
 `error` 一定有。需要客户端按错误码分别处理的端点（如 `plugin-rpc`、`media`）会同时给 `code`。
 
+这是 HTTP 错误格式。模型工具的公共结果使用 `{ok,data}` / `{ok,error:{code,message}}`，见[工具](./tools.md)；不要把 HTTP 的 `error` 字符串当成工具错误对象。
+
 `code` 使用小写字母、数字以及 `_` 或 `-` 分隔符；插件选择错误会沿用 `missing-provider` 这样的求解器错误码。
 
 几种全站统一的错误：
@@ -167,7 +169,7 @@ PostgreSQL 一列的细节：
 
 ### 鉴权：Session owner token
 
-在本机（`DEPLOYMENT_TIER=self`，默认值）和桌面应用里，不带任何 token 就能用全部端点。下面的规则主要影响托管部署。
+会话鉴权由[宿主配置](../internals/security.md#host-profile)决定。默认的本机 personal 实例不检查会话 owner token，依靠回环监听和 Host 检查；桌面壳配置了启动令牌时，配置和文件接口仍要求该令牌。生产环境的 MemoryStore 使用 browser-private 形态，即使 `DEPLOYMENT_TIER=self` 也检查 owner token。
 
 **owner token 是什么**
 
@@ -175,7 +177,7 @@ PostgreSQL 一列的细节：
 
 框架私有的元数据不会出现在任何响应里：owner 哈希、approval / session incarnation、lifecycle 和 delete lease 等，在会话的增删改查、快照和 `/state` 的虚拟表响应里都会被去掉。
 
-**各部署层级怎样检查**
+**各部署层级怎样检查会话 owner token**
 
 | `DEPLOYMENT_TIER`     | 行为                                                                 |
 | --------------------- | -------------------------------------------------------------------- |
@@ -239,7 +241,7 @@ community 插件的 ESM 代码会在服务器进程里注册全局能力，所�
 - 凭据只保存在当前浏览器的 `localStorage`。
 - 只在上面这些需要运维 token 的同源请求里，以 `Authorization: Bearer <token>` 发送。
 - 保存或清除后，客户端会重新加载，用新凭据重新取会话和世界数据。
-- 开发模式和桌面单用户模式仍然可以不带 token 使用。生产 MemoryStore 按上面的例外处理。
+- personal 的普通会话请求不要求 owner token；桌面配置和文件接口仍遵守上面的启动令牌门禁。生产 MemoryStore 按上面的例外处理。
 
 **Web 客户端怎样保存 owner token**
 
@@ -1145,6 +1147,7 @@ setup runtime 挂起等玩家回答时，这次尝试不占重试次数。挂起
 | POST | `/api/install/github/batch` | `{ tokens, acceptRisk: true }` | 把已预览的包作为一个整体安装，失败时回滚本次写入 |
 | POST | `/api/install/collection` | multipart 字段 `file` | 导入打包好的合集 ZIP |
 | GET | `/api/install/plugins` | — | 列出用户插件目录中的包及可用的来源记录 |
+| GET | `/api/install/worlds` | — | 列出用户世界目录中的包及可用的来源记录 |
 
 各端点接受什么、返回什么：
 
@@ -4483,6 +4486,8 @@ runtime 可以中途停下来等玩家提供数据，这叫挂起。本节的端
 ```
 
 `result.status` 是 `success`；runtime 又一次挂起时是 `suspended`，这时 `result.output.suspensionId` 是新挂起项的 ID。
+
+客户端在恢复成功、再次挂起、放弃或收到 `suspension_outdated` 后重新读取会话记录，以服务端已提交的 `completedPlayerTurns` 更新界面，不自行加一。继续挂起时计数仍可能不变；读取失败不应重试已经成功的恢复请求。
 
 **错误**
 

@@ -108,14 +108,14 @@ Different ways of starting Covel read different files.
 
 The same setting is stored in different places depending on whether you use the browser or the desktop app:
 
-| Setting                                                     | Browser with pnpm / Docker                                                                       | Electron                                                                  |
-| ----------------------------------------------------------- | ------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------- |
-| Model defaults                                              | The `llm.toml` in the project or the mounted one                                                 | `$COVEL_HOME/llm.toml`                                                    |
-| Connections, roles, and parameters entered in the interface | `covel:settings` for the current origin                                                          | `$COVEL_HOME/settings.json`, through IPC                                  |
-| API keys entered in the interface                           | `covel:keys` for the current origin                                                              | `$COVEL_HOME/keys.env`, through IPC                                       |
-| Server default keys                                         | Environment variables; only trusted origins that are allowed can use them                        | Same environment priority. File changes are synced to the running backend |
-| Settings the server runs with                               | Server database (`server_settings` table). The `self` tier can change them on the settings page  | Same as left: written to the database through the local server            |
-| Game saves                                                  | In memory mode, the browser saves checkpoints. In SQLite / pg mode, your own instance keeps them | Your own SQLite, or a backend you choose explicitly                       |
+| Setting                                                     | Browser with pnpm / Docker                                                                                                    | Electron                                                                  |
+| ----------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------- |
+| Model defaults                                              | The `llm.toml` in the project or the mounted one                                                                              | `$COVEL_HOME/llm.toml`                                                    |
+| Connections, roles, and parameters entered in the interface | `covel:settings` for the current origin                                                                                       | `$COVEL_HOME/settings.json`, through IPC                                  |
+| API keys entered in the interface                           | `covel:keys` for the current origin                                                                                           | `$COVEL_HOME/keys.env`, through IPC                                       |
+| Server default keys                                         | Environment variables; only trusted origins that are allowed can use them                                                     | Same environment priority. File changes are synced to the running backend |
+| Settings the server runs with                               | Server database (`server_settings` table); editable in personal form, operator-configured in browser-private and hosted forms | Same as left: written to the database through the local server            |
+| Game saves                                                  | In memory mode, the browser saves checkpoints. In SQLite / pg mode, your own instance keeps them                              | Your own SQLite, or a backend you choose explicitly                       |
 
 A few rules that are easy to get wrong:
 
@@ -225,7 +225,7 @@ Both SQLite and PostgreSQL create the current table structure when the app start
 
 Both commands run Drizzle directly and read the root `.env`. A `DATABASE_URL` set in the shell takes priority.
 
-To upgrade an existing database, you must write and review SQL for the old table structure. Test it on a backup copy first, then apply it by hand. These tools do not handle SQLite upgrades.
+Covel supports only the current data contract and provides no migration path for old databases. If the data schema is incompatible, back it up and create a new SQLite file or empty PostgreSQL database; see [schema checks](../internals/storage.md#capabilities-and-migrations). These tools neither migrate data nor bypass the startup version check.
 
 ### Plugin extension development data
 
@@ -548,10 +548,10 @@ What is never cleaned up:
 Who decides:
 
 1. When this variable is set, its value is the operator's value, and it overrides the player's choice in settings. The settings page shows "This deployment fixes the value."
-2. When it is not set, the player's choice in settings is used. It only takes effect in the `self` tier, and both the desktop app and a self-hosted web deployment can change it. It is saved in the `server_settings` table of the server database. A change takes effect at the next commit or cleanup. See [`settings-store.md`](./settings-store.md).
+2. When it is not set, the player's choice in settings is used. It takes effect only in personal form, where desktop users and owners of persistent self-hosted web instances can change it. It is saved in the `server_settings` table of the server database. A change takes effect at the next commit or cleanup. See [`settings-store.md`](./settings-store.md).
 3. If neither is set, the value is 30 days.
 
-The `demo` / `commercial` tiers ignore the saved value and use only this variable. All "settings that the server runs with" follow this order: environment variable, saved value, default.
+The browser-private form and the `demo` / `commercial` tiers ignore the saved value and use only this variable. All "settings that the server runs with" follow this order: environment variable, saved value, default.
 
 A newly created SQLite database uses incremental auto-vacuum, so after cleanup it hands free pages back to the file. Old database files stay as they are: their space is reused, but the file does not shrink. See [`storage.md`](../internals/storage.md).
 

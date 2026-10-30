@@ -13,7 +13,7 @@ const UNDECIDED_CALLING = {
 
 export function defaultNarrative(form) {
   return fillNarrativeTemplate(
-    form.narrativeTemplate,
+    form.narrativeTemplate ?? "",
     Object.fromEntries(
       form.fields.map((field) => [
         field.name,
@@ -41,7 +41,15 @@ export function checkFormDefaults(form, attributes, locale = "en") {
   const language = new Intl.Locale(locale).language;
   const segmenter = new Intl.Segmenter(locale, { granularity: "word" });
   const issues = [];
+  const matches = Array.from(
+    (form.narrativeTemplate ?? "").matchAll(/\{\{([^{}]+)\}\}/g),
+  );
+  const placeholders = new Set(matches.map((match) => match[1].trim()));
   for (const field of form.fields) {
+    if (!placeholders.has(field.name))
+      issues.push(
+        `narrativeTemplate must include {{${field.name}}} so the player's edited answer replaces the default in the opening narrative. Do not hardcode this field's default.`,
+      );
     if (field.name === "characterName") continue;
     const value = field.defaultValue;
     if (typeof value !== "string") continue;
@@ -55,9 +63,7 @@ export function checkFormDefaults(form, attributes, locale = "en") {
         `${field.name}.defaultValue is an undecided placeholder (${JSON.stringify(value)}). Choose a concrete value from this world, such as a real calling, rather than leaving the choice undecided.`,
       );
     }
-    for (const match of form.narrativeTemplate.matchAll(
-      /\{\{\s*([^}]+?)\s*\}\}/g,
-    )) {
+    for (const match of matches) {
       if (match[1].trim() !== field.name) continue;
       const before = boundaryWord(
         segmenter,

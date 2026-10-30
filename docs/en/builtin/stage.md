@@ -36,7 +36,7 @@ Stage mode needs no extra setup on its own, but how complete the picture is depe
 | Character portraits     | Characters stand in front of the scene                                                                | [Add portraits to characters](../worlds/portraits.md) |
 | Neither                 | The stage still works, but the background falls back to the world's cover, and there are no portraits | -                                                     |
 
-The scene picture and on-stage character data come from Scene Stage below. So to use stage mode, turn Scene Stage on at the session-prep screen.
+The scene picture and on-stage character data come from Scene Stage below. Enable it on the session-prep screen for scene backdrops and on-stage characters. You can still read the story in stage mode without it.
 
 ## Scene Stage (`scene-stage`)
 
@@ -47,6 +47,7 @@ Lets the stage know where things are, whether it is day or night, and who is pre
 - The background and portraits on the stage come from this plugin. Speaker name tags come from the narrator's story segments and do not need it.
 - On the right there is a "Scene" tab. It contains a read-only "Scene" panel (the scene name, day or night, and where the background comes from) and a "Cast" panel. The "Cast" panel also says why each character was chosen, for example "Mentioned", "In scene", "Profile", or "Recent".
 - If the place cannot be found in the world's scene pictures, the background shows "No backdrop", and the stage uses the world's cover instead.
+- A location change clears an existing stage-direction cast before applying the new entries. Without new entries, portraits from the old location disappear. Day/night changes at the same location keep the actors. Worlds without direction state still use cast selection.
 
 ### When it is on
 
@@ -54,9 +55,9 @@ Optional. The built-in "Dialogue Mode" gameplay pack includes it. The "Campus Ro
 
 ### What you can change
 
-| Name            | What it does                                                                 | Default |
-| --------------- | ---------------------------------------------------------------------------- | ------- |
-| Active speakers | The most characters that can be "speaking" in a turn. You can choose 1 to 4. | 2       |
+| Name            | What it does                                                                                                       | Default |
+| --------------- | ------------------------------------------------------------------------------------------------------------------ | ------- |
+| Active speakers | How many NPCs to recommend as the main participants in this turn, from 1 to 4. This does not cap the story’s cast. | 2       |
 
 World authors can set a different default for this world in `pluginSettings.scene-stage.activeSpeakerCount` in `world.yaml`.
 
@@ -72,7 +73,7 @@ For how to do it, see [Add scene pictures to a world](../worlds/scenes.md). For 
 ### Notes
 
 - At the start, if the story has not said where it is, the stage uses the first scene in the scene registry. So the screen is never blank at the beginning.
-- Places are matched by name. See [The name decides whether the background changes](../worlds/scenes.md#the-name-decides-whether-the-background-changes) for naming advice and examples. A scene name that is too short (for example, just one character) will match every place that contains that character. Write the full name.
+- Places are matched by name. See [The name decides whether the background changes](../worlds/scenes.md#the-name-decides-whether-the-background-changes) for naming advice and examples. A location name that is too short cannot select one background when several scenes contain it. Use the full name.
 
 ## Soundtrack (`soundtrack`)
 

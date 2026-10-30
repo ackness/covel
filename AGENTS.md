@@ -174,9 +174,10 @@ Read [turn flow](docs/internals/flow.md) before changing execution and
   history, events for follow-up work, and services for request/response. World
   data routes through accepted contracts, never a hardcoded destination namespace.
   See [plugin communication](docs/reference/plugin-extensions.md).
-- Core objects stay separate: Run, Branch, Snapshot, State, Event, Record,
+- Core objects stay separate: Run, Branch, Snapshot, Event, Record,
   Character, PluginData. Plugin KV is session/package scoped; `_` namespaces are
-  kernel-reserved. World Model reads use `ctx.world`, writes use proposals.
+  kernel-reserved except the owning plugin’s code may write its own `_hidden.*`
+  buckets. REST and built-in model data tools cannot write any `_` namespace. World Model reads use `ctx.world`, writes use proposals.
 - `turn_results.commit_status` stays `pending` until its commit owner settles it
   to `committed` / `failed`; lingering `pending` signals a crash.
 - SQLite and PostgreSQL share the DataStore contract; BrowserVault hydrates an

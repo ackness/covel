@@ -17,8 +17,8 @@ World Model 是一局游戏里由内核保管的那部分世界数据：世界�
 
 这些入口是只读的，写入要通过 proposal（一份“我想改什么”的申请，由内核校验后统一保存）。
 
-- 角色和角色 schema：同一次执行里，排在前面的 runtime 提出的合法修改，以及当前 runtime 自己还没保存的修改，后面读得到。
-- 维度不一样：它的值在一个回合内是冻结的。不要把自己刚提出的修改当成别的 runtime 已经能看到的值。
+- 角色、角色 schema 和维度：`ctx.world` 可以读取已完成上游的合法提案，并随读取叠加当前 runtime 自己的合法提案。这些修改尚未持久化，最终仍需提交。
+- 维度的公共输入、内置查询和叙事摘要使用执行开始时冻结的底本。它们与用于计算的 `ctx.world` 投影视图不同，见[冻结读取与维护](./dynamic-dimensions.md#冻结读取与维护)。
 
 字段和各部分归谁管见[插件契约](./plugins.md#world-model-与数据边界)。
 
@@ -117,7 +117,7 @@ interface CharacterRecord {
 保存时的规则没有变：两个非玩家角色可以同名（查找时是 `ambiguous`），名字等于别人的别名才被拒绝。
 
 > [!IMPORTANT]
-> `characters` 表有 `aliases` 列。服务端只建表、不改表，所以在加入别名之前创建的 SQLite / PostgreSQL 开发数据库缺这一列，读取角色时报 `no such column: aliases`。按[迁移说明](./env-registry.md#plugin-extension-development-data)备份后换一个新的数据库文件（PostgreSQL 重建 schema）。浏览器私有存档里的角色没有别名，照常读取。
+> `characters` 表有 `aliases` 列。缺少这一列的旧 SQLite / PostgreSQL 开发数据库会被启动时的 schema 检查拒绝；应用不会自动加列。按[开发数据说明](./env-registry.md#plugin-extension-development-data)备份后创建新库。`aliases` 本身是可选字段；当前格式的浏览器私有存档可以保存没有别名的角色。
 
 ## 座位
 

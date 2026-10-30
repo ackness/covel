@@ -28,23 +28,30 @@
 
 想直接看代码时，从这里找入口：
 
-| 问题                                 | 优先搜索                                                                                                                                                                               |
+<!-- prettier-ignore -->
+| 问题 | 优先搜索 |
 | ------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `PLUGIN.md` 字段有哪些               | `packages/shared/src/schemas/plugin-schemas.ts`（zod 真身，`plugin.ts` 只是 re-export 聚合点）, `packages/plugin-loader/src/parse-plugin-md.ts`, `docs/reference/plugins.md`           |
-| world data 字段和 URI 怎么写         | `packages/shared/src/schemas/world-data.ts`, `packages/shared/src/world-data-target.ts`, `apps/server/src/world-data/schema-registry.ts`, `docs/reference/world-data.md`               |
-| 包的作者信息在哪声明、在哪展示       | `packages/shared/src/schemas/package-info.ts`, `apps/web/src/components/shared/package-credits.tsx`, `docs/reference/plugins.md`                                                       |
-| 某个 HTTP endpoint 的真实行为        | `apps/server/src/routes/api/`, `docs/reference/api.md`                                                                                                                                 |
-| SSE / action 事件怎么消费            | `packages/shared/src/types/protocol.ts`, `apps/web/src/services/api/actions.ts`, `apps/web/src/services/subscription.ts`, `docs/reference/protocol.md`                                 |
-| LLM tool 从哪里注册                  | `packages/tools/src/`, `docs/reference/tools.md`                                                                                                                                       |
-| prompt 注入和 cache_control 怎么工作 | `packages/context/src/`, `packages/runtime/src/turn-executor/turn-executor.ts`, `packages/runtime/src/turn-executor/turn-runtime-execution.ts`, `docs/reference/prompt-structure.md`   |
-| 插件 UI 组件可用 props               | `apps/web/src/lib/catalog/`, `apps/web/src/components/session/plugin-panel.tsx`, `apps/web/src/components/session/chat-messages/message-blocks.tsx`, `docs/reference/ui-components.md` |
-| 存储事务、media、ledger 行为         | `packages/store/src/`, `packages/store/src/media-store/`, `apps/server/src/world-data/session-import/`, `docs/reference/transactions.md`, `docs/reference/media-store.md`              |
-| 会话启用哪些插件、契约如何解析       | `packages/shared/src/plugin-selection.ts`, `packs/builtin.yaml`, `apps/server/src/config/plugin-packs.ts`, `docs/reference/plugins.md`                                                 |
-| hook 有哪些事件、负载和上下文        | `packages/shared/src/types/hooks.ts`, `packages/runtime/src/hooks/types.ts`, `packages/runtime/src/hooks/wire-helpers.ts`, `docs/reference/hooks.md`                                   |
-| 扩展点、插件服务怎么声明和调用       | `packages/shared/src/extension-points/`, `packages/plugin-handlers-utils/src/plugin-api.ts`, `docs/reference/extension-points.md`, `docs/reference/plugin-extensions.md`               |
-| 回合调度、stage、触发判定            | `packages/runtime/src/turn-executor/`, `packages/runtime/src/schedule/`, `packages/runtime/src/trigger/trigger.ts`, `docs/internals/flow.md`                                           |
-| 模型用途（slot）如何路由             | `packages/ai-provider/src/config/llm-schema.ts`, `llm.toml.example`, `docs/reference/slots.md`                                                                                         |
-| 环境变量有哪些、默认值是什么         | `packages/shared/src/env/registry.ts`, `docs/reference/env-registry.md`                                                                                                                |
+| `PLUGIN.md` 字段有哪些 | `packages/shared/src/schemas/plugin-schemas.ts`（zod 真身，`plugin.ts` 只是 re-export 聚合点）, `packages/plugin-loader/src/parse-plugin-md.ts`, `docs/reference/plugins.md` |
+| world data 字段和 URI 怎么写 | `packages/shared/src/schemas/world-data.ts`, `packages/shared/src/world-data-target.ts`, `apps/server/src/world-data/schema-registry.ts`, `docs/reference/world-data.md` |
+| 包的作者信息在哪声明、在哪展示 | `packages/shared/src/schemas/package-info.ts`, `apps/web/src/components/shared/package-credits.tsx`, `docs/reference/plugins.md` |
+| 某个 HTTP endpoint 的真实行为 | `apps/server/src/routes/api/`, `docs/reference/api.md` |
+| SSE / action 事件怎么消费 | `packages/shared/src/types/protocol.ts`, `apps/web/src/services/api/actions.ts`, `apps/web/src/services/subscription.ts`, `docs/reference/protocol.md` |
+| LLM tool 从哪里注册 | `packages/tools/src/`, `docs/reference/tools.md` |
+| prompt 注入和 cache_control 怎么工作 | `packages/context/src/`, `packages/runtime/src/turn-executor/turn-executor.ts`, `packages/runtime/src/turn-executor/turn-runtime-execution.ts`, `docs/reference/prompt-structure.md` |
+| 插件 UI 组件可用 props | `apps/web/src/lib/catalog/`, `apps/web/src/components/session/plugin-panel.tsx`, `apps/web/src/components/session/chat-messages/message-blocks.tsx`, `docs/reference/ui-components.md` |
+| 存储事务、media、ledger 行为 | `packages/store/src/`, `packages/store/src/media-store/`, `apps/server/src/world-data/session-import/`, `docs/reference/transactions.md`, `docs/reference/media-store.md` |
+| 会话启用哪些插件、契约如何解析 | `packages/shared/src/plugin-selection.ts`, `packs/builtin.yaml`, `apps/server/src/config/plugin-packs.ts`, `docs/reference/plugins.md` |
+| hook 有哪些事件、负载和上下文 | `packages/shared/src/types/hooks.ts`, `packages/runtime/src/hooks/types.ts`, `packages/runtime/src/hooks/wire-helpers.ts`, `docs/reference/hooks.md` |
+| 扩展点、插件服务怎么声明和调用 | `packages/shared/src/extension-points/`, `packages/plugin-handlers-utils/src/plugin-api.ts`, `docs/reference/extension-points.md`, `docs/reference/plugin-extensions.md` |
+| 回合调度、stage、触发判定 | `packages/runtime/src/turn-executor/`, `packages/runtime/src/schedule/`, `packages/runtime/src/trigger/trigger.ts`, `docs/internals/flow.md` |
+| 模型用途（slot）如何路由 | `packages/ai-provider/src/config/llm-schema.ts`, `llm.toml.example`, `docs/reference/slots.md` |
+| 环境变量有哪些、默认值是什么 | `packages/shared/src/env/registry.ts`, `docs/reference/env-registry.md` |
+| 工具的内部结果与模型信封怎样区分 | `packages/plugin-handlers-utils/src/tool-result.ts`, `packages/plugin-handlers-utils/src/tool-error.ts`, `packages/runtime/src/agent-loop/tool-result-text.ts`, `packages/runtime/tests/tool-result-envelope.test.ts`, `docs/reference/tools.md` |
+| 子 agent、递归调用和故障暂停怎样关联 | `packages/runtime/src/agent-loop/subagent-delegate.ts`, `packages/runtime/src/faults/plugin-fault-latch.ts`, `packages/runtime/tests/subagents.test.ts`, `packages/runtime/tests/fault-latch-execution.test.ts`, `docs/reference/plugins.md` |
+| 挂起恢复保存哪些工具循环状态 | `packages/store/src/records/snapshot-records.ts`（`SuspendedLoopState`）, `packages/runtime/src/resume/`, `packages/runtime/tests/resume-loop-state.test.ts`, `apps/server/tests/api/resume.test.ts`, `docs/internals/flow.md` |
+| 分段叙事、说话人和 presence 从哪里来 | `packages/shared/src/schemas/story-output.ts`, `packages/runtime/src/agent-loop/story-output.ts`, `packages/runtime/src/commit/commit-narrative.ts`, `apps/server/tests/api/story-segments.test.ts`, `docs/reference/plugins.md` |
+| 世界、会话、座位和行动怎样对应 | `packages/shared/src/schemas/seat.ts`, `packages/plugin-handlers-utils/src/seats.ts`, `packages/shared/src/types/action.ts`, `apps/server/tests/api/session-seats.test.ts`, `docs/reference/world-model.md` |
+| 哪种部署需要哪些令牌 | `apps/server/src/host-profile.ts`, `apps/server/tests/bootstrap/route-access.test.ts`, `apps/server/tests/lib/host-profile.test.ts`, `docs/internals/security.md` |
 
 世界图片与画廊内容资料见 [世界美术方向](./worlds/art-direction.md#画廊资料与前端使用) 和 [角色立绘指南](./worlds/portraits.md)。
 

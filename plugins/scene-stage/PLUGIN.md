@@ -35,8 +35,11 @@ contributes:
       order: 10
       watch:
         - direction
+        - stage
+        - scenes
       preview:
         - stage.direction
+        - scene.set
   events:
     - topic: stage.direction
       schema: ./schemas/stage-direction.event.json
@@ -45,7 +48,8 @@ contributes:
         entry/exit, position, focus, and visual changes into cues. actor.focus
         controls the visual spotlight; nameplates come from the story's
         segment speakers. Specify an exit transition for actor.leave and
-        stage.clear.
+        stage.clear. On a location change, re-enter every NPC at the new
+        location: existing direction actors are cleared before these cues.
     - topic: scene.set
       schema: ./schemas/scene-set.event.json
       description: >-

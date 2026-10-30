@@ -105,7 +105,7 @@ Throws, timeouts and malformed results count toward the registering plugin's [fa
 
 The "Scope" column says what the event is about: `session` (the whole session), `turn` (one execution), or `runtime` (one runtime). For events with scope `runtime`, `ctx.pluginId` and `ctx.runtimeId` are that runtime.
 
-The table is in the order the kernel actually fires the events.
+The table follows the order in `HOOK_EVENTS`. Tool events repeat inside the agent loop; they do not occur after `PostRuntime`.
 
 | Event                 | Scope   | How it runs | Guard | What the handler can do                                                                 |
 | --------------------- | ------- | ----------- | ----- | --------------------------------------------------------------------------------------- |
@@ -214,10 +214,10 @@ Payload: `{ step, stepsRemaining, maxSteps, toolNames, toolChoice }`.
 `replace` accepts these four fields. Invalid parts are dropped; they do not fail the runtime:
 
 - `replace.tools`: offer only these tools to the model. It can only be a subset of `toolNames`. Names outside it are ignored and recorded in this step's `step.completed`. The narrowing applies to this step only; the next step starts from the full tool set again. It also does not change which tools may run: if the model calls a tool the hook removed, the call still runs as long as the manifest declares the tool.
-- `replace.toolChoice`: this step's tool choice, replacing the manifest's `llm.toolChoice`. `"auto"` means no choice is sent; `{ name }` must be a tool offered this step. On a step where the runtime asked the model to correct itself and call a tool, `"auto"` does not lift that requirement.
+- `replace.toolChoice`: this step's tool choice, replacing the manifest's `agent.toolChoice`. `"auto"` means no choice is sent; `{ name }` must be a tool offered this step. On a step where the runtime asked the model to correct itself and call a tool, `"auto"` does not lift that requirement.
 - `replace.stepsRemaining`: lower the steps left to this integer (at least 1, this step included). A value larger than the current one is ignored: steps can only go down. When they run out, the loop ends with `max-steps`.
 - `replace.stop: { reason, message? }`: end the loop before this step's model call. `reason` can only be one of these two:
-  - `"tool-finished"`: end as a success, the same as `PostToolUse`'s `terminate`. The runtime's completion conditions (`requireToolUse` and so on) are still checked.
+  - `"tool-finished"`: end as a success, the same as `PostToolUse`'s `terminate`. The runtime's completion conditions (`agent.completion`) are still checked.
   - `"cancelled"`: the runtime fails with the error `Runtime "<id>" was stopped by a PreStep hook`, followed by `message`. The tool calls already made stay in the failed result.
 
 `abort` is the same as "nothing changes". `PreStep` runs first and `PreLLMCall` then rewrites the call: `PreLLMCall`'s `replace.tools` overrides the tools `PreStep` narrowed.

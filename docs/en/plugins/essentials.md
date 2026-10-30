@@ -198,7 +198,7 @@ Once it is declared:
 
 - Its prompts, model replies, tool arguments, tool results and output do not appear in debug records, live progress, or the execution history the player can see. Only the name, the status, the duration and the usage remain.
 - When it fails, the player sees a fixed generic message. The real reason is written only to the server log.
-- The text it outputs is not written to the conversation record, and other runtimes cannot read it. Forms and interface blocks are still shown as usual.
+- Its output text is not written to the conversation record, so other runtimes do not receive it through prompt history. Declared output contracts remain available to input bindings. Forms and interface blocks are still shown as usual.
 
 `io.concealed: true` cannot be used together with `io.visibility: story`. Loading fails, because story runtime text is meant for the player to read anyway.
 
@@ -224,7 +224,7 @@ There are two ways to write: in a function, call `ctx.pluginData.set(namespace, 
 Limits to remember:
 
 - A value can be at most 256 KiB once it is converted to JSON. When it is larger, the write fails. The error states the plugin, the `namespace/key`, the actual size and the limit. The original value does not change, and nothing is cut short. A list that keeps growing must be split across several keys, or trimmed by your code.
-- A namespace that starts with `_` is reserved for Covel itself. Plugins cannot write to it.
+- Namespaces starting with `_` are generally reserved for the kernel. A plugin’s own `_hidden.*` namespaces are the exception: its functions and local tools can write hidden data through normal proposals. See [Hidden data](../reference/world-data.md#hidden-data-visibility-hidden).
 - To declare the shape of a namespace's records (JSON Schema, key, allowed operations), see [datasets](../reference/plugins.md#datasets-contributesdatasets).
 - To let players submit a new kind of action (for example "whisper"), declare it in `contributes.actionKinds`; see [action kinds](../reference/plugins.md#action-kinds-contributesactionkinds).
 - If two plugins need to share data, they must do it through a public capability. They cannot read each other's namespaces.

@@ -37,18 +37,18 @@ A layout changes only where things are placed. How panels are found, grouped and
 
 ## Session Toolbar, Player Status and Scene HUD
 
-The toolbar and status display at the top of a session use only the kernel's own data. They do not read any plugin's data. So they work for every world. When a piece has no data, that piece is not shown.
+The session toolbar and status display read the World Model and public kernel UI slots, without reading plugins' private namespaces directly. Plugins supply slot values, so the same interface works across worlds and plugin combinations. A display item is hidden when its data is absent.
 
-| Shown content                   | Data source                                                                                                                                                                                                    |
-| ------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| World name, turn count          | `WorldRecord.name`, `SessionRecord.completedPlayerTurns`                                                                                                                                                       |
-| Current scene name              | `name` in the `stage.backdrop@1` slot                                                                                                                                                                          |
-| Player stat gauges              | Session World Model: character records with `type: "player"`, plus attributes in the character schema with `category: "stats"`, `type: "number"`, and both `min` and `max` declared; up to 4 items             |
-| Carried items                   | String items of the `type: "array"` attributes with `category: "equipment"` on the same player character record, merged in schema order                                                                        |
-| Characters on stage (scene HUD) | The actors in `stage.cast@1` who have not left (up to 3), with avatars from `character.visual@1` looked up by character ID; only the name is shown when there is no picture                                    |
-| "Speaking" marker               | The last paragraph with a speaker in the latest committed story; it matches an actor on stage by character ID when the segment has `speakerId`, otherwise by `displayName`. Not shown while the story streams  |
-| Chapter banner                  | In a layout with `backdrop: "banner"`, the world header image, the world name and the first three tags, shown above the first message                                                                          |
-| Status summary                  | The `session.summary@1` slot: a few lines that any plugin can provide and that should be seen at a glance, such as the current goal, the time and the inventory. See [Session summary](#session-summary) below |
+| Shown content                   | Data source                                                                                                                                                                                                                           |
+| ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| World name, turn count          | `WorldRecord.name`, `SessionRecord.completedPlayerTurns`                                                                                                                                                                              |
+| Current scene name              | `name` in the `stage.backdrop@1` slot                                                                                                                                                                                                 |
+| Player stat gauges              | Session World Model: the primary seat’s current character (see [Seats](./world-model.md#seats)), plus attributes in the character schema with `category: "stats"`, `type: "number"`, and both `min` and `max` declared; up to 4 items |
+| Carried items                   | String items of the `type: "array"` attributes with `category: "equipment"` on the same player character record, merged in schema order                                                                                               |
+| Characters on stage (scene HUD) | The actors in `stage.cast@1` who have not left (up to 3), with avatars from `character.visual@1` looked up by character ID; only the name is shown when there is no picture                                                           |
+| "Speaking" marker               | The last paragraph with a speaker in the latest committed story; it matches an actor on stage by character ID when the segment has `speakerId`, otherwise by `displayName`. Not shown while the story streams                         |
+| Chapter banner                  | In a layout with `backdrop: "banner"`, the world header image, the world name and the first three tags, shown above the first message                                                                                                 |
+| Status summary                  | The `session.summary@1` slot: a few lines that any plugin can provide and that should be seen at a glance, such as the current goal, the time and the inventory. See [Session summary](#session-summary) below                        |
 
 Where this content goes:
 
@@ -188,10 +188,10 @@ For the raw declaration format, the rebuild requirements for development data, a
 
 The "World" tab is provided by the framework itself. It sits next to the plugin tabs, but `/api/ui-specs` does not affect it.
 
-- **Data source**: the `WorldRecord.lore` of the current session, which is `worlds/<id>/WORLD.md`. It is resolved by `defaultLocale`: first an exact match for the locale, then the main language of the same writing system, and finally the main file `WORLD.md`. The content is written into the store at startup by `world-seed-loader`.
+- **Data source**: the current world record’s `lore` and editions in `metadata`. `localizedWorldText` selects the session’s content language; changing the UI language during play does not change it. World loading and import populate the store. See [Session language](./i18n.md#the-session-language-is-locked-at-creation) for edition selection and fallback.
 - **Interaction**: rendered as Markdown (`@/components/ui/markdown`, `react-markdown` + `remark-gfm`). When `lore` is empty, `description` is shown. If that is also empty, "No world document" (`worldDocumentEmpty`) is shown.
 - **Narrator-only text**: content between `<!-- narrator-only -->` and `<!-- /narrator-only -->` is not shown (`playerVisibleLore`, in `@covel/shared`). When the whole file is marked, it is treated as an empty `lore`. The "World Document" on the session-prep screen and the world detail page use the same function. For how to write it, see [World Data](./world-data.md#narrator-only-lore-narrator-only).
-- **Implementation**: `apps/web/src/components/session/world-document-panel.tsx`. It is mounted in `right-panel.tsx` as the `world` tab, and `game-view.tsx` passes the current `world: WorldRecord | null` to it.
+- **Implementation**: `apps/web/src/components/session/world-document-panel.tsx`. It is mounted in `right-panel.tsx` as the `world` tab, and `game-view.tsx` passes the world summary and session language; the panel then loads the full record by world ID.
 - **Isolation rule**: the code of this tab belongs to the framework. It depends only on the public fields of `WorldRecord` and does not know any plugin ID.
 
 > [!IMPORTANT]
@@ -870,7 +870,8 @@ The component catalogue is on its own page: [ui-components.md](./ui-components.m
 ### Right-Panel Data Flow
 
 ```
-plugin local tool / builtin tool / function handler writes plugin_data
+plugin local tool / builtin tool / function handler proposes plugin_data writes
+  → proposal validation and execution commit
   → store write
   → eventBus emits plugin-data.changed
   → pushed to the front end over SSE
@@ -912,8 +913,8 @@ To add a plugin message surface:
 
 To add an interaction block bound to a turn:
 
-1. Write `interaction` in a runtime's output or a tool's return value.
-2. The session kernel normalizes it into an `interaction.request`.
+1. A function returns `effects.interactions`, or a tool returns a pending `interaction.request` proposal. An agent requests interaction through tools such as `create-form` or `create-choices`.
+2. The kernel validates and commits it. An identically named field in business `output` alone has no effect.
 3. `chat-messages.tsx` renders the form, choice or confirmation UI through `messageToSpec()`.
 
 ### Gameplay Completion and Reading Order
@@ -1014,6 +1015,8 @@ Every field is optional. `{}` is also valid.
 
 The value is `{ actors, retainWhenEmpty }`. Both fields are required.
 
+On an actual location change, built-in Scene Stage clears existing direction actors before applying new cues. Preview and commit use the same scene identity and ordering. Existing direction state with no new entries yields empty actors and `retainWhenEmpty: false`, preventing old-location portraits from remaining. Without direction state, the original cast provider remains in use.
+
 | Field             | Type                                   | Required | Meaning                                                                                                                        |
 | ----------------- | -------------------------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------ |
 | `actors`          | Array of the objects below, at most 64 | Yes      | Actors currently on stage; an empty array is valid                                                                             |
@@ -1032,6 +1035,10 @@ Each actor:
 | `visual`      | `{ variantId?: string, outfit?: string, expression?: string, pose?: string }` | No       | Requested portrait variant; all four fields are optional                                             |
 | `position`    | `left` / `center-left` / `center` / `center-right` / `right`                  | No       | Requested position                                                                                   |
 | `transition`  | `none` / `fade` / `slide-left` / `slide-right` / `dissolve`                   | No       | Portrait transition; the client uses `fade` when omitted                                             |
+
+<a id="stagedialogue1"></a>
+
+Per-paragraph attribution is stored in story message `segments`; the `stage.dialogue@1` slot has been removed. See [Story output](./plugins.md#story-output).
 
 #### `stage.choices@1`
 

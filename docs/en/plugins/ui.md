@@ -43,7 +43,7 @@ Open `runtimes/note/ui/panel.json`. It has two parts. The top few lines say whic
   "groupOrder": 800,
   "label": "Plugin Notes",
   "shortLabel": "Notes",
-  "icon": "notebook-pen",
+  "icon": "book-open",
   "dataSource": { "namespace": "notes" },
   "alwaysRender": true,
   "emptyState": { "message": "No plugin notes yet. ..." },
@@ -103,7 +103,7 @@ Replace the whole of `runtimes/note/ui/panel.json` with the content below. It do
   "id": "tavern-rumors-notes",
   "label": "Rumors",
   "shortLabel": "Rumors",
-  "icon": "notebook-pen",
+  "icon": "book-open",
   "dataSource": { "namespace": "notes" },
   "alwaysRender": true,
   "emptyState": { "message": "No rumors yet." },
@@ -413,7 +413,7 @@ What happens once the form appears:
 
 - The form shows in the story text. The input box is locked until the player answers.
 - When the player submits, the framework fills the entered values into `narrativeTemplate`. That sentence appears in the story text as the player's words, and the next turn starts. Your plugin reads these values in that turn.
-- If you do not want this sentence to appear in the story text, write `"submitBehavior": { "echoFilledNarrative": false }` on the form. Then the next turn has no player words, and the plugin reads the answers from the saved form values. This field defaults to `true`.
+- If you do not want this sentence to appear in the story text, write `"submitBehavior": { "echoFilledNarrative": false }` on the form. The interface then omits the filled narrative, and the plugin still reads the answers from the saved form values. This field defaults to `true`.
 
 Validation and errors:
 
@@ -424,6 +424,8 @@ Validation and errors:
 | The same form is submitted a second time                                   | The reason for the rejection is shown, and the first answers are filled back in.                                                                                            | `code: "interaction_already_submitted"`   |
 
 A form can be answered only once. If the player opens the game again in another browser tab or on another device, a form that was already answered shows as answered, with the values it had then.
+
+The built-in Character Creator additionally requires a narrative placeholder for every collected field, keeping edited answers and the echoed opening consistent. This is its own validation; generic `create-form` can still collect structured answers without narrative echo.
 
 To add your own validation rules (for example, two fields must not be the same), or to explain why a form is showing again (`notice`), see `validation` and `notice` in the [Tools reference](../reference/tools.md#create-form).
 
@@ -544,13 +546,13 @@ To check this yourself: in **Settings → Appearance → Style**, choose "Panel"
 
 Before you build a more complex interface, know what the framework gives you now. The points below describe the current state. They are not things that can never be done. If you really need one, you can propose that the framework add it.
 
-| Area                        | How it works now                                                                                                | So                                                                                                                      |
-| --------------------------- | --------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
-| Places it can go            | Story-text blocks, side-panel tabs, and the stage decision area. The status bar accepts only status summaries.  | You cannot place a panel over the scene picture at the moment.                                                          |
-| Panel size                  | The player drags the sidebar to set its width. Any panel can be expanded into a large dialog.                   | There is no permanent large central area.                                                                               |
-| Turn information            | The interface in the stage decision area can get the current turn and the current choices. A side panel cannot. | A side panel that needs to know "which turn this result belongs to" must store the turn information in its data itself. |
-| Interface events            | `emitEvent` hands the event to subscribers, which run in the background, and does not return their results.     | To get a result right away, use `invokeRuntime` or `invokePluginAction`.                                                |
-| Content the framework draws | The list of places is fixed, and the data format of each place is fixed.                                        | New content that the framework draws requires a framework change. For content the plugin draws itself, use `webview`.   |
+| Area                        | How it works now                                                                                                                                     | So                                                                                                                      |
+| --------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| Places it can go            | Story-text blocks, side-panel tabs, the stage decision area and plugin views in the full story column. The status bar accepts only status summaries. | You cannot place a panel over the scene picture at the moment.                                                          |
+| Panel size                  | The player drags the sidebar to set its width. Any panel can be expanded into a large dialog.                                                        | Use a [plugin view](#make-a-plugin-view) for the full story column; sidebar panels keep the sidebar layout.             |
+| Turn information            | The interface in the stage decision area can get the current turn and the current choices. A side panel cannot.                                      | A side panel that needs to know "which turn this result belongs to" must store the turn information in its data itself. |
+| Interface events            | `emitEvent` hands the event to subscribers, which run in the background, and does not return their results.                                          | To get a result right away, use `invokeRuntime` or `invokePluginAction`.                                                |
+| Content the framework draws | The list of places is fixed, and the data format of each place is fixed.                                                                             | New content that the framework draws requires a framework change. For content the plugin draws itself, use `webview`.   |
 
 ## When something does not work
 
