@@ -1426,6 +1426,117 @@ describe("Resume Routes", () => {
       });
     });
 
+    describe("progress reported by a resume that suspends again", () => {
+      const scope: ExecutionContext = {
+        executionId: "suspended-execution",
+        origin: "player",
+        countPolicy: "complete-player-turn",
+        logicalTurnId: "logical-turn-with-progress",
+      };
+      const reporter: RuntimeManifest = {
+        ...TEST_MANIFEST,
+        runtimeType: "function",
+        outputKind: "system",
+      };
+
+      async function histories(): Promise<Record<string, string[]>> {
+        const rows = await store.listJobStatus("sess-1", {
+          progressScopeId: scope.executionId,
+        });
+        const byJob: Record<string, string[]> = {};
+        for (const row of rows) (byJob[row.jobId] ??= []).push(row.state);
+        return byJob;
+      }
+
+      /**
+       * The first resume reports one job running, claims another succeeded
+       * and suspends again; the next resume succeeds.
+       */
+      async function resuspended() {
+        await createSuspension(store, { executionContext: scope });
+        const handler: FunctionHandler = async (ctx) => {
+          if (ctx.resumedFromSuspensionId !== "susp-1")
+            return { outcome: "success", value: { content: "Answered." } };
+          await ctx.progress!.report({
+            jobId: "working",
+            state: "running",
+            sequence: 1,
+          });
+          await ctx.progress!.report({
+            jobId: "claimed",
+            state: "succeeded",
+            sequence: 2,
+          });
+          return {
+            outcome: "suspended",
+            reason: "Need a surname too",
+            resumeSchema: { type: "object" },
+          };
+        };
+        const app = createTestApp(
+          makeDefaultDeps(
+            store,
+            {
+              loadRuntimeFn: async () =>
+                ({ manifest: reporter, promptTemplate: "", handler }) as never,
+            },
+            reporter,
+          ),
+        );
+        const first = await app.request(
+          "/api/sessions/sess-1/suspensions/susp-1/resume",
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ data: { name: "Alice" } }),
+          },
+        );
+        expect(first.status).toBe(200);
+        const body = (await first.json()) as {
+          result: { status: string; output?: { suspensionId?: string } };
+        };
+        expect(body.result.status).toBe("suspended");
+        const nextId = body.result.output?.suspensionId;
+        expect(nextId).toBeDefined();
+        return { app, nextId: nextId! };
+      }
+
+      it("waits for input until the final resume settles it once", async () => {
+        const { app, nextId } = await resuspended();
+        expect(await histories()).toEqual({
+          working: ["running", "waiting-input"],
+          claimed: ["succeeded", "waiting-input"],
+        });
+
+        const done = await app.request(
+          `/api/sessions/sess-1/suspensions/${nextId}/resume`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ data: { surname: "Liddell" } }),
+          },
+        );
+        expect(done.status).toBe(200);
+        expect(await histories()).toEqual({
+          working: ["running", "waiting-input", "succeeded"],
+          claimed: ["succeeded", "waiting-input", "succeeded"],
+        });
+      });
+
+      it("is cancelled when the new suspension is abandoned", async () => {
+        const { app, nextId } = await resuspended();
+        const abandoned = await app.request(
+          `/api/sessions/sess-1/suspensions/${nextId}`,
+          { method: "DELETE" },
+        );
+        expect(abandoned.status).toBe(200);
+        expect(await histories()).toEqual({
+          working: ["running", "waiting-input", "cancelled"],
+          claimed: ["succeeded", "waiting-input", "cancelled"],
+        });
+      });
+    });
+
     it("waits for the final sibling suspension before completing the logical turn", async () => {
       await store.updateSession("sess-1", {
         phase: "playing",

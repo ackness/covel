@@ -470,6 +470,8 @@ function emitCommittedSuspension(
  * Terminalise every job reported under this execution's progress scope. Runs
  * after the domain outcome is settled: a rolled-back execution fails all its
  * jobs; a committed one maps each job to its owning runtime's result status.
+ * A suspended runtime's jobs wait for input, a claimed success too, since its
+ * writes are held until the suspension is resumed.
  * In a continued scope (a resume) only the jobs of the runtimes this
  * execution ran are settled, and a rollback returns them, including a
  * claimed success whose writes did not land, to waiting for input.

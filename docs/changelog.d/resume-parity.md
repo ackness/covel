@@ -12,7 +12,7 @@
 ### Changed
 
 - **A resumed runtime gets the same time limit as its original dispatch.** The manifest's `timeoutMs` now takes precedence over the framework default on resume as well. See `docs/reference/api.md` (resume).
-- **A resumed run reports progress under the suspended execution.** `ctx.progress` jobs of every leg of a suspension chain end together: `succeeded` when the last resume commits, `cancelled` when the suspension is abandoned, expires or is voided. A leg that suspends again leaves them `waiting-input`, and a resume that does not commit (its runtime fails, times out or is stopped, or the commit rolls back) returns them to `waiting-input`, including a `succeeded` it reported, since the suspension can be retried. See `docs/reference/protocol.md`.
+- **A resumed run reports progress under the suspended execution.** `ctx.progress` jobs of every leg of a suspension chain end together: `succeeded` when the last resume commits, `cancelled` when the suspension is abandoned, expires or is voided. A leg that suspends, first or again, leaves them `waiting-input`, including a `succeeded` it reported, since its writes are held until the resume. A resume that does not commit (its runtime fails, times out or is stopped, or the commit rolls back) returns them to `waiting-input` as well, a reported `succeeded` included, since the suspension can be retried. See `docs/reference/protocol.md`.
 
 ### Fixed
 

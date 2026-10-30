@@ -483,6 +483,124 @@ describe("a function that suspends again on resume", () => {
       expect(states.get("answered")?.at(-1)).toBe("succeeded");
     });
 
+    /**
+     * Every leg claims its job `succeeded` before suspending; only the last
+     * leg's writes land. Leg 0 is the first suspension, leg 1 a re-suspension.
+     */
+    async function claimedThenResuspended(f: Fixture) {
+      let firstId: string | undefined;
+      const deps = handlerDeps(f, async (ctx) => {
+        const leg =
+          ctx.resumedFromSuspensionId === undefined
+            ? 0
+            : ctx.resumedFromSuspensionId === firstId
+              ? 1
+              : 2;
+        await ctx.progress!.report({
+          jobId: `claimed-${leg}`,
+          state: "succeeded",
+          sequence: 1,
+        });
+        await ctx.pluginData!.set("notes", `leg-${leg}`, leg);
+        if (leg === 2) return { outcome: "success", value: {} };
+        return {
+          outcome: "suspended",
+          reason: `question ${leg}`,
+          resumeSchema: { type: "object" },
+        };
+      });
+      const execution = await executeTurn(input, [asker], deps());
+      await commitExecution({
+        store: f.store,
+        eventBus: f.eventBus,
+        execution,
+        completion: { kind: "turn", turnId: input.turnId, durationMs: 0 },
+      });
+      const [first] = await pending(f);
+      firstId = first!.id;
+      const executionId =
+        first!.pendingContinuation.executionContext.executionId;
+      expect((await finalStates(f, executionId)).get("claimed-0")).toEqual([
+        "succeeded",
+        "waiting-input",
+      ]);
+      const again = await resumeSuspendedRuntime(first!, {}, asker, deps(), {
+        activeRuntimes: [asker],
+      });
+      expect((await commitResume(f, again, first!)).status).toBe("committed");
+      const [second] = await pending(f);
+      expect(await f.store.listPluginData(SESSION, "probe", "notes")).toEqual(
+        [],
+      );
+      return { second: second!, executionId, deps };
+    }
+
+    const terminalEvents = (f: Fixture) =>
+      named(f, "job-status.updated")
+        .map((event) => event.payload as { jobId: string; state: string })
+        .filter((payload) =>
+          ["succeeded", "failed", "cancelled"].includes(payload.state),
+        )
+        .map(({ jobId, state }) => `${jobId}:${state}`)
+        .sort();
+
+    it("takes back a claimed success when the leg suspends again, and settles it once at the end", async () => {
+      const f = await session();
+      const { second, executionId, deps } = await claimedThenResuspended(f);
+      let states = await finalStates(f, executionId);
+      expect(states.get("claimed-0")).toEqual(["succeeded", "waiting-input"]);
+      expect(states.get("claimed-1")).toEqual(["succeeded", "waiting-input"]);
+
+      await finish(f, second, asker, deps(), [asker]);
+      // `finish` clears the event log right before the final commit.
+      expect(terminalEvents(f)).toEqual([
+        "claimed-0:succeeded",
+        "claimed-1:succeeded",
+      ]);
+      states = await finalStates(f, executionId);
+      for (const jobId of ["claimed-0", "claimed-1"])
+        expect(states.get(jobId), jobId).toEqual([
+          "succeeded",
+          "waiting-input",
+          "succeeded",
+        ]);
+      expect(states.get("claimed-2")).toEqual(["succeeded"]);
+      const notes = await f.store.listPluginData(SESSION, "probe", "notes");
+      expect(notes.map((row) => row.key).sort()).toEqual([
+        "leg-0",
+        "leg-1",
+        "leg-2",
+      ]);
+    });
+
+    it("cancels a claimed success of a leg that suspended again when the chain is abandoned", async () => {
+      const f = await session();
+      const { second, executionId } = await claimedThenResuspended(f);
+      const plan = await planSuspensionAbandon(f.store, second);
+      await f.store.withTransaction((tx) =>
+        applySuspensionAbandonTx(tx, plan, timestamp),
+      );
+      f.events.length = 0;
+      await settleAbandonedSuspensionJobs(
+        { store: f.store, eventBus: f.eventBus },
+        second,
+      );
+      expect(terminalEvents(f)).toEqual([
+        "claimed-0:cancelled",
+        "claimed-1:cancelled",
+      ]);
+      const states = await finalStates(f, executionId);
+      for (const jobId of ["claimed-0", "claimed-1"])
+        expect(states.get(jobId), jobId).toEqual([
+          "succeeded",
+          "waiting-input",
+          "cancelled",
+        ]);
+      expect(await f.store.listPluginData(SESSION, "probe", "notes")).toEqual(
+        [],
+      );
+    });
+
     it("cancels every leg's jobs when the chain is abandoned", async () => {
       const f = await session();
       const { first, second } = await resuspended(f);

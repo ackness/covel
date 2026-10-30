@@ -167,8 +167,11 @@ const TERMINAL_STATES: ReadonlySet<JobStatusState> = new Set([
  * appends cleanly onto the existing stream. Jobs already in a terminal state
  * (or already in the mapped target state) are skipped — a job the handler
  * itself completed is not overwritten, unless it reported `succeeded` and its
- * writes never landed: the outcome is `failed`, or `rolledBack` says the
- * commit was undone. Such a job takes the mapped state instead.
+ * writes have not landed: the outcome is `failed`, the outcome is `suspended`
+ * (a suspended runtime's writes are held until its suspension is resumed, and
+ * an abandon discards them), or `rolledBack` says the commit was undone. Such
+ * a job takes the mapped state instead, so a suspension chain's final resume
+ * settles it once and an abandon cancels it.
  *
  * Kernel-facing: called with the raw (un-revoked) store, unlike the plugin's
  * `ctx.progress`. `finalizeExecution` calls it once the domain outcome is known.
@@ -202,9 +205,11 @@ export async function finalizeJobStatuses(
     const latest = own.at(-1);
     if (!latest) continue;
     // A handler can report success before its writes reach commit. When they
-    // did not land, the final state follows the save result, not the claim.
+    // did not land, or are held by a suspension, the state follows the save
+    // result, not the claim.
     const claimedSuccessLost =
-      latest.state === "succeeded" && (target === "failed" || rolledBack);
+      latest.state === "succeeded" &&
+      (target === "failed" || target === "waiting-input" || rolledBack);
     if (
       (TERMINAL_STATES.has(latest.state) && !claimedSuccessLost) ||
       latest.state === target
