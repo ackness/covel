@@ -68,7 +68,7 @@ How the loader handles these files:
 ---
 displayName: Example
 description: Records useful facts after each story turn.
-requires: [narrative-engine@1]
+requires: [narrative-engine@2]
 contributes:
   tools: [save-facts]
   data:
@@ -80,7 +80,7 @@ runtime:
   io:
     inputs:
       narrative:
-        from: { contract: narrative-engine@1 }
+        from: { contract: narrative-engine@2 }
         select: /narrativeOutput
     output: { contract: example.facts@1 }
   agent:
@@ -108,7 +108,7 @@ The ID of this package is its directory name, `example`; its entry is `server/in
 
 Root fields that are rarely needed, such as `covel` and `homepage`, are in [Advanced fields](#advanced-fields).
 
-A contract is a versioned name, such as `narrative-engine@1`. Plugins find each other through it, not through plugin IDs. A few rules:
+A contract is a versioned name, such as `narrative-engine@2`. Plugins find each other through it, not through plugin IDs. A few rules:
 
 - The contracts this package provides are `provides` plus the `io.output.contract` of each runtime.
 - Within one package, two runtimes cannot produce the same contract (`ambiguous output contract`).
@@ -148,7 +148,7 @@ Bundled plugins follow the same current data contracts as external packages. Dic
 
 ### Contract version policy
 
-The `@N` in a contract ID is its version marker, such as `narrative-engine@1`. The kernel supports only the current version (current-only). It does not negotiate versions, it does not support several versions at once, and it has no cross-version compatible reads or dual-write migration.
+The `@N` in a contract ID is its version marker, such as `narrative-engine@2`. The kernel supports only the current version (current-only). It does not negotiate versions, it does not support several versions at once, and it has no cross-version compatible reads or dual-write migration.
 
 - A breaking change uses a new contract ID, such as `@2`. The provider and the consumers are upgraded together in the same change. The old version stops working at that point.
 - Snapshots of old sessions and queued jobs must be rebuilt.
@@ -445,7 +445,7 @@ When there are several completing tools, or the model should call `runtime-done`
 io:
   inputs:
     narrative:
-      from: { contract: narrative-engine@1 }
+      from: { contract: narrative-engine@2 }
       select: /narrativeOutput
       accepts: ./schemas/narrative.schema.json
     previous:
@@ -520,7 +520,45 @@ The internal `RuntimeResult` keeps three things separate:
 | `effects`    | Explicit side effects | Commit, event followers, pending interactions      |
 | `completion` | `done` or `pending`   | Decides whether setup is complete                  |
 
-`output.narrativeOutput` of an `outputKind: story` runtime is still published as the narrative, as declared.
+The output of an `outputKind: story` runtime is normalized as described in [Story output](#story-output) and then published as the narrative.
+
+#### Story output
+
+The kernel owns the shape of a story. It is the same for every `outputKind: story` runtime: agents, functions, and stories that a guard returns early. The current contract is `narrative-engine@2`:
+
+| Field      | Type                                    | Meaning                                                                                                |
+| ---------- | --------------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| `segments` | Array of segments, at most 60           | The story text, in order                                                                               |
+| `cues`     | `{ scene?, present?, mood? }`, optional | Scene name (≤200 characters), names of the characters present (≤32), mood (≤80 characters)             |
+| `yield`    | `user` or `continue`, default `user`    | Hands the turn back to the player after the story; `continue` is reserved for later and acts as `user` |
+
+Each segment is `{ kind, speaker?, text }`:
+
+- `kind` is `narration`, `dialogue` or `action`.
+- `speaker` is the name of the character who speaks or acts (≤80 characters). Write a name, never an ID. Narration has no speaker.
+- `text` is the segment's text (≤4000 characters). Blank lines inside a segment fold to a single newline, so each segment is exactly one paragraph the player sees.
+
+The kernel derives `narrativeOutput` from `segments`: the segment texts joined by blank lines. Plugins that read the story still use `select: /narrativeOutput` and get a string. The conversation journal, the next turn's history, `turn-digest@1` and memory read the same text and never see the JSON.
+
+**Lenient normalization.** Before commit, the kernel tidies the story:
+
+- Prose is still a valid story: each paragraph becomes one `narration` segment.
+- An unknown `kind` is read as `narration`. A dialogue without a `speaker` is kept, unattributed.
+- The `speaker` of a `narration` segment is dropped.
+- A `text` over 4000 characters is split at newlines into several segments. Above 60 segments, neighbours of the same kind and speaker are merged first; trailing segments are dropped only if the story still does not fit.
+- A trailing paragraph that lists options for the player ("What do you do?") is removed.
+- A story with no text left fails with the "no narrative output" error, including when a PostRuntime hook empties it.
+
+**Repair requests.** A story agent that declares `io.output.schema: contract:narrative-engine@2` sends that schema to the model as the response format. When the answer has problems (a dialogue without a speaker, an unknown `kind`, prose where `segments` were asked for, or an empty `segments` array), the kernel sends one repair request through the existing output repair flow, listing at most five problems. Once the repair budget is spent, the story commits under the lenient rules above.
+
+**Speaker resolution.** At commit, the kernel resolves `speaker` and `cues.present` to characters of the session by name. Only a full character ID, name or alias matches; there is no partial matching.
+
+- A resolved segment gets `speakerId`, and its `speaker` becomes the character's current name.
+- A name that matches no character, or more than one, is kept as written and listed in `unresolvedSpeakers` of the `narrative.completed` event (see [protocol](./protocol.md)).
+- The story message's metadata records `segments`, `cues`, `yield` and the presence record `presentCharacterIds`: the resolved speakers and the characters in `cues.present`. The presence record is only stored for now, ready for per-character history later.
+- Story messages on `/messages` and `/view` carry `segments` (see [API](./api.md)). Character IDs never reach model-facing text.
+
+**Streaming.** When the answer is segmented JSON, the narrative stream forwards only each segment's `text`, with a blank line between segments, matching the committed text. JSON keys, `speaker` and `cues` never appear in the stream. A prose answer streams as before.
 
 #### Function output
 
@@ -551,7 +589,7 @@ An agent's side effects come only from its tools. What the model can write is de
 - `PostRuntime` cannot add or rewrite `pendingProposals`, `effects`, or `completion`; those channels always come from the runtime's original result. To block or rewrite a proposal, use [`PreStateCommit`](./hooks.md#prestatecommit).
 - The side effects of a failed runtime are not committed, and its events do not trigger the runtimes that follow it.
 - Normal execution and resume share the output schema check for agents. A non-story agent that declares a private `io.output.schema` first validates the candidate protocol output, and only then splits out the business value and the side effects. A final output with no story text, or with empty story text, is also accepted by the validation. If it does not match the schema, the run fails, and the writes accumulated while it was paused are not committed.
-- A story agent keeps its own separate story text check, and it does not use the private schema check.
+- A story agent does not use the private schema check; it uses the checks and repair of [Story output](#story-output) instead.
 
 > [!NOTE]
 > After a change to the internal result structure, rebuild the affected development execution results, exports, background jobs, and snapshots. The old flat side-effect results cannot be read.
@@ -580,7 +618,7 @@ The nested call's writes follow the parent handler:
 
 - When the parent handler succeeds, the nested writes commit with the parent's, ahead of the parent's result.
 - When the parent handler fails (it throws, times out, or returns `failed` or `skipped`), the nested writes are discarded with it. They are also discarded when a PostRuntime Hook changes the parent result's status (for example, rewrites a failure as a success), just like the parent's own writes. The rule applies at every level: when any parent handler fails, the writes of every level below it are discarded.
-- When the parent handler suspends for input, its own writes wait to commit after the resume, but the nested writes are discarded. Nested writes are not yet saved with a suspension.
+- When the parent handler suspends for input, the nested results and their writes are saved with the suspended item. When the resumed handler succeeds, they commit with the parent's writes, ahead of the parent's result, in the same order as without a suspension. When the resume fails, a PostRuntime Hook changes the status, or the item is abandoned, expires or is voided, they are discarded with the parent's writes. A nested call that suspended itself is not saved; the trace records a `recursive.failed` with `code` `nested-suspension-dropped`.
 - A nested call made from an agent's guard commits only when the guard returns `{ skip: true }` and the result is still skipped; it is discarded when the guard lets the agent run.
 
 At commit, a top-level runtime and the nested calls at every level below it are one unit: they all commit, or they are all discarded.
@@ -635,6 +673,8 @@ Rules at run time:
 
 A failure does not throw (only a call after the handler has ended throws); it returns an error code:
 
+These codes are a subset of the [tool error codes](./tools.md#unified-result-format-and-error-codes).
+
 <!-- prettier-ignore -->
 | `error.code` | Meaning |
 | --- | --- |
@@ -678,7 +718,7 @@ When the session no longer exists, `getSession()` throws and the current executi
 When the kernel writes records into the prompt, it removes these fields:
 
 - Each row of `io.selfData` is `- <key> | <JSON of the value>` (the `summary` format is cut to 200 characters). An `updatedAt` on the row is not included, and an `id` in the value that is the same as the key is not repeated.
-- The following are passed through the same projection before they reach the model: the values in `<runtime-inputs>` and `<runtime-exports>`, the payload in `<runtime-activation>`, the fields of `{{ world.schema }}` and `{{ characters.npcs }}`, the player sheet and NPC fields of the SDK's `characterSheetSegments()`, and tool results that have no `_text`.
+- The following are passed through the same projection before they reach the model: the values in `<runtime-inputs>` and `<runtime-exports>`, the payload in `<runtime-activation>`, the fields of `{{ world.schema }}` and `{{ characters.npcs }}`, the player sheet and NPC fields of the SDK's `characterSheetSegments()`, and the `data` field of unified tool results.
 
 A property is removed only when both its name and its value match:
 
@@ -700,7 +740,7 @@ A record repeating its own UUID in its properties, arrays or nested objects with
 The records that code reads do not change: the return values of `ctx.inputs`, `ctx.activation`, `ctx.pluginData`, and `ctx.tools.call` are all complete.
 
 - When a plugin builds its own prompt (for example, by calling `ctx.gateway` directly), it does the same thing with `modelFacingJson(value)`, which is exported from `@covel/plugin-handlers-utils`.
-- When a tool must give the model an opaque handle, put it in `_text`.
+- When a tool must give the model an opaque handle, put it in the model view summary with `withModelView(content, { summary })`.
 
 #### The kernel input `turn-digest@1`
 
@@ -805,7 +845,7 @@ Loading checks these rules and rejects a manifest that breaks one:
 
 **Finishing before the time limit (`deadlineReserveMs`).** When less time than this is left, and text alone could complete the runtime at that moment (no unmet `requireToolUse` or explicit completion, and no output handed over by a completing tool) and at least 3 seconds remain to write it, the loop starts no new step and asks for the final answer with tools off. With `steering` on, player interjections queued during the last step are merged first, so that request reads them. When the answer is written, the runtime succeeds with stop reason `deadline` and `finalizer: true`. When it is not, the runtime still fails with a timeout. The reserve used is at most half of `timeoutMs`, and the time left is measured against the deadline as queue and streaming time have moved it. When the conditions do not hold, the loop runs to the real time limit as usual.
 
-**Correction budgets and output repair.** The four budgets in `agent.loop.corrections` are independent; `0` disables that correction. Write only keys you want to override. A bare text finish and a `runtime-done` without business work share the `toolUse` budget. After the loop and any finalizer, output that fails its schema or a story with empty text gets one request with tools off by default, including the validation errors and asking for a complete replacement answer. If it is still invalid, the runtime fails with `invalid-output`. The repair replaces earlier drafts and story text from before interjections. It runs only after a success-shaped exit, with required tool work and completion met, output not handed over by a completing tool, and at least 3 seconds left. Errors, cancellation and an expired deadline get no repair. Each request consumes one `outputRepair` unit; a new loop, including a resumed execution, starts fresh budgets.
+**Correction budgets and output repair.** The four budgets in `agent.loop.corrections` are independent; `0` disables that correction. Write only keys you want to override. A bare text finish and a `runtime-done` without business work share the `toolUse` budget. After the loop and any finalizer, output that fails its schema or a story with empty text gets one request with tools off by default, including the validation errors and asking for a complete replacement answer. If it is still invalid, the runtime fails with `invalid-output`. The repair replaces earlier drafts and story text from before interjections. It runs only after a success-shaped exit, with required tool work and completion met, output not handed over by a completing tool, and at least 3 seconds left. Errors, cancellation and an expired deadline get no repair. Each request consumes one `outputRepair` unit. Each new loop starts fresh budgets; a resumed execution is not a new loop and keeps counting from what it spent before the suspension.
 
 ### Author information
 
@@ -1187,7 +1227,7 @@ Below are all the plugins that ship with Covel from [plugins/](../../../plugins/
 | [branch-reply](../../../plugins/branch-reply/README.md) | Reply Variants | `plugin` | `branch-reply@1` | inline | Offers several replies the player can switch between. |
 | [char-creator](../../../plugins/char-creator/README.md) | Character Creator | `core` | `character-creation@1` (default provider) | `player-init`, `character-tracker` | Creates the protagonist, and records important changes to characters in the story. |
 | [character-blueprint](../../../plugins/character-blueprint/README.md) | Character Profiles | `plugin` | `character-blueprint@1`, `character-presence@1` | `presence` | Stores the character profiles a world presets, along with avatars, portraits, and voices. |
-| [chat-mode-narrator](../../../plugins/chat-mode-narrator/README.md) | Dialogue Narrator | `plugin` | `narrative-engine@1` | inline | Makes the story read more like a conversation between characters. |
+| [chat-mode-narrator](../../../plugins/chat-mode-narrator/README.md) | Dialogue Narrator | `plugin` | `narrative-engine@2` | inline | Makes the story read more like a conversation between characters. |
 | [codex](../../../plugins/codex/README.md) | Codex | `plugin` | none | inline | Organizes newly found places, people, items, and rumors. |
 | [core-quest](../../../plugins/core-quest/README.md) | Quest Log | `plugin` | `world-ir.vocabulary@1` | `log`, `vocabulary` | Registers quests from the narrative and moves them forward. |
 | [dice-check](../../../plugins/dice-check/README.md) | Dice Check | `plugin` | `action-check@1` | `roller`, `recorder` | Rolls dice for actions that carry a risk of failure. |
@@ -1196,7 +1236,7 @@ Below are all the plugins that ship with Covel from [plugins/](../../../plugins/
 | [inventory](../../../plugins/inventory/README.md) | Inventory | `plugin` | `world-ir.vocabulary@1` | `ledger`, `vocabulary` | Records items gained and lost, and changes of equipment. |
 | [living-world-rules](../../../plugins/living-world-rules/README.md) | World Rules | `plugin` | `living-world-rules@1`, `world-info@1` | none | Shows the rules in a world package that apply over the long term, and keeps the narrative to them. |
 | [memory](../../../plugins/memory/README.md) | Story Memory | `core` | none | `extract` | Remembers the plot, scenes, character relationships, and the protagonist's state. |
-| [narrator](../../../plugins/narrator/README.md) | Narrator | `core` | `narrative-engine@1` (default provider) | inline | Advances the story based on the player's actions. |
+| [narrator](../../../plugins/narrator/README.md) | Narrator | `core` | `narrative-engine@2` (default provider) | inline | Advances the story based on the player's actions. |
 | [npc-graph](../../../plugins/npc-graph/README.md) | Relationship Graph | `plugin` | `npc-graph@1`, `graph-rag@1` | `extractor`, `rag-retriever` | Records the relationships between people. |
 | [pregame](../../../plugins/pregame/README.md) | Pre-Game Setup | `core` | `session.opening@1` | inline | Reads the world material at the start and prepares the first adventure. |
 | [scene-stage](../../../plugins/scene-stage/README.md) | Scene Stage | `plugin` | `stage-direction@1`, `scene-stage@1`, `scene-cast@1` | `seed`, `direction`, `resolver`, `cast` | Tracks the current scene, day and night, and the characters present, for use by the stage background and portraits. |

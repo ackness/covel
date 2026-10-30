@@ -212,7 +212,7 @@ describe("Session plugin routes (real sessionRoutes)", () => {
           id: "narrator",
           name: "Core Narrator",
           kind: "core",
-          provides: ["narrative-engine@1"],
+          provides: ["narrative-engine@2"],
           conflicts: ["chat-mode-narrator@1"],
         }),
         source: "builtin",
@@ -247,7 +247,7 @@ describe("Session plugin routes (real sessionRoutes)", () => {
           id: "chat-mode-narrator",
           name: "Chat Mode Narrator",
           kind: "plugin",
-          provides: ["narrative-engine@1"],
+          provides: ["narrative-engine@2"],
           requires: [
             "scene-cast@1",
             "scene-prompts@1",

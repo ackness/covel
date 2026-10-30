@@ -1,6 +1,6 @@
 ---
 kind: core
-version: 0.0.43
+version: 0.0.44
 displayName: Character Creator
 description: >-
   Helps create your hero and keeps important character details up to date during
@@ -18,7 +18,7 @@ provides:
 requires:
   - session.opening@1
   - world-data-provider@1
-  - narrative-engine@1
+  - narrative-engine@2
 contributes:
   extensions:
     - prompt.segment@1/character-roster

@@ -1,5 +1,5 @@
 ---
-version: 0.0.39
+version: 0.0.40
 displayName: Scene Stage
 description: >-
   Tracks the current scene, time of day, and who is on stage for the visual
@@ -37,26 +37,15 @@ contributes:
         - direction
       preview:
         - stage.direction
-    - point: ui.slot@1
-      id: dialogue
-      slot: stage.dialogue@1
-      watch:
-        - dialogue
-      preview:
-        - stage.direction
   events:
     - topic: stage.direction
       schema: ./schemas/stage-direction.event.json
       description: >-
-        Emit once before each narrative. Merge all actor entry/exit, position,
-        focus, and visual changes into cues. Supply dialogue.paragraphSpeakers
-        with one exact character ID (from active-cast) per blank-line-separated
-        narrative paragraph, in order; use null for narration, mixed speech, or
-        unknown identities. Separate different speakers into paragraphs and keep
-        the final paragraph count/order identical to the array. cues may be
-        empty only when dialogue is provided. actor.focus controls the visual
-        spotlight, not dialogue attribution. Specify an exit transition for
-        actor.leave and stage.clear.
+        Emit once before a narrative in which actors change. Merge all actor
+        entry/exit, position, focus, and visual changes into cues. actor.focus
+        controls the visual spotlight; nameplates come from the story's
+        segment speakers. Specify an exit transition for actor.leave and
+        stage.clear.
     - topic: scene.set
       schema: ./schemas/scene-set.event.json
       description: >-

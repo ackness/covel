@@ -1,5 +1,5 @@
 /**
- * Effects isolation (W3d): function-runtime / agent-guard domain writes buffer
+ * Effects isolation: function-runtime / agent-guard domain writes buffer
  * into proposals instead of hitting the store directly, and reads overlay the
  * buffer so a handler/guard sees its own not-yet-committed writes. The buffer
  * flushes onto the runtime result, so processRuntimeResult commits it through
@@ -234,6 +234,61 @@ describe("buffered writes as a handler reads them", () => {
 });
 
 describe("createPluginDataWriter with a write buffer", () => {
+  it("preserves committed timestamps across scoped reads and omits them on new buffered rows", async () => {
+    const store = createMemoryStore();
+    const stored = {
+      id: "stored",
+      sessionId: CTX.sessionId,
+      pluginId: CTX.pluginId,
+      namespace: "notes",
+      key: "existing",
+      value: "before",
+      createdAt: "2026-01-01T00:00:00Z",
+      updatedAt: "2026-01-02T00:00:00Z",
+    };
+    await store.setPluginData(stored);
+    const buffer = createExecutionWriteBuffer();
+    const writer = createPluginDataWriter(store, CTX, buffer);
+    const view = createFunctionStoreView(store, CTX, buffer);
+    try {
+      await writer.set("notes", "existing", "after");
+      await writer.set("notes", "new", "pending");
+      const rows = await view.listPluginData("notes");
+      for (const row of [
+        await view.getPluginData("notes", "existing"),
+        rows.find((entry) => entry.key === "existing"),
+      ]) {
+        expect(row).toMatchObject({
+          value: "after",
+          createdAt: stored.createdAt,
+          updatedAt: stored.updatedAt,
+        });
+      }
+      for (const row of [
+        await view.getPluginData("notes", "new"),
+        rows.find((entry) => entry.key === "new"),
+      ]) {
+        expect(row).toMatchObject({ value: "pending" });
+        expect(row).not.toHaveProperty("createdAt");
+        expect(row).not.toHaveProperty("updatedAt");
+      }
+      expect(await writer.list("notes")).toEqual([
+        {
+          key: "existing",
+          value: "after",
+          createdAt: stored.createdAt,
+          updatedAt: stored.updatedAt,
+        },
+        { key: "new", value: "pending" },
+      ]);
+      expect(
+        await store.listPluginData(CTX.sessionId, CTX.pluginId, "notes"),
+      ).toEqual([stored]);
+    } finally {
+      await store.close();
+    }
+  });
+
   it("buffers writes and deletes with a read-through overlay", async () => {
     const store = createMemoryStore();
     const buffer = createExecutionWriteBuffer();
@@ -252,13 +307,11 @@ describe("createPluginDataWriter with a write buffer", () => {
     ).toBeNull();
     expect(await writer.get("generated", "img-1")).toEqual({ url: "a" });
     const list = await writer.list("generated");
-    // The entry shape an extension handler lists: key, value, timestamps.
+    // Pending-only entries have no stored timestamps.
     expect(list).toEqual([
       {
         key: "img-1",
         value: { url: "a" },
-        createdAt: expect.any(String),
-        updatedAt: expect.any(String),
       },
     ]);
 

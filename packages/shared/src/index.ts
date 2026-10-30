@@ -75,6 +75,12 @@ export {
 
 // ── Types ─────────────────────────────────────────────────────────
 export * from "./types/index.js";
+export {
+  TOOL_ERROR_CODES,
+  ToolError,
+  isToolError,
+} from "@covel/plugin-handlers-utils";
+export type { ToolModelView } from "@covel/plugin-handlers-utils";
 export * from "./types/llm-diagnostics.js";
 export * from "./llm-request-budget.js";
 export * from "./llm-slots.js";
@@ -675,3 +681,21 @@ export {
 export * from "./schemas/trusted-sources.js";
 
 export { rpcActionNameSchema } from "./schemas/rpc-action.js";
+export {
+  STORY_LIMITS,
+  storyCuesSchema,
+  storyMessageSegmentSchema,
+  storyOutputJsonSchema,
+  storyOutputSchema,
+  storySegmentKinds,
+  storySegmentSchema,
+  storyYields,
+} from "./schemas/story-output.js";
+export type {
+  StoryCues,
+  StoryMessageSegment,
+  StoryOutput,
+  StorySegment,
+  StorySegmentKind,
+  StoryYield,
+} from "@covel/plugin-handlers-utils";

@@ -435,13 +435,13 @@ This takes about a dozen lines of code in the plugin's `entry` module. For the w
 
 In the same way, the framework draws the content below, and the plugin only provides the data:
 
-| Content                             | Slot name                          | Notes                                                                                                                                                                                         |
-| ----------------------------------- | ---------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Scene picture                       | `stage.backdrop@1`                 | The stage view and the text view with a scene background read the same data.                                                                                                                  |
-| Characters present, who is speaking | `stage.cast@1`, `stage.dialogue@1` | Used by the stage view.                                                                                                                                                                       |
-| Choices on the stage                | `stage.choices@1`                  | The decision area of the stage view.                                                                                                                                                          |
-| Character avatars and portraits     | `character.visual@1`               | The avatar, the portrait panel, and the stage all read it.                                                                                                                                    |
-| Background music                    | `stage.music@1`                    | The plugin says only "which track should play now". Playback, fading in and out, the player's volume, and the mute switch are all handled by the framework, so the plugin needs no interface. |
+| Content                         | Slot name            | Notes                                                                                                                                                                                         |
+| ------------------------------- | -------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Scene picture                   | `stage.backdrop@1`   | The stage view and the text view with a scene background read the same data.                                                                                                                  |
+| Characters present              | `stage.cast@1`       | Used by the stage view. Who is speaking needs no slot: the stage reads the speakers of the story segments.                                                                                    |
+| Choices on the stage            | `stage.choices@1`    | The decision area of the stage view.                                                                                                                                                          |
+| Character avatars and portraits | `character.visual@1` | The avatar, the portrait panel, and the stage all read it.                                                                                                                                    |
+| Background music                | `stage.music@1`      | The plugin says only "which track should play now". Playback, fading in and out, the player's volume, and the mute switch are all handled by the framework, so the plugin needs no interface. |
 
 For the data format of these slots, see [Kernel UI slots in the panel reference](../reference/ui-panels.md#kernel-ui-slots). The list of slots is fixed. A plugin cannot add its own.
 

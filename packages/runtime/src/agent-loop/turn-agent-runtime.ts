@@ -29,6 +29,7 @@ import type { TurnExecutorDeps } from "../turn-executor/turn-executor-types.js";
 import { runAgentToolLoop } from "./turn-agent-tool-loop.js";
 import { withSubagentDelegate } from "./subagent-delegate.js";
 import { MAX_PICTURE_ATTACHMENTS } from "./picture-attachments.js";
+import { createStorySegmentStream } from "./story-stream.js";
 import { attachReadDependencies } from "../read-dependencies.js";
 import {
   createPluginDataVisibility,
@@ -307,11 +308,17 @@ export async function executeAgentRuntime({
     writes: upstreamPluginData,
     ...(deps.pluginDataReadProbe ? { probe: deps.pluginDataReadProbe } : {}),
   });
+  // A story answered in JSON streams only its segment text.
+  const onDelta =
+    deps.onDelta && manifest.outputKind === "story" && loaded.outputSchema
+      ? createStorySegmentStream(deps.onDelta)
+      : deps.onDelta;
+  const streamDeps = onDelta === deps.onDelta ? deps : { ...deps, onDelta };
   // `delegate` runs a sub-agent; the wrapper answers it and forwards the rest.
   const loopDeps =
     deps.subagents && deps.toolExecutor
       ? {
-          ...deps,
+          ...streamDeps,
           toolExecutor: withSubagentDelegate(
             deps.toolExecutor,
             deps.subagents,
@@ -327,7 +334,7 @@ export async function executeAgentRuntime({
             },
           ),
         }
-      : deps;
+      : streamDeps;
   const toolLoop = await runAgentToolLoop({
     worldBase,
     upstreamProposals,

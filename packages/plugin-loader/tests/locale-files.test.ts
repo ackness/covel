@@ -22,10 +22,10 @@ id: demo
 kind: plugin
 displayName: Inventory
 description: Keeps the player character's bag.
-provides: [narrative-engine@1]
+provides: [narrative-engine@2]
 runtime:
   schedule: {stage: narrative}
-  io: {output: {contract: narrative-engine@1}}
+  io: {output: {contract: narrative-engine@2}}
   agent: {tools: {builtin: [plugin-data-set]}}
 ---
 English prompt body.

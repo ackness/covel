@@ -660,7 +660,8 @@ describe("suspension terminal", () => {
       expect(collectExecutionSuspensionRuns(turn)).toEqual({
         [record!.id]: result.runId,
       });
-      expect(h.count("PostRuntime")).toBe(1);
+      // PostRuntime waits for the end of the logical runtime.
+      expect(h.count("PostRuntime")).toBe(0);
       expect(h.count("runtime.completed")).toBe(1);
     } finally {
       await h.close();
@@ -746,7 +747,8 @@ describe("suspension terminal", () => {
       expect(collectExecutionSuspensionRuns(turn)).toEqual({
         [record!.id]: result.runId,
       });
-      expect(h.count("PostRuntime")).toBe(1);
+      // PostRuntime waits for the end of the logical runtime.
+      expect(h.count("PostRuntime")).toBe(0);
       expect(h.count("runtime.completed")).toBe(1);
     } finally {
       await h.close();
@@ -815,7 +817,7 @@ describe("resume terminals", () => {
     };
   }
 
-  it("returns suspended without an artifact when a resumed function suspends again", async () => {
+  it("lets a resumed function suspend again with a new continuation", async () => {
     const h = harness();
     const runtime = manifest({ runtimeType: "function" });
     try {
@@ -829,53 +831,91 @@ describe("resume terminals", () => {
         }),
       );
       expect(result.status).toBe("suspended");
-      expect(collectExecutionSuspensions({ runtimeResults: [result] })).toEqual(
-        [],
-      );
-      expect(h.count("PostRuntime")).toBe(1);
+      const [record] = collectExecutionSuspensions({
+        runtimeResults: [result],
+      });
+      expect(record).toMatchObject({
+        reason: "again",
+        runtimeId: runtime.name,
+      });
+      expect(record!.id).not.toBe("suspension");
+      expect(result.output).toMatchObject({ suspensionId: record!.id });
+      expect(h.count("PostRuntime")).toBe(0);
+      expect(
+        h.busEvents.find((event) => event.type === "runtime.started")?.payload,
+      ).toMatchObject({ resumed: true });
+      expect(h.count("runtime.completed")).toBe(1);
     } finally {
       await h.close();
     }
   });
 
-  it("feeds a nested agent suspend on resume back as a tool error", async () => {
+  it("lets a resumed agent suspend again with its whole transcript", async () => {
     const h = harness({ toolExecutor: toolExecutor({ suspend: sentinel }) });
     const runtime = manifest({
       runtimeType: "agent",
       tools: { builtin: ["suspend"] },
     });
-    const generate = vi
-      .fn()
-      .mockResolvedValueOnce(suspendCall("call-again"))
-      .mockResolvedValue(stop('{"done":true}'));
+    const generate = vi.fn().mockResolvedValueOnce(suspendCall("call-again"));
+    const previous: LLMMessage[] = [
+      { role: "system", content: "probe" },
+      { role: "user", content: "Continue" },
+      {
+        role: "assistant",
+        content: "",
+        toolCalls: [{ id: "call-first", name: "suspend", arguments: "{}" }],
+      },
+      {
+        role: "tool",
+        content: JSON.stringify({ suspended: true }),
+        toolCallId: "call-first",
+      },
+    ];
     try {
       const result = await resumeRuntimePipeline(
-        suspension(runtime),
-        {},
+        suspension(runtime, {
+          messages: previous,
+          suspendToolCallId: "call-first",
+        }),
+        { answer: 1 },
         runtime,
         { ...h.deps({}), llm: { generate } },
       );
-      expect(result.status).toBe("success");
-      expect(collectExecutionSuspensions({ runtimeResults: [result] })).toEqual(
-        [],
-      );
-      const messages = (
-        generate.mock.calls[1]![0] as { messages: LLMMessage[] }
-      ).messages;
-      expect(messages.at(-1)).toMatchObject({
-        role: "tool",
-        toolCallId: "call-again",
-        content: JSON.stringify({ error: "Nested suspend is not supported" }),
+      expect(result.status).toBe("suspended");
+      expect(generate).toHaveBeenCalledTimes(1);
+      const [record] = collectExecutionSuspensions({
+        runtimeResults: [result],
       });
+      expect(record!.pendingContinuation).toMatchObject({
+        suspendToolCallId: "call-again",
+        messages: [
+          ...previous.slice(0, 3),
+          {
+            role: "tool",
+            content: JSON.stringify({ resumeData: { answer: 1 } }),
+            toolCallId: "call-first",
+          },
+          {
+            role: "assistant",
+            toolCalls: [{ id: "call-again", name: "suspend", arguments: "{}" }],
+          },
+          {
+            role: "tool",
+            content: JSON.stringify({ suspended: true }),
+            toolCallId: "call-again",
+          },
+        ],
+      });
+      expect(h.count("PostRuntime")).toBe(0);
     } finally {
       await h.close();
     }
   });
 
-  it("lets options.timeoutMs beat manifest.timeoutMs on resume", async () => {
+  it("lets manifest.timeoutMs beat options.timeoutMs on resume, as on dispatch", async () => {
     const h = harness();
     const release = Promise.withResolvers<void>();
-    const runtime = manifest({ runtimeType: "function", timeoutMs: 60_000 });
+    const runtime = manifest({ runtimeType: "function", timeoutMs: 30 });
     try {
       const result = await resumeRuntimePipeline(
         suspension(runtime),
@@ -887,7 +927,7 @@ describe("resume terminals", () => {
             return { outcome: "success", value: {} };
           },
         }),
-        { timeoutMs: 30 },
+        { timeoutMs: 60_000 },
       );
       expect(result).toMatchObject({
         status: "failed",

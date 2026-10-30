@@ -166,8 +166,12 @@ const TERMINAL_STATES: ReadonlySet<JobStatusState> = new Set([
  * event's `sequence` is the highest already-committed sequence plus one, so it
  * appends cleanly onto the existing stream. Jobs already in a terminal state
  * (or already in the mapped target state) are skipped — a job the handler
- * itself completed is not overwritten, unless it reported `succeeded` and the
- * outcome is `failed`: its writes never landed, so it ends `failed`.
+ * itself completed is not overwritten, unless it reported `succeeded` and its
+ * writes have not landed: the outcome is `failed`, the outcome is `suspended`
+ * (a suspended runtime's writes are held until its suspension is resumed, and
+ * an abandon discards them), or `rolledBack` says the commit was undone. Such
+ * a job takes the mapped state instead, so a suspension chain's final resume
+ * settles it once and an abandon cancels it.
  *
  * Kernel-facing: called with the raw (un-revoked) store, unlike the plugin's
  * `ctx.progress`. `finalizeExecution` calls it once the domain outcome is known.
@@ -177,9 +181,12 @@ export async function finalizeJobStatuses(
   {
     outcome,
     reportedJobs,
+    rolledBack = false,
   }: {
     readonly outcome: ExecutionJobOutcome;
     readonly reportedJobs: readonly string[];
+    /** The execution's writes were rolled back, whatever `outcome` maps to. */
+    readonly rolledBack?: boolean;
   },
 ): Promise<void> {
   const target = OUTCOME_TO_STATE[outcome];
@@ -198,9 +205,11 @@ export async function finalizeJobStatuses(
     const latest = own.at(-1);
     if (!latest) continue;
     // A handler can report success before its writes reach commit. When they
-    // did not land, the final state follows the save result, not the claim.
+    // did not land, or are held by a suspension, the state follows the save
+    // result, not the claim.
     const claimedSuccessLost =
-      latest.state === "succeeded" && target === "failed";
+      latest.state === "succeeded" &&
+      (target === "failed" || target === "waiting-input" || rolledBack);
     if (
       (TERMINAL_STATES.has(latest.state) && !claimedSuccessLost) ||
       latest.state === target
@@ -213,6 +222,70 @@ export async function finalizeJobStatuses(
         state: target,
         sequence: latest.sequence + 1,
       }),
+    );
+  }
+}
+
+/**
+ * Return to waiting for input the jobs that some runtimes reported under a
+ * continued progress scope, including a success one of them claimed. Used
+ * when a resume attempt ends without committing: none of its writes landed
+ * and its suspension stays open for a retry, which settles the jobs again.
+ * Only the named runtimes' jobs are touched; the scope also holds jobs that
+ * the suspended execution's own commit settled. Best-effort like every
+ * job-status write: a failure is logged and never changes the outcome.
+ */
+export async function returnJobsToWaitingInput(
+  deps: {
+    readonly store: Pick<DataStore, "appendJobStatus" | "listJobStatus">;
+    readonly eventBus?: EventBus;
+  },
+  scope: {
+    readonly sessionId: string;
+    readonly progressScopeId: string;
+    readonly runtimeIds: ReadonlySet<string>;
+  },
+): Promise<void> {
+  try {
+    const reported = await deps.store.listJobStatus(scope.sessionId, {
+      progressScopeId: scope.progressScopeId,
+    });
+    const groups = new Map<
+      string,
+      { pluginId: string; runtimeId: string; jobIds: Set<string> }
+    >();
+    for (const record of reported) {
+      if (!scope.runtimeIds.has(record.runtimeId)) continue;
+      const key = `${record.pluginId}\u0000${record.runtimeId}`;
+      const group = groups.get(key) ?? {
+        pluginId: record.pluginId,
+        runtimeId: record.runtimeId,
+        jobIds: new Set<string>(),
+      };
+      group.jobIds.add(record.jobId);
+      groups.set(key, group);
+    }
+    for (const group of groups.values()) {
+      await finalizeJobStatuses(
+        {
+          store: deps.store,
+          ...(deps.eventBus ? { eventBus: deps.eventBus } : {}),
+          sessionId: scope.sessionId,
+          progressScopeId: scope.progressScopeId,
+          pluginId: group.pluginId,
+          runtimeId: group.runtimeId,
+        },
+        {
+          outcome: "suspended",
+          reportedJobs: [...group.jobIds],
+          rolledBack: true,
+        },
+      );
+    }
+  } catch (err) {
+    console.warn(
+      "[job-status] returning a failed resume's jobs to waiting failed:",
+      err instanceof Error ? err.message : String(err),
     );
   }
 }

@@ -31,6 +31,7 @@ import { freezeInputSlots } from "../agent-loop/runtime-input-slots.js";
 import { deepFreeze } from "../hooks/hook-settings.js";
 import { createPluginRuntimeContext } from "./plugin-runtime-context.js";
 import { attachNestedResults } from "../turn-executor/nested-results.js";
+import { suspendNestedResults } from "../resume/suspended-nested-results.js";
 import { attachReadDependencies } from "../read-dependencies.js";
 import {
   createPluginDataVisibility,
@@ -94,8 +95,12 @@ export interface ExecuteFunctionRuntimeOptions {
   readonly resumedFromSuspensionId?: string;
   /** Uncommitted writes captured by the suspended invocation. */
   readonly pendingProposals?: readonly import("@covel/shared").Proposal[];
-  /** Resume forbids creating a second nested suspension. Defaults to true. */
-  readonly allowSuspend?: boolean;
+  /**
+   * `ctx.recursiveCall` results of the suspended invocation, in commit order.
+   * Like its buffered writes, they commit only with the handler's own success,
+   * and a further suspension carries them on.
+   */
+  readonly restoredNested?: readonly RuntimeResult[];
 }
 
 export async function executeFunctionRuntime({
@@ -123,7 +128,7 @@ export async function executeFunctionRuntime({
   resumeData,
   resumedFromSuspensionId,
   pendingProposals = [],
-  allowSuspend = true,
+  restoredNested = [],
 }: ExecuteFunctionRuntimeOptions): Promise<RuntimeResult> {
   const inputs = originalInputs ? freezeInputSlots(originalInputs) : undefined;
   const exportSlots = originalExports
@@ -133,10 +138,13 @@ export async function executeFunctionRuntime({
     ? deepFreeze(structuredClone(originalActivation))
     : undefined;
   // Emit start for function runtimes (no guard to check)
-  await reportRuntimeStarted(deps, input.sessionId, manifest, {
-    turnId: input.turnId,
-    runId,
-  });
+  await reportRuntimeStarted(
+    deps,
+    input.sessionId,
+    manifest,
+    { turnId: input.turnId, runId },
+    resumedFromSuspensionId !== undefined,
+  );
 
   const helperCtx = {
     sessionId: input.sessionId,
@@ -244,9 +252,26 @@ export async function executeFunctionRuntime({
   });
 
   // ── Suspend detection for function runtimes ────────────
-  // A resume invocation must not create a second suspension record.
-  if (handlerOutcome.outcome === "suspended" && allowSuspend) {
+  // A resumed handler may suspend again; the commit resolves the old record
+  // and saves this one in one transaction.
+  if (handlerOutcome.outcome === "suspended") {
     const suspensionId = crypto.randomUUID();
+    // Nested results wait with the suspension and commit with the resume
+    // that succeeds. A nested run that itself suspended cannot be resumed
+    // from here, so it is dropped and traced.
+    const nested = suspendNestedResults([
+      ...restoredNested,
+      ...runtimeContext.nestedResults,
+    ]);
+    for (const child of nested.dropped)
+      await deps.emitter?.emit("recursive.failed", {
+        ...helperCtx,
+        depth: recursionDepth,
+        code: "nested-suspension-dropped",
+        nestedRuntimeId: child.runtimeId,
+        error:
+          "A nested run suspended inside a suspended parent; its suspension was dropped",
+      });
     // Keep domain writes uncommitted until resume succeeds. The continuation
     // also owns the original binding snapshots rather than resolving them again.
     const suspension: SuspensionRecord = {
@@ -270,6 +295,7 @@ export async function executeFunctionRuntime({
         takenUnder: suspensionBasis(manifest, 0),
         ...(input.locale !== undefined ? { locale: input.locale } : {}),
         ...(logicalTurn !== undefined ? { logicalTurn } : {}),
+        ...(nested.saved.length > 0 ? { nestedResults: nested.saved } : {}),
       },
       createdAt: new Date().toISOString(),
     };
@@ -390,7 +416,10 @@ export async function executeFunctionRuntime({
         }
       : result;
   if (ownSuccess)
-    attachNestedResults(completedResult, runtimeContext.nestedResults);
+    attachNestedResults(completedResult, [
+      ...restoredNested,
+      ...runtimeContext.nestedResults,
+    ]);
   if (ownSuccess)
     attachReadDependencies(completedResult, runtimeContext.readDependencies());
 

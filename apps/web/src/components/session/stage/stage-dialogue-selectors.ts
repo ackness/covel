@@ -1,3 +1,5 @@
+import type { StreamMessage } from "@/stores/session-store/types.js";
+
 /** The speaker contract and the typewriter must use identical boundaries. */
 export function splitStageParagraphs(text: string): string[] {
   return text
@@ -6,19 +8,44 @@ export function splitStageParagraphs(text: string): string[] {
     .split("\n\n");
 }
 
+/**
+ * The nameplate of each paragraph of a committed story: one entry per
+ * segment (a story's text is its segments joined by blank lines), `null` for
+ * narration and unattributed lines. A streaming placeholder has no segments.
+ */
+export function storyParagraphSpeakers(
+  message: Pick<StreamMessage, "segments"> | undefined,
+): (string | null)[] | undefined {
+  return message?.segments?.map((segment) => segment.speaker ?? null);
+}
+
+/** The last attributed segment of a committed story: who is speaking now. */
+export function lastStorySpeaker(
+  message: Pick<StreamMessage, "id" | "segments"> | undefined,
+): { readonly name: string; readonly characterId?: string } | undefined {
+  if (!message || message.id.startsWith("stream_")) return undefined;
+  const segment = message.segments?.findLast((entry) => entry.speaker);
+  return segment?.speaker
+    ? {
+        name: segment.speaker,
+        ...(segment.speakerId ? { characterId: segment.speakerId } : {}),
+      }
+    : undefined;
+}
+
 export function stageParagraphSpeakerName(
-  paragraphSpeakers: readonly (string | null)[] | undefined,
+  segmentSpeakers: readonly (string | null)[] | undefined,
   text: string,
   paragraphIndex: number,
   streamEnded: boolean,
 ): string | undefined {
-  if (!paragraphSpeakers) return undefined;
+  if (!segmentSpeakers) return undefined;
   const count = splitStageParagraphs(text).length;
   if (
-    count > paragraphSpeakers.length ||
-    (streamEnded && count !== paragraphSpeakers.length)
+    count > segmentSpeakers.length ||
+    (streamEnded && count !== segmentSpeakers.length)
   ) {
     return undefined;
   }
-  return paragraphSpeakers[paragraphIndex] ?? undefined;
+  return segmentSpeakers[paragraphIndex] ?? undefined;
 }

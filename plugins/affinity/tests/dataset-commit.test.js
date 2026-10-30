@@ -96,7 +96,7 @@ async function fixture(invalidWrite) {
     stage: "narrative",
     runtimeType: "function",
     outputKind: "story",
-    outputContract: "narrative-engine@1",
+    outputContract: "narrative-engine@2",
     trigger: { type: "auto" },
   };
   loaded.set(story.name, {
@@ -127,7 +127,7 @@ async function fixture(invalidWrite) {
     trigger: { type: "auto" },
     inputs: {
       narrative: {
-        from: { capability: "narrative-engine@1", cardinality: "one" },
+        from: { capability: "narrative-engine@2", cardinality: "one" },
         required: true,
       },
     },

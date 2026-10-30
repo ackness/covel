@@ -4,7 +4,11 @@ import {
   createCharacterTools,
   type CharacterStore,
 } from "../src/builtin/character-tools.js";
-import { getPendingProposals, getToolContent } from "../src/result.js";
+import {
+  getModelView,
+  getPendingProposals,
+  getToolContent,
+} from "../src/result.js";
 
 const context = {
   sessionId: "session",
@@ -101,8 +105,13 @@ describe("character batch idempotency", () => {
       },
       context,
     );
+    expect(getToolContent(result)).not.toHaveProperty("success");
+    expect(getModelView(result)).toEqual({
+      summary: expect.stringContaining(
+        "Synchronized 1 new and 1 existing characters.",
+      ),
+    });
     expect(getToolContent(result)).toMatchObject({
-      success: true,
       created: [{ name: "New NPC" }],
       unchanged: [{ characterId: "existing" }],
       updated: [{ characterId: "existing", version: 2 }],

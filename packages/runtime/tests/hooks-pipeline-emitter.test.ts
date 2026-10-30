@@ -229,54 +229,39 @@ describe("HookPipeline emitter integration", () => {
     });
   });
 
-  it("does not let PostRuntime detach a persisted suspension", async () => {
+  it("tells PostRuntime when the runtime it ends was resumed", async () => {
     const pipeline = createHookPipeline();
+    const payloads: unknown[] = [];
     pipeline.register({
-      id: "hook-rewrite-suspension",
+      id: "post-runtime-observer",
       event: "PostRuntime",
-      handler: async () => ({
-        action: "continue",
-        replace: {
-          result: {
-            status: "success",
-            output: { narrativeOutput: "pretend this completed" },
-          },
-        },
-      }),
-    });
-
-    const result = await runPostRuntimeHook(
-      {
-        pipeline,
-        sessionId: "S",
-        turnId: "T",
-        pluginId: "plugin-x",
-        runtimeId: "plugin-x/runtime",
+      handler: async (_context, payload) => {
+        payloads.push(payload);
+        return { action: "continue" };
       },
-      {
-        pluginId: "plugin-x",
-        runtimeId: "plugin-x/runtime",
-        runId: "run-1",
-        turnId: "T",
-        status: "suspended",
-        output: {
-          suspended: true,
-          suspensionId: "susp-1",
-          reason: "need input",
-          resumeSchema: { type: "string" },
-        },
-        toolCalls: [],
-        durationMs: 1,
-        timestamp: "2026-08-25T00:00:00.000Z",
-      },
-    );
-
-    expect(result.status).toBe("suspended");
-    expect(result.output).toMatchObject({
-      narrativeOutput: "pretend this completed",
-      suspended: true,
-      suspensionId: "susp-1",
-      reason: "need input",
     });
+    const opts = {
+      pipeline,
+      sessionId: "S",
+      turnId: "T",
+      pluginId: "plugin-x",
+      runtimeId: "plugin-x/runtime",
+    };
+    const result = {
+      pluginId: "plugin-x",
+      runtimeId: "plugin-x/runtime",
+      runId: "run-1",
+      turnId: "T",
+      status: "success" as const,
+      output: { content: "done" },
+      toolCalls: [],
+      durationMs: 1,
+      timestamp: "2026-08-25T00:00:00.000Z",
+    };
+
+    await runPostRuntimeHook(opts, result);
+    await runPostRuntimeHook(opts, result, { resumed: true });
+
+    expect(payloads).toEqual([{ result }, { result, resumed: true }]);
   });
 });

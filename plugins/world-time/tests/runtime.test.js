@@ -77,7 +77,7 @@ async function fixture({
     stage: "narrative",
     runtimeType: "function",
     outputKind: "story",
-    outputContract: "narrative-engine@1",
+    outputContract: "narrative-engine@2",
     trigger: { type: "auto" },
     inputs: {
       worldTime: {

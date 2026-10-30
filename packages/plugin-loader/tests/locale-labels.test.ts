@@ -19,7 +19,7 @@ id: demo
 kind: plugin
 displayName: Inventory
 description: Keeps the protagonist's bag.
-provides: [narrative-engine@1]
+provides: [narrative-engine@2]
 contributes:
   commands:
     - name: bag
@@ -36,7 +36,7 @@ contributes:
       role: system
 runtime:
   schedule: {stage: narrative}
-  io: {output: {contract: narrative-engine@1}}
+  io: {output: {contract: narrative-engine@2}}
   agent: {tools: {builtin: [plugin-data-set]}}
 ---
 English prompt body.

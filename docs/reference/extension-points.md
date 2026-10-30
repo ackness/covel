@@ -125,7 +125,7 @@ export default function (covel) {
 ## 其他扩展点在哪里讲
 
 - `ui.slot@1`：提供者还要声明 `slot`，可选 `order` / `watch` / `preview`。服务端负责投影、校验和缓存，前端使用通用槽位，不读插件的 namespace。见 [UI 槽位](./ui-panels.md#kernel-ui-slots)。
-- 舞台的四个数据槽位是 `stage.backdrop@1`、`stage.cast@1`、`stage.dialogue@1`、`stage.choices@1`。handler 返回所选槽位的值，或 `null`；不需要改动时返回 `previous`。字段、必填项、枚举和上限见[舞台槽位值](./ui-panels.md#舞台槽位值)。每份输出按所选槽位校验；非法输出只跳过该提供者，保留前一个有效值。
+- 舞台的三个数据槽位是 `stage.backdrop@1`、`stage.cast@1`、`stage.choices@1`；对白名牌来自故事段落，不是槽位。handler 返回所选槽位的值，或 `null`；不需要改动时返回 `previous`。字段、必填项、枚举和上限见[舞台槽位值](./ui-panels.md#舞台槽位值)。每份输出按所选槽位校验；非法输出只跳过该提供者，保留前一个有效值。
 - 想让插件的状态出现在玩家的状态条或场景 HUD 上，提供 `session.summary@1`。见[状态摘要](./ui-panels.md#session-summary)。
 - 想让会话有背景音乐，提供 `stage.music@1`。见[背景音乐](./ui-panels.md#stage-music)。
 - 世界上下文、历史变换与压缩挂在流程的哪个位置，见[插件契约](./plugins.md#提示词与记忆扩展)。

@@ -180,7 +180,9 @@ export function finalizeThrownRuntime(
 /**
  * Finalize a `suspended` result for `record`. The continuation is attached to
  * the finalized object itself, so `collectExecutionSuspensionRuns` maps it to
- * this run; a PostRuntime hook that changes the status drops it.
+ * this run. PostRuntime does not run: the logical runtime has not ended, and
+ * its hook runs once when it does. A timeout or cancellation still turns the
+ * result into a failure, which drops the continuation.
  */
 export async function finalizeSuspension(
   deps: FinalizationDeps,
@@ -217,7 +219,7 @@ export async function finalizeSuspension(
     manifest,
     input,
     suspendedResult,
-    finalizeOptions,
+    { ...finalizeOptions, skipPostRuntime: true },
   );
   return finalResult.status === "suspended"
     ? attachSuspensionArtifact(finalResult, { record })

@@ -35,7 +35,9 @@ describe("queryDimensionSnapshot", () => {
       version: 3,
       value: { sessionId: "session-1", id: rowId },
     });
-    expect(answer._text).toBe(
+    expect(answer).not.toHaveProperty("_text");
+    expect(answer).not.toHaveProperty("success");
+    expect(answer.text).toBe(
       'ledger (v3) = {"gold":12,"entries":[{"item":"rope"},{"item":"lamp"}]}',
     );
   });
@@ -47,7 +49,7 @@ describe("queryDimensionSnapshot", () => {
         queries: [{ dimension: "ledger", path }],
       });
       expect(answer.results[0]).toMatchObject({ found: true });
-      expect(answer._text).toBe(`ledger.${path}: not found`);
+      expect(answer.text).toBe(`ledger.${path}: not found`);
     },
   );
 
@@ -62,7 +64,7 @@ describe("queryDimensionSnapshot", () => {
         nextOffset: 1,
       },
     });
-    expect(answer._text).toBe(
+    expect(answer.text).toBe(
       'ledger.entries (v3) = {"value":[{"item":"rope"}],"total":2,"nextOffset":1}',
     );
   });
@@ -75,6 +77,6 @@ describe("queryDimensionSnapshot", () => {
       found: false,
       error: "Unknown dimension",
     });
-    expect(answer._text).toBe("missing: not found");
+    expect(answer.text).toBe("missing: not found");
   });
 });

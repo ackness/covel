@@ -25,6 +25,7 @@ import {
   type EmittedEvent,
 } from "@covel/tools";
 import type { LLMMessage, LLMResponse, LLMToolDefinition } from "@covel/shared";
+import type { SuspendedLoopState } from "@covel/store";
 import { promptCacheKeyFor } from "../llm/prompt-cache-key.js";
 import type { HookPipeline } from "../hooks/pipeline.js";
 import type { RetryInfo } from "../retry/llm-retry.js";
@@ -32,7 +33,11 @@ import { buildAgentLoopPolicy } from "./agent-loop-policy.js";
 import type { ResolvedLoopProfile } from "./loop-profile.js";
 import { prepareBudgetedRequest } from "./request-context-budget.js";
 import { createDeltaForwarder } from "./delta-forwarder.js";
-import { executeToolSearch, SEARCH_TOOLS_TOOL_NAME } from "./tool-search.js";
+import {
+  deferredToolDefinitions,
+  executeToolSearch,
+  SEARCH_TOOLS_TOOL_NAME,
+} from "./tool-search.js";
 import { requestLLMResponse } from "./tool-loop-handler.js";
 import {
   createPictureLoader,
@@ -120,6 +125,8 @@ export interface AgentToolLoopInitialState {
   readonly collectedToolCalls?: readonly ToolCallRecord[];
   readonly pendingProposals?: readonly Proposal[];
   readonly emittedEvents?: readonly EmittedEvent[];
+  /** Corrections, activated tools, steered prose and completing-tool output. */
+  readonly loop?: SuspendedLoopState;
 }
 
 export interface RunAgentToolLoopOptions {
@@ -135,7 +142,10 @@ export interface RunAgentToolLoopOptions {
   readonly logicalTurn?: number;
   readonly loaded: LoadedRuntime;
   readonly inputSlots?: Readonly<Record<string, InputSlot>>;
-  /** Passed to `PreLLMCall` hooks. Omitted on resume: nothing is assembled. */
+  /**
+   * Passed to `PreLLMCall` hooks. On resume nothing is assembled: the list
+   * saved with the suspension is passed again.
+   */
   readonly promptSegments?: readonly IncludedPromptSegment[];
   readonly deps: AgentLoopDeps;
   readonly maxSteps: number;
@@ -159,9 +169,10 @@ export interface RunAgentToolLoopOptions {
   /** Seed mid-turn state — used by the resume path. Omitted = fresh loop. */
   readonly initialState?: AgentToolLoopInitialState;
   /**
-   * Whether a suspend sentinel may suspend this loop. The normal path allows it
-   * (`true`, default); the resume path forbids re-suspending mid-resume and
-   * instead feeds the LLM a "Nested suspend is not supported" tool result.
+   * Whether a suspend sentinel may suspend this loop. Dispatch and resume
+   * allow it (`true`, default), so a resumed runtime can suspend again; a
+   * sub-agent cannot, and gets a "Nested suspend is not supported" tool
+   * result instead.
    */
   readonly allowSuspend?: boolean;
 }
@@ -247,7 +258,11 @@ async function runAgentToolLoopWithinBudget(
   // Tool-call drafts already have a canonical assistant turn in messages.
   let finalResponseMessageIndex: number | undefined;
   let lastTarget: LLMTargetIdentity | undefined;
-  let finalToolOutput: Record<string, unknown> | null = null;
+  // A completing tool's output from before a suspension is still the answer.
+  let finalToolOutput: Record<string, unknown> | null = initialState?.loop
+    ?.completingToolOutput
+    ? { ...initialState.loop.completingToolOutput }
+    : null;
   const collectedToolCalls: ToolCallRecord[] = [
     ...(initialState?.collectedToolCalls ?? []),
   ];
@@ -309,12 +324,37 @@ async function runAgentToolLoopWithinBudget(
     maxSteps,
     timeoutMs,
   });
-  const policy = createCorrectionPolicy(profile.corrections);
+  // Corrections bound one logical runtime, so a resumed loop keeps the
+  // counts it spent before its suspension.
+  const policy = createCorrectionPolicy(
+    profile.corrections,
+    initialState?.loop?.corrections,
+  );
   // The step limit in force. A PreStep hook may lower it, never raise it.
   let stepLimit = effectiveMaxSteps;
 
-  // search-tools can activate deferred tools for subsequent steps.
-  let activeToolDefs = toolDefs;
+  // search-tools can activate deferred tools for subsequent steps. A resumed
+  // loop starts with the ones it had activated before its suspension.
+  const restoredTools =
+    initialState?.loop?.activatedTools && deps.toolExecutor
+      ? deferredToolDefinitions(
+          initialState.loop.activatedTools.filter(
+            (name) => !toolDefs?.some((definition) => definition.name === name),
+          ),
+          deferredToolNames,
+          deps.toolExecutor,
+          {
+            sessionId: input.sessionId,
+            turnId: input.turnId,
+            pluginId: manifest.pluginId,
+            runtimeId: manifest.name,
+          },
+        )
+      : [];
+  let activeToolDefs =
+    restoredTools.length > 0
+      ? [...(toolDefs ?? []), ...restoredTools]
+      : toolDefs;
 
   // The loop's single narrative outlet — counts chunks for `message.completed`.
   // Only a profile that streams to the player forwards text.
@@ -361,7 +401,7 @@ async function runAgentToolLoopWithinBudget(
   // Prose captured from steps that were extended by late steering (see the
   // late-steering drain below). Joined into finalContent at the final break
   // so the persisted narrative keeps both pre- and post-interjection text.
-  const steeredProse: string[] = [];
+  const steeredProse: string[] = [...(initialState?.loop?.steeredProse ?? [])];
 
   /**
    * One model request: PreLLMCall, pictures, the context budget, then the
@@ -723,7 +763,7 @@ async function runAgentToolLoopWithinBudget(
           const effectiveTc = preToolOutcome.toolCall;
           // The hook may rewrite the name or arguments. Replay that effective
           // call while the executor still receives the original argument text
-          // so an unrepairable call remains INVALID_ARGS.
+          // so an unrepairable call still fails with `invalid-input`.
           const assistantMessage = messages[assistantMessageIndex]!;
           messages[assistantMessageIndex] = {
             ...assistantMessage,
@@ -864,11 +904,12 @@ async function runAgentToolLoopWithinBudget(
           // field from a plugin tool is ordinary data, not loop control.
           // When the suspend tool is called, capture the current loop state as
           // an execution-local artifact. The tool result is not pushed back to
-          // the LLM; instead we exit the loop with status 'suspended'.
+          // the LLM; instead we exit the loop with status 'suspended'. A
+          // resumed loop suspends the same way.
           //
-          // The resume path runs the same loop with `allowSuspend: false`: a
-          // nested suspend mid-resume is unsupported, so the sentinel is fed
-          // back to the LLM as an error tool result and the loop continues.
+          // A sub-agent runs with `allowSuspend: false`: it cannot suspend, so
+          // the sentinel is fed back to the LLM as an error tool result and
+          // the loop continues.
           if (
             effectiveTc.name === "suspend" &&
             toolResult.success &&
@@ -937,6 +978,20 @@ async function runAgentToolLoopWithinBudget(
                 suspendToolCallId: effectiveTc.id,
                 startTime,
                 runId,
+                loop: {
+                  corrections: policy.snapshot(),
+                  activatedTools: (activeToolDefs ?? [])
+                    .map((definition) => definition.name)
+                    .filter(
+                      (name) =>
+                        !toolDefs?.some((initial) => initial.name === name),
+                    ),
+                  steeredProse,
+                  completingToolOutput: outputFromCompletingTool
+                    ? (completingToolOutputInResponse ?? finalToolOutput)
+                    : null,
+                },
+                ...(promptSegments ? { promptSegments } : {}),
               });
             }
           }

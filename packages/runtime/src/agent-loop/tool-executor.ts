@@ -11,7 +11,8 @@
  */
 
 import {
-  ToolRefusal,
+  isToolError,
+  getModelView,
   ToolValidationError,
   getEmittedEvents,
   getPendingProposals,
@@ -24,8 +25,18 @@ import {
 } from "@covel/tools";
 import type { DataStore } from "@covel/store";
 import type { ApprovalPipeline } from "@covel/approval";
-import { modelFacingJson } from "@covel/shared";
-import type { ApprovalStatus, InputSlot, Proposal } from "@covel/shared";
+import {
+  renderToolSuccess,
+  renderToolError,
+  parseToolResultText,
+  type ToolResultError,
+} from "./tool-result-text.js";
+import type {
+  ToolErrorCode,
+  ApprovalStatus,
+  InputSlot,
+  Proposal,
+} from "@covel/shared";
 import { createToolExecutionContext } from "./tool-execution-context.js";
 import {
   createToolExecutorLifetime,
@@ -33,42 +44,34 @@ import {
 } from "./tool-executor-lifetime.js";
 import { combineAbortSignals } from "../turn-executor/turn-control.js";
 
-// ── Structured tool error shape (returned to LLM) ────────────────
-
-type ToolErrorCode =
-  | "NOT_FOUND"
-  | "DENIED"
-  | "UNAUTHORIZED"
-  | "INVALID_ARGS"
-  | "VALIDATION_ERROR"
-  | "CANCELLED"
-  | "TIMEOUT"
-  | "EXECUTION_ERROR";
-
 class ToolTimeoutError extends Error {}
 
 function toolError(
   code: ToolErrorCode,
   message: string,
-  details?: string[],
+  hint?: string,
 ): string {
-  const payload: Record<string, unknown> = {
-    success: false,
-    error: message,
+  return renderToolError({
     code,
-  };
-  if (details && details.length > 0) payload.details = details;
-  return JSON.stringify(payload);
+    message,
+    ...(hint !== undefined ? { hint } : {}),
+  });
 }
 
-// ── Types ────────────────────────────────────────────────────────
+function errorFromText(text: string): ToolResultError {
+  return (parseToolResultText(text) as { error: ToolResultError }).error;
+}
 
-/** A tool result without the `ui` blocks the kernel renders for the player. */
-function withoutUiBlocks(result: unknown): unknown {
-  if (!result || typeof result !== "object" || Array.isArray(result))
-    return result;
-  const { ui, ...rest } = result as Record<string, unknown>;
-  return Array.isArray(ui) ? rest : result;
+/** Keep unexpected failures useful without exposing dumps or identifiers. */
+function internalMessage(name: string, error: unknown): string {
+  const raw = error instanceof Error ? error.message : String(error);
+  const first = (raw.split(/\r?\n/)[0] ?? "")
+    .replace(
+      /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi,
+      "<id>",
+    )
+    .slice(0, 300);
+  return `Tool "${name}" failed: ${first}`;
 }
 
 export interface ToolCall {
@@ -125,8 +128,9 @@ export interface ToolCallResult {
   /** Domain events emitted via the `emit-event` builtin tool (see @covel/tools result.ts). */
   readonly emittedEvents?: readonly EmittedEvent[];
   readonly success: boolean;
+  readonly error?: ToolResultError;
   /**
-   * A failed call that the tool refused with `ToolRefusal`: the model had
+   * A failed call that the tool refused with `ToolError("refused", …)`: the model had
    * nothing to correct, so the call is not a failure of the runtime.
    */
   readonly refused?: true;
@@ -249,10 +253,12 @@ function emitToolFailed(
   details: string[] | undefined,
   durationMs: number,
   approvalStatus: ApprovalStatus,
+  hint?: string,
 ): Promise<void> {
   return emitToolEvent(ctx, call, "tool.failed", approvalStatus, {
     code,
     error,
+    ...(hint !== undefined ? { hint } : {}),
     ...(details && details.length > 0 ? { details } : {}),
     durationMs,
     success: false,
@@ -300,7 +306,7 @@ export function createToolExecutor(
         !context.authorizedToolNames.has(call.name)
       ) {
         const errorResult = toolError(
-          "UNAUTHORIZED",
+          "unavailable",
           `Tool "${call.name}" is not declared by runtime "${context.runtimeId}". Only declared tools may be called.`,
         );
         await recordCall(
@@ -315,7 +321,7 @@ export function createToolExecutor(
         await emitToolFailed(
           context,
           call,
-          "UNAUTHORIZED",
+          "unavailable",
           `tool not declared by runtime ${context.runtimeId}`,
           undefined,
           Date.now() - startTime,
@@ -325,6 +331,7 @@ export function createToolExecutor(
           toolCallId: call.toolCallId,
           name: call.name,
           result: errorResult,
+          error: errorFromText(errorResult),
           parsedResult: null,
           success: false,
           approvalStatus: "auto-allowed" as const,
@@ -335,7 +342,7 @@ export function createToolExecutor(
       const tool = resolveToolModule(config, call.name, context);
       if (!tool) {
         const errorResult = toolError(
-          "NOT_FOUND",
+          "not-found",
           `Unknown tool: ${call.name}. Check the tool name and try again.`,
         );
         await recordCall(
@@ -350,7 +357,7 @@ export function createToolExecutor(
         await emitToolFailed(
           context,
           call,
-          "NOT_FOUND",
+          "not-found",
           `Unknown tool: ${call.name}`,
           undefined,
           Date.now() - startTime,
@@ -360,6 +367,7 @@ export function createToolExecutor(
           toolCallId: call.toolCallId,
           name: call.name,
           result: errorResult,
+          error: errorFromText(errorResult),
           parsedResult: null,
           success: false,
           approvalStatus: "auto-allowed" as const,
@@ -386,8 +394,9 @@ export function createToolExecutor(
         if (checkResult.decision === "deny") {
           approvalStatus = "policy-denied";
           const denyResult = toolError(
-            "DENIED",
-            `Tool "${call.name}" was denied by the approval policy. Reason: ${checkResult.reason}. Do not retry this tool call.`,
+            "refused",
+            `Tool "${call.name}" was denied by the approval policy. Reason: ${checkResult.reason}.`,
+            "Do not retry this call.",
           );
           await recordCall(
             config.store,
@@ -401,16 +410,18 @@ export function createToolExecutor(
           await emitToolFailed(
             context,
             call,
-            "DENIED",
+            "refused",
             checkResult.reason ?? "denied by approval policy",
             undefined,
             Date.now() - startTime,
             approvalStatus,
+            "Do not retry this call.",
           );
           return {
             toolCallId: call.toolCallId,
             name: call.name,
             result: denyResult,
+            error: errorFromText(denyResult),
             parsedResult: null,
             success: false,
             approvalStatus,
@@ -425,8 +436,9 @@ export function createToolExecutor(
         params = parseJsonText(call.arguments);
       } catch {
         const errorResult = toolError(
-          "INVALID_ARGS",
+          "invalid-input",
           `Arguments for tool "${call.name}" are not valid JSON. Ensure the arguments object is properly formatted JSON.`,
+          "Send the arguments as one JSON object.",
         );
         await recordCall(
           config.store,
@@ -440,16 +452,18 @@ export function createToolExecutor(
         await emitToolFailed(
           context,
           call,
-          "INVALID_ARGS",
+          "invalid-input",
           "arguments are not valid JSON",
           undefined,
           Date.now() - startTime,
           approvalStatus,
+          "Send the arguments as one JSON object.",
         );
         return {
           toolCallId: call.toolCallId,
           name: call.name,
           result: errorResult,
+          error: errorFromText(errorResult),
           parsedResult: null,
           success: false,
           approvalStatus,
@@ -473,7 +487,7 @@ export function createToolExecutor(
         await emitToolCalling(context, call, toolSource, approvalStatus);
         invocation.assertLive();
         const active = invocation;
-        const { parsedResult, pendingProposals, emittedEvents } =
+        const { parsedResult, pendingProposals, emittedEvents, model } =
           await (async () => {
             let timer: ReturnType<typeof setTimeout> | undefined;
             try {
@@ -499,6 +513,7 @@ export function createToolExecutor(
                     active.assertLive();
                     // Snapshot envelopes before cleanup or trace persistence can yield.
                     return {
+                      model: structuredClone(getModelView(rawResult)),
                       parsedResult: structuredClone(getToolContent(rawResult)),
                       pendingProposals: structuredClone(
                         getPendingProposals(rawResult),
@@ -528,23 +543,13 @@ export function createToolExecutor(
         )
           throw new Error("read-only tool returned writes");
 
-        // Text-first convention: if the tool result is an object with a
-        // `_text` string field, send ONLY the text as the LLM-facing payload
-        // (instead of JSON-stringifying the whole object). This keeps LLM
-        // prompts human-readable while framework tracing still gets the full
-        // structured object via `parsedResult`. Falls back to JSON.stringify
-        // for tools that don't opt in. That JSON goes through `modelFacingJson`
-        // (no bookkeeping such as `updatedAt` of a plugin-data row or the time
-        // of a recalled message) and without the `ui` blocks, which are for
-        // the player's screen and repeat what the model has just written.
-        // `_text` is sent as it is, so it is not projected: a tool that hands
-        // the model an opaque handle must write only the text it means to show.
-        const resultStr =
-          parsedResult &&
-          typeof parsedResult === "object" &&
-          typeof (parsedResult as { _text?: unknown })._text === "string"
-            ? (parsedResult as { _text: string })._text
-            : JSON.stringify(modelFacingJson(withoutUiBlocks(parsedResult)));
+        const resultStr = renderToolSuccess({
+          content: parsedResult,
+          model,
+          pendingProposals,
+          emittedEvents,
+          locale: context.locale,
+        });
 
         // Accept the snapshotted result before recording its terminal state.
         // Cancellation after this point still aborts the enclosing runtime,
@@ -604,12 +609,13 @@ export function createToolExecutor(
         let code: ToolErrorCode;
         let details: string[] | undefined;
         let message: string;
+        let hint: string | undefined;
         if (context.signal?.aborted) {
-          code = "CANCELLED";
+          code = "cancelled";
           message = "Tool execution was cancelled";
           errorResult = toolError(code, message);
         } else if (error instanceof ToolTimeoutError) {
-          code = "TIMEOUT";
+          code = "timeout";
           message = error.message;
           errorResult = toolError(code, message);
         } else if (error instanceof ToolValidationError) {
@@ -635,19 +641,23 @@ export function createToolExecutor(
           // undefined" alone does not say which one, and a model sent the
           // same incomplete call again.
           message = details.join("; ");
-          code = "VALIDATION_ERROR";
+          code = "invalid-input";
           errorResult = toolError(
             code,
             `Invalid parameters for tool "${call.name}": ${message}. Fix the highlighted fields and retry.`,
-            details,
+            "Fix these fields and call the tool again.",
           );
+          hint = "Fix these fields and call the tool again.";
+        } else if (isToolError(error)) {
+          code = error.code;
+          message = error.message;
+          hint = error.hint;
+          errorResult = toolError(code, message.slice(0, 2000), hint);
         } else {
           message = error instanceof Error ? error.message : String(error);
-          code = "EXECUTION_ERROR";
-          errorResult = toolError(
-            code,
-            `Tool "${call.name}" failed during execution: ${message}`,
-          );
+          code = "internal";
+          errorResult = toolError(code, internalMessage(call.name, error));
+          console.warn(`[ToolExecutor] Tool "${call.name}" failed:`, error);
         }
         await recordCall(
           config.store,
@@ -666,14 +676,18 @@ export function createToolExecutor(
           details,
           Date.now() - startTime,
           approvalStatus,
+          hint,
         );
         return {
           toolCallId: call.toolCallId,
           name: call.name,
           result: errorResult,
+          error: errorFromText(errorResult),
           parsedResult: null,
           success: false,
-          ...(code === "EXECUTION_ERROR" && error instanceof ToolRefusal
+          ...(isToolError(error) &&
+          error.code === "refused" &&
+          code === "refused"
             ? { refused: true as const }
             : {}),
           approvalStatus,

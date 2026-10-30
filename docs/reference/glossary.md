@@ -19,7 +19,7 @@
 | Capability | 能力标签 | 一条模型路由的 `tag`（`text`、`image` 等）。找插件靠的是 **Contract**，不是能力标签。 |
 | Capability snapshot | 能力快照 | 安装记录里的声明能力上界；见[可信来源](./plugin-installation.md#可信来源)。 |
 | Collection | 合集 |  |
-| Contract | 契约 | 带版本号的 ID，例如 `narrative-engine@1`。 |
+| Contract | 契约 | 带版本号的 ID，例如 `narrative-engine@2`。 |
 | Credits | 作者信息 | 一个包的 `author`、`license` 和 `homepage` 字段。 |
 | Dataset | 数据集 | 插件声明的带类型数据（`contributes.datasets`）。不是安装用的 **Collection**。 |
 | Deployment form | 部署形态 | 桌面客户端、自部署网页版、官方网页版。不是 `DEPLOYMENT_TIER`。 |
@@ -32,7 +32,9 @@
 | Official web app | 官方网页版 |  |
 | Operation-based write | 操作式写入 | 交一串操作（`plugin.data.update`），不交算好的整个值。 |
 | Pack | 玩法包 |  |
+| Perspective | 视角 | 叙事从谁的角度讲：以角色为中心的第一、第二、第三人称，全知旁白，或主持人。 |
 | PluginType | 插件类型 |  |
+| Presence record | 在场记录 | 故事消息上记下的在场角色 ID（`presentCharacterIds`）。 |
 | Preset | 预设 |  |
 | Proposal | 提案 |  |
 | Provider | 提供商 |  |
@@ -41,11 +43,12 @@
 | Runtime | runtime | 保留英文：它指清单里的一个运行单元，不是泛指“运行时”。 |
 | Runtime manifest | runtime 清单 |  |
 | Seat | 座位 | 会话里“谁在玩、以什么身份、控制哪些角色”（`session.seats`）。 |
-| Segment | 提示词段 |  |
+| Segment | 提示词段 | 组装好的提示词里的一段。故事里的段落是 **Story segment**。 |
 | Server-scoped setting | 服务端设置 | `scope: "server"` 的设置；其余的是本设备设置。 |
 | Session | 会话 |  |
 | Slot | 槽位 | 设置界面里叫“模型用途”。 |
 | Stop reason | 结束原因 | agent 工具循环怎样结束（`RuntimeResult.stop.reason`）。 |
+| Story segment | 故事段落 | 故事输出里的一段：旁白、对白或动作。上下文清楚时简称“段落”。 |
 | Sub-agent | 子 agent | 另一个 runtime 在自己的执行里运行、只交回输出的 agent runtime。 |
 | Tool result | 工具结果 | 代码读取的内容与模型看到的反馈是两种形状；工具成功不代表已保存。 |
 | Trigger mode | 触发模式 |  |
@@ -128,7 +131,7 @@
 
 ## Contract
 
-一个带版本号的 ID，例如 `narrative-engine@1`，用来说明一个插件提供什么能力，或者需要什么能力。
+一个带版本号的 ID，例如 `narrative-engine@2`，用来说明一个插件提供什么能力，或者需要什么能力。
 
 - 根 `PLUGIN.md` 用 `requires`、`conflicts` 列出需要和不能共存的契约，用 `provides` 列出不由 runtime 输出的契约。
 - runtime 用 `io.output.contract` 发布一个契约（插件因此提供它），用 `from: { contract }` 读取一个契约。
@@ -221,6 +224,12 @@ agent runtime 用完步数之后，内核再发的一次模型请求：关掉工
 
 详见：`packs/builtin.yaml`、`apps/server/src/config/plugin-packs.ts`、[插件字段参考](./plugins.md)、[世界数据](./world-data.md)。
 
+## Perspective
+
+叙事从谁的角度讲。内置叙事插件的“视角”设置有五个值：`character-first`、`character-second`（默认）、`character-third` 以玩家角色为中心，分别用“我”“你”和角色名称呼他；`omniscient` 是全知的第三人称旁白，没有玩家专属的一行；`dm` 是主持人对玩家说话。对白保留说话人自己的人称。
+
+详见：[内置插件：叙事](../builtin/story.md)。
+
 ## Plugin kind and source
 
 描述一个插件有两个互不相干的角度。
@@ -231,6 +240,12 @@ agent runtime 用完步数之后，内核再发的一次模型请求：关掉工
 官方维护、但从仓库之外安装的插件，来源仍然是 `community`。
 
 详见：[插件字段参考](./plugins.md)、[插件安装](./plugin-installation.md)、[工具](./tools.md)。
+
+## Presence record
+
+一条故事消息上记下的“这一段故事里有谁在场”：提交时解析成功的说话人，加上 `cues.present` 里的角色，按首次出现的顺序存成 `presentCharacterIds`。现在只保存，留给以后的按角色历史使用。
+
+详见：[插件契约：故事输出](./plugins.md#故事输出)。
 
 ## Preset
 
@@ -290,7 +305,7 @@ agent runtime 用完步数之后，内核再发的一次模型请求：关掉工
 
 ## Segment
 
-组装好的提示词里的一段（提示词结构规范把提示词分成 10 段）。段和缓存有关：稳定的段（世界观、插件提示词）会带上 `cache_control` 标记，让服务商一侧的提示词缓存可以跨回合复用。
+组装好的提示词里的一段（提示词结构规范把提示词分成 10 段）。段和缓存有关：稳定的段（世界观、插件提示词）会带上 `cache_control` 标记，让服务商一侧的提示词缓存可以跨回合复用。故事输出里的段落是另一回事，见 [Story segment](#story-segment)。
 
 详见：[提示词结构](./prompt-structure.md)。
 
@@ -323,6 +338,12 @@ agent runtime 的工具循环怎样结束，例如 `completed`（模型给出了
 它写在 `RuntimeResult.stop` 和 runtime 生命周期事件的 `stopReason` 里。函数 runtime 没有结束原因。
 
 详见：[协议参考的结束原因](./protocol.md#stop-reasons)、[回合管线](../internals/flow.md)。
+
+## Story segment
+
+`narrative-engine@2` 故事输出里的一段：`kind` 是 `narration`（旁白）、`dialogue`（对白）或 `action`（动作），可以带说话人的名字 `speaker`，正文是 `text`。一段就是玩家看到的一个段落；各段正文用空行连接成 `narrativeOutput`。
+
+详见：[插件契约：故事输出](./plugins.md#故事输出)。
 
 ## Sub-agent
 

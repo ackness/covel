@@ -30,7 +30,7 @@ const proposal: Proposal = {
 };
 
 describe("tool annotations and per-call timeout", () => {
-  it("times out a never-resolving tool, records TIMEOUT and traces a failure", async () => {
+  it("times out a never-resolving tool, records timeout and traces a failure", async () => {
     vi.useFakeTimers();
     try {
       const store = createMemoryStore();
@@ -56,14 +56,14 @@ describe("tool annotations and per-call timeout", () => {
       await vi.advanceTimersByTimeAsync(20);
       const result = await running;
       expect(result).toMatchObject({ success: false, parsedResult: null });
-      expect(JSON.parse(result.result).code).toBe("TIMEOUT");
+      expect(JSON.parse(result.result).error.code).toBe("timeout");
       expect(result.pendingProposals).toBeUndefined();
       expect(result.emittedEvents).toBeUndefined();
       expect(save).toHaveBeenCalledOnce();
       expect(save.mock.calls[0]?.[0].output).toBe(result.result);
       expect(emit).toHaveBeenLastCalledWith(
         "tool.failed",
-        expect.objectContaining({ code: "TIMEOUT" }),
+        expect.objectContaining({ code: "timeout" }),
       );
       expect(vi.getTimerCount()).toBe(0);
     } finally {
@@ -71,7 +71,7 @@ describe("tool annotations and per-call timeout", () => {
     }
   });
 
-  it("classifies a parent abort before the timer as CANCELLED", async () => {
+  it("classifies a parent abort before the timer as cancelled", async () => {
     vi.useFakeTimers();
     const entered = Promise.withResolvers<void>();
     const release = Promise.withResolvers<void>();
@@ -97,7 +97,7 @@ describe("tool annotations and per-call timeout", () => {
       await vi.advanceTimersByTimeAsync(19);
       controller.abort(new Error("parent cancelled"));
       const result = await running;
-      expect(JSON.parse(result.result).code).toBe("CANCELLED");
+      expect(JSON.parse(result.result).error.code).toBe("cancelled");
       expect(vi.getTimerCount()).toBe(0);
     } finally {
       release.resolve();
@@ -134,7 +134,7 @@ describe("tool annotations and per-call timeout", () => {
       await entered.promise;
       await vi.advanceTimersByTimeAsync(20);
       const result = await running;
-      expect(JSON.parse(result.result).code).toBe("TIMEOUT");
+      expect(JSON.parse(result.result).error.code).toBe("timeout");
       expect(result.pendingProposals).toBeUndefined();
       expect(result.emittedEvents).toBeUndefined();
       await expect(retained?.store?.getSession()).rejects.toThrow("timed out");
@@ -179,8 +179,10 @@ describe("tool annotations and per-call timeout", () => {
       });
       expect(result.success).toBe(false);
       expect(JSON.parse(result.result)).toMatchObject({
-        code: "EXECUTION_ERROR",
-        error: expect.stringContaining("read-only tool returned writes"),
+        error: {
+          code: "internal",
+          message: expect.stringContaining("read-only tool returned writes"),
+        },
       });
       expect(result.pendingProposals).toBeUndefined();
       expect(result.emittedEvents).toBeUndefined();
@@ -212,7 +214,7 @@ describe("tool annotations and per-call timeout", () => {
         const result = await executor.execute(call, identity);
         expect(result.success).toBe(!throws);
         if (throws)
-          expect(JSON.parse(result.result).code).toBe("EXECUTION_ERROR");
+          expect(JSON.parse(result.result).error.code).toBe("internal");
         expect(vi.getTimerCount()).toBe(0);
         await executor.close();
       } finally {
@@ -342,7 +344,7 @@ describe("tool executor ownership", () => {
         await vi.waitFor(() => expect(settled).toBe(true));
         const result = await running;
         expect(result).toMatchObject({ success: false, parsedResult: null });
-        expect(JSON.parse(result.result).code).toBe("CANCELLED");
+        expect(JSON.parse(result.result).error.code).toBe("cancelled");
         expect(result.pendingProposals).toBeUndefined();
         await expect(retained!.store!.getSession()).rejects.toThrow(
           "cancelled probe",
@@ -398,7 +400,7 @@ describe("tool executor ownership", () => {
       });
       const result = await running;
       expect(result.success).toBe(false);
-      expect(JSON.parse(result.result).code).toBe("CANCELLED");
+      expect(JSON.parse(result.result).error.code).toBe("cancelled");
       expect(closed).toBe(false);
       release.resolve();
       await closing;
@@ -469,7 +471,7 @@ describe("tool result acceptance", () => {
       findTool: () => module,
     }).execute(call, { ...identity, signal: controller.signal, emitter });
     expect(result.success).toBe(false);
-    expect(JSON.parse(result.result).code).toBe("CANCELLED");
+    expect(JSON.parse(result.result).error.code).toBe("cancelled");
     expect(save).toHaveBeenCalledOnce();
     expect(events).toEqual(["tool.calling", "tool.failed"]);
   });

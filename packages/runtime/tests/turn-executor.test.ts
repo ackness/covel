@@ -981,17 +981,17 @@ describe("TurnExecutor _interaction protocol", () => {
       calls++;
       const lastTool = params.messages.filter((m) => m.role === "tool").at(-1);
       if (calls === 2)
-        expect(JSON.parse(String(lastTool?.content)).error).toContain(
+        expect(JSON.parse(String(lastTool?.content)).error.message).toContain(
           'repeats "to"',
         );
       if (calls === 3) {
         expect(JSON.parse(String(lastTool?.content))).toEqual({
-          filledNarrative: "Alex waits. Waiting.",
+          data: { filledNarrative: "Alex waits. Waiting." },
         });
       }
       if (calls === 4) {
         expect(JSON.parse(String(lastTool?.content))).toEqual({
-          filledNarrative: "Welcome Alex. You enter the village.",
+          data: { filledNarrative: "Welcome Alex. You enter the village." },
         });
         return {
           content: '{"preGameDone":false}',

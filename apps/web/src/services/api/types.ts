@@ -82,6 +82,8 @@ export interface MessageRecord {
   /** Runtime kind (e.g. "story", "plugin") - used to filter display on restore. */
   kind?: string;
   block?: Record<string, unknown>;
+  /** A story message's segments, with resolved speakers. */
+  segments?: readonly import("@covel/shared").StoryMessageSegment[];
   createdAt: string;
 }
 

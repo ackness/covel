@@ -80,7 +80,11 @@ return { result: execution.result, committed: outcome.status === "committed" };
 - function runtime 挂起时，continuation 保存还没提交的命令、输入和导出的绑定，以及 activation。
 - 恢复时使用这些冻结的快照。还没提交的命令仍然可以被这次运行读到，并在恢复成功时一起原子提交。
 - 恢复失败会丢弃这些域写入。
+- function handler 挂起前用 `ctx.recursiveCall` 调用的子 runtime，结果连同它们的写入一起保存在 continuation 里，恢复成功时先于 handler 提交。自己也挂起了的子 runtime 不保存，trace 里记一条 `recursive.failed`，`code` 是 `nested-suspension-dropped`。
+- agent runtime 挂起时，continuation 还保存工具循环的状态：用掉的纠正次数、激活过的延迟工具、并入的玩家插话写出的正文、已经成功的完成工具的输出，以及这一回合的提示词片段。恢复时循环接着这些状态走，不重新组装上下文。
 - continuation 还记下挂起时历史里的玩家回合数和插件版本。恢复时任一项变了，挂起项就被作废，不再运行，见[过时的挂起项](./api.md#过时的挂起项)。
+- 恢复的运行可以再次挂起。新挂起项接着同一次执行，原执行的身份、逻辑回合和扣下的后台作业都转给它，见[再次挂起](./api.md#再次挂起)。
+- 恢复的运行照常发出 `runtime.started`，带 `resumed: true`。`PreRuntime` 和 `PostContextAssembly` 不再触发；`PostRuntime` 在挂起时不触发，到真正结束时触发一次，见 [Hook](./hooks.md#postruntime)。
 
 > [!WARNING]
 > continuation 的格式更新之后，已有的开发期暂停记录需要重建。
@@ -120,14 +124,17 @@ return { result: execution.result, committed: outcome.status === "committed" };
 
 ### 叙事事件
 
-| 事件类型              | 方向 | 描述             | 负载                                                |
-| --------------------- | ---- | ---------------- | --------------------------------------------------- |
-| `narrative.delta`     | S→C  | 流式叙事文本片段 | `{ runtimeId, pluginId, kind, delta }`              |
-| `narrative.completed` | S→C  | 完整叙事消息     | `{ content, kind, messageId, runtimeId, pluginId }` |
+| 事件类型              | 方向 | 描述             | 负载                                                                                |
+| --------------------- | ---- | ---------------- | ----------------------------------------------------------------------------------- |
+| `narrative.delta`     | S→C  | 流式叙事文本片段 | `{ runtimeId, pluginId, kind, delta }`                                              |
+| `narrative.completed` | S→C  | 完整叙事消息     | `{ content, kind, messageId, runtimeId, pluginId, segments?, unresolvedSpeakers? }` |
 
 - `narrative.delta`、`narrative.completed` 和 `runtime.started` 都必须带 `kind`；客户端直接读取它，不从 `label` 推断。
 - `narrative.delta` 可以带 `reset: true`，这时 `delta` 是空字符串。意思是：同一个 runtime 已经流出来的文字属于工具调用之前的准备步骤，或者是被审查驳回的草稿，不会成为最终的叙事。客户端应该清掉已经显示的部分，再接收后面的片段。
 - `narrative.completed` 的 `content` 始终是审查通过之后的最终文本。它替换流式显示的内容。
+- 分段故事（`narrative-engine@2` 的 `segments`）的 `narrative.delta` 只带段落正文，段与段之间是空行，和 `content` 一致；JSON 的键、说话人和 `cues` 不进入 `delta`。见[故事输出](./plugins.md#故事输出)。
+- 故事里有说话人或在场名字没能解析成角色（没有匹配，或匹配到多个）时，`narrative.completed` 带 `unresolvedSpeakers`：这些名字按首次出现的顺序排列，没有时省略。
+- 故事的 `narrative.completed` 带 `segments`：提交时解析过说话人的段落，形状和 `/messages` 的 `segments` 相同（见 [api.md](./api.md#get-apisessionsidmessages)）。客户端用它给刚看完的这一回合显示名牌和说话人，不必再读消息；其他 `kind` 的事件没有这个字段。
 
 ### 交互事件
 
@@ -156,11 +163,13 @@ return { result: execution.result, committed: outcome.status === "committed" };
 | ----------------------- | ---- | ------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
 | `execution.started`     | S→C  | 回合执行开始                                                                          | `{ runtimeCount }`                                                                                                      |
 | `interaction.submitted` | S→C  | `submit_actions` 里的交互回答已落库、后续回合已开始；先于该回合的 `execution.started` | `{ interactionTurnId, results: [{ submissionId, interactionId, values, filledNarrative }], message?: { id, content } }` |
-| `runtime.started`       | S→C  | 单个 runtime 开始                                                                     | `{ runtimeId, pluginId, kind, turnId, runId, label, stage? }`                                                           |
+| `runtime.started`       | S→C  | 单个 runtime 开始                                                                     | `{ runtimeId, pluginId, kind, turnId, runId, label, stage?, resumed? }`                                                 |
 | `runtime.deferred`      | S→C  | staged runtime 已随原始回合提交并转入后台                                             | `{ runtimeId, pluginId, jobId, sourceTurnId }`                                                                          |
 | `runtime.completed`     | S→C  | 单个 runtime 完成                                                                     | `{ runtimeId, pluginId, turnId, runId, status, durationMs, stopReason? }`                                               |
 | `runtime.failed`        | S→C  | 单个 runtime 失败                                                                     | `{ runtimeId, pluginId, turnId, runId, status, durationMs, error, errorKind?, failureTarget?, stopReason? }`            |
 | `execution.completed`   | S→C  | 回合执行终态                                                                          | `{ runtimeCount, resultCount, durationMs, committed, error?, abortReason?, resync? }`，各字段见下                       |
+
+`runtime.started.resumed` 只在从挂起中恢复的运行上出现，值为 `true`。同一个逻辑 runtime 每次运行都有自己的 `runtime.started` 和终态事件，挂起的那次以 `status: "suspended"` 结束。
 
 `runtime.started.stage` 记录这次 runtime 的阶段，取值为 `setup`、`pre-turn`、`narrative`、`post-turn` 或 `audit`；没有阶段的 event/manual runtime 不带此字段。持久 trace 保留它，客户端从实时事件和历史 trace 恢复到同一条执行步骤，后续终态事件不清除阶段。某个执行组有 `stage: "setup"` 的步骤时，时间线显示中性的“开局准备”摘要，不提供单任务重试；会话进入 `playing` 或页面刷新后也不变。不要按当前会话阶段或插件名称推断历史执行的阶段。
 
@@ -373,7 +382,7 @@ ctx.progress.report({ jobId, state, progress?, message?, data?, sequence })
 - 还没结束的作业，按 runtime 的结果换成终态。
 - 插件已经上报了 `succeeded`，但这次的领域写入没有提交（整次执行回滚、这个 runtime 失败，或者它的写入在提交时被单独丢弃）：框架追加一条 `failed`，不保留成功状态。
 - 插件自己上报的 `failed` / `cancelled` 不会被改写。
-- 挂起的 runtime 的作业停在 `waiting-input`。它们记在挂起那次执行名下：恢复成功提交后换成 `succeeded`；挂起项被放弃、过期或作废时换成 `cancelled`；恢复失败、还能重试时继续等待。
+- 挂起的 runtime 的作业停在 `waiting-input`，它在挂起前已经上报 `succeeded` 的也退回 `waiting-input`：挂起时它的写入先扣下，等恢复才提交，放弃挂起项时一并丢弃。这些作业记在挂起那次执行名下，恢复的运行也在这个名下上报，所以一条挂起链只有一个进度范围：最后一次恢复成功提交后换成 `succeeded`；挂起项被放弃、过期或作废时换成 `cancelled`；恢复失败、还能重试，或者恢复后又挂起时继续等待。恢复没有提交时（runtime 失败、抛错、超时、被 `PostRuntime` 拦下，或者提交回滚），这次恢复里还没结束的作业换成 `waiting-input`，已经上报 `succeeded` 的也退回 `waiting-input`：写入没有落地，挂起项还在，可以重试。
 
 **后台作业的状态对应**
 
@@ -582,10 +591,10 @@ Gemini 原生的思考强度、`providerOptions.google.thinkingConfig`、`cached
 
 ### Suspend / Resume 事件
 
-| 事件类型         | 方向 | 描述                                                                                                                                                                                                     | 负载                                                                                          |
-| ---------------- | ---- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
-| `turn.suspended` | S→C  | runtime 创建 suspension artifact；`finalizeExecution` 将记录与同一 execution 的写入提交成功后才发出。回滚不保留记录也不发事件。同一个 runtime 的旧挂起项在这次提交里作废，不另发事件，客户端收到后去掉它 | `{ sessionId, turnId, suspensionId, pluginId, runtimeId, suspendedAt, reason, resumeSchema }` |
-| `turn.resumed`   | S→C  | suspension 资源的 `resume` 动作成功后由路由发出                                                                                                                                                          | `{ sessionId, turnId, suspensionId }`                                                         |
+| 事件类型         | 方向 | 描述                                                                                                                                                                                                                                                               | 负载                                                                                          |
+| ---------------- | ---- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------- |
+| `turn.suspended` | S→C  | runtime 创建 suspension artifact；`finalizeExecution` 将记录与同一 execution 的写入提交成功后才发出。回滚不保留记录也不发事件。同一个 runtime 的旧挂起项在这次提交里作废，不另发事件，客户端收到后去掉它。恢复的 runtime 再次挂起时也发出，这时不发 `turn.resumed` | `{ sessionId, turnId, suspensionId, pluginId, runtimeId, suspendedAt, reason, resumeSchema }` |
+| `turn.resumed`   | S→C  | suspension 资源的 `resume` 动作成功后由路由发出                                                                                                                                                                                                                    | `{ sessionId, turnId, suspensionId }`                                                         |
 
 ### Snapshot / Fork 事件
 
@@ -1263,7 +1272,7 @@ error.occurred        → executionError
 | --- | --- |
 | `tool.calling` | `{ runtimeId, pluginId, toolName, toolCallId, label, arguments, source, approvalStatus }` |
 | `tool.completed` | `{ runtimeId, pluginId, toolName, toolCallId, label, result, parsedResult, durationMs, approvalStatus, success: true }` |
-| `tool.failed` | `{ runtimeId, pluginId, toolName, toolCallId, label, code, error, details?, durationMs, approvalStatus, success: false }` |
+| `tool.failed` | `{ runtimeId, pluginId, toolName, toolCallId, label, code, error, hint?, details?, durationMs, approvalStatus, success: false }`  `code` 使用 `ToolErrorCode`；`error` 是完整消息，`hint` 是可选修正提示。错误码为 `invalid-input`、`not-found`、`ambiguous`、`refused`、`unavailable`、`timeout`、`conflict`、`cancelled`、`internal`。 |
 | `domain-event.previewed` | `{ runtimeId, pluginId, toolCallId, topic, data }`。`emit-event` 校验成功后的临时显示信号；持久的业务状态仍然由正常的事件链提交 |
 | `llm.calling` | `{ runtimeId, pluginId, slot, model, provider?: string \| null, messages, tools, attempt, startedAt, queueWaitMs?, streaming? }`。`slot` 是 runtime 请求的用途；生产环境的 gateway 在调用之前把它解析成 `model` / `provider`。不支持用途解析的自定义 adapter 可以不给 `provider` |
 | `llm.responded` | `{ runtimeId, pluginId, text?, reasoningContent?, toolCalls?, usage, finishReason, durationMs, attempt, error? }`。`usage` 是 `{ inputTokens, outputTokens, cachedInputTokens?, cacheWriteInputTokens? }`，其中 `inputTokens` 是包含缓存读写的总输入，后两项是服务商报告的子集。`finishReason` 为 `length` 只出现在 story runtime：正文在输出上限处被截断，但已经保留，客户端据此提示玩家；其他情况下被截断的调用按失败上报 |

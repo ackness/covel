@@ -26,7 +26,7 @@ describe("StageDialog", () => {
   });
   it("changes the nameplate at each paragraph and removes it for narration", () => {
     render(
-      <StageDialog {...baseProps} paragraphSpeakers={["Mio", "Rin", null]} />,
+      <StageDialog {...baseProps} segmentSpeakers={["Mio", "Rin", null]} />,
     );
     expect(screen.getByTestId("stage-dialog-speaker").textContent).toBe("Mio");
     const advance = screen.getByRole("button");

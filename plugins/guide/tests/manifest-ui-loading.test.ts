@@ -65,7 +65,7 @@ describe("guide manifest and UI loading", () => {
       // the prompt input, so third-party narrative providers work by capability.
       inputs: {
         narrative: {
-          from: { capability: "narrative-engine@1" },
+          from: { capability: "narrative-engine@2" },
           select: "/narrativeOutput",
           accepts: "./schemas/narrative-output.schema.json",
         },

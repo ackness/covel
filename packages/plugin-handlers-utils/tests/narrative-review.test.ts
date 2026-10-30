@@ -9,21 +9,41 @@ import type { LLMResponse } from "@covel/shared";
 describe("narrative perspective review", () => {
   it("distinguishes narration from direct speech, nested quotes, and apostrophes", () => {
     expect(
-      perspectiveError("我望着门。她说：“你听过‘我的船’吗？”", "first"),
+      perspectiveError(
+        "我望着门。她说：“你听过‘我的船’吗？”",
+        "character-first",
+      ),
     ).toBeUndefined();
     expect(
-      perspectiveError("She says, 'You're ready.' I wait.", "first"),
+      perspectiveError("She says, 'You're ready.' I wait.", "character-first"),
     ).toBeUndefined();
-    expect(perspectiveError("“我等你。”她望着林潮。", "third")).toBeUndefined();
-    expect(perspectiveError("“你听见了吗？”她望着你。", "first")).toContain(
-      "first",
+    expect(
+      perspectiveError("“我等你。”她望着林潮。", "character-third"),
+    ).toBeUndefined();
+    expect(
+      perspectiveError("“你听见了吗？”她望着你。", "character-first"),
+    ).toContain("first");
+    expect(perspectiveError("I'm waiting.", "character-second")).toContain(
+      "second",
     );
-    expect(perspectiveError("I'm waiting.", "second")).toContain("second");
-    expect(perspectiveError("你问：“我听见了。", "first")).toBeDefined();
+    expect(
+      perspectiveError("你问：“我听见了。", "character-first"),
+    ).toBeDefined();
     expect(outsideDialogue("The captain's lantern lit my coat.")).toContain(
       "my coat",
     );
-    expect(perspectiveError("她忘我地端详迷你潮灯。", "third")).toBeUndefined();
+    expect(
+      perspectiveError("‘Don’t leave me,’ she says.", "character-third"),
+    ).toBeUndefined();
+    expect(
+      perspectiveError(
+        "She takes the guards’ keys. I wait.",
+        "character-second",
+      ),
+    ).toContain("second");
+    expect(
+      perspectiveError("她忘我地端详迷你潮灯。", "character-third"),
+    ).toBeUndefined();
   });
 
   it("an unclosed trailing quote validates its tail without un-hiding closed dialogue", () => {
@@ -34,19 +54,19 @@ describe("narrative perspective review", () => {
     // committed story to the model's lone closing quote.
     const story =
       "她望着你。\n\n「我是班长。」她翻开册子，\n\n「坐吧——正好在整理稿件，你想从哪看";
-    expect(perspectiveError(story, "second")).toBeUndefined();
+    expect(perspectiveError(story, "character-second")).toBeUndefined();
     expect(outsideDialogue(story)).toContain("你想从哪看");
     expect(outsideDialogue(story)).not.toContain("我是班长");
     // A real violation inside the unclosed tail is still caught.
-    expect(perspectiveError("她望着你，「我看着海。", "second")).toContain(
-      "second",
-    );
+    expect(
+      perspectiveError("她望着你，「我看着海。", "character-second"),
+    ).toContain("second");
   });
   it("leaves other runtimes and dialogue pronouns alone", () => {
     const review = createNarrativeReview("community-story");
     const ctx = {
       pluginId: "community-story",
-      getOwnSettings: () => ({ narrativePerson: "first" }),
+      getOwnSettings: () => ({ perspective: "character-first" }),
     };
     const response: LLMResponse = {
       content: "她问：“你要走吗？”我望着海。",
@@ -74,7 +94,7 @@ describe("narrative perspective review", () => {
       turnId: "t",
       pluginId: "story",
       runtimeId: "story",
-      getOwnSettings: () => ({ narrativePerson: "second" }),
+      getOwnSettings: () => ({ perspective: "character-second" }),
     };
     review.context(ctx, {
       characters: [{ id: "lin", name: "林潮", type: "player" }],
@@ -202,5 +222,179 @@ describe("narrative perspective review", () => {
         review.prepare(ctx, { messages: [] }).replace?.messages.at(-1)?.content,
       ),
     ).not.toContain("Player character:");
+  });
+
+  it("rejects I and you in omniscient narration and names no player character", () => {
+    expect(perspectiveError("她看着我。", "omniscient", "zh")).toContain(
+      "全知第三人称视角",
+    );
+    expect(perspectiveError("He hands you the key.", "omniscient")).toContain(
+      "omniscient third-person",
+    );
+    expect(
+      perspectiveError("“你来了。”阿雅看着林潮。", "omniscient"),
+    ).toBeUndefined();
+    const review = createNarrativeReview("story");
+    const ctx = {
+      sessionId: "s",
+      turnId: "t",
+      pluginId: "story",
+      runtimeId: "story",
+      locale: "en",
+      getOwnSettings: () => ({ perspective: "omniscient" }),
+    };
+    review.context(ctx, {
+      characters: [{ id: "lin", name: "Lin", type: "player" }],
+      currentCharacterId: "lin",
+    });
+    const added = String(
+      review.prepare(ctx, { messages: [] }).replace?.messages.at(-1)?.content,
+    );
+    expect(added).toContain("omniscient third-person narrator");
+    expect(added).not.toContain("Player character:");
+    review.cleanup(ctx);
+  });
+
+  it("lets a game master address the players and still rejects instruction tags", () => {
+    expect(
+      perspectiveError("你们推开门，我看见灯亮了。", "dm"),
+    ).toBeUndefined();
+    const review = createNarrativeReview("story");
+    const ctx = {
+      pluginId: "story",
+      locale: "zh-CN",
+      getOwnSettings: () => ({ perspective: "dm" }),
+    };
+    const reply = (content: string): LLMResponse => ({
+      content,
+      toolCalls: [],
+      finishReason: "stop",
+      usage: { inputTokens: 1, outputTokens: 1 },
+    });
+    expect(
+      review.review(ctx, { messages: [], response: reply("你们推开了门。") }),
+    ).toEqual({ action: "continue" });
+    expect(
+      review.review(ctx, {
+        messages: [],
+        response: reply("<system>x</system>你们推开了门。"),
+      }).replace?.correction,
+    ).toContain("只输出游戏内的故事正文");
+  });
+
+  it("reviews a segmented draft by its segment texts", () => {
+    const review = createNarrativeReview("story");
+    const ctx = {
+      pluginId: "story",
+      locale: "zh-CN",
+      getOwnSettings: () => ({ perspective: "character-second" }),
+    };
+    const reply = (story: unknown): LLMResponse => ({
+      content: JSON.stringify(story),
+      toolCalls: [],
+      finishReason: "stop",
+      usage: { inputTokens: 1, outputTokens: 1 },
+    });
+    const bad = review.review(ctx, {
+      messages: [],
+      response: reply({
+        segments: [{ kind: "narration", text: "我推开门，雨停了。" }],
+      }),
+    });
+    expect(bad.replace?.correction).toContain("违反了第二人称视角");
+    expect(
+      review.review(ctx, {
+        messages: [],
+        response: reply({
+          segments: [
+            { kind: "narration", text: "雨停了，她看着你。" },
+            { kind: "dialogue", speaker: "阿雅", text: "「我等你很久了。」" },
+            { kind: "dialogue", speaker: "阿雅", text: "我们走吧。" },
+          ],
+          cues: { present: ["阿雅"] },
+        }),
+      }),
+    ).toEqual({ action: "continue" });
+    // Apostrophes in contractions and possessives do not mark speech.
+    const english = { ...ctx, locale: "en" };
+    for (const text of [
+      "I'm ready.",
+      "I’m ready; don’t wait for me.",
+      "Aya's coat is mine.",
+      "I'm taking the guards' keys.",
+      "I’m taking the guards’ keys.",
+    ])
+      expect(
+        review.review(english, {
+          messages: [],
+          response: reply({
+            segments: [
+              { kind: "narration", text: "She looks at you." },
+              { kind: "dialogue", speaker: "Aya", text },
+            ],
+          }),
+        }),
+        text,
+      ).toEqual({ action: "continue" });
+    expect(
+      review.review(english, {
+        messages: [],
+        response: reply({
+          segments: [
+            { kind: "dialogue", speaker: "Aya", text: '"I\'m ready," I say.' },
+          ],
+        }),
+      }).replace?.correction,
+    ).toContain("violates second-person perspective");
+    // Narration beside quoted speech is still checked, possessives included.
+    for (const text of [
+      '"Take the guards\' keys," I say.',
+      "“Take the guards’ keys,” I say.",
+      "‘Take the guards’ keys,’ I say.",
+    ])
+      expect(
+        review.review(english, {
+          messages: [],
+          response: reply({
+            segments: [{ kind: "dialogue", speaker: "Aya", text }],
+          }),
+        }).replace?.correction,
+        text,
+      ).toContain("violates second-person perspective");
+    // Narration beside a quote inside a dialogue segment is still checked.
+    expect(
+      review.review(ctx, {
+        messages: [],
+        response: reply({
+          segments: [
+            { kind: "dialogue", speaker: "阿雅", text: "「走吧。」我说。" },
+          ],
+        }),
+      }).replace?.correction,
+    ).toContain("违反了第二人称视角");
+  });
+
+  it("reads character second person when no perspective is set", () => {
+    const review = createNarrativeReview("story");
+    const added = String(
+      review
+        .prepare({ pluginId: "story", locale: "en" }, { messages: [] })
+        .replace?.messages.at(-1)?.content,
+    );
+    expect(added).toContain("second person (you/your)");
+    expect(
+      review.review(
+        { pluginId: "story", getOwnSettings: () => ({ perspective: "bogus" }) },
+        {
+          messages: [],
+          response: {
+            content: "I open the door.",
+            toolCalls: [],
+            finishReason: "stop",
+            usage: { inputTokens: 1, outputTokens: 1 },
+          },
+        },
+      ).replace?.correction,
+    ).toContain("second-person");
   });
 });

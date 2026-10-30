@@ -139,6 +139,20 @@ describe("governed function tools", () => {
     expect(await f.store.listCharacters(input.sessionId)).toHaveLength(1);
   });
 
+  it("rejects invalid governed calls with a coded error and a plain message", async () => {
+    let caught: unknown;
+    await fixture(async (ctx) => {
+      await ctx.tools!.call("create-character", {}).catch((error: unknown) => {
+        caught = error;
+      });
+      return { outcome: "success", value: {} };
+    });
+    expect(caught).toMatchObject({ name: "ToolError", code: "invalid-input" });
+    expect(caught).toBeInstanceOf(Error);
+    if (caught instanceof Error)
+      expect(caught.message.startsWith("{")).toBe(false);
+  });
+
   it("fails and commits no buffered effects when a missing-character update is caught", async () => {
     let caught: unknown;
     const f = await fixture(
@@ -276,6 +290,210 @@ describe("governed function tools", () => {
     expect(toolSeats).toEqual(seats);
     expect(Object.isFrozen(handlerSeats)).toBe(true);
     expect((await f.store.getSession(input.sessionId))?.seats).toEqual(seats);
+  });
+
+  it.each(["blocked", "unavailable"] as const)(
+    "rejects %s calls with a coded error and keeps the failure latched",
+    async (mode) => {
+      const hooks = createHookPipeline();
+      hooks.register({
+        id: "block",
+        event: "PreToolUse",
+        handler: async () => ({
+          action: "abort",
+          reason: "Player input is required",
+        }),
+      });
+      const execute = vi.fn(async () => ({}));
+      const command = tool({
+        name: "list-characters",
+        description: "Probe",
+        parameters: z.object({}),
+        execute,
+      });
+      const executor = createToolExecutor({ findTool: () => command });
+      const bound = createRuntimeTools({
+        manifest,
+        context: {
+          ...input,
+          pluginId: manifest.pluginId,
+          runtimeId: manifest.name,
+        },
+        buffer: [],
+        signal: new AbortController().signal,
+        assertLive() {},
+        deps: {
+          loadRuntime: async () => ({ manifest, promptTemplate: "" }),
+          llm: {
+            generate: async () => {
+              throw new Error("unused");
+            },
+          },
+          ...(mode === "blocked"
+            ? { toolExecutor: executor, hookPipeline: hooks }
+            : {}),
+        },
+      });
+      try {
+        let caught: unknown;
+        await bound.tools
+          .call("list-characters", {})
+          .catch((error: unknown) => {
+            caught = error;
+          });
+        expect(caught).toMatchObject({
+          name: "ToolError",
+          code: mode === "blocked" ? "refused" : "unavailable",
+          message:
+            mode === "blocked"
+              ? "Player input is required"
+              : "Tool executor is unavailable",
+        });
+        expect(caught).toBeInstanceOf(Error);
+        await expect(bound.drain()).rejects.toBe(caught);
+        await expect(bound.tools.call("list-characters", {})).rejects.toBe(
+          caught,
+        );
+        expect(execute).not.toHaveBeenCalled();
+        expect(bound.records).toEqual([]);
+        expect(bound.events).toEqual([]);
+      } finally {
+        await executor.close();
+      }
+    },
+  );
+
+  describe("coded rejections raised before or around the executor", () => {
+    function bindProbe(hookPipeline?: ReturnType<typeof createHookPipeline>) {
+      const execute = vi.fn(async () => ({ ok: true }));
+      const command = tool({
+        name: "list-characters",
+        description: "Probe",
+        parameters: z.object({}),
+        execute,
+      });
+      const executor = createToolExecutor({ findTool: () => command });
+      const bound = createRuntimeTools({
+        manifest,
+        context: {
+          ...input,
+          pluginId: manifest.pluginId,
+          runtimeId: manifest.name,
+        },
+        buffer: [],
+        signal: new AbortController().signal,
+        assertLive() {},
+        deps: {
+          loadRuntime: async () => ({ manifest, promptTemplate: "" }),
+          llm: {
+            generate: async () => {
+              throw new Error("unused");
+            },
+          },
+          toolExecutor: executor,
+          ...(hookPipeline ? { hookPipeline } : {}),
+        },
+      });
+      return { bound, execute, executor };
+    }
+
+    it("rejects arguments that cannot be serialized with invalid-input and latches the failure", async () => {
+      const { bound, execute, executor } = bindProbe();
+      try {
+        const circular: Record<string, unknown> = {};
+        circular.self = circular;
+        let caught: unknown;
+        await bound.tools
+          .call("list-characters", circular)
+          .catch((error: unknown) => {
+            caught = error;
+          });
+        expect(caught).toMatchObject({
+          name: "ToolError",
+          code: "invalid-input",
+        });
+        expect(caught).toBeInstanceOf(Error);
+        if (caught instanceof Error) {
+          expect(caught.message).toContain("JSON-serializable");
+          expect(caught.message.startsWith("{")).toBe(false);
+        }
+        await expect(bound.drain()).rejects.toBe(caught);
+        expect(execute).not.toHaveBeenCalled();
+        expect(bound.records).toEqual([]);
+      } finally {
+        await executor.close();
+      }
+    });
+
+    it("rejects an argument value with no JSON form with invalid-input", async () => {
+      const { bound, execute, executor } = bindProbe();
+      try {
+        await expect(
+          bound.tools.call(
+            "list-characters",
+            (() => undefined) as unknown as Record<string, unknown>,
+          ),
+        ).rejects.toMatchObject({ name: "ToolError", code: "invalid-input" });
+        expect(execute).not.toHaveBeenCalled();
+      } finally {
+        await executor.close();
+      }
+    });
+
+    it("rejects calls queued after a PostToolUse termination with cancelled", async () => {
+      const hooks = createHookPipeline();
+      hooks.register({
+        id: "stop",
+        event: "PostToolUse",
+        handler: async () => ({
+          action: "continue",
+          replace: { terminate: true },
+        }),
+      });
+      const { bound, execute, executor } = bindProbe(hooks);
+      try {
+        const first = bound.tools.call("list-characters", {});
+        const second = bound.tools.call("list-characters", {});
+        await expect(first).resolves.toEqual({ ok: true });
+        let caught: unknown;
+        await second.catch((error: unknown) => {
+          caught = error;
+        });
+        expect(caught).toMatchObject({
+          name: "ToolError",
+          code: "cancelled",
+          message: "Tool calls were terminated by PostToolUse",
+        });
+        expect(caught).toBeInstanceOf(Error);
+        await expect(bound.drain()).rejects.toBe(caught);
+        expect(execute).toHaveBeenCalledOnce();
+      } finally {
+        await executor.close();
+      }
+    });
+
+    it("rejects a hook rewrite that is not JSON with the executor's invalid-input code", async () => {
+      const hooks = createHookPipeline();
+      hooks.register({
+        id: "garble",
+        event: "PreToolUse",
+        handler: async () => ({
+          action: "continue",
+          replace: { toolCall: { arguments: "{not json" } },
+        }),
+      });
+      const { bound, execute, executor } = bindProbe(hooks);
+      try {
+        await expect(
+          bound.tools.call("list-characters", {}),
+        ).rejects.toMatchObject({ name: "ToolError", code: "invalid-input" });
+        expect(execute).not.toHaveBeenCalled();
+        expect(bound.records).toHaveLength(1);
+        expect(bound.records[0]?.input).toBe("{not json");
+      } finally {
+        await executor.close();
+      }
+    });
   });
 
   it("keeps logicalTurn absent for a thin host that does not supply a clock", async () => {
@@ -505,8 +723,8 @@ describe("governed function tools", () => {
         toolExecutor: createToolExecutor({ findTool: () => secret }),
       },
     });
-    await expect(bound.tools.call("list-characters", {})).rejects.toThrow(
-      "UNAUTHORIZED",
+    await expect(bound.tools.call("list-characters", {})).rejects.toMatchObject(
+      { name: "ToolError", code: "unavailable" },
     );
     expect(execute).not.toHaveBeenCalled();
     revoked = true;

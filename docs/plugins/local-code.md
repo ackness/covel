@@ -83,7 +83,12 @@ Read `runtime-inputs.narrative.value`. Call `save-note` one time with one fact t
 ```js
 import { makeProposal } from "@covel/plugin-handlers-utils";
 
-export default function makeSaveNote({ tool, z, withPendingProposals }) {
+export default function makeSaveNote({
+  tool,
+  z,
+  withPendingProposals,
+  withModelView,
+}) {
   return tool({
     name: "save-note",
     description: "Save one short fact that the current narrative states.",
@@ -103,7 +108,10 @@ export default function makeSaveNote({ tool, z, withPendingProposals }) {
           value: { id: params.id, text: params.text },
         },
       );
-      return withPendingProposals({ saved: true, id: params.id }, [proposal]);
+      return withModelView(
+        withPendingProposals({ id: params.id }, [proposal]),
+        { summary: "Queued a note." },
+      );
     },
   });
 }
@@ -116,7 +124,11 @@ export default function makeSaveNote({ tool, z, withPendingProposals }) {
 | `tool`                 | 定义一个工具                                        |
 | `z`                    | 描述参数的形状（Zod）。模型传错参数时，调用会被拒绝 |
 | `withPendingProposals` | 把“工具返回给模型的内容”和“想写入的数据”一起交回去  |
+| `withModelView`        | 选择模型读取的摘要和数据，不改变代码读取的正文      |
+| `ToolError`            | 抛出带错误码和可选提示的失败                        |
 | `shortId`              | 生成短 ID。第四个参数传 `context.random`            |
+
+模型读取[统一工具结果](../reference/tools.md#统一返回格式与错误码)。这个例子只发送摘要和自动附加的暂存提示；代码仍读取 `{id}`。需要报告可修正的失败时，可抛出 `new ToolError("not-found", "The requested note was not found.", { hint: "Check the name." })`。`ctx.tools.call` 成功时返回完整正文，失败时抛出 `ToolError`；message 是纯文本，code 和 hint 是独立字段。
 
 工具不直接写存档。它返回一条**写入请求**（proposal）：类型是 `plugin.data`，内容是“往 `notes` 里写这一条”。Covel 在回合结束时检查并保存所有请求。回合失败时，一条都不会保存。
 

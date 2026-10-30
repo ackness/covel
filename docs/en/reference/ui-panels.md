@@ -46,7 +46,7 @@ The toolbar and status display at the top of a session use only the kernel's own
 | Player stat gauges              | Session World Model: character records with `type: "player"`, plus attributes in the character schema with `category: "stats"`, `type: "number"`, and both `min` and `max` declared; up to 4 items             |
 | Carried items                   | String items of the `type: "array"` attributes with `category: "equipment"` on the same player character record, merged in schema order                                                                        |
 | Characters on stage (scene HUD) | The actors in `stage.cast@1` who have not left (up to 3), with avatars from `character.visual@1` looked up by character ID; only the name is shown when there is no picture                                    |
-| "Speaking" marker               | The last attributed paragraph in `paragraphSpeakers` of `stage.dialogue@1`; shown only when that name matches the `displayName` of an actor on stage                                                           |
+| "Speaking" marker               | The last paragraph with a speaker in the latest committed story; it matches an actor on stage by character ID when the segment has `speakerId`, otherwise by `displayName`. Not shown while the story streams  |
 | Chapter banner                  | In a layout with `backdrop: "banner"`, the world header image, the world name and the first three tags, shown above the first message                                                                          |
 | Status summary                  | The `session.summary@1` slot: a few lines that any plugin can provide and that should be seen at a glance, such as the current goal, the time and the inventory. See [Session summary](#session-summary) below |
 
@@ -678,7 +678,7 @@ The stage reads the server's `ui.slot@1` projection. Each provider builds the ge
 | **Backdrop** | `stage.backdrop@1`                                                | Shows the background, the scene name and the status; falls back to the world's visuals when there is no picture |
 | **Sprites**  | `stage.cast@1`, with `character.visual@1` indexed by character ID | Position, highlight, portraits, and a placeholder when there is no picture                                      |
 | **Hud**      | `stage.backdrop@1`                                                | Shows the name, the variant and the source status                                                               |
-| **Dialog**   | The latest story text and `stage.dialogue@1`                      | Typing, paragraph splitting and per-paragraph speaker names                                                     |
+| **Dialog**   | The latest story text and its `segments`                          | Typing, paragraph splitting and per-paragraph speaker names                                                     |
 | **Choices**  | `stage.choices@1` and the pending interaction choice block        | Situation recap, decision question, options (`.ui-choice`) and free text input                                  |
 
 **Switching between typing and the decision panel.**
@@ -704,10 +704,10 @@ The stage reads the server's `ui.slot@1` projection. Each provider builds the ge
 
 **Speaker name tags.**
 
-- The name tag reads `paragraphSpeakers` from `stage.dialogue@1`. Each entry is a display-name string or `null` (narration), not a character ID or an object. The provider converts its own data into this shape. See [Stage slot values](#stage-slot-values).
-- Live events of the same turn can be previewed first. An old committed mapping is not reused during the streaming phase of a retry of the same turn.
-- The typewriter and the speaker check share `splitStageParagraphs`. CRLF is turned into LF, and three or more line breaks count as one blank line separator. After the text ends, the number of paragraphs must match the mapping.
-- A character name tag is not shown for narration, for an unknown speaker, for an old message with no mapping, or when the turn does not match. An actor's focus does not take part in speaker attribution.
+- Name tags come from the `segments` of the committed story message (see [story output of `narrative-engine@2`](./plugins.md#story-output)): each paragraph is one segment, and its name tag is that segment's `speaker`. At commit the kernel replaces each speaker it can resolve with the character's current name. No plugin needs to provide data for name tags.
+- There are no name tags while the story streams; they appear once it is committed.
+- The typewriter and the speaker check share `splitStageParagraphs`. CRLF is turned into LF, and three or more line breaks count as one blank line separator. After the text ends, the number of paragraphs must match the number of segments.
+- A character name tag is not shown for narration, for a segment without a speaker, or for an old message or prose story without `segments`. An actor's focus does not take part in speaker attribution.
 
 **Size and portraits.**
 
@@ -965,7 +965,6 @@ Kernel UI slots are a few fixed positions on the screen, such as the stage backg
 
 - `stage.backdrop@1`
 - `stage.cast@1`
-- `stage.dialogue@1`
 - `stage.choices@1`
 - `character.visual@1`
 - `session.summary@1`
@@ -1033,15 +1032,6 @@ Each actor:
 | `visual`      | `{ variantId?: string, outfit?: string, expression?: string, pose?: string }` | No       | Requested portrait variant; all four fields are optional                                             |
 | `position`    | `left` / `center-left` / `center` / `center-right` / `right`                  | No       | Requested position                                                                                   |
 | `transition`  | `none` / `fade` / `slide-left` / `slide-right` / `dissolve`                   | No       | Portrait transition; the client uses `fade` when omitted                                             |
-
-#### `stage.dialogue@1`
-
-| Field               | Type                             | Required | Meaning                                                                                                                                 |
-| ------------------- | -------------------------------- | -------- | --------------------------------------------------------------------------------------------------------------------------------------- |
-| `turnId`            | string                           | No       | The story turn being attributed. Set it when attributing the current text; name tags appear only when it matches the current story turn |
-| `paragraphSpeakers` | `(string \| null)[]`, at most 80 | Yes      | Display name for each paragraph; `null` means narration or no attribution                                                               |
-
-For example, `{"turnId":"<story-turn-id>","paragraphSpeakers":["Mio",null,"Rin"]}` attributes three paragraphs to Mio, narration and Rin. Set `turnId` to the current story's turn ID. The text is split on blank lines after CRLF is converted to LF and three or more line breaks are reduced to two. When the text ends, the paragraph count must equal the array length; otherwise no name tags from the mapping are shown. A live mapping must also come from the current turn's preview. A committed mapping from before a retry cannot be reused.
 
 #### `stage.choices@1`
 

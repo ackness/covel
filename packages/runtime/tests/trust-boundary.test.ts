@@ -3,7 +3,7 @@
  *
  * Locks the four trust-boundary fixes:
  *  1. ToolExecutor rejects calls outside the runtime's authorization set
- *     (UNAUTHORIZED), even for registered builtins.
+ *     (unavailable), even for registered builtins.
  *  2. Tool-carried proposals are rebound to the executing runtime's
  *     sessionId/turnId/source before commit (no cross-session or
  *     cross-plugin impersonation through `withPendingProposals`).
@@ -78,7 +78,7 @@ describe("executor-side tool authorization", () => {
       { ...baseContext, authorizedToolNames: new Set(["echo"]) },
     );
     expect(result.success).toBe(false);
-    expect(result.result).toContain("UNAUTHORIZED");
+    expect(result.result).toContain("unavailable");
     expect(secretExecute).not.toHaveBeenCalled();
   });
 
@@ -103,7 +103,7 @@ describe("executor-side tool authorization", () => {
       },
     );
     expect(result.success).toBe(false);
-    expect(result.result).toContain("UNAUTHORIZED");
+    expect(result.result).toContain("unavailable");
   });
 });
 

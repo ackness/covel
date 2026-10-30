@@ -49,11 +49,46 @@ describe(`${PLUGIN_ID} package`, () => {
       definition.packageManifest.plugin.provides.map((item) =>
         typeof item === "string" ? item : item.contract,
       ),
-    ).toContain("narrative-engine@1");
+    ).toContain("narrative-engine@2");
     // Two engines in one session would both write the turn.
     expect(definition.packageManifest.plugin.conflicts).toContain(
-      "narrative-engine@1",
+      "narrative-engine@2",
     );
+  });
+
+  it("asks for story segments through its output schema", () => {
+    expect(manifest.outputContract).toBe("narrative-engine@2");
+    expect(manifest.output?.schema).toBe("contract:narrative-engine@2");
+    const schema = JSON.parse(
+      readFileSync(
+        path.join(PLUGIN_DIR, "schemas/narrative-engine.schema.json"),
+        "utf8",
+      ),
+    );
+    expect(schema.required).toEqual(["segments"]);
+  });
+
+  it("offers the five perspectives, character second person by default", () => {
+    const settings = definition.packageManifest.manifest.userSettings ?? [];
+    const perspective = settings.find(({ key }) => key === "perspective");
+    expect(perspective).toMatchObject({
+      type: "select",
+      default: "character-second",
+    });
+    expect(perspective.options.map(({ value }) => value)).toEqual([
+      "character-first",
+      "character-second",
+      "character-third",
+      "omniscient",
+      "dm",
+    ]);
+    expect(placeholders(english)).toContain("userSettings.perspective");
+    expect(placeholders(chinese)).toContain("userSettings.perspective");
+    // The stage reads nameplates from segments, not from an ID map.
+    for (const file of ["PLUGIN.md", "PLUGIN.zh.md"])
+      expect(readFileSync(path.join(PLUGIN_DIR, file), "utf8")).not.toMatch(
+        /paragraph[S]peakers|narrative[P]erson/,
+      );
   });
 
   it("hands every player setting to the prompt, in both languages", () => {

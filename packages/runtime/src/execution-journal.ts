@@ -56,6 +56,11 @@ export function attachRuntimeTrigger(result: object, runtimeId: string): void {
   });
 }
 
+/** The runtime a result counts one run of in the trigger ledger, if any. */
+export function runtimeTriggerOf(result: object): string | undefined {
+  return (result as JournalCarrier)[RUNTIME_TRIGGER];
+}
+
 function executionResults(
   turnResult: Pick<TurnResult, "runtimeResults" | "nestedRuntimeResults">,
 ): RuntimeResult[] {

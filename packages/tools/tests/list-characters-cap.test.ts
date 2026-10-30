@@ -1,6 +1,7 @@
 /** list-characters caps what one call returns and says how many it left out. */
 
 import { describe, it, expect } from "vitest";
+import { getModelView } from "@covel/plugin-handlers-utils";
 import { getToolContent } from "../src/result.js";
 import { createCharacterTools } from "../src/builtin/character-tools.js";
 
@@ -37,8 +38,11 @@ async function list(count: number) {
       pendingProposals: [],
     },
   );
-  return getToolContent(result) as {
-    _text: string;
+  return {
+    ...(getToolContent(result) as Record<string, unknown>),
+    summary: getModelView(result)?.summary,
+  } as {
+    summary: string;
     count: number;
     characters: unknown[];
   };
@@ -48,16 +52,16 @@ describe("list-characters cap", () => {
   it("lists every character below the cap with no note", async () => {
     const out = await list(16);
     expect(out.characters).toHaveLength(16);
-    expect(out._text).not.toContain("not listed");
+    expect(out.summary).not.toContain("not listed");
   });
 
   it("returns the most recent 50 and reports the rest", async () => {
     const out = await list(120);
     expect(out.count).toBe(120);
     expect(out.characters).toHaveLength(50);
-    expect(out._text.split("\n")).toHaveLength(1 + 50 + 1);
-    expect(out._text).toContain("70 more not listed");
-    expect(out._text).toContain("Person 119");
-    expect(out._text).not.toContain("Person 0 ");
+    expect(out.summary.split("\n")).toHaveLength(1 + 50 + 1);
+    expect(out.summary).toContain("70 more not listed");
+    expect(out.summary).toContain("Person 119");
+    expect(out.summary).not.toContain("Person 0 ");
   });
 });

@@ -4,7 +4,7 @@
  * `create-character` / `update-character` expose `fields: Record<string,
  * unknown>` to the LLM — intentionally permissive so storytelling isn't
  * blocked by an incomplete schema. This validator runs *after* the write
- * and surfaces a soft warning list into `_text` so the LLM can self-correct
+ * and surfaces a soft warning list in the model-view summary so the LLM can self-correct
  * on the next turn without us ever rejecting its call.
  *
  * Scope:
@@ -38,7 +38,7 @@ export interface SchemaValidationResult {
   readonly unknownKeys: readonly string[];
   /** Keys whose values don't fit the declared attribute type. */
   readonly typeMismatches: readonly SchemaValidationIssue[];
-  /** Composite human-readable summary for inclusion in a tool _text. Empty when clean. */
+  /** Composite human-readable summary for inclusion in a tool model-view summary. Empty when clean. */
   readonly warningText: string;
 }
 

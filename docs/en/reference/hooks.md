@@ -172,7 +172,7 @@ Payload: `{ triggered }`, the list of manifests of the runtimes selected for thi
 
 ### `PreRuntime`
 
-Fires once before a runtime starts, before its guard, its agent loop, or its function handler.
+Fires once before a runtime starts, before its guard, its agent loop, or its function handler. It fires once per logical runtime: a run resumed from a suspended state does not fire it, however many times it suspended. To stop an agent from suspending, use `PreToolUse` on the `suspend` tool.
 
 Payload: `{ manifest, input }`, the manifest of this runtime and the turn input.
 
@@ -180,7 +180,7 @@ Payload: `{ manifest, input }`, the manifest of this runtime and the turn input.
 
 ### `PostContextAssembly`
 
-Fires once for an agent runtime, after its context has been assembled and before the first model call.
+Fires once for an agent runtime, after its context has been assembled and before the first model call. A run resumed from a suspended state does not assemble its context again and does not fire it: the saved conversation record already carries the result of this step.
 
 Payload: `{ systemPrompt, messages, outputKind?, promptTemplate?, inputSlots?, characters?, currentCharacterId?, promptSegments? }`.
 
@@ -226,7 +226,7 @@ Payload: `{ step, stepsRemaining, maxSteps, toolNames, toolChoice }`.
 
 Fires before each model call of an agent runtime. This includes calls made after tool results and the finalizer step. Within one step, `PreStep` runs first.
 
-Payload: `{ messages, model, tools, stream?, promptSegments? }`. `promptSegments` is the same list as in `PostContextAssembly`. A run resumed from a suspended state does not assemble its context again, so its calls do not have this field.
+Payload: `{ messages, model, tools, stream?, promptSegments? }`. `promptSegments` is the same list as in `PostContextAssembly`. A run resumed from a suspended state carries the same list, saved before the suspension.
 
 - `replace.messages`, `replace.model`, and `replace.tools` change only this one call. The runtime's own conversation record is not changed.
 - Output repair requests keep tools off after hook processing; `replace.tools` cannot re-enable tools for repair steps.
@@ -239,18 +239,20 @@ Fires after each model reply, before the tool calls in the reply are run.
 
 Payload: `{ response, messages }`, the reply, and the messages actually sent.
 
+For a story runtime that asks for segments (`io.output.schema: contract:narrative-engine@2`), `response.content` is the JSON the model wrote, not the story text; a text review reads each segment's `text` (see [Story output](./plugins.md#story-output)).
+
 - `replace.response` replaces the reply.
 - `replace.correction` (a non-empty string) sends this draft back: its tool calls are not run, and this text is sent to the model as a correction request, so the model answers again. Each rejection consumes one `agent.loop.corrections.review` unit, allowing two corrections by default. A further rejection after that budget is exhausted fails the runtime with `invalid-output`. See [the loop profile](./plugins.md#loop-profile-agentloopprofile) for configuration.
 
 ### `PostRuntime`
 
-Fires once after a runtime finishes, whatever state it finishes in.
+Fires once after a runtime finishes, whether it succeeds, fails or is skipped. It does not fire when a runtime suspends; it fires when the resumed runtime really finishes, once per logical runtime.
 
-Payload: `{ result }`, the `RuntimeResult`.
+Payload: `{ result, resumed? }`. `result` is the `RuntimeResult`. `resumed` is `true` when the run that finishes was resumed from a suspended state; otherwise the field is absent.
 
 `replace.result` replaces the result. The kernel does these things with the replaced result:
 
-- It keeps the original result's `pluginId`, `runtimeId`, `runId`, and `turnId`, and the suspension fields of a suspended result.
+- It keeps the original result's `pluginId`, `runtimeId`, `runId`, and `turnId`.
 - Writes come only from the runtime itself: `pendingProposals`, `effects` and `completion` always take the original result's values, and whatever a hook adds is dropped. To stop a write, use `PreStateCommit`.
 - When a hook changes `status` (for example from failed to success), the run's `pendingProposals`, `effects`, and `completion` are all discarded. A failed function handler's writes buffered before it failed are not committed either. A setup runtime changed from failed to success by a hook is not marked complete; it remains pending.
 - If the handler changed `output` but did not change `canonicalValue`, the kernel discards the old `canonicalValue`. This way, the values other runtimes read do not disagree with the rewritten output.
@@ -270,6 +272,8 @@ Payload: `{ toolCall: { id, name, arguments } }`, where `arguments` is a JSON st
 Fires after each tool call that was actually executed.
 
 Payload: `{ toolCall, result }`.
+
+`result.result` is the tool envelope JSON text. `result.error` contains `{code,message,hint?}` on failure and is pinned along with effects, `success`, `refused` and approval status. A hook can rewrite the model text or `parsedResult`; it cannot change failure accounting or the structured error.
 
 - `replace.result` replaces the result the model reads (in a function runtime, the value `ctx.tools.call` returns). The writes and events the tool produced, whether it succeeded, and its approval status stay as they were.
 - `replace.terminate: true` ends the tool loop after this result is recorded.

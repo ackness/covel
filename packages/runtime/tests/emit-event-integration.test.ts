@@ -250,17 +250,25 @@ describe("emit-event: segment 5 directory injection (plan task 5)", () => {
   });
 });
 
-describe("emit-event: same-turn duplicate topic no-op (plan task 1)", () => {
+describe("emit-event: same-turn duplicate topic no-op", () => {
   it("only produces one event.emit proposal when emit-event is called twice for the same topic", async () => {
     // Three-step script: step 1 and step 2 both call emit-event for
     // "test.ping" (simulating an LLM re-emitting the same fact), step 3
     // returns final text. The tool loop should thread the topic emitted in
     // step 1 into step 2's ToolExecutionContext so emit-event no-ops instead
     // of producing a second emittedEvent.
+    const toolMessages: string[] = [];
     class RepeatingLLM implements LLMAdapter {
       private step = 0;
 
-      async generate(): Promise<LLMResponse> {
+      async generate(
+        params: Parameters<LLMAdapter["generate"]>[0],
+      ): Promise<LLMResponse> {
+        toolMessages.push(
+          ...params.messages
+            .filter((message) => message.role === "tool")
+            .map((message) => String(message.content)),
+        );
         this.step++;
         if (this.step <= 2) {
           return {
@@ -337,8 +345,9 @@ describe("emit-event: same-turn duplicate topic no-op (plan task 1)", () => {
     // The second tool call got the "already emitted" no-op hint instead of
     // a second emitted event.
     const secondCall = emitterResult!.toolCalls[1];
-    expect((secondCall?.output as { _text?: string })?._text).toContain(
-      "already emitted",
+    expect(secondCall?.output).toEqual({});
+    expect(toolMessages.map((text) => JSON.parse(text).summary)).toContainEqual(
+      expect.stringContaining("already emitted"),
     );
 
     // Exactly one event.emit proposal reaches commit — the duplicate never

@@ -272,14 +272,19 @@ export async function runPreRuntimeHook(
 
 // ── PostRuntime ──────────────────────────────────────────────────
 
+/**
+ * PostRuntime runs once per logical runtime, when it ends: never on a
+ * suspension, and with `resumed: true` at the end of a resumed one.
+ */
 export async function runPostRuntimeHook(
   opts: BaseOpts & { readonly pluginId: string; readonly runtimeId: string },
   result: RuntimeResult,
+  { resumed = false }: { readonly resumed?: boolean } = {},
 ): Promise<RuntimeResult> {
   const hookResult = await runHook(
     opts,
     "PostRuntime",
-    { result },
+    { result, ...(resumed ? { resumed: true } : {}) },
     { pluginId: opts.pluginId, runtimeId: opts.runtimeId },
   );
   const replacedResult = hookReplace(hookResult)?.result;
@@ -297,18 +302,6 @@ export async function runPostRuntimeHook(
   // A hook may rewrite output/status, never execution identity: the proposal
   // rebinder downstream keys writes on these fields, so an approved hook could
   // otherwise redirect another plugin's writes under a forged identity.
-  // Suspension control fields are framework-owned too: the continuation has
-  // already been persisted before PostRuntime runs, so rewriting its status or
-  // id would make turn accounting/rollback cleanup lose that record.
-  const suspensionOutput =
-    result.status === "suspended" && result.output
-      ? {
-          suspended: result.output.suspended,
-          suspensionId: result.output.suspensionId,
-          reason: result.output.reason,
-          resumeSchema: result.output.resumeSchema,
-        }
-      : undefined;
   // An output-only rewrite cannot silently publish the handler's old business
   // value. Hooks may explicitly replace canonicalValue; finalization validates it.
   const canonicalValue = result.canonicalValue
@@ -323,8 +316,7 @@ export async function runPostRuntimeHook(
   // recovery, and a skip a hook forced commits nothing. Owned copies, like the
   // rest of the accepted result: a producer that still holds the originals
   // cannot change what commits.
-  const status =
-    result.status === "suspended" ? result.status : replaced.status;
+  const status = replaced.status;
   const writes =
     status === result.status
       ? cloneHookData({
@@ -346,15 +338,6 @@ export async function runPostRuntimeHook(
     ...writes,
     ...stop,
     canonicalValue,
-    ...(result.status === "suspended"
-      ? {
-          status: "suspended" as const,
-          output: {
-            ...replaced.output,
-            ...suspensionOutput,
-          },
-        }
-      : {}),
     pluginId: result.pluginId,
     runtimeId: result.runtimeId,
     runId: result.runId,
@@ -772,6 +755,7 @@ const PINNED_TOOL_RESULT_FIELDS = [
   "pendingProposals",
   "emittedEvents",
   "success",
+  "error",
   "refused",
   "approvalStatus",
 ] as const;

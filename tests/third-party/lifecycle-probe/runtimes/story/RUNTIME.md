@@ -4,7 +4,7 @@ schedule:
   stage: narrative
 io:
   output:
-    contract: narrative-engine@1
+    contract: narrative-engine@2
   visibility: story
 function: {}
 ---

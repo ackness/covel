@@ -71,10 +71,6 @@ export const stageCastSchema = z.strictObject({
     .max(64),
   retainWhenEmpty: z.boolean(),
 });
-export const stageDialogueSchema = z.strictObject({
-  turnId: z.string().optional(),
-  paragraphSpeakers: z.array(z.string().nullable()).max(80),
-});
 export const stageChoicesSchema = z.strictObject({
   turnId: z.string().optional(),
   scene: i18nTextSchema.optional(),
@@ -147,7 +143,6 @@ export const stageMusicSchema = z.strictObject({
 export const uiSlotValueSchemas = {
   [kernelUiSlots.backdrop]: stageBackdropSchema,
   [kernelUiSlots.cast]: stageCastSchema,
-  [kernelUiSlots.dialogue]: stageDialogueSchema,
   [kernelUiSlots.choices]: stageChoicesSchema,
   [kernelUiSlots.characterVisual]: characterVisualSchema,
   [kernelUiSlots.summary]: sessionSummarySchema,
@@ -157,7 +152,6 @@ export const uiSlotNameSchema = z.enum(Object.values(kernelUiSlots));
 export type UiSlotName = z.infer<typeof uiSlotNameSchema>;
 export type StageBackdropModel = z.infer<typeof stageBackdropSchema>;
 export type StageCastModel = z.infer<typeof stageCastSchema>;
-export type StageDialogueModel = z.infer<typeof stageDialogueSchema>;
 export type StageChoicesModel = z.infer<typeof stageChoicesSchema>;
 export type CharacterVisualModel = z.infer<typeof characterVisualSchema>;
 export type SessionSummaryEntry = z.infer<typeof sessionSummaryEntrySchema>;
@@ -166,7 +160,6 @@ export type StageMusicModel = z.infer<typeof stageMusicSchema>;
 const valueSchema = z.union([
   stageBackdropSchema,
   stageCastSchema,
-  stageDialogueSchema,
   stageChoicesSchema,
   characterVisualSchema,
   characterVisualCollectionSchema,

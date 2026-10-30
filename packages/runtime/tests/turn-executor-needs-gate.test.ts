@@ -247,15 +247,15 @@ describe("runTurnPipeline: manifest.needs", () => {
 describe("runTurnPipeline: capability-based needs", () => {
   it("runs cardinality one when one provider succeeds and an alternative is cyclic", async () => {
     const available = manifest("engine-a", {
-      outputContract: "narrative-engine@1",
+      outputContract: "narrative-engine@2",
     });
     const cyclicProvider = manifest("engine-b", {
-      outputContract: "narrative-engine@1",
+      outputContract: "narrative-engine@2",
       needs: ["cycle-peer"],
     });
     const cyclePeer = manifest("cycle-peer", { needs: ["engine-b"] });
     const consumer = manifest("guide", {
-      needs: [{ capability: "narrative-engine@1", cardinality: "one" }],
+      needs: [{ capability: "narrative-engine@2", cardinality: "one" }],
     });
     let consumerRan = false;
 
@@ -289,11 +289,11 @@ describe("runTurnPipeline: capability-based needs", () => {
     // what lets the same guidance plugin work under either narrative engine.
     const engine = manifest("chat-mode-narrator", {
       stage: "narrative",
-      outputContract: "narrative-engine@1",
+      outputContract: "narrative-engine@2",
     });
     const downstream = manifest("guide", {
       stage: "post-turn",
-      needs: [{ capability: "narrative-engine@1" }],
+      needs: [{ capability: "narrative-engine@2" }],
     });
 
     let ran = false;
@@ -313,11 +313,11 @@ describe("runTurnPipeline: capability-based needs", () => {
   it("skips when the in-scope capability provider failed", async () => {
     const engine = manifest("narrator", {
       stage: "narrative",
-      outputContract: "narrative-engine@1",
+      outputContract: "narrative-engine@2",
     });
     const downstream = manifest("guide", {
       stage: "post-turn",
-      needs: [{ capability: "narrative-engine@1" }],
+      needs: [{ capability: "narrative-engine@2" }],
     });
 
     const result = await runTurn([engine, downstream], {
@@ -338,7 +338,7 @@ describe("runTurnPipeline: capability-based needs", () => {
     // A guidance runtime with no narrative engine active has nothing to act on.
     const downstream = manifest("guide", {
       stage: "post-turn",
-      needs: [{ capability: "narrative-engine@1" }],
+      needs: [{ capability: "narrative-engine@2" }],
     });
 
     const result = await runTurn([downstream], {
@@ -354,15 +354,15 @@ describe("runTurnPipeline: capability-based needs", () => {
   it('requires every provider for cardinality "all"', async () => {
     const first = manifest("engine-a", {
       stage: "narrative",
-      outputContract: "narrative-engine@1",
+      outputContract: "narrative-engine@2",
     });
     const second = manifest("engine-b", {
       stage: "narrative",
-      outputContract: "narrative-engine@1",
+      outputContract: "narrative-engine@2",
     });
     const downstream = manifest("guide", {
       stage: "post-turn",
-      needs: [{ capability: "narrative-engine@1", cardinality: "all" }],
+      needs: [{ capability: "narrative-engine@2", cardinality: "all" }],
     });
     let downstreamRan = false;
 
@@ -382,7 +382,7 @@ describe("runTurnPipeline: capability-based needs", () => {
     expect(byId.get("guide")).toMatchObject({
       status: "skipped",
       output: {
-        missingUpstreams: ["capability:narrative-engine@1"],
+        missingUpstreams: ["capability:narrative-engine@2"],
       },
     });
   });
@@ -390,15 +390,15 @@ describe("runTurnPipeline: capability-based needs", () => {
   it('runs when every provider for cardinality "all" succeeds', async () => {
     const first = manifest("engine-a", {
       stage: "narrative",
-      outputContract: "narrative-engine@1",
+      outputContract: "narrative-engine@2",
     });
     const second = manifest("engine-b", {
       stage: "narrative",
-      outputContract: "narrative-engine@1",
+      outputContract: "narrative-engine@2",
     });
     const downstream = manifest("guide", {
       stage: "post-turn",
-      needs: [{ capability: "narrative-engine@1", cardinality: "all" }],
+      needs: [{ capability: "narrative-engine@2", cardinality: "all" }],
     });
     let downstreamRan = false;
 

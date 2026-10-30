@@ -151,6 +151,8 @@ export interface TurnExecutorDeps extends AgentLoopDeps {
     runId?: string;
     /** Named stage; absent for event/manual/UI-only runtimes. */
     stage?: Stage;
+    /** The run continues a suspended runtime. */
+    resumed?: true;
   }) => Promise<void>;
 
   /**

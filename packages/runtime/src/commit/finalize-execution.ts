@@ -48,6 +48,7 @@ import { isSetupRuntime } from "@covel/shared";
 import {
   assertSuspensionWritesUnchanged,
   SuspensionDataChangedError,
+  nestedResultProposals,
   takeSuspensionWriteBaseline,
 } from "../resume/suspension-baseline.js";
 import {
@@ -125,6 +126,14 @@ export interface FinalizeExecutionArgs {
   readonly sessionId: string;
   /** Canonical identity of the execution being finalized. */
   readonly executionContext: ExecutionContext;
+  /**
+   * The progress scope this execution's jobs were reported under, when it is
+   * not `executionContext.executionId`: a resume continues the suspended
+   * execution's scope. Only the jobs of runtimes in `results` are settled
+   * there, and a rolled-back commit leaves them waiting for input, since the
+   * suspension stays open for a retry.
+   */
+  readonly progressScopeId?: string;
   /**
    * Manifests for every runtime that may appear in `results`, used to resolve
    * each result's `outputKind` / `capabilities` and (by default) the hook
@@ -461,6 +470,11 @@ function emitCommittedSuspension(
  * Terminalise every job reported under this execution's progress scope. Runs
  * after the domain outcome is settled: a rolled-back execution fails all its
  * jobs; a committed one maps each job to its owning runtime's result status.
+ * A suspended runtime's jobs wait for input, a claimed success too, since its
+ * writes are held until the suspension is resumed.
+ * In a continued scope (a resume) only the jobs of the runtimes this
+ * execution ran are settled, and a rollback returns them, including a
+ * claimed success whose writes did not land, to waiting for input.
  * Job-status is append-only and non-transactional by design, so a failure here
  * is logged and never re-opens the domain outcome.
  */
@@ -469,7 +483,8 @@ async function terminalizeExecutionJobs(
   outcome: FinalizeExecutionOutcome,
 ): Promise<void> {
   const status = outcome.status;
-  const scopeId = args.executionContext?.executionId;
+  const continued = args.progressScopeId;
+  const scopeId = continued ?? args.executionContext?.executionId;
   if (!scopeId) return;
   try {
     const reported = await args.store.listJobStatus(args.sessionId, {
@@ -506,10 +521,15 @@ async function terminalizeExecutionJobs(
       groups.set(key, group);
     }
     for (const group of groups.values()) {
-      const outcome: ExecutionJobOutcome =
-        status === "failed"
-          ? "failed"
-          : jobOutcomeForResult(statusByRuntime.get(group.runtimeId));
+      // A continued scope also holds jobs of runtimes that ran in the
+      // suspended execution and were settled by its own commit.
+      if (continued && !statusByRuntime.has(group.runtimeId)) continue;
+      const rolledBack = status === "failed";
+      const outcome: ExecutionJobOutcome = rolledBack
+        ? continued
+          ? "suspended"
+          : "failed"
+        : jobOutcomeForResult(statusByRuntime.get(group.runtimeId));
       await finalizeJobStatuses(
         {
           store: args.store,
@@ -519,7 +539,7 @@ async function terminalizeExecutionJobs(
           pluginId: group.pluginId,
           runtimeId: group.runtimeId,
         },
-        { outcome, reportedJobs: [...group.jobIds] },
+        { outcome, reportedJobs: [...group.jobIds], rolledBack },
       );
     }
   } catch (err) {
@@ -653,11 +673,13 @@ export async function finalizeExecution(
             : {}),
           takenUnder: {
             ...continuation.takenUnder,
-            writes: await takeSuspensionWriteBaseline(
-              tx,
-              sessionId,
-              continuation.pendingProposals,
-            ),
+            writes: await takeSuspensionWriteBaseline(tx, sessionId, [
+              ...continuation.pendingProposals,
+              ...nestedResultProposals(
+                continuation.nestedResults ?? [],
+                sessionId,
+              ),
+            ]),
           },
         },
       };

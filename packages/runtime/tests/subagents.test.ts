@@ -1,3 +1,4 @@
+import { withSubagentDelegate } from "../src/agent-loop/subagent-delegate.js";
 /**
  * Sub-agents (`ctx.agents.run`, the `delegate` tool, `subagentOnly`): a
  * runtime runs another agent runtime inside its own execution. The scripted
@@ -415,7 +416,7 @@ describe("ctx.agents.run", () => {
       (e) => e.payload.toolName === "poke",
     );
     expect(refusal?.payload).toMatchObject({
-      code: "UNAUTHORIZED",
+      code: "unavailable",
       runtimeId: "actor-pkg/guard",
     });
     expect(answer).toMatchObject({ ok: true, output: { line: "Noted." } });
@@ -725,7 +726,7 @@ describe("delegate", () => {
     expect(delegateDone?.payload).toMatchObject({
       approvalStatus: "auto-allowed",
       success: true,
-      result: '{"line":"Who goes there?"}',
+      result: '{"data":{"line":"Who goes there?"}}',
     });
     expect(Object.keys(delegateDone!.payload).sort()).toEqual(
       Object.keys(glanceDone!.payload).sort(),
@@ -736,7 +737,7 @@ describe("delegate", () => {
     const toolResult = second?.messages.find(
       (m) => m.role === "tool" && m.toolCallId === "tc-delegate",
     );
-    expect(toolResult?.content).toBe('{"line":"Who goes there?"}');
+    expect(toolResult?.content).toBe('{"data":{"line":"Who goes there?"}}');
 
     // The sub-agent's own events point back at the delegate call.
     const subSteps = eventsOf(emitter, "step.completed").filter(
@@ -841,7 +842,7 @@ describe("delegate", () => {
         eventsOf(emitter, "tool.completed").find(
           (e) => e.payload.toolName === "delegate",
         )?.payload.result,
-      ).toBe('{"line":"GUARD-LINE"}');
+      ).toBe('{"data":{"line":"GUARD-LINE"}}');
       const streamed = deltas.map((d) => d.textDelta).join("");
       expect(streamed).toContain("LEAD-LINE");
       expect(streamed).not.toContain("GUARD");
@@ -879,7 +880,7 @@ describe("delegate", () => {
       eventsOf(emitter, "tool.failed").find(
         (e) => e.payload.toolName === "delegate",
       )?.payload,
-    ).toMatchObject({ code: "UNAUTHORIZED" });
+    ).toMatchObject({ code: "unavailable" });
   });
 });
 
@@ -1016,4 +1017,74 @@ describe("sub-agent caps and tool filter", () => {
     });
     expect(at(0)?.builtin).toEqual(["delegate", "plugin-data-get"]);
   });
+});
+
+describe("delegate result envelopes", () => {
+  it.each(["success", "not-found", "invalid-input"] as const)(
+    "keeps code-facing output and accounting for %s",
+    async (outcome) => {
+      const output = { line: "Hello" };
+      const answer: SubagentResult =
+        outcome === "success"
+          ? {
+              ok: true,
+              output,
+              stopReason: "completed",
+              usage: { inputTokens: 1, outputTokens: 1 },
+            }
+          : { ok: false, error: { code: outcome, message: "No output" } };
+      const inner = createToolExecutor({});
+      const emitter = makeEmitterSpy();
+      const { llm } = routedLLM({});
+      const executor = withSubagentDelegate(
+        inner,
+        { inFlight: 0, run: async () => answer },
+        {
+          caller: {
+            pluginId: "director",
+            runtimeId: "director/lead",
+            depth: 0,
+          },
+          input,
+          deps: makeDeps({ llm, runtimes: [] }),
+          executionContext: createExecutionContext(input),
+        },
+      );
+      try {
+        const result = await executor.execute(
+          {
+            toolCallId: "call",
+            name: "delegate",
+            arguments: JSON.stringify({
+              target: { runtimeId: "guard" },
+              brief: "Speak",
+            }),
+          },
+          {
+            sessionId: input.sessionId,
+            turnId: input.turnId,
+            pluginId: "director",
+            runtimeId: "director/lead",
+            authorizedToolNames: new Set(["delegate"]),
+            emitter,
+          },
+        );
+        if (answer.ok) {
+          expect(JSON.parse(result.result)).toEqual({ data: output });
+          expect(result.parsedResult).toBe(output);
+        } else {
+          expect(JSON.parse(result.result)).toEqual({ error: answer.error });
+          expect(result.error).toEqual(answer.error);
+          expect(result.parsedResult).toBe(answer);
+          expect(eventsOf(emitter, "tool.failed")[0]?.payload.code).toBe(
+            outcome,
+          );
+          if (outcome === "not-found") expect(result.refused).toBe(true);
+          else expect(result).not.toHaveProperty("refused");
+        }
+      } finally {
+        await inner.close();
+      }
+    },
+  );
 });

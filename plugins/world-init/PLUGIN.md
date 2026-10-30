@@ -1,6 +1,6 @@
 ---
 kind: core
-version: 0.0.43
+version: 0.0.44
 displayName: World Dimensions
 description: Initializes character attributes and authored dimensions,
   maintaining evolving state.

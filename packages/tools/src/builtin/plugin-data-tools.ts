@@ -24,7 +24,7 @@ import {
   overlayPluginDataRows,
   overlayPluginDataValue,
 } from "../proposal-overlay.js";
-import { tool, type JsonValue } from "@covel/plugin-handlers-utils";
+import { ToolError, tool, type JsonValue } from "@covel/plugin-handlers-utils";
 import type { ToolExecutionContext, ToolModule } from "../types.js";
 
 /** Minimal read-only store interface for plugin data operations. */
@@ -128,7 +128,7 @@ function scopedReads(
 /** Model-driven writes never reach framework or hidden namespaces. */
 function assertModelWritableNamespace(namespace: string): void {
   const reserved = reservedPluginDataNamespaceError(namespace);
-  if (reserved) throw new Error(reserved);
+  if (reserved) throw new ToolError("invalid-input", reserved);
 }
 
 /**
@@ -148,7 +148,7 @@ function isModelReadableNamespace(namespace: string): boolean {
  */
 function assertValueFits(namespace: string, key: string, value: unknown): void {
   const tooLarge = pluginDataToolSizeError(namespace, key, value);
-  if (tooLarge) throw new Error(tooLarge);
+  if (tooLarge) throw new ToolError("invalid-input", tooLarge);
 }
 
 // ── plugin-data-set ─────────────────────────────────────────────
@@ -172,7 +172,6 @@ function createPluginDataSetTool(): ToolModule {
       const timestamp = new Date().toISOString();
       return withPendingProposals(
         {
-          success: true,
           namespace: params.namespace,
           key: params.key,
         },
@@ -219,7 +218,6 @@ function createPluginDataSetBatchTool(): ToolModule {
       const timestamp = new Date().toISOString();
       return withPendingProposals(
         {
-          success: true,
           count: params.items.length,
           items: params.items.map((item) => ({
             namespace: item.namespace,
@@ -268,7 +266,7 @@ function createPluginDataGetTool(store: PluginDataStore): ToolModule {
           namespace: params.namespace,
           key: params.key,
           value: row.value,
-          updatedAt: row.updatedAt ?? new Date().toISOString(),
+          ...(row.updatedAt !== undefined ? { updatedAt: row.updatedAt } : {}),
         };
       }
       const targetPlugin = context.pluginId;
@@ -299,8 +297,7 @@ function createPluginDataGetTool(store: PluginDataStore): ToolModule {
         namespace: params.namespace,
         key: params.key,
         value: pending.value,
-        updatedAt:
-          pending.hit || !record ? new Date().toISOString() : record.updatedAt,
+        ...(record ? { updatedAt: record.updatedAt } : {}),
       };
     },
   });
@@ -325,7 +322,6 @@ function createPluginDataListTool(store: PluginDataStore): ToolModule {
         return { count: 0, items: [] };
       const scoped = scopedReads(context);
       if (scoped) {
-        const now = new Date().toISOString();
         const items = (await scoped.listPluginData(params.namespace)).flatMap(
           (row) => {
             const namespace = row.namespace ?? params.namespace;
@@ -337,7 +333,9 @@ function createPluginDataListTool(store: PluginDataStore): ToolModule {
                 namespace,
                 key: row.key,
                 value: row.value,
-                updatedAt: row.updatedAt ?? now,
+                ...(row.updatedAt !== undefined
+                  ? { updatedAt: row.updatedAt }
+                  : {}),
               },
             ];
           },
@@ -353,10 +351,9 @@ function createPluginDataListTool(store: PluginDataStore): ToolModule {
         )
       ).filter((record) => isModelReadableNamespace(record.namespace));
 
-      const now = new Date().toISOString();
       const merged = new Map<
         string,
-        { namespace: string; key: string; value: unknown; updatedAt: string }
+        { namespace: string; key: string; value: unknown; updatedAt?: string }
       >();
       for (const r of records) {
         merged.set(JSON.stringify([r.namespace, r.key]), {
@@ -380,7 +377,15 @@ function createPluginDataListTool(store: PluginDataStore): ToolModule {
         // The plugin's own code may buffer writes to its hidden buckets.
         if (!isModelReadableNamespace(namespace)) continue;
         if (deleted) merged.delete(overlayKey);
-        else merged.set(overlayKey, { namespace, key, value, updatedAt: now });
+        else {
+          const updatedAt = merged.get(overlayKey)?.updatedAt;
+          merged.set(overlayKey, {
+            namespace,
+            key,
+            value,
+            ...(updatedAt !== undefined ? { updatedAt } : {}),
+          });
+        }
       }
 
       const items = [...merged.values()];

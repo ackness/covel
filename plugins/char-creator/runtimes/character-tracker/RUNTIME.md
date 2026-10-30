@@ -7,12 +7,12 @@ schedule:
   trigger:
     cooldownTurns: 1
   needs:
-    - contract: narrative-engine@1
+    - contract: narrative-engine@2
 io:
   inputs:
     narrator-output:
       from:
-        contract: narrative-engine@1
+        contract: narrative-engine@2
       select: /narrativeOutput
       required: false
 agent:

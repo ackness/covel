@@ -103,6 +103,7 @@ export {
   planSuspensionAbandon,
   settleAbandonedSetupAttempt,
   settleAbandonedSuspensionJobs,
+  settleFailedResumeJobs,
   suspensionOutdatedReason,
 } from "./resume/suspension-settlement.js";
 export {

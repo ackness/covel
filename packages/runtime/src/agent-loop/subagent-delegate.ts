@@ -11,11 +11,10 @@
 import type {
   ApprovalStatus,
   ExecutionContext,
-  SubagentErrorCode,
   SubagentResult,
   TurnInput,
 } from "@covel/shared";
-import { modelFacingJson } from "@covel/shared";
+import { renderToolSuccess, renderToolError } from "./tool-result-text.js";
 import {
   DELEGATE_TOOL_NAME,
   delegateParametersSchema,
@@ -40,17 +39,6 @@ export interface SubagentDelegateScope {
 }
 
 const APPROVAL: ApprovalStatus = "auto-allowed";
-
-/** Executor error codes of the trace, for a sub-agent's error code. */
-const TRACE_CODES: Readonly<Record<SubagentErrorCode, string>> = {
-  "invalid-input": "INVALID_ARGS",
-  "not-found": "EXECUTION_ERROR",
-  ambiguous: "EXECUTION_ERROR",
-  unavailable: "EXECUTION_ERROR",
-  timeout: "TIMEOUT",
-  cancelled: "CANCELLED",
-  internal: "EXECUTION_ERROR",
-};
 
 export function withSubagentDelegate(
   inner: ToolExecutor,
@@ -127,7 +115,7 @@ async function runDelegate(
   // a completing `delegate` hands it to the caller's output gate. Stop reason
   // and usage stay on the sub-agent's own `subagent.completed` trace.
   const output = result.output;
-  const resultText = JSON.stringify(modelFacingJson(output));
+  const resultText = renderToolSuccess({ content: output });
   await emitToolEvent(context, call, "tool.completed", {
     result: resultText,
     parsedResult: output,
@@ -156,7 +144,7 @@ async function failed(
 ): Promise<ToolCallResult> {
   const { code, message } = result.error;
   await emitToolEvent(context, call, "tool.failed", {
-    code: TRACE_CODES[code],
+    code,
     error: message,
     durationMs: Date.now() - startTime,
     success: false,
@@ -164,7 +152,8 @@ async function failed(
   return {
     toolCallId: call.toolCallId,
     name: call.name,
-    result: JSON.stringify({ success: false, error: message, code }),
+    result: renderToolError(result.error),
+    error: result.error,
     parsedResult: result,
     success: false,
     ...(code === "invalid-input" ? {} : { refused: true as const }),

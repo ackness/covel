@@ -212,6 +212,7 @@ stateDiagram-v2
   - 执行记录。`turn_results` 和各 runtime 的输出在提交之前写入，`turn_results` 先记为 `pending`，提交之后再结算成 `committed` 或 `failed`。
 - `turn.suspended` 只在提交之后发出。
 - 保存挂起记录时，同一个 runtime 还在等待的旧挂起项在同一个事务里作废。恢复的提交事务先核对挂起时记下的记录内容，有变化就什么都不写。
+- 恢复的 runtime 可以再次挂起。这次提交先把旧挂起项标为已处理，再保存新的；新挂起项接着同一次执行，不算放弃旧的。规则见[再次挂起](../reference/api.md#再次挂起)。
 - 自动快照在全部提案提交后才拍，保证对话位置、角色、状态和插件数据属于同一个已提交的回合。
 - `execution.completed.committed` 是客户端的终态信号：前端据此确认或撤回它先显示出来的内容。
 - 提交之后的事件发布逐个独立进行，任何一个失败都不回滚已经写入的数据。失败时宿主记一条 `commit.fanout.failed` trace，让该会话的订阅流收到 `system.reset`（`reason: "publish-failed"`）后完整重读，并在 `execution.completed` 上带 `resync: true`。
@@ -364,7 +365,7 @@ flowchart LR
 - 能发出事件：它的 `tools.builtin` 列了 `emit-event`，或者声明了 `advertiseEvents: true`；
 - 直接修改角色、状态或交互。
 
-**回合里有挂起时。** 回合里有 runtime 挂起时，这些作业先不入队，随挂起项一起保存，回合也先不计数。结束这个回合的那个出口把作业入队、给回合计数：最后一个挂起项恢复成功，或者它被放弃、过期、因过时而作废。规则见[挂起与回合计数](../reference/api.md#挂起与回合计数)。
+**回合里有挂起时。** 回合里有 runtime 挂起时，这些作业先不入队，随挂起项一起保存，回合也先不计数。结束这个回合的那个出口把作业入队、给回合计数：最后一个挂起项恢复成功，或者它被放弃、过期、因过时而作废。恢复后又挂起时，作业转给新的挂起项，回合仍不计数；整条挂起链只在结束时计一次。规则见[挂起与回合计数](../reference/api.md#挂起与回合计数)。
 
 **挂起之后的写入。** 挂起期间，后台作业和手动运行照常提交。挂起项记下了它保存的写入要改的每条记录当时的内容。其中一条之后被改过，恢复就被拒绝，挂起项作废，旧的写入不会盖掉新的。规则见[过时的挂起项](../reference/api.md#过时的挂起项)。
 
@@ -488,8 +489,8 @@ flowchart LR
 LLM 返回                     框架翻译层                        玩家看到的
 ────────                    ────────                         ──────────
 
-narrativeOutput:    ──►    Session Kernel      ──►    ┌─────────────────┐
-"沼泽的雾气..."              │                         │  叙事文本         │
+segments:           ──►    Session Kernel      ──►    ┌─────────────────┐
+[{narration,"沼泽…"}]       │                         │  叙事文本         │
                             │ normalizeOutput()        │  (Prose 组件)    │
 interactions:       ──►     │ → Proposal[]      ──►    ├─────────────────┤
 create-form / form          │                         │  角色创建表单    │
@@ -505,6 +506,8 @@ plugin_data 写入      ──►    │ SSE emit()               │  插件消
                             MessageList 渲染 turn messages
                             MessagePluginSurface / RightPanel 渲染 plugin surfaces
 ```
+
+故事 runtime 返回分段的故事（`segments`，见[故事输出](../reference/plugins.md#故事输出)）。内核把它规整后推出 `narrativeOutput`（各段正文用空行连接），提交时把说话人解析成角色，并在故事消息上记下段落和在场记录。玩家看到的正文、对话日志和下游输入都是这段文字；舞台按段落显示说话人。
 
 ### 3.3 翻译细节：Tool 调用链
 
@@ -528,9 +531,9 @@ LLM: "调用 sync-           ToolExecutor:
                               ├─ 工具逻辑执行
                               ├─ 生成领域 proposal / execution-local 写入
                               ├─ commit 成功后发布数据事件 ──► SSE → surface 更新
-                              └─ 返回结构化结果或 `_text`
+                              └─ 返回正文及可选的模型视图
                            4. 结果序列化为 tool message
-                              → `_text` 优先作为 LLM 可读文本
+                              → LLM 读取统一的 summary / data / staged 或 error JSON
                               → 结构化结果保留给 trace / commit / 调试
                            5. LLM 看到结果，决定是否继续调用
 
@@ -550,11 +553,11 @@ LLM: "调用 sync-           ToolExecutor:
 - function runtime 可以通过声明过的 `ctx.tools.call()` 走同样的工具、权限、参数校验和事务边界。
 - 社区 handler 使用 `ctx.pluginData`，拿不到完整的可写 store。
 
-**输出审查在执行工具之前。** 插件可以在 `PreLLMCall` 里要求先缓冲输出，再在 `PostLLMResponse` 里拒绝草稿并给出纠正要求。
+**输出审查在执行工具之前。** 插件可以在 `PostLLMResponse` 里拒绝草稿并给出纠正要求；`PreLLMCall` 也可以用 `replace.stream: false` 关掉这次调用的流式输出，审查通过前什么都不显示。
 
 - 纠正次数由 `agent.loop.corrections.review` 配置，默认两次；预算用尽后再次退回草稿，runtime 以 `invalid-output` 失败。纠正仍受步数和时限限制，配置见[循环 profile](../reference/plugins.md#循环-profileagentloopprofile)。
-- 两个内置叙事插件用它检查 `narrativePerson`：默认第二人称，允许第一或第三人称，对白保留各自的视角。
-- 它们在检查通过后一次显示整段正文。框架仍然支持其他插件流式输出。
+- 两个内置叙事插件用它检查 `perspective`（视角）：默认以角色为中心的第二人称，也可选第一、第三人称、全知旁白或主持人视角；对白保留各自的视角。分段的草稿按各段正文检查。
+- 它们不缓冲：草稿边写边流式显示。草稿被退回时，循环发出 `reset`，客户端清掉已显示的文字，再显示改写后的草稿；提交后 `narrative.completed` 的最终正文替换流式显示的内容。
 - 这是有限的文本检查，不保证所有剧情推断都正确。
 
 **工具循环的阶段与结束原因。** agent 的工具循环（`packages/runtime/src/agent-loop/turn-agent-tool-loop.ts`）按固定的阶段走，阶段和合法的转换写在 `agent-loop/loop-state.ts` 里，非法的转换直接抛错（这是循环自身的缺陷，模型和插件触发不了）：
@@ -635,7 +638,7 @@ plugins/my-plugin/
 
 | 需求             | 接口                                                  | 边界                                                                      |
 | ---------------- | ----------------------------------------------------- | ------------------------------------------------------------------------- |
-| 本轮上游输出     | `io.inputs`，`from: { contract: narrative-engine@1 }` | agent 获得 typed input 数据块，function 使用 `ctx.inputs`；保留来源信息。 |
+| 本轮上游输出     | `io.inputs`，`from: { contract: narrative-engine@2 }` | agent 获得 typed input 数据块，function 使用 `ctx.inputs`；保留来源信息。 |
 | 强依赖与顺序     | `schedule.needs` / `schedule.after`                   | needs 排序并门控；after 只排序。turn 输入绑定也形成 DAG 边。              |
 | 已提交导出       | `io.inputs` 的 `scope: committed`                     | 读取显式导出，不扫描其他插件存储。                                        |
 | 查询业务能力     | `ctx.services.discover/call`                          | 使用 service contract 与 provider 身份，不绑定私有表。                    |
@@ -648,7 +651,7 @@ plugins/my-plugin/
 io:
   inputs:
     narrative:
-      from: { contract: narrative-engine@1 }
+      from: { contract: narrative-engine@2 }
       select: /narrativeOutput
 ```
 
@@ -774,7 +777,7 @@ io:
 组件清单见 [UI 组件](../reference/ui-components.md)。
 
 > [!IMPORTANT]
-> `narrative.delta` 只有启用了流式输出的 runtime 才发。当前的内置叙事插件先缓冲并审查正文，所以客户端不能指望每回合都收到 delta。
+> `narrative.delta` 只有启用了流式输出的 runtime 才发。插件可以在 `PreLLMCall` 里用 `replace.stream: false` 关掉流式，所以客户端不能指望每回合都收到 delta。内置叙事插件边写边流式输出，草稿被退回时先发 `reset`。
 >
 > 只有 `execution.completed.committed` 或已提交的记录，才能确认本回合已经保存。单个 runtime 的成功事件不是整个回合的提交凭据。
 
@@ -1004,7 +1007,8 @@ turn_messages (canonical 追加式执行日志):
   │ turn-2 │ tool     │ tool       │ {"entries":[...]}             │
   └────────┴──────────┴────────────┴──────────────────────────────┘
 
-  runtime 行只把 narrativeOutput / content 文本写入 content，并携带表单
+  runtime 行只把 narrativeOutput / content 文本写入 content（分段故事写
+  推出的正文，不写 JSON），并携带表单
   （pendingInput）与 UI 附件。结构化输出保留在 turn_results；既无文本也
   无附件的运行（如 codex 只写结构化条目）不写 runtime 行。
 
@@ -1089,9 +1093,9 @@ sequenceDiagram
             Kernel->>Plugin: guard / buildContext
             Plugin->>LLM: generate() + tool loop
             LLM-->>Plugin: tool 结果 / finishReason=stop
-            Plugin-->>Kernel: RuntimeOutput<br/>(narrativeOutput / interactions / preGameDone)
+            Plugin-->>Kernel: RuntimeOutput<br/>(segments / narrativeOutput / interactions / preGameDone)
         end
-        Kernel-->>Web: SSE: narrative.delta (仅流式 runtime)
+        Kernel-->>Web: SSE: narrative.delta (仅流式 runtime；分段故事只发段落正文)
         Kernel-->>Web: SSE: narrative.completed
         Kernel-->>Web: SSE: interaction.requested (若有表单/按钮)
         Server-->>Web: SSE: runtime.completed / runtime.failed / runtime.skipped { status, runId }

@@ -20,16 +20,7 @@ const POSITIONS = new Set([
 export default async function handler(ctx) {
   const evt = ctx.triggerEvent;
   const cues = Array.isArray(evt?.data?.cues) ? evt.data.cues : [];
-  const paragraphSpeakers = evt?.data?.dialogue?.paragraphSpeakers;
-  const hasDialogue =
-    Array.isArray(paragraphSpeakers) &&
-    paragraphSpeakers.length > 0 &&
-    paragraphSpeakers.length <= 80;
-  if (
-    !evt ||
-    evt.topic !== "stage.direction" ||
-    (!cues.length && !hasDialogue)
-  ) {
+  if (!evt || evt.topic !== "stage.direction" || !cues.length) {
     return {
       outcome: "success",
       value: { skipped: true, reason: "no usable stage.direction cues" },
@@ -42,33 +33,6 @@ export default async function handler(ctx) {
   const hadDirectionState = previous !== null && previous !== undefined;
   let actors = normalizeActors(previous?.actors);
   const diagnostics = [];
-  const dialogue = hasDialogue
-    ? {
-        schemaVersion: 1,
-        turnId: ctx.turnId,
-        paragraphSpeakers: paragraphSpeakers.map((characterId) => {
-          if (characterId === null) return null;
-          const character = characters.find((row) => row.id === characterId);
-          if (!character) {
-            diagnostics.push(
-              `unresolved dialogue speaker: ${String(characterId)}`,
-            );
-            return null;
-          }
-          return { characterId: character.id, displayName: character.name };
-        }),
-      }
-    : undefined;
-  const proposals = dialogue
-    ? [
-        makeProposal(ctx, new Date().toISOString(), "plugin.data", {
-          namespace: "dialogue",
-          // One row, like the stage's other state: the record names its turn.
-          key: "current",
-          value: dialogue,
-        }),
-      ]
-    : [];
   let changed = false;
 
   for (const cue of cues) {
@@ -156,17 +120,7 @@ export default async function handler(ctx) {
   }
 
   if (!changed) {
-    return withPendingProposals(
-      {
-        outcome: "success",
-        value: {
-          skipped: !dialogue,
-          ...(dialogue ? { dialogue } : {}),
-          diagnostics,
-        },
-      },
-      proposals,
-    );
+    return { outcome: "success", value: { skipped: true, diagnostics } };
   }
   if (actors.length > 0 && !actors.some((actor) => actor.active)) {
     actors = actors.map((actor, index) => ({ ...actor, active: index === 0 }));
@@ -184,11 +138,8 @@ export default async function handler(ctx) {
     value: direction,
   });
   return withPendingProposals(
-    {
-      outcome: "success",
-      value: { direction, ...(dialogue ? { dialogue } : {}), diagnostics },
-    },
-    [proposal, ...proposals],
+    { outcome: "success", value: { direction, diagnostics } },
+    [proposal],
   );
 }
 

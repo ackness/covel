@@ -1,3 +1,4 @@
+import { ToolError } from "@covel/plugin-handlers-utils";
 import { compileRuntimeManifest } from "@covel/plugin-loader";
 import { createMemoryStore } from "@covel/store/memory";
 import type { DataStore } from "@covel/store";
@@ -97,7 +98,16 @@ export async function executeToolAndCommit<TOutput>(
           },
           context,
         );
-        if (!result.success) throw toolError ?? new Error(result.result);
+        if (!result.success) {
+          if (toolError) throw toolError;
+          const error = result.error;
+          if (!error)
+            throw new ToolError(
+              "internal",
+              "Tool call failed without an error.",
+            );
+          throw new ToolError(error.code, error.message, { hint: error.hint });
+        }
         return [
           withEmittedEvents(
             withPendingProposals(

@@ -36,6 +36,7 @@ import type {
   shortIdBatch,
   tool,
   withPendingProposals,
+  withModelView,
   ToolModule,
 } from "@covel/tools";
 import type { z } from "zod";
@@ -52,6 +53,8 @@ export interface PluginToolkit {
   readonly z: typeof z;
   readonly shortId: typeof shortId;
   readonly shortIdBatch: typeof shortIdBatch;
+  readonly withModelView: typeof withModelView;
+  readonly ToolError: typeof import("@covel/shared").ToolError;
   readonly withPendingProposals: typeof withPendingProposals;
 }
 

@@ -80,7 +80,11 @@ return { result: execution.result, committed: outcome.status === "committed" };
 - When a function runtime suspends, the continuation saves the commands not yet committed, the input, the exported bindings, and the activation.
 - A resume uses these frozen snapshots. Commands not yet committed can still be read by the resumed run, and they are committed together, atomically, if the resume succeeds.
 - A failed resume discards these domain writes.
+- The results of child runtimes a function handler called with `ctx.recursiveCall` before it suspended are saved in the continuation together with their writes, and they commit ahead of the handler when the resume succeeds. A child that suspended itself is not saved; the trace records a `recursive.failed` with `code` `nested-suspension-dropped`.
+- When an agent runtime suspends, the continuation also saves the state of the tool loop: the corrections spent, the deferred tools activated, the prose written from merged player interjections, the output of a completing tool that already succeeded, and this turn's prompt segments. The resumed loop continues from that state and does not assemble its context again.
 - The continuation also records the number of player turns in the history and the plugin version at the moment of the suspension. If either has changed at resume time, the suspended item is voided and does not run; see [Out-of-date suspended items](./api.md#out-of-date-suspended-items).
+- A resumed run can suspend again. The new suspended item continues the same execution, and the original execution's identity, logical turn and held-back background jobs move to it; see [Suspending again](./api.md#suspending-again).
+- A resumed run sends `runtime.started` as usual, with `resumed: true`. `PreRuntime` and `PostContextAssembly` do not fire again; `PostRuntime` does not fire on a suspension and fires once at the real end; see [Hooks](./hooks.md#postruntime).
 
 > [!WARNING]
 > After the continuation format changes, existing development-time suspension records must be rebuilt.
@@ -120,14 +124,17 @@ In the tables, "S→C" means sent from the server to the client.
 
 ### Narrative events
 
-| Event type            | Dir. | Description                        | Payload                                             |
-| --------------------- | ---- | ---------------------------------- | --------------------------------------------------- |
-| `narrative.delta`     | S→C  | A streamed piece of narrative text | `{ runtimeId, pluginId, kind, delta }`              |
-| `narrative.completed` | S→C  | The complete narrative message     | `{ content, kind, messageId, runtimeId, pluginId }` |
+| Event type            | Dir. | Description                        | Payload                                                                             |
+| --------------------- | ---- | ---------------------------------- | ----------------------------------------------------------------------------------- |
+| `narrative.delta`     | S→C  | A streamed piece of narrative text | `{ runtimeId, pluginId, kind, delta }`                                              |
+| `narrative.completed` | S→C  | The complete narrative message     | `{ content, kind, messageId, runtimeId, pluginId, segments?, unresolvedSpeakers? }` |
 
 - `narrative.delta`, `narrative.completed`, and `runtime.started` must all carry `kind`; clients read it directly rather than inferring it from `label`.
 - `narrative.delta` can carry `reset: true`. In that case `delta` is an empty string. It means: the text this runtime already streamed was a preparation step before a tool call, or a draft that the review rejected, and it will not become the final narrative. The client should clear the part already shown, then take in the later pieces.
 - The `content` of `narrative.completed` is always the final text after review has passed. It replaces what was shown while streaming.
+- For a segmented story (the `segments` of `narrative-engine@2`), `narrative.delta` carries only segment text, with a blank line between segments, matching `content`. JSON keys, speakers and `cues` never reach `delta`. See [Story output](./plugins.md#story-output).
+- When a speaker or present name in the story could not be resolved to a character (no match, or more than one), `narrative.completed` carries `unresolvedSpeakers`: those names in order of first appearance; it is omitted when there are none.
+- A story's `narrative.completed` carries `segments`: the segments with the speakers resolved at commit, in the same shape as `segments` from `/messages` (see [api.md](./api.md#get-apisessionsidmessages)). The client uses them to show nameplates and the speaker for the turn it just watched without reading messages again; events of other kinds have no such field.
 
 ### Interaction events
 
@@ -156,11 +163,13 @@ This lets stage animations react while the narrative is still being generated, a
 | ----------------------- | ---- | ------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------- |
 | `execution.started`     | S→C  | A turn execution starts                                                                                                        | `{ runtimeCount }`                                                                                                      |
 | `interaction.submitted` | S→C  | The interaction answer in `submit_actions` is saved and the next turn has started. Sent before that turn's `execution.started` | `{ interactionTurnId, results: [{ submissionId, interactionId, values, filledNarrative }], message?: { id, content } }` |
-| `runtime.started`       | S→C  | One runtime starts                                                                                                             | `{ runtimeId, pluginId, kind, turnId, runId, label, stage? }`                                                           |
+| `runtime.started`       | S→C  | One runtime starts                                                                                                             | `{ runtimeId, pluginId, kind, turnId, runId, label, stage?, resumed? }`                                                 |
 | `runtime.deferred`      | S→C  | A staged runtime was committed with the original turn and moved to the background                                              | `{ runtimeId, pluginId, jobId, sourceTurnId }`                                                                          |
 | `runtime.completed`     | S→C  | One runtime completes                                                                                                          | `{ runtimeId, pluginId, turnId, runId, status, durationMs, stopReason? }`                                               |
 | `runtime.failed`        | S→C  | One runtime fails                                                                                                              | `{ runtimeId, pluginId, turnId, runId, status, durationMs, error, errorKind?, failureTarget?, stopReason? }`            |
 | `execution.completed`   | S→C  | The final state of a turn execution                                                                                            | `{ runtimeCount, resultCount, durationMs, committed, error?, abortReason?, resync? }`, each field explained below       |
+
+`runtime.started.resumed` appears only on a run resumed from a suspended state, and its value is `true`. Each run of one logical runtime has its own `runtime.started` and terminal event; the run that suspends ends with `status: "suspended"`.
 
 `runtime.started.stage` records the runtime's stage for that execution: `setup`, `pre-turn`, `narrative`, `post-turn` or `audit`. Event/manual runtimes without a stage omit it. Persisted traces retain it, and clients restore it from live events and historical traces onto the same execution step; later terminal events do not clear the stage. A group with a `stage: "setup"` step keeps a neutral "Opening setup" summary without per-task retries, even after the session enters `playing` or the page reloads. Do not infer a historical execution's stage from the current session phase or a plugin name.
 
@@ -373,7 +382,7 @@ When an execution ends, the framework handles the jobs that this execution repor
 - A job that has not finished gets a final state that matches the runtime's result.
 - If the plugin already reported `succeeded`, but this execution's domain writes were not committed (the whole execution rolled back, this runtime failed, or its writes were discarded on their own at commit time), the framework appends a `failed` entry and does not keep the success state.
 - A `failed` or `cancelled` that the plugin reported itself is not rewritten.
-- The jobs of a suspended runtime stay in `waiting-input`. They belong to the execution that suspended: they become `succeeded` once a resume commits, `cancelled` when the suspended item is abandoned, expires or is voided, and keep waiting while a failed resume can be retried.
+- The jobs of a suspended runtime stay in `waiting-input`, and one it already reported `succeeded` before suspending goes back to `waiting-input`: a suspended runtime's writes are held until it is resumed and discarded if the suspended item is abandoned. These jobs belong to the execution that suspended, and a resumed run reports under it too, so a chain of suspensions has one progress scope: the jobs become `succeeded` once the last resume commits, `cancelled` when the suspended item is abandoned, expires or is voided, and keep waiting while a failed resume can be retried or after a resume suspends again. When a resume does not commit (its runtime fails, throws, times out or is stopped by `PostRuntime`, or the commit rolls back), its unfinished jobs move to `waiting-input`, and one already reported `succeeded` goes back to `waiting-input` too: its writes did not land, and the suspended item stays open for a retry.
 
 **How background job states map**
 
@@ -582,10 +591,10 @@ For Gemini native thinking effort, `providerOptions.google.thinkingConfig`, `cac
 
 ### Suspend / Resume events
 
-| Event type       | Dir. | Description                                                                                                                                                                                                                                                                                                                           | Payload                                                                                       |
-| ---------------- | ---- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
-| `turn.suspended` | S→C  | The runtime creates a suspension artifact. It is sent only after `finalizeExecution` commits the record together with the writes of the same execution. On a rollback, no record is kept and no event is sent. An older item of the same runtime is voided in this commit without an event of its own; the client drops it on receipt | `{ sessionId, turnId, suspensionId, pluginId, runtimeId, suspendedAt, reason, resumeSchema }` |
-| `turn.resumed`   | S→C  | Sent by the route after the `resume` action on the suspension resource succeeds                                                                                                                                                                                                                                                       | `{ sessionId, turnId, suspensionId }`                                                         |
+| Event type       | Dir. | Description                                                                                                                                                                                                                                                                                                                                                                                                                       | Payload                                                                                       |
+| ---------------- | ---- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| `turn.suspended` | S→C  | The runtime creates a suspension artifact. It is sent only after `finalizeExecution` commits the record together with the writes of the same execution. On a rollback, no record is kept and no event is sent. An older item of the same runtime is voided in this commit without an event of its own; the client drops it on receipt. It is also sent when a resumed runtime suspends again, and then `turn.resumed` is not sent | `{ sessionId, turnId, suspensionId, pluginId, runtimeId, suspendedAt, reason, resumeSchema }` |
+| `turn.resumed`   | S→C  | Sent by the route after the `resume` action on the suspension resource succeeds                                                                                                                                                                                                                                                                                                                                                   | `{ sessionId, turnId, suspensionId }`                                                         |
 
 ### Snapshot / Fork events
 
@@ -1263,7 +1272,7 @@ These events use the standard SSE envelope, and they are saved to `trace_events`
 | --- | --- |
 | `tool.calling` | `{ runtimeId, pluginId, toolName, toolCallId, label, arguments, source, approvalStatus }` |
 | `tool.completed` | `{ runtimeId, pluginId, toolName, toolCallId, label, result, parsedResult, durationMs, approvalStatus, success: true }` |
-| `tool.failed` | `{ runtimeId, pluginId, toolName, toolCallId, label, code, error, details?, durationMs, approvalStatus, success: false }` |
+| `tool.failed` | `{ runtimeId, pluginId, toolName, toolCallId, label, code, error, hint?, details?, durationMs, approvalStatus, success: false }`  `code` uses `ToolErrorCode`; `error` is the full message and `hint` is optional correction guidance. Codes: `invalid-input`, `not-found`, `ambiguous`, `refused`, `unavailable`, `timeout`, `conflict`, `cancelled`, `internal`. |
 | `domain-event.previewed` | `{ runtimeId, pluginId, toolCallId, topic, data }`. A temporary display signal after `emit-event` passes validation. Persistent business state is still committed by the normal event chain |
 | `llm.calling` | `{ runtimeId, pluginId, slot, model, provider?: string \| null, messages, tools, attempt, startedAt, queueWaitMs?, streaming? }`. `slot` is the role the runtime requests. In production, the gateway resolves it to `model` / `provider` before the call. A custom adapter that does not support role resolution can omit `provider` |
 | `llm.responded` | `{ runtimeId, pluginId, text?, reasoningContent?, toolCalls?, usage, finishReason, durationMs, attempt, error? }`. `usage` is `{ inputTokens, outputTokens, cachedInputTokens?, cacheWriteInputTokens? }`. `inputTokens` is the total input including cache reads and writes. The last two are subsets reported by the provider. `finishReason` of `length` appears only in the story runtime: the body was cut off at the output limit but was kept, and the client uses this to tell the player. In other cases, a truncated call is reported as a failure |

@@ -17,7 +17,7 @@ You will see:
 
 - Background: a picture of the current scene. It can differ between day and night.
 - Portraits: the characters on stage stand in front of the background. The character who is speaking is highlighted.
-- Dialogue box: the story text is shown one paragraph at a time, with the speaker's name beside it. Click the screen to go to the next paragraph.
+- Dialogue box: the story text is shown one paragraph at a time, with the speaker's name beside it (taken from the story's segments, shown once the story is complete). Click the screen to go to the next paragraph.
 - Choices: when you need to decide, possible responses appear below the dialogue box. You can also click "✎ Write your own…" and write your own words.
 
 The name of the current scene is shown on the screen. A row of small buttons lets you open "History" (to look back at the conversation), turn "Auto-play" on or off, or enter "Fullscreen stage". To go back to the text view, click "Exit stage".
@@ -44,7 +44,7 @@ Lets the stage know where things are, whether it is day or night, and who is pre
 
 ### What you will see
 
-- The background, portraits and speaker names on the stage all come from this plugin.
+- The background and portraits on the stage come from this plugin. Speaker name tags come from the narrator's story segments and do not need it.
 - On the right there is a "Scene" tab. It contains a read-only "Scene" panel (the scene name, day or night, and where the background comes from) and a "Cast" panel. The "Cast" panel also says why each character was chosen, for example "Mentioned", "In scene", "Profile", or "Recent".
 - If the place cannot be found in the world's scene pictures, the background shows "No backdrop", and the stage uses the world's cover instead.
 
