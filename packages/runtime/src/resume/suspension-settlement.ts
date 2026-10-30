@@ -34,7 +34,10 @@ import {
   applySessionClockTx,
   updateSetupRuntimeStates,
 } from "../commit/session-clock.js";
-import { finalizeSuspendedJobStatuses } from "../job-status/job-status.js";
+import {
+  finalizeSuspendedJobStatuses,
+  returnJobsToWaitingInput,
+} from "../job-status/job-status.js";
 import {
   changedSuspensionWrites,
   type SuspensionWriteReader,
@@ -294,4 +297,29 @@ export async function settleAbandonedSuspensionJobs(
     },
     "skipped",
   );
+}
+
+/**
+ * After a resume attempt that ended without committing (its runtime failed,
+ * threw, timed out or was stopped by `PostRuntime`): the suspension stays open
+ * for a retry, so the jobs the attempt's runtimes reported under the suspended
+ * execution wait for input again, and a success one of them claimed is taken
+ * back, since its writes never landed. Call it while the claim is still held,
+ * so no retry is reporting under the same scope. `runtimeIds` names the
+ * runtimes the attempt ran, when known; the suspended runtime is always one.
+ */
+export async function settleFailedResumeJobs(
+  deps: {
+    readonly store: Pick<DataStore, "appendJobStatus" | "listJobStatus">;
+    readonly eventBus?: EventBus;
+  },
+  suspension: SuspensionRecord,
+  runtimeIds: Iterable<string> = [],
+): Promise<void> {
+  await returnJobsToWaitingInput(deps, {
+    sessionId: suspension.sessionId,
+    progressScopeId:
+      suspension.pendingContinuation.executionContext.executionId,
+    runtimeIds: new Set([suspension.runtimeId, ...runtimeIds]),
+  });
 }

@@ -9,16 +9,21 @@ export interface CorrectionPolicy {
   snapshot(): Readonly<Record<CorrectionKind, number>>;
 }
 
-/** One independent, bounded correction budget per kind, for one loop run. */
+/**
+ * One independent, bounded correction budget per kind, for one logical
+ * runtime. `used` seeds the counts a resumed loop already spent before its
+ * suspension; `take` compares them with the budget in force now.
+ */
 export function createCorrectionPolicy(
   budgets: CorrectionBudgets,
+  used?: Readonly<Partial<Record<CorrectionKind, number>>>,
 ): CorrectionPolicy {
   const limits = { ...budgets };
   const counts: Record<CorrectionKind, number> = {
-    toolUse: 0,
-    review: 0,
-    loopPerturbation: 0,
-    outputRepair: 0,
+    toolUse: used?.toolUse ?? 0,
+    review: used?.review ?? 0,
+    loopPerturbation: used?.loopPerturbation ?? 0,
+    outputRepair: used?.outputRepair ?? 0,
   };
   return {
     take(kind) {

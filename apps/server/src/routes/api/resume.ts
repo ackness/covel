@@ -39,6 +39,11 @@ import {
  * The records are compared again first in the commit transaction, so a write
  * that lands while the runtime runs voids it too, with nothing committed.
  *
+ * Suspending again: a resumed runtime may suspend once more. The resume then
+ * commits like a success and answers 200 with `result.status: "suspended"`;
+ * the claimed record resolves and the new one, which continues the same
+ * execution, is saved in that transaction.
+ *
  * Expiry: the suspension-touching routes opportunistically fire a
  * time-gated, best-effort global sweep of stale (unresolved, older-than-TTL)
  * suspensions via `maybeSweepExpiredSuspensions`; a one-time forced sweep also
@@ -62,6 +67,7 @@ import {
   snapshotUserSettings,
   createTurnEmitter,
   runWithHookScope,
+  settleFailedResumeJobs,
   suspensionOutdatedReason,
   type SuspensionOutdatedReason,
 } from "@covel/runtime";
@@ -368,7 +374,12 @@ resumeRoutes.post("/:id/suspensions/:suspensionId/resume", async (c) => {
 
         const { result } = execution;
 
-        if (result.status !== "success" || !result.output) {
+        // A resumed runtime that suspends again commits like a success: the
+        // old record resolves and the new one is saved in one transaction.
+        if (
+          (result.status !== "success" && result.status !== "suspended") ||
+          !result.output
+        ) {
           // No proposals were submitted: count only the runtime's own fault,
           // leaving buffered writes and the unresolved suspension untouched.
           await recordExecutionFaults({
@@ -379,6 +390,14 @@ resumeRoutes.post("/:id/suspensions/:suspensionId/resume", async (c) => {
             emitter,
             eventBus,
           });
+          // Nothing it reported landed: its jobs, a claimed success
+          // included, wait for the retry. Settled before the claim is
+          // released, so no retry reports under the same scope meanwhile.
+          await settleFailedResumeJobs(
+            { store, ...(eventBus ? { eventBus } : {}) },
+            liveSuspension,
+            execution.commit.results.map((ran) => ran.runtimeId),
+          );
           await releaseClaim();
           // The runtime's own failure, the text a turn reports to the player
           // in `runtime.failed`. An exception below stays a generic 500.
@@ -483,7 +502,15 @@ resumeRoutes.post("/:id/suspensions/:suspensionId/resume", async (c) => {
   } catch (err: unknown) {
     // Release the claim so legitimate retries can attempt again. The
     // runtime error propagates to the caller; the suspension is back to
-    // `unresolved` and appears in subsequent `listSuspensions`.
+    // `unresolved` and appears in subsequent `listSuspensions`. A claim
+    // still held means the attempt did not commit: what its runtime
+    // reported waits for the retry, as after a failed result.
+    if (ownClaim !== undefined) {
+      await settleFailedResumeJobs(
+        { store, ...(eventBus ? { eventBus } : {}) },
+        suspension,
+      );
+    }
     await releaseClaim();
 
     throw err;

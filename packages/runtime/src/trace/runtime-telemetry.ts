@@ -9,12 +9,16 @@ import type { TurnEmitter } from "./turn-emitter.js";
 import { emitSubEvent } from "../turn-executor/turn-runtime-helpers.js";
 import type { TurnExecutorDeps } from "../turn-executor/turn-executor-types.js";
 
-/** Started execution retains its turn and invocation identity on every entry. */
+/**
+ * Started execution retains its turn and invocation identity on every entry.
+ * A run that continues a suspended runtime is marked `resumed`.
+ */
 export async function reportRuntimeStarted(
   deps: Pick<TurnExecutorDeps, "onRuntimeStart" | "eventBus">,
   sessionId: string,
   manifest: RuntimeManifest,
   identity: { readonly turnId: string; readonly runId: string },
+  resumed = false,
 ): Promise<void> {
   const stage = getRuntimeSpec(manifest).stage;
   const payload = {
@@ -22,6 +26,7 @@ export async function reportRuntimeStarted(
     pluginId: manifest.pluginId,
     ...identity,
     ...(stage !== undefined ? { stage } : {}),
+    ...(resumed ? { resumed: true as const } : {}),
   };
   try {
     await deps.onRuntimeStart?.(payload);

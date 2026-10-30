@@ -18,7 +18,7 @@ describe.each(["agent", "function"] as const)(
   "%s suspension terminal",
   (runtimeType) => {
     it.each([false, true])(
-      "only publishes a suspension if PostRuntime finishes live (cancel=%s)",
+      "publishes a suspension without PostRuntime unless cancelled first (cancel=%s)",
       async (cancel) => {
         const manifest: RuntimeManifest = {
           description: "test",
@@ -37,10 +37,11 @@ describe.each(["agent", "function"] as const)(
         };
         const controller = new AbortController();
         const hookPipeline = createHookPipeline();
-        const post = vi.fn(async () => {
+        const post = vi.fn(async () => ({ action: "continue" as const }));
+        // The host closes while the runtime asks for input.
+        const closeHost = () => {
           if (cancel) controller.abort(new Error("host closing"));
-          return { action: "continue" as const };
-        });
+        };
         hookPipeline.register({
           id: "suspension-policy",
           event: "PostRuntime",
@@ -67,11 +68,14 @@ describe.each(["agent", "function"] as const)(
               loadRuntime: async () => ({
                 manifest,
                 promptTemplate: "probe",
-                handler: async () => ({
-                  outcome: "suspended",
-                  reason: "input",
-                  resumeSchema: {},
-                }),
+                handler: async () => {
+                  closeHost();
+                  return {
+                    outcome: "suspended",
+                    reason: "input",
+                    resumeSchema: {},
+                  };
+                },
               }),
               llm: {
                 async generate() {
@@ -98,6 +102,7 @@ describe.each(["agent", "function"] as const)(
                   jsonSchema: { type: "object", properties: {} },
                 }),
                 async execute() {
+                  closeHost();
                   return {
                     toolCallId: "call",
                     name: "suspend",
@@ -111,7 +116,9 @@ describe.each(["agent", "function"] as const)(
           );
           const status = cancel ? "failed" : "suspended";
           expect(turn.runtimeResults[0]).toMatchObject({ status });
-          expect(post).toHaveBeenCalledTimes(1);
+          // A suspension is not the end of the logical runtime, and a
+          // cancelled execution runs no more hooks.
+          expect(post).not.toHaveBeenCalled();
           expect(collectExecutionSuspensions(turn)).toHaveLength(
             cancel ? 0 : 1,
           );

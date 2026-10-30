@@ -7,7 +7,6 @@ import {
 import { deepFreeze } from "../hooks/hook-settings.js";
 import { emitSubEvent } from "../turn-executor/turn-runtime-helpers.js";
 import { saveAutoSnapshot } from "../snapshot/auto-snapshot.js";
-import { finalizeSuspendedJobStatuses } from "../job-status/job-status.js";
 import {
   applyIsolatedRuntimes,
   finalizeExecution,
@@ -74,13 +73,21 @@ export async function commitExecution(
     hookSettings: deepFreeze(plan.hookSettings),
     loadOutputSchema: async (runtimeId) => plan.outputSchemas[runtimeId],
     extraInTx: async (tx, isolation) => {
+      // The resumed runtime is the last result; nested results restored
+      // with it come first. It either succeeded or suspended again.
+      const resumed = plan.resolvedSuspensionId
+        ? plan.results.at(-1)
+        : undefined;
       if (
         plan.resolvedSuspensionId &&
-        plan.results.some((result) => result.status !== "success")
+        resumed?.status !== "success" &&
+        resumed?.status !== "suspended"
       ) {
         throw new Error("Cannot commit an unsuccessful resumed execution");
       }
       await args.extraInTx?.(tx, isolation);
+      // Resolved before the execution's suspensions are saved: a resume that
+      // suspends again must not see its own claimed record as one to replace.
       if (plan.resolvedSuspensionId) {
         await tx.markSuspensionResolved(plan.resolvedSuspensionId);
       }
@@ -102,15 +109,6 @@ export async function commitExecution(
     plan.results,
     outcome.isolatedRuntimes,
   ).some((result) => result.status === "suspended");
-  if (plan.resumedExecution) {
-    // The suspended execution's progress jobs end with the resume that
-    // continued it; a failed resume leaves them waiting for the retry.
-    await finalizeSuspendedJobStatuses(
-      { store, ...(eventBus ? { eventBus } : {}) },
-      { sessionId, ...plan.resumedExecution },
-      "success",
-    );
-  }
   if (completion.kind === "resume" && !suspended) {
     try {
       emitSubEvent(eventBus, "game", "turn.resumed", sessionId, {

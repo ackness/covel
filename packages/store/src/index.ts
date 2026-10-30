@@ -120,6 +120,8 @@ export type {
   SuspensionBasis,
   SuspensionWriteBaseline,
   SuspensionWriteTarget,
+  SuspendedLoopState,
+  SuspendedNestedResult,
   SnapshotRecord,
   SnapshotPayload,
   SnapshotSessionState,

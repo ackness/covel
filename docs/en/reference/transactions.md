@@ -448,6 +448,8 @@ The second argument of `extraInTx` gives the dropped runtimes. The main turn use
 - Resume puts the assistant's turn message and the suspension's resolved mark into the same transaction through `extraInTx`. If anything fails, they are rolled back together with the proposals. After the claim is released, it can be retried.
 - The resolved mark also clears what this resume has already used from the suspension (messages, buffered tool calls and proposals, input), and keeps only the execution identifier, the player turns and plugin version recorded at suspension, the language, and the turn number. On rollback, this content is restored with the transaction.
 - Abandoning, expiring and voiding go through one exit: deleting the suspension, counting the turn (when it was the last suspension of its logical turn still waiting) and queuing the detached jobs the turn held back happen in one transaction.
+- When a resumed runtime suspends again, the commit goes ahead as usual: in one transaction it first writes the old suspension's resolved mark, then saves the new suspension. The old one is already resolved, so saving the new item does not abandon it as an older item of the same runtime. The new suspension keeps the old execution identifier, logical turn, player turns recorded at suspension, and held-back detached jobs; the jobs are not queued and the turn is not counted.
+- The nested results saved when a function runtime suspended commit with its successful resume as one commit unit, children first.
 
 **The session clock is written in the same transaction.**
 
@@ -458,7 +460,7 @@ The second argument of `extraInTx` gives the dropped runtimes. The main turn use
 - When a whole turn is rolled back (a story or setup failure, or any proposal failing in an execution with no story), the count, the phase, and the setup mirror do not advance, and the ledger is not written.
 - A commit that only drops optional runtimes advances the clock as usual.
 - Manual and background finalization do not pass `sessionClock`, so the clock does not move.
-- Resume does pass it. The count is advanced once, when the last suspension of the same logical turn is resumed, abandoned, expires or is voided. When the resumed runtime is a setup runtime and it reports completion, the `done` mirror and the phase flip (when all setup runtimes are complete) are written with this commit. The attempt ledger keeps the attempt that was in place at suspension.
+- Resume does pass it. The count is advanced once, when the last suspension of the same logical turn is resumed, abandoned, expires or is voided. A commit in which the resumed runtime suspends again does not count; the count comes with the last resume of the chain. When the resumed runtime is a setup runtime and it reports completion, the `done` mirror and the phase flip (when all setup runtimes are complete) are written with this commit. The attempt ledger keeps the attempt that was in place at suspension.
 
 **Lock boundary of action-level plugin-rpc.** An action handler does its reads, validation, and writes inside the session lock. So it does not interleave with a turn of the same session. PG multi-process deployments are also serialized by the same distributed lock key.
 
@@ -554,7 +556,7 @@ A missing namespace or key, and an empty or invalid operation list, are rejected
 
 **Relies on per-session commit serialization.** The read-modify-write is correct because the commits of one session are serialized by the session lock, which is distributed across PostgreSQL processes (see the action-level plugin-rpc lock boundary above). Two executions that each prepare `inc +1` and commit one after the other add both. Writers outside the session lock do not read the current value and can overwrite it: the management API `PUT` of plugin data and the immediate writes of a plugin action RPC.
 
-**Suspension write baseline.** The write baseline recorded when a suspension is saved (`takenUnder.writes`) includes a `plugin.data.update` only when its operations contain `set` or `delete`. An update of relative operations only (`merge`, `inc`, array operations) applies to the latest value at commit and cannot put back a stale whole value, so it is left out.
+**Suspension write baseline.** The write baseline recorded when a suspension is saved (`takenUnder.writes`) includes a `plugin.data.update` only when its operations contain `set` or `delete`. An update of relative operations only (`merge`, `inc`, array operations) applies to the latest value at commit and cannot put back a stale whole value, so it is left out. The baseline also covers the nested writes saved with the suspension, derived the same way as at commit.
 
 `isolatedRuntimes[].cause` is the structured drop reason: `rejected` (a proposal in this unit was rejected), `upstream` (a hard dependency did not commit), `read` (a producer it read did not commit), or `nested` (dropped with the parent unit). Existing `error` text stays; fault attribution never matches that text. Rejected proposals belong to `proposal.source.pluginId`, not every plugin in the dropped unit.
 

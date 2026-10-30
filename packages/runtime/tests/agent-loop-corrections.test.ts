@@ -61,6 +61,24 @@ describe("correction policy", () => {
     expect(policy.snapshot()).not.toBe(before);
   });
 
+  it("counts a seed from before a suspension against the budget", () => {
+    const policy = createCorrectionPolicy(
+      { toolUse: 2, review: 2, loopPerturbation: 1, outputRepair: 1 },
+      { toolUse: 1, loopPerturbation: 1 },
+    );
+    expect(policy.snapshot()).toEqual({
+      toolUse: 1,
+      review: 0,
+      loopPerturbation: 1,
+      outputRepair: 0,
+    });
+    expect(policy.take("loopPerturbation")).toBe(false);
+    expect(policy.take("toolUse")).toBe(true);
+    expect(policy.take("toolUse")).toBe(false);
+    expect(policy.used("toolUse")).toBe(2);
+    expect(policy.snapshot()).toMatchObject({ toolUse: 2 });
+  });
+
   it("preserves every preset's budgets and merges only authored keys", () => {
     for (const preset of ["story", "actor", "system"] as const) {
       expect(LOOP_PRESETS[preset].corrections).toEqual({
