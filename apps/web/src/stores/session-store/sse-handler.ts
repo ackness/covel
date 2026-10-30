@@ -8,6 +8,7 @@ import {
   isAssetGenerateView,
   PLAYER_ABORT_REASON,
   stageSchema,
+  storyMessageSegmentSchema,
   type CovelEventType,
 } from "@covel/shared";
 import * as api from "@/services/api";
@@ -353,6 +354,10 @@ export function createSseEventHandler(
           flushNarrativeDeltaBuffer(deps);
           clearStreamingText(`stream_${turnId ?? "unknown"}_${runtimeId}`);
           if (content) {
+            // Segments carry the stage nameplates and the HUD speaker.
+            const segments = storyMessageSegmentSchema
+              .array()
+              .safeParse(payload.segments);
             const msg: StreamMessage = {
               id: msgId,
               role: "assistant",
@@ -361,6 +366,7 @@ export function createSseEventHandler(
               timestamp: envelope.timestamp,
               turnId,
               runtimeId: runtimeId !== "unknown" ? runtimeId : undefined,
+              ...(segments.success ? { segments: segments.data } : {}),
             };
             deps.dispatch({
               type: "COMPLETE_MESSAGE",

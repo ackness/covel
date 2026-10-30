@@ -678,6 +678,7 @@ export { rpcActionNameSchema } from "./schemas/rpc-action.js";
 export {
   STORY_LIMITS,
   storyCuesSchema,
+  storyMessageSegmentSchema,
   storyOutputJsonSchema,
   storyOutputSchema,
   storySegmentKinds,

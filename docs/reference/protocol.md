@@ -120,16 +120,17 @@ return { result: execution.result, committed: outcome.status === "committed" };
 
 ### 叙事事件
 
-| 事件类型              | 方向 | 描述             | 负载                                                                     |
-| --------------------- | ---- | ---------------- | ------------------------------------------------------------------------ |
-| `narrative.delta`     | S→C  | 流式叙事文本片段 | `{ runtimeId, pluginId, kind, delta }`                                   |
-| `narrative.completed` | S→C  | 完整叙事消息     | `{ content, kind, messageId, runtimeId, pluginId, unresolvedSpeakers? }` |
+| 事件类型              | 方向 | 描述             | 负载                                                                                |
+| --------------------- | ---- | ---------------- | ----------------------------------------------------------------------------------- |
+| `narrative.delta`     | S→C  | 流式叙事文本片段 | `{ runtimeId, pluginId, kind, delta }`                                              |
+| `narrative.completed` | S→C  | 完整叙事消息     | `{ content, kind, messageId, runtimeId, pluginId, segments?, unresolvedSpeakers? }` |
 
 - `narrative.delta`、`narrative.completed` 和 `runtime.started` 都必须带 `kind`；客户端直接读取它，不从 `label` 推断。
 - `narrative.delta` 可以带 `reset: true`，这时 `delta` 是空字符串。意思是：同一个 runtime 已经流出来的文字属于工具调用之前的准备步骤，或者是被审查驳回的草稿，不会成为最终的叙事。客户端应该清掉已经显示的部分，再接收后面的片段。
 - `narrative.completed` 的 `content` 始终是审查通过之后的最终文本。它替换流式显示的内容。
 - 分段故事（`narrative-engine@2` 的 `segments`）的 `narrative.delta` 只带段落正文，段与段之间是空行，和 `content` 一致；JSON 的键、说话人和 `cues` 不进入 `delta`。见[故事输出](./plugins.md#故事输出)。
-- 故事里有说话人或在场名字没能解析成角色（没有匹配，或匹配到多个）时，`narrative.completed` 带 `unresolvedSpeakers`：这些名字按首次出现的顺序排列，没有时省略。段落和解析后的说话人不在事件里，读 `/view` 或 `/messages` 的 `segments`。
+- 故事里有说话人或在场名字没能解析成角色（没有匹配，或匹配到多个）时，`narrative.completed` 带 `unresolvedSpeakers`：这些名字按首次出现的顺序排列，没有时省略。
+- 故事的 `narrative.completed` 带 `segments`：提交时解析过说话人的段落，形状和 `/messages` 的 `segments` 相同（见 [api.md](./api.md#get-apisessionsidmessages)）。客户端用它给刚看完的这一回合显示名牌和说话人，不必再读消息；其他 `kind` 的事件没有这个字段。
 
 ### 交互事件
 

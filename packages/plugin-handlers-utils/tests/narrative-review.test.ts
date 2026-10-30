@@ -306,6 +306,35 @@ describe("narrative perspective review", () => {
         }),
       }),
     ).toEqual({ action: "continue" });
+    // An apostrophe inside a word does not mark speech.
+    const english = { ...ctx, locale: "en" };
+    for (const text of [
+      "I'm ready.",
+      "I’m ready; don’t wait for me.",
+      "Aya's coat is mine.",
+    ])
+      expect(
+        review.review(english, {
+          messages: [],
+          response: reply({
+            segments: [
+              { kind: "narration", text: "She looks at you." },
+              { kind: "dialogue", speaker: "Aya", text },
+            ],
+          }),
+        }),
+        text,
+      ).toEqual({ action: "continue" });
+    expect(
+      review.review(english, {
+        messages: [],
+        response: reply({
+          segments: [
+            { kind: "dialogue", speaker: "Aya", text: '"I\'m ready," I say.' },
+          ],
+        }),
+      }).replace?.correction,
+    ).toContain("violates second-person perspective");
     // Narration beside a quote inside a dialogue segment is still checked.
     expect(
       review.review(ctx, {

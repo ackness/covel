@@ -11,7 +11,10 @@
  * value are never forwarded.
  *
  * A step whose first non-space character is not `{` is prose and passes
- * through unchanged. A `reset` is forwarded and starts over. A second JSON
+ * through unchanged, except a Markdown fence (```` ``` ```` or
+ * ```` ```json ````) that opens a JSON object: the final-output parser and
+ * the narrative review strip that fence and read the JSON, so the fence is
+ * held until the next character shows whether JSON follows. A `reset` is forwarded and starts over. A second JSON
  * object after the first one closed is a new step (the last answer wins), so
  * the text shown so far is reset first.
  */
@@ -37,9 +40,15 @@ const ESCAPES: Readonly<Record<string, string>> = {
 
 const isSpace = (char: string): boolean => /\s/.test(char);
 
+/** A held text that may still become a supported fence before a JSON object. */
+const FENCE_PREFIX = /^(?:`{1,3}|```(?:j|js|jso|json)|```(?:json)?\s+)$/i;
+/** A complete fence opener: the next `{` starts the JSON answer. */
+const FENCE_OPEN = /^```(?:json)?\s*$/i;
+
 export function createStorySegmentStream(onDelta: DeltaSink): DeltaSink {
   let mode: "start" | "prose" | "json" | "after" = "start";
   let heldSpace = "";
+  let fence = "";
   let stack: Container[] = [];
   let inString = false;
   let stringIsKey = false;
@@ -55,6 +64,7 @@ export function createStorySegmentStream(onDelta: DeltaSink): DeltaSink {
   const clear = (): void => {
     mode = "start";
     heldSpace = "";
+    fence = "";
     stack = [];
     inString = false;
     stringIsKey = false;
@@ -215,6 +225,22 @@ export function createStorySegmentStream(onDelta: DeltaSink): DeltaSink {
     for (let index = 0; index < text.length; index++) {
       const char = text[index]!;
       if (mode === "prose") return { out: out + text.slice(index), reset };
+      if (mode === "start" && (fence || char === "`")) {
+        if (FENCE_PREFIX.test(fence + char)) {
+          fence += char;
+          continue;
+        }
+        if (char !== "{" || !FENCE_OPEN.test(fence)) {
+          // Not a fence around JSON: everything held is prose.
+          mode = "prose";
+          const rest = heldSpace + fence + text.slice(index);
+          heldSpace = "";
+          fence = "";
+          return { out: out + rest, reset };
+        }
+        // The closing fence lands in the "after" mode, which ignores it.
+        fence = "";
+      }
       if (mode === "start" || mode === "after") {
         if (isSpace(char)) {
           if (mode === "start") heldSpace += char;

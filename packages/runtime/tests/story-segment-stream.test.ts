@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { createStorySegmentStream } from "../src/agent-loop/story-stream.js";
 import { normalizeStoryOutput } from "../src/agent-loop/story-output.js";
+import { parseFinalOutputEnvelope } from "../src/turn-executor/turn-output-helpers.js";
 
 type Delta = { textDelta: string; reset?: true };
 
@@ -104,5 +105,36 @@ describe("segment text stream", () => {
     await send('{"segments":[{"kind":"narration","text":"first"}]}');
     await send('{"segments":[{"kind":"narration","text":"second"}]}');
     expect(shown()).toBe("second");
+  });
+
+  it("streams a JSON answer inside a Markdown fence as its committed text", async () => {
+    const everyChar = (raw: string) =>
+      Array.from({ length: raw.length - 1 }, (_, i) => i + 1);
+    for (const raw of [
+      "```json\n" + story + "\n```",
+      "```JSON " + story + "```",
+      "```\n" + story + "\n```\n",
+      "  ```json\n\n" + story + "\n```",
+    ]) {
+      const committed = normalizeStoryOutput(
+        parseFinalOutputEnvelope(raw).output,
+      )?.narrativeOutput;
+      expect(committed).toBe("雨停了。\n\n「走吧。」");
+      const { shown } = await streamIn(raw, everyChar(raw));
+      expect(shown, JSON.stringify(raw)).toBe(committed);
+      expect((await streamIn(raw, [])).shown).toBe(committed);
+    }
+  });
+
+  it("passes a fence that does not open JSON through as prose", async () => {
+    for (const raw of ["```js\nconst a = 1;", "``inline`` text", "```\nplain"])
+      expect(
+        (
+          await streamIn(
+            raw,
+            Array.from({ length: raw.length - 1 }, (_, i) => i + 1),
+          )
+        ).shown,
+      ).toBe(raw);
   });
 });

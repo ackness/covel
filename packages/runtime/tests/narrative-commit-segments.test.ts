@@ -114,10 +114,18 @@ describe("committing a segmented story", () => {
     expect(event?.payload.unresolvedSpeakers).toEqual(["守卫", "陌生人"]);
   });
 
+  it("sends the resolved segments with the completion event", async () => {
+    const { message, event } = await commitStory(store, story);
+    expect(event?.payload.segments).toEqual(
+      (message.metadata as Record<string, unknown>).segments,
+    );
+  });
+
   it("adds no story keys to a system message and derives segments for a bare story", async () => {
     const system = await commitStory(store, {}, "system", {
       notifications: [{ message: "系统通知。" }],
     });
+    expect(system.event?.payload).not.toHaveProperty("segments");
     expect(system.message.metadata).toEqual({
       turnId: "turn-1",
       runtimeId: "teller",

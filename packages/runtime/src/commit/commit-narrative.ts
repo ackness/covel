@@ -128,6 +128,7 @@ export function createNarrativeCommitHandlers(
         content,
         kind,
         messageId: proposal.id,
+        ...(story ? { segments: story.segments } : {}),
         ...(story && story.unresolvedSpeakers.length > 0
           ? { unresolvedSpeakers: story.unresolvedSpeakers }
           : {}),

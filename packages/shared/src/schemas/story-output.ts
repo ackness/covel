@@ -14,6 +14,7 @@
  */
 import { z } from "zod";
 import type {
+  StoryMessageSegment,
   StoryOutput,
   StorySegmentKind,
   StoryYield,
@@ -97,10 +98,26 @@ export const storyOutputSchema = z.looseObject({
     .describe("Who acts next. Leave it out unless asked; defaults to user."),
 });
 
+/**
+ * A committed story segment as clients receive it: the speaker as resolved
+ * at commit, with the character ID when it matched one. Committed segments
+ * already passed the story limits, so a reader checks only their shape.
+ */
+export const storyMessageSegmentSchema = z.object({
+  kind: z.enum(storySegmentKinds),
+  speaker: z.string().optional(),
+  speakerId: z.string().optional(),
+  text: z.string(),
+});
+
 // Compile-time check: the schema's input matches the SDK's public types.
 type SchemaInput = z.input<typeof storyOutputSchema>;
 const _shapeMatches: (value: SchemaInput) => StoryOutput = (value) => value;
 void _shapeMatches;
+const _segmentMatches: (
+  value: z.output<typeof storyMessageSegmentSchema>,
+) => StoryMessageSegment = (value) => value;
+void _segmentMatches;
 
 /**
  * The JSON Schema of a story. A contract file adds `$id` and `title`; it

@@ -67,6 +67,11 @@ export interface NarrativeCompletedPayload {
    * or more than one. They stay as written and are never an error.
    */
   readonly unresolvedSpeakers?: readonly string[];
+  /**
+   * A story's committed segments with resolved speakers, so the client can
+   * show nameplates for the turn it just watched without reading messages.
+   */
+  readonly segments?: readonly StoryMessageSegment[];
 }
 
 export interface InteractionRequestedPayload {

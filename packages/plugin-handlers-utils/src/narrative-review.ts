@@ -169,11 +169,18 @@ export function perspectiveError(
 }
 
 const QUOTE_MARK = /["'“”‘’「」『』«»]/u;
+/** An apostrophe inside a word (I'm, don’t, Aya's) delimits no speech. */
+const WORD_APOSTROPHE = /(?<=\p{L})['’](?=\p{L})/gu;
+
+/** Whether a text marks speech with quotation marks, ignoring apostrophes. */
+const hasSpeechMarks = (text: string): boolean =>
+  QUOTE_MARK.test(text.replace(WORD_APOSTROPHE, ""));
 
 /**
  * The texts of a segmented story draft (JSON with a `segments` array), each
  * as the review reads it, or undefined for a prose draft. A dialogue text
- * with no quotation mark at all is spoken words only and is not checked.
+ * with no quotation mark (an apostrophe inside a word is not one) is spoken
+ * words only and is not checked.
  */
 function storyDraftTexts(text: string): string[] | undefined {
   const stripped = text
@@ -196,7 +203,7 @@ function storyDraftTexts(text: string): string[] | undefined {
     if (!segment || typeof segment !== "object") return [];
     const { kind, text: value } = segment as { kind?: unknown; text?: unknown };
     if (typeof value !== "string") return [];
-    return kind === "dialogue" && !QUOTE_MARK.test(value) ? [] : [value];
+    return kind === "dialogue" && !hasSpeechMarks(value) ? [] : [value];
   });
 }
 

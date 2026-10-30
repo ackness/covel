@@ -552,11 +552,11 @@ LLM: "调用 sync-           ToolExecutor:
 - function runtime 可以通过声明过的 `ctx.tools.call()` 走同样的工具、权限、参数校验和事务边界。
 - 社区 handler 使用 `ctx.pluginData`，拿不到完整的可写 store。
 
-**输出审查在执行工具之前。** 插件可以在 `PreLLMCall` 里要求先缓冲输出，再在 `PostLLMResponse` 里拒绝草稿并给出纠正要求。
+**输出审查在执行工具之前。** 插件可以在 `PostLLMResponse` 里拒绝草稿并给出纠正要求；`PreLLMCall` 也可以用 `replace.stream: false` 关掉这次调用的流式输出，审查通过前什么都不显示。
 
 - 纠正次数由 `agent.loop.corrections.review` 配置，默认两次；预算用尽后再次退回草稿，runtime 以 `invalid-output` 失败。纠正仍受步数和时限限制，配置见[循环 profile](../reference/plugins.md#循环-profileagentloopprofile)。
 - 两个内置叙事插件用它检查 `perspective`（视角）：默认以角色为中心的第二人称，也可选第一、第三人称、全知旁白或主持人视角；对白保留各自的视角。分段的草稿按各段正文检查。
-- 它们在检查通过后一次显示整段正文。框架仍然支持其他插件流式输出。
+- 它们不缓冲：草稿边写边流式显示。草稿被退回时，循环发出 `reset`，客户端清掉已显示的文字，再显示改写后的草稿；提交后 `narrative.completed` 的最终正文替换流式显示的内容。
 - 这是有限的文本检查，不保证所有剧情推断都正确。
 
 **工具循环的阶段与结束原因。** agent 的工具循环（`packages/runtime/src/agent-loop/turn-agent-tool-loop.ts`）按固定的阶段走，阶段和合法的转换写在 `agent-loop/loop-state.ts` 里，非法的转换直接抛错（这是循环自身的缺陷，模型和插件触发不了）：
@@ -776,7 +776,7 @@ io:
 组件清单见 [UI 组件](../reference/ui-components.md)。
 
 > [!IMPORTANT]
-> `narrative.delta` 只有启用了流式输出的 runtime 才发。当前的内置叙事插件先缓冲并审查正文，所以客户端不能指望每回合都收到 delta。
+> `narrative.delta` 只有启用了流式输出的 runtime 才发。插件可以在 `PreLLMCall` 里用 `replace.stream: false` 关掉流式，所以客户端不能指望每回合都收到 delta。内置叙事插件边写边流式输出，草稿被退回时先发 `reset`。
 >
 > 只有 `execution.completed.committed` 或已提交的记录，才能确认本回合已经保存。单个 runtime 的成功事件不是整个回合的提交凭据。
 

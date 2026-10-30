@@ -7,10 +7,10 @@
 
 ### Added
 
-- **Story segments carry speakers.** Both bundled narrators ask for segments through `io.output.schema: contract:narrative-engine@2`. Speakers and `cues.present` are written as names; at commit the kernel resolves them to characters by exact name or alias, and `/messages` and `/view` return `segments` with the character's current name and `speakerId`. A name that matches no character, or more than one, stays as written and is listed in `narrative.completed.unresolvedSpeakers`. Rule: `docs/reference/api.md`, `docs/reference/protocol.md`.
+- **Story segments carry speakers.** Both bundled narrators ask for segments through `io.output.schema: contract:narrative-engine@2`. Speakers and `cues.present` are written as names; at commit the kernel resolves them to characters by exact name or alias, and `/messages` and `/view` return `segments` with the character's current name and `speakerId`. `narrative.completed` carries the same `segments`, so a turn shows its nameplates as soon as it is committed. A name that matches no character, or more than one, stays as written and is listed in `narrative.completed.unresolvedSpeakers`. Rule: `docs/reference/api.md`, `docs/reference/protocol.md`.
 - **Story messages record who was present.** Each committed story keeps its resolved speakers and `cues.present` characters as presence metadata, ready for per-character history later.
 - **Narrators have a perspective setting with omniscient and game-master modes.** `omniscient` narrates in the third person with no player line and rejects "I" and "you" in narration; `dm` addresses the players and skips the pronoun check while keeping the tag check.
-- **A segmented story streams its text live.** The live stream carries only the segment texts, with the same blank-line separators as the committed message, never the JSON.
+- **A segmented story streams its text live.** The live stream carries only the segment texts, with the same blank-line separators as the committed message, never the JSON, including when the model wraps the JSON in a Markdown code fence.
 
 ### Changed
 
