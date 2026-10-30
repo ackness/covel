@@ -28,11 +28,16 @@ import { finalizeRuntimeResult } from "../turn-executor/runtime-finalization.js"
 import type { TurnExecutorDeps } from "../turn-executor/turn-executor-types.js";
 import { runAgentToolLoop } from "./turn-agent-tool-loop.js";
 import { withSubagentDelegate } from "./subagent-delegate.js";
+import {
+  prepareAgentToolSurface,
+  withAgentToolSurface,
+} from "./agent-tool-surface.js";
 import { MAX_PICTURE_ATTACHMENTS } from "./picture-attachments.js";
 import { createStorySegmentStream } from "./story-stream.js";
 import { attachReadDependencies } from "../read-dependencies.js";
 import {
   createPluginDataVisibility,
+  type PluginDataVisibility,
   type UpstreamPluginDataWrite,
 } from "../function-runtime/upstream-plugin-data.js";
 
@@ -46,6 +51,8 @@ export interface ExecuteAgentRuntimeOptions {
   readonly upstreamProposals?: readonly import("@covel/shared").Proposal[];
   /** Writes of completed upstream runtimes of this plugin that tool reads include. */
   readonly upstreamPluginData?: readonly UpstreamPluginDataWrite[];
+  /** Upstream writes of another plugin, for the services this run's tools call. */
+  readonly upstreamOf?: PluginDataVisibility["upstreamOf"];
   readonly manifest: RuntimeManifest;
   readonly input: TurnInput;
   readonly loaded: LoadedRuntime;
@@ -102,6 +109,7 @@ export interface ExecuteAgentRuntimeOptions {
 export async function executeAgentRuntime({
   upstreamProposals = [],
   upstreamPluginData = [],
+  upstreamOf,
   manifest,
   input,
   loaded,
@@ -309,6 +317,7 @@ export async function executeAgentRuntime({
     runtimeId: manifest.name,
     runId,
     writes: upstreamPluginData,
+    ...(upstreamOf ? { upstreamOf } : {}),
     ...(deps.pluginDataReadProbe ? { probe: deps.pluginDataReadProbe } : {}),
   });
   // A story answered in JSON streams only its segment text.
@@ -317,27 +326,33 @@ export async function executeAgentRuntime({
       ? createStorySegmentStream(deps.onDelta)
       : deps.onDelta;
   const streamDeps = onDelta === deps.onDelta ? deps : { ...deps, onDelta };
-  // `delegate` runs a sub-agent; the wrapper answers it and forwards the rest.
+  // Imported services become tools for this run; the surface wraps the raw
+  // executor, then `delegate` (which runs a sub-agent) wraps that.
+  const toolExecutor = deps.toolExecutor
+    ? withAgentToolSurface(
+        deps.toolExecutor,
+        await prepareAgentToolSurface({ manifest, input, deps }),
+        deps.services,
+      )
+    : undefined;
   const loopDeps =
-    deps.subagents && deps.toolExecutor
+    deps.subagents && toolExecutor
       ? {
           ...streamDeps,
-          toolExecutor: withSubagentDelegate(
-            deps.toolExecutor,
-            deps.subagents,
-            {
-              caller: {
-                pluginId: manifest.pluginId,
-                runtimeId: manifest.name,
-                depth: 0,
-              },
-              input,
-              deps,
-              executionContext,
+          toolExecutor: withSubagentDelegate(toolExecutor, deps.subagents, {
+            caller: {
+              pluginId: manifest.pluginId,
+              runtimeId: manifest.name,
+              depth: 0,
             },
-          ),
+            input,
+            deps,
+            executionContext,
+          }),
         }
-      : streamDeps;
+      : toolExecutor
+        ? { ...streamDeps, toolExecutor }
+        : streamDeps;
   const toolLoop = await runAgentToolLoop({
     worldBase,
     upstreamProposals,

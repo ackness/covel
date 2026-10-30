@@ -90,6 +90,24 @@ export default async (covel) => {
     });
   });
 
+  it("records a model-facing service as an object and round-trips it", async () => {
+    const root = await fixture(
+      `export default (covel) => {
+  const handler = () => null;
+  covel.registerService({ contract: "inventory.items@1", modelFacing: true, handler });
+  covel.registerService({ contract: "notes.read@1", modelFacing: false, handler });
+};`,
+    );
+    expect((await extractDeclarations(root)).services).toEqual([
+      { contract: "inventory.items@1", modelFacing: true },
+      "notes.read@1",
+    ]);
+    expect((await cli(["extract", root])).code).toBe(0);
+    const manifest = await fs.readFile(path.join(root, "PLUGIN.md"), "utf8");
+    expect(manifest).toContain("modelFacing: true");
+    expect(await cli(["extract", root, "--check"])).toMatchObject({ code: 0 });
+  });
+
   it("supports explicit entry paths and awaits async factories and disposal", async () => {
     const root = await fixture(
       `export default async (covel) => {

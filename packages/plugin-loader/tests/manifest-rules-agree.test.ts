@@ -271,6 +271,27 @@ const crossField = [
     field: "schedule.detached.maxSettleWaitMs",
   },
   {
+    name: "an imported service named like a framework tool",
+    runtime: {
+      schedule: { stage: "narrative" },
+      agent: {
+        tools: { services: [{ contract: "inventory.items@1", as: "suspend" }] },
+      },
+    },
+    field: "agent.tools.services.0.as",
+  },
+  {
+    name: "an imported service that completes the run",
+    runtime: {
+      schedule: { stage: "post-turn" },
+      agent: {
+        tools: { services: ["inventory.items@1"] },
+        finishWith: "inventory-items",
+      },
+    },
+    field: "agent.finishWith",
+  },
+  {
     name: "finishWith beside the long completion form",
     runtime: {
       schedule: { stage: "post-turn" },

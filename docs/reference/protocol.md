@@ -1452,7 +1452,8 @@ runtime 的终态：
 
 `plugin.service.completed` 是只进 trace 的事件，`forwardToActionStream: false`。
 
-- payload 包含 `callId/parentCallId?/sessionId/turnId?/runtimeId?/callerPluginId/providerPluginId/name/contract/durationMs/outcome/errorCode?`。
+- payload 包含 `callId/parentCallId?/sessionId/turnId?/runtimeId?/toolCallId?/callerPluginId/providerPluginId/name/contract/durationMs/outcome/errorCode?`。工具发起的调用（包括 agent 导入的服务工具）带 `toolCallId`，对得上同一次工具调用的 `tool.*` trace。
+- `errorCode` 是固定分类：`invalid-options`、`cycle-or-depth-limit`、`admission-error`、`unavailable`、`input-validation`、`invocation-error`、`output-validation`、`timeout`、`cancelled`。`input-validation` 表示提供方拒绝了输入。
 - 扩展调用另外带宿主登记的元数据 `extension: { point, id, slot? }`。
 - 不记录输入、输出、原始异常或私有的 `diagnosticScope`。
 

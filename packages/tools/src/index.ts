@@ -1,5 +1,9 @@
 // ── Tool definition ──────────────────────────────────────────────
-export { tool, ToolValidationError } from "@covel/plugin-handlers-utils";
+export {
+  tool,
+  toolParametersJsonSchema,
+  ToolValidationError,
+} from "@covel/plugin-handlers-utils";
 export { parseJsonText } from "@covel/plugin-handlers-utils";
 export { ToolRegistry, FRAMEWORK_TOOL_NAMES } from "./registry.js";
 export {

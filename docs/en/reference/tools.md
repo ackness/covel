@@ -2,10 +2,12 @@
 
 A tool is a function the model can call during a run. The model gives a name and arguments, the framework runs it, and the result goes back to the model. This page lists every tool, the arguments and return value of each one, how to write your own tool, and how a tool writes data to storage. Plugin authors who write runtime prompts or tools need it.
 
-There are two kinds of tool:
+There are four kinds of tool:
 
 - **builtin**: included with the framework. Any plugin can use it.
 - **plugin**: registered by a plugin in its own `entry` module. Only that plugin can use it.
+- **imported**: an agent imports another plugin's model-facing service in `agent.tools.services`, and the framework generates a tool for it when the runtime starts; see [Imported service tools](#imported-service-tools). It is not in the registry, so the overview table does not list it.
+- **injected**: a tool the framework adds for a run because of the runtime's declaration, such as `search-tools`.
 
 > [!NOTE]
 > In the tables and approval rules below, `local` is an internal source label used by the executor. It means "a tool that a plugin's entry registered successfully." It is not a manifest field. The manifest has no `tools.local` field, and a manifest that sets one fails to load.
@@ -255,7 +257,7 @@ A plugin tool wraps the plugin's own business logic. Its schema, text, and data 
 - Tools are registered by `(pluginId, name)`. Different plugins can use the same name. If one plugin uses a duplicate name, or a framework reserved name, that whole batch of registrations fails and is rolled back.
 - A declaration in `tools.plugin` does not register an implementation. A call passes two checks: the runtime's tool allow-list, and the calling plugin's own registry. A name that is not registered does not fall through to another plugin's tool with the same name.
 - The model, `ctx.tools.call`, and `tools.defer` all use the tool's original name.
-- To expose a capability across plugins, use `ctx.services`.
+- To expose a capability across plugins, use a service. A running tool calls another plugin's services through `context.services`, with the same rules as a function runtime's `ctx.services`; an agent imports model-facing services as tools with `agent.tools.services`.
 
 ### Not a tool: framework features on `FunctionHandlerContext`
 
@@ -1470,6 +1472,54 @@ The tool does two things: it writes the normalized `{ prompt, promptMode, compos
 The model does not have to write a `{ topic, data }` event envelope itself, so it cannot leave out the topic or write an empty one. The runtime's output schema checks only the trusted result that the tool produces.
 
 Both prompt generators are agents that are triggered manually, and they declare `schedule.background: true`. Their `agent.completion.afterTools` lists the matching tool, so the run ends after one successful submit. The image generator that follows keeps running in the background.
+
+## Imported service tools
+
+An agent imports another plugin's model-facing services in `agent.tools.services` ([how to provide one](./plugin-extensions.md#model-facing-services)). Each import becomes a read-only tool when the runtime starts.
+
+```yaml
+agent:
+  tools:
+    services:
+      - inventory.items@1
+      - { contract: world.map@2, as: look-at-map }
+```
+
+- **Name**: by default the contract without its version, dots as dashes (`inventory.items@1` → `inventory-items`); `as` names it otherwise. A name has only letters, digits, `_` and `-`, at most 64; a derived name that is too long needs `as`. A name cannot repeat a framework tool, the runtime's `tools.builtin` / `tools.plugin`, the package's `contributes.tools` or another import, and one contract is imported once. Manifest validation reports a clash.
+- **Description and parameters**: the description is the provider's registered `description`. The parameters' JSON Schema comes from the provider's Zod input (without `$schema`), or from the provider's explicit `inputSchema`. A Zod input (also one shown through an explicit `inputSchema`) is checked on the tool side first, with the usual field-by-field errors and repair of arrays or objects sent as JSON text. The provider receives the arguments the model sent, or their repair, and parses them once for its handler, so a `transform` applies once. An input that is not a Zod schema is checked by the provider only.
+- **Annotations**: `{ readOnly: true, stagesWrites: false, idempotent: true, concurrencySafe: true }`. Imported services are read-only and can run together with other read-only tools. A sub-agent keeps its imports.
+- **Result**: the model gets `{ "data": … }` like any other tool, with IDs, UUIDs and timestamps removed by `modelFacingJson`. Approval, `PreToolUse` / `PostToolUse`, `tool_calls` records and `tool.*` traces work as usual; approval counts the source as `local`.
+- **Time limit**: a call waits at most 15 seconds for the provider and answers `timeout` after that.
+- **Deferred loading**: with `tools.defer: true`, or with an import's name in the `defer` list, the import is deferred like other tools and found through `search-tools`.
+- **Cannot complete a runtime**: `finishWith` and `completion.afterTools` cannot name an imported tool. A runtime must not need another plugin to finish.
+
+### Absent tools
+
+Without exactly one active provider, the tool is absent: it is not in the model request's tool list, and `search-tools` does not find it. The runtime starts and the story commits as usual. When the model still calls it (a resumed transcript still holds it, or the model guessed the name), the call answers `unavailable` with the reason and no plugin ID:
+
+- `The tool "inventory-items" is unavailable in this session: no active provider offers inventory.items@1.`
+- `…: more than one plugin provides it.`
+- `…: its provider is paused after repeated errors.`
+- `…: its provider does not offer it to models.`
+
+The server log has a line with the plugin IDs for the author.
+
+### How a service failure is answered
+
+An imported tool, and any plugin tool that lets a service error through, answers the model by this table. Only an input error is the model's to fix; the other failures are the provider's, so the result carries `refused: true` and does not count as the caller's failed call. A function runtime that fails because of one is not counted as faulty either; the service call trace names the provider. These failures do not count toward pausing the provider.
+
+<!-- prettier-ignore -->
+| Service outcome | Tool error code | `refused` |
+| --- | --- | --- |
+| Provider unavailable, unapproved or revoked; a call cycle or the depth limit | `unavailable` | yes |
+| Timed out waiting | `timeout` | yes |
+| The call was cancelled | `cancelled` | no |
+| The provider rejected the input | `invalid-input` (names the fields) | no |
+| The provider's result fails its output schema | `internal`: "The service returned an invalid result." | yes |
+| The provider threw a `ToolError` | Its own code, message and hint | yes (except `invalid-input` and `cancelled`) |
+| The provider threw another error | `internal`, first line only, UUIDs as `<id>` | yes |
+
+A tool's own timeout, the caller's cancellation, an approval denial and a `PreToolUse` block are unchanged.
 
 ## Short IDs (entity references the LLM can read)
 

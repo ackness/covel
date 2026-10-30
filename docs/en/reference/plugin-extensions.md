@@ -13,17 +13,17 @@ Examples you can install and look at:
 
 Start by finding your need in the table and reading the matching interface:
 
-| Need                                                    | Interface                                                                   | Execution and data boundary                                                                                                                                       |
-| ------------------------------------------------------- | --------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Use an upstream result from this turn                   | `runtime.io.inputs` + `accepts`                                             | Binds to a versioned contract or runtime, creates a scheduling dependency, and carries the source. If a required input is missing, the runtime is skipped.        |
-| Use a committed past result                             | `runtime.io.output.recordAs` + `io.inputs` with `scope: committed`          | Reads a snapshot taken before this execution starts.                                                                                                              |
-| Emit an event and trigger later work                    | Event results from a handler / the `emit-event` tool + an event trigger     | Managed by scheduling and the commit path. It is not a free broadcast in memory.                                                                                  |
-| Call another plugin's public function or model protocol | `covel.registerService` + `ctx.services`                                    | Request and response. Input and output are validated. Only active services that are allowed to run can be called.                                                 |
-| Have another agent answer a brief                       | A `schedule.subagentOnly` provider + `ctx.agents.run` / the `delegate` tool | A [sub-agent](./plugins.md#sub-agents) runs inside the caller's execution and returns output only, with no writes; a contract finds a provider in another package |
-| Write domain data from a runtime                        | Declared tools, handler effects / `ctx.pluginData`                          | Goes through the runtime's proposal and commit boundary. It does not write to another plugin directly.                                                            |
-| A UI action runs the plugin's own server logic          | `invokeRuntime` / `invokePluginAction` / `invokeCommand`                    | Reuses the existing RPC, session ownership, and approval. For write boundaries, see below.                                                                        |
-| A UI emits a domain event                               | `emitEvent`                                                                 | Can emit only topics that the plugin declares, checked against a schema. Subscribed runtimes run as event tasks.                                                  |
-| Draw a custom UI                                        | JSON `view` or HTML `webview`                                               | HTML runs in a separate sandbox. It reads data and sends actions through a message bridge.                                                                        |
+| Need                                                    | Interface                                                                                       | Execution and data boundary                                                                                                                                        |
+| ------------------------------------------------------- | ----------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Use an upstream result from this turn                   | `runtime.io.inputs` + `accepts`                                                                 | Binds to a versioned contract or runtime, creates a scheduling dependency, and carries the source. If a required input is missing, the runtime is skipped.         |
+| Use a committed past result                             | `runtime.io.output.recordAs` + `io.inputs` with `scope: committed`                              | Reads a snapshot taken before this execution starts.                                                                                                               |
+| Emit an event and trigger later work                    | Event results from a handler / the `emit-event` tool + an event trigger                         | Managed by scheduling and the commit path. It is not a free broadcast in memory.                                                                                   |
+| Call another plugin's public function or model protocol | `covel.registerService` + `ctx.services` / a tool's `context.services` / `agent.tools.services` | Request and response. Input and output are validated. Only active services that are allowed to run can be called. An agent imports model-facing services as tools. |
+| Have another agent answer a brief                       | A `schedule.subagentOnly` provider + `ctx.agents.run` / the `delegate` tool                     | A [sub-agent](./plugins.md#sub-agents) runs inside the caller's execution and returns output only, with no writes; a contract finds a provider in another package  |
+| Write domain data from a runtime                        | Declared tools, handler effects / `ctx.pluginData`                                              | Goes through the runtime's proposal and commit boundary. It does not write to another plugin directly.                                                             |
+| A UI action runs the plugin's own server logic          | `invokeRuntime` / `invokePluginAction` / `invokeCommand`                                        | Reuses the existing RPC, session ownership, and approval. For write boundaries, see below.                                                                         |
+| A UI emits a domain event                               | `emitEvent`                                                                                     | Can emit only topics that the plugin declares, checked against a schema. Subscribed runtimes run as event tasks.                                                   |
+| Draw a custom UI                                        | JSON `view` or HTML `webview`                                                                   | HTML runs in a separate sandbox. It reads data and sends actions through a message bridge.                                                                         |
 
 The details that do not fit in the table come next.
 
@@ -33,12 +33,15 @@ A function runtime that changes its own data can submit a list of operations ins
 
 The session's seats (who is playing and which characters they control) belong to no plugin, so you never ask another plugin for them through a service or an input. Function runtimes, guards, tools (`context.world`) and extension providers (`ctx.world`) all read the same read-only copy on `world.seats`. To find the character acting this turn, use the SDK's `actingCharacterOf(actions, world.characters, world.seats)` instead of combining `primarySeat` and `currentCharacterOf` yourself: it takes the character a player action names first and falls back to the primary seat's current character only when there is none. Function runtimes and guards pass `ctx.playerActions`. Extension providers and tools receive no actions, so they pass `[]` and get the primary seat's current character. Detached jobs pass their source turn's `ctx.inputs.turn.value.actions` (defaulting to `[]`) to keep that action's actor. `seatCharacterIds` gives every character bound to one seat. The full rule is in [Seats](./world-model.md#seats). Plugins cannot write seats; the player switches the current character through the [switch endpoint](./api.md#session-seats).
 
-### Services are only for function runtimes
+<a id="services-are-only-for-function-runtimes"></a>
 
-Function runtime handlers and agent guards can use `ctx.services`. The framework does not expose every public service to every agent. If an agent needs the result of a service, it has two options:
+### How tools and agents use services
 
-- Let one of the plugin's own function runtimes call the service, and let the agent receive the result through `inputs`.
-- Keep using the plugin's own registered tools.
+- Function runtime handlers and agent guards use `ctx.services`.
+- Plugin tools use `context.services`, with the same rules as a function runtime: the caller is the tool's plugin and runtime, a call inherits the tool's deadline and cancellation, and its reads use the same scope and read dependencies as the tool's own `context.store` reads. Calls still running when the tool returns are cancelled. A failed service call rejects with the service's error; a tool that lets it through answers the model by the error mapping of [Imported service tools](./tools.md#imported-service-tools), the service call trace still names the provider, and the failure does not count as the caller's fault.
+- An agent can import **model-facing** services in `agent.tools.services`. Each import becomes a read-only tool; see [Model-facing services](#model-facing-services) below. The framework does not hand every service to every agent.
+
+Services called from a tool or an import get no `gateway` or `utils`: model work belongs to the caller.
 
 ### How events trigger downstream work
 
@@ -66,7 +69,7 @@ See [RPC channel](./api.md#post-apisessionsidplugin-rpc) and [handler write cont
 
 ### Tools do not cross plugins
 
-A plugin tool is registered in `entry` with `covel.registerTool()`, and its name must be unique within the plugin. Different plugins can use the same name without overwriting each other. A tool call only finds the calling plugin's own implementation and the framework's built-in tools. For a capability that other plugins should use, make it a service, as described below.
+A plugin tool is registered in `entry` with `covel.registerTool()`, and its name must be unique within the plugin. Different plugins can use the same name without overwriting each other. A tool call only finds the calling plugin's own implementation, the framework's built-in tools and the services this runtime imports. For a capability that other plugins should use, make it a service, as described below: another plugin's tools call it through `context.services`, and to let another agent's model call it directly, make it a model-facing service that the agent imports in `agent.tools.services`.
 
 ### Packages without a runtime
 
@@ -251,15 +254,16 @@ A plugin can expose a function to other plugins. This is called a **service**.
 A service is registered while the `entry` factory runs. It is published together with the tools, hooks, and RPC: it takes effect only if everything succeeds, and if anything fails, all of it is withdrawn. The registration is removed when the host shuts down.
 
 - A service name must be unique within its plugin.
-- `contract` is the public contract ID that the plugin author defines. It is recommended to include a version number.
+- `contract` is the public contract ID that the plugin author defines, shaped `<name>@<major>`: it starts with a lowercase letter and has only lowercase letters, digits, `.` and `-`, such as `my-plugin.rank@1`.
 - Make an incompatible change with a new contract. Do not write a migration for development data.
+- Declare every registered service in `contributes.services` of `PLUGIN.md` by its contract ID; write a model-facing one as `{ contract, modelFacing: true }`. When the declaration and the registration disagree, the whole registration batch fails.
 
 ```js
 export default function (covel) {
   const { z } = covel.toolkit;
   covel.registerService({
     name: "rank",
-    contract: "my-plugin/rank@1",
+    contract: "my-plugin.rank@1",
     input: z.object({ candidates: z.array(z.string()).min(1) }),
     output: z.object({ selected: z.string() }),
     async handler(input, ctx) {
@@ -272,7 +276,7 @@ export default function (covel) {
 
 ### Discovery and calls
 
-Another plugin first uses `ctx.services.discover("my-plugin/rank@1")` to find the providers. This returns `{ pluginId, name, contract, description? }[]`. Then it chooses one provider explicitly and calls it.
+Another plugin first uses `ctx.services.discover("my-plugin.rank@1")` to find the providers. This returns `{ pluginId, name, contract, description? }[]`. Then it chooses one provider explicitly and calls it.
 
 When there are several providers, the calling plugin's settings or its business rules decide which one to use. The framework does not guess by plugin name, and it does not pick the first one automatically.
 
@@ -280,7 +284,7 @@ When there are several providers, the calling plugin's settings or its business 
 const value = await ctx.services.call({
   pluginId: configuredProviderId,
   name: "rank",
-  contract: "my-plugin/rank@1",
+  contract: "my-plugin.rank@1",
   input: { candidates: ["Visit the library", "Explore the classroom"] },
 });
 ```
@@ -292,7 +296,7 @@ const value = await ctx.services.call(
   {
     pluginId: configuredProviderId,
     name: "rank",
-    contract: "my-plugin/rank@1",
+    contract: "my-plugin.rank@1",
     input: { candidates: ["Visit the library", "Explore the classroom"] },
   },
   { timeoutMs: 1500, signal: ctx.signal },
@@ -341,6 +345,68 @@ Before each call, the framework checks again: that the caller and the provider a
 When called through a runtime's client, `pluginData` overlays committed data with the provider plugin's completed, commit-eligible upstream writes in this execution, in commit order. Retry or background seed results are not applied again. Parallel runtimes in the same level cannot see each other's writes. The original runtime's own write buffer is applied last only when the provider belongs to that runtime's plugin. Lists remove deleted keys and append new keys in write order. Clients outside an execution read committed data only and record no read dependencies.
 
 A read that sees an uncommitted upstream write records a read dependency on the calling runtime's result. Nested services read each provider's own data and keep recording on the original runtime. If a producer is dropped at commit, an auxiliary caller is dropped with it; a story caller still commits and the trace records the dependency (see [Transactions](./transactions.md)). Calling a read service creates no new scheduling dependency; a story runtime can call it as needed and handle missing or failed services.
+
+Calls from tools and imports read the same data: the tools of a top-level agent overlay upstream writes and record read dependencies like a function runtime. When a resumed runtime or a sub-agent calls a service from a tool, it reads committed data only and records no read dependencies, the same as its own tool reads.
+
+### Model-facing services
+
+When a provider marks a service as model-facing, an agent can import it in `agent.tools.services` and its model calls it directly. The mark goes in two places, and they must agree:
+
+```yaml
+# PLUGIN.md
+contributes:
+  services:
+    - { contract: inventory.items@1, modelFacing: true }
+```
+
+```js
+covel.registerService({
+  name: "items",
+  contract: "inventory.items@1",
+  modelFacing: true,
+  description: "List the items in one of the player's bags.",
+  input: z.object({ bag: z.string().describe("Bag name") }),
+  output: z.object({ items: z.array(z.object({ name: z.string() })) }),
+  handler: async ({ bag }, ctx) => ({
+    items: (await ctx.pluginData.get("bags", bag)) ?? [],
+  }),
+});
+```
+
+A service can be imported when:
+
+- it is declared as `{ contract, modelFacing: true }` and registered with `modelFacing: true`;
+- it has a non-empty `description`, which is the tool description the model reads;
+- its input exports JSON Schema: a Zod schema is exported automatically (without `$schema` and without patterns a provider cannot read); for an input that is not Zod, or a Zod input that has no JSON Schema form (such as one using `z.custom`), give an explicit `inputSchema`, and the Zod input is then not exported. The root must be `type: "object"`.
+
+These are checked at registration. When one fails, the whole registration batch fails, not a later turn. `modelFacing` stays out of the capability snapshot: the mark gives the provider's code no new power, so a package from a trusted source is not confirmed again.
+
+The importing agent writes:
+
+```yaml
+agent:
+  tools:
+    services:
+      - inventory.items@1 # tool name inventory-items
+      - { contract: world.map@2, as: look-at-map }
+```
+
+The tool name is the contract without its version, dots as dashes; `as` names it otherwise. For the name rules, schema, annotations, time limit and errors, see [Imported service tools](./tools.md#imported-service-tools). A function runtime cannot write `tools.services`; it uses `ctx.services` directly.
+
+At each runtime start the framework finds a provider for each import. The candidates are plugins that declare the contract as model-facing and are enabled and approved to run, plus plugins paused after repeated errors:
+
+| Case                                        | Result                                                                                                |
+| ------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| Exactly one active provider                 | The tool is generated and bound to that provider                                                      |
+| No provider                                 | The tool is absent; a call to it answers `unavailable`                                                |
+| Providers, but none model-facing            | The same, and the text says the provider does not offer it to models                                  |
+| More than one model-facing provider         | The same, and the text says more than one plugin provides it; no guess by name, no first pick         |
+| The only provider is paused                 | The same, and the text says the provider is paused; the tool returns once a later execution clears it |
+| One active provider and one paused provider | Counted as more than one provider: the active one is never silently substituted                       |
+
+A missing import removes only its tool: the runtime starts and the story commits as usual. Imports create no scheduling edge and do not make the package require its provider; an imported tool cannot complete a runtime (`finishWith` and `completion.afterTools` cannot name it). The host tells the framework which plugins are paused through its admission interface; for an embedder without it, a paused provider is simply unknown.
+
+Service calls made from a tool carry its `toolCallId` in `plugin.service.completed`, and nested calls inherit it; see [Protocol](./protocol.md).
 
 ## Models and new protocols
 

@@ -1452,7 +1452,8 @@ How snapshots are saved:
 
 `plugin.service.completed` is a trace-only event, with `forwardToActionStream: false`.
 
-- The payload includes `callId/parentCallId?/sessionId/turnId?/runtimeId?/callerPluginId/providerPluginId/name/contract/durationMs/outcome/errorCode?`.
+- The payload includes `callId/parentCallId?/sessionId/turnId?/runtimeId?/toolCallId?/callerPluginId/providerPluginId/name/contract/durationMs/outcome/errorCode?`. A call made from a tool (including an agent's imported service tool) carries `toolCallId`, which matches the `tool.*` trace of the same tool call.
+- `errorCode` is a fixed classification: `invalid-options`, `cycle-or-depth-limit`, `admission-error`, `unavailable`, `input-validation`, `invocation-error`, `output-validation`, `timeout`, `cancelled`. `input-validation` means the provider rejected the input.
 - Extension calls also carry the metadata the host registers: `extension: { point, id, slot? }`.
 - The input, the output, the raw exception, and the private `diagnosticScope` are not recorded.
 

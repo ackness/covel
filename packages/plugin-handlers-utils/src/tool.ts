@@ -164,6 +164,20 @@ function withPortablePatterns(schema: unknown): unknown {
   return portable;
 }
 
+/**
+ * The JSON Schema a model sees for a tool's parameters: the input shape of a
+ * Zod schema, without `$schema` (LLM APIs do not need it and some reject it)
+ * and without patterns a provider cannot read. Structural, so a schema from
+ * another Zod copy works too. Throws when the schema has no JSON form.
+ */
+export function toolParametersJsonSchema(schema: {
+  toJSONSchema(params: { io: "input" }): Record<string, unknown>;
+}): Readonly<Record<string, unknown>> {
+  // Models supply the input shape; execute receives Zod's parsed output.
+  const { $schema: _drop, ...rest } = schema.toJSONSchema({ io: "input" });
+  return withPortablePatterns(rest) as Record<string, unknown>;
+}
+
 const annotationsSchema = z.object({
   readOnly: z.boolean().default(false),
   stagesWrites: z.boolean().optional(),
@@ -230,11 +244,7 @@ export function tool<TParams extends ZodType, TOutput>(
 
   let jsonSchema: Readonly<Record<string, unknown>>;
   try {
-    // Models supply the input shape; execute receives Zod's parsed output.
-    const raw = definition.parameters.toJSONSchema({ io: "input" });
-    // Strip $schema — LLM APIs don't need it and some reject it
-    const { $schema: _drop, ...rest } = raw;
-    jsonSchema = withPortablePatterns(rest) as typeof rest;
+    jsonSchema = toolParametersJsonSchema(definition.parameters);
   } catch (cause) {
     throw new Error(
       `Tool "${definition.name}" parameters cannot be represented as JSON Schema: ${cause instanceof Error ? cause.message : String(cause)}`,

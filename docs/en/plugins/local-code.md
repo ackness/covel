@@ -179,7 +179,7 @@ pnpm plugin:extract ~/.covel/plugins/notebook --check
 pnpm plugin:extract ~/.covel/plugins/notebook --check --json
 ```
 
-The first command runs the entry factory on the author's machine, writes the six registration lists (`tools`, `actions`, `services`, `forms`, `wires`, `hooks`) into `contributes` in the root `PLUGIN.md`, and prints changed keys. When already in sync, it prints `Declarations are in sync.`. Lists are deduplicated in first-registration order; normal hooks become event names, and other phases become `{ event, enforce }`. Empty list keys are removed. Comments, other fields and the Markdown body are preserved.
+The first command runs the entry factory on the author's machine, writes the six registration lists (`tools`, `actions`, `services`, `forms`, `wires`, `hooks`) into `contributes` in the root `PLUGIN.md`, and prints changed keys. When already in sync, it prints `Declarations are in sync.`. Lists are deduplicated in first-registration order; normal hooks become event names, and other phases become `{ event, enforce }`; a plain service becomes its contract ID, and a model-facing service becomes `{ contract, modelFacing: true }`. Empty list keys are removed. Comments, other fields and the Markdown body are preserved.
 
 `--check` writes nothing and shows removed names with `-` and added names with `+` per key; changes only to order or spelling are described separately. It exits 1 on drift and 0 when in sync, for CI. `--json` emits `extracted` and `drift`. Extraction errors exit 1; invalid arguments exit 2.
 

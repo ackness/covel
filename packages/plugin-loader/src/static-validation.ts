@@ -354,6 +354,12 @@ export function validatePluginFiles(
           `${parsed.sourcePath}: tools.plugin: ${tool} is not declared in contributes.tools`,
         );
     }
+    for (const [i, entry] of (runtime.tools?.services ?? []).entries()) {
+      if (plugin.contributes?.tools?.includes(entry.name))
+        throw new Error(
+          `${parsed.sourcePath}: agent.tools.services.${i}: the imported tool "${entry.name}" has the name of a tool in contributes.tools; name it with as`,
+        );
+    }
     for (const [field, refs] of [
       ["needs", runtime.needs],
       ["after", runtime.after],

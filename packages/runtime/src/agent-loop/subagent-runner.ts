@@ -45,6 +45,10 @@ import type { TurnEmitter } from "../trace/turn-emitter.js";
 import { DEFAULT_MAX_TOOL_STEPS } from "./agent-loop-policy.js";
 import { settleAgentLoop } from "./settle-agent-loop.js";
 import { stopOf } from "./stop-reason.js";
+import {
+  prepareAgentToolSurface,
+  withAgentToolSurface,
+} from "./agent-tool-surface.js";
 import { withSubagentDelegate } from "./subagent-delegate.js";
 import type { ToolExecutor } from "./tool-executor.js";
 import { runAgentToolLoop } from "./turn-agent-tool-loop.js";
@@ -314,9 +318,9 @@ function resolveTarget(
  * A name that does not resolve is kept, so the missing-tool check still fails
  * the run with its own diagnostic.
  *
- * Seam: imported read services and write services join this
- * list when they exist; write services will add their writes to the
- * caller's commit unit.
+ * Imported services (`tools.services`) are read-only and stay as declared;
+ * the sub-agent resolves them as itself when it starts. Write services, once
+ * they exist, will add their writes to the caller's commit unit.
  */
 export function subagentToolNames(
   manifest: RuntimeManifest,
@@ -497,6 +501,15 @@ async function runProvider({
     deps.turnControl?.executionSignal,
     args.parentSignal,
   );
+  // The sub-agent resolves its own imports, as itself; the surface wraps the
+  // raw executor, then `delegate` wraps that.
+  const surfaceExecutor = innerExecutor
+    ? withAgentToolSurface(
+        innerExecutor,
+        await prepareAgentToolSurface({ manifest, input, deps }),
+        deps.services,
+      )
+    : undefined;
   const subDeps: TurnExecutorDeps = {
     ...deps,
     onDelta: undefined,
@@ -508,8 +521,8 @@ async function runProvider({
       ...(executionSignal ? { executionSignal } : {}),
     },
     toolExecutor:
-      innerExecutor && depth < SUBAGENT_MAX_DEPTH
-        ? withSubagentDelegate(innerExecutor, runner, {
+      surfaceExecutor && depth < SUBAGENT_MAX_DEPTH
+        ? withSubagentDelegate(surfaceExecutor, runner, {
             caller: {
               pluginId: provider.pluginId,
               runtimeId: provider.name,
@@ -519,7 +532,7 @@ async function runProvider({
             deps: { ...deps, toolExecutor: innerExecutor },
             executionContext: args.executionContext,
           })
-        : innerExecutor,
+        : surfaceExecutor,
   };
 
   try {

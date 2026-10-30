@@ -567,6 +567,24 @@
             }
           ],
           "description": "Deferred tool loading. `true` defers the whole whitelist; a list defers only those names."
+        },
+        "services": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "contract": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9.-]*@[1-9][0-9]*$"
+              },
+              "name": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9_-]{1,64}$"
+              }
+            },
+            "required": ["contract", "name"],
+            "additionalProperties": false
+          }
         }
       },
       "additionalProperties": false

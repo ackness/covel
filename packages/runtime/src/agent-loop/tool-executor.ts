@@ -43,6 +43,12 @@ import {
   waitForToolWork,
 } from "./tool-executor-lifetime.js";
 import { combineAbortSignals } from "../turn-executor/turn-control.js";
+import {
+  serviceFailureOf,
+  ServiceInputValidationError,
+  type PluginServiceRegistry,
+  type ServiceFailure,
+} from "../plugin-services.js";
 
 class ToolTimeoutError extends Error {}
 
@@ -117,6 +123,16 @@ export interface ToolCallContext {
    * local tool of a sibling runtime in the same plugin).
    */
   readonly authorizedToolNames?: ReadonlySet<string>;
+  /**
+   * Kernel only: the service registry a tool's `context.services` calls
+   * through, as the calling plugin and runtime.
+   */
+  readonly services?: PluginServiceRegistry;
+  /**
+   * Kernel only: tools the kernel generated for this runtime (imported
+   * services), resolved before the registry's tools.
+   */
+  readonly generatedTools?: ReadonlyMap<string, ToolModule>;
 }
 
 export interface ToolCallResult {
@@ -135,6 +151,11 @@ export interface ToolCallResult {
    */
   readonly refused?: true;
   readonly approvalStatus?: ApprovalStatus;
+  /**
+   * Kernel only: the provenance of a service failure the call failed with,
+   * so a caller that fails because of it blames the provider.
+   */
+  readonly serviceFailure?: ServiceFailure;
 }
 
 export interface ToolInfo {
@@ -270,7 +291,84 @@ function resolveToolModule(
   name: string,
   context: ToolCallContext,
 ): ToolModule | undefined {
-  return config.findTool?.(name, context);
+  return context.generatedTools?.get(name) ?? config.findTool?.(name, context);
+}
+
+/**
+ * The answer to a call that failed because a service it called failed. Only
+ * a bad input is the model's to fix; the other failures are the provider's,
+ * so the call is refused rather than failed. Messages name the tool only:
+ * provider errors can carry plugin IDs.
+ */
+function serviceFailureAnswer(
+  name: string,
+  error: unknown,
+  failure: ServiceFailure,
+): { code: ToolErrorCode; message: string; hint?: string; refused: boolean } {
+  switch (failure.errorCode) {
+    case "unavailable":
+    case "admission-error":
+    case "cycle-or-depth-limit":
+      return {
+        code: "unavailable",
+        message:
+          isToolError(error) && error.code === "unavailable"
+            ? error.message
+            : `The tool "${name}" is unavailable: the service it calls is not available in this session.`,
+        refused: true,
+      };
+    case "timeout":
+      return {
+        code: "timeout",
+        message: `The tool "${name}" timed out waiting for its service.`,
+        refused: true,
+      };
+    case "cancelled":
+      return {
+        code: "cancelled",
+        message: "Tool execution was cancelled",
+        refused: false,
+      };
+    case "input-validation": {
+      const details =
+        error instanceof ServiceInputValidationError
+          ? [...new Set(error.details)].slice(0, 5)
+          : [];
+      return {
+        code: "invalid-input",
+        message: `Invalid parameters for tool "${name}"${details.length ? `: ${details.join("; ")}` : ""}. Fix the input and retry.`,
+        hint: "Fix these fields and call the tool again.",
+        refused: false,
+      };
+    }
+    case "output-validation":
+      return {
+        code: "internal",
+        message: "The service returned an invalid result.",
+        refused: true,
+      };
+    case "invocation-error":
+      return isToolError(error)
+        ? {
+            code: error.code,
+            message: error.message,
+            ...(error.hint !== undefined ? { hint: error.hint } : {}),
+            refused:
+              error.code !== "invalid-input" && error.code !== "cancelled",
+          }
+        : {
+            code: "internal",
+            message: internalMessage(name, error),
+            refused: true,
+          };
+    case "invalid-options":
+      // The calling tool passed bad options: its own mistake.
+      return {
+        code: "internal",
+        message: internalMessage(name, error),
+        refused: false,
+      };
+  }
 }
 
 export function createToolExecutor(
@@ -482,6 +580,7 @@ export function createToolExecutor(
         invocation = createToolExecutionContext(
           { ...context, signal: executionSignal },
           config.store,
+          call.toolCallId,
         );
         // Capture authority before any asynchronous trace work.
         await emitToolCalling(context, call, toolSource, approvalStatus);
@@ -610,6 +709,10 @@ export function createToolExecutor(
         let details: string[] | undefined;
         let message: string;
         let hint: string | undefined;
+        let refused = false;
+        // Set only for a failure the provider owns, never the caller's own.
+        let providerFailure: ServiceFailure | undefined;
+        const serviceFailure = serviceFailureOf(error);
         if (context.signal?.aborted) {
           code = "cancelled";
           message = "Tool execution was cancelled";
@@ -618,6 +721,16 @@ export function createToolExecutor(
           code = "timeout";
           message = error.message;
           errorResult = toolError(code, message);
+        } else if (serviceFailure) {
+          const answer = serviceFailureAnswer(call.name, error, serviceFailure);
+          ({ code, message, hint, refused } = answer);
+          if (refused) providerFailure = serviceFailure;
+          errorResult = toolError(code, message.slice(0, 2000), hint);
+          if (code === "internal")
+            console.warn(
+              `[ToolExecutor] Service called by tool "${call.name}" failed:`,
+              error,
+            );
         } else if (error instanceof ToolValidationError) {
           // Dedupe Zod issues by path so only the FIRST issue on any given
           // field is reported. Zod v4 has a quirk where `z.array(...).max(N)`
@@ -685,12 +798,12 @@ export function createToolExecutor(
           error: errorFromText(errorResult),
           parsedResult: null,
           success: false,
-          ...(isToolError(error) &&
-          error.code === "refused" &&
-          code === "refused"
+          ...(refused ||
+          (isToolError(error) && error.code === "refused" && code === "refused")
             ? { refused: true as const }
             : {}),
           approvalStatus,
+          ...(providerFailure ? { serviceFailure: providerFailure } : {}),
         };
       } finally {
         invocation?.close();

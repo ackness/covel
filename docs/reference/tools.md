@@ -2,10 +2,12 @@
 
 工具是模型在一次运行中可以调用的函数：模型给出名字和参数，框架执行它，把结果回给模型。本页列出全部工具、每个工具的参数和返回，以及怎样写自己的工具、工具怎样把数据写进存储。写 runtime 提示词或写工具的插件作者需要它。
 
-工具分两类：
+工具分四类：
 
 - **builtin**：框架自带，任何插件都可以用。
 - **plugin**：插件在自己的 `entry` 模块里注册，只有这个插件能用。
+- **导入**：agent 在 `agent.tools.services` 里导入别的插件给模型用的服务，框架在 runtime 开始时为它生成一个工具，见[导入的服务工具](#导入的服务工具)。它不在注册表里，所以不在下面的概览表里。
+- **注入**：框架按 runtime 的声明临时加上的工具，例如 `search-tools`。
 
 > [!NOTE]
 > 下文表格和审批规则里的 `local` 是执行器内部使用的来源标签，指“由插件 entry 注册成功的工具”。它不是清单字段。清单里没有 `tools.local`，写了它的清单加载失败。
@@ -255,7 +257,7 @@ plugin 工具封装插件自己的业务。它的 schema、文案和数据结构
 - 工具按 `(pluginId, name)` 注册。不同插件可以用同一个名字。同一个插件里重名，或用了框架保留名，会让这一批注册全部失败并撤回。
 - `tools.plugin` 的声明不注册实现。一次调用要过两关：这个 runtime 的工具白名单，以及调用方插件自己的注册表。没注册的名字不会落到别的插件的同名实现上。
 - 模型、`ctx.tools.call`、`tools.defer` 都用工具原来的名字。
-- 要跨插件公开的能力用 `ctx.services`。
+- 要跨插件公开的能力用服务。工具执行时用 `context.services` 调用别的插件的服务，规则和函数 runtime 的 `ctx.services` 相同；agent 用 `agent.tools.services` 把给模型用的服务导入成工具。
 
 ### 不是 Tool：`FunctionHandlerContext` 上的框架能力
 
@@ -1468,6 +1470,54 @@ schema 里带 `x-derive` 的字段由 `world-init/dimension-clock` 按时钟计�
 模型不用自己写 `{ topic, data }` 事件信封，所以不会漏写 topic 或写成空的。runtime 的输出 schema 只校验工具产生的可信结果。
 
 两个 prompt-generator 都是手动触发的 agent，声明了 `schedule.background: true`。它们的 `agent.completion.afterTools` 列出了对应的工具，所以一次成功提交后就结束。之后的 image-generator 在后台继续执行。
+
+## 导入的服务工具
+
+agent 在 `agent.tools.services` 里导入别的插件给模型用的服务（[怎样提供](./plugin-extensions.md#给模型用的服务)）。每个导入在 runtime 开始时变成一个只读工具。
+
+```yaml
+agent:
+  tools:
+    services:
+      - inventory.items@1
+      - { contract: world.map@2, as: look-at-map }
+```
+
+- **名字**：默认是去掉版本号、`.` 换成 `-` 的契约名（`inventory.items@1` → `inventory-items`），`as` 另起名字。名字只能有字母、数字、`_` 和 `-`，最长 64；推导出来的名字太长时要写 `as`。名字不能和框架工具、这个 runtime 的 `tools.builtin` / `tools.plugin`、本包的 `contributes.tools` 或另一个导入重名；同一个契约只能导入一次。重名时清单校验报错。
+- **说明和参数**：说明是提供方注册时的 `description`。参数的 JSON Schema 来自提供方的 Zod 输入（不带 `$schema`），或提供方显式给的 `inputSchema`。输入是 Zod 时（显式给了 `inputSchema` 也一样），参数先在工具这一侧校验，错误照常写明字段，写成 JSON 文本的数组或对象会被修复；提供方收到的是模型发来的参数（或修复后的参数），由它自己解析一次后交给处理函数，所以 `transform` 只作用一次。输入不是 Zod 时，参数只由提供方校验。
+- **注解**：`{ readOnly: true, stagesWrites: false, idempotent: true, concurrencySafe: true }`。导入的服务只读，可以和其他只读工具一起并发。子 agent 保留导入。
+- **结果**：和其他工具一样回给模型 `{ "data": … }`，ID、UUID 和时间戳由 `modelFacingJson` 去掉。审批、`PreToolUse` / `PostToolUse`、`tool_calls` 记录和 `tool.*` trace 都照常；审批来源按 `local` 算。
+- **时限**：一次调用最多等提供方 15 秒，超时回答 `timeout`。
+- **延迟加载**：`tools.defer: true`，或在 `defer` 列表里写导入的名字，导入就和其他工具一样延迟，用 `search-tools` 找到。
+- **不能完成 runtime**：`finishWith` 和 `completion.afterTools` 不能写导入的工具。runtime 不能靠另一个插件才能结束。
+
+### 不在的工具
+
+没有恰好一个活跃的提供方时，这个工具不出现：不在模型请求的工具列表里，`search-tools` 也找不到。runtime 照常开始，故事照常提交。模型仍然调用它（比如恢复执行的对话里还留着它，或者模型猜了这个名字）时，得到 `unavailable`，说明写清原因，不带插件 ID：
+
+- `The tool "inventory-items" is unavailable in this session: no active provider offers inventory.items@1.`
+- `…: more than one plugin provides it.`
+- `…: its provider is paused after repeated errors.`
+- `…: its provider does not offer it to models.`
+
+服务端日志另有一行带插件 ID 的说明，给作者排查用。
+
+### 服务失败怎样回答
+
+导入的工具，以及任何让服务错误抛出来的插件工具，都按下表回答模型。只有输入错误是模型能改的；其他失败是提供方的问题，结果带 `refused: true`，不算调用方的失败调用；函数 runtime 因此失败时，也不算这个 runtime 的错误，服务调用记录里写明提供方。这些失败不会累计到提供方身上让它暂停。
+
+<!-- prettier-ignore -->
+| 服务的结果 | 工具错误码 | `refused` |
+| --- | --- | --- |
+| 提供方不可用、未获准或被撤销，调用成环或超过深度 | `unavailable` | 是 |
+| 等待超时 | `timeout` | 是 |
+| 调用被取消 | `cancelled` | 否 |
+| 提供方拒绝输入 | `invalid-input`（写明字段） | 否 |
+| 提供方的返回不符合它的输出 schema | `internal`："The service returned an invalid result." | 是 |
+| 提供方抛出 `ToolError` | 它自己的错误码、说明和提示 | 是（`invalid-input`、`cancelled` 除外） |
+| 提供方抛出其他错误 | `internal`，只留第一行，UUID 换成 `<id>` | 是 |
+
+工具自己的超时、调用方取消、审批拒绝和 `PreToolUse` 拦截不变。
 
 ## 短 ID（LLM 友好实体引用）
 
