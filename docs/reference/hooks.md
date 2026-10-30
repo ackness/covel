@@ -264,19 +264,21 @@ agent runtime 的每次工具调用之前触发，函数 runtime 经 `ctx.tools.
 
 负载：`{ toolCall: { id, name, arguments } }`，`arguments` 是 JSON 字符串。
 
-- `abort` 跳过这次调用，`reason` 作为工具的错误回给模型。
+- `abort` 跳过这次调用，`reason` 作为工具的 `refused` 错误回给模型。agent 循环还记录 `tool.calling` / `tool.failed`，带 `skipped: true` 和 `skipReason: "hook-aborted"`；不计入已执行调用或失败计数。
 - `replace.toolCall` 可以改 `name` 或 `arguments`，`id` 保持不变。
+
+同一批 agent 工具调用中，`PreToolUse` 每次只运行一次，按模型顺序执行。在一段可并发的只读调用中，所有成员的 Hook 先按顺序运行，再启动工具。原始名字不是可并发工具的调用不会被提前查看；它的 Hook 等前一步结束后才运行。提前查看的调用如果被改写成屏障，就留到下一步单独执行，已经得到的 Hook 结果保留，不重复触发。并行池和屏障的规则见[工具参考](./tools.md#同一批调用的执行)。
 
 ### `PostToolUse`
 
-每次实际执行过的工具调用之后触发。
+每次实际执行过的工具调用之后触发。并行池的所有成员先全部结束，再按模型顺序运行各自的 `PostToolUse`；屏障的 Hook 在这次单独调用结束后运行。
 
 负载：`{ toolCall, result }`。
 
 `result.result` 是统一工具结果的 JSON 文本。失败时 `result.error` 是 `{code,message,hint?}`；它和副作用、`success`、`refused`、审批状态一样不可被替换。Hook 可以改写模型文本或 `parsedResult`，不能改变失败计数和结构化错误。
 
 - `replace.result` 替换模型读到的结果（函数 runtime 里是 `ctx.tools.call` 返回的值）。工具交出的写入和事件、是否成功、审批状态都保持原样。
-- `replace.terminate: true` 在记下这条结果之后结束工具循环。
+- `replace.terminate: true` 在当前步骤结束后结束工具循环。并行池中所有已经启动的成员都正常记下结果并运行 `PostToolUse`，任一成员要求结束都跳过后面的步骤；屏障要求结束时跳过所有后续调用。跳过的调用以 `cancelled` 工具结果关闭，并记录带 `skipReason: "terminated"` 的 trace。
 
 ### `PreStateCommit`
 

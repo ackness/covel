@@ -24,13 +24,26 @@ import {
   parseJsonText,
   type EmittedEvent,
 } from "@covel/tools";
-import type { LLMMessage, LLMResponse, LLMToolDefinition } from "@covel/shared";
+import type {
+  LLMMessage,
+  LLMResponse,
+  LLMToolCall,
+  LLMToolDefinition,
+} from "@covel/shared";
 import type { SuspendedLoopState } from "@covel/store";
 import { promptCacheKeyFor } from "../llm/prompt-cache-key.js";
 import type { HookPipeline } from "../hooks/pipeline.js";
 import type { RetryInfo } from "../retry/llm-retry.js";
 import { buildAgentLoopPolicy } from "./agent-loop-policy.js";
-import type { ResolvedLoopProfile } from "./loop-profile.js";
+import type { ToolCallContext } from "./tool-executor.js";
+import { answerWithoutTools, writeStoryWithoutTools } from "./loop-prompts.js";
+import {
+  MAX_PARALLEL_TOOL_CALLS,
+  runBounded,
+  cutToolStep,
+  closeUnansweredToolCalls,
+  emitSkippedToolCall,
+} from "./tool-batch.js";
 import { prepareBudgetedRequest } from "./request-context-budget.js";
 import { createDeltaForwarder } from "./delta-forwarder.js";
 import {
@@ -73,9 +86,11 @@ import {
   buildPreToolAbortMessage,
   buildToolExecutionUnavailableMessage,
   buildToolResultMessage,
+  buildSuspendedPlaceholderMessage,
+  buildNestedSuspendMessage,
 } from "./turn-agent-tool-loop-messages.js";
 import type { AgentLoopDeps } from "../turn-executor/turn-executor-types.js";
-import { storyOutputError } from "./story-output.js";
+import { schemaAsksForSegments, storyOutputError } from "./story-output.js";
 import {
   checkTextCompletion,
   hasBusinessWork,
@@ -171,8 +186,7 @@ export interface RunAgentToolLoopOptions {
   /**
    * Whether a suspend sentinel may suspend this loop. Dispatch and resume
    * allow it (`true`, default), so a resumed runtime can suspend again; a
-   * sub-agent cannot, and gets a "Nested suspend is not supported" tool
-   * result instead.
+   * sub-agent cannot, and gets an unavailable tool result instead.
    */
   readonly allowSuspend?: boolean;
 }
@@ -384,8 +398,28 @@ async function runAgentToolLoopWithinBudget(
     eventBus: deps.eventBus,
     emitter: deps.emitter,
   };
-  // Set by a PostToolUse hook returning `terminate` — ends the loop. The calls
-  // after the terminating one in the same response are not executed.
+  const toolCallContext = (): ToolCallContext => ({
+    sessionId: input.sessionId,
+    turnId: input.turnId,
+    pluginId: manifest.pluginId,
+    runtimeId: manifest.name,
+    locale: input.locale,
+    messages: pluginMessagesFor(loaded.messages, input.locale),
+    pendingProposals,
+    ...(pluginDataVisibility ? { pluginDataVisibility } : {}),
+    upstreamProposals,
+    world,
+    signal: hookOpts.signal,
+    inputSlots,
+    emittedEventTopics: emittedEvents.map((event) => event.topic),
+    emitter: deps.emitter,
+    ...(turnNumber !== undefined ? { turnNumber } : {}),
+    ...(logicalTurn !== undefined ? { logicalTurn } : {}),
+    authorizedToolNames,
+  });
+  const segments = schemaAsksForSegments(loaded.outputSchema);
+  // A terminating hook ends the loop after its step. Already-running pool
+  // members finish normally; later steps in the response never execute.
   let terminatedByHook = false;
   const reviewResponse = createResponseReviewer(
     hookOpts,
@@ -532,7 +566,9 @@ async function runAgentToolLoopWithinBudget(
    */
   const runFinalizer = async (step: number): Promise<string | undefined> => {
     await delta.reset();
-    messages.push(answerWithoutTools(profile.answerPrompt, input.locale));
+    messages.push(
+      answerWithoutTools(profile.answerPrompt, input.locale, { segments }),
+    );
     await stepEvents.start({
       step,
       maxSteps: stepLimit,
@@ -731,336 +767,375 @@ async function runAgentToolLoopWithinBudget(
       // Where this response's calls start in `executedToolCalls`.
       const firstCallOfResponse = executedToolCalls.length;
 
-      for (
-        let toolCallIndex = 0;
-        toolCallIndex < response.toolCalls.length;
-        toolCallIndex += 1
-      ) {
-        const tc = response.toolCalls[toolCallIndex]!;
+      const preOutcomes = new Map<
+        number,
+        Awaited<ReturnType<typeof runPreToolUseHook>>
+      >();
+      const effectiveCalls = new Map<number, LLMToolCall | null>();
+      const hookAborts = new Map<string, string>();
+      const startedCallIds = new Set<string>();
+      const prepareCall = async (index: number) => {
+        if (preOutcomes.has(index)) return;
         budget.assertLive();
-        if (deps.toolExecutor) {
-          const tcStart = Date.now();
-
-          // ── PreToolUse hook ──────────────────────────
-          const preToolOutcome = await runPreToolUseHook(hookOpts, {
-            id: tc.id,
-            name: tc.name,
-            arguments: tc.arguments,
-          });
-          budget.assertLive();
-          if (preToolOutcome.skipped) {
-            // Skip tool execution; push synthetic tool-role message so LLM sees a result
-            messages.push(
-              buildPreToolAbortMessage({
-                toolCallId: tc.id,
-                reason: preToolOutcome.reason,
-              }),
-            );
-            continue;
-          }
-
-          // Use the (possibly replaced) toolCall from the hook outcome
-          const effectiveTc = preToolOutcome.toolCall;
-          // The hook may rewrite the name or arguments. Replay that effective
-          // call while the executor still receives the original argument text
-          // so an unrepairable call still fails with `invalid-input`.
+        const call = response.toolCalls[index]!;
+        const outcome = await runPreToolUseHook(hookOpts, call);
+        preOutcomes.set(index, outcome);
+        effectiveCalls.set(index, outcome.skipped ? null : outcome.toolCall);
+        if (outcome.skipped) {
+          hookAborts.set(call.id, outcome.reason);
+        } else {
+          // Replay hook rewrites while leaving invalid argument text for the executor.
           const assistantMessage = messages[assistantMessageIndex]!;
           messages[assistantMessageIndex] = {
             ...assistantMessage,
-            toolCalls: assistantMessage.toolCalls!.map((call, index) =>
-              index === toolCallIndex
-                ? normalizeAssistantToolCall(effectiveTc)
-                : call,
+            toolCalls: assistantMessage.toolCalls!.map((item, callIndex) =>
+              callIndex === index
+                ? normalizeAssistantToolCall(outcome.toolCall)
+                : item,
             ),
           };
+        }
+        budget.assertLive();
+      };
 
-          // ── search-tools interception (deferred tool loading) ─
-          // Framework-injected sentinel, same pattern as suspend /
-          // runtime-done: never dispatched to the executor. Ranks the
-          // still-deferred pool (BM25) and grows the working tool surface so
-          // the NEXT LLM step can call the activated tools directly.
-          if (
-            effectiveTc.name === SEARCH_TOOLS_TOOL_NAME &&
-            deferredToolNames.size > 0
-          ) {
-            const activeNames = new Set(
-              (activeToolDefs ?? []).map((d) => d.name),
+      try {
+        let nextCall = 0;
+        while (nextCall < response.toolCalls.length) {
+          budget.assertLive();
+          const executor = deps.toolExecutor;
+          if (!executor) {
+            messages.push(
+              buildToolExecutionUnavailableMessage(
+                response.toolCalls[nextCall++]!.id,
+              ),
             );
-            const search = executeToolSearch({
-              argumentsJson: effectiveTc.arguments,
-              deferredNames: deferredToolNames,
-              activeNames,
-              toolExecutor: deps.toolExecutor,
-              context: {
-                sessionId: input.sessionId,
-                turnId: input.turnId,
+            continue;
+          }
+          // This snapshot is shared by classification and execution for the step.
+          const context = toolCallContext();
+          const poolable = (call: LLMToolCall) => {
+            if (
+              !authorizedToolNames.has(call.name) ||
+              [
+                SEARCH_TOOLS_TOOL_NAME,
+                "suspend",
+                "runtime-done",
+                "delegate",
+              ].includes(call.name)
+            )
+              return false;
+            const info = executor.getToolInfo(call.name, context);
+            return (
+              info?.annotations.readOnly === true &&
+              info.annotations.concurrencySafe === true
+            );
+          };
+          await prepareCall(nextCall);
+          let step = cutToolStep(
+            response.toolCalls,
+            nextCall,
+            poolable,
+            effectiveCalls,
+          );
+          for (const index of step.indices.slice(1)) {
+            await prepareCall(index);
+            step = cutToolStep(
+              response.toolCalls,
+              nextCall,
+              poolable,
+              effectiveCalls,
+            );
+            if (!step.indices.includes(index)) break;
+          }
+
+          // Hooks are prepared in order; tool work alone runs concurrently.
+          const results = await runBounded(
+            step.indices.map((index) => async () => {
+              budget.assertLive();
+              const outcome = preOutcomes.get(index)!;
+              if (outcome.skipped) return null;
+              const effectiveTc = outcome.toolCall;
+              if (
+                effectiveTc.name === SEARCH_TOOLS_TOOL_NAME &&
+                deferredToolNames.size > 0
+              )
+                return null;
+              const started = Date.now();
+              startedCallIds.add(effectiveTc.id);
+              const result = await executor.execute(
+                {
+                  toolCallId: effectiveTc.id,
+                  name: effectiveTc.name,
+                  arguments: effectiveTc.arguments,
+                },
+                context,
+              );
+              return { result, durationMs: Date.now() - started };
+            }),
+            step.kind === "pool" ? MAX_PARALLEL_TOOL_CALLS : 1,
+          );
+          budget.assertLive();
+
+          for (const [position, toolCallIndex] of step.indices.entries()) {
+            const tc = response.toolCalls[toolCallIndex]!;
+            const outcome = preOutcomes.get(toolCallIndex)!;
+            if (outcome.skipped) {
+              const message = buildPreToolAbortMessage({
+                toolCallId: tc.id,
+                reason: outcome.reason,
+              });
+              messages.push(message);
+              await emitSkippedToolCall({
+                call: tc,
+                context,
+                reason: "hook-aborted",
+                message,
+              });
+              continue;
+            }
+            const effectiveTc = outcome.toolCall;
+            const tcStart = Date.now();
+            // ── search-tools interception (deferred tool loading) ─
+            // Framework-injected sentinel, same pattern as suspend /
+            // runtime-done: never dispatched to the executor. Ranks the
+            // still-deferred pool (BM25) and grows the working tool surface so
+            // the NEXT LLM step can call the activated tools directly.
+            if (
+              effectiveTc.name === SEARCH_TOOLS_TOOL_NAME &&
+              deferredToolNames.size > 0
+            ) {
+              const activeNames = new Set(
+                (activeToolDefs ?? []).map((d) => d.name),
+              );
+              const search = executeToolSearch({
+                argumentsJson: effectiveTc.arguments,
+                deferredNames: deferredToolNames,
+                activeNames,
+                toolExecutor: deps.toolExecutor,
+                context,
+              });
+              if (search.activated.length > 0) {
+                activeToolDefs = [
+                  ...(activeToolDefs ?? []),
+                  ...search.activated,
+                ];
+                stepEvents.note({
+                  kind: "tool-activated",
+                  count: search.activated.length,
+                });
+              }
+              messages.push(
+                buildToolResultMessage({
+                  toolCallId: effectiveTc.id,
+                  content: search.resultText,
+                }),
+              );
+              executedToolCalls.push({
+                name: effectiveTc.name,
+                arguments: effectiveTc.arguments,
+                result: search.parsedResult,
+                success: true,
+              });
+              stepEvents.toolCall(effectiveTc.name, true);
+              collectedToolCalls.push({
+                toolCallId: effectiveTc.id,
+                toolName: effectiveTc.name,
                 pluginId: manifest.pluginId,
                 runtimeId: manifest.name,
-              },
-            });
-            if (search.activated.length > 0) {
-              activeToolDefs = [...(activeToolDefs ?? []), ...search.activated];
-              stepEvents.note({
-                kind: "tool-activated",
-                count: search.activated.length,
+                turnId: input.turnId,
+                input: {
+                  query: toJsonValueOrDiagnostic(
+                    search.parsedResult.query,
+                    "input.query",
+                  ),
+                },
+                output: toJsonValueOrDiagnostic(search.parsedResult, "output"),
+                durationMs: Date.now() - tcStart,
+                approvalStatus: "auto-allowed",
+                timestamp: new Date().toISOString(),
+              });
+              continue;
+            }
+
+            const { result, durationMs } = results[position]!;
+            const { result: toolResult, terminate: terminateAfterTool } =
+              await runPostToolUseHook(hookOpts, effectiveTc, result);
+            budget.assertLive();
+            if (!toolResult.success && !toolResult.refused) {
+              failedToolCalls.push({
+                toolName: effectiveTc.name,
+                message: extractToolFailureMessage(toolResult.result),
               });
             }
-            messages.push(
-              buildToolResultMessage({
-                toolCallId: effectiveTc.id,
-                content: search.resultText,
-              }),
-            );
+            if (toolResult.pendingProposals?.length)
+              pendingProposals.push(...toolResult.pendingProposals);
+            if (toolResult.emittedEvents?.length)
+              emittedEvents.push(...toolResult.emittedEvents);
+
+            // ── Suspend detection ────────────────────────
+            // These names are reserved to builtins by ToolRegistry. A matching
+            // field from a plugin tool is ordinary data, not loop control.
+            // When the suspend tool is called, capture the current loop state as
+            // an execution-local artifact. The tool result is not pushed back to
+            // the LLM; instead we exit the loop with status 'suspended'. A
+            // resumed loop suspends the same way.
+            //
+            // A sub-agent runs with `allowSuspend: false`: it cannot suspend, so
+            // the sentinel is fed back to the LLM as an error tool result and
+            // the loop continues.
+            if (
+              effectiveTc.name === "suspend" &&
+              toolResult.success &&
+              isSuspendSentinel(toolResult.parsedResult)
+            ) {
+              if (!allowSuspend) {
+                messages.push(buildNestedSuspendMessage(effectiveTc.id));
+                continue;
+              }
+              {
+                // The captured assistant message contains the whole tool-call
+                // batch. Provider protocols require a tool-role result for every
+                // call before the next LLM request. Capture a placeholder for the
+                // suspender (resume replaces its content) and explicitly cancel
+                // later calls rather than leaving dangling ids in the transcript.
+                messages.push(buildSuspendedPlaceholderMessage(effectiveTc.id));
+                await closeUnansweredToolCalls({
+                  messages,
+                  assistantMessageIndex,
+                  context,
+                  reason: "suspended",
+                  hookAborts,
+                });
+                loop.enter("suspended");
+                loop.stop = { reason: "suspended" };
+                await stepEvents.close("suspended");
+                return handleSuspension({
+                  outputContractSchema: loaded.outputContractSchema,
+                  sentinel: toolResult.parsedResult,
+                  manifest,
+                  input,
+                  inputSlots,
+                  deps,
+                  hookPipeline,
+                  messages,
+                  finalContent,
+                  collectedToolCalls,
+                  completionCalls: captureCompletionCalls(
+                    executedToolCalls,
+                    initialState?.completionCalls,
+                  ),
+                  pendingProposals,
+                  emittedEvents,
+                  executionContext,
+                  ...(logicalTurn !== undefined ? { logicalTurn } : {}),
+                  ...(turnNumber !== undefined ? { turnNumber } : {}),
+                  currentTurnUserMessages,
+                  suspendToolCallId: effectiveTc.id,
+                  startTime,
+                  runId,
+                  loop: {
+                    corrections: policy.snapshot(),
+                    activatedTools: (activeToolDefs ?? [])
+                      .map((definition) => definition.name)
+                      .filter(
+                        (name) =>
+                          !toolDefs?.some((initial) => initial.name === name),
+                      ),
+                    steeredProse,
+                    completingToolOutput: outputFromCompletingTool
+                      ? (completingToolOutputInResponse ?? finalToolOutput)
+                      : null,
+                  },
+                  ...(promptSegments ? { promptSegments } : {}),
+                });
+              }
+            }
+
             executedToolCalls.push({
               name: effectiveTc.name,
               arguments: effectiveTc.arguments,
-              result: search.parsedResult,
-              success: true,
+              result: toolResult.parsedResult,
+              success: toolResult.success,
+              ...(toolResult.refused ? { refused: true as const } : {}),
             });
-            stepEvents.toolCall(effectiveTc.name, true);
+            stepEvents.toolCall(effectiveTc.name, toolResult.success);
+
+            if (
+              effectiveTc.name !== "runtime-done" ||
+              !toolResult.success ||
+              !isRuntimeDoneSentinel(toolResult.parsedResult)
+            ) {
+              if (toolResult.success) {
+                if (completeAfterTools.has(effectiveTc.name)) {
+                  successfulCompletingToolsInResponse++;
+                  if (isRecord(toolResult.parsedResult)) {
+                    completingToolOutputInResponse = {
+                      ...toolResult.parsedResult,
+                    };
+                  }
+                }
+              } else if (!toolResult.refused) failedBusinessToolsInResponse++;
+            }
+
+            // Build ToolCallRecord for RuntimeResult.toolCalls
+            let parsedInput: Record<string, unknown> = {};
+            try {
+              parsedInput = parseJsonText(effectiveTc.arguments) as Record<
+                string,
+                unknown
+              >;
+            } catch {
+              /* keep empty */
+            }
             collectedToolCalls.push({
               toolCallId: effectiveTc.id,
               toolName: effectiveTc.name,
               pluginId: manifest.pluginId,
               runtimeId: manifest.name,
               turnId: input.turnId,
-              input: {
-                query: toJsonValueOrDiagnostic(
-                  search.parsedResult.query,
-                  "input.query",
-                ),
-              },
-              output: toJsonValueOrDiagnostic(search.parsedResult, "output"),
-              durationMs: Date.now() - tcStart,
-              approvalStatus: "auto-allowed",
+              input: toJsonValueOrDiagnostic(parsedInput, "input"),
+              output: toJsonValueOrDiagnostic(
+                toolResult.parsedResult,
+                "output",
+              ),
+              durationMs,
+              approvalStatus: toolResult.approvalStatus ?? "auto-allowed",
               timestamp: new Date().toISOString(),
             });
-            continue;
-          }
 
-          const result = await deps.toolExecutor.execute(
-            {
-              toolCallId: effectiveTc.id,
-              name: effectiveTc.name,
-              arguments: effectiveTc.arguments,
-            },
-            {
-              sessionId: input.sessionId,
-              turnId: input.turnId,
-              pluginId: manifest.pluginId,
-              runtimeId: manifest.name,
-              locale: input.locale,
-              messages: pluginMessagesFor(loaded.messages, input.locale),
-              pendingProposals: pendingProposals,
-              ...(pluginDataVisibility ? { pluginDataVisibility } : {}),
-              upstreamProposals,
-              world,
-              signal: hookOpts.signal,
-              inputSlots,
-              emittedEventTopics: emittedEvents.map((e) => e.topic),
-              emitter: deps.emitter,
-              ...(turnNumber !== undefined ? { turnNumber } : {}),
-              ...(logicalTurn !== undefined ? { logicalTurn } : {}),
-              // Execution is bounded by the runtime's declared surface,
-              // checked AFTER PreToolUse replacement produced effectiveTc.
-              authorizedToolNames,
-            },
-          );
-          budget.assertLive();
-
-          // ── PostToolUse hook ─────────────────────────
-          const { result: toolResult, terminate: terminateAfterTool } =
-            await runPostToolUseHook(
-              hookOpts,
-              {
-                id: effectiveTc.id,
-                name: effectiveTc.name,
-                arguments: effectiveTc.arguments,
-              },
-              result,
+            messages.push(
+              buildToolResultMessage({
+                toolCallId: effectiveTc.id,
+                content: toolResult.result,
+              }),
             );
-          budget.assertLive();
 
-          if (!toolResult.success && !toolResult.refused) {
-            failedToolCalls.push({
-              toolName: effectiveTc.name,
-              message: extractToolFailureMessage(toolResult.result),
-            });
+            if (terminateAfterTool) terminatedByHook = true;
           }
-
-          if (
-            toolResult.pendingProposals &&
-            toolResult.pendingProposals.length > 0
-          ) {
-            pendingProposals.push(...toolResult.pendingProposals);
-          }
-
-          if (toolResult.emittedEvents && toolResult.emittedEvents.length > 0) {
-            emittedEvents.push(...toolResult.emittedEvents);
-          }
-
-          // ── Suspend detection ────────────────────────
-          // These names are reserved to builtins by ToolRegistry. A matching
-          // field from a plugin tool is ordinary data, not loop control.
-          // When the suspend tool is called, capture the current loop state as
-          // an execution-local artifact. The tool result is not pushed back to
-          // the LLM; instead we exit the loop with status 'suspended'. A
-          // resumed loop suspends the same way.
-          //
-          // A sub-agent runs with `allowSuspend: false`: it cannot suspend, so
-          // the sentinel is fed back to the LLM as an error tool result and
-          // the loop continues.
-          if (
-            effectiveTc.name === "suspend" &&
-            toolResult.success &&
-            isSuspendSentinel(toolResult.parsedResult)
-          ) {
-            if (!allowSuspend) {
-              messages.push(
-                buildToolResultMessage({
-                  toolCallId: effectiveTc.id,
-                  content: JSON.stringify({
-                    error: "Nested suspend is not supported",
-                  }),
-                }),
-              );
-              continue;
-            }
-            {
-              // The captured assistant message contains the whole tool-call
-              // batch. Provider protocols require a tool-role result for every
-              // call before the next LLM request. Capture a placeholder for the
-              // suspender (resume replaces its content) and explicitly cancel
-              // later calls rather than leaving dangling ids in the transcript.
-              messages.push(
-                buildToolResultMessage({
-                  toolCallId: effectiveTc.id,
-                  content: JSON.stringify({ suspended: true }),
-                }),
-              );
-              for (const skipped of response.toolCalls.slice(
-                toolCallIndex + 1,
-              )) {
-                messages.push(
-                  buildToolResultMessage({
-                    toolCallId: skipped.id,
-                    content: JSON.stringify({
-                      error:
-                        "Tool call skipped because an earlier call suspended the runtime",
-                    }),
-                  }),
-                );
-              }
-              loop.enter("suspended");
-              loop.stop = { reason: "suspended" };
-              await stepEvents.close("suspended");
-              return handleSuspension({
-                outputContractSchema: loaded.outputContractSchema,
-                sentinel: toolResult.parsedResult,
-                manifest,
-                input,
-                inputSlots,
-                deps,
-                hookPipeline,
-                messages,
-                finalContent,
-                collectedToolCalls,
-                completionCalls: captureCompletionCalls(
-                  executedToolCalls,
-                  initialState?.completionCalls,
-                ),
-                pendingProposals,
-                emittedEvents,
-                executionContext,
-                ...(logicalTurn !== undefined ? { logicalTurn } : {}),
-                ...(turnNumber !== undefined ? { turnNumber } : {}),
-                currentTurnUserMessages,
-                suspendToolCallId: effectiveTc.id,
-                startTime,
-                runId,
-                loop: {
-                  corrections: policy.snapshot(),
-                  activatedTools: (activeToolDefs ?? [])
-                    .map((definition) => definition.name)
-                    .filter(
-                      (name) =>
-                        !toolDefs?.some((initial) => initial.name === name),
-                    ),
-                  steeredProse,
-                  completingToolOutput: outputFromCompletingTool
-                    ? (completingToolOutputInResponse ?? finalToolOutput)
-                    : null,
-                },
-                ...(promptSegments ? { promptSegments } : {}),
-              });
-            }
-          }
-
-          executedToolCalls.push({
-            name: effectiveTc.name,
-            arguments: effectiveTc.arguments,
-            result: toolResult.parsedResult,
-            success: toolResult.success,
-            ...(toolResult.refused ? { refused: true as const } : {}),
-          });
-          stepEvents.toolCall(effectiveTc.name, toolResult.success);
-
-          if (
-            effectiveTc.name !== "runtime-done" ||
-            !toolResult.success ||
-            !isRuntimeDoneSentinel(toolResult.parsedResult)
-          ) {
-            if (toolResult.success) {
-              if (completeAfterTools.has(effectiveTc.name)) {
-                successfulCompletingToolsInResponse++;
-                if (isRecord(toolResult.parsedResult)) {
-                  completingToolOutputInResponse = {
-                    ...toolResult.parsedResult,
-                  };
-                }
-              }
-            } else if (!toolResult.refused) failedBusinessToolsInResponse++;
-          }
-
-          // Build ToolCallRecord for RuntimeResult.toolCalls
-          let parsedInput: Record<string, unknown> = {};
-          try {
-            parsedInput = parseJsonText(effectiveTc.arguments) as Record<
-              string,
-              unknown
-            >;
-          } catch {
-            /* keep empty */
-          }
-          collectedToolCalls.push({
-            toolCallId: effectiveTc.id,
-            toolName: effectiveTc.name,
-            pluginId: manifest.pluginId,
-            runtimeId: manifest.name,
-            turnId: input.turnId,
-            input: toJsonValueOrDiagnostic(parsedInput, "input"),
-            output: toJsonValueOrDiagnostic(toolResult.parsedResult, "output"),
-            durationMs: Date.now() - tcStart,
-            approvalStatus: toolResult.approvalStatus ?? "auto-allowed",
-            timestamp: new Date().toISOString(),
-          });
-
-          messages.push(
-            buildToolResultMessage({
-              toolCallId: effectiveTc.id,
-              content: toolResult.result,
-            }),
-          );
-
-          // PostToolUse hook requested loop termination. Stop processing
-          // further tool calls in this response and exit the loop below.
-          if (terminateAfterTool) {
-            terminatedByHook = true;
-            break;
-          }
-        } else {
-          messages.push(buildToolExecutionUnavailableMessage(tc.id));
+          nextCall = step.indices.at(-1)! + 1;
+          if (terminatedByHook) break;
         }
+        if (terminatedByHook) {
+          await closeUnansweredToolCalls({
+            messages,
+            assistantMessageIndex,
+            context: toolCallContext(),
+            reason: "terminated",
+            hookAborts,
+          });
+        }
+      } catch (error) {
+        await closeUnansweredToolCalls({
+          messages,
+          assistantMessageIndex,
+          context: toolCallContext(),
+          reason: "aborted",
+          hookAborts,
+          startedCallIds,
+        });
+        // Runtime cancellation or deadline takes precedence over a task rejection.
+        budget.assertLive();
+        throw error;
       }
 
       loop.enter("deciding");
@@ -1107,7 +1182,7 @@ async function runAgentToolLoopWithinBudget(
           finalResponse = undefined;
           finalResponseMessageIndex = undefined;
           activeToolDefs = undefined;
-          messages.push(writeStoryWithoutTools(input.locale));
+          messages.push(writeStoryWithoutTools(input.locale, { segments }));
           stepEvents.note({ kind: "story-without-tools" });
           continue;
         }
@@ -1225,7 +1300,9 @@ async function runAgentToolLoopWithinBudget(
         finalResponse = undefined;
         finalResponseMessageIndex = undefined;
         activeToolDefs = undefined;
-        messages.push(answerWithoutTools(profile.answerPrompt, input.locale));
+        messages.push(
+          answerWithoutTools(profile.answerPrompt, input.locale, { segments }),
+        );
         stepEvents.note({ kind: "story-without-tools" });
       }
       if (policy.used("loopPerturbation") > perturbationsBefore)
@@ -1460,37 +1537,5 @@ async function runAgentToolLoopWithinBudget(
     requiredToolUseUnmet,
     lastTarget,
     requiredCompletionUnmet,
-  };
-}
-
-/** Ask for the answer `answerPrompt` names, tools off. */
-function answerWithoutTools(
-  answerPrompt: ResolvedLoopProfile["answerPrompt"],
-  locale: string | undefined,
-): LLMMessage {
-  return answerPrompt === "story"
-    ? writeStoryWithoutTools(locale)
-    : finalAnswerWithoutTools(locale);
-}
-
-/** Ask a non-story runtime at its step limit for its final answer, tools off. */
-function finalAnswerWithoutTools(locale: string | undefined): LLMMessage {
-  return {
-    role: "system",
-    content:
-      instructionLocaleFor(locale) === "zh"
-        ? "已经没有剩余步数，工具已关闭。现在根据已有的信息直接给出最终答案，按要求的输出格式回复；不要再调用工具或解释处理过程。"
-        : "No steps are left and tools are off. Give your final answer now from the information you already have, in the required output format. Do not call tools or describe the processing steps.",
-  };
-}
-
-/** Ask a story runtime that has only called tools to write the narrative. */
-function writeStoryWithoutTools(locale: string | undefined): LLMMessage {
-  return {
-    role: "system",
-    content:
-      instructionLocaleFor(locale) === "zh"
-        ? "你只完成了工具调用，还没有输出故事正文。现在根据已读取的信息直接写出本回合正文；不要再调用工具或解释处理过程。"
-        : "You completed tool calls but have not written the story. Write this turn's narrative now using the information already retrieved. Do not call more tools or describe the processing steps.",
   };
 }

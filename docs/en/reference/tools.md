@@ -92,6 +92,16 @@ In the overview table, “defaults” means the default combination above; `—`
 
 If a declared `tools.plugin` tool is not registered, even when deferred by `tools.defer`, the runtime fails before calling the model: `runtime "<id>" declares plugin tool "<name>", but its plugin did not register it`. A builtin capability absent from the host is still omitted with a warning: `builtin tool "<name>" is not installed on this host — not offered`.
 
+## Execution within one batch
+
+One model reply can contain several agent tool calls. After `PreToolUse` rewrites a call, it joins the parallel pool only when the runtime authorizes its name and the tool declares both `readOnly: true` and `concurrencySafe: true`. Consecutive eligible calls form one pool, with at most 8 running at once. `concurrencySafe` is the author's promise that concurrent reads do not cause side effects through shared state. The kernel rejects writes and events returned by a read-only tool, but cannot inspect external side effects.
+
+Every other call is a barrier and runs alone: it waits for the preceding pool to finish, and later calls wait for the barrier. Unknown tools, undeclared names and the loop-handled `search-tools`, `suspend` and `runtime-done` calls are barriers. `delegate` does not declare concurrency safety and always runs serially.
+
+Tool messages, call records, proposals and events are collected in model order, regardless of completion order. A pooled call that exceeds its own `timeoutMs` returns `timeout` and counts as a failed call; its siblings and the loop continue. There is no default per-tool timeout. Omitting it keeps the runtime deadline as the limit; concurrent tools that wait on network reads should set `timeoutMs`.
+
+Calls skipped by a hook, suspension or loop termination still receive tool results and trace events explaining the reason. They do not count as executed calls, failures or step tool statistics. Before another model request, including output repair, the loop answers every unanswered call without executing it again.
+
 ## How tool calls work
 
 This page follows the implementation in these three places: `apps/server/src/routes/api/bootstrap/tools.ts`, `packages/tools/src/builtin/`, and `plugins/**/tools/`.
@@ -786,7 +796,7 @@ What happens after the call:
 3. The framework emits a `turn.suspended` event, and the whole tool loop stops right away.
 4. Afterwards, data that matches `resumeSchema` is submitted through `POST /api/sessions/:id/suspensions/:suspensionId/resume`, and this runtime continues from where it stopped (see [api.md](./api.md) for details).
 
-When one of the model's replies has several tool calls, the `suspend` call first leaves a placeholder result that can be replaced. Each call after it that has not run yet writes a "cancelled" result. This way, after resuming, the conversation record still meets the provider's requirement that tool calls and results come in pairs.
+When one model reply has several tool calls, `suspend` leaves a `summary` placeholder in the tool success envelope. Each later call that has not run receives an error envelope with `error.code: "cancelled"`. Resume replaces the placeholder by the same `toolCallId`, returning a `summary` and the player's answer in `data`; suspensions saved with older placeholder text are also replaced by ID. The resumed transcript therefore still meets the provider's requirement that tool calls and results come in pairs.
 
 **Things to note:**
 
@@ -901,10 +911,10 @@ The SDK's `TOOL_ERROR_CODES` is the single error-code list. Authors throw `new T
 | `unavailable` | Not authorized or currently unavailable | Tool authorization, missing executor, tools or sub-agents | No for tools/executor; yes for delegate |
 | `timeout` | Tool or sub-agent timed out | Executor, tools or sub-agents | No for tools/executor; yes for delegate |
 | `conflict` | Write conflict, reserved | No builtin producer yet | No |
-| `cancelled` | Call cancelled | Executor, tools or sub-agents | No for tools/executor; yes for delegate |
+| `cancelled` | Call cancelled, including calls skipped within a batch | Executor, tool loop, tools or sub-agents | No for tools/executor or skipped batch calls; yes for delegate |
 | `internal` | Unexpected execution failure | Executor, tools or sub-agents | No for tools/executor; yes for delegate |
 
-The code and accounting flag are separate. Approval denial, undeclared calls and hook aborts still count as failed calls. Only a tool's own `ToolError("refused", …)` is excluded from runtime failure accounting. `delegate` keeps its own rule: every failure except `invalid-input` sets the flag.
+The code and accounting flag are separate. Approval denial and undeclared calls still count as failed calls. A call skipped by `PreToolUse` in an agent loop appears only in history and trace, without failure accounting; a hook abort still fails a function-runtime call. For tools that execute, only a tool's own `ToolError("refused", …)` is excluded from runtime failure accounting. `delegate` keeps its own rule: every failure except `invalid-input` sets the flag.
 
 `ToolCallResult.error` provides the same `{code,message,hint?}` for code. Failed calls have `parsedResult: null`; `delegate` retains its own failure result. A failed `ctx.tools.call` rejects with `ToolError`, whose message is plain text rather than JSON.
 

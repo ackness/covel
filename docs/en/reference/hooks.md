@@ -264,19 +264,21 @@ Fires before each tool call of an agent runtime, and before each call a function
 
 Payload: `{ toolCall: { id, name, arguments } }`, where `arguments` is a JSON string.
 
-- `abort` skips this call, and `reason` is sent back to the model as the tool's error.
+- `abort` skips this call and sends `reason` to the model as a `refused` error. The agent loop also records `tool.calling` / `tool.failed` with `skipped: true` and `skipReason: "hook-aborted"`; it does not count as an executed call or a failure.
 - `replace.toolCall` can change `name` or `arguments`. `id` stays the same.
+
+Within an agent tool batch, `PreToolUse` runs exactly once per call, in model order. For a run of eligible concurrent reads, all members' hooks run in order before any tool starts. A call whose original name is not poolable is never looked ahead to; its hook waits for the preceding step to finish. If a look-ahead call is rewritten into a barrier, it runs alone in the next step, retaining its hook outcome without firing the hook again. See [the tool execution rules](./tools.md#execution-within-one-batch).
 
 ### `PostToolUse`
 
-Fires after each tool call that was actually executed.
+Fires after each tool call that was actually executed. All members of a parallel pool settle before their `PostToolUse` hooks run in model order. A barrier's hook runs after that single call finishes.
 
 Payload: `{ toolCall, result }`.
 
 `result.result` is the tool envelope JSON text. `result.error` contains `{code,message,hint?}` on failure and is pinned along with effects, `success`, `refused` and approval status. A hook can rewrite the model text or `parsedResult`; it cannot change failure accounting or the structured error.
 
 - `replace.result` replaces the result the model reads (in a function runtime, the value `ctx.tools.call` returns). The writes and events the tool produced, whether it succeeded, and its approval status stay as they were.
-- `replace.terminate: true` ends the tool loop after this result is recorded.
+- `replace.terminate: true` ends the tool loop after the current step. Every already-started pool member is recorded normally and runs `PostToolUse`; a termination from any member skips later steps. A terminating barrier skips every later call. Skipped calls are closed with `cancelled` tool results and traced with `skipReason: "terminated"`.
 
 ### `PreStateCommit`
 

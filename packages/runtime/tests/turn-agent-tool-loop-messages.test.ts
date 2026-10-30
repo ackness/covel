@@ -4,6 +4,10 @@ import {
   buildPreToolAbortMessage,
   buildToolExecutionUnavailableMessage,
   buildToolResultMessage,
+  buildSuspendedPlaceholderMessage,
+  buildSkippedToolMessage,
+  buildNestedSuspendMessage,
+  buildResumedToolMessage,
 } from "../src/agent-loop/turn-agent-tool-loop-messages.js";
 
 describe("turn-agent-tool-loop message helpers", () => {
@@ -73,6 +77,63 @@ describe("turn-agent-tool-loop message helpers", () => {
       content:
         '{"error":{"code":"unavailable","message":"Tool execution not available"}}',
       toolCallId: "tc-missing",
+    });
+  });
+
+  it("builds a suspension placeholder in the success envelope", () => {
+    const message = buildSuspendedPlaceholderMessage("suspend-call");
+    expect(message).toMatchObject({ role: "tool", toolCallId: "suspend-call" });
+    expect(JSON.parse(message.content as string)).toEqual({
+      summary: "Suspended: waiting for the player's answer.",
+    });
+  });
+
+  it.each([
+    [
+      "suspended",
+      "Not run: an earlier call in this response suspended the runtime.",
+    ],
+    ["terminated", "Not run: an earlier tool result ended the run."],
+    ["aborted", "Not run: this tool batch was aborted."],
+  ] as const)(
+    "builds a cancelled envelope for a call skipped because of %s",
+    (reason, text) => {
+      const message = buildSkippedToolMessage({
+        toolCallId: "skipped-call",
+        reason,
+      });
+      expect(message).toMatchObject({
+        role: "tool",
+        toolCallId: "skipped-call",
+      });
+      expect(JSON.parse(message.content as string)).toEqual({
+        error: { code: "cancelled", message: text },
+      });
+    },
+  );
+
+  it("builds a nested-suspend error with guidance", () => {
+    expect(
+      JSON.parse(buildNestedSuspendMessage("nested-call").content as string),
+    ).toEqual({
+      error: {
+        code: "unavailable",
+        message: "Suspending is not supported inside a sub-agent run.",
+        hint: "Continue without asking the player, or finish with what you have.",
+      },
+    });
+  });
+
+  it("builds a resume success envelope and projects the player's data", () => {
+    const message = buildResumedToolMessage("suspend-call", {
+      answer: "yes",
+      id: "86c20348-fbb5-4908-bc84-9954441a60c0",
+      changedAt: "2026-10-30T12:00:00.000Z",
+    });
+    expect(message).toMatchObject({ role: "tool", toolCallId: "suspend-call" });
+    expect(JSON.parse(message.content as string)).toEqual({
+      summary: "The player answered.",
+      data: { answer: "yes" },
     });
   });
 });

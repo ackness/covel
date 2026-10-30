@@ -367,7 +367,10 @@ describe("TurnExecutor — agent runtime suspend", () => {
       resumed
         .filter((message) => message.role === "tool")
         .map((message) => message.content),
-    ).toEqual(['{"value":17}', '{"resumeData":{"name":"Alice"}}']);
+    ).toEqual([
+      '{"value":17}',
+      '{"summary":"The player answered.","data":{"name":"Alice"}}',
+    ]);
   });
 
   it("should capture partialContent and toolCallsSoFar in pendingContinuation", async () => {
@@ -634,7 +637,10 @@ describe("TurnExecutor — agent runtime suspend", () => {
       resumedMessages.find((message) => message.toolCallId === "tc-suspend"),
     ).toMatchObject({
       role: "tool",
-      content: JSON.stringify({ resumeData: { answer: "continue" } }),
+      content: JSON.stringify({
+        summary: "The player answered.",
+        data: { answer: "continue" },
+      }),
     });
     expect(
       resumedMessages.find((message) => message.toolCallId === "tc-after"),
@@ -1546,7 +1552,10 @@ describe("resumeRuntimePipeline", () => {
     const content = JSON.parse(
       (toolMsg as Record<string, unknown>).content as string,
     ) as Record<string, unknown>;
-    expect(content.resumeData).toEqual({ name: "Dave" });
+    expect(content).toEqual({
+      summary: "The player answered.",
+      data: { name: "Dave" },
+    });
   });
 
   it("resumes a function runtime through its handler with inherited execution responsibility", async () => {
