@@ -8,6 +8,7 @@ import {
   loadPluginDefinition,
   validatePluginFiles,
 } from "../src/index.js";
+import { authoringWarnings } from "../src/authoring-warnings.js";
 import { parsePluginMd } from "../src/parse-plugin-md.js";
 
 const roots: string[] = [];
@@ -161,5 +162,44 @@ describe("contributes.actionKinds", () => {
       { name: "Whisper", display: { label: "Whisper" } },
     ]);
     await expect(load(dir)).rejects.toThrow(/kebab-case/);
+  });
+});
+
+describe("composer fields warning", () => {
+  async function composerWarnings(schema: unknown) {
+    const dir = await plugin("warn-pack", [whisper], {
+      "schemas/whisper.json": schema,
+    });
+    const definition = await load(dir);
+    // The kind still loads and validates; only the composer leaves it out.
+    expect(() => validate(dir)).not.toThrow();
+    return authoringWarnings(
+      definition.packageManifest,
+      definition.manifests,
+    ).filter((message) => message.includes("composer"));
+  }
+
+  it("is silent for a flat object the composer can draw", async () => {
+    expect(await composerWarnings(whisperSchema)).toEqual([]);
+  });
+
+  it.each([
+    [
+      "a nested object",
+      { type: "object", properties: { a: { type: "object" } } },
+    ],
+    [
+      "an array property",
+      { type: "object", properties: { a: { type: "array" } } },
+    ],
+    ["a oneOf", { type: "object", oneOf: [{ properties: {} }] }],
+    ["a root that is not an object", { type: "string" }],
+  ])("names the kind when the schema has %s", async (_, schema) => {
+    const [warning, ...rest] = await composerWarnings(schema);
+    expect(rest).toEqual([]);
+    expect(warning).toContain("contributes.actionKinds[0].schema");
+    expect(warning).toContain(
+      "fields schema of whisper cannot be shown in the composer",
+    );
   });
 });

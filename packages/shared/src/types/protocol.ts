@@ -1,6 +1,7 @@
 import type {
   StoryMessageSegment,
   StorySegmentKind,
+  TurnAction,
 } from "@covel/plugin-handlers-utils";
 import type { ProviderFailureKind } from "../llm-failure-kind.js";
 import type { Stage } from "./runtime-scheduling.js";
@@ -864,6 +865,8 @@ export interface SnapshotMessage {
   readonly block?: Readonly<Record<string, unknown>>;
   /** A story message's segments; see `Message.segments`. */
   readonly segments?: readonly StoryMessageSegment[];
+  /** A player's message: the resolved actions it carried; see `Message.actions`. */
+  readonly actions?: readonly TurnAction[];
   readonly createdAt: string;
 }
 

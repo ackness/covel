@@ -1333,8 +1333,9 @@ contributes:
 - **线上的类型名是 `<pluginId>/<name>`。** 上例在 `whisper-pack` 里就是 `whisper-pack/whisper`。两个插件可以用同一个 `name`，不会冲突。`name` 用小写 kebab-case，不能是基础类型的名字，在包里不能重复。
 - `roles` 不能为空。身份和基础类型的对应见[座位](./world-model.md#座位)。
 - `schema` 是包内的 JSON 文件，加载、`pnpm validate:plugin` 和安装都会读取它；缺文件、不是 JSON 对象、路径越出包根都会报错。没有 `schema` 的类型不接受 `fields`。
-- `display.label` 是输入框里的名称，也是渲染给模型看的类型名，按会话语言选。`fields` 以 JSON 跟在文字后面；没有文字的行动只写类型名和 `fields`，照样进入玩家消息和聊天记录。例如 `【阿雅·耳语】在这边。{"target":"守卫"}`、`【阿雅·让过】`。
+- `display.label` 是输入框里的名称，也是渲染给模型看的类型名，按会话语言选。输入框直接显示 `display`：`label` 是模式名，`icon` 是图标，`placeholder` 是输入框的占位符；不需要另外声明输入框模式，见[输入框模式](./ui-panels.md#输入框模式)。`fields` 以 JSON 跟在文字后面；没有文字的行动只写类型名和 `fields`，照样进入玩家消息和聊天记录。例如 `【阿雅·耳语】在这边。{"target":"守卫"}`、`【阿雅·让过】`。
 - 表单、选项和确认框可以用 `actionKind` 声明玩家的回答算哪种行动（基础类型或 `<pluginId>/<name>`），默认选项是 `say`，表单和确认框是 `act`。回答按这个类型校验座位身份，见 [API · 玩家交互](./api.md#玩家交互-1)。
+- 输入框只能显示 `schema` 的一个子集：根是 `type: object`，`properties` 是平的 `string`（可带 `enum`）、`number`、`integer` 或 `boolean`，`required` 只列出已有的属性。超出这个子集的 schema 不显示这种模式（交互仍可提交这种类型），`pnpm validate:plugin` 警告“fields schema of `<name>` cannot be shown in the composer”。服务端校验不受影响。
 - 只有这局可运行的插件声明的类型可用。服务端按目录校验每个行动，见 [`GET /api/sessions/:id/action-kinds`](./api.md#行动类型目录)。
 - 函数 runtime 从 `ctx.playerActions` 读到行动，`fields` 原样保留，见[handler 上下文里的回合信息](#handler-上下文里的回合信息)。
 

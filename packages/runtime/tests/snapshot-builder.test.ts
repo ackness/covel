@@ -122,6 +122,38 @@ describe("buildSessionSnapshot", () => {
     expect(snapshot!.executionSteps[0]!.type).toBe("runtime.started");
   });
 
+  it("carries the actions a player message recorded, and only that message's", async () => {
+    const store = createMockStore();
+    const actions = [
+      {
+        seatId: "main",
+        kind: "act",
+        actorId: "c1",
+        text: "Draw the sword",
+        source: "player",
+      },
+    ];
+    store.listMessagesPage.mockResolvedValue([
+      {
+        id: "m1",
+        role: "user",
+        content: "Draw the sword",
+        metadata: { turnId: "t1", actions },
+        createdAt: "2026-01-01",
+      },
+      {
+        id: "m2",
+        role: "assistant",
+        content: "Story text.",
+        metadata: { turnId: "t1", runtimeId: "narrator", kind: "story" },
+        createdAt: "2026-01-01",
+      },
+    ]);
+    const snapshot = await buildSessionSnapshot(store as any, "sess-1");
+    expect(snapshot!.messages[0]!.actions).toEqual(actions);
+    expect(snapshot!.messages[1]).not.toHaveProperty("actions");
+  });
+
   it("should return null if session not found", async () => {
     const store = createMockStore();
     store.getSession.mockResolvedValue(null);

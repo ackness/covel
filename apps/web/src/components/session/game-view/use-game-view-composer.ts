@@ -21,6 +21,7 @@ import {
 import { requestConfirm } from "@/lib/confirm-channel.js";
 import { resolveDisplayText } from "@/lib/i18n-text.js";
 import { isPendingInteractionMessage } from "./interaction-blocks.js";
+import { useComposerModes } from "./use-composer-modes.js";
 import {
   commandAcceptsTypedName,
   completeSlashCommand,
@@ -83,6 +84,9 @@ export function useGameViewComposer({
     loadSessionPlugins,
   } = useSession();
 
+  const composerModes = useComposerModes({ session, executing, onSendMessage });
+  const { restore: restoreComposerMode } = composerModes;
+
   const restoredRequest = useRef<string | null>(null);
   const restoredInput = sessionState.restoredInput;
   useEffect(() => {
@@ -92,8 +96,13 @@ export function useGameViewComposer({
     setInputValue((current) =>
       current ? `${restoredInput.content}\n${current}` : restoredInput.content,
     );
+    restoreComposerMode({
+      kind: restoredInput.kind,
+      fields: restoredInput.fields,
+      drafts: restoredInput.drafts,
+    });
     clearRestoredInput(restoredInput.requestId);
-  }, [restoredInput, clearRestoredInput]);
+  }, [restoredInput, clearRestoredInput, restoreComposerMode]);
 
   const commandQuery = useMemo(
     () => readSlashCommandQuery(inputValue),
@@ -143,20 +152,21 @@ export function useGameViewComposer({
   // steers the in-flight turn instead of starting a new one.
   const composerDisabled = composerBlocked || awaitingBegin;
 
+  /**
+   * Send the queued selections, and the typed line with them, as one
+   * submission. False when nothing was sent (nothing to send, or a required
+   * field of the selected mode is empty); the queue is then kept.
+   */
   const commitDrafts = useCallback(
-    (extraText?: string) => {
-      if (pendingDrafts.length === 0) return;
-      const combined = [
-        ...pendingDrafts.map((d) =>
-          String(d.values?.text ?? d.label ?? "").trim(),
-        ),
-        extraText ?? "",
-      ]
+    (extraText?: string): boolean => {
+      if (pendingDrafts.length === 0) return false;
+      const draftText = pendingDrafts
+        .map((d) => String(d.values?.text ?? d.label ?? "").trim())
         .filter(Boolean)
         .join("\n");
-      if (!combined) {
-        clearInteractionDrafts();
-        return;
+      if (!composerModes.submit(extraText ?? "", draftText || undefined)) {
+        if (!draftText && !extraText) clearInteractionDrafts();
+        return false;
       }
       // Stamp each source block with the player's selection so the disabled
       // re-render can show what was chosen. Generic across plugin types: any
@@ -186,10 +196,10 @@ export function useGameViewComposer({
           items,
         });
       }
-      onSendMessage(combined);
       clearInteractionDrafts();
+      return true;
     },
-    [pendingDrafts, clearInteractionDrafts, onSendMessage, submitBlock],
+    [pendingDrafts, clearInteractionDrafts, composerModes, submitBlock],
   );
 
   const applyCommandCompletion = useCallback((command: SessionSlashCommand) => {
@@ -298,7 +308,13 @@ export function useGameViewComposer({
     const val = inputValue.trim();
     if (composerDisabled || commandExecuting) return;
     if (!val) {
-      if (!executing) commitDrafts();
+      if (executing) return;
+      if (pendingDrafts.length > 0) commitDrafts();
+      else if (
+        composerModes.mode.kind !== "say" &&
+        composerModes.acceptsInput("")
+      )
+        composerModes.submit("");
       return;
     }
     if (commandQuery && !commandsLoaded) {
@@ -325,10 +341,11 @@ export function useGameViewComposer({
     setCommandFeedback(null);
     // Queued selections ride along with the typed line as a single turn.
     if (!executing && pendingDrafts.length > 0) {
-      setInputValue("");
-      commitDrafts(val);
+      if (commitDrafts(val)) setInputValue("");
       return;
     }
+    // Steering takes text only, so the other modes wait for the turn to end.
+    if (executing && composerModes.mode.kind !== "say") return;
     if (executing) {
       // Steer the in-flight turn. The turn may not take the text (409): it
       // ended first, or its story is written and only bookkeeping is left.
@@ -354,8 +371,7 @@ export function useGameViewComposer({
         .catch(restoreSteeredText);
       return;
     }
-    onSendMessage(val);
-    setInputValue("");
+    if (composerModes.submit(val)) setInputValue("");
   }, [
     inputValue,
     composerDisabled,
@@ -371,7 +387,7 @@ export function useGameViewComposer({
     pendingDrafts.length,
     commitDrafts,
     steerMessage,
-    onSendMessage,
+    composerModes,
     t,
   ]);
 
@@ -428,8 +444,20 @@ export function useGameViewComposer({
     ],
   );
 
+  // Steering takes text only, so in another mode the send waits for the turn.
+  // A slash command is not steering and runs at any time.
+  const commandRunnable =
+    commandQuery !== null && selectedCommand !== undefined;
+  const canSubmit =
+    composerModes.mode.kind === "say"
+      ? inputValue.trim().length > 0 || (!executing && pendingDrafts.length > 0)
+      : composerModes.acceptsInput(inputValue) &&
+        (!executing || commandRunnable);
+
   return {
     inputValue,
+    composerModes,
+    canSubmit,
     setInputValue: handleInputValueChange,
     pendingDrafts,
     suspensions,

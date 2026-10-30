@@ -166,7 +166,7 @@ const player = currentCharacterOf(
 
 `actingCharacterOf(actions, characters, seats)` finds the acting character for a turn: it reads `source: "player"` actions in order and returns the first existing character named by an `actorId`; otherwise it falls back to the primary seat's current character, then `undefined`. Unknown actor IDs and system actions do not select a character. Function runtimes and guards pass `ctx.playerActions`; extension providers and tools have no actions and pass `[]`. Detached jobs pass their source turn's `ctx.inputs.turn.value.actions` (defaulting to `[]`) to retain its actor.
 
-**Switching the current character**: `PATCH /api/sessions/:id/seats/:seatId` with the body `{ "currentCharacterId": "…" }`. The character must be bound to that seat, and a human must control the seat. It applies from the next turn. See [API](./api.md#session-seats). The game view has no switch control yet.
+**Switching the current character**: `PATCH /api/sessions/:id/seats/:seatId` with the body `{ "currentCharacterId": "…" }`. The character must be bound to that seat, and a human must control the seat. It applies from the next turn. See [API](./api.md#session-seats). The game view has a current-character selector above the composer (above the free input in stage mode). It appears when the seat binds two or more characters; see [Composer Modes](./ui-panels.md#composer-modes).
 
 **The role decides which actions a seat may submit.** What a player submits each time is a list of actions (see [API · submit_actions](./api.md#submit_actions)). The server checks them against the seat's role:
 

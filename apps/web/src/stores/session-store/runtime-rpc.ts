@@ -1,5 +1,9 @@
 import i18n from "i18next";
-import { PLAYER_ABORT_REASON } from "@covel/shared";
+import {
+  PLAYER_ABORT_REASON,
+  type TurnAction,
+  type TurnActionRequest,
+} from "@covel/shared";
 import * as api from "@/services/api";
 import { ApiError } from "@/services/api/request.js";
 import {
@@ -13,6 +17,7 @@ import { confirmPluginApproval } from "@/lib/approval-message.js";
 import type { MutableRef, SessionActionOwner } from "./runtime-refs.js";
 import type { SseEventHandler } from "./sse-handler.js";
 import type { SessionDispatch } from "./types.js";
+import { actionsText, echoContent } from "./composer-actions.js";
 import { toExecutionStepStatus } from "./execution-steps.js";
 import { refreshSessionResource } from "./session-resource-reads.js";
 
@@ -363,7 +368,8 @@ export function runActionStream(
 }
 
 export async function runSingleSessionAction({
-  content,
+  actions,
+  echoActions,
   echoUserMessage,
   owner,
   session,
@@ -372,7 +378,9 @@ export async function runSingleSessionAction({
   handleSseEvent,
   sessionIdRef,
 }: {
-  content: string;
+  actions: readonly TurnActionRequest[];
+  /** The actions as the server will resolve them, kept on the echoed message. */
+  echoActions?: readonly TurnAction[];
   echoUserMessage: boolean;
   owner: SessionActionOwner;
   session: api.SessionRecord;
@@ -384,8 +392,11 @@ export async function runSingleSessionAction({
   if (!owner.isCurrent()) return;
   dispatch({ type: "SET_EXECUTION_RECOVERY", recovery: null });
   let input: api.MessageRecord | undefined;
+  let inputMessageId: string | undefined;
+  const content = echoContent(actions);
   if (echoUserMessage && content) {
     const id = crypto.randomUUID();
+    inputMessageId = id;
     const timestamp = new Date().toISOString();
     dispatch({
       type: "ADD_MESSAGE",
@@ -395,15 +406,23 @@ export async function runSingleSessionAction({
         content,
         timestamp,
         requestId: owner.requestId,
+        ...(echoActions ? { actions: echoActions } : {}),
       },
     });
-    input = {
-      id,
-      sessionId: session.id,
-      role: "user",
-      content,
-      createdAt: timestamp,
-    };
+    // The browser stores the input before the commit, and the commit adopts
+    // that row only when the content is identical. The server's content is
+    // the actions' texts; a fields-only action gets a labelled rendering that
+    // only the server can produce, so it is committed under the same id with
+    // no row stored ahead of it.
+    if (actionsText(actions) === content) {
+      input = {
+        id,
+        sessionId: session.id,
+        role: "user",
+        content,
+        createdAt: timestamp,
+      };
+    }
   }
   if (!owner.isCurrent()) return;
   try {
@@ -423,13 +442,8 @@ export async function runSingleSessionAction({
           ...base,
           type: "submit_actions",
           payload: {
-            actions: [
-              {
-                kind: content.startsWith("/") ? "command" : "say",
-                text: content,
-              },
-            ],
-            ...(input ? { inputMessageId: input.id } : {}),
+            actions: [...actions],
+            ...(inputMessageId ? { inputMessageId } : {}),
           },
         };
         return runActionStream(action, handleSseEvent, dispatch, {

@@ -18,6 +18,7 @@ import {
   type LoopPresetId,
   type RuntimeVisibility,
 } from "@covel/shared";
+import { composerFieldWarnings } from "./action-kinds.js";
 import { isDerivedTag } from "./package-defaults.js";
 import type { ParsedPluginMd, ParsedRuntimeMd } from "./types.js";
 
@@ -228,7 +229,14 @@ export function authoringWarnings(
       record(value)?.role,
       "system",
     );
-  const messages = [...plugin.messages];
+  const messages = [
+    ...plugin.messages,
+    ...composerFieldWarnings(
+      pluginFile,
+      packageManifest.plugin.contributes?.actionKinds,
+      packageManifest.actionKinds,
+    ),
+  ];
   for (const parsed of manifests) {
     const inline = parsed.manifest.name === packageManifest.plugin.id;
     const runtime = record(

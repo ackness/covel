@@ -840,6 +840,7 @@ A few things to know about `GET /api/sessions/:id/view`:
 
 - **It contains only the recent window.** By default `messages` and `executionSteps` hold the latest 80 messages and 600 trace events, not the full history.
 - **Story messages carry `segments`**, in the same shape as [`GET /messages`](#get-apisessionsidmessages); the stage uses them to show each paragraph's speaker.
+- **Player messages carry `actions`**: the resolved actions the message submitted (`SnapshotMessage.actions`, the same as `actions` on `GET /messages`). A restored chat uses them to label the message "character · kind"; older messages that recorded no actions have no such field.
 - **Paging backward.** The view carries an opaque `messagesCursor`. When the front end scrolls up, it passes this value unchanged as `?cursor=` to `GET /api/sessions/:id/messages/page`.
 - **Older turns outside the window** do not render an execution timeline.
 - **Session clock.** The session object embedded in the view carries the same required clock fields as the session API: `phase`, `completedPlayerTurns`, and `setupRuntimes`. Restore and reconnect judge progress only from these fields.
@@ -1065,6 +1066,7 @@ Authentication is the same as for the other session endpoints (owner token). Res
 - `text` is the text rule: `required` needs text, `optional` may have it, `none` takes none. `actor` says whether the action is taken as a character.
 - `fieldsSchema` is the JSON Schema a plugin kind's `fields` must match; a kind without one takes no `fields`.
 - `seats[].allowed` is the kinds the seat's role may submit; it is empty for a seat no human controls (`controller` is not `human`). Which role may submit which base kind is in [seats](./world-model.md#seats).
+- The composer's modes are the kinds in the composer seat's `allowed` other than `command`, named by `display` (label, icon, placeholder). It draws only a subset of `fieldsSchema`; see [Composer Modes](./ui-panels.md#composer-modes).
 
 ### Player interaction
 

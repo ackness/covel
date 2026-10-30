@@ -51,6 +51,22 @@ describe("reconnect message recovery", () => {
     expect(merge(next, recovered)).toBe(next);
     expect(current[1]!.id).toBe("echo-1");
   });
+  it("fills the actions of a player message that is already shown without them", () => {
+    const answer: StreamMessage = {
+      id: "answer",
+      turnId: "turn-1",
+      role: "user",
+      content: "Ready",
+      timestamp: "2026-09-18T00:00:00Z",
+    };
+    const actions = [
+      { kind: "act", seatId: "main", actorId: "bo", source: "player" },
+    ] as unknown as StreamMessage["actions"];
+    const next = merge([answer], [{ ...answer, actions }]);
+    expect(next).toEqual([{ ...answer, actions }]);
+    // Actions already on the row stay as they are.
+    expect(merge(next, [{ ...answer, actions: [] }])).toBe(next);
+  });
   it("restores the missing story before an already hydrated guide", () => {
     const guide = {
       ...story("plugin-message:guide:turn-1"),

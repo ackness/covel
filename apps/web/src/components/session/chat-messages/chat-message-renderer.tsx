@@ -4,6 +4,7 @@ import { ImageIcon } from "lucide-react";
 import { Button } from "@/components/ui/button.js";
 import type { StreamMessage } from "@/stores/session-store.js";
 import { useStreamingText } from "@/stores/streaming-text-store.js";
+import { PlayerMessageLabel } from "./player-message-label.js";
 import {
   NarrativeMessageBody,
   SystemMessageLine,
@@ -129,9 +130,11 @@ export const ChatMessageRenderer = memo(function ChatMessageRenderer({
       <span
         className={`ui-message-role ui-eyebrow text-xs ${isUser ? "text-primary" : "text-muted-foreground"}`}
       >
-        {isUser
-          ? t("session.player", "Player")
-          : t("session.assistant", "Assistant")}
+        {isUser ? (
+          <PlayerMessageLabel actions={msg.actions} />
+        ) : (
+          t("session.assistant", "Assistant")
+        )}
         {/* Author-facing detail, same gate as the source badge above: a raw
             turn UUID means nothing to a player and eats a full line on a
             phone. */}

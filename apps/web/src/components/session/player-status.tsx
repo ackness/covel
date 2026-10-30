@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import { currentCharacterOf, primarySeat, type Seat } from "@covel/shared";
 import { useSession } from "@/stores/session-store.js";
 import { resolveDisplayText } from "@/lib/i18n-text.js";
+import { sessionCharacters } from "@/lib/session-characters.js";
 
 export interface StatusMeter {
   readonly id: string;
@@ -51,16 +52,7 @@ export function currentCharacterIdOf(
   gameState: Readonly<Record<string, unknown>>,
   seats: readonly Seat[],
 ): string | undefined {
-  const characters = (
-    Array.isArray(gameState.characters) ? gameState.characters : []
-  ).flatMap((raw) => {
-    const character = asRecord(raw);
-    return character &&
-      typeof character.id === "string" &&
-      typeof character.type === "string"
-      ? [{ id: character.id, type: character.type }]
-      : [];
-  });
+  const characters = sessionCharacters(gameState);
   return currentCharacterOf(primarySeat(seats), characters, seats)?.id;
 }
 

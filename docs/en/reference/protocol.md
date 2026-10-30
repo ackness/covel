@@ -880,6 +880,8 @@ The names in the "Command" column of the tables below (`session.create`, `turn.s
 | `session.restore` | GET    | `/api/sessions/:id/view` | JSON: `SessionSnapshot` |
 | `session.delete`  | DELETE | `/api/sessions/:id`      | JSON: `{ deleted }`     |
 
+Each item of `SessionSnapshot.messages` is a `SnapshotMessage`. A player message carries `actions`: the resolved actions it submitted (`metadata.actions` in storage, in the same shape as `actions` on `GET /messages`), and a story message carries `segments`. Other messages have neither field.
+
 The top-level `dimensions` of `SessionSnapshot` is the [public snapshot of current values](./world-model.md#dynamic-dimension-snapshot). The optional `dimensionSettlements` is a summary of receipts. The provider and recovery metadata is bound and validated by the host.
 
 > [!WARNING]

@@ -53,6 +53,7 @@ import { StageDialog } from "./StageDialog.js";
 import type { RightPanelState } from "../right-panel-state.js";
 import { StagePluginPanels } from "./StagePluginPanels.js";
 import { StageChoices } from "./StageChoices.js";
+import type { ComposerModes } from "../game-view/use-composer-modes.js";
 import { StageExecutionStatus } from "./StageExecutionStatus.js";
 import { storyParagraphSpeakers } from "./stage-dialogue-selectors.js";
 import {
@@ -67,6 +68,8 @@ import {
 
 export interface StageViewProps {
   readonly composerDraft?: { value: string; onChange: (value: string) => void };
+  /** The composer's modes and character switcher, shared with the free input. */
+  readonly composerModes?: ComposerModes;
   readonly panelState: Pick<
     RightPanelState,
     "rightSpecs" | "specsStatus" | "retrySpecs"
@@ -299,6 +302,7 @@ export function StageView(props: StageViewProps): ReactElement {
       />
       <StageChoices
         composerDraft={props.composerDraft}
+        composerModes={props.composerModes}
         extensions={(choices, onDraftMessage) => (
           <StagePluginPanels
             panelState={props.panelState}

@@ -84,6 +84,8 @@ export interface MessageRecord {
   block?: Record<string, unknown>;
   /** A story message's segments, with resolved speakers. */
   segments?: readonly import("@covel/shared").StoryMessageSegment[];
+  /** On a player's message: the resolved actions it carried. */
+  actions?: readonly import("@covel/shared").TurnAction[];
   createdAt: string;
 }
 

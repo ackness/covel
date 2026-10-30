@@ -20,6 +20,10 @@ import {
   applyPluginMessageSurface,
   refreshPluginMessageSurfaces,
 } from "./plugin-message-surface.js";
+import {
+  stoppedSubmissionOf,
+  type StoppedSubmission,
+} from "./composer-actions.js";
 import { mergeRecoveredMessages } from "./recovered-messages.js";
 import { settleExecutionAttempt } from "./execution-attempts.js";
 import { orderStoryBeforePluginMessages } from "./message-order.js";
@@ -161,6 +165,7 @@ export const initialState: SessionState = {
   sessionPlugins: [],
   sessionCommands: [],
   sessionCommandsLoaded: false,
+  sessionActionKinds: null,
   unavailableSessionPlugins: [],
   worldDataNotices: [],
   messageUiSpecs: [],
@@ -195,6 +200,7 @@ const SESSION_RESET: Partial<SessionState> = {
   sessionPlugins: [],
   sessionCommands: [],
   sessionCommandsLoaded: false,
+  sessionActionKinds: null,
   unavailableSessionPlugins: [],
   worldDataNotices: [],
   messageUiSpecs: [],
@@ -657,6 +663,17 @@ export function reducer(
         unavailableSessionPlugins:
           action.unavailable ?? state.unavailableSessionPlugins,
       };
+    case "SET_SESSION_ACTION_KINDS":
+      if (action.catalogue === null && state.sessionActionKinds === null)
+        return state;
+      return { ...state, sessionActionKinds: action.catalogue };
+    case "SET_SESSION_SEATS":
+      return state.session
+        ? {
+            ...state,
+            session: { ...state.session, seats: [...action.seats] },
+          }
+        : state;
     case "SET_WORLD_DATA_NOTICES":
       return { ...state, worldDataNotices: action.notices };
     case "TOGGLE_SESSION_PLUGIN": {
@@ -683,10 +700,19 @@ export function reducer(
           message.role === "user" && message.requestId === action.requestId,
       );
       if (!input) return state;
+      const stopped: StoppedSubmission = input.actions?.length
+        ? stoppedSubmissionOf(input.actions)
+        : { text: input.content };
       return {
         ...state,
         messages: state.messages.filter((message) => message !== input),
-        restoredInput: { requestId: action.requestId, content: input.content },
+        restoredInput: {
+          requestId: action.requestId,
+          content: stopped.text,
+          ...(stopped.kind ? { kind: stopped.kind } : {}),
+          ...(stopped.fields ? { fields: stopped.fields } : {}),
+          ...(stopped.drafts ? { drafts: stopped.drafts } : {}),
+        },
       };
     }
     case "CLEAR_RESTORED_INPUT":
