@@ -416,3 +416,47 @@ it("supersedes an earlier suspension when only the committed resume notification
     }),
   ]);
 });
+
+it.each([
+  ["success", "completed"],
+  ["suspended", "suspended"],
+] as const)(
+  "lets a later resume finishing with %s replace an earlier failed resume",
+  (status, expected) => {
+    const h = harness(false);
+    h.send("runtime.started", { runId: "original" });
+    h.send("runtime.completed", { runId: "original", status: "suspended" });
+    h.send("runtime.started", { runId: "first-resume", resumed: true });
+    h.send("runtime.failed", { runId: "first-resume", error: "timeout" });
+    const displayed = () =>
+      projectExecutionTurns([], h.getState().executionSteps).turns.find(
+        (turn) => turn.turnId === "attempt",
+      )?.steps;
+    expect(displayed()).toEqual([
+      expect.objectContaining({ runId: "first-resume", status: "failed" }),
+    ]);
+    h.send("runtime.started", { runId: "second-resume", resumed: true });
+    expect(displayed()).toEqual([
+      expect.objectContaining({ runId: "second-resume", status: "running" }),
+    ]);
+    h.send("runtime.completed", { runId: "second-resume", status });
+    expect(displayed()).toEqual([
+      expect.objectContaining({ runId: "second-resume", status: expected }),
+    ]);
+  },
+);
+
+it("still reports a failed nested run of the runtime after a later resume succeeds", () => {
+  const h = harness(false);
+  h.send("runtime.started", { runId: "original" });
+  h.send("runtime.started", { runId: "nested" });
+  h.send("runtime.failed", { runId: "nested", error: "nested failure" });
+  h.send("runtime.completed", { runId: "original", status: "suspended" });
+  h.send("runtime.started", { runId: "continuation", resumed: true });
+  h.send("runtime.completed", { runId: "continuation", status: "success" });
+  expect(
+    projectExecutionTurns([], h.getState().executionSteps).turns.find(
+      (turn) => turn.turnId === "attempt",
+    )?.steps,
+  ).toEqual([expect.objectContaining({ runId: "nested", status: "failed" })]);
+});

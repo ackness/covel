@@ -258,3 +258,54 @@ it("keeps the cached start of a recovered continuation when the snapshot only ca
     expect.objectContaining({ runId: "continuation", status: "completed" }),
   ]);
 });
+
+it.each([
+  ["success", "completed"],
+  ["suspended", "suspended"],
+] as const)(
+  "lets a recovered resume finishing with %s replace an earlier failed resume",
+  (status, expected) => {
+    const at = (second: number) => `2026-09-05T04:00:0${second}Z`;
+    const traces = [
+      event("runtime.started", { runId: "original" }),
+      event("runtime.completed", { runId: "original", status: "suspended" }),
+      {
+        ...event("runtime.started", { runId: "first-resume", resumed: true }),
+        timestamp: at(1),
+      },
+      {
+        ...event("runtime.failed", {
+          runId: "first-resume",
+          error: "timeout",
+        }),
+        timestamp: at(2),
+      },
+      {
+        ...event("runtime.started", { runId: "second-resume", resumed: true }),
+        timestamp: at(3),
+      },
+      {
+        ...event("runtime.completed", { runId: "second-resume", status }),
+        timestamp: at(4),
+      },
+    ];
+    const shown = [
+      expect.objectContaining({ runId: "second-resume", status: expected }),
+    ];
+    expect(
+      projectExecutionTurns([], buildSnapshotExecutionSteps(traces)).turns[0]
+        ?.steps,
+    ).toEqual(shown);
+    // A browser cache that already holds the failed resume adopts the rest.
+    const cached = buildSnapshotExecutionSteps(traces.slice(0, 4));
+    expect(projectExecutionTurns([], cached).turns[0]?.steps).toEqual([
+      expect.objectContaining({ runId: "first-resume", status: "failed" }),
+    ]);
+    expect(
+      projectExecutionTurns(
+        [],
+        reconcileExecutionSteps(cached, traces.slice(4)),
+      ).turns[0]?.steps,
+    ).toEqual(shown);
+  },
+);

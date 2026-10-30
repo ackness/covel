@@ -189,11 +189,13 @@ export function projectExecutionTurns(
         });
     }
     includeTime(group, step.turnStartedAt ?? step.startedAt);
-    // A continuation replaces earlier suspensions, while a new suspension
-    // from that continuation remains visible until it too is resumed.
+    // Resume attempts reuse the suspended turn ID. The newest attempt replaces
+    // the original suspension and every earlier attempt, whatever its outcome,
+    // so a failed resume cannot outrank a later one that completed or suspended
+    // again. Other runs of the runtime outside that chain still count.
     const resume = latestResumes.get(runtimeKey(step));
     if (
-      step.status === "suspended" &&
+      (step.status === "suspended" || step.resumed) &&
       resume &&
       (timestamp(step.startedAt) < resume.time ||
         (timestamp(step.startedAt) === resume.time && order < resume.order))
