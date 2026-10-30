@@ -596,6 +596,8 @@ For Gemini native thinking effort, `providerOptions.google.thinkingConfig`, `cac
 | `turn.suspended` | S→C  | The runtime creates a suspension artifact. It is sent only after `finalizeExecution` commits the record together with the writes of the same execution. On a rollback, no record is kept and no event is sent. An older item of the same runtime is voided in this commit without an event of its own; the client drops it on receipt. It is also sent when a resumed runtime suspends again, and then `turn.resumed` is not sent | `{ sessionId, turnId, suspensionId, pluginId, runtimeId, suspendedAt, reason, resumeSchema }` |
 | `turn.resumed`   | S→C  | Sent by the route after the `resume` action on the suspension resource succeeds                                                                                                                                                                                                                                                                                                                                                   | `{ sessionId, turnId, suspensionId }`                                                         |
 
+A subscription receiving `turn.resumed` also reads the authoritative session snapshot. This updates the committed turn count even when the resume made no character or dimension writes. Delayed reads cannot overwrite a later session visit or newer committed state.
+
 ### Snapshot / Fork events
 
 The server broadcasts all snapshot events through the eventBus (the topic is `session`). The SSE named event type comes from `_subType` in the payload.

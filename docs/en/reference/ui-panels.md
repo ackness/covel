@@ -1015,6 +1015,8 @@ Every field is optional. `{}` is also valid.
 
 The value is `{ actors, retainWhenEmpty }`. Both fields are required.
 
+On an actual location change, built-in Scene Stage clears existing direction actors before applying new cues. Preview and commit use the same scene identity and ordering. Existing direction state with no new entries yields empty actors and `retainWhenEmpty: false`, preventing old-location portraits from remaining. Without direction state, the original cast provider remains in use.
+
 | Field             | Type                                   | Required | Meaning                                                                                                                        |
 | ----------------- | -------------------------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------ |
 | `actors`          | Array of the objects below, at most 64 | Yes      | Actors currently on stage; an empty array is valid                                                                             |

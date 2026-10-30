@@ -77,11 +77,52 @@ test("a run's temp directory is removed at exit, and so is one a killed run left
   assert.equal(run.status, 0, run.stderr);
   const runDirectory = run.stdout.trim();
 
-  assert.equal(path.dirname(runDirectory), base);
+  assert.equal(path.dirname(runDirectory), fs.realpathSync(base));
   assert.match(path.basename(runDirectory), /^covel-test-\d+-/);
   assert.equal(fs.existsSync(runDirectory), false);
   assert.equal(fs.existsSync(abandoned), false);
   assert.equal(fs.existsSync(recent), true);
   assert.equal(fs.existsSync(inUse), true);
   assert.equal(fs.existsSync(unrelated), true);
+});
+
+test("a run publishes the canonical path of a symlinked temp root", (t) => {
+  const base = fs.realpathSync(
+    fs.mkdtempSync(path.join(os.tmpdir(), "covel-temp-alias-test-")),
+  );
+  t.after(() => fs.rmSync(base, { recursive: true, force: true }));
+  const real = path.join(base, "real");
+  const alias = path.join(base, "alias");
+  fs.mkdirSync(real);
+  fs.symlinkSync(
+    real,
+    alias,
+    process.platform === "win32" ? "junction" : "dir",
+  );
+  const env = { ...process.env, TMPDIR: alias, TMP: alias, TEMP: alias };
+  delete env.COVEL_TEST_TEMP_DIR;
+  const run = spawnSync(
+    process.execPath,
+    [
+      "--import",
+      "tsx",
+      "--input-type=module",
+      "--eval",
+      `await import(${JSON.stringify(baseConfigUrl.href)});
+       const { tmpdir } = await import("node:os");
+       const { realpathSync } = await import("node:fs");
+       console.log(JSON.stringify({
+         dir: tmpdir(), canonical: realpathSync(tmpdir()),
+         marker: process.env.COVEL_TEST_TEMP_DIR
+       }));`,
+    ],
+    { cwd: repoRoot, env, encoding: "utf8" },
+  );
+  assert.equal(run.status, 0, run.stderr);
+  const { dir, canonical, marker } = JSON.parse(run.stdout);
+  assert.equal(path.dirname(dir), real);
+  assert.equal(dir, canonical);
+  assert.equal(marker, dir);
+  assert.equal(fs.existsSync(dir), false);
+  assert.equal(fs.existsSync(alias), true);
 });

@@ -177,7 +177,7 @@ When `POST /api/sessions` creates a session, the server generates an owner token
 
 Metadata private to the framework never appears in any response. The owner hash, approval and session incarnation, lifecycle, and delete lease are removed from the session create, read, update, and delete responses, from snapshots, and from the virtual tables in `/state`.
 
-**How each deployment tier is checked**
+**How each deployment tier checks the session owner token**
 
 | `DEPLOYMENT_TIER`          | Behavior                                                                                                                |
 | -------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
@@ -241,7 +241,7 @@ A web-only client can enter or clear this token under **Settings → Operator Ac
 - The credential is stored only in the `localStorage` of the current browser.
 - It is sent as `Authorization: Bearer <token>` only on same-origin requests that need the operator token, as listed above.
 - After saving or clearing, the client reloads, and uses the new credential to fetch sessions and world data again.
-- Development mode and the desktop single-user mode can still run without a token. Production MemoryStore follows the exception above.
+- Ordinary personal-session requests need no owner token; desktop configuration and file endpoints still follow the per-launch token gates above. Production MemoryStore follows the exception above.
 
 **How the web client saves the owner token**
 
@@ -4486,6 +4486,8 @@ Resume a suspended runtime with the data the player submitted.
 ```
 
 `result.status` is `success`, or `suspended` when the runtime suspended again. In that case `result.output.suspensionId` is the ID of the new suspended item.
+
+After a successful resume, another suspension, abandonment, or `suspension_outdated`, the client rereads the session record and displays the server’s committed `completedPlayerTurns` rather than incrementing it locally. Another suspension may leave the count unchanged. A failed read must not retry an already successful resume request.
 
 **Errors**
 

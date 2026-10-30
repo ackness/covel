@@ -1,6 +1,8 @@
-import { withPendingProposals } from "@covel/plugin-handlers-utils";
+import {
+  makeProposal,
+  withPendingProposals,
+} from "@covel/plugin-handlers-utils";
 
-import { createHash } from "node:crypto";
 import {
   REGISTRY_KEY,
   SCENES_NS,
@@ -8,6 +10,7 @@ import {
   STAGE_NS,
   buildStageRecord,
   makeStageProposal,
+  sceneIdForLocation,
 } from "../../lib/stage-data.js";
 import { matchScene } from "../../lib/scene-match.js";
 
@@ -31,12 +34,13 @@ export default async function handler(ctx) {
   }
   const variant = evt.data.timeOfDay === "night" ? "night" : "day";
 
-  const [registry, previous] = ctx.pluginData
+  const [registry, previous, direction] = ctx.pluginData
     ? await Promise.all([
         ctx.pluginData.get(SCENES_NS, REGISTRY_KEY),
         ctx.pluginData.get(STAGE_NS, STAGE_KEY),
+        ctx.pluginData.get("direction", "current"),
       ])
-    : [null, null];
+    : [null, null, null];
 
   const scenes = Array.isArray(registry?.scenes) ? registry.scenes : [];
   const worldMatch = matchScene(scenes, location);
@@ -80,19 +84,25 @@ export default async function handler(ctx) {
     };
   }
 
-  return withPendingProposals({ outcome: "success", value: { stage } }, [
-    makeStageProposal(ctx, stage),
-  ]);
-}
-
-/**
- * Deterministic scene id for a location that has no registry entry —
- * `loc-` + first 8 hex chars of sha256(location) — so repeated scene.set
- * events for the same unmatched location are recognised as no-ops.
- *
- * @param {string} location
- * @returns {string}
- */
-function sceneIdForLocation(location) {
-  return `loc-${createHash("sha256").update(location, "utf8").digest("hex").slice(0, 8)}`;
+  const proposals = [makeStageProposal(ctx, stage)];
+  if (previous?.sceneId && previous.sceneId !== stage.sceneId && direction) {
+    // A new location does not inherit the previous location's actors. The
+    // direction follower runs next and may explicitly place the new cast.
+    proposals.push(
+      makeProposal(ctx, stage.updatedAt, "plugin.data", {
+        namespace: "direction",
+        key: "current",
+        value: {
+          schemaVersion: 1,
+          actors: [],
+          turnId: ctx.turnId,
+          updatedAt: stage.updatedAt,
+        },
+      }),
+    );
+  }
+  return withPendingProposals(
+    { outcome: "success", value: { stage } },
+    proposals,
+  );
 }

@@ -57,7 +57,9 @@ const openingForm =
             submitLabel: "Create",
             fields: [nameField, ...fields],
             submitBehavior: { echoFilledNarrative: true },
-            narrativeTemplate: "{{characterName}} begins.",
+            narrativeTemplate: fields.length
+              ? "{{characterName}} begins, feeling {{persona}}."
+              : "{{characterName}} begins.",
           }),
         },
       ],
@@ -287,7 +289,10 @@ it("retries a failed character setup in the same session", async () => {
       ),
     ).toEqual([]);
     const form = await h.form("char-creation");
-    const submitted = await h.submit(form!, { characterName: "Ada" });
+    const submitted = await h.submit(form!, {
+      characterName: "Ada",
+      persona: "Curious",
+    });
     expect(submitted.refused).toBeUndefined();
     // One request: the answer, then the turn that reads it.
     expect(submitted.types.slice(0, 2)).toEqual([
@@ -299,18 +304,18 @@ it("retries a failed character setup in the same session", async () => {
       results: [
         {
           interactionId: "char-creation",
-          values: { characterName: "Ada" },
-          filledNarrative: "Ada begins.",
+          values: { characterName: "Ada", persona: "Curious" },
+          filledNarrative: "Ada begins, feeling Curious.",
         },
       ],
-      message: { content: "Ada begins." },
+      message: { content: "Ada begins, feeling Curious." },
     });
     expect(submitted.types.at(-1)).toBe("execution.completed");
     expect(
       (await h.store.listTurnMessages(h.sessionId))
         .filter((message) => message.sourceType === "player")
         .map((message) => message.content),
-    ).toEqual(["Ada begins."]);
+    ).toEqual(["Ada begins, feeling Curious."]);
     expect((await h.player())?.name).toBe("Ada");
     expect((await h.session()).phase).toBe("playing");
   } finally {

@@ -3,7 +3,7 @@
  * `actors: []` means the director intentionally cleared the stage. */
 
 import { matchScene } from "./scene-match.js";
-import { sourceLabelFor } from "./stage-data.js";
+import { sceneIdForLocation, sourceLabelFor } from "./stage-data.js";
 
 export const MAX_SPRITE_SLOTS = 4;
 
@@ -22,6 +22,7 @@ export function applySceneSetPreview(ctx, current, registry, data, turnId) {
   if (!matched) {
     return {
       ...current,
+      sceneId: sceneIdForLocation(location),
       name: location,
       variant,
       source: "none",

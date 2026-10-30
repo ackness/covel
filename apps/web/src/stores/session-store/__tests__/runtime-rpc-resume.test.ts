@@ -1,31 +1,52 @@
 // @vitest-environment node
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { SessionWorkspace } from "@/services/data-service.js";
+import type { SessionRecord } from "@/services/api";
 import { ApiError } from "@/services/api/request.js";
 import type { SessionAction, SessionState } from "../types.js";
+import { refreshSessionResource } from "../session-resource-reads.js";
 
 const {
   resumeSuspension,
   resolveApproval,
   listSessionPlugins,
   requestConfirm,
+  getSession,
 } = vi.hoisted(() => ({
   resumeSuspension: vi.fn(),
   resolveApproval: vi.fn(),
   listSessionPlugins: vi.fn(),
   requestConfirm: vi.fn(),
+  getSession: vi.fn(),
 }));
 const { emitToast } = vi.hoisted(() => ({ emitToast: vi.fn() }));
 vi.mock("@/services/api", () => ({
   resumeSuspension,
   resolveApproval,
   listSessionPlugins,
+  getSession,
 }));
 vi.mock("@/lib/confirm-channel.js", () => ({ requestConfirm }));
 vi.mock("@/lib/toast-channel.js", () => ({ emitToast }));
 const { resumeSessionSuspension } = await import("../runtime-rpc.js");
 const { reducer, initialState } = await import("../reducer.js");
 const { reduceTurnSuspended } = await import("../event-reducers.js");
+
+const session: SessionRecord = {
+  id: "session-1",
+  worldId: "world",
+  locale: "en-US",
+  status: "active",
+  phase: "playing",
+  completedPlayerTurns: 1,
+  setupRuntimes: {},
+  activePlugins: ["external"],
+  seats: [
+    { id: "main", controller: "human", role: "player", characters: "auto" },
+  ],
+  createdAt: "2026-10-30T00:00:00Z",
+  updatedAt: "2026-10-30T00:00:00Z",
+};
 
 function fixture() {
   const dispatch = vi.fn();
@@ -71,6 +92,7 @@ beforeEach(() => {
   resolveApproval.mockResolvedValue({ ok: true });
   listSessionPlugins.mockResolvedValue({ items: [], commands: [] });
   requestConfirm.mockResolvedValue(true);
+  getSession.mockResolvedValue(session);
 });
 
 describe("resuming an out-of-date suspension", () => {
@@ -324,5 +346,110 @@ describe("a resume that suspends again", () => {
     await state.resume();
     announceNext(state.apply);
     expectOnlyTheNewSuspension(state.session());
+  });
+});
+
+describe("publishing the committed session clock after resume", () => {
+  it("does not overwrite a later committed turn with a delayed resume read", async () => {
+    let readStarted!: () => void;
+    const started = new Promise<void>((resolve) => {
+      readStarted = resolve;
+    });
+    let finishRead!: (value: SessionRecord) => void;
+    const pending = new Promise<SessionRecord>((resolve) => {
+      finishRead = resolve;
+    });
+    const latest = { ...session, completedPlayerTurns: 3 };
+    getSession
+      .mockImplementationOnce(() => {
+        readStarted();
+        return pending;
+      })
+      .mockResolvedValue(latest);
+    resumeSuspension.mockResolvedValue(completed);
+    const state = fixture();
+    const running = state.resume();
+    await started;
+    await refreshSessionResource(
+      state.dispatch,
+      ["game-state", "session-1", "reconnect"],
+      {
+        isCurrent: () => true,
+        read: async () => latest,
+        apply: (record) =>
+          state.dispatch({ type: "SET_SESSION", session: record }),
+      },
+    );
+    finishRead({ ...session, completedPlayerTurns: 2 });
+    await running;
+    expect(getSession).toHaveBeenCalledTimes(2);
+    expect(state.dispatch).not.toHaveBeenCalledWith({
+      type: "SET_SESSION",
+      session: { ...session, completedPlayerTurns: 2 },
+    });
+    expect(state.dispatch).toHaveBeenLastCalledWith({
+      type: "SET_SESSION",
+      session: latest,
+    });
+  });
+  it.each(["success", "suspended"])(
+    "reads the clock after a settled %s result",
+    async (status) => {
+      resumeSuspension.mockResolvedValue({
+        ...completed,
+        result: { ...completed.result, status },
+      });
+      const updated = {
+        ...session,
+        completedPlayerTurns: status === "success" ? 2 : 1,
+      };
+      getSession.mockResolvedValue(updated);
+      const state = fixture();
+      await state.resume();
+      expect(getSession).toHaveBeenCalledExactlyOnceWith("session-1");
+      expect(state.dispatch).toHaveBeenCalledWith({
+        type: "SET_SESSION",
+        session: updated,
+      });
+    },
+  );
+
+  it("does not publish a delayed clock after leaving and revisiting the same session", async () => {
+    let readStarted!: () => void;
+    const started = new Promise<void>((resolve) => {
+      readStarted = resolve;
+    });
+    let finishRead!: (value: SessionRecord) => void;
+    const pending = new Promise<SessionRecord>((resolve) => {
+      finishRead = resolve;
+    });
+    getSession.mockImplementation(() => {
+      readStarted();
+      return pending;
+    });
+    resumeSuspension.mockResolvedValue(completed);
+    const state = fixture();
+    const running = state.resume();
+    await started;
+    state.sessionGenerationRef.current += 2;
+    finishRead({ ...session, completedPlayerTurns: 2 });
+    await running;
+    expect(
+      state.dispatch.mock.calls.some(
+        ([action]) => action.type === "SET_SESSION",
+      ),
+    ).toBe(false);
+  });
+
+  it("does not turn a committed resume into a failed retry when clock refresh fails", async () => {
+    resumeSuspension.mockResolvedValue(completed);
+    getSession.mockRejectedValue(new Error("Connection lost after commit"));
+    const state = fixture();
+    await expect(state.resume()).resolves.toBeUndefined();
+    expect(resumeSuspension).toHaveBeenCalledOnce();
+    expect(state.dispatch).toHaveBeenCalledWith({
+      type: "REMOVE_SUSPENSION",
+      suspensionId: "susp-1",
+    });
   });
 });

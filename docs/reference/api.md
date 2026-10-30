@@ -177,7 +177,7 @@ PostgreSQL 一列的细节：
 
 框架私有的元数据不会出现在任何响应里：owner 哈希、approval / session incarnation、lifecycle 和 delete lease 等，在会话的增删改查、快照和 `/state` 的虚拟表响应里都会被去掉。
 
-**各部署层级怎样检查**
+**各部署层级怎样检查会话 owner token**
 
 | `DEPLOYMENT_TIER`     | 行为                                                                 |
 | --------------------- | -------------------------------------------------------------------- |
@@ -241,7 +241,7 @@ community 插件的 ESM 代码会在服务器进程里注册全局能力，所�
 - 凭据只保存在当前浏览器的 `localStorage`。
 - 只在上面这些需要运维 token 的同源请求里，以 `Authorization: Bearer <token>` 发送。
 - 保存或清除后，客户端会重新加载，用新凭据重新取会话和世界数据。
-- 开发模式和桌面单用户模式仍然可以不带 token 使用。生产 MemoryStore 按上面的例外处理。
+- personal 的普通会话请求不要求 owner token；桌面配置和文件接口仍遵守上面的启动令牌门禁。生产 MemoryStore 按上面的例外处理。
 
 **Web 客户端怎样保存 owner token**
 
@@ -4486,6 +4486,8 @@ runtime 可以中途停下来等玩家提供数据，这叫挂起。本节的端
 ```
 
 `result.status` 是 `success`；runtime 又一次挂起时是 `suspended`，这时 `result.output.suspensionId` 是新挂起项的 ID。
+
+客户端在恢复成功、再次挂起、放弃或收到 `suspension_outdated` 后重新读取会话记录，以服务端已提交的 `completedPlayerTurns` 更新界面，不自行加一。继续挂起时计数仍可能不变；读取失败不应重试已经成功的恢复请求。
 
 **错误**
 

@@ -14,6 +14,7 @@ import type { MutableRef, SessionActionOwner } from "./runtime-refs.js";
 import type { SseEventHandler } from "./sse-handler.js";
 import type { SessionDispatch } from "./types.js";
 import { toExecutionStepStatus } from "./execution-steps.js";
+import { refreshSessionResource } from "./session-resource-reads.js";
 
 const CONNECTION_CLOSED_REASON = "__i18n:session.reasonConnectionClosed__";
 
@@ -142,6 +143,13 @@ export async function resumeSessionSuspension(
           defaultValue: "The story has moved on since it was asked.",
         }) as string,
       );
+      await resyncSessionRecord(
+        sid,
+        sessionIdRef,
+        dispatch,
+        sessionGenerationRef,
+        isCurrent,
+      );
       return;
     }
     const { result, events } = outcome;
@@ -160,6 +168,15 @@ export async function resumeSessionSuspension(
       },
     });
     dispatch({ type: "REMOVE_SUSPENSION", suspensionId });
+    // The last continuation can settle a player turn without any character
+    // or dimension event. Read the committed clock instead of incrementing it.
+    await resyncSessionRecord(
+      sid,
+      sessionIdRef,
+      dispatch,
+      sessionGenerationRef,
+      isCurrent,
+    );
     return;
   }
 }
@@ -443,16 +460,14 @@ export async function resyncSessionRecord(
 ): Promise<void> {
   const generation = sessionGenerationRef.current;
   try {
-    const session = await api.getSession(sessionId);
-    // A stale response after a session switch must not overwrite the
-    // now-active session's record (and yank the URL back to it).
-    if (
-      sessionIdRef.current !== sessionId ||
-      sessionGenerationRef.current !== generation ||
-      (isCurrentAction && !isCurrentAction())
-    )
-      return;
-    dispatch({ type: "SET_SESSION", session });
+    await refreshSessionResource(dispatch, ["game-state", sessionId], {
+      isCurrent: () =>
+        sessionIdRef.current === sessionId &&
+        sessionGenerationRef.current === generation &&
+        (!isCurrentAction || isCurrentAction()),
+      read: () => api.getSession(sessionId),
+      apply: (session) => dispatch({ type: "SET_SESSION", session }),
+    });
   } catch {
     /* next action or reload will resync */
   }

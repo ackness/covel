@@ -1,4 +1,8 @@
-import { getToolContent, getModelView } from "@covel/plugin-handlers-utils";
+import {
+  fillNarrativeTemplate,
+  getToolContent,
+  getModelView,
+} from "@covel/plugin-handlers-utils";
 import { describe, expect, it, vi } from "vitest";
 import { createFormTool, tool } from "@covel/tools";
 import makeCharacterForm from "../tools/create-character-form.js";
@@ -99,6 +103,7 @@ describe("create-character-form schema boundary", () => {
     const result = await createCharacterForm.execute(
       {
         ...params,
+        narrativeTemplate: "{{characterName}} arrives because of {{motive}}.",
         fields: [
           ...params.fields,
           { name: "motive", type: "text", label: "Motive" },
@@ -144,6 +149,7 @@ describe("create-character-form schema boundary", () => {
       createCharacterForm.execute(
         {
           ...params,
+          narrativeTemplate: "{{characterName}} arrives because of {{motive}}.",
           fields: [
             ...params.fields,
             {
@@ -221,6 +227,7 @@ describe("create-character-form schema boundary", () => {
   it("keeps exact enum values and rejects narrative synonyms", async () => {
     const valid = {
       ...params,
+      narrativeTemplate: "{{characterName}} arrives as an {{occupation}}.",
       fields: [
         ...params.fields,
         {
@@ -264,6 +271,7 @@ describe("create-character-form schema boundary", () => {
     const result = await createCharacterForm.execute(
       {
         ...params,
+        narrativeTemplate: "{{characterName}}: {{occupation}}; {{motive}}.",
         fields: [
           ...params.fields,
           { name: "motive", type: "text", label: "Motive" },
@@ -488,7 +496,7 @@ describe("create-character-form narrative defaults", () => {
         opening(
           "a scout",
           "tomorrow",
-          "You came to {{background}}; tomorrow will be different.",
+          "{{characterName}} is {{calling}}. You came to {{background}}; tomorrow will be different.",
         ),
         openingContext("en-US"),
       ),
@@ -497,9 +505,79 @@ describe("create-character-form narrative defaults", () => {
 
   it("renders blank optional defaults as missing, as submission does", async () => {
     const result = await createCharacterForm.execute(
-      opening("scout", "   ", "{{calling}} / {{background}}"),
+      opening(
+        "scout",
+        "   ",
+        "{{characterName}}: {{calling}} / {{background}}",
+      ),
       openingContext("en-US"),
     );
-    expect(result.filledNarrative).toBe("scout / ");
+    expect(result.filledNarrative).toBe("张三: scout / ");
+  });
+
+  it("rejects hardcoded answers before creating an interaction, then echoes edited answers", async () => {
+    const execute = vi.fn(createFormTool.execute);
+    const checked = makeCharacterForm({ tool }, { ...createFormTool, execute });
+    const form = {
+      ...params,
+      narrativeTemplate: "{{characterName}} arrives, motivated by exploration.",
+      fields: [
+        ...params.fields,
+        {
+          name: "motive",
+          label: "Motive",
+          type: "text",
+          defaultValue: "exploration",
+        },
+      ],
+    };
+    await expect(checked.execute(form, context)).rejects.toThrow(
+      /must include \{\{motive\}\}/,
+    );
+    expect(execute).not.toHaveBeenCalled();
+    const result = getToolContent(
+      await checked.execute(
+        {
+          ...form,
+          narrativeTemplate:
+            "{{ characterName }} arrives, motivated by {{ motive }}.",
+        },
+        context,
+      ),
+    );
+    expect(execute).toHaveBeenCalledOnce();
+    expect(
+      fillNarrativeTemplate(result.interaction.narrativeTemplate, {
+        characterName: "Wren",
+        motive: "repaying a debt",
+      }),
+    ).toBe("Wren arrives, motivated by repaying a debt.");
+  });
+
+  it("rejects a hardcoded character name", async () => {
+    await expect(
+      createCharacterForm.execute(
+        {
+          ...params,
+          narrativeTemplate: "Wren arrives.",
+        },
+        context,
+      ),
+    ).rejects.toThrow(/must include \{\{characterName\}\}/);
+  });
+
+  it("rejects missing and long unclosed placeholders without creating a form", async () => {
+    await expect(
+      createCharacterForm.execute(
+        { ...params, narrativeTemplate: undefined },
+        context,
+      ),
+    ).rejects.toThrow("Tool parameter validation failed");
+    await expect(
+      createCharacterForm.execute(
+        { ...params, narrativeTemplate: `{{${" ".repeat(10000)}` },
+        context,
+      ),
+    ).rejects.toThrow(/must include \{\{characterName\}\}/);
   });
 });

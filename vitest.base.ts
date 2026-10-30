@@ -1,4 +1,10 @@
-import { mkdtempSync, readdirSync, rmSync, statSync } from "node:fs";
+import {
+  mkdtempSync,
+  readdirSync,
+  realpathSync,
+  rmSync,
+  statSync,
+} from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -48,7 +54,10 @@ export function useRunTempDir(): void {
   // A config can load twice in one process, and a test can start another
   // test run. Both stay in the directory that exists.
   if (process.env[RUN_DIR_MARKER]) return;
-  const base = os.tmpdir();
+  // macOS aliases /tmp and /var through symlinks. Publish one canonical
+  // spelling so fixtures and realpath-based package validation agree, including
+  // missing children whose full path cannot be resolved yet.
+  const base = realpathSync(os.tmpdir());
   const now = Date.now();
   for (const name of readdirSync(base)) {
     const owner = Number(/^covel-test-(\d+)-/.exec(name)?.[1]);
