@@ -226,6 +226,12 @@ export interface TurnExecutorOptions {
 
 export interface TurnInputExecutionFlags {
   readonly suppressPlayerMessage?: boolean;
+  /**
+   * Progress scope of the root execution a `ctx.recursiveCall` execution runs
+   * under, so the nested runs' `ctx.progress` tasks settle with the root's
+   * commit. Set only by the kernel; a plugin cannot choose it.
+   */
+  readonly progressScopeId?: string;
 }
 
 export class MaxRecursionExceeded extends Error {

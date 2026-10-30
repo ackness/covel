@@ -291,6 +291,11 @@ export async function executeFunctionRuntime({
         ...(activation ? { activation: structuredClone(activation) } : {}),
         emittedEvents: [],
         executionContext,
+        // A nested call reports progress under the root execution's scope.
+        ...(executionId !== undefined &&
+        executionId !== executionContext.executionId
+          ? { progressScopeId: executionId }
+          : {}),
         // `executeTurn` sets the player turns once it knows the whole execution.
         takenUnder: suspensionBasis(manifest, 0),
         ...(input.locale !== undefined ? { locale: input.locale } : {}),

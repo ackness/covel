@@ -381,8 +381,9 @@ ctx.progress.report({ jobId, state, progress?, message?, data?, sequence })
 
 - 还没结束的作业，按 runtime 的结果换成终态。
 - 插件已经上报了 `succeeded`，但这次的领域写入没有提交（整次执行回滚、这个 runtime 失败，或者它的写入在提交时被单独丢弃）：框架追加一条 `failed`，不保留成功状态。
+- 嵌套子调用（`ctx.recursiveCall`）上报了 `succeeded`，但它的父 runtime 没有成功，子调用的写入随之丢弃：追加的是 `cancelled`，不是 `failed`，因为子调用不是一次独立失败的执行，它的成功只是被撤回。
 - 插件自己上报的 `failed` / `cancelled` 不会被改写。
-- 挂起的 runtime 的作业停在 `waiting-input`，它在挂起前已经上报 `succeeded` 的也退回 `waiting-input`：挂起时它的写入先扣下，等恢复才提交，放弃挂起项时一并丢弃。这些作业记在挂起那次执行名下，恢复的运行也在这个名下上报，所以一条挂起链只有一个进度范围：最后一次恢复成功提交后换成 `succeeded`；挂起项被放弃、过期或作废时换成 `cancelled`；恢复失败、还能重试，或者恢复后又挂起时继续等待。恢复没有提交时（runtime 失败、抛错、超时、被 `PostRuntime` 拦下，或者提交回滚），这次恢复里还没结束的作业换成 `waiting-input`，已经上报 `succeeded` 的也退回 `waiting-input`：写入没有落地，挂起项还在，可以重试。
+- 挂起的 runtime 的作业停在 `waiting-input`，它在挂起前已经上报 `succeeded` 的也退回 `waiting-input`：挂起时它的写入先扣下，等恢复才提交，放弃挂起项时一并丢弃。这些作业记在挂起那次执行的进度范围里，恢复的运行也在这个范围里上报，所以一条挂起链只有一个进度范围。嵌套子调用保留自己的执行身份，但在根执行的进度范围里上报，挂起的父 runtime 的子调用作业随父一起停在 `waiting-input`，放弃挂起项时一并 `cancelled`：最后一次恢复成功提交后换成 `succeeded`；挂起项被放弃、过期或作废时换成 `cancelled`；恢复失败、还能重试，或者恢复后又挂起时继续等待。恢复没有提交时（runtime 失败、抛错、超时、被 `PostRuntime` 拦下，或者提交回滚），这次恢复里还没结束的作业换成 `waiting-input`，已经上报 `succeeded` 的也退回 `waiting-input`：写入没有落地，挂起项还在，可以重试。
 
 **后台作业的状态对应**
 

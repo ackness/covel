@@ -166,6 +166,8 @@ export interface RunAgentToolLoopOptions {
   readonly runId: string;
   /** Original scheduling identity, persisted if this loop suspends. */
   readonly executionContext: ExecutionContext;
+  /** Progress scope of a nested call, persisted if this loop suspends. */
+  readonly progressScopeId?: string;
   /** Seed mid-turn state — used by the resume path. Omitted = fresh loop. */
   readonly initialState?: AgentToolLoopInitialState;
   /**
@@ -245,6 +247,7 @@ async function runAgentToolLoopWithinBudget(
     startTime,
     runId,
     executionContext,
+    progressScopeId,
     initialState,
     allowSuspend = true,
   }: RunAgentToolLoopOptions,
@@ -972,6 +975,7 @@ async function runAgentToolLoopWithinBudget(
                 pendingProposals,
                 emittedEvents,
                 executionContext,
+                ...(progressScopeId !== undefined ? { progressScopeId } : {}),
                 ...(logicalTurn !== undefined ? { logicalTurn } : {}),
                 ...(turnNumber !== undefined ? { turnNumber } : {}),
                 currentTurnUserMessages,

@@ -172,6 +172,9 @@ export async function executeOneRuntime(
     setupRuntimeDone,
   } = inv;
   const startTime = Date.now();
+  // `ctx.progress` scope: the root execution's when this runs nested.
+  const progressScopeId =
+    (input as RecursiveTurnInput).progressScopeId ?? executionId;
   const runId = inv.runId ?? crypto.randomUUID();
   const timeoutMs = resolveRuntimeTimeoutMs(manifest, defaultTimeoutMs);
   // Resolves to the nested execution's kernel-held result. The invocation
@@ -224,6 +227,9 @@ export async function executeOneRuntime(
         turnId: input.turnId,
         playerMessage: delta.playerMessage ?? input.playerMessage,
         suppressPlayerMessage: true,
+        // Its `ctx.progress` tasks belong to the root execution's scope, the
+        // one the commit settles, at any depth.
+        ...(progressScopeId !== undefined ? { progressScopeId } : {}),
         // A nested execution is never a player turn — stamp its origin
         // and parent so it is excluded from player-turn accounting.
         origin: "recursive",
@@ -688,7 +694,7 @@ export async function executeOneRuntime(
         startTime,
         runId,
         timeoutMs,
-        executionId,
+        executionId: progressScopeId,
         upstreamOf,
       });
     }
@@ -710,7 +716,7 @@ export async function executeOneRuntime(
       inputs: inputSlots,
       exports: exportSlots,
       executionContext,
-      executionId,
+      executionId: progressScopeId,
       createRecursiveCall,
       recursionDepth,
       startTime,
@@ -746,6 +752,7 @@ export async function executeOneRuntime(
       inputs: inputSlots,
       exports: exportSlots,
       executionContext,
+      ...(progressScopeId !== undefined ? { progressScopeId } : {}),
       startTime,
       runId,
     });

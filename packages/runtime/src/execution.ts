@@ -52,6 +52,7 @@ import {
   countPlayerTurns,
   hasPendingSibling,
 } from "./resume/suspension-settlement.js";
+import { suspensionProgressScopeId } from "./resume/suspension-progress-scope.js";
 
 type Schema = Readonly<Record<string, unknown>>;
 
@@ -408,6 +409,11 @@ export async function resumeSuspendedRuntime(
     ),
   );
   const inherited = suspension.pendingContinuation.executionContext;
+  // The scope its tasks report under, which a nested child's suspension
+  // keeps apart from its execution identity.
+  const progressScopeId = suspensionProgressScopeId(
+    suspension.pendingContinuation,
+  );
   const hasUnresolvedSibling = hasPendingSibling(
     suspension,
     await deps.store.listSuspensions(suspension.sessionId),
@@ -445,14 +451,20 @@ export async function resumeSuspendedRuntime(
   // ends it counts the turn once, releases the held-back jobs once and
   // settles the suspended execution's progress jobs.
   const suspensions = collectExecutionSuspensions(carrier).map((record) => {
-    const { withheldRuntimeJobs: _own, ...continuation } =
-      record.pendingContinuation;
+    const {
+      withheldRuntimeJobs: _own,
+      progressScopeId: _ownScope,
+      ...continuation
+    } = record.pendingContinuation;
     const withheld = suspension.pendingContinuation.withheldRuntimeJobs;
     return {
       ...record,
       pendingContinuation: {
         ...continuation,
         executionContext: inherited,
+        ...(progressScopeId !== inherited.executionId
+          ? { progressScopeId }
+          : {}),
         takenUnder: {
           ...continuation.takenUnder,
           playerTurns: suspension.pendingContinuation.takenUnder.playerTurns,
@@ -531,7 +543,7 @@ export async function resumeSuspendedRuntime(
         writeBaseline: suspension.pendingContinuation.takenUnder.writes,
         // Every leg reports progress under the suspended execution; this
         // leg's own identity stays in `executionContext`.
-        progressScopeId: inherited.executionId,
+        progressScopeId,
         ...(releasedRuntimeJobs?.length ? { releasedRuntimeJobs } : {}),
       }),
       outputSchemas: captured.outputSchemas,

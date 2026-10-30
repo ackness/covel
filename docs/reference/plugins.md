@@ -623,6 +623,7 @@ Agent 的副作用只来自工具：模型能写什么，以 `agent.tools` 白�
 - 父 handler 成功时，子调用的写入和父写入一起提交，排在父结果之前。
 - 父 handler 失败时（抛错、超时、返回 `failed` 或 `skipped`），子调用的写入一起丢弃。PostRuntime Hook 改写了父结果的状态（例如把失败改成成功）时也丢弃，和父 handler 自己的写入一样。多层嵌套逐层适用：任何一层父 handler 失败，它下面所有层的写入都丢弃。
 - 父 handler 挂起等待输入时，子调用的结果连同写入随挂起项保存。恢复后的 handler 成功时，它们和父写入一起提交，排在父结果之前，提交顺序和不挂起时相同；恢复失败、PostRuntime Hook 改了状态，或挂起项被放弃、过期、作废时，它们和父写入一起丢弃。自己也挂起了的子调用不保存，trace 里记一条 `code` 为 `nested-suspension-dropped` 的 `recursive.failed`。
+- 子调用用 `ctx.progress` 上报的进度作业，和父调用在同一个进度范围里，随父执行的提交一起收尾，同一个 runtime 的多次调用（例如父调用多次触发同一个子调用）共用这个范围；作业在完整身份键（`pluginId`、`runtimeId` 等）内按 `jobId` 和序号去重，所以父子或兄弟 runtime 的作业不会互相冲突；同一个 runtime 的多次调用共用一个身份键，要用不同的 `jobId`。子调用保留自己的执行身份，只是在根执行的进度范围里上报。父 handler 成功时，它们按各自的结果结束；父 handler 失败时，以 `cancelled` 结束；父 handler 挂起时，它们和父调用的作业一起停在 `waiting-input`，恢复成功后以保存时的结果结束，挂起项被放弃、过期、作废时以 `cancelled` 结束。
 - agent 的 guard 里发起的子调用，只在 guard 返回 `{ skip: true }`、结果仍是跳过时提交；guard 放行、agent 照常运行时丢弃。
 
 提交时，顶层 runtime 和它下面所有层的嵌套调用是一个整体，要么全部提交，要么全部丢弃：
