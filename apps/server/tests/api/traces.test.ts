@@ -240,7 +240,7 @@ describe("traceRoutes", () => {
         toolName: "inspect",
         toolCallId: "call-1",
         arguments: { target: "door" },
-        code: "INVALID_ARGS",
+        code: "invalid-input",
         error: "target is required",
         details: ["missing target"],
         durationMs: 1001,
@@ -298,7 +298,7 @@ describe("traceRoutes", () => {
         operation: "inspect",
         durationMs: 1001,
         error: {
-          code: "INVALID_ARGS",
+          code: "invalid-input",
           message: "target is required",
           details: ["missing target"],
         },

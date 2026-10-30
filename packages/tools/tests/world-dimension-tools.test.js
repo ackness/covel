@@ -1,5 +1,10 @@
+import { getToolContent } from "@covel/plugin-handlers-utils";
 import { describe, expect, it } from "vitest";
-import { worldDimensionGetTool as instance } from "../src/builtin/world-dimension-tools.js";
+import { worldDimensionGetTool as registered } from "../src/builtin/world-dimension-tools.js";
+const instance = {
+  ...registered,
+  execute: async (...args) => getToolContent(await registered.execute(...args)),
+};
 function context() {
   return {
     sessionId: "s",
@@ -23,7 +28,7 @@ function context() {
           },
           value: {
             harbor: {
-              name: { "en-US": "Harbor", "zh-CN": "港口" },
+              name: "Harbor",
               progress: 3,
             },
           },
@@ -35,7 +40,7 @@ function context() {
   };
 }
 describe("public frozen dimension queries", () => {
-  it("reads current versioned values and only explicitly marked translations", async () => {
+  it("reads current versioned values in the session language", async () => {
     const result = await instance.execute(
       { queries: [{ dimension: "discoveries", path: "harbor.name" }] },
       context(),
@@ -76,7 +81,7 @@ describe("public frozen dimension queries", () => {
           },
         },
       ),
-    ).rejects.toThrow("unavailable");
+    ).rejects.toMatchObject({ code: "unavailable" });
   });
   it("reports unknown IDs and invalid/absent paths explicitly", async () => {
     const result = await instance.execute(
@@ -94,7 +99,7 @@ describe("public frozen dimension queries", () => {
   it("keeps arbitrary named-map keys queryable through JSON Pointer and pages strings", async () => {
     const ctx = context();
     ctx.world.dimensions.discoveries.value["a.b"] = {
-      name: { "en-US": "abcdefgh" },
+      name: "abcdefgh",
       progress: 1,
     };
     const result = await instance.execute(

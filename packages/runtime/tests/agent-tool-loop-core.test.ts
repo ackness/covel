@@ -561,7 +561,7 @@ describe("runAgentToolLoop core", () => {
     },
   );
 
-  it("preserves unrepairable arguments as JSON text and reports INVALID_ARGS", async () => {
+  it("preserves unrepairable arguments as JSON text and reports invalid-input", async () => {
     const raw = '{"note":';
     const llm = new ScriptedLLM([
       {
@@ -576,7 +576,7 @@ describe("runAgentToolLoop core", () => {
       ?.arguments;
     expect(JSON.parse(args!)).toBe(raw);
     expect(messages.find((m) => m.role === "tool")?.content).toContain(
-      "INVALID_ARGS",
+      "invalid-input",
     );
     expect(result.pendingProposals).toEqual([]);
   });
@@ -630,9 +630,9 @@ describe("runAgentToolLoop core", () => {
       }),
       deps: { toolExecutor: executor },
     });
-    expect(JSON.parse((await execute.mock.results[1]!.value).result).code).toBe(
-      "UNAUTHORIZED",
-    );
+    expect(
+      JSON.parse((await execute.mock.results[1]!.value).result).error.code,
+    ).toBe("unavailable");
     expect(result.requiredToolUseUnmet).toBe(true);
     expect(llm.calls).toBe(4); // one correction after the text answer
   });

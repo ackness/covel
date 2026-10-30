@@ -166,7 +166,7 @@ prompt loader 也按实例划分：
 - 维度提供者从 `@covel/plugin-handlers-utils/dimensions` 导入。插件不到 shared 包里去取这些操作。
 - UI 工具工厂和角色字段校验也在 SDK 里。
 - 按 locale 读取文件的功能单独放在只能在 Node 里用的 `/prompts` 入口，根入口保持可以在浏览器里使用。
-- 宿主包重新导出的内容包括工具校验的错误类。
+- 宿主包重新导出的内容包括工具校验的错误类。`shared` 还重新导出 SDK 的 `ToolError`、固定错误码和 `ToolModelView`；runtime 从 `shared` 导入错误和模型视图类型，从 `tools` 读取工具辅助函数的类型，不直接导入 SDK。
 
 ## 开发阶段的兼容范围
 

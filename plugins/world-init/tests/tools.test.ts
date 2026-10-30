@@ -576,6 +576,7 @@ describe("world-init domain tools", () => {
       complete: false,
       nextOffset: 100,
     });
-    expect(result._text.length).toBeLessThan(500);
+    expect(result).not.toHaveProperty("_text");
+    expect(JSON.stringify(result).length).toBeLessThan(500);
   });
 });

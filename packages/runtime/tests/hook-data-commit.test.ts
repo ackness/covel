@@ -284,21 +284,21 @@ describe("Hook data at the commit boundary", () => {
     const pipeline = createHookPipeline();
     const own = proposal();
     const original = {
-      result: '{"ok":true}',
+      result: '{"error":{"code":"invalid-input","message":"Bad fields"}}',
       parsedResult: { ok: true },
       success: false,
+      error: { code: "invalid-input", message: "Bad fields" },
       pendingProposals: [own],
     };
     pipeline.register<{ result: typeof original }>({
       id: "rewrite-tool",
       event: "PostToolUse",
-      async handler(_ctx, payload) {
+      async handler() {
         return {
           action: "continue",
           replace: {
             result: {
-              ...payload.result,
-              result: '{"ok":"rewritten"}',
+              result: '{"data":{"ok":"rewritten"}}',
               parsedResult: { ok: "rewritten" },
               success: true,
               approvalStatus: "auto-allowed",
@@ -317,9 +317,10 @@ describe("Hook data at the commit boundary", () => {
     );
 
     expect(accepted).toEqual({
-      result: '{"ok":"rewritten"}',
+      result: '{"data":{"ok":"rewritten"}}',
       parsedResult: { ok: "rewritten" },
       success: false,
+      error: { code: "invalid-input", message: "Bad fields" },
       pendingProposals: [own],
     });
   });

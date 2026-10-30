@@ -44,11 +44,11 @@ describe("turn-agent-tool-loop message helpers", () => {
     expect(
       buildToolResultMessage({
         toolCallId: "tc-ok",
-        content: '{"ok":true}',
+        content: '{"data":{"ok":true}}',
       }),
     ).toEqual({
       role: "tool",
-      content: '{"ok":true}',
+      content: '{"data":{"ok":true}}',
       toolCallId: "tc-ok",
     });
 
@@ -60,14 +60,18 @@ describe("turn-agent-tool-loop message helpers", () => {
         }).content as string,
       ),
     ).toEqual({
-      error: "pre-tool-use hook aborted: tool blocked",
+      error: {
+        code: "refused",
+        message: "pre-tool-use hook aborted: tool blocked",
+      },
     });
   });
 
   it("builds the no-executor fallback tool message", () => {
     expect(buildToolExecutionUnavailableMessage("tc-missing")).toEqual({
       role: "tool",
-      content: '{"result":"Tool execution not available"}',
+      content:
+        '{"error":{"code":"unavailable","message":"Tool execution not available"}}',
       toolCallId: "tc-missing",
     });
   });

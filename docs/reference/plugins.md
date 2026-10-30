@@ -634,6 +634,8 @@ const result = await ctx.agents?.run({
 
 失败不会抛异常（只有 handler 结束后再调用才抛），而是返回错误码：
 
+这些错误码是[工具错误码](./tools.md#统一返回格式与错误码)的子集。
+
 <!-- prettier-ignore -->
 | `error.code` | 含义 |
 | --- | --- |
@@ -677,7 +679,7 @@ const result = await ctx.agents?.run({
 内核把记录写进提示词时会去掉它们：
 
 - `io.selfData` 的每一行是 `- <key> | <值的 JSON>`（`summary` 格式截断到 200 字符）。不带行的 `updatedAt`，值里和 key 相同的 `id` 也不重复。
-- 下面这些内容在交给模型之前经过同一个投影：`<runtime-inputs>` / `<runtime-exports>` 的值、`<runtime-activation>` 的载荷、`{{ world.schema }}`、`{{ characters.npcs }}` 的 fields、SDK `characterSheetSegments()` 的玩家表和 NPC fields，以及没有 `_text` 的工具结果。
+- 下面这些内容在交给模型之前经过同一个投影：`<runtime-inputs>` / `<runtime-exports>` 的值、`<runtime-activation>` 的载荷、`{{ world.schema }}`、`{{ characters.npcs }}` 的 fields、SDK `characterSheetSegments()` 的玩家表和 NPC fields，以及统一工具结果的 `data` 字段。
 
 属性名和取值都符合才会被去掉：
 
@@ -699,7 +701,7 @@ const result = await ctx.agents?.run({
 代码读到的记录不变：`ctx.inputs`、`ctx.activation`、`ctx.pluginData`、`ctx.tools.call` 的返回值都是完整的。
 
 - 插件自己拼提示词（例如直接调用 `ctx.gateway`）时，用 `@covel/plugin-handlers-utils` 导出的 `modelFacingJson(value)` 做同样的事。
-- 工具要把一个不透明的句柄交给模型时，写在 `_text` 里。
+- 工具要把一个不透明的句柄交给模型时，用 `withModelView(content, { summary })` 写在模型视图的摘要里。
 
 #### 内核输入 `turn-digest@1`
 

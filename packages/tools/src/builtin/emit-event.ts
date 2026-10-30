@@ -12,8 +12,8 @@
  */
 
 import { z } from "zod";
-import { tool } from "@covel/plugin-handlers-utils";
-import { ToolRefusal, withEmittedEvents } from "../result.js";
+import { withModelView, ToolError, tool } from "@covel/plugin-handlers-utils";
+import { withEmittedEvents } from "../result.js";
 import type { ToolModule } from "../types.js";
 
 /** Structural dep — implemented by the server's session event directory. */
@@ -38,11 +38,13 @@ export function createEmitEventTool(deps: {
     }),
     execute: async ({ topic, data }, context) => {
       if (context.emittedEventTopics?.includes(topic)) {
-        return {
-          // Say what to do next: a model that reads only "skipped" tries a
-          // third time.
-          _text: `event "${topic}" was already emitted this turn and is recorded. Do not emit it again; continue with the task.`,
-        };
+        // Say what to do next: a model that reads only "skipped" tries again.
+        return withModelView(
+          {},
+          {
+            summary: `event "${topic}" was already emitted this turn and is recorded. Do not emit it again; continue with the task.`,
+          },
+        );
       }
       const known = await deps.directory.listTopics(context.sessionId);
       if (!known.includes(topic)) {
@@ -50,7 +52,8 @@ export function createEmitEventTool(deps: {
         // satisfy `requireToolUse` or a finishing-tool rule. A refusal and
         // not an error: the model can correct nothing here, and a runtime
         // that goes on to finish has not failed.
-        throw new ToolRefusal(
+        throw new ToolError(
+          "refused",
           `unknown topic "${topic}"; no active plugin consumes it, so it cannot be emitted. Do not retry it. Available topics: ${known.join(", ") || "(none — no consumer plugin active)"}`,
         );
       }
@@ -60,14 +63,20 @@ export function createEmitEventTool(deps: {
         data,
       );
       if (!verdict.ok) {
-        throw new Error(`event payload rejected: ${verdict.reason}`);
+        throw new ToolError(
+          "invalid-input",
+          `event payload rejected: ${verdict.reason}`,
+        );
       }
       // One topic is emitted one time in a turn. The result says so: with a
       // bare "emitted" some models send the same event again to be sure.
       return withEmittedEvents(
-        {
-          _text: `event "${topic}" emitted and recorded for this turn. Do not emit it again.`,
-        },
+        withModelView(
+          {},
+          {
+            summary: `event "${topic}" emitted and recorded for this turn. Do not emit it again.`,
+          },
+        ),
         [{ topic, data }],
       );
     },

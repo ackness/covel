@@ -82,7 +82,6 @@ describe("builtin plugin-data tools", () => {
     )) as { success: boolean; namespace: string; key: string };
 
     expect(getToolContent(result)).toEqual({
-      success: true,
       namespace: "entries",
       key: "codex-qingping-mountain",
     });
@@ -167,7 +166,7 @@ describe("builtin plugin-data tools", () => {
       ctx(),
     )) as { success: boolean; count: number };
 
-    expect(getToolContent(result).success).toBe(true);
+    expect(getToolContent(result)).not.toHaveProperty("success");
     expect(getToolContent(result).count).toBe(2);
     expect(store.setPluginDataBatch).not.toHaveBeenCalled();
 
@@ -186,6 +185,93 @@ describe("builtin plugin-data tools", () => {
         ],
       },
     });
+  });
+
+  it("keeps stored timestamps and omits them on pending-only rows", async () => {
+    store.getPluginData.mockResolvedValue(null);
+    store.listPluginData.mockResolvedValue([]);
+    const write = await findByName(tools, "plugin-data-set").execute(
+      { namespace: "notes", key: "new", value: 1 },
+      ctx(),
+    );
+    const context = { ...ctx(), pendingProposals: getPendingProposals(write) };
+    const get = getToolContent(
+      await findByName(tools, "plugin-data-get").execute(
+        { namespace: "notes", key: "new" },
+        context,
+      ),
+    );
+    const list = getToolContent(
+      await findByName(tools, "plugin-data-list").execute(
+        { namespace: "notes" },
+        context,
+      ),
+    ) as { items: unknown[] };
+    expect(get).not.toHaveProperty("updatedAt");
+    expect(list.items[0]).not.toHaveProperty("updatedAt");
+    const stored = {
+      namespace: "notes",
+      key: "new",
+      value: 0,
+      updatedAt: "2026-04-21T00:00:00.000Z",
+    };
+    store.getPluginData.mockResolvedValue(stored);
+    store.listPluginData.mockResolvedValue([stored]);
+    expect(
+      getToolContent(
+        await findByName(tools, "plugin-data-get").execute(
+          { namespace: "notes", key: "new" },
+          context,
+        ),
+      ),
+    ).toMatchObject({ updatedAt: stored.updatedAt });
+    expect(
+      getToolContent(
+        await findByName(tools, "plugin-data-list").execute(
+          { namespace: "notes" },
+          context,
+        ),
+      ),
+    ).toMatchObject({ items: [{ updatedAt: stored.updatedAt }] });
+    const scoped = {
+      ...ctx(),
+      store: {
+        getPluginData: async () => ({
+          namespace: "notes",
+          key: "new",
+          value: 1,
+        }),
+        listPluginData: async () => [
+          { namespace: "notes", key: "new", value: 1 },
+        ],
+        listPlayerInputs: async () => [],
+        getSession: async () => {
+          throw new Error("unused");
+        },
+        listTurnMessages: async () => [],
+        readTurnMessages: async () => ({
+          messages: [],
+          cursor: null,
+          hasMore: false,
+        }),
+      },
+    };
+    expect(
+      getToolContent(
+        await findByName(tools, "plugin-data-get").execute(
+          { namespace: "notes", key: "new" },
+          scoped,
+        ),
+      ),
+    ).not.toHaveProperty("updatedAt");
+    expect(
+      getToolContent(
+        await findByName(tools, "plugin-data-list").execute(
+          { namespace: "notes" },
+          scoped,
+        ),
+      ),
+    ).toMatchObject({ items: [{ namespace: "notes", key: "new", value: 1 }] });
   });
 
   it("reads single records through plugin-data-get", async () => {

@@ -1,3 +1,4 @@
+import type { PluginToolErrorCode } from "./tool-error.js";
 /** Stable author capabilities; provider-specific services are host extensions. */
 import type {
   PluginHttp,
@@ -218,17 +219,13 @@ export interface PluginSubagentRequest {
 }
 
 /**
- * Why a sub-agent produced no output. `unavailable` means the depth or
- * per-execution pool cap was reached: the call is refused at once.
+ * Why a sub-agent produced no output. `unavailable` covers a depth or pool cap
+ * and a provider paused in this session; the call is refused at once.
  */
-export type PluginSubagentErrorCode =
-  | "invalid-input"
-  | "not-found"
-  | "ambiguous"
-  | "unavailable"
-  | "timeout"
-  | "cancelled"
-  | "internal";
+export type PluginSubagentErrorCode = Exclude<
+  PluginToolErrorCode,
+  "refused" | "conflict"
+>;
 
 export type PluginSubagentResult =
   | {
@@ -379,6 +376,7 @@ export interface PluginFunctionContext {
   readonly world?: ExtensionWorldModel;
   readonly services?: PluginServiceClient;
   readonly tools?: {
+    /** Rejects with a ToolError on a failed call. */
     call(
       name: string,
       args: Readonly<Record<string, unknown>>,

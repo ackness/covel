@@ -15,6 +15,7 @@
  * neither be found nor activated.
  */
 
+import { renderToolSuccess } from "./tool-result-text.js";
 import type { RuntimeManifest } from "@covel/shared";
 import {
   buildSearchToolsDescription,
@@ -114,8 +115,12 @@ export function executeToolSearch(args: {
   }
   if (!query) {
     return {
-      resultText:
-        "search-tools requires a non-empty `query` string describing the capability you need.",
+      resultText: renderToolSuccess({
+        model: {
+          summary:
+            "search-tools requires a non-empty `query` string describing the capability you need.",
+        },
+      }),
       parsedResult: { activated: [], query: "" },
       activated: [],
     };
@@ -143,9 +148,13 @@ export function executeToolSearch(args: {
   );
   if (ranked.length === 0) {
     return {
-      resultText:
-        `No matching tools among ${pool.length} deferred tool(s) for "${query}". ` +
-        `Try different capability keywords.`,
+      resultText: renderToolSuccess({
+        model: {
+          summary:
+            `No matching tools among ${pool.length} deferred tool(s) for "${query}". ` +
+            `Try different capability keywords.`,
+        },
+      }),
       parsedResult: { activated: [], query },
       activated: [],
     };
@@ -157,9 +166,13 @@ export function executeToolSearch(args: {
     .filter((def): def is LLMToolDefinition => def !== undefined);
   const lines = activated.map((d) => `- ${d.name}: ${d.description}`);
   return {
-    resultText:
-      `Activated ${activated.length} tool(s) — directly callable from your next step:\n` +
-      lines.join("\n"),
+    resultText: renderToolSuccess({
+      model: {
+        summary:
+          `Activated ${activated.length} tool(s) — directly callable from your next step:\n` +
+          lines.join("\n"),
+      },
+    }),
     parsedResult: { activated: activated.map((d) => d.name), query },
     activated,
   };

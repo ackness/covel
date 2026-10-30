@@ -15,6 +15,8 @@ import {
   z,
   shortId,
   shortIdBatch,
+  withModelView,
+  ToolError,
   withPendingProposals,
 } from "@covel/tools";
 
@@ -79,7 +81,15 @@ export async function extractDeclarations(
   const api: PluginAPI = {
     pluginId: path.basename(root),
     signal: scope.signal,
-    toolkit: { tool, z, shortId, shortIdBatch, withPendingProposals },
+    toolkit: {
+      tool,
+      z,
+      shortId,
+      shortIdBatch,
+      withPendingProposals,
+      withModelView,
+      ToolError,
+    },
     http: {
       fetchWithRetry: () => unavailable("http.fetchWithRetry"),
       validateBaseUrl: () => unavailable("http.validateBaseUrl"),

@@ -1,11 +1,29 @@
+import {
+  type PluginToolResult,
+  getToolContent,
+} from "@covel/plugin-handlers-utils";
 import { describe, expect, it } from "vitest";
 import { normalizeUIRenderInstruction } from "@covel/shared";
 import {
-  createChoicesTool,
-  createFormTool,
-  createNotificationTool,
-  renderUITool,
+  createChoicesTool as rawChoices,
+  createFormTool as rawForm,
+  createNotificationTool as rawNotification,
+  renderUITool as rawUI,
 } from "../src/index.js";
+
+function contentTool<TArgs extends unknown[], TContent>(module: {
+  execute: (...args: TArgs) => Promise<PluginToolResult<TContent>>;
+}) {
+  return {
+    ...module,
+    execute: async (...args: TArgs): Promise<TContent> =>
+      getToolContent<TContent>(await module.execute(...args)),
+  };
+}
+const createChoicesTool = contentTool(rawChoices);
+const createFormTool = contentTool(rawForm);
+const createNotificationTool = contentTool(rawNotification);
+const renderUITool = contentTool(rawUI);
 
 const CTX = {
   sessionId: "sess-1",

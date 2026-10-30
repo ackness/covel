@@ -8,7 +8,8 @@ import type {
 } from "./extension-points.js";
 import type { FunctionStoreView } from "./function-runtime.js";
 import type { JsonValue, MediaReference, PluginDataReader } from "./types.js";
-import type { withPendingProposals } from "./tool-result.js";
+import type { ToolError } from "./tool-error.js";
+import type { withModelView, withPendingProposals } from "./tool-result.js";
 import type { PluginMessageContext, PluginMessages } from "./messages.js";
 export type { PluginToolResult } from "./tool-result.js";
 
@@ -273,6 +274,8 @@ export interface PluginToolkit {
     sessionId: string,
     random: import("./function-runtime.js").PluginRandom,
   ) => string[];
+  readonly withModelView: typeof withModelView;
+  readonly ToolError: typeof ToolError;
   readonly withPendingProposals: typeof withPendingProposals;
 }
 

@@ -642,7 +642,6 @@ export function createFunctionStoreView(
       });
       if (!hit) return row;
       if (!current.exists) return null;
-      const now = new Date().toISOString();
       return {
         id: row?.id ?? `${sessionId}:${pluginId}:${namespace}:${key}`,
         sessionId,
@@ -650,8 +649,7 @@ export function createFunctionStoreView(
         namespace,
         key,
         value: structuredClone(current.value),
-        createdAt: row?.createdAt ?? now,
-        updatedAt: now,
+        ...(row ? { createdAt: row.createdAt, updatedAt: row.updatedAt } : {}),
       };
     },
     // The public type takes a namespace; the builtin `plugin-data-list` tool

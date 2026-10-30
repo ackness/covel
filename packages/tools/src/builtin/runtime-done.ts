@@ -18,7 +18,7 @@
  */
 
 import { z } from "zod";
-import { tool } from "@covel/plugin-handlers-utils";
+import { withModelView, tool } from "@covel/plugin-handlers-utils";
 import type { ToolModule } from "../types.js";
 
 /** Sentinel shape the turn-executor checks after each tool call. */
@@ -45,6 +45,9 @@ export const runtimeDoneTool: ToolModule = tool({
     reason: z.string().optional().describe("Optional trace note."),
   }),
   execute: async ({ reason }) => {
-    return { _covelRuntimeDone: true, reason } satisfies RuntimeDoneSentinel;
+    return withModelView(
+      { _covelRuntimeDone: true, reason } satisfies RuntimeDoneSentinel,
+      { summary: "Run finished." },
+    );
   },
 });

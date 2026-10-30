@@ -50,11 +50,19 @@ describe("public SDK results through the real host executor", () => {
       const executor = createToolExecutor({ findTool: () => saveNote });
       const result = await executor.execute(
         { toolCallId: "call", name: "save-note", arguments: "{}" },
-        context,
+        { ...context, locale: "en" },
       );
       expect(result.success).toBe(true);
       expect(result.parsedResult).toEqual({ saved: true });
-      expect(result.result).toBe('{"saved":true}');
+      expect(JSON.parse(result.result)).toEqual({
+        data: { saved: true },
+        staged: {
+          count: 2,
+          kinds: ["plugin.data", "event"],
+          notice:
+            "Staged: it takes effect when the turn ends and may still be rejected.",
+        },
+      });
       expect(result.pendingProposals).toEqual([proposal]);
       expect(result.emittedEvents).toEqual([event]);
     },

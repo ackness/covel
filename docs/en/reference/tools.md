@@ -84,9 +84,9 @@ tool({
 
 These definitions throw when `tool()` is called, with an error starting with `Tool "<name>":`: combining `readOnly: true` and `stagesWrites: true`; setting `concurrencySafe: true` without `readOnly: true`; or a `timeoutMs` that is not an integer in `[1, 600000]`. The registry also validates all four annotations and the timeout. Hand-built `ToolModule` objects must supply complete annotations; plugins using `tool()` receive the defaults automatically. Annotations and timeouts are framework metadata. Model definitions still contain only the name, description and parameter schema.
 
-Omitting `timeoutMs` sets no per-tool limit; the runtime deadline still applies. A tool timeout returns `success: false`, `code: "TIMEOUT"`, records a failed call and emits `tool.failed`. The tool loop can continue. The invocation's authority and signal are revoked; proposals, domain events and late results are discarded. The executor retains ownership of the callback and waits for it during shutdown. Parent cancellation from a runtime deadline, player stop or executor shutdown still produces `CANCELLED`.
+Omitting `timeoutMs` sets no per-tool limit; the runtime deadline still applies. A tool timeout returns `{error:{code:"timeout",message}}`, records a failed call and emits `tool.failed`. The tool loop can continue. The invocation's authority and signal are revoked; proposals, domain events and late results are discarded. The executor retains ownership of the callback and waits for it during shutdown. Parent cancellation from a runtime deadline, player stop or executor shutdown still produces `cancelled`.
 
-If a `readOnly: true` tool returns proposals or domain events, the call fails with `EXECUTION_ERROR` and a message containing `read-only tool returned writes`. This check runs before recording success or emitting `tool.completed`, and all writes are discarded. Other annotations are author declarations and do not imply that storage has committed.
+If a `readOnly: true` tool returns proposals or domain events, the call fails with `internal` and a message containing `read-only tool returned writes`. This check runs before recording success or emitting `tool.completed`, and all writes are discarded. Other annotations are author declarations and do not imply that storage has committed.
 
 In the overview table, “defaults” means the default combination above; `—` means the loop handles the call directly without module annotations. Character tools currently retain defaults too. The SDK's `FRAMEWORK_TOOL_NAMES` is the single source of reserved names. A test checks equality in both directions against the default registry, optional memory tools and `search-tools`.
 
@@ -158,23 +158,23 @@ Key points:
 
 - `id`, `kind`, and `description` in `PLUGIN.md` are required fields. `entry` must be a relative `.js` path inside the plugin root.
 - `tools.plugin` only lets the model see the tool. The tool itself must be registered first, by calling `registerTool()` from the entry.
-- Use the framework's `covel.toolkit.tool` and `covel.toolkit.z`. This way the plugin does not need its own Zod dependency, and the parameter schema and the runtime `VALIDATION_ERROR` come from the same toolkit. Do not mix in a different copy of Zod that the plugin bundles itself in the same definition.
+- Use the framework's `covel.toolkit.tool` and `covel.toolkit.z`. This way the plugin does not need its own Zod dependency, and the parameter schema and the runtime `invalid-input` come from the same toolkit. Do not mix in a different copy of Zod that the plugin bundles itself in the same definition.
 
 What happens at runtime:
 
-- When the agent calls `echo-value` successfully, it gets `{ "ok": true, "value": "..." }`.
-- `tool()` turns the parameters into a JSON Schema for the model to see. When the tool runs, the same Zod schema checks the arguments. If `value` is missing, is an empty string, or is longer than 80 characters, the model gets `VALIDATION_ERROR`, and `execute` is not called.
+- When the agent calls `echo-value` successfully, it gets `{ "data": { "ok": true, "value": "..." } }`: the returned content goes into `data` after `modelFacingJson`. Code, such as `ctx.tools.call`, still reads `{ ok, value }`. For the other shapes, see [Unified result format and error codes](#unified-result-format-and-error-codes).
+- `tool()` turns the parameters into a JSON Schema for the model to see. When the tool runs, the same Zod schema checks the arguments. If `value` is missing, is an empty string, or is longer than 80 characters, the model gets `invalid-input`, and `execute` is not called.
 
 Two related points:
 
-- **To save data**: use the builtin `plugin-data-set` instead (list it in `tools.builtin`). It returns `{ success, namespace, key }`, and it hands the write to the end-of-turn commit flow as a `plugin.data` proposal.
+- **To save data**: use the builtin `plugin-data-set` instead (list it in `tools.builtin`). It returns `{ namespace, key }`, and it hands the write to the end-of-turn commit flow as a `plugin.data` proposal, so the result the model reads carries the `staged` notice.
 - **To let the UI or HTTP trigger one plugin action directly**: that is not a tool. Register it in the entry with `covel.registerRpc(action, handler)`, and call it through `POST /api/sessions/:id/plugin-rpc`. RPC is not given to the model, so do not put it in `tools.plugin`.
 
 #### Malformed argument JSON from the model
 
 The argument JSON a model writes often has a few typos that come up again and again. Each one has only one reasonable meaning. The framework fixes them while it parses, which saves a round where the model has to resend. The fixed content must still pass the tool's schema.
 
-Repaired arguments are written back to model history as valid JSON, including tool names and arguments rewritten by `PreToolUse`. An unrepairable call still returns `INVALID_ARGS`; history preserves its original text as a JSON string rather than an empty object that appears to have been executed. The original response and tool-call traces retain diagnostic evidence. The framework does not resend an unchanged request after the provider rejects history arguments.
+Repaired arguments are written back to model history as valid JSON, including tool names and arguments rewritten by `PreToolUse`. An unrepairable call still returns `invalid-input`; history preserves its original text as a JSON string rather than an empty object that appears to have been executed. The original response and tool-call traces retain diagnostic evidence. The framework does not resend an unchanged request after the provider rejects history arguments.
 
 | Typo                                                   | Example                                                | How it is fixed                                                                                                                                                                                                                                                                                                                                                    |
 | ------------------------------------------------------ | ------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
@@ -189,13 +189,13 @@ A few limits:
 - The last three rows are each tried on their own. They do not stack, and the corrected text must parse as it is.
 - Why they do not stack: the third row has another reading, where the model left out a key name (`"summary":"…", {"role":"…"}}]`). Only one of the two readings makes the brackets balance. Stacking the fixes would read the text that "left out a key name" as two elements. So text written with the other reading still raises an error.
 - These rules apply both to the whole call arguments and to JSON text inside a field.
-- Other errors are not guessed at. A truncated output, a missing comma between two strings, and a quote inside a value followed directly by `,` or `:` are not fixed. If the whole argument is still not valid JSON, the call fails with `INVALID_ARGS`, and the model must give the arguments again.
+- Other errors are not guessed at. A truncated output, a missing comma between two strings, and a quote inside a value followed directly by `,` or `:` are not fixed. If the whole argument is still not valid JSON, the call fails with `invalid-input`, and the model must give the arguments again.
 
 **An array or object was written as a JSON text.** When the schema expects an array or object at some position, but the model gave a string, `tool()` first parses that text with the rules above, and then checks it again. The parsed content must still pass the same schema.
 
 This kind of text field has one extra rule: **an open bracket left at the end of the text is closed** (`[{"id":"a"},{"id":"b"}`). The reason is that the outer arguments already parsed successfully, so the text was finished by the model itself and was not cut off. After closing it, the result must still parse as it is. A value that is not finished (`[{"id":"a"},{"id":`) still raises an error. This step is not done on the whole call arguments, because those may really be a cut-off output.
 
-When the text cannot be parsed, `VALIDATION_ERROR` states the reason for the failure and the position, and asks the model to pass the array or object itself directly.
+When the text cannot be parsed, `invalid-input` states the reason for the failure and the position, and asks the model to pass the array or object itself directly.
 
 **Regular expressions with Unicode property escapes.** When `tool()` generates the JSON Schema for the model, it removes any `pattern` that uses forms such as `\p{Letter}`. The reason: a JSON Schema `pattern` has no regex flags, and these forms mean what the author intended only with the `u` flag. A provider that validates tool schemas rejects the whole request as "not a valid regex," and every call with that tool then fails. Zod still checks the argument values against the original regex. Write the rule itself in the field's `describe()` so the model can see it.
 
@@ -204,8 +204,8 @@ When the text cannot be parsed, `VALIDATION_ERROR` states the reason for the fai
 | Symptom                                   | Cause and check                                                                                                                                                                                                                                                      |
 | ----------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | The tool is not in the model's tool list  | Check whether the runtime lists the correct name in `tools.builtin` or `tools.plugin`. For a plugin tool, also confirm that the entry loaded successfully, that no name is duplicated inside the plugin, and that the name does not take a framework reserved name.  |
-| `UNAUTHORIZED`                            | The final tool name is not in this runtime's allowed set, or a hook changed the name to a tool that is not allowed. Check the runtime manifest first, then the final tool name in the trace.                                                                         |
-| `VALIDATION_ERROR`                        | The error line and `details` give the field path and the Zod message. Do not retry blindly with the same arguments.                                                                                                                                                  |
+| `unavailable`                             | The final tool name is not in this runtime's allowed set, or a hook changed the name to a tool that is not allowed. Check the runtime manifest first, then the final tool name in the trace.                                                                         |
+| `invalid-input`                           | The error line and `details` give the field path and the Zod message. Do not retry blindly with the same arguments.                                                                                                                                                  |
 | RPC returns `401` / `403`                 | Check the session's owner or operator token.                                                                                                                                                                                                                         |
 | RPC returns `202 approval-required`       | This is usually what a community plugin returns on its first run. Approve it, then retry the original request.                                                                                                                                                       |
 | RPC returns `404`                         | Usually the session, the action, or the runtime does not exist.                                                                                                                                                                                                      |
@@ -266,7 +266,7 @@ Rules:
 
 - Calls run in order. A later tool can read writes from earlier calls that are not yet committed.
 - **If any one call fails, the whole runtime fails.** Even if the handler catches the exception, no partial writes are committed.
-- Arguments that cannot be serialized (for example a BigInt or a circular reference) also make the whole runtime fail.
+- Arguments that cannot be serialized (for example a BigInt or a circular reference) also make the whole runtime fail, and the call is rejected with a `ToolError` coded `invalid-input`. A call blocked by a `PreToolUse` hook is `refused`; a call queued after a `PostToolUse` hook terminated is `cancelled`; a host without a tool executor gives `unavailable`.
 - After the runtime times out or ends, the call handle is no longer valid.
 - Only a successful runtime hands its domain writes together with `ctx.pluginData` to the execution transaction.
 - This interface is for function runtimes only. It is not available to an agent's guard.
@@ -456,7 +456,7 @@ Write one item into the plugin's persistent storage. Data is isolated by `(sessi
 | key       | string  | ✓        | Data key name                                          |
 | value     | unknown | ✓        | JSON data to store                                     |
 
-**Output**: `{ success, namespace, key }`
+**Output**: `{ namespace, key }`
 
 **Governance path**: the write is not saved right away. It is committed through the session kernel's commit flow, like any other write. It goes through `PreStateCommit` / `PostStateCommit`, the trace, and the storage transaction.
 
@@ -511,7 +511,7 @@ Each item:
 | key       | string  | ✓        | Data key name      |
 | value     | unknown | ✓        | JSON data to store |
 
-**Output**: `{ success, count, items: [{ namespace, key }] }`
+**Output**: `{ count, items: [{ namespace, key }] }`
 
 **Governance path**: committed through the commit flow, the same as a single write. The whole batch is one proposal. Hooks, the trace, and the transaction are handled the same way as for a single write.
 
@@ -527,6 +527,8 @@ Read one item from the **current plugin's** storage. Reading across plugins is n
 | key       | string | ✓        | Data key name  |
 
 **Output**: `{ found, namespace, key, value?, updatedAt? }`
+
+`updatedAt` is the stored timestamp, even when pending writes change the visible value. Pending-only rows omit it. The scoped store view and plugin-data lists follow the same rule; `createdAt` is also omitted until a row has been stored.
 
 **It can read what it just wrote.** A write is committed only when execution finishes. But a read adds in the uncommitted `plugin.data` / `plugin.data.batch` / `plugin.data.delete` / `plugin.data.update` operations from this execution:
 
@@ -552,7 +554,7 @@ List all items in one namespace of the **current plugin**.
 | --------- | ------ | -------- | -------------------------------------- |
 | namespace | string |          | Data namespace (if omitted, lists all) |
 
-**Output**: `{ count, items: [{ namespace, key, value, updatedAt }] }`
+**Output**: `{ count, items: [{ namespace, key, value, updatedAt? }] }`
 
 - As with `plugin-data-get`, pending writes and deletes from this execution are added in, including the writes of upstream runtimes of the same plugin. A deleted item does not appear in the list.
 - A list with a `namespace` depends on every upstream runtime that wrote that namespace; without one, it depends on every upstream runtime that wrote plugin data.
@@ -643,7 +645,7 @@ All plugins read the same public snapshot, `ctx.world.dimensions`, which is froz
 - Does not add in the caller's own writes that are not yet committed.
 - Does not fall back to the world's initial values.
 
-The model's `_text` queries and pages dimension values after applying `modelFacingJson`. A direct query of a bookkeeping field cannot expose it; code still receives the full values in `results`.
+The model's `summary` comes from SDK `queryDimensionSnapshot`'s `text`, querying and paging dimension values after applying `modelFacingJson`. A direct query of a bookkeeping field cannot expose it; code still receives the full values in `results`.
 
 | Argument  | Type                                       | Required | Description                       |
 | --------- | ------------------------------------------ | -------- | --------------------------------- |
@@ -673,7 +675,6 @@ For example, the query `{queries:[{dimension:"reputation"}]}`:
 
 ```json
 {
-  "success": true,
   "results": [
     {
       "dimension": "reputation",
@@ -684,17 +685,17 @@ For example, the query `{queries:[{dimension:"reputation"}]}`:
       "version": 2
     }
   ],
-  "_text": "reputation (v2) = 5"
+  "text": "reputation (v2) = 5"
 }
 ```
 
-The model sees only the `_text` that fits its budget. The trace and debugging keep the full structured result. A long value that is not paged gets a truncation notice. In that case, query a narrower path or a smaller page. Do not treat truncated content as the full value.
+The model sees only the `summary` that fits its budget. The trace and debugging keep the full structured result. A long value that is not paged gets a truncation notice. In that case, query a narrower path or a smaller page. Do not treat truncated content as the full value.
 
 The public result does not include `initialValue`, `updateRule`, or the tracing source.
 
 ### world-dimension-list
 
-It is in the same module as `world-dimension-get`. The argument is `{}`, and it returns `{dimensions:[{id,name,type,version}], _text}`. `type` comes from the schema's `type`, and it can be missing when the schema does not set one.
+It is in the same module as `world-dimension-get`. The argument is `{}`, and it returns `{dimensions:[{id,name,type,version}]}`. `type` comes from the schema's `type`, and it can be missing when the schema does not set one.
 
 Use this tool only to find out which dimensions exist and what versions they have. It does not return values, rules, or initial values. Use it first to find the IDs, then use `world-dimension-get` to read the paths you need. This way, you do not have to put a large amount of data into the prompt all at once.
 
@@ -726,7 +727,7 @@ The text of case 4 clearly says "do not emit again." If the reply were only "emi
 
 Cases 2 and 3 are failed tool calls. The error text goes back to the model, and the call does not count as "a tool was used" (`requireToolUse`). It also does not count as completing the tool work. But they affect the runtime result differently:
 
-- **An unknown topic (case 2) is not a runtime failure.** No enabled plugin declares this topic, so the model has no way to correct it, and the call did nothing. The tool rejects it with `ToolRefusal` (from `@covel/tools`). It does not count as business work (`requireToolUse` is still not met, and `completeAfterTools` is not triggered). It is also not treated as an unresolved failure. If an agent only made this one emit, and then ended with text or `runtime-done`, the result is a normal success with no event emitted. So removing the plugin that consumes an event does not make the runtime that emits it fail.
+- **An unknown topic (case 2) is not a runtime failure.** No enabled plugin declares this topic, so the model has no way to correct it, and the call did nothing. The tool rejects it with `ToolError("refused", …)` (from the public SDK). It does not count as business work (`requireToolUse` is still not met, and `completeAfterTools` is not triggered). It is also not treated as an unresolved failure. If an agent only made this one emit, and then ended with text or `runtime-done`, the result is a normal success with no event emitted. So removing the plugin that consumes an event does not make the runtime that emits it fail.
 - **A payload that does not match the schema (case 3) is a failure.** The contract exists, but the data is wrong, and the model can resend based on the error text. A later successful call of the same tool cancels it out. A `system` runtime that ends without a successful resend and without any other output fails with `tool_failed_without_output`. A runtime that declares `requireExplicitCompletion` cannot end with `runtime-done` while this failure is unresolved.
 
 **Internal topics.** A topic declared with `advertise: false` is not in the allow-list of `emit-event`. It can be emitted only by a **function runtime** of the plugin that declares it, through `output.events`. An agent cannot use `emit-event` to emit it directly, which would skip the generation step in between. The list of available topics echoed in case 2 also does not include the names of internal topics.
@@ -810,7 +811,7 @@ When a runtime has many tools, putting every tool's schema into every model call
 | query    | string | ✓        | Capability keywords (Chinese or English both work), such as `切换场景背景` (switch scene background) |
 | limit    | number | —        | Maximum number of tools to activate (default 8, maximum 20)                                          |
 
-**Output**: a block of text listing the names and descriptions of the matching tools. The full schemas of the matching tools are added to the tool list from the next model call on, and they stay in effect for the rest of this turn's agent loop. In the next turn, the list resets to the short version.
+**Output**: `{summary}` listing the names and descriptions of the matching tools. The full schemas of the matching tools are added to the tool list from the next model call on, and they stay in effect for the rest of this turn's agent loop. In the next turn, the list resets to the short version.
 
 **Things to note:**
 
@@ -833,7 +834,7 @@ An agent runtime uses it to hand a job to a [sub-agent](./plugins.md#sub-agents)
 | data      | object | —        | Facts the sub-agent needs, as a JSON object, at most 32 KB                                         |
 | maxSteps  | number | —        | The sub-agent's step limit; it can only be lower than the provider's own                           |
 
-**Output**: on success the tool result is the sub-agent's output, and the model receives it as JSON (through `modelFacingJson`, without bookkeeping fields); `stopReason` and usage are recorded only on `subagent.completed`. When `completeAfterTools` lists `delegate`, that output is checked as the caller's own output. On failure it receives `{ success: false, error, code }`, where `code` is one of the `ctx.agents.run` error codes. A failure other than `invalid-input` is not a tool failure of this runtime, so the model can try another way.
+**Output**: on success the model receives `{data: output}`, with output projected through `modelFacingJson`; code still reads the original output. `stopReason` and usage stay on `subagent.completed`. A completing `delegate` passes the original output to the caller's output gate. Failure uses `{error:{code,message,hint?}}`, with the same codes in `tool.failed`. All failures except `invalid-input` retain the `refused` accounting flag.
 
 **Notes**:
 
@@ -848,25 +849,61 @@ The contract is declared in `packages/tools/src/builtin/delegate.ts`; the execut
 
 These are the framework's built-in character management tools. They are defined in `packages/tools/src/builtin/character-tools.ts`. Characters are written to the `characters` table. A character belongs to the session, and every plugin can see it.
 
-### Text-first convention
+<a id="text-first-convention"></a>
 
-The return value of this group of tools has a special field, `_text`. Other tools can use this convention too.
+### Unified result format and error codes
 
-- **What the model sees = the raw text of `_text`**, with no JSON wrapper.
-- **What the trace and the debugging view see = the full `parsedResult` object**, including `_text` and the structured fields.
+Every tool result the model reads is a JSON object. Success keys appear in the order `summary`, `data`, `staged`. With no summary, data or effects, the result is `{"summary":"Done."}` (`完成。` for Chinese instructions). A failure has only `error`:
 
-This way the model reads compact natural language (fewer tokens, less distraction), and the framework still keeps the structured data for debugging and tracing.
+```json
+{
+  "summary": "Queued a note.",
+  "data": { "key": "gate" },
+  "staged": {
+    "count": 1,
+    "kinds": ["plugin.data"],
+    "notice": "已暂存，回合结束时生效（可能被拒绝）。"
+  }
+}
+```
 
-The framework (`packages/runtime/src/agent-loop/tool-executor.ts`) decides what to give the model based on whether `_text` is present:
+```json
+{
+  "error": {
+    "code": "invalid-input",
+    "message": "The name is required.",
+    "hint": "Fix these fields and call the tool again."
+  }
+}
+```
 
-| Result               | What is given to the model                                                                                                                                                                                                                                                                                                                                                                                  |
-| -------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Has a `_text` string | That text, exactly.                                                                                                                                                                                                                                                                                                                                                                                         |
-| No `_text`           | The result is serialized to JSON, but two kinds of content are removed: bookkeeping fields (a row's `updatedAt`, a message's `timestamp`, UUID-style `…Id` fields, and `sessionId`; the rules are in [bookkeeping fields in records](./plugins.md#inputs-and-outputs)), and the top-level `ui` array of the result (that is a card for the player's screen, and its content was just written by the model). |
+- `summary` and `data` are optional. Without an explicit view, `data` is the tool content projected through `modelFacingJson`, with the top-level `ui` array removed.
+- `withModelView(content, { summary?, data? })` selects what the model reads. With a view, only its specified fields are sent; a summary-only view omits the content. `data` still passes through `modelFacingJson`; `summary` is preserved verbatim.
+- `withModelView`, `withPendingProposals` and `withEmittedEvents` compose in any order, retaining content, the view and both effect channels. Read the view with `getModelView`. `_text` has no special meaning.
+- `parsedResult`, `ctx.tools.call` return values, completing-tool output, UI and interaction payloads remain the full content. The model envelope does not change them.
+- Successful calls with pending proposals or domain events include `staged`. `count` totals both channels; `kinds` lists distinct proposal types in first-seen order, followed by `event` when there are events. Success means staged; commit can still reject the effects.
+- `instructionLocaleFor(context.locale)` selects the notice and honors `COVEL_INSTRUCTION_LOCALE`: Chinese is “已暂存，回合结束时生效（可能被拒绝）。”; English is “Staged: it takes effect when the turn ends and may still be rejected.” Error messages and hints remain English.
 
-In either case, `parsedResult` and the return value of `ctx.tools.call` are the full object.
+The SDK's `TOOL_ERROR_CODES` is the single error-code list. Authors throw `new ToolError(code, message, { hint? })` for readable failures. `isToolError` recognizes subclasses and Errors from another SDK copy. `ToolValidationError` extends it with code `invalid-input`.
 
-Other builtin tools (such as `plugin-data-*` and `create-form`) currently return JSON.
+<!-- prettier-ignore -->
+| Identifier | Meaning | Producer | Sets `refused` |
+| --- | --- | --- | --- |
+| `invalid-input` | Arguments need correction | JSON parsing, Zod, tools or sub-agent request validation | No |
+| `not-found` | Target not found | Tool lookup, tools or sub-agent resolution | No for thrown tool errors; yes for delegate |
+| `ambiguous` | Target is not unique | Tools or sub-agent resolution | No for thrown tool errors; yes for delegate |
+| `refused` | Call refused | Approval, PreToolUse or tools | Only when the tool itself throws it |
+| `unavailable` | Not authorized or currently unavailable | Tool authorization, missing executor, tools or sub-agents | No for tools/executor; yes for delegate |
+| `timeout` | Tool or sub-agent timed out | Executor, tools or sub-agents | No for tools/executor; yes for delegate |
+| `conflict` | Write conflict, reserved | No builtin producer yet | No |
+| `cancelled` | Call cancelled | Executor, tools or sub-agents | No for tools/executor; yes for delegate |
+| `internal` | Unexpected execution failure | Executor, tools or sub-agents | No for tools/executor; yes for delegate |
+
+The code and accounting flag are separate. Approval denial, undeclared calls and hook aborts still count as failed calls. Only a tool's own `ToolError("refused", …)` is excluded from runtime failure accounting. `delegate` keeps its own rule: every failure except `invalid-input` sets the flag.
+
+`ToolCallResult.error` provides the same `{code,message,hint?}` for code. Failed calls have `parsedResult: null`; `delegate` retains its own failure result. A failed `ctx.tools.call` rejects with `ToolError`, whose message is plain text rather than JSON.
+
+For `internal`, the model reads `Tool "<name>" failed: <text>`: only the first error line, UUIDs replaced by `<id>`, and at most 300 characters of error text. Author-thrown `ToolError.message` is limited to 2 000 characters. Non-concealed `tool.failed.error` retains the full message; unexpected exceptions are also logged server-side. Stack frames and cause chains are not sent to the model. Trace `code` uses the same vocabulary, with optional `hint` and validation `details`; `tool.completed.result` is the JSON text above. Concealed runtimes still strip these fields.
 
 ### create-character
 
@@ -880,7 +917,7 @@ Create a new character record: a player character, an NPC, or a companion.
 | description | string                  |          | Short description of the character                                               |
 | fields      | Record<string, unknown> |          | Attribute key-value pairs (should match the world schema's character-attributes) |
 
-**Output (parsedResult)**: `{ _text, success, existed, characterId, name, type }`
+**Output (parsedResult)**: `{ existed, characterId, name, type }`
 
 The id of a new character is made from its name, and it is a readable word form (see [short IDs](#short-ids-entity-references-the-llm-can-read)).
 
@@ -892,7 +929,7 @@ The id of a new character is made from its name, and it is a readable word form 
 - When creating `type: "player"`, if the name is the name or alias of another character, the tool reports an error and asks for a different name for the player. A player cannot be an NPC that already exists in the world.
 - A session can have several players. A new player character is bound to the default seat automatically (see [seats](./world-model.md#seats)). The other types come from the schema's `types`.
 
-**Example `_text` the model sees**:
+**Example `summary` the model sees**:
 
 ```
 Created npc "苏婉" as char-abc123. — 青萍宗外门首席弟子，冰灵根修士。
@@ -990,9 +1027,9 @@ What each argument does:
 - Within one call, removal happens before addition, so one call can replace an alias.
 - In `sync-characters.updates[]`, an alias removed by an earlier item can be added to another character by a later item.
 
-**Successful output (parsedResult)**: `{ _text, success: true, characterId, version }`
+**Successful output (parsedResult)**: `{ characterId, version }`
 
-**Example `_text` the model sees**:
+**Example `summary` the model sees**:
 
 ```
 Updated npc "苏婉" (char-abc123) → v2.
@@ -1008,13 +1045,14 @@ Updated npc "苏婉" (char-abc123) → v2.
 | A name or alias belongs to more than one character | Lists each one's id: `"Maud" names 2 characters: Maud [npc-a]; maud [npc-b]. Pass the id of the one you mean. Nothing was updated.`                                                                                                                                         |
 | An alias to add belongs to another character       | Fails, and states who the alias belongs to.                                                                                                                                                                                                                                 |
 
-These are thrown errors, not a normal return of `success: false`. In the tool loop, the model receives:
+Missing characters throw `ToolError("not-found", …)`; non-unique names throw `ToolError("ambiguous", …)`. In the tool loop, the model receives:
 
 ```json
 {
-  "success": false,
-  "error": "Tool \"update-character\" failed during execution: …",
-  "code": "EXECUTION_ERROR"
+  "error": {
+    "code": "not-found",
+    "message": "Character not found. Nothing was updated."
+  }
 }
 ```
 
@@ -1033,7 +1071,7 @@ It reuses the duplicate check, default value merging, schema warnings, and "read
 
 Each item in `creates[]` takes the same arguments as `create-character`, and each item in `updates[]` takes the same arguments as `update-character`.
 
-**Output (parsedResult)**: `{ _text, success: true, created, updated, unchanged }`
+**Output (parsedResult)**: `{ created, updated, unchanged }`
 
 Rules:
 
@@ -1063,17 +1101,17 @@ The output is a **compact text list**, with one character per line: id, name (fo
 | -------- | ---- | -------- | ---------------------------------------- |
 | type     | enum |          | Filter by `player` / `npc` / `companion` |
 
-**Output (parsedResult)**: `{ _text, count, characters: CharacterSnapshot[] }`
+**Output (parsedResult)**: `{ count, characters: CharacterSnapshot[] }`
 
 **Sorting**: first by `version` from high to low (a higher version means the character has been interacted with more often), then by `updatedAt` from newest to oldest.
 
 **Maximum number of rows**: at most 50 characters are returned at a time, from the top of the list (bundled worlds come with 10 to 16 characters).
 
 - `count` is still the total number that match.
-- When there are more, one line is added at the end of `_text`. It says how many are not listed, and suggests filtering by `type` or finding a character by name with `get-character`.
+- When there are more, one line is added at the end of `summary`. It says how many are not listed, and suggests filtering by `type` or finding a character by name with `get-character`.
 - `characters` contains only the ones that are listed.
 
-**Example `_text` the model sees**:
+**Example `summary` the model sees**:
 
 ```
 Characters in session (3 total, sorted by frequency then recency):
@@ -1086,10 +1124,10 @@ Characters in session (3 total, sorted by frequency then recency):
 
 ### get-character-schema
 
-Read the session's character attribute schema. The argument is `{}`, and it returns `{ schema: CharacterSchemaRecord | null, _text }`.
+Read the session's character attribute schema. The argument is `{}`, and it returns `{ schema: CharacterSchemaRecord | null }`.
 
 - The schema belongs to the session's World Model. It contains `version` / `types` / `attributes`. When it does not exist, it returns `null`.
-- The `_text` the model reads passes through `modelFacingJson`, removing the session ID and write timestamps. Code still receives the complete `schema` record.
+- The `summary` the model reads passes through `modelFacingJson`, removing the session ID and write timestamps. Code still receives the complete `schema` record.
 - The read includes the validated pending domain proposals. It does not infer the schema from the plugin's private `schema` data.
 - This tool does not write data, and it does not accept IDs of other sessions or plugins.
 
@@ -1110,10 +1148,10 @@ A narrative plugin can declare only the two read-only tools `list-characters` an
 
 **Output (parsedResult)**:
 
-- Found: `{ _text, found, character: CharacterSnapshot }`
-- Not found: `{ _text, found: false, candidates: string[] }`. `_text` carries the same information as when `update-character` cannot find a character (the closest name, or the ambiguous candidates). `candidates` are the names of those characters.
+- Found: `{ found, character: CharacterSnapshot }`
+- Not found: `{ found: false, candidates: string[] }`. `summary` carries the same information as when `update-character` cannot find a character (the closest name, or the ambiguous candidates). `candidates` are the names of those characters.
 
-**Example `_text` the model sees**:
+**Example `summary` the model sees**:
 
 ```
 Character: 苏婉 [npc] char-abc123
@@ -1206,7 +1244,7 @@ When retrying, prefer the definitions frozen in the source receipt, and check th
 | `offset` | integer           |          | Default 0                                              |
 | `limit`  | integer           |          | Default 6000, range 1–6000, paged by Unicode character |
 
-It returns `{id,version,content,complete,nextOffset?,_text}`. When `complete:false`, fetch the next page. Do not settle based on a rule preview that was cut short.
+It returns `{id,version,content,complete,nextOffset?}`. When `complete:false`, fetch the next page. Do not settle based on a rule preview that was cut short.
 
 ### update-dimensions
 
@@ -1451,16 +1489,16 @@ The tool allow-list controls two things: which tools the model can see, and whic
 
 - The agent loop passes the exact authorized set of the current runtime to the executor, in `ToolCallContext.authorizedToolNames`. The set includes every name declared by `tools.*`, plus `runtime-done` for runtimes whose completion contract uses it and for story runtimes. Runtimes that must finish through a completing tool no longer receive automatic authorization for it.
 - Tools on the `defer` list are also in the authorized set. Deferring affects only whether the model can see the tool at the start. It does not affect authorization.
-- Before resolving the tool and running approval, the executor first checks whether the final tool name is in the authorized set. "Final" means the name after session overrides and `PreToolUse` replacement. If it is not in the set, the executor returns the structured error `UNAUTHORIZED`.
+- Before resolving the tool and running approval, the executor first checks whether the final tool name is in the authorized set. "Final" means the name after session overrides and `PreToolUse` replacement. If it is not in the set, the executor returns the structured error `unavailable`.
 - `search-tools` is intercepted inside the loop, so it never reaches the executor.
 - `findTool` is strict for calls with no context: without a context, it can find only builtin tools, and it rejects all plugin tools.
 
-**Story runtimes are an exception.** A story runtime (`io.visibility: story`) ends with the story text. Its tool list does not include `runtime-done`, and the `[COMPLETION]` section does not mention it either. But authorization is still kept. When the model calls it out of habit, the loop uses the remaining steps to ask for the story text, instead of returning `UNAUTHORIZED`. The reason `runtime-done` is not given to a story runtime: a model that follows the instructions literally would call only it and never write the story text.
+**Story runtimes are an exception.** A story runtime (`io.visibility: story`) ends with the story text. Its tool list does not include `runtime-done`, and the `[COMPLETION]` section does not mention it either. But authorization is still kept. When the model calls it out of habit, the loop uses the remaining steps to ask for the story text, instead of returning `unavailable`. The reason `runtime-done` is not given to a story runtime: a model that follows the instructions literally would call only it and never write the story text.
 
 ### Cancellation
 
 - The executor merges the caller's cancellation and the host's shutdown into `context.signal`.
-- Cancellation revokes this call's read capabilities, and it ends the wait for the tool callback with `CANCELLED`. Late return values, proposals, and events are not accepted.
+- Cancellation revokes this call's read capabilities, and it ends the wait for the tool callback with `cancelled`. Late return values, proposals, and events are not accepted.
 - Cancellation cannot forcibly stop JavaScript in the same process. The executor keeps tracking callbacks and reads that have not finished, including host capabilities held by builtin tools.
 - On normal completion, the executor also waits for reads that a tool started but did not wait for itself to finish.
 
@@ -1498,7 +1536,7 @@ After the executor resolves a tool, `ToolRegistry.source()` classifies it by reg
 - Framework tools registered with `registerBuiltin()` (including `builtinUITools`) → `builtin`
 - Tools that a plugin's `entry` registered successfully with `registerTool()` → `local`
 
-These are the only two sources. Missing tools and another plugin's private tools return `NOT_FOUND` before the source check. Source categories do not represent plugin trust levels. The authorization flow below decides whether community code may run.
+These are the only two sources. Missing tools and another plugin's private tools return `not-found` before the source check. Source categories do not represent plugin trust levels. The authorization flow below decides whether community code may run.
 
 ### The approval boundary for third-party plugin server code and plugin tools
 
@@ -1724,6 +1762,7 @@ A tool that only computes can return its text directly. When it needs to write d
 interface PluginToolResult<T> {
   readonly kind: "covel.tool-result";
   readonly content: T;
+  readonly model?: { readonly summary?: string; readonly data?: unknown };
   readonly pendingProposals: readonly PluginProposal[];
   readonly emittedEvents?: readonly {
     topic: string;
@@ -1734,11 +1773,12 @@ interface PluginToolResult<T> {
 
 To read this result, use the functions from the public SDK. Do not read the properties directly:
 
-| Function                      | What it reads        |
-| ----------------------------- | -------------------- |
-| `getToolContent(result)`      | The business content |
-| `getPendingProposals(result)` | The pending writes   |
-| `getEmittedEvents(result)`    | The events emitted   |
+| Function                      | What it reads                  |
+| ----------------------------- | ------------------------------ |
+| `getToolContent(result)`      | The business content           |
+| `getModelView(result)`        | Model-facing summary/data view |
+| `getPendingProposals(result)` | The pending writes             |
+| `getEmittedEvents(result)`    | The events emitted             |
 
 For example, in a test write `getToolContent(result).someField`, not `result.someField`. After calling a helper function, you must use the object it returns.
 

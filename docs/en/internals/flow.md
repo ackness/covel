@@ -527,9 +527,9 @@ LLM: "call sync-           ToolExecutor:
                               ├─ the tool logic runs
                               ├─ produces domain proposals / execution-local writes
                               ├─ after a successful commit, publishes data events ──► SSE → surface update
-                              └─ returns a structured result or `_text`
+                              └─ returns content and an optional model view
                            4. The result is serialized into a tool message
-                              → `_text` is preferred as the text the LLM reads
+                              → LLM reads unified summary / data / staged or error JSON
                               → the structured result is kept for trace / commit / debugging
                            5. The LLM sees the result and decides whether to call again
 

@@ -9,6 +9,7 @@
  */
 
 import { z } from "zod";
+import { withModelView } from "./tool-result.js";
 import { tool } from "./tool.js";
 
 // ── render-ui ───────────────────────────────────────────────────
@@ -51,15 +52,19 @@ export const renderUITool = tool({
       .optional()
       .describe("Layout"),
   }),
-  execute: async (params) => ({
-    rendered: true,
-    ui: [
+  execute: async (params) =>
+    withModelView(
       {
-        parts: params.parts,
-        ...(params.layout ? { layout: params.layout } : {}),
+        rendered: true,
+        ui: [
+          {
+            parts: params.parts,
+            ...(params.layout ? { layout: params.layout } : {}),
+          },
+        ],
       },
-    ],
-  }),
+      { summary: "The UI is shown to the player." },
+    ),
 });
 
 // ── create-form ──────────────────────────────────────────────────
@@ -205,23 +210,29 @@ export const createFormTool = tool({
         );
       }
     }
-    return {
-      created: true,
-      formId: params.formId,
-      fieldCount: params.fields.length,
-      interaction: {
-        type: "form" as const,
-        interactionId: params.formId,
-        title: params.title,
-        fields: params.fields,
-        validation: params.validation,
-        submitLabel: params.submitLabel,
-        narrativeTemplate: params.narrativeTemplate,
-        submitBehavior: params.submitBehavior,
-        ...(params.notice ? { notice: params.notice } : {}),
-        ...(params.actionKind ? { actionKind: params.actionKind } : {}),
+    return withModelView(
+      {
+        created: true,
+        formId: params.formId,
+        fieldCount: params.fields.length,
+        interaction: {
+          type: "form" as const,
+          interactionId: params.formId,
+          title: params.title,
+          fields: params.fields,
+          validation: params.validation,
+          submitLabel: params.submitLabel,
+          narrativeTemplate: params.narrativeTemplate,
+          submitBehavior: params.submitBehavior,
+          ...(params.notice ? { notice: params.notice } : {}),
+          ...(params.actionKind ? { actionKind: params.actionKind } : {}),
+        },
       },
-    };
+      {
+        summary:
+          "The form is shown to the player; the answer arrives as their next action.",
+      },
+    );
   },
 });
 
@@ -259,18 +270,25 @@ export const createChoicesTool = tool({
         "Optional action kind the answer is submitted as: a base kind (say, act) or a plugin kind <pluginId>/<name>. Defaults to say.",
       ),
   }),
-  execute: async (params) => ({
-    created: true,
-    choiceId: params.choiceId,
-    choiceCount: params.choices.length,
-    interaction: {
-      type: "choice" as const,
-      interactionId: params.choiceId,
-      prompt: params.prompt,
-      choices: params.choices,
-      ...(params.actionKind ? { actionKind: params.actionKind } : {}),
-    },
-  }),
+  execute: async (params) =>
+    withModelView(
+      {
+        created: true,
+        choiceId: params.choiceId,
+        choiceCount: params.choices.length,
+        interaction: {
+          type: "choice" as const,
+          interactionId: params.choiceId,
+          prompt: params.prompt,
+          choices: params.choices,
+          ...(params.actionKind ? { actionKind: params.actionKind } : {}),
+        },
+      },
+      {
+        summary:
+          "The choices are shown to the player; the answer arrives as their next action.",
+      },
+    ),
 });
 
 // ── create-notification ──────────────────────────────────────────
@@ -294,29 +312,33 @@ export const createNotificationTool = tool({
     title: z.string().min(1).describe("Notification title"),
     message: z.string().min(1).describe("Notification body"),
   }),
-  execute: async (params) => ({
-    notified: true,
-    level: params.level,
-    ui: [
+  execute: async (params) =>
+    withModelView(
       {
-        parts: [
+        notified: true,
+        level: params.level,
+        ui: [
           {
-            id: "notification-1",
-            type: "notification",
-            status: "success" as const,
-            content: {
-              type: "Alert",
-              props: {
-                level: params.level,
-                title: params.title,
-                message: params.message,
+            parts: [
+              {
+                id: "notification-1",
+                type: "notification",
+                status: "success" as const,
+                content: {
+                  type: "Alert",
+                  props: {
+                    level: params.level,
+                    title: params.title,
+                    message: params.message,
+                  },
+                },
               },
-            },
+            ],
           },
         ],
       },
-    ],
-  }),
+      { summary: "The notification is shown to the player." },
+    ),
 });
 
 // ── All built-in UI tools ────────────────────────────────────────
