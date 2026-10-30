@@ -1223,7 +1223,7 @@ pnpm lint
 <!-- prettier-ignore -->
 | ID | 名称 | `kind` | 提供的契约 | runtime | 做什么 |
 | --- | --- | --- | --- | --- | --- |
-| [affinity](../../plugins/affinity/README.md) | 好感度 | `plugin` | 无 | 内联 | 追踪玩家和 NPC 之间的数值好感度，右栏显示分数、档位和变化 |
+| [affinity](../../plugins/affinity/README.md) | 好感度 | `plugin` | 无 | 内联 | 追踪玩家和 NPC 之间的数值好感度，右栏显示分数、档位和变化；通过 `prompt.segment@1` 只读投影当前分数 |
 | [branch-reply](../../plugins/branch-reply/README.md) | 回复变体 | `plugin` | `branch-reply@1` | 内联 | 提供多条可切换的回复 |
 | [char-creator](../../plugins/char-creator/README.md) | 角色创建 | `core` | `character-creation@1`（默认提供者） | `player-init`、`character-tracker` | 创建主角并逐项回填表单答案，记录故事中的角色变化 |
 | [character-blueprint](../../plugins/character-blueprint/README.md) | 角色资料 | `plugin` | `character-blueprint@1`、`character-presence@1` | `presence` | 保存世界预设的人物资料，以及头像、立绘和声音 |

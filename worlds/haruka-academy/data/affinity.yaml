@@ -18,3 +18,15 @@
   name: 东条茜
   score: 0
   notes: 图书委员长学姐。还没见过你——她通常在图书馆窗边的位置。
+- id: mikoeda-haruka
+  name: 三枝遥
+  score: 5
+  notes: 学生会长，负责学园祭资源分配；这是对转学生的初始好意，不是恋爱路线。
+- id: onodera-chihiro
+  name: 小野寺千寻
+  score: 4
+  notes: 二年 B 组班主任，愿意给学生温和提醒，也尊重他们自己作决定。
+- id: morikawa-souta
+  name: 森川奏太
+  score: 6
+  notes: 轻音部鼓手，外向爱开玩笑，也是夏帆的队友；这里记录他对玩家的友好。

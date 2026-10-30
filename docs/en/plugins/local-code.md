@@ -498,6 +498,8 @@ The bundled [inventory ledger](../../../plugins/inventory/lib/update-inventory.j
 - It returns nothing. Read the key again for the new value.
 - The operations are `set`, `merge`, `inc`, `append`, `insert`, `remove`, `upsertItem` and `delete`. For the rules at commit, see [Transactions · Operation-based writes](../reference/transactions.md#operation-based-writes-plugindataupdate).
 
+The affinity plugin also uses the existing `prompt.segment@1` to project its own committed scores for story runtimes, without copying them into character fields. See [current-affinity](../../../plugins/affinity/server/current-affinity.js) and the [extension contract](../reference/extension-points.md).
+
 ## Ask the player for input: a form
 
 Use a form when the player must fill in structured content (creating a character, allocating points).

@@ -498,6 +498,8 @@ const gold = await ctx.pluginData.get("wallet", "gold"); // the value after the 
 - 它不返回新值。想要新值，再 `get` 一次。
 - 可用的操作有 `set`、`merge`、`inc`、`append`、`insert`、`remove`、`upsertItem`、`delete`。提交时的规则见[事务 · 操作式写入](../reference/transactions.md#操作式写入plugindataupdate)。
 
+好感插件还用已有的 `prompt.segment@1` 只读投影自身已提交分数，供 story runtime 读取，不把分数再写入角色字段。实现见 [current-affinity](../../plugins/affinity/server/current-affinity.js)，契约见[提示词片段](../reference/extension-points.md#提示词片段-promptsegment1-的两个字段)。
+
 ## 向玩家要输入：表单
 
 需要玩家填结构化的内容（建角色、分配点数）时用表单。

@@ -56,7 +56,7 @@ A session may have several player characters. The two narrator plugins follow th
 | [Tabletop Rules](./rpg.md) `tabletop-rules`    | Assigns attribute points at the start, and lets the player start attribute checks             |               |
 | [Quest Log](./rpg.md) `core-quest`             | Records quests and objectives, with localized status badges                                   |               |
 | [Inventory](./rpg.md) `inventory`              | Records what the player character carries; items can be used and dropped                      |               |
-| [Affinity](./rpg.md) `affinity`                | Records each character's attitude toward the player character                                 |               |
+| [Affinity](./rpg.md) `affinity`                | Tracks numeric player–NPC affinity and supplies current scores to narration                   |               |
 | [Hidden Story Events](./rpg.md) `story-events` | Story events that only happen when their conditions are met                                   |               |
 
 ### Characters and world

@@ -367,6 +367,10 @@ A world package does not have to use every capability. Let the genre decide the 
 - All four worlds enable `story-events`. Mistport, Emberback and Lantern Barrow also turn on story planning with `pluginSettings.story-events.planner: true`. Besides the hidden events the author sets up, it adds follow-up events that fire only once, based on clues left during play. Harukaze Academy's romance routes are arranged one by one by the author, and it does not turn on story planning.
 - When you make a new world, first copy the structure of the world whose gameplay is closest to yours. Then add or remove characters, rules or media by following the sections below.
 
+Harukaze Academy keeps one relationship account per subject: all eight characters’ affinity belongs only to `affinity`; the five route characters’ stage, trust and pressure belong only to `routes` (trust and pressure 0–5); the three supporting characters retain trust, pressure and non-romantic relationship state in their profiles (trust and pressure 0–100), with no conversion. All eight retain `publicCloseness` in their profiles. Relationship memory records events, promises and details, without a second copy of current values. The character schema removes `affection` and has no defaults for supporting-character `trust/pressure`, so defaults do not refill these numbers on route characters or players. Generic character creation does not enforce NPC-only scope for text fields. Disabling affinity removes score tracking and its narrative projection without recreating character copies.
+
+Create fresh Harukaze development sessions from the updated world package; existing sessions, branches and snapshots are not cleaned automatically. Reimport or recreate world copies with old embedded data. Database tables do not need rebuilding.
+
 ### Display fields
 
 These fields change only how the world is shown. You can leave all of them out.

@@ -1223,7 +1223,7 @@ Below are all the plugins that ship with Covel from [plugins/](../../../plugins/
 <!-- prettier-ignore -->
 | ID | Name | `kind` | Contracts provided | runtime | What it does |
 | --- | --- | --- | --- | --- | --- |
-| [affinity](../../../plugins/affinity/README.md) | Affinity | `plugin` | none | inline | Tracks numeric affinity between the player and NPCs. The right panel shows the score, the tier, and changes. |
+| [affinity](../../../plugins/affinity/README.md) | Affinity | `plugin` | none | inline | Tracks numeric affinity between the player and NPCs. The right panel shows scores, tiers and changes; `prompt.segment@1` provides a read-only projection of current scores. |
 | [branch-reply](../../../plugins/branch-reply/README.md) | Reply Variants | `plugin` | `branch-reply@1` | inline | Offers several replies the player can switch between. |
 | [char-creator](../../../plugins/char-creator/README.md) | Character Creator | `core` | `character-creation@1` (default provider) | `player-init`, `character-tracker` | Creates the protagonist with echoed form answers and records character changes. |
 | [character-blueprint](../../../plugins/character-blueprint/README.md) | Character Profiles | `plugin` | `character-blueprint@1`, `character-presence@1` | `presence` | Stores the character profiles a world presets, along with avatars, portraits, and voices. |
