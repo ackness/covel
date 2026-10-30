@@ -1152,13 +1152,14 @@ agent runtime 调用 `suspend` 之后，会话工具条上出现一个徽标。�
 
 每张卡片以 `reason` 为标题，并按 `resumeSchema` 选择作答的控件（`suspension-input.ts`）：
 
-| `resumeSchema`                         | 控件                                |
-| -------------------------------------- | ----------------------------------- |
-| `boolean`                              | 是 / 否按钮                         |
-| `enum`，或 `oneOf` 里的 `const`        | 选项按钮                            |
-| `string`                               | 文本框                              |
-| 维度值编辑器能覆盖的对象 / 数字 schema | 表单（复用 `DimensionValueEditor`） |
-| 没有 schema，或没有控件能覆盖          | “高级”折叠区里的原始 JSON 文本框    |
+| `resumeSchema`                         | 控件                                            |
+| -------------------------------------- | ----------------------------------------------- |
+| `boolean`                              | 是 / 否按钮                                     |
+| `enum`，或 `oneOf` 里的 `const`        | 选项按钮                                        |
+| `string`                               | 文本框                                          |
+| `suspend.fields` 编译的对象 schema     | 按属性的 `title` 显示控件标签，答案以字段名为键 |
+| 维度值编辑器能覆盖的对象 / 数字 schema | 表单（复用 `DimensionValueEditor`）             |
+| 没有 schema，或没有控件能覆盖          | “高级”折叠区里的原始 JSON 文本框                |
 
 ### 加载更早消息与执行状态
 

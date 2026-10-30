@@ -45,7 +45,10 @@ const input = {
   playerMessage: "Ask the archivist",
   origin: "player" as const,
 };
-const ASK = { reason: "Need input", resumeSchema: { type: "object" } };
+const ASK = {
+  reason: "Need input",
+  fields: [{ type: "text", name: "answer", label: "Answer" }],
+};
 
 const later: RuntimeManifest = {
   description: "test",

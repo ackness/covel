@@ -95,7 +95,7 @@ interface CharacterRecord {
 **别名从哪里来：**
 
 - 世界作者在 `characters/characters.json` 里写 `aliases`（见[角色文件](./world-data.md#一个世界一份角色文件)）。语言文件可以整列替换。
-- 故事揭示新名字时，模型通过 `update-character` / `sync-characters.updates[]` 的 `aliases` 参数追加。`create-character` 也接受 `aliases`。
+- 故事揭示新名字时，模型通过 `sync-characters.updates[]` 的 `aliases` 参数追加。`sync-characters.creates[]` 也接受 `aliases`。
 - `character.upsert` proposal 的 `aliases`：
   - 带 `expectedVersion` 时，追加到已有别名之后。同一回合两次追加都保留，和 `fields` 的合并方式一样。
   - 不带时，它就是完整的列表。
@@ -112,7 +112,7 @@ interface CharacterRecord {
   - 表单会发给客户端并留在会话消息里，所以它不带任何角色的名字或别名。它带的是这些名字按表单加盐后的 SHA-256 摘要（放在 `validation.data`）。
   - 摘要只防止直接读出名单，防不住拿着已经猜到的名字去验证。
 - **`player-init` 的 guard** 再查一次，因为表单发出之后世界里的角色可能变了。名字仍然冲突时，它不产生 `character.upsert`，而是让 runtime 重新发出表单，`notice` 说明这个名字已有角色使用，其余答案保留。开局不会因此反复失败。
-- **`create-character`** 创建 `type: "player"` 时，名字是其他角色的名字或别名就报错，并说明要向玩家另要一个名字。它不会把那个 NPC 当作“已经存在的角色”返回。
+- **`sync-characters.creates[]`** 创建 `type: "player"` 时，名字是其他角色的名字或别名就报错，并说明要向玩家另要一个名字。它不会把那个 NPC 当作“已经存在的角色”返回。
 
 保存时的规则没有变：两个非玩家角色可以同名（查找时是 `ambiguous`），名字等于别人的别名才被拒绝。
 
@@ -137,7 +137,7 @@ interface CharacterRecord {
 
 - `"auto"` 绑定所有 `type: player` 的角色，按角色列表的顺序，跳过别的座位明确列出的角色。
 - 明确的列表绑定其中仍然存在的角色，按列表的顺序。
-- 新建一个玩家角色（建角插件、世界导入、`create-character`）不需要写座位：下一次读取时它就绑定到 `"auto"` 座位上。
+- 新建一个玩家角色（建角插件、世界导入、`sync-characters.creates[]`）不需要写座位：下一次读取时它就绑定到 `"auto"` 座位上。
 
 每次写入都检查这些约束：座位 `id` 不重复；最多一个座位用 `"auto"`；一个角色 `id` 只能出现在一个座位的列表里，在同一个列表里也只出现一次。
 

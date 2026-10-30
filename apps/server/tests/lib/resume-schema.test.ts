@@ -49,3 +49,34 @@ it.each([
     warn.mockRestore();
   }
 });
+
+it("validates answers compiled from form fields including titles, defaults and bounds", () => {
+  const schema = {
+    type: "object",
+    properties: {
+      name: { type: "string", title: "Your name", minLength: 1 },
+      age: {
+        type: "number",
+        title: "Age",
+        minimum: 1,
+        maximum: 100,
+        default: 21,
+      },
+      agree: { type: "boolean", title: "Agree" },
+      route: { type: "string", title: "Route", enum: ["gate", "inn"] },
+    },
+    required: ["name", "route"],
+    additionalProperties: false,
+  };
+  const validate = createResumeValidator();
+  const good = { name: "Alex", age: 21, agree: true, route: "gate" };
+  expect(validate(good, schema)).toBeNull();
+  for (const answer of [
+    { route: "gate" },
+    { ...good, age: 101 },
+    { ...good, route: "lake" },
+  ])
+    expect(validate(answer, schema)).toMatchObject({
+      code: "resume_data_invalid",
+    });
+});

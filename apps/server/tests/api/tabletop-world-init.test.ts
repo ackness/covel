@@ -14,7 +14,6 @@ import {
   buildTabletopProbeZip,
   tabletopProbeId,
 } from "../helpers/tabletop-package.js";
-import { runtimeResultsOf } from "../helpers/runtime-results.js";
 
 it("creates a third-party form from the real world-init guard in the first setup execution", async () => {
   const project = path.resolve(import.meta.dirname, "../../../..");
@@ -128,12 +127,6 @@ it("creates a third-party form from the real world-init guard in the first setup
           status: "success",
         }),
       ]),
-    );
-    const creation = runtimeResultsOf(turns[0]!).find(
-      (r) => r.runtimeId === `${tabletopProbeId}/creation`,
-    )!;
-    expect(creation.toolCalls.map((call) => call.toolName)).not.toContain(
-      "get-character-schema",
     );
     const rules = await store.getPluginData(
       sessionId,

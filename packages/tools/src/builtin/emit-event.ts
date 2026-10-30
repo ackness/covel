@@ -19,6 +19,9 @@ import type { ToolModule } from "../types.js";
 /** Structural dep — implemented by the server's session event directory. */
 export interface EventDirectoryLike {
   listTopics(sessionId: string): Promise<readonly string[]>;
+  describeTopics?(
+    sessionId: string,
+  ): Promise<readonly { topic: string; schema?: Record<string, unknown> }[]>;
   validate(
     sessionId: string,
     topic: string,
@@ -81,4 +84,38 @@ export function createEmitEventTool(deps: {
       );
     },
   });
+}
+
+/** Advertise payload shapes without tightening the execution-time topic gate. */
+export function buildSessionEmitEventTool(
+  deps: { directory: EventDirectoryLike },
+  topics: readonly { topic: string; schema?: Record<string, unknown> }[],
+): ToolModule | undefined {
+  if (topics.length === 0) return undefined;
+  const base = createEmitEventTool(deps);
+  const payloads = topics.map(({ topic, schema }) => {
+    // References may be nested; never send a provider a dangling reference.
+    const hasReferences = (value: unknown): boolean => {
+      if (value === null || typeof value !== "object") return false;
+      return Object.entries(value).some(
+        ([key, child]) =>
+          key === "$ref" || key === "$defs" || hasReferences(child),
+      );
+    };
+    if (!schema || hasReferences(schema))
+      return { type: "object", title: topic };
+    const { $schema: _schema, $id: _id, ...payload } = schema;
+    return { ...payload, title: topic };
+  });
+  return {
+    ...base,
+    jsonSchema: {
+      type: "object",
+      properties: {
+        topic: { type: "string", enum: topics.map(({ topic }) => topic) },
+        data: payloads.length === 1 ? payloads[0] : { anyOf: payloads },
+      },
+      required: ["topic", "data"],
+    },
+  };
 }

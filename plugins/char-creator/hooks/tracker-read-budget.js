@@ -27,11 +27,27 @@ export default function trackerReadBudget(ctx, payload) {
       },
     };
   });
-  const hasRead = payload.messages.some(
-    (message) =>
-      message.role === "assistant" &&
-      message.toolCalls?.some((call) => call.name === "get-character"),
+  const readIds = new Set(
+    payload.messages.flatMap((message) =>
+      message.role === "assistant"
+        ? (message.toolCalls ?? [])
+            .filter((call) => call.name === "get-character")
+            .map((call) => call.id)
+        : [],
+    ),
   );
+  const hasRead = payload.messages.some((message) => {
+    if (message.role !== "tool" || !readIds.has(message.toolCallId))
+      return false;
+    try {
+      const result = JSON.parse(message.content);
+      return (
+        result !== null && typeof result === "object" && !("error" in result)
+      );
+    } catch {
+      return false;
+    }
+  });
   if (!hasRead) return { action: "continue", replace: { tools } };
   return {
     action: "continue",

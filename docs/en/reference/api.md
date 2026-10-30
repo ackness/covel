@@ -1442,7 +1442,7 @@ Fork and community plugin grants:
 ### Character data
 
 > [!NOTE]
-> The built-in web interface gets the character view mainly through `GET /api/sessions/:id/view`. The endpoints in this section are lightweight read and management APIs. Inside a plugin, for a runtime that tracks a batch of characters at once, the recommended tool is `sync-characters`. Other plugins can use the lower-level `create-character` / `update-character` as needed, along with the read tools `list-characters` / `get-character`.
+> The built-in web interface gets the character view mainly through `GET /api/sessions/:id/view`. The endpoints in this section are lightweight read and management APIs. Inside a plugin, write characters with `sync-characters` (creates and updates), and read with `list-characters` / `get-character`.
 
 A character `id` only has to be unique within the current session. Different sessions can safely use the same ID.
 
@@ -2981,7 +2981,7 @@ Sends the answer to one or more player interactions with `submit_actions`, and r
   "kind": "act",
   "interaction": {
     "turnId": "t1",
-    "interactionId": "create-character",
+    "interactionId": "character-opening",
     "type": "form"
   },
   "fields": { "name": "艾尔文", "class": "法师" }
@@ -4872,7 +4872,7 @@ Other rules:
 > [!NOTE]
 > The built-in Web UI gets the character view mainly through `GET /api/sessions/:id/view`. The endpoints in this section are lightweight read and management endpoints.
 >
-> In a plugin, write characters with tools. For a runtime that tracks characters in batches, `sync-characters` is recommended. Other plugins can use `create-character` / `update-character` as needed, and read with `list-characters` / `get-character`.
+> In a plugin, write characters with tools. Use `sync-characters` (creates and updates), and read with `list-characters` / `get-character`.
 
 #### `GET /api/sessions/:id/characters`
 

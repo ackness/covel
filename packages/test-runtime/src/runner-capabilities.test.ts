@@ -61,7 +61,7 @@ async function fixture(
 function:
   handler: ./handler.js
   tools:
-    builtin: [get-character-schema, create-character, get-character]
+    builtin: [sync-characters, get-character]
     plugin: ${mode === "buffered" ? "[set-schema]" : "[]"}
 schedule:
   trigger: {type: event, topic: root.ready}
@@ -71,10 +71,9 @@ schedule:
     "support/runtimes/follower/handler.js": `export default async ctx => {
       ${mode === "buffered" ? 'await ctx.tools.call("set-schema", {});' : ""}
       ${mode === "private" ? `await ctx.pluginData.set("schema", "character-attributes", ${JSON.stringify(schema)});` : ""}
-      const result = await ctx.tools.call("get-character-schema", {});
-      await ctx.tools.call("create-character", {name:"Test player",type:"player",fields:${invalid ? '{hp:"invalid"}' : "{}"}});
+      await ctx.tools.call("sync-characters", {creates:[{name:"Test player",type:"player",fields:${invalid ? '{hp:"invalid"}' : "{}"}}]});
       const character = await ctx.tools.call("get-character", {name:"Test player"});
-      return {outcome:"success",value:{schema:result.schema,fields:character.character.fields,worldSchema:ctx.world.characterSchema}};
+      return {outcome:"success",value:{schema:ctx.world.characterSchema,fields:character.character.fields,worldSchema:ctx.world.characterSchema}};
     };`,
   };
   for (const [relative, content] of Object.entries(files)) {

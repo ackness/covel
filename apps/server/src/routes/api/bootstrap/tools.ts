@@ -15,6 +15,7 @@ import {
   ToolRegistry,
   createDefaultToolRegistry,
   buildSessionCharacterWriteTools,
+  buildSessionEmitEventTool,
   type ToolModule,
 } from "@covel/tools";
 import type { DataStore } from "@covel/store";
@@ -42,7 +43,7 @@ export async function setupPluginTools(
   const { store, eventDirectory } = params;
   const tools = createDefaultToolRegistry({ store, eventDirectory });
 
-  // ── Per-session tool overrides (Phase 2) ──────────────────────
+  // ── Per-session tool overrides ──────────────────────
   //
   // Advertise the world's field constraints once in each write tool's
   // description, retaining compact generic parameters. Execution validates
@@ -52,22 +53,24 @@ export async function setupPluginTools(
   // generic tool registry. Action handlers call `prepareToolsForSession` before
   // every `executeTurn` so the LLM always gets the freshest schema.
   const sessionToolOverrides = new Map<string, Map<string, ToolModule>>();
-  const SESSION_OVERRIDABLE_TOOLS = new Set([
-    "create-character",
-    "update-character",
-    "sync-characters",
-  ]);
+  const SESSION_OVERRIDABLE_TOOLS = new Set(["sync-characters", "emit-event"]);
 
   async function prepareToolsForSession(sessionId: string): Promise<void> {
     const value = await store.getCharacterSchema(sessionId);
-    if (!value) {
-      sessionToolOverrides.delete(sessionId);
-      return;
-    }
-
     const overrides = new Map<string, ToolModule>();
-    for (const t of buildSessionCharacterWriteTools(store, value)) {
-      overrides.set(t.name, t);
+    if (value) {
+      for (const tool of buildSessionCharacterWriteTools(store, value)) {
+        overrides.set(tool.name, tool);
+      }
+    }
+    try {
+      const topics = await eventDirectory.describeTopics?.(sessionId);
+      const emit =
+        topics &&
+        buildSessionEmitEventTool({ directory: eventDirectory }, topics);
+      if (emit) overrides.set(emit.name, emit);
+    } catch {
+      // The generic tool still validates topics and payloads at execution time.
     }
     sessionToolOverrides.set(sessionId, overrides);
   }
@@ -80,9 +83,7 @@ export async function setupPluginTools(
 
   const toolExecutor = createToolExecutor({
     findTool: (name, context) => {
-      // Per-session override (Phase 2): when the active session has a
-      // CharacterAttributeSchema, return the schema-aware variant so both the
-      // LLM-facing JSON schema and the Zod validation reflect typed fields.
+      // Session variants advertise current character constraints and event topics.
       if (SESSION_OVERRIDABLE_TOOLS.has(name)) {
         const override = sessionToolOverrides.get(context.sessionId)?.get(name);
         if (override) return override;

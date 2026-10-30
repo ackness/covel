@@ -292,7 +292,7 @@ describe("explicit completion for third-party extractors", () => {
         response(null, "read-facts", { scope: 42 }),
         response(null, "suspend", {
           reason: "Choose a scope",
-          resumeSchema: {},
+          fields: [{ type: "text", name: "answer", label: "Answer" }],
         }),
         ...(repair ? [response(null, "read-facts", { scope: "current" })] : []),
         response(null, "runtime-done"),
@@ -307,7 +307,7 @@ describe("explicit completion for third-party extractors", () => {
     const batch = response(null, "save-facts");
     const suspended = response(null, "suspend", {
       reason: "Confirm",
-      resumeSchema: {},
+      fields: [{ type: "text", name: "answer", label: "Answer" }],
     });
     const { resumeCaptured, write } = await run([
       { ...batch, toolCalls: [...batch.toolCalls!, ...suspended.toolCalls!] },

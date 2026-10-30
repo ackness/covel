@@ -1154,13 +1154,14 @@ After an agent runtime calls `suspend`, a badge appears on the session toolbar. 
 
 Each card uses `reason` as its title, and it picks the answer control from `resumeSchema` (`suspension-input.ts`):
 
-| `resumeSchema`                                                      | Control                                                       |
-| ------------------------------------------------------------------- | ------------------------------------------------------------- |
-| `boolean`                                                           | Yes / No buttons                                              |
-| `enum`, or `const` in `oneOf`                                       | Option buttons                                                |
-| `string`                                                            | Text box                                                      |
-| An object / number schema that the dimension value editor can cover | A form (reusing `DimensionValueEditor`)                       |
-| No schema, or no control can cover it                               | A raw JSON text box inside the "Advanced" collapsible section |
+| `resumeSchema`                                                      | Control                                                                          |
+| ------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
+| `boolean`                                                           | Yes / No buttons                                                                 |
+| `enum`, or `const` in `oneOf`                                       | Option buttons                                                                   |
+| `string`                                                            | Text box                                                                         |
+| Object schema compiled from `suspend.fields`                        | Form controls labelled with each property's `title`; answer keys are field names |
+| An object / number schema that the dimension value editor can cover | A form (reusing `DimensionValueEditor`)                                          |
+| No schema, or no control can cover it                               | A raw JSON text box inside the "Advanced" collapsible section                    |
 
 ### Loading Older Messages and Execution Status
 

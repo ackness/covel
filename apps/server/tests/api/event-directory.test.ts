@@ -527,3 +527,43 @@ describe("event directory", () => {
     expect(warn).toHaveBeenCalledTimes(1);
   });
 });
+
+it("describes advertised schemas and follows the active plugin set", async () => {
+  const { registry, directory } = await setupBasicSession();
+  expect(await directory.describeTopics!("sess-1")).toEqual(
+    expect.arrayContaining([{ topic: "scene.set", schema: SCENE_SCHEMA }]),
+  );
+  registry.syncSessionActivations("sess-1", ["plugin-c"]);
+  expect(await directory.describeTopics!("sess-1")).toEqual([
+    { topic: "npc.spawn", schema: { type: "object" } },
+  ]);
+});
+
+it("keeps an unreadable advertised topic and omits internal topics", async () => {
+  const root = await makePluginRoot();
+  const manifest = parsedManifest({
+    name: "probe/main",
+    pluginId: "probe",
+    events: [
+      {
+        topic: "public.changed",
+        schema: "missing.json",
+        advertise: true,
+        description: "Public",
+      },
+      {
+        topic: "private.changed",
+        schema: "internal.json",
+        advertise: false,
+        description: "Private",
+      },
+    ],
+  });
+  const directory = createEventDirectory({
+    registry: { getActivePluginDeclarations: () => [manifest.manifest] },
+    resolvePluginDir: () => root,
+  });
+  expect(await directory.describeTopics!("session")).toEqual([
+    { topic: "public.changed" },
+  ]);
+});

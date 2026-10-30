@@ -37,11 +37,11 @@ describe("deriveEffects — builtin tool mapping table", () => {
   it("maps character tools to characters:*", () => {
     const w = deriveEffects(
       manifest({
-        tools: { builtin: ["create-character", "update-character"] },
+        tools: { builtin: ["sync-characters"] },
       }),
     );
     expect(asSet(w.writes)).toEqual(["characters:*"]);
-    expect(asSet(w.reads)).toEqual([]);
+    expect(asSet(w.reads)).toEqual(["characters:*"]);
 
     const r = deriveEffects(
       manifest({ tools: { builtin: ["get-character", "list-characters"] } }),
@@ -166,7 +166,7 @@ describe("deriveEffects — builtin tool mapping table", () => {
   it("UNIONs an explicit effects declaration with the derivation (add/tighten, never remove)", () => {
     const e = deriveEffects(
       manifest({
-        tools: { builtin: ["create-character"] },
+        tools: { builtin: ["sync-characters"] },
         effects: {
           reads: ["lorebook:*"],
           writes: ["assets:*"],
@@ -176,7 +176,7 @@ describe("deriveEffects — builtin tool mapping table", () => {
     );
     // Derived characters:* is NOT removable; explicit assets:* is added.
     expect(asSet(e.writes)).toEqual(["assets:*", "characters:*"]);
-    expect(asSet(e.reads)).toEqual(["lorebook:*"]);
+    expect(asSet(e.reads)).toEqual(["characters:*", "lorebook:*"]);
     expect(e.parallelSafe).toBe(true);
   });
 });
@@ -267,11 +267,11 @@ describe("applyHazardPolicy — stable warn / strict output", () => {
   // plus an independent narrator that only writes narrative (no conflict).
   const writerA = manifest({
     name: "p/a",
-    tools: { builtin: ["update-character"] },
+    tools: { builtin: ["sync-characters"] },
   });
   const writerB = manifest({
     name: "p/b",
-    tools: { builtin: ["create-character"] },
+    tools: { builtin: ["sync-characters"] },
   });
   const narrator = manifest({ name: "p/narrator", outputKind: "story" });
   const group: ScheduledGroup = {

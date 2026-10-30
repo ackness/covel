@@ -1442,7 +1442,7 @@ fork 和社区插件的授权：
 ### 角色数据
 
 > [!NOTE]
-> 内置 Web 界面主要通过 `GET /api/sessions/:id/view` 拿角色视图。这一节的端点是轻量的读取和管理 API。在插件里，一次追踪一批角色的 runtime 推荐用 `sync-characters` 工具；其它插件可以按需使用底层的 `create-character` / `update-character`，以及读取工具 `list-characters` / `get-character`。
+> 内置 Web 界面主要通过 `GET /api/sessions/:id/view` 拿角色视图。这一节的端点是轻量的读取和管理 API。在插件里，用 `sync-characters` 的 creates / updates 写角色，用 `list-characters` / `get-character` 读取。
 
 角色 `id` 只需要在当前会话内唯一。不同会话可以放心使用同一个 ID。
 
@@ -2981,7 +2981,7 @@ SSE。先发一个 `ready` 事件，之后每 15 秒发一行注释保持连接�
   "kind": "act",
   "interaction": {
     "turnId": "t1",
-    "interactionId": "create-character",
+    "interactionId": "character-opening",
     "type": "form"
   },
   "fields": { "name": "艾尔文", "class": "法师" }
@@ -4870,7 +4870,7 @@ runtime 导出的处理：
 > [!NOTE]
 > 内置 Web UI 主要通过 `GET /api/sessions/:id/view` 拿角色视图。本节的端点是轻量的读取和管理接口。
 >
-> 插件里写角色请用工具：一批一批追踪角色的 runtime 推荐 `sync-characters`；其他插件可以按需用 `create-character` / `update-character`，读取用 `list-characters` / `get-character`。
+> 插件里写角色请用工具：用 `sync-characters` 的 creates / updates 写入，用 `list-characters` / `get-character` 读取。
 
 #### `GET /api/sessions/:id/characters`
 

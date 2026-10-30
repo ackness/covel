@@ -61,6 +61,7 @@ export type {
 } from "./builtin/character-tools.js";
 export { buildFieldsZodFromSchema } from "@covel/shared";
 export { suspendTool, isSuspendSentinel } from "./builtin/suspend.js";
+export { suspendFieldsToResumeSchema } from "./builtin/suspend-form.js";
 export type { SuspendSentinel } from "./builtin/suspend.js";
 export {
   runtimeDoneTool,
@@ -86,7 +87,10 @@ export {
 } from "./builtin/delegate.js";
 export { createMemoryTools } from "./builtin/memory-tools.js";
 export type { MemoryToolDeps } from "./builtin/memory-tools.js";
-export { createEmitEventTool } from "./builtin/emit-event.js";
+export {
+  createEmitEventTool,
+  buildSessionEmitEventTool,
+} from "./builtin/emit-event.js";
 export type { EventDirectoryLike } from "./builtin/emit-event.js";
 export { createDefaultToolRegistry } from "./builtin/default-tools.js";
 export type { DefaultToolRegistryDeps } from "./builtin/default-tools.js";

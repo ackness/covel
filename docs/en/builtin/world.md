@@ -31,7 +31,7 @@ Reads the world material before the game starts, prepares the first part of the 
 
 ## Character Creator (`char-creator`)
 
-Opening character templates must include a placeholder for every collected field. Template/default errors are correctable `invalid-input` failures; see [character tools](../reference/tools.md#create-character).
+Opening character templates must include a placeholder for every collected field. Template/default errors are correctable `invalid-input` failures; see [character tools](../reference/tools.md#opening-character-form).
 
 At the start, it guides you through creating the player character. It gives you an opening passage that describes arriving in the world, then a short form. Once you fill in the form, the story begins. During play, it also records important new people in the story as characters, and updates their status, injuries and equipment.
 

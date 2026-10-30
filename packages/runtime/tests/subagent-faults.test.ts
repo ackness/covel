@@ -638,7 +638,7 @@ describe("sub-agent faults at execution boundaries", () => {
           case 0:
             return call("suspend", {
               reason: "Confirm",
-              resumeSchema: { type: "object" },
+              fields: [{ type: "text", name: "answer", label: "Answer" }],
             });
           case 1:
             return call("delegate", request);
