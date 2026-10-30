@@ -1659,6 +1659,7 @@ fork 和社区插件的授权：
   ],
   "message": [...],
   "view": [...],
+  "segment": [...],
   "diagnostics": []
 }
 ```
@@ -1670,10 +1671,12 @@ fork 和社区插件的授权：
 - 聚合时，每个 spec 都用 `pnpm validate:plugin` 的同一套规则校验（结构、`specVersion`、数据归属、`webview`）。
 - `specVersion` 可以省略，按 v1 处理。声明的版本高于服务端支持的版本（当前 `CURRENT_UI_SPEC_VERSION = 1`）会被拒绝。
 - 一个 spec 校验失败，**不会影响整个响应**：只把它从所在的 slot 里去掉。
-- 失败原因写在顶层的 `diagnostics[]` 里，每项是 `{ pluginId, runtimeId, slot, specIndex, specId?, issues[{ path, message, code }] }`，说明是哪个插件、哪个字段、什么问题。文件读不出来（不存在、不是 JSON、指向插件目录以外）也写在这里；`code` 都是 `invalid`。
+- 失败原因写在顶层的 `diagnostics[]` 里，每项是 `{ pluginId, runtimeId, slot, specIndex, declaredPath?, specId?, issues[{ path, message, code }] }`（`declaredPath` 是清单里写的 spec 路径），说明是哪个插件、哪个字段、什么问题。文件读不出来（不存在、不是 JSON、指向插件目录以外）也写在这里；`code` 都是 `invalid`。
 - 带 `sessionId` 时，`diagnostics` 只包含该会话已激活的插件。
 
 `view` 始终为数组（可以为空），项为 `{ pluginId, specs }`。仅列出当前会话活跃插件的视图；同一插件重复的视图 ID 保留第一份，其余报告 `slot: "view"` 诊断。这里只读取 UI JSON、HTML 和已发布资源，不导入插件代码，不需要服务端代码审批。读取会话的玩家授权在浏览器挂载前单独处理，见[插件视图](./ui-panels.md#插件视图)。
+
+`segment` 始终为数组（可以为空），项为 `{ pluginId, specs }`，是 `contributes.ui.segment` 的段落模板，按与 `message` 相同的会话筛选，插件的顺序就是模板同级时的先后。缺少 `match`、写了 `webview` / `dataSource` 等面板字段或带 `on` / `watch` 的模板报 `slot: "segment"` 诊断，同一插件的其他模板照常返回。见[段落模板](./ui-panels.md#段落模板)。
 
 **开发热重载**：`POST /api/plugins/:id/reload` 重新加载一个社区插件。
 
@@ -3881,7 +3884,7 @@ runtime 报告失败时，它的原始错误保留在 `result.runtimeResults` �
         "runtime-export",
         "kernel"
       ],
-      "uiSlots": ["right", "message"]
+      "uiSlots": ["right", "message", "view", "segment"]
     },
     "scheduling": {
       "effectsPolicy": "warn"

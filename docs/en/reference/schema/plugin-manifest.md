@@ -243,11 +243,12 @@ In the path headings below, `[]` is a list item and `.*` is a map value.
 
 ## `contributes.ui`
 
-| Field     | Type           | Required | Description                                                       |
-| --------- | -------------- | -------- | ----------------------------------------------------------------- |
-| `view`    | list of string | no       | Paths of UI specs for full-column views the player can switch to. |
-| `right`   | list of string | no       | Paths of UI specs for right-panel tabs.                           |
-| `message` | list of string | no       | Paths of UI specs rendered inside the message stream.             |
+| Field     | Type           | Required | Description                                                                                         |
+| --------- | -------------- | -------- | --------------------------------------------------------------------------------------------------- |
+| `view`    | list of string | no       | Paths of UI specs for full-column views the player can switch to.                                   |
+| `right`   | list of string | no       | Paths of UI specs for right-panel tabs.                                                             |
+| `message` | list of string | no       | Paths of UI specs rendered inside the message stream.                                               |
+| `segment` | list of string | no       | Paths of display-only templates for committed story paragraphs, matched by segment kind or speaker. |
 
 ## `contributes.worldProjections.*`
 

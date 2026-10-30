@@ -268,6 +268,7 @@ export type {
   CovelEventMeta,
   CovelEventPayload,
   DomainEventPreviewedPayload,
+  NarrativeDeltaSegment,
   RuntimeDeferredPayload,
   StepNote,
   StepNoteKind,

@@ -19,6 +19,7 @@ A plugin's content can appear in a few fixed places. First choose the place that
 | -------------------------------------------------------------------------------------------- | ----------------------------------------------------------------- | --------------------------------------------------------------------- | ---------------------------------- |
 | Complete data the player can look through at any time (codex, inventory, relationship graph) | Side panel `ui.right`                                             | A tab in the right-hand panel                                         | One JSON file                      |
 | Content that appears after a certain turn (suggestions, summaries, hints)                    | Story-text block `ui.message`                                     | In the story text, under that turn                                    | One JSON file                      |
+| A different look for story paragraphs (dialogue name tags, character avatars)                | Segment template `ui.segment`                                     | In the story text, in place of the matched paragraph's default look   | One JSON file                      |
 | Choices for the player to pick from                                                          | `ChoiceList` / `Choice` components                                | In the story text; the decision area in stage view                    | JSON, or one tool call             |
 | A form that must be answered before the game continues                                       | `create-form` tool                                                | In the story text; the input box is locked until it is answered       | One tool call                      |
 | A status the player should see at a glance (goals, time, inventory)                          | Status summary `session.summary@1`                                | Below the panel tab, or as a status bar on the scene picture          | A dozen or so lines of code        |
@@ -340,6 +341,41 @@ In the output, all three cases show `"status": "passed"`.
 
 > [!NOTE]
 > In the default interface layout, read-only blocks that appear in each turn (such as hints and status changes) are merged into one line, "Turn updates · N", which expands when you open it. Forms, choices, and warnings are never collapsed.
+
+### Give story paragraphs a different look
+
+A block sits under a turn. To change the story text itself, for example to add a name tag to dialogue, use a segment template. Create `ui/nameplate.json`:
+
+```json
+{
+  "id": "tavern-rumors-nameplate",
+  "match": { "kind": "dialogue" },
+  "view": {
+    "component": "Stack",
+    "children": [
+      {
+        "component": "Badge",
+        "props": { "label": { "$state": "/segment/speaker" } }
+      },
+      {
+        "component": "Text",
+        "props": { "content": { "$state": "/segment/text" } }
+      }
+    ]
+  }
+}
+```
+
+Register it in `PLUGIN.md`:
+
+```yaml
+contributes:
+  ui:
+    segment:
+      - ./ui/nameplate.json
+```
+
+`match` is required: `kind` matches segment kinds, `speaker` matches a character ID or name. A template only displays, with no buttons and no data source; paragraphs no template matches look as before. See [Segment templates](../reference/ui-panels.md#segment-templates) for the state it reads and how a template is chosen.
 
 ## 5. Give the player choices
 

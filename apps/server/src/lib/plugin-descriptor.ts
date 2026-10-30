@@ -239,7 +239,7 @@ export function buildPluginDetail(
   );
   const declarations = pluginDeclarations(entry);
   const runtimeIds = new Set(runtimes.map((runtime) => runtime.id));
-  const uiDeclarations = (slot: "right" | "message" | "view") =>
+  const uiDeclarations = (slot: keyof PluginDetail["ui"]) =>
     declarations.flatMap(({ manifest }) =>
       (manifest.ui?.[slot] ?? []).map((path) => ({
         ...(runtimeIds.has(manifest.name) ? { runtimeId: manifest.name } : {}),
@@ -284,6 +284,7 @@ export function buildPluginDetail(
       right: uiDeclarations("right"),
       message: uiDeclarations("message"),
       view: uiDeclarations("view"),
+      segment: uiDeclarations("segment"),
     },
     runtimes,
   };

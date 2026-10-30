@@ -679,6 +679,12 @@ export const pluginUiPathsSchema = z
       .array(z.string().min(1))
       .describe("Paths of UI specs rendered inside the message stream.")
       .optional(),
+    segment: z
+      .array(z.string().min(1))
+      .describe(
+        "Paths of display-only templates for committed story paragraphs, matched by segment kind or speaker.",
+      )
+      .optional(),
   })
   .strict();
 

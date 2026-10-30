@@ -1,4 +1,7 @@
-import type { StoryMessageSegment } from "@covel/plugin-handlers-utils";
+import type {
+  StoryMessageSegment,
+  StorySegmentKind,
+} from "@covel/plugin-handlers-utils";
 import type { ProviderFailureKind } from "../llm-failure-kind.js";
 import type { Stage } from "./runtime-scheduling.js";
 
@@ -53,8 +56,28 @@ export interface NarrativeDeltaPayload {
    * Discard the text streamed so far for this runtime before appending
    * `delta`: the previous model step (preparation before tool calls, or a
    * draft rejected by review) will not be part of the final narrative.
+   * It also drops the paragraph metadata streamed so far.
    */
   readonly reset?: true;
+  /**
+   * The paragraph this delta belongs to, on a story whose runtime declares
+   * an output schema. Sent with the first visible character of each
+   * paragraph, and again (with an empty `delta`) when its `kind` or `speaker`
+   * arrives after that. Absent on prose.
+   */
+  readonly segment?: NarrativeDeltaSegment;
+}
+
+/**
+ * Live metadata of one story paragraph. `index` counts the paragraphs shown
+ * so far (a segment without visible text has none), so it equals the
+ * paragraph's position in the streamed text. The speaker is the name as the
+ * model wrote it; `narrative.completed` carries the resolved one.
+ */
+export interface NarrativeDeltaSegment {
+  readonly index: number;
+  readonly kind: StorySegmentKind;
+  readonly speaker?: string;
 }
 
 export interface NarrativeCompletedPayload {
@@ -126,6 +149,8 @@ export interface ExecutionCompletedPayload {
 export interface RuntimeStartedPayload {
   readonly runtimeId: string;
   readonly pluginId: string;
+  /** This run's identity; the terminal `runtime.*` events carry the same id. */
+  readonly runId?: string;
   readonly kind: string;
   readonly label?: string;
   /** Stage at execution time; absent for event/manual runtimes. */

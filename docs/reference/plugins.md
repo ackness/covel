@@ -135,8 +135,9 @@ Extract facts supported by runtime-inputs.narrative.value, then call save-facts.
 | `data` | 本插件数据 namespace 的 schema、version、accepts、search |
 | `datasets` | 本插件拥有的带类型数据集：名字即 namespace，写 schema、key、ops，见[数据集](#数据集contributesdatasets) |
 | `actionKinds` | 玩家能提交的行动类型：名字、可用身份、文字规则、`fields` 的 schema、显示名称，见[行动类型](#行动类型contributesactionkinds) |
-| `ui` | 包根相对的 `right/message/view` UI spec 路径 |
+| `ui` | 包根相对的 `right/message/view/segment` UI spec 路径 |
 | `ui.view` | 包根相对的完整故事栏视图 spec 路径；声明与授权见[插件视图](./ui-panels.md#插件视图) |
+| `ui.segment` | 包根相对的段落模板 spec 路径：按段落类型或说话人匹配，只用于显示已提交的故事段落，见[段落模板](./ui-panels.md#段落模板) |
 | `worldProjections` | 世界数据投影声明 |
 | `prompt` | 静态提示词段 |
 
@@ -562,7 +563,7 @@ CLI 和安装器的静态校验对 `scope: turn` 和 `scope: committed` 的输�
 - 故事消息的元数据记下 `segments`、`cues`、`yield`，以及在场记录 `presentCharacterIds`：解析成功的说话人和 `cues.present` 里的角色。在场记录现在只保存，留给以后的按角色历史使用。
 - `/messages` 和 `/view` 的故事消息带 `segments`（见 [API](./api.md)）。角色 ID 不进入模型看到的文字。
 
-**流式显示。** 回复是分段 JSON 时，叙事流只转发各段的 `text`，段与段之间是空行，和提交后的正文一致；JSON 的键、`speaker` 和 `cues` 不会出现在流里。纯文本回复照常流式显示。
+**流式显示。** 回复是分段 JSON 时，叙事流只转发各段的 `text`，段与段之间是空行，和提交后的正文一致；JSON 的键、`speaker` 和 `cues` 不会出现在流的正文里。每段的类型和模型写的说话人放在 `narrative.delta` 的 `segment` 里，舞台据此在流式时显示名牌，提交后换成解析后的名字（见[协议](./protocol.md#叙事事件)）。纯文本回复照常流式显示，不带 `segment`。
 
 #### Function 的输出
 

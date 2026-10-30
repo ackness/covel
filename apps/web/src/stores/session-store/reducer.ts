@@ -166,6 +166,7 @@ export const initialState: SessionState = {
   unavailableSessionPlugins: [],
   worldDataNotices: [],
   messageUiSpecs: [],
+  segmentUiSpecs: [],
   pendingInteractionDrafts: [],
   suspensions: [],
   assetsByTurn: new Map<string, readonly AssetGenerateView[]>(),
@@ -199,6 +200,7 @@ const SESSION_RESET: Partial<SessionState> = {
   unavailableSessionPlugins: [],
   worldDataNotices: [],
   messageUiSpecs: [],
+  segmentUiSpecs: [],
   pendingInteractionDrafts: [],
   suspensions: [],
   assetsByTurn: new Map<string, readonly AssetGenerateView[]>(),
@@ -830,6 +832,8 @@ export function reducer(
     }
     case "LOAD_MESSAGE_UI_SPECS":
       return { ...state, messageUiSpecs: action.specs };
+    case "LOAD_SEGMENT_UI_SPECS":
+      return { ...state, segmentUiSpecs: action.specs };
     case "UPSERT_PLUGIN_MESSAGE_SURFACE":
       return applyPluginMessageSurface(state, action.pluginId);
     case "UPSERT_DRAFT": {

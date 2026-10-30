@@ -242,6 +242,13 @@ export interface SessionState {
   messageUiSpecs: api.UISlotEntry[];
 
   /**
+   * Story paragraph templates (`contributes.ui.segment`) from /api/ui-specs,
+   * in the order it returns them. Display-only: the chat view draws a
+   * committed story's segments through them.
+   */
+  segmentUiSpecs: api.UISlotEntry[];
+
+  /**
    * Pending interaction drafts (choice selections, suggestion picks, etc.)
    * staged by the player before confirmation. Cleared on turn submission,
    * session reset, or explicit dismissal.
@@ -423,6 +430,7 @@ export type SessionAction =
       data: Record<string, unknown>;
     }
   | { type: "LOAD_MESSAGE_UI_SPECS"; specs: api.UISlotEntry[] }
+  | { type: "LOAD_SEGMENT_UI_SPECS"; specs: api.UISlotEntry[] }
   | { type: "UPSERT_PLUGIN_MESSAGE_SURFACE"; pluginId: string }
   | { type: "UPSERT_DRAFT"; draft: PendingInteractionDraft }
   | { type: "REMOVE_DRAFT"; draftId: string }

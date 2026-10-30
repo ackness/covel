@@ -1,5 +1,13 @@
-export { loadPluginUiSpec, loadPluginUiSpecs } from "./ui-spec.js";
-export type { PluginUiSpecDiagnostic, PluginUiSpecs } from "./ui-spec.js";
+export {
+  loadPluginUiSpec,
+  loadPluginUiSpecs,
+  PLUGIN_UI_SLOTS,
+} from "./ui-spec.js";
+export type {
+  PluginUiSlot,
+  PluginUiSpecDiagnostic,
+  PluginUiSpecs,
+} from "./ui-spec.js";
 // ── Parsers ──────────────────────────────────────────────────────
 export {
   parsePluginMd,

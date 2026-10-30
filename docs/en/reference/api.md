@@ -1659,6 +1659,7 @@ A webview spec returns `webview: { html, height? }` for a single file or `webvie
   ],
   "message": [...],
   "view": [...],
+  "segment": [...],
   "diagnostics": []
 }
 ```
@@ -1670,10 +1671,12 @@ Each slot is an array. Its elements are `{ pluginId, specs[] }`. Each item in `s
 - When aggregating, every spec is validated with the same rules as `pnpm validate:plugin` (structure, `specVersion`, data ownership, `webview`).
 - `specVersion` can be left out, and is treated as v1. A declared version higher than the server supports (currently `CURRENT_UI_SPEC_VERSION = 1`) is rejected.
 - If one spec fails validation, it **does not affect the whole response**. Only that spec is removed from its slot.
-- The reason for failure is written in the top-level `diagnostics[]`. Each item is `{ pluginId, runtimeId, slot, specIndex, specId?, issues[{ path, message, code }] }`. It says which plugin, which field, and what the problem is. A file that cannot be read (missing, not JSON, or pointing outside the plugin directory) is reported here too; `code` is always `invalid`.
+- The reason for failure is written in the top-level `diagnostics[]`. Each item is `{ pluginId, runtimeId, slot, specIndex, declaredPath?, specId?, issues[{ path, message, code }] }` (`declaredPath` is the spec path as the manifest writes it). It says which plugin, which field, and what the problem is. A file that cannot be read (missing, not JSON, or pointing outside the plugin directory) is reported here too; `code` is always `invalid`.
 - With `sessionId`, `diagnostics` includes only the plugins active in that session.
 
 `view` is always an array (possibly empty) of `{ pluginId, specs }`. With a session, it lists only active plugins. The first view ID within a plugin wins; later duplicates produce `slot: "view"` diagnostics. Loading reads UI JSON, HTML and published assets without importing plugin code or requiring server-code approval. The browser separately gates mounting on player consent for session reading; see [Plugin views](./ui-panels.md#plugin-views).
+
+`segment` is always an array (possibly empty) of `{ pluginId, specs }`: the story paragraph templates of `contributes.ui.segment`, filtered by session like `message`. Plugin order is the tie-break order between templates of the same specificity. A template without `match`, with `webview`, `dataSource` or another panel field, or with an `on` / `watch` binding gets a `slot: "segment"` diagnostic, and the plugin's other templates are still returned. See [Segment templates](./ui-panels.md#segment-templates).
 
 **Development hot reload**: `POST /api/plugins/:id/reload` reloads one community plugin.
 
@@ -3881,7 +3884,7 @@ Returns an index of the framework's capabilities. Third-party developers, extern
         "runtime-export",
         "kernel"
       ],
-      "uiSlots": ["right", "message"]
+      "uiSlots": ["right", "message", "view", "segment"]
     },
     "scheduling": {
       "effectsPolicy": "warn"

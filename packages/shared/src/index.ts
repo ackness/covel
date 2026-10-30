@@ -377,8 +377,11 @@ export {
   MAX_UI_WEBVIEW_BYTES,
   pluginUiSpecIssues,
   pluginUiSpecSchema,
+  segmentTemplateMatchSchema,
   uiMapDirectiveSchema,
   type PluginUiSpecIssue,
+  type PluginUiSpecSlot,
+  type SegmentTemplateMatch,
 } from "./schemas/ui-spec.js";
 export {
   PLUGIN_VIEW_ID_PATTERN,

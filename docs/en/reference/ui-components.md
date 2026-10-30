@@ -33,6 +33,8 @@ A plugin's UI is a JSON document (a UI spec), and it can only be built from the 
 | Transform a value                                | `$format`, `$math`, `$concat`, `$count`, `$truncate`, `$pluralize`, or `$join` (also available in action parameters)                    |
 | Multilingual text                                | Write English in properties such as `content` / `label` / `placeholder` / `title` / `message`, and translate in `locales/<locale>.yaml` |
 
+**State of a segment template.** A `ui.segment` template has no plugin data and reads only these paths: `/segment/kind`, `/segment/text`, `/segment/speaker`, `/segment/speakerId` (the committed segment), `/index` (its position, from 0), `/character/id`, `/character/name`, `/character/type` (when the speaker is a session character), and `/visual` (that character's `character.visual@1` slot value, when the host has it). A missing path reads as empty. Templates only display and cannot declare `on` / `watch`, so a value written back with `$bindState` goes nowhere. See [Segment templates](./ui-panels.md#segment-templates).
+
 ## Components
 
 Properties marked _(I18nText)_ in the tables are text shown to the player, and they are translated by language.

@@ -14,5 +14,5 @@
 
 ### Changed
 
-- **Stage nameplates and the HUD speaking marker come from the story.** The nameplate of each paragraph is its segment's speaker, and the HUD marks the speaker of the last attributed segment. Nameplates appear once the story is committed, not while it streams.
+- **Stage nameplates and the HUD speaking marker come from the story.** The nameplate of each paragraph is its segment's speaker, and the HUD marks the speaker of the last attributed segment.
 - **A malformed segmented story is repaired, then committed leniently.** A dialogue without a speaker, an unknown kind or prose where segments were asked for gets one repair request; after the repair budget the story commits with unknown kinds read as narration and unattributed lines kept. Only a story with no text fails.

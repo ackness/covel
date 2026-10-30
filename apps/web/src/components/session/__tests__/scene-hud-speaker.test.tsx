@@ -1,6 +1,10 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render, screen } from "@testing-library/react";
 import type { StreamMessage } from "@/stores/session-store.js";
+import {
+  clearAllStreamingText,
+  setStreamingSegment,
+} from "@/stores/streaming-text-store.js";
 
 const hud = vi.hoisted(() => ({
   messages: [] as StreamMessage[],
@@ -56,6 +60,7 @@ const story = (id: string): StreamMessage => ({
 
 afterEach(() => {
   cleanup();
+  clearAllStreamingText();
   hud.messages = [];
   hud.slots = [];
 });
@@ -72,9 +77,33 @@ describe("scene HUD speaking marker", () => {
     expect(speakingCard()).toContain("阿雅");
   });
 
-  it("marks nobody while the story is still streaming", () => {
+  it("marks the last live speaker by name while the story streams", () => {
     hud.slots = [cast];
     hud.messages = [story("stream_turn_narrator")];
+    setStreamingSegment("stream_turn_narrator", {
+      index: 0,
+      kind: "dialogue",
+      speaker: "阿雅",
+    });
+    setStreamingSegment("stream_turn_narrator", {
+      index: 1,
+      kind: "narration",
+    });
+    render(<SceneHud sessionId="s" />);
+    expect(speakingCard()).toContain("阿雅");
+  });
+
+  it("marks nobody while a streaming story has no live speaker", () => {
+    hud.slots = [cast];
+    hud.messages = [story("stream_turn_narrator")];
+    // The placeholder's own segments are not read while it streams.
+    render(<SceneHud sessionId="s" />);
+    expect(speakingCard()).toBeNull();
+    cleanup();
+    setStreamingSegment("stream_turn_narrator", {
+      index: 0,
+      kind: "narration",
+    });
     render(<SceneHud sessionId="s" />);
     expect(speakingCard()).toBeNull();
   });

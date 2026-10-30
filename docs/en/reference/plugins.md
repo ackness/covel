@@ -135,8 +135,9 @@ Session prep groups the plugins by whether they call a model, that is by the der
 | `data` | The schema, version, accepts, and search settings for this plugin's data namespace |
 | `datasets` | Typed datasets the package owns: the name is the namespace, with schema, key and ops. See [Datasets](#datasets-contributesdatasets) |
 | `actionKinds` | Action kinds players may submit: name, roles, text rule, `fields` schema and display label. See [Action kinds](#action-kinds-contributesactionkinds) |
-| `ui` | Paths, relative to the package root, of the `right/message/view` UI spec files |
+| `ui` | Paths, relative to the package root, of the `right/message/view/segment` UI spec files |
 | `ui.view` | Full-column view spec paths relative to the package root; see [Plugin views](./ui-panels.md#plugin-views) for declarations and consent |
+| `ui.segment` | Paths, relative to the package root, of segment template specs: matched by segment kind or speaker, display-only, for committed story paragraphs; see [Segment templates](./ui-panels.md#segment-templates) |
 | `worldProjections` | Declarations of world data projections |
 | `prompt` | Static prompt sections |
 
@@ -562,7 +563,7 @@ The kernel derives `narrativeOutput` by joining each segment’s `text` with bla
 - The story message's metadata records `segments`, `cues`, `yield` and the presence record `presentCharacterIds`: the resolved speakers and the characters in `cues.present`. The presence record is only stored for now, ready for per-character history later.
 - Story messages on `/messages` and `/view` carry `segments` (see [API](./api.md)). Character IDs never reach model-facing text.
 
-**Streaming.** When the answer is segmented JSON, the narrative stream forwards only each segment's `text`, with a blank line between segments, matching the committed text. JSON keys, `speaker` and `cues` never appear in the stream. A prose answer streams as before.
+**Streaming.** When the answer is segmented JSON, the narrative stream forwards only each segment's `text`, with a blank line between segments, matching the committed text. JSON keys, `speaker` and `cues` never appear in the streamed text. Each paragraph's kind and speaker as written travel in the `segment` of `narrative.delta`, so the stage shows name tags while the story streams and replaces them with the resolved names at commit (see [protocol](./protocol.md#narrative-events)). A prose answer streams as before, without `segment`.
 
 #### Function output
 
