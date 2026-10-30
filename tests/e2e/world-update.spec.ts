@@ -1,5 +1,9 @@
 import { expect, test } from "@playwright/test";
 import type { PluginInstallation } from "@covel/shared";
+import {
+  packageCapabilities,
+  verifiedInstallation,
+} from "./helpers/package-fixtures.js";
 import { ONBOARDING_VERSION, seedBrowserSettings } from "./helpers/player.js";
 
 for (const width of [1280, 390]) {
@@ -28,12 +32,12 @@ for (const width of [1280, 390]) {
       route.fulfill({
         json: {
           items: [
-            {
+            verifiedInstallation({
               id: "example-note",
               version: "1.0.0",
               source,
               pendingUpdate: pending,
-            },
+            }),
           ],
         },
       }),
@@ -49,6 +53,8 @@ for (const width of [1280, 390]) {
             description: "Updated plugin",
             author: null,
             hasServerCode: false,
+            trustedSource: false,
+            capabilities: packageCapabilities(false),
             source: nextSource,
             previous: { version: "1.0.0", source },
             changes: {
