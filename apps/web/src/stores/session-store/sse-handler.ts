@@ -430,6 +430,9 @@ export function createSseEventHandler(
             attemptStatus: "pending",
             label,
             turnId,
+            ...(typeof payload.runId === "string" && payload.runId
+              ? { runId: payload.runId }
+              : {}),
             startedAt: envelope.timestamp,
             ...retryStepMetadata(payload, turnId),
           },

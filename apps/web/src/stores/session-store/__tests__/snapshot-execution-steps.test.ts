@@ -149,3 +149,34 @@ describe("authoritative execution recovery", () => {
     ]);
   });
 });
+
+it("recovers separate runs and settles only the run named by the terminal event", () => {
+  const steps = buildSnapshotExecutionSteps([
+    event("runtime.started", { runId: "a" }),
+    event("runtime.started", { runId: "b" }),
+    event("runtime.completed", { runId: "b", status: "success" }),
+  ]);
+  expect(steps).toEqual([
+    expect.objectContaining({ runId: "a", status: "running" }),
+    expect.objectContaining({ runId: "b", status: "completed" }),
+  ]);
+  expect(
+    reconcileExecutionSteps(steps, [
+      event("runtime.failed", { runId: "a", error: "Failure" }),
+    ]),
+  ).toEqual([
+    expect.objectContaining({ runId: "a", status: "failed" }),
+    expect.objectContaining({ runId: "b", status: "completed" }),
+  ]);
+});
+
+it("adopts a snapshot run id into a legacy local row and merges the same run", () => {
+  const events = [
+    event("runtime.completed", { runId: "a", status: "success" }),
+  ];
+  const steps = reconcileExecutionSteps([running], events);
+  expect(steps).toEqual([
+    expect.objectContaining({ runId: "a", status: "completed" }),
+  ]);
+  expect(reconcileExecutionSteps(steps, events)).toEqual(steps);
+});

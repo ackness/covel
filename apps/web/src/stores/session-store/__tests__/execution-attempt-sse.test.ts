@@ -353,3 +353,16 @@ describe("SSE retry commit settlement", () => {
     expect(h.getState().executionError).toBe("Unable to save");
   });
 });
+
+it("keeps an outer run running when a nested run completes", () => {
+  const h = harness(false);
+  h.send("runtime.started", { runId: "a" });
+  h.send("runtime.started", { runId: "b" });
+  h.send("runtime.completed", { runId: "b", status: "success" });
+  expect(
+    h.getState().executionSteps.filter((step) => step.turnId === "attempt"),
+  ).toEqual([
+    expect.objectContaining({ runId: "a", status: "running" }),
+    expect.objectContaining({ runId: "b", status: "completed" }),
+  ]);
+});

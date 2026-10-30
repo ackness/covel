@@ -98,6 +98,18 @@ function projectedStep(step: ExecutionStep, turnId?: string): ExecutionStep {
   };
 }
 
+const runStatusPriority: Record<ExecutionStep["status"], number> = {
+  failed: 0,
+  running: 1,
+  llm: 1,
+  tool: 1,
+  suspended: 2,
+  deferred: 3,
+  unknown: 4,
+  completed: 5,
+  skipped: 6,
+};
+
 /**
  * Player-facing turns keep their original place in history. Retrying a task
  * updates only that task, while the raw store keeps every real attempt ID.
@@ -145,6 +157,7 @@ export function projectExecutionTurns(
     { turnId?: string; order: number; failed: ReadonlySet<string> }
   >();
   const winnerOrders = new Map<string, number>();
+  const winnerRows = new Map<string, ExecutionStep>();
   for (const [order, step] of orderedSteps.entries()) {
     const turnId = getSourceTurnId(step.turnId, sources);
     const group = getGroup(`turn:${turnId ?? "__unknown__"}`, turnId);
@@ -169,6 +182,24 @@ export function projectExecutionTurns(
       (row) => row.runtimeId === step.runtimeId,
     );
     const previous = existing < 0 ? undefined : group.steps[existing];
+    const winnerKey = `${group.key}|${step.runtimeId}`;
+    const winner = winnerRows.get(winnerKey);
+    // Runs share a chip within one attempt. Later retry attempts still replace
+    // the earlier attempt's result, including its failures.
+    if (
+      winner &&
+      winner.turnId === step.turnId &&
+      (winner.runId || step.runId)
+    ) {
+      const priority =
+        runStatusPriority[step.status] - runStatusPriority[winner.status];
+      if (
+        priority > 0 ||
+        (priority === 0 &&
+          timestamp(step.startedAt) < timestamp(winner.startedAt))
+      )
+        continue;
+    }
     const notExecuted = step.sourceTurnId && step.status === "skipped";
     // A dependency failure can skip another selected task in the same batch.
     // That task is still unresolved; skipping must not erase its earlier failure.
@@ -182,8 +213,10 @@ export function projectExecutionTurns(
       : projectedStep(step, turnId);
     if (existing < 0) group.steps.push(projected);
     else group.steps[existing] = projected;
-    if (!notExecuted || !previous)
-      winnerOrders.set(`${group.key}|${step.runtimeId}`, order);
+    if (!notExecuted || !previous) {
+      winnerOrders.set(winnerKey, order);
+      winnerRows.set(winnerKey, step);
+    }
   }
   for (const group of groups.values()) {
     const summary = summaries.get(group.key);
