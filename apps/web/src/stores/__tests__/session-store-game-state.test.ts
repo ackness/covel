@@ -78,12 +78,11 @@ describe("session-store gameState replacement", () => {
 });
 
 describe("enrichGameStateFromSnapshot", () => {
-  it("merges gameState, characters, and characterSchema from a snapshot", () => {
+  it("keeps characters, characterSchema and dimensions without tables", () => {
     const characters = [{ id: "player", name: "Aning", type: "player" }];
     const characterSchema = { fields: { age: { type: "number" } } };
 
     const enriched = enrichGameStateFromSnapshot({
-      gameState: { location: "dock", mood: "calm" },
       characters,
       characterSchema,
       dimensions: {},
@@ -91,7 +90,6 @@ describe("enrichGameStateFromSnapshot", () => {
     });
 
     expect(enriched).toEqual({
-      tables: { location: "dock", mood: "calm" },
       characters,
       characterSchema,
       dimensions: {},
@@ -100,16 +98,15 @@ describe("enrichGameStateFromSnapshot", () => {
     // characters arrives from the snapshot even though no character.upserted
     // SSE event fires on the direct-write character path.
     expect(enriched.characters).toBe(characters);
+    expect(enriched).not.toHaveProperty("tables");
   });
 
   it("clears characterSchema when the authoritative snapshot has none", () => {
     const enriched = enrichGameStateFromSnapshot({
-      gameState: { turn: 3 },
       characters: [],
     });
 
     expect(enriched).toEqual({
-      tables: { turn: 3 },
       characters: [],
       characterSchema: null,
       dimensions: {},
@@ -118,80 +115,18 @@ describe("enrichGameStateFromSnapshot", () => {
     expect(enriched.characterSchema).toBeNull();
   });
 
-  it("tolerates a missing gameState slice", () => {
+  it("defaults absent optional snapshot fields", () => {
     const characters = [{ id: "npc-1", name: "Watcher", type: "npc" }];
 
     const enriched = enrichGameStateFromSnapshot({ characters });
 
     expect(enriched).toEqual({
-      tables: {},
       characters,
       characterSchema: null,
       dimensions: {},
       dimensionSettlements: [],
     });
   });
-});
-
-it.each(["RESET_SESSION", "RESET_TO_WORLD_SELECT"] as const)(
-  "clears complete snapshot ownership on %s",
-  (type) => {
-    const observed = reducer(initialState, {
-      type: "SET_GAME_STATE",
-      state: {},
-    });
-    expect(observed.hasGameStateSnapshot).toBe(true);
-    expect(reducer(observed, { type }).hasGameStateSnapshot).toBe(false);
-  },
-);
-
-it("isolates every plugin table from framework fields in snapshots, live patches and cached history", () => {
-  const tables = {
-    dimensions: { hp: 5 },
-    characterSchema: { bogus: true },
-    characters: { custom: 1 },
-    dimensionProviderPluginId: { custom: 2 },
-    tables: { nested: 3 },
-  };
-  const snapshot = enrichGameStateFromSnapshot({
-    gameState: tables,
-    characters: [],
-    characterSchema: null,
-    dimensions: {},
-  });
-  const patch = {
-    id: "collision",
-    summary: "Plugin tables",
-    packageName: "probe",
-    data: tables,
-  };
-  for (const state of [
-    reducer(initialState, { type: "SET_GAME_STATE", state: snapshot }),
-    reducer(
-      { ...initialState, gameState: snapshot },
-      { type: "MERGE_INITIAL_STATE_PATCHES", patches: [patch] },
-    ),
-    reducer(
-      {
-        ...initialState,
-        gameState: {
-          characters: [],
-          characterSchema: null,
-          dimensions: {},
-          dimensionSettlements: [],
-        },
-      },
-      { type: "MERGE_INITIAL_STATE_PATCHES", patches: [patch] },
-    ),
-  ]) {
-    expect(state.gameState).toEqual({
-      tables,
-      characters: [],
-      characterSchema: null,
-      dimensions: {},
-      dimensionSettlements: [],
-    });
-  }
 });
 
 it("can receive a valid dimension commit after a malformed snapshot without throwing", () => {

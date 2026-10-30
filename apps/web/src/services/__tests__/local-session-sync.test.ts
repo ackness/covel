@@ -25,9 +25,6 @@ const api = vi.hoisted(() => ({
 }));
 
 const appKv = vi.hoisted(() => ({
-  getStatePatches: vi.fn(async () => null),
-  appendStatePatch: vi.fn(async () => {}),
-  removeStatePatches: vi.fn(async () => {}),
   getSubmittedBlocks: vi.fn(async () => null),
   saveSubmittedBlocks: vi.fn(async () => {}),
   removeSubmittedBlocks: vi.fn(async () => {}),

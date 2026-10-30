@@ -85,15 +85,6 @@ export interface MessageRecord {
   createdAt: string;
 }
 
-export interface StatePatchRecord {
-  id: string;
-  sessionId: string;
-  summary: string;
-  packageName: string;
-  data?: unknown;
-  createdAt: string;
-}
-
 export interface PresetSummary {
   reasoningEffort?: import("@covel/shared").ReasoningEffort;
   id: string;

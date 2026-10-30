@@ -78,6 +78,25 @@ function drizzleTableNames(
 describe("table registry consistency", () => {
   const registryNames = new Set(SESSION_SCOPED_TABLE_NAMES);
 
+  it("has no kernel state tables", () => {
+    const sqliteNames = drizzleTableNames(sqliteSchema, (v) =>
+      is(v, SQLiteTable),
+    );
+    const pgNames = drizzleTableNames(pgSchema, (v) => is(v, PgTable));
+    for (const names of [
+      sqliteNames,
+      pgNames,
+      registryNames,
+      new Set(ALL_TABLE_NAMES),
+      new Set(ddlTablesWithColumns().keys()),
+    ]) {
+      for (const name of ["state_schemas", "state_entries", "state_changes"]) {
+        expect(names.has(name), name).toBe(false);
+      }
+      expect(names.has("state_snapshots")).toBe(true);
+    }
+  });
+
   it("has no duplicate entries", () => {
     expect(registryNames.size).toBe(SESSION_SCOPED_TABLES.length);
   });

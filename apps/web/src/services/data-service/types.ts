@@ -2,7 +2,6 @@ import type { CursorPage, PageCursor, WorldPatchRequest } from "@covel/shared";
 import type {
   MessageRecord,
   SessionRecord,
-  StatePatchRecord,
   WorldRecord,
   WorldSummary,
 } from "../api.js";
@@ -86,9 +85,6 @@ export interface DataService {
   ): Promise<CursorPage<MessageRecord>>;
   /** Persist a browser-authored input before its action is dispatched. */
   addMessage(msg: MessageRecord): Promise<void>;
-
-  // State patches
-  listStatePatches(sessionId: string): Promise<StatePatchRecord[]>;
 
   /**
    * Atomically merge submitted block IDs and their form values into a session.

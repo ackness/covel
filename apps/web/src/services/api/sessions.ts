@@ -32,7 +32,6 @@ import type {
   SessionCreateResponse,
   SessionRecord,
   SetupRuntimeState,
-  StatePatchRecord,
 } from "./types.js";
 
 // -- Session Plugin API -------------------------------------------
@@ -168,15 +167,6 @@ export async function getSession(
   );
 }
 
-export async function listStatePatches(
-  sessionId: string,
-): Promise<StatePatchRecord[]> {
-  const response = await request<{ items: StatePatchRecord[] }>(
-    `/api/sessions/${encodeURIComponent(sessionId)}/state-patches`,
-  );
-  return response.items;
-}
-
 export interface StateTableEntry {
   name: string;
   fields: Array<{ name: string; type?: string; description?: string }>;
@@ -184,9 +174,8 @@ export interface StateTableEntry {
 }
 
 /**
- * Fetch every state table (schema + current values) for the session.
- * Used by the database panel to render a live DB view instead of just a
- * patch history log.
+ * Fetch the session, characters and plugin-data virtual tables.
+ * Used by the database panel to render the current database view.
  */
 export async function listStateTables(
   sessionId: string,

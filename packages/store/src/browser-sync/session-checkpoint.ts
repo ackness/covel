@@ -101,7 +101,6 @@ export async function exportSessionCheckpoint(
     setupAttempts,
     jobStatus,
     runtimeExports,
-    stateSchemas,
   ] = await Promise.all([
     session.worldId ? store.getWorld(session.worldId) : Promise.resolve(null),
     store.listMessages(sessionId),
@@ -137,23 +136,7 @@ export async function exportSessionCheckpoint(
           .then((exports) =>
             exportsReadableFrom(exports, options.exportsReadableFrom!),
           ),
-    store.listStateSchemas(sessionId),
   ]);
-
-  const stateEntries = (
-    await Promise.all(
-      stateSchemas.map((schema) =>
-        store.listStateEntries(sessionId, schema.tableName),
-      ),
-    )
-  ).flat();
-  const stateChanges = (
-    await Promise.all(
-      stateEntries.map((entry) =>
-        store.listStateChanges(sessionId, entry.tableName, entry.fieldName),
-      ),
-    )
-  ).flat();
 
   // Rows are in the order they were written; the latest executions are last.
   const recentTurnIds = new Set(
@@ -193,11 +176,6 @@ export async function exportSessionCheckpoint(
     setupAttempts,
     jobStatus,
     runtimeExports,
-    state: {
-      schemas: stateSchemas,
-      entries: stateEntries,
-      changes: stateChanges,
-    },
     revision: options.revision,
     actionId: options.actionId,
     committedAt: options.committedAt ?? new Date().toISOString(),
@@ -266,15 +244,6 @@ async function writeCheckpoint(
     await store.appendJobStatus(record);
   for (const record of checkpoint.runtimeExports)
     await store.appendRuntimeExport(record);
-
-  if (checkpoint.state) {
-    for (const record of checkpoint.state.schemas)
-      await store.saveStateSchema(record);
-    for (const record of checkpoint.state.entries)
-      await store.upsertStateEntry(record);
-    for (const record of checkpoint.state.changes)
-      await store.addStateChange(record);
-  }
 }
 
 /** Atomically replace one transient workspace from a browser checkpoint. */

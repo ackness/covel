@@ -14,8 +14,6 @@ export function rebindSnapshotPayloadSession(
       ? { ...payload.characterSchema, sessionId }
       : null,
     characters: rebind(payload.characters),
-    stateEntries: rebind(payload.stateEntries),
-    stateSchemas: rebind(payload.stateSchemas),
     runtimeExports: rebind(payload.runtimeExports),
     pluginData: rebind(payload.pluginData),
     lorebookEntries: rebind(payload.lorebookEntries),

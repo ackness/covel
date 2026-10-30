@@ -27,9 +27,6 @@ import {
   makeSetupAttempt,
   makeSnapshot,
   makeSnapshotPayload,
-  makeStateChange,
-  makeStateEntry,
-  makeStateSchema,
   makeSuspension,
   makeToolCall,
   makeTraceEvent,
@@ -53,9 +50,7 @@ const pluginData = {
 };
 const snapshotRecords = {
   characters: [makeCharacter()],
-  stateSchemas: [makeStateSchema()],
   runtimeExports: [makeRuntimeExport()],
-  stateEntries: [makeStateEntry()],
   pluginData: [pluginData],
   sessionSummaries: [makeSessionSummary()],
   lorebookEntries: [makeLorebookEntry()],
@@ -83,11 +78,6 @@ const domainRecords = {
   jobStatus: [makeJobStatus()],
   runtimeExports: [makeRuntimeExport()],
 };
-const stateRecords = {
-  schemas: [makeStateSchema()],
-  entries: [makeStateEntry()],
-  changes: [makeStateChange()],
-};
 const checkpoint: BrowserCheckpoint = JSON.parse(
   JSON.stringify({
     schemaVersion: 2,
@@ -97,7 +87,6 @@ const checkpoint: BrowserCheckpoint = JSON.parse(
     world: makeWorld({ id: "world-1" }),
     ...domainRecords,
     characterSchema: null,
-    state: stateRecords,
     revision: 1,
     actionId: "action-1",
     committedAt: timestamp,
@@ -302,29 +291,6 @@ describe("checkpoint record validation", () => {
     },
   );
 
-  it.each(Object.keys(stateRecords) as (keyof typeof stateRecords)[])(
-    "rejects foreign or malformed state.%s records",
-    (domain) => {
-      expect(() =>
-        validateBrowserCheckpoint({
-          ...checkpoint,
-          state: {
-            ...checkpoint.state,
-            [domain]: [
-              { ...stateRecords[domain][0], sessionId: "another-session" },
-            ],
-          },
-        }),
-      ).toThrow(`state.${domain}[0].sessionId must match checkpoint.sessionId`);
-      expect(() =>
-        validateBrowserCheckpoint({
-          ...checkpoint,
-          state: { ...checkpoint.state, [domain]: [{ sessionId }] },
-        }),
-      ).toThrow(BrowserSyncValidationError);
-    },
-  );
-
   it.each(Object.keys(snapshotRecords) as (keyof typeof snapshotRecords)[])(
     "rejects foreign or malformed snapshot payload %s records",
     (domain) => {
@@ -355,7 +321,6 @@ describe("checkpoint record validation", () => {
   );
 
   it.each([
-    "stateSchemas",
     "runtimeExports",
     "sessionSummaries",
     "compactedMessageSummaryIds",

@@ -157,8 +157,8 @@ beforeEach(() => {
   api.getSessionView.mockResolvedValue({
     session,
     messages: [],
-    gameState: {},
     characters: [],
+    characterSchema: { version: 2 },
     executionSteps: [],
     submittedInteractions: [],
     execution: { state: "idle" },
@@ -305,13 +305,12 @@ it("ignores pending event refreshes after provider unmount", async () => {
   expect(options.dispatch).not.toHaveBeenCalled();
 });
 
-it("coalesces committed state notices during a snapshot read without replaying them or appending patch history", async () => {
+it("coalesces committed state notices during a snapshot read without replaying them", async () => {
   const pending = deferred<unknown>();
   const current = {
     session,
     messages: [],
     characters: [{ id: "hero", name: "Current" }],
-    gameState: { stats: { hp: 9, mp: 3 }, weather: { sky: "clear" } },
     executionSteps: [],
     submittedInteractions: [],
     execution: { state: "idle" },
@@ -331,7 +330,6 @@ it("coalesces committed state notices during a snapshot read without replaying t
     pending.resolve({
       ...current,
       characters: [],
-      gameState: { stats: { hp: 1 } },
     });
   });
   expect(api.getSessionView).toHaveBeenCalledTimes(2);
@@ -339,10 +337,8 @@ it("coalesces committed state notices during a snapshot read without replaying t
     characterSchema: null,
     dimensions: {},
     dimensionSettlements: [],
-    tables: current.gameState,
     characters: current.characters,
   });
-  expect(options.stateRef.current.statePatches).toEqual([]);
 });
 
 it("refreshes once when a state commit follows snapshot publication but other recovery reads are pending", async () => {
@@ -360,7 +356,7 @@ it("refreshes once when a state commit follows snapshot publication but other re
     session,
     messages: [],
     characters: [],
-    gameState: { stats: { hp: 9, mp: 3 }, weather: { sky: "clear" } },
+    characterSchema: { version: 2 },
     executionSteps: [],
     submittedInteractions: [],
     execution: { state: "idle" },
@@ -372,13 +368,11 @@ it("refreshes once when a state commit follows snapshot publication but other re
   });
   expect(api.getSessionView).toHaveBeenCalledTimes(2);
   expect(options.stateRef.current.gameState).toEqual({
-    characterSchema: null,
+    characterSchema: { version: 2 },
     dimensions: {},
     dimensionSettlements: [],
-    tables: { stats: { hp: 9, mp: 3 }, weather: { sky: "clear" } },
     characters: [],
   });
-  expect(options.stateRef.current.statePatches).toEqual([]);
 });
 
 function jobEnded(jobId: string): SubscriptionEvent {
@@ -420,7 +414,6 @@ it("reads only the snapshot for committed state and shows what a turn changed", 
     messages: [historyMessage(1)],
     characters: [{ id: "hero", name: "Hero" }],
     dimensions: { mood: { hero: { value: 3 } } },
-    gameState: { stats: { hp: 9 } },
     executionSteps: [],
     submittedInteractions: [],
     execution: { state: "idle" },
@@ -444,7 +437,6 @@ it("reads only the snapshot for committed state and shows what a turn changed", 
   expectSnapshotReadsOnly(2);
   const state = options.stateRef.current;
   expect(state.gameState).toMatchObject({
-    tables: { stats: { hp: 9 } },
     characters: committed.characters,
     dimensions: committed.dimensions,
   });
@@ -463,7 +455,6 @@ it("refreshes the snapshot once for background jobs that end together", async ()
     session,
     messages: [],
     characters: [],
-    gameState: {},
     executionSteps: [],
     submittedInteractions: [],
     execution: { state: "idle" },
@@ -577,7 +568,7 @@ it("backs off failed recovery reads, stops, and reads again on the next commit",
     session,
     messages: [],
     characters: [],
-    gameState: { stats: { hp: 2 } },
+    characterSchema: { version: 2 },
     executionSteps: [],
     submittedInteractions: [],
     execution: { state: "idle" },
@@ -588,7 +579,7 @@ it("backs off failed recovery reads, stops, and reads again on the next commit",
   expect(api.getSessionView).toHaveBeenCalledTimes(reads + 1);
   expect(options.stateRef.current.executionError).toBeNull();
   expect(options.stateRef.current.gameState).toMatchObject({
-    tables: { stats: { hp: 2 } },
+    characterSchema: { version: 2 },
   });
   unmount();
 });
@@ -602,7 +593,7 @@ it("does not retry a failed current snapshot merely because committed notices ar
   streams[0]!.emit(event("character.upserted"));
   streams[0]!.emit(event("character.upserted"));
   await act(async () => {
-    pending.resolve({ session, messages: [], characters: [], gameState: {} });
+    pending.resolve({ session, messages: [], characters: [] });
   });
   expect(api.getSessionView).toHaveBeenCalledTimes(2);
 });
@@ -622,7 +613,7 @@ it.each(["unmount", "revisit"] as const)(
     }
     options.dispatch.mockClear();
     await act(async () => {
-      pending.resolve({ session, messages: [], characters: [], gameState: {} });
+      pending.resolve({ session, messages: [], characters: [] });
     });
     expect(api.getSessionView).toHaveBeenCalledOnce();
     expect(options.dispatch).not.toHaveBeenCalled();
@@ -641,7 +632,6 @@ it.each([false, true])(
     await act(async () => {
       streams[0]!.emit(event("system.reset"));
     });
-    expect(options.stateRef.current.hasGameStateSnapshot).toBe(true);
     const done = {
       status: "succeeded",
       runtimeId: "current/background",
@@ -827,7 +817,6 @@ it("fills a nonoverlapping snapshot gap without dropping loaded history", async 
     submittedInteractions: [],
     execution: { state: "idle" },
     characters: [],
-    gameState: {},
   });
   api.listMessagesPage.mockResolvedValue({
     items: historyWindow(1, 40),
@@ -866,7 +855,6 @@ function setupHistoryGap() {
     submittedInteractions: [],
     execution: { state: "completed", turnId: "old" },
     characters: [],
-    gameState: {},
   });
   return hook;
 }

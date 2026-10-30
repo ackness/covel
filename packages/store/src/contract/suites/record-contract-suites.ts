@@ -10,8 +10,6 @@ import {
   makeSession,
   makeSessionSummary,
   makeSnapshot,
-  makeStateChange,
-  makeStateSchema,
   makeSuspension,
   makeToolCall,
   makeTraceEvent,
@@ -65,17 +63,6 @@ const APPEND_PROBES: Readonly<Record<string, AppendProbe>> = {
       ),
     count: async (store) =>
       (await store.listInteractionRecords(SESSION)).length,
-  },
-  addStateChange: {
-    write: (store, id, revision) =>
-      store.addStateChange(
-        makeStateChange({ id, sessionId: SESSION, turnId: `turn-${revision}` }),
-      ),
-    count: async (store) => {
-      const { tableName, fieldName } = makeStateChange();
-      return (await store.listStateChanges(SESSION, tableName, fieldName))
-        .length;
-    },
   },
   saveEvent: {
     write: (store, id, revision) =>
@@ -168,19 +155,6 @@ function registerRecordContractTests(getStore: () => DataStore): void {
       ).toEqual(["evt-a"]);
     });
 
-    it("lists state changes of one millisecond by id", async () => {
-      for (const id of ["chg-b", "chg-a"])
-        await store.addStateChange(
-          makeStateChange({ id, sessionId: SESSION, createdAt: SAME_TIME }),
-        );
-      const { tableName, fieldName } = makeStateChange();
-      expect(
-        (await store.listStateChanges(SESSION, tableName, fieldName)).map(
-          (c) => c.id,
-        ),
-      ).toEqual(["chg-a", "chg-b"]);
-    });
-
     it("lists interaction records of one timestamp newest id first, before and after a limit", async () => {
       for (const id of ["ir-a", "ir-c", "ir-b"])
         await store.saveInteractionRecord(
@@ -198,26 +172,6 @@ function registerRecordContractTests(getStore: () => DataStore): void {
           (r) => r.id,
         ),
       ).toEqual(["ir-c"]);
-    });
-
-    it("lists state schemas by table name, and an update does not move a row", async () => {
-      const later = makeStateSchema({
-        id: "schema-1",
-        sessionId: SESSION,
-        tableName: "table-b",
-      });
-      await store.saveStateSchema(later);
-      await store.saveStateSchema(
-        makeStateSchema({
-          id: "schema-2",
-          sessionId: SESSION,
-          tableName: "table-a",
-        }),
-      );
-      await store.saveStateSchema({ ...later });
-      expect(
-        (await store.listStateSchemas(SESSION)).map((s) => s.tableName),
-      ).toEqual(["table-a", "table-b"]);
     });
 
     it("lists snapshots of one millisecond by id", async () => {

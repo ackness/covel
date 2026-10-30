@@ -223,23 +223,8 @@ export interface SessionState {
    */
   suspensions: SuspensionSummary[];
 
-  /** Refreshes consumers even when a field replaces a cached value. */
-  statePatchRevision: number;
-  recentStatePatchIds: string[];
-
-  // Latest bounded field patches from kernel
-  statePatches: Array<{
-    id: string;
-    summary: string;
-    packageName: string;
-    data?: unknown;
-  }>;
-
   /** Current game state, updated by full snapshots and committed increments. */
   gameState: Record<string, unknown>;
-
-  /** An authoritative snapshot, including an empty one, supersedes cached patches. */
-  hasGameStateSnapshot: boolean;
 
   /** Plugin data keyed by pluginId -> namespace -> key -> value. Updated via plugin-data.changed events. */
   /** Snapshot inputs needed to synthesize historical message cards. Live namespaces live in plugin-data-store. */
@@ -365,15 +350,6 @@ export type SessionAction =
     }
   | { type: "SET_OLDER_MESSAGES_CURSOR"; cursor: PageCursor | null }
   | { type: "SET_INITIAL_EVENT_CURSOR"; cursor: string | null }
-  | {
-      type: "MERGE_INITIAL_STATE_PATCHES";
-      patches: Array<{
-        id: string;
-        summary: string;
-        packageName: string;
-        data?: unknown;
-      }>;
-    }
   | {
       type: "APPEND_REASONING";
       turnId: string;

@@ -8,9 +8,6 @@ import {
   checkpointRecordArrays,
   jsonObject,
   nonEmptyString,
-  stateChanges,
-  stateEntries,
-  stateSchemas,
   timestamp,
 } from "./checkpoint-record-schemas.js";
 import {
@@ -23,12 +20,6 @@ const recordArrays = {
   ...checkpointRecordArrays,
   ...checkpointLifecycleArrays,
 };
-const state = z.looseObject({
-  schemas: z.array(stateSchemas),
-  entries: z.array(stateEntries),
-  changes: z.array(stateChanges),
-});
-
 /** Validate every durable record before any checkpoint transaction starts. */
 export const checkpointDomainsSchema = z
   .object({
@@ -49,7 +40,6 @@ export const checkpointDomainsSchema = z
       .nullable(),
     ...recordArrays,
     characterSchema: characterSchemaRecordSchema.nullable(),
-    state: state.optional(),
   })
   .superRefine((checkpoint, context) => {
     const sessionId = checkpoint.session.id;
@@ -103,11 +93,6 @@ export const checkpointDomainsSchema = z
         path: ["characterSchema", "sessionId"],
         message: "must match checkpoint.sessionId",
       });
-    }
-    if (checkpoint.state) {
-      for (const key of ["schemas", "entries", "changes"] as const) {
-        validateOwnership(checkpoint.state[key], ["state", key]);
-      }
     }
     checkpoint.snapshots.forEach((snapshot, index) => {
       if (

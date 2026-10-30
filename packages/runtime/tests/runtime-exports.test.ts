@@ -46,11 +46,13 @@ describe("publishExecutionExports", () => {
   it("rolls back a failed export savepoint while preserving domain writes and later exports", async () => {
     const store = createMemoryStore();
     await store.withTransaction(async (tx) => {
-      await tx.upsertStateEntry({
+      await tx.setPluginData({
         id: "domain",
         sessionId: "s",
-        tableName: "stats",
-        fieldName: "hp",
+        pluginId: "p",
+        namespace: "stats",
+        key: "hp",
+        createdAt: "2026-10-07T00:00:00.000Z",
         value: 7,
         updatedAt: "2026-10-07T00:00:00.000Z",
       });
@@ -76,7 +78,7 @@ describe("publishExecutionExports", () => {
         committedAt: "2026-10-07T00:00:00.000Z",
       });
     });
-    expect((await store.getStateEntry("s", "stats", "hp"))?.value).toBe(7);
+    expect((await store.getPluginData("s", "p", "stats", "hp"))?.value).toBe(7);
     expect(
       await store.getLatestRuntimeExport("s", "p/broken", "cfg"),
     ).toBeNull();

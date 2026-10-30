@@ -33,9 +33,6 @@ import type {
   SessionSummaryRecord,
   SetupAttemptRecord,
   SnapshotRecord,
-  StateChangeRecord,
-  StateEntryRecord,
-  StateSchemaRecord,
   SuspensionRecord,
   ToolCallRecordRow,
   TraceEventRecord,
@@ -91,11 +88,6 @@ export interface JsonWriter {
 export interface InsertValueBuilders {
   pluginDataInsert(record: PluginDataRecord): Record<string, unknown>;
   pluginDataUpdate(record: PluginDataRecord): Record<string, unknown>;
-  stateEntryInsert(record: StateEntryRecord): Record<string, unknown>;
-  stateEntryUpdate(record: StateEntryRecord): Record<string, unknown>;
-  stateSchemaInsert(record: StateSchemaRecord): Record<string, unknown>;
-  stateSchemaUpdate(record: StateSchemaRecord): Record<string, unknown>;
-  stateChangeInsert(record: StateChangeRecord): Record<string, unknown>;
   turnResultInsert(record: TurnResultRecord): Record<string, unknown>;
   /** Commit settlement: status plus the settled `runtimeResults`. */
   turnResultSettlement(record: TurnResultRecord): Record<string, unknown>;
@@ -183,52 +175,6 @@ function buildInsertValues(json: JsonWriter): InsertValueBuilders {
       return {
         value: json.writeJson(record.value),
         updatedAt: record.updatedAt,
-      };
-    },
-
-    stateEntryInsert(record) {
-      return {
-        id: record.id,
-        sessionId: record.sessionId,
-        tableName: record.tableName,
-        fieldName: record.fieldName,
-        value: json.writeJson(record.value),
-        updatedAt: record.updatedAt,
-      };
-    },
-    stateEntryUpdate(record) {
-      return {
-        value: json.writeJson(record.value),
-        updatedAt: record.updatedAt,
-      };
-    },
-
-    stateSchemaInsert(record) {
-      return {
-        id: record.id,
-        sessionId: record.sessionId,
-        tableName: record.tableName,
-        schema: json.writeJson(record.schema),
-        createdAt: record.createdAt,
-      };
-    },
-    stateSchemaUpdate(record) {
-      return {
-        schema: json.writeJson(record.schema),
-      };
-    },
-
-    stateChangeInsert(record) {
-      return {
-        id: record.id,
-        sessionId: record.sessionId,
-        tableName: record.tableName,
-        fieldName: record.fieldName,
-        value: json.writeJson(record.value),
-        changedBy: record.changedBy,
-        turnId: record.turnId,
-        reason: record.reason ?? null,
-        createdAt: record.createdAt,
       };
     },
 

@@ -2,32 +2,24 @@
  * App-level IndexedDB key-value store for frontend-only data.
  *
  * Stores frontend-only records that are keyed by session/world ids:
- * state patches, world overlays, submitted block UI state, etc.
+ * world overlays, submitted block UI state and execution history.
  */
 
 // Backend-free cache schema constants.
 import {
   APP_KV_STORE_EXECUTION_STEPS,
-  APP_KV_STORE_STATE_PATCHES,
   APP_KV_STORE_SUBMITTED_BLOCKS,
   APP_KV_STORE_WORLD_OVERLAYS,
 } from "@covel/store/idb-schema";
-import {
-  compactStatePatches,
-  rememberStatePatchIds,
-} from "./state-patch-cache.js";
 import { mergeExecutionHistory } from "./execution-history.js";
 import { openBrowserCacheDb } from "./storage/cache-db.js";
-import type { StatePatchRecord } from "./api/types.js";
 
 const STORE_WORLD_OVERLAYS = APP_KV_STORE_WORLD_OVERLAYS; // key: worldId
-const STORE_STATE_PATCHES = APP_KV_STORE_STATE_PATCHES; // key: sessionId
 const STORE_SUBMITTED_BLOCKS = APP_KV_STORE_SUBMITTED_BLOCKS; // key: sessionId
 const STORE_EXECUTION_STEPS = APP_KV_STORE_EXECUTION_STEPS; // key: sessionId
 
 type StoreNames =
   | typeof STORE_WORLD_OVERLAYS
-  | typeof STORE_STATE_PATCHES
   | typeof STORE_SUBMITTED_BLOCKS
   | typeof STORE_EXECUTION_STEPS;
 
@@ -72,65 +64,6 @@ async function idbDelete(storeName: StoreNames, key: string): Promise<void> {
     tx.onabort = () =>
       reject(tx.error ?? new Error("Cache deletion transaction aborted"));
   });
-}
-
-// ── State Patches ───────────────────────────────────────────────
-
-interface StatePatchCache {
-  patches: StatePatchRecord[];
-  recentIds: string[];
-}
-
-export async function getStatePatches(
-  sessionId: string,
-): Promise<StatePatchRecord[] | null> {
-  return (
-    (await idbGet<StatePatchCache>(STORE_STATE_PATCHES, sessionId))?.patches ??
-    null
-  );
-}
-
-export async function appendStatePatch(patch: StatePatchRecord): Promise<void> {
-  const owned = structuredClone(patch);
-  const db = await openBrowserCacheDb();
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction(STORE_STATE_PATCHES, "readwrite");
-    const store = tx.objectStore(STORE_STATE_PATCHES);
-    const req = store.get(owned.sessionId);
-    let failure: unknown;
-    req.onsuccess = () => {
-      try {
-        const current = (req.result as StatePatchCache | undefined) ?? {
-          patches: [],
-          recentIds: [],
-        };
-        if (!current.recentIds.includes(owned.id)) {
-          store.put(
-            {
-              patches: compactStatePatches([...current.patches, owned]),
-              recentIds: rememberStatePatchIds([
-                ...current.recentIds,
-                owned.id,
-              ]),
-            } satisfies StatePatchCache,
-            owned.sessionId,
-          );
-        }
-      } catch (error) {
-        failure = error;
-        tx.abort();
-      }
-    };
-    tx.oncomplete = () => resolve();
-    tx.onabort = () =>
-      reject(
-        failure ?? tx.error ?? new Error("State patch transaction aborted"),
-      );
-  });
-}
-
-export async function removeStatePatches(sessionId: string): Promise<void> {
-  return idbDelete(STORE_STATE_PATCHES, sessionId);
 }
 
 // ── World Overlays ───────────────────────────────────────────────

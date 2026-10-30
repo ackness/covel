@@ -56,15 +56,6 @@ async function json(res: Response): Promise<unknown> {
   return res.json();
 }
 
-async function createSession(app: Hono, body: Record<string, unknown> = {}) {
-  const res = await app.request("/api/sessions", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
-  return json(res) as Promise<{ id: string }>;
-}
-
 // ── CRITICAL #1: Client-supplied session ID validation ──────────
 
 describe("[HIGH] Client-supplied session ID validation", () => {
@@ -477,71 +468,6 @@ contributes:
     source: "builtin",
   });
 }
-
-// ── HIGH: state-patches IDs must be stable ──────────────────────
-
-describe("[HIGH] state-patches returns stable IDs", () => {
-  let app: Hono;
-  let store: DataStore;
-
-  beforeEach(async () => {
-    store = createMemoryStore();
-    app = createTestApp({
-      store,
-      pluginRegistry: createPluginRegistry(),
-    });
-  });
-
-  it("generates unique IDs with timestamp, not array index", async () => {
-    const { id } = await createSession(app);
-
-    const schema = {
-      name: "character",
-      fields: [{ name: "hp", type: "integer", default: 100 }],
-    } as const;
-    const now = new Date().toISOString();
-    await store.saveStateSchema({
-      id: "character-schema",
-      sessionId: id,
-      tableName: schema.name,
-      schema,
-      createdAt: now,
-    });
-    await store.upsertStateEntry({
-      id: "character-hp",
-      sessionId: id,
-      tableName: schema.name,
-      fieldName: "hp",
-      value: 80,
-      updatedAt: now,
-    });
-    await store.addStateChange({
-      id: "character-hp-change",
-      sessionId: id,
-      tableName: schema.name,
-      fieldName: "hp",
-      value: 80,
-      changedBy: "test",
-      turnId: "turn-1",
-      reason: "damage",
-      createdAt: now,
-    });
-
-    const res = await app.request(`/api/sessions/${id}/state-patches`);
-    expect(res.status).toBe(200);
-    const { items: patches } = (await json(res)) as {
-      items: Array<{
-        id: string;
-        createdAt: string;
-      }>;
-    };
-    expect(patches).toHaveLength(1);
-    // ID should NOT be "character.hp.0" (array index pattern)
-    expect(patches[0]!.id).not.toMatch(/\.\d+$/);
-    // ID should contain a timestamp or be otherwise stable
-    expect(patches[0]!.createdAt).toBeDefined();
-  });
-});
 
 // ── HIGH: POST /sessions activate-after-persist ordering ────────
 

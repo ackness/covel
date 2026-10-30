@@ -68,9 +68,9 @@ runSchemaVersionTests("SqliteStore", () => {
  * DDL adds to an existing table) recorded for {@link DATA_SCHEMA_VERSION}.
  */
 const PINNED_SHAPES = {
-  version: 7,
-  sqlite: "e77c06edc184083d83a6bc68afb150d18eefbfc46dff434dd756a2dea37bdb8e",
-  pg: "c4caec51bd938edc2fd4c7f7664d20b7e072766307076522300f8d52ff5e2ac1",
+  version: 8,
+  sqlite: "4821bac0a9824b3ca970342b944a6b6d661449fb56944c828de5ae33bf37d0fa",
+  pg: "d4679eb1187d1409a2babe655a0f3dc4bfcfddf83d6f42e2b5f9ff47b063c4f4",
 };
 
 function shapeDigest(tables: readonly unknown[], dialect: "sqlite" | "pg") {
@@ -81,8 +81,18 @@ function shapeDigest(tables: readonly unknown[], dialect: "sqlite" | "pg") {
   return createHash("sha256").update(shape).digest("hex");
 }
 
+const refusedVersions = [
+  null,
+  DATA_SCHEMA_VERSION - 1,
+  DATA_SCHEMA_VERSION + 1,
+];
+
 describe("data schema version", () => {
-  it.each([null, DATA_SCHEMA_VERSION - 1, DATA_SCHEMA_VERSION + 1])(
+  it("refuses data schema 7", () => {
+    expect(refusedVersions).toContain(7);
+  });
+
+  it.each(refusedVersions)(
     "names the absolute SQLite path when refusing schema %s",
     (version) => {
       const dir = fs.mkdtempSync(path.join(os.tmpdir(), "covel-schema-path-"));

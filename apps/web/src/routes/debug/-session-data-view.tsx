@@ -224,20 +224,6 @@ export function SessionDataView({
             </DataSection>
 
             <DataSection
-              title={t("debugger.dataSection.gameState")}
-              icon={<Database className="w-3.5 h-3.5" />}
-              defaultExpanded={false}
-            >
-              {Object.keys(snapshotData.gameState).length === 0 ? (
-                <p className="text-xs text-muted-foreground italic">
-                  {t("debugger.noStateData")}
-                </p>
-              ) : (
-                <JsonBlock data={snapshotData.gameState} />
-              )}
-            </DataSection>
-
-            <DataSection
               title={`${t("debugger.dataSection.executionSteps")} (${snapshotData.executionSteps.length})`}
               icon={<Activity className="w-3.5 h-3.5" />}
               defaultExpanded={false}

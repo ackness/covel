@@ -21,9 +21,6 @@ import type {
   SessionSummaryRecord,
   SetupAttemptRecord,
   SnapshotRecord,
-  StateChangeRecord,
-  StateEntryRecord,
-  StateSchemaRecord,
   SuspensionRecord,
   ToolCallRecordRow,
   TraceEventRecord,
@@ -56,20 +53,11 @@ export const BROWSER_CHECKPOINT_SCHEMA_VERSION = 2 as const;
 export type BrowserCheckpointSchemaVersion =
   typeof BROWSER_CHECKPOINT_SCHEMA_VERSION;
 
-/** Optional state domain kept separate while the state API is still evolving. */
-export interface BrowserCheckpointState {
-  readonly schemas: ReadonlyArray<StateSchemaRecord>;
-  readonly entries: ReadonlyArray<StateEntryRecord>;
-  readonly changes: ReadonlyArray<StateChangeRecord>;
-}
-
 /**
  * A JSON-safe, versioned snapshot of all durable session domains.
  *
  * The explicit domain arrays keep this contract independent from a concrete
- * DataStore implementation while retaining the existing record shapes. The
- * optional `state` member is intentionally isolated so it can be removed in a
- * later state-contract cleanup without reshaping the other domains.
+ * DataStore implementation while retaining the existing record shapes.
  */
 export interface BrowserCheckpoint {
   readonly schemaVersion: BrowserCheckpointSchemaVersion;
@@ -98,7 +86,6 @@ export interface BrowserCheckpoint {
   readonly setupAttempts: ReadonlyArray<SetupAttemptRecord>;
   readonly jobStatus: ReadonlyArray<JobStatusRecord>;
   readonly runtimeExports: ReadonlyArray<RuntimeExportRecord>;
-  readonly state?: BrowserCheckpointState;
   readonly revision: number;
   readonly actionId: string;
   readonly committedAt: string;

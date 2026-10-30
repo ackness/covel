@@ -220,10 +220,6 @@ export class RemoteDataService implements DataService {
     // Remote mode: server stores messages during action SSE flow
   }
 
-  async listStatePatches(sessionId: string) {
-    return api.listStatePatches(sessionId);
-  }
-
   async saveSubmittedBlocks(
     sessionId: string,
     blockIds: string[],

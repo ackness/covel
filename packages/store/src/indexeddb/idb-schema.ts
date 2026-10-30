@@ -3,7 +3,6 @@ export const BROWSER_IDB_SCHEMA_VERSION = 2;
 export const BROWSER_IDB_DATABASE_NAME = "covel-browser-cache";
 
 export const APP_KV_STORE_WORLD_OVERLAYS = "worldOverlays";
-export const APP_KV_STORE_STATE_PATCHES = "statePatches";
 export const APP_KV_STORE_SUBMITTED_BLOCKS = "submittedBlocks";
 export const APP_KV_STORE_EXECUTION_STEPS = "executionSteps";
 export const REMOTE_UI_CACHE_STORE = "remoteSessionUi";
@@ -41,7 +40,6 @@ export function upgradeBrowserIdbSchema(
   _transaction?: unknown,
 ): Promise<void> {
   ensureStore(db, APP_KV_STORE_WORLD_OVERLAYS);
-  ensureStore(db, APP_KV_STORE_STATE_PATCHES);
   ensureStore(db, APP_KV_STORE_SUBMITTED_BLOCKS);
   ensureStore(db, APP_KV_STORE_EXECUTION_STEPS);
   const remoteUi = ensureStore(db, REMOTE_UI_CACHE_STORE, {

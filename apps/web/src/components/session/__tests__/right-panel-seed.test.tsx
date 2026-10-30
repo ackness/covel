@@ -124,9 +124,7 @@ it.each(["set", "delete"] as const)(
         context.plugins,
       ),
     );
-    render(
-      <RightPanel sessionId={session.id} world={null} statePatchRevision={0} />,
-    );
+    render(<RightPanel sessionId={session.id} world={null} />);
     await waitFor(() =>
       expect(api.listPluginData).toHaveBeenCalledExactlyOnceWith(
         session.id,

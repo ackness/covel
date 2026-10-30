@@ -351,48 +351,40 @@ describe("State Routes", () => {
       expect(body.tables.session?.data.id).toBe(sessionId);
     });
 
-    it("returns table data after creating a table", async () => {
-      const schema = {
-        name: "character",
-        fields: [
-          { name: "hp", type: "integer", default: 100 },
-          { name: "name", type: "string", default: "Hero" },
-        ],
-      } as const;
+    it("lists only session, characters and plugin data", async () => {
       const now = new Date().toISOString();
-      await store.saveStateSchema({
-        id: "character-schema",
+      await store.upsertCharacter({
+        id: "hero",
         sessionId,
-        tableName: schema.name,
-        schema,
+        name: "Hero",
+        type: "player",
+        version: 1,
         createdAt: now,
+        updatedAt: now,
       });
-      await Promise.all(
-        schema.fields.map((field) =>
-          store.upsertStateEntry({
-            id: `character-${field.name}`,
-            sessionId,
-            tableName: schema.name,
-            fieldName: field.name,
-            value: field.default,
-            updatedAt: now,
-          }),
-        ),
-      );
-
+      await store.setPluginData({
+        id: "note",
+        sessionId,
+        pluginId: "probe",
+        namespace: "notes",
+        key: "entry",
+        value: { text: "Hello" },
+        createdAt: now,
+        updatedAt: now,
+      });
       const res = await app.request(`/api/sessions/${sessionId}/state`);
       expect(res.status).toBe(200);
+      const body = (await res.json()) as { tables: Record<string, unknown> };
+      expect(Object.keys(body.tables).sort()).toEqual([
+        "characters",
+        "plugin_data/probe:notes",
+        "session",
+      ]);
+    });
 
-      const body = (await json(res)) as {
-        tables: Record<
-          string,
-          { schema: unknown; data: Record<string, unknown> }
-        >;
-      };
-      expect(body.tables.character).toBeDefined();
-      expect(body.tables.character?.data.hp).toBe(100);
-      expect(body.tables.character?.data.name).toBe("Hero");
-      expect(body.tables.character?.schema).toBeDefined();
+    it("returns 404 for the removed patch endpoint", async () => {
+      const res = await app.request(`/api/sessions/${sessionId}/state-patches`);
+      expect(res.status).toBe(404);
     });
 
     it("returns 404 for unknown session", async () => {

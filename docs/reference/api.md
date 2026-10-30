@@ -36,7 +36,7 @@ Covel 的服务器对外只有一套 HTTP JSON 接口。网页和桌面应用用
 | 回答回合里弹出的表单或选项 | `POST /api/actions`（`submit_actions`） | [玩家交互](#玩家交互) |
 | 查一局能提交哪些行动 | `GET /api/sessions/:id/action-kinds` | [行动类型目录](#行动类型目录) |
 | 读聊天记录 | `GET /api/sessions/:id/messages` | [消息历史](#消息历史) |
-| 读状态表、角色 | `GET /api/sessions/:id/state`、`/characters` | [状态查询](#状态查询)、[角色数据](#角色数据) |
+| 读会话、角色和插件数据的数据库视图 | `GET /api/sessions/:id/state`、`/characters` | [状态查询](#状态查询)、[角色数据](#角色数据) |
 | 给一局开关插件 | `PUT` / `DELETE /api/sessions/:id/plugins/:pluginId` | [会话插件管理](#会话插件管理) |
 | 调用插件的手动功能 | `POST /api/sessions/:id/plugin-rpc` | [插件 RPC 通道](#插件-rpc-通道) |
 | 批准或拒绝插件的请求 | `POST /api/approvals/:approvalId/decision` | [RPC Approval 流程](#rpc-approval-流程) |
@@ -480,9 +480,6 @@ curl -N -X POST http://localhost:3001/api/actions \
 ### 8. 查看游戏状态
 
 ```bash
-# 查看状态表
-curl http://localhost:3001/api/sessions/<sessionId>/state
-
 # 查看角色列表
 curl http://localhost:3001/api/sessions/<sessionId>/characters
 
@@ -809,12 +806,11 @@ curl -X DELETE http://localhost:3001/api/sessions/<sessionId>
 - Dexie schema v5 升级保留已有列表（包括空列表），不会再次补入样例。
 - 只有显式清空整个 vault 才会重置初始化标记。
 
-**显示历史、表单和时间线缓存。** 它们存在独立的缓存库里，不替代 checkpoint，也不替代游戏状态。
+**表单和时间线缓存。** 它们存在独立的缓存库里，不替代 checkpoint，也不替代游戏状态。
 
-- 状态变化的显示历史：读取直接查 IndexedDB；单条追加在读写事务里合并，事务提交后才算完成。
-- 追加和保存沿用世界 / 会话锁，排队结束后检查会话是否还在。迟到的追加或保存会失败，不会重建已删除会话的缓存。
+- 保存沿用世界 / 会话锁，排队结束后检查会话是否还在。迟到的保存会失败，不会重建已删除会话的缓存。
 - 表单和时间线的保存在入队前复制输入。表单在事务内合并，时间线替换显示快照。
-- 删除会话（包括删除世界时清理它的会话）会等显示历史、表单和时间线缓存全部清理完。
+- 删除会话（包括删除世界时清理它的会话）会等表单和时间线缓存全部清理完。
 - 缓存失败不会撤销已提交的游戏状态或会话删除。清理失败时在开发环境输出警告，再次删除可以重试清理。
 - 远程模式不会因此得到本地 vault 的这套生命周期协调。
 
@@ -1218,10 +1214,9 @@ GitHub 插件安装和更新预览始终返回 `capabilities` 与 `trustedSource
 
 ### 状态查询
 
-| 方法 | 路径                              | 描述                                |
-| ---- | --------------------------------- | ----------------------------------- |
-| GET  | `/api/sessions/:id/state`         | 获取所有状态表                      |
-| GET  | `/api/sessions/:id/state-patches` | 获取状态变更补丁列表（`{ items }`） |
+| 方法 | 路径                      | 描述                                 |
+| ---- | ------------------------- | ------------------------------------ |
+| GET  | `/api/sessions/:id/state` | 读取会话、角色和插件数据的数据库视图 |
 
 恢复整个会话用 `GET /api/sessions/:id/view`。物化存档的创建、列表和读取统一使用 `/api/sessions/:id/snapshots` 资源，见 [Snapshot / Fork](#snapshot--fork)。
 
@@ -4117,11 +4112,11 @@ runtime 报告失败时，它的原始错误保留在 `result.runtimeResults` �
 
 ### 状态查询
 
-这些只读调试端点保留对现有会话状态表和变更记录的访问。状态表和存储接口归内核所有，后续用途待定；插件不能再写入它们。插件自己的状态请使用插件数据。现有条目的快照、浏览器私有存档和 fork 处理保持不变。
+数据库页签通过下面的只读端点查看会话、角色和插件数据。
 
 #### `GET /api/sessions/:id/state`
 
-返回这个会话的全部状态表和表里的数据。表名和数据的键按原名保留，包括 `__proto__` 这类合法的 JSON 键。
+返回 `tables` 数据库视图：`session` 始终存在；有角色时返回 `characters`；公开插件数据按 `plugin_data/<pluginId>:<ns>` 分组。角色按角色 ID、插件数据按记录的 key 索引。表名和数据的键按原名保留，包括 `__proto__` 这类合法的 JSON 键。数据库页签在挂载和手动刷新时读取。
 
 限流：同一客户端对同一路径每分钟最多 120 次，超出返回 `429`（`code: "rate_limit_exceeded"`，带 `Retry-After`）。
 
@@ -4136,28 +4131,53 @@ runtime 报告失败时，它的原始错误保留在 `result.runtimeResults` �
 ```json
 {
   "tables": {
-    "character_stats": {
+    "session": {
       "schema": {
-        "name": "character_stats",
+        "name": "session",
         "fields": [
-          { "name": "hp", "type": "number", "default": 100 },
-          { "name": "mp", "type": "number", "default": 50 }
+          {
+            "name": "phase",
+            "type": "string"
+          }
         ]
       },
       "data": {
-        "hp": 85,
-        "mp": 42
+        "id": "session-1",
+        "phase": "playing"
       }
     },
-    "world_flags": {
+    "characters": {
       "schema": {
-        "name": "world_flags",
+        "name": "characters",
         "fields": [
-          { "name": "gate_opened", "type": "boolean", "default": false }
+          {
+            "name": "name",
+            "type": "string"
+          }
         ]
       },
       "data": {
-        "gate_opened": true
+        "hero": {
+          "id": "hero",
+          "name": "Hero",
+          "type": "player"
+        }
+      }
+    },
+    "plugin_data/example:notes": {
+      "schema": {
+        "name": "plugin_data/example:notes",
+        "fields": [
+          {
+            "name": "chapter",
+            "type": "object"
+          }
+        ]
+      },
+      "data": {
+        "chapter": {
+          "title": "Arrival"
+        }
       }
     }
   }
@@ -4555,7 +4575,7 @@ runtime 可以中途停下来等玩家提供数据，这叫挂起。本节的端
 **快照里有什么**
 
 - 会话的生命周期和运行配置：`status`、`phase`、`completedPlayerTurns`、`setupRuntimes`、`locale`、`activePlugins`、`runtimeModelOverrides`
-- `characters`、`stateEntries`、`pluginData`、`characterSchema`、`lorebookEntries`
+- `characters`、`pluginData`、`characterSchema`、`lorebookEntries`
 - `sessionSummaries`：截至消息游标实际引用到的压缩摘要
 - `compactedMessageSummaryIds`：快照时刻“消息 → 摘要”的对应关系
 - `suspensions`：还没处理的挂起项
@@ -4569,7 +4589,7 @@ runtime 可以中途停下来等玩家提供数据，这叫挂起。本节的端
 
 **快照格式（v3）**
 
-- `stateSchemas`、`runtimeExports`、`sessionSummaries`、`compactedMessageSummaryIds` 和 `displayMessagesBoundary` 必须全部存在。
+- `runtimeExports`、`sessionSummaries`、`compactedMessageSummaryIds` 和 `displayMessagesBoundary` 必须全部存在。
 - 空数组、空映射和值为 `null` 的聊天边界都有明确含义，不等于“缺失”。
 - 缺字段的开发期旧快照必须重建。服务端不迁移它，也不用父会话的当前状态去补。
 - 存储写入、SQL 读取和浏览器 checkpoint 用同一套 payload 校验。摘要映射必须指向快照里实际存在的摘要，否则拒绝。
@@ -4607,8 +4627,6 @@ runtime 可以中途停下来等玩家提供数据，这叫挂起。本节的端
       "loreOverride": "The session's captured world lore."
     },
     "characters": [/* ... */],
-    "stateSchemas": [/* StateSchemaRecord[] */],
-    "stateEntries": [/* ... */],
     "runtimeExports": [/* RuntimeExportRecord[] */],
     "pluginData": [/* ... */],
     "characterSchema": null,
@@ -4749,9 +4767,7 @@ runtime 可以中途停下来等玩家提供数据，这叫挂起。本节的端
 
 **第 3 步：拷贝数据**
 
-- 拷贝的内容：角色、状态记录、插件数据、角色 schema、状态表结构，以及还没处理的挂起项。
-- 快照用必需的 `stateSchemas` 固定了表结构，空数组表示当时没有表。分叉会重建表 ID，并把子会话的表结构写进子快照。父会话之后的修改不影响再次分叉。
-- 任何一条状态记录找不到对应的表结构时，返回 `409 snapshot_schema_missing` 并回滚，不会返回一个状态不完整的分支。
+- 拷贝的内容：角色、插件数据、角色 schema，以及还没处理的挂起项。
 - 后台任务和日志这类控制用的命名空间（`_runtime_jobs`、`_runtime_job_control`、`_logs`、`_jobs`）不进子会话，也不进子快照。
 - 角色按 `(sessionId, id)` 隔离，拷贝时保留角色 ID，这样插件数据里对角色的引用仍然有效。
 - 向量和摄取游标是派生数据，不直接拷贝。提交之后会在后台为子会话重建索引。
@@ -4793,7 +4809,6 @@ runtime 导出的处理：
 | 404 | `not_found` | 快照不存在，或不属于这个会话 |
 | 404 | `world_not_found` | 会话关联的世界已经不存在 |
 | 409 | `cursor_missing` | `messagesCursor` 或聊天边界指向的消息已不在父会话里 |
-| 409 | `snapshot_schema_missing` | 有状态记录找不到对应的表结构 |
 | 409 | `dimension_provider_required` | 快照的维度数据属于某个社区插件，而子会话无法启用它 |
 | 409 | `world_deleting` | 会话关联的世界正在删除 |
 | 429 | `rate_limit_exceeded` | 超过分叉频率上限，带 `Retry-After` |

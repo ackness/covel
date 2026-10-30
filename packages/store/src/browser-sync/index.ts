@@ -16,7 +16,6 @@ export {
 
 export type {
   BrowserCheckpoint,
-  BrowserCheckpointState,
   BrowserCheckpointSchemaVersion,
   PersistenceProfile,
   SessionCommit,

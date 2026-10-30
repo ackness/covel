@@ -111,9 +111,6 @@ describe("function business value and effect boundary", () => {
           "business",
         ),
       ).toBeNull();
-      expect(
-        await store.getStateEntry("effect-session", "stats", "business"),
-      ).toBeNull();
       expect(commit.events.map((event) => event.type)).not.toContain(
         "interaction.requested",
       );

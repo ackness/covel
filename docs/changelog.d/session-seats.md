@@ -1,6 +1,6 @@
 ### Breaking
 
-- **The data schema is version 7: recreate development databases and browser saves.** Sessions gained a NOT NULL `seats` column. A SQLite or PostgreSQL database recorded with version 6 is refused at startup (`StoreSchemaVersionError`), and a browser checkpoint or snapshot without `session.seats` fails validation. Back up and start a new database, and recreate browser-private sessions. See `docs/internals/storage.md`.
+- **Sessions require player seats in saved data.** Sessions gained a NOT NULL `seats` column. Recreate development databases as described in the kernel state table removal entry. A browser checkpoint or snapshot without `session.seats` fails validation; recreate browser-private sessions that lack seats. See `docs/internals/storage.md`.
 - **A session may have several `type: player` characters.** World model validation, `create-character` and world import no longer reject a second player. The character the story follows is the current character of the primary seat, not the first `type: player` character. `characterSheetSegments` shows a `<player-character>` sheet only for the `currentCharacterId` it is given, and lists every other character, player characters included, in `<character-profiles>`; a plugin passes `currentCharacterOf(primarySeat(ctx.world.seats), ctx.world.characters, ctx.world.seats)?.id`. `createNarrativeReview` reads the player from the new `PostContextAssembly` field `currentCharacterId`. See `docs/reference/world-model.md`.
 
 ### Added

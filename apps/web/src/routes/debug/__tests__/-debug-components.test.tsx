@@ -144,7 +144,6 @@ describe("debug route components", () => {
           fields: { courage: 3 },
         },
       ],
-      gameState: { location: "archive" },
       executionSteps: [
         {
           type: "runtime.completed",
@@ -226,7 +225,6 @@ describe("debug route components", () => {
       /插件数据索引/,
       /角色/,
       /消息/,
-      /游戏状态/,
       /执行步骤/,
     ]) {
       fireEvent.click(screen.getByRole("button", { name: section }));
@@ -236,7 +234,9 @@ describe("debug route components", () => {
     expect(screen.getByText("The door opens.")).toBeDefined();
     expect(screen.getAllByText("story-plugin").length).toBeGreaterThan(0);
     expect(screen.getByText("chapter")).toBeDefined();
-    expect(screen.getByText(/archive/)).toBeDefined();
+    expect(
+      screen.queryByRole("button", { name: /游戏状态|Game State/ }),
+    ).toBeNull();
   });
 
   it("renders trace rows and forwards selected events", () => {

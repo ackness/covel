@@ -10,8 +10,6 @@ import {
   nonEmptyString,
   pluginData,
   sessionSummaries,
-  stateEntries,
-  stateSchemas,
   timestamp,
 } from "./checkpoint-record-schemas.js";
 
@@ -179,9 +177,7 @@ const runtimeExport = z.looseObject({
 
 export const snapshotRecordArrays = {
   characters: z.array(characters),
-  stateSchemas: z.array(stateSchemas),
   runtimeExports: z.array(runtimeExport),
-  stateEntries: z.array(stateEntries),
   pluginData: z.array(pluginData),
   sessionSummaries: z.array(sessionSummaries),
   lorebookEntries: z.array(lorebookEntries),

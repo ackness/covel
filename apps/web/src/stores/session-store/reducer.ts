@@ -1,18 +1,12 @@
-import {
-  compactStatePatches,
-  rememberStatePatchIds,
-} from "@/services/state-patch-cache.js";
 import { appendReasoningStep } from "./reasoning.js";
 import type { AssetGenerateView } from "@covel/shared";
 import {
-  deepMerge,
   encodePageCursor,
   executionMayBeRunning,
   summarizeWorld,
 } from "@covel/shared";
 import {
   mergeGameStateForReplacement,
-  rebuildGameStateFromPatches,
   upsertGameStateCharacter,
   mergeCommittedDimensions,
 } from "./game-state.js";
@@ -162,11 +156,7 @@ export const initialState: SessionState = {
   executionSteps: [],
   executionRecovery: null,
   actionGeneration: 0,
-  statePatches: [],
-  statePatchRevision: 0,
-  recentStatePatchIds: [],
   gameState: {},
-  hasGameStateSnapshot: false,
   pluginMessageData: {},
   submittedBlockIds: new Set<string>(),
   submittedBlockValues: {},
@@ -194,11 +184,7 @@ const SESSION_RESET: Partial<SessionState> = {
   restoredInput: null,
   olderMessagesCursor: null,
   initialEventCursor: null,
-  statePatches: [],
-  statePatchRevision: 0,
-  recentStatePatchIds: [],
   gameState: {},
-  hasGameStateSnapshot: false,
   pluginMessageData: {},
   executing: false,
   executionError: null,
@@ -520,28 +506,6 @@ export function reducer(
       return { ...state, olderMessagesCursor: action.cursor };
     case "SET_INITIAL_EVENT_CURSOR":
       return { ...state, initialEventCursor: action.cursor };
-    case "MERGE_INITIAL_STATE_PATCHES": {
-      const currentIds = new Set(state.recentStatePatchIds);
-      const historical = action.patches;
-      const patches = compactStatePatches([
-        ...historical.filter((patch) => !currentIds.has(patch.id)),
-        ...state.statePatches,
-      ]);
-      return {
-        ...state,
-        statePatches: patches,
-        statePatchRevision: state.statePatchRevision + 1,
-        recentStatePatchIds: rememberStatePatchIds([
-          ...historical.map((patch) => patch.id),
-          ...state.recentStatePatchIds,
-        ]),
-        // Live increments win over cached history. Once a full snapshot was
-        // published, even its empty state is authoritative for deleted fields.
-        gameState: state.hasGameStateSnapshot
-          ? state.gameState
-          : deepMerge(rebuildGameStateFromPatches(patches), state.gameState),
-      };
-    }
     case "UPSERT_GAME_STATE_CHARACTER":
       return {
         ...state,
@@ -561,7 +525,6 @@ export function reducer(
       return {
         ...state,
         gameState: mergeGameStateForReplacement(state.gameState, action.state),
-        hasGameStateSnapshot: true,
       };
     case "APPEND_REASONING": {
       const previous = state.executionSteps.find(

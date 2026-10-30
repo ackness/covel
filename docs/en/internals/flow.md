@@ -929,9 +929,6 @@ All server reads and writes go through the `DataStore` interface. The tables it 
 │  ├── character_schemas   The session's character types and attribute definitions, version  │
 │  ├── characters          Character records (name, type, fields)                            │
 │  ├── lorebook_entries    Lorebook entries owned by the world / player / plugins            │
-│  ├── state_schemas       Dynamic state table schemas                                       │
-│  ├── state_entries       State key-value pairs                                             │
-│  ├── state_changes       State change history                                              │
 │  ├── events              Business events (append-only)                                     │
 │  │                                                                                         │
 │  Plugin data                                                                               │

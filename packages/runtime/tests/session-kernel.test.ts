@@ -611,8 +611,6 @@ describe("createCommitPipeline", () => {
       setPluginDataBatch: vi.fn(),
       deletePluginData: vi.fn(),
       addTraceEvent: vi.fn(),
-      addStateChange: vi.fn(),
-      upsertStateEntry: vi.fn(),
     };
   }
 
@@ -1185,8 +1183,6 @@ describe("processRuntimeResult", () => {
       setPluginData: vi.fn(),
       setPluginDataBatch: vi.fn(),
       addTraceEvent: vi.fn(),
-      addStateChange: vi.fn(),
-      upsertStateEntry: vi.fn(),
     };
   }
 
