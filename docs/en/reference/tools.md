@@ -796,7 +796,7 @@ What happens after the call:
 3. The framework emits a `turn.suspended` event, and the whole tool loop stops right away.
 4. Afterwards, data that matches `resumeSchema` is submitted through `POST /api/sessions/:id/suspensions/:suspensionId/resume`, and this runtime continues from where it stopped (see [api.md](./api.md) for details).
 
-When one model reply has several tool calls, `suspend` leaves a `summary` placeholder in the tool success envelope. Each later call that has not run receives an error envelope with `error.code: "cancelled"`. Resume replaces the placeholder by the same `toolCallId`, returning a `summary` and the player's answer in `data`; suspensions saved with older placeholder text are also replaced by ID. The resumed transcript therefore still meets the provider's requirement that tool calls and results come in pairs.
+When one model reply has several tool calls, `suspend` leaves a `summary` placeholder in the tool success envelope. Each later call that has not run receives an error envelope with `error.code: "cancelled"`. Resume replaces the placeholder by the same `toolCallId`, returning a `summary` and the player's answer in `data`; suspensions saved with older placeholder text are also replaced by ID. The player's `data` is preserved in full, including nested identifiers and timestamps, without `modelFacingJson` projection. The resumed transcript therefore still meets the provider's requirement that tool calls and results come in pairs.
 
 **Things to note:**
 

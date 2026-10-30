@@ -351,6 +351,7 @@ describe("tool batches", () => {
 
   it("treats serial reads, unknown names, undeclared names and tool search as barriers", async () => {
     let active = 0;
+    const order: string[] = [];
     const names = [
       "r1",
       "serial",
@@ -364,9 +365,11 @@ describe("tool batches", () => {
     ];
     const reads = ["r1", "r2", "r3", "r4", "r5"].map((name) =>
       module(name, async () => {
+        order.push(`start:${name}`);
         active++;
         await wait(5);
         active--;
+        order.push(`end:${name}`);
         return { name };
       }),
     );
@@ -376,12 +379,22 @@ describe("tool batches", () => {
       id: "barriers",
       event: "PreToolUse",
       handler: async (_context, { toolCall: call }) => {
+        order.push(`pre:${call.name}`);
         if (
           ["serial", "missing", "hidden", "search-tools"].includes(call.name)
         ) {
           expect(active).toBe(0);
           barriers.push(call.name);
         }
+        return { action: "continue" };
+      },
+    });
+    hooks.register<{ toolCall: { name: string } }>({
+      id: "barrier-results",
+      event: "PostToolUse",
+      handler: async (_context, { toolCall: call }) => {
+        await Promise.resolve();
+        order.push(`post:${call.name}`);
         return { action: "continue" };
       },
     });
@@ -424,6 +437,11 @@ describe("tool batches", () => {
     });
     expect(barriers).toEqual(["serial", "missing", "hidden", "search-tools"]);
     expect(hidden).not.toHaveBeenCalled();
+    expect(
+      order.filter((entry) =>
+        ["end:r3", "pre:hidden", "post:hidden", "start:r4"].includes(entry),
+      ),
+    ).toEqual(["end:r3", "pre:hidden", "post:hidden", "start:r4"]);
     expect(JSON.parse(toolsIn(messages)[3]!.content as string).error.code).toBe(
       "not-found",
     );

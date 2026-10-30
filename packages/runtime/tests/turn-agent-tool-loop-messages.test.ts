@@ -124,16 +124,22 @@ describe("turn-agent-tool-loop message helpers", () => {
     });
   });
 
-  it("builds a resume success envelope and projects the player's data", () => {
-    const message = buildResumedToolMessage("suspend-call", {
+  it("preserves the complete player answer in the resume success envelope", () => {
+    const resumeData = {
       answer: "yes",
       id: "86c20348-fbb5-4908-bc84-9954441a60c0",
       changedAt: "2026-10-30T12:00:00.000Z",
-    });
+      selected: {
+        characterId: "d18f190a-a926-49c5-aebc-552c8b9d77b7",
+        selectedAt: "2026-10-30T12:01:00.000Z",
+        items: [{ id: "4f343dd6-ec1d-4ead-bf6c-fbd2103de747" }],
+      },
+    };
+    const message = buildResumedToolMessage("suspend-call", resumeData);
     expect(message).toMatchObject({ role: "tool", toolCallId: "suspend-call" });
     expect(JSON.parse(message.content as string)).toEqual({
       summary: "The player answered.",
-      data: { answer: "yes" },
+      data: resumeData,
     });
   });
 });

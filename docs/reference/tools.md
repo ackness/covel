@@ -794,7 +794,7 @@ JSON Schema 只能检查字段的形状，检查不了“这个结果和骰子�
 3. 框架发出 `turn.suspended` 事件，整个工具循环立即停止。
 4. 之后通过 `POST /api/sessions/:id/suspensions/:suspensionId/resume` 提交一份符合 `resumeSchema` 的数据，这个 runtime 就从停下的地方继续（详见 [api.md](./api.md)）。
 
-模型的一条回答里有多个工具调用时：`suspend` 那次调用先留一个统一工具成功信封中的 `summary` 占位结果，它后面还没执行的调用各写入一条 `error.code: "cancelled"` 的错误信封。恢复时按同一 `toolCallId` 替换占位结果，返回 `summary` 和承载玩家回答的 `data`；保存过旧占位文本的挂起项也按 ID 替换。这样恢复之后，对话记录仍然满足服务商“工具调用和结果必须成对”的要求。
+模型的一条回答里有多个工具调用时：`suspend` 那次调用先留一个统一工具成功信封中的 `summary` 占位结果，它后面还没执行的调用各写入一条 `error.code: "cancelled"` 的错误信封。恢复时按同一 `toolCallId` 替换占位结果，返回 `summary` 和承载玩家回答的 `data`；保存过旧占位文本的挂起项也按 ID 替换。玩家提交的 `data` 完整保留，包括嵌套标识符和时间戳，不经过 `modelFacingJson`。这样恢复之后，对话记录仍然满足服务商“工具调用和结果必须成对”的要求。
 
 **注意事项**：
 

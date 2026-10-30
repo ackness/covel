@@ -12,3 +12,5 @@
 ### Fixed
 
 - **Terminating a multi-call response leaves no unanswered calls.** A PostToolUse termination closes later calls before output repair, avoiding provider rejection of the repair request.
+
+- **Resuming preserves the complete player answer.** Resume tool messages retain submitted identifiers and timestamps, including nested fields, so the agent receives the selected values unchanged.

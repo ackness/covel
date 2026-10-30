@@ -121,8 +121,10 @@ export function buildResumedToolMessage(
 ): LLMMessage {
   return buildToolResultMessage({
     toolCallId,
-    content: renderToolSuccess({
-      model: { summary: "The player answered.", data: resumeData },
+    // Preserve every field the player submitted, including identifiers and dates.
+    content: JSON.stringify({
+      summary: "The player answered.",
+      data: resumeData,
     }),
   });
 }
