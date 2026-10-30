@@ -1,4 +1,9 @@
 import { importWorldDataForSession } from "../helpers/world-data-import.js";
+import {
+  conventionsOfPlugins,
+  KERNEL_SOURCES,
+  setWorldDataConventions,
+} from "../../src/world-data/conventions.js";
 import { registerDimensionProvider } from "../helpers/dimension-provider.js";
 import {
   createPluginRegistry,
@@ -35,7 +40,7 @@ import {
 import type { ModelProviderAdapter } from "@covel/ai-provider";
 import { createAiStack, type AiStack } from "../../src/ai-setup.js";
 import { createPerRequestLlmMiddleware } from "../../src/middleware/per-request-llm.js";
-import { worldEditionLocales } from "@covel/shared";
+import { playerVisibleLore, worldEditionLocales } from "@covel/shared";
 import { type DataStore, type WorldRecord } from "@covel/store";
 import { createMemoryStore } from "@covel/store/memory";
 import * as worldCreation from "@covel/create";
@@ -201,6 +206,7 @@ describe("ai world generation route", () => {
   });
 
   afterEach(async () => {
+    setWorldDataConventions(KERNEL_SOURCES);
     vi.restoreAllMocks();
     vi.unstubAllEnvs();
     if (previousStoreBackend === undefined) {
@@ -1665,6 +1671,305 @@ protocol = "openai-chat-v1"
         }),
       );
     };
+
+    it.each(["server-file", "server-store", "return-only"] as const)(
+      "%s revision discovers existing non-generating contracts, validates schema, retains omissions and deletes the last record",
+      async (target) => {
+        const discoveries = await discoverPlugins(
+          path.resolve(import.meta.dirname, "../../../../plugins"),
+        );
+        const discovery = discoveries.find((item) => item.id === "world-time")!;
+        const definition = await loadPluginDefinition(discovery);
+        const data =
+          definition.packageManifest.plugin.contributes!.data!.definitions!;
+        const registryFor = async (generate: boolean) => {
+          const registry = createPluginRegistry();
+          registry.register({
+            id: "world-time",
+            summary: {
+              id: "world-time",
+              name: "Clock",
+              description: "",
+              kind: "plugin",
+              runtimeCount: 0,
+            },
+            rootPath: discovery.rootPath,
+            manifests: [],
+            loadedRuntimes: new Map(),
+            status: "registered",
+            packageManifest: parsePluginMd(
+              `---\n${JSON.stringify({ ...definition.packageManifest.plugin, contributes: { data: { definitions: { ...data, authoring: { ...data.authoring, generate: generate ? "offer" : undefined } } } } })}\n---`,
+              "fixture/PLUGIN.md",
+            ),
+          });
+          await registerDimensionProvider(registry);
+          // Match bootstrap: file sources use the process's installed conventions.
+          setWorldDataConventions(conventionsOfPlugins(registry));
+          return registry;
+        };
+        const value = {
+          id: "world",
+          definition: {
+            kind: "phases",
+            name: "Tide",
+            phases: ["Rise", "Fall"],
+            cycleLabel: "Tide",
+            initial: { cycle: 3, phase: 1 },
+            evolution: { mode: "forward", defaultStep: 1, maxStep: 4 },
+          },
+        };
+        const contract = "world.time-definition@1";
+        const records = [{ contract, key: "world", value }];
+        const revisedValue = {
+          ...value,
+          definition: { ...value.definition, initial: { cycle: 8, phase: 0 } },
+        };
+        const packagePatch = (pack: unknown) =>
+          `===WORLD_YAML===\nUNCHANGED\n===WORLD_MD===\nUNCHANGED\n===WORLD_PACKAGE_YAML===\n${JSON.stringify(pack)}\n===END===`;
+        const full = FULL.replace(
+          WORLD_PACKAGE_YAML,
+          JSON.stringify({ contractData: records }),
+        );
+        const llm = new SequenceLlm([
+          full,
+          full,
+          full,
+          packagePatch({
+            contractData: [
+              {
+                contract,
+                key: "world",
+                value: {
+                  ...value,
+                  definition: {
+                    ...value.definition,
+                    initial: { cycle: "eight", phase: 0 },
+                  },
+                },
+              },
+            ],
+          }),
+          packagePatch({
+            contractData: [{ contract, key: "world", value: revisedValue }],
+          }),
+          packagePatch({}),
+          packagePatch({
+            contractData: [{ contract, key: "world", remove: true }],
+          }),
+        ]);
+        app = createTestApp(store, llm, await registryFor(true));
+        let world = doneEvent(
+          await readSseJson(
+            await post("generate-world", {
+              concept: "Tidal city",
+              saveTarget: target,
+              brief: { contracts: [contract] },
+            }),
+          ),
+        ).world;
+        app = createTestApp(store, llm, await registryFor(false));
+        for (const [index, instruction] of [
+          "Start at cycle eight.",
+          "Keep all records.",
+          "Remove the time definition.",
+        ].entries()) {
+          world = doneEvent(
+            await readSseJson(
+              await post("revise-world", {
+                worldId: world.id,
+                instruction,
+                ...(target === "return-only" ? { world } : {}),
+              }),
+            ),
+          ).world;
+          expect(world.metadata?.contractData ?? []).toEqual(
+            index === 2
+              ? []
+              : [{ contract, key: "world", value: revisedValue }],
+          );
+          if (target === "return-only")
+            expect(await store.getWorld(world.id)).toBeNull();
+          else
+            expect(
+              (await store.getWorld(world.id))?.metadata?.contractData ?? [],
+            ).toEqual(world.metadata?.contractData ?? []);
+          if (target === "server-file") {
+            const files = await readdir(path.join(worldsDir, world.id, "data"));
+            if (index === 2) expect(files).not.toContain("time.yaml");
+            else
+              expect(
+                await readFile(
+                  path.join(worldsDir, world.id, "data/time.yaml"),
+                  "utf8",
+                ),
+              ).toContain("cycle: 8");
+          }
+        }
+        expect(llm.requests).toHaveLength(7);
+        expect(llm.requests[3]).toContain(
+          'EDITABLE contract "world.time-definition@1"',
+        );
+        expect(llm.requests[3]).toContain("Record schema:");
+        expect(llm.requests[3]).not.toContain(
+          "none requested. Omit contractData",
+        );
+        expect(llm.requests[4]).toContain("does not match the schema");
+      },
+    );
+
+    const protectedCases = (
+      ["server-file", "server-store", "return-only"] as const
+    ).flatMap((target) =>
+      (
+        [
+          "public edit",
+          "hidden edit",
+          "moved secret",
+          "dropped markers",
+          "invalid fragment",
+          "incomplete fragment",
+        ] as const
+      ).map((change) => ({ target, change })),
+    );
+    it.each(protectedCases)(
+      "preserves protected revision behavior and persistence: $target / $change",
+      async ({ target, change }) => {
+        const secret = "证人其实是守钟人。";
+        const protectedMd = `${WORLD_MD}\n<!-- narrator-only -->\n${secret}\n<!-- /narrator-only -->`;
+        const publicMd = WORLD_MD.replace(
+          "钟声提前响起，",
+          "未到整点，钟声已越过屋顶，",
+        );
+        const publicEdit = protectedMd.replace(WORLD_MD, publicMd);
+        const hiddenEdit = protectedMd.replace(
+          secret,
+          "证人其实是守钟人的妹妹。",
+        );
+        const moved = protectedMd.replace(
+          `<!-- narrator-only -->\n${secret}`,
+          `${secret}\n<!-- narrator-only -->`,
+        );
+        const dropped = protectedMd
+          .replaceAll("<!-- narrator-only -->", "")
+          .replaceAll("<!-- /narrator-only -->", "");
+        const proposed =
+          change === "hidden edit"
+            ? hiddenEdit
+            : change === "moved secret"
+              ? moved
+              : change === "dropped markers"
+                ? dropped
+                : publicEdit;
+        const expected =
+          change === "hidden edit"
+            ? hiddenEdit
+            : change === "moved secret"
+              ? `${WORLD_MD}\n<!-- narrator-only -->\n\n<!-- /narrator-only -->`
+              : publicEdit;
+        const createdAnswer = FULL.replace(WORLD_MD, protectedMd);
+        const fragment =
+          change === "moved secret"
+            ? "UNCHANGED"
+            : change === "invalid fragment"
+              ? "<!-- /narrator-only -->\nEscape"
+              : publicMd;
+        const llm = new SequenceLlm([
+          ...CREATED.map(() => createdAnswer),
+          `===WORLD_YAML===\nUNCHANGED\n===WORLD_MD===\n${proposed}\n===WORLD_PACKAGE_YAML===\nUNCHANGED\n===END===`,
+          `===WORLD_MD===\n${fragment}\n===END===`,
+        ]);
+        if (change === "incomplete fragment") {
+          const answer = llm.generate.bind(llm);
+          vi.spyOn(llm, "generate").mockImplementation(async (request) => {
+            const response = await answer(request);
+            return llm.requests.length === CREATED.length + 2
+              ? { ...response, finishReason: "length" }
+              : response;
+          });
+        }
+        const created = await generate(target, llm);
+        const original = await store.getWorld(created.id);
+        const markerPath = path.join(
+          worldsDir,
+          created.id,
+          ".covel-generated.json",
+        );
+        const originalMarker =
+          target === "server-file"
+            ? await readFile(markerPath, "utf8")
+            : undefined;
+        const events = await readSseJson(
+          await post("revise-world", {
+            worldId: created.id,
+            ...(target === "return-only" ? { world: created } : {}),
+            instruction:
+              change === "hidden edit"
+                ? "把隐藏的证人改成守钟人的妹妹，仍然保密。"
+                : "润色公开首段，秘密与边界不变。",
+          }),
+        );
+        const failed =
+          change === "dropped markers" ||
+          change === "invalid fragment" ||
+          change === "incomplete fragment";
+        if (failed) {
+          expect(events.some((event) => event.type === "done")).toBe(false);
+          expect(events).toContainEqual(
+            expect.objectContaining({
+              type: "error",
+              message: expect.stringContaining(
+                change === "incomplete fragment"
+                  ? "did not complete"
+                  : "narrator-only",
+              ),
+            }),
+          );
+          expect(await store.getWorld(created.id)).toEqual(original);
+          if (target === "server-file") {
+            expect(
+              (
+                await readFile(
+                  path.join(worldsDir, created.id, "WORLD.md"),
+                  "utf8",
+                )
+              ).trim(),
+            ).toBe(protectedMd);
+            expect(await readFile(markerPath, "utf8")).toBe(originalMarker);
+          }
+        } else {
+          const done = doneEvent(events);
+          expect(done.world.lore).toBe(expected);
+          expect(playerVisibleLore(done.world.lore!)).not.toContain(secret);
+          if (target === "return-only")
+            expect(await store.getWorld(created.id)).toBeNull();
+          else expect((await store.getWorld(created.id))?.lore).toBe(expected);
+          if (target === "server-file") {
+            expect(
+              (
+                await readFile(
+                  path.join(worldsDir, created.id, "WORLD.md"),
+                  "utf8",
+                )
+              ).trim(),
+            ).toBe(expected);
+            expect(
+              (await loadSingleWorld(path.join(worldsDir, created.id)))?.lore,
+            ).toBe(expected);
+          }
+        }
+        if (target !== "server-file")
+          expect(await readdir(worldsDir)).toEqual([]);
+        const isolated = llm.requests.slice(CREATED.length + 1);
+        expect(isolated).toHaveLength(
+          change === "hidden edit" || change === "dropped markers" ? 0 : 1,
+        );
+        for (const request of isolated) {
+          expect(request).not.toContain(secret);
+          expect(request).not.toContain("守钟人的妹妹");
+          expect(request).toContain("authorInstruction");
+        }
+      },
+    );
 
     it.each([
       ["server-store", "deleted"],

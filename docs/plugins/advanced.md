@@ -45,7 +45,7 @@ io:
   inputs:
     narrative:
       from: { contract: narrative-engine@2 }
-      select: /narrativeOutput
+      select: /segments
   output:
     contract: facts.index@1
     schema: ../../schemas/facts.schema.json
@@ -53,6 +53,8 @@ io:
 ---
 Extract only the facts that `runtime-inputs.narrative.value` states.
 ```
+
+按每段的 `speaker` 区分谁在说话或行动；不要把 NPC 台词中的“我”归给玩家。输入选择的规则见[故事输出](../reference/plugins.md#故事输出)。
 
 `runtimes/query/RUNTIME.md` 是一个手动触发的函数。它有 `function` 块，代码在同一个文件夹的 `handler.js` 里：
 

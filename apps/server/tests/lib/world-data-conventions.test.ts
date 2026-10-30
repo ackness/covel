@@ -306,6 +306,31 @@ describe("world data conventions", () => {
     expect(crowdedTarget?.source).toBeUndefined();
   });
 
+  it("includes schemas for existing revision records without enabling them for new generation", async () => {
+    const catalogue = await loadPluginCatalogue([PLUGINS]);
+    const generated = await worldGenerationDataContracts(catalogue);
+    const current = {
+      yaml: "id: small",
+      lore: "A small world.",
+      packageYaml:
+        "contractData: [{contract: quests@1, key: delivery, value: {id: delivery}}]",
+    };
+    expect(generated.some((item) => item.contract === "quests@1")).toBe(false);
+    const editable = await worldGenerationDataContracts(
+      catalogue,
+      undefined,
+      current,
+    );
+    const quest = editable.find((item) => item.contract === "quests@1");
+    expect(quest?.schema).toBeDefined();
+    expect(quest?.hint).toBeTruthy();
+    expect(quest?.validate({ id: "delivery" })).toBe(false);
+    // Unrelated contracts that do not offer generation stay out.
+    expect(editable.some((item) => item.contract === "inventory.items@1")).toBe(
+      false,
+    );
+  });
+
   /** The bundled plugins and the rival, as one catalogue. */
   const crowdedCatalogue = async (status?: "error") => {
     const catalogue = await loadPluginCatalogue([PLUGINS]);

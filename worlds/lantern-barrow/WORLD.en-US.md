@@ -36,7 +36,7 @@ The tomb is bigger inside than the hill that holds it. All you know is the way i
 
 An ossuary, flooded burial chambers, a gallery where the dead sing, a throne at the heart of the hill: what lies deeper is for your party to discover. The Delve Map on the right records each room.
 
-The barrow sleeps lightly. Fighting, breaking down doors, making a racket, lighting a flame in the tomb, or resting too long inside brings it closer to waking. Relighting wall lamps or slipping past quietly lets it settle back to sleep. When the Barrow Alarm reaches 6, the Barrow King opens his eyes.
+The barrow sleeps lightly. Fighting, breaking down doors, making a racket, lighting a flame in the Choir Gallery, or resting too long inside the tomb brings it closer to waking. Relighting wall lamps or slipping past quietly lets it settle back to sleep. When the Barrow Alarm reaches 6, the Barrow King opens his eyes.
 
 ## Rules at a Glance
 

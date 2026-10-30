@@ -130,7 +130,10 @@ Put content that only the narrator should know (hidden threads, answers to myste
   - A marker line inside a code block still counts as a marker.
   - `pnpm validate:world` gives a `lore-narrator-only` warning for these cases and points to the line number.
 - When a player edits the "World Document" on the session-prep screen, the player sees and edits only the visible part. The content between the markers is kept as it is in the lore that this game uses.
-- The AI creation and editing of worlds in the app works on the whole lore text, markers included.
+- AI creation can write hidden regions. Translation and targeted repair split the source at its markers, send one fragment per request, and put each result back inside the original program-owned boundaries. Dropping markers from a hidden fragment's answer cannot make it visible. Targeted repair touches only fragments containing generation meta wording. Invalid source markers reject the transformation; a failed repair of protected lore never falls back to whole-document regeneration.
+- AI revision supports polishing public prose and editing stories inside hidden regions. When hidden regions exist, the package answer only selects public fragments to rewrite; its public draft is never published directly. Each changed public fragment gets an independent request containing only its original public source, the original public lore, and the author's original request with its source identified. It receives no hidden source, package answer, other fragment answers, or other package fields. Hidden edits go back inside hidden regions; unchanged fragments and `UNCHANGED` keep the original text. The program retains and reconstructs the markers. File, server-store, and return-only worlds use the same rule.
+- Adding or removing regions, or explicitly changing visibility, is outside this revision contract when hidden regions already exist. A marker structure/count mismatch, invalid fragment reply, or failed validation prevents publication of a partial result, without falling back to rewriting the whole package. Structure alone cannot identify marker movement with the same count, but text moved into public prose by the package answer is never adopted directly. Lore without hidden regions still uses ordinary whole-section revision.
+- These checks constrain fragment sources and boundary structure, not story semantics. The author's original request may itself contain hidden facts; a model may also infer or paraphrase secrets, change facts, or place information in other fields. The program does not guarantee that all spoilers are prevented. Authors must review translations and revisions.
 
 > [!WARNING]
 > This is "no spoilers", not secrecy. The world record, the world package files and the `lore` returned by the API are all the whole lore text. Anyone who reads the files or calls the API can see it. For content that should be revealed only when a condition is met, use [hidden data](#hidden-data-visibility-hidden).
@@ -222,7 +225,7 @@ Validation rules:
 **Translation.** The main file is written in the default language. The translations go in [language files](#language-files-namelocaleext).
 
 - `name` and `description` are the labels on the panel. They are shown in the player's interface language.
-- Text inside values is not translated by default. Only a node that the schema marks with `x-i18n: true` can be translated.
+- Text inside values is not translated by default. Only a node that the schema marks with `x-i18n: true` can be translated. Mark natural-language string leaves such as narrative initial values and nested descriptions, even when creating just one language edition: the mark declares where future translations may go. Do not mark stable IDs, enum/const machine values, code, numbers, or booleans.
 - When a session is imported, these nodes and `updateRule` become plain text in the session's content language. A session stores only one language (see [Dynamic Dimensions](./dynamic-dimensions.md)).
 
 For example:
@@ -317,6 +320,7 @@ The "AI create world" feature in the app and a world package written by hand use
 - A new world is written in one language only. `defaultLocale` is the requested language (the default is `zh-CN`), and the package has no language files, so the world has only this one edition. A translation that the model claims to have but did not really generate is not accepted.
 - `characterSchema` and other valid manifest content are kept.
 - When characters are added, the whole group of characters is validated against `characterSchema`. If it is still invalid after three attempts, that part is dropped, and a warning is returned.
+- Lorebook and rule `strategy` and `position` values are machine enums. Omitted values use defaults; explicit invalid values, including translated enums, are rejected and retried instead of silently changing activation or placement.
 - When an existing world is edited, all the characters after the merge are validated. If they are not valid, the whole package is retried, and if that also fails, the edit fails. Existing characters are never deleted quietly. The "one language only" rule for new worlds does not apply to edits.
 
 **What the generated world package looks like:** it is laid out along the [convention paths](#import-by-convention), the same as a hand-written one.
@@ -366,6 +370,10 @@ A world package does not have to use every capability. Let the genre decide the 
 - None of the four worlds has a descriptor; every file is at a convention path. Rule files sit under `data/rules/`, one set per file.
 - All four worlds enable `story-events`. Mistport, Emberback and Lantern Barrow also turn on story planning with `pluginSettings.story-events.planner: true`. Besides the hidden events the author sets up, it adds follow-up events that fire only once, based on clues left during play. Harukaze Academy's romance routes are arranged one by one by the author, and it does not turn on story planning.
 - When you make a new world, first copy the structure of the world whose gameplay is closest to yours. Then add or remove characters, rules or media by following the sections below.
+
+Harukaze Academy keeps one relationship account per subject: all eight characters’ affinity belongs only to `affinity`; the five route characters’ stage, trust and pressure belong only to `routes` (trust and pressure 0–5); the three supporting characters retain trust, pressure and non-romantic relationship state in their profiles (trust and pressure 0–100), with no conversion. All eight retain `publicCloseness` in their profiles. Relationship memory records events, promises and details, without a second copy of current values. The character schema removes `affection` and has no defaults for supporting-character `trust/pressure`, so defaults do not refill these numbers on route characters or players. Generic character creation does not enforce NPC-only scope for text fields. Disabling affinity removes score tracking and its narrative projection without recreating character copies.
+
+Create fresh Harukaze development sessions from the updated world package; existing sessions, branches and snapshots are not cleaned automatically. Reimport or recreate world copies with old embedded data. Database tables do not need rebuilding.
 
 ### Display fields
 

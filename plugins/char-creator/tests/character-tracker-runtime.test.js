@@ -128,7 +128,16 @@ async function run(secondResponse, ...corrections) {
             runId: "narrator-test-run",
             turnId: "prior-test-turn",
             status: "success",
-            output: { narrativeOutput: "Mira improves her systems skill." },
+            output: {
+              segments: [
+                {
+                  kind: "action",
+                  speaker: "Mira",
+                  text: "Mira improves her systems skill.",
+                },
+              ],
+              narrativeOutput: "Mira improves her systems skill.",
+            },
             toolCalls: [],
             durationMs: 1,
             timestamp: now,

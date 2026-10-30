@@ -5,7 +5,11 @@ import {
   translateTexts,
   type TranslationUnit,
 } from "@covel/create";
-import { canonicalizeLocale, type LLMAdapter } from "@covel/shared";
+import {
+  canonicalizeLocale,
+  playerVisibleLore,
+  type LLMAdapter,
+} from "@covel/shared";
 import {
   worldTranslationStatus,
   writeWorldTranslations,
@@ -145,7 +149,9 @@ export async function prepareWorldTranslation(
       llm,
       ...model,
       signal,
-      text: `${nameTexts.join("\n")}\n\n${lore}`,
+      // Hidden lore must not influence the glossary later given to visible
+      // translation fragments. Its own fragments still get translated.
+      text: `${nameTexts.join("\n")}\n\n${playerVisibleLore(lore)}`,
       from,
       to: locale,
       known: glossary,

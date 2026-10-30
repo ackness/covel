@@ -16,7 +16,7 @@
       done: false
 - id: stop-mile-seventeen
   name: Stop the Convoy
-  description: June is escorting thirty medical cryo-packs toward the exact place named in the future warning. Reach her before long-range communications fail completely.
+  description: June is escorting thirty medical cryo-packs toward the exact place named in the future warning. With long-range communications already down, reach her by short-range radio or drive out to intercept the convoy before it reaches Mile Seventeen.
   status: active
   giver: Your future self
   reward: The convoy's safety and June's trust

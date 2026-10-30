@@ -85,6 +85,16 @@ Two things are worth noting:
 > [!TIP]
 > A good length for the main text is 800 to 1500 characters. It goes into the prompt on every turn. If it is too long, it costs more and gets cut short. Put details that do not need to appear on every turn into the lorebook in the next step.
 
+### Give the world its own default voice
+
+Describe how this world tells its stories in `WORLD.md`. Mistport favors Gothic investigation, Haruka Academy favors restrained dialogue, Emberback uses technical detail and dry humor, and Lantern Barrow reads like a brisk game master. The default voice belongs to the world; the worlds do not all need the same tone.
+
+The bundled worlds also keep these directions in `tone.initialValue.narrativeStyle` in `data/dimensions.yaml`. The author chose the names `tone` and `narrativeStyle`; they are not kernel-reserved fields. See [world dimensions](../reference/world-data.md#dynamic-world-dimensions-dimensions) for definitions and translation markers. Put each character's way of speaking in their profile or `blueprint`, so occupation, relationships, and the immediate situation shape their words.
+
+Check naturalness together with voice: a character should not know a secret without a reason, an item in a pocket should not return to the table on the next turn, and initial records should not say the player has paid or agreed to something they have not chosen. Check the same facts in both languages. Passing validation establishes structural validity; it does not replace reading and playing consecutive turns.
+
+The narrative plugin still has its own requirements for length, perspective, segments, openings, and endings. The world's voice directions enter the narrative context but do not replace those contracts. If the result differs from what you expect, also check the narrative provider and the effective prompt.
+
 ## 4. Validate and play a first game
 
 The two files are already a complete world. Run this in the root folder of the Covel repository:

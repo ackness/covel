@@ -538,7 +538,7 @@ Each segment is `{ kind, speaker?, text }`:
 - `speaker` is the name of the character who speaks or acts (≤80 characters). Write a name, never an ID. Narration has no speaker.
 - `text` is the segment's text (≤4000 characters). Blank lines inside a segment fold to a single newline, so each segment is exactly one paragraph the player sees.
 
-The kernel derives `narrativeOutput` from `segments`: the segment texts joined by blank lines. Plugins that read the story still use `select: /narrativeOutput` and get a string. The conversation journal, the next turn's history, `turn-digest@1` and memory read the same text and never see the JSON.
+The kernel derives `narrativeOutput` by joining each segment’s `text` with blank lines. Consumers needing only prose can use `select: /narrativeOutput`. Consumers extracting who spoke, acted, or changed state should use `select: /segments`, reading `kind`, `speaker`, and `text` together; quoted first-person speech does not automatically belong to the player. The public contract validates the full output before `select`, so consumers need no duplicate segment schema. The original player message may be absent from an extractor’s inputs; do not infer commitments from missing text. Requests, attempts, and promises do not establish successful outcomes. Dialogue logs, next-turn history, `turn-digest@1`, and memory still read the joined prose, not JSON.
 
 **Lenient normalization.** Before commit, the kernel tidies the story:
 
@@ -1223,7 +1223,7 @@ Below are all the plugins that ship with Covel from [plugins/](../../../plugins/
 <!-- prettier-ignore -->
 | ID | Name | `kind` | Contracts provided | runtime | What it does |
 | --- | --- | --- | --- | --- | --- |
-| [affinity](../../../plugins/affinity/README.md) | Affinity | `plugin` | none | inline | Tracks numeric affinity between the player and NPCs. The right panel shows the score, the tier, and changes. |
+| [affinity](../../../plugins/affinity/README.md) | Affinity | `plugin` | none | inline | Tracks numeric affinity between the player and NPCs. The right panel shows scores, tiers and changes; `prompt.segment@1` provides a read-only projection of current scores. |
 | [branch-reply](../../../plugins/branch-reply/README.md) | Reply Variants | `plugin` | `branch-reply@1` | inline | Offers several replies the player can switch between. |
 | [char-creator](../../../plugins/char-creator/README.md) | Character Creator | `core` | `character-creation@1` (default provider) | `player-init`, `character-tracker` | Creates the protagonist with echoed form answers and records character changes. |
 | [character-blueprint](../../../plugins/character-blueprint/README.md) | Character Profiles | `plugin` | `character-blueprint@1`, `character-presence@1` | `presence` | Stores the character profiles a world presets, along with avatars, portraits, and voices. |

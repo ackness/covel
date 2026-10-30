@@ -7,7 +7,7 @@
 本插件**只管玩家↔NPC 的数值好感**（分数、档位、变更历史）：
 
 - NPC 与 NPC 之间的结构化关系（节点、边、阵营）归关系图谱（npc-graph）。
-- 散文式的人物羁绊与情感描述归记忆系统的 `character_relationships` 记忆块。
+- 散文式的人物羁绊、互动与承诺归记忆系统；记忆不维护另一份当前分数或路线阶段。
 
 三者互补不重复。
 
@@ -16,7 +16,8 @@
 - `PLUGIN.md`：叙事后执行的 agent runtime（`stage: post-turn`，通过必需的 `world-ir-provider@1` 输入读取本轮事实）。
 - `tier-metadata.js`：分数范围、六档 tier 与展示元数据的唯一来源。
 - `tools/update-affinity.js`：按名字去重的批量好感变更工具。
-- `server/index.js`：entry 模块，注册本地工具。
+- `server/index.js`：entry 模块，注册本地工具与 `prompt.segment@1/current-affinity`。
+- `server/current-affinity.js`：只读当前分数投影，供所有 story runtime 使用。
 - `schemas/affinity.schema.json`：`affinity` 数据集与 worldData 导入共用的 schema。
 - `ui/affinity-panel.json`：右侧好感面板。
 - `ui/affinity-toast.json`：聊天区变更消息卡。
@@ -30,9 +31,17 @@
 - 本回合变更同时写入 `message` namespace（`__turnId` + `changes`），供聊天区消息卡渲染。
 - 没有明确互动的回合不调用工具、不产生任何写入。
 
+## 叙事读取
+
+`prompt.segment@1/current-affinity` 从提供者自己的 `ctx.pluginData.list("affinity")` 读取已提交状态，按规范姓名输出 `{canonicalName, score}`，设定 `audience: story`、`volatility: turn`。预置记录没有 tier 也可读取；不输出 ID、时间戳、notes、history 或可能落后于分数的派生档位。JSON 经过 `modelFacingJson` 与标签转义；说明明确标注数据不是指令、不是恋爱阶段，也不会自动推进路线。分数行最多占 8000 字符，整条省略并注明数量；未列出不等于 0。
+
+投影不调用模型、不提出写入，也不复制到角色字段。关闭插件就没有该投影。实际分数变化仍由原有 post-turn agent 判断并提交；下一次执行读取新值。
+
 ## 世界预置
 
 世界包可通过 `worldData` 向 `affinity` namespace 预置关键 NPC 的初始好感，形状为 `{ id, name, score, notes? }`（见 `schemas/affinity.schema.json`）。预置记录没有 history / tier 等派生字段——工具在首次变更时容错并补齐；面板在首次变更前只显示名字与原始分数。
+
+遥风学园的八名主要角色都在此持有唯一好感分数。五人的恋爱阶段、信任与压力由「心之路线」持有；三名支持角色的非恋爱关系、信任与压力留在角色资料。好感档位不会把支持角色变成恋爱路线。
 
 ## 开发
 

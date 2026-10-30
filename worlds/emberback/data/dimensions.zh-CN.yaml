@@ -407,5 +407,5 @@ startingConditions:
     playerConstraints:
       - 你是余烬岭最新的线务员，受过训练，但大家还不放心让你独自应付一场危机。
       - 冠火三小时后到达山脊。
-      - 医疗车队已经上路，远程通讯正在失效。
+      - 医疗车队已经上路，远程通讯已经中断。
     startingLocation: 余烬岭中继站，信号室

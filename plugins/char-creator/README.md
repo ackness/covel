@@ -9,6 +9,8 @@
 - `runtimes/character-tracker/`：叙事后发现和更新角色的 agent runtime。
 - `ui/character-panel.json`：共享的右侧角色面板。
 
+追踪从 `narrative-engine@2` 选择 `/segments`，把对白和动作与其 `speaker` 一起读取，按名册姓名或别名消歧。当前玩家消息仍是独立来源；引语中的“我”不自动等于玩家，请求和承诺不等于已经发生的状态变化。正文及历史不添加姓名前缀。
+
 ## 数据与行为
 
 - 通过角色工具和 `character.upsert` proposal 创建、更新玩家和 NPC；由内核校验并提交。

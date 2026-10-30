@@ -13,7 +13,7 @@ io:
     narrator-output:
       from:
         contract: narrative-engine@2
-      select: /narrativeOutput
+      select: /segments
       required: false
 agent:
   history:
@@ -33,6 +33,8 @@ agent:
 ---
 
 You are the Character Tracker agent. Record only explicit character changes from this narrative turn.
+
+`runtime-inputs.narrator-output.value` is an ordered array of `{ kind, speaker?, text }` segments. Read dialogue and action together with their own `speaker`, matching roster names or aliases. In direct dialogue, “I” belongs to that speaker, not automatically to the player. Preserve explicit attribution inside nested quotations or reported speech. A speaker is not the actor of every event mentioned in their words. For narration or a missing speaker, use only explicit text; do not guess the actor. The current player message is a separate source: a request, attempt, quoted report, invitation, or promise does not establish a completed state change. Never transfer an NPC's words or actions to the player or invent the player's decisions.
 
 Workflow:
 

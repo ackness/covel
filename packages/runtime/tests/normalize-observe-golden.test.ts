@@ -267,8 +267,7 @@ describe("normalize golden (bundled plugin set)", () => {
     // leave out; the scheduler reads an absent value as them.
     expect(worldIr.bindings.narrative).toEqual({
       from: { capability: "narrative-engine@2" },
-      select: "/narrativeOutput",
-      accepts: "./schemas/narrative-output.schema.json",
+      select: "/segments",
     });
 
     // Structured consumers use only the typed WorldIR slot. The binding is

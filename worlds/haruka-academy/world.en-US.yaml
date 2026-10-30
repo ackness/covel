@@ -26,17 +26,14 @@ characterSchema:
       name: Class
       description: Their homeroom class
     - id: relationshipStage
-      name: Relationship
-      description: Where their relationship with the player stands right now
-    - id: affection
-      name: Affection
-      description: How much they like the player
+      name: Supporting Character Relationship
+      description: "Non-romantic relationship state with the player, only for Haruka, Chihiro and Souta. The five romance routes use Heart Routes instead."
     - id: trust
-      name: Trust
-      description: How much they trust the player
+      name: Supporting Character Trust
+      description: "Only for Haruka, Chihiro and Souta: willingness to confide in the player, on the existing 0–100 scale. The five romance routes use Heart Routes (0–5), with no conversion between scales."
     - id: pressure
-      name: Pressure
-      description: The emotional pressure they are under right now
+      name: Supporting Character Pressure
+      description: "Only for Haruka, Chihiro and Souta: the real-world burden they carry, on the existing 0–100 scale. The five romance routes use Heart Routes (0–5), with no conversion between scales."
     - id: publicCloseness
       name: Public Closeness
       description: How close they act with the player in front of other people

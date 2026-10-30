@@ -4,6 +4,8 @@ This page covers the start of a game and the world itself: what happens when a g
 
 This page introduces the plugins in the order you encounter them in a game. First come the four that run at the start, then the five that keep updating as the story goes on.
 
+Character tracking, fact extraction, and dimension updates read the attribution of each dialogue or action segment, distinguishing NPC actions from player actions. Unattributed or ambiguous text should not be guessed to be a player action. Story text and history stay unchanged; model-extracted facts can still be wrong.
+
 | Plugin                                     | In short                                                                             |
 | ------------------------------------------ | ------------------------------------------------------------------------------------ |
 | Pre-Game Setup (`pregame`)                 | Reads the world material at the start and prepares the first part of the adventure   |

@@ -7,7 +7,6 @@
     "fields": {
       "club": "Literature Club",
       "class": "Class 2-B",
-      "relationshipStage": "Just met",
       "favoriteTopic": "Books, festival publications, quiet places",
       "availability": "In Class 2-B before morning reading and between classes; in the Literature Club Room after school; sometimes proofreads in the library at lunch",
       "currentConcern": "Completing the table of contents for Spring Mint and making the case for the club's survival before the first budget review, at fourteen days on the countdown"
@@ -76,7 +75,6 @@
     "fields": {
       "club": "Newspaper Club",
       "class": "Class 2-B",
-      "relationshipStage": "Just met",
       "favoriteTopic": "Rumors, interviews, the things people really mean but don't say",
       "availability": "In Class 2-B or at the Courtyard Notice Board between classes and at lunch; in the Newspaper Club Editorial Office after school",
       "currentConcern": "Deciding how to write up the transfer student, and where to draw the line between reporter and friend for the Fact-or-Rumor Wall"
@@ -145,7 +143,6 @@
     "fields": {
       "club": "Light Music Club",
       "class": "Class 2-A",
-      "relationshipStage": "Just met",
       "favoriteTopic": "Music, the walk home from school, the stage",
       "availability": "May cross the courtyard with her guitar at lunch; in the Light Music Club Practice Room after school; sometimes heads to Sakurazaka Seawall at dusk",
       "currentConcern": "Finishing the last part of her new song before the main-stage preview at seven days on the countdown, and getting out from under the shadow of last year's mistake"
@@ -193,7 +190,7 @@
           "afterSchool": "Club Building, Light Music Club Practice Room; after rehearsal she may go to Sakurazaka Seawall to work on lyrics"
         },
         "relationships": {
-          "player": "A new classmate who might be willing to listen to her practice"
+          "player": "A new schoolmate who might be willing to listen to her practice"
         }
       },
       "rules": [
@@ -212,7 +209,6 @@
     "fields": {
       "club": "Student Council",
       "class": "Class 2-C",
-      "relationshipStage": "Just met",
       "favoriteTopic": "Rules, responsibility, quiet rooftops",
       "availability": "In the Student Council Room between classes; reviews club paperwork after school; patrols the Club Building and its roof at 17:40",
       "currentConcern": "Getting through the first budget review by the book, while leaving the clubs that are genuinely trying room to appeal and hand in missing paperwork"
@@ -494,7 +490,6 @@
     "fields": {
       "club": "Library Committee",
       "class": "Third year",
-      "relationshipStage": "Just met",
       "favoriteTopic": "Books, old festival special issues, dusk on the seawall",
       "availability": "In the library at lunch and after school until 17:30; after closing she sometimes goes to Umineko Books or Sakurazaka Seawall",
       "currentConcern": "Sorting out the signature pages in the old issues before she graduates, and finding out whether the preservation campaign her sister led back then can still help the Literature Club today"

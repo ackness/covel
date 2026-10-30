@@ -1,6 +1,6 @@
 routes:
   name: Heart Routes
-  description: Relationship stage, trust, and pressure with each of the five romanceable characters. How much they like the player (affection) is tracked in the affinity panel.
+  description: The sole record of stage, trust and pressure for the five romanceable characters; trust and pressure range from 0 to 5. Affinity is shown in the Affinity panel, and Public Closeness in character profiles. An affinity tier is not a route stage.
   schema:
     properties:
       mio:
@@ -442,12 +442,12 @@ powerSystem:
         title: Stages
   initialValue:
     name: Affection and Distance
-    description: Change in this world comes from how the characters feel toward the player — trust, curiosity, reliance, jealousy, pressure, and a sense of boundaries. This is the relationship system for dialogue mode.
+    description: Change in this world comes from how the characters feel toward the player — trust, curiosity, reliance, jealousy, pressure, and a sense of boundaries. The five stages below describe only the five romance routes, not the Affinity panel’s tiers or the supporting characters’ non-romantic relationships.
     rules:
-      - Relationships move forward through concrete events and dialogue choices; crossing a line outright lowers Trust.
+      - Relationships move forward through concrete events and dialogue choices; for the five route characters, boundary violations raise Pressure under the Heart Routes rules, and clear harm can set a route back one stage.
       - A character's Affection, Pressure, and Public Closeness don't have to change together.
       - Festival preparations, exams, club crises, and rumors push relationships from one stage to the next.
-      - Affection is attraction, Trust is willingness to confide a secret, Pressure is the real-world weight they carry, and Public Closeness is how the classmates around them read the relationship.
+      - Affinity is goodwill and closeness, which can include attraction on a romance route; Trust is willingness to confide a secret, Pressure is the real-world weight they carry, and Public Closeness is how the classmates around them read the relationship.
       - When the player keeps promises, remembers details, and respects silences, Trust goes up first; favoritism in public, jokes that go too far, or pushing for someone's feelings raise Pressure and Rumor Heat first.
       - A single everyday choice usually moves the numbers only a little. A relationship stage has to be moved by a memorable event — a task finished together, a secret confided, a misunderstanding cleared up, or an explicit promise — never by numbers alone.
       - After a relationship stage changes, there must be visible differences in what the character calls the player, whether they offer invitations, where they're willing to show up, and how close they stand in public.

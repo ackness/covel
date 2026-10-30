@@ -6,11 +6,11 @@
 - id: sister-wren
   name: Sister Wren
   notes:
-    The acolyte who arrived three days late. You're the first person to listen closely
-    to her explanation of the lantern inscriptions, right to the end.
+    The acolyte who arrived three days late. She hopes to find a companion willing
+    to hear her explanation of the lantern inscriptions. She has not spoken to you yet.
 - id: mirelle-voss
   name: Mirelle Voss
-  notes: The innkeeper. You've paid for your room. As far as she's concerned, that's a start.
+  notes: The innkeeper. She has just met you and is sizing up the new arrival.
 - id: aldous-penn
   name: Reeve Aldous Penn
   notes: The reeve needs your help, but doesn't trust outsiders.
