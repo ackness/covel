@@ -4,7 +4,7 @@
 
 ## 运行时结构
 
-- `creation` 在角色创建之后追加开局配点：不声明 `character-creation` capability，因此**不替换**默认创角 runtime；它声明弱排序 `after: [world-data-provider, character-creation]`，等待 `char-creator/player-init`（或其替代者）创建角色后，在已有角色上弹出仅含可配属性的表单，提交后用 `update-character` 把分配值并入角色字段（身份、性格等字段保留）。
+- `creation` 在角色创建之后追加开局配点：不声明 `character-creation` capability，因此**不替换**默认创角 runtime；它声明弱排序 `after: [world-data-provider, character-creation]`，等待 `char-creator/player-init`（或其替代者）创建角色后，在已有角色上弹出仅含可配属性的表单，提交后用 `sync-characters` 把分配值并入角色字段（身份、性格等字段保留）。
 - `check` 在每回合开始时处理已提交的属性检定，输出不可改写的结算结果。玩家从右侧“属性检定”面板点击“发起属性检定”后，才会显示包含行动、属性和难度的表单；普通回合不会弹出表单。
 - 已提交的表单检定通过公开 `tabletop-check@1` 输出提供回执，并独占该回合的检定结果。若同时启用 `dice-check`，后者的 recorder 不再把模型转述的表单回执当作预掷骰池结果记录；没有表单回执的普通回合仍使用骰池。
 - 配点为整数、每点成本 1、必须用完预算。属性修正按世界 schema 声明的量程换算成 0 到 +10（修正 = (属性值 − 下限) ÷ 量程 × 10，四舍五入；与 dice-check 相同，两个插件同时启用时同一属性给出同一修正），没有声明量程的属性直接取属性值（不超过 ±10），d20 对抗 DC 8/12/16/20；自然 1/20 为大失败/大成功。这是本插件的规则，不是框架规则。
@@ -15,7 +15,7 @@
 
 世界既没有配置规则、也没有可配点属性（如纯对话世界）时，`creation` 静默跳过配点：不弹表单、不报错，也不阻塞开场流程；`check` 相应保持惰性，面板按钮会给出明确提示。世界显式配置了规则但与角色 schema 不符时仍会失败，避免展示一张无法完成的表单。
 
-`creation` 从执行视图 `ctx.world.characterSchema` 读取属性结构，不调用 `get-character-schema`，也不直接读取上游的 `worldSchema` 输出。执行视图包含已提交的 schema，以及同一执行里成功完成的上游 `character.schema.set` proposal；世界初始化 guard 采用作者 schema 后也能配点。
+`creation` 从执行视图 `ctx.world.characterSchema` 读取属性结构，写入通过 `sync-characters` 的 `updates` 提交。执行视图包含已提交的 schema，以及同一执行里成功完成的上游 `character.schema.set` proposal；世界初始化 guard 采用作者 schema 后也能配点。
 
 世界可通过 world-data 导入声明 `schema: contract:tabletop-rules.rules.initial@1`、`to: contract:tabletop-rules.rules.initial@1`、`key: id`，提供 `{ "id": "creation", "budget": 4, "attributes": [{ "id": "combat", "label": "格斗", "base": 1, "max": 5 }] }`。`key` 是 JSON 对象中的字段名。所选属性必须符合世界角色 schema。表单首次显示时冻结规则，避免后续改配置改变已展示表单的含义。
 

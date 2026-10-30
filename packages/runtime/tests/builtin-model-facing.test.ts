@@ -68,7 +68,10 @@ const inputs: Record<string, Record<string, unknown>> = {
     title: "Arrival",
     message: "Gate opened",
   },
-  suspend: { reason: "Choose a route", resumeSchema: { type: "object" } },
+  suspend: {
+    reason: "Choose a route",
+    fields: [{ type: "text", name: "answer", label: "Answer" }],
+  },
   "runtime-done": { reason: "Finished" },
   "plugin-data-set": { namespace: "facts", key: "gate", value },
   "plugin-data-set-batch": {
@@ -77,18 +80,12 @@ const inputs: Record<string, Record<string, unknown>> = {
   "plugin-data-get": { namespace: "facts", key: "gate" },
   "plugin-data-list": { namespace: "facts" },
   "emit-event": { topic: "gate.opened", data: value },
-  "create-character": { name: "Mira", type: "npc" },
-  "update-character": {
-    id: "gate-keeper",
-    description: "Friendly gate keeper",
-  },
   "sync-characters": {
     creates: [{ name: "Mira", type: "npc" }],
     updates: [{ id: "gate-keeper", description: "Friendly gate keeper" }],
   },
   "list-characters": {},
   "get-character": { name: "Aldric" },
-  "get-character-schema": {},
   "memory-search": { query: "gate" },
   "world-dimension-get": { queries: [{ dimension: "discoveries" }] },
   "world-dimension-list": {},
@@ -234,54 +231,8 @@ describe("builtin model-facing results", () => {
       );
       expect(result.success, result.result).toBe(true);
       assertModelText(result.result);
-      if (name === "get-character-schema") {
-        expect(result.parsedResult).toMatchObject({ schema });
-        const model = JSON.parse(result.result);
-        expect(model).toEqual({ summary: expect.any(String) });
-        expect(JSON.parse(model.summary)).toEqual({
-          version: 1,
-          types: ["npc"],
-          attributes: [],
-        });
-      }
     },
   );
-
-  it("projects a pending character schema while retaining its full record for code", async () => {
-    const { executor, context } = await setup();
-    const result = await executor.execute(
-      { toolCallId: rowId, name: "get-character-schema", arguments: "{}" },
-      {
-        ...context,
-        pendingProposals: [
-          {
-            id: rowId,
-            type: "character.schema.set",
-            sessionId,
-            turnId,
-            timestamp,
-            source: {
-              pluginId: context.pluginId,
-              runtimeId: context.runtimeId,
-            },
-            payload: { types: ["npc", "companion"], attributes: [] },
-          },
-        ],
-      },
-    );
-    expect(result.success, result.result).toBe(true);
-    assertModelText(result.result);
-    const model = JSON.parse(result.result);
-    expect(model).toEqual({ summary: expect.any(String) });
-    expect(JSON.parse(model.summary)).toEqual({
-      version: 2,
-      types: ["npc", "companion"],
-      attributes: [],
-    });
-    expect(result.parsedResult).toMatchObject({
-      schema: { sessionId, updatedAt: timestamp },
-    });
-  });
 
   it("search-tools sends only matching tool definitions", async () => {
     const { registry, executor, context } = await setup();

@@ -7,5 +7,5 @@ schedule:
     - contract: character-creation@1
 function:
   tools:
-    builtin: [create-form, update-character]
+    builtin: [create-form, sync-characters]
 ---

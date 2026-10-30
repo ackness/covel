@@ -66,7 +66,9 @@ export default async function (ctx) {
     for (const attribute of rules.attributes) {
       fields[attribute.id] = submitted.values[attribute.id];
     }
-    await ctx.tools.call("update-character", { id: player.id, fields });
+    await ctx.tools.call("sync-characters", {
+      updates: [{ id: player.id, fields }],
+    });
     await ctx.pluginData.set("setup", "allocated", {
       submissionId: submitted.id,
     });

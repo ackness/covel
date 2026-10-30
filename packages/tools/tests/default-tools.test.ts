@@ -29,9 +29,6 @@ describe("default tool registry", () => {
         "plugin-data-get",
         "plugin-data-list",
         "emit-event",
-        "get-character-schema",
-        "create-character",
-        "update-character",
         "sync-characters",
         "list-characters",
         "get-character",
@@ -53,4 +50,38 @@ describe("default tool registry", () => {
       );
     }
   });
+});
+
+it("describes explicit runtime completion without changing its result", async () => {
+  const {
+    runtimeDoneTool,
+    getToolContent,
+    getModelView,
+    isRuntimeDoneSentinel,
+  } = await import("../src/index.js");
+  expect(runtimeDoneTool.description).toContain("Call this last");
+  expect(runtimeDoneTool.description).toContain(
+    "every needed tool call has succeeded or when nothing needs doing",
+  );
+  expect(runtimeDoneTool.description).toContain("records nothing");
+  expect(runtimeDoneTool.description).toContain("run ends after this response");
+  expect(runtimeDoneTool.description).toContain(
+    "do not make more calls or write more prose",
+  );
+  const result = await runtimeDoneTool.execute(
+    { reason: "Finished" },
+    {
+      sessionId: "session",
+      turnId: "turn",
+      pluginId: "probe",
+      runtimeId: "probe/run",
+      random: { int: (min: number) => min },
+    },
+  );
+  expect(getToolContent(result)).toEqual({
+    _covelRuntimeDone: true,
+    reason: "Finished",
+  });
+  expect(isRuntimeDoneSentinel(getToolContent(result))).toBe(true);
+  expect(getModelView(result)).toEqual({ summary: "Run finished." });
 });

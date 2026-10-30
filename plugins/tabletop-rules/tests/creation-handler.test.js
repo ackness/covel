@@ -77,14 +77,25 @@ function makeCtx({
       call: async (name, args) => {
         calls.tools.push({ name, args });
         if (name === "list-characters") return { characters };
-        if (name === "get-character-schema") return { schema: worldSchema };
         if (name === "create-form") {
           calls.forms.push(args);
           return { interaction: { type: "form", interactionId: args.formId } };
         }
-        if (name === "update-character") {
-          calls.updates.push(args);
-          return { success: true, characterId: args.id, version: 2 };
+        if (name === "sync-characters") {
+          expect(args).toEqual({
+            updates: [
+              expect.objectContaining({
+                id: expect.any(String),
+                fields: expect.any(Object),
+              }),
+            ],
+          });
+          calls.updates.push(args.updates[0]);
+          return {
+            updated: [{ characterId: args.updates[0].id, version: 2 }],
+            created: [],
+            unchanged: [],
+          };
         }
         throw new Error(`unexpected tool: ${name}`);
       },
@@ -125,7 +136,10 @@ describe("creation handler", () => {
     expect(result.completion).toBe("pending");
     expect(pluginData.get("setup/rules")).toEqual(rules);
     expect(
-      calls.tools.filter((call) => call.name === "get-character-schema"),
+      calls.tools.filter(
+        (call) =>
+          call.name !== "create-form" && call.name !== "sync-characters",
+      ),
     ).toEqual([]);
   });
 
@@ -295,7 +309,22 @@ it("uses the World Model schema without reading a provider output or schema tool
   expect(await ctx.pluginData.get("setup", "rules")).toMatchObject({
     attributes: [{ id: "tideReading" }, { id: "combat" }],
   });
-  expect(calls.tools.map((call) => call.name)).not.toContain(
-    "get-character-schema",
+  expect(
+    calls.tools.every((call) =>
+      ["create-form", "sync-characters"].includes(call.name),
+    ),
+  ).toBe(true);
+});
+
+it("declares only the form and character batch builtins for creation", async () => {
+  const { readFile } = await import("node:fs/promises");
+  const { parse } = await import("yaml");
+  const text = await readFile(
+    new URL("../runtimes/creation/RUNTIME.md", import.meta.url),
+    "utf8",
   );
+  expect(parse(text.split("---")[1]).function.tools.builtin).toEqual([
+    "create-form",
+    "sync-characters",
+  ]);
 });

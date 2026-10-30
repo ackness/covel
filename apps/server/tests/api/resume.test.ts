@@ -1164,11 +1164,14 @@ describe("Resume Routes", () => {
                           name: "suspend",
                           arguments: JSON.stringify({
                             reason: "Need a surname too",
-                            resumeSchema: {
-                              type: "object",
-                              properties: { surname: { type: "string" } },
-                              required: ["surname"],
-                            },
+                            fields: [
+                              {
+                                type: "text",
+                                name: "surname",
+                                label: "Surname",
+                                required: true,
+                              },
+                            ],
                           }),
                         },
                       ],

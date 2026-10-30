@@ -409,7 +409,10 @@ describe("sub-agents after resume", () => {
         index === 0
           ? call(
               "suspend",
-              { reason: "Confirm", resumeSchema: { type: "object" } },
+              {
+                reason: "Confirm",
+                fields: [{ type: "text", name: "answer", label: "Answer" }],
+              },
               "tc-suspend",
             )
           : index === 1

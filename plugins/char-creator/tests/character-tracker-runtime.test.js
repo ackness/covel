@@ -29,6 +29,14 @@ function response(name, args) {
 }
 
 async function run(secondResponse, ...corrections) {
+  return runFromRead(
+    response("get-character", { id: characterId }),
+    secondResponse,
+    ...corrections,
+  );
+}
+
+async function runFromRead(firstRead, secondResponse, ...corrections) {
   const store = createMemoryStore();
   await store.createSession({
     id: sessionId,
@@ -83,11 +91,7 @@ async function run(secondResponse, ...corrections) {
     store,
   });
   const llm = new MockLLM({
-    responses: [
-      response("get-character", { id: characterId }),
-      secondResponse,
-      ...corrections,
-    ],
+    responses: [firstRead, secondResponse, ...corrections],
   });
   const tools = new Map(
     [...createCharacterTools(store, {}), runtimeDoneTool].map((tool) => [
@@ -172,14 +176,29 @@ async function run(secondResponse, ...corrections) {
   expect(llm.calls.length).toBeGreaterThanOrEqual(2);
   expect(llm.calls.length).toBeLessThanOrEqual(20);
   expect(llm.calls[0].toolNames).toContain("get-character");
-  expect(llm.calls[1].toolNames).not.toContain("get-character");
-  expect(llm.calls[1].toolNames).toContain("sync-characters");
-  expect(llm.calls[1].toolNames).toContain("runtime-done");
-  expect(toolResults[0]).toMatchObject({
-    name: "get-character",
-    success: true,
-    parsedResult: { found: true },
-  });
+  const missed =
+    JSON.parse(firstRead.toolCalls[0].arguments).id !== characterId;
+  if (missed) {
+    expect(llm.calls[1].toolNames).toContain("get-character");
+    expect(toolResults[0]).toMatchObject({
+      success: false,
+      error: { code: "not-found" },
+    });
+    expect(toolResults[1]).toMatchObject({
+      success: true,
+      parsedResult: { character: expect.objectContaining({ id: characterId }) },
+    });
+    expect(llm.calls[2].toolNames).not.toContain("get-character");
+  } else {
+    expect(llm.calls[1].toolNames).not.toContain("get-character");
+    expect(llm.calls[1].toolNames).toContain("sync-characters");
+    expect(llm.calls[1].toolNames).toContain("runtime-done");
+    expect(toolResults[0]).toMatchObject({
+      name: "get-character",
+      success: true,
+      parsedResult: { character: expect.objectContaining({ id: characterId }) },
+    });
+  }
   return { store, tracker, toolResults, llm };
 }
 
@@ -319,6 +338,11 @@ describe("tracker read budget", () => {
             content: "",
             toolCalls: [{ id: "c1", name: "get-character", arguments: "{}" }],
           },
+          {
+            role: "tool",
+            toolCallId: "c1",
+            content: JSON.stringify({ summary: "Character detail" }),
+          },
         ],
       },
     ).replace.messages.at(-1).content;
@@ -334,4 +358,13 @@ describe("tracker read budget", () => {
     // A locale with no prompt body of its own reads the English one.
     expect(added("ja")).toBe(added("en"));
   });
+});
+
+it("allows a failed detail read to be repaired before completing the tracker", async () => {
+  const { tracker } = await runFromRead(
+    response("get-character", { id: "unknown-character" }),
+    response("get-character", { id: characterId }),
+    response("sync-characters", { creates: [], updates: [] }),
+  );
+  expect(tracker.status).toBe("success");
 });

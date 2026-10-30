@@ -407,17 +407,19 @@ describe("runAgentToolLoop core", () => {
     expect(result.finalContent).toContain("single-shot");
   });
 
-  it("does not complete after an update-character call fails to find its target", async () => {
+  it("does not complete after a character batch fails to find its target", async () => {
     const tools = createCharacterTools(createMemoryStore());
     const llm = new ScriptedLLM([
-      toolCall("update-character", { id: "missing", fields: { hp: 1 } }),
+      toolCall("sync-characters", {
+        updates: [{ id: "missing", fields: { hp: 1 } }],
+      }),
       prose("Recovered after the failed update"),
     ]);
     const result = await run({
       llm,
       manifest: manifest({
-        tools: { builtin: ["update-character"] },
-        completeAfterTools: ["update-character"],
+        tools: { builtin: ["sync-characters"] },
+        completeAfterTools: ["sync-characters"],
       }),
       deps: {
         toolExecutor: createToolExecutor({

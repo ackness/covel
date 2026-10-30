@@ -37,7 +37,10 @@ const input = {
   playerMessage: "Ask",
   origin: "player" as const,
 };
-const ASK = { reason: "Need input", resumeSchema: { type: "object" } };
+const ASK = {
+  reason: "Need input",
+  fields: [{ type: "text", name: "answer", label: "Answer" }],
+};
 
 describe.each(["agent", "function"] as const)(
   "a %s that suspends twice",

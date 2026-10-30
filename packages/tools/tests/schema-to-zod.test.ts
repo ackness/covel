@@ -6,7 +6,7 @@ import {
 } from "../src/index.js";
 import type { CharacterStore } from "../src/builtin/character-tools.js";
 
-// Minimal stub — Phase 2 jsonSchema generation doesn't touch the store.
+// Minimal stub — session jsonSchema generation doesn't touch the store.
 const stubStore: CharacterStore = {
   upsertCharacter: async () => {},
   listCharacters: async () => [],
@@ -155,54 +155,33 @@ describe("buildSessionCharacterWriteTools", () => {
         },
       ],
     });
-    expect(otherTools[2]!.description).toContain('"min":-5');
-    expect(otherTools[2]!.description).not.toContain('"hp"');
+    expect(otherTools[0]!.description).toContain('"min":-5');
+    expect(otherTools[0]!.description).not.toContain('"hp"');
   });
 
-  it("keeps create-character fields compact instead of duplicating the session schema", () => {
-    const [createTool] = buildSessionCharacterWriteTools(stubStore, {
+  it("keeps batch fields compact and the update schema path stable", () => {
+    const tools = buildSessionCharacterWriteTools(stubStore, {
       ...sampleSchema,
       types: ["npc", "companion"],
     });
-    expect(createTool!.name).toBe("create-character");
-    const schema = createTool!.jsonSchema as Record<string, unknown>;
-    const props = schema.properties as Record<string, Record<string, unknown>>;
-
-    // Top-level params: name, aliases, type, description, fields
-    expect(Object.keys(props).sort()).toEqual([
-      "aliases",
-      "description",
-      "fields",
-      "name",
-      "type",
-    ]);
-
-    // Runtime validation still uses the stored schema, but the wire contract
-    // stays bounded instead of repeating every attribute here and in update.
-    const fields = props.fields as {
-      type: string;
-      additionalProperties: Record<string, unknown>;
+    expect(tools.map((tool) => tool.name)).toEqual(["sync-characters"]);
+    const schema = tools[0]!.jsonSchema as {
+      properties: Record<
+        string,
+        { items: { properties: Record<string, unknown> } }
+      >;
     };
-    expect(fields.type).toBe("object");
-    expect(fields.additionalProperties).toEqual({});
-    expect(fields).not.toHaveProperty("properties");
-  });
-
-  it("keeps update-character fields compact as well", () => {
-    const [, updateTool] = buildSessionCharacterWriteTools(stubStore, {
-      ...sampleSchema,
-      types: ["npc", "companion"],
+    for (const name of ["creates", "updates"])
+      expect(schema.properties[name]!.items.properties.fields).toMatchObject({
+        type: "object",
+        additionalProperties: {},
+      });
+    expect(schema.properties.creates!.items.properties.type).toMatchObject({
+      enum: ["player", "npc", "companion"],
     });
-    expect(updateTool!.name).toBe("update-character");
-    const schema = updateTool!.jsonSchema as Record<string, unknown>;
-    const props = schema.properties as Record<string, Record<string, unknown>>;
-    const fields = props.fields as {
-      type: string;
-      additionalProperties: Record<string, unknown>;
-    };
-    expect(fields.type).toBe("object");
-    expect(fields.additionalProperties).toEqual({});
-    expect(fields).not.toHaveProperty("properties");
+    expect(
+      Object.keys(schema.properties.updates!.items.properties).sort(),
+    ).toEqual(["aliases", "description", "fields", "id", "removeAliases"]);
   });
 });
 

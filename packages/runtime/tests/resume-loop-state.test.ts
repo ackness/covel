@@ -40,7 +40,10 @@ import {
   type GenerateParams,
 } from "./_helpers/agent-loop-fixture.js";
 
-const ASK = { reason: "Need input", resumeSchema: { type: "object" } };
+const ASK = {
+  reason: "Need input",
+  fields: [{ type: "text", name: "answer", label: "Answer" }],
+};
 
 const lookupTool = tool({
   name: "lookup",

@@ -1,6 +1,9 @@
 import { getModelView, ToolError } from "@covel/plugin-handlers-utils";
 import { describe, expect, it, vi } from "vitest";
-import { createEmitEventTool } from "../src/builtin/emit-event.js";
+import {
+  buildSessionEmitEventTool,
+  createEmitEventTool,
+} from "../src/builtin/emit-event.js";
 import { getEmittedEvents, getPendingProposals } from "../src/result.js";
 import type { ToolExecutionContext } from "../src/types.js";
 
@@ -124,5 +127,89 @@ describe("emit-event tool", () => {
     )) as { _text: string };
     expect(getEmittedEvents(result)).toBeUndefined();
     expect(getModelView(result)?.summary).toContain("already emitted");
+  });
+});
+
+describe("session event definitions", () => {
+  const deps = {
+    directory: makeDirectory([
+      { topic: "a.b", requires: "a" },
+      { topic: "c.d", requires: "c" },
+    ]),
+  };
+  const topics = [
+    {
+      topic: "a.b",
+      schema: {
+        $schema: "https://json-schema.org/draft/2020-12/schema",
+        $id: "first",
+        type: "object",
+        properties: { a: { type: "string" } },
+        required: ["a"],
+      },
+    },
+    {
+      topic: "c.d",
+      schema: {
+        type: "object",
+        properties: { c: { type: "number" } },
+        required: ["c"],
+      },
+    },
+  ];
+  it("advertises topic enums and payload alternatives below data", () => {
+    const tool = buildSessionEmitEventTool(deps, topics)!;
+    expect(tool.jsonSchema).toEqual({
+      type: "object",
+      properties: {
+        topic: { type: "string", enum: ["a.b", "c.d"] },
+        data: {
+          anyOf: [
+            {
+              type: "object",
+              properties: { a: { type: "string" } },
+              required: ["a"],
+              title: "a.b",
+            },
+            { ...topics[1]!.schema, title: "c.d" },
+          ],
+        },
+      },
+      required: ["topic", "data"],
+    });
+    expect(topics[0]!.schema).toHaveProperty("$id");
+  });
+  it("uses a single payload directly and falls back for absent or referenced schemas", () => {
+    expect(
+      buildSessionEmitEventTool(deps, [topics[1]!])!.jsonSchema,
+    ).toMatchObject({
+      properties: { data: { ...topics[1]!.schema, title: "c.d" } },
+    });
+    for (const schema of [
+      undefined,
+      { $ref: "#/$defs/value", $defs: {} },
+      { properties: { nested: { $ref: "#" } } },
+    ])
+      expect(
+        buildSessionEmitEventTool(deps, [{ topic: "a.b", schema }])!.jsonSchema,
+      ).toMatchObject({
+        properties: { data: { type: "object", title: "a.b" } },
+      });
+    expect(buildSessionEmitEventTool(deps, [])).toBeUndefined();
+    expect(createEmitEventTool(deps).jsonSchema).toMatchObject({
+      properties: { topic: { type: "string" } },
+    });
+  });
+  it("keeps Zod loose so unknown topics are refused and bad payloads remain invalid-input", async () => {
+    const tool = buildSessionEmitEventTool(deps, topics)!;
+    expect(
+      tool.parametersSchema.safeParse({ topic: "unknown", data: {} }).success,
+    ).toBe(true);
+    await expect(
+      tool.execute({ topic: "unknown", data: {} }, ctx),
+    ).rejects.toMatchObject({ code: "refused" });
+    await expect(
+      tool.execute({ topic: "a.b", data: {} }, ctx),
+    ).rejects.toMatchObject({ code: "invalid-input" });
   });
 });

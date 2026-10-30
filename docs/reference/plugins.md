@@ -326,7 +326,7 @@ runtime 的 `schedule.needs[].contract` 和 `io.inputs.*.from.contract` 引用�
 
 ### setup runtime 的注意事项
 
-开场角色模板须包含每个收集字段的占位符。模板和默认值错误属于可修正的 `invalid-input`，见[角色工具](./tools.md#create-character)。
+开场角色模板须包含每个收集字段的占位符。模板和默认值错误属于可修正的 `invalid-input`，见[角色工具](./tools.md#开场角色表单)。
 
 包级的 `requires` 保证契约的提供者被激活，但不要求提供者每次执行都重新产出。
 

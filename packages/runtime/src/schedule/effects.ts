@@ -35,8 +35,6 @@ export interface RuntimeEffects {
 
 // Builtin tools whose invocation writes a fixed domain resource.
 const BUILTIN_WRITE: Readonly<Record<string, EffectResource>> = {
-  "create-character": "characters:*",
-  "update-character": "characters:*",
   "sync-characters": "characters:*",
   "render-ui": "ui:*",
   "create-notification": "ui:*",

@@ -326,7 +326,7 @@ A provider that already succeeded in an earlier stage or event layer can also sa
 
 ### Notes on setup runtimes
 
-Opening character templates must include a placeholder for every collected field. Template/default errors are correctable `invalid-input` failures; see [character tools](./tools.md#create-character).
+Opening character templates must include a placeholder for every collected field. Template/default errors are correctable `invalid-input` failures; see [character tools](./tools.md#opening-character-form).
 
 A package-level `requires` makes sure the contract's provider is activated. It does not require the provider to produce output again on every execution.
 

@@ -2,8 +2,8 @@ import { getModelView } from "@covel/plugin-handlers-utils";
 /**
  * Tests for builtin character management tools.
  *
- * DELIBERATE CHANGE (effects isolation / W3d): create-character and
- * update-character no longer write to the store during execution. They return
+ * Character writes return buffered proposals rather than writing during execution.
+ * They return
  * `character.upsert` proposals (via withPendingProposals); the Session Kernel
  * commit chain performs the actual character write + plugin-data mirror at the
  * end of the execution. Reads (list/get/dedup) overlay the proposals buffered
@@ -140,6 +140,39 @@ class Loop {
     return { ...content, summary: getModelView(result)?.summary };
   }
 
+  async create(
+    params: Record<string, unknown>,
+    pluginId = this.defaultPlugin,
+  ): Promise<Record<string, unknown>> {
+    const result = await this.call(
+      "sync-characters",
+      { creates: [params] },
+      pluginId,
+    );
+    const created = result.created as Record<string, unknown>[];
+    const unchanged = result.unchanged as Record<string, unknown>[];
+    return {
+      ...(created[0] ?? unchanged[0]),
+      existed: unchanged.length > 0,
+      summary: result.summary,
+    };
+  }
+
+  async update(
+    params: Record<string, unknown>,
+    pluginId = this.defaultPlugin,
+  ): Promise<Record<string, unknown>> {
+    const result = await this.call(
+      "sync-characters",
+      { updates: [params] },
+      pluginId,
+    );
+    return {
+      ...(result.updated as Record<string, unknown>[])[0],
+      summary: result.summary,
+    };
+  }
+
   /** Simulate finalizeExecution committing the buffered proposals. */
   commit(): void {
     commitCharacterProposals(this.store, this.pending);
@@ -158,15 +191,123 @@ describe("builtin character tools", () => {
     loop = new Loop(tools, store);
   });
 
+  it("marks character reads safe for concurrent sub-agent use", () => {
+    for (const name of ["list-characters", "get-character"])
+      expect(
+        tools.find((tool) => tool.name === name)?.annotations,
+      ).toMatchObject({
+        readOnly: true,
+        idempotent: true,
+        concurrencySafe: true,
+        stagesWrites: false,
+      });
+    expect(
+      tools.find((tool) => tool.name === "sync-characters")?.annotations,
+    ).toMatchObject({ readOnly: false, stagesWrites: true });
+  });
+
+  it("preserves coded batch correction text and identifies the failing entry", async () => {
+    const owner = await loop.create({
+      name: "Keeper Ysolde",
+      aliases: ["The Lantern Keeper"],
+      type: "npc",
+    });
+    loop.commit();
+    const aliasError = await loop
+      .call("sync-characters", {
+        creates: [
+          { name: "Maud", type: "npc", aliases: ["The Lantern Keeper"] },
+        ],
+      })
+      .catch((error: unknown) => error);
+    expect(aliasError).toMatchObject({
+      code: "invalid-input",
+      message: expect.stringContaining("creates[0]:"),
+    });
+    const message = (aliasError as Error).message;
+    expect(message.length).toBeGreaterThan(300);
+    expect(message).toContain(owner.characterId);
+    expect(message).toContain("removeAliases");
+    expect(message).toContain("Otherwise leave this alias out.");
+    for (const name of ["Keeper Ysolde", "The Lantern Keeper"])
+      await expect(
+        loop.call("sync-characters", { creates: [{ name, type: "player" }] }),
+      ).rejects.toMatchObject({
+        code: "invalid-input",
+        message: expect.stringMatching(
+          /creates\[0\]:.*ask the player for a different name.*create nothing until they give one/,
+        ),
+      });
+    await expect(
+      loop.call("sync-characters", {
+        creates: [{ name: "Alex", type: "unknown" }],
+      }),
+    ).rejects.toMatchObject({
+      code: "invalid-input",
+      message: "creates[0]: Unknown character type: unknown",
+    });
+    await expect(
+      loop.call("sync-characters", { updates: [{ id: "missing" }] }),
+    ).rejects.toMatchObject({
+      code: "not-found",
+      message: expect.stringContaining("updates[0]:"),
+    });
+    expect(loop.pending).toEqual([]);
+  });
+
+  it("reads a create through its alias within the batch and stamps the expected version", async () => {
+    const result = await loop.call("sync-characters", {
+      creates: [
+        {
+          name: "Mira",
+          type: "npc",
+          aliases: ["The Scout"],
+          fields: { hp: 3 },
+        },
+      ],
+      updates: [{ id: "The Scout", fields: { hp: 2 } }],
+    });
+    expect(result).toMatchObject({
+      created: [{ name: "Mira" }],
+      updated: [{ version: 2 }],
+    });
+    expect(loop.pending).toHaveLength(2);
+    expect(loop.pending[1]?.payload).toMatchObject({
+      expectedVersion: 1,
+      version: 2,
+      fields: { hp: 2 },
+    });
+    const read = await loop.call("get-character", { name: "Mira" });
+    expect(read.character).toMatchObject({ version: 2, fields: { hp: 2 } });
+  });
+
+  it("retains schema warnings in the batch summary", async () => {
+    loop.pending.push({
+      id: "schema",
+      type: "character.schema.set",
+      source: { pluginId: "fixture", runtimeId: "fixture/schema" },
+      sessionId: "sess-1",
+      turnId: "turn-1",
+      timestamp: "2026-10-29T00:00:00Z",
+      payload: {
+        types: ["npc"],
+        attributes: [
+          { id: "hp", name: "Health", type: "number", category: "stats" },
+        ],
+      },
+    });
+    const result = await loop.call("sync-characters", {
+      creates: [{ name: "Alex", type: "npc", fields: { unknown: true } }],
+    });
+    expect(result.summary).toContain("unknown");
+  });
+
   it("registers character read and write tools", () => {
     const names = tools.map((t) => t.name).sort();
     expect(names).toEqual([
-      "create-character",
       "get-character",
-      "get-character-schema",
       "list-characters",
       "sync-characters",
-      "update-character",
     ]);
   });
 
@@ -193,10 +334,7 @@ describe("builtin character tools", () => {
       type: "character.schema.set",
       payload: pendingSchema,
     });
-    expect(await loop.call("get-character-schema", {})).toMatchObject({
-      schema: { ...pendingSchema, version: 1 },
-    });
-    const created = await loop.call("create-character", {
+    const created = await loop.create({
       name: "Alex",
       type: "player",
     });
@@ -205,7 +343,7 @@ describe("builtin character tools", () => {
       payload: { fields: { power: 3 } },
     });
     await expect(
-      loop.call("update-character", {
+      loop.update({
         id: created.characterId,
         fields: { power: 6 },
       }),
@@ -225,15 +363,15 @@ describe("builtin character tools", () => {
       store,
     );
     await expect(
-      caller.call("create-character", { name: "Alex", type: "player" }),
+      caller.create({ name: "Alex", type: "player" }),
     ).rejects.toThrow("schema store unavailable");
     expect(caller.pending).toEqual([]);
   });
 
   it("creates a second player character beside a committed one", async () => {
-    await loop.call("create-character", { name: "Alex", type: "player" });
+    await loop.create({ name: "Alex", type: "player" });
     loop.commit();
-    const second = await loop.call("create-character", {
+    const second = await loop.create({
       name: "Brook",
       type: "player",
     });
@@ -251,12 +389,12 @@ describe("builtin character tools", () => {
   });
 
   it("ignores pending characters from a different session", async () => {
-    await loop.call("create-character", { name: "Alex", type: "player" });
+    await loop.create({ name: "Alex", type: "player" });
     loop.pending = loop.pending.map((p) => ({
       ...p,
       sessionId: "other-session",
     }));
-    const created = await loop.call("create-character", {
+    const created = await loop.create({
       name: "Alex",
       type: "player",
     });
@@ -288,20 +426,20 @@ describe("builtin character tools", () => {
     });
     loop = new Loop(createCharacterTools(schemaStore), store);
     await expect(
-      loop.call("create-character", {
+      loop.create({
         name: "Alex",
         type: "player",
         fields: { systems: "self-taught" },
       }),
     ).rejects.toThrow(/systems/);
     expect(loop.pending).toHaveLength(0);
-    const created = await loop.call("create-character", {
+    const created = await loop.create({
       name: "Alex",
       type: "player",
     });
     loop.commit();
     await expect(
-      loop.call("update-character", {
+      loop.update({
         id: created.characterId,
         fields: { systems: 6 },
       }),
@@ -312,26 +450,26 @@ describe("builtin character tools", () => {
     });
   });
 
-  describe("create-character", () => {
+  describe("batch creates", () => {
     it.each([false, true])(
       "preserves chained partial updates before commit (stored: %s)",
       async (stored) => {
-        const created = await loop.call("create-character", {
+        const created = await loop.create({
           name: "Probe",
           type: "npc",
           description: "original",
           fields: { hp: 10, mp: 5 },
         });
         if (stored) loop.commit();
-        await loop.call("update-character", {
+        await loop.update({
           id: created.characterId,
           fields: { hp: 8 },
         });
-        await loop.call("update-character", {
+        await loop.update({
           id: created.characterId,
           fields: { mp: 4 },
         });
-        await loop.call("update-character", {
+        await loop.update({
           id: created.characterId,
           description: "",
         });
@@ -339,7 +477,6 @@ describe("builtin character tools", () => {
           id: created.characterId,
         });
         expect(read).toMatchObject({
-          found: true,
           character: {
             name: "Probe",
             type: "npc",
@@ -363,7 +500,7 @@ describe("builtin character tools", () => {
     );
 
     it("emits a character.upsert proposal that persists on commit", async () => {
-      const result = await loop.call("create-character", {
+      const result = await loop.create({
         name: "柳无痕",
         type: "player",
         description: "外门弟子，灵识敏锐",
@@ -392,10 +529,10 @@ describe("builtin character tools", () => {
     });
 
     it("validates type field and rejects invalid values", async () => {
-      const t = tools.find((m) => m.name === "create-character")!;
+      const t = tools.find((m) => m.name === "sync-characters")!;
       await expect(
         t.execute(
-          { name: "X", type: "invalid" as never },
+          { creates: [{ name: "X", type: "invalid" }] },
           {
             sessionId: "sess-1",
             turnId: "turn-1",
@@ -408,10 +545,10 @@ describe("builtin character tools", () => {
     });
 
     it("requires a non-empty name", async () => {
-      const t = tools.find((m) => m.name === "create-character")!;
+      const t = tools.find((m) => m.name === "sync-characters")!;
       await expect(
         t.execute(
-          { name: "", type: "player" },
+          { creates: [{ name: "", type: "player" }] },
           {
             sessionId: "sess-1",
             turnId: "turn-1",
@@ -424,11 +561,11 @@ describe("builtin character tools", () => {
     });
 
     it("generates a unique id per call", async () => {
-      const r1 = await loop.call("create-character", {
+      const r1 = await loop.create({
         name: "A",
         type: "npc",
       });
-      const r2 = await loop.call("create-character", {
+      const r2 = await loop.create({
         name: "B",
         type: "npc",
       });
@@ -440,14 +577,14 @@ describe("builtin character tools", () => {
     });
 
     it("is idempotent for same (name, type) — sees buffered create, no duplicate", async () => {
-      const r1 = await loop.call("create-character", {
+      const r1 = await loop.create({
         name: "赵铁山",
         type: "npc",
         description: "师叔",
         fields: { hp: 40 },
       });
       // Dedup must see the FIRST create even though it is only buffered.
-      const r2 = await loop.call("create-character", {
+      const r2 = await loop.create({
         name: "赵铁山",
         type: "npc",
         description: "师叔 v2",
@@ -467,11 +604,11 @@ describe("builtin character tools", () => {
     });
 
     it("allows different types with same name (player 与 npc 可以同名)", async () => {
-      const r1 = await loop.call("create-character", {
+      const r1 = await loop.create({
         name: "Echo",
         type: "player",
       });
-      const r2 = await loop.call("create-character", {
+      const r2 = await loop.create({
         name: "Echo",
         type: "npc",
       });
@@ -483,7 +620,7 @@ describe("builtin character tools", () => {
     });
 
     it("returns a human-readable summary summary (model view)", async () => {
-      const result = (await loop.call("create-character", {
+      const result = (await loop.create({
         name: "柳无痕",
         type: "player",
         description: "外门弟子",
@@ -497,8 +634,8 @@ describe("builtin character tools", () => {
     });
 
     it("summary reflects existed=true path when duplicate", async () => {
-      await loop.call("create-character", { name: "孙师叔", type: "npc" });
-      const r2 = (await loop.call("create-character", {
+      await loop.create({ name: "孙师叔", type: "npc" });
+      const r2 = (await loop.create({
         name: "孙师叔",
         type: "npc",
       })) as { summary: string };
@@ -506,25 +643,25 @@ describe("builtin character tools", () => {
     });
   });
 
-  describe("update-character", () => {
+  describe("batch updates", () => {
     it("codes unresolved names without staging a write", async () => {
-      await loop.call("create-character", { name: "Mina Park", type: "npc" });
-      await loop.call("create-character", { name: "Mina Okafor", type: "npc" });
+      await loop.create({ name: "Mina Park", type: "npc" });
+      await loop.create({ name: "Mina Okafor", type: "npc" });
       loop.commit();
       await expect(
-        loop.call("update-character", { id: "Mina", fields: {} }),
+        loop.update({ id: "Mina", fields: {} }),
       ).rejects.toMatchObject({ code: "not-found" });
       // Imported records may already share an alias; writes must not guess.
       for (const character of store.characters) character.aliases = ["Mina"];
       await expect(
-        loop.call("update-character", { id: "Mina", fields: {} }),
+        loop.update({ id: "Mina", fields: {} }),
       ).rejects.toMatchObject({ code: "ambiguous" });
       await expect(
-        loop.call("update-character", { id: "Unknown", fields: {} }),
+        loop.update({ id: "Unknown", fields: {} }),
       ).rejects.toMatchObject({ code: "not-found" });
     });
     it("merges fields into buffered character and bumps version", async () => {
-      const created = await loop.call("create-character", {
+      const created = await loop.create({
         name: "苏婉",
         type: "npc",
         fields: { hp: 100, status: "alive" },
@@ -532,7 +669,7 @@ describe("builtin character tools", () => {
       const charId = (created as { characterId: string }).characterId;
 
       // update reads its own buffered create via the overlay.
-      const result = await loop.call("update-character", {
+      const result = await loop.update({
         id: charId,
         fields: { hp: 50, status: "wounded", injuries: ["arm"] },
       });
@@ -553,14 +690,14 @@ describe("builtin character tools", () => {
     });
 
     it("updates description when provided", async () => {
-      const created = await loop.call("create-character", {
+      const created = await loop.create({
         name: "柳娘",
         type: "npc",
         description: "药王谷谷主",
       });
       const charId = (created as { characterId: string }).characterId;
 
-      await loop.call("update-character", {
+      await loop.update({
         id: charId,
         description: "药王谷谷主，已故",
       });
@@ -572,7 +709,7 @@ describe("builtin character tools", () => {
 
     it("rejects when the character id does not exist", async () => {
       await expect(
-        loop.call("update-character", {
+        loop.update({
           id: "nonexistent",
           fields: { hp: 1 },
         }),
@@ -595,7 +732,7 @@ describe("builtin character tools", () => {
     });
 
     it("queues new and existing character changes in one call", async () => {
-      const existing = await loop.call("create-character", {
+      const existing = await loop.create({
         name: "苏婉",
         type: "npc",
         fields: { hp: 100 },
@@ -655,17 +792,17 @@ describe("builtin character tools", () => {
   describe("list-characters", () => {
     beforeEach(async () => {
       // Seed via committed state so list has a store baseline to read.
-      await loop.call("create-character", {
+      await loop.create({
         name: "柳无痕",
         type: "player",
         description: "外门弟子",
       });
-      await loop.call("create-character", {
+      await loop.create({
         name: "苏婉",
         type: "npc",
         description: "师姐",
       });
-      await loop.call("create-character", {
+      await loop.create({
         name: "柳娘",
         type: "npc",
         description: "药王谷谷主",
@@ -712,14 +849,27 @@ describe("builtin character tools", () => {
       );
     });
 
-    it('treats "None" filter values as no filter', async () => {
-      const result = (await loop.call("list-characters", {
-        type: "None",
-      })) as { summary: string; count: number };
-      expect(getToolContent(result).count).toBe(3);
-      expect(getToolContent(result).summary).toContain("柳无痕");
-      expect(getToolContent(result).summary).toContain("苏婉");
-      expect(getToolContent(result).summary).toContain("柳娘");
+    it.each(["none", "all", "None"])(
+      "uses %s as a literal filter",
+      async (type) => {
+        const result = await loop.call("list-characters", { type });
+        expect(result.count).toBe(0);
+        expect(result.summary).toContain("Types in this session: npc, player.");
+      },
+    );
+
+    it("rejects null and empty filters and advertises a plain optional string", async () => {
+      for (const type of [null, ""])
+        await expect(
+          loop.call("list-characters", { type }),
+        ).rejects.toMatchObject({ code: "invalid-input" });
+      const schema = tools.find(
+        (tool) => tool.name === "list-characters",
+      )!.jsonSchema;
+      expect(schema).toMatchObject({
+        properties: { type: { type: "string", minLength: 1 } },
+      });
+      expect(JSON.stringify(schema)).not.toContain("anyOf");
     });
 
     it("sorts by frequency (version) desc, then updatedAt desc", async () => {
@@ -735,15 +885,15 @@ describe("builtin character tools", () => {
       expect(suwanId).toBeDefined();
       expect(liuniangId).toBeDefined();
 
-      await loop.call("update-character", {
+      await loop.update({
         id: suwanId!,
         fields: { hp: 90 },
       });
-      await loop.call("update-character", {
+      await loop.update({
         id: suwanId!,
         fields: { hp: 80 },
       });
-      await loop.call("update-character", {
+      await loop.update({
         id: liuniangId!,
         fields: { hp: 60 },
       });
@@ -762,14 +912,14 @@ describe("builtin character tools", () => {
     it("recency breaks frequency ties (same version → newer updatedAt first)", async () => {
       const freshStore = createMockStore();
       const freshLoop = new Loop(createCharacterTools(freshStore), freshStore);
-      await freshLoop.call("create-character", {
+      await freshLoop.create({
         name: "柳无痕",
         type: "player",
       });
       await new Promise((r) => setTimeout(r, 5));
-      await freshLoop.call("create-character", { name: "苏婉", type: "npc" });
+      await freshLoop.create({ name: "苏婉", type: "npc" });
       await new Promise((r) => setTimeout(r, 5));
-      await freshLoop.call("create-character", { name: "柳娘", type: "npc" });
+      await freshLoop.create({ name: "柳娘", type: "npc" });
       freshLoop.commit();
 
       const list = (await freshLoop.call("list-characters", {})) as {
@@ -783,11 +933,7 @@ describe("builtin character tools", () => {
     });
 
     it("includes cross-plugin characters (session-scoped)", async () => {
-      await loop.call(
-        "create-character",
-        { name: "NarratorGhost", type: "npc" },
-        "narrator",
-      );
+      await loop.create({ name: "NarratorGhost", type: "npc" }, "narrator");
       loop.commit();
 
       const result = (await loop.call("list-characters", {})) as {
@@ -803,7 +949,7 @@ describe("builtin character tools", () => {
     let charId: string;
 
     beforeEach(async () => {
-      const created = await loop.call("create-character", {
+      const created = await loop.create({
         name: "柳无痕",
         type: "player",
         fields: { hp: 100 },
@@ -815,9 +961,9 @@ describe("builtin character tools", () => {
     it("returns full character detail as text when found by id", async () => {
       const result = (await loop.call("get-character", { id: charId })) as {
         summary: string;
-        found: boolean;
       };
-      expect(getToolContent(result).found).toBe(true);
+      expect(getToolContent(result)).toHaveProperty("character");
+      expect(getToolContent(result)).not.toHaveProperty("found");
       expect(typeof getToolContent(result).summary).toBe("string");
       expect(getToolContent(result).summary).toContain("柳无痕");
       expect(getToolContent(result).summary).toContain("player");
@@ -829,19 +975,19 @@ describe("builtin character tools", () => {
     it("looks up by name and returns full detail", async () => {
       const result = (await loop.call("get-character", { name: "柳无痕" })) as {
         summary: string;
-        found: boolean;
       };
-      expect(getToolContent(result).found).toBe(true);
+      expect(getToolContent(result)).toHaveProperty("character");
+      expect(getToolContent(result)).not.toHaveProperty("found");
       expect(getToolContent(result).summary).toContain("柳无痕");
       expect(getToolContent(result).summary).toContain("player");
     });
 
     it("resolves a partial name and lists candidates on a miss", async () => {
-      await loop.call("create-character", {
+      await loop.create({
         name: "Dr. Mina Park",
         type: "npc",
       });
-      await loop.call("create-character", { name: "Mina Okafor", type: "npc" });
+      await loop.create({ name: "Mina Okafor", type: "npc" });
       loop.commit();
       const found = getToolContent(
         (await loop.call("get-character", { name: "mina park" })) as {
@@ -850,34 +996,27 @@ describe("builtin character tools", () => {
       );
       expect(found.summary).toContain("Dr. Mina Park");
 
-      const ambiguous = getToolContent(
-        (await loop.call("get-character", { name: "Mina" })) as {
-          found: boolean;
-          candidates: string[];
-        },
-      );
-      expect(ambiguous.found).toBe(false);
-      expect(ambiguous.candidates).toEqual(["Dr. Mina Park", "Mina Okafor"]);
-
-      const missing = getToolContent(
-        (await loop.call("get-character", { name: "Eli" })) as {
-          summary: string;
-          candidates: string[];
-        },
-      );
-      expect(missing.summary).toContain("Characters in session:");
-      expect(missing.candidates).toContain("柳无痕");
+      await expect(
+        loop.call("get-character", { name: "Mina" }),
+      ).rejects.toMatchObject({
+        code: "ambiguous",
+        message: expect.stringContaining("Mina Okafor"),
+      });
+      await expect(
+        loop.call("get-character", { name: "Eli" }),
+      ).rejects.toMatchObject({
+        code: "not-found",
+        message: expect.stringContaining("Characters in session:"),
+      });
     });
 
-    it("returns text saying not found when id is missing", async () => {
-      const result = (await loop.call("get-character", { id: "nope" })) as {
-        summary: string;
-        found: boolean;
-      };
-      expect(getToolContent(result).found).toBe(false);
-      expect(getToolContent(result).summary.toLowerCase()).toMatch(
-        /not found|未找到|不存在/,
-      );
+    it("reports not-found with correction text when id is missing", async () => {
+      await expect(
+        loop.call("get-character", { id: "nope" }),
+      ).rejects.toMatchObject({
+        code: "not-found",
+        message: expect.stringContaining("not found"),
+      });
     });
 
     it("requires either id or name", async () => {
@@ -897,7 +1036,7 @@ describe("builtin character tools", () => {
     });
 
     it("reads a character that is only buffered (not yet committed)", async () => {
-      const created = await loop.call("create-character", {
+      const created = await loop.create({
         name: "未落库者",
         type: "npc",
       });
@@ -905,21 +1044,22 @@ describe("builtin character tools", () => {
       // Deliberately NOT committed — the overlay must still surface it.
       const result = (await loop.call("get-character", {
         id: bufferedId,
-      })) as { summary: string; found: boolean };
-      expect(getToolContent(result).found).toBe(true);
+      })) as { summary: string };
+      expect(getToolContent(result)).toHaveProperty("character");
+      expect(getToolContent(result)).not.toHaveProperty("found");
       expect(getToolContent(result).summary).toContain("未落库者");
     });
   });
 
   describe("aliases", () => {
     beforeEach(async () => {
-      await loop.call("create-character", {
+      await loop.create({
         name: "Isolde",
         aliases: ["the keeper", "伊索德", "isolde"],
         type: "npc",
         fields: { hp: 10 },
       });
-      await loop.call("create-character", { name: "Corvin", type: "npc" });
+      await loop.create({ name: "Corvin", type: "npc" });
       loop.commit();
     });
     const isolde = () => store.characters.find((c) => c.name === "Isolde")!;
@@ -929,7 +1069,7 @@ describe("builtin character tools", () => {
     });
 
     it("updates the existing character when it is addressed by an alias, in another spelling", async () => {
-      const result = await loop.call("update-character", {
+      const result = await loop.update({
         id: "The  Keeper",
         fields: { hp: 4 },
       });
@@ -940,7 +1080,7 @@ describe("builtin character tools", () => {
     });
 
     it("returns the existing character when a create names it by an alias, whatever the type", async () => {
-      const result = await loop.call("create-character", {
+      const result = await loop.create({
         name: "伊索德",
         type: "companion",
       });
@@ -954,13 +1094,13 @@ describe("builtin character tools", () => {
 
     it("refuses a player whose name is a name or an alias of another character", async () => {
       for (const name of ["伊索德", "ＴＨＥ  Keeper", "corvin"]) {
-        await expect(
-          loop.call("create-character", { name, type: "player" }),
-        ).rejects.toThrow(/ask the player for a different name/);
+        await expect(loop.create({ name, type: "player" })).rejects.toThrow(
+          /ask the player for a different name/,
+        );
       }
       expect(loop.pending).toHaveLength(0);
 
-      const created = await loop.call("create-character", {
+      const created = await loop.create({
         name: "Wren",
         type: "player",
       });
@@ -968,7 +1108,7 @@ describe("builtin character tools", () => {
     });
 
     it("adds an alias the story reveals and keeps the earlier ones", async () => {
-      const result = await loop.call("update-character", {
+      const result = await loop.update({
         id: isolde().id,
         aliases: ["Keeper Ysolde", "THE KEEPER"],
       });
@@ -982,15 +1122,15 @@ describe("builtin character tools", () => {
     });
 
     it("adds aliases from two updates of one execution", async () => {
-      await loop.call("update-character", { id: "Isolde", aliases: ["Sol"] });
-      await loop.call("update-character", { id: "Sol", aliases: ["Izzy"] });
+      await loop.update({ id: "Isolde", aliases: ["Sol"] });
+      await loop.update({ id: "Sol", aliases: ["Izzy"] });
       loop.commit();
       expect(isolde().aliases).toEqual(["the keeper", "伊索德", "Sol", "Izzy"]);
     });
 
     it("refuses an alias that is a name or alias of another character and names the owner", async () => {
       await expect(
-        loop.call("update-character", {
+        loop.update({
           id: "Corvin",
           aliases: ["The Keeper"],
         }),
@@ -998,7 +1138,7 @@ describe("builtin character tools", () => {
         `"The Keeper" is already a name of Isolde (aka the keeper, 伊索德) [${isolde().id}]`,
       );
       await expect(
-        loop.call("create-character", {
+        loop.create({
           name: "Old Woman",
           aliases: ["Isolde"],
           type: "npc",
@@ -1008,12 +1148,12 @@ describe("builtin character tools", () => {
     });
 
     it("takes away an alias in any spelling, so another character can have the name", async () => {
-      const result = await loop.call("update-character", {
+      const result = await loop.update({
         id: "Isolde",
         removeAliases: ["The  Keeper", "never an alias", "Isolde"],
       });
       expect(result.summary).toContain("aliases: - the keeper");
-      await loop.call("update-character", {
+      await loop.update({
         id: "Corvin",
         aliases: ["the keeper"],
       });
@@ -1040,7 +1180,7 @@ describe("builtin character tools", () => {
     });
 
     it("replaces an alias in one update and tells how to free a wrong one", async () => {
-      await loop.call("update-character", {
+      await loop.update({
         id: "Isolde",
         removeAliases: ["the keeper"],
         aliases: ["the lamp keeper"],
@@ -1048,7 +1188,7 @@ describe("builtin character tools", () => {
       loop.commit();
       expect(isolde().aliases).toEqual(["伊索德", "the lamp keeper"]);
       await expect(
-        loop.call("update-character", { id: "Corvin", aliases: ["伊索德"] }),
+        loop.update({ id: "Corvin", aliases: ["伊索德"] }),
       ).rejects.toThrow(
         `If the alias is wrong for Isolde, remove it there first: update ${isolde().id} with removeAliases.`,
       );
@@ -1056,7 +1196,7 @@ describe("builtin character tools", () => {
 
     it("names the closest known characters when an update misses, and writes nothing", async () => {
       await expect(
-        loop.call("update-character", { id: "Isolda", fields: { hp: 1 } }),
+        loop.update({ id: "Isolda", fields: { hp: 1 } }),
       ).rejects.toThrow(
         'Character "Isolda" not found. Closest known names: Isolde (aka the keeper, 伊索德).',
       );
@@ -1065,7 +1205,7 @@ describe("builtin character tools", () => {
 
     it("does not let an update reach a character by a part of its name", async () => {
       await expect(
-        loop.call("update-character", { id: "Isol", fields: { hp: 1 } }),
+        loop.update({ id: "Isol", fields: { hp: 1 } }),
       ).rejects.toThrow("not found");
     });
 
@@ -1077,11 +1217,19 @@ describe("builtin character tools", () => {
         aliases: ["the keeper"],
       });
       await expect(
-        loop.call("update-character", { id: "the keeper", fields: { hp: 1 } }),
-      ).rejects.toThrow('"the keeper" names 2 characters');
-      const read = await loop.call("get-character", { name: "the keeper" });
-      expect(read.found).toBe(false);
-      expect(read.candidates).toEqual(["Isolde", "Maud"]);
+        loop.update({ id: "the keeper", fields: { hp: 1 } }),
+      ).rejects.toMatchObject({
+        code: "ambiguous",
+        message: expect.stringContaining(
+          'updates[0]: "the keeper" names 2 characters',
+        ),
+      });
+      await expect(
+        loop.call("get-character", { name: "the keeper" }),
+      ).rejects.toMatchObject({
+        code: "ambiguous",
+        message: expect.stringContaining("Maud"),
+      });
     });
 
     it("shows aliases in get-character and list-characters", async () => {
@@ -1093,16 +1241,16 @@ describe("builtin character tools", () => {
     });
   });
 
-  describe("update-character summary output", () => {
+  describe("batch update summaries", () => {
     it("summarizes what changed in the returned summary", async () => {
-      const created = await loop.call("create-character", {
+      const created = await loop.create({
         name: "赵铁山",
         type: "npc",
         fields: { hp: 100, status: "alive" },
       });
       const charId = (created as { characterId: string }).characterId;
 
-      const result = (await loop.call("update-character", {
+      const result = (await loop.update({
         id: charId,
         fields: { hp: 50, status: "wounded" },
         description: "updated desc",
@@ -1117,7 +1265,7 @@ describe("builtin character tools", () => {
 
     it("reports the missing character id in its rejection", async () => {
       await expect(
-        loop.call("update-character", {
+        loop.update({
           id: "missing",
           fields: { hp: 1 },
         }),
@@ -1129,7 +1277,7 @@ describe("builtin character tools", () => {
   describe("effects isolation: buffered writes commit atomically", () => {
     it("create A → list (sees A) → create B (dedup sees A) → update A, no store write until commit", async () => {
       // create A
-      const a = await loop.call("create-character", {
+      const a = await loop.create({
         name: "Aria",
         type: "npc",
         fields: { hp: 100 },
@@ -1145,7 +1293,7 @@ describe("builtin character tools", () => {
       expect(list1.summary).toContain("Aria");
 
       // create B — dedup does NOT match A (different name), new proposal
-      const b = await loop.call("create-character", {
+      const b = await loop.create({
         name: "Borin",
         type: "npc",
       });
@@ -1153,7 +1301,7 @@ describe("builtin character tools", () => {
       expect(bId).not.toBe(aId);
 
       // update A — sees its own buffered create as the base
-      const upd = await loop.call("update-character", {
+      const upd = await loop.update({
         id: aId,
         fields: { hp: 40 },
       });
@@ -1174,8 +1322,8 @@ describe("builtin character tools", () => {
     });
 
     it("rollback (never commit) leaves the store with zero changes", async () => {
-      await loop.call("create-character", { name: "Ghost", type: "npc" });
-      await loop.call("update-character", {
+      await loop.create({ name: "Ghost", type: "npc" });
+      await loop.update({
         id: (loop.pending[0]!.payload as { id: string }).id,
         fields: { hp: 1 },
       });

@@ -39,6 +39,8 @@ describe("framework tool names", () => {
       "plugin-data-get",
       "plugin-data-list",
       "memory-search",
+      "list-characters",
+      "get-character",
     ]);
     for (const module of [
       ...registry.builtinTools.values(),

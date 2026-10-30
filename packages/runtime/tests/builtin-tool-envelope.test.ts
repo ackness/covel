@@ -54,12 +54,9 @@ const cases: Record<string, Record<string, unknown>> = {
   },
   "plugin-data-get": { namespace: "notes", key: "k" },
   "plugin-data-list": { namespace: "notes" },
-  "create-character": { name: "Wren", type: "npc" },
-  "update-character": { id: "Ada", fields: { hp: 3 } },
   "sync-characters": { creates: [{ name: "Wren", type: "npc" }] },
   "list-characters": {},
   "get-character": { name: "Ada" },
-  "get-character-schema": {},
   "runtime-done": {},
 };
 const expectedUI: Record<string, unknown> = {
@@ -221,8 +218,6 @@ describe("builtin tool envelopes", () => {
           [
             "plugin-data-set",
             "plugin-data-set-batch",
-            "create-character",
-            "update-character",
             "sync-characters",
             "emit-event",
           ].includes(name)
@@ -237,4 +232,100 @@ describe("builtin tool envelopes", () => {
       }
     },
   );
+});
+
+it("returns a coded error envelope and result error for a missing character", async () => {
+  const store = createMemoryStore();
+  const registry = createDefaultToolRegistry({
+    store,
+    eventDirectory: {
+      listTopics: async () => [],
+      validate: async () => ({ ok: true }),
+    },
+  });
+  const executor = createToolExecutor({
+    findTool: (name) => registry.find(name, "probe"),
+  });
+  try {
+    const result = await executor.execute(
+      {
+        toolCallId: "read",
+        name: "get-character",
+        arguments: '{"name":"Unknown"}',
+      },
+      {
+        sessionId: "session",
+        turnId: "turn",
+        pluginId: "probe",
+        runtimeId: "probe/story",
+      },
+    );
+    expect(result.success).toBe(false);
+    expect(JSON.parse(result.result)).toEqual({
+      error: {
+        code: "not-found",
+        message: expect.stringContaining("not found"),
+      },
+    });
+    expect(result.error).toMatchObject({
+      code: "not-found",
+      message: expect.stringContaining("not found"),
+    });
+  } finally {
+    await executor.close();
+    await store.close();
+  }
+});
+
+it("keeps the full correction text for a character alias conflict", async () => {
+  const store = createMemoryStore();
+  await store.upsertCharacter({
+    id: "keeper-ysolde",
+    sessionId: "session",
+    name: "Keeper Ysolde",
+    aliases: ["The Lantern Keeper"],
+    type: "npc",
+    version: 1,
+    createdAt: "2026-10-29T00:00:00Z",
+    updatedAt: "2026-10-29T00:00:00Z",
+  });
+  const registry = createDefaultToolRegistry({
+    store,
+    eventDirectory: {
+      listTopics: async () => [],
+      validate: async () => ({ ok: true }),
+    },
+  });
+  const executor = createToolExecutor({
+    findTool: (name) => registry.find(name, "probe"),
+  });
+  try {
+    const result = await executor.execute(
+      {
+        toolCallId: "write",
+        name: "sync-characters",
+        arguments: JSON.stringify({
+          creates: [
+            { name: "Maud", type: "npc", aliases: ["The Lantern Keeper"] },
+          ],
+        }),
+      },
+      {
+        sessionId: "session",
+        turnId: "turn",
+        pluginId: "probe",
+        runtimeId: "probe/tracker",
+      },
+    );
+    expect(result.error).toMatchObject({ code: "invalid-input" });
+    const { error } = JSON.parse(result.result);
+    expect(error.message.length).toBeGreaterThan(300);
+    expect(error.message).toContain("creates[0]:");
+    expect(error.message).toContain("keeper-ysolde");
+    expect(error.message).toContain("removeAliases");
+    expect(error.message).toContain("Otherwise leave this alias out.");
+  } finally {
+    await executor.close();
+    await store.close();
+  }
 });

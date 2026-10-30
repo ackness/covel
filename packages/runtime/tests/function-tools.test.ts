@@ -23,7 +23,7 @@ const manifest: RuntimeManifest = {
   runtimeType: "function",
   stage: "setup",
   trigger: { type: "auto" },
-  tools: { builtin: ["create-character", "list-characters"] },
+  tools: { builtin: ["sync-characters", "list-characters"] },
 };
 const input = {
   sessionId: "session",
@@ -142,9 +142,11 @@ describe("governed function tools", () => {
   it("rejects invalid governed calls with a coded error and a plain message", async () => {
     let caught: unknown;
     await fixture(async (ctx) => {
-      await ctx.tools!.call("create-character", {}).catch((error: unknown) => {
-        caught = error;
-      });
+      await ctx
+        .tools!.call("sync-characters", { creates: [{}] })
+        .catch((error: unknown) => {
+          caught = error;
+        });
       return { outcome: "success", value: {} };
     });
     expect(caught).toMatchObject({ name: "ToolError", code: "invalid-input" });
@@ -158,12 +160,18 @@ describe("governed function tools", () => {
     const f = await fixture(
       async (ctx) => {
         await ctx.pluginData!.set("audit", "created", true);
-        await ctx.tools!.call("create-character", {
-          name: "Ada",
-          type: "player",
+        await ctx.tools!.call("sync-characters", {
+          creates: [
+            {
+              name: "Ada",
+              type: "player",
+            },
+          ],
         });
         await ctx
-          .tools!.call("update-character", { id: "missing", fields: { hp: 1 } })
+          .tools!.call("sync-characters", {
+            updates: [{ id: "missing", fields: { hp: 1 } }],
+          })
           .catch((error: unknown) => {
             caught = error;
           });
@@ -172,7 +180,7 @@ describe("governed function tools", () => {
       {
         runtime: {
           ...manifest,
-          tools: { builtin: ["create-character", "update-character"] },
+          tools: { builtin: ["sync-characters"] },
         },
       },
     );
@@ -599,9 +607,13 @@ describe("governed function tools", () => {
 
   it("rolls character and plugin data back together when finalization fails", async () => {
     const f = await fixture(async (ctx) => {
-      await ctx.tools!.call("create-character", {
-        name: "Ada",
-        type: "player",
+      await ctx.tools!.call("sync-characters", {
+        creates: [
+          {
+            name: "Ada",
+            type: "player",
+          },
+        ],
       });
       await ctx.pluginData!.set("audit", "created", true);
       return { outcome: "success", value: {} };
@@ -619,10 +631,14 @@ describe("governed function tools", () => {
   });
   it("reads buffered tool writes and commits them with plugin data exactly once", async () => {
     const f = await fixture(async (ctx) => {
-      const created = await ctx.tools!.call("create-character", {
-        name: "Ada",
-        type: "player",
-        fields: { strength: 3 },
+      const created = await ctx.tools!.call("sync-characters", {
+        creates: [
+          {
+            name: "Ada",
+            type: "player",
+            fields: { strength: 3 },
+          },
+        ],
       });
       const listed = await ctx.tools!.call("list-characters", {
         type: "player",
@@ -656,9 +672,13 @@ describe("governed function tools", () => {
     "discards all buffered writes on %s",
     async (mode) => {
       const f = await fixture(async (ctx) => {
-        await ctx.tools!.call("create-character", {
-          name: "Ada",
-          type: "player",
+        await ctx.tools!.call("sync-characters", {
+          creates: [
+            {
+              name: "Ada",
+              type: "player",
+            },
+          ],
         });
         await ctx.pluginData!.set("audit", "created", true);
         if (mode === "throw") throw new Error("Abort after write");
@@ -667,8 +687,12 @@ describe("governed function tools", () => {
         // Swallowing a failed command must not accidentally commit an earlier write.
         await ctx
           .tools!.call(
-            mode === "unauthorized" ? "update-character" : "create-character",
-            mode === "bigint" ? { value: 1n } : mode === "cycle" ? cyclic : {},
+            mode === "unauthorized" ? "get-character" : "sync-characters",
+            mode === "bigint"
+              ? { value: 1n }
+              : mode === "cycle"
+                ? cyclic
+                : { creates: [{}] },
           )
           .catch(() => {});
         return { outcome: "success", value: {} };
@@ -732,6 +756,8 @@ describe("governed function tools", () => {
     );
     expect(execute).not.toHaveBeenCalled();
     revoked = true;
-    expect(() => bound.tools.call("create-character", {})).toThrow("revoked");
+    expect(() =>
+      bound.tools.call("sync-characters", { creates: [{}] }),
+    ).toThrow("revoked");
   });
 });
