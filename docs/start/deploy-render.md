@@ -47,7 +47,7 @@
        "form": "browser-private",
        "source": {
          "repository": "https://github.com/ackness/covel",
-         "commit": "<部署的提交>"
+         "commit": "<deployed commit>"
        }
      },
      "storage": {

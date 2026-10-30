@@ -18,7 +18,7 @@
 pnpm validate:world worlds/<id>
 ```
 
-它和 `pnpm release:preflight` 用的是同一个校验器,并且复用建会话时的 worldData 预检,所以这里通过的种子,建会话时不会再因为记录内容报错。可以一次传多个目录;仓库外的世界(`~/.covel/worlds/<id>/`)直接传绝对路径。
+它和 `pnpm release:preflight` 用的是同一个校验器,并且复用建会话时的 worldData 预检,它验证的是当前代码、文件和扫描到的插件契约；创建会话时若选择了不同的插件或文件已变更，仍会重新预检。可以一次传多个目录;仓库外的世界(`~/.covel/worlds/<id>/`)直接传绝对路径。
 
 检查内容:
 
@@ -87,7 +87,7 @@ console.log('refs OK');
 
 ## L3 — Lore 完整度(可选)
 
-`WORLD.md` 是给主叙事插件 (`narrator`) 当世界书塞进 prompt 的;`world.yaml` 是给所有插件 (`codex` / `npc-graph` / `world-init` 等) 结构化消费的。两者**应该**互相覆盖以下"关键名词":
+`WORLD.md` 提供叙事设定；`world.yaml` 提供世界元数据，维度和其他数据按当前启用插件的公开契约导入。两者**应该**互相覆盖以下"关键名词":
 
 - `geography.initialValue.regions[].name`
 - `factions.initialValue[].name`(至少 major)
@@ -148,4 +148,4 @@ if (missing.length){
       └─ 否(本地测试用) → 跳过 L3/L4
 ```
 
-角色导入还需确认角色类型、字段和 player 单例符合 `characterSchema`；不要以插件私有 namespace 代替角色领域。
+角色导入还需确认角色类型和字段符合 `characterSchema`。会话可以有多个 `type: player` 的角色，绑定和当前扮演角色由座位决定，见 `docs/reference/world-model.md` 的“座位”；不要以插件私有 namespace 代替角色领域。

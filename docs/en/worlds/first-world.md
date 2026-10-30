@@ -11,7 +11,7 @@ It takes about twenty minutes. You do not need to write code.
 - A text editor.
 
 > [!NOTE]
-> You can make a world with the desktop app without a source checkout: create the same files under `~/.covel/worlds/` and reopen Covel. Players without source can click **Validate** in **Settings → Install & manage** to check an installed package or ZIP.
+> You can make a world with the desktop app without a source checkout: put them in the desktop user-worlds directory (default `~/.covel/data/worlds/`), and reopen Covel. The `~/.covel/worlds/` paths below are the source-run default; for desktop, use the worlds directory shown in Settings. Players without source can click **Validate** in **Settings → Install & manage** to check an installed package or ZIP.
 
 ## What you will make
 

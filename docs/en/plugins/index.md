@@ -23,10 +23,12 @@ The top of `PLUGIN.md` is a block of YAML that declares what this package is. Th
 
 The thing that actually runs inside a plugin is called a **runtime** (a runtime unit). A plugin can have none, one, or several. There are two kinds:
 
-| Type         | What it is                                                        | What it is good for                                                        | Does it cost model fees? |
-| ------------ | ----------------------------------------------------------------- | -------------------------------------------------------------------------- | ------------------------ |
-| **agent**    | A prompt. The model reads it, then calls tools to finish the task | Writing the story, extracting facts from the story text, making judgments  | Yes                      |
-| **function** | A JavaScript function                                             | Rolling dice, calculating, reading and writing data, calling external APIs | No                       |
+| Type         | What it is                                                        | What it is good for                                                        | Does it cost model fees?                               |
+| ------------ | ----------------------------------------------------------------- | -------------------------------------------------------------------------- | ------------------------------------------------------ |
+| **agent**    | A prompt. The model reads it, then calls tools to finish the task | Writing the story, extracting facts from the story text, making judgments  | Yes                                                    |
+| **function** | A JavaScript function                                             | Rolling dice, calculating, reading and writing data, calling external APIs | No for direct execution; model calls still cost tokens |
+
+A function can also call a model through `ctx.gateway` or delegate to a sub-agent through `ctx.agents.run`. Those calls still use model tokens.
 
 A rule of thumb: **give anything that can be worked out from fixed rules to a function, and give anything that requires understanding the text to an agent.** Dice should be rolled by a function, so that the result cannot be rewritten to fit the text.
 
@@ -46,7 +48,7 @@ A stage starts only after every runtime of the previous stage has finished. Besi
 
 ## How plugins work together
 
-Plugins do not name each other directly. One plugin says what capability it **provides**, and another says what capability it **needs**, and Covel connects them. A capability has a versioned name, for example `narrative-engine@2`, which means "the story-writing capability, version 1".
+Plugins do not name each other directly. One plugin says what capability it **provides**, and another says what capability it **needs**, and Covel connects them. A capability has a versioned name, for example `narrative-engine@2`, which means "the story-writing capability, version 2".
 
 ```yaml
 requires: [narrative-engine@2]
@@ -56,7 +58,7 @@ This line means "I need a plugin that can write the story", not "I need the plug
 
 ## How plugins save data
 
-A plugin cannot change the save directly. It can only propose "I want to change this". Covel checks the proposals, and writes them all together when the turn ends. If the turn fails, no half-changed data is left behind.
+A plugin cannot change the save directly. It proposes a change, and Covel validates it before committing. A failed runtime’s writes are discarded. Executions with story output isolate optional-plugin commit failures, so the accepted story can still be kept. See [Transactions](../reference/transactions.md) for the boundaries.
 
 Each plugin has its own block of data, which other plugins cannot read. Data that everyone shares, such as characters and the lorebook, is kept by Covel. Plugins can read it, but to change it they must also make a proposal first.
 

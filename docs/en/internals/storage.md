@@ -28,6 +28,8 @@ The contracts and implementations for each kind of data:
 
 The browser no longer re-implements the server's create, read, update, delete and transaction methods, and there is no `IdbStore`. `@covel/store` owns the contracts for domain records and checkpoints, and `apps/web` decides how things are persisted in the browser.
 
+“Game state” means the current session, characters, plugin data and related records; it is not a separate set of kernel state tables. `state_schemas`, `state_entries` and `state_changes` have been removed. Gameplay data belongs in plugin-owned namespaces, while shared domain objects are written through World Model proposals. `state_snapshots` still holds materialized session snapshots. See the [API](../reference/api.md#state-query) for the session view fields.
+
 ## Server Backend Selection
 
 `STORE_BACKEND` decides only the server's `DataStore`:
@@ -454,7 +456,7 @@ Memory, SQLite and PostgreSQL agree on this, and the shared contract tests check
 
 The shared contract tests check this.
 
-**Suspensions.** A pending suspension stores the whole request it will continue: the messages up to the suspension point, the buffered tool calls and proposals, and the frozen input. On resume this record is sent out as it is, so none of it can be rebuilt from the session's later state.
+**Suspensions.** A pending suspension preserves both the request and the control state needed to continue: messages, tool calls and buffered proposals, frozen inputs, and the agent’s `loop` state (spent correction counts, discovered tools, prose captured before steering, and completing-tool output). Resume restores this state rather than rebuilding it from the changed session. The runtime manifest sets a fresh step limit and timeout for this resume; correction counts continue accumulating. Results of a function’s `ctx.recursiveCall` are saved with the parent suspension and commit only when resume succeeds; output-only sub-agents work differently. See [suspension and resume](../reference/api.md#post-apisessionsidsuspensionssuspensionidresume).
 
 - After the resume is committed, `markSuspensionResolved` keeps the row (duplicate resume requests and the session's suspension list still need to find it), and it discards what the resume has already consumed. A resolved row keeps only the execution identity, the language and the turn number (`settledSuspensionContinuation`).
 - Snapshots copy only pending suspensions. So a resolved suspension never carries its prompts into snapshots, forks, exports or browser checkpoints.
@@ -592,7 +594,7 @@ Two more kinds of lists that go into a prompt also have a full order on every ba
 
 | Owner / namespace                                                                        | Who decides                                                                      | What a plugin can do                                                                                                                                                                               |
 | ---------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Plugin owner, any namespace starting with `_`                                            | The kernel                                                                       | Read through scoped APIs. No generic write or delete is allowed, and the same goes for unknown `_` names.                                                                                          |
+| Plugin owner, namespaces starting with `_` except its own `_hidden.*`                    | The kernel                                                                       | Read through scoped APIs. No generic write or delete is allowed, and the same goes for unknown `_` names.                                                                                          |
 | Plugin owner, `_runtime_jobs`                                                            | Persisted background jobs (detached stages, background manual or event triggers) | Read only. State transitions are handled by the runtime worker.                                                                                                                                    |
 | Plugin owner, `_logs`                                                                    | The runtime log ring                                                             | Read only through the data API. Entries are produced through the scoped logger.                                                                                                                    |
 | Plugin owner, `_hidden.<namespace>`                                                      | World data with `visibility: hidden`, and hidden content added during play       | Only the owning plugin's own code can read and write it (REST and LLM data tools cannot write). It does not appear in the public data API, extension handlers, LLM data tools or prompt injection. |
@@ -602,7 +604,7 @@ Two more kinds of lists that go into a prompt also have a full order on every ba
 | Plugin owner, ordinary names such as `blocks`, `definitions`, `characters`, `blueprints` | The plugin                                                                       | Read its own data, and write it through proposals. Old character mirrors are not created again.                                                                                                    |
 | `__kernel:<subsystem>` owners, including `__kernel:vector` and `__kernel:triggers`       | The kernel                                                                       | Not visible through a bound plugin's store or extension API, the REST reads of plugin data, or the `plugin-data.changed` event. This is an owner partition, not a plugin namespace.                |
 
-**The whole underscore prefix is reserved.** If only the names that exist today were listed as exceptions, bookkeeping data added by the kernel in the future could become writable by plugins before every caller has been updated.
+**The framework controls the underscore prefix.** Generic REST writes and model data tools cannot write any `_` namespace. A plugin’s own code may write only its own `_hidden.*` buckets. Other underscore names remain read-only even before they are used, so future kernel bookkeeping stays protected.
 
 - `_memory` is still protected, even though the old memory mirror and queue have been removed. This does not mean there is a compatibility read or data recovery.
 - Jobs and logs keep their existing snapshot and branch inclusion policy.
@@ -620,7 +622,7 @@ See [World Model](../reference/world-model.md#dynamic-dimension-snapshot) and [b
 > [!NOTE]
 > These are permission boundaries at the API level. They are not encryption, and they are not a process sandbox.
 
-**Stability commitment**: keeping the `_` prefix is a permanent design decision. New kernel subsystems may add more `_<name>` namespaces, and that is not a breaking change. Plugin authors must never put their own data in the `_` namespace, and they must not assume that they can write names reserved by the kernel.
+**Stability commitment**: keeping the `_` prefix is a permanent design decision. New kernel subsystems may add more `_<name>` namespaces, and that is not a breaking change. Use ordinary names without `_` for plugin data and the framework-defined `_hidden.*` buckets for private content. Other kernel-reserved names must not be treated as writable.
 
 ### Bounded Reads
 

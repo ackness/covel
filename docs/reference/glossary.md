@@ -14,41 +14,44 @@
 | Action | 行动 | 玩家一次提交里的一项：从哪个座位、以哪个角色、做哪种事（`submit_actions`）。 |
 | Action kind | 行动类型 | 一种行动：内核的 `say`、`act` 等，或插件声明的 `<pluginId>/<name>`。 |
 | Alias | 别名 | 同一个角色的另一个名字（`aliases`）。不是字段或 ID 的兼容名。 |
-| Binding | 绑定 |  |
+| Binding | 绑定 | 在 `io.inputs` 声明的结果通路，把上游值及其来源交给 runtime。 |
 | Bundled plugin | 内置插件 | 随 Covel 一起安装的插件。不等于 `kind: core`。 |
 | Capability | 能力标签 | 一条模型路由的 `tag`（`text`、`image` 等）。找插件靠的是 **Contract**，不是能力标签。 |
 | Capability snapshot | 能力快照 | 安装记录里的声明能力上界；见[可信来源](./plugin-installation.md#可信来源)。 |
-| Collection | 合集 |  |
+| Collection | 合集 | 安装清单，把世界和插件作为一组发布；不同于游玩时选择插件的 Pack。 |
 | Contract | 契约 | 带版本号的 ID，例如 `narrative-engine@2`。 |
 | Credits | 作者信息 | 一个包的 `author`、`license` 和 `homepage` 字段。 |
 | Dataset | 数据集 | 插件声明的带类型数据（`contributes.datasets`）。不是安装用的 **Collection**。 |
 | Deployment form | 部署形态 | 桌面客户端、自部署网页版、官方网页版。不是 `DEPLOYMENT_TIER`。 |
 | Edition | 语言版本 | 世界的一种语言：`defaultLocale`，以及根目录里每个 `world.<locale>.yaml` 或 `WORLD.<locale>.md` 的语言。 |
+| Execution | 执行 | 一次调度及其提交计划；玩家回合、手动调用和后台作业都可以发起执行。 |
 | Fault latch | 熔断 | 辅助插件在同一会话连续因自身故障失败后暂停，可由玩家重新启用；只在进程内存中保存。见[协议](./protocol.md#插件故障熔断)。 |
 | Finalizer step | 收尾步骤 | agent 用完步数后关掉工具、要求直接给出答案的那一次请求。 |
-| Kernel | 内核 |  |
+| Kernel | 内核 | 负责调度、上下文、工具调用、提案校验和提交的框架核心。 |
 | Local model relay | 本地模型中继 | 共享形态的服务端经玩家浏览器访问玩家电脑或局域网上的模型。见[安全边界](../internals/security.md#local-model-relay)。 |
-| Official web app | 官方网页版 |  |
+| Official web app | 官方网页版 | 尚未支持的官方托管产品；已有的 browser-private 基础设施不等于完整产品。 |
 | Operation-based write | 操作式写入 | 交一串操作（`plugin.data.update`），不交算好的整个值。 |
-| Pack | 玩法包 |  |
+| Pack | 玩法包 | 供玩家选择的一组已安装插件，不负责安装包。 |
 | Perspective | 视角 | 叙事从谁的角度讲：以角色为中心的第一、第二、第三人称，全知旁白，或主持人。 |
-| PluginType | 插件类型 |  |
+| Plugin kind | 插件类型 | 包的 `kind` 决定默认选择；不同于 runtime 的 agent/function，也不同于发现来源。 |
 | Presence record | 在场记录 | 故事消息上记下的在场角色 ID（`presentCharacterIds`）。 |
-| Preset | 预设 |  |
-| Proposal | 提案 |  |
-| Provider | 提供商 |  |
+| Preset | 预设 | 内部的模型连接方案，含提供商、端点、协议和模型 ID。 |
+| Proposal | 提案 | runtime 提交给内核校验的一次写入请求，校验通过后才保存。 |
+| Provider | 提供商 | 通过模型槽位路由选中的具体模型服务。 |
+| Recursive call | 嵌套调用 | 包内 runtime 调用，写入随父执行一起提交；不同于只交回输出的子 agent。 |
 | Roleplay notes | 扮演说明 | 世界作者写在角色记录的 `blueprint` 字段里、告诉叙事怎样演这个角色的内容；由“角色资料”插件读取。不是角色本身。 |
 | Runtime | runtime | 保留英文：它指清单里的一个运行单元，不是泛指“运行时”。 |
-| Runtime manifest | runtime 清单 |  |
+| Runtime manifest | runtime 清单 | 加载器从作者清单编译出的内部执行结构，不是可直接复制的作者格式。 |
 | Seat | 座位 | 会话里“谁在玩、以什么身份、控制哪些角色”（`session.seats`）。 |
 | Segment | 提示词段 | 组装好的提示词里的一段。故事里的段落是 **Story segment**。 |
 | Server-scoped setting | 服务端设置 | `scope: "server"` 的设置；其余的是本设备设置。 |
-| Session | 会话 |  |
+| Session | 会话 | 用某个世界进行的一局游戏，拥有独立的角色、插件数据和进度。 |
 | Slot | 槽位 | 设置界面里叫“模型用途”。 |
 | Stop reason | 结束原因 | agent 工具循环怎样结束（`RuntimeResult.stop.reason`）。 |
 | Story segment | 故事段落 | 故事输出里的一段：旁白、对白或动作。上下文清楚时简称“段落”。 |
 | Sub-agent | 子 agent | 另一个 runtime 在自己的执行里运行、只交回输出的 agent runtime。 |
-| Trigger mode | 触发模式 |  |
+| Tool result | 工具结果 | 代码读取的内容与模型看到的反馈是两种形状；工具成功不代表已保存。 |
+| Trigger mode | 触发模式 | runtime 的触发方式，只有 `auto`、`manual`、`event`。 |
 | Trusted source | 可信来源 | 实例所有者或运营者选定的 GitHub 来源，只减少审批提示。 |
 | Turn | 回合 | “This turn” 是“本回合”。 |
 | World | 世界 | 世界的安装包叫“世界包”。 |
@@ -60,7 +63,7 @@
 <!-- prettier-ignore -->
 | Term | 中文 | 意思 | 不要用这些词来指它 |
 | --- | --- | --- | --- |
-| turn | 回合 | 玩家的一条消息，以及各个 runtime 为它做的全部事情 | round |
+| turn | 回合 | 玩家一次行动提交，以及各个 runtime 为它执行的流程 | round |
 | narrative | 叙事 | 叙事 runtime 在本回合写出的故事正文 | story text, prose, the output |
 | player | 玩家 | 玩游戏的人 | user |
 | player character | 玩家角色 | 玩家控制的角色 | protagonist, hero, PC |
@@ -108,13 +111,13 @@
 - 同一个包内，按 runtime ID 找到上游；跨包时，按带版本的契约找。
 - 可以用 JSON Pointer（RFC 6901）只取结果里的一部分。
 - 取到的值会按 `accepts` 校验，再连同它的来源一起交给 `ctx.inputs` 或 agent 的提示词。
-- 写 `scope: committed` 时，读的是之前某次执行已经保存下来的结果，而不是本次执行的。
+- 写 `scope: committed` 时，读的是之前某次执行已经保存下来的结果，而不是本次执行的；这类输入不能同时写 `select`。
 
 详见：[插件字段参考](./plugins.md)、[回合管线](../internals/flow.md)、`packages/shared/src/types/runtime-scheduling.ts`。
 
 ## Bundled plugin
 
-内置插件是随 Covel 一起发布、放在 `plugins/` 下的插件。它的来源是 `builtin`，代码不用玩家批准就能运行；社区插件的代码要玩家批准。内置插件是示范，不是框架的一部分：删掉任何一个，框架都应当照常运行。它和 `kind: core` 不是一回事：`kind` 决定插件默认是否加入每一局。
+内置插件是随 Covel 一起发布、放在 `plugins/` 下的插件。它的来源是 `builtin`，代码不用玩家批准就能运行；社区插件的代码按[普通审批或可信来源规则](./plugin-installation.md#可信来源)授权。内置插件是示范，不是框架的一部分：删掉任何一个，框架都应当照常运行。它和 `kind: core` 不是一回事：`kind` 决定插件默认是否加入每一局。
 
 详见：[内置插件与功能](../builtin/index.md)、[插件字段参考](./plugins.md)。
 
@@ -158,6 +161,14 @@
 部署形态是 Covel 的三种运行方式：桌面客户端、自部署网页版和官方网页版。现在支持前两种，官方网页版还不支持。各自的存储方式见[存储](../internals/storage.md)。商业版现在没有做，本仓库不为它更新。
 
 它和部署档位（`DEPLOYMENT_TIER`）不是一回事：档位决定鉴权和安全检查有多严，见[安全边界](../internals/security.md)。
+
+## Execution
+
+执行是一次管线调用，带有自己的身份、冻结的注册表与读取底本、各 runtime 的结果和提交计划。`execution.origin` 说明它因何开始，例如玩家行动、手动调用、后台作业或嵌套调用。恢复接续挂起的逻辑工作，同时分配新的 `executionId`，将 `origin` 设为 `resume`；沿用原来的 `logicalTurnId` 和计数责任。
+
+`executionId` 标识一次管线派发，`turnId` 关联回合产物，`runId` 标识某个 runtime 的一次尝试。恢复保留来源 `turnId`，不能用它区分每次恢复派发。这些 ID 都不是逻辑回合号。setup、开场、手动运行和后台作业不增加 `completedPlayerTurns`；一个已提交的玩家回合最多增加一次。
+
+详见：[回合管线](../internals/flow.md)、[执行和提交](./protocol.md#执行和提交是两步)。
 
 ## Extension point
 
@@ -258,12 +269,18 @@ agent runtime 用完步数之后，内核再发的一次模型请求：关掉工
 
 详见：`packages/ai-provider/`、[插件字段参考](./plugins.md)。
 
+## Recursive call
+
+通过 `ctx.recursiveCall` 调用本插件内的另一个 runtime。它可以产生领域写入；嵌套结果与父结果组成同一个提交单元，父调用失败时子调用写入也丢弃。它不同于子 agent：子 agent 只交回输出，而且可以按契约选择其他包的提供者。
+
+详见：[嵌套调用](./plugins.md#嵌套调用ctxrecursivecall)、[子 agent](./plugins.md#子-agent)。
+
 ## Runtime
 
 插件里真正被执行的单元。有两种：
 
 - `agent`：由模型驱动，把 `RUNTIME.md`（或根清单里内联的 runtime）的正文当作系统提示词。
-- `function`：一个纯 JavaScript 处理函数。
+- `function`：由 JavaScript handler 执行；需要时可以调用工具、服务或模型。
 
 一个插件包可以有多个 runtime，各有自己的触发方式、阶段和依赖关系。
 
@@ -302,7 +319,7 @@ agent runtime 用完步数之后，内核再发的一次模型请求：关掉工
 
 ## Session
 
-一位玩家正在进行的一局游戏。它的 ID 形如 `{worldId}-{uuid8}`，固定属于一个世界，有自己的回合计数、启用的插件、快照和事件。
+一局正在进行的游戏。它的 ID 形如 `{worldId}-{uuid8}`，固定属于一个世界，有自己的回合计数、启用的插件、快照和事件。
 
 详见：[HTTP API](./api.md)、[事务](./transactions.md)。
 
@@ -334,6 +351,12 @@ agent runtime 的工具循环怎样结束，例如 `completed`（模型给出了
 
 详见：[插件参考 · 子 agent](./plugins.md#子-agent)、[delegate 工具](./tools.md#子-agentdelegate)。
 
+## Tool result
+
+一次工具调用的返回。插件代码可以直接返回业务内容，也可以用 SDK 的 `covel.tool-result` 分开内容、模型反馈和待提交副作用。执行器把模型反馈整理成成功信封或 `error` 信封。已暂存的写入仍可能在提交时被拒绝。
+
+详见：[工具结果契约](./tools.md#结果与写入)。
+
 ## Trigger mode
 
 一个 runtime 怎样决定这个回合要不要运行：`auto`（默认）、`manual` 或 `event`。只有这三种，清单里写了别的值会在加载时被拒绝。
@@ -349,7 +372,7 @@ agent runtime 的工具循环怎样结束，例如 `completed`（模型给出了
 
 会话循环走一圈：玩家输入 → 决定触发哪些 runtime → 按阶段执行（一个阶段全部完成后才进入下一个，阶段内按依赖顺序）→ 校验提案 → 提交 → 通过 SSE 推送给界面。
 
-每次执行有一个不透明的 `turnId`。已提交的玩家回合会让 `completedPlayerTurns` 这个只增不减的计数前进，每个逻辑回合最多一次。走哪一组阶段由 `session.phase` 决定：`setup` 运行 setup 阶段，`playing` 运行 `pre-turn → narrative → post-turn → audit`。
+执行产物关联一个不透明的 `turnId`；挂起恢复保留来源 `turnId`，用新的 `executionId` 区分派发。已提交的玩家回合会让 `completedPlayerTurns` 这个只增不减的计数前进，每个逻辑回合最多一次。走哪一组阶段由 `session.phase` 决定：`setup` 运行 setup 阶段，`playing` 运行 `pre-turn → narrative → post-turn → audit`。
 
 详见：[回合管线](../internals/flow.md)、[SSE 协议](./protocol.md)。
 
@@ -363,6 +386,6 @@ agent runtime 的工具循环怎样结束，例如 `completed`（模型给出了
 
 ## Related
 
-- **pluginId 和 runtimeId 的区别**：见根目录 `AGENTS.md` 的 “Identity model”。
+- **pluginId 和 runtimeId 的区别**：见[Runtime manifest](#runtime-manifest)：`pluginId` 标识包、隔离和写入归属，`name` 是 runtimeId，标识调度与追踪。
 - **插件来源**：见上面的 “Plugin kind and source”，以及[工具](./tools.md)。
 - **这里没有收录的词**：`Branch`、`Snapshot`、`PluginData`、`CharacterRecord`、`Lorebook`，见[事务](./transactions.md)。

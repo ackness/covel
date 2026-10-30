@@ -31,7 +31,7 @@ sources:
 ```yaml
 # data/hidden/events.yaml
 - id: lighthouse-orphan
-  title: { zh-CN: 灯塔托孤, en-US: The Lighthouse Charge }
+  title: 灯塔托孤
   when:
     all:
       - time: phase
@@ -45,6 +45,8 @@ sources:
   once: true
   priority: 10
 ```
+
+每份世界数据文件只写一种语言；标题的英文放在对应语言文件中，按 `id` 对齐，见[世界数据的语言文件](../../docs/reference/world-data.md#语言文件namelocaleext)。
 
 - 条件组合：`all` / `any` / `not`；叶子引用 `dimension`（可带 `path`，点号或数组）、`time`（world-time 输出的数值字段，如时段制的 `phase` / `cycle`，历法制的 `hour` / `day` / `month` / `weekdayIndex`）、`revealed`（另一个事件）或会话回合数（`turnGte` / `turnLte`）。
 - 事件链：`{ revealed: <事件 ID> }` 在该事件发生过后成立，可加 `turnsSinceGte` / `turnsSinceLte` 限定距它最近一次发生过了多少回合；配合 `not` 可以写「某事还没发生」。`revealed` 叶子不需要比较运算符，引用不存在的事件 ID 属于无法判断（见下）并写入诊断；事件存在但尚未发生则是确定的“不成立”，`not` 可以正常取反。

@@ -105,7 +105,7 @@ handler 抛出异常、超时或返回了格式不对的结果，都算这个 ha
 
 “范围”一列说明事件是关于什么的：`session`（整个会话）、`turn`（一次执行）、`runtime`（一个 runtime）。范围为 `runtime` 的事件里，`ctx.pluginId` 和 `ctx.runtimeId` 就是那个 runtime。
 
-表按内核实际触发的先后排列。
+表按 `HOOK_EVENTS` 的顺序列出。工具事件在 agent 循环里反复触发；它们并不发生在 `PostRuntime` 之后。
 
 | 事件                  | 范围    | 运行方式   | Guard | handler 可以做什么                                     |
 | --------------------- | ------- | ---------- | ----- | ------------------------------------------------------ |
@@ -214,10 +214,10 @@ agent runtime 的工具循环每走一步、调用模型之前触发一次：在
 `replace` 认这四个字段，不合法的部分被丢掉，不会让 runtime 失败：
 
 - `replace.tools`：只给模型这些工具。它只能是 `toolNames` 的子集，不在里面的名字被忽略，并记进这一步的 `step.completed`。收窄只管这一步，下一步又从完整的工具集开始。它也不改变哪些工具可以执行：模型调用了被去掉的工具，只要清单声明了它，仍然会执行。
-- `replace.toolChoice`：这一步的工具选择，替换清单的 `llm.toolChoice`。`"auto"` 表示不指定；`{ name }` 必须是这一步提供的工具。runtime 要求模型改正、必须调用工具的那一步，`"auto"` 不会取消这个要求。
+- `replace.toolChoice`：这一步的工具选择，替换清单的 `agent.toolChoice`。`"auto"` 表示不指定；`{ name }` 必须是这一步提供的工具。runtime 要求模型改正、必须调用工具的那一步，`"auto"` 不会取消这个要求。
 - `replace.stepsRemaining`：把剩余步数减到这个整数（至少 1，包括这一步）。比当前值大的数被忽略，步数只能减少。用完后循环以 `max-steps` 结束。
 - `replace.stop: { reason, message? }`：在这一步调用模型之前结束循环。`reason` 只能是这两个：
-  - `"tool-finished"`：按成功结束，和 `PostToolUse` 的 `terminate` 一样。runtime 的完成条件（`requireToolUse` 等）照常检查。
+  - `"tool-finished"`：按成功结束，和 `PostToolUse` 的 `terminate` 一样。runtime 的完成条件（`agent.completion`）照常检查。
   - `"cancelled"`：runtime 失败，错误是 `Runtime "<id>" was stopped by a PreStep hook`，后面跟 `message`。已经做过的工具调用留在失败的结果里。
 
 `abort` 等于“什么都不变”。`PreStep` 先运行，`PreLLMCall` 再改写这次调用：`PreLLMCall` 的 `replace.tools` 会覆盖 `PreStep` 收窄后的工具。

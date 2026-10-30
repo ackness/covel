@@ -75,7 +75,7 @@ The Debugger page is at <http://localhost:5173/debug>. It shows each plugin's mo
 
 - [All environment variables](../reference/env-registry.md)
 - [Less common commands](../internals/commands.md)
-- [Contributing guide](../../CONTRIBUTING.md)
+- [Contributing guide](../../CONTRIBUTING.en.md)
 
 ## Next steps
 

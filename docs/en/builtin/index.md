@@ -29,11 +29,11 @@ The first three packs also include Pre-Game Setup, World Dimensions and Characte
 
 The "Back to the minimal set" button on the session-prep screen selects this combination in one click: only narrative plugins and any plugins they or the world require.
 
-A world can have its own gameplay pack. For example, "Lantern Barrow" (提灯古冢) has a "Classic Tabletop" pack. It builds on Traditional Story and adds Tabletop Rules, Dice Check, Quest Log, Inventory and Affinity. After you pick a pack, you can still add or remove plugins under "Customize plugins and advanced settings" on the session-prep screen.
+A world can add plugins to a built-in pack and give that combination a name. For example, Lantern Barrow calls its Traditional Story setup with Tabletop Rules, Dice Check, Quest Log, Inventory and Affinity “Classic Tabletop”. This does not create another pack available globally. After you pick a pack, you can still add or remove plugins under "Customize plugins and advanced settings" on the session-prep screen.
 
 ## All built-in plugins
 
-Plugins marked "On by default" are added to every game automatically, and you can turn them off on the session-prep screen. Some plugins need other plugins to work with them, so turning one off can make a game fail to start. The others are chosen by the gameplay pack, the world, or you.
+Plugins marked "On by default" are added to every game automatically, and you can turn them off on the session-prep screen. Some plugins require capabilities from other plugins. If a provider is missing, its dependents are disabled and the interface explains what is missing; other features keep working. The others are chosen by the gameplay pack, the world, or you.
 
 ### Narrative and memory
 

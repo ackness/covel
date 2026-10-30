@@ -17,7 +17,7 @@ Open **Settings → Install & manage**.
 2. Parse the link. The plugins and world packages in that folder are listed together.
 3. Check the items you want to install, confirm the ID, version, and source, read the code risk notice, and confirm once to install.
 
-Selected packages are installed together, plugins first and then worlds. If any one of them fails, everything installed in this run is removed, so you are not left with a half-finished install.
+Selected packages install together, plugins first. If one fails, Covel tries to roll back the packages installed in this run. Worlds with sessions and packages that cannot be removed are kept and listed in the error; resolve these before retrying. See [collections](../ship/collections.md#what-happens-when-a-player-installs-it).
 
 Local ZIP packages are imported on the same page.
 
@@ -34,7 +34,7 @@ Local ZIP packages are imported on the same page.
 After restarting the backend, complete two more steps before the plugin can run:
 
 1. **Enable it**: select it in the plugin list on the world's session-prep screen, or have the world's gameplay pack include it.
-2. **Authorize it**: the first time a community plugin needs to run code, the "Authorize plugin action" prompt appears. After you authorize it, it starts working. If you choose "Not now", the plugin stays paused, and the rest of the game keeps running as usual.
+2. **Authorize it**: if trusted-source authorization does not apply, the first time a community plugin needs to run code, the "Authorize plugin action" prompt appears. After you authorize it, it starts working. If you choose "Not now", the plugin stays paused, and the rest of the game keeps running as usual.
 
 Explicit authorization lasts only while the server is running. Trusted-source code and runtime grants can pass automatically; other community plugins ask again after a restart.
 
@@ -54,13 +54,13 @@ You also uninstall from "Install & manage". After you uninstall a plugin, you ne
 
 ## Troubleshooting
 
-| Symptom                                                      | What to do                                                                                                                     |
-| ------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------ |
-| You cannot select a package in the preview                   | Read the error next to it. Usually a capability it depends on is not provided by any plugin, or it needs a newer Covel version |
-| The session-prep screen says the world is missing a plugin   | You can start without installing it, but the gameplay that plugin provides will not work                                       |
-| The session-prep screen says no plugin provides a capability | The world cannot run without that capability (for example, dice checks). Install a plugin that provides it before you start    |
-| A plugin is installed but does not run                       | Check in order: whether you restarted the backend, whether you enabled it in this game, and whether you authorized it          |
-| The download fails                                           | Set up a proxy under **Settings → Desktop → Network Proxy**. Downloads follow the settings there                               |
+| Symptom                                                      | What to do                                                                                                                              |
+| ------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------- |
+| You cannot select a package in the preview                   | Read the error next to it. Usually a capability it depends on is not provided by any plugin, or it needs a newer Covel version          |
+| The session-prep screen says the world is missing a plugin   | You can start without installing it, but the gameplay that plugin provides will not work                                                |
+| The session-prep screen says no plugin provides a capability | You can start with that feature (for example, dice checks) missing. To add it, install and enable a plugin that provides the capability |
+| A plugin is installed but does not run                       | Check in order: whether you restarted the backend, whether you enabled it in this game, and whether you authorized it                   |
+| The download fails                                           | Set up a proxy under **Settings → Desktop → Network Proxy**. Downloads follow the settings there                                        |
 
 ## Learn more
 

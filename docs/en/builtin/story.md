@@ -29,8 +29,8 @@ How to choose:
 - If you want characters to talk back and forth with you, and you want to see portraits and a stage, choose "Dialogue Narrator".
 - If you want to keep model costs down, choose the "Low Cost" pack. It uses "Narrator" and has no extra model calls for things like action suggestions.
 
-> [!WARNING]
-> "Dialogue Narrator" depends on "Scene Stage" and "Action Suggestions". It cannot be turned on if either one is missing. "Narrator" has no such requirement.
+> [!NOTE]
+> Either narrator can run on its own. Scene Stage adds the stage presentation and Action Suggestions adds suggested actions; the story still works without them.
 
 ## Narrator (`narrator`)
 

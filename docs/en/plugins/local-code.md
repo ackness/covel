@@ -130,7 +130,7 @@ This file exports one function. Covel passes a set of helpers to it:
 
 The model reads the [unified tool envelope](../reference/tools.md#unified-result-format-and-error-codes). This example sends only a summary plus the automatic staged notice; code still reads `{id}`. Use `new ToolError("not-found", "The requested note was not found.", { hint: "Check the name." })` for a coded failure. `ctx.tools.call` returns full content on success and rejects with `ToolError` on failure; its message is plain text, and `code` and `hint` are separate fields.
 
-The tool does not write to the save directly. It returns a **write request** (a proposal). Its type is `plugin.data`, and its content means "write this one record into `notes`". Covel checks and saves all write requests when the turn ends. If the turn fails, none of them are saved.
+The tool does not write to the save directly. It returns a **write request** (a proposal). Its type is `plugin.data`, and its content means "write this one record into `notes`". Covel checks these requests when the execution commits. If this runtime fails or its commit is rejected, this write is not saved.
 
 This tool overwrites the same record by a stable key, so it declares `idempotent: true`. Read tools can also declare `readOnly` and `concurrencySafe`; use `timeoutMs` for a per-call limit. See [Annotations and timeout](../reference/tools.md#annotations-and-timeout) for defaults and validation rules.
 
@@ -143,7 +143,7 @@ Three rules:
 > [!NOTE]
 > `makeProposal` fills in the request's ID, source and turn information. Use `context.random` for game randomness; the SDK generates request IDs.
 
-`schemas/note.schema.json` describes the shape of one record. When a world package imports content into this data space, it checks the content against this schema. See [Advanced · Data contracts and world import](./advanced.md#data-contracts-and-world-import). The tool's own writes are guarded by the `parameters` above, so the two must have the same shape:
+`schemas/note.schema.json` describes the shape of one record. When a world package imports content into this data space, it checks the content against this schema. See [Advanced · Data contracts and world import](./advanced.md#data-contracts-and-world-import). The `parameters` above validate tool arguments. This example declares no `datasets`: `contributes.data` alone does not enable dataset validation for tool writes. To validate records at commit too, declare a [dataset](../reference/plugins.md#datasets-contributesdatasets) and keep its schema aligned with the tool arguments and import schema:
 
 ```json
 {
@@ -541,16 +541,16 @@ A form can be answered only once. Submitting it again gives `code: "interaction_
 
 ## When it does not work as expected
 
-| Symptom                                                                    | Cause and fix                                                                                                           |
-| -------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
-| Validation passes, but the plugin fails to load                            | The tool and action names registered in the entry file do not match `contributes`                                       |
-| The entry file reports that `@covel/plugin-handlers-utils` cannot be found | A plugin in the user directory cannot `import` it. Use the `covel.toolkit` and `ctx` that are passed in instead         |
-| A tool call is rejected in an offline case                                 | The `arguments` of the fake model do not match the tool's `parameters`                                                  |
-| A tool call succeeds, but the data is not saved                            | The runtime ends as a failure at the end, so none of its writes are saved. Check the reason it failed on the debug page |
-| The case reports `Unsupported rpc`                                         | This is normal. Offline runs do not support actions. Verify on a real server                                            |
-| In a function, `ctx.tools.call` reports the tool is unavailable            | The tool is not listed in `function.tools`                                                                              |
-| The model writes data in its reply, but nothing happens                    | Data fields in a reply have no effect. Give it a tool                                                                   |
-| An agent that declares `require: tool-use` always fails                    | It must successfully call a tool once even when there is "no change"                                                    |
+| Symptom                                                                    | Cause and fix                                                                                                                                                     |
+| -------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Validation passes, but the plugin fails to load                            | The tool and action names registered in the entry file do not match `contributes`                                                                                 |
+| The entry file reports that `@covel/plugin-handlers-utils` cannot be found | Load the plugin through Covel, or resolve the public SDK in the repository test environment. Standalone Node does not automatically receive host-supplied modules |
+| A tool call is rejected in an offline case                                 | The `arguments` of the fake model do not match the tool's `parameters`                                                                                            |
+| A tool call succeeds, but the data is not saved                            | The runtime ends as a failure at the end, so none of its writes are saved. Check the reason it failed on the debug page                                           |
+| The case reports `Unsupported rpc`                                         | This is normal. Offline runs do not support actions. Verify on a real server                                                                                      |
+| In a function, `ctx.tools.call` reports the tool is unavailable            | The tool is not listed in `function.tools`                                                                                                                        |
+| The model writes data in its reply, but nothing happens                    | Data fields in a reply have no effect. Give it a tool                                                                                                             |
+| An agent that declares `require: tool-use` always fails                    | It must successfully call a tool once even when there is "no change"                                                                                              |
 
 ## What's next
 

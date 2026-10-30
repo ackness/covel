@@ -618,9 +618,10 @@ await store.withTransaction(async (tx) => {
 
 表和索引的 DDL 由 Drizzle schema（`packages/store/src/{sqlite,postgres}/schema.ts`）经 `packages/store/src/common/ddl-codegen.ts` 生成，使用 `CREATE TABLE IF NOT EXISTS`。
 
-- 早期开发阶段，store 不迁移旧数据。更早的构建创建的数据库，只有在它的表已经和当前一致时才能启动。
-- 对表、约束或索引的改动，如果旧的行不满足，会列在 `docs/CHANGELOG.md` 的 Breaking 下面，并说明要重建哪些开发数据。
-- 启动时，store 会删除已退役的表和已退役的 plugin-data namespace。这是删除，不是转换。
+- SQLite 和 PostgreSQL 共用 `packages/store/src/migrations.ts` 里的 `DATA_SCHEMA_VERSION`。SQLite 记在 `PRAGMA user_version`，PostgreSQL 记在 `covel_schema_meta`。
+- 启动时拒绝记录了其他 schema 版本的数据库。未记录版本时，检查已有表是否具备当前 schema 所需的列，通过后才建缺失表并记录版本；不迁移旧数据。检查失败时先备份，再重建受影响的开发数据库。完整规则见[存储](../internals/storage.md#capabilities-and-migrations)。
+- checkpoint 和挂起 continuation 另有当前格式的校验。SQL schema 版本相同，不代表旧 checkpoint 或工具循环状态可以恢复。
+- 改动 schema 使开发数据失效时，在 changelog fragment 里写明要重建什么；已发布的升级说明汇总在 `docs/CHANGELOG.md`。
 
 ## References
 

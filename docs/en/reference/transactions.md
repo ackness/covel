@@ -616,11 +616,12 @@ The `trace_events` produced by a transactional commit are the same as for a non-
 
 ## Schema changes
 
-The table and index DDL is generated from the Drizzle schema (`packages/store/src/{sqlite,postgres}/schema.ts`) by `packages/store/src/common/ddl-codegen.ts`, using `CREATE TABLE IF NOT EXISTS`.
+Table and index DDL is generated from the Drizzle schemas (`packages/store/src/{sqlite,postgres}/schema.ts`) by `packages/store/src/common/ddl-codegen.ts`, using `CREATE TABLE IF NOT EXISTS`.
 
-- In the early development stage, the store does not migrate old data. A database created by an earlier build can start only if its tables already match the current ones.
-- A change to a table, constraint, or index that old rows do not satisfy is listed under Breaking in `docs/CHANGELOG.md`, with a note on which development data must be rebuilt.
-- At startup, the store deletes retired tables and retired plugin-data namespaces. This is deletion, not conversion.
+- The shared SQL data schema version is `DATA_SCHEMA_VERSION` in `packages/store/src/migrations.ts`. SQLite records it in `PRAGMA user_version`; PostgreSQL records it in `covel_schema_meta`.
+- Startup rejects a database recorded with another schema version. When no version is recorded, it checks that existing tables have the columns the current schema needs, then creates missing tables and records the version. It does not migrate old data. If the check fails, back up the files and recreate the affected development database. Full rules: [Storage](../internals/storage.md#capabilities-and-migrations).
+- Checkpoints and suspended continuations have their own current-format validation. A SQL schema version match does not make older checkpoint or loop-state shapes compatible.
+- A schema change that invalidates development data must say what to recreate in a changelog fragment. Released upgrade instructions are collected in `docs/CHANGELOG.md`.
 
 ## References
 

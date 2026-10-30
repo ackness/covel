@@ -1,165 +1,60 @@
 # `llm.toml` Slot 配置：插件作者踩雷点
 
-第三方插件**不修改 llm.toml 本身**——只在 README 里告诉用户怎么配。本文只收集写 README 和 handler 错误信息时容易踩的坑。
+插件只在 `agent.model` / `function.model` 写模型用途名。玩家在设置界面或 `llm.toml` 里把用途连到服务商与模型；插件目录里的 `llm.toml` 不会被读取。
 
-插件只在 `agent.model` / `function.model` 写用途（slot）名，**不能自带模型或端点**：插件目录里的 `llm.toml` 不会被读取，`pnpm validate:plugin` 会提醒删掉它（见 [`docs/reference/slots.md#实际选择优先级`](../../../../docs/reference/slots.md#实际选择优先级)）。
-
-**字段全集、枚举值和默认值以 [`docs/reference/slots.md`](../../../../docs/reference/slots.md) 为准**（schema 源码：`packages/ai-provider/src/config/llm-schema.ts`）。不要在这里或插件 README 里另抄一份字段表：schema 是 Zod **strict**，抄错一个枚举值，用户照着填会让**整份** `llm.toml` 拒载——所有 slot（包括与你无关的 `[covel.story]`）一起停摆，服务端回退到内置 DeepSeek `story`，用户看到的现象是"我配的别的 provider 都没生效"。
+字段、默认值、回退和优先级以[模型用途](../../../../docs/reference/slots.md)为准，schema 在 `packages/ai-provider/src/config/llm-schema.ts`。不要在技能或插件 README 复制完整字段表。配置出错时，启动使用内置默认配置并报告错误；手动重载失败则保留正在使用的配置。
 
 ## 踩雷点（第三方插件作者必须在 README 里教用户）
 
-### 1. 只有转写 slot 必须手写 `tag`
+<a id="1-只有转写-slot-必须手写-tag"></a>
 
-省略 `tag` 时，框架按 `output` 推断（`modelOutputTag`，`packages/shared/src/model-capabilities.ts`）：
+### 1. 转写和音乐用途需要明确 `tag`
 
-- `output` 含 `"evaluation"` → `evaluation`
-- 含 `"image"` → `image`
-- 含 `"audio"` → `speech`
-- 含 `"embedding"` → `embedding`
-- 其它 → `text`
+`modelOutputTag` 按输出类型推导用途标签，优先顺序是 evaluation、image、audio（推成 speech）、embedding，最后是 text。转写模型输出 text，但用途是 transcription，所以必须显式标为 `transcription`；音乐也需要 `music`，否则 audio 被推成 speech。
 
-**语音转文字模型例外**：它的 output 是 `text`，会被推成 `text`，必须手写 `tag = "transcription"`，否则 handler 里 `gateway.resolveSlot({ fallbackTag: "transcription" })` 找不到这个 slot。
+设置中的用途标签和输出能力要相符。完整规则见[模型用途](../../../../docs/reference/slots.md#slot-字段covelslot)，不要把 `tag`、模型输出类型和插件契约混为一谈。
 
 ### 2. 空字符串不等于"没写"
 
-```toml
-output = [""]   # ❌ 不在 enum 里，整份 llm.toml 拒载
-tag    = ""     # ❌ schema 接受，但得到空 tag：不会回落到按 output 推断，按 tag 找不到这个 slot
-```
-
-**正确**：不想设置就直接**删掉这一行**，让框架走默认推断。
+不设置的字段直接省略，不写 `output = [""]` 或 `tag = ""`。schema 不接受的字段会使整份配置校验失败；合法但空的自定义标签也不会自动变成推导标签。
 
 ### 3. baseUrl 末尾的 `/v1` 取决于 provider
 
-OpenAI 兼容 host：写 `baseUrl = "https://api.example.com"` ——adapter 自己拼 `/v1/chat/completions`。
-某些 provider 文档会让你写 `https://x.example.com/v1` ——也行，但不同 wire 实现对重复 `/v1` 的处理不一致。
-
-**插件作者**自管 wire 时建议写**容错**：
-
-```js
-const trimmed = baseUrl.replace(/\/$/, '').replace(/\/v1$/, '');
-const url = `${trimmed}/v1/chat/completions`;
-```
+使用内置协议时，按[连接端点](../../../../docs/reference/slots.md)的规则填写地址。业务 handler 不拼 provider URL。自定义 wire 才负责地址到协议路径的转换，并对自己支持的根路径和后缀写测试；不要把一种 `/v1` 处理规则推广给所有协议。
 
 ### 4. 清单里的标签只写 English，译文放 `locales/`
 
-`PLUGIN.md` 的 `displayName`、`description`、`label` 写一行 English。不要按 i18n 习惯写成内联 map：
-
-```yaml
-description:
-  zh: 中文
-  en: English
-```
-
-`pnpm validate:plugin` 会把它报为错误。中文写在 `locales/zh.yaml`，按清单文件分节：
+`PLUGIN.md` 的 `displayName`、`description` 和 `label` 用 English 字符串，不写内联语言 map。译文按清单文件分节：
 
 ```yaml
 PLUGIN.md:
-  description: 中文
+  description: 中文说明
 ```
 
-完整字段定义见 [`plugin-schema.md`](./plugin-schema.md)。
+动态文本用 `translate` / `labelText`，详见[多语言](../../../../docs/reference/i18n.md)。
 
 ## API key 解析规则
 
-```
-keys.env 里：DEEPSEEK_API_KEY=sk-...
-        ↓ 转换：去 _API_KEY 后缀，lowercase，下划线 → 连字符
-slot 配置里 provider = "deepseek"  → apiKeys["deepseek"] 命中
-```
+密钥属于玩家配置，不属于插件。源码运行从 `.env.llm`、桌面版从 `keys.env` 读取；Web 客户端也可随请求提供密钥。环境变量按 `{PROVIDER}_API_KEY` 命名，下划线映射成 provider 名中的连字符，例如 `OPEN_ROUTER_API_KEY` 对应 `open-router`。
 
-```
-XIAOMI_API_KEY     ↔ provider = "xiaomi"
-DEEPSEEK_API_KEY   ↔ provider = "deepseek"
-DASHSCOPE_API_KEY  ↔ provider = "dashscope"
-OPEN_ROUTER_API_KEY ↔ provider = "open-router"  (下划线变连字符！)
-```
-
-**给用户写 README 时**：明确说 "环境变量名必须叫 `<UPPER>_API_KEY`，对应 slot `provider = "<lower>"`"。
+完整优先级和 origin 限制见 [API Key 流转](../../../../docs/reference/slots.md#api-key-流转)。服务的 `gateway.resolveSlot` 不向服务提供者泄露调用方凭据；wire 只处理宿主交给它的当前端点配置。
 
 ## 插件 → slot 对接惯例
 
-第三方插件应该：
-
-1. **默认 presetId 等于插件 id**（避免与别人撞名）
-
-   ```yaml
-   # PLUGIN.md
-   userSettings:
-     - key: modelPresetId
-       type: text
-       default: mimo-tts            # ← 插件 id
-       label: 模型 preset
-   ```
-
-2. **handler 用 `fallbackTag`** 让没配 slot 的用户至少能 fallback：
-
-   ```js
-   const slot = ctx.gateway.resolveSlot({
-     presetId: userSettings?.modelPresetId ?? 'mimo-tts',
-     fallbackTag: 'speech',
-   });
-   ```
-
-3. **README 给完整样例**，把 `tag` / `output` 都写出来：
-
-   ```toml
-   [covel.mimo-tts]
-   provider = "xiaomi"
-   model    = "mimo-v2.5-tts"
-   baseUrl  = "https://api.xiaomimimo.com"
-   protocol = "openai-chat-v1"
-   tag      = "speech"          # ← 必写！自动推断不会到这
-   output   = ["audio"]         # ← 必写！known-models DB 不一定有这个 model
-   ```
-
-4. **handler 错误信息要 actionable**：
-
-   ```js
-   if (!slot) {
-     return {
-       outcome: 'failed',
-       error: `Slot "${presetId}" not configured. Add to ~/.covel/llm.toml:
-[covel.${presetId}]
-provider = "..."
-model    = "..."
-baseUrl  = "..."
-protocol = "openai-chat-v1"
-tag      = "speech"
-output   = ["audio"]`,
-     };
-   }
-   if (!slot.apiKey) {
-     return {
-       outcome: 'failed',
-       error: `Slot resolved without apiKey — set ${slot.provider.toUpperCase().replace(/-/g, '_')}_API_KEY in ~/.covel/keys.env`,
-     };
-   }
-   ```
+- 固定用途写在 `agent.model` 或 `function.model`。需要玩家选择时，在 `contributes.settings` 声明 `type: slot` 的设置，并限制适用 tag。
+- 使用 `ctx.gateway`、`ctx.images`、`ctx.speech`、`ctx.music`，不要在 handler 中绕过媒体路由自行 fetch。
+- 需要 `resolveSlot({presetId, fallbackTag})` 时只请求与工作相符的 tag；回退不跨类型。不要依赖默认文本模型来完成图片、语音或转写。
+- README 说明用途、所需协议和配置失败后怎么修复；不要固定一个供应商或要求任何端点都必须有 key。
+- 插件不改玩家的 `llm.toml`，不写密钥，也不创建旧式根 `userSettings` 字段。
 
 ## SSRF 真相
 
-框架的 SSRF 策略：**Open by default**。所有公网 https host 默认放行。**block** 仅这些：
+服务端默认允许公网 HTTPS，仍执行地址、DNS 和重定向检查。provider 路由按部署形态处理本地模型；插件的 HTTP helper 则始终走严格的直连路径，还受声明的源和方法约束。两条路径不是同一种访问权限。
 
-- RFC1918 / link-local IP（`10.x` / `172.16-31.x` / `192.168.x` / `169.254.x` / `fc00::` / `fe80::`）
-- Cloud metadata host：`metadata.google.internal`、`metadata.internal`
-- 远程 host 用 http（必须 https）
-- 非 `http`/`https` 协议
-- Loopback（`localhost` / `127.0.0.1` / `::1`）：可以 http，给 Ollama 等本地服务用
-
-**`COVEL_ALLOWED_LLM_HOSTS`** 这个 env var 仅作占位文档存在——**代码并不读**。第三方插件作者**不需要**让用户加这个 env，把任何公网 https host 写进 `baseUrl` 都直接通过。
+不要建议未注册的环境变量或关闭安全检查。完整边界见[安全](../../../../docs/internals/security.md#ssrf-防护)和[环境变量](../../../../docs/reference/env-registry.md)。
 
 ## 调试
 
-启动时 schema fail 会在 server log 报：
+先看设置界面报告的配置错误和服务端的脱敏日志，再检查：用途是否存在、tag 与能力是否匹配、协议插件是否已启用并获准运行、当前 origin 是否可以使用该凭据。
 
-```
-ZodError: Invalid input
-  - covel.mimo-tts.output.0: Invalid enum value. Expected 'text' | 'image' | 'audio' | 'embedding', received ''
-```
-
-**给 user 的排查 tips**（写进插件 README 的"安装后排查"小节）：
-
-1. 启动后看 server log 里第一行 LLM 加载日志，是否报 ZodError——有就按上面错误位置改字段
-2. 在前端 Settings → LLM 页面看是否能列出本 slot——列不出基本就是 schema 失败
-3. handler 报 `Slot "<X>" not configured` → 检查 section 名是否拼对、是否落在 `[covel.X]` 命名空间
+重载失败不会覆盖正在使用的配置。插件应把不可用用途报告为明确失败或跳过，不伪造成功产物。仅在已有授权和凭据时验证真实模型；常规测试用 mock，不要求模型 key。

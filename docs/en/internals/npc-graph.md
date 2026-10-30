@@ -117,7 +117,7 @@ Entities of type `character` in the World IR correspond to `individual` nodes in
 - Existing node IDs, edge endpoints, and the turn of first appearance stay the same after a restart.
 - Historical data that has already been overwritten can be recovered only from an intact backup. Installing a new version cannot rebuild it.
 
-Both tools use the approach "the host injects the dependencies, and the file carries none of its own". `server/index.js` registers them with `covel.registerTool(...)`:
+The tool uses the approach "the host injects the dependencies, and the file carries none of its own". `server/index.js` registers it with `covel.registerTool(...)`:
 
 ```js
 export default function ({ tool, z, shortIdBatch }) {

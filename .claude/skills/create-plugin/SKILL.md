@@ -86,7 +86,9 @@ proposals or handler effects.
 - Use `covel.toolkit` for local tools and validators
   ([tools](references/tool-factory.md)), `covel.registerService` for services, and
   `covel.provideExtension(point, id, {handler})` for extensions. Registration
-  factories only register; defer I/O to invocation handlers.
+  belongs in the entry factory. Defer session work to invocation handlers; if
+  initialization acquires resources, register `covel.onDispose` cleanup immediately
+  and use the activation `covel.signal` (see `docs/reference/plugin-extensions.md`).
 - Agent runtime bodies hold prompts. Function handlers return explicit
   success / suspended / skipped / failed results
   ([public HandlerResult](../../../packages/plugin-handlers-utils/src/handler-result.ts),

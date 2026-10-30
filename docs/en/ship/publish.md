@@ -47,7 +47,7 @@ Users are not updated automatically. A user has to click "Check for updates" in 
 
 Two things about updates are worth knowing:
 
-- **The user's data is not touched.** An update only replaces the files in the package. Saves, the data a plugin stored, and settings all stay. So a new version must be able to read the data that an old version stored.
+- **Package updates do not migrate saves.** An update replaces package files while retaining saves, plugin data, and settings. Give an incompatible contract a new versioned ID and explain which development data or sessions must be recreated. At this stage, authors do not need compatibility reads for old contracts. See [plugin contracts](../reference/plugins.md).
 - **A package the user has changed is not overwritten.** If the user has edited files in the package, the update is stopped.
 
 ## 4. Help more people find it
@@ -60,7 +60,7 @@ To get your work listed in the official directory, submit an entry to the matchi
 Your code stays in your own repository, and the directory only points to it. For how to submit, see the contribution guide in each repository.
 
 > [!NOTE]
-> Being listed in a directory does not mean the code has passed a security review. When users install your plugin, they still see the code risk notice, and the first run still needs authorization.
+> Being listed in a directory does not mean the code has passed a security review. When users install your plugin, they still see the code risk notice, and session authorization is still required before code runs, with automatic grants available under the trusted-source policy.
 
 ## If you do not want to use GitHub
 

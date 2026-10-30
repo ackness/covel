@@ -15,7 +15,7 @@
 
 Covel 是一套 AI RPG 框架，也是一间可以直接游玩的工作室：NPC 关系、世界典籍、任务、行囊、记忆、舞台调度和媒体都会随回合演化。它有三层清晰分工：**内核提供原语与编排**，**插件提供行为**，**世界包提供设定、资源与默认插件组合**。
 
-> **当前源码版本：v0.0.53**，早期阶段。API、世界数据和插件 manifest 可能随版本变化。当前二进制面向 macOS Apple Silicon 与 Windows x64，尚未签名，macOS 构建也未公证；每个发布附带 `SHA256SUMS.txt`，可用来核对下载文件。v0.0.53 的桌面版后端改用随包的 Electron 运行时，要求 macOS 13.5 及以上；源码和 Docker 部署需要 Node 26.12.1。升级前请阅读[破坏性变更](./docs/CHANGELOG.md#breaking-changes-in-v0053)与[升级说明](./docs/CHANGELOG.md#upgrade-notes-for-v0053)。从 v0.0.51 及更早版本升级，还需遵循 v0.0.52 的[破坏性变更](./docs/CHANGELOG.md#breaking-changes-in-v0052)与[升级说明](./docs/CHANGELOG.md#upgrade-notes-for-v0052)：**v0.0.51 及更早版本创建的 SQLite 或 PostgreSQL 数据库，v0.0.52 及以后的版本启动时会拒绝使用，必须重建**（会话不会迁移；浏览器私有存档不受影响）。更早版本还需遵循 [v0.0.51 升级说明](./docs/CHANGELOG.md#upgrade-notes-for-v0051)、[v0.0.50 破坏性变更](./docs/CHANGELOG.md#breaking-changes-in-v0050)与[升级说明](./docs/CHANGELOG.md#upgrade-notes-for-v0050)、[v0.0.49 升级说明](./docs/CHANGELOG.md#upgrade-notes-for-v0049)与 [v0.0.48 破坏性变更说明](./docs/CHANGELOG.md#breaking-changes-and-upgrade-notes-for-v0048)；从 v0.0.42 之前的版本升级还需遵循 [v0.0.42 升级指南](./docs/internals/upgrade-0.0.42.md)。升级前请保留完整备份，开发数据不会自动迁移。
+> **当前源码版本：v0.0.53**，早期阶段。API、世界数据和插件 manifest 可能随版本变化。当前二进制面向 macOS Apple Silicon 与 Windows x64，尚未签名，macOS 构建也未公证；每个发布附带 `SHA256SUMS.txt`，可用来核对下载文件。v0.0.53 的桌面版后端改用随包的 Electron 运行时，要求 macOS 13.5 及以上；源码和 Docker 部署需要 Node 26.12.1。升级前请阅读[破坏性变更](./docs/CHANGELOG.md#breaking-changes-in-v0053)与[升级说明](./docs/CHANGELOG.md#upgrade-notes-for-v0053)。从 v0.0.51 及更早版本升级，还需遵循 v0.0.52 的[破坏性变更](./docs/CHANGELOG.md#breaking-changes-in-v0052)与[升级说明](./docs/CHANGELOG.md#upgrade-notes-for-v0052)：**v0.0.51 及更早版本创建的 SQLite 或 PostgreSQL 数据库，v0.0.52 及以后的版本启动时会拒绝使用，必须重建**（会话不会迁移；浏览器私有存档不受影响）。更早版本还需遵循 [v0.0.51 升级说明](./docs/CHANGELOG.md#upgrade-notes-for-v0051)、[v0.0.50 破坏性变更](./docs/CHANGELOG.md#breaking-changes-in-v0050)与[升级说明](./docs/CHANGELOG.md#upgrade-notes-for-v0050)、[v0.0.49 升级说明](./docs/CHANGELOG.md#upgrade-notes-for-v0049)与 [v0.0.48 破坏性变更说明](./docs/CHANGELOG.md#breaking-changes-and-upgrade-notes-for-v0048)；从 v0.0.42 之前的版本升级还需遵循 [v0.0.42 升级指南](./docs/internals/upgrade-0.0.42.md)。升级前请保留完整备份，开发数据不会自动迁移。跟随 `main` 源码时还需检查未发布的结构变更，见[数据、备份与升级](./docs/start/data-and-upgrade.md)。
 
 ## 亮点
 
@@ -34,7 +34,7 @@ Covel 是一套 AI RPG 框架，也是一间可以直接游玩的工作室：NPC
 |                                舞台模式（视觉小说）                                 |                                 叙事模式（文字）                                 |
 | :---------------------------------------------------------------------------------: | :------------------------------------------------------------------------------: |
 | ![遥风学园的舞台模式：背景、角色立绘与对话](./.assets/images/readme/stage-mode.png) | ![余烬岭中继站的叙事模式：正文与任务日志](./.assets/images/readme/text-mode.png) |
-|                背景、立绘与打字机对话；场景美术随探索自动解析与生成                 |       经典叙事回合，内嵌行动建议与表单；任务日志等面板由默认插件每回合更新       |
+|                背景、立绘与打字机对话；随探索匹配世界包已有的场景图                 |         经典叙事回合，内嵌行动建议与表单；任务日志等面板由启用的插件更新         |
 
 世界声明自己的默认档（`defaultViewMode: stage`），游戏中可随时切换。
 
@@ -68,7 +68,7 @@ Covel 是一套 AI RPG 框架，也是一间可以直接游玩的工作室：NPC
 | **生命周期 hook**    | 在调度、模型、工具与提交边界执行横切策略   | `narrator`（草稿审查）、`char-creator`（角色资料保护） |
 | **UI 与数据契约**    | 声明面板、记忆块、schema 或 WorldData 目标 | `memory`、`character-blueprint`                        |
 
-根 `PLUGIN.md` 声明包 `requires` 的版本化契约，以及工具、事件、UI、设置等共享 `contributes`。其余由加载器推出：ID 是目录名，包提供各 runtime 的 `io.output.contract`，有 `function` 块的 runtime 是函数，没有的是 agent。最小的插件只是一个 `PLUGIN.md`：一句说明、一个阶段和一段提示词。单 runtime 放在明确的 `runtime` 字段中；多 runtime 包则把执行清单放在 `runtimes/*/RUNTIME.md`：
+根 `PLUGIN.md` 声明包 `requires` 的版本化契约，以及工具、事件、UI、设置等共享 `contributes`。其余可由加载器推导：ID 可从目录名取得，包提供各 runtime 的 `io.output.contract`，有 `function` 块的 runtime 是函数，没有的是 agent。最小的插件只是一个 `PLUGIN.md`：一句说明、一个阶段和一段提示词。单 runtime 放在明确的 `runtime` 字段中；多 runtime 包则把执行清单放在 `runtimes/*/RUNTIME.md`：
 
 ```text
 plugins/npc-graph/
@@ -91,20 +91,20 @@ plugins/npc-graph/
 
 ```text
 worlds/my-world/
-├── world.yaml                        # 身份、pluginPolicy、pluginSettings
-├── WORLD.md                          # 权威设定与开局前提
+├── world.yaml                        # identity, pluginPolicy, pluginSettings
+├── WORLD.md                          # canonical setting and opening premise
 ├── data/
-│   ├── world.data.yaml               # 有序 source → schema → target 导入
+│   ├── world.data.yaml               # ordered source → schema → target imports
 │   ├── dimensions.yaml
 │   └── rules/
-├── characters/characters.json         # 角色记录，可带扮演说明
+├── characters/characters.json         # characters, with roleplay notes
 └── media/
     ├── portraits/
     ├── scenes/
-    └── 角色 presence 与场景索引
+    └── presence and scene indexes
 ```
 
-`pluginPolicy` 用 `preset` 选一个内置玩法包，用 `plus` 加上世界还要的插件；版本化契约负责解析依赖，玩家开局前仍可改选。`requires` 列出世界离不开的契约（如 `action-check@1`）：任何提供该契约的已安装插件都能满足，没有提供者时无法开始游戏。`pluginSettings` 提供低于玩家覆盖优先级的世界默认值。通过 WorldData 导入 `memory.blocks@1`，可以加入线索、嫌疑人、信号日志、倒计时等题材记忆定义，无需修改 memory 插件。
+`pluginPolicy` 用 `preset` 选一个内置玩法包，用 `plus` 加上世界还要的插件；版本化契约负责解析依赖，玩家开局前仍可改选。`requires` 列出世界声明需要的契约（如 `action-check@1`），可由任何实现该契约的插件满足。缺少可启用的提供者时，准备页提示缺少的功能，仍可继续开局。`pluginSettings` 提供低于玩家覆盖优先级的世界默认值。通过 WorldData 导入 `memory.blocks@1`，可以加入线索、嫌疑人、信号日志、倒计时等题材记忆定义，无需修改 memory 插件。
 
 `WorldData` 是统一导入协议，不是第二种世界格式。source 可以是 YAML、JSON、Markdown、文本或媒体，目标可以是通用角色/资料库，也可以是明确接受 WorldData 的插件 namespace。应用内 AI 构筑器生成的也是同一套标准包：它会根据结构化创作简报生成 manifest、世界观、维度、主要角色、资料库和规则。文件型世界包可以携带完整媒体；浏览器或 store 中的 AI 世界保留可移植文本回退，媒体仍由文件或资源存储承载。
 
@@ -113,10 +113,10 @@ worlds/my-world/
 Covel 内置 `zh-CN`、`en-US` 与 `ru-RU` 三套界面词典。界面语言只决定标签。一局会话只有一种内容语言，在创建会话时确定，而且一定是这个世界已有的语言版本。每个内容文件只写一种语言；译文是它旁边的一个文件，只写翻译后的文字：
 
 ```text
-apps/web/src/i18n/locales/ja-JP.json       # 应用界面词典
-plugins/my-plugin/locales/ja.yaml          # 插件的标签、界面文字和消息
-worlds/my-world/world.ja.yaml              # 世界名称、简介、属性名
-worlds/my-world/WORLD.ja.md                # 本地化的世界设定
+apps/web/src/i18n/locales/ja-JP.json       # application UI catalog
+plugins/my-plugin/locales/ja.yaml          # a plugin's labels, UI text and messages
+worlds/my-world/world.ja.yaml              # world name, summary, attribute names
+worlds/my-world/WORLD.ja.md                # localized setting document
 worlds/my-world/characters/characters.ja.json
 worlds/my-world/data/rules/core.ja.yaml
 ```
@@ -169,9 +169,9 @@ worlds/my-world/data/rules/core.ja.yaml
 ```bash
 pnpm install --frozen-lockfile
 cp .env.example .env              # server and storage settings
-cp llm.toml.example llm.toml        # 模型 ID 与端点
-cp .env.llm.example .env.llm        # provider API 密钥
-pnpm dev                            # web :5173 + server :3001（SQLite）
+cp llm.toml.example llm.toml        # model IDs and endpoints
+cp .env.llm.example .env.llm        # provider API keys
+pnpm dev                            # web :5173 + server :3001 (SQLite)
 ```
 
 打开 <http://localhost:5173>，调试工具在 `/debug`。个人使用可直接在设置里填写连接地址、模型和密钥，`.env.llm` 可不创建；网页选择覆盖项目 `llm.toml`，不回写文件。浏览器设置和密钥属于当前浏览器，Electron 使用 `~/.covel` 下的个人文件。SQLite / PostgreSQL 保存的是实例存档。Docker 默认也是仅绑定回环地址的个人实例，不作为公开多人服务。Docker 启动、浏览器存档和配置优先级见[环境变量注册表](./docs/reference/env-registry.md)。
@@ -216,3 +216,13 @@ pnpm workspaces + Turborepo · ESM-only · TypeScript strict · React 19 + Hono 
 欢迎 Issue 和 PR —— 请先阅读 [`docs/CONTRIBUTING.md`](./docs/CONTRIBUTING.md) 和[行为准则](./CODE_OF_CONDUCT.md)。发布由 Git 标签驱动：推送 `v*` 标签即由 [GitHub Actions](./.github/workflows/release.yml) 构建并发布 macOS 与 Windows 安装包。
 
 [MIT](./LICENSE) © 2026 Covel Contributors
+
+## Star 趋势
+
+<a href="https://www.star-history.com/?repos=ackness%2Fcovel&type=date&legend=top-left">
+ <picture>
+   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=ackness/covel&type=date&theme=dark&legend=top-left" />
+   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=ackness/covel&type=date&legend=top-left" />
+   <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=ackness/covel&type=date&legend=top-left" />
+ </picture>
+</a>

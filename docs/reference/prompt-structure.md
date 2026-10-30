@@ -231,6 +231,8 @@ contributes:
 动态内容通过 `prompt.segment@1` 提供。根清单声明 `contributes.extensions`，entry 调用 `provideExtension`，handler 返回段的数组：
 
 ```js
+import { modelFacingJson } from "@covel/plugin-handlers-utils";
+
 api.provideExtension("prompt.segment@1", "status", {
   async handler(input, ctx) {
     const status = await ctx.pluginData.get("status", "current");
@@ -238,7 +240,7 @@ api.provideExtension("prompt.segment@1", "status", {
       ? [
           {
             id: "current-status",
-            content: JSON.stringify(status),
+            content: JSON.stringify(modelFacingJson(status)),
             position: "pre-history",
             audience: "self",
             volatility: "turn",
@@ -272,7 +274,7 @@ api.provideExtension("prompt.segment@1", "status", {
 | `[COMPLETION]` | 完成约定。按 runtime 的结束方式有三种写法：有输出 schema 的以 JSON 或完成工具结束；故事 runtime 以回复里的正文结束；其余以 `runtime-done` 结束 |
 
 - hook 返回的 `systemPrompt` 如果不以它开头，框架会把它补回最前面。所以只返回自己正文的裁剪型 hook 不需要去掉它，也去不掉它。
-- payload 里的 `frameworkHead` 是这段文本的只读副本。
+- `frameworkHead` 是装配内部字段，不在 Hook payload 里，也不接受 Hook 替换。
 - 少了这段，模型就不知道会话用什么语言。
 - hook 收到的原始本地化 `promptTemplate`、已解析的 `inputSlots` 和角色摘要是只读的来源，不接受 hook 替换。
 - runtime 挂起时，输入槽冻结进 continuation，恢复时使用同一份输入。
@@ -524,7 +526,7 @@ pnpm prompt:prefix apps/server/data/covel.db --json
 
 这些都用会话的指令语言写：简体中文会话读到的是中文，其余会话是 English。标签名、`[retry N]` 这类标记和 id 不变。完整清单、插件代码的做法和不翻译的几类文字见 [i18n · 代码拼进提示词的文字](./i18n.md#代码拼进提示词的文字)。
 
-工具定义、工具循环里返回给模型的结果，以及拒绝原因，始终是 English。
+工具定义和错误说明保持 English。业务内容可以使用会话语言；框架的 `staged` 提示使用指令语言。详见[工具结果](./tools.md#统一返回格式与错误码)。
 
 ## 7. 相关实现
 

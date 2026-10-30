@@ -276,6 +276,7 @@ apps/web/src/themes/builtins/
 ### 5.2 表面 token
 
 - `--surface-page`
+- `--surface-story`：`backdrop: "scene"` 时故事栏的底色；未声明时使用布局样式中的回退色。
 - `--surface-session`：游戏中央面板的底色。没有设置时用 `--surface-page`。可以用半透明色，让底层的主题流光透出来。
 - `--surface-rail`
 - `--surface-inset`

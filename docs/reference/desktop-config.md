@@ -156,7 +156,7 @@ ANTHROPIC_API_KEY=sk-ant-xxxxxxxxxxxx
 
 界面里的模型设置只保存在 `llm.providers`。启动和读取都不会迁移或退回到 `llm.customPresets`。受影响的模型配置和密钥需要在当前的服务商界面里重新建立；旧条目不会自动删除。
 
-**热重载。** 改完 `llm.toml` 不用重启应用。到 **设置 → 模型 → 用途分配** 点“重载配置”：后端重读文件并应用到运行中的模型网关（`POST /api/llm-config/reload`），新增或删除的用途立即生效。桌面版的这个接口受一次性 bearer token 保护（和其他写接口一样），界面会自动带上；开发和网页部署没有 token 时它是开放的。
+**热重载。** 改完 `llm.toml` 不用重启应用。到 **设置 → 模型 → 用途分配** 点“重载配置”：后端重读文件并应用到运行中的模型网关（`POST /api/llm-config/reload`），新增或删除的用途立即生效。这个接口使用 `host.config` 权限：personal 实例配置了启动令牌时，界面自动附带它；未配置时仍受本机网络边界保护。browser-private 和托管实例始终要求运维 Bearer 令牌，见[宿主配置](../internals/security.md#host-profile)。
 
 **解析失败看得见。** `llm.toml` 有语法错误时（例如某个 key 写了 `=` 却没有值）：
 
@@ -241,7 +241,7 @@ ANTHROPIC_API_KEY=sk-ant-xxxxxxxxxxxx
 
 - `GET /api/config/info` 的响应带 `requiresAuth` 字段，前端据此决定要不要带 Authorization 头。
 - Electron 的页面通过 `covel:get-info` IPC 拿到 `restToken`，自动加到所有写请求上。
-- 开发模式下没设置这个变量时，token 门不启用。纯网页部署和 `pnpm dev:web` 的流程不受影响。
+- personal 实例未设置这个变量时不启用桌面令牌检查，仍检查 Host。纯网页客户端遵守所连接后端的宿主配置；`pnpm dev:web` 只启动前端，不改变后端的鉴权规则。
 
 **密钥在界面里怎样表示。** Electron 界面通过 `covel:keys:load` IPC 读取 `keys.env` 的明文密钥，保存在 SettingsStore 内存中，用于构造 `X-Provider-Keys` 请求头，不写入桌面页面的 `localStorage`。保存通过 `covel:keys:save` 传递补丁：未修改的密钥保留，新值写入，`null` 删除。主进程优先通过 sidecar 的 `PUT /api/config/keys` 写入；开发模式没有 sidecar 或 sidecar 不可用时，直接写文件。
 

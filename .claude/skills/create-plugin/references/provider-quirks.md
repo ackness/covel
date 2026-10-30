@@ -1,198 +1,70 @@
 # Provider 自管 Wire 指引
 
-什么时候让框架管 wire，什么时候自己管，怎么排查"奇怪 provider"。
+本页帮助插件作者选择模型接口、实现非标准协议。模型、地址和凭据由玩家配置；插件只声明用途和协议实现。完整契约见[插件扩展与通信](../../../../docs/reference/plugin-extensions.md#使用已有的模型能力)和[模型用途](../../../../docs/reference/slots.md)。
 
 ## 决策树
 
-```
-我的 provider 是什么类型？
-│
-├─ 文本 chat completions，OpenAI 完全兼容（Authorization: Bearer + 标准 messages）
-│   └─ 用 ctx.gateway.generateText({ presetId, messages })，框架管一切
-│
-├─ 文本但请求格式或鉴权头不是内置四种协议的（api-key、x-api-key、自定义 header、原生接口）
-│   └─ 文本 wire：entry 里 covel.registerWires({ text: [...] })，id 写进 contributes.wires，
-│      模型的 protocol 写 <pluginId>/<wireId>（参考 docs/reference/plugin-extensions.md#文本协议-wire）；
-│      只有不是模型对话的调用才自己 fetch
-│
-├─ 图像生成
-│   └─ 先用 ctx.images.generate（框架 wire：openai-images / dashscope-wan）；
-│      协议不同的 provider 写 wire 模块，entry 里 covel.registerWires() 注册
-│
-├─ 语音合成 (TTS) / 转录 (ASR)
-│   └─ 先用 ctx.speech.generate / .transcribe（框架 wire：openai-speech /
-│      openai-transcription）；协议不同的 provider 同样走 covel.registerWires()
-│      注册自己的 wire，而不是在 handler 里 fetch。范例：plugins/mimo-tts
-│
-├─ 音乐生成
-│   └─ ctx.music.generate + covel.registerWires({ music: [...] })（框架没有内置的音乐 wire）
-│
-├─ Embedding / 视频生成
-│   └─ 一定自管 wire（框架没有这两类的 wire 注册表；embedding 不走文本 wire）
-│
-├─ Async submit + poll（DashScope wan2.x、某些视频 API）
-│   └─ 一定自管 wire（框架的 generateText 不会等任务）
-│
-├─ 流式音频（PCM frames）
-│   └─ 自管 wire 但不在第一版做（前端 <audio> 直接喂 PCM 不行；先做非流式）
-│
-└─ Structured JSON 输出（function 不能 generateObject）
-    └─ 用 agent runtime 配 output.schema，**不要**在 function runtime 强求结构化
-```
+- 文本：函数和 guard 都可以调用 `ctx.gateway.generateText` / `generateObject`。结构化输出传 JSON Schema；不必为了调用模型而改成 agent runtime。
+- 图像：使用 `ctx.images.generate` 或 `ctx.gateway.generateImage`。
+- 语音和转写：使用 `ctx.speech.generate` / `transcribe`。
+- 音乐：使用 `ctx.music.generate`，由插件提供音乐 wire。
+- 已有协议不支持的文本、图像、语音、转写或音乐：在 entry 注册对应的 wire，而不是在业务 handler 里另写一条 provider fetch 路径。
+- embedding 不走文本 wire；视频也没有可供插件注册的 wire 接口。不要把一个普通服务注册成框架尚未支持的模型能力。
+- 服务商先返回任务 ID、再轮询结果时，轮询属于 wire 的实现，并受同一个取消信号约束。
 
 ## 自管 wire 标准模板
 
-```js
-import { ... } from './your-helpers.js';
+wire 和业务 handler 分开。entry 用 `covel.registerWires({ text, image, speech, transcription, music })` 注册实现，只写需要的类型；各实现的本地 `id` 同时列入 `contributes.wires`。文本模型的 `protocol` 用 `<pluginId>/<wireId>`。
 
-export default async function handler(ctx) {
-  const { gateway, utils, userSettings, pluginData, logger, media } = ctx;
+精确签名从公开 SDK 的 `PluginTextWire`、`PluginImageWire`、`PluginSpeechWire`、`PluginTranscriptionWire`、`PluginMusicWire` 取得。文本 wire 的可复制示例在[文本协议 wire](../../../../docs/reference/plugin-extensions.md#文本协议-wire)，媒体的路由和结果在[模型用途](../../../../docs/reference/slots.md)。
 
-  // 1. 依赖检查
-  if (!gateway?.resolveSlot) return failed('framework too old: needs gateway.resolveSlot');
-  if (!utils?.validateBaseUrl) return failed('framework too old: needs utils');
-
-  // 2. 解析 slot
-  const presetId = userSettings?.modelPresetId ?? '<plugin-id>';
-  const slot = gateway.resolveSlot({ presetId, fallbackTag: 'speech' /* 或 image/embedding/transcription */ });
-  if (!slot) {
-    return failed(`Slot "${presetId}" not configured. README 让用户在 ~/.covel/llm.toml 加 [covel.${presetId}].`);
-  }
-  if (!slot.baseUrl || !slot.apiKey) {
-    return failed(`Slot "${presetId}" missing baseUrl/apiKey. Set <PROVIDER>_API_KEY in ~/.covel/keys.env.`);
-  }
-
-  // 3. SSRF 校验
-  const guard = utils.validateBaseUrl(slot.baseUrl);
-  if (!guard.ok) return failed(`Invalid baseUrl: ${guard.reason}`);
-
-  // 4. 拼 URL（容错 /v1 后缀）
-  const cleanBase = slot.baseUrl.replace(/\/$/, '').replace(/\/v1$/, '');
-  const url = `${cleanBase}/v1/chat/completions`;   // 或 provider 文档要求的 path
-
-  // 5. 调用（用 utils.fetchWithRetry，自动 429/5xx 退避）
-  const response = await utils.fetchWithRetry(url, {
-    method: 'POST',
-    headers: {
-      'content-type': 'application/json',
-      // 关键：每个 provider 的鉴权头不一样，下方查表
-      'api-key': slot.apiKey,
-      // 或：'authorization': `Bearer ${slot.apiKey}`
-      // 或：'x-api-key': slot.apiKey
-    },
-    body: JSON.stringify(buildRequestBody(slot.model, ...)),
-  });
-  if (!response.ok) {
-    const text = await response.text().catch(() => '');
-    return failed(`HTTP ${response.status} ${response.statusText} — ${text.slice(0, 240)}`);
-  }
-
-  // 6. 解析 + 落 MediaStore
-  const payload = await response.json();
-  const bytes = decodeBytesFrom(payload);
-  const ref = await media.put(bytes, sniffedMime, { plugin: '<plugin-id>', turnId: ctx.turnId });
-
-  // 7. Commit the generated asset and its plugin-owned index.
-  return {
-    outcome: 'success',
-    effects: {
-      pluginData: [{ namespace: 'tracks', key: ctx.turnId, value: { ref } }],
-      assetGenerations: [{ ref, modality: 'audio' }],
-    },
-  };
-}
-
-function failed(msg) { return { outcome: 'failed', error: msg }; }
-```
+- 使用传入的 `config`，不要在 wire 里选择另一台服务商、硬编码模型或查找其他槽位的密钥。
+- HTTP 使用 `covel.http.fetchWithRetry`，传递 `config.signal`。社区插件只能访问声明的源和方法，以及当前用途的端点；重定向也要通过检查。
+- 返回 SDK 规定的内容、用量和警告。媒体由宿主存入 MediaStore，业务 handler 保存 `MediaRef`。
+- 不为旧开发版本添加 `framework too old` 分支；按当前契约实现并声明所需宿主版本。
 
 ## 鉴权头差异表（常见 provider）
 
-| Provider                       | header                                                   | 示例                                 |
-| ------------------------------ | -------------------------------------------------------- | ------------------------------------ |
-| OpenAI / DeepSeek / 大多数兼容 | `Authorization`                                          | `Bearer sk-...`                      |
-| Anthropic                      | `x-api-key` + `anthropic-version`                        | `x-api-key: sk-ant-...`              |
-| Xiaomi MiMo                    | `api-key`                                                | `api-key: tp-...`                    |
-| DashScope (Aliyun)             | `Authorization` + 异步可能加 `X-DashScope-Async: enable` | —                                    |
-| Google / Vertex                | `Authorization` (Bearer 短期 token)                      | OAuth2 流程，复杂                    |
-| Azure OpenAI                   | `api-key`                                                | 但 path 含 deployment / version 参数 |
+鉴权属于 wire 协议，不属于 runtime 提示词。按服务商当前的官方文档和已验证请求实现，不在本技能维护另一份供应商字段表。
 
-> **永远不要硬编码 apiKey**——一律从 `slot.apiKey` 取。slot 由框架按 user 的 `[covel.<X>].provider` + `keys.env` 解析。
+只向 `config.baseUrl` 所代表的服务发送 `config.apiKey` / `headers`。密钥不进入提示词、返回值、日志、示例数据或错误说明。没有密钥的本地端点可以合法工作，不要对所有端点强制要求 key。
 
 ## Body 形态差异表（常见踩雷）
 
-| Provider                | 写法                                           | 注意                               |
-| ----------------------- | ---------------------------------------------- | ---------------------------------- |
-| OpenAI / 多数兼容       | `messages: [{role:'user', content}]`           | 标准                               |
-| Xiaomi MiMo TTS         | `messages: [{role:'assistant', content}]` ⚠️   | 文本要塞在 **assistant** role      |
-| Anthropic               | `messages` + 顶级 `system`                     | 不允许 `messages` 里有 system role |
-| DashScope wan2.x        | `input.messages: [{content:[{text}]}]`         | 嵌套两层                           |
-| Image (DashScope async) | submit 拿 `task_id`，poll `/api/v1/tasks/<id>` | 24h URL 过期，要 ingestUrl 入库    |
+wire 负责把 SDK 的模型请求转换成服务商协议。文本 wire 必须处理消息、工具、结构化回复要求和取消，并同时实现 `generateText` 与 `streamText`。不要通过把所有 system 消息移到最前面来简化实现；这会改变上下文顺序和缓存行为。
 
 ## 响应解析差异表
 
-| 内容类型            | 在响应的什么字段                                                                     |
-| ------------------- | ------------------------------------------------------------------------------------ |
-| 文本（OpenAI 兼容） | `choices[0].message.content`                                                         |
-| 文本（Anthropic）   | `content[0].text`                                                                    |
-| 流式文本（SSE）     | `data: {...}` chunks，每个 chunk `choices[0].delta.content`                          |
-| 音频 base64         | `choices[0].message.audio.data`（OpenAI audio API 风格）                             |
-| 图像 url（同步）    | `data[0].url` 或 `images[0].url` 或 `output.results[0].url`                          |
-| 图像 base64         | `data[0].b64_json` 或 `images[0].base64`                                             |
-| Async 任务 id       | `output.task_id`                                                                     |
-| Async 任务结果      | `output.task_status` (`SUCCEEDED`/`FAILED`/`PENDING`/`RUNNING`) + `output.results[]` |
+以公开 SDK 的返回类型为准。文本流必须以 `done` 事件结束；服务商的结束原因由网关统一。媒体 wire 返回字节或接口允许的 URL，不把 base64 存进 plugin data。
 
 ## 排查不熟悉 provider 的标准流程
 
-1. **找官方前端示例**：很多中国厂商有公开的 web demo 或 GitHub repo（直接搜 `<provider> chat web` / `<provider> playground source`）。前端代码里能看到真实的 fetch URL + headers + body shape——比 PDF 文档 + WebFetch 看官网准。
-2. **用 curl 复现**：先用 curl + 真实 key 打通最小成功路径，把整个 cmd 贴在 handler 注释里：
-   ```
-   curl -X POST https://api.example.com/v1/chat/completions \
-     -H 'api-key: <KEY>' \
-     -H 'content-type: application/json' \
-     -d '{"model":"...","messages":[...]}'
-   ```
-3. **第一次 4xx 一定打全 body**：`text.slice(0, 240)` 喂进 error.message——80% 错误信息直接告诉你字段名错了/缺字段。
-4. **保存 reproducible script**：handler 顶部写一段 `// curl 调通的最小命令` 注释，未来任何人接手都能立刻复现。
+1. 先阅读服务商当前的官方协议和 SDK 示例，明确端点、鉴权、请求和结束原因。
+2. 用 mock 固定请求转换、成功结果、4xx/5xx、取消、超时和损坏响应。异步协议还要覆盖轮询期限及终态。
+3. 只有任务已授权且有可用凭据时才做真实请求。保留脱敏复现步骤，不在注释或命令里留下真实 key。
+4. 错误给出可操作的分类和建议；不要把原始响应正文直接放进玩家可见的错误。它可能含凭据或私有数据。
 
 ## 推荐的 lib/ 布局
 
-复杂自管 wire 抽到 `lib/<provider>.js`，handler 只剩"读 slot → 调 lib → 落 MediaStore → 返回"骨架：
-
-```
+```text
 my-plugin/
-├── lib/
-│   └── my-provider.js       # synthesize(args) -> { bytes, mime } 纯函数，方便 vitest mock fetch
+├── PLUGIN.md
+├── server/index.js
+├── lib/provider-wire.js
 └── runtimes/
-    ├── auto/
-    │   ├── PLUGIN.md
-    │   └── handler.js       # 调 lib/my-provider.js
-    └── manual/
-        ├── PLUGIN.md
-        └── handler.js       # 调同一个 lib
+    └── generate/
+        ├── RUNTIME.md
+        └── handler.js
 ```
 
-`lib/<provider>.js` 测试只需要 `vi.fn()` mock 全局 `fetch`，不需要 framework runtime——单测又快又稳。
+wire helper 测试通过注入 HTTP mock 验证协议；runtime 测试 mock `ctx.images` / `ctx.speech` 等公共能力，验证业务输入、`MediaRef` 和待提交 effects。entry 注册只在根文件声明，不能在子目录放 `PLUGIN.md`。
 
 ## 失败处理通用范式
 
-1. 用 `ctx.progress.report({ jobId, state: "running", sequence: 1 })` 发布实时进度。
-2. 成功后通过 `success.effects.pluginData` 提交最终领域记录；失败时发布 job-status 并返回 `outcome: "failed"`。失败执行的 plugin-data buffer 不会提交。
-3. 错误信息说明配置、凭据或供应商错误的具体原因。UI 从 job-status 订阅读取进度，从 plugin-data 读取已提交成品。
+用 `ctx.progress.report({ jobId, state: "running", sequence: 1 })` 发布执行进度。成功时把领域结果放进 `effects.pluginData` 和 `effects.assetGenerations`；失败时报告失败进度并返回 `outcome: "failed"`。同一 job 的 `sequence` 递增。失败和跳过结果不提交领域写入，不用它们保存错误占位。
 
-```js
-async function recordFailure(ctx, jobId, message, sequence) {
-  await ctx.progress?.report({ jobId, state: "failed", message, sequence });
-  await ctx.logger.error("failed", { jobId, error: message });
-  return { outcome: "failed", error: message };
-}
-```
-
-同一 job 的 `sequence` 必须递增。不要通过失败结果的 `effects.pluginData` 写错误占位，这类领域写入会被剥离。
+取消信号继续向下传递。框架不能强行终止同进程 JavaScript，也不能撤回已发出的外部请求；不要把取消改写成成功。
 
 ## 流式响应（参考）
 
-第一版插件**不做流式**。如果未来要做：
-
-- **OpenAI 风格 SSE**：循环 `response.body.getReader()`，按 `data: {...}` 切分；每个 chunk `choices[0].delta.content` 拼到累积 buffer，期间通过 `ctx.progress.report({jobId, state: 'progress', data: {partial: buffer}, sequence})` 发布片段，`sequence` 每次递增
-- **PCM 流式音频**：浏览器 `<audio>` 不能直接吃 PCM frames，需要前端 framework 改进（提供 `<AudioStream>` 组件解码 PCM → Web Audio buffer），或后端先聚合再 mp3 转码。**当前框架不支持**。
-- **结构化 JSON 流式**：function runtime 用不上，agent runtime 配 `output.schema` + `responseFormat` 框架已自动处理。
+文本 wire 按 SDK 的流事件契约实现。runtime 是否把正文流给玩家，由循环 profile 和 Hook 决定。不要用 job-status 通道代替叙事协议，也不要承诺前端可以直接播放 PCM 帧；当前媒体接口交付完成的媒体引用。结构化请求的解析和 schema 校验由网关负责。

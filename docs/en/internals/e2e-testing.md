@@ -239,7 +239,7 @@ These directories are excluded in `.dockerignore`, so they do not enter the prod
 
 Passing automated tests does not mean the game is playable. Before a release, go through the following in order.
 
-1. Run `pnpm lint`, `pnpm test` and `pnpm e2e` locally, in sequence. Do not run them at the same time, because they share the build directory.
+1. Run `pnpm check`, `pnpm test` and `pnpm e2e` locally, in sequence. Do not run them at the same time, because they share the build directory.
 2. Run `pnpm release:preflight`.
 3. Fix the failures you already know about locally before you push. Use remote CI to double-check, and to cover platform differences such as Windows and macOS.
 

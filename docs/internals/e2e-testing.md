@@ -239,7 +239,7 @@ pnpm docker:pg:down
 
 自动测试通过不等于游戏能玩。发版前按下面的顺序做。
 
-1. 在本地顺序运行 `pnpm lint`、`pnpm test`、`pnpm e2e`。不要同时跑，它们共用构建目录。
+1. 在本地顺序运行 `pnpm check`、`pnpm test`、`pnpm e2e`。不要同时跑，它们共用构建目录。
 2. 运行 `pnpm release:preflight`。
 3. 本地已知的失败先修好，再推送。远端 CI 用来复核，并补上 Windows、macOS 等平台差异。
 

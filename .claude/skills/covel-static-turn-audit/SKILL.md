@@ -1,6 +1,6 @@
 ---
 name: covel-static-turn-audit
-description: "Static audit of Covel's runtime scheduling by reading code and reasoning about it, without starting the app or calling a model: plugin manifests first, then plugin-to-plugin edges, the kernel scheduler, commit and background jobs. Treats each LLM call as an unknown with a closed set of outcomes, checks hard logic with small input/output scripts, and reports counterexample traces under devs/audits/, with an HTML block-diagram map on request. Use only when the user explicitly asks for a static turn-flow or scheduling audit, or for this skill by name."
+description: "Static audit of Covel's runtime scheduling by reading code and reasoning about it, without starting the app or calling a model: plugin manifests first, then plugin-to-plugin edges, the kernel scheduler, commit and background jobs. Treats each LLM call as an unknown with a closed set of outcomes, checks hard logic with small input/output scripts, and reports counterexample traces under devs/docs/audits/, with an HTML block-diagram map on request. Use only when the user explicitly asks for a static turn-flow or scheduling audit, or for this skill by name."
 ---
 
 # Covel Static Turn Audit
@@ -55,7 +55,7 @@ When the user asks for a diagram or an overview, add `map.html` to the report fo
 
 Confirm or infer: the target tree, the world and plugin set to reason about (default: one bundled world with the set its `pluginPolicy` and pack resolve to), the layers in scope (default: all four), and any focus the user named.
 
-Read `flow.md`, `design-principles.md`, `docs/reference/glossary.md`, `docs/reference/plugins.md`, and `docs/internals/technical-debt.md` — a limit recorded there is not a finding. Earlier audits under `devs/audits/` and `devs/docs/audits/` are leads: re-check each against current code, and do not re-report what the user deferred.
+Read `flow.md`, `design-principles.md`, `docs/reference/glossary.md`, `docs/reference/plugins.md`, and `docs/internals/technical-debt.md` — a limit recorded there is not a finding. Earlier audits under `devs/docs/audits/` are leads: re-check each against current code, and do not re-report what the user deferred.
 
 ### 2. Fix The Model
 
@@ -69,7 +69,7 @@ Write down what the reasoning ranges over before reasoning. Take every item from
 - **Properties.** What must always hold. Seeds — confirm each wording against the docs, then add what the plugins themselves assume:
   - a runtime never starts before its `needs` targets of the same pass succeeded, and a stage never starts before the previous one settled;
   - order inside a stage comes only from declared edges, then `name`;
-  - a failed execution commits nothing partial, and a runtime whose writes are dropped takes its hard dependents with it;
+  - commit units follow `docs/reference/transactions.md`: a failed optional unit loses its writes and takes its hard dependents with it; a storage failure rolls back the whole transaction;
   - each committed player execution counts once, and no other origin counts;
   - `phase` leaves `setup` only when every setup runtime is done or waived, in the transaction that commits their writes;
   - a background result never commits into a session, plugin, or version it was not computed for;
@@ -125,7 +125,7 @@ Neither reading nor a probe can say how often a model produces an outcome, how l
 
 ## Report
 
-Write to `devs/audits/<YYYY-MM-DD>-<short-slug>/` in the main checkout (gitignored, so a worktree has no such folder; name the worktree path and HEAD in the baseline when it is the target). Probes, their logs, and analyser output go to `debugs/audits/<same-slug>/` and stay there as supporting material.
+Write to `devs/docs/audits/<YYYY-MM-DD>-<short-slug>/` in the audited checkout (gitignored; name its path and HEAD in the baseline). Do not write into another checkout. Probes, their logs, and analyser output go to `debugs/audits/<same-slug>/` and stay there as supporting material.
 
 - `README.md`: the short entry point. Baseline, scope, conclusion, finding table, open questions, everything that ran (each probe with what it asserts), and the limits above. The finding table is the index: every finding, sorted by severity (`P1` first) and then by ID, one row each with the broken property in one sentence, the main `path:line`, the trigger class, and a link to its trace.
 - `01-model.md`: runtimes, schedule table, outcome set, state, actors, properties.

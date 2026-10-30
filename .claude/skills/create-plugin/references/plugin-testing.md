@@ -38,7 +38,7 @@ Fix: `tools.local` was removed — register the tool in the plugin's `entry`
 
 > 别改写成 `node -e "... import { validatePluginManifest } from '@covel/shared'"`：workspace 包直接导出 TS 源码（无构建产物），裸 `node` 会在解析 `@covel/shared` 时抛 `ERR_MODULE_NOT_FOUND`。`validate:plugin` 走的是 `tsx`。
 >
-> 注意有一类**不报错的失败**：rpc action 里出现未知字段时，loader 打印 `malformed rpc declaration skipped` 但整体仍判 `✓`——插件能加载，那个 action 却静默消失了。看到 `skipped` 就当失败处理。
+> 静态校验不会执行 entry。工具、RPC、服务等注册还要和 `contributes` 双向一致；用注册测试和真实加载检查，不能从 manifest 校验成功推断 entry 已能运行。
 
 ---
 
@@ -103,26 +103,13 @@ describe("image-generator handler", () => {
         runtimeId: "my-plugin/image-generator",
         manualPayload: { prompt: "a quiet harbor" },
       }),
-      gateway: {
-        resolveSlot: vi.fn().mockReturnValue({
-          presetId: "image",
-          provider: "dashscope",
-          protocol: "openai-chat-v1",
-          baseUrl: "https://dashscope.aliyuncs.com",
-          apiKey: "test-key",
-          model: "wan2.7-image-pro",
-          tag: "image",
-          metadata: {},
+      images: {
+        isAvailable: vi.fn().mockReturnValue(true),
+        generate: vi.fn().mockResolvedValue({
+          refs: [mediaRef],
+          warnings: [],
+          cached: false,
         }),
-      },
-      utils: {
-        validateBaseUrl: vi.fn().mockReturnValue({ ok: true }),
-        fetchWithRetry: vi.fn(),
-      },
-      media: {
-        put: vi.fn().mockResolvedValue(mediaRef),
-        get: vi.fn(),
-        ingestUrl: vi.fn(),
       },
       logger: {
         debug: vi.fn(),
@@ -134,8 +121,8 @@ describe("image-generator handler", () => {
 
     const result = await handler(ctx);
 
-    expect(ctx.gateway.resolveSlot).toHaveBeenCalledWith(
-      expect.objectContaining({ presetId: "image", fallbackTag: "image" }),
+    expect(ctx.images.generate).toHaveBeenCalledWith(
+      expect.objectContaining({ prompt: "a quiet harbor" }),
     );
     expect(result.outcome).toBe("success");
     expect(result.effects.pluginData[0].namespace).toBe("images");
@@ -149,27 +136,9 @@ describe("image-generator handler", () => {
 
 ### 测 trigger helper
 
-```ts
-import { describe, expect, it } from "vitest";
-import { makeTriggerContext } from "@covel/plugin-test-utils";
-import { shouldRunOnInterval } from "../src/trigger.js";
+测试自己的触发 helper 时，用 `makeTriggerContext({ logicalTurn, turnNumber })` 明确设定时钟。框架的 `schedule.every: 3` 在逻辑回合 3、6、9 运行，不是 1、4、7；setup、开场和第一条玩家消息的逻辑回合都为 1。若业务规则使用另一种节奏，测试要说明这个区别。
 
-describe("trigger", () => {
-  it("fires every 3 turns", () => {
-    expect(shouldRunOnInterval(makeTriggerContext({ turnNumber: 1 }))).toBe(
-      true,
-    );
-    expect(shouldRunOnInterval(makeTriggerContext({ turnNumber: 2 }))).toBe(
-      false,
-    );
-    expect(shouldRunOnInterval(makeTriggerContext({ turnNumber: 4 }))).toBe(
-      true,
-    );
-  });
-});
-```
-
-`makeTriggerContext` 默认 `turnsSinceLastTrigger: 999`，多数 cooldown 分支会直接通过。
+`makeTriggerContext` 的默认 `turnsSinceLastTrigger: 999` 不能替代首次运行、冷却边界和已提交 trigger 台账的测试。调度规则以[触发方式](../../../../docs/reference/plugins.md#触发方式)为准。
 
 ---
 
@@ -182,14 +151,14 @@ describe("trigger", () => {
 1. `discoverPlugins` / `loadPluginManifest` / `loadRuntime`（`@covel/plugin-loader`）加载真实插件 runtime；需要合成 runtime（如模拟 narrator 发 event）时手写 `RuntimeManifest` + `LLMAdapter`。
 2. `createMemoryStore()`（`@covel/store`）做后端，按需 `setPluginData` 预置数据。
 3. `createToolExecutor` + `executeTurn`（`@covel/runtime`）执行 turn，LLM 用 `MockLLM`（`responses[]` 按调用顺序消费，耗尽后回落 `defaultResponse`，多步 tool loop 优先用它）。
-4. 对每个 runtime result 调 `processRuntimeResult`（`@covel/runtime`）把 proposal commit 进 store，再断言 `store.listPluginData(...)` 等持久化结果。
+4. 把 `executeTurn` 返回的整个 `{ result, commit }` 交给 `commitExecution`（`@covel/runtime`），确认提交成功，再断言 `store.listPluginData(...)` 等持久化结果。不要逐条提交 runtime result：嵌套结果、journal、挂起、setup 和时钟必须共用完整提交计划，见[宿主执行与提交边界](../../../../docs/reference/protocol.md#宿主执行与提交边界)。
 
 常用断言：
 
 | 目标                  | 写法                                                    |
 | --------------------- | ------------------------------------------------------- |
 | prompt 里包含注入内容 | `llm.calls[n].messages`                                 |
-| 工具顺序              | `result.runtimeResults[0].toolCalls.map((c) => c.name)` |
+| 工具顺序              | `execution.result.runtimeResults[0].toolCalls.map((c) => c.name)` |
 | plugin_data 写入      | `store.listPluginData(sessionId, pluginId, namespace)`  |
 | asset.generate 输出   | `expectAssetGenerated(result, { modality: "image" })`   |
 
@@ -310,7 +279,7 @@ pnpm test:runtime -- my-plugin \
 
 ### Expected failure
 
-mock 模式里，图像/音频插件通常会走到 provider URL、SSRF guard 或 HTTP 层，合理失败也可以是绿色 case：
+mock 模式也可以验证明确的失败结果。下面的 `errorIncludes` 必须替换成插件实际返回的脱敏错误；失败不应向 plugin data 写入错误占位：
 
 ```json
 {
@@ -324,8 +293,7 @@ mock 模式里，图像/音频插件通常会走到 provider URL、SSRF guard �
         "status": "failed",
         "errorIncludes": "invalid image baseUrl"
       }
-    ],
-    "pluginData": [{ "namespace": "images", "status": "failed" }]
+    ]
   }
 }
 ```

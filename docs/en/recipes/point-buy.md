@@ -92,7 +92,7 @@ To set your own point total and limits, create `data/tabletop-rules.json`:
 Each point added costs 1 point of budget.
 
 > [!NOTE]
-> The attribute `id`s here must match exactly the ones you defined in step 1, and `base` and `max` must lie inside the `min` and `max` of that attribute. If you get one wrong, the validation in the next step reports an `attribute-reference` error and says which one.
+> The attribute `id`s here must match exactly the ones you defined in step 1, and `base` and `max` must lie inside the `min` and `max` of that attribute. If you get one wrong, the next step identifies the attribute and explains what must be corrected.
 
 ## 4. Validate
 

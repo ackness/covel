@@ -67,7 +67,7 @@ If you only want to back up the interface settings, use "Export settings" under 
 
 ## Before an Upgrade
 
-Covel is still in an early stage. Versions can have changes that are not compatible with each other, and **saves are not migrated automatically**. Before each upgrade:
+Covel is still in early access. Versions may have incompatible changes, and **saves are not migrated automatically**. If you follow `main`, also read the [pending release entries](../../changelog.d/README.md): database schemas and session contracts can change before the application version changes. The current source removes the old generic state tables, so older SQLite / PostgreSQL databases must be recreated. See [storage](../internals/storage.md) for schema-version rules. Before each upgrade:
 
 1. Read the [changelog](../../CHANGELOG.md) for that version, and find the "Upgrade notes" and "Breaking changes".
 2. Make a full backup using the method above.
