@@ -14,11 +14,12 @@ export const objectiveAssessmentSchema = z.strictObject({
     "failed",
     "unverified",
     "not_addressed",
+    "superseded",
   ]),
   evidence: z
     .string()
     .describe(
-      "Exact contiguous quote from one segment's text in narrative.value supporting this judgment; empty only for not_addressed. Never quote the vocabulary or player intent as proof of completion.",
+      "Exact contiguous quote from one segment's text in narrative.value supporting this judgment; empty only for not_addressed. For superseded, quote the text showing the quest's goal was reached without this objective. Never quote the vocabulary or player intent as proof of completion.",
     ),
 });
 
@@ -97,6 +98,7 @@ export function objectiveCoverageIssues(facts, assessments, inputSlots) {
   }
 
   const completed = new Set();
+  const finishedQuests = new Set();
   for (const [index, event] of facts.events.entries()) {
     if (event.type !== "quest_change") continue;
     const { quest, status, completedObjectives = [] } = event.attributes;
@@ -127,10 +129,12 @@ export function objectiveCoverageIssues(facts, assessments, inputSlots) {
       completed.add(key);
     }
     if (status === "completed") {
+      finishedQuests.add(quest);
       for (const objective of objectives) {
-        if (reviewed.get(keyOf(quest, objective))?.outcome !== "achieved")
+        const outcome = reviewed.get(keyOf(quest, objective))?.outcome;
+        if (outcome !== "achieved" && outcome !== "superseded")
           issues.push(
-            `${path}.status: cannot complete a quest with an unachieved open objective`,
+            `${path}.status: cannot complete a quest while ${JSON.stringify(objective)} is neither achieved nor superseded`,
           );
       }
     }
@@ -146,7 +150,16 @@ export function objectiveCoverageIssues(facts, assessments, inputSlots) {
       !completed.has(key)
     )
       issues.push(
-        `events: achieved objective ${key} needs a quest_change with status progressed and its exact completedObjectives text`,
+        `events: achieved objective ${key} needs a quest_change listing its exact text in completedObjectives`,
+      );
+    // Superseded closes an objective only together with its quest.
+    if (
+      expected.has(key) &&
+      assessment.outcome === "superseded" &&
+      !finishedQuests.has(assessment.quest)
+    )
+      issues.push(
+        `events: superseded objective ${key} needs a quest_change with status completed for that quest; otherwise judge the objective by its own work`,
       );
   }
   return issues;

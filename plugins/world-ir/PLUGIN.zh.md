@@ -51,11 +51,11 @@
 
 ## 未完成目标覆盖
 
-提交 `objectiveAssessments`，为 `vocabulary` 中每个 `type: quest` 条目的**每一项**未完成目标（`details`）填写一项，包括本回合未涉及的目标。`quest`、`objective` 照抄原文；`outcome` 选 `achieved`（达成）、`planned`（计划）、`partial`（部分）、`failed`（失败）、`unverified`（未核实）或 `not_addressed`（未涉及）。除 `not_addressed` 的 `evidence` 写空字符串外，其余都在 `evidence` 引用 `narrative.value` 中单个段落的 `text` 内支持判断的一段连续原文。此评估只用于工具校验，不是事实类别，也不进入公开 WorldIR 输出。
+提交 `objectiveAssessments`，为 `vocabulary` 中每个 `type: quest` 条目的**每一项**未完成目标（`details`）填写一项，包括本回合未涉及的目标。`quest`、`objective` 照抄原文；`outcome` 选 `achieved`（达成）、`planned`（计划）、`partial`（部分）、`failed`（失败）、`unverified`（未核实）、`not_addressed`（未涉及）或 `superseded`（已无必要）。只有正文在本回合完成了整个任务、而这项目标对达成任务目的已不再需要时，才用 `superseded`，并引用表明任务目的已经达成的原文。除 `not_addressed` 的 `evidence` 写空字符串外，其余都在 `evidence` 引用 `narrative.value` 中单个段落的 `text` 内支持判断的一段连续原文。此评估只用于工具校验，不是事实类别，也不进入公开 WorldIR 输出。
 
 判断目标描述的工作是否完成，不要求正文宣布“任务更新”。只有实际做完的动作或已核实的结果才是 `achieved`；计划、尝试、部分工作、失败及未经核实的说法不算。逐项独立判断：另一项目标尚未完成，不妨碍本项目标已完成。词表说明要检查什么，不证明发生了什么。
 
-每个 `achieved` 必须对应一条 `status: progressed` 的 `quest_change`，`completedObjectives` 写该目标原文；同一任务的目标合并到一条事件。进度事实可与底层互动并存。还有未达成目标时不能把整个任务标为完成。不能提交与评估矛盾的完成目标、简称任务名或改写目标。工具拒绝覆盖缺项、非正文引文和事件矛盾；根据正文修正判断或事件，不得为了过校验编造证据。只有没有未完成目标时，才能省略评估字段或写 `[]`。
+每个 `achieved` 必须对应一条 `status: progressed` 的 `quest_change`，`completedObjectives` 写该目标原文；同一任务的目标合并到一条事件。进度事实可与底层互动并存。还有既非 `achieved` 也非 `superseded` 的目标时，不能把整个任务标为完成；`superseded` 的目标不写进 `completedObjectives`。不能提交与评估矛盾的完成目标、简称任务名或改写目标。工具拒绝覆盖缺项、非正文引文和事件矛盾；根据正文修正判断或事件，不得为了过校验编造证据。只有没有未完成目标时，才能省略评估字段或写 `[]`。
 
 ## 限制
 

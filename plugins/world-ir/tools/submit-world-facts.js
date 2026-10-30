@@ -394,9 +394,13 @@ export default function ({ tool }) {
         context?.inputSlots,
       );
       if (issues.length)
+        // The hint is not truncated, so a long issue list keeps its guidance.
         throw new ToolError(
           "invalid-input",
-          `Invalid parameters for tool "submit-world-facts": ${issues.join("; ")}. Review every open objective against narrative.value and retry; do not invent completion evidence.`,
+          `Invalid parameters for tool "submit-world-facts": ${issues.join("; ")}.`,
+          {
+            hint: "Review every open objective against narrative.value and retry; do not invent completion evidence.",
+          },
         );
       const handles = characterHandles(context?.world?.characters ?? []);
       const completed = withEntitySubjects(

@@ -137,7 +137,7 @@ describe("objective coverage before extraction succeeds", () => {
         ...args,
         events: [event(quest, objectives.slice(0, 2), "completed")],
       }),
-    ).rejects.toThrow("unachieved open objective");
+    ).rejects.toThrow("neither achieved nor superseded");
   });
   it.each(["planned", "partial", "failed", "unverified", "not_addressed"])(
     "does not allow %s judgments to finish an objective",
@@ -265,6 +265,62 @@ describe("objective coverage before extraction succeeds", () => {
       ).rejects.toThrow("exact tracked objective");
     },
   );
+  it("completes a quest whose remaining objective the story made unnecessary", async () => {
+    const reached = "你没有等比对结果，直接确认了呼叫来自明天，任务就此了结。";
+    const ctx = structuredClone(context);
+    ctx.inputSlots.narrative.value = [
+      { kind: "narration", text: source },
+      { kind: "narration", text: reached },
+    ];
+    const objectiveAssessments = [
+      assessment(objectives[0], "achieved", "你将原始呼叫复制到独立介质"),
+      assessment(objectives[1], "achieved", "声纹比对支持录音者是你"),
+      assessment(objectives[2], "superseded", reached),
+    ];
+    const done = event(quest, objectives.slice(0, 2), "completed");
+    await expect(
+      submit({ ...empty, events: [done], objectiveAssessments }, ctx),
+    ).resolves.toEqual({ ...empty, events: [done] });
+    // Without the completion, superseded cannot close an objective.
+    const progressed = event(quest, objectives.slice(0, 2));
+    await expect(
+      submit({ ...empty, events: [progressed], objectiveAssessments }, ctx),
+    ).rejects.toThrow(
+      /superseded objective .* needs a quest_change with status completed/,
+    );
+    // It still needs a quote from the story, and never finishes the objective itself.
+    await expect(
+      submit(
+        {
+          ...empty,
+          events: [done],
+          objectiveAssessments: [
+            ...objectiveAssessments.slice(0, 2),
+            assessment(objectives[2], "superseded", ""),
+          ],
+        },
+        ctx,
+      ),
+    ).rejects.toThrow(/2\.evidence/);
+    await expect(
+      submit(
+        {
+          ...empty,
+          events: [event(quest, objectives, "completed")],
+          objectiveAssessments,
+        },
+        ctx,
+      ),
+    ).rejects.toThrow(/needs an achieved assessment/);
+  });
+  it("keeps the retry guidance in the hint when the issue list is long", async () => {
+    await expect(
+      submit({ ...empty, objectiveAssessments: [] }),
+    ).rejects.toMatchObject({
+      code: "invalid-input",
+      hint: expect.stringMatching(/Review every open objective/),
+    });
+  });
   it("allows no vocabulary and new accepted quests without inventing assessments", async () => {
     await expect(submit(empty, {})).resolves.toEqual(empty);
     const events = [event("独立的新委托", [], "accepted")];
