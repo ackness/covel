@@ -59,9 +59,18 @@ export type ReasoningWire = (
   request: ReasoningWireRequest,
 ) => Record<string, unknown>;
 
+/** What of the request itself decides its reasoning fields. */
+export interface ReasoningRequestShape {
+  /** The request offers the model function tools. */
+  tools?: boolean;
+}
+
 /**
  * Translate a unified UI selection through one protocol's wire. A selection
  * the model does not offer sends nothing, so the provider default applies.
+ * When the target accepts only some levels with tools (`withTools` in the
+ * reasoning model data) and the request carries tools, a selection outside
+ * them, or no selection, is sent the first accepted level instead.
  */
 export function reasoningRequestFields(
   wire: ReasoningWire | undefined,
@@ -69,15 +78,22 @@ export function reasoningRequestFields(
   context: ModelRequestContext | undefined,
   protocol: ProviderProtocol,
   requestModel: string,
+  shape: ReasoningRequestShape = {},
 ): Record<string, unknown> {
-  const selection = readReasoningEffort(metadata);
-  if (!wire || !selection || selection === "provider-default") return {};
+  if (!wire) return {};
+  const selected = readReasoningEffort(metadata);
+  if ((!selected || selected === "provider-default") && !shape.tools) return {};
 
   const provider = context?.preset?.provider ?? context?.profile?.provider;
   const model =
     context?.preset?.model ?? context?.profile?.model ?? requestModel;
-  const { family, profile, parameterStyle, thinkingAlwaysOn } =
+  const { family, profile, parameterStyle, thinkingAlwaysOn, withTools } =
     resolveReasoningControls(model || requestModel, provider, protocol);
+  const selection =
+    shape.tools && withTools && !(selected && withTools.includes(selected))
+      ? withTools[0]
+      : selected;
+  if (!selection || selection === "provider-default") return {};
   const option = profile?.options.find((entry) => entry.value === selection);
   // A model of an unnamed family with no entry takes the level as selected.
   if (!option && (profile || family !== "compatible")) {
@@ -192,6 +208,51 @@ export function openAiChatReasoningFields({
   return {
     reasoning_effort: selection === "disabled" ? "none" : selection,
   };
+}
+
+/** A slot whose target narrows reasoning on requests that carry tools. */
+export interface ReasoningToolLimit {
+  slot: string;
+  provider: string;
+  model: string;
+  protocol: string;
+  /** The levels requests with tools are limited to, first one sent. */
+  withTools: ReasoningEffort[];
+}
+
+/**
+ * The slots whose provider, model and protocol accept only some reasoning
+ * levels on requests with tools, from the reasoning model data, so a host
+ * can tell the owner once at load instead of each request quietly changing.
+ */
+export function reasoningToolLimits(
+  presets: ReadonlyArray<{
+    name: string;
+    provider: string;
+    model: string;
+    protocol?: string;
+    enabled?: boolean;
+  }>,
+): ReasoningToolLimit[] {
+  return presets.flatMap((preset) => {
+    if (preset.enabled === false || !preset.protocol) return [];
+    const { withTools } = resolveReasoningControls(
+      preset.model,
+      preset.provider,
+      preset.protocol,
+    );
+    return withTools
+      ? [
+          {
+            slot: preset.name,
+            provider: preset.provider,
+            model: preset.model,
+            protocol: preset.protocol,
+            withTools,
+          },
+        ]
+      : [];
+  });
 }
 
 export function readReasoningEffort(

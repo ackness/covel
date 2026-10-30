@@ -59,6 +59,11 @@ export interface ReasoningControls {
   parameterStyle?: ReasoningParameterStyle;
   /** The model cannot turn thinking off. */
   thinkingAlwaysOn: boolean;
+  /**
+   * The levels the target accepts when a request carries tools, first one
+   * preferred. Absent: tools do not narrow the levels.
+   */
+  withTools?: ReasoningEffort[];
 }
 
 // ── File format ──────────────────────────────────────────────────
@@ -84,11 +89,23 @@ const ruleSchema = z.strictObject({
   match: z.union([pattern, z.array(pattern)]).optional(),
   /** Protocols the rule applies to; `""` is "no protocol stated". */
   protocols: z.array(z.string()).optional(),
+  /**
+   * Patterns the lower-cased provider name of the slot must match: a rule
+   * about one vendor's own endpoint, which a relay of the same models may not
+   * share. Absent: any provider.
+   */
+  providers: z.array(pattern).optional(),
   /** Applies only to a model whose thinking is always on. */
   whenThinkingAlwaysOn: z.literal(true).optional(),
   default: level.optional(),
   levels: z.array(levelEntrySchema),
   parameterStyle: z.enum(["adaptive", "effort"]).optional(),
+  /**
+   * The only levels the target accepts on a request that carries tools,
+   * first one preferred. A request with tools and another level, or with no
+   * level (the model's own default then applies), is sent the first one.
+   */
+  withTools: z.array(level).min(1).optional(),
 });
 
 const familySchema = z.strictObject({
@@ -121,10 +138,12 @@ export type ReasoningModelsFile = z.infer<typeof reasoningModelsFileSchema>;
 interface CompiledRule {
   match: RegExp[];
   protocols?: string[];
+  providers?: RegExp[];
   whenThinkingAlwaysOn: boolean;
   defaultValue?: ReasoningEffort;
   levels: Array<ReasoningEffortOption & { protocols?: string[] }>;
   parameterStyle?: ReasoningParameterStyle;
+  withTools?: ReasoningEffort[];
 }
 
 interface CompiledFamily {
@@ -155,6 +174,7 @@ function compile(file: ReasoningModelsFile): CompiledFamily[] {
         typeof rule.match === "string" ? [rule.match] : rule.match,
       ),
       protocols: rule.protocols,
+      ...(rule.providers ? { providers: compilePatterns(rule.providers) } : {}),
       whenThinkingAlwaysOn: rule.whenThinkingAlwaysOn ?? false,
       defaultValue: rule.default,
       levels: rule.levels.map((entry) =>
@@ -169,6 +189,7 @@ function compile(file: ReasoningModelsFile): CompiledFamily[] {
             },
       ),
       parameterStyle: rule.parameterStyle,
+      ...(rule.withTools ? { withTools: rule.withTools } : {}),
     })),
     hostRules: [],
   }));
@@ -266,7 +287,8 @@ export function resolveReasoningControls(
   features?: readonly ModelFeature[],
 ): ReasoningControls {
   const model = modelId.toLowerCase();
-  const family = familyOf(model, provider?.toLowerCase() ?? "");
+  const providerName = provider?.toLowerCase() ?? "";
+  const family = familyOf(model, providerName);
   const alwaysOn = matchesAny(family.thinkingAlwaysOn, model);
   const unknown: ReasoningControls = {
     family: family.id,
@@ -278,6 +300,7 @@ export function resolveReasoningControls(
   const applies = (entry: CompiledRule): boolean =>
     entry.match.every((expression) => expression.test(model)) &&
     (!entry.protocols || entry.protocols.includes(stated)) &&
+    (!entry.providers || matchesAny(entry.providers, providerName)) &&
     (!entry.whenThinkingAlwaysOn || alwaysOn);
   const passesGate =
     (!family.known && !family.tableFlag) ||
@@ -292,6 +315,7 @@ export function resolveReasoningControls(
     family: family.id,
     thinkingAlwaysOn: alwaysOn,
     ...(rule.parameterStyle ? { parameterStyle: rule.parameterStyle } : {}),
+    ...(rule.withTools ? { withTools: rule.withTools } : {}),
     profile: {
       family: family.id,
       ...(rule.defaultValue ? { defaultValue: rule.defaultValue } : {}),

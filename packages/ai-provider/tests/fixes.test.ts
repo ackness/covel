@@ -204,6 +204,37 @@ describe("providerRequestMetadata cannot override critical fields", () => {
     expect(body["model"]).toBe("gpt-4o");
   });
 
+  it("openai-chat generateText: tools turn reasoning off only on OpenAI's own GPT-6 Chat", async () => {
+    const tools = [
+      {
+        type: "function" as const,
+        function: { name: "note", parameters: { type: "object" } },
+      },
+    ];
+    const send = async (provider: string, withTools: boolean) => {
+      mockOpenAiSuccessResponse();
+      await createOpenAiChatAdapter().generateText(
+        { baseUrl: "https://api.openai.com/v1", apiKey: "sk-test" },
+        {
+          model: "gpt-6-luna",
+          messages: [{ role: "user", content: "hi", toolCalls: undefined }],
+          ...(withTools ? { tools } : {}),
+        },
+        {
+          profile: { provider } as never,
+          preset: { provider, model: "gpt-6-luna" } as never,
+          mode: "text",
+        },
+      );
+      return JSON.parse(
+        (vi.mocked(fetch).mock.calls[0]![1] as RequestInit).body as string,
+      ) as Record<string, unknown>;
+    };
+    expect((await send("openai", true))["reasoning_effort"]).toBe("none");
+    expect(await send("openai", false)).not.toHaveProperty("reasoning_effort");
+    expect(await send("relay", true)).not.toHaveProperty("reasoning_effort");
+  });
+
   it("openai-chat generateText: metadata cannot override messages", async () => {
     mockOpenAiSuccessResponse();
 

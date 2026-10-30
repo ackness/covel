@@ -49,6 +49,7 @@ import {
   openAiResponsesReasoningFields,
   reasoningRequestFields,
   type ReasoningWire,
+  type ReasoningRequestShape,
 } from "./reasoning-effort.js";
 import type {
   CacheStrategy,
@@ -304,6 +305,7 @@ export function extractReasoningRequestFields(
   context: ModelRequestContext | undefined,
   protocol: ProviderProtocol,
   requestModel: string,
+  shape?: ReasoningRequestShape,
 ): Record<string, unknown> {
   return reasoningRequestFields(
     getProtocolDefinition(protocol)?.reasoningFields,
@@ -311,6 +313,7 @@ export function extractReasoningRequestFields(
     context,
     protocol,
     requestModel,
+    shape,
   );
 }
 
