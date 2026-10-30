@@ -1,6 +1,7 @@
 // Types
 export {
   REASONING_EFFORT_VALUES,
+  reasoningToolLimits,
   resolveReasoningEffortProfile,
 } from "./reasoning-effort.js";
 export {
@@ -59,6 +60,7 @@ export type {
   ReasoningProviderFamily,
   ReasoningEffortOption,
   ReasoningEffortProfile,
+  ReasoningToolLimit,
   ReasoningWire,
   ReasoningWireRequest,
 } from "./reasoning-effort.js";

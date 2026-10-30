@@ -507,6 +507,7 @@ reasoningEffort = "disabled"
   - 已识别的 GPT-5 / o3 / o4 模型同时请求 `summary: "auto"`；明确的摘要设置保留。
   - 服务商是否保存对话见 [Responses 不让服务商保存对话](#responses-不让服务商保存对话)。
   - 函数工具带 `strict: false`。原因：这个接口在不带该字段时把工具当成严格模式（Chat 协议相反），所有可选参数都变成必填，模型会给每个可选参数填一个空值，工具随后拒绝这次调用。
+  - 结构化输出的 `text.format` 同样带 `strict: false`。严格模式要求每个对象都写 `additionalProperties: false`、所有属性都必填，否则整次请求返回 400；Covel 的输出 schema 有可选字段，由调用方自己校验解析结果。
 - **Anthropic Messages**：`output_config: { effort }`。
   - 已识别的自适应思考模型选了档位时，启用 `thinking.type: "adaptive"`，默认请求可见的摘要 `display: "summarized"`。
   - 不能关闭思考的模型不显示关闭选项。
@@ -543,17 +544,19 @@ reasoningEffort = "disabled"
 
 每个系列的字段：
 
-| 字段               | 含义                                                                                                                                                                         |
-| ------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `model`            | 模型 ID（小写）匹配其中任一正则即属于该系列；按文件中的系列顺序判断                                                                                                          |
-| `provider`         | 没有任何系列的 `model` 匹配时，按服务商 ID 判断                                                                                                                              |
-| `known`            | 已确认支持档位的名称。系列写了 `known` 或 `tableFlag` 时，模型要先通过其中之一才读 `rules`                                                                                   |
-| `tableFlag`        | LiteLLM 模型表把模型标为 `reasoning` 时也算通过（只在查询带上模型表特性时生效，即设置页的档位列表；请求路径只按名称判断）                                                    |
-| `thinkingAlwaysOn` | 不能关闭思考的模型：不提供 `disabled`                                                                                                                                        |
-| `rules`            | 按顺序取第一条适用的规则。`match`（一个或多个正则，全部匹配）、`protocols`（适用的协议，`""` 表示未指定协议）、`whenThinkingAlwaysOn`、`default`、`levels`、`parameterStyle` |
+| 字段               | 含义                                                                                                                                                                                                                                   |
+| ------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `model`            | 模型 ID（小写）匹配其中任一正则即属于该系列；按文件中的系列顺序判断                                                                                                                                                                    |
+| `provider`         | 没有任何系列的 `model` 匹配时，按服务商 ID 判断                                                                                                                                                                                        |
+| `known`            | 已确认支持档位的名称。系列写了 `known` 或 `tableFlag` 时，模型要先通过其中之一才读 `rules`                                                                                                                                             |
+| `tableFlag`        | LiteLLM 模型表把模型标为 `reasoning` 时也算通过（只在查询带上模型表特性时生效，即设置页的档位列表；请求路径只按名称判断）                                                                                                              |
+| `thinkingAlwaysOn` | 不能关闭思考的模型：不提供 `disabled`                                                                                                                                                                                                  |
+| `rules`            | 按顺序取第一条适用的规则。`match`（一个或多个正则，全部匹配）、`protocols`（适用的协议，`""` 表示未指定协议）、`providers`（槽位的服务商 ID 要匹配的正则）、`whenThinkingAlwaysOn`、`default`、`levels`、`parameterStyle`、`withTools` |
 
 - `levels` 的一项是档位名，或者 `{ "value", "budget", "protocols" }`。`budget` 表示这一档按思考 token 预算发送，`protocols` 表示只在这些协议上提供。
 - `parameterStyle` 在一个系列有多种写法时选其中一种：Anthropic 的 `adaptive`（同时发送 `thinking.type: "adaptive"`）和 Qwen 的 `effort`（同时发送 `reasoning_effort`）。
+- `providers` 让规则只对某个服务商自己的接口生效。同一个模型经过中转时，中转的限制可能不同，所以这类规则按槽位声明的服务商 ID 区分，而不是按模型名。
+- `withTools` 是请求带函数工具时这个目标唯一接受的档位，第一个优先。带工具的请求选了别的档位、或者没选档位（这时服务商按模型默认档位处理）时，发送第一个。例如 OpenAI 自己的 Chat 接口对 GPT-6 模型规定：带函数工具时 `reasoning_effort` 只能是 `none`，所以内置数据给 `provider` 为 `openai`、协议为 `openai-chat-v1` 的 GPT-6 写了 `"withTools": ["none"]`。要在带工具时保留推理，OpenAI 的槽位请用 `openai-responses-v1`。服务端加载 `llm.toml` 时，对受这类规则影响的槽位记一条警告。
 
 **为什么由人工维护**
 

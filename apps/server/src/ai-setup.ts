@@ -12,6 +12,7 @@ import {
   createModelDatabase,
   setModelDatabase,
   setReasoningModelOverrides,
+  reasoningToolLimits,
   BUNDLED_MODEL_DB_PATH,
 } from "@covel/ai-provider";
 import { readRuntimeEnv } from "@covel/shared";
@@ -120,6 +121,12 @@ function loadAiConfig(
       `[ai-setup] Loaded llm.toml (${llmTomlPath}) with slots:`,
       Object.keys(llmResult.llmConfig.covel).join(", "),
     );
+    for (const limit of reasoningToolLimits(llmResult.aiConfig.presets))
+      console.warn(
+        `[ai-setup] Slot "${limit.slot}" (${limit.provider} ${limit.model} over ${limit.protocol}) ` +
+          `sends reasoning "${limit.withTools[0]}" on requests with tools, which this endpoint requires. ` +
+          `Use another protocol of the provider to keep reasoning with tools (see the slots reference).`,
+      );
     return {
       config: llmResult.aiConfig,
       llmConfig: llmResult.llmConfig,

@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
 
 import { extractReasoningRequestFields } from "../src/protocol-registry.js";
-import { resolveReasoningEffortProfile } from "../src/reasoning-effort.js";
+import {
+  reasoningToolLimits,
+  resolveReasoningEffortProfile,
+} from "../src/reasoning-effort.js";
 
 describe("reasoning effort profiles", () => {
   it("recognizes deepseek-flash without a model-database entry", () => {
@@ -136,7 +139,7 @@ describe("reasoning effort profiles", () => {
         "local",
         "openai-chat-v1",
       )?.options.map((option) => option.value),
-    ).toEqual(["none", "minimal", "low", "medium", "high", "xhigh", "max"]);
+    ).toEqual(["none", "low", "medium", "high", "xhigh", "max"]);
     const sent = (reasoningEffort: string) =>
       extractReasoningRequestFields(
         { reasoningEffort },
@@ -152,6 +155,95 @@ describe("reasoning effort profiles", () => {
     expect(sent("max")).toEqual({ reasoning_effort: "max" });
     // A bookkeeping runtime's default of no reasoning arrives here as `none`.
     expect(sent("none")).toEqual({ reasoning_effort: "none" });
+  });
+
+  it("turns reasoning off for tools on OpenAI's own Chat endpoint only", () => {
+    // OpenAI's Chat API answers function tools with reasoning on with a 400
+    // for GPT-6 models; the level absent means the model default, which is on.
+    const sent = (
+      provider: string,
+      protocol: "openai-chat-v1" | "openai-responses-v1",
+      reasoningEffort: string | undefined,
+      tools: boolean,
+    ) =>
+      extractReasoningRequestFields(
+        reasoningEffort ? { reasoningEffort } : undefined,
+        {
+          profile: { provider } as never,
+          preset: { provider, model: "gpt-6.1-terra" } as never,
+          mode: "text",
+        },
+        protocol,
+        "gpt-6.1-terra",
+        { tools },
+      );
+    expect(sent("openai", "openai-chat-v1", undefined, true)).toEqual({
+      reasoning_effort: "none",
+    });
+    expect(sent("openai", "openai-chat-v1", "high", true)).toEqual({
+      reasoning_effort: "none",
+    });
+    // Without tools the chosen level stays.
+    expect(sent("openai", "openai-chat-v1", "high", false)).toEqual({
+      reasoning_effort: "high",
+    });
+    expect(sent("openai", "openai-chat-v1", undefined, false)).toEqual({});
+    // Responses keeps reasoning with tools; a relay is not narrowed.
+    expect(sent("openai", "openai-responses-v1", "high", true)).toEqual({
+      reasoning: { effort: "high" },
+    });
+    expect(sent("relay", "openai-chat-v1", "high", true)).toEqual({
+      reasoning_effort: "high",
+    });
+    expect(sent("relay", "openai-chat-v1", undefined, true)).toEqual({});
+    // OpenAI's Chat endpoint stops at xhigh.
+    expect(
+      resolveReasoningEffortProfile(
+        "gpt-6.1-terra",
+        "openai",
+        "openai-chat-v1",
+      )?.options.map((option) => option.value),
+    ).toEqual(["none", "low", "medium", "high", "xhigh"]);
+  });
+
+  it("lists the slots whose tool requests narrow reasoning", () => {
+    expect(
+      reasoningToolLimits([
+        {
+          name: "story",
+          provider: "openai",
+          model: "gpt-6-luna",
+          protocol: "openai-chat-v1",
+        },
+        {
+          name: "plugin",
+          provider: "openai",
+          model: "gpt-6-luna",
+          protocol: "openai-responses-v1",
+        },
+        {
+          name: "relay",
+          provider: "relay",
+          model: "gpt-6-luna",
+          protocol: "openai-chat-v1",
+        },
+        {
+          name: "off",
+          provider: "openai",
+          model: "gpt-6-luna",
+          protocol: "openai-chat-v1",
+          enabled: false,
+        },
+      ]),
+    ).toEqual([
+      {
+        slot: "story",
+        provider: "openai",
+        model: "gpt-6-luna",
+        protocol: "openai-chat-v1",
+        withTools: ["none"],
+      },
+    ]);
   });
 
   it("only exposes high effort for gpt-5-pro", () => {

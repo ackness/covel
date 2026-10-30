@@ -41,6 +41,7 @@ import type { OpenAiChatReasoningField } from "./http/openai-readers.js";
 import {
   openAiChatReasoningFields,
   reasoningRequestFields,
+  type ReasoningRequestShape,
 } from "../reasoning-effort.js";
 import {
   createMetadataSanitizer,
@@ -106,6 +107,7 @@ function extractOpenAiParameterOverrides(
   meta: Record<string, unknown> | undefined,
   context: ModelRequestContext | undefined,
   model: string,
+  shape: ReasoningRequestShape = {},
 ): Record<string, unknown> {
   return {
     ...extractParameterOverrides(meta, {
@@ -120,6 +122,7 @@ function extractOpenAiParameterOverrides(
       context,
       "openai-chat-v1",
       model,
+      shape,
     ),
   };
 }
@@ -317,6 +320,7 @@ function openAiChatTextBody(
       params.providerRequestMetadata,
       context,
       params.model,
+      { tools: (params.tools?.length ?? 0) > 0 },
     ),
   };
   attachOpenAiTools(body, params.tools, params.model, context, params.defaults);

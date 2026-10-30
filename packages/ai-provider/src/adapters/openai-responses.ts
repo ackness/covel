@@ -42,6 +42,7 @@ import { applyCapabilityFallback } from "./capability-fallback.js";
 import {
   openAiResponsesReasoningFields,
   reasoningRequestFields,
+  type ReasoningRequestShape,
 } from "../reasoning-effort.js";
 import { createOpenAiChatAdapter } from "./openai-chat.js";
 import { objectResponseFormat } from "./structured-output.js";
@@ -90,6 +91,12 @@ const sanitizeResponsesMetadata = createMetadataSanitizer(
   RESPONSES_PROTECTED_KEYS,
 );
 
+/**
+ * `strict: false` is explicit for the same reason as function tools below: the
+ * Responses API treats an absent field as strict, and strict mode rejects a
+ * schema with optional properties or open objects outright (HTTP 400).
+ * Callers validate the parsed output themselves.
+ */
 function toResponsesJsonSchema(
   responseFormat: LLMResponseFormat,
 ): Record<string, unknown> {
@@ -104,6 +111,7 @@ function toResponsesJsonSchema(
     type: "json_schema",
     name: name || "structured_output",
     schema: responseFormat.schema,
+    strict: false,
   };
 }
 
@@ -111,6 +119,7 @@ function extractResponsesParameterOverrides(
   meta: Record<string, unknown> | undefined,
   context: ModelRequestContext | undefined,
   model: string,
+  shape: ReasoningRequestShape = {},
 ): Record<string, unknown> {
   const fields = {
     ...extractParameterOverrides(meta, RESPONSES_PARAMETER_FIELD_MAP),
@@ -120,6 +129,7 @@ function extractResponsesParameterOverrides(
       context,
       "openai-responses-v1",
       model,
+      shape,
     ),
   };
   const knownReasoningModel = /(?:^|[/])(?:gpt-5|o[34](?:-|$))/.test(
@@ -304,6 +314,7 @@ function responsesRequestBody(
     model: string;
     promptCacheKey?: string;
     providerRequestMetadata?: Record<string, unknown>;
+    tools?: readonly unknown[];
   },
   messages: TextMessage[],
   context: ModelRequestContext | undefined,
@@ -317,6 +328,7 @@ function responsesRequestBody(
       params.providerRequestMetadata,
       context,
       params.model,
+      { tools: (params.tools?.length ?? 0) > 0 },
     ),
   };
   const stateless = body.store !== true;

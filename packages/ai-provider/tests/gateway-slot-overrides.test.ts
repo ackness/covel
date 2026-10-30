@@ -311,8 +311,14 @@ describe("gateway + slotOverrides", () => {
     const resolved = gateway.resolveSlot("story", options);
 
     expect(calls.map((call) => call.capability)).toEqual([
-      expect.objectContaining({ contextWindow: 240_000, output: ["text", "image"] }),
-      expect.objectContaining({ contextWindow: 240_000, output: ["text", "image"] }),
+      expect.objectContaining({
+        contextWindow: 240_000,
+        output: ["text", "image"],
+      }),
+      expect.objectContaining({
+        contextWindow: 240_000,
+        output: ["text", "image"],
+      }),
     ]);
     expect(calls.map((call) => call.tag)).toEqual(["image", "image"]);
     expect(resolved).toMatchObject({

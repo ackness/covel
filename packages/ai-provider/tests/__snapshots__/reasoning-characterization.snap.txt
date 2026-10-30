@@ -327,64 +327,6 @@ provider custom,openai,anthropic,deepseek,google,xai,dashscope:
     runtime default off: automatic (<model> cannot disable thinking; using its lowest supported setting (automatic).)
     provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: {}
 
-## fields 5a3dba94 (61 models, e.g. azure/apac/gpt-6.1-sol)
-provider custom,openai,anthropic,deepseek,google,xai,dashscope:
-  (no protocol)
-    profile: openai default=- [none minimal low medium high xhigh max]
-  openai-chat-v1
-    profile: openai default=- [none minimal low medium high xhigh max]
-    runtime default off: none
-    provider-default,disabled,automatic: {}
-    none: {"reasoning_effort":"none"}
-    minimal: {"reasoning_effort":"minimal"}
-    low: {"reasoning_effort":"low"}
-    medium: {"reasoning_effort":"medium"}
-    high: {"reasoning_effort":"high"}
-    xhigh: {"reasoning_effort":"xhigh"}
-    max: {"reasoning_effort":"max"}
-  openai-responses-v1
-    profile: openai default=- [none minimal low medium high xhigh max]
-    runtime default off: none
-    provider-default,disabled,automatic: {}
-    none: {"reasoning":{"effort":"none"}}
-    minimal: {"reasoning":{"effort":"minimal"}}
-    low: {"reasoning":{"effort":"low"}}
-    medium: {"reasoning":{"effort":"medium"}}
-    high: {"reasoning":{"effort":"high"}}
-    xhigh: {"reasoning":{"effort":"xhigh"}}
-    max: {"reasoning":{"effort":"max"}}
-  anthropic-messages-v1
-    profile: openai default=- [none minimal low medium high xhigh max]
-    runtime default off: none
-    provider-default,disabled,automatic: {}
-    none: {"output_config":{"effort":"none"}}
-    minimal: {"output_config":{"effort":"minimal"}}
-    low: {"output_config":{"effort":"low"}}
-    medium: {"output_config":{"effort":"medium"}}
-    high: {"output_config":{"effort":"high"}}
-    xhigh: {"output_config":{"effort":"xhigh"}}
-    max: {"output_config":{"effort":"max"}}
-  google-generative-ai-v1
-    profile: openai default=- [none minimal low medium high xhigh max]
-    runtime default off: none
-    provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: {}
-  typesafe-systemone-v1
-    profile: openai default=- [none minimal low medium high xhigh max]
-    runtime default off: none
-    provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: {}
-  openrouter-decisions-v1
-    profile: openai default=- [none minimal low medium high xhigh max]
-    runtime default off: none
-    provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: {}
-  vercel-evaluation-v4
-    profile: openai default=- [none minimal low medium high xhigh max]
-    runtime default off: none
-    provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: {}
-  openai-decisions-v1
-    profile: openai default=- [none minimal low medium high xhigh max]
-    runtime default off: none
-    provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: {}
-
 ## fields 68735238 (27 models, e.g. azure/eu/gpt-5.1)
 provider custom,openai,anthropic,deepseek,google,xai,dashscope:
   (no protocol)
@@ -845,6 +787,113 @@ provider custom,openai,anthropic,deepseek,google,xai,dashscope:
   openai-decisions-v1
     profile: anthropic default=high [low medium high xhigh max]
     runtime default off: low (<model> cannot disable thinking; using its lowest supported setting (low).)
+    provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: {}
+
+## fields 873ce937 (61 models, e.g. azure/apac/gpt-6.1-sol)
+provider custom,anthropic,deepseek,google,xai,dashscope:
+  (no protocol)
+    profile: openai default=- [none low medium high xhigh max]
+  openai-chat-v1
+    profile: openai default=- [none low medium high xhigh max]
+    runtime default off: none
+    provider-default,disabled,automatic,minimal: {}
+    none: {"reasoning_effort":"none"}
+    low: {"reasoning_effort":"low"}
+    medium: {"reasoning_effort":"medium"}
+    high: {"reasoning_effort":"high"}
+    xhigh: {"reasoning_effort":"xhigh"}
+    max: {"reasoning_effort":"max"}
+  openai-responses-v1
+    profile: openai default=- [none low medium high xhigh max]
+    runtime default off: none
+    provider-default,disabled,automatic,minimal: {}
+    none: {"reasoning":{"effort":"none"}}
+    low: {"reasoning":{"effort":"low"}}
+    medium: {"reasoning":{"effort":"medium"}}
+    high: {"reasoning":{"effort":"high"}}
+    xhigh: {"reasoning":{"effort":"xhigh"}}
+    max: {"reasoning":{"effort":"max"}}
+  anthropic-messages-v1
+    profile: openai default=- [none low medium high xhigh max]
+    runtime default off: none
+    provider-default,disabled,automatic,minimal: {}
+    none: {"output_config":{"effort":"none"}}
+    low: {"output_config":{"effort":"low"}}
+    medium: {"output_config":{"effort":"medium"}}
+    high: {"output_config":{"effort":"high"}}
+    xhigh: {"output_config":{"effort":"xhigh"}}
+    max: {"output_config":{"effort":"max"}}
+  google-generative-ai-v1
+    profile: openai default=- [none low medium high xhigh max]
+    runtime default off: none
+    provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: {}
+  typesafe-systemone-v1
+    profile: openai default=- [none low medium high xhigh max]
+    runtime default off: none
+    provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: {}
+  openrouter-decisions-v1
+    profile: openai default=- [none low medium high xhigh max]
+    runtime default off: none
+    provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: {}
+  vercel-evaluation-v4
+    profile: openai default=- [none low medium high xhigh max]
+    runtime default off: none
+    provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: {}
+  openai-decisions-v1
+    profile: openai default=- [none low medium high xhigh max]
+    runtime default off: none
+    provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: {}
+provider openai:
+  (no protocol)
+    profile: openai default=- [none low medium high xhigh max]
+  openai-chat-v1
+    profile: openai default=- [none low medium high xhigh]
+    runtime default off: none
+    provider-default,disabled,automatic,minimal,max: {}
+    none: {"reasoning_effort":"none"}
+    low: {"reasoning_effort":"low"}
+    medium: {"reasoning_effort":"medium"}
+    high: {"reasoning_effort":"high"}
+    xhigh: {"reasoning_effort":"xhigh"}
+  openai-responses-v1
+    profile: openai default=- [none low medium high xhigh max]
+    runtime default off: none
+    provider-default,disabled,automatic,minimal: {}
+    none: {"reasoning":{"effort":"none"}}
+    low: {"reasoning":{"effort":"low"}}
+    medium: {"reasoning":{"effort":"medium"}}
+    high: {"reasoning":{"effort":"high"}}
+    xhigh: {"reasoning":{"effort":"xhigh"}}
+    max: {"reasoning":{"effort":"max"}}
+  anthropic-messages-v1
+    profile: openai default=- [none low medium high xhigh max]
+    runtime default off: none
+    provider-default,disabled,automatic,minimal: {}
+    none: {"output_config":{"effort":"none"}}
+    low: {"output_config":{"effort":"low"}}
+    medium: {"output_config":{"effort":"medium"}}
+    high: {"output_config":{"effort":"high"}}
+    xhigh: {"output_config":{"effort":"xhigh"}}
+    max: {"output_config":{"effort":"max"}}
+  google-generative-ai-v1
+    profile: openai default=- [none low medium high xhigh max]
+    runtime default off: none
+    provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: {}
+  typesafe-systemone-v1
+    profile: openai default=- [none low medium high xhigh max]
+    runtime default off: none
+    provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: {}
+  openrouter-decisions-v1
+    profile: openai default=- [none low medium high xhigh max]
+    runtime default off: none
+    provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: {}
+  vercel-evaluation-v4
+    profile: openai default=- [none low medium high xhigh max]
+    runtime default off: none
+    provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: {}
+  openai-decisions-v1
+    profile: openai default=- [none low medium high xhigh max]
+    runtime default off: none
     provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: {}
 
 ## fields 890864de (11 models, e.g. anthropic.claude-opus-4-5-20251101-v1:0)
@@ -1926,40 +1975,6 @@ provider custom,openai,anthropic,deepseek,google,xai,dashscope:
     runtime default off,disabled,automatic,none,minimal,low,medium,high,xhigh,max: {"generationConfig":{"maxOutputTokens":1000,"temperature":0.7,"topK":40,"topP":0.9},"toolConfig":{"functionCallingConfig":{"mode":"ANY"}}}
     provider-default: {"generationConfig":{"maxOutputTokens":1000,"temperature":0.7,"topK":40,"topP":0.9},"toolConfig":{"functionCallingConfig":{"mode":"AUTO"}}}
 
-## bodies 06bb3dc6 (5 models, e.g. bedrock_mantle/openai.gpt-6-astra)
-  openai-chat-v1
-    runtime default off,none: {"max_tokens":1000,"reasoning_effort":"none","temperature":0.7,"tool_choice":"required","top_p":0.9}
-    provider-default: {"max_tokens":1000,"temperature":0.7,"tool_choice":"auto","top_p":0.9}
-    disabled,automatic: {"max_tokens":1000,"temperature":0.7,"tool_choice":"required","top_p":0.9}
-    minimal: {"max_tokens":1000,"reasoning_effort":"minimal","temperature":0.7,"tool_choice":"required","top_p":0.9}
-    low: {"max_tokens":1000,"reasoning_effort":"low","temperature":0.7,"tool_choice":"required","top_p":0.9}
-    medium: {"max_tokens":1000,"reasoning_effort":"medium","temperature":0.7,"tool_choice":"required","top_p":0.9}
-    high: {"max_tokens":1000,"reasoning_effort":"high","temperature":0.7,"tool_choice":"required","top_p":0.9}
-    xhigh: {"max_tokens":1000,"reasoning_effort":"xhigh","temperature":0.7,"tool_choice":"required","top_p":0.9}
-    max: {"max_tokens":1000,"reasoning_effort":"max","temperature":0.7,"tool_choice":"required","top_p":0.9}
-  openai-responses-v1
-    runtime default off,none: {"max_output_tokens":1000,"reasoning":{"effort":"none"},"store":false,"temperature":0.7,"tool_choice":"required","top_p":0.9}
-    provider-default: {"include":["reasoning.encrypted_content"],"max_output_tokens":1000,"store":false,"temperature":0.7,"tool_choice":"auto","top_p":0.9}
-    disabled,automatic: {"include":["reasoning.encrypted_content"],"max_output_tokens":1000,"store":false,"temperature":0.7,"tool_choice":"required","top_p":0.9}
-    minimal: {"include":["reasoning.encrypted_content"],"max_output_tokens":1000,"reasoning":{"effort":"minimal"},"store":false,"temperature":0.7,"tool_choice":"required","top_p":0.9}
-    low: {"include":["reasoning.encrypted_content"],"max_output_tokens":1000,"reasoning":{"effort":"low"},"store":false,"temperature":0.7,"tool_choice":"required","top_p":0.9}
-    medium: {"include":["reasoning.encrypted_content"],"max_output_tokens":1000,"reasoning":{"effort":"medium"},"store":false,"temperature":0.7,"tool_choice":"required","top_p":0.9}
-    high: {"include":["reasoning.encrypted_content"],"max_output_tokens":1000,"reasoning":{"effort":"high"},"store":false,"temperature":0.7,"tool_choice":"required","top_p":0.9}
-    xhigh: {"include":["reasoning.encrypted_content"],"max_output_tokens":1000,"reasoning":{"effort":"xhigh"},"store":false,"temperature":0.7,"tool_choice":"required","top_p":0.9}
-    max: {"include":["reasoning.encrypted_content"],"max_output_tokens":1000,"reasoning":{"effort":"max"},"store":false,"temperature":0.7,"tool_choice":"required","top_p":0.9}
-  anthropic-messages-v1
-    runtime default off,none: {"max_tokens":1000,"output_config":{"effort":"none"},"temperature":0.7,"tool_choice":{"type":"any"},"top_k":40,"top_p":0.9}
-    provider-default: {"max_tokens":1000,"temperature":0.7,"top_k":40,"top_p":0.9}
-    disabled,automatic: {"max_tokens":1000,"temperature":0.7,"tool_choice":{"type":"any"},"top_k":40,"top_p":0.9}
-    minimal: {"max_tokens":1000,"output_config":{"effort":"minimal"},"temperature":0.7,"tool_choice":{"type":"any"},"top_k":40,"top_p":0.9}
-    low: {"max_tokens":1000,"output_config":{"effort":"low"},"temperature":0.7,"tool_choice":{"type":"any"},"top_k":40,"top_p":0.9}
-    medium: {"max_tokens":1000,"output_config":{"effort":"medium"},"temperature":0.7,"tool_choice":{"type":"any"},"top_k":40,"top_p":0.9}
-    high: {"max_tokens":1000,"output_config":{"effort":"high"},"temperature":0.7,"tool_choice":{"type":"any"},"top_k":40,"top_p":0.9}
-    xhigh: {"max_tokens":1000,"output_config":{"effort":"xhigh"},"temperature":0.7,"tool_choice":{"type":"any"},"top_k":40,"top_p":0.9}
-    max: {"max_tokens":1000,"output_config":{"effort":"max"},"temperature":0.7,"tool_choice":{"type":"any"},"top_k":40,"top_p":0.9}
-  google-generative-ai-v1
-    runtime default off,provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: no request
-
 ## bodies 0b2308d5 (8 models, e.g. global.xai.grok-4.6)
   openai-chat-v1
     runtime default off,low: {"max_tokens":1000,"reasoning_effort":"low","temperature":0.7,"tool_choice":"required","top_p":0.9}
@@ -2067,41 +2082,6 @@ provider custom,openai,anthropic,deepseek,google,xai,dashscope:
     provider-default: {"max_tokens":1000,"temperature":0.7,"top_k":40,"top_p":0.9}
     disabled: {"max_tokens":1000,"temperature":0.7,"thinking":{"type":"disabled"},"tool_choice":{"type":"any"},"top_k":40,"top_p":0.9}
     none: {"max_tokens":1000,"output_config":{"effort":"none"},"temperature":0.7,"tool_choice":{"type":"any"},"top_k":40,"top_p":0.9}
-    minimal: {"max_tokens":1000,"output_config":{"effort":"minimal"},"temperature":0.7,"tool_choice":{"type":"any"},"top_k":40,"top_p":0.9}
-    low: {"max_tokens":1000,"output_config":{"effort":"low"},"temperature":0.7,"tool_choice":{"type":"any"},"top_k":40,"top_p":0.9}
-    medium: {"max_tokens":1000,"output_config":{"effort":"medium"},"temperature":0.7,"tool_choice":{"type":"any"},"top_k":40,"top_p":0.9}
-    high: {"max_tokens":1000,"output_config":{"effort":"high"},"temperature":0.7,"tool_choice":{"type":"any"},"top_k":40,"top_p":0.9}
-    xhigh: {"max_tokens":1000,"output_config":{"effort":"xhigh"},"temperature":0.7,"tool_choice":{"type":"any"},"top_k":40,"top_p":0.9}
-    max: {"max_tokens":1000,"output_config":{"effort":"max"},"temperature":0.7,"tool_choice":{"type":"any"},"top_k":40,"top_p":0.9}
-  google-generative-ai-v1
-    runtime default off,disabled,automatic,none,minimal,low,medium,high,xhigh,max: {"generationConfig":{"maxOutputTokens":1000,"temperature":0.7,"topK":40,"topP":0.9},"toolConfig":{"functionCallingConfig":{"mode":"ANY"}}}
-    provider-default: {"generationConfig":{"maxOutputTokens":1000,"temperature":0.7,"topK":40,"topP":0.9},"toolConfig":{"functionCallingConfig":{"mode":"AUTO"}}}
-
-## bodies 1a392d4d (7 models, e.g. gpt-6)
-  openai-chat-v1
-    runtime default off,none: {"max_completion_tokens":1000,"reasoning_effort":"none","temperature":0.7,"tool_choice":"required","top_p":0.9}
-    provider-default: {"max_completion_tokens":1000,"temperature":0.7,"tool_choice":"auto","top_p":0.9}
-    disabled,automatic: {"max_completion_tokens":1000,"temperature":0.7,"tool_choice":"required","top_p":0.9}
-    minimal: {"max_completion_tokens":1000,"reasoning_effort":"minimal","temperature":0.7,"tool_choice":"required","top_p":0.9}
-    low: {"max_completion_tokens":1000,"reasoning_effort":"low","temperature":0.7,"tool_choice":"required","top_p":0.9}
-    medium: {"max_completion_tokens":1000,"reasoning_effort":"medium","temperature":0.7,"tool_choice":"required","top_p":0.9}
-    high: {"max_completion_tokens":1000,"reasoning_effort":"high","temperature":0.7,"tool_choice":"required","top_p":0.9}
-    xhigh: {"max_completion_tokens":1000,"reasoning_effort":"xhigh","temperature":0.7,"tool_choice":"required","top_p":0.9}
-    max: {"max_completion_tokens":1000,"reasoning_effort":"max","temperature":0.7,"tool_choice":"required","top_p":0.9}
-  openai-responses-v1
-    runtime default off,none: {"max_output_tokens":1000,"reasoning":{"effort":"none"},"store":false,"temperature":0.7,"tool_choice":"required","top_p":0.9}
-    provider-default: {"include":["reasoning.encrypted_content"],"max_output_tokens":1000,"store":false,"temperature":0.7,"tool_choice":"auto","top_p":0.9}
-    disabled,automatic: {"include":["reasoning.encrypted_content"],"max_output_tokens":1000,"store":false,"temperature":0.7,"tool_choice":"required","top_p":0.9}
-    minimal: {"include":["reasoning.encrypted_content"],"max_output_tokens":1000,"reasoning":{"effort":"minimal"},"store":false,"temperature":0.7,"tool_choice":"required","top_p":0.9}
-    low: {"include":["reasoning.encrypted_content"],"max_output_tokens":1000,"reasoning":{"effort":"low"},"store":false,"temperature":0.7,"tool_choice":"required","top_p":0.9}
-    medium: {"include":["reasoning.encrypted_content"],"max_output_tokens":1000,"reasoning":{"effort":"medium"},"store":false,"temperature":0.7,"tool_choice":"required","top_p":0.9}
-    high: {"include":["reasoning.encrypted_content"],"max_output_tokens":1000,"reasoning":{"effort":"high"},"store":false,"temperature":0.7,"tool_choice":"required","top_p":0.9}
-    xhigh: {"include":["reasoning.encrypted_content"],"max_output_tokens":1000,"reasoning":{"effort":"xhigh"},"store":false,"temperature":0.7,"tool_choice":"required","top_p":0.9}
-    max: {"include":["reasoning.encrypted_content"],"max_output_tokens":1000,"reasoning":{"effort":"max"},"store":false,"temperature":0.7,"tool_choice":"required","top_p":0.9}
-  anthropic-messages-v1
-    runtime default off,none: {"max_tokens":1000,"output_config":{"effort":"none"},"temperature":0.7,"tool_choice":{"type":"any"},"top_k":40,"top_p":0.9}
-    provider-default: {"max_tokens":1000,"temperature":0.7,"top_k":40,"top_p":0.9}
-    disabled,automatic: {"max_tokens":1000,"temperature":0.7,"tool_choice":{"type":"any"},"top_k":40,"top_p":0.9}
     minimal: {"max_tokens":1000,"output_config":{"effort":"minimal"},"temperature":0.7,"tool_choice":{"type":"any"},"top_k":40,"top_p":0.9}
     low: {"max_tokens":1000,"output_config":{"effort":"low"},"temperature":0.7,"tool_choice":{"type":"any"},"top_k":40,"top_p":0.9}
     medium: {"max_tokens":1000,"output_config":{"effort":"medium"},"temperature":0.7,"tool_choice":{"type":"any"},"top_k":40,"top_p":0.9}
@@ -2256,41 +2236,6 @@ provider custom,openai,anthropic,deepseek,google,xai,dashscope:
   google-generative-ai-v1
     runtime default off,provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: no request
 
-## bodies 29f44933 (12 models, e.g. global.openai.gpt-6-astra)
-  openai-chat-v1
-    runtime default off,none: {"max_tokens":1000,"reasoning_effort":"none","temperature":0.7,"tool_choice":"required","top_p":0.9}
-    provider-default: {"max_tokens":1000,"temperature":0.7,"tool_choice":"auto","top_p":0.9}
-    disabled,automatic: {"max_tokens":1000,"temperature":0.7,"tool_choice":"required","top_p":0.9}
-    minimal: {"max_tokens":1000,"reasoning_effort":"minimal","temperature":0.7,"tool_choice":"required","top_p":0.9}
-    low: {"max_tokens":1000,"reasoning_effort":"low","temperature":0.7,"tool_choice":"required","top_p":0.9}
-    medium: {"max_tokens":1000,"reasoning_effort":"medium","temperature":0.7,"tool_choice":"required","top_p":0.9}
-    high: {"max_tokens":1000,"reasoning_effort":"high","temperature":0.7,"tool_choice":"required","top_p":0.9}
-    xhigh: {"max_tokens":1000,"reasoning_effort":"xhigh","temperature":0.7,"tool_choice":"required","top_p":0.9}
-    max: {"max_tokens":1000,"reasoning_effort":"max","temperature":0.7,"tool_choice":"required","top_p":0.9}
-  openai-responses-v1
-    runtime default off,none: {"max_output_tokens":1000,"reasoning":{"effort":"none"},"store":false,"temperature":0.7,"tool_choice":"required","top_p":0.9}
-    provider-default: {"include":["reasoning.encrypted_content"],"max_output_tokens":1000,"store":false,"temperature":0.7,"tool_choice":"auto","top_p":0.9}
-    disabled,automatic: {"include":["reasoning.encrypted_content"],"max_output_tokens":1000,"store":false,"temperature":0.7,"tool_choice":"required","top_p":0.9}
-    minimal: {"include":["reasoning.encrypted_content"],"max_output_tokens":1000,"reasoning":{"effort":"minimal"},"store":false,"temperature":0.7,"tool_choice":"required","top_p":0.9}
-    low: {"include":["reasoning.encrypted_content"],"max_output_tokens":1000,"reasoning":{"effort":"low"},"store":false,"temperature":0.7,"tool_choice":"required","top_p":0.9}
-    medium: {"include":["reasoning.encrypted_content"],"max_output_tokens":1000,"reasoning":{"effort":"medium"},"store":false,"temperature":0.7,"tool_choice":"required","top_p":0.9}
-    high: {"include":["reasoning.encrypted_content"],"max_output_tokens":1000,"reasoning":{"effort":"high"},"store":false,"temperature":0.7,"tool_choice":"required","top_p":0.9}
-    xhigh: {"include":["reasoning.encrypted_content"],"max_output_tokens":1000,"reasoning":{"effort":"xhigh"},"store":false,"temperature":0.7,"tool_choice":"required","top_p":0.9}
-    max: {"include":["reasoning.encrypted_content"],"max_output_tokens":1000,"reasoning":{"effort":"max"},"store":false,"temperature":0.7,"tool_choice":"required","top_p":0.9}
-  anthropic-messages-v1
-    runtime default off,none: {"max_tokens":1000,"output_config":{"effort":"none"},"temperature":0.7,"tool_choice":{"type":"any"},"top_k":40,"top_p":0.9}
-    provider-default: {"max_tokens":1000,"temperature":0.7,"top_k":40,"top_p":0.9}
-    disabled,automatic: {"max_tokens":1000,"temperature":0.7,"tool_choice":{"type":"any"},"top_k":40,"top_p":0.9}
-    minimal: {"max_tokens":1000,"output_config":{"effort":"minimal"},"temperature":0.7,"tool_choice":{"type":"any"},"top_k":40,"top_p":0.9}
-    low: {"max_tokens":1000,"output_config":{"effort":"low"},"temperature":0.7,"tool_choice":{"type":"any"},"top_k":40,"top_p":0.9}
-    medium: {"max_tokens":1000,"output_config":{"effort":"medium"},"temperature":0.7,"tool_choice":{"type":"any"},"top_k":40,"top_p":0.9}
-    high: {"max_tokens":1000,"output_config":{"effort":"high"},"temperature":0.7,"tool_choice":{"type":"any"},"top_k":40,"top_p":0.9}
-    xhigh: {"max_tokens":1000,"output_config":{"effort":"xhigh"},"temperature":0.7,"tool_choice":{"type":"any"},"top_k":40,"top_p":0.9}
-    max: {"max_tokens":1000,"output_config":{"effort":"max"},"temperature":0.7,"tool_choice":{"type":"any"},"top_k":40,"top_p":0.9}
-  google-generative-ai-v1
-    runtime default off,disabled,automatic,none,minimal,low,medium,high,xhigh,max: {"generationConfig":{"maxOutputTokens":1000,"temperature":0.7,"topK":40,"topP":0.9},"toolConfig":{"functionCallingConfig":{"mode":"ANY"}}}
-    provider-default: {"generationConfig":{"maxOutputTokens":1000,"temperature":0.7,"topK":40,"topP":0.9},"toolConfig":{"functionCallingConfig":{"mode":"AUTO"}}}
-
 ## bodies 2bf23fc8 (2 models, e.g. grok-4.20)
   openai-chat-v1
     runtime default off,low: {"max_tokens":1000,"reasoning_effort":"low","temperature":0.7,"tool_choice":"required","top_p":0.9}
@@ -2389,6 +2334,37 @@ provider custom,openai,anthropic,deepseek,google,xai,dashscope:
   google-generative-ai-v1
     runtime default off,disabled,automatic,none,minimal,low,medium,high,xhigh,max: {"generationConfig":{"maxOutputTokens":1000,"temperature":0.7,"topK":40,"topP":0.9},"toolConfig":{"functionCallingConfig":{"mode":"ANY"}}}
     provider-default: {"generationConfig":{"maxOutputTokens":1000,"temperature":0.7,"topK":40,"topP":0.9},"toolConfig":{"functionCallingConfig":{"mode":"AUTO"}}}
+
+## bodies 44af4847 (5 models, e.g. bedrock_mantle/openai.gpt-6-astra)
+  openai-chat-v1
+    runtime default off,none: {"max_tokens":1000,"reasoning_effort":"none","temperature":0.7,"tool_choice":"required","top_p":0.9}
+    provider-default: {"max_tokens":1000,"temperature":0.7,"tool_choice":"auto","top_p":0.9}
+    disabled,automatic,minimal: {"max_tokens":1000,"temperature":0.7,"tool_choice":"required","top_p":0.9}
+    low: {"max_tokens":1000,"reasoning_effort":"low","temperature":0.7,"tool_choice":"required","top_p":0.9}
+    medium: {"max_tokens":1000,"reasoning_effort":"medium","temperature":0.7,"tool_choice":"required","top_p":0.9}
+    high: {"max_tokens":1000,"reasoning_effort":"high","temperature":0.7,"tool_choice":"required","top_p":0.9}
+    xhigh: {"max_tokens":1000,"reasoning_effort":"xhigh","temperature":0.7,"tool_choice":"required","top_p":0.9}
+    max: {"max_tokens":1000,"reasoning_effort":"max","temperature":0.7,"tool_choice":"required","top_p":0.9}
+  openai-responses-v1
+    runtime default off,none: {"max_output_tokens":1000,"reasoning":{"effort":"none"},"store":false,"temperature":0.7,"tool_choice":"required","top_p":0.9}
+    provider-default: {"include":["reasoning.encrypted_content"],"max_output_tokens":1000,"store":false,"temperature":0.7,"tool_choice":"auto","top_p":0.9}
+    disabled,automatic,minimal: {"include":["reasoning.encrypted_content"],"max_output_tokens":1000,"store":false,"temperature":0.7,"tool_choice":"required","top_p":0.9}
+    low: {"include":["reasoning.encrypted_content"],"max_output_tokens":1000,"reasoning":{"effort":"low"},"store":false,"temperature":0.7,"tool_choice":"required","top_p":0.9}
+    medium: {"include":["reasoning.encrypted_content"],"max_output_tokens":1000,"reasoning":{"effort":"medium"},"store":false,"temperature":0.7,"tool_choice":"required","top_p":0.9}
+    high: {"include":["reasoning.encrypted_content"],"max_output_tokens":1000,"reasoning":{"effort":"high"},"store":false,"temperature":0.7,"tool_choice":"required","top_p":0.9}
+    xhigh: {"include":["reasoning.encrypted_content"],"max_output_tokens":1000,"reasoning":{"effort":"xhigh"},"store":false,"temperature":0.7,"tool_choice":"required","top_p":0.9}
+    max: {"include":["reasoning.encrypted_content"],"max_output_tokens":1000,"reasoning":{"effort":"max"},"store":false,"temperature":0.7,"tool_choice":"required","top_p":0.9}
+  anthropic-messages-v1
+    runtime default off,none: {"max_tokens":1000,"output_config":{"effort":"none"},"temperature":0.7,"tool_choice":{"type":"any"},"top_k":40,"top_p":0.9}
+    provider-default: {"max_tokens":1000,"temperature":0.7,"top_k":40,"top_p":0.9}
+    disabled,automatic,minimal: {"max_tokens":1000,"temperature":0.7,"tool_choice":{"type":"any"},"top_k":40,"top_p":0.9}
+    low: {"max_tokens":1000,"output_config":{"effort":"low"},"temperature":0.7,"tool_choice":{"type":"any"},"top_k":40,"top_p":0.9}
+    medium: {"max_tokens":1000,"output_config":{"effort":"medium"},"temperature":0.7,"tool_choice":{"type":"any"},"top_k":40,"top_p":0.9}
+    high: {"max_tokens":1000,"output_config":{"effort":"high"},"temperature":0.7,"tool_choice":{"type":"any"},"top_k":40,"top_p":0.9}
+    xhigh: {"max_tokens":1000,"output_config":{"effort":"xhigh"},"temperature":0.7,"tool_choice":{"type":"any"},"top_k":40,"top_p":0.9}
+    max: {"max_tokens":1000,"output_config":{"effort":"max"},"temperature":0.7,"tool_choice":{"type":"any"},"top_k":40,"top_p":0.9}
+  google-generative-ai-v1
+    runtime default off,provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: no request
 
 ## bodies 46fba062 (32 models, e.g. anthropic.claude-fable-5-1)
   openai-chat-v1
@@ -2848,6 +2824,37 @@ provider custom,openai,anthropic,deepseek,google,xai,dashscope:
   google-generative-ai-v1
     runtime default off,provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: no request
 
+## bodies a079876a (37 models, e.g. azure/apac/gpt-6.1-sol)
+  openai-chat-v1
+    runtime default off,none: {"max_completion_tokens":1000,"reasoning_effort":"none","temperature":0.7,"tool_choice":"required","top_p":0.9}
+    provider-default: {"max_completion_tokens":1000,"temperature":0.7,"tool_choice":"auto","top_p":0.9}
+    disabled,automatic,minimal: {"max_completion_tokens":1000,"temperature":0.7,"tool_choice":"required","top_p":0.9}
+    low: {"max_completion_tokens":1000,"reasoning_effort":"low","temperature":0.7,"tool_choice":"required","top_p":0.9}
+    medium: {"max_completion_tokens":1000,"reasoning_effort":"medium","temperature":0.7,"tool_choice":"required","top_p":0.9}
+    high: {"max_completion_tokens":1000,"reasoning_effort":"high","temperature":0.7,"tool_choice":"required","top_p":0.9}
+    xhigh: {"max_completion_tokens":1000,"reasoning_effort":"xhigh","temperature":0.7,"tool_choice":"required","top_p":0.9}
+    max: {"max_completion_tokens":1000,"reasoning_effort":"max","temperature":0.7,"tool_choice":"required","top_p":0.9}
+  openai-responses-v1
+    runtime default off,none: {"max_output_tokens":1000,"reasoning":{"effort":"none"},"store":false,"temperature":0.7,"tool_choice":"required","top_p":0.9}
+    provider-default: {"include":["reasoning.encrypted_content"],"max_output_tokens":1000,"store":false,"temperature":0.7,"tool_choice":"auto","top_p":0.9}
+    disabled,automatic,minimal: {"include":["reasoning.encrypted_content"],"max_output_tokens":1000,"store":false,"temperature":0.7,"tool_choice":"required","top_p":0.9}
+    low: {"include":["reasoning.encrypted_content"],"max_output_tokens":1000,"reasoning":{"effort":"low"},"store":false,"temperature":0.7,"tool_choice":"required","top_p":0.9}
+    medium: {"include":["reasoning.encrypted_content"],"max_output_tokens":1000,"reasoning":{"effort":"medium"},"store":false,"temperature":0.7,"tool_choice":"required","top_p":0.9}
+    high: {"include":["reasoning.encrypted_content"],"max_output_tokens":1000,"reasoning":{"effort":"high"},"store":false,"temperature":0.7,"tool_choice":"required","top_p":0.9}
+    xhigh: {"include":["reasoning.encrypted_content"],"max_output_tokens":1000,"reasoning":{"effort":"xhigh"},"store":false,"temperature":0.7,"tool_choice":"required","top_p":0.9}
+    max: {"include":["reasoning.encrypted_content"],"max_output_tokens":1000,"reasoning":{"effort":"max"},"store":false,"temperature":0.7,"tool_choice":"required","top_p":0.9}
+  anthropic-messages-v1
+    runtime default off,none: {"max_tokens":1000,"output_config":{"effort":"none"},"temperature":0.7,"tool_choice":{"type":"any"},"top_k":40,"top_p":0.9}
+    provider-default: {"max_tokens":1000,"temperature":0.7,"top_k":40,"top_p":0.9}
+    disabled,automatic,minimal: {"max_tokens":1000,"temperature":0.7,"tool_choice":{"type":"any"},"top_k":40,"top_p":0.9}
+    low: {"max_tokens":1000,"output_config":{"effort":"low"},"temperature":0.7,"tool_choice":{"type":"any"},"top_k":40,"top_p":0.9}
+    medium: {"max_tokens":1000,"output_config":{"effort":"medium"},"temperature":0.7,"tool_choice":{"type":"any"},"top_k":40,"top_p":0.9}
+    high: {"max_tokens":1000,"output_config":{"effort":"high"},"temperature":0.7,"tool_choice":{"type":"any"},"top_k":40,"top_p":0.9}
+    xhigh: {"max_tokens":1000,"output_config":{"effort":"xhigh"},"temperature":0.7,"tool_choice":{"type":"any"},"top_k":40,"top_p":0.9}
+    max: {"max_tokens":1000,"output_config":{"effort":"max"},"temperature":0.7,"tool_choice":{"type":"any"},"top_k":40,"top_p":0.9}
+  google-generative-ai-v1
+    runtime default off,provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: no request
+
 ## bodies a3294578 (38 models, e.g. aihubmix/claude-opus-4-8-think)
   openai-chat-v1
     runtime default off,disabled: {"max_tokens":1000,"reasoning_effort":"none","temperature":0.7,"tool_choice":"required","top_p":0.9}
@@ -2969,6 +2976,70 @@ provider custom,openai,anthropic,deepseek,google,xai,dashscope:
   anthropic-messages-v1
     runtime default off,disabled,automatic,none,minimal,low,medium,high,xhigh,max: {"max_tokens":1000,"temperature":0.7,"tool_choice":{"type":"any"},"top_k":40,"top_p":0.9}
     provider-default: {"max_tokens":1000,"temperature":0.7,"top_k":40,"top_p":0.9}
+  google-generative-ai-v1
+    runtime default off,disabled,automatic,none,minimal,low,medium,high,xhigh,max: {"generationConfig":{"maxOutputTokens":1000,"temperature":0.7,"topK":40,"topP":0.9},"toolConfig":{"functionCallingConfig":{"mode":"ANY"}}}
+    provider-default: {"generationConfig":{"maxOutputTokens":1000,"temperature":0.7,"topK":40,"topP":0.9},"toolConfig":{"functionCallingConfig":{"mode":"AUTO"}}}
+
+## bodies be0b7ce3 (7 models, e.g. gpt-6)
+  openai-chat-v1
+    runtime default off,none: {"max_completion_tokens":1000,"reasoning_effort":"none","temperature":0.7,"tool_choice":"required","top_p":0.9}
+    provider-default: {"max_completion_tokens":1000,"temperature":0.7,"tool_choice":"auto","top_p":0.9}
+    disabled,automatic,minimal: {"max_completion_tokens":1000,"temperature":0.7,"tool_choice":"required","top_p":0.9}
+    low: {"max_completion_tokens":1000,"reasoning_effort":"low","temperature":0.7,"tool_choice":"required","top_p":0.9}
+    medium: {"max_completion_tokens":1000,"reasoning_effort":"medium","temperature":0.7,"tool_choice":"required","top_p":0.9}
+    high: {"max_completion_tokens":1000,"reasoning_effort":"high","temperature":0.7,"tool_choice":"required","top_p":0.9}
+    xhigh: {"max_completion_tokens":1000,"reasoning_effort":"xhigh","temperature":0.7,"tool_choice":"required","top_p":0.9}
+    max: {"max_completion_tokens":1000,"reasoning_effort":"max","temperature":0.7,"tool_choice":"required","top_p":0.9}
+  openai-responses-v1
+    runtime default off,none: {"max_output_tokens":1000,"reasoning":{"effort":"none"},"store":false,"temperature":0.7,"tool_choice":"required","top_p":0.9}
+    provider-default: {"include":["reasoning.encrypted_content"],"max_output_tokens":1000,"store":false,"temperature":0.7,"tool_choice":"auto","top_p":0.9}
+    disabled,automatic,minimal: {"include":["reasoning.encrypted_content"],"max_output_tokens":1000,"store":false,"temperature":0.7,"tool_choice":"required","top_p":0.9}
+    low: {"include":["reasoning.encrypted_content"],"max_output_tokens":1000,"reasoning":{"effort":"low"},"store":false,"temperature":0.7,"tool_choice":"required","top_p":0.9}
+    medium: {"include":["reasoning.encrypted_content"],"max_output_tokens":1000,"reasoning":{"effort":"medium"},"store":false,"temperature":0.7,"tool_choice":"required","top_p":0.9}
+    high: {"include":["reasoning.encrypted_content"],"max_output_tokens":1000,"reasoning":{"effort":"high"},"store":false,"temperature":0.7,"tool_choice":"required","top_p":0.9}
+    xhigh: {"include":["reasoning.encrypted_content"],"max_output_tokens":1000,"reasoning":{"effort":"xhigh"},"store":false,"temperature":0.7,"tool_choice":"required","top_p":0.9}
+    max: {"include":["reasoning.encrypted_content"],"max_output_tokens":1000,"reasoning":{"effort":"max"},"store":false,"temperature":0.7,"tool_choice":"required","top_p":0.9}
+  anthropic-messages-v1
+    runtime default off,none: {"max_tokens":1000,"output_config":{"effort":"none"},"temperature":0.7,"tool_choice":{"type":"any"},"top_k":40,"top_p":0.9}
+    provider-default: {"max_tokens":1000,"temperature":0.7,"top_k":40,"top_p":0.9}
+    disabled,automatic,minimal: {"max_tokens":1000,"temperature":0.7,"tool_choice":{"type":"any"},"top_k":40,"top_p":0.9}
+    low: {"max_tokens":1000,"output_config":{"effort":"low"},"temperature":0.7,"tool_choice":{"type":"any"},"top_k":40,"top_p":0.9}
+    medium: {"max_tokens":1000,"output_config":{"effort":"medium"},"temperature":0.7,"tool_choice":{"type":"any"},"top_k":40,"top_p":0.9}
+    high: {"max_tokens":1000,"output_config":{"effort":"high"},"temperature":0.7,"tool_choice":{"type":"any"},"top_k":40,"top_p":0.9}
+    xhigh: {"max_tokens":1000,"output_config":{"effort":"xhigh"},"temperature":0.7,"tool_choice":{"type":"any"},"top_k":40,"top_p":0.9}
+    max: {"max_tokens":1000,"output_config":{"effort":"max"},"temperature":0.7,"tool_choice":{"type":"any"},"top_k":40,"top_p":0.9}
+  google-generative-ai-v1
+    runtime default off,disabled,automatic,none,minimal,low,medium,high,xhigh,max: {"generationConfig":{"maxOutputTokens":1000,"temperature":0.7,"topK":40,"topP":0.9},"toolConfig":{"functionCallingConfig":{"mode":"ANY"}}}
+    provider-default: {"generationConfig":{"maxOutputTokens":1000,"temperature":0.7,"topK":40,"topP":0.9},"toolConfig":{"functionCallingConfig":{"mode":"AUTO"}}}
+
+## bodies c07c6f3a (12 models, e.g. global.openai.gpt-6-astra)
+  openai-chat-v1
+    runtime default off,none: {"max_tokens":1000,"reasoning_effort":"none","temperature":0.7,"tool_choice":"required","top_p":0.9}
+    provider-default: {"max_tokens":1000,"temperature":0.7,"tool_choice":"auto","top_p":0.9}
+    disabled,automatic,minimal: {"max_tokens":1000,"temperature":0.7,"tool_choice":"required","top_p":0.9}
+    low: {"max_tokens":1000,"reasoning_effort":"low","temperature":0.7,"tool_choice":"required","top_p":0.9}
+    medium: {"max_tokens":1000,"reasoning_effort":"medium","temperature":0.7,"tool_choice":"required","top_p":0.9}
+    high: {"max_tokens":1000,"reasoning_effort":"high","temperature":0.7,"tool_choice":"required","top_p":0.9}
+    xhigh: {"max_tokens":1000,"reasoning_effort":"xhigh","temperature":0.7,"tool_choice":"required","top_p":0.9}
+    max: {"max_tokens":1000,"reasoning_effort":"max","temperature":0.7,"tool_choice":"required","top_p":0.9}
+  openai-responses-v1
+    runtime default off,none: {"max_output_tokens":1000,"reasoning":{"effort":"none"},"store":false,"temperature":0.7,"tool_choice":"required","top_p":0.9}
+    provider-default: {"include":["reasoning.encrypted_content"],"max_output_tokens":1000,"store":false,"temperature":0.7,"tool_choice":"auto","top_p":0.9}
+    disabled,automatic,minimal: {"include":["reasoning.encrypted_content"],"max_output_tokens":1000,"store":false,"temperature":0.7,"tool_choice":"required","top_p":0.9}
+    low: {"include":["reasoning.encrypted_content"],"max_output_tokens":1000,"reasoning":{"effort":"low"},"store":false,"temperature":0.7,"tool_choice":"required","top_p":0.9}
+    medium: {"include":["reasoning.encrypted_content"],"max_output_tokens":1000,"reasoning":{"effort":"medium"},"store":false,"temperature":0.7,"tool_choice":"required","top_p":0.9}
+    high: {"include":["reasoning.encrypted_content"],"max_output_tokens":1000,"reasoning":{"effort":"high"},"store":false,"temperature":0.7,"tool_choice":"required","top_p":0.9}
+    xhigh: {"include":["reasoning.encrypted_content"],"max_output_tokens":1000,"reasoning":{"effort":"xhigh"},"store":false,"temperature":0.7,"tool_choice":"required","top_p":0.9}
+    max: {"include":["reasoning.encrypted_content"],"max_output_tokens":1000,"reasoning":{"effort":"max"},"store":false,"temperature":0.7,"tool_choice":"required","top_p":0.9}
+  anthropic-messages-v1
+    runtime default off,none: {"max_tokens":1000,"output_config":{"effort":"none"},"temperature":0.7,"tool_choice":{"type":"any"},"top_k":40,"top_p":0.9}
+    provider-default: {"max_tokens":1000,"temperature":0.7,"top_k":40,"top_p":0.9}
+    disabled,automatic,minimal: {"max_tokens":1000,"temperature":0.7,"tool_choice":{"type":"any"},"top_k":40,"top_p":0.9}
+    low: {"max_tokens":1000,"output_config":{"effort":"low"},"temperature":0.7,"tool_choice":{"type":"any"},"top_k":40,"top_p":0.9}
+    medium: {"max_tokens":1000,"output_config":{"effort":"medium"},"temperature":0.7,"tool_choice":{"type":"any"},"top_k":40,"top_p":0.9}
+    high: {"max_tokens":1000,"output_config":{"effort":"high"},"temperature":0.7,"tool_choice":{"type":"any"},"top_k":40,"top_p":0.9}
+    xhigh: {"max_tokens":1000,"output_config":{"effort":"xhigh"},"temperature":0.7,"tool_choice":{"type":"any"},"top_k":40,"top_p":0.9}
+    max: {"max_tokens":1000,"output_config":{"effort":"max"},"temperature":0.7,"tool_choice":{"type":"any"},"top_k":40,"top_p":0.9}
   google-generative-ai-v1
     runtime default off,disabled,automatic,none,minimal,low,medium,high,xhigh,max: {"generationConfig":{"maxOutputTokens":1000,"temperature":0.7,"topK":40,"topP":0.9},"toolConfig":{"functionCallingConfig":{"mode":"ANY"}}}
     provider-default: {"generationConfig":{"maxOutputTokens":1000,"temperature":0.7,"topK":40,"topP":0.9},"toolConfig":{"functionCallingConfig":{"mode":"AUTO"}}}
@@ -3223,40 +3294,6 @@ provider custom,openai,anthropic,deepseek,google,xai,dashscope:
     medium: {"max_tokens":1000,"output_config":{"effort":"medium"},"thinking":{"display":"summarized","type":"adaptive"},"tool_choice":{"type":"auto"}}
     high: {"max_tokens":1000,"output_config":{"effort":"high"},"thinking":{"display":"summarized","type":"adaptive"},"tool_choice":{"type":"auto"}}
     max: {"max_tokens":1000,"output_config":{"effort":"max"},"thinking":{"display":"summarized","type":"adaptive"},"tool_choice":{"type":"auto"}}
-  google-generative-ai-v1
-    runtime default off,provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: no request
-
-## bodies ddcbad0a (37 models, e.g. azure/apac/gpt-6.1-sol)
-  openai-chat-v1
-    runtime default off,none: {"max_completion_tokens":1000,"reasoning_effort":"none","temperature":0.7,"tool_choice":"required","top_p":0.9}
-    provider-default: {"max_completion_tokens":1000,"temperature":0.7,"tool_choice":"auto","top_p":0.9}
-    disabled,automatic: {"max_completion_tokens":1000,"temperature":0.7,"tool_choice":"required","top_p":0.9}
-    minimal: {"max_completion_tokens":1000,"reasoning_effort":"minimal","temperature":0.7,"tool_choice":"required","top_p":0.9}
-    low: {"max_completion_tokens":1000,"reasoning_effort":"low","temperature":0.7,"tool_choice":"required","top_p":0.9}
-    medium: {"max_completion_tokens":1000,"reasoning_effort":"medium","temperature":0.7,"tool_choice":"required","top_p":0.9}
-    high: {"max_completion_tokens":1000,"reasoning_effort":"high","temperature":0.7,"tool_choice":"required","top_p":0.9}
-    xhigh: {"max_completion_tokens":1000,"reasoning_effort":"xhigh","temperature":0.7,"tool_choice":"required","top_p":0.9}
-    max: {"max_completion_tokens":1000,"reasoning_effort":"max","temperature":0.7,"tool_choice":"required","top_p":0.9}
-  openai-responses-v1
-    runtime default off,none: {"max_output_tokens":1000,"reasoning":{"effort":"none"},"store":false,"temperature":0.7,"tool_choice":"required","top_p":0.9}
-    provider-default: {"include":["reasoning.encrypted_content"],"max_output_tokens":1000,"store":false,"temperature":0.7,"tool_choice":"auto","top_p":0.9}
-    disabled,automatic: {"include":["reasoning.encrypted_content"],"max_output_tokens":1000,"store":false,"temperature":0.7,"tool_choice":"required","top_p":0.9}
-    minimal: {"include":["reasoning.encrypted_content"],"max_output_tokens":1000,"reasoning":{"effort":"minimal"},"store":false,"temperature":0.7,"tool_choice":"required","top_p":0.9}
-    low: {"include":["reasoning.encrypted_content"],"max_output_tokens":1000,"reasoning":{"effort":"low"},"store":false,"temperature":0.7,"tool_choice":"required","top_p":0.9}
-    medium: {"include":["reasoning.encrypted_content"],"max_output_tokens":1000,"reasoning":{"effort":"medium"},"store":false,"temperature":0.7,"tool_choice":"required","top_p":0.9}
-    high: {"include":["reasoning.encrypted_content"],"max_output_tokens":1000,"reasoning":{"effort":"high"},"store":false,"temperature":0.7,"tool_choice":"required","top_p":0.9}
-    xhigh: {"include":["reasoning.encrypted_content"],"max_output_tokens":1000,"reasoning":{"effort":"xhigh"},"store":false,"temperature":0.7,"tool_choice":"required","top_p":0.9}
-    max: {"include":["reasoning.encrypted_content"],"max_output_tokens":1000,"reasoning":{"effort":"max"},"store":false,"temperature":0.7,"tool_choice":"required","top_p":0.9}
-  anthropic-messages-v1
-    runtime default off,none: {"max_tokens":1000,"output_config":{"effort":"none"},"temperature":0.7,"tool_choice":{"type":"any"},"top_k":40,"top_p":0.9}
-    provider-default: {"max_tokens":1000,"temperature":0.7,"top_k":40,"top_p":0.9}
-    disabled,automatic: {"max_tokens":1000,"temperature":0.7,"tool_choice":{"type":"any"},"top_k":40,"top_p":0.9}
-    minimal: {"max_tokens":1000,"output_config":{"effort":"minimal"},"temperature":0.7,"tool_choice":{"type":"any"},"top_k":40,"top_p":0.9}
-    low: {"max_tokens":1000,"output_config":{"effort":"low"},"temperature":0.7,"tool_choice":{"type":"any"},"top_k":40,"top_p":0.9}
-    medium: {"max_tokens":1000,"output_config":{"effort":"medium"},"temperature":0.7,"tool_choice":{"type":"any"},"top_k":40,"top_p":0.9}
-    high: {"max_tokens":1000,"output_config":{"effort":"high"},"temperature":0.7,"tool_choice":{"type":"any"},"top_k":40,"top_p":0.9}
-    xhigh: {"max_tokens":1000,"output_config":{"effort":"xhigh"},"temperature":0.7,"tool_choice":{"type":"any"},"top_k":40,"top_p":0.9}
-    max: {"max_tokens":1000,"output_config":{"effort":"max"},"temperature":0.7,"tool_choice":{"type":"any"},"top_k":40,"top_p":0.9}
   google-generative-ai-v1
     runtime default off,provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: no request
 
@@ -3753,7 +3790,7 @@ aws_polly/long-form	97e18daf	f20e29e6
 aws_polly/neural	97e18daf	f20e29e6
 aws_polly/standard	97e18daf	f20e29e6
 azure/ada	97e18daf	f20e29e6
-azure/apac/gpt-6.1-sol	5a3dba94	ddcbad0a
+azure/apac/gpt-6.1-sol	873ce937	a079876a
 azure/chat-latest	97e18daf	f20e29e6
 azure/codex-mini	97e18daf	f20e29e6
 azure/command-r-plus	97e18daf	f20e29e6
@@ -3804,10 +3841,10 @@ azure/eu/gpt-5.6	7242c71e	56aa525f
 azure/eu/gpt-5.6-luna	7242c71e	56aa525f
 azure/eu/gpt-5.6-sol	7242c71e	56aa525f
 azure/eu/gpt-5.6-terra	7242c71e	56aa525f
-azure/eu/gpt-6-astra	5a3dba94	ddcbad0a
-azure/eu/gpt-6-luna	5a3dba94	ddcbad0a
-azure/eu/gpt-6-sol	5a3dba94	ddcbad0a
-azure/eu/gpt-6.1-sol	5a3dba94	ddcbad0a
+azure/eu/gpt-6-astra	873ce937	a079876a
+azure/eu/gpt-6-luna	873ce937	a079876a
+azure/eu/gpt-6-sol	873ce937	a079876a
+azure/eu/gpt-6.1-sol	873ce937	a079876a
 azure/eu/o1	50665211	6007d524
 azure/eu/o1-2024-12-17	50665211	6007d524
 azure/eu/o1-mini	50665211	6007d524
@@ -3914,14 +3951,14 @@ azure/gpt-5.6-sol	7242c71e	56aa525f
 azure/gpt-5.6-sol-2026-07-09	7242c71e	56aa525f
 azure/gpt-5.6-terra	7242c71e	56aa525f
 azure/gpt-5.6-terra-2026-07-09	7242c71e	56aa525f
-azure/gpt-6-astra	5a3dba94	ddcbad0a
-azure/gpt-6-astra-2026-09-03	5a3dba94	ddcbad0a
-azure/gpt-6-luna	5a3dba94	ddcbad0a
-azure/gpt-6-luna-2026-09-22	5a3dba94	ddcbad0a
-azure/gpt-6-sol	5a3dba94	ddcbad0a
-azure/gpt-6-sol-2026-09-22	5a3dba94	ddcbad0a
-azure/gpt-6.1-sol	5a3dba94	ddcbad0a
-azure/gpt-6.1-sol-2026-09-29	5a3dba94	ddcbad0a
+azure/gpt-6-astra	873ce937	a079876a
+azure/gpt-6-astra-2026-09-03	873ce937	a079876a
+azure/gpt-6-luna	873ce937	a079876a
+azure/gpt-6-luna-2026-09-22	873ce937	a079876a
+azure/gpt-6-sol	873ce937	a079876a
+azure/gpt-6-sol-2026-09-22	873ce937	a079876a
+azure/gpt-6.1-sol	873ce937	a079876a
+azure/gpt-6.1-sol-2026-09-29	873ce937	a079876a
 azure/gpt-audio	9a276813	1edb4060
 azure/gpt-audio-1.5	9a276813	1edb4060
 azure/gpt-audio-1.5-2026-02-23	9a276813	1edb4060
@@ -4055,10 +4092,10 @@ azure/us/gpt-5.6	7242c71e	56aa525f
 azure/us/gpt-5.6-luna	7242c71e	56aa525f
 azure/us/gpt-5.6-sol	7242c71e	56aa525f
 azure/us/gpt-5.6-terra	7242c71e	56aa525f
-azure/us/gpt-6-astra	5a3dba94	ddcbad0a
-azure/us/gpt-6-luna	5a3dba94	ddcbad0a
-azure/us/gpt-6-sol	5a3dba94	ddcbad0a
-azure/us/gpt-6.1-sol	5a3dba94	ddcbad0a
+azure/us/gpt-6-astra	873ce937	a079876a
+azure/us/gpt-6-luna	873ce937	a079876a
+azure/us/gpt-6-sol	873ce937	a079876a
+azure/us/gpt-6.1-sol	873ce937	a079876a
 azure/us/gpt-chat-latest	9a276813	1edb4060
 azure/us/o1	50665211	6007d524
 azure/us/o1-2024-12-17	50665211	6007d524
@@ -4183,10 +4220,10 @@ azure_ai/gpt-5.4-pro-2026-03-05	7242c71e	56aa525f
 azure_ai/gpt-5.5	7242c71e	56aa525f
 azure_ai/gpt-5.5-2026-04-23	7242c71e	56aa525f
 azure_ai/gpt-5.5-2026-04-24	7242c71e	56aa525f
-azure_ai/gpt-6-astra	5a3dba94	ddcbad0a
-azure_ai/gpt-6-luna	5a3dba94	ddcbad0a
-azure_ai/gpt-6-sol	5a3dba94	ddcbad0a
-azure_ai/gpt-6.1-sol	5a3dba94	ddcbad0a
+azure_ai/gpt-6-astra	873ce937	a079876a
+azure_ai/gpt-6-luna	873ce937	a079876a
+azure_ai/gpt-6-sol	873ce937	a079876a
+azure_ai/gpt-6.1-sol	873ce937	a079876a
 azure_ai/gpt-chat-latest	9a276813	1edb4060
 azure_ai/gpt-image-2	9a276813	1edb4060
 azure_ai/gpt-oss-120b	9a276813	1edb4060
@@ -4476,11 +4513,11 @@ bedrock_mantle/openai.gpt-5.6-cyber	7242c71e	6c82226f
 bedrock_mantle/openai.gpt-5.6-luna	7242c71e	6c82226f
 bedrock_mantle/openai.gpt-5.6-sol	7242c71e	6c82226f
 bedrock_mantle/openai.gpt-5.6-terra	7242c71e	6c82226f
-bedrock_mantle/openai.gpt-6-astra	5a3dba94	06bb3dc6
-bedrock_mantle/openai.gpt-6-luna	5a3dba94	06bb3dc6
-bedrock_mantle/openai.gpt-6-sol	5a3dba94	06bb3dc6
-bedrock_mantle/openai.gpt-6.1-sol	5a3dba94	06bb3dc6
-bedrock_mantle/openai.gpt-6.1-terra	5a3dba94	06bb3dc6
+bedrock_mantle/openai.gpt-6-astra	873ce937	44af4847
+bedrock_mantle/openai.gpt-6-luna	873ce937	44af4847
+bedrock_mantle/openai.gpt-6-sol	873ce937	44af4847
+bedrock_mantle/openai.gpt-6.1-sol	873ce937	44af4847
+bedrock_mantle/openai.gpt-6.1-terra	873ce937	44af4847
 bedrock_mantle/openai.gpt-daybreak-blue-5.6-sol	9a276813	1edb4060
 bedrock_mantle/openai.gpt-oss-120b	9a276813	1edb4060
 bedrock_mantle/openai.gpt-oss-20b	9a276813	1edb4060
@@ -4551,11 +4588,11 @@ chatgpt/gpt-5.5	7242c71e	56aa525f
 chatgpt/gpt-5.6-luna	7242c71e	56aa525f
 chatgpt/gpt-5.6-sol	7242c71e	56aa525f
 chatgpt/gpt-5.6-terra	7242c71e	56aa525f
-chatgpt/gpt-6-astra	5a3dba94	ddcbad0a
-chatgpt/gpt-6-luna	5a3dba94	ddcbad0a
-chatgpt/gpt-6-sol	5a3dba94	ddcbad0a
-chatgpt/gpt-6.1-sol	5a3dba94	ddcbad0a
-chatgpt/gpt-6.1-terra	5a3dba94	ddcbad0a
+chatgpt/gpt-6-astra	873ce937	a079876a
+chatgpt/gpt-6-luna	873ce937	a079876a
+chatgpt/gpt-6-sol	873ce937	a079876a
+chatgpt/gpt-6.1-sol	873ce937	a079876a
+chatgpt/gpt-6.1-terra	873ce937	a079876a
 chatgpt/gpt-rosalind-discovery	9a276813	1edb4060
 claude-3-5-haiku-20241022	7af22a68	bda9263a
 claude-3-5-haiku-latest	7af22a68	bda9263a
@@ -4644,7 +4681,7 @@ codestral-2501	97e18daf	11f00057
 codestral-latest	97e18daf	11f00057
 codestral/codestral-2405	97e18daf	f20e29e6
 codestral/codestral-latest	97e18daf	f20e29e6
-codex/gpt-6-luna	5a3dba94	ddcbad0a
+codex/gpt-6-luna	873ce937	a079876a
 cognition/swe-1.6	97e18daf	f20e29e6
 cognition/swe-1.7	97e18daf	f20e29e6
 cognition/swe-1.7-lightning	97e18daf	f20e29e6
@@ -5833,11 +5870,11 @@ github_copilot/gpt-5.5	7242c71e	56aa525f
 github_copilot/gpt-5.6-luna	7242c71e	56aa525f
 github_copilot/gpt-5.6-sol	7242c71e	56aa525f
 github_copilot/gpt-5.6-terra	7242c71e	56aa525f
-github_copilot/gpt-6-astra	5a3dba94	ddcbad0a
-github_copilot/gpt-6-luna	5a3dba94	ddcbad0a
-github_copilot/gpt-6-sol	5a3dba94	ddcbad0a
-github_copilot/gpt-6.1-sol	5a3dba94	ddcbad0a
-github_copilot/gpt-6.1-terra	5a3dba94	ddcbad0a
+github_copilot/gpt-6-astra	873ce937	a079876a
+github_copilot/gpt-6-luna	873ce937	a079876a
+github_copilot/gpt-6-sol	873ce937	a079876a
+github_copilot/gpt-6.1-sol	873ce937	a079876a
+github_copilot/gpt-6.1-terra	873ce937	a079876a
 github_copilot/grok-4.5	8a7ba322	29b7b224
 github_copilot/grok-4.6	8a7ba322	29b7b224
 github_copilot/grok-4.7	8a7ba322	29b7b224
@@ -5872,11 +5909,11 @@ global.openai.gpt-5.5	7242c71e	f06935c4
 global.openai.gpt-5.6-luna	7242c71e	f06935c4
 global.openai.gpt-5.6-sol	7242c71e	f06935c4
 global.openai.gpt-5.6-terra	7242c71e	f06935c4
-global.openai.gpt-6-astra	5a3dba94	29f44933
-global.openai.gpt-6-luna	5a3dba94	29f44933
-global.openai.gpt-6-sol	5a3dba94	29f44933
-global.openai.gpt-6.1-sol	5a3dba94	29f44933
-global.openai.gpt-6.1-terra	5a3dba94	29f44933
+global.openai.gpt-6-astra	873ce937	c07c6f3a
+global.openai.gpt-6-luna	873ce937	c07c6f3a
+global.openai.gpt-6-sol	873ce937	c07c6f3a
+global.openai.gpt-6.1-sol	873ce937	c07c6f3a
+global.openai.gpt-6.1-terra	873ce937	c07c6f3a
 global.twelvelabs.pegasus-1-2-v1:0	97e18daf	f20e29e6
 global.twelvelabs.pegasus-1-5-v1:0	97e18daf	f20e29e6
 global.xai.grok-4.6	8a7ba322	0b2308d5
@@ -5991,13 +6028,13 @@ gpt-5.6-cyber	7242c71e	23079fb2
 gpt-5.6-luna	7242c71e	23079fb2
 gpt-5.6-sol	7242c71e	23079fb2
 gpt-5.6-terra	7242c71e	23079fb2
-gpt-6	5a3dba94	1a392d4d
-gpt-6-astra	5a3dba94	1a392d4d
-gpt-6-luna	5a3dba94	1a392d4d
-gpt-6-sol	5a3dba94	1a392d4d
-gpt-6.1-sol	5a3dba94	1a392d4d
-gpt-6.1-terra	5a3dba94	1a392d4d
-gpt-7	5a3dba94	1a392d4d
+gpt-6	873ce937	be0b7ce3
+gpt-6-astra	873ce937	be0b7ce3
+gpt-6-luna	873ce937	be0b7ce3
+gpt-6-sol	873ce937	be0b7ce3
+gpt-6.1-sol	873ce937	be0b7ce3
+gpt-6.1-terra	873ce937	be0b7ce3
+gpt-7	873ce937	be0b7ce3
 gpt-audio	9a276813	bda9263a
 gpt-audio-1.5	9a276813	bda9263a
 gpt-audio-2025-08-28	9a276813	bda9263a
@@ -6745,8 +6782,8 @@ ollama/qwen3-coder:480b-cloud	94a111ce	48429573
 ollama/vicuna	97e18daf	f20e29e6
 omni-moderation-2024-09-26	97e18daf	11f00057
 omni-moderation-latest	97e18daf	11f00057
-openai.gpt-6-luna	5a3dba94	29f44933
-openai.gpt-6-sol	5a3dba94	29f44933
+openai.gpt-6-luna	873ce937	c07c6f3a
+openai.gpt-6-sol	873ce937	c07c6f3a
 openai.gpt-oss-120b-1:0	9a276813	1edb4060
 openai.gpt-oss-20b-1:0	9a276813	1edb4060
 openai.gpt-oss-safeguard-120b	9a276813	bda9263a
@@ -6767,7 +6804,7 @@ opencode_go/glm-5.2	97e18daf	f20e29e6
 opencode_go/glm-5.3	97e18daf	f20e29e6
 opencode_go/glm-5.3-flash	97e18daf	f20e29e6
 opencode_go/gpt-5.6-luna	7242c71e	56aa525f
-opencode_go/gpt-6-luna	5a3dba94	ddcbad0a
+opencode_go/gpt-6-luna	873ce937	a079876a
 opencode_go/grok-4.7	8a7ba322	29b7b224
 opencode_go/hy3	97e18daf	f20e29e6
 opencode_go/hy4-preview	97e18daf	f20e29e6
@@ -6855,10 +6892,10 @@ perplexity/openai/gpt-5.5	7242c71e	56aa525f
 perplexity/openai/gpt-5.6-luna	7242c71e	56aa525f
 perplexity/openai/gpt-5.6-sol	7242c71e	56aa525f
 perplexity/openai/gpt-5.6-terra	7242c71e	56aa525f
-perplexity/openai/gpt-6-astra	5a3dba94	ddcbad0a
-perplexity/openai/gpt-6-luna	5a3dba94	ddcbad0a
-perplexity/openai/gpt-6-sol	5a3dba94	ddcbad0a
-perplexity/openai/gpt-6.1-sol	5a3dba94	ddcbad0a
+perplexity/openai/gpt-6-astra	873ce937	a079876a
+perplexity/openai/gpt-6-luna	873ce937	a079876a
+perplexity/openai/gpt-6-sol	873ce937	a079876a
+perplexity/openai/gpt-6.1-sol	873ce937	a079876a
 perplexity/perplexity/deepseek-v4-flash-0731	7cd6eaf6	1b5a78cb
 perplexity/perplexity/deepseek-v4-pro-0813	7cd6eaf6	1b5a78cb
 perplexity/perplexity/glm-5.2	97e18daf	f20e29e6
@@ -7512,11 +7549,11 @@ us.openai.gpt-5.5	7242c71e	f06935c4
 us.openai.gpt-5.6-luna	7242c71e	f06935c4
 us.openai.gpt-5.6-sol	7242c71e	f06935c4
 us.openai.gpt-5.6-terra	7242c71e	f06935c4
-us.openai.gpt-6-astra	5a3dba94	29f44933
-us.openai.gpt-6-luna	5a3dba94	29f44933
-us.openai.gpt-6-sol	5a3dba94	29f44933
-us.openai.gpt-6.1-sol	5a3dba94	29f44933
-us.openai.gpt-6.1-terra	5a3dba94	29f44933
+us.openai.gpt-6-astra	873ce937	c07c6f3a
+us.openai.gpt-6-luna	873ce937	c07c6f3a
+us.openai.gpt-6-sol	873ce937	c07c6f3a
+us.openai.gpt-6.1-sol	873ce937	c07c6f3a
+us.openai.gpt-6.1-terra	873ce937	c07c6f3a
 us.stability.stable-conservative-upscale-v1:0	97e18daf	f20e29e6
 us.stability.stable-creative-upscale-v1:0	97e18daf	f20e29e6
 us.stability.stable-fast-upscale-v1:0	97e18daf	f20e29e6
