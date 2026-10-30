@@ -17,7 +17,7 @@ Open **Settings → Install & manage**.
 2. Parse the link. The plugins and world packages in that folder are listed together.
 3. Check the items you want to install, confirm the ID, version, and source, read the code risk notice, and confirm once to install.
 
-Selected packages are installed together, plugins first and then worlds. If any one of them fails, everything installed in this run is removed, so you are not left with a half-finished install.
+Selected packages install together, plugins first. If one fails, Covel tries to roll back the packages installed in this run. Worlds with sessions and packages that cannot be removed are kept and listed in the error; resolve these before retrying. See [collections](../ship/collections.md#what-happens-when-a-player-installs-it).
 
 Local ZIP packages are imported on the same page.
 
@@ -58,7 +58,7 @@ You also uninstall from "Install & manage". After you uninstall a plugin, you ne
 | ------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------ |
 | You cannot select a package in the preview                   | Read the error next to it. Usually a capability it depends on is not provided by any plugin, or it needs a newer Covel version |
 | The session-prep screen says the world is missing a plugin   | You can start without installing it, but the gameplay that plugin provides will not work                                       |
-| The session-prep screen says no plugin provides a capability | The world cannot run without that capability (for example, dice checks). Install a plugin that provides it before you start    |
+| The session-prep screen says no plugin provides a capability | You can start with that feature (for example, dice checks) missing. To add it, install and enable a plugin that provides the capability    |
 | A plugin is installed but does not run                       | Check in order: whether you restarted the backend, whether you enabled it in this game, and whether you authorized it          |
 | The download fails                                           | Set up a proxy under **Settings → Desktop → Network Proxy**. Downloads follow the settings there                               |
 

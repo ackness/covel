@@ -43,7 +43,7 @@ notebook/
 ---
 version: 0.1.0
 description: Saves a brief note after narration.
-requires: [narrative-engine@1]
+requires: [narrative-engine@2]
 contributes:
   tools: [save-note]
   data:
@@ -54,7 +54,7 @@ runtime:
   io:
     inputs:
       narrative:
-        from: { contract: narrative-engine@1 }
+        from: { contract: narrative-engine@2 }
         select: /narrativeOutput
   agent:
     history: { maxTurns: 2 }
@@ -131,7 +131,7 @@ export default function makeSaveNote({ tool, z, withPendingProposals }) {
 > [!NOTE]
 > `makeProposal` 补齐请求的 ID、来源和回合信息。游戏里的随机数用 `context.random`；请求 ID 由 SDK 生成。
 
-`schemas/note.schema.json` 描述一条记录的形状。世界包往这个数据空间导入内容时按它检查，见[进阶 · 数据契约与世界导入](./advanced.md#数据契约与世界导入)。工具自己的写入靠上面的 `parameters` 把关，所以两边要写成一样的形状：
+`schemas/note.schema.json` 描述一条记录的形状。世界包往这个数据空间导入内容时按它检查，见[进阶 · 数据契约与世界导入](./advanced.md#数据契约与世界导入)。工具参数由上面的 `parameters` 检查；这个例子没有声明 `datasets`，仅有 `contributes.data` 不会为工具写入启用数据集校验。要让提交边界也检查记录，声明[数据集](../reference/plugins.md#数据集contributesdatasets)，并保持参数、导入和数据集 schema 一致：
 
 ```json
 {
@@ -347,7 +347,7 @@ runtime:
   io:
     inputs:
       narrative:
-        from: { contract: narrative-engine@1 }
+        from: { contract: narrative-engine@2 }
         select: /narrativeOutput
   function:
     timeoutMs: 30000
@@ -532,7 +532,7 @@ covel.registerFormValidator("point-buy", (values, data, context) => {
 | 现象                                            | 原因和处理                                                                |
 | ----------------------------------------------- | ------------------------------------------------------------------------- |
 | 校验通过，但插件加载失败                        | 入口文件注册的工具、动作名和 `contributes` 里的不一致                     |
-| 入口文件报找不到 `@covel/plugin-handlers-utils` | 用户目录里的插件不能 `import` 它。改用传进来的 `covel.toolkit` 和 `ctx`   |
+| 入口文件报找不到 `@covel/plugin-handlers-utils` | 确认由 Covel 加载，或在仓库测试环境解析公开 SDK；独立运行 Node 不会自动获得宿主提供的模块   |
 | 离线用例里工具调用被拒绝                        | 假模型传的 `arguments` 不符合工具的 `parameters`                          |
 | 工具调用成功，数据却没有保存                    | 这个 runtime 最后以失败结束，它的写入就都不保存。在调试页面看它失败的原因 |
 | 用例提示 `Unsupported rpc`                      | 正常。离线运行不支持动作，到真实的服务端上验证                            |

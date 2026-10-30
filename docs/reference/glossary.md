@@ -25,6 +25,7 @@
 | Deployment form | 部署形态 | 桌面客户端、自部署网页版、官方网页版。不是 `DEPLOYMENT_TIER`。 |
 | Edition | 语言版本 | 世界的一种语言：`defaultLocale`，以及根目录里每个 `world.<locale>.yaml` 或 `WORLD.<locale>.md` 的语言。 |
 | Fault latch | 熔断 | 辅助插件在同一会话连续因自身故障失败后暂停，可由玩家重新启用；只在进程内存中保存。见[协议](./protocol.md#插件故障熔断)。 |
+| Execution | 执行 | 一次调度及其提交计划；玩家回合、手动调用和后台作业都可以发起执行。 |
 | Finalizer step | 收尾步骤 | agent 用完步数后关掉工具、要求直接给出答案的那一次请求。 |
 | Kernel | 内核 |  |
 | Local model relay | 本地模型中继 | 共享形态的服务端经玩家浏览器访问玩家电脑或局域网上的模型。见[安全边界](../internals/security.md#local-model-relay)。 |
@@ -35,6 +36,7 @@
 | Preset | 预设 |  |
 | Proposal | 提案 |  |
 | Provider | 提供商 |  |
+| Recursive call | 嵌套调用 | 包内 runtime 调用，写入随父执行一起提交；不同于只交回输出的子 agent。 |
 | Roleplay notes | 扮演说明 | 世界作者写在角色记录的 `blueprint` 字段里、告诉叙事怎样演这个角色的内容；由“角色资料”插件读取。不是角色本身。 |
 | Runtime | runtime | 保留英文：它指清单里的一个运行单元，不是泛指“运行时”。 |
 | Runtime manifest | runtime 清单 |  |
@@ -45,6 +47,7 @@
 | Slot | 槽位 | 设置界面里叫“模型用途”。 |
 | Stop reason | 结束原因 | agent 工具循环怎样结束（`RuntimeResult.stop.reason`）。 |
 | Sub-agent | 子 agent | 另一个 runtime 在自己的执行里运行、只交回输出的 agent runtime。 |
+| Tool result | 工具结果 | 代码读取的内容与模型看到的反馈是两种形状；工具成功不代表已保存。 |
 | Trigger mode | 触发模式 |  |
 | Trusted source | 可信来源 | 实例所有者或运营者选定的 GitHub 来源，只减少审批提示。 |
 | Turn | 回合 | “This turn” 是“本回合”。 |
@@ -166,6 +169,14 @@
 
 详见：[扩展点](./extension-points.md)、[插件扩展与通信](./plugin-extensions.md)。
 
+## Execution
+
+执行是一次管线调用，带有自己的身份、冻结的注册表与读取底本、各 runtime 的结果和提交计划。`execution.origin` 说明它因何开始，例如玩家行动、手动调用、后台作业或嵌套调用。恢复会接着被挂起的执行继续。
+
+`turnId` 标识执行；`runId` 标识某个 runtime 的一次尝试。两者都不是逻辑回合号。setup、开场、手动运行和后台作业不增加 `completedPlayerTurns`；一个已提交的玩家回合最多增加一次。
+
+详见：[回合管线](../internals/flow.md)、[执行和提交](./protocol.md#执行和提交是两步)。
+
 ## Finalizer step
 
 agent runtime 用完步数之后，内核再发的一次模型请求：关掉工具，要求模型根据已有的信息直接给出最终答案。
@@ -243,12 +254,18 @@ agent runtime 用完步数之后，内核再发的一次模型请求：关掉工
 
 详见：`packages/ai-provider/`、[插件字段参考](./plugins.md)。
 
+## Recursive call
+
+通过 `ctx.recursiveCall` 调用本插件内的另一个 runtime。它可以产生领域写入；嵌套结果与父结果组成同一个提交单元，父调用失败时子调用写入也丢弃。它不同于子 agent：子 agent 只交回输出，而且可以按契约选择其他包的提供者。
+
+详见：[嵌套调用](./plugins.md#嵌套调用ctxrecursivecall)、[子 agent](./plugins.md#子-agent)。
+
 ## Runtime
 
 插件里真正被执行的单元。有两种：
 
 - `agent`：由模型驱动，把 `RUNTIME.md`（或根清单里内联的 runtime）的正文当作系统提示词。
-- `function`：一个纯 JavaScript 处理函数。
+- `function`：由 JavaScript handler 执行；需要时可以调用工具、服务或模型。
 
 一个插件包可以有多个 runtime，各有自己的触发方式、阶段和依赖关系。
 
@@ -287,7 +304,7 @@ agent runtime 用完步数之后，内核再发的一次模型请求：关掉工
 
 ## Session
 
-一位玩家正在进行的一局游戏。它的 ID 形如 `{worldId}-{uuid8}`，固定属于一个世界，有自己的回合计数、启用的插件、快照和事件。
+一局正在进行的游戏。它的 ID 形如 `{worldId}-{uuid8}`，固定属于一个世界，有自己的回合计数、启用的插件、快照和事件。
 
 详见：[HTTP API](./api.md)、[事务](./transactions.md)。
 
@@ -312,6 +329,12 @@ agent runtime 的工具循环怎样结束，例如 `completed`（模型给出了
 另一个 runtime 在自己的执行里运行的 agent runtime：函数用 `ctx.agents.run`，agent 用 `delegate` 工具。它拿着调用方给的简报，用自己的对话记录和预算运行，只交回输出，不写数据、不发事件，也不形成提交单位。提供方写 `schedule.subagentOnly: true`，调度器从不自动运行它。
 
 详见：[插件参考 · 子 agent](./plugins.md#子-agent)、[delegate 工具](./tools.md#子-agentdelegate)。
+
+## Tool result
+
+一次工具调用的返回。插件代码可以直接返回业务内容，也可以用 SDK 的 `covel.tool-result` 分开内容、模型反馈和待提交副作用。执行器把模型反馈整理成成功信封或 `error` 信封。已暂存的写入仍可能在提交时被拒绝。
+
+详见：[工具结果契约](./tools.md#工具结果契约tool-result)。
 
 ## Trigger mode
 
@@ -342,6 +365,6 @@ agent runtime 的工具循环怎样结束，例如 `completed`（模型给出了
 
 ## Related
 
-- **pluginId 和 runtimeId 的区别**：见根目录 `AGENTS.md` 的 “Identity model”。
+- **pluginId 和 runtimeId 的区别**：见[Runtime manifest](#runtime-manifest)：`pluginId` 标识包、隔离和写入归属，`name` 是 runtimeId，标识调度与追踪。
 - **插件来源**：见上面的 “Plugin kind and source”，以及[工具](./tools.md)。
 - **这里没有收录的词**：`Branch`、`Snapshot`、`PluginData`、`CharacterRecord`、`Lorebook`，见[事务](./transactions.md)。

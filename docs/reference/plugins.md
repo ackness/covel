@@ -548,7 +548,7 @@ Agent 的副作用只来自工具：模型能写什么，以 `agent.tools` 白�
 
 - `PostRuntime` 如果改变 function 的 `output`，应该同时明确提供匹配的 `canonicalValue`。新值会重新接受私有和公共 schema 的校验。
 - 只改写 `output` 会撤销业务值，停止 export 和下游的值绑定。有公共输出契约时，还会因为缺少契约值而失败。
-- 要修改副作用或完成信号，直接改 `effects` 或 `completion`。
+- `PostRuntime` 不能新增或改写 `pendingProposals`、`effects` 或 `completion`；这些通道始终来自 runtime 原结果。要拦截或改写一条提案，用 [`PreStateCommit`](./hooks.md#prestatecommit)。
 - 失败 runtime 的副作用不提交，它的事件不触发后继 runtime。
 - 普通执行和 resume 共用 agent 的输出 schema 检查。非 story 的 agent 声明私有 `io.output.schema` 后，先校验候选的协议输出，再拆分业务值和副作用。最终没有正文或正文为空也接受校验；不符合 schema 就失败，暂停期间积累的写入不提交。
 - Story agent 保留独立的叙事正文检查，不使用私有 schema 检查。
@@ -922,8 +922,8 @@ homepage: https://example.com/tidefall
 
 **读取。**
 
-- 同一次执行里，公共的维度读取是冻结的。
-- setup 初始化和写入者自己的 proposal 可以形成局部预览。预览不替换公共快照，也不泄露给并行的其他 runtime。
+- `world.dimensions@1` 和 `session.world-context@1` 提供执行开始时冻结的公共快照。
+- 函数 handler 和 guard 的 `ctx.world` 在这个底本上叠加已完成上游及自己的合法领域 proposal，供后续计算读取，例如让时钟推导看到本轮维度维护的结果。这是执行内的预览，不是已提交值，也不替换公共快照。
 - 内置工具 `world-dimension-get` / `world-dimension-list` 始终读冻结的快照，不叠加调用者自己的写入，也不回退到初值。
 - 模板里用 `{{ world.dimensions.<id>.value }}` 取值。默认的提示词段是预算内的投影，不是全量记录。
 

@@ -548,7 +548,7 @@ An agent's side effects come only from its tools. What the model can write is de
 
 - If `PostRuntime` changes a function's `output`, it should also set a matching `canonicalValue`. The new value is validated again against the private and public schemas.
 - Changing only `output` discards the business value. It stops the export and the downstream value bindings. When there is a public output contract, it also fails because the contract value is missing.
-- To change side effects or the completion signal, change `effects` or `completion` directly.
+- `PostRuntime` cannot add or rewrite `pendingProposals`, `effects`, or `completion`; those channels always come from the runtime's original result. To block or rewrite a proposal, use [`PreStateCommit`](./hooks.md#prestatecommit).
 - The side effects of a failed runtime are not committed, and its events do not trigger the runtimes that follow it.
 - Normal execution and resume share the output schema check for agents. A non-story agent that declares a private `io.output.schema` first validates the candidate protocol output, and only then splits out the business value and the side effects. A final output with no story text, or with empty story text, is also accepted by the validation. If it does not match the schema, the run fails, and the writes accumulated while it was paused are not committed.
 - A story agent keeps its own separate story text check, and it does not use the private schema check.
@@ -922,8 +922,8 @@ The built-in `world-init` has four runtimes related to dimensions. `dimension-cl
 
 **Reading.**
 
-- Within one execution, public dimension reads are frozen.
-- Setup initialization, and proposals from the writer itself, can form a local preview. The preview does not replace the public snapshot, and it does not leak to other runtimes that run in parallel.
+- `world.dimensions@1` and `session.world-context@1` expose the public snapshot frozen at the start of the execution.
+- A function handler or guard's `ctx.world` overlays completed upstream and its own valid domain proposals on that base for later calculations. For example, clock-derived fields can see this turn's dimension maintenance. This is an execution-local preview, not committed state, and it does not replace the public snapshot.
 - The built-in tools `world-dimension-get` and `world-dimension-list` always read the frozen snapshot. They do not add the caller's own writes, and they do not fall back to the initial values.
 - In a template, read a value with `{{ world.dimensions.<id>.value }}`. The default prompt section is a projection within the budget, not the full record.
 

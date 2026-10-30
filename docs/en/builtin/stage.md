@@ -36,7 +36,7 @@ Stage mode needs no extra setup on its own, but how complete the picture is depe
 | Character portraits     | Characters stand in front of the scene                                                                | [Add portraits to characters](../worlds/portraits.md) |
 | Neither                 | The stage still works, but the background falls back to the world's cover, and there are no portraits | -                                                     |
 
-The scene picture and on-stage character data come from Scene Stage below. So to use stage mode, turn Scene Stage on at the session-prep screen.
+The scene picture and on-stage character data come from Scene Stage below. Enable it on the session-prep screen for scene backdrops and on-stage characters. You can still read the story in stage mode without it.
 
 ## Scene Stage (`scene-stage`)
 

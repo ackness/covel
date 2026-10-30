@@ -307,7 +307,7 @@ pnpm test:runtime -- my-plugin/note --payload '{"title":"Gate"}' --pretty
 | `artifacts.saveImages`      | 把生成的图片存到一个目录，方便人看                               |
 
 > [!NOTE]
-> 用例里的 runtime 是被直接触发的，它的上游并没有运行。所以它声明的输入（例如这一回合的故事正文）是空的，`message` 只是玩家输入。要测“读到上游结果之后做什么”，把上游插件用 `withPlugins` 一起加载，或者在测试里[组装完整的回合](#在测试里跑完整的一个回合)。
+> 用例里的 runtime 是被直接触发的，它的上游并没有运行。所以它声明的输入（例如这一回合的故事正文）是空的，`message` 只是玩家输入。要测“读到上游结果之后做什么”，在测试里[组装完整的回合](#在测试里跑完整的一个回合)。`withPlugins` 只加载其他插件，不会自动运行它们的上游 runtime。
 
 ### 假模型的回复
 
@@ -494,7 +494,7 @@ pnpm test:plugin-lifecycle
 | `has no tests/runtime-cases.json or covel.test.json`         | 多 runtime 的插件没有用例文件。加一个，或者写完整的 runtime 名来直接触发   |
 | 用例 `failed`，`assertions` 里是 `pluginData:<名字>`         | 数据没有按期望保存。核对用例里的 `namespace`、`key`、`field`               |
 | 用例 `failed`，`assertions` 里是 `runtime:<名字>:success`    | runtime 没有成功。看 `runtimeResults` 里它的 `error`                       |
-| `skipped: upstream not success`                              | 它依赖的上游没有运行。加 `--ignore-upstreams`，或者一起加载上游            |
+| `skipped: upstream not success`                              | 它依赖的上游没有运行。只测本地逻辑可加 `--ignore-upstreams`；要读真实上游结果则组装完整回合            |
 | 声明了必须调用工具的 agent 失败                              | 用例没有提供带工具调用的 `llmResponses`                                    |
 | 工具调用被拒绝                                               | 假回复里的 `arguments` 不符合工具的参数，或者不是合法的 JSON 文本          |
 | 打印 `Unsupported rpc` 之类的警告                            | 正常。这部分要在真实的服务端上验证                                         |

@@ -35,7 +35,7 @@ A declaration has this shape: `{name, description?, schema, initialValue, update
 - `schema` can be a scalar, a nullable value, a nested object, an array, or a set of named records declared with `additionalProperties`.
 - The initial value and every value committed later are checked against the same schema.
 
-**Supported schema keywords** are defined by `packages/shared/src/schemas/dimensions.ts`:
+**Supported schema keywords** are defined by `packages/plugin-handlers-utils/src/dimension-schemas.ts`:
 
 - `type`, `enum`, `const`
 - `minimum`, `maximum`, `exclusiveMinimum`, `exclusiveMaximum`
@@ -137,7 +137,7 @@ There is no expression language. A world file contains no code.
 - In `initialValue`, this field must equal the value when `source` is 0. The reason: at the start, no turn has run yet to calculate it.
 - A dimension whose whole value is derived cannot also have an `updateRule`.
 
-**Where the calculation happens.** It is done by `world-init/dimension-clock`. This is a runtime that does not call the model. It runs after each turn's narrative and does not add to the turn's time.
+**Where the calculation happens.** It is done by `world-init/dimension-clock`. This is a runtime that does not call the model. It runs after each turn’s narrative without making another model call.
 
 - It reads the clock after this turn's settlement (contract `world-time-evolution@1`), and it calculates the new value for each dimension that has `x-derive`. When a value changes, it commits a versioned `dimension.update`. This is not narrative settlement, so it does not use a settlement receipt.
 - It runs after the time settlement and after the tracker (the model that updates dimensions according to rules). The value it reads already includes this turn's updates from the tracker, and it changes only the derived fields. So the two never write the same dimension from the same version.
@@ -173,7 +173,9 @@ For the full sync rules, see [Preflight and Sync](./world-data.md#preflight-and-
 
 ## Frozen reads and maintenance
 
-**A value read within one turn does not change.** At the start of a turn, a runtime that does not call the model publishes the values from the end of the previous turn (written as Sₙ). The three kinds of reads in this turn (`ctx.world.dimensions.<id>.value`, the built-in public queries, and the summary in the prompt that has a length budget) all read the same data. They cannot see changes that have not been saved yet, and they do not fall back to the author's initial values. After saving, the API and the interface get the new values (Sₙ₊₁).
+**Public reads use a frozen base.** At the start of a turn, a runtime publishes the values from the end of the previous turn (Sₙ), without a model call. The `world.dimensions@1` input, public built-in queries, and the story prompt summary use this base. They neither read uncommitted updates nor fall back to author-defined initial values.
+
+For functions and guards, `ctx.world.dimensions` overlays valid proposals from completed upstream runtimes and the current runtime onto that base. This lets `dimension-clock`, for example, calculate clock fields on top of the tracker’s proposed values. The view is a projection within the execution, not persisted state. After commit, the API and UI read the new authoritative values (Sₙ₊₁). See [World Model](./world-model.md).
 
 **Two read-only built-in tools** that every plugin can use:
 
@@ -220,7 +222,7 @@ For details, see [World time](./world-time.md#runtime-and-state). This input pla
 There are five states: `pending-settlement`, `settled`, `no-change`, `manual`, and `skipped`. For their meanings, see [Turn timing and settlement receipts](./world-model.md#turn-timing-and-settlement-receipts).
 
 - A failure, a run that did not happen, and a scheduled skip are all not `no-change`.
-- If automatic settlement fails, the narrative is kept, and the settlement obligation is kept too. Other ordinary proposals in the same execution still follow the rule that they are saved only if all of them succeed.
+- If automatic settlement fails, the narrative and its pending obligation remain. Other proposals follow the [commit-unit rules](./transactions.md): a failed optional unit and its hard dependents are discarded; a database error still rolls back the entire commit.
 - For resolved receipts, only the most recent 20 are kept for each game. (When a new receipt is recorded, older ones are cleaned up.) Receipts that are still pending are never cleaned up.
 
 **The tracker tries more than once.** A pending settlement blocks the turns that come after it, so here it is better to try again.

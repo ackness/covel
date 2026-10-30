@@ -79,7 +79,7 @@ Translation is done by the model you configured, so it uses model calls. After t
 
 ## Install plugins and worlds
 
-In "Settings", "Install & manage" can install plugin packages, world packages and collection packages from GitHub or from ZIP files, and can uninstall them. After an install, you need to restart the backend for it to take effect. Code in third-party plugins only runs after you authorize it in a session. For detailed steps, see [Install plugins and worlds](../start/packages.md).
+In "Settings", "Install & manage" can install plugin packages, world packages and collection packages from GitHub or from ZIP files, and can uninstall them. New worlds are available immediately; installing or removing plugins requires a backend restart. Third-party plugin code also needs session authorization, which can be granted automatically under the trusted-source policy. For detailed steps, see [Install plugins and worlds](../start/packages.md).
 
 The packaged desktop app can restart its bundled backend. A desktop shell running from source does not own the external development server, so restart buttons in Desktop and Install & manage are disabled. Restart the server in the terminal running `pnpm dev` instead.
 

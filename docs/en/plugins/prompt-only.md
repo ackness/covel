@@ -71,7 +71,7 @@ Change `PLUGIN.md` to:
 ---
 displayName: Observation
 description: Adds a short observation grounded in the latest narrative.
-requires: [narrative-engine@1]
+requires: [narrative-engine@2]
 contributes:
   settings:
     - key: length
@@ -86,7 +86,7 @@ runtime:
   io:
     inputs:
       narrative:
-        from: { contract: narrative-engine@1 }
+        from: { contract: narrative-engine@2 }
         select: /narrativeOutput
 ---
 Read `runtime-inputs.narrative.value`. Describe one detail that the player can observe.
@@ -99,7 +99,7 @@ You must not add an event, a character, an item or a decision that the narrative
 | This part                        | What it means                                                                                                                                                                                                                 |
 | -------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `displayName`                    | The name the player sees                                                                                                                                                                                                      |
-| `requires: [narrative-engine@1]` | Needs a plugin that writes the story. When this plugin is enabled, Covel makes sure one is present                                                                                                                            |
+| `requires: [narrative-engine@2]` | Needs a plugin that writes the story. When this plugin is enabled, Covel makes sure one is present                                                                                                                            |
 | `contributes.settings`           | Gives the player one setting: the most sentences to write. The default is 2                                                                                                                                                   |
 | `schedule.stage: post-turn`      | Runs after the story of each turn                                                                                                                                                                                             |
 | `io.inputs.narrative`            | Reads the story text of this turn. The prompt refers to it as `runtime-inputs.narrative.value`                                                                                                                                |

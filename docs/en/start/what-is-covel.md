@@ -30,9 +30,9 @@ After you send an action:
 2. Each plugin reads what it needs, such as the world setting, the recent conversation, and the data it saved itself.
 3. The narrator plugin writes the story text, and you watch it appear on the screen one character at a time.
 4. After the narrative, other plugins update their own states based on that text: whether a quest moved forward, what was added to your inventory, and whose attitude toward you changed.
-5. The kernel checks all the changes and writes them to the save in one go. The interface shows "Turn complete".
+5. The kernel validates and saves the story and state updates. The interface shows failures that need your attention; some background tasks continue after the story is saved.
 
-Plugins cannot change the save directly. They can only propose "I want to change this", and the kernel really writes it only after the check passes. So a turn either takes full effect, or leaves nothing behind.
+Plugins cannot change the save directly. They propose changes, and the kernel saves them after validation. Once the story succeeds, a failed optional update does not erase it: the interface tells you which updates are incomplete so you can retry them separately. Executions without a story, such as setup and manual actions, save or roll back as a whole. See [transactions](../reference/transactions.md).
 
 ## Two ways to view the story
 

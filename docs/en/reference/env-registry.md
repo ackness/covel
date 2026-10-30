@@ -225,7 +225,7 @@ Both SQLite and PostgreSQL create the current table structure when the app start
 
 Both commands run Drizzle directly and read the root `.env`. A `DATABASE_URL` set in the shell takes priority.
 
-To upgrade an existing database, you must write and review SQL for the old table structure. Test it on a backup copy first, then apply it by hand. These tools do not handle SQLite upgrades.
+Covel supports only the current data contract and provides no migration path for old databases. If the data schema is incompatible, back it up and create a new SQLite file or empty PostgreSQL database; see [schema checks](../internals/storage.md#capabilities-and-migrations). These tools neither migrate data nor bypass the startup version check.
 
 ### Plugin extension development data
 

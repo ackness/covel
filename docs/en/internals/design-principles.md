@@ -128,17 +128,17 @@ Things that cannot fit this pattern are not Covel's goal. Examples are real-time
 
 ## Failure isolation (why everything goes through Proposals)
 
-Plugins never write to the database directly. They always produce a [Proposal](../reference/glossary.md), and the Kernel checks it and commits it. This is the only write channel between the Kernel and a plugin.
+Runtimes do not write to the database directly. They produce [Proposals](../reference/glossary.md#proposal), which the Kernel validates and commits. A successful tool call confirms that the operation ran; only the commit result confirms that the save changed.
 
-This boundary brings three things:
+This boundary imposes three constraints:
 
-- **If one plugin fails, only its own output is lost.** When a plugin crashes or its commit is rejected, the narrative that has already been generated is not dragged down with it. Each optional plugin commits inside its own savepoint (a small section of a transaction that can be rolled back on its own). A downstream plugin that hard-depends on it is discarded along with it, and its state is recorded as failed.
-- **Several plugins that change the same thing do not fight each other.**
-- **A plugin can see only its own data.**
+- **A valid story can survive an optional write failure.** An execution with story output divides its writes into units by top-level runtime. Nested calls belong to their parent's unit. Optional units commit inside savepoints; a failed unit and auxiliary downstream runtimes that depend on its results or uncommitted data are discarded together. A rejected write in a story or setup unit, or an infrastructure failure, still rolls back the entire execution.
+- **Concurrent changes follow explicit rules.** Operation-based writes apply to the latest stored value at commit. Character and dimension updates check versions and reject conflicts. These checks prevent silent overwrites; authors still need to handle failure.
+- **Private plugin data is isolated; public domain objects are shared.** A plugin can directly read and write only its own namespaces. It reads characters, seats and dimensions through the public World Model, and domain writes still require validation.
 
-An execution with no narrative still either succeeds as a whole or rolls back as a whole. These executions include manual triggers, background runs, and opening setup.
+An execution with no story commits or rolls back as a whole, including manual runs, background work and setup. Scoped store writes in plugin action RPCs have a separate, existing boundary: they take effect immediately and are not undone if the handler later fails. Use a manual function runtime when several domain writes must succeed together. See [Interface-triggered writes](../reference/plugin-extensions.md#writes-triggered-by-the-interface-how-the-three-actions-differ) and [Transactions](../reference/transactions.md#one-transaction-per-turn).
 
-"Flexible but not out of control" comes from this.
+Database rollback cannot undo external requests that have already been sent. Plugin authors should make those operations repeatable and cancellable, and distinguish them from committing a save.
 
 ## Further reading
 

@@ -117,7 +117,7 @@ It has no settings you can change.
 
 If this file is missing, the plugin uses every numeric attribute in the world (category `abilities`, with `min` and `max`) for point buy, and adds 4 extra points. Resources such as health and stamina are not included automatically.
 
-Each attribute `id` must match the one defined in `world.yaml`. If it does not match, the failure only appears at the start of the game. For how to write and check the rules, see [Point buy and dice checks](../recipes/point-buy.md). For how data gets into a world package, see [World data](../reference/world-data.md).
+Each attribute `id` must match the one defined in `world.yaml`. A mismatch produces an `attribute-reference` error in `pnpm validate:world`; session import also checks it. For how to write and check the rules, see [Point buy and dice checks](../recipes/point-buy.md). For how data gets into a world package, see [World data](../reference/world-data.md).
 
 ## Quest Log (`core-quest`)
 

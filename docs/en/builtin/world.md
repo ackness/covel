@@ -48,7 +48,7 @@ At the start, it guides you through creating the player character. It gives you 
 
 ## Character Profiles (`character-blueprint`)
 
-Keeps the roleplay notes the world author has written for the characters: personality, way of speaking, secrets, and relationships with others. While a character is in the game, the narrative plays them according to these notes. The notes' "secrets" are known only to the narrative. They are not stated directly until the plot reveals them. The characters themselves come from the world's character file and exist without this plugin too.
+Keeps the roleplay notes the world author has written for the characters: personality, way of speaking, secrets, and relationships with others. While a character is in the game, the narrative plays them according to these notes. Secrets are passed to the narrator as character data, with instructions to avoid revealing them early. This is not a data-access boundary; see the note below. The characters themselves come from the world's character file and exist without this plugin too.
 
 **What you will see**
 

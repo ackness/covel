@@ -8,7 +8,7 @@ Covel 的服务器对外只有一套 HTTP JSON 接口。网页和桌面应用用
 
 - 地址：`pnpm dev:server` 启动后是 `http://localhost:3001/api/`。
 - 请求体：JSON，带 `Content-Type: application/json`。
-- 鉴权：本机默认不需要任何 token。只有托管部署（`DEPLOYMENT_TIER=demo` 或 `commercial`）才要带会话的 owner token 或运维 token，见[鉴权：Session owner token](#鉴权session-owner-token)。
+- 鉴权：默认的本机 personal 实例不检查会话 token；桌面配置和文件接口可能要求启动令牌。browser-private 与托管实例还检查会话或运维令牌，见[鉴权：Session owner token](#鉴权session-owner-token)。
 - 回合不是普通的请求-响应：发消息、开局、提交选择都走 `POST /api/actions`，响应是一条 SSE 流。
 
 **这一页怎么组织**
@@ -141,6 +141,8 @@ PostgreSQL 一列的细节：
 
 `error` 一定有。需要客户端按错误码分别处理的端点（如 `plugin-rpc`、`media`）会同时给 `code`。
 
+这是 HTTP 错误格式。模型工具的公共结果使用 `{ok,data}` / `{ok,error:{code,message}}`，见[工具](./tools.md)；不要把 HTTP 的 `error` 字符串当成工具错误对象。
+
 `code` 使用小写字母、数字以及 `_` 或 `-` 分隔符；插件选择错误会沿用 `missing-provider` 这样的求解器错误码。
 
 几种全站统一的错误：
@@ -167,7 +169,7 @@ PostgreSQL 一列的细节：
 
 ### 鉴权：Session owner token
 
-在本机（`DEPLOYMENT_TIER=self`，默认值）和桌面应用里，不带任何 token 就能用全部端点。下面的规则主要影响托管部署。
+会话鉴权由[宿主配置](../internals/security.md#host-profile)决定。默认的本机 personal 实例不检查会话 owner token，依靠回环监听和 Host 检查；桌面壳配置了启动令牌时，配置和文件接口仍要求该令牌。生产环境的 MemoryStore 使用 browser-private 形态，即使 `DEPLOYMENT_TIER=self` 也检查 owner token。
 
 **owner token 是什么**
 

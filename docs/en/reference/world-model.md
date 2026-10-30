@@ -17,8 +17,8 @@ A plugin reads the World Model through four entry points:
 
 These entry points are read-only. To write, use a proposal (a request that says "I want to change this", which the kernel validates and then saves in one batch).
 
-- Characters and the character schema: within the same execution, a runtime that runs earlier can propose valid changes, and the runtime that is running can also read changes it has not saved yet.
-- Dimensions are different: their values are frozen for the duration of a turn. Do not treat a change you just proposed as a value another runtime can already see.
+- For characters, the character schema, and dimensions, `ctx.world` can read valid proposals from completed upstream runtimes and overlays the current runtime’s own valid proposals on each read. These changes still need to pass commit before they persist.
+- Public dimension inputs, built-in queries, and story summaries use the base frozen at the start of the execution. They differ from the projected `ctx.world` view used for calculations; see [Frozen reads and maintenance](./dynamic-dimensions.md#frozen-reads-and-maintenance).
 
 For which fields exist and who manages each part, see [plugin contracts](./plugins.md#world-model-and-data-boundaries).
 
@@ -117,7 +117,7 @@ Before comparing names and aliases, `characterNameKey` normalizes the spelling:
 The save rule has not changed: two non-player characters can share a name (lookup then returns `ambiguous`), but a name that equals someone else's alias is rejected.
 
 > [!IMPORTANT]
-> The `characters` table has an `aliases` column. The server creates tables but does not change them. So a SQLite or PostgreSQL development database created before aliases were added lacks this column, and reading characters reports `no such column: aliases`. Back it up following the [migration notes](./env-registry.md#plugin-extension-development-data), then switch to a new database file (for PostgreSQL, rebuild the schema). Characters in a browser-private save have no aliases, and they are read as usual.
+> The `characters` table has an `aliases` column. Startup schema checks reject old SQLite or PostgreSQL development databases that lack it; the app does not add the column automatically. Follow the [development-data instructions](./env-registry.md#plugin-extension-development-data) to back up and create a new database. The `aliases` field itself is optional, so current-format browser-private saves may contain characters without aliases.
 
 ## Seats
 

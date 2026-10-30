@@ -35,7 +35,7 @@ dimensions:
 - `schema` 可以是标量、可空的值、嵌套对象、数组，或者用 `additionalProperties` 声明的一组有名字的记录。
 - 初值和之后每次提交的值都用同一个 schema 校验。
 
-**支持的 schema 关键字**以 `packages/shared/src/schemas/dimensions.ts` 为准：
+**支持的 schema 关键字**以 `packages/plugin-handlers-utils/src/dimension-schemas.ts` 为准：
 
 - `type`、`enum`、`const`
 - `minimum`、`maximum`、`exclusiveMinimum`、`exclusiveMaximum`
@@ -137,7 +137,7 @@ crownfire:
 - `initialValue` 里这个字段必须等于 `source` 为 0 时的值，因为开局时还没有任何回合去计算它。
 - 整个值都由推导给出的维度不能再写 `updateRule`。
 
-**计算在哪里发生。** 由 `world-init/dimension-clock` 完成。它是一个不调用模型的 runtime，在每回合叙事之后运行，不增加回合耗时。
+**计算在哪里发生。** 由 `world-init/dimension-clock` 完成。它是一个不调用模型的 runtime，在每回合叙事之后运行，不增加模型调用。
 
 - 它读取本回合结算之后的时钟（契约 `world-time-evolution@1`），给每个带 `x-derive` 的维度算出新值。值有变化时提交一条带版本的 `dimension.update`。这不是叙事结算，不占用结算回执。
 - 它排在时间结算和 tracker（按规则更新维度的那个模型）之后。读到的值已经带上 tracker 本回合的更新，它只改其中的推导字段。所以两者不会从同一个版本去写同一个维度。
@@ -173,7 +173,9 @@ crownfire:
 
 ## 冻结读取与维护
 
-**一回合内读到的值不变。** 回合开始时，一个不调用模型的 runtime 发布上一回合结束时的值（记作 Sₙ）。这一回合里的三种读取——`ctx.world.dimensions.<id>.value`、公共的内置查询、提示词里有长度预算的摘要——都读同一份。它们读不到还没保存的修改，也不会改用作者的初值。保存之后，接口和界面得到新的值（Sₙ₊₁）。
+**公共读取使用冻结底本。** 回合开始时，一个不调用模型的 runtime 发布上一回合结束时的值（记作 Sₙ）。`world.dimensions@1` 输入、公共内置查询和叙事提示词摘要都使用这份底本，不读取尚未提交的更新，也不改用作者的初值。
+
+function / guard 的 `ctx.world.dimensions` 在这份底本上叠加已完成上游和当前 runtime 自己的合法维度 proposal，供后续计算。例如 `dimension-clock` 能在 tracker 的提案之上计算时钟字段。这只是执行内的投影视图，不表示已经保存。提交之后，接口和界面才得到新的权威值（Sₙ₊₁），见 [World Model](./world-model.md)。
 
 **两个只读的内置工具**，所有插件都可以用：
 
@@ -220,7 +222,7 @@ crownfire:
 状态有五种：`pending-settlement`、`settled`、`no-change`、`manual`、`skipped`，含义见[回合时序与结算回执](./world-model.md#回合时序与结算回执)。
 
 - 失败、没有运行、被调度跳过都不是 `no-change`。
-- 自动结算失败时，叙事保留，待结算的义务也保留。同一次执行里其他普通 proposal“全部成功才保存”的规则不受影响。
+- 自动结算失败时，叙事和待结算义务保留。其他 proposal 按[提交单元](./transactions.md#commit-失败语义)隔离：可选单元失败时丢弃该单元及其硬依赖下游，数据库异常仍回滚整次提交。
 - 已经解决的回执，每局游戏只保留最近 20 条（登记新回执时清理更早的）。待结算的回执不会被清理。
 
 **tracker 会多试几次。** 待结算会挡住之后的回合，所以这里宁可多试。

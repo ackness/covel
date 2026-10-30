@@ -25,6 +25,7 @@ Each English term has only one Chinese term. The Chinese docs, the UI text, and 
 | Deployment form | 部署形态 | The desktop app, the self-hosted web app, the official web app. Not `DEPLOYMENT_TIER`. |
 | Edition | 语言版本 | One language of a world: `defaultLocale`, and the language of each `world.<locale>.yaml` or `WORLD.<locale>.md` at the root. |
 | Fault latch | 熔断 | A session-local pause after consecutive self-caused auxiliary plugin faults, cleared by the player or a process restart. See the [protocol](./protocol.md#plugin-fault-latch). |
+| Execution | 执行 | One scheduled run and its commit plan; player turns, manual calls and background jobs can each start one. |
 | Finalizer step | 收尾步骤 | The one request, after an agent runs out of steps, that turns tools off and asks for the answer now. |
 | Kernel | 内核 |  |
 | Local model relay | 本地模型中继 | On a shared form, the server reaches a model on the player's computer or local network through the player's browser. See [Security boundaries](../internals/security.md#local-model-relay). |
@@ -35,6 +36,7 @@ Each English term has only one Chinese term. The Chinese docs, the UI text, and 
 | Preset | 预设 |  |
 | Proposal | 提案 |  |
 | Provider | 提供商 |  |
+| Recursive call | 嵌套调用 | A same-package runtime call whose writes commit with its parent; distinct from a read-only sub-agent. |
 | Roleplay notes | 扮演说明 | What the world author writes in the `blueprint` field of a character record to tell the narrative how to play the character; read by Character Profiles. Not the character itself. |
 | Runtime | runtime | Kept in English. It means one execution unit in a manifest, not the general word "runtime". |
 | Runtime manifest | runtime 清单 |  |
@@ -45,6 +47,7 @@ Each English term has only one Chinese term. The Chinese docs, the UI text, and 
 | Slot | 槽位 | In the settings UI it is called "model role". |
 | Stop reason | 结束原因 | How an agent tool loop ended (`RuntimeResult.stop.reason`). |
 | Sub-agent | 子 agent | An agent runtime another runtime runs inside its own execution, returning output only. |
+| Tool result | 工具结果 | Code-facing content and model-facing feedback have different shapes; success does not confirm persistence. |
 | Trigger mode | 触发模式 |  |
 | Trusted source | 可信来源 | A GitHub source chosen by the instance owner or operator to reduce approval prompts. |
 | Turn | 回合 | "This turn" is 本回合 in Chinese. |
@@ -168,6 +171,14 @@ It is different from a plugin's **Contract**. A Contract is defined by a plugin 
 
 See: [extension points](./extension-points.md), [plugin extensions and communication](./plugin-extensions.md).
 
+## Execution
+
+One invocation of the execution pipeline, with an identity, a frozen registry and read baseline, runtime results, and a commit plan. Its `execution.origin` records why it started, such as a player action, a manual call, a background job, or a recursive call. Resuming continues the suspended execution.
+
+`turnId` identifies the execution; `runId` identifies one runtime attempt. Neither is the logical turn number. Setup, the opening and manual or background work do not advance `completedPlayerTurns`; a committed player turn advances it at most once.
+
+See: [Turn pipeline](../internals/flow.md), [execution and commit](./protocol.md#execution-and-commit-are-two-steps).
+
 ## Finalizer step
 
 The one more model request the kernel sends after an agent runtime runs out of steps: tools off, asking the model for its final answer from what it already has.
@@ -245,12 +256,18 @@ A specific model service: text, image, or vector (OpenAI, Anthropic, DeepSeek, A
 
 See: `packages/ai-provider/`, [plugin field reference](./plugins.md).
 
+## Recursive call
+
+A runtime call within the caller's own plugin, made through `ctx.recursiveCall`. It can produce domain writes. The nested results and their parent form one commit unit; a parent failure discards the nested writes too. It is different from a sub-agent, which returns output only and can be selected across packages by contract.
+
+See: [Nested calls](./plugins.md#nested-calls-ctxrecursivecall), [sub-agents](./plugins.md#sub-agents).
+
 ## Runtime
 
 The unit inside a plugin that actually runs. There are two kinds:
 
 - `agent`: driven by the model. The body of `RUNTIME.md` (or the runtime inlined in the root manifest) is used as the system prompt.
-- `function`: a pure JavaScript handler function.
+- `function`: executed by a JavaScript handler, which may call tools, services or models when needed.
 
 A plugin package can have several runtimes. Each has its own trigger, stage, and dependencies.
 
@@ -289,7 +306,7 @@ See: [settings store](./settings-store.md).
 
 ## Session
 
-One game that a player is playing. Its ID has the form `{worldId}-{uuid8}`. It belongs to one world, and it has its own turn count, enabled plugins, snapshots, and events.
+One game in progress. Its ID has the form `{worldId}-{uuid8}`. It belongs to one world, and it has its own turn count, enabled plugins, snapshots, and events.
 
 See: [HTTP API](./api.md), [transactions](./transactions.md).
 
@@ -314,6 +331,12 @@ See: [the protocol reference's stop reasons](./protocol.md#stop-reasons), [turn 
 An agent runtime that another runtime runs inside its own execution: a function with `ctx.agents.run`, an agent with the `delegate` tool. It runs with the caller's brief, its own transcript and its own budget, and returns output only: it writes no data, emits no events and forms no commit unit. The provider sets `schedule.subagentOnly: true`, and the scheduler never runs it on its own.
 
 See: [Plugin reference · Sub-agents](./plugins.md#sub-agents), [the delegate tool](./tools.md#sub-agents-delegate).
+
+## Tool result
+
+The result of one tool call. Plugin code can return business content directly or use the SDK's `covel.tool-result` to separate content, model feedback and staged effects. The executor formats model feedback as a success envelope or an `error` envelope. A staged write can still be rejected at commit.
+
+See: [Tool result contract](./tools.md#工具结果契约tool-result).
 
 ## Trigger mode
 
@@ -344,6 +367,6 @@ See: [world data](./world-data.md).
 
 ## Related
 
-- **The difference between pluginId and runtimeId**: see "Identity model" in the root `AGENTS.md`.
+- **The difference between pluginId and runtimeId**: see [Runtime manifest](#runtime-manifest): `pluginId` identifies the package and its isolation and write ownership; `name` is the runtimeId used for scheduling and tracing.
 - **Plugin source**: see "Plugin kind and source" above, and [tools](./tools.md).
 - **Terms not listed here**: `Branch`, `Snapshot`, `PluginData`, `CharacterRecord`, and `Lorebook` are covered in [transactions](./transactions.md).

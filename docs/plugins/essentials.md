@@ -54,14 +54,14 @@ pnpm --filter @covel/plugin-my-plugin test
 ```yaml
 ---
 description: Adds a brief observation after narration.
-requires: [narrative-engine@1]
+requires: [narrative-engine@2]
 runtime:
   schedule:
     stage: post-turn
   io:
     inputs:
       narrative:
-        from: { contract: narrative-engine@1 }
+        from: { contract: narrative-engine@2 }
         select: /narrativeOutput
 ---
 Write one observation grounded in runtime-inputs.narrative.value.
@@ -149,15 +149,15 @@ agent:
 
 ## 怎样用别的插件的结果
 
-按能力找，不按名字找。能力有一个带版本号的名字，例如 `narrative-engine@1`。要读“写故事的插件”这一回合的输出，写三处：
+按能力找，不按名字找。能力有一个带版本号的名字，例如 `narrative-engine@2`。要读“写故事的插件”这一回合的输出，写三处：
 
 ```yaml
-requires: [narrative-engine@1]
+requires: [narrative-engine@2]
 runtime:
   io:
     inputs:
       narrative:
-        from: { contract: narrative-engine@1 }
+        from: { contract: narrative-engine@2 }
         select: /narrativeOutput
 ```
 
@@ -198,7 +198,7 @@ io:
 
 - 它的提示词、模型回复、工具参数、工具结果和输出，不会出现在调试记录、实时进度和玩家能看到的执行历史里。只留下名称、状态、耗时和用量。
 - 它失败时，玩家看到一句固定的通用提示。真实原因只写进服务端日志。
-- 它输出的文字不写入对话记录，别的 runtime 也读不到。表单和界面块照常显示。
+- 它输出的文字不写入对话记录，不会经提示词历史传给别的 runtime。声明的输出契约仍可被输入绑定读取，表单和界面块照常显示。
 
 `io.concealed: true` 不能和 `io.visibility: story` 一起用，加载会失败：故事 runtime 的文字本来就是给玩家读的。
 

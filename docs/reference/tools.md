@@ -156,7 +156,7 @@ export default function (covel) {
 
 要点：
 
-- `PLUGIN.md` 的 `id`、`kind`、`description` 是必需字段。`entry` 必须是插件根目录内的相对 `.js` 路径。
+- `description` 是必需字段；`id` 从目录名推出，`kind` 默认为 `plugin`。省略的 `entry` 在存在时取 `./server/index.js`；显式路径必须是插件根目录内的相对 `.js` 路径。
 - `tools.plugin` 只是让模型看到这个工具。工具的实现必须先由 entry 调用 `registerTool()` 注册。
 - 用框架给的 `covel.toolkit.tool` 和 `covel.toolkit.z`。这样插件不用自己依赖 Zod，参数 schema 和运行时的 `VALIDATION_ERROR` 也来自同一套工具。不要在同一个定义里混用插件自己打包的另一份 Zod。
 
@@ -1117,8 +1117,6 @@ Characters in session (3 total, sorted by frequency then recency):
 Character: 苏婉 [npc] char-abc123
 Description: 青萍宗外门首席弟子，冰灵根修士。发现百灵沼泽深处一条野生灵脉...
 Version: 3
-Created: 2026-04-12T04:00:00.000Z
-Updated: 2026-04-12T04:24:55.000Z
 
 Attributes:
   hp: 60

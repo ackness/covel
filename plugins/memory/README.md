@@ -6,7 +6,7 @@
 
 - `PLUGIN.md` 注册 `memory.block-definitions@1` 服务、`prompt.segment@1` 扩展和面板。
 - `runtimes/extract/RUNTIME.md` 在 `post-turn` 消费冻结的 `turn-digest@1`，以脱离回合的 function runtime 提取记忆。
-- `server/extract.js` 使用当前请求的 gateway 和 `plugin` 模型槽，写入自己的 `blocks` 和 `facts` 命名空间。
+- `server/extract.js` 使用当前请求的 gateway 和 `memory` 模型用途，写入自己的 `blocks` 和 `facts` 命名空间。
 - `server/facts.js` 决定事实记录的 key、文字，以及每回合召回哪几条。
 
 ## 数据与行为
@@ -47,9 +47,10 @@
 - 提示词中的 8192 字符预算和 60 块上限会截断内容
 - 不同模型的提取质量可能存在差异
 
-**30 秒超时配置未经大规模测量验证：**
+**30 秒的提交屏障等待尚未经过大规模测量：**
 
-- 当前超时值基于开发期样本观察
+- 下一次执行最多等 30 秒；提取函数和后台执行各有 120 秒时限。屏障等待超时不取消仍在运行的作业
+- 这些配置基于开发期样本观察
 - 实际生产环境中，不同模型、不同叙事长度可能导致不同的处理时间
 - 超时失败不会提交部分记忆，需要人工检查或重试
 - 模型回复不是可解析的记忆块 JSON 时，同一作业内再请求一次；第二次仍无法解析，作业才失败

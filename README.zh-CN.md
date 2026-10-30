@@ -15,7 +15,7 @@
 
 Covel 是一套 AI RPG 框架，也是一间可以直接游玩的工作室：NPC 关系、世界典籍、任务、行囊、记忆、舞台调度和媒体都会随回合演化。它有三层清晰分工：**内核提供原语与编排**，**插件提供行为**，**世界包提供设定、资源与默认插件组合**。
 
-> **当前源码版本：v0.0.53**，早期阶段。API、世界数据和插件 manifest 可能随版本变化。当前二进制面向 macOS Apple Silicon 与 Windows x64，尚未签名，macOS 构建也未公证；每个发布附带 `SHA256SUMS.txt`，可用来核对下载文件。v0.0.53 的桌面版后端改用随包的 Electron 运行时，要求 macOS 13.5 及以上；源码和 Docker 部署需要 Node 26.12.1。升级前请阅读[破坏性变更](./docs/CHANGELOG.md#breaking-changes-in-v0053)与[升级说明](./docs/CHANGELOG.md#upgrade-notes-for-v0053)。从 v0.0.51 及更早版本升级，还需遵循 v0.0.52 的[破坏性变更](./docs/CHANGELOG.md#breaking-changes-in-v0052)与[升级说明](./docs/CHANGELOG.md#upgrade-notes-for-v0052)：**v0.0.51 及更早版本创建的 SQLite 或 PostgreSQL 数据库，v0.0.52 及以后的版本启动时会拒绝使用，必须重建**（会话不会迁移；浏览器私有存档不受影响）。更早版本还需遵循 [v0.0.51 升级说明](./docs/CHANGELOG.md#upgrade-notes-for-v0051)、[v0.0.50 破坏性变更](./docs/CHANGELOG.md#breaking-changes-in-v0050)与[升级说明](./docs/CHANGELOG.md#upgrade-notes-for-v0050)、[v0.0.49 升级说明](./docs/CHANGELOG.md#upgrade-notes-for-v0049)与 [v0.0.48 破坏性变更说明](./docs/CHANGELOG.md#breaking-changes-and-upgrade-notes-for-v0048)；从 v0.0.42 之前的版本升级还需遵循 [v0.0.42 升级指南](./docs/internals/upgrade-0.0.42.md)。升级前请保留完整备份，开发数据不会自动迁移。
+> **当前源码版本：v0.0.53**，早期阶段。API、世界数据和插件 manifest 可能随版本变化。当前二进制面向 macOS Apple Silicon 与 Windows x64，尚未签名，macOS 构建也未公证；每个发布附带 `SHA256SUMS.txt`，可用来核对下载文件。v0.0.53 的桌面版后端改用随包的 Electron 运行时，要求 macOS 13.5 及以上；源码和 Docker 部署需要 Node 26.12.1。升级前请阅读[破坏性变更](./docs/CHANGELOG.md#breaking-changes-in-v0053)与[升级说明](./docs/CHANGELOG.md#upgrade-notes-for-v0053)。从 v0.0.51 及更早版本升级，还需遵循 v0.0.52 的[破坏性变更](./docs/CHANGELOG.md#breaking-changes-in-v0052)与[升级说明](./docs/CHANGELOG.md#upgrade-notes-for-v0052)：**v0.0.51 及更早版本创建的 SQLite 或 PostgreSQL 数据库，v0.0.52 及以后的版本启动时会拒绝使用，必须重建**（会话不会迁移；浏览器私有存档不受影响）。更早版本还需遵循 [v0.0.51 升级说明](./docs/CHANGELOG.md#upgrade-notes-for-v0051)、[v0.0.50 破坏性变更](./docs/CHANGELOG.md#breaking-changes-in-v0050)与[升级说明](./docs/CHANGELOG.md#upgrade-notes-for-v0050)、[v0.0.49 升级说明](./docs/CHANGELOG.md#upgrade-notes-for-v0049)与 [v0.0.48 破坏性变更说明](./docs/CHANGELOG.md#breaking-changes-and-upgrade-notes-for-v0048)；从 v0.0.42 之前的版本升级还需遵循 [v0.0.42 升级指南](./docs/internals/upgrade-0.0.42.md)。升级前请保留完整备份，开发数据不会自动迁移。跟随 `main` 源码时还需检查未发布的结构变更，见[数据、备份与升级](./docs/start/data-and-upgrade.md)。
 
 ## 亮点
 
@@ -34,7 +34,7 @@ Covel 是一套 AI RPG 框架，也是一间可以直接游玩的工作室：NPC
 |                                舞台模式（视觉小说）                                 |                                 叙事模式（文字）                                 |
 | :---------------------------------------------------------------------------------: | :------------------------------------------------------------------------------: |
 | ![遥风学园的舞台模式：背景、角色立绘与对话](./.assets/images/readme/stage-mode.png) | ![余烬岭中继站的叙事模式：正文与任务日志](./.assets/images/readme/text-mode.png) |
-|                背景、立绘与打字机对话；场景美术随探索自动解析与生成                 |       经典叙事回合，内嵌行动建议与表单；任务日志等面板由默认插件每回合更新       |
+|                背景、立绘与打字机对话；随探索匹配世界包已有的场景图                 |       经典叙事回合，内嵌行动建议与表单；任务日志等面板由启用的插件更新       |
 
 世界声明自己的默认档（`defaultViewMode: stage`），游戏中可随时切换。
 
@@ -68,7 +68,7 @@ Covel 是一套 AI RPG 框架，也是一间可以直接游玩的工作室：NPC
 | **生命周期 hook**    | 在调度、模型、工具与提交边界执行横切策略   | `narrator`（草稿审查）、`char-creator`（角色资料保护） |
 | **UI 与数据契约**    | 声明面板、记忆块、schema 或 WorldData 目标 | `memory`、`character-blueprint`                        |
 
-根 `PLUGIN.md` 声明包 `requires` 的版本化契约，以及工具、事件、UI、设置等共享 `contributes`。其余由加载器推出：ID 是目录名，包提供各 runtime 的 `io.output.contract`，有 `function` 块的 runtime 是函数，没有的是 agent。最小的插件只是一个 `PLUGIN.md`：一句说明、一个阶段和一段提示词。单 runtime 放在明确的 `runtime` 字段中；多 runtime 包则把执行清单放在 `runtimes/*/RUNTIME.md`：
+根 `PLUGIN.md` 声明包 `requires` 的版本化契约，以及工具、事件、UI、设置等共享 `contributes`。其余可由加载器推导：ID 可从目录名取得，包提供各 runtime 的 `io.output.contract`，有 `function` 块的 runtime 是函数，没有的是 agent。最小的插件只是一个 `PLUGIN.md`：一句说明、一个阶段和一段提示词。单 runtime 放在明确的 `runtime` 字段中；多 runtime 包则把执行清单放在 `runtimes/*/RUNTIME.md`：
 
 ```text
 plugins/npc-graph/
@@ -104,7 +104,7 @@ worlds/my-world/
     └── 角色 presence 与场景索引
 ```
 
-`pluginPolicy` 用 `preset` 选一个内置玩法包，用 `plus` 加上世界还要的插件；版本化契约负责解析依赖，玩家开局前仍可改选。`requires` 列出世界离不开的契约（如 `action-check@1`）：任何提供该契约的已安装插件都能满足，没有提供者时无法开始游戏。`pluginSettings` 提供低于玩家覆盖优先级的世界默认值。通过 WorldData 导入 `memory.blocks@1`，可以加入线索、嫌疑人、信号日志、倒计时等题材记忆定义，无需修改 memory 插件。
+`pluginPolicy` 用 `preset` 选一个内置玩法包，用 `plus` 加上世界还要的插件；版本化契约负责解析依赖，玩家开局前仍可改选。`requires` 列出世界离不开的契约（如 `action-check@1`）：任何提供该契约的已安装插件都能满足，没有提供者时，准备页提示缺少的功能，仍可继续开局。`pluginSettings` 提供低于玩家覆盖优先级的世界默认值。通过 WorldData 导入 `memory.blocks@1`，可以加入线索、嫌疑人、信号日志、倒计时等题材记忆定义，无需修改 memory 插件。
 
 `WorldData` 是统一导入协议，不是第二种世界格式。source 可以是 YAML、JSON、Markdown、文本或媒体，目标可以是通用角色/资料库，也可以是明确接受 WorldData 的插件 namespace。应用内 AI 构筑器生成的也是同一套标准包：它会根据结构化创作简报生成 manifest、世界观、维度、主要角色、资料库和规则。文件型世界包可以携带完整媒体；浏览器或 store 中的 AI 世界保留可移植文本回退，媒体仍由文件或资源存储承载。
 

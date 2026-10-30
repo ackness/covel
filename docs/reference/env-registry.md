@@ -114,7 +114,7 @@
 | 界面里的连接、用途和参数 | 当前 origin 的 `covel:settings`                                      | `$COVEL_HOME/settings.json`，通过 IPC          |
 | 界面里填的 API 密钥      | 当前 origin 的 `covel:keys`                                          | `$COVEL_HOME/keys.env`，通过 IPC               |
 | 服务端默认密钥           | 环境变量；只有允许的可信 origin 才能使用                             | 同样按环境优先级；文件变更会同步到运行中的后端 |
-| 服务端执行的设置         | 服务端数据库（`server_settings` 表），`self` 层级可以在设置页修改    | 同左：经本机服务端写入数据库                   |
+| 服务端执行的设置         | 服务端数据库（`server_settings` 表）；personal 形态可在设置页修改，browser-private 和托管形态由运维方配置    | 同左：经本机服务端写入数据库                   |
 | 游戏存档                 | memory 模式由浏览器保存 checkpoint；SQLite / pg 模式由个人实例持久化 | 个人 SQLite，或明确选择的后端                  |
 
 几条容易弄错的规则：
@@ -225,7 +225,7 @@ SQLite 和 PostgreSQL 都在应用启动时创建当前的表结构，没有针�
 
 两个命令都直接运行 Drizzle，读根 `.env`，shell 里的 `DATABASE_URL` 优先。
 
-升级已有数据库需要针对旧表结构编写并审核 SQL，先在备份副本上验证，再手动应用。这两个工具不处理 SQLite 升级。
+Covel 只支持当前数据契约，不提供旧库迁移流程。数据 schema 不兼容时，先备份，再创建新的 SQLite 文件或空 PostgreSQL 数据库，步骤见[存储版本检查](../internals/storage.md#capabilities-and-migrations)。这两个工具既不迁移数据，也不绕过启动时的版本检查。
 
 ### Plugin extension development data
 

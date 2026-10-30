@@ -660,7 +660,7 @@ io:
 
 - The domain read view has three parts: the committed CharacterSchema and Characters, the validated upstream proposals, and the writes this runtime is about to commit. So if a tool writes something and reads it right after, it gets what was just written.
 - Plugin data works the same way: a runtime that reads its own plugin's data reads the committed value, plus the writes that completed upstream runtimes of the same plugin will commit (in commit order), plus its own buffer. The visible writes are taken when the runtime starts, so siblings of one level do not see each other; upstream results brought by a retry or a background job do not count. A runtime that read an upstream write depends on it: when the upstream is dropped at commit, an auxiliary runtime is dropped with it, while a story or setup runtime commits and the trace records it. Rules: [In-execution plugin-data visibility](../reference/plugins.md#in-execution-plugin-data-visibility).
-- The world and plugin-data that extension providers see are frozen when this execution is created. This way the same extension sees the same content in runtimes that run in parallel. Services and extension providers do not see the uncommitted plugin data of upstream runtimes.
+- The world and plugin-data that extension providers see are frozen when this execution is created. This way the same extension sees the same content in runtimes that run in parallel. Service reads have a different boundary: they can include completed, commit-eligible upstream writes from the provider's plugin. See [Service context](../reference/plugin-extensions.md#what-a-service-can-and-cannot-access).
 
 ### 4.3 Decision tree for plugin triggers
 

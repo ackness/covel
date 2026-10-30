@@ -28,6 +28,8 @@ The thing that actually runs inside a plugin is called a **runtime** (a runtime 
 | **agent**    | A prompt. The model reads it, then calls tools to finish the task | Writing the story, extracting facts from the story text, making judgments  | Yes                      |
 | **function** | A JavaScript function                                             | Rolling dice, calculating, reading and writing data, calling external APIs | No                       |
 
+A function can also call a model through `ctx.gateway` or delegate to a sub-agent through `ctx.agents.run`. Those calls still use model tokens.
+
 A rule of thumb: **give anything that can be worked out from fixed rules to a function, and give anything that requires understanding the text to an agent.** Dice should be rolled by a function, so that the result cannot be rewritten to fit the text.
 
 ## When it runs
@@ -46,10 +48,10 @@ A stage starts only after every runtime of the previous stage has finished. Besi
 
 ## How plugins work together
 
-Plugins do not name each other directly. One plugin says what capability it **provides**, and another says what capability it **needs**, and Covel connects them. A capability has a versioned name, for example `narrative-engine@1`, which means "the story-writing capability, version 1".
+Plugins do not name each other directly. One plugin says what capability it **provides**, and another says what capability it **needs**, and Covel connects them. A capability has a versioned name, for example `narrative-engine@2`, which means "the story-writing capability, version 2".
 
 ```yaml
-requires: [narrative-engine@1]
+requires: [narrative-engine@2]
 ```
 
 This line means "I need a plugin that can write the story", not "I need the plugin named narrator". So the narrator can be replaced, and the plugins that depend on it do not have to change.

@@ -156,7 +156,7 @@ export default function (covel) {
 
 Key points:
 
-- `id`, `kind`, and `description` in `PLUGIN.md` are required fields. `entry` must be a relative `.js` path inside the plugin root.
+- `description` is required. `id` comes from the directory name, and `kind` defaults to `plugin`. If `entry` is omitted, the loader uses `./server/index.js` when that file exists; an explicit path must be a relative `.js` path inside the plugin root.
 - `tools.plugin` only lets the model see the tool. The tool itself must be registered first, by calling `registerTool()` from the entry.
 - Use the framework's `covel.toolkit.tool` and `covel.toolkit.z`. This way the plugin does not need its own Zod dependency, and the parameter schema and the runtime `VALIDATION_ERROR` come from the same toolkit. Do not mix in a different copy of Zod that the plugin bundles itself in the same definition.
 
@@ -1119,8 +1119,6 @@ A narrative plugin can declare only the two read-only tools `list-characters` an
 Character: 苏婉 [npc] char-abc123
 Description: 青萍宗外门首席弟子，冰灵根修士。发现百灵沼泽深处一条野生灵脉...
 Version: 3
-Created: 2026-04-12T04:00:00.000Z
-Updated: 2026-04-12T04:24:55.000Z
 
 Attributes:
   hp: 60
