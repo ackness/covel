@@ -930,7 +930,7 @@ describe("imports in every agent entry", () => {
         [
           call("suspend", {
             reason: "Which bag?",
-            resumeSchema: { type: "object" },
+            fields: [{ type: "text", name: "bag", label: "Bag" }],
           }),
           call("inventory-items", { bag: "leather" }),
           text(JSON.stringify({ done: true })),
