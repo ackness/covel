@@ -10,6 +10,7 @@ import {
 import {
   appendStreamingText,
   clearAllStreamingText,
+  setStreamingSegment,
 } from "@/stores/streaming-text-store.js";
 import type { StreamMessage } from "@/stores/session-store.js";
 import { StageView, type StageViewProps } from "../StageView.js";
@@ -187,7 +188,7 @@ describe("stage decision lifecycle", () => {
     expect(screen.queryByTestId("stage-thinking")).toBeNull();
   });
 
-  it("names paragraph speakers from the committed story, never while it streams", () => {
+  it("names paragraphs with live speakers while streaming, then the resolved names", () => {
     let props = { ...fixture(), executing: true };
     const stream: StreamMessage = {
       ...previousStory,
@@ -199,10 +200,27 @@ describe("stage decision lifecycle", () => {
     const { rerender } = render(<StageView {...props} />);
     const text = "雨停了。\n\n「走吧。」";
     act(() => {
-      appendStreamingText(stream.id, text);
+      setStreamingSegment(stream.id, { index: 0, kind: "narration" });
+      appendStreamingText(stream.id, "雨停了。");
     });
     expect(screen.getByTestId("stage-dialog")).toBeDefined();
     expect(screen.queryByTestId("stage-dialog-speaker")).toBeNull();
+    // A second paragraph whose metadata has not arrived names nobody, so
+    // it never borrows another paragraph's speaker.
+    act(() => {
+      appendStreamingText(stream.id, "\n\n「走吧。」");
+    });
+    fireEvent.click(screen.getByRole("button", { name: "点击继续对话" }));
+    expect(screen.queryByTestId("stage-dialog-speaker")).toBeNull();
+    // Its live speaker is the name as the model wrote it.
+    act(() => {
+      setStreamingSegment(stream.id, {
+        index: 1,
+        kind: "dialogue",
+        speaker: "小雅",
+      });
+    });
+    expect(screen.getByTestId("stage-dialog-speaker").textContent).toBe("小雅");
 
     props = {
       ...props,
@@ -225,8 +243,7 @@ describe("stage decision lifecycle", () => {
       ],
     };
     rerender(<StageView {...props} />);
-    expect(screen.queryByTestId("stage-dialog-speaker")).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "点击继续对话" }));
+    // Commit replaces the written alias with the resolved name.
     expect(screen.getByTestId("stage-dialog-speaker").textContent).toBe("阿雅");
   });
 

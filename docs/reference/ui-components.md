@@ -33,6 +33,8 @@
 | 变换一个值           | `$format`、`$math`、`$concat`、`$count`、`$truncate`、`$pluralize` 或 `$join`（在 action 的参数里同样可用）        |
 | 多语言文字           | 在 `content` / `label` / `placeholder` / `title` / `message` 等属性里写 English，在 `locales/<locale>.yaml` 里翻译 |
 
+**段落模板的状态。** `ui.segment` 的模板没有插件数据，只能读这几个路径：`/segment/kind`、`/segment/text`、`/segment/speaker`、`/segment/speakerId`（已提交的段落），`/index`（段落位置，从 0 开始），`/character/id`、`/character/name`、`/character/type`（说话人是会话角色时），`/visual`（这个角色的 `character.visual@1` 槽位值，宿主有时才有）。缺的路径读出来为空。模板只负责显示，不能写 `on` / `watch`，所以 `$bindState` 写回的值没有去处；也只能用其中的显示组件，清单见[段落模板](./ui-panels.md#段落模板)。见[段落模板](./ui-panels.md#段落模板)。
+
 ## Components
 
 表里标了 _(I18nText)_ 的属性是显示给玩家的文字，会按语言翻译。

@@ -54,6 +54,8 @@ export interface AgentLoopDeps {
     textDelta: string;
     /** Drop the text streamed so far for this runtime before appending. */
     reset?: true;
+    /** The story paragraph this text belongs to (segmented stories only). */
+    segment?: import("@covel/shared").NarrativeDeltaSegment;
   }) => Promise<void>;
   /** Called when a runtime completes execution (e.g. on suspension). */
   readonly onRuntimeComplete?: (info: {

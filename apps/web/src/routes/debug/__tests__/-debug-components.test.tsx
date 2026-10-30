@@ -187,6 +187,7 @@ describe("debug route components", () => {
             view: [],
             right: [{ runtimeId: "story/runtime", path: "ui.json" }],
             message: [],
+            segment: [],
           },
           runtimes: [],
         },

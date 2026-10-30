@@ -7,7 +7,11 @@
  */
 import { z } from "zod";
 import { PLUGIN_VIEW_ID_PATTERN } from "./view-mode.js";
-import { PLUGIN_UI_COMPONENT_NAMES } from "../types/plugin-ui.js";
+import {
+  PLUGIN_UI_COMPONENT_NAMES,
+  SEGMENT_TEMPLATE_COMPONENT_NAMES,
+} from "../types/plugin-ui.js";
+import { STORY_LIMITS, storySegmentKinds } from "./story-output.js";
 
 /** The newest `specVersion` this host understands. */
 export const CURRENT_UI_SPEC_VERSION = 1;
@@ -241,6 +245,52 @@ export const pluginUiSpecSchema = z
       });
   });
 
+const MAX_MATCH_ENTRIES = 16;
+
+const oneOrList = <T extends z.ZodType>(item: T) =>
+  z.union([item, z.array(item).min(1).max(MAX_MATCH_ENTRIES)]);
+
+/**
+ * Which committed story paragraphs a segment template draws: by segment
+ * kind, by speaker (a character ID or the name as written), or both. Every
+ * given key must match.
+ */
+export const segmentTemplateMatchSchema = z
+  .strictObject({
+    kind: oneOrList(z.enum(storySegmentKinds)).optional(),
+    speaker: oneOrList(
+      z.string().trim().min(1).max(STORY_LIMITS.speaker),
+    ).optional(),
+  })
+  .refine((match) => match.kind !== undefined || match.speaker !== undefined, {
+    message: "match needs kind, speaker or both",
+  });
+
+export type SegmentTemplateMatch = z.infer<typeof segmentTemplateMatchSchema>;
+
+/** Where a UI spec is declared: a key of `contributes.ui`. */
+export type PluginUiSpecSlot = "right" | "message" | "view" | "segment";
+
+/** Spec fields a segment template cannot use: it only draws one paragraph. */
+const SEGMENT_TEMPLATE_EXCLUDED_FIELDS = [
+  "webview",
+  "dataSource",
+  "surfaces",
+  "group",
+  "groupLabel",
+  "groupOrder",
+  "shortLabel",
+  "navTarget",
+  "alwaysRender",
+] as const;
+
+const KNOWN_COMPONENTS: ReadonlySet<string> = new Set(
+  PLUGIN_UI_COMPONENT_NAMES,
+);
+const SEGMENT_TEMPLATE_COMPONENTS: ReadonlySet<string> = new Set(
+  SEGMENT_TEMPLATE_COMPONENT_NAMES,
+);
+
 export interface PluginUiSpecIssue {
   /** JSON path inside the spec, such as `view.children[0].component`, or `(root)`. */
   readonly path: string;
@@ -256,7 +306,7 @@ export interface PluginUiSpecIssue {
 export function pluginUiSpecIssues(
   spec: unknown,
   ownerPluginId: string,
-  slot?: "right" | "message" | "view",
+  slot?: PluginUiSpecSlot,
 ): PluginUiSpecIssue[] {
   const result = pluginUiSpecSchema.safeParse(spec);
   const issues: PluginUiSpecIssue[] = result.success
@@ -310,6 +360,7 @@ export function pluginUiSpecIssues(
         message: "bridge is only valid in contributes.ui.view",
       });
     }
+    if (slot === "segment") issues.push(...segmentTemplateIssues(record));
   }
   walkSpec(spec, [], (at, key, value) => {
     if (
@@ -324,6 +375,79 @@ export function pluginUiSpecIssues(
       });
   });
   return issues;
+}
+
+/**
+ * A segment template is display-only: a `match`, a view of display
+ * components, and no actions.
+ */
+function segmentTemplateIssues(
+  record: Readonly<Record<string, unknown>>,
+): PluginUiSpecIssue[] {
+  const issues: PluginUiSpecIssue[] = [];
+  if (record.match === undefined)
+    issues.push({
+      path: "match",
+      message: "match is required in contributes.ui.segment",
+    });
+  else {
+    const match = segmentTemplateMatchSchema.safeParse(record.match);
+    if (!match.success)
+      for (const issue of match.error.issues)
+        issues.push({
+          path: formatPath(["match", ...issue.path]),
+          message: issue.message,
+        });
+  }
+  for (const field of SEGMENT_TEMPLATE_EXCLUDED_FIELDS)
+    if (record[field] !== undefined)
+      issues.push({
+        path: field,
+        message: "not valid in a segment template",
+      });
+  visitViewNodes(record.view, ["view"], (node, at) => {
+    const field = node.component !== undefined ? "component" : "type";
+    const name = node[field];
+    // An unknown name is already a schema issue.
+    if (
+      typeof name === "string" &&
+      KNOWN_COMPONENTS.has(name) &&
+      !SEGMENT_TEMPLATE_COMPONENTS.has(name)
+    )
+      issues.push({
+        path: formatPath([...at, field]),
+        message: `${name} is not available in a segment template, which only displays; use one of ${SEGMENT_TEMPLATE_COMPONENT_NAMES.join(", ")}`,
+      });
+    for (const field of ["on", "watch"])
+      if (node[field] !== undefined)
+        issues.push({
+          path: formatPath([...at, field]),
+          message: "a segment template is display-only; remove the action",
+        });
+  });
+  return issues;
+}
+
+/** Every node of a view tree, including FilterContainer item templates. */
+function visitViewNodes(
+  node: unknown,
+  at: (string | number)[],
+  visit: (node: Record<string, unknown>, at: (string | number)[]) => void,
+): void {
+  if (!node || typeof node !== "object" || Array.isArray(node)) return;
+  const record = node as Record<string, unknown>;
+  visit(record, at);
+  if (Array.isArray(record.children))
+    for (const [index, child] of record.children.entries())
+      visitViewNodes(child, [...at, "children", index], visit);
+  if (record.slots && typeof record.slots === "object")
+    for (const [name, children] of Object.entries(record.slots))
+      if (Array.isArray(children))
+        for (const [index, child] of children.entries())
+          visitViewNodes(child, [...at, "slots", name, index], visit);
+  const props = record.props as Record<string, unknown> | undefined;
+  if (props && typeof props === "object")
+    visitViewNodes(props.itemTemplate, [...at, "props", "itemTemplate"], visit);
 }
 
 function formatPath(path: readonly PropertyKey[]): string {

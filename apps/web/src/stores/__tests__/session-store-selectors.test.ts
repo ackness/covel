@@ -49,6 +49,7 @@ function stateFor(
     gameState: {},
     pluginMessageData: {},
     messageUiSpecs: [],
+    segmentUiSpecs: [],
     pendingInteractionDrafts: [],
     assetsByTurn: new Map(),
     assetProgressByTurn: new Map(),

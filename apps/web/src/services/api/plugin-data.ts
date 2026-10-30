@@ -1,5 +1,6 @@
 import i18n from "@/i18n/index.js";
 import { request } from "./request.js";
+import type { SegmentTemplateMatch } from "@covel/shared";
 
 // -- Plugin Data API -------------------------------------------
 
@@ -57,6 +58,8 @@ export interface UISlotSpec {
   view?: Record<string, unknown>;
   webview?: { html?: string; url?: string; height?: number };
   surfaces?: readonly ("panel" | "stage")[];
+  /** Which story paragraphs a segment template draws. */
+  match?: SegmentTemplateMatch;
 }
 
 export interface UISlotEntry {
@@ -68,8 +71,9 @@ export interface UISlotEntry {
 export interface UiSpecDiagnostic {
   pluginId: string;
   runtimeId: string;
-  slot: "right" | "message" | "view";
+  slot: "right" | "message" | "view" | "segment";
   specIndex: number;
+  declaredPath?: string;
   specId?: string;
   issues: { path: string; message: string; code: string }[];
 }
@@ -78,6 +82,8 @@ export interface UISpecsResponse {
   right: UISlotEntry[];
   message?: UISlotEntry[];
   view?: UISlotEntry[];
+  /** Story paragraph templates, in the session's plugin order. */
+  segment?: UISlotEntry[];
   /** Specs dropped from the slots above because they failed validation. */
   diagnostics?: UiSpecDiagnostic[];
 }

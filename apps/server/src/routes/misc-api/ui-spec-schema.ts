@@ -17,6 +17,8 @@ export interface UiSpecDiagnostic {
   readonly runtimeId: string;
   readonly slot: UiSlotName;
   readonly specIndex: number;
+  /** The spec file as `contributes.ui.<slot>` declares it. */
+  readonly declaredPath?: string;
   readonly specId?: string;
   readonly issues: readonly UiSpecIssue[];
 }

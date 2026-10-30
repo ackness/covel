@@ -46,7 +46,7 @@
 | 玩家状态量表         | 会话 World Model：主座位当前扮演的角色记录（见[座位](./world-model.md#座位)），加角色 schema 里 `category: "stats"`、`type: "number"` 且同时声明 `min` / `max` 的属性；最多 4 项 |
 | 随身物品             | 同一条玩家角色记录里，角色 schema 中 `category: "equipment"`、`type: "array"` 的属性的字符串项，按 schema 顺序合并                                                               |
 | 在场角色（场景 HUD） | `stage.cast@1` 的未退场演员（最多 3 位）与按角色 ID 取的 `character.visual@1` 头像；没有图时只显示名字                                                                           |
-| “正在说话”标记       | 最新一条已提交故事里最后一个有说话人的段落；有 `speakerId` 时按角色 ID 匹配在场演员，否则按 `displayName` 匹配；故事还在流式输出时不显示                                         |
+| “正在说话”标记       | 最新故事里最后一个有说话人的段落；有 `speakerId` 时按角色 ID 匹配在场演员，否则按 `displayName` 匹配；故事流式输出时按模型写的名字匹配，提交后换成解析结果                       |
 | 章节横幅             | `backdrop: "banner"` 的布局里，世界头图、世界名和前三个标签，放在第一条消息上方                                                                                                  |
 | 状态摘要             | `session.summary@1` 槽位：任何插件都可以提供的几行“一眼就该看到”的内容（当前目标、时间、行囊），见下方 [Session summary](#session-summary)                                       |
 
@@ -212,7 +212,7 @@ contributes:
       - ./ui/my-panel.json
 ```
 
-本页说的 `ui.right`、`ui.message`、`ui.view` 都是指 `contributes.ui` 下的键。支持这三个位置；舞台决策区通过右侧面板的 `surfaces` 选择。清单里的其他位置（包括已删除的 `left`）在加载时被忽略并记入日志，`pnpm validate:plugin` 则报未知字段错误。
+本页说的 `ui.right`、`ui.message`、`ui.view`、`ui.segment` 都是指 `contributes.ui` 下的键。支持这四个位置；舞台决策区通过右侧面板的 `surfaces` 选择，故事段落的模板见[段落模板](#段落模板)。清单里的其他位置（包括已删除的 `left`）在加载时被忽略并记入日志，`pnpm validate:plugin` 则报未知字段错误。
 
 ### JSON Spec 格式
 
@@ -656,6 +656,47 @@ guide 分析叙事 → `generate-guide` 写入 `plugin_data[message]`
   → InputBar 统一发送待发送草稿与手写输入
 ```
 
+### 段落模板
+
+插件可以用 `ui.segment` 给已提交故事的段落换一种画法，例如给某个角色的对白加名牌和头像。模板只负责显示：它是一份 json-render view，不带操作，不读插件数据，也不开沙箱页面。
+
+```yaml
+# PLUGIN.md
+contributes:
+  ui:
+    segment:
+      - ./ui/dialogue-nameplate.json
+```
+
+```json
+{
+  "id": "dialogue-nameplate",
+  "match": { "kind": "dialogue" },
+  "view": {
+    "component": "Stack",
+    "children": [
+      {
+        "component": "Badge",
+        "props": { "label": { "$state": "/segment/speaker" } }
+      },
+      {
+        "component": "Text",
+        "props": { "content": { "$state": "/segment/text" } }
+      }
+    ]
+  }
+}
+```
+
+- **`match`（必填）。** `kind` 写段落类型（`narration` / `dialogue` / `action`），`speaker` 写角色 ID 或段落里写的名字；两者可以只写一个，也可以都写，都写时都要符合。每项可以是单个值或 1–16 项的列表，名字 1–80 个字符。旁白没有说话人，`speaker` 规则不会匹配旁白。
+- **说话人怎样比较。** 先和段落的 `speakerId` 比，再和去掉首尾空白的 `speaker` 名字比。世界角色有稳定的 ID，按 ID 写能对准某个世界的角色；不知道 ID 的插件可以按名字写。
+- **选哪个模板。** 每个段落在所有匹配的模板里选最具体的：`kind + speaker` 优先于只写 `speaker`，只写 `speaker` 优先于只写 `kind`；同一级里按 ID 匹配的优先于按名字匹配的。还相同时，按 `/api/ui-specs?sessionId=` 返回的插件顺序，再按声明顺序。只有在会话里可运行的插件提供模板，与 `ui.message` 的筛选相同。
+- **模板读到的状态。** `/segment` 是已提交的段落 `{ kind, text, speaker?, speakerId? }`；`/index` 是段落位置（从 0 开始）；`/character` 是 `speakerId` 指向会话角色时的 `{ id, name, type }`；`/visual` 是这个角色已有的 `character.visual@1` 槽位值。没有插件数据、设置和别的 ID。
+- **哪里用。** 只在聊天视图的 `parsed` 和 `detailed` 模式、只对带 `segments` 的已提交故事使用。有段落命中模板时，整条故事按段落依次显示：命中的段落用模板，其余段落用默认正文。一个段落都没命中时，消息和以前完全一样。流式输出中的故事、舞台对话框和 `raw` 视图不用模板（`raw` 的 JSON 里能看到 `segments`）。
+- **能用哪些组件。** 只能用只显示自身 props 的组件：`Stack`、`Row`、`Grid`、`Separator`、`Text`、`Badge`、`Icon`、`TagList`、`Source`、`Image`、`Media`、`AudioPlayer`、`Card`、`CardList`、`EntryCard`、`StatBar`、`Progress`、`Accordion`、`Section`、`JsonView`、`EntryList`、`Prose`、`PlayerMessage`、`Alert`。会发消息、调用运行时、接收输入或读取会话数据的组件（如 `CandidateList`、`Button`、`Choice`、表单与输入组件、`SceneCastList`、`CharacterFieldsView`、`CharacterAvatar`、各类画廊）都不能用；头像用 `Image` 读 `/visual/avatar`。媒体总在当前会话里解析，`sessionId` prop 不生效。
+- **出错怎么办。** 某个模板渲染失败时，只有这一段退回默认正文。模板写错时（缺少或空的 `match`、写了 `webview`、`dataSource`、`surfaces`、`group*`、`shortLabel`、`navTarget`、`alwaysRender`、`bridge`，view 里有 `on` / `watch`，或用了上面列表以外的组件），`pnpm validate:plugin` 和安装报错；加载时这一项给出带声明路径的诊断，同一个插件的其他模板照常使用。
+- `ui.segment` 不派生能力（与 `ui.view` 相同）：模板不运行代码，也不读数据。
+
 ## 舞台模式（Stage View）
 
 舞台模式是视觉小说式的画面：场景背景、角色立绘和逐字出现的对话框。
@@ -671,13 +712,13 @@ guide 分析叙事 → `generate-guide` 写入 `plugin_data[message]`
 
 舞台读的是服务端的 `ui.slot@1` 投影。各个提供者从自己的数据、领域事件和 World Model 构造通用的槽位值；前端不按插件 namespace 自己拼舞台。
 
-| 层           | 数据源                                                 | 前端用途                                           |
-| ------------ | ------------------------------------------------------ | -------------------------------------------------- |
-| **Backdrop** | `stage.backdrop@1`                                     | 展示背景、场景名称和状态；缺图时使用世界视觉回退   |
-| **Sprites**  | `stage.cast@1` 与按角色 ID 索引的 `character.visual@1` | 站位、高亮、立绘与无图时的占位                     |
-| **Hud**      | `stage.backdrop@1`                                     | 展示名称、变体和来源状态                           |
-| **Dialog**   | 最新 story 正文与它的 `segments`                       | 打字、段落切分和逐段署名                           |
-| **Choices**  | `stage.choices@1` 与待提交 interaction choice block    | 情境回顾、决策问题、选项（`.ui-choice`）与自由输入 |
+| 层           | 数据源                                                   | 前端用途                                           |
+| ------------ | -------------------------------------------------------- | -------------------------------------------------- |
+| **Backdrop** | `stage.backdrop@1`                                       | 展示背景、场景名称和状态；缺图时使用世界视觉回退   |
+| **Sprites**  | `stage.cast@1` 与按角色 ID 索引的 `character.visual@1`   | 站位、高亮、立绘与无图时的占位                     |
+| **Hud**      | `stage.backdrop@1`                                       | 展示名称、变体和来源状态                           |
+| **Dialog**   | 最新 story 正文与它的 `segments`（流式时是实时段落信息） | 打字、段落切分和逐段署名                           |
+| **Choices**  | `stage.choices@1` 与待提交 interaction choice block      | 情境回顾、决策问题、选项（`.ui-choice`）与自由输入 |
 
 **打字与决策面板的切换。**
 
@@ -703,7 +744,7 @@ guide 分析叙事 → `generate-guide` 写入 `plugin_data[message]`
 **对白名牌。**
 
 - 名牌来自已提交故事消息的 `segments`（见 [`narrative-engine@2` 的故事输出](./plugins.md#故事输出)）：每个段落就是一段，名牌是这一段的 `speaker`。内核在提交时把能解析的说话人换成角色的当前名字。没有插件需要为名牌提供数据。
-- 故事流式输出期间没有名牌，提交后才显示。
+- 故事流式输出时，名牌来自 `narrative.delta` 的 `segment`（见[协议](./protocol.md)）：某一段的说话人一到就显示，显示的是模型写的名字。提交后 `narrative.completed` 的 `segments` 把它换成解析后的当前名字，例如别名换成正名。客户端自己不解析名字。
 - 打字机和署名校验共用 `splitStageParagraphs`：CRLF 转成 LF，三个以上的换行算一个空行分隔。正文结束后，分段的数量必须和段落数一致。
 - 以下情况不显示人物名牌：旁白、没有说话人的段落、没有 `segments` 的旧消息或纯文本故事。演员的焦点不参与署名。
 

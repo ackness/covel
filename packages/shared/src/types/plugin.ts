@@ -376,8 +376,9 @@ export type { HookEventName, HookEnforce, HookDeclaration } from "./hooks.js";
  * - `right`: Right sidebar panel tabs (status panels, dashboards)
  * - `message`: Inline blocks in the chat message area
  * - `view`: Full-column pages replacing the story column
+ * - `segment`: Display-only templates for committed story paragraphs
  */
-export type UISlotType = "right" | "message" | "view";
+export type UISlotType = "right" | "message" | "view" | "segment";
 
 /**
  * UI contribution spec — declares which JSON files a plugin contributes
@@ -393,6 +394,8 @@ export interface UISpec {
   readonly message?: readonly string[];
   /** Full-column view specs. */
   readonly view?: readonly string[];
+  /** Story paragraph template specs, each with a `match`. */
+  readonly segment?: readonly string[];
 }
 
 // ── Slash commands ──────────────────────────────────────────────

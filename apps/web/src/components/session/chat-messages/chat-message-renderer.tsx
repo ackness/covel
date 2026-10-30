@@ -8,6 +8,7 @@ import {
   NarrativeMessageBody,
   SystemMessageLine,
 } from "./message-primitives.js";
+import { StoryMessageBody } from "./story-segments-body.js";
 
 export interface ChatMessageRendererProps {
   readonly msg: StreamMessage;
@@ -72,6 +73,7 @@ export const ChatMessageRenderer = memo(function ChatMessageRenderer({
               runtimeId: msg.runtimeId,
               content: msg.content,
               turnId: msg.turnId,
+              segments: msg.segments,
             },
             null,
             2,
@@ -140,11 +142,21 @@ export const ChatMessageRenderer = memo(function ChatMessageRenderer({
         )}
       </span>
 
-      <NarrativeMessageBody
-        isUser={isUser}
-        isHiddenAssistantKind={Boolean(isHiddenAssistantKind)}
-        content={msg.content}
-      />
+      {/* A committed story may draw its segments through plugin
+          templates; a live one always streams as plain text. */}
+      {isAssistant &&
+      msg.kind === "story" &&
+      msg.segments?.length &&
+      liveText === undefined &&
+      !msg.id.startsWith("stream_") ? (
+        <StoryMessageBody message={msg} sessionId={sessionId} />
+      ) : (
+        <NarrativeMessageBody
+          isUser={isUser}
+          isHiddenAssistantKind={Boolean(isHiddenAssistantKind)}
+          content={msg.content}
+        />
+      )}
 
       {showImageButton && (
         <div className="flex items-center gap-1.5">

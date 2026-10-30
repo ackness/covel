@@ -39,16 +39,16 @@ A layout changes only where things are placed. How panels are found, grouped and
 
 The session toolbar and status display read the World Model and public kernel UI slots, without reading plugins' private namespaces directly. Plugins supply slot values, so the same interface works across worlds and plugin combinations. A display item is hidden when its data is absent.
 
-| Shown content                   | Data source                                                                                                                                                                                                                           |
-| ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| World name, turn count          | `WorldRecord.name`, `SessionRecord.completedPlayerTurns`                                                                                                                                                                              |
-| Current scene name              | `name` in the `stage.backdrop@1` slot                                                                                                                                                                                                 |
-| Player stat gauges              | Session World Model: the primary seat’s current character (see [Seats](./world-model.md#seats)), plus attributes in the character schema with `category: "stats"`, `type: "number"`, and both `min` and `max` declared; up to 4 items |
-| Carried items                   | String items of the `type: "array"` attributes with `category: "equipment"` on the same player character record, merged in schema order                                                                                               |
-| Characters on stage (scene HUD) | The actors in `stage.cast@1` who have not left (up to 3), with avatars from `character.visual@1` looked up by character ID; only the name is shown when there is no picture                                                           |
-| "Speaking" marker               | The last paragraph with a speaker in the latest committed story; it matches an actor on stage by character ID when the segment has `speakerId`, otherwise by `displayName`. Not shown while the story streams                         |
-| Chapter banner                  | In a layout with `backdrop: "banner"`, the world header image, the world name and the first three tags, shown above the first message                                                                                                 |
-| Status summary                  | The `session.summary@1` slot: a few lines that any plugin can provide and that should be seen at a glance, such as the current goal, the time and the inventory. See [Session summary](#session-summary) below                        |
+| Shown content                   | Data source                                                                                                                                                                                                                                                      |
+| ------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| World name, turn count          | `WorldRecord.name`, `SessionRecord.completedPlayerTurns`                                                                                                                                                                                                         |
+| Current scene name              | `name` in the `stage.backdrop@1` slot                                                                                                                                                                                                                            |
+| Player stat gauges              | Session World Model: the primary seat’s current character (see [Seats](./world-model.md#seats)), plus attributes in the character schema with `category: "stats"`, `type: "number"`, and both `min` and `max` declared; up to 4 items                            |
+| Carried items                   | String items of the `type: "array"` attributes with `category: "equipment"` on the same player character record, merged in schema order                                                                                                                          |
+| Characters on stage (scene HUD) | The actors in `stage.cast@1` who have not left (up to 3), with avatars from `character.visual@1` looked up by character ID; only the name is shown when there is no picture                                                                                      |
+| "Speaking" marker               | The last paragraph with a speaker in the latest story; it matches an actor on stage by character ID when the segment has `speakerId`, otherwise by `displayName`. While the story streams it matches the name as written, replaced by the resolved one at commit |
+| Chapter banner                  | In a layout with `backdrop: "banner"`, the world header image, the world name and the first three tags, shown above the first message                                                                                                                            |
+| Status summary                  | The `session.summary@1` slot: a few lines that any plugin can provide and that should be seen at a glance, such as the current goal, the time and the inventory. See [Session summary](#session-summary) below                                                   |
 
 Where this content goes:
 
@@ -212,7 +212,7 @@ contributes:
       - ./ui/my-panel.json
 ```
 
-When this page says `ui.right`, `ui.message` or `ui.view`, it means these keys under `contributes.ui`. These are the three supported placements; a right panel can also select the stage decision area with `surfaces`. Other placements, including the removed `left`, are ignored with a log message at load and reported as unknown fields by `pnpm validate:plugin`.
+When this page says `ui.right`, `ui.message`, `ui.view` or `ui.segment`, it means these keys under `contributes.ui`. These are the four supported placements; a right panel can also select the stage decision area with `surfaces`, and story paragraph templates are described in [Segment templates](#segment-templates). Other placements, including the removed `left`, are ignored with a log message at load and reported as unknown fields by `pnpm validate:plugin`.
 
 ### JSON Spec Format
 
@@ -658,6 +658,47 @@ The guide analyzes the narrative → `generate-guide` writes to `plugin_data[mes
   → InputBar sends the pending draft and typed input together
 ```
 
+### Segment Templates
+
+With `ui.segment` a plugin can draw the paragraphs of a committed story differently, for example add a name tag and an avatar to one character's lines. A template only displays: it is a json-render view with no actions, no plugin data and no sandboxed page.
+
+```yaml
+# PLUGIN.md
+contributes:
+  ui:
+    segment:
+      - ./ui/dialogue-nameplate.json
+```
+
+```json
+{
+  "id": "dialogue-nameplate",
+  "match": { "kind": "dialogue" },
+  "view": {
+    "component": "Stack",
+    "children": [
+      {
+        "component": "Badge",
+        "props": { "label": { "$state": "/segment/speaker" } }
+      },
+      {
+        "component": "Text",
+        "props": { "content": { "$state": "/segment/text" } }
+      }
+    ]
+  }
+}
+```
+
+- **`match` (required).** `kind` names segment kinds (`narration` / `dialogue` / `action`); `speaker` names a character ID or the name as written in the segment. Write either or both; when both are given, both must match. Each is one value or a list of 1–16 values, and a name has 1–80 characters. Narration has no speaker, so a `speaker` rule never matches narration.
+- **How speakers compare.** First with the segment's `speakerId`, then with its `speaker` name after trimming. World characters have stable IDs, so an ID targets a world's character; a plugin that does not know IDs can use names.
+- **Which template draws a segment.** The most specific matching template wins: `kind + speaker` beats `speaker` alone, which beats `kind` alone; at the same level, a match by ID beats a match by name. Remaining ties go to the plugin order that `/api/ui-specs?sessionId=` returns, then to declaration order. Only plugins runnable in the session contribute templates, as with `ui.message`.
+- **State a template reads.** `/segment` is the committed segment `{ kind, text, speaker?, speakerId? }`; `/index` is its position (from 0); `/character` is `{ id, name, type }` when `speakerId` names a session character; `/visual` is that character's `character.visual@1` slot value when the host has it. No plugin data, settings or other IDs.
+- **Where templates apply.** Only in the chat view's `parsed` and `detailed` modes, and only to committed stories with `segments`. When some segment matches, the story renders segment by segment: matched segments through their template, the rest as default text. When no segment matches, the message renders exactly as before. A story still streaming, the stage dialog and the `raw` view never use templates (the `raw` JSON shows `segments`).
+- **Which components a template can use.** Only components that draw nothing but their own props: `Stack`, `Row`, `Grid`, `Separator`, `Text`, `Badge`, `Icon`, `TagList`, `Source`, `Image`, `Media`, `AudioPlayer`, `Card`, `CardList`, `EntryCard`, `StatBar`, `Progress`, `Accordion`, `Section`, `JsonView`, `EntryList`, `Prose`, `PlayerMessage`, `Alert`. Components that send messages, call runtimes, take input or read session data (such as `CandidateList`, `Button`, `Choice`, form and input components, `SceneCastList`, `CharacterFieldsView`, `CharacterAvatar` and the galleries) are not available; for an avatar, point `Image` at `/visual/avatar`. Media always resolves in the current session, and a `sessionId` prop has no effect.
+- **When something fails.** A template that fails to render falls back to the default text for that segment only. A malformed template (a missing or empty `match`; `webview`, `dataSource`, `surfaces`, `group*`, `shortLabel`, `navTarget`, `alwaysRender` or `bridge`; an `on` / `watch` binding in the view; a component outside the list above) is an error in `pnpm validate:plugin` and installation; at load it becomes a diagnostic with its declared path, and the plugin's other templates still apply.
+- `ui.segment` derives no capability (like `ui.view`): templates run no code and read no data.
+
 ## Stage Mode (Stage View)
 
 Stage mode is a visual-novel style screen: a scene background, character portraits, and a dialogue box whose text appears one character at a time.
@@ -673,13 +714,13 @@ The stage has five layers. All are absolutely positioned, and their `z-index` va
 
 The stage reads the server's `ui.slot@1` projection. Each provider builds the generic slot values from its own data, domain events and the World Model. The front end does not assemble the stage from plugin namespaces on its own.
 
-| Layer        | Data source                                                       | Front-end use                                                                                                   |
-| ------------ | ----------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
-| **Backdrop** | `stage.backdrop@1`                                                | Shows the background, the scene name and the status; falls back to the world's visuals when there is no picture |
-| **Sprites**  | `stage.cast@1`, with `character.visual@1` indexed by character ID | Position, highlight, portraits, and a placeholder when there is no picture                                      |
-| **Hud**      | `stage.backdrop@1`                                                | Shows the name, the variant and the source status                                                               |
-| **Dialog**   | The latest story text and its `segments`                          | Typing, paragraph splitting and per-paragraph speaker names                                                     |
-| **Choices**  | `stage.choices@1` and the pending interaction choice block        | Situation recap, decision question, options (`.ui-choice`) and free text input                                  |
+| Layer        | Data source                                                                        | Front-end use                                                                                                   |
+| ------------ | ---------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| **Backdrop** | `stage.backdrop@1`                                                                 | Shows the background, the scene name and the status; falls back to the world's visuals when there is no picture |
+| **Sprites**  | `stage.cast@1`, with `character.visual@1` indexed by character ID                  | Position, highlight, portraits, and a placeholder when there is no picture                                      |
+| **Hud**      | `stage.backdrop@1`                                                                 | Shows the name, the variant and the source status                                                               |
+| **Dialog**   | The latest story text and its `segments` (live paragraph metadata while streaming) | Typing, paragraph splitting and per-paragraph speaker names                                                     |
+| **Choices**  | `stage.choices@1` and the pending interaction choice block                         | Situation recap, decision question, options (`.ui-choice`) and free text input                                  |
 
 **Switching between typing and the decision panel.**
 
@@ -705,7 +746,7 @@ The stage reads the server's `ui.slot@1` projection. Each provider builds the ge
 **Speaker name tags.**
 
 - Name tags come from the `segments` of the committed story message (see [story output of `narrative-engine@2`](./plugins.md#story-output)): each paragraph is one segment, and its name tag is that segment's `speaker`. At commit the kernel replaces each speaker it can resolve with the character's current name. No plugin needs to provide data for name tags.
-- There are no name tags while the story streams; they appear once it is committed.
+- While the story streams, name tags come from the `segment` of `narrative.delta` (see [protocol](./protocol.md)): a paragraph's speaker shows as soon as it arrives, as the model wrote it. At commit the `segments` of `narrative.completed` replace it with the resolved current name, for example an alias with the canonical name. The client never resolves names itself.
 - The typewriter and the speaker check share `splitStageParagraphs`. CRLF is turned into LF, and three or more line breaks count as one blank line separator. After the text ends, the number of paragraphs must match the number of segments.
 - A character name tag is not shown for narration, for a segment without a speaker, or for an old message or prose story without `segments`. An actor's focus does not take part in speaker attribution.
 

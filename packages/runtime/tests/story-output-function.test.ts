@@ -193,4 +193,59 @@ describe("function and guard stories", () => {
     expect(shown).not.toContain('阿雅"');
     expect(shown).not.toContain("旧港");
   });
+
+  it("passes each paragraph's metadata to onDelta for a JSON story only", async () => {
+    const agent = {
+      ...teller,
+      runtimeType: "agent",
+      outputContract: undefined,
+      output: { schema: "contract:narrative-engine@2" },
+    } as RuntimeManifest;
+    const run = async (
+      answer: string,
+      outputSchema?: Readonly<Record<string, unknown>>,
+    ) => {
+      const deltas: { textDelta: string; segment?: unknown }[] = [];
+      await runTurnPipeline(turn, [agent], {
+        store: createMemoryStore(),
+        llm: {
+          generate: async () => {
+            throw new Error("streaming expected");
+          },
+          stream: async function* () {
+            for (const textDelta of answer.match(/.{1,5}/gsu) ?? [])
+              yield { type: "text-delta" as const, textDelta };
+            yield { type: "done" as const, finishReason: "stop" as const };
+          },
+        },
+        onDelta: async (delta) => {
+          deltas.push({
+            textDelta: delta.textDelta,
+            ...(delta.segment ? { segment: delta.segment } : {}),
+          });
+        },
+        loadRuntime: async () => ({
+          manifest: agent,
+          promptTemplate: "Write the story.",
+          ...(outputSchema ? { outputSchema } : {}),
+        }),
+      });
+      return deltas;
+    };
+    const segmented = await run(
+      JSON.stringify(written),
+      storyOutputJsonSchema(),
+    );
+    expect(
+      segmented.flatMap((delta) => (delta.segment ? [delta.segment] : [])),
+    ).toEqual([
+      { index: 0, kind: "narration" },
+      { index: 1, kind: "dialogue", speaker: "阿雅" },
+    ]);
+    const prose = await run("雨停了。\n\n「走吧。」");
+    expect(prose.map((delta) => delta.textDelta).join("")).toBe(
+      "雨停了。\n\n「走吧。」",
+    );
+    expect(prose.every((delta) => !("segment" in delta))).toBe(true);
+  });
 });

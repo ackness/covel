@@ -18,6 +18,9 @@ import {
   resetStreamingText,
   clearStreamingText,
   clearStreamingTextsForTurn,
+  parseStreamSegmentMeta,
+  setStreamingSegment,
+  type StreamSegmentMeta,
 } from "@/stores/streaming-text-store.js";
 import {
   reducePluginDataChanged,
@@ -47,6 +50,8 @@ interface DeltaBufferEntry {
   runtimeId: string;
   pluginId: string;
   text: string;
+  /** The latest metadata of each paragraph, applied with the text. */
+  segments?: Map<number, StreamSegmentMeta>;
   flushSessionId: string | null;
 }
 
@@ -100,22 +105,26 @@ function queueNarrativeDelta(
     runtimeId: string;
     pluginId: string;
     delta: string;
+    segment?: StreamSegmentMeta;
   },
 ): void {
   const turnId = entry.turnId ?? "unknown";
   const bufKey = `${turnId}_${entry.runtimeId}`;
-  const existing = deps.deltaBufferRef.current.get(bufKey);
-  if (existing) {
-    existing.text += entry.delta;
+  let buffered = deps.deltaBufferRef.current.get(bufKey);
+  if (buffered) {
+    buffered.text += entry.delta;
   } else {
-    deps.deltaBufferRef.current.set(bufKey, {
+    buffered = {
       turnId,
       runtimeId: entry.runtimeId,
       pluginId: entry.pluginId,
       text: entry.delta,
       flushSessionId: deps.sessionIdRef.current,
-    });
+    };
+    deps.deltaBufferRef.current.set(bufKey, buffered);
   }
+  if (entry.segment)
+    (buffered.segments ??= new Map()).set(entry.segment.index, entry.segment);
   if (deps.deltaRafRef.current !== null) return;
 
   deps.deltaRafRef.current = requestAnimationFrame(() => {
@@ -139,6 +148,11 @@ function flushNarrativeDeltaBuffer(
   for (const buffered of bufferedEntries) {
     if (buffered.flushSessionId !== currentSid) continue;
     const streamId = `stream_${buffered.turnId}_${buffered.runtimeId}`;
+    // Metadata and text land in the same frame, so a new paragraph never
+    // shows the previous paragraph's speaker.
+    for (const meta of buffered.segments?.values() ?? [])
+      setStreamingSegment(streamId, meta);
+    if (!buffered.text) continue;
     const firstChunk = appendStreamingText(streamId, buffered.text);
     if (!firstChunk) continue;
     deps.dispatch({
@@ -336,8 +350,16 @@ export function createSseEventHandler(
           );
           resetStreamingText(`stream_${turnId ?? "unknown"}_${runtimeId}`);
         }
-        if (delta && deltaKind === "story") {
-          queueNarrativeDelta(deps, { turnId, runtimeId, pluginId, delta });
+        // A metadata-only delta (empty text) still updates the nameplate.
+        const segment = parseStreamSegmentMeta(payload.segment);
+        if (deltaKind === "story" && (delta || segment)) {
+          queueNarrativeDelta(deps, {
+            turnId,
+            runtimeId,
+            pluginId,
+            delta,
+            ...(segment ? { segment } : {}),
+          });
         }
         break;
       }

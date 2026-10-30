@@ -1097,6 +1097,7 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
                 kind: outputKindByRuntime.get(delta.runtimeId) ?? "system",
                 delta: delta.textDelta,
                 ...(delta.reset ? { reset: true } : {}),
+                ...(delta.segment ? { segment: delta.segment } : {}),
               });
             },
             onRuntimeStart: async (info) => {

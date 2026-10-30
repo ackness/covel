@@ -1109,6 +1109,14 @@
                 "minLength": 1
               },
               "description": "Paths of UI specs rendered inside the message stream."
+            },
+            "segment": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1
+              },
+              "description": "Paths of display-only templates for committed story paragraphs, matched by segment kind or speaker."
             }
           },
           "additionalProperties": false,
