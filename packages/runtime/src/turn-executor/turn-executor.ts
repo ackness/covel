@@ -333,7 +333,16 @@ async function executeTurnImpl(
   const dimensionProvider = activeRuntimes.find(
     (runtime) => runtime.outputContract === DIMENSION_CONTRACT,
   );
-  deps = { ...deps, dimensionProviderPluginId: dimensionProvider?.pluginId };
+  deps = {
+    ...deps,
+    dimensionProviderPluginId: dimensionProvider?.pluginId,
+    ...(sessionState.sessionMeta.failedOperationSummaries
+      ? {
+          failedOperationSummaries:
+            sessionState.sessionMeta.failedOperationSummaries,
+        }
+      : {}),
+  };
   // Abort early if session is paused or ended — no runtimes should execute.
   if (sessionStatus !== "active") {
     return {

@@ -482,6 +482,11 @@ for (const [backend, create] of BACKENDS) {
         "failed/rejected",
         "committed",
       ]);
+      // Its rejected write names the operation, so a host can tell it from
+      // an execution failure.
+      expect(outcome.failedProposals).toEqual([
+        expect.objectContaining({ operationId: outcome.operations[1]!.id }),
+      ]);
       expect(await items()).toEqual(["a", "c"]);
       expect(await gold()).toBe(94);
     });
@@ -518,6 +523,12 @@ for (const [backend, create] of BACKENDS) {
         "discarded/caller-dropped",
         "failed/rejected",
       ]);
+      // The caller's run was dropped: an isolated runtime failure, not an
+      // operation that failed alone.
+      expect(outcome.failedProposals).not.toEqual([]);
+      expect(
+        outcome.failedProposals.map((failure) => failure.operationId),
+      ).toEqual(outcome.failedProposals.map(() => undefined));
       expect(await items()).toEqual([]);
       expect(await gold()).toBe(100);
       expect(await store.listPluginData(SESSION, "shop", "receipts")).toEqual(
@@ -772,6 +783,146 @@ it("keeps provider-private writes out of recursive results at every depth", asyn
   expect(
     (await store.getPluginData(SESSION, "bank", "private", "secret"))?.value,
   ).toBe("provider-private-content");
+});
+
+describe("readers of the operations input", () => {
+  const reads = {
+    input: {
+      inject: [{ kind: "kernel", from: "operations@1", name: "operations" }],
+    },
+  } as unknown as Partial<RuntimeManifest>;
+  /** The `operations@1` value a handler received. */
+  const operationsInput = (ctx: Ctx) =>
+    (ctx.inputs!.operations as { value: { operations: readonly unknown[] } })
+      .value;
+  /** Writes how many operations its input showed. */
+  const counter = fn("observer", "count", reads);
+  const count: FunctionHandler = async (ctx) => {
+    const { operations } = operationsInput(ctx);
+    await ctx.pluginData!.set("log", "seen", operations.length);
+    return ok();
+  };
+  const logged = async (store: DataStore) =>
+    (await store.listPluginData(SESSION, "observer", "log")).map(
+      (row) => row.value,
+    );
+
+  it("depends on the operations it saw, without their ids in the value", async () => {
+    const narrator = story();
+    let value: unknown;
+    const { outcome, execution, resultOf, store } = await run({
+      runtimes: [narrator, counter],
+      handlers: {
+        [narrator.name]: async (ctx) => {
+          await trade(ctx, "a", 5);
+          return ok({ narrativeOutput: "You shop." });
+        },
+        [counter.name]: async (ctx) => {
+          value = operationsInput(ctx);
+          return count(ctx);
+        },
+      },
+    });
+    expect(outcome.status).toBe("committed");
+    const [operation] = outcome.operations;
+    expect(
+      (execution.commit.readDependencies ?? {})[resultOf(counter.name).runId],
+    ).toEqual([operation!.id]);
+    expect(JSON.stringify(value)).not.toContain(operation!.id);
+    expect(await logged(store)).toEqual([1]);
+  });
+
+  it("drops an auxiliary reader when the operation it saw fails", async () => {
+    const narrator = story();
+    const { outcome, resultOf, store } = await run({
+      runtimes: [narrator, counter],
+      handlers: {
+        [narrator.name]: async (ctx) => {
+          await trade(ctx, "a", 5);
+          return ok({ narrativeOutput: "You shop." });
+        },
+        [counter.name]: count,
+      },
+      veto: (proposal) => (proposal.payload as { key?: string }).key === "a",
+    });
+    expect(outcome.status).toBe("committed");
+    expect(settled(outcome.operations)).toEqual(["failed/rejected"]);
+    expect(outcome.isolatedRuntimes).toEqual([
+      {
+        runtimeId: counter.name,
+        runId: resultOf(counter.name).runId,
+        cause: "read",
+        error: "read data of bank.trade@1 that did not commit",
+      },
+    ]);
+    expect(await logged(store)).toEqual([]);
+  });
+
+  it("leaves the operation committed when the reader's own write is rejected", async () => {
+    const narrator = story();
+    const { outcome, gold, store } = await run({
+      runtimes: [narrator, counter],
+      handlers: {
+        [narrator.name]: async (ctx) => {
+          await trade(ctx, "a", 5);
+          return ok({ narrativeOutput: "You shop." });
+        },
+        [counter.name]: count,
+      },
+      proposalGuard: (proposal) =>
+        (proposal.payload as { key?: string }).key === "seen"
+          ? "log refused"
+          : undefined,
+    });
+    expect(outcome.status).toBe("committed");
+    expect(settled(outcome.operations)).toEqual(["committed"]);
+    expect(outcome.isolatedRuntimes).toEqual([
+      expect.objectContaining({ runtimeId: counter.name, cause: "rejected" }),
+    ]);
+    expect(await gold()).toBe(95);
+    expect(await logged(store)).toEqual([]);
+  });
+
+  it("commits a story that read a dropped operation and traces it", async () => {
+    const shop = fn("shop", "buy", { stage: "pre-turn" });
+    const teller = fn("teller", "story", {
+      stage: "narrative",
+      outputKind: "story",
+      ...reads,
+    });
+    const { outcome, kept, resultOf } = await run({
+      runtimes: [shop, teller],
+      handlers: {
+        [shop.name]: async (ctx) => {
+          await trade(ctx, "a", 5);
+          await ctx.pluginData!.set("receipts", "r", "x");
+          return ok();
+        },
+        [teller.name]: async (ctx) => {
+          const { operations } = operationsInput(ctx);
+          return ok({ narrativeOutput: `${operations.length} trades.` });
+        },
+      },
+      proposalGuard: (proposal) =>
+        (proposal.payload as { key?: string }).key === "r"
+          ? "receipt refused"
+          : undefined,
+    });
+    expect(outcome.status).toBe("committed");
+    expect(settled(outcome.operations)).toEqual(["discarded/caller-dropped"]);
+    expect(resultOf(teller.name).output).toMatchObject({
+      narrativeOutput: "1 trades.",
+    });
+    expect(await kept()).toEqual([
+      {
+        runtimeId: teller.name,
+        runId: resultOf(teller.name).runId,
+        producerOperationId: outcome.operations[0]!.id,
+        producerContract: "bank.trade@1",
+        reason: "read data of bank.trade@1 that did not commit",
+      },
+    ]);
+  });
 });
 
 describe("provider datasets", () => {

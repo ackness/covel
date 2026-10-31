@@ -415,9 +415,9 @@ flowchart LR
 - `committing` 状态的作业必须先不阻塞地拿到同一把提交锁，锁忙时留到下一轮。
 - 关闭时停止后续调度，并等待进行中的扫描和锁回调。
 
-内核输入还包括 `operations@1`：绑定时冻结本次执行已完成上游的暂存操作，不增加调度依赖，也不能用于 detached runtime。字段和可见性见[插件输入](../reference/plugins.md#内核输入-operations1)。
+内核输入还包括 `operations@1`：绑定时冻结本次执行已完成上游的暂存操作，不增加调度依赖，但读者在提交时依赖它读到的操作，也不能用于 detached runtime。字段和可见性见[插件输入](../reference/plugins.md#内核输入-operations1)。
 
-提交成功但有操作失败时，action 流发出一次 `operation.failed`，玩家立即看到数量提示。agent 的下一次玩家或续行执行读取最新一条已提交的 `player` / `continuation` 回合记录；只给 `invokedBy.runtimeId` 对应的 agent 显示 `operations-not-applied`，位于输入和导出块之后，最多十条摘要。定向重试不显示。读取随会话状态每次执行只做一次，不增加持久状态。
+提交成功但有操作失败时，action 流发出一次 `operation.failed`，玩家立即看到数量提示。只因自身失败而被丢弃的故事附带操作不再发 `proposal.failed`，回合不显示执行失败。agent 的下一次玩家或续行执行读取最新一条已提交的 `player` / `continuation` 回合记录；只给 `invokedBy.runtimeId` 对应的 agent 显示 `operations-not-applied`，位于输入和导出块之后，最多十条摘要。子 agent 发起的操作记的是子 agent 的 runtime ID，这个子 agent 下次被调用时在自己的上下文里收到通知。定向重试不显示。读取随会话状态每次执行只做一次，不增加持久状态。
 
 如果后续尝试没有提交，最新的已提交记录没有改变，下次尝试仍显示同一通知。任意更晚的玩家或续行执行一旦提交，旧通知便消失。通知放在每回合变化的上下文段，不改变缓存前缀。
 

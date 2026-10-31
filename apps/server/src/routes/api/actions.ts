@@ -1215,8 +1215,12 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
               }
               // Commit failures are surfaced as `proposal.failed` SSE events; any
               // failure withholds the completion barrier below (turn.completed,
-              // memory ingestion, auto-snapshot success signal).
+              // memory ingestion, auto-snapshot success signal). A
+              // story-attached operation that failed alone is not an
+              // execution failure: the fixed `operation.failed` notice
+              // below tells the player instead.
               for (const fp of outcome.failedProposals) {
+                if (fp.operationId !== undefined) continue;
                 await writeEvent("proposal.failed", {
                   proposalId: fp.proposal.id,
                   proposalType: fp.proposal.type,

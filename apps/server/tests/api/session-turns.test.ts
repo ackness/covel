@@ -9,7 +9,7 @@ import { describe, expect, it } from "vitest";
 import { Hono } from "hono";
 import { type DataStore } from "@covel/store";
 import { createMemoryStore } from "@covel/store/memory";
-import { toJsonValueOrDiagnostic } from "@covel/shared";
+import { toJsonValueOrDiagnostic, type OperationRecord } from "@covel/shared";
 import { sessionTurnRoutes } from "../../src/routes/api/session-turns.js";
 
 async function makeApp(): Promise<{ app: Hono; store: DataStore }> {
@@ -24,6 +24,7 @@ async function makeApp(): Promise<{ app: Hono; store: DataStore }> {
           {
             manifests: [
               { manifest: { name: "planner/plot", concealed: true } },
+              { manifest: { name: "planner/scout", concealed: true } },
             ],
           },
         ],
@@ -170,6 +171,107 @@ describe("GET /api/sessions/:id/turns", () => {
       await store.close();
     },
   );
+
+  it("withholds service requests, results and summaries of concealed runtimes' operations", async () => {
+    const { app, store } = await makeApp();
+    const now = new Date().toISOString();
+    await store.createSession({
+      phase: "playing",
+      setupRuntimes: {},
+      seats: [
+        { id: "main", controller: "human", role: "player", characters: "auto" },
+      ],
+      metadata: {
+        approvalScopeNonce: globalThis.crypto.randomUUID(),
+        sessionIncarnationNonce: globalThis.crypto.randomUUID(),
+      },
+      id: "sess-ops",
+      status: "active",
+      completedPlayerTurns: 1,
+      activePlugins: [],
+      locale: "en-US",
+      createdAt: now,
+      updatedAt: now,
+    });
+    const operation = (
+      seq: number,
+      runtimeId: string,
+      secret: string,
+    ): OperationRecord => ({
+      id: `operation-${seq}`,
+      contract: "vault.stash@1",
+      providerPluginId: "vault",
+      service: "stash",
+      invokedBy: { pluginId: runtimeId.split("/")[0]!, runtimeId },
+      seq,
+      status: "committed",
+      summary: `Stashed ${secret}`,
+      request: { item: `${secret}-request` },
+      result: { stored: `${secret}-result` },
+    });
+    const result = (runtimeId: string, operations: OperationRecord[]) => ({
+      pluginId: runtimeId.split("/")[0]!,
+      runtimeId,
+      runId: `run-${runtimeId}`,
+      turnId: "turn-1",
+      status: "success" as const,
+      output: null,
+      toolCalls: [],
+      durationMs: 1,
+      timestamp: now,
+      operations,
+    });
+    await store.saveTurnResult({
+      id: crypto.randomUUID(),
+      sessionId: "sess-ops",
+      turnId: "turn-1",
+      runtimeResults: [
+        // A concealed runtime's own operation.
+        result("planner/plot", [operation(1, "planner/plot", "hidden-plot")]),
+        // A visible story whose concealed sub-agent wrote, next to its own.
+        result("narrator/story", [
+          operation(2, "planner/scout", "hidden-scout"),
+          operation(3, "narrator/story", "open-story"),
+        ]),
+      ],
+      origin: "player",
+      commitStatus: "committed",
+      durationMs: 5,
+      createdAt: now,
+    });
+
+    const res = await app.request("/api/sessions/sess-ops/turns");
+    expect(res.status).toBe(200);
+    const text = await res.text();
+    expect(text).not.toContain("hidden-plot");
+    expect(text).not.toContain("hidden-scout");
+    const body = JSON.parse(text) as {
+      items: Array<{
+        runtimeResults: Array<{ operations: OperationRecord[] }>;
+      }>;
+    };
+    const [concealed, open] = body.items[0]!.runtimeResults;
+    expect(concealed!.operations).toEqual([
+      expect.objectContaining({
+        contract: "vault.stash@1",
+        status: "committed",
+        summary: "Operation details withheld for a concealed runtime",
+      }),
+    ]);
+    expect(concealed!.operations[0]).not.toHaveProperty("request");
+    expect(concealed!.operations[0]).not.toHaveProperty("result");
+    expect(open!.operations[0]).not.toHaveProperty("request");
+    expect(open!.operations[1]).toMatchObject({
+      summary: "Stashed open-story",
+      request: { item: "open-story-request" },
+      result: { stored: "open-story-result" },
+    });
+    // The stored rows keep everything.
+    expect(JSON.stringify(await store.listTurnResults("sess-ops"))).toContain(
+      "hidden-scout-result",
+    );
+    await store.close();
+  });
 
   it("404s for an unknown session", async () => {
     const { app } = await makeApp();

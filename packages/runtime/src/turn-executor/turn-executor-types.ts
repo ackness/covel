@@ -96,6 +96,14 @@ export interface AgentLoopDeps {
 }
 
 export interface TurnExecutorDeps extends AgentLoopDeps {
+  /**
+   * Summaries of the previous player turn's failed operations, by the
+   * runtime ID that made them. Set with the execution's session state; a
+   * sub-agent reads its own entry, a scheduled agent its `sessionMeta`.
+   */
+  readonly failedOperationSummaries?: Readonly<
+    Record<string, readonly string[]>
+  >;
   readonly serviceOutcomes?: (
     outcome: import("../plugin-services.js").ServiceCallOutcome,
   ) => void;

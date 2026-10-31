@@ -1,4 +1,6 @@
 import { buildOperationsInput } from "./operations-input.js";
+import { attachReadDependencies } from "../read-dependencies.js";
+import { commitEligibility } from "../session/session-runtime-result.js";
 import { buildTurnDigest, freezeSnapshot } from "./turn-digest.js";
 import { projectExecutionStory } from "./session-state.js";
 import { collectUpstreamWorldProposals } from "../function-runtime/world-model-view.js";
@@ -191,16 +193,26 @@ export function canStageOperations(
 export async function executeOneRuntime(
   inv: RuntimeInvocation,
 ): Promise<RuntimeResult> {
-  const stage: { current?: RootOperationStage } = {};
+  const stage: InvocationState = { operationReads: new Set() };
   const result = await executeRuntime(inv, stage);
   // A run that did not succeed keeps its records, taken back.
   stage.current?.attachTo(result, false);
+  // A run that read upstream operations through its `operations@1` input
+  // built on writes that are not committed yet: it depends on them.
+  if (stage.operationReads.size > 0 && commitEligibility(result) !== "none")
+    attachReadDependencies(result, stage.operationReads);
   return result;
+}
+
+interface InvocationState {
+  current?: RootOperationStage;
+  /** Ids of the operations the run's `operations@1` input showed. */
+  readonly operationReads: Set<string>;
 }
 
 async function executeRuntime(
   inv: RuntimeInvocation,
-  stage: { current?: RootOperationStage },
+  stage: InvocationState,
 ): Promise<RuntimeResult> {
   const {
     manifest,
@@ -618,9 +630,14 @@ async function executeRuntime(
     for (const inject of manifest.input?.inject ?? []) {
       if (inject.kind !== "kernel") continue;
       if (inject.from === "operations@1") {
+        const snapshot = buildOperationsInput(
+          completedResults,
+          inv.seedResults,
+        );
+        for (const id of snapshot.producerIds) stage.operationReads.add(id);
         inputSlots[inject.name] = {
           cardinality: "one",
-          value: buildOperationsInput(completedResults, inv.seedResults),
+          value: snapshot.value,
           source: {
             pluginId: "__kernel",
             runtimeId: inject.from,

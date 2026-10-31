@@ -135,6 +135,11 @@ export interface KernelServiceCaller extends Omit<Caller, "pluginId"> {
 export interface ServiceCallOutcome {
   readonly providerPluginId: string;
   readonly callerRuntimeId?: string;
+  /**
+   * The scheduled runtime a sub-agent made the call for. Absent when the
+   * caller is that runtime itself. A setup runtime's exemption follows it.
+   */
+  readonly originRuntimeId?: string;
   readonly verdict: "fault" | "clean" | "neutral";
 }
 

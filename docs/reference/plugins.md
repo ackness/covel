@@ -279,7 +279,7 @@ guard 拿到的 `ctx` 和函数 handler 的一样，内置插件和社区插件�
 `io.concealed: true` 用于处理隐藏内容的 runtime，例如在剧情中策划隐藏事件的 agent。
 
 - 框架在写入 trace 和推送实时流之前，去掉它的提示词、模型回复、工具参数、工具结果和输出，只保留 runtime 名、工具名、状态、耗时和用量。
-- `/turns` 和手动 RPC 返回的执行结果也会清空它的输出和工具内容。
+- `/turns` 和手动 RPC 返回的执行结果也会清空它的输出和工具内容。`/turns` 里它调用[写服务](./plugin-extensions.md#写服务)留下的操作记录去掉 `request` 和 `result`，`summary` 换成固定文字，只留契约和提交结果；它作为子 agent 发起、记在可见调用方结果上的操作也一样。
 - runtime 失败时，发给玩家的失败原因（回合流、trace、返回的结果）换成一句固定的通用提示，真实原因只写入服务端控制台日志。
 - 持久化的执行记录保留完整内容，供重试使用。
 - 它输出里的文字（`narrativeOutput` 或 `content`）不写入对话日志，所以不会进入其他 runtime 的提示词历史、消息接口和“重建提示词”接口。它主动展示给玩家的内容（交互表单、UI 块）照常写入。
@@ -776,7 +776,7 @@ const result = await ctx.agents?.run({
 
 值总是存在，形状为 `{ operations: [{ contract, summary, request?, result?, truncated? }] }`，没有操作时数组为空。内核按调用顺序复制并深度冻结它，不带操作 ID、插件 ID、runtime ID 或 run ID。`request`、`result` 是操作记录已有的模型视图；超过大小限制而省略时带 `truncated: true`。
 
-它不增加调度依赖。绑定时只收集已结束、可提交的结果，包括嵌套结果；只保留 `staged` 操作，排除重试种子和 `discarded` 操作。较早启动的同阶段兄弟 runtime 看不到尚未完成的操作；`post-turn` runtime 能读到 narrative 阶段全部已完成的操作。需要稳定的先后顺序时，声明 `schedule.after` 或使用后续阶段。
+它不增加调度依赖，但增加提交依赖：读者依赖它读到的每个操作，内核在值之外记下这些操作的 ID。操作在提交时没有落库，辅助读者一起丢弃；story 或 setup 读者照常提交并记 `read-dependency.kept`（见[事务 · 回合级单事务](./transactions.md#回合级单事务)）。读者自己的写入被拒绝，不影响它读到的操作。绑定时只收集已结束、可提交的结果，包括嵌套结果；只保留 `staged` 操作，排除重试种子和 `discarded` 操作。较早启动的同阶段兄弟 runtime 看不到尚未完成的操作；`post-turn` runtime 能读到 narrative 阶段全部已完成的操作。需要稳定的先后顺序时，声明 `schedule.after` 或使用后续阶段。
 
 `detached` runtime 不能声明这个输入，静态校验和加载都会报出字段位置。它的来源快照没有操作记录；只有 `turn-digest@1` 可以读取该快照。内核输入只写 `from`，不带其他绑定选项。
 
