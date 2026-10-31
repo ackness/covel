@@ -1453,7 +1453,7 @@ contributes:
 
 - schema 是插件根目录里的 JSON Schema 文件。
 - 同一个 namespace 也可以声明成[数据集](./plugins.md#数据集contributesdatasets)；两边的 `schema` 必须是同一个文件。
-  - 导入和同步保留 source、契约与 `contributes.data` 校验，并额外按目的[数据集规则](./plugins.md#数据集contributesdatasets)检查。预置、替换和投影输出都是 `set`；真正移除托管记录需要 `delete`，替换不额外需要它。`force` 不绕过 schema、操作种类或大小限制。
+  - 导入和同步保留 source、契约与 `contributes.data` 校验，并额外按目的[数据集规则](./plugins.md#数据集contributesdatasets)检查。预置、替换和投影输出都是 `set`；真正移除托管记录需要 `delete`，替换不额外需要它。替换按实际的 `pluginId`、`namespace`、`key` 判断；只改 source 目标 URI（例如增减 `+lorebook`）仍是替换，账本仍区分目标 URI。`force` 不绕过 schema、操作种类或大小限制。
   - 普通来源或角色内嵌契约块违反目的规则时，整份导入计划失败。可选投影的一个输出只要有一项不合法，该输出整体 warning 并推迟，同步保留它原有的托管记录和账本；其他输出仍可继续。
   - 隐藏数据按实际的 `_hidden.<namespace>` 查策略，不套用公共命名空间的数据集规则；原有来源与接收 schema 校验仍保留。媒体占位值先检查是否允许 `set`，只读预检不写媒体或执行投影；实际媒体索引 `{ ref, filename, sourceId }` 在 apply 时再校验记录 schema 和最终字节数。事务和媒体补偿见[事务 · World Data import](./transactions.md#world-data-import)。
 - 接收声明只写在包的根 `PLUGIN.md`，不写进 `RUNTIME.md`。

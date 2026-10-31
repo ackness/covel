@@ -44,7 +44,11 @@ import {
 } from "./session-import/ledger.js";
 import { readWorldManifest, resolveWorldRoot } from "./session-import/utils.js";
 import { writeImportPlan } from "./session-import/writes.js";
-import { writeKey } from "./session-import/identity.js";
+import {
+  pluginDataIdentity,
+  pluginWriteIdentity,
+  writeKey,
+} from "./session-import/identity.js";
 import type {
   ImportWorldDataForSessionResult,
   ApplyPreparedWorldDataImportForSessionOptions,
@@ -840,7 +844,8 @@ export async function syncWorldDataForSession(
 
   // Physical replacement deletes implement a set; only selected true removals
   // need delete permission. An absent target needs just ledger cleanup.
-  const replacementKeys = new Set(writesToApply.map(writeKey));
+  // Source target URIs remain distinct in the ledger, even for the same row.
+  const replacementKeys = new Set(writesToApply.map(pluginWriteIdentity));
   const removalDiagnostics = async (
     store: Pick<
       DataStore,
@@ -850,9 +855,16 @@ export async function syncWorldDataForSession(
     const failures: WorldDataDiagnostic[] = [];
     for (const ledger of ledgersToDelete) {
       if (
-        replacementKeys.has(ledgerKey(ledger)) ||
         !ledger.pluginId ||
-        !ledger.namespace
+        !ledger.namespace ||
+        !ledger.key ||
+        replacementKeys.has(
+          pluginDataIdentity({
+            pluginId: ledger.pluginId,
+            namespace: ledger.namespace,
+            key: ledger.key,
+          }),
+        )
       )
         continue;
       if (

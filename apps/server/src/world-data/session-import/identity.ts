@@ -1,8 +1,16 @@
 import type { PlannedWrite } from "./types.js";
 
+export function pluginDataIdentity(record: {
+  readonly pluginId: string;
+  readonly namespace: string;
+  readonly key: string;
+}): string {
+  return `plugin:${record.pluginId}/${record.namespace}:${record.key}`;
+}
+
 export function pluginWriteIdentity(write: PlannedWrite): string | null {
   if (write.kind === "plugin-data" || write.kind === "media-index") {
-    return `plugin:${write.pluginId}/${write.namespace}:${write.key}`;
+    return pluginDataIdentity(write);
   }
   if (write.kind === "lorebook") return `lorebook:${write.id}`;
   if (write.kind === "character") return `characters:${write.key}`;
