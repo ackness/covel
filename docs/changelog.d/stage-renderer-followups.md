@@ -1,6 +1,6 @@
 ### Added
 
-- **Stage departures fade locally.** Previously displayed actors can finish a brief exit while the current cast changes immediately. Explicit transitions, reduced motion and session resets retain their meaning.
+- **Stage departures fade locally.** Previously displayed actors keep their loaded images throughout a brief exit without flashing a loading placeholder while the current cast changes immediately. Explicit transitions, reduced motion and session resets retain their meaning.
 - **Story templates can display and enlarge their speaker’s portrait.** `CharacterAvatar` uses only the host-projected speaker visual and explicit current session, with no extra character or session lookup.
 
 ### Changed
