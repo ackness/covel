@@ -666,6 +666,15 @@ export function createSseEventHandler(
         });
         break;
       }
+      case "operation.failed": {
+        emitToast(
+          "info",
+          i18n.t("session.operationFailedNotice", {
+            count: payload.count as number,
+          }),
+        );
+        return;
+      }
       // A proposal failed to commit: part of this turn's writes did
       // not land. Surface it as an execution error so the player sees a
       // visible failure instead of a silently incomplete turn (the server

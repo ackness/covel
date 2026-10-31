@@ -475,7 +475,7 @@ io:
 
 - A normal input reads the result of an upstream runtime that has already finished in the same execution. `select` is a JSON Pointer into the result value.
 - To read a result left by an earlier execution, use `scope: committed` with `recordAs`.
-- A kernel input (`from: { kernel: turn-digest@1 }`) has only `from`. It always has a value and is not checked against a schema, so writing `scope`, `select`, `required`, `accepts` or `recordAs` is rejected.
+- A kernel input (`from: { kernel: turn-digest@1 }` or `from: { kernel: operations@1 }`) has only `from`. It always has a value and is not checked against a schema, so writing `scope`, `select`, `required`, `accepts` or `recordAs` is rejected.
 - A schema can be a local path, or it can be written as `contract:<contractId>`. A contract schema from another provider is resolved when the package loads.
 - In the prompt, an input is at `runtime-inputs.<binding>.value`. Do not rely on the old injection tags.
 - If an agent runs after the narrative and it is bound to this turn's story text, that `value` is a sentence that points to the story message in the conversation. The story text itself is not repeated (see [Prompt structure](./prompt-structure.md#this-turns-story-text)).
@@ -769,6 +769,16 @@ The kernel input `turn-digest@1` freezes the facts of the source turn. A foregro
 - `runtimeResults` holds the final states already observed, as `{runtimeId, status}`. `status` is `success`, `failed`, `skipped`, or `suspended`. A runtime that has not finished is not predicted to succeed.
 - A background (detached) worker reads the snapshot of the source execution. It does not query the latest form or turn state again.
 - After this input contract is updated, old jobs and snapshots must be rebuilt. There is no compatible read path.
+
+#### The kernel input `operations@1`
+
+`io.inputs.operations: { from: { kernel: operations@1 } }` reads operations staged by completed, commit-eligible upstream runtimes in this execution. Functions read `ctx.inputs.operations.value`; agents read the `runtime-inputs` block. Tools cannot access this input.
+
+The value is always present: `{ operations: [{ contract, summary, request?, result?, truncated? }] }`, with an empty array when there are no operations. The kernel copies and deeply freezes it in call order, without operation, plugin, runtime or run IDs. `request` and `result` use the operation record's existing model-facing projections; `truncated: true` indicates a value omitted for exceeding the size limit.
+
+It adds no scheduling dependency. Binding collects only completed, commit-eligible results, including nested results, and retains only `staged` operations. Retry seeds and `discarded` operations are excluded. A same-stage sibling that started earlier cannot see unfinished operations; a `post-turn` runtime sees all completed narrative-stage operations. Declare `schedule.after` or use a later stage when ordering must be stable.
+
+A `detached` runtime cannot declare this input: static validation and loading report the field path. Its source snapshot carries no operation records; only `turn-digest@1` reads that snapshot. Kernel inputs take only `from`, with no other binding options.
 
 ## Advanced fields
 

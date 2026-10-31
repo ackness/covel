@@ -132,7 +132,39 @@ export interface KernelServiceCaller extends Omit<Caller, "pluginId"> {
   ): ExtensionContextFields;
 }
 
+export interface ServiceCallOutcome {
+  readonly providerPluginId: string;
+  readonly callerRuntimeId?: string;
+  readonly verdict: "fault" | "clean" | "neutral";
+}
+
+function providerVerdict(
+  code: PluginServiceCallEvent["errorCode"],
+  error: unknown,
+  ownImportTimeout: boolean,
+): ServiceCallOutcome["verdict"] {
+  if (serviceFailureOf(error)) return "neutral";
+  const deliberate =
+    error instanceof ToolError &&
+    [
+      "invalid-input",
+      "not-found",
+      "ambiguous",
+      "refused",
+      "conflict",
+      "unavailable",
+      "cancelled",
+    ].includes(error.code);
+  return code === "output-validation" ||
+    (code === "invocation-error" && !deliberate) ||
+    (code === "timeout" && ownImportTimeout)
+    ? "fault"
+    : "neutral";
+}
+
 interface Caller {
+  /** Kernel-only execution collector; inherited by nested service clients. */
+  readonly onSettled?: (outcome: ServiceCallOutcome) => void;
   /** Host-owned trace destination; never exposed in the plugin context. */
   readonly emitter?: TurnEmitter;
   readonly sessionId: string;
@@ -234,6 +266,7 @@ interface CallState {
   readonly callId: string;
   diagnosticScope?: string;
   cancellation?: "timeout" | "cancelled";
+  ownTimeout?: boolean;
 }
 
 async function runCall(
@@ -284,6 +317,7 @@ async function runCall(
       timer = setTimeout(() => {
         if (controller.signal.aborted) return;
         state.cancellation = "timeout";
+        state.ownTimeout = true;
         controller.abort(
           new DOMException("Plugin service call timed out", "TimeoutError"),
         );
@@ -409,6 +443,37 @@ function modelFacingSchema(
 
 /** Scoped to one host instance; activation owns registration disposal. */
 export class PluginServiceRegistry {
+  private readonly executionObservers = new AsyncLocalStorage<
+    (outcome: ServiceCallOutcome) => void
+  >();
+  private readonly importedCalls = new AsyncLocalStorage<boolean>();
+
+  /** Bind execution collection without exposing the observer to plugin code. */
+  withExecutionObserver<T>(
+    observer: (outcome: ServiceCallOutcome) => void,
+    run: () => T,
+  ): T {
+    return this.executionObservers.run(observer, run);
+  }
+
+  executionObserver(): ((outcome: ServiceCallOutcome) => void) | undefined {
+    return this.executionObservers.getStore();
+  }
+
+  /** Generated tools are kernel service imports; plugin tools choose their own deadlines. */
+  observeToolCalls(
+    inner: import("./agent-loop/tool-executor.js").ToolExecutor,
+  ): import("./agent-loop/tool-executor.js").ToolExecutor {
+    return {
+      getToolInfo: (name, context) => inner.getToolInfo(name, context),
+      execute: (call, context) =>
+        this.importedCalls.run(
+          context.generatedTools?.has(call.name) === true,
+          () => inner.execute(call, context),
+        ),
+    };
+  }
+
   private readonly entries = new Map<string, Entry>();
   private readonly snapshots = new AsyncLocalStorage<Map<string, Entry>>();
   private readEntries(): ReadonlyMap<string, Entry> {
@@ -727,6 +792,9 @@ export class PluginServiceRegistry {
         };
         let errorCode: PluginServiceCallEvent["errorCode"] = "invalid-options";
         let outcome: PluginServiceCallEvent["outcome"] = "success";
+        let verdict: ServiceCallOutcome["verdict"] = "clean";
+        const imported =
+          path.length === 0 && this.importedCalls.getStore() === true;
         let extension: PluginServiceCallEvent["extension"];
         let target = {
           providerPluginId: "<unavailable>",
@@ -1041,6 +1109,11 @@ export class PluginServiceRegistry {
             errorCode = "output-validation";
           else if (error instanceof ServiceInputValidationError)
             errorCode = "input-validation";
+          verdict = providerVerdict(
+            errorCode,
+            error,
+            state.ownTimeout === true && imported,
+          );
           throw tagServiceFailure(error, {
             callerPluginId: caller.pluginId,
             providerPluginId: target.providerPluginId,
@@ -1048,6 +1121,17 @@ export class PluginServiceRegistry {
           });
         } finally {
           release?.();
+          try {
+            caller.onSettled?.({
+              providerPluginId: target.providerPluginId,
+              ...(caller.runtimeId !== undefined
+                ? { callerRuntimeId: caller.runtimeId }
+                : {}),
+              verdict,
+            });
+          } catch {
+            // Observation cannot change the service result.
+          }
           const event: PluginServiceCallEvent = {
             sessionId: caller.sessionId,
             ...(state.diagnosticScope !== undefined

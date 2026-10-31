@@ -1225,6 +1225,18 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
                   error: fp.error,
                 });
               }
+              const failedOperations = outcome.operations.filter(
+                (operation) => operation.status === "failed",
+              ).length;
+              if (outcome.status === "committed" && failedOperations > 0) {
+                const payload = {
+                  sessionId,
+                  turnId: result.turnId,
+                  count: failedOperations,
+                };
+                await emitter.emit("operation.failed", payload);
+                await writeEvent("operation.failed", payload);
+              }
               // A run already streamed as completed whose writes were
               // dropped at commit: show the saved result, not the run.
               for (const payload of droppedRunPayloads(

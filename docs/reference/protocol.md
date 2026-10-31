@@ -339,9 +339,11 @@ agent runtime 的工具循环每一种结束方式都对应一个结束原因（
 
 辅助插件在同一会话里连续三个逻辑输入因自身原因失败时，内核暂停它，并显示固定提示。插件列表显示“已暂停”，玩家可点“重新启用”清零。每个插件每个逻辑输入只计一次；同一输入的自动推进轮合并计数。同一次输入内故障优先于正常结果。一次真正提交的正常 runtime 运行清零；没有 runtime 的插件由正常完成的 Hook 清零。跳过、挂起等中性结果不改变计数。
 
-`RuntimeResult.fault?: "runtime" | "timeout"` 是内核写入的归因标记。被收尾步骤救回的上下文超限是正常成功；没有救回时仍计作 `runtime` 故障。只统计插件自己的异常、自己的超时，以及 agent 的 `max-steps`、`invalid-output`、`loop-detected`、`context-overflow` 和自己的 `deadline`。`errorKind` 不能用来判断是不是插件的错。是否提供者错误由原始异常（含重试包装的 `cause`）判定，PostRuntime Hook 改写错误文本不改变归因。模型和提供者错误、所有取消（取消标记只属于被取消的那次运行：上级自己的超时取消子 agent 时，上级仍按自己的超时计数）、依赖或读取引起的连带丢弃、维度版本冲突、过时的挂起基线、无辜插件的整次回滚均不计数。setup runtime 使用自己的重试预算，不参与熔断。子 agent 的自身故障计在提供方插件：只有提供方自己的时限最紧（相同时提供方优先）时，`deadline` 才算它的超时；调用方更紧的预算或剩余时间不计。setup runtime 调用的子 agent 既不计数也不清零。运行结果随提交计划交到宿主边界：提供方自身故障在父执行失败或回滚时仍计数，但清零必须等执行真正提交；过时挂起基线使整次尝试保持中性。服务提供方的故障仍不计入。服务异常保留失败调用的结构化来源；提供方抛错、服务不可用（包括提供方已暂停）、准入失败、服务调用自己的超时或取消均不记在调用方。调用方自己的 runtime 超时、无效调用选项和直接触发调用环或深度上限仍计数；嵌套提供方的调用错误不向外层调用方转嫁。
+`RuntimeResult.fault?: "runtime" | "timeout"` 是内核写入的归因标记。被收尾步骤救回的上下文超限是正常成功；没有救回时仍计作 `runtime` 故障。只统计插件自己的异常、自己的超时，以及 agent 的 `max-steps`、`invalid-output`、`loop-detected`、`context-overflow` 和自己的 `deadline`。`errorKind` 不能用来判断是不是插件的错。是否提供者错误由原始异常（含重试包装的 `cause`）判定，PostRuntime Hook 改写错误文本不改变归因。模型和提供者错误、所有取消（取消标记只属于被取消的那次运行：上级自己的超时取消子 agent 时，上级仍按自己的超时计数）、依赖或读取引起的连带丢弃、维度版本冲突、过时的挂起基线、无辜插件的整次回滚均不计数。setup runtime 使用自己的重试预算，不参与熔断。子 agent 的自身故障计在提供方插件：只有提供方自己的时限最紧（相同时提供方优先）时，`deadline` 才算它的超时；调用方更紧的预算或剩余时间不计。setup runtime 调用的子 agent 既不计数也不清零。运行结果随提交计划交到宿主边界：提供方自身故障在父执行失败或回滚时仍计数，但清零必须等执行真正提交；过时挂起基线使整次尝试保持中性。服务提供方自己的异常也参与熔断（`service`），规则见下文。服务异常保留失败调用的结构化来源；提供方抛错、服务不可用（包括提供方已暂停）、准入失败、服务调用自己的超时或取消均不记在调用方。调用方自己的 runtime 超时、无效调用选项和直接触发调用环或深度上限仍计数；嵌套提供方的调用错误不向外层调用方转嫁。
 
 Hook 自己抛错或超时记在 Hook 所属插件；主动 `abort` 不是 Hook 故障。插件自己的 proposal 被处理器拒绝或被 `PreStateCommit` 主动否决，记在 proposal 所属插件；其他插件的 Hook 抛错或超时只记 Hook 所属插件。提供当前 `outputKind: "story"` runtime 或维度契约的插件只记 trace，永不暂停。
+
+执行中的服务调用按提供方归因：输出校验失败、自身未处理的异常，以及内核给导入工具设置的超时，计作 `service`。主动抛出的 `ToolError`（`invalid-input`、`not-found`、`ambiguous`、`refused`、`conflict`、`unavailable`、`cancelled`）不计；`internal` 仍计。服务不可用、准入失败、调用环、输入校验、无效选项、取消和调用方自选的超时均为中性。嵌套失败只记最深的失败提供方一次，不重复记中间提供方。成功调用只有在执行真正提交后才清零；setup runtime 发起的调用既不计数也不清零。执行外的 RPC 或内核扩展调用不参与。故事和维度提供方仍豁免暂停。
 
 <!-- prettier-ignore -->
 | 事件 | Payload | 投递 |
@@ -350,7 +352,7 @@ Hook 自己抛错或超时记在 Hook 所属插件；主动 `abort` 不是 Hook 
 | `plugin.fault.latched` | `{ sessionId, pluginId, reason }` | 玩家执行时进入 action 流，其他情况进入会话事件流 |
 | `plugin.fault.cleared` | `{ sessionId, pluginId, by: "clean-run" \| "player" }` | 同上 |
 
-`reason` 固定为 `"runtime" | "hook" | "proposal-rejected" | "timeout"`，不包含原始错误文本。`SessionPlugin.paused` 和实时会话视图的 `SnapshotPluginStatus.paused` 仅在暂停时出现，形状为 `{ reason }`。故障计数和暂停状态只在进程内存里，重启、结束或删除会话会清除，不进入保存的快照、fork、导出或 BrowserVault checkpoint。无需重建开发数据。
+`reason` 固定为 `"runtime" | "hook" | "proposal-rejected" | "timeout" | "service"`，不包含原始错误文本。`SessionPlugin.paused` 和实时会话视图的 `SnapshotPluginStatus.paused` 仅在暂停时出现，形状为 `{ reason }`。故障计数和暂停状态只在进程内存里，重启、结束或删除会话会清除，不进入保存的快照、fork、导出或 BrowserVault checkpoint。无需重建开发数据。
 
 暂停从下一次执行开始生效：不调度它的 runtime，不运行它的 Hook，也不向它的 runtime 提供工具；服务和子 agent 调用返回 `unavailable`；暂停的子 agent 提供方仍参与歧义检查，不会悄悄改用其他提供方。当前执行冻结的注册表和启用集合保持到执行结束。玩家重新启用的 API 见[会话插件管理](./api.md#会话插件管理)。提交结果的连带原因见[事务](./transactions.md#回合级单事务)。
 
@@ -645,15 +647,16 @@ Gemini 原生的思考强度、`providerOptions.google.thinkingConfig`、`cached
 - `context.compacted` 只写进 `trace_events`，由历史压缩的编排写入，不在 `CovelEvent` 里。摘要策略通过 `history.compact@2` 扩展提供。
 - `recursive.calling/completed/failed` 和 [`subagent.*`](#子-agent-事件) 在 `CovelEvent` 里，但只通过订阅 topic `trace` 下发，不转发到 `/api/actions`。
 
-| 事件                            | 触发点                | payload                                                                                                                                 |
-| ------------------------------- | --------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
-| `character-schema.changed`      | domain schema 提交    | `{schema}`                                                                                                                              |
-| `character.upserted`            | domain character 提交 | `{character}`                                                                                                                           |
-| `dimensions.changed`            | dimension batch 提交  | `{providerPluginId, dimensions, settlement?}`                                                                                           |
-| `dimensions.settlement.changed` | 回执提交              | `{providerPluginId, source, sourceTurnId, version, status, error?}`                                                                     |
-| `plugin-data.changed`           | 所属插件数据提交      | pluginId、namespace 和受影响 key                                                                                                        |
-| `proposal.failed`               | proposal 提交失败     | `{proposalId,proposalType,runtimeId,pluginId,error}`                                                                                    |
-| `context.compacted`             | 压缩摘要保存          | `{summaryId,summaryIds,messagesCompacted,tokenSavings,focusSections,summariesMerged,summaryTokens,totalSummaryTokens,summaryTruncated}` |
+| 事件                            | 触发点                 | payload                                                                                                                                 |
+| ------------------------------- | ---------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| `character-schema.changed`      | domain schema 提交     | `{schema}`                                                                                                                              |
+| `character.upserted`            | domain character 提交  | `{character}`                                                                                                                           |
+| `dimensions.changed`            | dimension batch 提交   | `{providerPluginId, dimensions, settlement?}`                                                                                           |
+| `dimensions.settlement.changed` | 回执提交               | `{providerPluginId, source, sourceTurnId, version, status, error?}`                                                                     |
+| `plugin-data.changed`           | 所属插件数据提交       | pluginId、namespace 和受影响 key                                                                                                        |
+| `proposal.failed`               | proposal 提交失败      | `{proposalId,proposalType,runtimeId,pluginId,error}`                                                                                    |
+| `operation.failed`              | 已提交回合有操作未生效 | `{sessionId,turnId,count}`                                                                                                              |
+| `context.compacted`             | 压缩摘要保存           | `{summaryId,summaryIds,messagesCompacted,tokenSavings,focusSections,summariesMerged,summaryTokens,totalSummaryTokens,summaryTruncated}` |
 
 提交失败会扣住“执行完成”这一步，客户端把错误显示成执行失败。后台的结果不能重新打开已经结束的 action 流，重连时用保存下来的会话状态恢复。
 

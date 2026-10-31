@@ -106,6 +106,10 @@ export interface RuntimeRuleView {
   readonly finishWith?: string;
   /** Names of the inputs read from the same execution (not committed, not kernel). */
   readonly turnInputs?: readonly string[];
+  readonly operationsInputs?: readonly {
+    readonly name: string;
+    readonly path?: readonly (string | number)[];
+  }[];
   /**
    * Inputs bound to a contract (`turn` and `committed` scope; not kernel
    * inputs). `required` is the effective value, `true` by default.
@@ -524,6 +528,11 @@ export function runtimeRuleIssues(
       `${name("detached", "maxSettleWaitMs")} requires ${name("detached", "settle")}`,
     );
   if (detached) {
+    for (const input of m.operationsInputs ?? [])
+      add(
+        input.path ?? at("inputs", input.name),
+        "a detached runtime cannot read kernel input operations@1",
+      );
     const runtime = `a detached runtime (${name("detached")})`;
     if (m.stage !== "post-turn" && m.stage !== "audit")
       add(

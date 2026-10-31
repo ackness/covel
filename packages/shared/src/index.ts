@@ -1,6 +1,7 @@
 export {
   playerInputSubmissionSchema,
   turnDigestSchema,
+  operationsInputSchema,
 } from "./schemas/execution-snapshots.js";
 export * from "./extension-points/index.js";
 export {

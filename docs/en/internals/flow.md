@@ -414,6 +414,12 @@ When the player retries on purpose, a new jobId is created.
 - A job in the `committing` state must first get the same commit lock without blocking. If the lock is busy, the job waits for the next round.
 - On shutdown, scheduling stops, and the worker waits for ongoing scans and lock callbacks to finish.
 
+Kernel inputs also include `operations@1`: it freezes staged operations from completed upstream runs at binding time, adds no scheduling dependency, and is unavailable to detached runtimes. See [plugin inputs](../reference/plugins.md#the-kernel-input-operations1) for its fields and visibility.
+
+When a turn commits with failed operations, the action stream emits one `operation.failed` and the player immediately sees a count notice. The next player or continuation execution reads the newest committed `player` / `continuation` turn result. Only the agent named by `invokedBy.runtimeId` receives `operations-not-applied`, after the input and export blocks, with at most ten summaries. Scoped retries omit it. This read happens once per execution with session state and adds no persistent state.
+
+If a later attempt does not commit, the newest committed row stays unchanged, so the next attempt repeats the notice. Once any later player or continuation execution commits, the old notice disappears. The block lives in the context that varies per turn and leaves cached prefixes unchanged.
+
 ### 2.4 The settle barrier before the next execution
 
 Some background work must finish before the next turn starts, because the next turn reads its result. A `post-turn` / `audit` function like this can declare `schedule.detached: { settle: true, maxSettleWaitMs: … }`.

@@ -475,7 +475,7 @@ io:
 
 - 普通输入读同一次执行里已完成的上游结果。`select` 是结果值上的 JSON Pointer。
 - 要读更早的执行留下的结果，用 `scope: committed` 加 `recordAs`。
-- 内核输入（`from: { kernel: turn-digest@1 }`）只写 `from`。它总有值，也不按 schema 检查，所以写 `scope`、`select`、`required`、`accepts` 或 `recordAs` 会被拒绝。
+- 内核输入（`from: { kernel: turn-digest@1 }` 或 `from: { kernel: operations@1 }`）只写 `from`。它总有值，也不按 schema 检查，所以写 `scope`、`select`、`required`、`accepts` 或 `recordAs` 会被拒绝。
 - schema 可以是本地路径，也可以写 `contract:<contractId>`。跨提供者的契约 schema 在加载时解析。
 - 在提示词里，一个输入位于 `runtime-inputs.<binding>.value`。不要依赖旧的注入标签。
 - 叙事之后运行的 agent 如果绑定的是本回合的故事正文，这个 `value` 是一句指向对话里那条正文消息的话，正文本身不重复（见 [Prompt 结构](./prompt-structure.md#本回合正文)）。
@@ -769,6 +769,16 @@ const result = await ctx.agents?.run({
 - `runtimeResults` 是已经观察到的终态 `{runtimeId, status}`，`status` 为 `success/failed/skipped/suspended`。还没结束的 runtime 不会被预测为成功。
 - 后台（detached）worker 读的是源执行的快照，不重新查询最新的表单或回合状态。
 - 这个输入契约更新之后，旧作业和快照需要重建，不做兼容读取。
+
+#### 内核输入 `operations@1`
+
+`io.inputs.operations: { from: { kernel: operations@1 } }` 读取本次执行里已完成、可提交的上游 runtime 暂存的操作。函数通过 `ctx.inputs.operations.value` 读取，agent 在 `runtime-inputs` 块中读取；工具拿不到这个输入。
+
+值总是存在，形状为 `{ operations: [{ contract, summary, request?, result?, truncated? }] }`，没有操作时数组为空。内核按调用顺序复制并深度冻结它，不带操作 ID、插件 ID、runtime ID 或 run ID。`request`、`result` 是操作记录已有的模型视图；超过大小限制而省略时带 `truncated: true`。
+
+它不增加调度依赖。绑定时只收集已结束、可提交的结果，包括嵌套结果；只保留 `staged` 操作，排除重试种子和 `discarded` 操作。较早启动的同阶段兄弟 runtime 看不到尚未完成的操作；`post-turn` runtime 能读到 narrative 阶段全部已完成的操作。需要稳定的先后顺序时，声明 `schedule.after` 或使用后续阶段。
+
+`detached` runtime 不能声明这个输入，静态校验和加载都会报出字段位置。它的来源快照没有操作记录；只有 `turn-digest@1` 可以读取该快照。内核输入只写 `from`，不带其他绑定选项。
 
 ## 高级字段
 

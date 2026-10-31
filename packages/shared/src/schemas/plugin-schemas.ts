@@ -287,7 +287,7 @@ export const inputInjectDeclSchema = z.discriminatedUnion("kind", [
   runtimeExportInjectDeclSchema,
   z.strictObject({
     kind: z.literal("kernel"),
-    from: z.literal("turn-digest@1"),
+    from: z.enum(["turn-digest@1", "operations@1"]),
     name: bindingNameSchema,
   }),
 ]);
@@ -1102,6 +1102,7 @@ export const permissionsDeclSchema = z
 
 /** Fields of the flat IR shape that the shared runtime rules read. */
 interface ManifestCrossFieldView {
+  readonly input?: z.infer<typeof inputConfigSchema>;
   readonly outputContract?: string;
   readonly defaultProvider?: boolean;
   readonly runtimeType?: string;
@@ -1176,6 +1177,11 @@ function addIrRuleIssues(
       builtinTools: tools?.builtin,
       pluginTools: tools?.plugin,
       serviceImports: tools?.services,
+      operationsInputs: m.input?.inject?.flatMap((inject, index) =>
+        inject.kind === "kernel" && inject.from === "operations@1"
+          ? [{ name: inject.name, path: ["input", "inject", index] }]
+          : [],
+      ),
       completingTools: completeAfterTools,
     },
     IR_RULE_FIELD_PATHS,

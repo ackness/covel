@@ -323,6 +323,15 @@ const crossField = [
     field: "schedule.needs.0",
   },
   {
+    name: "a detached runtime reading live operations",
+    runtime: {
+      function: { handler: "./handler.js" },
+      schedule: { stage: "post-turn", detached: true },
+      io: { inputs: { operations: { from: { kernel: "operations@1" } } } },
+    },
+    field: "io.inputs.operations",
+  },
+  {
     name: "options on a kernel input",
     runtime: {
       schedule: { stage: "narrative" },
@@ -419,18 +428,21 @@ describe("cross-field rules", () => {
     expect((await validate(kernel)).status).toBe(0);
   });
 
-  it("accepts a kernel input that names only its source", async () => {
-    const dir = await plugin(
-      {},
-      {
-        one: {
-          schedule: { stage: "post-turn" },
-          io: { inputs: { digest: { from: { kernel: "turn-digest@1" } } } },
+  it.each(["turn-digest@1", "operations@1"])(
+    "accepts kernel input %s with only its source",
+    async (kernel) => {
+      const dir = await plugin(
+        {},
+        {
+          one: {
+            schedule: { stage: "post-turn" },
+            io: { inputs: { digest: { from: { kernel } } } },
+          },
         },
-      },
-    );
-    expect((await validate(dir)).status).toBe(0);
-  });
+      );
+      expect((await validate(dir)).status).toBe(0);
+    },
+  );
 
   it("orders after a contract the package does not depend on", async () => {
     const dir = await plugin(

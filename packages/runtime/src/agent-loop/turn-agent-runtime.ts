@@ -66,6 +66,7 @@ export interface ExecuteAgentRuntimeOptions {
   readonly executionStory?: readonly import("@covel/store").TurnMessageRecord[];
   readonly sessionMeta:
     | {
+        failedOperationSummaries?: Readonly<Record<string, readonly string[]>>;
         turnNumber: number;
         logicalTurn?: number;
         characters: readonly {
@@ -223,6 +224,8 @@ export async function executeAgentRuntime({
         ? applyHistoryWindow(visibleHistory, historyPolicy)
         : visibleHistory,
       sessionMeta,
+      failedOperationSummaries:
+        sessionMeta?.failedOperationSummaries?.[manifest.name],
       summaries:
         historyPolicy && !historyPolicy.includeSummaries
           ? []

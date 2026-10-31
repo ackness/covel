@@ -743,7 +743,7 @@
                   },
                   "from": {
                     "type": "string",
-                    "const": "turn-digest@1"
+                    "enum": ["turn-digest@1", "operations@1"]
                   },
                   "name": {
                     "type": "string",

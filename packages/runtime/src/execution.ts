@@ -53,6 +53,7 @@ import {
   hasPendingSibling,
 } from "./resume/suspension-settlement.js";
 import { suspensionProgressScopeId } from "./resume/suspension-progress-scope.js";
+import type { ServiceCallOutcome } from "./plugin-services.js";
 import { createOperationExecutionScope } from "./operations/operation-stage.js";
 
 type Schema = Readonly<Record<string, unknown>>;
@@ -86,6 +87,7 @@ export interface ExecutionCommitPlan extends Pick<
 > {
   readonly outputSchemas: Readonly<Record<string, Schema>>;
   readonly subagentRuns?: readonly SubagentRunOutcome[];
+  readonly serviceCalls?: readonly ServiceCallOutcome[];
   readonly resolvedSuspensionId?: string;
   /**
    * Detached jobs the suspended turn held back, released by the resume that
@@ -112,6 +114,9 @@ function captureSchemas(deps: ExecutionDeps) {
     datasetSchemas,
     deps: {
       ...deps,
+      ...(deps.services && deps.toolExecutor
+        ? { toolExecutor: deps.services.observeToolCalls(deps.toolExecutor) }
+        : {}),
       loadRuntime: async (
         ...args: Parameters<TurnExecutorDeps["loadRuntime"]>
       ) => {
@@ -201,6 +206,15 @@ export async function executeTurn(
     paused.has(runtime.pluginId),
   );
   runtimes = runtimes.filter((runtime) => !paused.has(runtime.pluginId));
+  const serviceCalls: ServiceCallOutcome[] = [];
+  const serviceOutcomes = (outcome: ServiceCallOutcome) => {
+    serviceCalls.push(outcome);
+    deps.serviceOutcomes?.(outcome);
+  };
+  const observeServices = <T>(run: () => T): T =>
+    deps.services
+      ? deps.services.withExecutionObserver(serviceOutcomes, run)
+      : run();
   const subagentRuns: SubagentSettledEvent[] = [];
   const subagents =
     deps.subagents ??
@@ -228,11 +242,19 @@ export async function executeTurn(
       : buildHookSettings(runtimes, userSettings),
     locale: deps.hookScope?.locale ?? input.locale,
   };
-  const turn = await runTurnPipeline(
-    { ...input, userSettings },
-    runtimes,
-    { ...captured.deps, hookScope, subagents, operationScope },
-    options,
+  const turn = await observeServices(() =>
+    runTurnPipeline(
+      { ...input, userSettings },
+      runtimes,
+      {
+        ...captured.deps,
+        hookScope,
+        subagents,
+        operationScope,
+        serviceOutcomes,
+      },
+      options,
+    ),
   );
   // Each top-level result commits as one unit with everything nested under
   // it, children before their parent; finalize settles units in order, so
@@ -306,6 +328,7 @@ export async function executeTurn(
         // Abandoned, cancelled runs that settle after this snapshot are
         // neutral and do not enter the commit plan.
         ...(subagentRuns.length ? { subagentRuns } : {}),
+        serviceCalls,
         commitUnits,
         ...(abortReason !== undefined ? { abortReason } : {}),
         journalMessages,
@@ -384,6 +407,15 @@ export async function resumeSuspendedRuntime(
       deps.pluginFaults?.isLatched(suspension.sessionId, pluginId),
     ),
   );
+  const serviceCalls: ServiceCallOutcome[] = [];
+  const serviceOutcomes = (outcome: ServiceCallOutcome) => {
+    serviceCalls.push(outcome);
+    deps.serviceOutcomes?.(outcome);
+  };
+  const observeServices = <T>(run: () => T): T =>
+    deps.services
+      ? deps.services.withExecutionObserver(serviceOutcomes, run)
+      : run();
   const subagentRuns: SubagentSettledEvent[] = [];
   const subagents =
     deps.subagents ??
@@ -412,13 +444,15 @@ export async function resumeSuspendedRuntime(
       : buildHookSettings([manifest], userSettings),
     locale: deps.hookScope?.locale ?? suspension.pendingContinuation.locale,
   };
-  const result = await runWithHookScope(hookScope, () =>
-    resumeRuntimePipeline(
-      suspension,
-      resumeData,
-      manifest,
-      { ...captured.deps, hookScope, subagents },
-      { ...options, userSettings },
+  const result = await observeServices(() =>
+    runWithHookScope(hookScope, () =>
+      resumeRuntimePipeline(
+        suspension,
+        resumeData,
+        manifest,
+        { ...captured.deps, hookScope, subagents, serviceOutcomes },
+        { ...options, userSettings },
+      ),
     ),
   );
   const inherited = suspension.pendingContinuation.executionContext;
@@ -537,6 +571,7 @@ export async function resumeSuspendedRuntime(
         results,
         commitUnits: commitUnitSizes([result]),
         ...(subagentRuns.length ? { subagentRuns } : {}),
+        serviceCalls,
         journalMessages: collectExecutionJournal(carrier),
         journalMessageRuns: collectExecutionJournalRuns(carrier),
         runtimeTriggers: collectExecutionTriggers(carrier),

@@ -17,6 +17,11 @@
     "primary": "Основное"
   },
   "session": {
+    "operationFailedNotice": "{{count}} действия из этого хода не вступило в силу.",
+    "operationFailedNotice_one": "{{count}} действие из этого хода не вступило в силу.",
+    "operationFailedNotice_few": "{{count}} действия из этого хода не вступили в силу.",
+    "operationFailedNotice_many": "{{count}} действий из этого хода не вступили в силу.",
+    "operationFailedNotice_other": "{{count}} действия из этого хода не вступило в силу.",
     "cached": "Из кэша",
     "historyLoadFailed": "Не удалось загрузить предыдущие сессии. Повторите попытку, чтобы увидеть сохранения.",
     "reasoningContent": "Размышление",
