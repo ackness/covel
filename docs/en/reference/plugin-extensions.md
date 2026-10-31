@@ -412,6 +412,8 @@ A write service's writes do not land right away. A successful call stages all it
 - Calls of one caller to one provider run one after the other, parallel tool calls and parallel sub-agents included; each call sees what the calls before it staged.
 - Each operation leaves an [operation record](./transactions.md#operation-records) that says, after the commit, whether it committed, failed or was taken back.
 
+A story-attached operation that fails at commit does not fail the story. The player immediately sees a fixed notice with the number of actions that did not take effect; the debug trace retains `operation.failed`. On the next player or continuation execution, the calling agent receives an `operations-not-applied` block listing at most ten failed operation summaries from the previous committed turn. Other runtimes and scoped retries do not receive it. The notice follows only the newest committed player or continuation turn; see [turn flow](../internals/flow.md).
+
 #### Where write services cannot be called
 
 A call from these places answers `unavailable` ("Write services cannot be called here.") and stages nothing:

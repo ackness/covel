@@ -17,6 +17,9 @@
     "primary": "Primary"
   },
   "session": {
+    "operationFailedNotice": "{{count}} actions from this turn did not take effect.",
+    "operationFailedNotice_one": "{{count}} action from this turn did not take effect.",
+    "operationFailedNotice_other": "{{count}} actions from this turn did not take effect.",
     "cached": "Cached",
     "historyLoadFailed": "Could not load previous sessions. Retry to see your saves.",
     "reasoningContent": "Thinking",

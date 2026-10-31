@@ -86,7 +86,7 @@ export interface LoopStop {
 }
 
 export type PluginFaultReason =
-  "runtime" | "hook" | "proposal-rejected" | "timeout";
+  "runtime" | "hook" | "proposal-rejected" | "timeout" | "service";
 
 export interface RuntimeResult {
   readonly pluginId: string;

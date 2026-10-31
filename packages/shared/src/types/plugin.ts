@@ -145,7 +145,7 @@ export interface RuntimeExportInjectDecl {
 
 export interface KernelInjectDecl {
   readonly kind: "kernel";
-  readonly from: "turn-digest@1";
+  readonly from: "turn-digest@1" | "operations@1";
   readonly name: string;
 }
 

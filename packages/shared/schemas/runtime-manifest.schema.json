@@ -267,8 +267,8 @@
                     "properties": {
                       "kernel": {
                         "type": "string",
-                        "const": "turn-digest@1",
-                        "description": "Kernel input: the frozen last player input and the runtime results observed so far."
+                        "enum": ["turn-digest@1", "operations@1"],
+                        "description": "Kernel input: the turn digest or staged operations from completed upstream runs."
                       }
                     },
                     "required": ["kernel"],

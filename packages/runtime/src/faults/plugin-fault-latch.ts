@@ -102,6 +102,7 @@ export function createPluginFaultLatch({
       readonly exempt: ReadonlySet<string>;
       readonly setupRuntimeIds?: ReadonlySet<string>;
       readonly subagentRuns?: Parameters<typeof classifyExecutionFaults>[3];
+      readonly serviceCalls?: Parameters<typeof classifyExecutionFaults>[4];
     }): FaultTransition[] {
       const transitions: FaultTransition[] = [];
       for (const [pluginId, verdict] of classifyExecutionFaults(
@@ -109,6 +110,7 @@ export function createPluginFaultLatch({
         input.outcome,
         input.setupRuntimeIds,
         input.subagentRuns,
+        input.serviceCalls,
       )) {
         if (verdict.kind === "fault")
           transitions.push(

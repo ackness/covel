@@ -42,6 +42,7 @@ import {
   interpolateTemplate,
   resolveFrameworkCompletion,
 } from "./prompt-internals.js";
+import { loadPrompt } from "./prompts-loader.js";
 import { serializeSystemPrompt } from "./prompt-serialization.js";
 import { fitWorldLore } from "./world-lore.js";
 import {
@@ -256,6 +257,26 @@ function buildExportsBindingBlock(params: ContextBuildParams): string {
   return `<runtime-exports>\n${escapeXmlContent(JSON.stringify(modelFacingSlots(slots)))}\n</runtime-exports>`;
 }
 
+async function buildOperationNoticeBlock(
+  params: ContextBuildParams,
+): Promise<string> {
+  if (!params.failedOperationSummaries?.length) return "";
+  const text = await loadPrompt(
+    "server",
+    "operation-notice",
+    instructionLocaleFor(params.turnInput.locale),
+  );
+  const summaries = params.failedOperationSummaries
+    .slice(0, 10)
+    .map((summary) => `- ${escapeXmlContent(summary.replace(/\s+/g, " "))}`);
+  return [
+    "<operations-not-applied>",
+    text.trim(),
+    ...summaries,
+    "</operations-not-applied>",
+  ].join("\n");
+}
+
 /** Build prompt segments, resolving plugin-data injects through the store. */
 async function buildPromptSegments(
   params: ContextBuildParams,
@@ -295,6 +316,7 @@ async function buildPromptSegments(
     rawInjects,
     buildInputsBindingBlock(params),
     buildExportsBindingBlock(params),
+    await buildOperationNoticeBlock(params),
     staged ? "" : activation,
   ]
     .filter(Boolean)

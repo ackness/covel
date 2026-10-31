@@ -22,6 +22,7 @@ export function classifyExecutionFaults(
   outcome: FinalizeExecutionOutcome,
   setupRuntimeIds: ReadonlySet<string> = new Set(),
   subagentRuns: readonly SubagentRunOutcome[] = [],
+  serviceCalls: readonly import("../plugin-services.js").ServiceCallOutcome[] = [],
 ): ReadonlyMap<string, PluginFaultVerdict> {
   const verdicts = new Map<string, PluginFaultVerdict>();
   const put = (pluginId: string, verdict: PluginFaultVerdict) => {
@@ -58,6 +59,15 @@ export function classifyExecutionFaults(
     else if (run.ok && outcome.status === "committed")
       put(run.pluginId, { kind: "clean" });
     else put(run.pluginId, { kind: "neutral" });
+  }
+  for (const call of serviceCalls) {
+    if (call.callerRuntimeId && setupRuntimeIds.has(call.callerRuntimeId))
+      continue;
+    if (call.verdict === "fault")
+      put(call.providerPluginId, { kind: "fault", reason: "service" });
+    else if (call.verdict === "clean" && outcome.status === "committed")
+      put(call.providerPluginId, { kind: "clean" });
+    else put(call.providerPluginId, { kind: "neutral" });
   }
   for (const failed of outcome.failedProposals) {
     if (

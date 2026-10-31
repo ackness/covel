@@ -96,6 +96,9 @@ export interface AgentLoopDeps {
 }
 
 export interface TurnExecutorDeps extends AgentLoopDeps {
+  readonly serviceOutcomes?: (
+    outcome: import("../plugin-services.js").ServiceCallOutcome,
+  ) => void;
   /** Captured at execution entry; latch changes apply to the next execution. */
   readonly pluginFaults?: {
     isLatched(sessionId: string, pluginId: string): boolean;

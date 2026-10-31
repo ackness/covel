@@ -511,6 +511,7 @@ export async function createPluginRuntimeContext({
       : undefined,
   };
   const serviceClient = deps.services?.createClient({
+    onSettled: deps.serviceOutcomes,
     emitter: deps.emitter,
     sessionId: input.sessionId,
     turnId: input.turnId,

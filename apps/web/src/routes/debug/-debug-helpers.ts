@@ -130,6 +130,7 @@ export function getTraceError(event: api.TraceEvent):
     type.endsWith(".failed") ||
     type === "error.occurred" ||
     type === "proposal.failed" ||
+    type === "operation.failed" ||
     (type === "runtime.completed" && data.status === "failed") ||
     (type === "turn.completed" && data.committed === false) ||
     (type === "llm.responded" && data.finishReason === "error");
@@ -156,6 +157,7 @@ export function isTerminalTraceFailure(event: api.TraceEvent): boolean {
     type === "flow.failed" ||
     type === "turn.failed" ||
     type === "proposal.failed" ||
+    type === "operation.failed" ||
     type === "error.occurred"
   );
 }

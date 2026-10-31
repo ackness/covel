@@ -1,3 +1,4 @@
+import { buildOperationsInput } from "./operations-input.js";
 import { buildTurnDigest, freezeSnapshot } from "./turn-digest.js";
 import { projectExecutionStory } from "./session-state.js";
 import { collectUpstreamWorldProposals } from "../function-runtime/world-model-view.js";
@@ -90,6 +91,7 @@ export interface RuntimeInvocation {
   readonly messageHistory: readonly TurnMessageRecord[];
   readonly sessionMeta:
     | {
+        failedOperationSummaries?: Readonly<Record<string, readonly string[]>>;
         turnNumber: number;
         logicalTurn?: number;
         characters: readonly {
@@ -615,6 +617,18 @@ async function executeRuntime(
     const inputSlots: Record<string, InputSlot> = { ...binding.slots };
     for (const inject of manifest.input?.inject ?? []) {
       if (inject.kind !== "kernel") continue;
+      if (inject.from === "operations@1") {
+        inputSlots[inject.name] = {
+          cardinality: "one",
+          value: buildOperationsInput(completedResults, inv.seedResults),
+          source: {
+            pluginId: "__kernel",
+            runtimeId: inject.from,
+            resultId: executionContext.executionId,
+          },
+        };
+        continue;
+      }
       if (input.detachedStage && !input.detachedStage.turnDigest)
         throw new Error(
           "Detached kernel input turn-digest@1 is missing its source snapshot",

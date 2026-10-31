@@ -400,9 +400,9 @@ In the path headings below, `[]` is a list item and `.*` is a map value.
 
 ## `runtime.io.inputs.*.from` (form 3 of 3)
 
-| Field    | Type              | Required | Description                                                                         |
-| -------- | ----------------- | -------- | ----------------------------------------------------------------------------------- |
-| `kernel` | `"turn-digest@1"` | yes      | Kernel input: the frozen last player input and the runtime results observed so far. |
+| Field    | Type                                  | Required | Description                                                                      |
+| -------- | ------------------------------------- | -------- | -------------------------------------------------------------------------------- |
+| `kernel` | `"turn-digest@1"` or `"operations@1"` | yes      | Kernel input: the turn digest or staged operations from completed upstream runs. |
 
 ## `runtime.io.selfData[]`
 
