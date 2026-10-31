@@ -1010,6 +1010,8 @@ data: {
 
 ### 插件 RPC
 
+action 和插件 command 的 scoped store 写入复用[数据集规则](./plugins.md#数据集contributesdatasets)：每条记录在落库前检查，被拒记录保持原样，先前成功的调用保留。未捕获的拒绝沿用已有 `handler-threw` 与生产安全的 `500` 响应；不增加事件或状态形状，不产生玩家回合或故事附带操作通知。原有隔离操作失败的固定提示与隐藏错误规则不变。
+
 这是给插件发“结构化指令”的统一通道。它同时承载三种调用：action 级、runtime 级和命令级。
 
 - action 级和 command 级返回一次 JSON。

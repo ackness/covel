@@ -584,7 +584,7 @@ await store.withTransaction(async (tx) => {
 
 缺少 namespace / key、空的或不合法的操作列表在处理器之前就被载荷检查拒绝，`code` 是 `proposal-invalid`。保留命名空间和超过大小上限的拒绝发生在处理器里，没有 `code`，只有 `error`。
 
-**数据集检查。** 插件在 `contributes.datasets` 里声明了某个命名空间时，这个插件写入该命名空间的**每一种**插件数据 proposal 都要检查：
+**数据集检查。** 插件在 `contributes.datasets` 里声明了某个命名空间时，每一种插件数据 proposal、action / command RPC 的 scoped store 写入，以及世界数据导入和同步，都使用同一套[目的数据集规则](./plugins.md#数据集contributesdatasets)。proposal 的检查如下：
 
 - `plugin.data.update` 里每个操作的种类都必须在数据集的 `ops` 里。整值写入（`plugin.data` 和 `plugin.data.batch` 的每一项）算作 `set`，`plugin.data.delete` 算作 `delete`。
 - 结果存在时，按数据集的记录 schema 校验写入后的值，最多报告前 3 条错误。
@@ -600,6 +600,10 @@ await store.withTransaction(async (tx) => {
 `FailedProposal.code: "hook-failed"` 表示 `PreStateCommit` 因 handler 抛错、超时或无效结果而失败，不是主动否决。只计 Hook 所属插件的故障，不能把 proposal 所属插件算成被主动拒绝。`dimension-version-conflict`、`conflict` 和 `suspension-data-changed` 也不计入[熔断](./protocol.md#插件故障熔断)。
 
 ## World Data import
+
+导入计划捕获注册包的目的数据集策略，apply 沿用这一代声明。来源校验之外，导入预置和替换记录都需要 `set`；媒体转换完成后，在任何语义写入（包括维度 CAS 与绑定）之前，再检查最终值的 schema 和 256 KiB 上限。拒绝时会话、角色 schema、插件数据、角色、资料库和导入账本一起回滚，只释放这次尝试的临时媒体引用。
+
+同步真正删除仍存在的托管记录时需要 `delete`；内部先删后写的替换只需要 `set`。dry-run 与 apply 都检查真正删除，`force` 不能绕过数据集规则。拒绝会阻止这次同步的全部语义变化；目标已不存在时只清理旧账本。可选投影的无效输出仍按[输出推迟规则](./world-data.md#配套插件数据)保留旧数据。
 
 规划阶段也校验接收插件声明的[维度引用和候选值](./world-data.md)。任何这类错误都会拒绝整份导入计划，不写入其他合法记录；同步遵守相同规则。
 

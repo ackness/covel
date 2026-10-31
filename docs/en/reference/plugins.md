@@ -1327,7 +1327,10 @@ At commit, every proposal a plugin writes into a dataset namespace it declares i
 - **Record schema.** The written value (for `plugin.data.update`, the result after the operations) must satisfy `schema`.
 - A violation rejects the proposal with `code: "dataset-violation"`, under the commit-unit rules. When the host did not capture the schema document, every write is refused instead of let through.
 - `key` is not checked at commit. Dataset tools normalize keys with the [dataset key rule](./tools.md#the-key-rule-and-lookup) `datasetKey(...)` (exported by the SDK), and look up the key as written first, then the normalized key. Plugin code that writes the same dataset should build its keys with `datasetKey(...)` so they land on the rows the tools find.
-- Writes outside the commit pipeline skip these checks: world data import and sync (validated against the source's `schema`, see [World Data · Companion plugin data](./world-data.md#companion-plugin-data)), `context.store.setPluginData` in a plugin action RPC, and the management API `PUT`.
+- Plugin action / command RPC `context.store.setPluginData`, world data import and sync use the same dataset rules. Whole-record seeding, replacement and projection output all count as `set`; a true sync removal of a managed record requires `delete`. An internal replacement delete does not require `delete` separately. `force` does not bypass these rules.
+- Policies come from registered package declarations and captured schemas, including packages with no runtimes. Trust and approval do not relax them. Missing, uncompilable or `$async` schemas refuse writes; record failures report at most 3 errors.
+- Policies use the physical stored namespace: `_hidden.notes` does not inherit the dataset rules of `notes`. RPC and import preserve exact keys without rewriting them or checking equality with a record field.
+- Management API `PUT` / `DELETE` remain operator overrides without dataset schema or `ops` checks. Existing authorization, activation, reserved-namespace and size limits still apply.
 
 See [Transactions · Operation-based writes](./transactions.md#operation-based-writes-plugindataupdate).
 

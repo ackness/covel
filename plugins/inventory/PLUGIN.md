@@ -1,5 +1,5 @@
 ---
-version: 0.0.42
+version: 0.0.43
 displayName: Inventory
 description: >-
   Records explicit item gains, losses, and equipment changes from each turn's
@@ -29,7 +29,7 @@ contributes:
     items:
       schema: ./schemas/items.schema.json
       key: id
-      ops: [set, merge, inc]
+      ops: [set, merge, inc, delete]
   data:
     items:
       schema: ./schemas/items.schema.json

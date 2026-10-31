@@ -15,7 +15,7 @@ import type {
 import { emitCommittedProposal } from "./session-commit-emitter.js";
 import { flushPostCommit } from "./post-commit-fanout.js";
 import { checkCommitProposal } from "./proposal-check.js";
-import type { DatasetPolicyResolver } from "./commit-plugin-data.js";
+import type { DatasetPolicyResolver } from "../plugin-data-validation.js";
 import type { MediaOwnershipStore } from "../media/canonicalize-media-refs.js";
 export type { KernelStore } from "../session/session-kernel-store.js";
 import type { KernelStore } from "../session/session-kernel-store.js";

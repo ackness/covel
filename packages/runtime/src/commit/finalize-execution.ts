@@ -120,7 +120,7 @@ import { flushPostCommit } from "./post-commit-fanout.js";
 import {
   datasetPolicyResolver,
   type DatasetSchemas,
-} from "./commit-plugin-data.js";
+} from "../plugin-data-validation.js";
 
 /**
  * Manifests resolve output kind, capabilities, scope, the persistent

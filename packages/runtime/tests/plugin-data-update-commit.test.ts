@@ -26,7 +26,7 @@ import { createCommitPipeline } from "../src/commit/session-commit-pipeline.js";
 import {
   datasetPolicyResolver,
   type DatasetSchemas,
-} from "../src/commit/commit-plugin-data.js";
+} from "../src/plugin-data-validation.js";
 import { createHookPipeline } from "../src/hooks/pipeline.js";
 import { commitExecution, executeTurn } from "../src/index.js";
 import type { MediaOwnershipStore } from "../src/media/canonicalize-media-refs.js";

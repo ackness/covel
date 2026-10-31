@@ -1,3 +1,4 @@
+import { emptyDatasetPolicy } from "../../src/lib/plugin-dataset-policy.js";
 import { Hono } from "hono";
 import { collectMediaRefIds, MEDIA_PIN_REF_PREFIX } from "@covel/shared";
 import { createPluginRegistry } from "@covel/plugin-loader";
@@ -83,6 +84,7 @@ it.each(["memory", "sqlite"] as const)(
             worldId: "world",
             now: "2026-01-01T00:00:00.000Z",
             plan: {
+              datasetPolicy: emptyDatasetPolicy,
               writes,
               diagnostics: [],
               mergeEvents: [],
@@ -208,6 +210,7 @@ it.each(["memory", "sqlite"] as const)(
             diagnostics: [],
             mediaRefs: prepared.mediaRefs,
             plan: {
+              datasetPolicy: emptyDatasetPolicy,
               writes: prepared.writes,
               diagnostics: [],
               mergeEvents: [],
@@ -372,6 +375,7 @@ it.each(["memory", "sqlite"] as const)(
             imported: true,
             diagnostics: [],
             plan: {
+              datasetPolicy: emptyDatasetPolicy,
               writes: [write],
               diagnostics: [],
               mergeEvents: [],
@@ -456,6 +460,7 @@ it.each([
           diagnostics: [],
           mediaRefs: materialized.mediaRefs,
           plan: {
+            datasetPolicy: emptyDatasetPolicy,
             writes: materialized.writes,
             diagnostics: [],
             mergeEvents: [],
@@ -526,6 +531,165 @@ it.each([
       }
     } finally {
       prepare.mockRestore();
+      await store.close();
+      await close();
+    }
+  },
+);
+
+it.each(["schema", "size"] as const)(
+  "refuses a final prepared media record by %s before semantic writes and preserves another session's reference",
+  async (reason) => {
+    const { mediaStore, write, close } = await publicationFixture("memory");
+    const store = createMemoryStore();
+    const now = "2026-10-31T00:00:00.000Z";
+    try {
+      const other = await materializeMediaIndexWrites({
+        mediaStore,
+        sessionId: "other",
+        writes: [write],
+      });
+      await finalizeWorldDataMediaRefs({ mediaStore, refs: other.mediaRefs });
+      const prepared = await materializeMediaIndexWrites({
+        mediaStore,
+        sessionId: "session",
+        writes: [write],
+      });
+      const mediaWrite = prepared.writes[0]!;
+      const schema =
+        reason === "schema"
+          ? {
+              type: "object",
+              properties: { filename: { const: "different.png" } },
+            }
+          : {};
+      const policy = (_pluginId: string, namespace: string) =>
+        namespace === "assets"
+          ? { namespace, ops: ["set"] as const, schema }
+          : undefined;
+      const finalMedia =
+        reason === "size"
+          ? {
+              ...mediaWrite,
+              value: {
+                ...(mediaWrite.value as Record<string, unknown>),
+                extra: "界".repeat(100_000),
+              },
+            }
+          : mediaWrite;
+      const writes: PlannedWrite[] = [
+        {
+          ...write,
+          kind: "plugin-data",
+          namespace: "_dimensions",
+          key: "tone",
+          value: {
+            definition: {
+              name: "Tone",
+              schema: { type: "string" },
+              initialValue: "calm",
+            },
+            value: "calm",
+            version: 1,
+          },
+        },
+        {
+          kind: "lorebook",
+          target: "lorebook",
+          source: write.source,
+          sourceDigest: "digest",
+          id: "lore",
+          pluginId: "world",
+          content: "Valid lore",
+          value: { content: "Valid lore" },
+        },
+        {
+          kind: "character",
+          target: "characters",
+          source: write.source,
+          sourceDigest: "digest",
+          key: "hero",
+          value: { id: "hero", name: "Hero", type: "npc" },
+          record: {
+            id: "hero",
+            sessionId: "session",
+            name: "Hero",
+            aliases: [],
+            type: "npc",
+            fields: {},
+            version: 1,
+            createdAt: now,
+            updatedAt: now,
+          },
+        },
+        finalMedia,
+      ];
+      const batch = vi.spyOn(store, "setPluginDataBatch");
+      const cas = vi.spyOn(store, "compareAndSetPluginDataBatch");
+      await expect(
+        store.withTransaction(async (tx) => {
+          await tx.createSession({
+            id: "session",
+            worldId: "world",
+            status: "active",
+            phase: "playing",
+            setupRuntimes: {},
+            seats: [],
+            locale: "en-US",
+            activePlugins: [],
+            completedPlayerTurns: 0,
+            createdAt: now,
+            updatedAt: now,
+          });
+          await tx.upsertCharacterSchema({
+            sessionId: "session",
+            version: 1,
+            types: ["npc"],
+            attributes: [],
+            createdAt: now,
+            updatedAt: now,
+          });
+          await applyPreparedWorldDataImportForSession({
+            store: tx,
+            mediaStore,
+            sessionId: "session",
+            worldId: "world",
+            now,
+            prepared: {
+              imported: true,
+              diagnostics: [],
+              mediaRefs: prepared.mediaRefs,
+              plan: {
+                datasetPolicy: policy,
+                writes,
+                diagnostics: [],
+                mergeEvents: [],
+                deferredProjectionOutputs: [],
+              },
+            },
+          });
+        }),
+      ).rejects.toThrow(
+        reason === "schema" ? "record does not match" : "limit",
+      );
+      expect(batch).not.toHaveBeenCalled();
+      expect(cas).not.toHaveBeenCalled();
+      expect(await store.getSession("session")).toBeNull();
+      expect(await store.getCharacterSchema("session")).toBeNull();
+      expect(await store.listCharacters("session")).toEqual([]);
+      expect(await store.listSessionLorebookEntries("session")).toEqual([]);
+      expect(await store.listPluginData("session", "portraits")).toEqual([]);
+      expect(await store.listWorldDataImportLedger("session")).toEqual([]);
+      expect(await mediaStore.listRefs()).toEqual([
+        expect.objectContaining({ sessionId: "other" }),
+      ]);
+      expect(
+        await mediaStore.isReferencedBy(other.mediaRefs[0]!.id, "other"),
+      ).toBe(true);
+      expect(
+        await mediaStore.isReferencedBy(other.mediaRefs[0]!.id, "session"),
+      ).toBe(false);
+    } finally {
       await store.close();
       await close();
     }

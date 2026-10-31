@@ -1010,6 +1010,8 @@ The optional `notice` field of a form interaction is shown above the fields.
 
 ### Plugin RPC
 
+Action and plugin-command scoped-store writes reuse the [dataset rules](./plugins.md#datasets-contributesdatasets): each record is checked before persistence, refused records stay unchanged, and earlier successful calls remain persisted. Uncaught refusals retain the existing `handler-threw` and production-safe `500` response. There are no new event or status shapes, player turns or story-attached operation notices. Existing fixed notices for isolated operation failures and concealed-error rules remain unchanged.
+
 This is the single channel for sending "structured instructions" to a plugin. It carries three kinds of calls: action-level, runtime-level, and command-level.
 
 - Action-level and command-level calls return one JSON answer.

@@ -302,6 +302,7 @@ Web 客户端只发送它的请求用得到的供应商的密钥：
 - 插件注册的媒体 wire 和文本 wire 一样带着提供它的插件：会话里只有启用了该插件才能选用；不属于任何会话的请求，只能选用内置插件的 wire，`self` 形态下也能选用社区插件的。
 - `framework` 是保留的 ID，没有包能用它。请求里写 `pluginId: "framework"` 只会执行框架默认动作，路由的信任判断和实际执行的处理函数是同一个。
 - 绑定会话的存储视图、按插件查找工具、proposal 管线，都是插件 API 的权限边界，也有同样的局限。
+- action / command RPC 的 scoped store 与世界数据导入按注册包捕获的数据集声明检查写入，不从已加载 runtime 推断策略，零 runtime 的包也适用。审批与信任不放宽 schema、操作种类或大小限制。管理 plugin-data PUT / DELETE 保留运维覆盖和已有授权限制；这不构成对获准服务端 JavaScript 的沙箱。
 - 读服务的 `ctx.pluginData` 绑定会话和提供方插件，过滤 `_hidden.*`，每次返回独立副本；`world` 复制调用方视图，`getOwnSettings()` 只读提供方设置。服务拿不到写入方法或 proposal 通道，见[服务上下文](../reference/plugin-extensions.md#服务能拿到什么不能拿到什么)。
 
 `ctx.gateway.resolveSlot()` 是同一类边界。

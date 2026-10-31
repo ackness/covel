@@ -1,3 +1,6 @@
+import { datasetFailure } from "@covel/runtime";
+import { finalPluginWriteDiagnostics } from "./session-import/validation.js";
+import { capturePluginDatasetPolicy } from "../lib/plugin-dataset-policy.js";
 import {
   activeDimensionProvider,
   appendDimensionPlan,
@@ -13,7 +16,7 @@ import {
   portableCharacterSources,
   portableContractSources,
 } from "./portable-contract-data.js";
-import type { WorldDataImportLedgerRecord } from "@covel/store";
+import type { DataStore, WorldDataImportLedgerRecord } from "@covel/store";
 import type { WorldDataDiagnostic } from "./types.js";
 import {
   conventionCollisionDiagnostics,
@@ -430,8 +433,13 @@ export class WorldDataSyncConflictError extends Error {
   readonly code = "world_data_sync_conflict";
 }
 
-function emptyImportPlan(): PreparedWorldDataSync["plan"] {
+function emptyImportPlan(
+  deps?: WorldDataImportPreflightDeps,
+): PreparedWorldDataSync["plan"] {
   return {
+    datasetPolicy: capturePluginDatasetPolicy(
+      deps?.registry?.getAll().values() ?? [],
+    ),
     writes: [],
     diagnostics: [],
     mergeEvents: [],
@@ -446,7 +454,7 @@ async function dimensionOnlyPlan(
 ): Promise<PreparedWorldDataSync> {
   const session = await options.store.getSession(options.sessionId);
   const plan = appendDimensionPlan(
-    emptyImportPlan(),
+    emptyImportPlan(options.preflight),
     record.dimensions,
     {
       ...options.preflight,
@@ -511,7 +519,7 @@ export async function prepareWorldDataSyncForSession(
     return {
       imported: true,
       diagnostics: [...collisions, ...descriptor.diagnostics],
-      plan: emptyImportPlan(),
+      plan: emptyImportPlan(options.preflight),
     };
   }
 
@@ -586,7 +594,7 @@ async function preparePortableWorldDataSync(
     : {
         imported: false,
         diagnostics: prepared.diagnostics,
-        plan: emptyImportPlan(),
+        plan: emptyImportPlan(options.preflight),
       };
 }
 
@@ -830,6 +838,66 @@ export async function syncWorldDataForSession(
     upserted++;
   }
 
+  // Physical replacement deletes implement a set; only selected true removals
+  // need delete permission. An absent target needs just ledger cleanup.
+  const replacementKeys = new Set(writesToApply.map(writeKey));
+  const removalDiagnostics = async (
+    store: Pick<
+      DataStore,
+      "getPluginData" | "listCharacters" | "listSessionLorebookEntries"
+    >,
+  ): Promise<WorldDataDiagnostic[]> => {
+    const failures: WorldDataDiagnostic[] = [];
+    for (const ledger of ledgersToDelete) {
+      if (
+        replacementKeys.has(ledgerKey(ledger)) ||
+        !ledger.pluginId ||
+        !ledger.namespace
+      )
+        continue;
+      if (
+        (await currentHashForLedger({
+          store,
+          sessionId: options.sessionId,
+          ledger,
+        })) === null
+      )
+        continue;
+      const failure = datasetFailure(
+        "worldData sync",
+        plan.datasetPolicy(ledger.pluginId, ledger.namespace),
+        ["delete"],
+      );
+      if (failure)
+        failures.push({
+          level: "error",
+          sourceId: ledger.sourceId,
+          message: failure.error ?? "Dataset removal refused",
+        });
+    }
+    return failures;
+  };
+  const refusalResult = (
+    failures: readonly WorldDataDiagnostic[],
+  ): SyncWorldDataForSessionResult => ({
+    imported: true,
+    dryRun,
+    diagnostics: [...diagnostics, ...failures],
+    planned: plan.writes.length,
+    upserted: 0,
+    deleted: 0,
+    unchanged,
+    conflicts,
+    mediaRefs: [],
+  });
+  const failures = [
+    ...finalPluginWriteDiagnostics(plan, writesToApply, {
+      observational: true,
+    }),
+    ...(await removalDiagnostics(options.store)),
+  ];
+  if (failures.length) return refusalResult(failures);
+
   // A row in conflict is left as it is and reported; it does not hold back the
   // rows that are not. A session that was played always has such rows (its
   // dimensions evolved, and `force` does not override those), so a sync that
@@ -861,9 +929,23 @@ export async function syncWorldDataForSession(
   const materializedWritesToApply = materialized.writes;
   let committed = false;
   try {
+    const finalFailures = finalPluginWriteDiagnostics(
+      plan,
+      materializedWritesToApply,
+    );
+    if (finalFailures.length) return refusalResult(finalFailures);
     // Scoped transaction: ledger deletes + plan writes commit atomically and a
     // throw rolls back the DB. Unclaimed materialized bytes remain for media GC.
     await options.store.withTransaction(async (tx) => {
+      const boundaryFailures = [
+        ...finalPluginWriteDiagnostics(plan, materializedWritesToApply),
+        ...(await removalDiagnostics(tx)),
+      ];
+      if (boundaryFailures.length)
+        throw new Error(
+          boundaryFailures.map((failure) => failure.message).join("; "),
+        );
+
       // Compare-and-swap. The conflict scan above ran BEFORE this transaction
       // opened, so anything it declared unmodified could have been edited in
       // between — by a turn, or by another HTTP writer — and a `force: false`
@@ -957,6 +1039,7 @@ export async function syncWorldDataForSession(
           worldId,
           now: options.now,
           plan: {
+            datasetPolicy: plan.datasetPolicy,
             writes: writesToCommit,
             diagnostics: [],
             mergeEvents: [],

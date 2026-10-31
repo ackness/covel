@@ -1,3 +1,7 @@
+import {
+  datasetFailure,
+  type DatasetPolicyResolver,
+} from "../plugin-data-validation.js";
 /**
  * Factories for the per-call helpers we hand to function-runtime
  * handlers. Keeps the turn-executor and plugin-rpc call sites symmetrical
@@ -867,6 +871,7 @@ const RPC_TURN_MESSAGE_LIMIT = 200;
 export function createRpcHandlerStoreView(
   store: DataStore,
   ctx: Pick<HandlerHelperContext, "sessionId" | "pluginId">,
+  options: { readonly datasetPolicy?: DatasetPolicyResolver } = {},
 ): RpcHandlerStore {
   return {
     async getSession() {
@@ -882,14 +887,21 @@ export function createRpcHandlerStoreView(
       return store.listRecentTurnMessages(ctx.sessionId, count);
     },
     async setPluginData(record) {
-      assertWritableNamespace(record.namespace);
+      const input = structuredClone(record);
+      assertWritableNamespace(input.namespace);
       assertPluginDataSize(
         ctx.pluginId,
-        record.namespace,
-        record.key,
-        record.value,
+        input.namespace,
+        input.key,
+        input.value,
       );
-      const input = structuredClone(record);
+      const failure = datasetFailure(
+        "setPluginData",
+        options.datasetPolicy?.(ctx.pluginId, input.namespace),
+        ["set"],
+        { value: input.value },
+      );
+      if (failure) throw new Error(failure.error);
       const existing = await store.getPluginData(
         ctx.sessionId,
         ctx.pluginId,
