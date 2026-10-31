@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { describe, expect, it } from "vitest";
-import type { StoryMessageSegment } from "@covel/shared";
+import type { CharacterVisualModel, StoryMessageSegment } from "@covel/shared";
 import type { UISlotEntry } from "@/services/api/plugin-data.js";
 import {
   compileSegmentTemplates,
@@ -134,7 +134,10 @@ describe("segment template state", () => {
       fields: { secret: 1 },
     },
   ];
-  const visual = { portrait: "aya.png" } as never;
+  const visual: CharacterVisualModel = {
+    characterId: "char-aya",
+    avatar: { id: "a".repeat(64), mime: "image/png", size: 1 },
+  };
 
   it("exposes the segment, its index, and the resolved speaker's public fields", () => {
     expect(
@@ -145,6 +148,46 @@ describe("segment template state", () => {
       character: { id: "char-aya", name: "阿雅", type: "npc" },
       visual,
     });
+  });
+
+  it("projects no surrounding private fields or other character visuals", () => {
+    const second = {
+      id: "char-beth",
+      name: "Beth",
+      type: "npc",
+      fields: { brief: "PRIVATE-BETH" },
+    };
+    const state = segmentTemplateState(
+      {
+        ...aya,
+        ...{
+          reasoning: "HIDDEN-REASONING",
+          continuation: "HIDDEN-CONTINUATION",
+        },
+      },
+      0,
+      [...characters, second],
+      new Map([
+        ["char-aya", visual],
+        [
+          "char-beth",
+          {
+            characterId: "char-beth",
+            avatar: { id: "b".repeat(64), mime: "image/png", size: 1 },
+          },
+        ],
+      ]),
+    );
+    expect(state.visual?.avatar).toEqual(visual.avatar);
+    expect(JSON.stringify(state)).not.toMatch(
+      /never exposed|secret|PRIVATE-BETH|HIDDEN-|char-beth/,
+    );
+    expect(Object.keys(state)).toEqual([
+      "segment",
+      "index",
+      "character",
+      "visual",
+    ]);
   });
 
   it("leaves the character out when the speaker is unresolved", () => {

@@ -62,6 +62,8 @@ The built page carries a content security policy, and the dev server does not. `
 
 `tests/e2e/plugin-assets-isolation.spec.ts` checks classic page resources, the injected bridge, sandbox/CSP isolation and embedded-font success versus rejection of font URLs without CORS under PAGE_CSP in `chromium-dev`.
 
+`tests/e2e/stage-render-followups.spec.ts` uses the built app, an isolated HTTP host, bundled scene selectors and the actual dialogue template to cover departures, full-cast replacement, reduced motion, portrait preview and reload. Scripted model output needs no paid models. Animation assertions use a controlled clock and the real CSS animation lifecycle.
+
 ### Accessibility Cases
 
 ```bash

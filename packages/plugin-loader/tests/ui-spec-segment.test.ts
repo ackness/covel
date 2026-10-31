@@ -76,6 +76,45 @@ describe("segment template loading", () => {
     expect(loaded.slots.segment).toEqual([valid]);
   });
 
+  it.each(["component", "type"])(
+    "loads and statically validates a speaker avatar using %s",
+    async (spelling) => {
+      const avatar = {
+        ...valid,
+        view: {
+          [spelling]: "CharacterAvatar",
+          props: { characterId: { $state: "/character/id" } },
+        },
+      };
+      const { dir, declared } = await plugin({ avatar });
+      expect(validate(dir)).toBeUndefined();
+      const loaded = await loadPluginUiSpecs(dir, "segment-probe", {
+        segment: declared,
+      });
+      expect(loaded.diagnostics).toEqual([]);
+      expect(loaded.slots.segment).toEqual([avatar]);
+      for (const binding of ["on", "watch"]) {
+        const sibling = {
+          ...avatar,
+          view: {
+            ...avatar.view,
+            [binding]: { press: { action: "sendMessage" } },
+          },
+        };
+        const fixture = await plugin({ avatar, sibling });
+        const result = await loadPluginUiSpecs(fixture.dir, "segment-probe", {
+          segment: fixture.declared,
+        });
+        expect(result.slots.segment).toEqual([avatar]);
+        expect(result.diagnostics).toHaveLength(1);
+        expect(result.diagnostics[0]!.issues).toContainEqual(
+          expect.objectContaining({ path: `view.${binding}` }),
+        );
+        expect(validate(fixture.dir)).toContain(`view.${binding}`);
+      }
+    },
+  );
+
   it("reports the same problems while the valid sibling still loads", async () => {
     for (const [name, { spec, path: issuePath }] of Object.entries(invalid)) {
       const { dir, declared } = await plugin({

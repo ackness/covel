@@ -127,3 +127,5 @@ New compositions remain plugin lists plus a world-generation default view. They 
 ## Story-driven presentation
 
 Scene Stage and Soundtrack story-cue selectors adopt zero-budget [presentation functions](../reference/plugins.md#presentation-runtimes). They add no generation charges; absent plugins or assets degrade only their display. See [stage and sound](./stage.md).
+
+Scene Stage dialogue templates use speaker-scoped portraits with local enlargement. The current cast updates immediately while the host finishes departures; see [Stage and sound](./stage.md).
