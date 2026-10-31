@@ -22,7 +22,15 @@ const data = vi.hoisted(() => ({
   getSession: vi.fn(),
   updateSession: vi.fn(),
 }));
-vi.mock("@/settings/SettingsDialog.js", () => ({ SettingsDialog: () => null }));
+vi.mock("@/settings/SettingsDialog.js", () => ({
+  SettingsDialog: ({
+    open,
+    initialKey,
+  }: {
+    open: boolean;
+    initialKey: string;
+  }) => (open ? <div role="dialog">{initialKey}</div> : null),
+}));
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({
     t: (key: string, args?: { field?: string }) =>
@@ -54,6 +62,84 @@ const base: OrchestrationResponse = {
   ],
 };
 describe("orchestration controls", () => {
+  it.each(["unique", "selected", "paused"] as const)(
+    "shows a sole %s provider without a selection form",
+    async (status) => {
+      data.getSession.mockResolvedValue({ autoAdvanceLimit: 3 });
+      const policy = {
+        ...base.policies[0]!,
+        status:
+          status === "paused" ? ("paused" as const) : ("available" as const),
+      };
+      vi.mocked(getOrchestration).mockResolvedValue({
+        ...base,
+        settings: {
+          ...base.settings,
+          ...(status === "selected"
+            ? { turnPolicy: { pluginId: policy.pluginId, name: policy.name } }
+            : {}),
+        },
+        policies: [policy],
+        status,
+      });
+      render(<OrchestrationSettings sessionId="scene" />);
+      await screen.findByText(policy.label);
+      expect(screen.queryByRole("combobox")).toBeNull();
+      expect(
+        screen.queryByRole("button", { name: "save-orchestration.policy" }),
+      ).toBeNull();
+      fireEvent.click(
+        screen.getByRole("button", { name: "orchestration.providerSettings" }),
+      );
+      expect(screen.getByRole("dialog").textContent).toBe("plugin.sample");
+      expect(patchOrchestration).not.toHaveBeenCalled();
+    },
+  );
+  it("clears a stale selection before resolving the sole remaining provider", async () => {
+    data.getSession.mockResolvedValue({ autoAdvanceLimit: 3 });
+    const unique: OrchestrationResponse = {
+      ...base,
+      policies: [base.policies[0]!],
+      status: "unique",
+    };
+    vi.mocked(getOrchestration).mockResolvedValue({
+      ...unique,
+      settings: {
+        ...base.settings,
+        turnPolicy: { pluginId: "gone", name: "Old plan" },
+      },
+      status: "missing",
+      policies: [
+        ...unique.policies,
+        {
+          pluginId: "gone",
+          name: "Old plan",
+          label: "Old plan",
+          status: "unavailable",
+        },
+      ],
+    });
+    vi.mocked(patchOrchestration).mockImplementation(async () => {
+      vi.mocked(getOrchestration).mockResolvedValue(unique);
+      return unique;
+    });
+    render(<OrchestrationSettings sessionId="scene" />);
+    await screen.findByText("Old plan");
+    expect(screen.queryByRole("combobox")).toBeNull();
+    fireEvent.click(
+      screen.getByRole("button", { name: "orchestration.clearPolicy" }),
+    );
+    await waitFor(() =>
+      expect(patchOrchestration).toHaveBeenCalledWith("scene", {
+        turnPolicy: null,
+      }),
+    );
+    await screen.findByText("orchestration.unique");
+    expect(screen.getByText("Ensemble")).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: "orchestration.providerSettings" }),
+    ).toBeTruthy();
+  });
   it("stays hidden when neither resource can be loaded", async () => {
     vi.mocked(getOrchestration).mockRejectedValue(new Error("Unavailable"));
     data.getSession.mockImplementation(() => {
@@ -97,7 +183,7 @@ describe("orchestration controls", () => {
     )) as HTMLInputElement;
     await waitFor(() => expect(calls.disabled).toBe(false));
     expect(screen.getAllByRole("spinbutton")).toHaveLength(3);
-    expect(screen.getAllByRole("option")).toHaveLength(1);
+    expect(screen.queryByRole("combobox")).toBeNull();
     expect(screen.getByText("orchestration.missing")).toBeTruthy();
     expect(screen.queryByRole("status")).toBeNull();
     fireEvent.change(calls, { target: { value: "0" } });

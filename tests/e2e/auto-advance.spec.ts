@@ -1,6 +1,11 @@
 import { expect, test } from "@playwright/test";
 import { startAdvancementBrowserHost } from "../../apps/server/tests/helpers/auto-advance-browser.js";
-import { composer, composerInput, seedAppSettings } from "./helpers/player.js";
+import {
+  composer,
+  composerInput,
+  openStudioConfiguration,
+  seedAppSettings,
+} from "./helpers/player.js";
 
 for (const mode of ["chat", "stage"] as const) {
   test(`bounded advancement and Stop remain available in ${mode}`, async ({
@@ -62,6 +67,8 @@ for (const mode of ["chat", "stage"] as const) {
       await page.reload();
       await expect(controls).toBeVisible();
       await expect(controls.getByRole("status")).toHaveCount(0);
+      await page.getByRole("button", { name: "解析视图", exact: true }).click();
+      await openStudioConfiguration(page);
       await page.getByLabel("自动推进轮数", { exact: true }).fill("0");
       await page
         .getByRole("button", { name: "保存自动推进轮数", exact: true })
@@ -138,6 +145,7 @@ for (const mode of ["chat", "stage"] as const) {
       const next = (await response.json()) as { id: string };
       await host.store.updateSession(next.id, { phase: "playing" });
       await page.goto(`/session?sid=${next.id}`);
+      await openStudioConfiguration(page);
       await expect(
         page.getByLabel("自动推进轮数", { exact: true }),
       ).toHaveValue("0");

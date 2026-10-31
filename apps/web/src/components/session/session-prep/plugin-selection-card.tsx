@@ -165,7 +165,11 @@ export function PluginSelectionCard({
           id="plugin-selection-card-content"
           className="space-y-4 px-4 pb-4"
         >
-          <div className="space-y-1.5">
+          <fieldset
+            disabled={pluginPlanLoading}
+            aria-label={t("session.plugins", "Loaded Plugins")}
+            className="min-w-0 space-y-1.5"
+          >
             <PluginPackSelector
               pluginPacks={pluginPacks}
               activePluginPack={activePluginPack}
@@ -231,7 +235,7 @@ export function PluginSelectionCard({
                 bindingState={bindingState}
               />
             </details>
-          </div>
+          </fieldset>
 
           <WorldDataPreflightPanel
             result={worldDataPreflight}

@@ -12,7 +12,8 @@
 
 - **Dialogue narration prepares a policy once, then delegates inside the story agent.** Successful public actor segments retain plan order; this bundled consumer dispatches sequentially, including parallel advice. Shared briefs contain current observations, while each actor receives its own witnessed history. Private intent is discarded. Stage presence informs both planning and narration. Only committed story yield requests bounded host advancement.
 - **Director uses the planner's text slot, including browser request bindings.** Slot inspection matches generation, and function gateways convert JSON Schema for structured output by default. Missing gateways or usable slots fall back to mention with a reason; model failures leave narrator-only play available.
-- **Orchestration groups policy selection and all three limits.** Independent field saves use their existing routes, preserve failed drafts and successful saves, and link to provider-owned settings. Live advancement and Stop remain in every game view.
+- **Orchestration groups policy selection and all three limits.** A sole provider resolves automatically with its name and settings link; multiple providers offer a selector, and stale selections can be cleared. Independent field saves use their existing routes and preserve failed drafts and successful saves. Live advancement and Stop remain in every game view.
+- **Preparation waits for plugin defaults before accepting selection edits.** Plugin switches and pack controls stay disabled while the plugin plan loads, so its defaults cannot overwrite a player's exclusions.
 - **Translated standalone plugin prompt pairs share the existing fingerprint lock.** Existing English/Chinese pairs under plugin prompt directories participate without requiring translations for unrelated unpaired templates.
 
 ### Upgrade notes
