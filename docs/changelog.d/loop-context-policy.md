@@ -1,11 +1,6 @@
 ### Changed
 
-- **Long tool conversations condense older output to stay within the model context.** The loop preserves full tool records, replaces old result data with omission markers, and freezes older steps into deterministic digests. If the request still cannot fit, profiles allowing a finalizer get one answer request with tools off and budget-triggered trimming that can include the newest tool step. Unrescued overflows retain their failure text and runtime fault attribution.
-
-### Fixed
-
-- **Finalizers retain tool data when the request fits.** Both normal and emergency trimming start only above the input limit and stop at the 70% target; emergency mode only expands which groups may be trimmed.
-- **Hook filtering cannot substitute another call's condensed result when IDs are reused.** Ledger replay checks call metadata and result content, skipping missing or ambiguous matches.
+- **Long tool conversations condense older output to stay within the model context.** The loop preserves full tool records, replaces old result data with omission markers, and freezes older steps into deterministic digests. Trimming starts only above the input limit and stops at 70% of it, so a request that fits, including a finalizer's, keeps its tool data. If the request still cannot fit, profiles allowing a finalizer get one answer request with tools off, whose trimming may also reach the newest tool step. Condensed results are matched to their calls by call metadata and content, so a hook that filters calls with reused IDs cannot swap one call's result for another's. Unrescued overflows retain their failure text and runtime fault attribution.
 
 ### Documentation
 
