@@ -2160,7 +2160,7 @@
       "notice": "Uses your configured model; charges may apply.",
       "delegated": "Runs when another runtime delegates work.",
       "manual": "Runs when explicitly invoked.",
-      "event": "Runs when a matching event arrives.",
+      "event": "Runs on matching events, including explicit player actions. Explicit calls bypass start-turn, cooldown and maximum-run limits.",
       "setup": "Runs during session setup.",
       "scheduled": "Runs on scheduled turns (every {{count}} turns).",
       "start": "Starts at turn {{count}}.",

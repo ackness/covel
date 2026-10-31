@@ -888,6 +888,8 @@ Only a `webview` in `contributes.ui.view` can declare `bridge: "session"`. Until
 
 The capability is session reading, bound to the plugin ID and a SHA-256 hash of the entire loaded spec, including inlined HTML. SettingsStore persists the record on this device at `ui.pluginViewConsent.<pluginId>.<hash>.session`. Changing the spec or HTML asks again. Choose “Revoke story access” in the view bar’s “View permissions” menu to revoke and return to the host default. This consent is independent of server-code approval and applies to every plugin source.
 
+Replacing content or switching sessions closes the old iframe's connection and stream subscription. The page stays unmounted while new content is being hashed or awaiting consent. Already authorized content also gets a new iframe in another session; the old page receives no state or streamed text from the new session.
+
 ### SessionProjection (version 1)
 
 After consent, the page reads the `session` field of the `window.covel` state object, and can also use `window.covel.subscribe` to follow changes. The table below describes that field. The projection does not repeat top-level `locale` and `theme`.

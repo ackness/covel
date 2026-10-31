@@ -27,7 +27,7 @@ export function PluginModelNotice({
             : t("plugin.modelUse.scheduled", { count: trigger.every ?? 1 });
     if (
       !runtime.subagentOnly &&
-      trigger.type !== "manual" &&
+      trigger.type === "auto" &&
       runtime.stage !== "setup"
     ) {
       if (trigger.startTurn !== undefined)

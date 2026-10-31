@@ -1696,7 +1696,7 @@ Each slot is an array. Its elements are `{ pluginId, specs[] }`. Each item in `s
 
 - Request body: `{ "sessionId"?: string }`.
 - Response: `{ "ok": true, "pluginId": string, "generation": string }`.
-- Available only in the development environment, and only for community plugins. It needs authentication through the install API, and the session must currently hold the server-code grant.
+- Available only in development and only for community plugins, with install API authorization. Freshly proven declarative packages publish without a code grant. Importing other packages' code requires the session's current server-code grant; without it, reload publishes metadata only.
 - If the reload fails, it returns `409 plugin_reload_failed`, and the old generation stays in effect.
 - When the feature is off, it returns `403 plugin_reload_disabled`.
 - Executions that have already started keep using the old generation's capabilities, handlers, and guards. Later executions use the new generation.
@@ -4503,7 +4503,7 @@ Resume a suspended runtime with the data the player submitted.
 | ------ | ------ | -------- | ---------------------------------------------------------------------------- |
 | `data` | object | Yes      | Data the player submitted. It must match the suspended item's `resumeSchema` |
 
-- If a non-declarative community plugin lacks execution grants, the server first returns `202 approval-required`, asking for `covel:plugin-server-code` and then `runtime:<runtimeId>`. Only the resumed runtime and the session's sub-agent providers need approval; the server rechecks the grants under the session lock. The client approves each request and retries the original submission. Denying approval leaves the suspension pending. Hosted deployments also require an operator credential.
+- If a non-declarative community plugin lacks execution grants, the server first returns `202 approval-required`, asking for `covel:plugin-server-code` and then `runtime:<runtimeId>`. Only the resumed runtime and the session's sub-agent providers need approval; the server rechecks the grants under the session lock. The client approves each request and retries the original submission. Denying approval leaves the suspension pending. These code approvals also require an operator credential on hosted deployments. Freshly proven declarative packages skip code/runtime approval and this operator restriction; session ownership is still checked.
 - The server checks `data` against `resumeSchema` with full JSON Schema validation (Ajv). This covers `enum`, nested objects, `min` / `max`, `minLength` / `maxLength`, `pattern`, array `items`, `oneOf` / `anyOf`, and more. If the data does not match, the server returns `400 resume_data_invalid`. If the schema is not an object or cannot compile, it returns `400 resume_schema_invalid` without claiming the suspension or running the plugin. The author must correct the schema produced by the plugin and create a new suspension. The player can abandon the original item.
 - A browser client can send an `X-Provider-Keys` header to give model keys for this request. The desktop app and self-hosted clients can leave it out, and the server then uses the keys it was started with. The server never returns keys through this endpoint.
 
@@ -5820,7 +5820,7 @@ All three endpoints follow the same rules:
 - Events are ordered from oldest to newest.
 - The `nextCursor` in the response is an opaque string. When it is not `null`, there are earlier events. Send it back unchanged as `?cursor` to read the earlier part.
 - An invalid `cursor` returns `400 { "code": "invalid_cursor" }`.
-- `discovery` is the plugin and runtime discovery snapshot for this session. The debug page uses it to show names.
+- `discovery` is the plugin and runtime discovery snapshot for this session. The debug page uses it to show names. Before serialization, current files are reassessed for execution mode and source trust using the same assessment as `/api/plugins`.
 
 #### `GET /api/traces/:sessionId`
 

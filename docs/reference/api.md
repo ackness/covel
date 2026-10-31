@@ -1696,7 +1696,7 @@ fork 和社区插件的授权：
 
 - 请求 body：`{ "sessionId"?: string }`。
 - 响应：`{ "ok": true, "pluginId": string, "generation": string }`。
-- 只在开发环境、只对社区插件可用。需要通过安装 API 的鉴权，代码导入还要求该会话当前持有服务端代码授权；未授权时仅发布元数据。
+- 只在开发环境、只对社区插件可用，需要通过安装 API 的鉴权。新鲜证明为声明式的包无需代码授权即可发布；其他包的代码导入要求该会话当前持有服务端代码授权，未授权时仅发布元数据。
 - 重载失败返回 `409 plugin_reload_failed`，旧的一代继续生效。
 - 功能关闭时返回 `403 plugin_reload_disabled`。
 - 已经开始的执行继续用旧一代的能力、handler 和 guard；之后的执行用新一代。
@@ -4503,7 +4503,7 @@ runtime 可以中途停下来等玩家提供数据，这叫挂起。本节的端
 | ------ | ------ | ---- | ----------------------------------------------- |
 | `data` | object | 是   | 玩家提交的数据，必须符合挂起项的 `resumeSchema` |
 
-- 缺少社区插件的运行授权时，先返回 `202 approval-required`，依次请求 `covel:plugin-server-code` 和 `runtime:<runtimeId>`。授权只针对这次恢复的 runtime 和会话里的子 agent 提供方；持有会话锁后还会重查。客户端逐项审批并重试原请求，拒绝审批则保留挂起项。托管部署还要求运营者凭据。
+- 非声明式社区插件缺少运行授权时，先返回 `202 approval-required`，依次请求 `covel:plugin-server-code` 和 `runtime:<runtimeId>`。授权只针对这次恢复的 runtime 和会话里的子 agent 提供方；持有会话锁后还会重查。客户端逐项审批并重试原请求，拒绝审批则保留挂起项。这些代码审批在托管部署还要求运营者凭据；新鲜证明为声明式的包免去代码、runtime 审批和此运营者门槛，但仍检查会话所有权。
 - 服务端用 `resumeSchema` 对 `data` 做完整的 JSON Schema 校验（Ajv）：`enum`、嵌套对象、`min` / `max`、`minLength` / `maxLength`、`pattern`、数组 `items`、`oneOf` / `anyOf` 等都会检查。不符合返回 `400 resume_data_invalid`。schema 不是对象或无法编译时，返回 `400 resume_schema_invalid`；不会占用挂起项或运行插件，作者需修正插件产生的 schema，再发起新的挂起请求；玩家可以放弃原挂起项。
 - 浏览器客户端可以带 `X-Provider-Keys` 请求头，为这次请求提供模型密钥。桌面版和自部署客户端可以省略，沿用服务端启动时配置的密钥。服务端不会通过这个接口回传密钥。
 
@@ -5216,7 +5216,7 @@ id: example-epoch:2
 
 ##### 社区插件授权
 
-会话里的社区插件还没有得到授权时，服务端在开始 SSE 和写入回合**之前**返回 HTTP `202` 和一段 JSON：
+会话里的非声明式社区插件还没有得到授权时，服务端在开始 SSE 和写入回合**之前**返回 HTTP `202` 和一段 JSON：
 
 ```json
 { "status": "approval-required", "approvalId": "...", "pending": { ... } }
@@ -5818,7 +5818,7 @@ Trace 是服务器为每个回合记下的调试事件：哪个 runtime 开始�
 - 事件按时间从旧到新排列。
 - 响应里的 `nextCursor` 是一个不透明字符串。它不为 `null` 时，说明还有更早的事件；把它原样作为 `?cursor` 再请求，就能读到更早的一段。
 - 非法的 `cursor` 返回 `400 { "code": "invalid_cursor" }`。
-- `discovery` 是这个会话的插件和 runtime 发现快照，调试页用它显示名称。
+- `discovery` 是这个会话的插件和 runtime 发现快照，调试页用它显示名称。序列化前重新检查当前文件的执行分类与来源信任，与 `/api/plugins` 使用同一评估结果。
 
 #### `GET /api/traces/:sessionId`
 

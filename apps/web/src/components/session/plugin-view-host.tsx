@@ -8,6 +8,7 @@ import { HeaderMenu, MenuItem } from "./game-view/game-view-header.js";
 import type { PluginViewEntry } from "./game-view/use-plugin-views.js";
 import { PluginPanel } from "./plugin-panel.js";
 import { useSessionBridge } from "./use-session-bridge.js";
+import { pluginViewContent } from "./plugin-view-consent.js";
 
 export function PluginViewHost({
   entry,
@@ -71,7 +72,12 @@ export function PluginViewHost({
       >
         {(!readsSession || sessionBridgeAllowed) && (
           <PluginSurfaceBoundary
-            key={entry.mode}
+            key={JSON.stringify([
+              sessionId,
+              entry.pluginId,
+              entry.mode,
+              pluginViewContent(entry.spec),
+            ])}
             surfaceLabel={entry.label}
             onError={failed}
           >

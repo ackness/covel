@@ -80,7 +80,7 @@ The rules that are easiest to get wrong:
 
 Every `pnpm create-plugin` mode starts `PLUGIN.md` at version `0.1.0`. Change that one place when publishing a new version, then check with `pnpm validate:plugin <plugin-dir>`.
 
-After validation passes, select the plugin on the session-prep screen of the game and authorize it. Only then does it run. See the last step in [your first plugin](./first-plugin.md). For packaging and trial installs, see [package and try install](../ship/package.md).
+After validation passes, select the plugin on the session-prep screen. Packages the host verifies as declarative from current files run directly; code packages ask for authorization. See the last step in [your first plugin](./first-plugin.md). For packaging and trial installs, see [package and try install](../ship/package.md).
 
 ## Where to declare what my code registers
 

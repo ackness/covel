@@ -80,7 +80,7 @@ Write one observation grounded in runtime-inputs.narrative.value.
 
 `pnpm create-plugin` 的每种模式都把 `PLUGIN.md` 的版本设为 `0.1.0`。发布新版本时改这一处，再用 `pnpm validate:plugin <插件目录>` 检查。
 
-校验通过后，在游戏的准备页选中插件；声明式包直接运行，代码包按提示授权，见[第一个插件](./first-plugin.md)的最后一步。打包和安装见[打包并试装](../ship/package.md)。
+校验通过后，在游戏的准备页选中插件；宿主根据当前文件确认的声明式包直接运行，代码包按提示授权，见[第一个插件](./first-plugin.md)的最后一步。打包和安装见[打包并试装](../ship/package.md)。
 
 ## 我注册的东西要在哪里声明
 
