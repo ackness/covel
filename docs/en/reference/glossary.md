@@ -22,6 +22,8 @@ Each English term has only one Chinese term. The Chinese docs, the UI text, and 
 | Contract | 契约 | A versioned ID, for example `narrative-engine@2`. |
 | Credits | 作者信息 | The `author`, `license`, and `homepage` fields of a package. |
 | Dataset | 数据集 | Typed plugin data a plugin declares (`contributes.datasets`). Not the install-time **Collection**. |
+| Dataset key | 数据集键 | The key dataset tools give a record: text normalized by `datasetKey()` (NFKC, trimmed, whitespace collapsed, lower-cased); see [The key rule and lookup](./tools.md#the-key-rule-and-lookup). |
+| Dataset tool | 数据集工具 | A `<dataset>-get`, `-list`, `-upsert` or `-update` tool the framework generates for a dataset listed in `agent.tools.datasets`; see [Dataset tools](./tools.md#dataset-tools). |
 | Deployment form | 部署形态 | The desktop app, the self-hosted web app, the official web app. Not `DEPLOYMENT_TIER`. |
 | Edition | 语言版本 | One language of a world: `defaultLocale`, and the language of each `world.<locale>.yaml` or `WORLD.<locale>.md` at the root. |
 | Execution | 执行 | One scheduled run and its commit plan; player turns, manual calls and background jobs can each start one. |
@@ -155,7 +157,9 @@ A dataset is a typed kind of plugin data that a plugin declares with `contribute
 
 It has nothing to do with a **Collection**, which is an install-time manifest (`covel-collection.yaml`). At commit, every proposal a plugin writes into its own dataset is checked against the declared operation kinds and schema.
 
-See: [Datasets](./plugins.md#datasets-contributesdatasets), [world data](./world-data.md).
+An agent reads and writes a dataset through **dataset tools**: when a runtime lists the dataset in `agent.tools.datasets`, the framework generates typed read and write tools for it, and records are stored under their **dataset key**.
+
+See: [Datasets](./plugins.md#datasets-contributesdatasets), [dataset tools](./tools.md#dataset-tools), [world data](./world-data.md).
 
 ## Deployment form
 

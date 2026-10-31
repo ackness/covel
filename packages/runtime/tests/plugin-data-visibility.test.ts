@@ -2,7 +2,7 @@
  * In-execution visibility of a plugin's own uncommitted plugin data.
  *
  * A runtime's plugin-data reads (`ctx.pluginData`, `ctx.store`, tool store
- * reads and the builtin `plugin-data-get/list`) include the writes of
+ * reads and dataset tools) include the writes of
  * completed, commit-eligible upstream runtimes of the same plugin, applied in
  * commit order. Other plugins, siblings of the same DAG level, seeds from
  * another execution and failed results stay invisible, and upstream writes
@@ -25,7 +25,7 @@ import type {
   FunctionHandlerContext,
   LoadedRuntime,
 } from "@covel/shared/plugin-runtime";
-import { createPluginDataTools } from "@covel/tools";
+import { tool, z } from "@covel/tools";
 import { commitExecution, executeTurn } from "../src/index.js";
 import { createToolExecutor } from "../src/agent-loop/tool-executor.js";
 import type { PluginDataReadObservation } from "../src/function-runtime/upstream-plugin-data.js";
@@ -57,6 +57,21 @@ function fn(
     ...extra,
   } as RuntimeManifest;
 }
+
+/** A plugin tool that reports what its store view sees of `notes`. */
+const peekTool = tool({
+  name: "peek",
+  description: "Read the notes.",
+  annotations: { readOnly: true, idempotent: true, concurrencySafe: true },
+  parameters: z.object({}),
+  execute: async (_args, context) => ({
+    get: (await context.store!.getPluginData("notes", "x"))?.value ?? null,
+    list: (await context.store!.listPluginData("notes")).map((row) => [
+      row.key,
+      row.value,
+    ]),
+  }),
+});
 
 const ok = (value: Record<string, JsonValue> = {}): HandlerResult => ({
   outcome: "success",
@@ -111,7 +126,7 @@ async function run(
       updatedAt: timestamp,
     });
   }
-  const tools = createPluginDataTools(store);
+  const tools = [peekTool];
   const execution = await executeTurn(
     { ...baseInput, ...options.input },
     runtimes,
@@ -131,6 +146,7 @@ async function run(
       loadRuntime: async (runtime) => ({
         manifest: runtime,
         promptTemplate: "",
+        datasetSchemas: { notes: {} },
         ...(options.guards?.[runtime.name]
           ? { guard: options.guards[runtime.name] }
           : {}),
@@ -512,34 +528,23 @@ describe("plugin-data visibility within one execution", () => {
     expect(seen).toEqual({ kept: true });
   });
 
-  it("shows upstream writes to tool store reads and the builtin plugin-data tools", async () => {
+  it("shows upstream writes to a tool's store reads", async () => {
     const a = fn("a");
-    const b = fn("b", {
-      after: [a.name],
-      tools: { builtin: ["plugin-data-get", "plugin-data-list"] },
-    });
-    const seen: Record<string, unknown> = {};
+    const b = fn("b", { after: [a.name], tools: { plugin: ["peek"] } });
+    let seen: unknown;
     await run(
       [a, b],
       {
         [a.name]: set("x", "from a"),
         [b.name]: async (ctx) => {
-          seen.get = await ctx.tools!.call("plugin-data-get", {
-            namespace: "notes",
-            key: "x",
-          });
-          seen.list = await ctx.tools!.call("plugin-data-list", {});
+          seen = await ctx.tools!.call("peek", {});
           return ok();
         },
       },
       { tools: true },
     );
 
-    expect(seen.get).toMatchObject({ found: true, value: "from a" });
-    expect(seen.list).toMatchObject({
-      count: 1,
-      items: [{ namespace: "notes", key: "x", value: "from a" }],
-    });
+    expect(seen).toEqual({ get: "from a", list: [["x", "from a"]] });
   });
 
   it("shows upstream writes to an agent's tool calls", async () => {
@@ -547,7 +552,15 @@ describe("plugin-data visibility within one execution", () => {
     const agent = fn("agent", {
       runtimeType: "agent",
       after: [a.name],
-      tools: { builtin: ["plugin-data-get"] },
+      tools: { datasets: [{ dataset: "notes", tools: ["get"] }] },
+      datasets: {
+        notes: {
+          namespace: "notes",
+          schema: "./note.json",
+          ops: ["set"],
+          tools: ["get", "list", "upsert"],
+        },
+      },
     });
     const replies: LLMResponse[] = [
       {
@@ -555,8 +568,8 @@ describe("plugin-data visibility within one execution", () => {
         toolCalls: [
           {
             id: "call-1",
-            name: "plugin-data-get",
-            arguments: JSON.stringify({ namespace: "notes", key: "x" }),
+            name: "notes-get",
+            arguments: JSON.stringify({ key: "x" }),
           },
         ],
         finishReason: "tool_calls",
@@ -578,9 +591,9 @@ describe("plugin-data visibility within one execution", () => {
       },
     );
 
-    expect(resultOf(agent.name)?.toolCalls[0]?.output).toMatchObject({
-      found: true,
-      value: "from a",
+    expect(resultOf(agent.name)?.toolCalls[0]?.output).toEqual({
+      key: "x",
+      record: "from a",
     });
     expect(
       execution.commit.readDependencies?.[resultOf(agent.name)!.runId],

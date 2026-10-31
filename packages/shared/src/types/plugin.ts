@@ -6,6 +6,7 @@
  */
 
 import type { DataOpKind } from "@covel/plugin-handlers-utils";
+import type { DatasetToolKind } from "../schemas/dataset-tools.js";
 import type {
   LoopPresetId,
   LoopPresetValues,
@@ -220,6 +221,10 @@ export interface PluginDatasetDecl {
   readonly key?: string;
   /** Operation kinds allowed on the dataset; every kind when undeclared. */
   readonly ops: readonly DataOpKind[];
+  /** Dataset tools an agent may select; derived from `ops` when undeclared. */
+  readonly tools: readonly DatasetToolKind[];
+  /** Model-facing text, appended to each dataset tool's description. */
+  readonly description?: string;
 }
 
 // ── World projections ─────────────────────────────────────
@@ -316,6 +321,15 @@ export interface ToolsConfig {
   readonly services?: readonly {
     readonly contract: string;
     readonly name: string;
+  }[];
+  /**
+   * The package's datasets an agent uses through generated tools, each with
+   * the tool kinds it selected. At run start the kernel builds
+   * `<dataset>-<kind>` tools from the dataset's declaration.
+   */
+  readonly datasets?: readonly {
+    readonly dataset: string;
+    readonly tools: readonly DatasetToolKind[];
   }[];
 }
 

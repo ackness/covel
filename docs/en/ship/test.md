@@ -64,8 +64,8 @@ Open `tests/runtime-cases.json`, and add an item to `cases`:
       "toolCalls": [
         {
           "id": "tc-1",
-          "name": "plugin-data-set",
-          "arguments": "{\"namespace\":\"notes\",\"key\":\"keepers-daughter\",\"value\":{\"kind\":\"analysis\",\"title\":\"The keeper's daughter\",\"text\":\"The innkeeper says she never left the lighthouse.\",\"tags\":[\"rumor\"]}}"
+          "name": "notes-upsert",
+          "arguments": "{\"record\":{\"id\":\"keepers-daughter\",\"kind\":\"analysis\",\"title\":\"The keeper's daughter\",\"text\":\"The innkeeper says she never left the lighthouse.\",\"tags\":[\"rumor\"]}}"
         },
         {
           "id": "tc-2",

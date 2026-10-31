@@ -22,6 +22,8 @@
 | Contract | 契约 | 带版本号的 ID，例如 `narrative-engine@2`。 |
 | Credits | 作者信息 | 一个包的 `author`、`license` 和 `homepage` 字段。 |
 | Dataset | 数据集 | 插件声明的带类型数据（`contributes.datasets`）。不是安装用的 **Collection**。 |
+| Dataset key | 数据集键 | 数据集工具给记录用的键：`datasetKey()` 规范化（NFKC、去首尾空白、合并空白、小写）后的文本；见[键的规则与查找](./tools.md#键的规则与查找)。 |
+| Dataset tool | 数据集工具 | 框架按 `agent.tools.datasets` 为数据集生成的 `<数据集>-get`、`-list`、`-upsert`、`-update` 工具；见[数据集工具](./tools.md#数据集工具)。 |
 | Deployment form | 部署形态 | 桌面客户端、自部署网页版、官方网页版。不是 `DEPLOYMENT_TIER`。 |
 | Edition | 语言版本 | 世界的一种语言：`defaultLocale`，以及根目录里每个 `world.<locale>.yaml` 或 `WORLD.<locale>.md` 的语言。 |
 | Execution | 执行 | 一次调度及其提交计划；玩家回合、手动调用和后台作业都可以发起执行。 |
@@ -155,7 +157,9 @@
 
 它和 **Collection** 无关：Collection 是安装时用的清单（`covel-collection.yaml`）。提交时，插件写入自己数据集的每一条 proposal 都按声明的操作种类和 schema 校验。
 
-详见：[数据集](./plugins.md#数据集contributesdatasets)、[世界数据](./world-data.md)。
+agent 通过**数据集工具**读写数据集：runtime 在 `agent.tools.datasets` 里列出数据集，框架就为它生成带类型的读写工具，记录按**数据集键**存放。
+
+详见：[数据集](./plugins.md#数据集contributesdatasets)、[数据集工具](./tools.md#数据集工具)、[世界数据](./world-data.md)。
 
 ## Deployment form
 

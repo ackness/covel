@@ -527,7 +527,7 @@ await store.withTransaction(async (tx) => {
 
 ### 操作式写入（plugin.data.update）
 
-插件可以对一个插件数据键提交一串操作，而不是先算好的整个值。function runtime 调用 `ctx.pluginData.update(namespace, key, ops)`；工具用 `makeProposal(ctx, now, "plugin.data.update", { namespace, key, ops })`。操作的种类和语义见[插件数据操作](./plugins.md#数据集contributesdatasets)里的 `ops`。
+插件可以对一个插件数据键提交一串操作，而不是先算好的整个值。function runtime 调用 `ctx.pluginData.update(namespace, key, ops)`；工具用 `makeProposal(ctx, now, "plugin.data.update", { namespace, key, ops })`；[数据集工具](./tools.md#数据集工具)的 `<数据集>-upsert` / `-update` 每次写入也提交一条 `plugin.data.update`。操作的种类和语义见[插件数据操作](./plugins.md#数据集contributesdatasets)里的 `ops`。
 
 **在提交事务里读改写。** 提交时，`plugin.data.update` 的处理器在提交事务里读出这个键当前存的值，用 `applyDataOps` 依次应用这些操作，再把结果写回：
 

@@ -54,7 +54,6 @@ export {
   createNotificationTool,
   builtinUITools,
 } from "@covel/plugin-handlers-utils";
-export { createPluginDataTools } from "./builtin/plugin-data-tools.js";
 export {
   createCharacterTools,
   buildSessionCharacterWriteTools,

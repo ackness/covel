@@ -316,7 +316,7 @@ agent runtime 的工具循环每一种结束方式都对应一个结束原因（
 
 **谁会触发它**
 
-- 所有写入路径都会触发：`plugin-data-set`、`plugin-data-set-batch`、DELETE `/plugin-data/...` 等。成功的 compare-and-set 写入也算（runtime job 的状态迁移、维度记录）。
+- 所有写入路径都会触发：数据集工具的写入、`ctx.pluginData`、DELETE `/plugin-data/...` 等。成功的 compare-and-set 写入也算（runtime job 的状态迁移、维度记录）。
 - 它由 `wrapStoreWithPluginDataEvents` 在 store 层统一拦截，所以前端可以实时看到插件状态的变化。
 - `plugin.data.update` 提交时也会触发：`value` 是应用操作之后的结果，`operation` 是 `set`；结果不存在而删掉了原来的行时，`operation` 是 `delete`。原本没有行、结果也不存在时什么都不写，也不触发。
 - 后台任务的终态以 `job-status.updated` 为准。`_runtime_jobs` 行的变化只用于同步数据。

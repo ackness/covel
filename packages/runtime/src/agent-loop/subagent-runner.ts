@@ -320,7 +320,9 @@ function resolveTarget(
  *
  * Imported services (`tools.services`) are read-only and stay as declared;
  * the sub-agent resolves them as itself when it starts. Write services, once
- * they exist, will add their writes to the caller's commit unit.
+ * they exist, will add their writes to the caller's commit unit. Dataset
+ * tools keep only their reads (`get`, `list`); a dataset left with none is
+ * dropped.
  */
 export function subagentToolNames(
   manifest: RuntimeManifest,
@@ -351,6 +353,16 @@ export function subagentToolNames(
     ...(tools.builtin ? { builtin: tools.builtin.filter(keep) } : {}),
     ...(tools.plugin ? { plugin: tools.plugin.filter(keep) } : {}),
     ...(Array.isArray(tools.defer) ? { defer: tools.defer.filter(keep) } : {}),
+    ...(tools.datasets
+      ? {
+          datasets: tools.datasets.flatMap(({ dataset, tools: kinds }) => {
+            const reads = kinds.filter(
+              (kind) => kind === "get" || kind === "list",
+            );
+            return reads.length > 0 ? [{ dataset, tools: reads }] : [];
+          }),
+        }
+      : {}),
   };
 }
 

@@ -36,8 +36,6 @@ describe("framework tool names", () => {
     const reads = new Set([
       "world-dimension-get",
       "world-dimension-list",
-      "plugin-data-get",
-      "plugin-data-list",
       "memory-search",
       "list-characters",
       "get-character",

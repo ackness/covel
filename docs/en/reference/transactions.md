@@ -527,7 +527,7 @@ await store.withTransaction(async (tx) => {
 
 ### Operation-based writes (plugin.data.update)
 
-A plugin can submit a list of operations against one plugin-data key instead of a computed value. A function runtime calls `ctx.pluginData.update(namespace, key, ops)`; a tool uses `makeProposal(ctx, now, "plugin.data.update", { namespace, key, ops })`. The operation kinds and their meaning are the `ops` of [plugin datasets](./plugins.md#datasets-contributesdatasets).
+A plugin can submit a list of operations against one plugin-data key instead of a computed value. A function runtime calls `ctx.pluginData.update(namespace, key, ops)`; a tool uses `makeProposal(ctx, now, "plugin.data.update", { namespace, key, ops })`; each write of the `<dataset>-upsert` / `-update` [dataset tools](./tools.md#dataset-tools) also submits one `plugin.data.update`. The operation kinds and their meaning are the `ops` of [plugin datasets](./plugins.md#datasets-contributesdatasets).
 
 **Read-modify-write in the commit transaction.** At commit, the `plugin.data.update` handler reads the key's stored value inside the commit transaction, applies the operations in order with `applyDataOps`, and writes the result back:
 

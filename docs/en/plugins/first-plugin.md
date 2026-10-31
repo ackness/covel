@@ -64,7 +64,7 @@ The scaffold writes the plugin into the user plugin directory, which is `~/.cove
 
 ```text
 tavern-rumors/
-├── PLUGIN.md                    package version and the panel it contributes
+├── PLUGIN.md                    package version, dataset and the panel it contributes
 ├── README.md
 ├── locales/
 │   └── zh.yaml                  Chinese translations of the name and interface text
@@ -76,6 +76,8 @@ tavern-rumors/
 │       ├── handler.js           the code of this function
 │       └── ui/
 │           └── panel.json       the sidebar panel
+├── schemas/
+│   └── note.schema.json         the format of one record
 └── tests/
     └── runtime-cases.json       test cases for the offline run
 ```
@@ -87,7 +89,7 @@ This example has two runtimes, one for each of the two types:
 | `analyst` | agent    | Automatically, after the narrative of each turn       | Reads the story of this turn, and records a rumor if there is new content |
 | `note`    | function | By hand, when the player clicks a button on the panel | Writes one record directly, without calling a model                       |
 
-Both write their records into this plugin's own `notes` data space. The panel shows what is in that space.
+Both write their records into this plugin's own `notes` dataset, and the panel shows what is in it. The dataset is declared in `contributes.datasets` in `PLUGIN.md`, and the format of each record is in `schemas/note.schema.json`.
 
 There is no `package.json`: the plugin ID is the folder name, the version is in `PLUGIN.md`, and Covel loads `handler.js` as an ES module.
 
@@ -108,18 +110,19 @@ io:
       as: <existing-notes>
 agent:
   tools:
-    builtin:
-      - plugin-data-set
+    datasets:
+      - dataset: notes
+        tools: [upsert]
 ```
 
-| This part                                | What it means                                                                                                                            |
-| ---------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
-| No `function` block                      | This is a runtime driven by a model. The body of the file is the prompt for the model                                                    |
-| `schedule.stage: post-turn`              | Runs after the narrative                                                                                                                 |
-| `io.inputs.narrator-output`              | Reads the story text of this turn. It comes from "any plugin that provides `narrative-engine@2`," not from one specific plugin           |
-| `io.selfData`                            | Puts the records it already has into the prompt, so the model can avoid recording the same thing twice                                   |
-| Fields left out                          | Take their defaults: it uses the model role `plugin`, and its output is not story text. See [Defaults](../reference/plugins.md#defaults) |
-| `agent.tools.builtin: [plugin-data-set]` | The model can call only this one tool: write one record into its own data space                                                          |
+| This part                   | What it means                                                                                                                            |
+| --------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| No `function` block         | This is a runtime driven by a model. The body of the file is the prompt for the model                                                    |
+| `schedule.stage: post-turn` | Runs after the narrative                                                                                                                 |
+| `io.inputs.narrator-output` | Reads the story text of this turn. It comes from "any plugin that provides `narrative-engine@2`," not from one specific plugin           |
+| `io.selfData`               | Puts the records it already has into the prompt, so the model can avoid recording the same thing twice                                   |
+| Fields left out             | Take their defaults: it uses the model role `plugin`, and its output is not story text. See [Defaults](../reference/plugins.md#defaults) |
+| `agent.tools.datasets`      | The model can call only one tool, `notes-upsert`: write one record into its own `notes` dataset                                          |
 
 The model can use only the tools listed here. It cannot read or write other plugins' data, and it cannot bypass the kernel to change the save directly.
 
@@ -169,7 +172,7 @@ It reads the cases in `tests/runtime-cases.json`, uses prewritten "model replies
 When both cases show `"status": "passed"`, this means:
 
 - After the `note` function is called, there is one more record in `notes`.
-- After the model calls `plugin-data-set`, the record written by `analyst` is committed.
+- After the model calls `notes-upsert`, the record written by `analyst` is committed.
 
 > [!TIP]
 > This is the fastest feedback while you develop. After each change to the manifest or the code, run the validation first, then run this command. Only go into the game once both pass. It costs no model fees.
@@ -248,8 +251,8 @@ At this point, your plugin has read the story, called a tool, written data, and 
 | Two kinds of runtime           | `analyst` is an agent, `note` is a function                                                 |
 | Stage                          | `analyst` runs automatically at `post-turn`                                                 |
 | Finding a plugin by capability | Reads the story through `narrative-engine@2`, and does not name a specific narrative plugin |
-| Limited tools                  | The agent can call only `plugin-data-set`                                                   |
-| Its own data                   | Both runtimes write only to their own `notes` space                                         |
+| Limited tools                  | The agent can call only `notes-upsert`                                                      |
+| Its own data                   | Both runtimes write only to the `notes` dataset they declare                                |
 | Interface                      | `panel.json` describes what the panel looks like, and no front-end code is needed           |
 | Trust                          | A community plugin's code runs only after the player authorizes it                          |
 

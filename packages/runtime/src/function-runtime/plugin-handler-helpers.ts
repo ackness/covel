@@ -652,8 +652,8 @@ export function createFunctionStoreView(
         ...(row ? { createdAt: row.createdAt, updatedAt: row.updatedAt } : {}),
       };
     },
-    // The public type takes a namespace; the builtin `plugin-data-list` tool
-    // omits it to list every namespace, as the store does.
+    // The public type takes a namespace; without one the view lists every
+    // namespace, as the store does.
     async listPluginData(namespace: string | undefined) {
       const stored = await store.listPluginData(sessionId, pluginId, namespace);
       const merged = mergePluginDataRows(

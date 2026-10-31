@@ -220,6 +220,7 @@ describe("affinity dataset", () => {
       schema: "./schemas/affinity.schema.json",
       key: "id",
       ops: ["set", "merge", "inc"],
+      tools: ["get", "list", "upsert", "update"],
     });
     expect(loaded.datasetSchemas.affinity).toEqual(schema);
   });

@@ -73,7 +73,7 @@ messages:
 
 ## 带持久化数据的工具
 
-使用 `plugin-data-*` builtin 工具而非自定义工具来读写数据。自定义工具内部读自己的数据用 `context.store.getPluginData(namespace, key)`（返回 `{ key, value }` 或 `null`，已经绑定了会话和插件，包含本次执行更早的写入）；写入返回 `plugin.data` proposal（`withPendingProposals`），一个值最多 256 KiB。
+模型要读写插件自己的数据，在根 `PLUGIN.md` 用 `contributes.datasets` 声明数据集（记录 schema、`key`），再在 agent 的 `agent.tools.datasets` 里列出它：框架生成 `<数据集>-get` / `-list` / `-upsert` / `-update`，按 schema 检查后暂存写入，不用写工具代码。只有数据集工具表达不了的业务逻辑才写自定义工具：内部读自己的数据用 `context.store.getPluginData(namespace, key)`（返回 `{ key, value }` 或 `null`，已经绑定了会话和插件，包含本次执行更早的写入）；写入返回 `plugin.data` / `plugin.data.update` proposal（`withPendingProposals`），一个值最多 256 KiB。写数据集的代码用 `datasetKey(text)` 生成键，数据集工具才能按同一个键找到记录。
 
 ## 注册与声明（两步，缺一不可）
 

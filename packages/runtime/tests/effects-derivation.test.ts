@@ -72,41 +72,33 @@ describe("deriveEffects — builtin tool mapping table", () => {
     expect(asSet(e.writes)).toEqual(["interaction:*", "ui:*"]);
   });
 
-  it("maps plugin-data-set to per-namespace self keys when dataSchemas are declared", () => {
+  it("maps dataset tools to their dataset's self key: reads for get/list, writes for upsert/update", () => {
     const e = deriveEffects(
       manifest({
-        tools: { builtin: ["plugin-data-set", "plugin-data-set-batch"] },
-        dataSchemas: {
-          inventory: {
-            namespace: "inventory",
-            schemaVersion: 1,
-            acceptsWorldData: false,
-            schema: "./s.json",
-          },
-          quests: {
-            namespace: "quests",
-            schemaVersion: 1,
-            acceptsWorldData: false,
-            schema: "./q.json",
-          },
+        tools: {
+          datasets: [
+            { dataset: "npcs", tools: ["get", "list", "upsert", "update"] },
+            { dataset: "clock", tools: ["get"] },
+            { dataset: "log", tools: ["upsert"] },
+          ],
         },
       }),
     );
-    expect(asSet(e.writes)).toEqual([
-      "plugin-data:self:inventory",
-      "plugin-data:self:quests",
+    expect(asSet(e.reads)).toEqual([
+      "plugin-data:self:clock",
+      "plugin-data:self:npcs",
     ]);
-  });
-
-  it("collapses plugin-data with no dataSchemas to the conservative unknown:*", () => {
-    const w = deriveEffects(
-      manifest({ tools: { builtin: ["plugin-data-set"] } }),
+    expect(asSet(e.writes)).toEqual([
+      "plugin-data:self:log",
+      "plugin-data:self:npcs",
+    ]);
+    const update = deriveEffects(
+      manifest({
+        tools: { datasets: [{ dataset: "npcs", tools: ["update"] }] },
+      }),
     );
-    expect(asSet(w.writes)).toEqual(["unknown:*"]);
-    const r = deriveEffects(
-      manifest({ tools: { builtin: ["plugin-data-get"] } }),
-    );
-    expect(asSet(r.reads)).toEqual(["unknown:*"]);
+    expect(asSet(update.reads)).toEqual([]);
+    expect(asSet(update.writes)).toEqual(["plugin-data:self:npcs"]);
   });
 
   it("maps emit-event to event:*; effects.writes adds exact topics", () => {

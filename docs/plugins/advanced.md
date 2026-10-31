@@ -305,7 +305,7 @@ io:
 agent:
   model: actor
   tools:
-    builtin: [plugin-data-get]
+    builtin: [get-character]
 ```
 
 函数 runtime 用 `ctx.agents.run` 调用它：

@@ -1132,7 +1132,7 @@ sequenceDiagram
         Note over Kernel: Only explicit effects and story narrative produce Proposal[], committed together
         Kernel-->>Web: SSE: narrative.delta / narrative.completed
         Kernel-->>Web: SSE: interaction.requested (e.g. the guide's action cards)
-        Kernel-->>Web: SSE: plugin-data.changed (written by the plugin-data-set tool)
+        Kernel-->>Web: SSE: plugin-data.changed (after a commit of writes such as dataset tools)
         Kernel-->>Web: SSE: event.emitted
         Server-->>Web: SSE: runtime.completed / runtime.failed / runtime.skipped { status, runId }
     end

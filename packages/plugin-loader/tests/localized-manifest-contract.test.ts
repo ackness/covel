@@ -28,7 +28,7 @@ provides: [narrative-engine@2]
 runtime:
   schedule: {stage: narrative}
   io: {output: {contract: narrative-engine@2}}
-  agent: {tools: {builtin: [plugin-data-set]}}
+  agent: {tools: {builtin: [sync-characters]}}
 ---
 English prompt body.
 `;
@@ -40,7 +40,7 @@ provides: [narrative-engine@2, image-generation@1]
 runtime:
   schedule: {stage: pre-turn}
   io: {output: {contract: narrative-engine@2}}
-  agent: {tools: {builtin: [plugin-data-set, emit-event]}}
+  agent: {tools: {builtin: [sync-characters, emit-event]}}
 ---
 中文提示词。
 `;
@@ -77,7 +77,7 @@ runtime:
     const oldChinese = await loadRuntime(discovery, "demo", "zh-CN", captured);
     expect(oldChinese.promptTemplate).toContain("中文提示词。");
     expect(oldChinese.manifest.stage).toBe("narrative");
-    expect(oldChinese.manifest.tools?.builtin).toEqual(["plugin-data-set"]);
+    expect(oldChinese.manifest.tools?.builtin).toEqual(["sync-characters"]);
     for (const locale of ["en-US", "ru-RU"]) {
       expect(
         (await loadRuntime(discovery, "demo", locale, captured)).promptTemplate,
@@ -98,7 +98,7 @@ runtime:
     const runtimeDir = path.join(dir, "runtimes", "story");
     await fs.mkdir(runtimeDir, { recursive: true });
     const runtime =
-      "---\nschedule: {stage: narrative}\nagent: {tools: {builtin: [plugin-data-set]}}\n---\nCanonical body.\n";
+      "---\nschedule: {stage: narrative}\nagent: {tools: {builtin: [sync-characters]}}\n---\nCanonical body.\n";
     await fs.writeFile(path.join(runtimeDir, "RUNTIME.md"), runtime);
     await fs.writeFile(
       path.join(runtimeDir, "RUNTIME.zh.md"),
@@ -122,7 +122,7 @@ runtime:
       captured,
     );
     expect(loaded.promptTemplate).toContain("中文正文。");
-    expect(loaded.manifest.tools?.builtin).toEqual(["plugin-data-set"]);
+    expect(loaded.manifest.tools?.builtin).toEqual(["sync-characters"]);
     expect(
       (await loadRuntime(discovery, "demo/story", "en-US", captured))
         .promptTemplate,
@@ -192,7 +192,7 @@ runtime:
 
     expect(loaded.manifest.stage).toBe("narrative");
     expect(loaded.manifest.outputContract).toEqual("narrative-engine@2");
-    expect(loaded.manifest.tools?.builtin).toEqual(["plugin-data-set"]);
+    expect(loaded.manifest.tools?.builtin).toEqual(["sync-characters"]);
     // Prose and prompt body still come from the translation.
     expect(loaded.manifest.description).toBe("中文描述");
     expect(loaded.promptTemplate).toContain("中文提示词。");
@@ -274,7 +274,7 @@ runtime:
     expect(loaded.manifest.description).toBe("English description");
     expect(loaded.manifest.stage).toBe("narrative");
     expect(loaded.manifest.outputContract).toEqual("narrative-engine@2");
-    expect(loaded.manifest.tools?.builtin).toEqual(["plugin-data-set"]);
+    expect(loaded.manifest.tools?.builtin).toEqual(["sync-characters"]);
     expect(loaded.promptTemplate).toContain("只翻译正文。");
     expect(warn).not.toHaveBeenCalled();
   });
@@ -332,7 +332,7 @@ describe("reconcileLocalizedManifest omitted fields", () => {
       name: "demo",
       stage: "post-turn",
       needs: ["pregame"],
-      tools: { builtin: ["plugin-data-set"] },
+      tools: { builtin: ["sync-characters"] },
       description: "中文描述",
     } as unknown as import("@covel/shared").RuntimeManifest;
     const localized = {
@@ -353,7 +353,7 @@ describe("reconcileLocalizedManifest omitted fields", () => {
 
     expect(merged.stage).toBe("post-turn");
     expect(merged.needs).toEqual(["pregame"]);
-    expect(merged.tools.builtin).toEqual(["plugin-data-set"]);
+    expect(merged.tools.builtin).toEqual(["sync-characters"]);
     expect(merged.description).toBe("English description");
     expect(warn).not.toHaveBeenCalled();
     warn.mockRestore();

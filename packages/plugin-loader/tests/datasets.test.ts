@@ -91,6 +91,7 @@ describe("contributes.datasets compile", () => {
         namespace: "journal",
         schema: "./j.json",
         ops: [...DATA_OP_KINDS],
+        tools: ["get", "list", "upsert", "update"],
       },
     });
   });
@@ -114,6 +115,7 @@ describe("contributes.datasets compile", () => {
       schema: "./j.json",
       key: "id",
       ops: ["upsertItem"],
+      tools: ["get", "list", "update"],
     });
   });
 

@@ -24,12 +24,7 @@ import type {
   FunctionHandler,
   LoadedRuntime,
 } from "@covel/shared/plugin-runtime";
-import {
-  createPluginDataTools,
-  delegateTool,
-  suspendTool,
-  ToolRegistry,
-} from "@covel/tools";
+import { delegateTool, suspendTool, ToolRegistry } from "@covel/tools";
 import {
   commitExecution,
   createToolExecutor,
@@ -66,6 +61,17 @@ afterEach(async () => {
 
 // ── Fixtures ────────────────────────────────────────────────────────
 
+/** A dataset of short notes, keyed by the caller. */
+const NOTES = {
+  notes: {
+    namespace: "notes",
+    schema: "./schemas/note.json",
+    ops: ["set"],
+    tools: ["get", "list", "upsert"],
+  },
+} as const satisfies RuntimeManifest["datasets"];
+const NOTE_SCHEMAS = { notes: { type: "string" } };
+
 /** The provider: it declares a write tool, which the kernel takes away. */
 const guard: RuntimeManifest = {
   name: "actor-pkg/guard",
@@ -78,7 +84,8 @@ const guard: RuntimeManifest = {
   outputContract: CONTRACT,
   output: { schema: "output.schema.json" },
   model: "actor-slot",
-  tools: { builtin: ["plugin-data-set", "plugin-data-get"] },
+  tools: { datasets: [{ dataset: "notes", tools: ["upsert", "get"] }] },
+  datasets: NOTES,
 };
 
 function json(value: unknown): LLMResponse {
@@ -138,11 +145,7 @@ function routedLLM(routes: Record<string, Reply>) {
 /** The provider tries to write; then it answers. */
 const guardReplies: Reply = (index) =>
   index === 0
-    ? call(
-        "plugin-data-set",
-        { namespace: "notes", key: "guard", value: "leaked" },
-        "tc-guard-write",
-      )
+    ? call("notes-upsert", { key: "guard", record: "leaked" }, "tc-guard-write")
     : json({ line: "Halt!" });
 
 async function seeded(activePlugins: string[]) {
@@ -175,8 +178,6 @@ function deps(args: {
   const registry = new ToolRegistry();
   registry.registerBuiltin(delegateTool);
   registry.registerBuiltin(suspendTool);
-  for (const module of createPluginDataTools(args.store))
-    registry.registerBuiltin(module);
   const loaded = new Map<string, LoadedRuntime>(
     args.runtimes.map((manifest) => [
       manifest.name,
@@ -194,6 +195,7 @@ function deps(args: {
               ? `${ACTOR_MARK} You are the gate guard.`
               : `${PARENT_MARK} You direct the scene.`,
             outputSchema: { ...LINE_SCHEMA },
+            datasetSchemas: NOTE_SCHEMAS,
             ...(manifest.outputContract
               ? { outputContractSchema: { ...LINE_SCHEMA } }
               : {}),
@@ -287,7 +289,7 @@ describe("sub-agents at commit", () => {
     // The refused write is on record, attributed to the sub-agent run.
     const [started] = await persisted(store, "subagent.started");
     const refusal = (await persisted(store, "tool.failed")).find(
-      (payload) => payload.toolName === "plugin-data-set",
+      (payload) => payload.toolName === "notes-upsert",
     );
     expect(refusal).toMatchObject({
       code: "unavailable",
@@ -310,15 +312,19 @@ describe("sub-agents at commit", () => {
       stage: "narrative",
       trigger: { type: "auto" },
       output: { schema: "output.schema.json" },
-      tools: { builtin: ["delegate", "plugin-data-set"] },
+      tools: {
+        builtin: ["delegate"],
+        datasets: [{ dataset: "notes", tools: ["upsert"] }],
+      },
+      datasets: NOTES,
     };
     const { llm } = routedLLM({
       [PARENT_MARK]: (index) =>
         index === 0
           ? calls(
               {
-                name: "plugin-data-set",
-                args: { namespace: "notes", key: "director", value: "kept" },
+                name: "notes-upsert",
+                args: { key: "director", record: "kept" },
                 id: "tc-director-write",
               },
               {

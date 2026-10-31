@@ -5,7 +5,6 @@ import { z } from "zod";
 import { createApprovalPipeline } from "@covel/approval";
 import {
   ToolError,
-  createPluginDataTools,
   tool,
   withModelView,
   withPendingProposals,
@@ -18,6 +17,7 @@ import {
   type ToolExecutorConfig,
 } from "../src/agent-loop/tool-executor.js";
 import { createTurnEmitter } from "../src/trace/turn-emitter.js";
+import { createDatasetTools } from "../src/agent-loop/dataset-tools.js";
 import { makeEmitterSpy } from "./_helpers/emitter-spy.js";
 
 const ctx: ToolCallContext = {
@@ -313,9 +313,9 @@ describe("tool result envelope", () => {
   });
 });
 
-describe("scoped plugin-data timestamps through the executor", () => {
+describe("scoped dataset reads through the executor", () => {
   it.each(["own", "upstream"] as const)(
-    "preserves stored timestamps and omits pending-only timestamps for %s writes",
+    "see %s writes and never return stored timestamps",
     async (source) => {
       const store = createMemoryStore();
       const stored = {
@@ -329,10 +329,32 @@ describe("scoped plugin-data timestamps through the executor", () => {
         updatedAt: "2026-09-02T00:00:00Z",
       };
       await store.setPluginData(stored);
-      const modules = createPluginDataTools(store);
+      const modules = createDatasetTools(
+        {
+          name: "p/r",
+          pluginId: "p",
+          description: "r",
+          runtimeType: "agent",
+          trigger: { type: "auto" },
+          tools: {
+            datasets: [{ dataset: "notes", tools: ["get", "list", "upsert"] }],
+          },
+          datasets: {
+            notes: {
+              namespace: "notes",
+              schema: "./note.json",
+              ops: ["set"],
+              tools: ["get", "list", "upsert"],
+            },
+          },
+        },
+        {
+          notes: { type: "object", properties: { n: { type: "number" } } },
+        },
+      );
       const executor = createToolExecutor({
         store,
-        findTool: (name) => modules.find((module) => module.name === name),
+        findTool: (name) => modules.get(name),
       });
       const pending: Proposal[] = [];
       try {
@@ -340,12 +362,8 @@ describe("scoped plugin-data timestamps through the executor", () => {
           const result = await executor.execute(
             {
               toolCallId: `set-${key}`,
-              name: "plugin-data-set",
-              arguments: JSON.stringify({
-                namespace: "notes",
-                key,
-                value: { n: 1 },
-              }),
+              name: "notes-upsert",
+              arguments: JSON.stringify({ key, record: { n: 1 } }),
             },
             source === "upstream" ? { ...ctx, runtimeId: "p/upstream" } : ctx,
           );
@@ -373,46 +391,28 @@ describe("scoped plugin-data timestamps through the executor", () => {
           const result = await executor.execute(
             {
               toolCallId: `get-${key}`,
-              name: "plugin-data-get",
-              arguments: JSON.stringify({ namespace: "notes", key }),
+              name: "notes-get",
+              arguments: JSON.stringify({ key }),
             },
             context,
           );
           expect(result.success, result.result).toBe(true);
-          expect(result.parsedResult).toEqual({
-            found: true,
-            namespace: "notes",
-            key,
-            value: { n: 1 },
-            ...(key === "stored" ? { updatedAt: stored.updatedAt } : {}),
-          });
-          expect(JSON.parse(result.result).data).not.toHaveProperty(
-            "updatedAt",
-          );
+          expect(result.parsedResult).toEqual({ key, record: { n: 1 } });
+          expect(result.result).not.toContain("updatedAt");
         }
-        for (const args of [{ namespace: "notes" }, {}]) {
-          const result = await executor.execute(
-            {
-              toolCallId: "list",
-              name: "plugin-data-list",
-              arguments: JSON.stringify(args),
-            },
-            context,
-          );
-          expect(result.success, result.result).toBe(true);
-          expect(result.parsedResult).toEqual({
-            count: 2,
-            items: [
-              {
-                namespace: "notes",
-                key: "stored",
-                value: { n: 1 },
-                updatedAt: stored.updatedAt,
-              },
-              { namespace: "notes", key: "new", value: { n: 1 } },
-            ],
-          });
-        }
+        const list = await executor.execute(
+          { toolCallId: "list", name: "notes-list", arguments: "{}" },
+          context,
+        );
+        expect(list.success, list.result).toBe(true);
+        expect(list.parsedResult).toEqual({
+          total: 2,
+          items: [
+            { key: "new", record: { n: 1 } },
+            { key: "stored", record: { n: 1 } },
+          ],
+        });
+        expect(list.result).not.toContain("updatedAt");
         expect(
           await store.getPluginData(
             ctx.sessionId,

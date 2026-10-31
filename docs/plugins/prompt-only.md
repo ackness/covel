@@ -24,6 +24,8 @@ observation/
 ├── PLUGIN.md          配置和提示词
 ├── PLUGIN.zh.md       可选：提示词的简体中文版
 ├── README.md          可选：写给维护者的说明
+├── schemas/
+│   └── observation.schema.json  可选：记录的格式
 └── locales/
     └── zh.yaml        可选：名称和设置项的中文
 ```
@@ -194,39 +196,66 @@ pnpm test:runtime -- observation --pretty
 
 ## 让它记住东西
 
-给 agent 一个内置工具 `plugin-data-set`，它就能把观察写进插件自己的数据里。再用 `io.selfData` 把已有的记录放回提示词，它就不会重复记录。
+模型要保存数据，得有一个写入工具。不写代码时，办法是声明一个**数据集**：插件自己的一块数据，每条记录都满足一份 JSON Schema。Covel 按声明为它生成工具，模型调用 `observations-upsert` 就写入一条记录。再用 `io.selfData` 把已有的记录放回提示词，它就不会重复记录。
 
-在 `runtime` 下面改这两处：
+先写记录的格式，存成 `schemas/observation.schema.json`：
 
-```yaml
-io:
-  selfData:
-    - namespace: observations
-      as: <known-observations>
-      maxEntries: 20
-agent:
-  tools:
-    builtin: [plugin-data-set]
+```json
+{
+  "type": "object",
+  "required": ["id", "text"],
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "A short stable name for the detail."
+    },
+    "text": { "type": "string", "description": "The observation." }
+  }
+}
 ```
 
-| 字段                  | 意思                                                 |
-| --------------------- | ---------------------------------------------------- |
-| `namespace`           | 读自己的哪一块数据。名字自己取                       |
-| `as`                  | 这块内容在提示词里的标签。提示词里用同一个标签引用它 |
-| `maxEntries`          | 最多放进多少条，默认 50                              |
-| `agent.tools.builtin` | 模型可以调用的 Covel 自带工具。没列出的工具它看不到  |
+然后在 `contributes` 下声明数据集，并在 `runtime` 下加两处：
+
+```yaml
+contributes:
+  datasets:
+    observations:
+      schema: ./schemas/observation.schema.json
+      key: id
+      description: Details the player has observed.
+runtime:
+  io:
+    selfData:
+      - namespace: observations
+        as: <known-observations>
+        maxEntries: 20
+  agent:
+    tools:
+      datasets: [{ dataset: observations, tools: [upsert] }]
+```
+
+| 字段                                | 意思                                                                                                                         |
+| ----------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| `contributes.datasets.observations` | 声明一个叫 `observations` 的数据集。名字也是这块数据的 namespace                                                             |
+| `schema`                            | 每条记录的格式，路径相对插件文件夹                                                                                           |
+| `key`                               | 记录里充当键的字段。同一个 `id` 再写一次，替换原来的记录                                                                     |
+| `description`                       | 告诉模型这里存什么，附在工具说明的后面                                                                                       |
+| `io.selfData` 的 `namespace`        | 读自己的哪一块数据，这里就是数据集的名字                                                                                     |
+| `as`                                | 这块内容在提示词里的标签。提示词里用同一个标签引用它                                                                         |
+| `maxEntries`                        | 最多放进多少条，默认 50                                                                                                      |
+| `agent.tools.datasets`              | 模型能用这个数据集的哪些工具。这里只给 `observations-upsert`；只写 `observations` 则给数据集提供的全部工具（读、列、写、改） |
 
 然后在提示词里告诉模型怎么用：
 
 ```markdown
 `<known-observations>` lists the observations on record.
 
-If the detail is new, call `plugin-data-set` one time with `namespace` set to `observations`, a short stable `key`, and `value` set to `{ "text": "<the observation>" }`. Then call `runtime-done`.
+If the detail is new, call `observations-upsert` one time with a `record` that has a short stable `id` and the observation as `text`. Then call `runtime-done`.
 
 If the detail is on record, call `runtime-done`.
 ```
 
-还没有写入过的数据空间是空的，这是正常的。
+还没有写入过的数据集是空的，这是正常的。工具的参数、键的规则和出错时的回答见[数据集工具](../reference/tools.md#数据集工具)。
 
 想把这些记录显示给玩家，要加一块面板，见[插件界面](./ui.md)。[第一个插件](./first-plugin.md)生成的示例里有一块现成的。
 
@@ -271,7 +300,7 @@ If the detail is on record, call `runtime-done`.
 ```yaml
 agent:
   tools:
-    builtin: [plugin-data-set, get-character, list-characters]
+    builtin: [get-character, list-characters]
   loop:
     timeoutMs: 180000
 ```
@@ -297,15 +326,15 @@ contributes:
 
 ## 没有按预期工作时
 
-| 现象                                    | 原因和处理                                                                                    |
-| --------------------------------------- | --------------------------------------------------------------------------------------------- |
-| 校验报 `id must match plugin directory` | 写了的 `id` 和文件夹名不一样。删掉 `id`（不写时就是文件夹名），或者改成文件夹名               |
-| 插件列表里没有它                        | 它不在用户插件目录里，或者校验没通过。校验之后重启后端                                        |
-| 选中了但没有运行                        | 没有授权。处理“授权插件操作”的提示                                                            |
-| 提示 `plugin` 用途不可用                | 在 **设置 → 模型 → 用途分配** 给它选一个模型                                                  |
-| 模型说“已保存”，但没有记录              | 它没有调用工具。把 `plugin-data-set` 加进 `agent.tools.builtin`，并在提示词里写明什么时候调用 |
-| 中文的游戏里，改了提示词却没有变化      | 你改的是 `PLUGIN.md`，而中文的游戏读 `PLUGIN.zh.md`                                           |
-| 设置项在界面上是英文                    | `locales/zh.yaml` 里没有这一项，或者 `key` 对不上                                             |
+| 现象                                    | 原因和处理                                                                                             |
+| --------------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| 校验报 `id must match plugin directory` | 写了的 `id` 和文件夹名不一样。删掉 `id`（不写时就是文件夹名），或者改成文件夹名                        |
+| 插件列表里没有它                        | 它不在用户插件目录里，或者校验没通过。校验之后重启后端                                                 |
+| 选中了但没有运行                        | 没有授权。处理“授权插件操作”的提示                                                                     |
+| 提示 `plugin` 用途不可用                | 在 **设置 → 模型 → 用途分配** 给它选一个模型                                                           |
+| 模型说“已保存”，但没有记录              | 它没有调用工具。在 `agent.tools.datasets` 里列出数据集，并在提示词里写明什么时候调用 `<数据集>-upsert` |
+| 中文的游戏里，改了提示词却没有变化      | 你改的是 `PLUGIN.md`，而中文的游戏读 `PLUGIN.zh.md`                                                    |
+| 设置项在界面上是英文                    | `locales/zh.yaml` 里没有这一项，或者 `key` 对不上                                                      |
 
 ## 接下来
 

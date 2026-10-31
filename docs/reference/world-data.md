@@ -748,11 +748,11 @@ sources:
 | 出口            | 处理                                                                                                                                                            |
 | --------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 提示词          | `io.selfData` 注入隐藏命名空间时直接报错；扩展点（`prompt.segment@1`、`ui.slot@1`、`session.world-context@1`）的 `ctx.pluginData` 读不到隐藏数据                |
-| 模型工具        | 内置 `plugin-data-get` / `plugin-data-list` 不返回隐藏命名空间                                                                                                  |
+| 模型工具        | 数据集工具到不了隐藏命名空间：数据集名以字母开头                                                                                                                |
 | 玩家可见接口    | 插件数据 API、`/state` 数据面板与 discovery 不列出，单条读取返回 404；快照读取接口（`GET` / `POST /snapshots`）的响应同样去掉隐藏命名空间，存储中的快照保持完整 |
 | lorebook 与投影 | 不允许 `+lorebook`；`worldProjections` 跳过隐藏 source                                                                                                          |
 | 其他目标        | `characters`、`lorebook`、`world:metadata.*`、media 与 `indexTo` 都会被拒绝                                                                                     |
-| 写入            | REST 与内置 `plugin-data-set` 工具不能写；只有所属插件自己的代码（function runtime、插件本地工具）能写自己的 `_hidden.*`                                        |
+| 写入            | REST 与数据集工具不能写；只有所属插件自己的代码（function runtime、插件本地工具）能写自己的 `_hidden.*`                                                         |
 
 只有接收插件自己的代码能读隐藏数据。插件决定揭示时：
 

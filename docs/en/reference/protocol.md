@@ -316,7 +316,7 @@ This is a notice that the world package's declaration changed. It is not an upda
 
 **What triggers it**
 
-- Every write path triggers it: `plugin-data-set`, `plugin-data-set-batch`, DELETE `/plugin-data/...`, and so on. A successful compare-and-set write also counts (runtime job state changes, dimension records).
+- Every write path triggers it: dataset tool writes, `ctx.pluginData`, DELETE `/plugin-data/...`, and so on. A successful compare-and-set write also counts (runtime job state changes, dimension records).
 - It is intercepted in one place, `wrapStoreWithPluginDataEvents`, at the store layer. So the frontend can see plugin state changes live.
 - A committed `plugin.data.update` fires it too: `value` is the result after the operations and `operation` is `set`; when the result is absent and the existing row was deleted, `operation` is `delete`. Without a row and with an absent result nothing is written and nothing fires.
 - The final state of a background job is given by `job-status.updated`. Changes to `_runtime_jobs` rows are used only to sync data.

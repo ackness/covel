@@ -133,7 +133,7 @@ Session prep groups the plugins by whether they call a model, that is by the der
 | `events` | Plugin event contracts |
 | `settings` | Player settings. The runtime reads them through `ctx.userSettings`. |
 | `data` | The schema, version, accepts, and search settings for this plugin's data namespace |
-| `datasets` | Typed datasets the package owns: the name is the namespace, with schema, key and ops. See [Datasets](#datasets-contributesdatasets) |
+| `datasets` | Typed datasets the package owns: the name is the namespace, with schema, key and ops, and optional `tools` and `description`. See [Datasets](#datasets-contributesdatasets) |
 | `actionKinds` | Action kinds players may submit: name, roles, text rule, `fields` schema and display label. See [Action kinds](#action-kinds-contributesactionkinds) |
 | `ui` | Paths, relative to the package root, of the `right/message/view/segment` UI spec files |
 | `ui.view` | Full-column view spec paths relative to the package root; see [Plugin views](./ui-panels.md#plugin-views) for declarations and consent |
@@ -256,6 +256,7 @@ The tags the author writes come first, followed by the derived tags in this orde
 - If you add a tool to such a package that only a UI action should use, also write the agent's allowlist. Otherwise the model can call that tool too.
 - In a package with several runtimes, each runtime must declare its own tools.
 - `agent.tools.services` imports other plugins' model-facing services as tools: write a contract ID, or `{contract, as}` to name it otherwise. An imported tool is read-only; without a provider it is absent and the runtime runs as usual. Names, parameters and failure answers are in [Imported service tools](./tools.md#imported-service-tools). A function runtime cannot set it and uses `ctx.services` directly.
+- `agent.tools.datasets` lists datasets from the package's `contributes.datasets`, and the framework generates `<dataset>-get`, `-list`, `-upsert` and `-update` tools for them. A dataset name gives every tool the dataset offers; `{ dataset, tools }` gives some of them. A runtime that does not write it gets none, even the inline runtime of a single-runtime package. See [Dataset tools](./tools.md#dataset-tools). A function runtime cannot set it and uses `ctx.pluginData` directly.
 
 ### Agent guards
 
@@ -670,7 +671,7 @@ The provider is an agent runtime that names the contract it provides in `io.outp
 Rules at run time:
 
 - **Own transcript**: the sub-agent's prompt is the provider's own body, the framework's completion instructions, then the brief. It sees neither the session history nor the caller's conversation.
-- **Read-only tools**: tools in the provider's `agent.tools` without the `readOnly` annotation (plugin tools, write tools such as `plugin-data-set`), `suspend` and `delegate` are taken away. A declared plugin tool that is not registered still fails the run as it always does. Imported service tools are read-only and stay.
+- **Read-only tools**: tools in the provider's `agent.tools` without the `readOnly` annotation (plugin tools, write tools such as a dataset's `-upsert` / `-update`), `suspend` and `delegate` are taken away. A declared plugin tool that is not registered still fails the run as it always does. Imported service tools are read-only and stay; of the dataset tools, only `-get` / `-list` stay.
 - **Loop profile**: without `agent.loop.profile` it runs `actor`: no streaming, no player interjections.
 - **Model**: it uses the model role the provider declares. The session's `runtimeModelOverrides` apply by the provider's runtimeId, also in a run resumed after suspension; the caller's override and the request's story model override do not.
 - **Caps**: one execution runs at most 8 sub-agents at a time, nested executions included, and a sub-agent cannot call another one (depth cap 1). A call over a cap gets `unavailable` at once; nothing queues.
@@ -929,7 +930,7 @@ Writes made during an execution commit when it ends. Until then, a plugin that r
 - The writes this runtime has already buffered.
 - The writes of completed upstream runtimes of the same plugin: a successful result, or a guard that skipped its agent and left writes. They apply in commit order: upstream first, then the runtime's own; the results of a nested call before their parent; within one result, `effects.pluginData` first, then buffered writes. `plugin.data.update` operations are computed in the same order and give the value the commit stores.
 
-`ctx.pluginData.get/list`, `ctx.store.getPluginData/listPluginData`, `context.store` in tools (agent tools and `ctx.tools.call`) and the builtin `plugin-data-get/list` all read this way. The early check of `ctx.pluginData.update` uses the same view.
+`ctx.pluginData.get/list`, `ctx.store.getPluginData/listPluginData`, `context.store` in tools (agent tools and `ctx.tools.call`) and the dataset tools all read this way. The early check of `ctx.pluginData.update` uses the same view.
 
 These writes are not visible:
 
@@ -1085,7 +1086,7 @@ After a namespace declares `search`, its records enter the framework's memory re
 - Extension points, model tools, `io.selfData`, and the public API cannot read it.
 - Revealing it should happen through this turn's runtime output. See [World Data · Hidden data](./world-data.md#hidden-data-visibility-hidden) for details.
 - The plugin's own code (`ctx.pluginData.set` / `ctx.pluginData.update` in a function runtime, and `plugin.data` / `plugin.data.update` proposals produced by the plugin's local tools) can also write to its own `_hidden.<namespace>`. This is used to append hidden content during the story. A write always belongs to the plugin that issued the proposal, so it cannot reach another plugin's hidden data.
-- The REST interface and the built-in `plugin-data-set` and `plugin-data-set-batch` tools cannot write to any namespace that starts with `_`.
+- The REST interface cannot write to any namespace that starts with `_`; dataset names start with a letter, so dataset tools never reach these namespaces either.
 
 ## Prompt and memory extensions
 
@@ -1149,6 +1150,7 @@ The directory-level command `pnpm validate:plugin <dir>` and the ZIP install sha
 - The built-in tool names and the plugin tool declarations, the runtime references inside the package, and the root contract dependencies must all be consistent.
 - A `contributes.actionKinds` `name` must not be a base action kind or repeat; its `schema` file must be in the package and be a JSON object.
 - Each `contributes.datasets` schema file must be in the package and valid JSON. `key` must be a required property in the schema's top-level `properties` (skipped when the schema has none). A name that is also in `contributes.data` must use the same schema in both.
+- A dataset that `agent.tools.datasets` references must be declared in `contributes.datasets`, the selected tools must be ones the dataset offers, and a dataset cannot be listed twice; a generated tool name cannot be longer than 64 characters or equal a framework tool, a tool the runtime declares, a `contributes.tools` entry or an imported service tool (see [Dataset tools](./tools.md#names-and-selection)).
 - An error from a cross-field rule (for example, `schedule.detached` is only allowed on `post-turn` or `audit`, or a story runtime's contract input must set `required: false`) gives the file path and the field path you wrote, for example `runtimes/note/RUNTIME.md: schedule.stage: …`.
 
 Loading, `pnpm validate:plugin` and installation use one copy of the manifest rules (the schemas in `@covel/shared`), and the same holds for UI specs: a panel that passes the check is not dropped in the game for its format.
@@ -1291,13 +1293,17 @@ contributes:
       schema: ./schemas/journal.json # required: a package-relative .json path
       key: id # optional: the top-level record field that is the key
       ops: [upsertItem, delete] # optional: allowed operations, default all
+      tools: [get, list, update] # optional: generated agent tools, derived from ops
+      description: What the agent keeps here. # optional: added to the tool descriptions
 ```
 
 - **The name is the namespace.** The `journal` dataset is the plugin-data space `journal`. A name starts with a letter and holds only letters, digits, `_` and `-`, at most 64 characters. A name starting with `_` is reserved for the kernel and cannot be declared.
 - `schema` must be a `.json` file in the package, with no `..` and no leading `/`.
 - `key`: which top-level field of a record (a string value) is its key. Leave it out to derive no key; the caller then chooses keys.
 - `ops`: the operation kinds this dataset allows, from `set`, `merge`, `inc`, `append`, `insert`, `remove`, `upsertItem`, `delete`. Leaving it out means all of them. When written it cannot be empty or contain duplicates.
-- Omitted fields take their defaults. The compiled declaration always carries `namespace`, `schema` and `ops` (`key` only when written). The compiled result is copied onto `datasets` of every runtime in the package.
+- `tools`: which tools this dataset generates for agents, from `get`, `list`, `upsert`, `update`. When omitted it is derived from `ops`: always `get` and `list`; `upsert` when `ops` has `set`; `update` when `ops` has any operation other than `set`. When written it cannot be empty or contain duplicates; `upsert` without `set` in `ops`, or `update` when `ops` has only `set`, is an error at `contributes.datasets.<name>.tools`. Only runtimes that reference the dataset in `agent.tools.datasets` get these tools; see [Dataset tools](./tools.md#dataset-tools).
+- `description`: 1–500 characters, added to the generated tool descriptions to tell the model what is kept here.
+- Omitted fields take their defaults. The compiled declaration always carries `namespace`, `schema`, `ops` and `tools` (`key` and `description` only when written). The compiled result is copied onto `datasets` of every runtime in the package.
 - **Relation to `contributes.data`.** When the same name appears in both `data` and `datasets`, the two `schema` paths must point at the same file: a namespace has one schema. `data` still governs world-pack import; the dataset governs the records in the namespace.
 - A namespace without a dataset declaration behaves as before.
 
@@ -1308,7 +1314,7 @@ At commit, every proposal a plugin writes into a dataset namespace it declares i
 - **Operation kinds.** Each operation kind of a `plugin.data.update` must be in `ops`. A whole-value write (`ctx.pluginData.set`, `plugin.data`, each item of `plugin.data.batch`) counts as `set`, and a delete (`plugin.data.delete`) counts as `delete`. So a dataset whose `ops` lack `set` cannot be overwritten with `set`.
 - **Record schema.** The written value (for `plugin.data.update`, the result after the operations) must satisfy `schema`.
 - A violation rejects the proposal with `code: "dataset-violation"`, under the commit-unit rules. When the host did not capture the schema document, every write is refused instead of let through.
-- `key` is not checked at commit.
+- `key` is not checked at commit. Dataset tools normalize keys with the [dataset key rule](./tools.md#the-key-rule-and-lookup) `datasetKey(...)` (exported by the SDK), and look up the key as written first, then the normalized key. Plugin code that writes the same dataset should build its keys with `datasetKey(...)` so they land on the rows the tools find.
 - Writes outside the commit pipeline skip these checks: world data import and sync (validated against the source's `schema`, see [World Data · Companion plugin data](./world-data.md#companion-plugin-data)), `context.store.setPluginData` in a plugin action RPC, and the management API `PUT`.
 
 See [Transactions · Operation-based writes](./transactions.md#operation-based-writes-plugindataupdate).

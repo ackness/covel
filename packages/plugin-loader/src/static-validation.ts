@@ -7,7 +7,11 @@ import {
   pluginUiSpecIssues,
 } from "@covel/shared";
 import path from "node:path";
-import { datasetKeyIssue, datasetSchemaIssues } from "./dataset-rules.js";
+import {
+  datasetKeyIssue,
+  datasetReferenceIssues,
+  datasetSchemaIssues,
+} from "./dataset-rules.js";
 import {
   actionKindDeclarationIssues,
   actionKindSchemaField,
@@ -80,6 +84,9 @@ export function validateRuntimeDeclarations(
         throw new Error(
           `${packageManifest.sourcePath}: requires: a package with a story runtime (${story.sourcePath}) cannot require contract ${contract}: remove it from requires and bind it as an optional input (required: false), so the story still runs when no provider is active`,
         );
+  // Dataset tools are generated from the package's own declarations.
+  const [datasetIssue] = datasetReferenceIssues(plugin, manifests);
+  if (datasetIssue) throw new Error(datasetIssue);
   for (const parsed of manifests) {
     const runtimeReferences = [
       ...(["needs", "after"] as const).flatMap((field) =>

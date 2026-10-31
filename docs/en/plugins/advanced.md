@@ -305,7 +305,7 @@ io:
 agent:
   model: actor
   tools:
-    builtin: [plugin-data-get]
+    builtin: [get-character]
 ```
 
 A function runtime calls it with `ctx.agents.run`:

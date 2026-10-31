@@ -163,6 +163,7 @@ export {
   type DataOpsCurrent,
   type DataOpsResult,
 } from "@covel/plugin-handlers-utils";
+export { datasetKey } from "@covel/plugin-handlers-utils";
 
 // ── Utilities ─────────────────────────────────────────────────────
 export { deepMerge } from "./utils/deep-merge.js";
@@ -373,6 +374,13 @@ export {
   effectsDeclSchema,
   permissionsDeclSchema,
 } from "./schemas/plugin.js";
+export {
+  DATASET_TOOL_KINDS,
+  datasetToolKinds,
+  datasetToolName,
+  datasetToolsIssues,
+  type DatasetToolKind,
+} from "./schemas/dataset-tools.js";
 export {
   isRuntimeDisablingIssue,
   SERVICE_IMPORT_NAME_PATTERN,

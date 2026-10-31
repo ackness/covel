@@ -1131,7 +1131,7 @@ sequenceDiagram
         Note over Kernel: 仅显式 effects 与 story 叙事生成 Proposal[]，统一提交
         Kernel-->>Web: SSE: narrative.delta / narrative.completed
         Kernel-->>Web: SSE: interaction.requested (如 guide 的 action 卡片)
-        Kernel-->>Web: SSE: plugin-data.changed (plugin-data-set 工具写入)
+        Kernel-->>Web: SSE: plugin-data.changed (数据集工具等写入提交后)
         Kernel-->>Web: SSE: event.emitted
         Server-->>Web: SSE: runtime.completed / runtime.failed / runtime.skipped { status, runId }
     end

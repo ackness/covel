@@ -1,0 +1,14 @@
+### Breaking
+
+- **The generic plugin-data builtin tools are removed.** `plugin-data-set`, `plugin-data-set-batch`, `plugin-data-get` and `plugin-data-list` no longer exist, and a manifest that lists one in `agent.tools.builtin` fails static validation with `unknown tool <name>; use a documented framework tool name`. A model now saves data only into a dataset its plugin declares: declare the dataset in `contributes.datasets` and list it in `agent.tools.datasets`. Plugin tools that return `plugin.data*` proposals and `ctx.pluginData` in function runtimes are unchanged. A development session suspended in the middle of a call to a removed tool resumes into an unauthorized-tool error; start a new session. Rule: `docs/reference/tools.md` (dataset tools).
+
+### Added
+
+- **Agents read and write declared datasets through generated tools.** A runtime that lists `agent.tools.datasets: [<dataset> | { dataset, tools }]` gets `<dataset>-get`, `<dataset>-list`, `<dataset>-upsert` and `<dataset>-update` for its own package's datasets. The record argument is the dataset's JSON Schema, writes are checked at call time (operations, size, schema) and staged as one `plugin.data.update` proposal each, and sub-agents keep only the read tools. Loading, `pnpm validate:plugin` and installation reject an unknown dataset, a tool the dataset does not offer, a name that is too long or collides with another tool, and a duplicate reference. Rule: `docs/reference/tools.md` (dataset tools).
+- **Datasets declare which tools they offer.** `contributes.datasets.<name>.tools` lists `get` / `list` / `upsert` / `update`; when omitted it is derived from `ops`. The optional `description` (1–500 characters) is added to the tool descriptions. Rule: `docs/reference/plugins.md` (datasets).
+- **`datasetKey()` is the dataset key rule.** The SDK and `@covel/shared` export `datasetKey(text)` (NFKC, trimmed, whitespace collapsed, lower-cased). Dataset tools store new records under it and look a key up as written first, then normalized; plugin code that writes the same dataset should key its rows with it.
+- **The plugin scaffold saves notes through a dataset.** `pnpm create-plugin` and the multi-runtime template declare a `notes` dataset with `schemas/note.schema.json`, and the analyst agent writes through `notes-upsert`.
+
+### Upgrade notes
+
+- **Moving a `plugin-data-set` prompt to a dataset.** Write the shape of one record as a JSON Schema file in the package, declare it under `contributes.datasets.<namespace>` with `schema` and, when records have a natural name, `key`. Replace `plugin-data-set` in `agent.tools.builtin` with `agent.tools.datasets: [<namespace>]` (or `{ dataset: <namespace>, tools: [upsert] }` for a write-only agent), and change the prompt to call `<namespace>-upsert` with `{ record }` (or `{ key, record }` when no `key` is declared). Reads use `<namespace>-get` / `<namespace>-list`, or keep `io.selfData`.

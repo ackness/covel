@@ -255,7 +255,7 @@ describe("turn-executor → context budget wiring", () => {
   );
   it.each<[string, Partial<RuntimeManifest>]>([
     ["without declared tools", {}],
-    ["with tools.builtin", { tools: { builtin: ["plugin-data-set"] } }],
+    ["with tools.builtin", { tools: { builtin: ["get-character"] } }],
     ["with tools.plugin", { tools: { plugin: ["dummy"] } }],
   ])(
     "prunes history before the LLM call %s",

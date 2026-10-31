@@ -264,6 +264,11 @@ describe("plugin scaffolding", () => {
             "utf8",
           ),
         );
+        if (mode !== "with-tools") {
+          // The agent saves its note through the declared dataset's tool.
+          expect(rootManifest).toMatch(/datasets:\n {4}notes:/);
+          expect(JSON.stringify(caseFile)).toContain('"name":"notes-upsert"');
+        }
         expect(caseFile.$schema).toBe(
           "https://raw.githubusercontent.com/AcKnEsS/covel/main/packages/shared/schemas/runtime-cases.schema.json",
         );

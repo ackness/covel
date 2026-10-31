@@ -133,7 +133,7 @@ Extract facts supported by runtime-inputs.narrative.value, then call save-facts.
 | `events` | 插件事件契约 |
 | `settings` | 玩家配置项，运行时通过 `ctx.userSettings` 读取 |
 | `data` | 本插件数据 namespace 的 schema、version、accepts、search |
-| `datasets` | 本插件拥有的带类型数据集：名字即 namespace，写 schema、key、ops，见[数据集](#数据集contributesdatasets) |
+| `datasets` | 本插件拥有的带类型数据集：名字即 namespace，写 schema、key、ops，以及可选的 `tools`、`description`，见[数据集](#数据集contributesdatasets) |
 | `actionKinds` | 玩家能提交的行动类型：名字、可用身份、文字规则、`fields` 的 schema、显示名称，见[行动类型](#行动类型contributesactionkinds) |
 | `ui` | 包根相对的 `right/message/view/segment` UI spec 路径 |
 | `ui.view` | 包根相对的完整故事栏视图 spec 路径；声明与授权见[插件视图](./ui-panels.md#插件视图) |
@@ -256,6 +256,7 @@ permissions:
 - 给这样的包新增一个只想让界面动作使用的工具时，要同时给 agent 写明白名单，否则模型也能调用它。
 - 多 runtime 的包里，每个 runtime 都要自己声明工具。
 - `agent.tools.services` 把别的插件给模型用的服务导入成工具，写契约 ID，或者 `{contract, as}` 另起名字。导入的工具只读，没有提供方时不出现，runtime 照常运行。命名、参数和失败的回答见[导入的服务工具](./tools.md#导入的服务工具)。函数 runtime 不能写它，直接用 `ctx.services`。
+- `agent.tools.datasets` 列出本包 `contributes.datasets` 里的数据集，框架为它们生成 `<数据集>-get`、`-list`、`-upsert`、`-update` 工具。写数据集名得到它提供的全部工具，写 `{ dataset, tools }` 只取其中几个。没写的 runtime 一个也没有，单 runtime 包的内联 runtime 也一样。见[数据集工具](./tools.md#数据集工具)。函数 runtime 不能写它，直接用 `ctx.pluginData`。
 
 ### Agent 的 guard
 
@@ -670,7 +671,7 @@ const result = await ctx.agents?.run({
 运行时的规则：
 
 - **独立的对话**：子 agent 的提示词是提供方自己的正文，加上框架的完成说明，再加简报。看不到会话历史，也看不到调用方的对话。
-- **只读工具**：提供方 `agent.tools` 里没有 `readOnly` 注解的工具（插件工具、`plugin-data-set` 这类写入工具）、`suspend` 和 `delegate` 都被拿掉。声明了却没注册的插件工具仍按原规则让这次运行失败。导入的服务工具只读，保留。
+- **只读工具**：提供方 `agent.tools` 里没有 `readOnly` 注解的工具（插件工具、数据集的 `-upsert` / `-update` 这类写入工具）、`suspend` 和 `delegate` 都被拿掉。声明了却没注册的插件工具仍按原规则让这次运行失败。导入的服务工具只读，保留；数据集工具只保留 `-get` / `-list`。
 - **循环 profile**：没写 `agent.loop.profile` 时用 `actor`，不流式显示，也不读玩家插话。
 - **模型**：用提供方自己声明的模型用途。会话的 `runtimeModelOverrides` 按提供方的 runtimeId 生效，挂起后恢复的运行里也一样；调用方的覆盖和请求里的故事模型覆盖都不生效。
 - **上限**：一次执行最多同时运行 8 个子 agent，嵌套执行也算在内；子 agent 不能再调用子 agent（深度上限 1）。超过上限的调用立刻得到 `unavailable`，不排队。
@@ -929,7 +930,7 @@ homepage: https://example.com/tidefall
 - 自己这个 runtime 已经缓冲的写入。
 - 同一个插件里已经完成的上游 runtime 的写入：成功的结果，或者跳过了 agent、但留下了写入的 guard。它们按提交顺序叠加：先上游，再自己；嵌套调用的子结果排在父结果前面；一个结果里先叠 `effects.pluginData`，再叠缓冲的写入。`plugin.data.update` 的操作也按这个顺序计算，和提交时得到的值一样。
 
-`ctx.pluginData.get/list`、`ctx.store.getPluginData/listPluginData`、工具里的 `context.store`（agent 工具和 `ctx.tools.call`）以及内置的 `plugin-data-get/list` 都这样读。`ctx.pluginData.update` 的提前检查也按这个视图算。
+`ctx.pluginData.get/list`、`ctx.store.getPluginData/listPluginData`、工具里的 `context.store`（agent 工具和 `ctx.tools.call`）以及数据集工具都这样读。`ctx.pluginData.update` 的提前检查也按这个视图算。
 
 下面这些写入看不到：
 
@@ -1085,7 +1086,7 @@ namespace 声明 `search` 之后，它的记录进入框架的记忆检索（[`m
 - 扩展点、模型工具、`io.selfData` 和公共 API 都读不到它。
 - 揭示应该通过本回合的 runtime 输出完成，详见 [World Data · 隐藏数据](./world-data.md#隐藏数据visibility-hidden)。
 - 插件自己的代码（function runtime 的 `ctx.pluginData.set` / `ctx.pluginData.update`、插件本地工具产生的 `plugin.data` / `plugin.data.update` 提案）也可以写入自己的 `_hidden.<namespace>`，用于在剧情中追加隐藏内容。写入总是归属提案来源的插件，碰不到其他插件的隐藏数据。
-- REST 接口和内置的 `plugin-data-set` / `plugin-data-set-batch` 工具不能写任何 `_` 开头的命名空间。
+- REST 接口不能写任何 `_` 开头的命名空间；数据集名以字母开头，数据集工具也到不了这些命名空间。
 
 ## 提示词与记忆扩展
 
@@ -1149,6 +1150,7 @@ namespace 声明 `search` 之后，它的记录进入框架的记忆检索（[`m
 - 内置工具名和插件工具声明、包内的 runtime 引用，以及根契约依赖必须一致。
 - `contributes.actionKinds` 的 `name` 不能是基础行动类型、不能重复；`schema` 文件必须在包里并且是 JSON 对象。
 - `contributes.datasets` 的 schema 文件必须在包里并且是合法 JSON；`key` 必须是 schema 顶层 `properties` 里的必填属性（schema 顶层没有 `properties` 时跳过）；同名出现在 `contributes.data` 时两边必须用同一份 schema。
+- `agent.tools.datasets` 引用的数据集必须在 `contributes.datasets` 里声明，选的工具必须是数据集提供的，同一个数据集不能列两次；生成的工具名不能超过 64 个字符，也不能和框架工具、runtime 声明的工具、`contributes.tools` 或导入服务的工具重名（见[数据集工具](./tools.md#名字与选择)）。
 - 跨字段的规则（例如 `schedule.detached` 只能用在 `post-turn` 或 `audit`，故事 runtime 的契约输入必须写 `required: false`）报错时给出文件路径和你写的字段路径，例如 `runtimes/note/RUNTIME.md: schedule.stage: …`。
 
 加载、`pnpm validate:plugin` 和安装用同一份清单规则（`@covel/shared` 的 schema），UI spec 也一样：校验通过的面板，游戏里不会因为格式被去掉。
@@ -1291,13 +1293,17 @@ contributes:
       schema: ./schemas/journal.json # required: a package-relative .json path
       key: id # optional: the top-level record field that is the key
       ops: [upsertItem, delete] # optional: allowed operations, default all
+      tools: [get, list, update] # optional: generated agent tools, derived from ops
+      description: What the agent keeps here. # optional: added to the tool descriptions
 ```
 
 - **名字就是 namespace。** `journal` 数据集对应插件数据的 `journal` 空间。名字用字母开头，只含字母、数字、`_`、`-`，最长 64 个字符；以 `_` 开头的空间留给内核，不能声明。
 - `schema` 必须是包内的 `.json` 文件，不能含 `..` 或前导 `/`。
 - `key`：记录的哪个顶层字段（字符串值）充当它的键。不写就不推导键，由调用方决定。
 - `ops`：这个数据集允许的操作种类，取自 `set`、`merge`、`inc`、`append`、`insert`、`remove`、`upsertItem`、`delete`。不写等于全部；写了就不能为空，也不能重复。
-- 不写的字段按默认处理，编译后的声明总会带齐 `namespace`、`schema`、`ops`（`key` 仅在写了时存在）。编译结果复制到包里每个 runtime 的 `datasets`。
+- `tools`：这个数据集给 agent 生成哪些工具，取自 `get`、`list`、`upsert`、`update`。不写时从 `ops` 推出：总有 `get` 和 `list`；`ops` 含 `set` 时加 `upsert`；`ops` 含 `set` 以外的操作时加 `update`。写了就不能为空、不能重复；写 `upsert` 而 `ops` 没有 `set`，或写 `update` 而 `ops` 只有 `set`，都是 `contributes.datasets.<name>.tools` 上的错误。只有在 `agent.tools.datasets` 里引用它的 runtime 才拿到这些工具，见[数据集工具](./tools.md#数据集工具)。
+- `description`：1–500 个字符，附在生成的工具描述后面，告诉模型这里存什么。
+- 不写的字段按默认处理，编译后的声明总会带齐 `namespace`、`schema`、`ops`、`tools`（`key`、`description` 仅在写了时存在）。编译结果复制到包里每个 runtime 的 `datasets`。
 - **与 `contributes.data` 的关系。** 同一个名字同时出现在 `data` 和 `datasets` 里时，两边的 `schema` 必须指向同一个文件：一个 namespace 只有一份 schema。`data` 仍管世界包导入，数据集管 namespace 里的记录。
 - 没有声明数据集的 namespace，行为和以前一样。
 
@@ -1308,7 +1314,7 @@ contributes:
 - **操作种类。** `plugin.data.update` 里每个操作的种类都必须在 `ops` 里。整值写入（`ctx.pluginData.set`、`plugin.data`、`plugin.data.batch` 的每一项）算作 `set`，删除（`plugin.data.delete`）算作 `delete`。所以 `ops` 里没有 `set` 的数据集，不能用 `set` 整个覆盖。
 - **记录 schema。** 写入后的值（对 `plugin.data.update` 是应用操作之后的结果）必须满足 `schema`。
 - 违反任何一条，这条 proposal 以 `code: "dataset-violation"` 被拒，按提交单元规则处理。宿主没有拿到 schema 文档时，写入一律被拒，不会放过。
-- `key` 在提交时不检查。
+- `key` 在提交时不检查。数据集工具按[数据集键规则](./tools.md#键的规则与查找) `datasetKey(...)`（SDK 导出）规范化键，查找时先找原样的键，再找规范化的键。插件代码写同一个数据集时，用 `datasetKey(...)` 生成键，才能落在工具找得到的行上。
 - 不经过提交流水线的写入不做这些检查：世界数据的导入和同步（按 source 的 `schema` 校验，见 [World Data · 配套插件数据](./world-data.md#配套插件数据)）、plugin action RPC 的 `context.store.setPluginData`，以及管理 API 的 `PUT`。
 
 详见[事务 · 操作式写入](./transactions.md#操作式写入plugindataupdate)。

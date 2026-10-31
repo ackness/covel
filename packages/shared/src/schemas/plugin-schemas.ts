@@ -6,6 +6,7 @@
 
 import { DATA_OP_KINDS } from "@covel/plugin-handlers-utils";
 import { z } from "zod";
+import { DATASET_TOOL_KINDS, datasetToolsIssues } from "./dataset-tools.js";
 
 /** A versioned extension point or UI slot name, such as `prompt.segment@1`. */
 const extensionPointPattern = "[a-z][a-z0-9.-]*@[1-9][0-9]*";
@@ -368,38 +369,83 @@ const datasetOpsSchema = z
   .refine(hasUniqueItems, "ops entries must be unique")
   .describe("Operation kinds allowed on this dataset. Defaults to every kind.");
 
+const datasetToolKindsSchema = z
+  .array(z.enum(DATASET_TOOL_KINDS))
+  .min(1)
+  .refine(hasUniqueItems, "tools entries must be unique");
+
+const datasetDescriptionSchema = z
+  .string()
+  .min(1)
+  .max(500)
+  .describe(
+    "What the dataset holds, in English. Agents read it in the description of each dataset tool.",
+  );
+
+/** `upsert` needs `set` in `ops`, and `update` needs another operation. */
+function addDatasetToolsIssues(
+  declaration: {
+    readonly ops?: readonly (typeof DATA_OP_KINDS)[number][];
+    readonly tools?: readonly (typeof DATASET_TOOL_KINDS)[number][];
+  },
+  ctx: z.RefinementCtx,
+): void {
+  for (const issue of datasetToolsIssues(declaration))
+    ctx.addIssue({
+      code: "custom",
+      path: ["tools", issue.index],
+      message: issue.message,
+    });
+}
+
 /**
  * Authored `contributes.datasets.<name>`: a typed plugin-data dataset. The name
  * is the plugin-data namespace.
  */
-export const pluginDatasetDeclSchema = z.strictObject({
-  schema: pluginRelativeJsonSchemaPath.describe(
-    "Package-relative JSON Schema that every record of the dataset must satisfy.",
-  ),
-  key: z
-    .string()
-    .regex(/^[A-Za-z_][A-Za-z0-9_]*$/)
-    .describe(
-      "Top-level record field whose string value is the record's key. Omit when callers choose keys.",
-    )
-    .optional(),
-  ops: datasetOpsSchema.optional(),
-});
+export const pluginDatasetDeclSchema = z
+  .strictObject({
+    schema: pluginRelativeJsonSchemaPath.describe(
+      "Package-relative JSON Schema that every record of the dataset must satisfy.",
+    ),
+    key: z
+      .string()
+      .regex(/^[A-Za-z_][A-Za-z0-9_]*$/)
+      .describe(
+        "Top-level record field whose string value is the record's key. Omit when callers choose keys.",
+      )
+      .optional(),
+    ops: datasetOpsSchema.optional(),
+    tools: datasetToolKindsSchema
+      .describe(
+        "Dataset tools an agent may select with `agent.tools.datasets`. Defaults to get and list, upsert when ops allow set, and update when ops allow any other operation.",
+      )
+      .optional(),
+    description: datasetDescriptionSchema.optional(),
+  })
+  .superRefine(addDatasetToolsIssues);
 
 /** Compiled dataset declaration with defaults resolved. */
-const compiledPluginDatasetDeclSchema = z.strictObject({
-  namespace: pluginDataNamespaceSchema.describe(
-    "Plugin-data namespace; equals the dataset name.",
-  ),
-  schema: pluginRelativeJsonSchemaPath.describe(
-    "Package-relative JSON Schema that every record of the dataset must satisfy.",
-  ),
-  key: z
-    .string()
-    .describe("Top-level record field whose string value is the record's key.")
-    .optional(),
-  ops: datasetOpsSchema,
-});
+const compiledPluginDatasetDeclSchema = z
+  .strictObject({
+    namespace: pluginDataNamespaceSchema.describe(
+      "Plugin-data namespace; equals the dataset name.",
+    ),
+    schema: pluginRelativeJsonSchemaPath.describe(
+      "Package-relative JSON Schema that every record of the dataset must satisfy.",
+    ),
+    key: z
+      .string()
+      .describe(
+        "Top-level record field whose string value is the record's key.",
+      )
+      .optional(),
+    ops: datasetOpsSchema,
+    tools: datasetToolKindsSchema.describe(
+      "Dataset tools an agent may select.",
+    ),
+    description: datasetDescriptionSchema.optional(),
+  })
+  .superRefine(addDatasetToolsIssues);
 
 const compiledPluginDatasetMapSchema = z
   .record(pluginDataNamespaceSchema, compiledPluginDatasetDeclSchema)
@@ -463,6 +509,21 @@ export const serviceImportSchema = z.union([
     .strict(),
 ]);
 
+/** A dataset an agent uses through generated tools: its name, or some of its tools. */
+export const datasetToolReferenceSchema = z.union([
+  pluginDataNamespaceSchema,
+  z
+    .object({
+      dataset: pluginDataNamespaceSchema.describe(
+        "A dataset of this package (`contributes.datasets`).",
+      ),
+      tools: datasetToolKindsSchema.describe(
+        "The dataset tools this agent gets; each must be one the dataset offers.",
+      ),
+    })
+    .strict(),
+]);
+
 /** An agent's tools as authored: a function runtime has no `services`. */
 export const agentToolsConfigSchema = toolsConfigSchema
   .extend({
@@ -470,6 +531,12 @@ export const agentToolsConfigSchema = toolsConfigSchema
       .array(serviceImportSchema)
       .describe(
         "Services the agent imports as read-only tools. Each names a contract; the one active provider that offers it to models answers the call. Without one the tool is left out for the run.",
+      )
+      .optional(),
+    datasets: z
+      .array(datasetToolReferenceSchema)
+      .describe(
+        "Datasets of this package the agent reads and writes through generated tools (`<dataset>-get`, `-list`, `-upsert`, `-update`). A name gives every tool the dataset offers; `{ dataset, tools }` gives some of them.",
       )
       .optional(),
   })
@@ -484,6 +551,20 @@ export const runtimeToolsConfigSchema = toolsConfigSchema
           .object({
             contract: contractIdSchema,
             name: z.string().regex(SERVICE_IMPORT_NAME_PATTERN),
+          })
+          .strict(),
+      )
+      .optional(),
+    datasets: z
+      .array(
+        z
+          .object({
+            dataset: pluginDataNamespaceSchema,
+            // Empty for a dataset the package does not declare, which the
+            // package rules reject.
+            tools: z
+              .array(z.enum(DATASET_TOOL_KINDS))
+              .refine(hasUniqueItems, "tools entries must be unique"),
           })
           .strict(),
       )

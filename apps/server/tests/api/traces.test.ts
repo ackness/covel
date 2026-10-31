@@ -103,7 +103,7 @@ function makeEntry(
         },
       },
       tools: {
-        builtin: ["plugin-data-get"],
+        builtin: ["get-character"],
         plugin: ["save-image"],
       },
     },
@@ -515,7 +515,7 @@ describe("traceRoutes", () => {
     registry.register(makeEntry());
     const app = makeApp(store, {
       registry,
-      builtinToolNames: ["plugin-data-get", "plugin-data-set"],
+      builtinToolNames: ["get-character", "sync-characters"],
     });
 
     const res = await app.request("/api/traces/sess-discovery/turns");
@@ -548,8 +548,8 @@ describe("traceRoutes", () => {
     };
 
     expect(body.discovery.framework.tools.builtin).toEqual([
-      "plugin-data-get",
-      "plugin-data-set",
+      "get-character",
+      "sync-characters",
     ]);
     expect(body.discovery.framework.pluginData.writePaths).toContain(
       "function-output:pluginData[]",
@@ -559,7 +559,7 @@ describe("traceRoutes", () => {
       declaredPluginDataNamespaces: ["images"],
       tools: [
         {
-          id: "plugin-data-get",
+          id: "get-character",
           kind: "builtin",
           runtimeId: "image-plugin",
         },

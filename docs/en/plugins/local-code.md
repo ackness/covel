@@ -279,12 +279,12 @@ Even if the agent's final reply includes fields that look like "data to save", t
 
 To let an agent write something, give it a tool, and list it in `agent.tools`:
 
-| What you want to do                 | Tool                                                                                                              |
-| ----------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
-| Write its own data                  | Its own tool, or the built-in `plugin-data-set`                                                                   |
-| Emit an event                       | The built-in `emit-event` (session topic enum and payload schemas; see [tools](../reference/tools.md#emit-event)) |
-| Send the player a notice            | The built-in `create-notification`                                                                                |
-| Ask the player for structured input | The built-in `create-form`                                                                                        |
+| What you want to do                 | Tool                                                                                                                                              |
+| ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Write its own data                  | Its own tool, or the `<dataset>-upsert` / `-update` tools a declared dataset generates (see [Dataset tools](../reference/tools.md#dataset-tools)) |
+| Emit an event                       | The built-in `emit-event` (session topic enum and payload schemas; see [tools](../reference/tools.md#emit-event))                                 |
+| Send the player a notice            | The built-in `create-notification`                                                                                                                |
+| Ask the player for structured input | The built-in `create-form`                                                                                                                        |
 
 If you want to require the agent to call a tool successfully on every run, write `completion: { require: tool-use }`. In this case, "no change" must also be submitted through a tool (for example, by submitting an empty list). Otherwise the run counts as failed.
 
