@@ -1,6 +1,7 @@
 import { expect, test } from "@playwright/test";
 import type { OrchestrationResponse } from "@covel/shared";
 import { createRecoveryFixture } from "./execution-recovery-fixtures.js";
+import { openStudioConfiguration } from "./helpers/player.js";
 
 test.use({ viewport: { width: 1440, height: 1000 } });
 
@@ -49,6 +50,7 @@ test("policy choice and zero delegation caps survive reload and can be cleared",
   );
   try {
     await page.goto(`/session?sid=${fixture.id}`);
+    await openStudioConfiguration(page);
     const policy = page.getByLabel("回合策略", { exact: true });
     await expect(policy).toBeVisible();
     await expect(
@@ -66,6 +68,7 @@ test("policy choice and zero delegation caps survive reload and can be cleared",
       .click();
     await expect.poll(() => value.settings.maxActors).toBe(0);
     await page.reload();
+    await openStudioConfiguration(page);
     await expect(policy).toHaveValue(
       JSON.stringify({ pluginId: "conversation", name: "draw" }),
     );
@@ -78,6 +81,7 @@ test("policy choice and zero delegation caps survive reload and can be cleared",
       ),
     };
     await page.reload();
+    await openStudioConfiguration(page);
     await expect(policy).toHaveValue(
       JSON.stringify({ pluginId: "conversation", name: "draw" }),
     );

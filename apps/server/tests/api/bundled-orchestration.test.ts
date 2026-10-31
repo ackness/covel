@@ -30,7 +30,8 @@ async function fixture(
     role?: "host" | "spectator";
     missing?: boolean;
     failActor?: boolean;
-    beforeActor?: () => Promise<void>;
+    beforeActor?: (signal?: AbortSignal) => Promise<void>;
+    actorRounds?: readonly (readonly string[])[];
   } = {},
 ) {
   const user = await mkdtemp(path.join(tmpdir(), "ensemble-user-"));
@@ -39,6 +40,9 @@ async function fixture(
   const store = createMemoryStore();
   const actorRequests: string[] = [],
     delegates: string[] = [];
+  const actorRounds = options.actorRounds ?? [["Mara", "Ivo"]];
+  const actorNames = [...new Set(actorRounds.flat())];
+  let round = 0;
   const llm: LLMAdapter = {
     generate: async (request) => {
       const text = JSON.stringify(request.messages);
@@ -50,10 +54,16 @@ async function fixture(
       });
       if (text.includes("Play only the character assigned")) {
         actorRequests.push(text);
-        await options.beforeActor?.();
+        await options.beforeActor?.(request.signal);
         request.signal?.throwIfAborted();
-        const name = text.includes('\\"name\\":\\"Mara\\"') ? "Mara" : "Ivo";
-        if (options.failActor && name === "Ivo")
+        const name = actorNames.find((actor) =>
+          text.includes(`\\"name\\":\\"${actor}\\"`),
+        );
+        expect(name).toBeDefined();
+        if (
+          options.failActor &&
+          actorRounds.some((actors) => actors[1] === name)
+        )
           throw new Error("Actor unavailable");
         return reply({
           segments: [{ kind: "dialogue", text: `${name} replies.` }],
@@ -121,15 +131,18 @@ async function fixture(
         };
         return (result.data?.segments ?? []).map((segment) => ({
           ...segment,
-          speaker: plan!.actors[index]!.character,
+          ...(options.actorRounds
+            ? { kind: "narration" as const }
+            : { speaker: plan!.actors[index]!.character }),
         }));
       });
+      round++;
       return reply({
         segments: [
           ...segments,
           { kind: "narration", text: "The bell grows quiet." },
         ],
-        cues: { present: plan?.cast ?? [] },
+        cues: { present: options.actorRounds?.[round] ?? plan?.cast ?? [] },
         yield: segments.length ? (plan?.yieldHint ?? "user") : "user",
       });
     },
@@ -156,7 +169,7 @@ async function fixture(
     locale: "en-US",
     metadata: {
       pluginSettings: {
-        "turn-policy": { strategy: "list", actorOrder: "Mara\nIvo" },
+        "turn-policy": { strategy: "list", actorOrder: actorNames.join("\n") },
         "chat-mode-narrator": { perspective: "dm" },
       },
     },
@@ -179,7 +192,7 @@ async function fixture(
   });
   expect(created.status).toBe(201);
   const session = (await created.json()) as { id: string };
-  for (const name of ["Mara", "Ivo"]) {
+  for (const name of actorNames) {
     const response = await boot.app.request(
       `/api/sessions/${session.id}/characters`,
       {
@@ -263,11 +276,15 @@ describe("bundled ensemble action flow", () => {
     "interrupts a gated generated actor with %s while preserving the root story",
     async (mode) => {
       const entered = Promise.withResolvers<void>(),
+        interrupted = Promise.withResolvers<void>(),
         release = Promise.withResolvers<void>();
       let calls = 0;
       const f = await fixture({
-        beforeActor: async () => {
+        beforeActor: async (signal) => {
           if (calls++ === 2) {
+            signal?.addEventListener("abort", () => interrupted.resolve(), {
+              once: true,
+            });
             entered.resolve();
             await release.promise;
           }
@@ -293,10 +310,12 @@ describe("bundled ensemble action flow", () => {
             { method: "POST", headers: f.headers },
           );
           expect(stopped.ok).toBe(true);
-        } else
+        } else {
           fresh = Promise.resolve(
             f.post("Mara and Ivo, start a new exchange."),
           );
+          await interrupted.promise;
+        }
         release.resolve();
         const stream = events(await oldStream);
         expect(
@@ -327,10 +346,28 @@ describe("bundled ensemble action flow", () => {
     },
   );
   it.each([false, true])(
-    "commits a capped chain with isolated actor failure: %s",
+    "resets delegation limits each round with isolated actor failure: %s",
     async (failActor) => {
-      const f = await fixture({ failActor });
+      const actorRounds = [
+        ["Mara", "Ivo"],
+        ["Lira", "Oren"],
+        ["Sera", "Tavi"],
+      ];
+      const f = await fixture({ failActor, actorRounds });
       try {
+        const limits = await f.boot.app.request(
+          `/api/sessions/${f.sessionId}/orchestration`,
+          {
+            method: "PATCH",
+            headers: f.headers,
+            body: JSON.stringify({ maxActors: 2, maxSubagentCalls: 2 }),
+          },
+        );
+        expect(limits.status).toBe(200);
+        expect(await limits.json()).toMatchObject({
+          settings: { maxActors: 2, maxSubagentCalls: 2 },
+          status: "unique",
+        });
         const response = await f.post();
         expect(response.status, await response.clone().text()).toBe(200);
         const stream = events(await response.text());
@@ -344,14 +381,8 @@ describe("bundled ensemble action flow", () => {
           stream.filter((event) => event.type === "execution.advance").at(-1)
             ?.payload,
         ).toMatchObject({ phase: "stopped", reason: "limit" });
-        expect(f.delegates).toEqual([
-          "Mara",
-          "Ivo",
-          "Mara",
-          "Ivo",
-          "Mara",
-          "Ivo",
-        ]);
+        expect(f.delegates).toEqual(actorRounds.flat());
+        expect(f.actorRequests).toHaveLength(6);
         const stories = (await f.store.listMessages(f.sessionId)).filter(
           (message) => message.role === "assistant",
         );
@@ -359,12 +390,14 @@ describe("bundled ensemble action flow", () => {
         expect(
           (await f.store.getSession(f.sessionId))?.completedPlayerTurns,
         ).toBe(1);
-        for (const story of stories) {
-          expect(story.content).toContain("Mara replies.");
-          if (failActor) expect(story.content).not.toContain("Ivo replies.");
+        for (const [index, story] of stories.entries()) {
+          const [first, second] = actorRounds[index]!;
+          expect(story.content).toContain(`${first} replies.`);
+          if (failActor)
+            expect(story.content).not.toContain(`${second} replies.`);
           else
-            expect(story.content.indexOf("Mara replies.")).toBeLessThan(
-              story.content.indexOf("Ivo replies."),
+            expect(story.content.indexOf(`${first} replies.`)).toBeLessThan(
+              story.content.indexOf(`${second} replies.`),
             );
         }
         const traces = await f.store.queryTraceEvents(f.sessionId, {

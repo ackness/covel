@@ -4,6 +4,8 @@ Covel 装好之后就带着一组插件和四个世界。这一章告诉你它�
 
 内置的插件和世界只是示范，不是必须用的。
 
+会话里的策略提供方和执行名额在[编排设置](./features.md#会话里的编排设置)中管理。
+
 叙事的地点和氛围提示随变化填写，供舞台和配乐读取，见[叙事与记忆](./story.md)。
 
 维度工具把不符合 schema 的值报告为可修正的输入错误，见 [update-dimensions](../reference/tools.md#update-dimensions)。

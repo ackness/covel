@@ -2783,6 +2783,7 @@
     "keyAdvice": "Create a temporary API key just for this trial, ideally with a spending limit. We do our best to protect your data, but please delete or rotate the key at your provider when you finish."
   },
   "orchestration": {
+    "clearPolicy": "Clear selection",
     "title": "Orchestration",
     "policy": "Turn policy",
     "automatic": "Automatic selection",

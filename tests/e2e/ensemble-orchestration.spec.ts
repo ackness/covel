@@ -5,9 +5,11 @@ import {
   type FakeReply,
 } from "./helpers/fake-llm-provider.js";
 import {
+  closeStudioConfiguration,
   composer,
   composerInput,
   ONBOARDING_VERSION,
+  openStudioConfiguration,
   seedBrowserSettings,
   selectWorldByText,
   startGame,
@@ -160,33 +162,54 @@ async function prepare(
   await page.goto("/session");
   await selectWorldByText(page, new RegExp(name));
   await page.getByLabel("Play as", { exact: true }).selectOption(role);
+  const start = page.getByRole("button", { name: "Start Game", exact: true });
+  await expect(start).toBeEnabled();
+  await page.getByRole("button", { name: /^Loaded Plugins/ }).click();
   const advanced = page.getByTestId("advanced-plugin-settings");
   await advanced.locator("summary").click();
-  for (const id of [
+  const excluded = [
     "pregame",
     "world-init",
     "world-time",
     "memory",
     "history-compaction",
-  ]) {
-    const toggle = page.locator(`[data-plugin-id="${id}"]`).getByRole("switch");
+  ];
+  for (const id of excluded) {
+    const toggle = advanced
+      .locator(`[data-plugin-id="${id}"]`)
+      .getByRole("switch");
+    await expect(toggle).toBeEnabled();
     if ((await toggle.getAttribute("aria-checked")) === "true")
       await toggle.click();
+    await expect(toggle).toHaveAttribute("aria-checked", "false");
+  }
+  for (const id of excluded) {
+    await expect(
+      advanced.locator(`[data-plugin-id="${id}"]`).getByRole("switch"),
+    ).toHaveAttribute("aria-checked", "false");
   }
   const creation = page.waitForResponse(
     (response) =>
       response.url().endsWith("/api/sessions") &&
       response.request().method() === "POST",
   );
-  await startGame(
-    page,
-    page.getByRole("button", { name: "Start Game", exact: true }),
-  );
-  const session = (await (await creation).json()) as {
+  await startGame(page, start);
+  const created = await creation;
+  const submitted = created.request().postDataJSON() as {
+    plugins: string[];
+    excludedPlugins: string[];
+  };
+  expect(submitted.excludedPlugins).toEqual(expect.arrayContaining(excluded));
+  expect(submitted.plugins.filter((id) => excluded.includes(id))).toEqual([]);
+  const session = (await created.json()) as {
     id: string;
     ownerToken?: string;
+    activePlugins: string[];
     seats: { role: string; characters: string[] }[];
   };
+  expect(session.activePlugins.filter((id) => excluded.includes(id))).toEqual(
+    [],
+  );
   expect(session.seats).toEqual([
     { id: "main", controller: "human", role, characters: [] },
   ]);
@@ -210,16 +233,30 @@ async function prepare(
   await page
     .getByRole("button", { name: "Begin Adventure", exact: true })
     .click();
+  await expect(
+    page.getByRole("button", { name: "Begin Adventure", exact: true }),
+  ).toHaveCount(0);
   await waitForTurnIdle(page);
   await page.getByRole("button", { name: "Parsed view", exact: true }).click();
-  const policy = page.getByLabel("Turn policy", { exact: true });
-  await expect(policy).toBeVisible();
-  await policy.selectOption(
-    JSON.stringify({ pluginId: "turn-policy", name: "turn-policy" }),
+  await openStudioConfiguration(page);
+  const orchestration = page.getByRole("group", {
+    name: "Orchestration",
+    exact: true,
+  });
+  await expect(orchestration.getByText(/^Turn Policy \/ /)).toBeVisible();
+  await expect(orchestration.getByRole("combobox")).toHaveCount(0);
+  await expect(
+    page.getByRole("button", { name: "Save Turn policy", exact: true }),
+  ).toHaveCount(0);
+  const resolved = await page.request.get(
+    `/api/sessions/${session.id}/orchestration`,
+    { headers },
   );
-  await page
-    .getByRole("button", { name: "Save Turn policy", exact: true })
-    .click();
+  expect(await resolved.json()).toMatchObject({
+    status: "unique",
+    settings: { maxActors: 4, maxSubagentCalls: 16 },
+  });
+  expect((await resolved.json()).settings.turnPolicy).toBeUndefined();
   await page.getByLabel("Automatic rounds", { exact: true }).fill("2");
   const saveAdvance = page.getByRole("button", {
     name: "Save Automatic rounds",
@@ -228,7 +265,9 @@ async function prepare(
   await saveAdvance.click();
   await expect(saveAdvance).toHaveText("Save");
   await expect(saveAdvance).toBeDisabled();
+  await closeStudioConfiguration(page);
   const strategy = async (value: string) => {
+    await openStudioConfiguration(page);
     await page.getByRole("button", { name: /^Settings for / }).click();
     const control = page
       .getByRole("dialog")
@@ -239,6 +278,7 @@ async function prepare(
       .getByRole("dialog")
       .getByRole("button", { name: "Close", exact: true })
       .click();
+    await closeStudioConfiguration(page);
   };
   return {
     provider,
@@ -277,12 +317,19 @@ test("host creation, fixed-order beats, manual names and settings survive reload
     expect(JSON.stringify(messages)).toContain("Ivo replies.");
     expect(JSON.stringify(messages)).not.toContain("PRIVATE-PERFORMER-INTENT");
     await page.reload();
-    await expect(page.getByLabel("Turn policy", { exact: true })).toHaveValue(
-      JSON.stringify({ pluginId: "turn-policy", name: "turn-policy" }),
+    await openStudioConfiguration(page);
+    await expect(
+      page
+        .getByRole("group", { name: "Orchestration", exact: true })
+        .getByText(/^Turn Policy \/ /),
+    ).toBeVisible();
+    await expect(page.getByLabel("Turn policy", { exact: true })).toHaveCount(
+      0,
     );
     await expect(
       page.getByLabel("Automatic rounds", { exact: true }),
     ).toHaveValue("2");
+    await closeStudioConfiguration(page);
     await expect(page.getByTestId("composer-mode-direct")).toBeVisible();
     await f.strategy("manual");
     await page.getByTestId("composer-mode-turn-policy/choose-actors").click();
@@ -314,12 +361,13 @@ test("spectator sees advance only and an invalid actor loses only its contributi
     await f.strategy("list");
     for (const kind of ["direct", "say", "turn-policy/choose-actors"])
       await expect(page.getByTestId(`composer-mode-${kind}`)).toHaveCount(0);
-    await expect(page.getByTestId("composer-mode-advance")).toBeVisible();
-    await page.getByTestId("composer-mode-advance").click();
-    await page
-      .getByRole("button", { name: "Advance", exact: true })
-      .last()
-      .click();
+    const advance = composer(page).getByRole("button", {
+      name: "Advance",
+      exact: true,
+    });
+    await expect(advance).toBeVisible();
+    await expect(advance).toBeEnabled();
+    await advance.click();
     await waitForTurnIdle(page);
     expect(f.calls).toEqual(["Mara", "Ivo", "Mara", "Ivo", "Mara", "Ivo"]);
     await expect(composer(page)).toHaveAttribute("data-executing", "false");
@@ -355,6 +403,11 @@ for (const mode of ["Stop", "new input"])
       await composerInput(page).fill("Mara and Ivo, greet each other.");
       await composerInput(page).press("Enter");
       await expect.poll(() => actors).toBe(3);
+      const aborted = page.waitForResponse(
+        (response) =>
+          response.url().endsWith(`/api/sessions/${f.sessionId}/abort`) &&
+          response.request().method() === "POST",
+      );
       if (mode === "Stop")
         await page
           .getByTestId("auto-advance-control")
@@ -364,6 +417,7 @@ for (const mode of ["Stop", "new input"])
         await composerInput(page).fill("Mara and Ivo, begin a new exchange.");
         await composerInput(page).press("Enter");
       }
+      expect((await aborted).ok()).toBe(true);
       release();
       await waitForTurnIdle(page);
       expect(f.calls).toHaveLength(mode === "Stop" ? 3 : 9);

@@ -106,8 +106,7 @@ export function OrchestrationSettings({
     setDraft((previous) => ({ ...previous, [field]: text }));
     setErrors((previous) => ({ ...previous, [field]: false }));
   };
-  const save = async (field: Field) => {
-    const text = draft[field];
+  const save = async (field: Field, text = draft[field]) => {
     if (text === undefined) return;
     const current = generation.current,
       revision = revisions.current[field] ?? 0;
@@ -160,8 +159,8 @@ export function OrchestrationSettings({
         setDraft((previous) => ({ ...previous, [field]: confirmed }));
     } catch {
       if (live()) setErrors((previous) => ({ ...previous, [field]: true }));
-    } finally {
-      if (!live()) return;
+    }
+    if (live()) {
       // Refresh both saved resources even after a failure; preserve every unsaved draft.
       const sequence = ++refresh.current;
       const [orchestration, session] = await loadResources(sessionId);
@@ -205,12 +204,15 @@ export function OrchestrationSettings({
       }
     }
   };
+  const activePolicies =
+    value?.policies.filter((policy) => policy.status !== "unavailable") ?? [];
   const selected =
     value?.settings.turnPolicy ??
-    (value?.status === "unique" ? value.policies[0] : undefined);
+    (activePolicies.length === 1 ? activePolicies[0] : undefined);
   const provider = value?.policies.find(
     (policy) => selectionValue(policy) === selectionValue(selected),
   );
+  const multipleProviders = activePolicies.length > 1;
   const button = (field: Field) => (
     <button
       type="button"
@@ -230,33 +232,53 @@ export function OrchestrationSettings({
   return (
     <fieldset className="space-y-3 rounded border border-(--rule-color) p-3 text-xs">
       <legend>{t("orchestration.title")}</legend>
-      <label htmlFor={`${sessionId}-policy`}>{label("turnPolicy")}</label>
-      <div className="flex items-center gap-2">
-        <select
-          id={`${sessionId}-policy`}
-          disabled={disabled || !value || pending.turnPolicy}
-          value={draft.turnPolicy ?? ""}
-          aria-describedby={
-            errors.turnPolicy ? `${sessionId}-turnPolicy-error` : undefined
-          }
-          onChange={(event) => edit("turnPolicy", event.target.value)}
-        >
-          <option value="">{t("orchestration.automatic")}</option>
-          {value?.policies.map((policy) => (
-            <option
-              key={selectionValue(policy)}
-              value={selectionValue(policy)}
-              disabled={policy.status === "unavailable"}
+      {multipleProviders ? (
+        <>
+          <label htmlFor={`${sessionId}-policy`}>{label("turnPolicy")}</label>
+          <div className="flex items-center gap-2">
+            <select
+              id={`${sessionId}-policy`}
+              disabled={disabled || !value || pending.turnPolicy}
+              value={draft.turnPolicy ?? ""}
+              aria-describedby={
+                errors.turnPolicy ? `${sessionId}-turnPolicy-error` : undefined
+              }
+              onChange={(event) => edit("turnPolicy", event.target.value)}
             >
-              {policy.label}
-              {policy.status !== "available"
-                ? ` (${t(`orchestration.${policy.status}`)})`
-                : ""}
-            </option>
-          ))}
-        </select>
-        {button("turnPolicy")}
-      </div>
+              <option value="">{t("orchestration.automatic")}</option>
+              {value?.policies.map((policy) => (
+                <option
+                  key={selectionValue(policy)}
+                  value={selectionValue(policy)}
+                  disabled={policy.status === "unavailable"}
+                >
+                  {policy.label}
+                  {policy.status !== "available"
+                    ? ` (${t(`orchestration.${policy.status}`)})`
+                    : ""}
+                </option>
+              ))}
+            </select>
+            {button("turnPolicy")}
+          </div>
+        </>
+      ) : (
+        <div className="flex items-center gap-2">
+          <p>
+            {label("turnPolicy")}:{" "}
+            <span>{provider?.label ?? t("orchestration.automatic")}</span>
+          </p>
+          {value?.settings.turnPolicy && (
+            <button
+              type="button"
+              disabled={disabled || pending.turnPolicy}
+              onClick={() => void save("turnPolicy", "")}
+            >
+              {t("orchestration.clearPolicy")}
+            </button>
+          )}
+        </div>
+      )}
       <p>{t(`orchestration.${value?.status ?? "unavailable"}`)}</p>
       {provider && provider.status !== "unavailable" && (
         <button

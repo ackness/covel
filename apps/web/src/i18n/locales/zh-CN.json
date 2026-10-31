@@ -2676,6 +2676,7 @@
     "keyAdvice": "请专门为体验创建一个临时 API 密钥，最好设好消费上限。我们已尽力保护你的数据，但仍建议体验结束后到服务商后台删除或轮换这个密钥。"
   },
   "orchestration": {
+    "clearPolicy": "清除选择",
     "title": "编排",
     "policy": "回合策略",
     "automatic": "自动选择",
