@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import {
@@ -38,6 +39,11 @@ describe("world-ir plugin contract", () => {
     expect(parsed?.manifest.input?.inject ?? []).not.toContainEqual(
       expect.objectContaining({ from: "turn-digest@1" }),
     );
+    expect(parsed?.manifest.input?.inject).toContainEqual({
+      kind: "kernel",
+      name: "operations",
+      from: "operations@1",
+    });
     expect(loaded?.bindingAcceptsSchemas?.narrative).toBeUndefined();
     expect(parsed?.manifest.output).toEqual({
       schema: "contract:world-ir@1",
@@ -73,4 +79,21 @@ it("uses the same short character handles for imported and generated IDs", () =>
   const handles = characterHandles([generated, imported]);
   expect(handles.get("north-watcher")).toBe(imported);
   expect(handles.get("south-watcher")).toBe(generated);
+});
+
+it("describes tool-made facts with the same names and quantities in both instruction languages", () => {
+  const ruleOf = (file: string) =>
+    readFileSync(new URL(`../${file}`, import.meta.url), "utf8")
+      .split("\n")
+      .find((line) => line.startsWith("`operations`"))!;
+  const en = ruleOf("PLUGIN.md");
+  const zh = ruleOf("PLUGIN.zh.md");
+  expect(en).toContain("same item name and quantity as the request");
+  expect(en).toContain(
+    "Never invent an event for an operation the narrative does not show",
+  );
+  expect(zh).toContain("相同的物品名和数量");
+  expect(zh).toContain("正文未呈现的操作");
+  for (const rule of [en, zh])
+    expect(rule).not.toMatch(/inventory|narrator|world-ir/);
 });

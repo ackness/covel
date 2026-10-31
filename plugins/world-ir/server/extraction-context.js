@@ -30,6 +30,7 @@ export default async function extractionContext(ctx, payload) {
     type,
   }));
   const vocabulary = vocabularyEntries(payload.inputSlots?.vocabulary);
+  const operations = payload.inputSlots?.operations?.value?.operations ?? [];
   return {
     action: "continue",
     replace: {
@@ -44,6 +45,17 @@ export default async function extractionContext(ctx, payload) {
             modelFacingJson({
               characters,
               ...(vocabulary.length ? { vocabulary } : {}),
+              ...(operations.length
+                ? {
+                    operations: operations.map(
+                      ({ contract, request, result }) => ({
+                        contract,
+                        request,
+                        result,
+                      }),
+                    ),
+                  }
+                : {}),
               // Keep attribution from the contract, without source bookkeeping.
               narrative: {
                 cardinality: narrative.cardinality,

@@ -177,6 +177,8 @@ If you use any of these plugins, keep this one on. If you turn it off, the plugi
 
 **When it is on**: optional. When you turn on a plugin that depends on it, it is turned on automatically. You do not need to select it separately.
 
+Extraction also sees changes already made through tools this turn. When the story shows one, it records the event with the same item name and quantity as the tool request; it does not invent events for changes absent from the story. Inventory skips changes its tool already handled, while other plugins can still read those events.
+
 World fact extraction assesses each open objective of tracked quests and checks that achievement judgments agree with quest events. Plans, partial work, failures and unverified claims do not count as completion. Semantic judgments can still be wrong; see [per-objective assessment](../reference/tools.md#per-objective-assessment).
 
 ## Next

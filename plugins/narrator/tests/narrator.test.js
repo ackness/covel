@@ -91,6 +91,30 @@ describe(`${PLUGIN_ID} package`, () => {
       );
   });
 
+  it("imports optional bag tools and explains payment and refusal in both languages", () => {
+    expect(manifest.tools.services).toEqual([
+      { contract: "inventory.bag@1", name: "check-bag" },
+      { contract: "inventory.change@1", name: "change-inventory" },
+    ]);
+    expect(definition.packageManifest.plugin.requires ?? []).toEqual([]);
+    expect(manifest.needs ?? []).toEqual([]);
+    expect(
+      Object.values(manifest.inputs ?? {}).every(
+        (input) => input.required === false,
+      ),
+    ).toBe(true);
+    expect(english).toContain("When the `change-inventory` tool is offered");
+    expect(english).toContain("with the payment first");
+    expect(english).toContain(
+      "If it is refused, narrate that the exchange does not happen",
+    );
+    expect(english).toContain("Call `check-bag`");
+    expect(chinese).toContain("提供了 `change-inventory` 工具");
+    expect(chinese).toContain("付款排在前面");
+    expect(chinese).toContain("若被拒绝，就叙述交易没有发生");
+    expect(chinese).toContain("调用 `check-bag`");
+  });
+
   it("hands every player setting to the prompt, in both languages", () => {
     const settings = definition.packageManifest.manifest.userSettings ?? [];
     expect(settings.length).toBeGreaterThan(0);
@@ -178,6 +202,10 @@ describe(`${PLUGIN_ID} package`, () => {
       },
       agent: {
         tools: {
+          services: [
+            { contract: "inventory.bag@1", as: "check-bag" },
+            { contract: "inventory.change@1", as: "change-inventory" },
+          ],
           builtin: [
             "list-characters",
             "get-character",
