@@ -45,7 +45,7 @@ interface UseGameViewComposerArgs {
   submittedBlockIds: ReadonlySet<string>;
   executing: boolean;
   session: SessionRecord;
-  onSendMessage: (content: string) => void;
+  onSendMessage: (content: string) => boolean;
   commands?: readonly SessionSlashCommand[];
   /** False while the session's command directory has not been read yet. */
   commandsLoaded?: boolean;

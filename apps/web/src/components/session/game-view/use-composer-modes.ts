@@ -58,7 +58,7 @@ export function useComposerModes({
 }: {
   session: SessionRecord;
   executing: boolean;
-  onSendMessage: (content: string) => void;
+  onSendMessage: (content: string) => boolean;
 }): ComposerModes {
   const { t, i18n } = useTranslation();
   const {
@@ -181,6 +181,14 @@ export function useComposerModes({
 
   const submit = useCallback(
     (text: string, queued?: string): boolean => {
+      const admitted = (result: boolean) => {
+        if (result !== false) return true;
+        emitToast(
+          "info",
+          t("session.reasonSessionBusy", "Session is busy, please retry"),
+        );
+        return false;
+      };
       const drafts =
         [selected.restoredDrafts, queued].filter(Boolean).join("\n") ||
         undefined;
@@ -193,13 +201,15 @@ export function useComposerModes({
         // A seat the server cannot default to (a host-only session) rides
         // along, or the line is refused for lack of a player seat.
         const seat = composerSeat(seats);
-        if (seat && seat !== primarySeat(seats))
-          submitComposerAction({
-            kind: joined.startsWith("/") ? "command" : "say",
-            text: joined,
-            seatId: seat.id,
-          });
-        else onSendMessage(joined);
+        const sent =
+          seat && seat !== primarySeat(seats)
+            ? submitComposerAction({
+                kind: joined.startsWith("/") ? "command" : "say",
+                text: joined,
+                seatId: seat.id,
+              })
+            : onSendMessage(joined);
+        if (!admitted(sent)) return false;
         setSelected(({ restoredDrafts: _sent, ...current }) => current);
         return true;
       }
@@ -240,7 +250,7 @@ export function useComposerModes({
         return [[field.name, value] as const];
       });
       const trimmed = text.trim();
-      submitComposerAction(
+      const sent = submitComposerAction(
         {
           kind: mode.kind,
           ...(mode.text !== "none" && trimmed ? { text: trimmed } : {}),
@@ -251,6 +261,7 @@ export function useComposerModes({
         },
         drafts ? { drafts } : undefined,
       );
+      if (!admitted(sent)) return false;
       setSelected(({ restoredDrafts: _sent, ...current }) => ({
         ...current,
         values: {},

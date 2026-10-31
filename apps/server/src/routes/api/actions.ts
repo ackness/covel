@@ -275,12 +275,56 @@ interface PlayerTurnInput {
   readonly messageId: string;
 }
 
+async function assertInputUncommitted(
+  store: DataStore,
+  sessionId: string,
+  inputMessageId?: string,
+): Promise<void> {
+  if (!inputMessageId) return;
+  const saved = await store.getMessage(sessionId, inputMessageId);
+  const savedTurnId =
+    saved?.metadata && typeof saved.metadata === "object"
+      ? (saved.metadata as { turnId?: unknown }).turnId
+      : undefined;
+  if (typeof savedTurnId === "string" && savedTurnId.length > 0)
+    throw new ActionRejectedError(
+      "This message was already sent and its turn is saved.",
+      "input_already_committed",
+    );
+}
+
 async function playerTurnInput(
   { kinds, characters, seats }: ActionContext,
   session: SessionRecord,
   actions: readonly TurnAction[],
   messageId: string,
+  submission?: PreparedInteractionSubmission,
 ): Promise<PlayerTurnInput> {
+  // Validate the values the answer stores, including defaults and coercion,
+  // and count its filled narrative together with the other submitted text.
+  if (submission) {
+    const texts = [...submission.texts];
+    actions = actions.map((action) => {
+      if (!action.interaction) return action;
+      const stored = submission.results.find(
+        (result) => result.interactionId === action.interaction?.interactionId,
+      );
+      return {
+        ...action,
+        text: texts.shift() ?? "",
+        fields: (stored?.values ?? action.fields ?? {}) as TurnAction["fields"],
+      };
+    });
+    checkAnsweredFields(actions, kinds);
+  }
+  if (
+    actions.reduce((sum, action) => sum + (action.text?.length ?? 0), 0) >
+    MAX_PLAYER_MESSAGE_CHARS
+  )
+    throw new ActionRejectedError(
+      `submit_actions text must be at most ${MAX_PLAYER_MESSAGE_CHARS} characters in total, answers included`,
+      "invalid_action",
+    );
   const message = await renderActions(actions, {
     characters,
     seats,
@@ -362,16 +406,18 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
   // The actions are checked here, for a status the client can read, and
   // again under the lock against the live session.
   let interactionPayload: ReturnType<typeof interactionSubmissionPayload>;
+  let admissionContext: ActionContext | undefined;
+  let admissionActions: readonly TurnAction[] | undefined;
   if (type === "submit_actions") {
     try {
-      interactionPayload = interactionSubmissionPayload(
-        await resolveActionsFor(
-          store,
-          await actionContext(store, pluginRegistry, session),
-          session,
-          payload.actions,
-        ),
+      admissionContext = await actionContext(store, pluginRegistry, session);
+      admissionActions = await resolveActionsFor(
+        store,
+        admissionContext,
+        session,
+        payload.actions,
       );
+      interactionPayload = interactionSubmissionPayload(admissionActions);
     } catch (error) {
       if (!(error instanceof ActionValidationError)) throw error;
       return c.json(
@@ -396,6 +442,67 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
       interactionPayload,
     );
     if (formApproval) return formApproval;
+  }
+
+  const submitInteraction = createInteractionSubmitter(async (request) => {
+    const validator = c
+      .get("rpcRegistry")
+      .getFormValidator(request.pluginId, request.name);
+    if (!validator)
+      throw new InteractionSubmissionError(
+        "Form validator is unavailable; activate and approve its plugin first",
+      );
+    return validator(request);
+  }, store);
+
+  let admissionRejection: Record<string, unknown> | undefined;
+  // Admission reads must finish before registration can revoke another
+  // request's advancement. Revalidate under the lock before any writes.
+  if (type === "submit_actions" && admissionContext && admissionActions) {
+    try {
+      await assertRecoverableTurn(store, sessionId, payload.recoverFromTurnId, {
+        type,
+        payload,
+      });
+      await assertInputUncommitted(store, sessionId, payload.inputMessageId);
+      const submission = interactionPayload
+        ? await submitInteraction(interactionPayload, {
+            sessionId,
+            locale: session.locale,
+          })
+        : undefined;
+      await playerTurnInput(
+        admissionContext,
+        session,
+        admissionActions,
+        payload.inputMessageId ?? crypto.randomUUID(),
+        submission,
+      );
+    } catch (error) {
+      if (error instanceof FormValidatorFailedError)
+        logRequestError(
+          c,
+          `[actions] form validator failed for ${sessionId}`,
+          error.cause,
+        );
+      if (
+        error instanceof ActionRejectedError ||
+        error instanceof ActionValidationError ||
+        error instanceof InteractionSubmissionError
+      )
+        admissionRejection = {
+          message: error.message,
+          code: error.code,
+          ...(error instanceof FormRejectedError
+            ? { details: { issues: error.issues } }
+            : {}),
+          ...(error instanceof ActionValidationError &&
+          error.details !== undefined
+            ? { details: error.details }
+            : {}),
+        };
+      else throw error;
+    }
   }
 
   // Lazy-lock the session's embedding model once per process boot.
@@ -462,15 +569,6 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
     // The turn currently writing to this stream. The opening-continuation
     // turn (below) reuses the stream under its own fresh turnId.
     let currentTurnId: string = turnId;
-    // Registered before anything waits, so a stop reaches this request while
-    // it waits for the lock and between the turns it chains. Released in the
-    // finally below so a crashed stream never leaves a stale target behind.
-    const control = registerActionRequest(
-      sessionId,
-      turnId,
-      requestId,
-      type === "submit_actions",
-    );
     const root = createAdvanceRoot(requestId);
     const faults = pluginFaultHost(store);
     let closeFaultGroup:
@@ -550,6 +648,25 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
       return Promise.resolve();
     };
 
+    if (admissionRejection) {
+      // Keep the action stream's refusal shape for form issues and drafts,
+      // without registering a request that can supersede accepted work.
+      await writeEvent("error.occurred", admissionRejection);
+      await writes.drain();
+      writes.close();
+      await closeSseDelivery(stream);
+      return;
+    }
+
+    // Registered after admission, before waiting for execution, so a stop
+    // reaches this request while it waits for the lock and between the turns it chains. Released in the
+    // finally below so a crashed stream never leaves a stale target behind.
+    const control = registerActionRequest(
+      sessionId,
+      turnId,
+      requestId,
+      type === "submit_actions",
+    );
     const publishAdvance = async (progress: ExecutionAdvancePayload) => {
       if (!requestStarted) return;
       control.setAdvance(progress);
@@ -853,18 +970,7 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
           // A resent input whose turn is already saved would run the whole
           // turn only for the commit to refuse it: refuse it before it runs.
           // The commit's check stays the last line of defence.
-          if (inputMessageId) {
-            const saved = await store.getMessage(sessionId, inputMessageId);
-            const savedTurnId =
-              saved?.metadata && typeof saved.metadata === "object"
-                ? (saved.metadata as { turnId?: unknown }).turnId
-                : undefined;
-            if (typeof savedTurnId === "string" && savedTurnId.length > 0)
-              throw new ActionRejectedError(
-                "This message was already sent and its turn is saved.",
-                "input_already_committed",
-              );
-          }
+          await assertInputUncommitted(store, sessionId, inputMessageId);
           // Refresh runtime activations from the session read under the lock.
           pluginRegistry.syncSessionActivations(
             sessionId,
@@ -898,73 +1004,26 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
               answers,
             );
             if (denied) throw await entryRejection(denied);
-            const rpcRegistry = c.get("rpcRegistry");
-            submission = await createInteractionSubmitter(async (request) => {
-              const validator = rpcRegistry.getFormValidator(
-                request.pluginId,
-                request.name,
-              );
-              if (!validator)
-                throw new InteractionSubmissionError(
-                  "Form validator is unavailable; activate and approve its plugin first",
-                );
-              return validator(request);
-            }, store)(answers, { sessionId, locale: liveSession.locale });
+            submission = await submitInteraction(answers, {
+              sessionId,
+              locale: liveSession.locale,
+            });
           }
-          // An answer's text is its filled narrative and its fields the
-          // values as stored (defaults applied, numbers coerced).
-          const answeredTexts = [...(submission?.texts ?? [])];
-          const answeredValues = [...(submission?.results ?? [])];
-          const playerInput =
-            resolvedActions && liveActionContext
-              ? await playerTurnInput(
-                  liveActionContext,
-                  liveSession,
-                  submission
-                    ? resolvedActions.map((action) => {
-                        if (!action.interaction) return action;
-                        const text = answeredTexts.shift() ?? "";
-                        const stored = answeredValues.find(
-                          (result) =>
-                            result.interactionId ===
-                            action.interaction?.interactionId,
-                        );
-                        return {
-                          ...action,
-                          text,
-                          fields: (stored?.values ??
-                            action.fields ??
-                            {}) as TurnAction["fields"],
-                        };
-                      })
-                    : resolvedActions,
-                  inputMessageId ?? crypto.randomUUID(),
-                )
-              : undefined;
-          // The stored answer values must also satisfy the fields schema of
-          // the kind each interaction declares; the form may not repeat it.
-          if (playerInput && liveActionContext && submission) {
+          let playerInput: PlayerTurnInput | undefined;
+          if (resolvedActions && liveActionContext) {
             try {
-              checkAnsweredFields(playerInput.actions, liveActionContext.kinds);
+              playerInput = await playerTurnInput(
+                liveActionContext,
+                liveSession,
+                resolvedActions,
+                inputMessageId ?? crypto.randomUUID(),
+                submission,
+              );
             } catch (error) {
               if (error instanceof ActionValidationError)
                 throw new ActionRejectedError(error.message, error.code);
               throw error;
             }
-          }
-          // The request schema bounds the typed texts and the submitter the
-          // filled answers; together they still share one limit, checked
-          // before anything is stored.
-          if (playerInput) {
-            const total = playerInput.actions.reduce(
-              (sum, action) => sum + (action.text?.length ?? 0),
-              0,
-            );
-            if (total > MAX_PLAYER_MESSAGE_CHARS)
-              throw new ActionRejectedError(
-                `submit_actions text must be at most ${MAX_PLAYER_MESSAGE_CHARS} characters in total, answers included`,
-                "invalid_action",
-              );
           }
           root.rememberSeat(playerInput?.actions);
           const turnPlayerMessage = playerInput?.message ?? "";

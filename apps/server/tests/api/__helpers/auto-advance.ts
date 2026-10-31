@@ -23,11 +23,12 @@ export async function advanceFixture(
     onGenerate?: (
       index: number,
       request: Parameters<LLMAdapter["generate"]>[0],
-    ) => Promise<void>;
+    ) => Promise<void | Awaited<ReturnType<LLMAdapter["generate"]>>>;
     hooks?: HookPipeline;
     store?: DataStore;
     databaseUrl?: string;
     sessionLock?: import("../../../src/lib/session-lock.js").SessionLock;
+    settledSessionLock?: import("../../../src/routes/api/plugin-rpc/settled-session-lock.js").SettledSessionLock;
     noProvider?: boolean;
     emptyOutput?: boolean;
     prepare?: (
@@ -130,7 +131,8 @@ runtime:
     llmAdapter: {
       generate: async (request) => {
         const index = calls++;
-        await options.onGenerate?.(index, request);
+        const response = await options.onGenerate?.(index, request);
+        if (response) return response;
         const yieldValue = options.yields ? options.yields[index] : "continue";
         return {
           content: options.emptyOutput
@@ -145,14 +147,17 @@ runtime:
         };
       },
     },
-    perRequestMiddleware: options.hooks
-      ? [
-          async (c, next) => {
-            c.set("hookPipeline", options.hooks!);
-            await next();
-          },
-        ]
-      : [],
+    perRequestMiddleware:
+      options.hooks || options.settledSessionLock
+        ? [
+            async (c, next) => {
+              if (options.hooks) c.set("hookPipeline", options.hooks);
+              if (options.settledSessionLock)
+                c.set("settledSessionLock", options.settledSessionLock);
+              await next();
+            },
+          ]
+        : [],
   });
   const headers = {
     Authorization: "Bearer advance-test-token",
