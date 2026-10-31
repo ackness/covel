@@ -157,7 +157,7 @@ describe("service import rules", () => {
   ])("rejects a clash with $case at $field", ({ agent, field }) => {
     const found = issues({ ...staged, agent });
     expect(found).toHaveLength(1);
-    expect(found[0]).toMatch(new RegExp(`^${field.replace(/\./g, "\\.")}: `));
+    expect(found[0]?.startsWith(`${field}: `)).toBe(true);
   });
 
   it("rejects imports in a function runtime", () => {
