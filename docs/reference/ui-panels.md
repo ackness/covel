@@ -892,6 +892,8 @@ contributes:
 
 授权后的页面从 `window.covel` 的状态对象读取 `session` 字段，也可用 `window.covel.subscribe` 订阅变化。下表是该字段的内容。它不重复顶层的 `locale` 和 `theme`。
 
+其他客户端提交回合后，宿主也会刷新消息和回合数，并推送更新后的投影；页面无需重新加载。
+
 <!-- prettier-ignore -->
 | 字段 | 内容 |
 | --- | --- |

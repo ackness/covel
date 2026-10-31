@@ -701,6 +701,7 @@ The data of `system.connected` has a `cursor`. It is the latest event ID this se
 - `apps/web/src/services/subscription.ts` subscribes by default to `runtime / state / game / plugin / session / system`. It does not include `store`. To recover background tasks, the session store subscribes to `job` explicitly as well.
 - The client dispatches by `event.topic`. When you add a new topic or event, **you must update this file at the same time**.
 - In-turn events on `/api/actions` (`narrative.delta` / `narrative.completed` / `interaction.requested` / `plugin-data.changed`, and so on) are handled by the callback of `sendAction`. They do not go through `subscription.ts`.
+- The `game` event `turn.completed` reports a committed turn. An observing web client rereads the session snapshot to update messages and the turn count, including turns without character or dimension writes. Existing recovery generation and execution ownership checks preserve a healthy local action stream.
 
 **Authentication**
 

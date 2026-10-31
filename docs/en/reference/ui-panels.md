@@ -894,6 +894,8 @@ Replacing content or switching sessions closes the old iframe's connection and s
 
 After consent, the page reads the `session` field of the `window.covel` state object, and can also use `window.covel.subscribe` to follow changes. The table below describes that field. The projection does not repeat top-level `locale` and `theme`.
 
+When another client commits a turn, the host also refreshes messages and the turn count and pushes the updated projection. The page does not need to reload.
+
 <!-- prettier-ignore -->
 | Field | Content |
 | --- | --- |
