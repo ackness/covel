@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "labels": {
+    "zh": {
+      "PLUGIN.md#contributes.actionKinds[name=choose-actors].display.label": "3b7924b863118eae",
+      "PLUGIN.md#contributes.actionKinds[name=choose-actors].display.placeholder": "f78b74bb44319a7c",
+      "PLUGIN.md#contributes.settings[key=actorOrder].description": "970be6c518985a27",
+      "PLUGIN.md#contributes.settings[key=actorOrder].label": "ab5dde8a549a94c5",
+      "PLUGIN.md#contributes.settings[key=strategy].description": "4b38f165a5a5d2f5",
+      "PLUGIN.md#contributes.settings[key=strategy].label": "6b27710dfaafdcec",
+      "PLUGIN.md#description": "a5f861a9beda3aa6",
+      "PLUGIN.md#displayName": "146c35043c127f22"
+    }
+  }
+}

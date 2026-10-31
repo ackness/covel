@@ -53,6 +53,16 @@ describe("orchestration contracts", () => {
       }),
     ).toThrow();
   });
+  it("validates selected actors without requiring host-owned admission limits", () => {
+    const selected = {
+      ...plan,
+      actors: [{ characterId: "semantic-character" }],
+    };
+    expect(
+      validateTurnPolicyOutput({ present: request.present }, selected),
+    ).toEqual(selected);
+    expect(() => validateTurnPolicyOutput({ present: [] }, selected)).toThrow();
+  });
   it.each([
     { speaker: "Other" },
     { effects: [] },

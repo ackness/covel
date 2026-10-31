@@ -99,21 +99,25 @@ describe("session prep approval preflight", () => {
   it.each([
     {
       locale: "en-US",
+      role: "host",
       title: "Needs approval",
       hint: "imported once",
       summary: "1/2 plugins enabled · 1 runtimes",
     },
     {
       locale: "zh-CN",
+      role: "spectator",
       title: "需要批准",
       hint: "导入一次",
       summary: "已启用 1/2 个插件 · 共 1 个运行任务",
     },
   ])(
-    "keeps pending requests separate and lets the game start ($locale)",
-    async ({ locale, title, hint, summary }) => {
+    "keeps pending requests separate and lets the game start ($locale, $role)",
+    async ({ locale, role, title, hint, summary }) => {
       await i18n.changeLanguage(locale);
-      const onStart = vi.fn();
+      const onStart = vi
+        .fn()
+        .mockRejectedValueOnce(new Error("Creation refused"));
       render(
         <SessionPrepScreen
           world={world}
@@ -128,6 +132,13 @@ describe("session prep approval preflight", () => {
         />,
       );
 
+      expect(
+        (screen.getByLabelText(i18n.t("session.playAs")) as HTMLSelectElement)
+          .value,
+      ).toBe("player");
+      fireEvent.change(screen.getByLabelText(i18n.t("session.playAs")), {
+        target: { value: role },
+      });
       const pending = await screen.findByTestId("pending-approval-plugins");
       expect(pending.textContent).toContain(title);
       expect(pending.textContent).toContain("Community Story");
@@ -173,8 +184,13 @@ describe("session prep approval preflight", () => {
           ["builtin", "community"],
           undefined,
           [],
+          role,
         ),
       );
+      expect(
+        (screen.getByLabelText(i18n.t("session.playAs")) as HTMLSelectElement)
+          .value,
+      ).toBe(role);
     },
   );
 });

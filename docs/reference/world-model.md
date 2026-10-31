@@ -359,3 +359,7 @@ type DimensionSnapshot = Readonly<Record<string, DimensionSnapshotEntry>>;
 先匹配再取最近的消息，按时间顺序返回。limit 默认 20，必须是 1–50 的整数；总文本最多 16,000 字符，只保留最近的完整消息/段落，不切 JSON 或代理对。扫描满 200 条、消息数或文本被裁减时 `truncated: true`。不存在于当前 World Model 的 ID 返回 `not-found`；已知角色但没有记录通常得到空数组。
 
 恢复沿用源执行的历史快照，不看到期间提交的新场景；新的根执行重新捕获。分叉只包含快照边界以前复制的消息。这个 API 只规定宿主提供哪段历史，不能保证任意简报、字段、已批准工具或服务不会透露其他知识。
+
+## 创建时选择身份
+
+创建请求的可选 `seatRole` 选择一个人类座位的身份。省略或 player 保留原有 auto 绑定；host 和 spectator 的 characters 为空，且没有 currentCharacterId。只能创建时选择，不迁移已有座位；快照、分叉、checkpoint 保留原有座位。主持人是游戏内身份，不授予服务器 owner/operator 权限。动作权限表保持不变。

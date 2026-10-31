@@ -429,7 +429,8 @@ describe("HTTP API e2e: haruka academy chat mode", () => {
       expect(successfulRuntimeIds).toEqual(
         expect.arrayContaining([
           "scene-stage/cast",
-          "chat-mode-narrator",
+          "chat-mode-narrator/plan",
+          "chat-mode-narrator/narrate",
           "guide",
           "world-time/advance",
         ]),
@@ -498,7 +499,7 @@ describe("HTTP API e2e: haruka academy chat mode", () => {
 
     const messages = await store.listTurnMessages(sessionId);
     const storyMessages = messages.filter(
-      (message) => message.sourceRuntimeId === "chat-mode-narrator",
+      (message) => message.sourceRuntimeId === "chat-mode-narrator/narrate",
     );
     expect(storyMessages).toHaveLength(3);
     expect(storyMessages.at(-1)?.content).toContain("朝仓凛");
@@ -584,7 +585,7 @@ describe("HTTP API e2e: haruka academy chat mode", () => {
     expect((await store.getSession(sessionId))?.phase).toBe("playing");
     const narratorMessages = async () =>
       (await store.listTurnMessages(sessionId)).filter(
-        (message) => message.sourceRuntimeId === "chat-mode-narrator",
+        (message) => message.sourceRuntimeId === "chat-mode-narrator/narrate",
       );
     // The opening is told without the stage, before any player message.
     const opening = await narratorMessages();
@@ -614,7 +615,8 @@ describe("HTTP API e2e: haruka academy chat mode", () => {
     expect(turnId).toBeDefined();
     const rows = await turnRuntimeResults(store, sessionId, turnId!);
     expect(
-      rows.find((row) => row.runtimeId === "chat-mode-narrator")?.status,
+      rows.find((row) => row.runtimeId === "chat-mode-narrator/narrate")
+        ?.status,
     ).toBe("success");
     expect(rows.filter((row) => row.status === "failed")).toEqual([]);
     const stories = await narratorMessages();

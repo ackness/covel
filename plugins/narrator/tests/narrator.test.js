@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
+import { createNarrativeReview } from "@covel/plugin-handlers-utils";
 import { beforeAll, describe, expect, it } from "vitest";
 import {
   discoverPlugins,
@@ -20,6 +21,45 @@ function placeholders(body) {
 }
 
 describe(`${PLUGIN_ID} package`, () => {
+  it.each(["en-US", "zh-CN"])(
+    "keeps game-master narration without a bound player in %s",
+    (locale) => {
+      const review = createNarrativeReview(PLUGIN_ID);
+      const ctx = {
+        pluginId: PLUGIN_ID,
+        runtimeId: PLUGIN_ID,
+        sessionId: "scene",
+        turnId: "turn",
+        locale,
+        getOwnSettings: () => ({ perspective: "dm" }),
+      };
+      const text =
+        locale === "zh-CN"
+          ? "你们面前是一道门。你可以决定是否靠近。"
+          : "You all face a gate. You may decide whether to approach.";
+      const prepared = review.prepare(ctx, { messages: [] });
+      const instruction = prepared.replace.messages.at(-1).content;
+      expect(instruction).not.toMatch(/Player character:|玩家角色：/);
+      expect(instruction).toContain(
+        locale === "zh-CN"
+          ? "不要复述玩家输入、替玩家添加行动或内心想法"
+          : "Do not restate the player's input or add player actions/thoughts",
+      );
+      expect(
+        review.review(ctx, {
+          messages: [],
+          response: {
+            content: JSON.stringify({
+              segments: [{ kind: "narration", text }],
+            }),
+            toolCalls: [],
+            finishReason: "stop",
+            usage: { inputTokens: 1, outputTokens: 1 },
+          },
+        }),
+      ).toEqual({ action: "continue" });
+    },
+  );
   let definition;
   let manifest;
   let english;

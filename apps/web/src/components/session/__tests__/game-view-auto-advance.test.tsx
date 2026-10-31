@@ -169,11 +169,7 @@ it.each(["chat", "stage", "immersive stage"])(
     state = reducer(state, { type: "SET_ADVANCE", advance: null });
     rerender(view());
     expect(controls().queryAllByRole("status")).toHaveLength(0);
-    await act(async () => {
-      fireEvent.change(controls().getByRole("combobox"), {
-        target: { value: "0" },
-      });
-    });
-    expect(actions.setAutoAdvanceLimit).toHaveBeenCalledExactlyOnceWith(0);
+    expect(controls().queryByRole("combobox")).toBeNull();
+    expect(actions.setAutoAdvanceLimit).not.toHaveBeenCalled();
   },
 );

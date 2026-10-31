@@ -15,6 +15,7 @@ export interface SessionActions {
     plugins?: string[],
     loreOverride?: string,
     excludedPlugins?: string[],
+    seatRole?: import("@covel/shared").SeatRole,
   ) => Promise<void>;
   beginAdventure: () => void;
   resumeSession: (session: api.SessionRecord) => Promise<void>;

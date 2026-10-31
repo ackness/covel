@@ -59,11 +59,88 @@ test("rejects a plugin template in a language with no instruction set", async (t
   await fs.mkdir(server, { recursive: true });
   for (const name of ["x.md", "x.zh.md", "x.zh-CN.md", "x.ru.md", "x.en.md"])
     await fs.writeFile(path.join(server, name), "text");
+  plugin.lock();
   assert.deepEqual(
     plugin
       .check()
       .map((problem) => problem.split(":")[0].replace(/^.*prompts\//, "")),
     ["server/x.en.md", "server/x.ru.md"],
+  );
+});
+
+test("locks translated standalone templates and detects a one-language edit", async (t) => {
+  const plugin = await fixture(t, { "PLUGIN.md": "---\n---\nMetadata.\n" });
+  const dir = path.join(plugin.directory, "prompts/nested");
+  await fs.mkdir(dir, { recursive: true });
+  await fs.writeFile(
+    path.join(dir, "director.md"),
+    "Choose one present character.\n",
+  );
+  await fs.writeFile(path.join(dir, "director.zh.md"), "选择一位在场角色。\n");
+  await fs.writeFile(
+    path.join(dir, "unpaired.md"),
+    "An unrelated English template.\n",
+  );
+  assert.deepEqual(plugin.lock(), []);
+  assert.deepEqual(plugin.check({ requireChinese: true }), []);
+  await fs.writeFile(
+    path.join(dir, "director.md"),
+    "Choose one present\n  character.\n",
+  );
+  assert.deepEqual(plugin.check(), []);
+  await fs.writeFile(
+    path.join(dir, "director.md"),
+    "Choose two present characters.\n",
+  );
+  assert.match(
+    plugin.check().join("\n"),
+    /director.md: the English prompt changed and the Chinese variant did not/,
+  );
+  await fs.writeFile(path.join(dir, "director.zh.md"), "选择两位在场角色。\n");
+  assert.deepEqual(plugin.lock(), []);
+  assert.deepEqual(plugin.check(), []);
+});
+
+test("reads manifest-named standalone templates as raw bodies", async (t) => {
+  const plugin = await fixture(t, { "PLUGIN.md": "---\n---\nMetadata.\n" });
+  const dir = path.join(plugin.directory, "prompts");
+  await fs.mkdir(dir);
+  await fs.writeFile(
+    path.join(dir, "RUNTIME.md"),
+    "---js\nLiteral template marker.\n---\nChoose one character.\n",
+  );
+  await fs.writeFile(
+    path.join(dir, "RUNTIME.zh.md"),
+    "---js\n模板正文中的字面标记。\n---\n选择一位角色。\n",
+  );
+  assert.deepEqual(plugin.lock(), []);
+  assert.deepEqual(plugin.check({ requireChinese: true }), []);
+});
+
+test("checks raw template language and named references", async (t) => {
+  const plugin = await fixture(t, { "PLUGIN.md": ENGLISH });
+  const dir = path.join(plugin.directory, "prompts");
+  await fs.mkdir(dir);
+  const english =
+    "Read `runtime-inputs.worldIR.value`, then call `update-demo`.\n";
+  const chinese =
+    "读取本回合的 `runtime-inputs.worldIR.value` 注入数据，再调用一次 `update-demo` 工具记录结果。\n";
+  await fs.writeFile(path.join(dir, "director.md"), english);
+  await fs.writeFile(
+    path.join(dir, "director.zh.md"),
+    "读取 `runtime-inputs.worldIR.value`，然后记录结果。\n",
+  );
+  assert.match(
+    plugin.lock().join("\n"),
+    /director.md: named in English but not in director.zh.md: update-demo/,
+  );
+  await fs.writeFile(path.join(dir, "director.zh.md"), chinese);
+  assert.deepEqual(plugin.lock(), []);
+  assert.deepEqual(plugin.check(), []);
+  await fs.writeFile(path.join(dir, "director.md"), chinese);
+  assert.match(
+    plugin.check().join("\n"),
+    /director.md: the canonical prompt must be English/,
   );
 });
 

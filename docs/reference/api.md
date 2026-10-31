@@ -2435,6 +2435,7 @@ SSE。先发一个 `ready` 事件，之后每 15 秒发一行注释保持连接�
 | `id`               | string   | 否   | 客户端自定义的会话 ID。不提供时自动生成 `{worldId}-{uuid8}`                            |
 | `loreOverride`     | string   | 否   | 本次会话使用的世界背景文本。见下方“世界背景”                                           |
 | `autoAdvanceLimit` | number   | 否   | 自动推进上限，见[会话推进设置](#auto-advance)                                          |
+| `seatRole`         | string   | 否   | 新会话的游戏身份：`player`（默认）、`host` 或 `spectator`；后两者没有角色绑定          |
 
 **内容语言（`locale`）:**
 
@@ -6779,3 +6780,7 @@ Stop 作用于整个请求，包含两轮之间的等待。未开始的自动轮
   "maxSubagentCalls": 8
 }
 ```
+
+## 创建身份
+
+`POST /api/sessions` 接受可选的 `seatRole: player | host | spectator`，可与 autoAdvanceLimit 一起提交。省略保持原玩家座位；另两种身份从空角色绑定开始。未知值、非字符串和 null 返回 400，不创建会话。仍先经过 session.create 的 host-profile 授权以及世界/内容语言校验。此字段只影响新会话的游戏动作，不授予 owner/operator 权限，不接受任意 seats 数组或 system 来源。主持人和观众通过动作 API 提交时，须带创建响应中返回的座位 ID；省略 seatId 仍只查找人类玩家主座位。普通客户端会自动携带。

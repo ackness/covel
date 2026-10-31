@@ -386,7 +386,7 @@ sessionRoutes.post("/", async (c) => {
     phase,
     completedPlayerTurns: 0,
     setupRuntimes: {},
-    seats: defaultSessionSeats(),
+    seats: defaultSessionSeats(parsedCreate.seatRole),
     // Persist selection; execution and lifecycle hooks use only live grants.
     activePlugins: plugins,
     createdAt: now,

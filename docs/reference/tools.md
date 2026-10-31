@@ -2074,3 +2074,7 @@ payload 是 `{entries:[{id,keys,content,strategy,position?,insertionOrder?,enabl
 角色提供方的输出为不带 speaker 的 dialogue/action segments 和可选 intent；父方组合故事时填写 speaker。模型仍可读取 intent，但持久工具记录、trace 与玩家投影不会保留私密委托内容。若 delegate 直接完成 runtime，普通角色只传递 segments，concealed 结果不传递内容。每次委托的暂存通知、写服务权限与串行屏障不变。累计名额见[角色委托](./plugins.md#character-orchestration)。
 
 `turn-policy@1` 导入覆盖普通服务的参数、结果及重复/并发注解：模型输入 `{present: string[], recentSegments}`，输出 `actors[].character` 名字，宿主添加当前行动与限制。它是只读工具，但 `idempotent: false`、`concurrencySafe: false`。选择、不可用与名字解析见[编排契约](./plugin-extensions.md#orchestration-contracts)。插件工具也可用会话绑定的 `context.historyFor(characterId, {limit?})` 读取[亲历故事](./world-model.md#witnessed-history)。
+
+## 故事内的演员委托
+
+故事 agent 可调用 `delegate`，传 `target: {contract: "character-actor@1"}`、`character: "Mara"`、简短的 `brief` 和可选 `instruction`；不传 characterId 或 data。名字解析、档案与亲历历史由框架负责。内置对话叙事按计划顺序逐个调用，只组合成功的公开段落，丢弃 intent；失败演员的暂存操作不提交。操作在最终提交被拒时，按现有规则只损失该操作并显示固定通知。

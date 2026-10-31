@@ -1504,3 +1504,7 @@ runtime 的终态：
 角色 `intent` 只留在编排方的实时内存对话里。内核按已解析提供方与工具调用 ID 记录来源，过滤子模型 trace、父方 delegate 参数/结果、持久工具记录和父方后续 `llm.request` 的对话副本；`/turns`、动作流及 trace API 读取过滤后的值。concealed 提供方的完整委托内容也如此。实时模型对话仍保留一一配对的工具调用和结果。完成工具直接转成输出时，普通角色只交付公开 segments，concealed 委托不交付内容。不会按任意业务 JSON 里的 `intent` 键猜测来源。
 
 角色失败或名额拒绝沿用 `subagent.failed`，不增加 actor 事件族，不为隔离失败发 `runtime.failed` 或执行错误。故事可以提交；独立操作被拒时仍只有既有的固定 `operation.failed` 提示。调用方故意把私密内容改写为正文不属于此结构化投影保证。
+
+## 创建身份与现有动作协议
+
+创建请求的可选 seatRole 只决定新的人类座位；字段、默认与拒绝规则见[创建接口](./api.md#创建身份)。主持人允许导演指示/旁白/推进，旁观者只有推进。后续动作仍由服务端填写 source，沿用现有 execution.round.completed、execution.advance 和单一 execution.completed 生命周期；此选择不引入新事件或新调度器。

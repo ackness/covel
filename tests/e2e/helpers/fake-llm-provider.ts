@@ -15,11 +15,35 @@ export interface FakeChatRequest {
   readonly model: string;
   /** The text of each message, in order. */
   readonly messages: readonly string[];
+  readonly rawMessages: readonly FakeChatMessage[];
+  readonly tools: readonly {
+    readonly type: "function";
+    readonly function: {
+      readonly name: string;
+      readonly description?: string;
+      readonly parameters?: Record<string, unknown>;
+    };
+  }[];
+}
+
+export interface FakeToolCall {
+  readonly id: string;
+  readonly type: "function";
+  readonly function: { readonly name: string; readonly arguments: string };
+}
+export interface FakeChatMessage {
+  readonly role: string;
+  readonly content?: unknown;
+  readonly tool_calls?: readonly FakeToolCall[];
+  readonly tool_call_id?: string;
+  readonly name?: string;
 }
 
 /** How the provider answers one request. */
 export interface FakeReply {
   readonly text: string;
+  readonly toolCalls?: readonly FakeToolCall[];
+  readonly error?: { readonly status: number; readonly message: string };
   /** Spread the answer evenly over this time. Without it the answer is sent at once. */
   readonly streamMs?: number;
   /** Send the first piece and then nothing: the connection stays open. */
@@ -44,7 +68,7 @@ const PIECE_INTERVAL_MS = 50;
 const pause = (ms: number) =>
   new Promise<void>((resolve) => setTimeout(resolve, ms));
 
-function chunk(delta: Record<string, string>, finish: string | null = null) {
+function chunk(delta: Record<string, unknown>, finish: string | null = null) {
   return `data: ${JSON.stringify({
     id: "fake",
     object: "chat.completion.chunk",
@@ -77,6 +101,23 @@ async function streamReply(res: http.ServerResponse, reply: FakeReply) {
     pieces.push(reply.text.slice(index, index + size));
   }
   const delay = reply.streamMs ? reply.streamMs / pieces.length : 0;
+
+  if (reply.toolCalls?.length) {
+    if (reply.hold) await reply.hold;
+    if (res.destroyed) return;
+    res.write(
+      chunk({
+        role: "assistant",
+        tool_calls: reply.toolCalls.map((call, index) => ({ index, ...call })),
+      }),
+    );
+    if (reply.stall) return;
+    res.write(chunk({}, "tool_calls"));
+    res.write("data: [DONE]\n\n");
+    res.end();
+    return;
+  }
+  if (!pieces.length && reply.hold) await reply.hold;
 
   for (const [index, piece] of pieces.entries()) {
     if (res.destroyed) return;
@@ -112,16 +153,31 @@ export async function startFakeLlmProvider(): Promise<FakeLlmProvider> {
     const body = JSON.parse(raw || "{}") as {
       model?: string;
       stream?: boolean;
-      messages?: { content?: unknown }[];
+      messages?: FakeChatMessage[];
+      tools?: FakeChatRequest["tools"];
     };
     const request: FakeChatRequest = {
       model: body.model ?? "",
       messages: (body.messages ?? []).map((message) =>
         messageText(message.content),
       ),
+      rawMessages: structuredClone(body.messages ?? []),
+      tools: structuredClone(body.tools ?? []),
     };
     requests.push(request);
     const reply = provider.reply(request);
+
+    if (reply.error) {
+      if (reply.hold) await reply.hold;
+      if (res.destroyed) return;
+      res.writeHead(reply.error.status, { "content-type": "application/json" });
+      res.end(
+        JSON.stringify({
+          error: { message: reply.error.message, type: "provider_error" },
+        }),
+      );
+      return;
+    }
 
     if (body.stream) {
       await streamReply(res, reply);
@@ -136,8 +192,14 @@ export async function startFakeLlmProvider(): Promise<FakeLlmProvider> {
         choices: [
           {
             index: 0,
-            message: { role: "assistant", content: reply.text },
-            finish_reason: "stop",
+            message: {
+              role: "assistant",
+              content: reply.text || null,
+              ...(reply.toolCalls?.length
+                ? { tool_calls: reply.toolCalls }
+                : {}),
+            },
+            finish_reason: reply.toolCalls?.length ? "tool_calls" : "stop",
           },
         ],
       }),

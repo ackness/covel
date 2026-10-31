@@ -161,6 +161,7 @@ export function useBuildSessionActions({
       plugins?: string[],
       loreOverride?: string,
       excludedPlugins?: string[],
+      seatRole?: import("@covel/shared").SeatRole,
     ) => {
       const world = stateRef.current.world;
       if (!world) return;
@@ -174,6 +175,7 @@ export function useBuildSessionActions({
         plugins,
         loreOverride,
         excludedPlugins,
+        seatRole,
       });
     },
     [ds, workspace, dispatch, sessionIdRef, sessionGenerationRef, stateRef],

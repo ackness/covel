@@ -847,7 +847,7 @@ The SDK exports `TURN_POLICY_CONTRACT`, `CHARACTER_ACTOR_CONTRACT`, and `turnPol
 | Actor input | `characterId`, `brief` of 1–20,000 characters, optional `instruction` up to 2,000 characters |
 | Actor output | 1–8 `{kind: dialogue / action, text}` segments, each 1–4,000 characters; optional `intent` up to 2,000. No speaker, narration or effects |
 
-Actors must be unique IDs from `present`; `validateTurnPolicyOutput(input, output)` supplies the same contextual validation. The host enforces canonical input/output even with permissive provider parsers, then clamps a valid plan in provider order. An admitted character speaking again consumes only a call. With no new-character slots, new characters are skipped while later admitted characters remain eligible. Planning reserves nothing; actual delegation may still be refused. The three advice fields are interpreted by the orchestrator, not by kernel scheduling.
+Actors must be unique IDs from `present`; `validateTurnPolicyOutput({present}, output)` supplies the same contextual validation without reconstructing host-owned admission limits. The host enforces canonical input/output even with permissive provider parsers, then clamps a valid plan in provider order. An admitted character speaking again consumes only a call. With no new-character slots, new characters are skipped while later admitted characters remain eligible. Planning reserves nothing; actual delegation may still be refused. The three advice fields are interpreted by the orchestrator, not by kernel scheduling.
 
 ```ts
 const plan = await ctx.services.call({
@@ -863,3 +863,7 @@ Model imports accept only `{present: string[], recentSegments}`. The host resolv
 Read services also receive provider-scoped `ctx.random`, with stream `service:<name>` and the existing seed rules. A director can use only the gateway already lent by its caller path: function calls may lend one; tools and agent imports receive no gateway/utils. Without it the service returns unavailable and the orchestrator writes its fallback. Registration and declarations must still agree; a policy cannot be a write service, runtime output or extension handler.
 
 See [character delegation](./plugins.md#character-orchestration) and the [composition guide](../plugins/advanced.md#orchestration-example).
+
+## Bundled policy and optional story composition
+
+The bundled provider exposes one code-only read service named turn-policy, with five algorithms chosen by its own getOwnSettings().strategy. Alone it needs no session selection; additional providers require an exact choice. The dialogue function calls once by contract so director can borrow a gateway; the story agent does not import/call policy again. Plans project names before reaching models; canonical requests and character IDs remain in code. Custom packages with several services on a contract still need one matching declaration per registration, without deduplication by contract.

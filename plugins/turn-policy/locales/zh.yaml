@@ -1,0 +1,22 @@
+PLUGIN.md:
+  displayName: 回合策略
+  description: 按点名、固定顺序、随机、手选或导演选择在场角色。
+  contributes:
+    actionKinds:
+      - name: choose-actors
+        display:
+          label: 选择演员
+          placeholder: 给所选角色的可选指示
+    settings:
+      - key: strategy
+        label: 策略
+        description: 每个故事节拍怎样选择在场角色。
+        options:
+          - label: 点名角色
+          - label: 固定顺序
+          - label: 随机一组
+          - label: 手动选择
+          - label: 模型导演
+      - key: actorOrder
+        label: 演员顺序
+        description: 固定顺序使用，每行一个准确姓名或别名，最多 32 个名字。

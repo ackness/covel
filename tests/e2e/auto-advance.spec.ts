@@ -62,7 +62,10 @@ for (const mode of ["chat", "stage"] as const) {
       await page.reload();
       await expect(controls).toBeVisible();
       await expect(controls.getByRole("status")).toHaveCount(0);
-      await controls.getByRole("combobox").selectOption("0");
+      await page.getByLabel("自动推进轮数", { exact: true }).fill("0");
+      await page
+        .getByRole("button", { name: "保存自动推进轮数", exact: true })
+        .click();
       await expect
         .poll(
           async () =>
@@ -70,13 +73,20 @@ for (const mode of ["chat", "stage"] as const) {
               ?.autoAdvanceLimit,
         )
         .toBe(0);
-      await expect(controls.getByRole("combobox")).toHaveValue("0");
+      await expect(
+        page.getByLabel("自动推进轮数", { exact: true }),
+      ).toHaveValue("0");
 
       // A fresh input interrupts automatic work, and refresh only recovers
       // its live controls. Neither operation replays a saved continue flag.
       await page.getByRole("button", { name: "解析视图", exact: true }).click();
-      await controls.getByRole("combobox").selectOption("2");
-      await expect(controls.getByRole("combobox")).toBeEnabled();
+      await page.getByLabel("自动推进轮数", { exact: true }).fill("2");
+      await page
+        .getByRole("button", { name: "保存自动推进轮数", exact: true })
+        .click();
+      await expect(
+        page.getByLabel("自动推进轮数", { exact: true }),
+      ).toBeEnabled();
       host.holdNextAuto();
       await composerInput(page).fill("Keep going");
       await composerInput(page).press("Enter");
@@ -128,7 +138,9 @@ for (const mode of ["chat", "stage"] as const) {
       const next = (await response.json()) as { id: string };
       await host.store.updateSession(next.id, { phase: "playing" });
       await page.goto(`/session?sid=${next.id}`);
-      await expect(controls.getByRole("combobox")).toHaveValue("0");
+      await expect(
+        page.getByLabel("自动推进轮数", { exact: true }),
+      ).toHaveValue("0");
       host.release();
       await expect.poll(() => host.calls()).toBe(13);
       await expect

@@ -142,3 +142,7 @@ Stories that do not answer in segments can still emit `music.cue`; worlds and pl
 - [Built-in app features](./features.md): besides the text and stage views, what else the app offers.
 - [Add scene pictures to a world](../worlds/scenes.md)
 - [Add portraits to characters](../worlds/portraits.md)
+
+## Ensemble nameplates and presence
+
+The story attaches canonical names to actor speech/actions; the stage still consumes public segments and cues for nameplates. A silent or failed actor can remain present. Stage salience settings are separate from execution caps in [Orchestration](./features.md#session-orchestration-settings). Delegation also works without the stage, using the dialogue planner's candidate heuristic.

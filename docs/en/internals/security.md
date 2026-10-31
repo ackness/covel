@@ -524,3 +524,7 @@ SillyTavern content import uses bounded PNG chunk walking (including remaining-l
 Witnessed history and name-addressed calls are bounded context capabilities, not security isolation for approved server code. This helper reads committed presence-bearing stories only for characters in the current world. Existing tool/service approvals and read permissions remain unchanged. Callers remain responsible for their brief and instruction.
 
 Delegation privacy uses kernel-recorded provider and call identity to project streams, persisted traces, parent tool records and trace copies of later requests. It trusts neither plugin-supplied redaction flags nor global key-name deletion. The actual parent model still uses intent. Settings routes retain host-profile, session-owner, settle and lock checks; choosing a service grants no execution permission. See [protocol](../reference/protocol.md#private-delegation-projections).
+
+## In-game host role
+
+The preparation role changes only a new seat's permitted game actions. It grants no owner/operator identity, bypasses no session.create host-profile check and cannot authorise system-source requests. Actor history and prompts aid perspective; they are not a sandbox for approved server code.

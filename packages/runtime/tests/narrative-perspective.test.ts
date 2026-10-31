@@ -20,7 +20,9 @@ describe.each(["narrator", "chat-mode-narrator"])("%s perspective", (id) => {
       const discovery = (await discoverPlugins(root)).find(
         (entry) => entry.id === id,
       )!;
-      const [loaded] = await loadPluginManifest(discovery, locale);
+      const loaded = (await loadPluginManifest(discovery, locale)).find(
+        ({ manifest }) => manifest.outputKind === "story",
+      )!;
       const definition = await loadPluginDefinition(discovery, locale);
       const manifest = resolvePluginRuntimeManifest(
         definition,

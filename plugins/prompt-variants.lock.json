@@ -11,9 +11,17 @@
     "en": "1975873921722204",
     "zh": "1d28347857cc3160"
   },
+  "plugins/character-agent/PLUGIN.md": {
+    "en": "e582eab293bfb60a",
+    "zh": "615a915954dc8ddf"
+  },
   "plugins/chat-mode-narrator/PLUGIN.md": {
-    "en": "fe6b56c5a38e6cfb",
-    "zh": "7378dc533cc8e355"
+    "en": "d6be31d653c4fbc9",
+    "zh": "c0b9b1b01f8b3c74"
+  },
+  "plugins/chat-mode-narrator/runtimes/narrate/RUNTIME.md": {
+    "en": "ebaadfe42e41ef72",
+    "zh": "0b81085f65643ef8"
   },
   "plugins/codex/PLUGIN.md": {
     "en": "2f5df09dfec2817d",
@@ -22,6 +30,10 @@
   "plugins/guide/PLUGIN.md": {
     "en": "ed3936b86a5d0739",
     "zh": "f3447fe23895c5e2"
+  },
+  "plugins/history-compaction/prompts/server/compactor.md": {
+    "en": "34bf821fd1dba882",
+    "zh": "365026b1103fce40"
   },
   "plugins/narrator/PLUGIN.md": {
     "en": "888a047b9285d248",
@@ -34,6 +46,10 @@
   "plugins/story-events/runtimes/plot/RUNTIME.md": {
     "en": "a243d38f82ff668d",
     "zh": "ac73559d323cb860"
+  },
+  "plugins/turn-policy/prompts/director.md": {
+    "en": "793eb4a2c427ed05",
+    "zh": "1a17bde4099297a9"
   },
   "plugins/world-init/runtimes/dimension-tracker/RUNTIME.md": {
     "en": "e3c763612f7e0da2",

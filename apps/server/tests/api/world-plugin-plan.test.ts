@@ -1,8 +1,12 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { Hono } from "hono";
+import path from "node:path";
 import {
   createPluginRegistry,
   parsePluginMd,
+  discoverPlugins,
+  loadPluginDefinition,
+  loadPluginSummary,
   type PluginRegistry,
   type PluginRegistryEntry,
 } from "@covel/plugin-loader";
@@ -20,6 +24,102 @@ import {
   resolveSessionPluginPlan,
   unknownPluginIds,
 } from "../../src/routes/api/session/plugins.js";
+
+describe("real bundled compositions", () => {
+  it.each([false, true])(
+    "resolves the catalogue and preserves one story with optional companions absent: %s",
+    async (missingCompanions) => {
+      const store = createMemoryStore();
+      const registry = createPluginRegistry();
+      for (const discovery of await discoverPlugins(
+        path.resolve(import.meta.dirname, "../../../../plugins"),
+      )) {
+        if (
+          missingCompanions &&
+          ["character-agent", "turn-policy", "scene-stage"].includes(
+            discovery.id,
+          )
+        )
+          continue;
+        const definition = await loadPluginDefinition(discovery);
+        registry.register({
+          id: discovery.id,
+          source: "builtin",
+          rootPath: discovery.rootPath,
+          packageManifest: definition.packageManifest,
+          manifests: definition.manifests,
+          summary: await loadPluginSummary(discovery, "en-US", definition),
+          status: "registered",
+          loadedRuntimes: new Map(),
+        });
+      }
+      registry.register(
+        entry("visiting-policy", {
+          contributes: { services: [{ contract: "turn-policy@1" }] },
+        }),
+      );
+      const app = new Hono<Env>();
+      app.use("*", async (c, next) => {
+        c.set("store", store);
+        c.set("pluginRegistry", registry);
+        await next();
+      });
+      app.route("/api/worlds", worldPluginPlanRoutes);
+      try {
+        expect(BUILTIN_PLUGIN_PACKS).toHaveLength(7);
+        for (const pack of BUILTIN_PLUGIN_PACKS) {
+          await store.createWorld({
+            id: `pack-${pack.id}`,
+            name: pack.id,
+            description: "",
+            metadata: {
+              pluginPolicy: { preset: pack.id, plus: ["visiting-policy"] },
+            },
+            createdAt: "2026-10-31",
+          });
+          const response = await app.request(
+            `/api/worlds/pack-${pack.id}/plugin-plan`,
+          );
+          expect(response.status).toBe(200);
+          const plan = (await response.json()) as WorldPluginPlan;
+          const selection = resolveSessionPluginPlan(
+            [...plan.defaultPluginIds, ...plan.policy.plus],
+            registry,
+            { excluded: plan.packs[0]?.excluded },
+          );
+          expect(selection.active).toContain("visiting-policy");
+          const stories = selection.active
+            .flatMap((id) => registry.get(id)?.manifests ?? [])
+            .filter(({ manifest }) => manifest.outputKind === "story");
+          expect(stories, pack.id).toHaveLength(1);
+          const expected = [
+            "dialogue-mode",
+            "ensemble-dialogue",
+            "spectator",
+          ].includes(pack.id)
+            ? "chat-mode-narrator"
+            : "narrator";
+          expect(stories[0]?.manifest.pluginId, pack.id).toBe(expected);
+          if (["dm-mode", "spectator"].includes(pack.id))
+            expect(selection.active).not.toContain("char-creator");
+          if (
+            !missingCompanions &&
+            ["ensemble-dialogue", "spectator"].includes(pack.id)
+          )
+            expect(selection.active).toEqual(
+              expect.arrayContaining([
+                "character-agent",
+                "turn-policy",
+                "scene-stage",
+              ]),
+            );
+        }
+      } finally {
+        await store.close();
+      }
+    },
+  );
+});
 
 type Env = { Variables: { store: DataStore; pluginRegistry: PluginRegistry } };
 function entry(

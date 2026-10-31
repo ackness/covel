@@ -117,7 +117,10 @@ describe("core plugin manifest contract", () => {
     const manifests = await loadRuntimeManifests();
     const retriever = requireRuntime(manifests, "npc-graph/rag-retriever");
     const narrator = requireRuntime(manifests, "narrator");
-    const chatModeNarrator = requireRuntime(manifests, "chat-mode-narrator");
+    const chatModeNarrator = requireRuntime(
+      manifests,
+      "chat-mode-narrator/narrate",
+    );
     const rawDownstreamIds = ["char-creator/character-tracker"];
     const structuredDownstreamIds = [
       "codex",
@@ -172,6 +175,7 @@ describe("core plugin manifest contract", () => {
       "get-character",
       "memory-search",
       "emit-event",
+      "delegate",
     ]);
 
     const guide = requireRuntime(manifests, "guide");

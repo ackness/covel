@@ -189,7 +189,17 @@ export class RemoteDataService implements DataService {
     loreOverride?: string,
     excludedPlugins?: string[],
     autoAdvanceLimit?: number,
+    seatRole?: import("@covel/shared").SeatRole,
   ) {
+    const creationOptions: [
+      autoAdvanceLimit?: number,
+      seatRole?: import("@covel/shared").SeatRole,
+    ] =
+      seatRole !== undefined
+        ? [autoAdvanceLimit, seatRole]
+        : autoAdvanceLimit === undefined
+          ? []
+          : [autoAdvanceLimit];
     return api.createSession(
       worldId,
       id,
@@ -197,9 +207,7 @@ export class RemoteDataService implements DataService {
       locale,
       loreOverride,
       excludedPlugins,
-      ...(autoAdvanceLimit === undefined
-        ? ([] as const)
-        : ([autoAdvanceLimit] as const)),
+      ...creationOptions,
     );
   }
   async updateSession(sessionId: string, updates: SessionPatch) {

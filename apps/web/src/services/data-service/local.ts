@@ -399,7 +399,17 @@ export class LocalDataService implements DataService {
     loreOverride?: string,
     excludedPlugins?: string[],
     autoAdvanceLimit?: number,
+    seatRole?: import("@covel/shared").SeatRole,
   ): Promise<SessionRecord> {
+    const creationOptions: [
+      autoAdvanceLimit?: number,
+      seatRole?: import("@covel/shared").SeatRole,
+    ] =
+      seatRole !== undefined
+        ? [autoAdvanceLimit, seatRole]
+        : autoAdvanceLimit === undefined
+          ? []
+          : [autoAdvanceLimit];
     worldWireRecordSchema.shape.lore.parse(loreOverride);
     const vault = await this.ready();
     const sessionId = _id ?? humanSessionId();
@@ -419,9 +429,7 @@ export class LocalDataService implements DataService {
             locale ?? DEFAULT_LOCALE,
             loreOverride,
             excludedPlugins ?? [],
-            ...(autoAdvanceLimit === undefined
-              ? ([] as const)
-              : ([autoAdvanceLimit] as const)),
+            ...creationOptions,
           );
           const commit = await api.fetchBrowserCommit(
             sessionId,

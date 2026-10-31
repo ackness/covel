@@ -29,6 +29,7 @@ type ParsedCreateSessionBody =
       excludedPlugins: string[];
       loreOverride: string | undefined;
       autoAdvanceLimit: number | undefined;
+      seatRole: import("@covel/shared").SeatRole | undefined;
     }
   | { ok: false; error: string };
 
@@ -86,6 +87,7 @@ export function parseCreateSessionBody(
     requestedPlugins,
     loreOverride: loreOverride.data,
     autoAdvanceLimit: request.data.autoAdvanceLimit,
+    seatRole: request.data.seatRole,
   };
 }
 

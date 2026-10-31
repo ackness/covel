@@ -55,9 +55,15 @@ test("policy choice and zero delegation caps survive reload and can be cleared",
       page.getByText("请选择策略以消除歧义", { exact: true }),
     ).toBeVisible();
     await policy.selectOption({ label: "Conversation / Invite one character" });
+    await page
+      .getByRole("button", { name: "保存回合策略", exact: true })
+      .click();
     const actors = page.getByLabel("不同角色数（0–16）", { exact: true });
     await expect(actors).toBeEnabled();
     await actors.fill("0");
+    await page
+      .getByRole("button", { name: "保存不同角色数（0–16）", exact: true })
+      .click();
     await expect.poll(() => value.settings.maxActors).toBe(0);
     await page.reload();
     await expect(policy).toHaveValue(
@@ -75,17 +81,21 @@ test("policy choice and zero delegation caps survive reload and can be cleared",
     await expect(policy).toHaveValue(
       JSON.stringify({ pluginId: "conversation", name: "draw" }),
     );
-    await expect(
-      page.getByRole("status").filter({ hasText: /^已暂停$/ }),
-    ).toBeVisible();
+    await expect(page.getByText("已暂停", { exact: true })).toBeVisible();
     await policy.selectOption("");
+    await page
+      .getByRole("button", { name: "保存回合策略", exact: true })
+      .click();
     await expect(
       page.getByText("请选择策略以消除歧义", { exact: true }),
     ).toBeVisible();
     deny = true;
     await actors.fill("2");
+    await page
+      .getByRole("button", { name: "保存不同角色数（0–16）", exact: true })
+      .click();
     await expect(
-      page.getByRole("alert").filter({ hasText: "无法读取或保存编排设置" }),
+      page.getByRole("alert").filter({ hasText: "此项未能保存" }),
     ).toBeVisible();
     expect(value.settings.maxActors).toBe(0);
   } finally {

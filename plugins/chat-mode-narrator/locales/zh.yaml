@@ -24,3 +24,7 @@ PLUGIN.md:
           - label: 短
           - label: 中
           - label: 长
+runtimes/plan/RUNTIME.md:
+  description: 准备可选的角色名单和回合策略计划，名单只包含姓名。
+runtimes/narrate/RUNTIME.md:
+  description: 把对白和可选角色贡献组成一条故事。

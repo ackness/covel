@@ -736,3 +736,7 @@ Keep intent private. If a policy or actor is unavailable, continue with a valid 
 在会话“编排”里选择一个策略。`Promise.all` 保留计划顺序，即使角色完成顺序不同。策略缺失时直接叙述；角色缺失或失败时跳过那份回复，所有角色都失败也返回非空故事。`yieldHint` 是建议，本例固定交回玩家。两种入口共用名额与取消规则，intent 从不复制到最终故事。
 
 验证命令沿用[插件测试](./testing.md)。框架回归从本页读取声明和代码并实际加载。契约、限制和模型名字适配的权威说明在[编排契约](../reference/plugin-extensions.md#orchestration-contracts)。导演策略可以检查 `ctx.gateway`，缺失时抛 `ToolError("unavailable", ...)`；不要给工具路径额外借用模型凭据。
+
+## 采用内置组合
+
+对话叙事采用上面的公开契约，但把只读策略调用放在 pre-turn 函数，把 delegate 保留在唯一故事 agent 的工具循环中。函数读取 ctx.world 的当前角色/座位，输出安全名字；故事消费可选的同包输入。director 只有函数调用路径能借到 gateway；模型导入不能绕过代码专用设置。演员/策略都可缺失或由社区包替换。完整玩家行为见[群像对话](../builtin/story.md#群像对话与角色演员)。

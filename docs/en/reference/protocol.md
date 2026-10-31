@@ -1504,3 +1504,7 @@ Recovery's optional `advance` uses the same payload; `unknown` does not establis
 Actor `intent` stays in the orchestrator's live in-memory conversation. The kernel records provenance from the resolved provider and tool-call ID, projecting child model traces, parent delegate arguments/results, persisted tool records and transcript copies in later parent `llm.request` events. `/turns`, action streams and trace APIs read projected values. Concealed providers' complete delegated content receives the same protection. The live model transcript retains paired tool calls and results. When a completing tool becomes output directly, an ordinary actor supplies only public segments; a concealed delegate supplies no content. Arbitrary business JSON keys named `intent` do not determine provenance.
 
 Actor failures and cap refusals use `subagent.failed`, without a new actor event family or `runtime.failed`/execution errors for isolated failures. The story may commit. Rejected independent operations still produce only the existing fixed `operation.failed` notice. Deliberately rewriting private data into story prose is outside this structured projection guarantee.
+
+## Creation role and existing actions
+
+Optional seatRole selects only the new human seat; see [creation API](./api.md#creation-role) for validation/defaults. Hosts can direct/narrate/advance; spectators can only advance. The server still assigns action source and uses the existing round settlement, advancement and single request-terminal events. This choice adds no event or scheduler.

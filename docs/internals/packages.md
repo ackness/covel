@@ -189,3 +189,7 @@ Covel 还在早期开发，只针对当前的契约。改一个契约时，生�
 `test-runtime` 只提供 CLI，不提供包导入入口。用 `pnpm test:runtime` 运行 runtime cases；`pnpm plugin:extract <dir>` 在作者本机执行入口工厂，记录注册并同步声明，纯文本改写由 `plugin-loader` 负责。
 
 网页端从 SettingsStore 读取主题和明暗偏好，经主题解析后，通过 appearance 辅助函数应用实际显示值。回退显示不改写已保存的偏好。
+
+## 可选群像提供方
+
+`plugins/character-agent` 提供可重复使用的角色演员，`plugins/turn-policy` 提供一个可选策略读服务；它们与对话叙事通过公开 SDK 契约组合，不是框架依赖或专用宿主路径。
