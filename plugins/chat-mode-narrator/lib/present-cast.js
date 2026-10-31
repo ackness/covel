@@ -84,15 +84,11 @@ export function presentCast(ctx, previous) {
     .slice(0, STORY_LIMITS.present);
 }
 
-export function observableBrief(previous, actions, locale) {
-  const observed = [
-    ...(previous?.segments ?? []).map(({ speaker, text }) =>
-      speaker ? `${speaker}: ${text}` : text,
-    ),
-    ...actions
-      .filter((action) => ["say", "act", "narrate"].includes(action.kind))
-      .map((action) => action.text ?? ""),
-  ];
+export function observableBrief(actions, locale) {
+  // Historical observations come from each actor's witnessed history.
+  const observed = actions
+    .filter((action) => ["say", "act", "narrate"].includes(action.kind))
+    .map((action) => action.text ?? "");
   return (
     observed.join("\n").slice(-6_000) ||
     pickLocaleText(

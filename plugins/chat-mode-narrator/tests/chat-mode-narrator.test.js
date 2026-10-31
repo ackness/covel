@@ -206,6 +206,7 @@ describe(`${PLUGIN_ID} package`, () => {
     expect(manifest.inputs.plan).toMatchObject({ required: false });
     expect(Object.keys(manifest.inputs).sort()).toEqual(
       [
+        "active-cast",
         "check-results",
         "npc-relationships",
         "plan",
@@ -223,8 +224,8 @@ describe(`${PLUGIN_ID} package`, () => {
     ]);
     expect(english).toContain('target: { contract: "character-actor@1" }');
     expect(chinese).toContain('target: { contract: "character-actor@1" }');
-    expect(english).not.toContain("runtime-inputs.active-cast");
-    expect(chinese).not.toContain("runtime-inputs.active-cast");
+    expect(english).toContain("runtime-inputs.active-cast");
+    expect(chinese).toContain("runtime-inputs.active-cast");
     expect(definition.packageManifest.plugin.imports ?? []).toEqual([]);
   });
 });

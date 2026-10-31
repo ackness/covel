@@ -23,6 +23,7 @@ const seats = [
 describe("scene cast manifests", () => {
   let sceneCast;
   let chatNarrator;
+  let chatPlanner;
   let loadedSceneCast;
   let loadedChatNarrator;
   let sceneStageUi;
@@ -41,8 +42,13 @@ describe("scene cast manifests", () => {
     sceneCast = (await loadPluginManifest(sceneStageDiscovery)).find(
       (entry) => entry.manifest.name === "scene-stage/cast",
     ).manifest;
-    chatNarrator = (await loadPluginManifest(chatNarratorDiscovery))[0]
-      .manifest;
+    const chatRuntimes = await loadPluginManifest(chatNarratorDiscovery);
+    chatNarrator = chatRuntimes.find(
+      (entry) => entry.manifest.name === "chat-mode-narrator/narrate",
+    ).manifest;
+    chatPlanner = chatRuntimes.find(
+      (entry) => entry.manifest.name === "chat-mode-narrator/plan",
+    ).manifest;
     loadedSceneCast = await loadRuntime(sceneStageDiscovery, sceneCast.name);
     sceneStageUi = await loadPluginUiSpecs(
       sceneStageDiscovery.rootPath,
@@ -76,12 +82,17 @@ describe("scene cast manifests", () => {
 
   it("loads chat-mode-narrator with active cast contract injection", () => {
     expect(chatNarrator).toMatchObject({
-      name: "chat-mode-narrator",
+      name: "chat-mode-narrator/narrate",
       stage: "narrative",
       outputKind: "story",
       model: "story",
     });
     expect(chatNarrator.outputContract).toBe("narrative-engine@2");
+    expect(chatPlanner.inputs["active-cast"]).toMatchObject({
+      from: { capability: "scene-cast@1" },
+      required: false,
+    });
+    expect(chatPlanner.inputs["active-cast"].select).toBeUndefined();
     expect(chatNarrator.inputs["active-cast"]).toMatchObject({
       from: { capability: "scene-cast@1" },
       select: "/activeCastContext",
@@ -101,6 +112,7 @@ describe("scene cast manifests", () => {
   it("schedules the cast runtime before chat-mode-narrator in the DAG runtime layer", () => {
     const { groups, error } = scheduleByDag([
       sceneCast,
+      chatPlanner,
       chatNarrator,
       {
         name: "guide",
@@ -108,7 +120,7 @@ describe("scene cast manifests", () => {
         stage: "post-turn",
         inputs: {
           narrative: {
-            from: { runtime: "chat-mode-narrator" },
+            from: { runtime: "chat-mode-narrator/narrate" },
           },
         },
       },
@@ -117,7 +129,12 @@ describe("scene cast manifests", () => {
     expect(error).toBeUndefined();
     expect(
       groups.map((group) => group.runtimes.map((runtime) => runtime.name)),
-    ).toEqual([["scene-stage/cast"], ["chat-mode-narrator"], ["guide"]]);
+    ).toEqual([
+      ["scene-stage/cast"],
+      ["chat-mode-narrator/plan"],
+      ["chat-mode-narrator/narrate"],
+      ["guide"],
+    ]);
   });
 });
 

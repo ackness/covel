@@ -351,6 +351,8 @@ model    = "glm-5"
 
 Function runtime 不读取 `runtimeModelOverrides`。`ctx.gateway.generateText` 和 `generateObject` 没传 `presetId` 时使用 `function.model`；handler 显式传入的 `presetId` 优先。这个默认值不影响图像、语音、音乐或评估调用。
 
+`ctx.gateway.resolveSlot({})` 和 `resolveSlot({ fallbackTag: "text" })` 使用同一个默认文本槽和当前请求的绑定；其他能力标签不套用文本默认值。`generateObject` 默认把插件的 JSON Schema 转成 Zod schema，供网关生成和校验结果，无需宿主另配转换器。
+
 准备页和会话插件列表会只读显示 `function.model` 声明的用途及其解析出的“服务商 · 模型”，没有选择控件。用途未配置时显示回退目标，已配置但不可用时显示不可用提示。没有声明 `function.model` 的函数不显示这一项。handler 显式选择其他用途的调用仍以该调用为准。
 
 图像、语音等 function 插件通常用自己的 `userSettings.modelPresetId` 选择对应能力的用途。准备页把它显示成一个独立的选项，写进设备设置 `plugin.<pluginId>.modelPresetId`。不要把 agent runtime 的会话覆盖和 function runtime 的这个设置混用。

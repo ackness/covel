@@ -740,3 +740,5 @@ Use the commands in [plugin testing](./testing.md). Framework regressions extrac
 ## Adopting the bundled composition
 
 Dialogue uses the public contracts above with a read-only policy call in a pre-turn function and delegate retained inside the sole story agent's tool loop. The function reads current characters/seats through ctx.world and projects names to an optional same-package input. Director borrows a gateway only through a function caller; a model import cannot bypass code-only visibility. Either provider can be absent or replaced by a community package. See [ensemble behaviour](../builtin/story.md#ensemble-dialogue-and-character-actors).
+
+Historical segments inform policy selection without automatically entering the shared actor brief; the runner supplies witnessed history per character. The planner reads the structured cast from `scene-cast@1`, while the story agent receives its optional `activeCastContext` input.

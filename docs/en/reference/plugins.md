@@ -1254,7 +1254,7 @@ Below are all the plugins that ship with Covel from [plugins/](../../../plugins/
 | [branch-reply](../../../plugins/branch-reply/README.md) | Reply Variants | `plugin` | `branch-reply@1` | inline | Offers several replies the player can switch between. |
 | [char-creator](../../../plugins/char-creator/README.md) | Character Creator | `core` | `character-creation@1` (default provider) | `player-init`, `character-tracker` | Creates the protagonist with echoed form answers and records character changes. |
 | [character-blueprint](../../../plugins/character-blueprint/README.md) | Character Profiles | `plugin` | `character-blueprint@1`, `character-presence@1` | `presence` | Stores the character profiles a world presets, along with avatars, portraits, and voices. |
-| [chat-mode-narrator](../../../plugins/chat-mode-narrator/README.md) | Dialogue Narrator | `plugin` | `narrative-engine@2` | inline | Makes the story read more like a conversation between characters. |
+| [chat-mode-narrator](../../../plugins/chat-mode-narrator/README.md) | Dialogue Narrator | `plugin` | `narrative-engine@2` | `plan` / `narrate` | Makes the story read like a conversation; stage presence informs both planning and narration. |
 | [codex](../../../plugins/codex/README.md) | Codex | `plugin` | none | inline | Organizes newly found places, people, items, and rumors. |
 | [core-quest](../../../plugins/core-quest/README.md) | Quest Log | `plugin` | `world-ir.vocabulary@1` | `log`, `vocabulary` | Registers quests from the narrative and moves them forward. |
 | [dice-check](../../../plugins/dice-check/README.md) | Dice Check | `plugin` | `action-check@1` | `roller`, `recorder` | Rolls dice for actions that carry a risk of failure. |

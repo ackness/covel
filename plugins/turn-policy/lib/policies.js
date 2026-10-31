@@ -52,8 +52,14 @@ export async function chooseActors(input, ctx, pluginId) {
   let actors;
   let order = "sequential";
   let yieldHint = "user";
-  if (strategy === "director" && ctx.gateway)
-    return director({ ...input, present }, ctx);
+  if (strategy === "director" && ctx.gateway) {
+    try {
+      return await director({ ...input, present }, ctx);
+    } catch (error) {
+      ctx.signal.throwIfAborted();
+      if (error?.code !== "unavailable") throw error;
+    }
+  }
   if (strategy === "manual") {
     actors = manualSelection(input.actions, characters, present, pluginId);
   } else if (strategy === "list") {
@@ -105,7 +111,7 @@ export async function chooseActors(input, ctx, pluginId) {
     actors = present
       .filter((actor) => mentions.has(actor.characterId))
       .map(({ characterId }) => ({ characterId }));
-    // A function host without a gateway can still apply the deterministic mention strategy.
+    // A missing gateway or text slot still permits deterministic selection.
     if (strategy === "director")
       actors = actors.map((actor) => ({
         ...actor,

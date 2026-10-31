@@ -1254,7 +1254,7 @@ pnpm lint
 | [branch-reply](../../plugins/branch-reply/README.md) | 回复变体 | `plugin` | `branch-reply@1` | 内联 | 提供多条可切换的回复 |
 | [char-creator](../../plugins/char-creator/README.md) | 角色创建 | `core` | `character-creation@1`（默认提供者） | `player-init`、`character-tracker` | 创建主角并逐项回填表单答案，记录故事中的角色变化 |
 | [character-blueprint](../../plugins/character-blueprint/README.md) | 角色资料 | `plugin` | `character-blueprint@1`、`character-presence@1` | `presence` | 保存世界预设的人物资料，以及头像、立绘和声音 |
-| [chat-mode-narrator](../../plugins/chat-mode-narrator/README.md) | 对话叙事 | `plugin` | `narrative-engine@2` | 内联 | 让故事更像角色对话 |
+| [chat-mode-narrator](../../plugins/chat-mode-narrator/README.md) | 对话叙事 | `plugin` | `narrative-engine@2` | `plan` / `narrate` | 让故事更像角色对话；舞台在场输入同时供规划和叙事使用 |
 | [codex](../../plugins/codex/README.md) | 设定图鉴 | `plugin` | 无 | 内联 | 整理新发现的地点、人物、物品和传闻 |
 | [core-quest](../../plugins/core-quest/README.md) | 任务日志 | `plugin` | `world-ir.vocabulary@1` | `log`、`vocabulary` | 从叙事中登记和推进任务 |
 | [dice-check](../../plugins/dice-check/README.md) | 骰子判定 | `plugin` | `action-check@1` | `roller`、`recorder` | 为有失败风险的行动做骰子判定 |

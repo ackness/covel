@@ -4,6 +4,11 @@ schedule:
   stage: narrative
 io:
   inputs:
+    active-cast:
+      from:
+        contract: scene-cast@1
+      select: /activeCastContext
+      required: false
     worldTime:
       from:
         contract: world-time-context@1
@@ -87,6 +92,7 @@ The `<player-character>` block holds the player character's current sheet.
 - Dialogue ratio: {{ userSettings.dialogueRatio }}%
 - Reply length: {{ userSettings.proseLength }}
 - Use the safe cast names in `runtime-inputs.plan.value.cast`. Scene salience and delegation caps are separate. If the optional plan is absent, narrate alone in the dialogue-first style.
+- Use `runtime-inputs.active-cast.value` for scene salience and character profiles when present. It is narrator context; do not copy it into actor briefs.
 
 ## Settled Tabletop Checks
 

@@ -31,7 +31,7 @@ import {
   type LLMUsageSummary,
 } from "@covel/shared";
 import type { GatewayOptions } from "@covel/ai-provider";
-import type { ZodType } from "zod";
+import { fromJSONSchema, type ZodType } from "zod";
 import {
   gatewayRequestOptions,
   type GatewayAdapterConfig,
@@ -202,21 +202,13 @@ export interface FullGatewayLike {
   }>;
 }
 
-/**
- * Minimal "accept anything" schema marker. `ai-provider.generateObject`
- * expects a Zod schema; plugins pass a JSON-schema-ish object instead.
- * We bypass validation at the gateway layer by handing it a passthrough
- * Zod schema. Importing Zod statically here would couple @covel/runtime
- * to @covel/ai-provider's peer dep tree, so we accept an optional
- * `passthroughSchema` override the server can wire at startup.
- */
+/** Optional host customization for converting plugin JSON Schemas. */
 export interface PluginRuntimeGatewayConfig extends GatewayAdapterConfig {
   /**
    * Schema factory called per `generateObject()` invocation. Receives the
    * plugin-supplied JSON-schema record and must return something the
    * underlying gateway's `generateObject` accepts (usually a ZodType).
-   * When omitted, the adapter rejects `generateObject` calls — agent
-   * runtimes should be used instead.
+   * Defaults to Zod's JSON Schema converter, including output validation.
    */
   readonly toZodSchema?: (
     jsonSchema: Readonly<Record<string, unknown>>,
@@ -315,21 +307,7 @@ export function createPluginRuntimeGateway(
       readonly finishReason: string;
       readonly usage: LLMUsageSummary;
     }> {
-      if (!config?.toZodSchema) {
-        throw new Error(
-          [
-            "PluginRuntimeGateway.generateObject is unavailable in this host.",
-            "The framework intentionally ships without a JSON Schema → Zod",
-            "converter injected: structured output for agent",
-            "runtimes is already handled by the executor via `output.schema`",
-            "and `responseFormat`, and no function-runtime caller needs this",
-            "path yet. Prefer an agent runtime; if you genuinely need",
-            "`generateObject` from a function runtime, open an issue so the",
-            "composition root can install a converter.",
-          ].join(" "),
-        );
-      }
-      const zodSchema = config.toZodSchema(input.schema);
+      const zodSchema = (config?.toZodSchema ?? fromJSONSchema)(input.schema);
       const messages = input.messages
         ? input.messages.map((m) => ({ role: m.role, content: m.content }))
         : toMessages({ system: input.system, prompt: input.prompt });
@@ -559,7 +537,7 @@ function toMessages(opts: { system?: string; prompt?: string }): Array<{
   return messages;
 }
 
-/** Bind text calls to the instruction language and an optional runtime default slot. */
+/** Bind text calls and slot inspection to an optional runtime default slot. */
 export function withRuntimeTextDefaults(
   gateway: PluginRuntimeGateway,
   locale: string | undefined,
@@ -568,6 +546,14 @@ export function withRuntimeTextDefaults(
   const instructionLocale = instructionLocaleFor(locale);
   return {
     ...gateway,
+    resolveSlot: (input) =>
+      gateway.resolveSlot({
+        ...input,
+        ...(defaultModel !== undefined &&
+        (input.fallbackTag === undefined || input.fallbackTag === "text")
+          ? { presetId: input.presetId ?? defaultModel }
+          : {}),
+      }),
     generateText: (input) =>
       gateway.generateText({
         ...input,

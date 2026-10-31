@@ -116,4 +116,6 @@ Generic policy selection and delegation caps are in [session orchestration setti
 
 The story interface also provides the host’s [advancement and Stop controls](../start/first-session.md#while-the-story-advances-automatically). The story provider decides whether to request another round. Ensemble dialogue can follow policy advice to continue and yields to the player when no actor contributes.
 
+Ensemble actors respond from their own witnessed history; the shared brief does not automatically tell newcomers about private exchanges from the previous scene. See [ensemble dialogue](./story.md#ensemble-dialogue-and-character-actors).
+
 New compositions remain plugin lists plus a world-generation default view. They do not select a role, perspective or strategy. For DM Mode, set Narrator Perspective to Game master. Ensemble works with the default Player role and mention strategy. To play a human DM, turn off character creation and select Game master in preparation. For Spectator, choose that role at creation, then list, random or director and Advance. Choose Game master instead to direct/narrate the same NPC composition. World allowed-pack lists remain authoritative and saved views are not overwritten. Recommendations stay optional; missing actors/policies preserve narrator-only play.

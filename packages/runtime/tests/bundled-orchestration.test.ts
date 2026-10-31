@@ -8,9 +8,14 @@ import {
   provideHostModules,
 } from "@covel/plugin-loader";
 import type { PluginAPI } from "@covel/plugin-handlers-utils";
+import {
+  createGateway,
+  createPresetRegistry,
+  createProviderRegistry,
+  type ModelProviderAdapter,
+} from "@covel/ai-provider";
 import { characterActorOutputJsonSchema } from "@covel/shared";
 import type { LLMAdapter, StorySegment } from "@covel/shared";
-import type { PluginRuntimeGateway } from "@covel/shared/plugin-runtime";
 import { createMemoryStore } from "@covel/store/memory";
 import { delegateTool } from "@covel/tools";
 import { loadRuntimeBundle } from "../../test-runtime/src/runtime-loading.js";
@@ -23,6 +28,7 @@ import {
   createTurnEmitter,
 } from "../src/index.js";
 import { prose, toolCall } from "./_helpers/agent-loop-fixture.js";
+import { createPluginRuntimeGateway } from "../src/function-runtime/plugin-runtime-gateway.js";
 
 const root = path.resolve(import.meta.dirname, "../../../plugins");
 describe("bundled orchestration", () => {
@@ -30,6 +36,8 @@ describe("bundled orchestration", () => {
     "success",
     "concealed-actor",
     "director",
+    "director-no-slot",
+    "director-no-gateway",
     "one-fails",
     "all-fail",
     "missing-actor",
@@ -42,6 +50,7 @@ describe("bundled orchestration", () => {
   ])(
     "commits the real dialogue pipeline with isolated contributions: %s",
     async (mode) => {
+      const directorMode = mode.startsWith("director");
       const store = createMemoryStore();
       const active = [
         "chat-mode-narrator",
@@ -126,35 +135,102 @@ describe("bundled orchestration", () => {
       const actorRequests: string[] = [];
       const parentRequests: string[] = [];
       const directorRequests: string[] = [];
-      const gateway: PluginRuntimeGateway = {
-        resolveSlot: () => ({
-          presetId: "plugin",
-          provider: "synthetic",
-          protocol: "openai-chat-v1",
-          model: "test",
-          tag: "text",
-          metadata: {},
-        }),
+      const adapter: ModelProviderAdapter = {
         generateText: async () => {
           throw new Error("Unexpected text generation");
         },
-        generateObject: async <T>(
-          request: Parameters<PluginRuntimeGateway["generateObject"]>[0],
-        ) => {
-          expect(request.signal).toBeDefined();
-          directorRequests.push(request.prompt ?? "");
+        generateObject: async (config, request) => {
+          expect(config.signal).toBeDefined();
+          expect(config.apiKey).toBe("browser-key");
+          expect(request.model).toBe("browser-director");
+          directorRequests.push(JSON.stringify(request.messages));
           return {
-            object: {
+            object: request.schema.parse({
               actors: [{ character: "Mara" }, { character: "Ivo" }],
               order: "sequential",
               narrator: "after",
               yieldHint: "user",
-            } as T,
+            }),
             finishReason: "stop",
             usage: { inputTokens: 1, outputTokens: 1 },
           };
         },
+        async *streamText() {
+          throw new Error("Unexpected streaming generation");
+        },
+        embed: async () => {
+          throw new Error("Unexpected embedding");
+        },
       };
+      const presets = createPresetRegistry({ profiles: [], presets: [] });
+      const fullGateway = createGateway({
+        presetRegistry: presets,
+        providerRegistry: createProviderRegistry({
+          providers: { synthetic: { adapter } },
+        }),
+      });
+      const gateway = createPluginRuntimeGateway(fullGateway, {
+        apiKeys: { synthetic: "browser-key" },
+        slotOverrides: {
+          slotBindings: {
+            story: { modelRef: "browser-story" },
+            plugin: { modelRef: "browser-plugin" },
+          },
+          customPresets: [
+            {
+              id: "browser-story",
+              name: "Story",
+              provider: "synthetic",
+              model: "browser-narrator",
+              baseUrl: "https://model.example",
+              protocol: "openai-chat-v1",
+            },
+            {
+              id: "browser-plugin",
+              name: "Director",
+              provider: "synthetic",
+              model: "browser-director",
+              baseUrl: "https://model.example",
+              protocol: "openai-chat-v1",
+            },
+          ],
+        },
+      });
+      expect(gateway.resolveSlot({})).toBeNull();
+      expect(gateway.resolveSlot({ presetId: "plugin" })?.model).toBe(
+        "browser-director",
+      );
+      const previous = {
+        segments: [
+          { kind: "dialogue", speaker: "Mara", text: "MARA-PRIVATE-EXCHANGE" },
+          { kind: "narration", text: "OMNISCIENT-SECRET" },
+        ],
+        cues: { present: ["Mara"] },
+      } as const;
+      await store.addMessage({
+        id: "history-private-exchange",
+        sessionId: "scene",
+        role: "assistant",
+        content: "MARA-PRIVATE-EXCHANGE",
+        metadata: {
+          kind: "story",
+          presentCharacterIds: ["private-a"],
+          segments: previous.segments,
+        },
+        createdAt: now,
+      });
+      await store.appendRuntimeExport({
+        sessionId: "scene",
+        producerPluginId: "chat-mode-narrator",
+        producerRuntimeId: "chat-mode-narrator/narrate",
+        recordAs: "latest-story",
+        revision: 1,
+        pluginVersion: bundle.target.version ?? "0.0.1",
+        schemaDigest: "fixture",
+        resultId: "previous-story",
+        value: previous,
+        committedAt: now,
+      });
       const manifests = [...bundle.manifests];
       if (mode === "concealed-actor") {
         const index = manifests.findIndex(
@@ -196,6 +272,10 @@ describe("bundled orchestration", () => {
             expect(text).toContain(
               name === "Mara" ? "MARA-WITNESS" : "IVO-WITNESS",
             );
+            if (name === "Ivo") {
+              expect(text).not.toContain("MARA-PRIVATE-EXCHANGE");
+              expect(text).not.toContain("OMNISCIENT-SECRET");
+            }
             if (mode === "all-fail" || (mode === "one-fails" && name === "Ivo"))
               throw new Error("Actor model unavailable");
             return prose(
@@ -223,6 +303,7 @@ describe("bundled orchestration", () => {
                   value?: {
                     actors: { character: string }[];
                     cast: string[];
+                    brief: string;
                     status?: string;
                     yieldHint?: "user" | "continue";
                   };
@@ -250,7 +331,7 @@ describe("bundled orchestration", () => {
               {
                 target: { contract: "character-actor@1" },
                 character: next.character,
-                brief: "The bell rings. Respond briefly.",
+                brief: plan!.brief,
               },
               `actor-${next.character}`,
             );
@@ -317,7 +398,12 @@ describe("bundled orchestration", () => {
           {
             store,
             llm,
-            gateway: mode === "director" ? gateway : undefined,
+            gateway:
+              mode === "director"
+                ? gateway
+                : mode === "director-no-slot"
+                  ? createPluginRuntimeGateway(fullGateway)
+                  : undefined,
             services: bundle.services,
             hookPipeline: bundle.hookPipeline,
             extensions: bundle.extensions,
@@ -328,7 +414,7 @@ describe("bundled orchestration", () => {
                   strategy:
                     mode === "invalid-selection"
                       ? "manual"
-                      : mode === "director"
+                      : directorMode
                         ? "director"
                         : "list",
                 },
@@ -391,10 +477,11 @@ describe("bundled orchestration", () => {
           expect(content).toContain("Correct the actor names.");
         }
         if (
-          ["success", "concealed-actor", "director", "one-fails"].includes(mode)
+          directorMode ||
+          ["success", "concealed-actor", "one-fails"].includes(mode)
         )
           expect(content).toContain("Mara answers.");
-        if (["success", "concealed-actor", "director"].includes(mode))
+        if (directorMode || ["success", "concealed-actor"].includes(mode))
           expect(content).toContain("Ivo answers.");
         else expect(content).not.toContain("Ivo answers.");
         if (
@@ -438,7 +525,8 @@ describe("bundled orchestration", () => {
         });
         expect(JSON.stringify(trace)).not.toContain("PRIVATE-INTENT");
         if (
-          ["success", "concealed-actor", "director", "one-fails"].includes(mode)
+          directorMode ||
+          ["success", "concealed-actor", "one-fails"].includes(mode)
         )
           expect(
             parentRequests.some((request) =>
@@ -451,10 +539,28 @@ describe("bundled orchestration", () => {
         if (mode === "director") {
           expect(directorRequests).toHaveLength(1);
           expect(directorRequests[0]).toContain("Mara");
+          expect(directorRequests[0]).toContain("MARA-PRIVATE-EXCHANGE");
+          expect(directorRequests[0]).toContain("OMNISCIENT-SECRET");
+          expect(presets.hasPreset("browser-plugin")).toBe(false);
           expect(directorRequests[0]).not.toMatch(
             /private-a|private-b|characterId|seatId|actorId/,
           );
         } else expect(directorRequests).toHaveLength(0);
+        if (directorMode && mode !== "director") {
+          const note = "Director unavailable; mention strategy used.";
+          expect(JSON.stringify(trace)).toContain(note);
+          expect(
+            execution.result.runtimeResults.find(
+              (result) => result.runtimeId === "chat-mode-narrator/plan",
+            )?.output,
+          ).toMatchObject({
+            status: "available",
+            actors: [
+              { character: "Mara", reason: note },
+              { character: "Ivo", reason: note },
+            ],
+          });
+        }
         if (mode === "one-fails")
           expect(trace.some((event) => event.type === "subagent.failed")).toBe(
             true,
