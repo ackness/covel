@@ -55,13 +55,13 @@ When `needs` points to a contract that has only one provider, a result that the 
 
 ### Writes triggered by the interface: how the three actions differ
 
-| Action               | What it does                                            | Writes                                                                                                                    |
-| -------------------- | ------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
-| `invokePluginAction` | Calls the plugin's RPC action                           | Takes effect right away. If the handler fails later, the writes made before that point are not rolled back automatically. |
-| `invokeRuntime`      | Triggers a function runtime with `trigger.type: manual` | The `ctx.pluginData` writes and the domain effects go into the same proposal commit, so they succeed or fail together.    |
-| `invokeCommand`      | Runs a player command that the manifest declares        | Goes through the command's validation and audit. Do not use `invokePluginAction` to bypass it.                            |
+| Action               | What it does                                            | Writes                                                                                                                             |
+| -------------------- | ------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| `invokePluginAction` | Calls the plugin's RPC action                           | Valid records take effect right away. A refused record stays unchanged; earlier successful writes survive a later handler failure. |
+| `invokeRuntime`      | Triggers a function runtime with `trigger.type: manual` | The `ctx.pluginData` writes and the domain effects go into the same proposal commit, so they succeed or fail together.             |
+| `invokeCommand`      | Runs a player command that the manifest declares        | Goes through the command's validation and audit. Do not use `invokePluginAction` to bypass it.                                     |
 
-When several records must succeed or fail together, use `invokeRuntime`. This function handler does not need a model. A manual trigger does not run a narrative runtime by itself. Any event downstream that the runtime declares still runs under the scheduling rules.
+The RPC scoped store checks `set` and the record schema under the [dataset rules](./plugins.md#datasets-contributesdatasets), without creating a turn or operation record. When several records must succeed or fail together, use `invokeRuntime`. This function handler does not need a model. A manual trigger does not run a narrative runtime by itself. Any event downstream that the runtime declares still runs under the scheduling rules.
 
 An RPC action handler receives `ctx.signal`, which aborts at its time limit. The RPC channel below defines when store calls close and already-started writes settle.
 

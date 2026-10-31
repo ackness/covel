@@ -182,6 +182,8 @@ It has no settings you can change.
 
 ### What world authors can preset
 
+Seeded items must pass the dataset’s `set` and record-schema checks. Sync may delete seeded items removed from their authoritative source.
+
 | Data           | File              | Notes                                                                                                                                                                                      |
 | -------------- | ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | Starting items | `data/items.yaml` | Things the player starts with. `quantity` is a number. Players see the tags, so write them in the world's language, and give currency a tag that says so. Worn items get `equipped: true`. |
@@ -234,6 +236,8 @@ Optional, and not turned on automatically.
 It has no settings you can change.
 
 ### What world authors can preset
+
+Seeded affinity records must pass the dataset’s `set` and record-schema checks. Sync may delete seeded records removed from their authoritative source.
 
 | Data              | File                 | Notes                                                                                                                                                           |
 | ----------------- | -------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |

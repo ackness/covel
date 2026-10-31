@@ -1313,7 +1313,7 @@ Query parameters:
 ### Plugin data (Plugin Data)
 
 > [!NOTE]
-> The built-in web interface reads plugin data only through the GET endpoints here (the right panel, the message-area interface, and the plugin data cache). PUT and DELETE are the write entry points for admin tools and API clients. When a plugin runtime writes its own data, the recommended route is the plugin-data tool, plugin RPC, or a proposal.
+> The built-in web interface reads plugin data only through the GET endpoints here (the right panel, the message-area interface, and the plugin data cache). PUT and DELETE are operator override entry points for admin tools and API clients. They skip dataset schema and `ops` checks while retaining session authorization, plugin activation, reserved-namespace and size checks. When a plugin runtime writes its own data, the recommended route is the plugin-data tool, plugin RPC, or a proposal.
 
 | Method | Path                                                      | Description                                                               |
 | ------ | --------------------------------------------------------- | ------------------------------------------------------------------------- |
@@ -2100,7 +2100,7 @@ Each dimension is handled by the rules below:
 
 Preflight also checks receivers' declared [dimension references and candidate values](./world-data.md), reporting `dimension-reference` with the file and record location. Import and sync use the same check.
 
-Does a read-only preflight of one worldData import. It tells you how many entries will be imported and where they will go, but it writes nothing.
+Does a read-only preflight of one worldData import. It tells you how many entries will be imported and where they will go, but it writes nothing. Destination dataset schema or `set` violations return error diagnostics with `sourceId` and available record locations. Media placeholders check `set` admission only; the actual index record schema and final size are checked at apply. Preflight does not materialize media.
 
 The request can be written in two ways:
 
@@ -2160,6 +2160,8 @@ Updating a world package, hot-reloading files, enabling a plugin or approving it
 | `sessionId` | string  | Yes      | The session to sync. It must belong to this world                                                            |
 | `dryRun`    | boolean | No       | Default `true`. Only `false` writes                                                                          |
 | `force`     | boolean | No       | Overwrites `modified` / `missing` conflicts on ordinary import rows. It does not bypass dimension protection |
+
+A true managed removal requires the destination dataset's `delete`; replacement requires only `set`. Dry-run and apply both report refusal with no semantic changes to that sync. `force` cannot bypass dataset schema, `ops` or size rules. Invalid optional projection outputs instead get a warning and are deferred, preserving their old records and ledger.
 
 **What gets synced:**
 
@@ -3152,6 +3154,8 @@ Sends a structured command to a plugin in a session. It does not go through chat
 
 ##### Action level
 
+Action and plugin-backed command scoped stores check each `setPluginData` against the [dataset rules](./plugins.md#datasets-contributesdatasets): a refused record stays unchanged, and earlier successful calls remain persisted. A handler can catch the refusal and return its own result; an uncaught refusal retains the production-safe `500`, without raw records, schemas or filesystem paths. It creates no player turn or operation-failure event.
+
 Calls the handler that the plugin registers in `entry` with `covel.registerRpc`, or a default framework handler (such as `slash-debug`).
 
 `action` must follow the [reserved-prefix rule](./plugins.md#contributes-fields). Submitting an internal approval key as an ordinary action returns `400`, even if a handler with that name exists in the registry.
@@ -3937,7 +3941,8 @@ Returns an index of the framework's capabilities. Third-party developers, extern
 
 - Operation-based writes have two paths: `function-ctx.pluginData.update` in a function runtime, and `plugin.data.update` submitted by a plugin's local tool through `withPendingProposals`. Both produce a `plugin.data.update` proposal, which applies its operations to the stored value inside the commit transaction. See [Transactions · Operation-based writes](./transactions.md#operation-based-writes-plugindataupdate).
 - Paths that produce proposals (builtin tools, `function-output:pluginData[]`, `function-ctx.pluginData.*`, a local tool's `withPendingProposals`) are checked at commit against the plugin's declared [datasets](./plugins.md#datasets-contributesdatasets): operation kinds and the record schema. A violation is refused with `code: "dataset-violation"`.
-- `plugin-rpc:context.store.setPluginData` and `management-api:PUT …` are direct writes outside the commit pipeline. They skip the dataset checks and do not read the current value. World data import skips the dataset checks too (see [World Data · Companion plugin data](./world-data.md#companion-plugin-data)).
+- `plugin-rpc:context.store.setPluginData` checks the destination dataset's `set` and record schema before immediate persistence. World import and sync also apply [destination dataset checks](./world-data.md#companion-plugin-data), and check final record size after media transformation.
+- `management-api:PUT …` / DELETE remain operator overrides without dataset schema / `ops` checks, retaining authorization, activation, namespace and size checks.
 
 #### `GET /api/plugins`
 

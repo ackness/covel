@@ -584,7 +584,7 @@ A write-service operation's `plugin.data.update` that fails here reports `confli
 
 A missing namespace or key, and an empty or invalid operation list, are rejected by the payload check before the handler runs, with `code` `proposal-invalid`. Rejections for a reserved namespace and the size limit happen in the handler and carry `error` without a `code`.
 
-**Dataset checks.** When a plugin declares a namespace in `contributes.datasets`, **every** plugin-data proposal of that plugin into the namespace is checked:
+**Dataset checks.** When a plugin declares a namespace in `contributes.datasets`, every plugin-data proposal, action / command RPC scoped-store write, and world data import or sync uses the same [destination dataset rules](./plugins.md#datasets-contributesdatasets). Proposal checks are:
 
 - Each operation kind of a `plugin.data.update` must be in the dataset's `ops`. A whole-value write (`plugin.data` and each item of `plugin.data.batch`) counts as `set`, and `plugin.data.delete` counts as `delete`.
 - When the result is present, the written value is validated against the dataset's record schema, and the first 3 errors are reported.
@@ -600,6 +600,10 @@ A missing namespace or key, and an empty or invalid operation list, are rejected
 `FailedProposal.code: "hook-failed"` means `PreStateCommit` failed because a handler threw, timed out or returned an invalid result, rather than deliberately vetoing. Only the Hook owner's fault counts; the proposal owner is not blamed for a deliberate rejection. `dimension-version-conflict`, `conflict` and `suspension-data-changed` also do not count toward the [latch](./protocol.md#plugin-fault-latch).
 
 ## World Data import
+
+An import plan captures registered packages' destination policies, and apply retains that declaration generation. Alongside source validation, seeding and replacement require `set`. After media transformation and before any semantic write, including dimension CAS and binding, the final value is checked against its schema and the 256 KiB limit. Refusal rolls back the session, character schema, plugin data, characters, lorebook and import ledger together, releasing only this attempt's temporary media references.
+
+A true sync deletion of an existing managed record requires `delete`; a physical delete followed by replacement requires only `set`. Dry-run and apply both check true removals, and `force` cannot bypass dataset rules. Refusal prevents all semantic changes in that sync; an already-absent target needs only stale-ledger cleanup. Invalid optional projection outputs still preserve old data under the [output deferral rules](./world-data.md#companion-plugin-data).
 
 Planning also validates the receiver's declared [dimension references and candidate values](./world-data.md). Any such error rejects the whole import plan, including otherwise valid records. Sync follows the same rule.
 

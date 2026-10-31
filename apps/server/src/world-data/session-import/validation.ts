@@ -1,3 +1,4 @@
+import { datasetFailure, type DatasetPolicyResolver } from "@covel/runtime";
 import { isRecord } from "../../lib/is-record.js";
 import {
   DIMENSION_DATA_NAMESPACE,
@@ -19,6 +20,8 @@ import { recordLocation, type RecordLocation } from "./utils.js";
 import type {
   PluginDataTarget,
   WorldDataImportPreflightDeps,
+  ImportPlan,
+  PlannedWrite,
 } from "./types.js";
 
 function getPreflightPluginEntry(
@@ -88,6 +91,9 @@ export async function validatePluginDataValue(options: {
   readonly deps?: WorldDataImportPreflightDeps;
   /** The record of the source that `value` is, when it is one. */
   readonly record?: RecordLocation;
+  readonly datasetPolicy?: DatasetPolicyResolver;
+  readonly storedNamespace?: string;
+  readonly mediaPlaceholder?: boolean;
 }): Promise<WorldDataDiagnostic | null> {
   const bytes = pluginDataSizeBytes(options.value);
   if (bytes > MAX_PLUGIN_DATA_VALUE_BYTES) {
@@ -97,10 +103,20 @@ export async function validatePluginDataValue(options: {
     return {
       level: "error",
       sourceId: options.source.id,
+      ...(options.record?.path ? { path: options.record.path } : {}),
+      ...(options.record?.pointer ? { pointer: options.record.pointer } : {}),
       message: `${where} is ${bytes} bytes, over the ${MAX_PLUGIN_DATA_VALUE_BYTES}-byte limit for one plugin-data value (plugin "${options.target.pluginId}" namespace "${options.target.namespace}")`,
       hint: "Split the record into several records, or drop what no turn reads.",
     };
   }
+  const destinationError = datasetWriteDiagnostic({
+    ...options,
+    namespace: options.storedNamespace ?? options.target.namespace,
+    pluginId: options.target.pluginId,
+    operation: "set",
+    checkRecord: !options.mediaPlaceholder,
+  });
+  if (destinationError) return destinationError;
   const schema =
     options.schema?.kind === "plugin" &&
     options.schema.pluginId === options.target.pluginId &&
@@ -339,4 +355,75 @@ export function checkProjectedLorebookRecord(
     hint ??= SELECTIVE_HINT;
   }
   return { errors, warnings: [], ...(hint ? { hint } : {}) };
+}
+
+/** Destination-only guard, also used on the exact final imported value. */
+export function datasetWriteDiagnostic(options: {
+  readonly datasetPolicy?: DatasetPolicyResolver;
+  readonly pluginId: string;
+  readonly namespace: string;
+  readonly operation: "set" | "delete";
+  readonly value?: unknown;
+  readonly checkRecord?: boolean;
+  readonly source: OrderedWorldDataSource;
+  readonly record?: RecordLocation;
+}): WorldDataDiagnostic | null {
+  const failure = datasetFailure(
+    options.record?.label ?? "worldData",
+    options.datasetPolicy?.(options.pluginId, options.namespace),
+    [options.operation],
+    options.operation === "set" && options.checkRecord !== false
+      ? { value: options.value }
+      : undefined,
+  );
+  return failure
+    ? {
+        level: "error",
+        sourceId: options.source.id,
+        ...(options.record?.path ? { path: options.record.path } : {}),
+        ...(options.record?.pointer ? { pointer: options.record.pointer } : {}),
+        message: failure.error ?? "Dataset write refused",
+      }
+    : null;
+}
+
+/** Check final stored records without consulting source schema files or live registries. */
+export function finalPluginWriteDiagnostics(
+  plan: Pick<ImportPlan, "datasetPolicy">,
+  writes: readonly PlannedWrite[],
+  options: { readonly observational?: boolean } = {},
+): WorldDataDiagnostic[] {
+  const diagnostics: WorldDataDiagnostic[] = [];
+  for (const write of writes) {
+    if (write.kind !== "plugin-data" && write.kind !== "media-index") continue;
+    const record = recordLocation(write.source, write.value, 0, false);
+    const bytes = pluginDataSizeBytes(write.value);
+    if (bytes > MAX_PLUGIN_DATA_VALUE_BYTES) {
+      diagnostics.push({
+        level: "error",
+        sourceId: write.source.id,
+        ...(record.path ? { path: record.path } : {}),
+        ...(record.pointer ? { pointer: record.pointer } : {}),
+        message: `${record.label} of source "${write.source.id}" is ${bytes} bytes, over the ${MAX_PLUGIN_DATA_VALUE_BYTES}-byte limit for one plugin-data value (plugin "${write.pluginId}" namespace "${write.namespace}")`,
+        hint: "Split the record into several records, or drop what no turn reads.",
+      });
+      continue;
+    }
+    const placeholder =
+      write.kind === "media-index" &&
+      isRecord(write.value) &&
+      isRecord(write.value.import);
+    const error = datasetWriteDiagnostic({
+      datasetPolicy: plan.datasetPolicy,
+      pluginId: write.pluginId,
+      namespace: write.namespace,
+      operation: "set",
+      value: write.value,
+      checkRecord: !(placeholder && options.observational),
+      source: write.source,
+      record,
+    });
+    if (error) diagnostics.push(error);
+  }
+  return diagnostics;
 }

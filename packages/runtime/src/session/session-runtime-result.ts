@@ -88,7 +88,7 @@ export interface RuntimeCommitOptions {
   /** Media store the MediaRefs of every proposal are checked against. */
   readonly mediaStore?: MediaOwnershipStore;
   /** Declared dataset rules every plugin-data write is checked against. */
-  readonly datasetPolicy?: import("../commit/commit-plugin-data.js").DatasetPolicyResolver;
+  readonly datasetPolicy?: import("../plugin-data-validation.js").DatasetPolicyResolver;
 }
 
 /** Proposals ready to persist, plus the ones already rejected on the way. */

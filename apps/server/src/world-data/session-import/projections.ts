@@ -1,3 +1,4 @@
+import type { DatasetPolicyResolver } from "@covel/runtime";
 import { isRecord } from "../../lib/is-record.js";
 import { Worker } from "node:worker_threads";
 import { pathToFileURL } from "node:url";
@@ -345,6 +346,7 @@ function projectedKey(options: {
 }
 
 export async function executeWorldProjections(options: {
+  readonly datasetPolicy: DatasetPolicyResolver;
   readonly source: OrderedWorldDataSource;
   readonly sourceDigest: string;
   readonly value: unknown;
@@ -626,6 +628,7 @@ export async function executeWorldProjections(options: {
         try {
           validationError = await validatePluginDataValue({
             target,
+            datasetPolicy: options.datasetPolicy,
             source: options.source,
             value: item,
             schema: null,

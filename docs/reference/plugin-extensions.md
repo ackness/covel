@@ -57,11 +57,11 @@ runtime 发出的事件在同一回合的事件链里逐层匹配订阅者。
 
 | 动作                 | 做什么                                         | 写入                                                                               |
 | -------------------- | ---------------------------------------------- | ---------------------------------------------------------------------------------- |
-| `invokePluginAction` | 调用插件的 RPC action                          | 立即生效。handler 后面失败了，前面的写入不会自动撤回。                             |
+| `invokePluginAction` | 调用插件的 RPC action                          | 合法记录立即生效。被拒记录保持原样；handler 后面失败，之前成功的写入保留。         |
 | `invokeRuntime`      | 触发一个 `trigger.type: manual` 的函数 runtime | `ctx.pluginData` 写入和领域 effects 进入同一次 proposal 提交，一起成功或一起失败。 |
 | `invokeCommand`      | 执行清单里声明的玩家命令                       | 走命令的校验与审计。不要用 `invokePluginAction` 绕开它。                           |
 
-多条记录必须一起成功或一起失败时，用 `invokeRuntime`。这个函数 handler 不需要模型。手动触发本身不会运行叙事 runtime；它声明的事件下游仍按调度规则执行。
+RPC 的 scoped store 按[数据集规则](./plugins.md#数据集contributesdatasets)检查 `set` 和记录 schema；没有新增回合或操作记录。多条记录必须一起成功或一起失败时，用 `invokeRuntime`。这个函数 handler 不需要模型。手动触发本身不会运行叙事 runtime；它声明的事件下游仍按调度规则执行。
 
 RPC action 的 handler 收到 `ctx.signal`，到达时限时中止；存储调用的关闭与已开始写入的结算见下方 RPC 通道。
 

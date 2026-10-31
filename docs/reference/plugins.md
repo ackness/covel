@@ -1327,7 +1327,10 @@ contributes:
 - **记录 schema。** 写入后的值（对 `plugin.data.update` 是应用操作之后的结果）必须满足 `schema`。
 - 违反任何一条，这条 proposal 以 `code: "dataset-violation"` 被拒，按提交单元规则处理。宿主没有拿到 schema 文档时，写入一律被拒，不会放过。
 - `key` 在提交时不检查。数据集工具按[数据集键规则](./tools.md#键的规则与查找) `datasetKey(...)`（SDK 导出）规范化键，查找时先找原样的键，再找规范化的键。插件代码写同一个数据集时，用 `datasetKey(...)` 生成键，才能落在工具找得到的行上。
-- 不经过提交流水线的写入不做这些检查：世界数据的导入和同步（按 source 的 `schema` 校验，见 [World Data · 配套插件数据](./world-data.md#配套插件数据)）、plugin action RPC 的 `context.store.setPluginData`，以及管理 API 的 `PUT`。
+- plugin action / command RPC 的 `context.store.setPluginData`、世界数据导入和同步也使用同一套数据集规则。整条记录的预置、替换和投影输出都算 `set`；同步真正移除托管记录时需要 `delete`，替换过程中的内部删除不另需 `delete`。`force` 不绕过这些规则。
+- 策略来自注册包的声明和捕获的 schema，不依赖 runtime 是否存在，也不因信任或审批而放宽。schema 缺失、无法编译或使用 `$async` 时拒绝写入；记录错误最多报告 3 条。
+- 按实际存储的命名空间查策略：`_hidden.notes` 不继承 `notes` 的数据集规则。RPC 和导入保留原样的 key，不重写键，也不检查它与记录字段相等。
+- 管理 API 的 `PUT` / `DELETE` 保留为运维覆盖，不检查数据集 schema 或 `ops`；已有的授权、启用状态、保留命名空间和大小限制仍适用。
 
 详见[事务 · 操作式写入](./transactions.md#操作式写入plugindataupdate)。
 

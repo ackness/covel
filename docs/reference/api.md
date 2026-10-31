@@ -1313,7 +1313,7 @@ GitHub 插件安装和更新预览始终返回 `capabilities` 与 `trustedSource
 ### 插件数据（Plugin Data）
 
 > [!NOTE]
-> 内置 Web 界面只用这里的 GET 端点读取插件数据（右侧面板、消息区界面、插件数据缓存）。PUT / DELETE 是给管理工具和 API 客户端的写入口。插件 runtime 自己写数据时，推荐用 plugin-data 工具、插件 RPC 或 proposal。
+> 内置 Web 界面只用这里的 GET 端点读取插件数据（右侧面板、消息区界面、插件数据缓存）。PUT / DELETE 是给管理工具和 API 客户端的运维覆盖入口，不检查数据集 schema 或 `ops`；仍需通过会话授权、插件启用、保留命名空间与大小检查。插件 runtime 自己写数据时，推荐用 plugin-data 工具、插件 RPC 或 proposal。
 
 | 方法   | 路径                                                      | 描述                                    |
 | ------ | --------------------------------------------------------- | --------------------------------------- |
@@ -2100,7 +2100,7 @@ SSE。先发一个 `ready` 事件，之后每 15 秒发一行注释保持连接�
 
 预检也检查接收插件声明的[维度引用和候选值](./world-data.md)，错误诊断使用 `dimension-reference`，并带文件和记录位置。正式导入与同步使用同一检查。
 
-只读地预检一次 worldData 导入：告诉你会导入多少条、写到哪里，但什么都不写。
+只读地预检一次 worldData 导入：告诉你会导入多少条、写到哪里，但什么都不写。目的数据集违反 schema 或 `set` 规则时返回带 `sourceId` 和可用记录位置的 error 诊断。媒体占位值只检查 `set` 准入，实际索引记录的 schema 与最终大小在 apply 时检查；预检不物化媒体。
 
 请求有两种写法：
 
@@ -2160,6 +2160,8 @@ SSE。先发一个 `ready` 事件，之后每 15 秒发一行注释保持连接�
 | `sessionId` | string  | 是   | 要同步的会话，必须属于这个世界                                  |
 | `dryRun`    | boolean | 否   | 默认 `true`。`false` 才写入                                     |
 | `force`     | boolean | 否   | 覆盖普通导入 row 的 `modified` / `missing` 冲突。不绕过维度保护 |
+
+真正移除托管记录需要目的数据集的 `delete`；替换只需要 `set`。dry-run 和 apply 都报告拒绝，整次同步不做语义变化；`force` 不能绕过数据集 schema、`ops` 或大小规则。可选投影的无效输出则 warning 并推迟，保留旧记录和账本。
 
 **同步哪些数据:**
 
@@ -3152,6 +3154,8 @@ SSE。先发一个 `ready` 事件，之后每 15 秒发一行注释保持连接�
 
 ##### action 级
 
+action 与插件支持的 command 的 scoped store 按[数据集规则](./plugins.md#数据集contributesdatasets)检查每条 `setPluginData`：被拒记录不变，之前成功的调用保留。handler 可以捕获拒绝并返回自己的结果；未捕获时沿用生产安全的 `500`，不返回原始记录、schema 或文件路径。它不新增玩家回合或操作失败事件。
+
 调用插件在 `entry` 里用 `covel.registerRpc` 注册的 handler，或者框架默认 handler（如 `slash-debug`）。
 
 `action` 必须遵守[保留前缀规则](./plugins.md#contributes-字段)。把内部审批键作为普通 action 提交时返回 `400`，即使同名 handler 已在 registry 中也不会执行。
@@ -3937,7 +3941,8 @@ runtime 报告失败时，它的原始错误保留在 `result.runtimeResults` �
 
 - 操作式写入有两条路径：function runtime 的 `function-ctx.pluginData.update`，以及插件本地工具通过 `withPendingProposals` 提交的 `plugin.data.update`。两者都产生 `plugin.data.update` proposal，在提交事务里对当前存的值应用操作。见[事务 · 操作式写入](./transactions.md#操作式写入plugindataupdate)。
 - 产生 proposal 的路径（内置工具、`function-output:pluginData[]`、`function-ctx.pluginData.*`、本地工具的 `withPendingProposals`）在提交时按插件声明的[数据集](./plugins.md#数据集contributesdatasets)检查操作种类和记录 schema，违反时以 `code: "dataset-violation"` 拒绝。
-- `plugin-rpc:context.store.setPluginData` 和 `management-api:PUT …` 是不经过提交流水线的直接写入，不做数据集检查，也不读当前值；世界数据导入同样不受数据集检查（见 [World Data · 配套插件数据](./world-data.md#配套插件数据)）。
+- `plugin-rpc:context.store.setPluginData` 在立即写入前检查目的数据集的 `set` 和记录 schema；世界导入与同步也执行[目的数据集检查](./world-data.md#配套插件数据)，并在媒体转换后检查最终记录大小。
+- `management-api:PUT …` / DELETE 仍是运维覆盖，不受数据集 schema / `ops` 限制，保留授权、启用状态、命名空间和大小检查。
 
 #### `GET /api/plugins`
 

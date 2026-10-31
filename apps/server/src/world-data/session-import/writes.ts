@@ -29,7 +29,11 @@ import type {
   PlannedWrite,
   WorldDataImportedMediaRef,
 } from "./types.js";
-import { lorebookPosition, lorebookStrategy } from "./validation.js";
+import {
+  finalPluginWriteDiagnostics,
+  lorebookPosition,
+  lorebookStrategy,
+} from "./validation.js";
 
 async function existingKeySet(options: {
   store: StoreTransaction;
@@ -184,6 +188,13 @@ export async function writeImportPlan(options: {
   });
   try {
     const materializedWrites = [...materialized.writes];
+    const failures = finalPluginWriteDiagnostics(
+      options.plan,
+      materializedWrites,
+    );
+    if (failures.length)
+      throw new Error(failures.map((failure) => failure.message).join("; "));
+
     const dimensionWrites = materializedWrites.filter(
       (write) =>
         write.kind === "plugin-data" &&

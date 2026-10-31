@@ -351,3 +351,11 @@ export {
   type PluginFaultState,
   type FaultTransition,
 } from "./faults/plugin-fault-latch.js";
+
+export {
+  datasetFailure,
+  datasetPolicyResolver,
+  type DatasetPolicy,
+  type DatasetPolicyResolver,
+  type DatasetSchemas,
+} from "./plugin-data-validation.js";

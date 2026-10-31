@@ -65,6 +65,8 @@ A session may have several player characters. The two narrator plugins follow th
 | [Affinity](./rpg.md) `affinity`                | Tracks numeric player–NPC affinity and supplies current scores to narration                   |               |
 | [Hidden Story Events](./rpg.md) `story-events` | Story events that only happen when their conditions are met                                   |               |
 
+Inventory and affinity world-seeded records pass dataset validation; sync can remove seeded records deleted from their authoritative source.
+
 ### Characters and world
 
 Character, fact, and dimension tracking retain each narrative segment’s speaker or actor. The player message remains a separate source; see [Characters and World](./world.md).

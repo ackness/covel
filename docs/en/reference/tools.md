@@ -1209,6 +1209,8 @@ This rule is enforced in one place, by `reservedPluginDataNamespaceError()` (`pa
 - `ctx.pluginData` in a function runtime or an agent guard
 - The store view of an RPC handler. Every plugin's RPC action, including those of bundled plugins, gets an immediate write capability bound to the session and the plugin through `createRpcHandlerStoreView()`
 
+RPC scoped-store `setPluginData` also uses the [dataset rules](./plugins.md#datasets-contributesdatasets), checking `set` and the record schema for the bound owning plugin and physical namespace. Refusal leaves that record unchanged; earlier successful calls remain persisted. Management REST writes remain operator overrides.
+
 Neither kind of plugin handle exposes the host's transaction, session lifecycle, or store-closing methods. The framework's own privileged writers (the background job runner and the runtime log) call the store directly and do not use these entry points.
 
 <a id="size-limit-for-one-value"></a>
@@ -1232,6 +1234,8 @@ The same limit applies at every write entry point:
 | `ctx.pluginData.set` / `ctx.pluginData.update`, the store view of an RPC handler | The write fails                                                                                                   |
 | REST `PUT /api/sessions/:id/plugin-data/...`                                     | Returns `413`                                                                                                     |
 | World package import                                                             | The record gets an error diagnostic. The import fails and is not truncated. `pnpm validate:world` reports it too. |
+
+Import and sync also check the same limit on the final stored JSON after selecting records and materializing media; read-only preflight does not materialize media.
 
 For reference, the largest seed record in the bundled worlds is about 7 KB. To store more, split it into several keys, or keep only the part that later turns will read.
 
