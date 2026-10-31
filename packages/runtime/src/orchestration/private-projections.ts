@@ -11,6 +11,7 @@ import {
   parseJsonText,
 } from "@covel/tools";
 import type { TurnEmitter } from "../trace/turn-emitter.js";
+import { loopStepDigestOf } from "../agent-loop/loop-step-digest.js";
 
 /** Kernel-owned call provenance; the live transcript is never edited. */
 export class PrivateDelegationProjection {
@@ -108,11 +109,28 @@ export class PrivateDelegationProjection {
               : call;
           })
         : undefined;
-      return {
+      const copy: Record<string, unknown> = {
         ...message,
         ...(privateResult ? { content: "[Private delegation result]" } : {}),
         ...(toolCalls ? { toolCalls } : {}),
       };
+      const digest = loopStepDigestOf(message);
+      if (digest?.steps.some((step) => this.calls.has(step.callId)))
+        copy.content = [
+          digest.header,
+          ...digest.steps.map((step) =>
+            this.calls.has(step.callId)
+              ? "- [Private delegation step]"
+              : step.text,
+          ),
+        ].join("\n");
+      if (this.calls.size) {
+        // Opaque native state and reasoning may repeat private calls or results,
+        // including on later messages without a private tool call of their own.
+        delete copy.providerContinuation;
+        delete copy.reasoningContent;
+      }
+      return copy;
     };
     return {
       ...inner,
