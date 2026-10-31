@@ -1828,10 +1828,10 @@ What the summary has and does not have:
 
 - It has no `lore` and no `dimensions`.
 - Optional top-level `updateAvailable` compares package files with the digest saved when the record was imported: `true` means different, `false` means identical. It is omitted when there is no package, no saved digest, or the package cannot currently be read. Each read checks again without writing the world record or querying GitHub.
-- `metadata` keeps only these keys: `source`, `storage`, `packageManaged`, `generated`, `cover`, `accentColor`, `supportedLocales`, `packageInfo`, `defaultViewMode`, `pluginSettings`, plus `name` / `description` inside `localizedText`.
+- `metadata` keeps only these keys: `source`, `storage`, `packageManaged`, `generated`, `cover`, `accentColor`, `supportedLocales`, `packageInfo`, `defaultViewMode`, `pluginSettings`, `plugins`, `pluginPitch`, plus `name` / `description` inside `localizedText`.
 - The setting text for each language, `localizedText.lore`, is not in the summary.
-- For the other keys (`dimensions`, `embeddedCharacters`, `embeddedLorebook`, `characterSchema`, `plugins`, `worldData`, and so on), read the full record with `GET /api/worlds/:id`.
-- For the result of resolving a world's plugin policy, see `GET /api/worlds/:id/plugin-plan`.
+- For the other keys (`dimensions`, `embeddedCharacters`, `embeddedLorebook`, `characterSchema`, `worldData`, and so on), read the full record with `GET /api/worlds/:id`.
+- For the result of resolving a world's plugin selection, see `GET /api/worlds/:id/plugin-plan`.
 
 The list for the four built-in worlds is about 3.9 KB.
 

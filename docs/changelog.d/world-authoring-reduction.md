@@ -5,4 +5,4 @@
 
 ### Added
 
-- **World introductions default to public name, summary and tags.** Optional `pluginPitch` fields override each value independently, with locale resolution at display time. Derived text never reads private lore and is never saved as authored data.
+- **World introductions default to public name, summary and tags.** Optional `pluginPitch` fields override each value independently, with locale resolution at display time. Revisions preserve edits and removals, resolving translated pitch to the world's content language before writing authored YAML. Derived text never reads private lore and is never saved as authored data.

@@ -1137,16 +1137,16 @@ After a namespace declares `search`, its records enter the framework's memory re
 - A built-in gameplay pack (`packs/builtin.yaml`) can also have `defaultViewMode` (`stage`, `parsed` or `plugin:<pluginId>:<viewId>`; bridge views request player consent first). When a world is created with AI for this pack, the generated world gets this `defaultViewMode`. The framework makes no decision by pack ID: the choices of AI world creation are all the packs of this catalogue; see `packs` in [`GET /api/framework/authoring`](./api.md#get-apiframeworkauthoring).
 - A recommendation is not enabled automatically, and it does not override the player's explicit exclusion.
 - `defaultPluginIds` from `GET /api/worlds/:id/plugin-plan` is the initial set of explicit requests. The session-prep screen and the create endpoint then use the same resolver to compute the active set.
-- Each `requested` list and `defaultPluginIds` returned by this endpoint contains only installed plugins. A plugin that a world or pack requests but that is not installed is listed in `missing`. The session-prep screen shows it as a notice, and it is not sent in the create request.
+- Each `requested` list and `defaultPluginIds` returned by this endpoint contains only installed plugins. A plugin that a world or pack requests but that is not installed appears as a `missing-plugin` item in `diagnostics`, retaining its `pluginId`, field `path` and optional `packId`. Unknown packs produce `unknown-pack` items with their reference locations. The prep screen shows these notices, and missing plugin IDs stay out of the create request.
 
 **Switching the gameplay pack on the session-prep screen.**
 
 - Switching packs does not change the view mode. A pack's `defaultViewMode` is written into the world only during AI world generation.
 - Switching replaces the requests that the previous pack contributed, including the pack the world selected at the start.
-- A plugin in the initial default requests that the initial pack requests belongs to that pack. After a switch, it is kept only if the new pack also requests it. This lets the new pack's narrative engine replace the old pack's engine.
+- A plugin requested only by the initial pack belongs to that pack. After a switch, it stays only if the new pack also requests it. A matching independent `plugin:` request from the world keeps the plugin selected; pack and independent requests retain separate ownership.
 - The world's independent plugin references and the requests the player added by hand are kept. An explicit exclusion still wins.
 - A manual change clears the highlight on the pack card. The source of the old pack is still remembered, though, so the next switch does not add the old pack's plugins back. A plugin in a pack that the player re-enables by hand is kept as a manual choice.
-- The resolver still checks the world's contract references on its own. Do not treat `plus` as a required item that cannot be canceled.
+- The resolver still checks the world's contract references on its own. Independent plugin references can still be canceled.
 - A gameplay pack can have `excluded`: choosing the pack turns those plugins off, `kind: core` ones included, and the player can turn them back on. Switching to the next pack lifts only the exclusions the previous pack added; the player's own exclusions stay. The exclusions of the pack the world selects at the start apply from the beginning. A plugin that is not installed does not appear in `excluded`.
 - The "Back to the minimal set" button keeps only the narrative plugins (the selected ones, or the core ones when none is selected) and the plugins that these and the world's contract references pull in. It adds no extra requirement for a `world.dimensions@1` provider. Every other core plugin and every plugin in the world's independent plugin references is excluded, and the pack highlight is cleared.
 

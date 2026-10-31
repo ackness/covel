@@ -4,6 +4,8 @@ import { parse as parseYaml, stringify as stringifyYaml } from "yaml";
 import type { WorldSections } from "@covel/create";
 import {
   DEFAULT_LOCALE,
+  pluginPitchSchema,
+  resolveI18nText,
   resolveWorldDimensionsLocale,
   validateWorldManifest,
   type WorldDimensions,
@@ -103,6 +105,7 @@ function contentFromRecord(record: WorldRecord): PackageContent {
 function manifestOf(record: WorldRecord): Entry {
   const metadata = record.metadata ?? {};
   const locale = record.locale ?? DEFAULT_LOCALE;
+  const pitch = pluginPitchSchema.safeParse(metadata.pluginPitch);
   const dimensions = (record.dimensions ?? metadata.dimensions) as
     WorldDimensions | undefined;
   const keep = (key: string) =>
@@ -116,7 +119,16 @@ function manifestOf(record: WorldRecord): Entry {
     defaultLocale: locale,
     ...(record.tags?.length ? { tags: record.tags } : {}),
     ...keep("plugins"),
-    ...keep("pluginPitch"),
+    ...(pitch.success
+      ? {
+          pluginPitch: Object.fromEntries(
+            Object.entries(pitch.data).map(([key, text]) => [
+              key,
+              resolveI18nText(text, locale),
+            ]),
+          ),
+        }
+      : {}),
     ...keep("pluginSettings"),
     ...keep("characterSchema"),
     ...keep("defaultViewMode"),
