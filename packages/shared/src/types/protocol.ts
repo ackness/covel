@@ -460,6 +460,14 @@ export type CovelEvent =
       readonly type: "proposal.failed";
       readonly payload: ProposalFailedPayload;
     }
+  | {
+      readonly type: "operation.failed";
+      readonly payload: {
+        readonly sessionId: string;
+        readonly turnId: string;
+        readonly count: number;
+      };
+    }
   // System
   | { readonly type: "error.occurred"; readonly payload: ErrorOccurredPayload }
   // Suspend / Resume
@@ -650,6 +658,7 @@ export const COVEL_EVENT_META = {
   // Direct write onto the action stream by the commit-owning route (like
   // the flag only governs eventBus forwarding.
   "proposal.failed": { forwardToActionStream: false },
+  "operation.failed": { forwardToActionStream: false },
   "error.occurred": { forwardToActionStream: false },
   "turn.suspended": { forwardToActionStream: true },
   "turn.resumed": { forwardToActionStream: true },

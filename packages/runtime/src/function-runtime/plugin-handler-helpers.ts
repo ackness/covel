@@ -25,7 +25,9 @@ import type { Proposal, Session, SetupRuntimeState } from "@covel/shared";
 import {
   applyDataOps,
   dataOpsSchema,
+  isHiddenPluginDataNamespace,
   pluginCodeNamespaceWriteError,
+  ToolError,
   pluginDataEntry,
   readEnvChoice,
   readEnvString,
@@ -375,6 +377,174 @@ export function createPluginDataWriter(
   };
 }
 
+/**
+ * The writer a write service's handler gets for its provider's own data.
+ *
+ * Writes go to `buffer` (one call's writes, carrying the provider's
+ * identity); the registry stages them as one operation when the call
+ * succeeds. Reads overlay, in order: committed rows, upstream writes of the
+ * provider in this execution (`visibility`, which records the producers a
+ * read saw on the caller's recorder), the operations the caller already
+ * staged for the provider (`staged`), and this call's buffer. The last two
+ * record nothing.
+ *
+ * Errors are the model-facing kind a caller can act on: a write into any `_`
+ * namespace, bad operations or an oversized value are `invalid-input`, and
+ * an `update` that does not apply to the current view is `conflict`. Once
+ * `signal` aborts (the call ended, timed out or was cancelled) every method
+ * throws.
+ */
+export function createServicePluginDataWriter(args: {
+  readonly store?: Pick<DataStore, "getPluginData" | "listPluginData">;
+  readonly identity: HandlerHelperContext;
+  readonly signal: AbortSignal;
+  readonly visibility?: PluginDataVisibility;
+  readonly staged: () => readonly Proposal[];
+  readonly buffer: ExecutionWriteBuffer;
+}): PluginDataWriter {
+  const { store, identity, signal, visibility, buffer } = args;
+  const { sessionId, pluginId } = identity;
+  const live = () => signal.throwIfAborted();
+  const overlay = () => [...args.staged(), ...buffer];
+  const writable = (namespace: string) => {
+    live();
+    if (typeof namespace !== "string" || namespace.startsWith("_"))
+      throw new ToolError(
+        "invalid-input",
+        `A write service cannot write the reserved namespace "${String(namespace)}".`,
+      );
+    const reserved = pluginCodeNamespaceWriteError(namespace);
+    if (reserved) throw new ToolError("invalid-input", reserved);
+  };
+  const sized = (namespace: string, key: string, value: unknown) => {
+    const error = pluginDataSizeError(pluginId, namespace, key, value);
+    if (error) throw new ToolError("invalid-input", error);
+  };
+  const readKey = async (namespace: string, key: string) => {
+    const row = await store?.getPluginData(sessionId, pluginId, namespace, key);
+    live();
+    const base: DataOpsCurrent = row
+      ? { exists: true, value: row.value as JsonValue }
+      : { exists: false };
+    return {
+      base,
+      ...readPluginDataKey(
+        visibility,
+        overlay(),
+        pluginId,
+        namespace,
+        key,
+        base,
+      ),
+    };
+  };
+  return {
+    async get(namespace: string, key: string) {
+      live();
+      if (isHiddenPluginDataNamespace(namespace)) return null;
+      const { base, current, producers } = await readKey(namespace, key);
+      const visible = current.exists ? current.value : null;
+      noteRead(visibility, {
+        kind: "get",
+        namespace,
+        key,
+        visible,
+        producers,
+        withoutUpstream: () => {
+          const own = overlayPluginDataValue(
+            overlay(),
+            pluginId,
+            namespace,
+            key,
+            base,
+          );
+          return own.exists ? own.value : null;
+        },
+      });
+      return structuredClone(visible);
+    },
+    async list(namespace: string) {
+      live();
+      if (isHiddenPluginDataNamespace(namespace)) return [];
+      const rows =
+        (await store?.listPluginData(sessionId, pluginId, namespace)) ?? [];
+      live();
+      const merged = mergePluginDataRows(
+        rows,
+        overlay(),
+        sessionId,
+        pluginId,
+        namespace,
+        visibility?.writes,
+      );
+      noteRead(visibility, {
+        kind: "list",
+        namespace,
+        visible: observedRows(merged),
+        producers: listPluginDataProducers(visibility, namespace),
+        withoutUpstream: () =>
+          observedRows(
+            mergePluginDataRows(
+              rows,
+              overlay(),
+              sessionId,
+              pluginId,
+              namespace,
+            ),
+          ),
+      });
+      return structuredClone(merged.map(pluginDataEntry));
+    },
+    async set(namespace: string, key: string, value: unknown) {
+      writable(namespace);
+      if (value === null) {
+        bufferPluginDataDelete(buffer, identity, namespace, key);
+        return;
+      }
+      sized(namespace, key, value);
+      bufferPluginData(buffer, identity, namespace, key, value);
+    },
+    async delete(namespace: string, key: string) {
+      writable(namespace);
+      bufferPluginDataDelete(buffer, identity, namespace, key);
+    },
+    async update(namespace: string, key: string, ops: unknown) {
+      writable(namespace);
+      const parsed = dataOpsSchema.safeParse(ops);
+      if (!parsed.success) {
+        const issues = parsed.error.issues
+          .slice(0, 3)
+          .map((issue) =>
+            issue.path.length > 0
+              ? `${issue.path.join(".")}: ${issue.message}`
+              : issue.message,
+          )
+          .join("; ");
+        throw new ToolError(
+          "invalid-input",
+          `pluginData.update: invalid ops (${issues})`,
+        );
+      }
+      const { current } = await readKey(namespace, key);
+      const result = applyDataOps(current, parsed.data);
+      if (!result.ok)
+        throw new ToolError(
+          "conflict",
+          `pluginData.update: ${result.error.message}`,
+        );
+      if (result.exists) sized(namespace, key, result.value);
+      live();
+      bufferPluginDataUpdate(
+        buffer,
+        identity,
+        namespace,
+        key,
+        structuredClone(parsed.data),
+      );
+    },
+  };
+}
+
 const LOG_LEVELS = ["debug", "info", "warn", "error"] as const;
 type LogLevel = (typeof LOG_LEVELS)[number];
 
@@ -652,8 +822,8 @@ export function createFunctionStoreView(
         ...(row ? { createdAt: row.createdAt, updatedAt: row.updatedAt } : {}),
       };
     },
-    // The public type takes a namespace; the builtin `plugin-data-list` tool
-    // omits it to list every namespace, as the store does.
+    // The public type takes a namespace; without one the view lists every
+    // namespace, as the store does.
     async listPluginData(namespace: string | undefined) {
       const stored = await store.listPluginData(sessionId, pluginId, namespace);
       const merged = mergePluginDataRows(

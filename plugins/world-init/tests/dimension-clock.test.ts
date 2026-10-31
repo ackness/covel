@@ -177,7 +177,7 @@ describe("the tracker beside a derived field", () => {
         },
       } as never,
     );
-    expect(getToolContent(result)).toMatchObject({ success: true });
+    expect(getToolContent(result)).toEqual({ updateCount: 1 });
     return getPendingProposals(result)[0]!.payload.updates;
   };
 

@@ -2,11 +2,12 @@
 
 工具是模型在一次运行中可以调用的函数：模型给出名字和参数，框架执行它，把结果回给模型。本页列出全部工具、每个工具的参数和返回，以及怎样写自己的工具、工具怎样把数据写进存储。写 runtime 提示词或写工具的插件作者需要它。
 
-工具分四类：
+工具分五类：
 
 - **builtin**：框架自带，任何插件都可以用。
 - **plugin**：插件在自己的 `entry` 模块里注册，只有这个插件能用。
 - **导入**：agent 在 `agent.tools.services` 里导入别的插件给模型用的服务，框架在 runtime 开始时为它生成一个工具，见[导入的服务工具](#导入的服务工具)。它不在注册表里，所以不在下面的概览表里。
+- **数据集**：agent 在 `agent.tools.datasets` 里列出本插件在 `contributes.datasets` 声明的数据集，框架在 runtime 开始时为每个数据集生成读写工具，见[数据集工具](#数据集工具)。它们也不在注册表里。
 - **注入**：框架按 runtime 的声明临时加上的工具，例如 `search-tools`。
 
 > [!NOTE]
@@ -24,10 +25,6 @@
 | create-choices | builtin | — | auto-allow | 创建选项列表 | 默认 |
 | create-notification | builtin | — | auto-allow | 显示通知消息 | 默认 |
 | render-ui | builtin | — | auto-allow | 渲染带独立 part 状态的 UI 块 | 默认 |
-| plugin-data-set | builtin | — | auto-allow | 写入插件持久化数据（单条） | 默认 |
-| plugin-data-set-batch | builtin | — | auto-allow | 批量写入插件持久化数据 | 默认 |
-| plugin-data-get | builtin | — | auto-allow | 读取当前插件持久化数据 | `readOnly`, `idempotent`, `concurrencySafe` |
-| plugin-data-list | builtin | — | auto-allow | 列出当前插件持久化数据 | `readOnly`, `idempotent`, `concurrencySafe` |
 | **sync-characters** | builtin | — | auto-allow | 原子批量创建/更新角色；新角色 ≤5、已有角色更新 ≤10 | 默认 |
 | **list-characters** | builtin | — | auto-allow | 列出本 session 所有角色（session 作用域，跨插件可见） | `readOnly`, `idempotent`, `concurrencySafe` |
 | **get-character** | builtin | — | auto-allow | 按 id、名字或别名查找单个角色 | `readOnly`, `idempotent`, `concurrencySafe` |
@@ -36,20 +33,20 @@
 | **emit-event** | builtin | — | auto-allow | 发射当前 session 已声明的领域事件（一次一个 topic），工具定义含 topic enum 与 payload schema | 默认 |
 | **suspend** | builtin | — | auto-allow | 用表单字段声明答案，挂起等待玩家输入，写 `suspensions` 表，可通过 resume API 恢复 | 默认 |
 | **runtime-done** | builtin | — | auto-allow | Agent 工具循环的结束信号——业务工具调用完毕后调用以结束本 runtime | 默认 |
-| **delegate** | builtin | — | auto-allow | 把一件事交给子 agent 运行并拿回它的输出；子 agent 不写入 | `readOnly` |
+| **delegate** | builtin | — | auto-allow | 把一件事交给子 agent 运行并拿回它的输出；可通过写服务暂存操作 | `stagesWrites` |
 | **search-tools** | 注入 | — | auto-allow | 延迟工具搜索——manifest 声明 `tools.defer` 时框架自动注入，BM25 检索并激活未预载工具 | — |
 | **memory-search** | builtin | — | auto-allow | 搜索记忆：对话历史与历史摘要(recall) + 长期知识库(archival，含 lorebook/角色/插件声明可检索的数据) | `readOnly`, `idempotent`, `concurrencySafe` |
 | initialize-world | local | world-init | auto-allow | 组合角色属性 schema 与维度声明初始化 | 默认 |
 | create-character-form | local | char-creator | auto-allow | 创建开场角色表单：只收集角色名与声明过的字符串/枚举属性，数值与复合属性保留默认值 | 默认 |
 | update-affinity | local | affinity | auto-allow | 批量应用本回合玩家对 NPC 的好感度变化；未知名字按 0 分新建，分数跨回合累计并限制在 [-100, 100] | 默认 |
 | advance-world-time | local | world-time | auto-allow | 结算本回合世界时间：提交已抵达的目标时间或时长，工具计算历法差值；随机模式只交原因，随故事提交 | 默认 |
-| dimension-rule-get | local | world-init | auto-allow | 维护时分页读取私有规则或值 schema | 默认 |
-| update-dimensions | local | world-init | auto-allow | 绑定本轮叙事，整批 CAS 更新或明确结算无变化 | 默认 |
-| submit-world-facts | local | world-ir | auto-allow | 以 Function Calling 参数提交并校验完整 `contract:world-ir@1` | 默认 |
+| dimension-rule-get | local | world-init | auto-allow | 维护时分页读取私有规则或值 schema | `readOnly`, `idempotent`, `concurrencySafe` |
+| update-dimensions | local | world-init | auto-allow | 绑定本轮叙事，整批 CAS 更新或明确结算无变化 | `idempotent` |
+| submit-world-facts | local | world-ir | auto-allow | 以 Function Calling 参数提交并校验完整 `contract:world-ir@1` | `stagesWrites: false`, `idempotent` |
 | sync-codex-entries | local | codex | auto-allow | 一次提交本轮图鉴变化，按标题新建或补充条目 | 默认 |
 | generate-guide | local | guide | auto-allow | 原子写入前情摘要、当前决策与玩家口吻快捷回复 | 默认 |
 | upsert-npc-graph | local | npc-graph | auto-allow | 批量写入 NPC 节点与关系边（按 name 引用，工具内部去重并分配短 ID） | 默认 |
-| plan-story-events | local | story-events | auto-allow | 校验剧情策划的后续隐藏事件（≤2/次，可撤回未发生的计划） | 默认 |
+| plan-story-events | local | story-events | auto-allow | 校验剧情策划的后续隐藏事件（≤2/次，可撤回未发生的计划） | `stagesWrites: false`, `idempotent` |
 | submit-dashscope-text-prompt | local | dashscope-image-gen | auto-allow | 提交文本画面提示并发射固定 DashScope 出图事件 | 默认 |
 | submit-dashscope-structured-prompt | local | dashscope-image-gen | auto-allow | 提交结构化画面提示并发射固定 DashScope 出图事件 | 默认 |
 | submit-openai-image-text-prompt | local | openai-image-gen | auto-allow | 提交文本画面提示并发射固定 OpenAI-compatible 出图事件 | 默认 |
@@ -176,7 +173,7 @@ export default function (covel) {
 
 两件相关的事：
 
-- **要保存数据**：改用 builtin 的 `plugin-data-set`（列在 `tools.builtin` 里）。它返回 `{ namespace, key }`，并把写入作为一条 `plugin.data` proposal 交给回合末的提交流程；模型读到的结果因此带有 `staged` 暂存提示。
+- **要保存数据**：在 `contributes.datasets` 里声明一个数据集，再在 runtime 的 `agent.tools.datasets` 里列出它，模型就得到 `<数据集>-upsert` 等类型化工具，见[数据集工具](#数据集工具)。也可以让自己的工具返回一条 `plugin.data*` proposal。两种写法都把写入交给回合末的提交流程，模型读到的结果因此带有 `staged` 暂存提示。
 - **要让界面或 HTTP 主动触发插件的一个动作**：那不是工具。在 entry 里用 `covel.registerRpc(action, handler)` 注册，通过 `POST /api/sessions/:id/plugin-rpc` 调用。RPC 不给模型用，不要写进 `tools.plugin`。
 
 #### 模型写错的参数 JSON
@@ -235,7 +232,6 @@ pnpm --filter @covel/runtime exec vitest run tests/proposal-type-contract.test.t
 
 builtin 工具是系统级的积木，适合被多个插件直接复用。例如：
 
-- `plugin-data-*`
 - `render-ui`
 - `create-form`
 - `create-choices`
@@ -455,123 +451,6 @@ interface UIRenderPart {
 
 工具返回 `{ ui: [{ parts, layout? }] }`，框架据此生成 `ui.render` proposal。每个 UI 块必须带 `parts`；没有 `parts` 的块会被拒绝。
 
-### plugin-data-set
-
-把一条数据写进插件的持久化存储。数据按 `(sessionId, pluginId, namespace, key)` 隔离。同一个 `(namespace, key)` 再写一次会覆盖旧值。
-
-| 参数      | 类型    | 必需 | 描述                                             |
-| --------- | ------- | ---- | ------------------------------------------------ |
-| namespace | string  | ✓    | 数据命名空间（如 `schema`, `entries`, `config`） |
-| key       | string  | ✓    | 数据键名                                         |
-| value     | unknown | ✓    | 要存储的 JSON 数据                               |
-
-**输出**: `{ namespace, key }`
-
-**治理路径**: 写入不是立即落库。它经会话内核的提交流程提交，和其他写入一样经过 `PreStateCommit` / `PostStateCommit`、trace 和存储事务。
-
-#### 单个值的大小上限
-
-一个值序列化成 JSON 后不得超过 **256 KiB**（UTF-8 字节；`MAX_PLUGIN_DATA_VALUE_BYTES`，`packages/shared/src/utils/plugin-data-limits.ts`）。
-
-超出时发生什么：
-
-- `plugin-data-set` / `plugin-data-set-batch` 在调用时就报错：`The value for <namespace>/<key> is N bytes; the limit for one value is 262144 bytes. …`。批量里有一条超限，整个调用失败。模型据此少写或拆分，不用等到提交时连同这个 runtime 的其他写入一起被丢掉。
-- 其他入口上写入失败。错误写明插件 ID、`namespace/key`、实际字节数和上限。已存的值不变，也不会被截断。
-
-同一个上限适用于所有写入口：
-
-| 入口                                                                      | 超限时                                                                        |
-| ------------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
-| 工具 `plugin-data-set` / `plugin-data-set-batch`                          | 调用时报错                                                                    |
-| `plugin.data` / `plugin.data.batch` 的提交                                | 提交失败                                                                      |
-| `plugin.data.update` 的提交（按操作之后的结果算）                         | 提交失败                                                                      |
-| `ctx.pluginData.set` / `ctx.pluginData.update`、RPC handler 的 store view | 写入失败                                                                      |
-| REST `PUT /api/sessions/:id/plugin-data/...`                              | 返回 `413`                                                                    |
-| 世界包导入                                                                | 该记录得到一条 error 诊断，导入失败、不截断。`pnpm validate:world` 同样报告。 |
-
-作为参照，内置世界里最大的一条种子记录约 7 KB。要存更多内容时，拆成多个 key，或只保留之后的回合会读的部分。
-
-#### 保留命名空间
-
-`_` 开头的 namespace 属于框架自己的记账，插件不能写。例如 `_jobs`（旧的后台任务）、`_runtime_jobs`（detached 作业）、`_logs`（runtime 日志环）。读取不受影响。
-
-这条限制由 `reservedPluginDataNamespaceError()`（`packages/shared/src/utils/plugin-data-namespace.ts`）统一实施，覆盖插件一侧的全部写入口：
-
-- REST `PUT /api/sessions/:id/plugin-data/...`
-- `plugin.data` / `plugin.data.batch` 的提交，包括由函数 runtime 的输出规范化出来的 proposal
-- 函数 runtime 和 agent guard 的 `ctx.pluginData`
-- RPC handler 的 store view。所有插件的 RPC action（包括内置插件的）都通过 `createRpcHandlerStoreView()` 得到一个绑定了会话和插件的即时写入能力
-
-两类插件句柄都不暴露宿主的事务、会话生命周期或关闭存储的方法。框架自己的特权写入者（后台任务运行器、runtime 日志）直接调用 store，不走这些入口。
-
-### plugin-data-set-batch
-
-一次调用写入多条数据。模型不用逐条调用，省掉很多轮往返。适合一次要写入大量条目的场景，例如世界初始化。
-
-| 参数  | 类型                           | 必需 | 描述                     |
-| ----- | ------------------------------ | ---- | ------------------------ |
-| items | Array<{namespace, key, value}> | ✓    | 要批量写入的数据条目数组 |
-
-每个 item:
-
-| 字段      | 类型    | 必需 | 描述               |
-| --------- | ------- | ---- | ------------------ |
-| namespace | string  | ✓    | 数据命名空间       |
-| key       | string  | ✓    | 数据键名           |
-| value     | unknown | ✓    | 要存储的 JSON 数据 |
-
-**输出**: `{ count, items: [{ namespace, key }] }`
-
-**治理路径**: 和单条写入一样经提交流程提交。整个批次是一条 proposal，Hook、trace 和事务的处理与单条写入一致。
-
-**设计原则**: 这是通用的批量写入。专用场景（例如世界初始化）建议插件写自己的工具，用更精确的 schema 引导模型生成结构正确的数据。
-
-### plugin-data-get
-
-从**当前插件**的存储里读一条数据。不允许跨插件读取。
-
-| 参数      | 类型   | 必需 | 描述         |
-| --------- | ------ | ---- | ------------ |
-| namespace | string | ✓    | 数据命名空间 |
-| key       | string | ✓    | 数据键名     |
-
-**输出**: `{ found, namespace, key, value?, updatedAt? }`
-
-`updatedAt` 保留存储中的时间，即使待提交写入改变了读到的值也不更新。只有待提交写入、没有已存记录的行不带它。绑定的 store view 和插件数据列表遵循同样的规则；未存储的行也不带 `createdAt`。
-
-**能读到自己刚写的。** 写入要到执行完成时才提交。但读取会把本次执行里还没提交的 `plugin.data` / `plugin.data.batch` / `plugin.data.delete` / `plugin.data.update` 叠加上去：
-
-- 只叠加**当前会话、当前插件**的待提交操作。
-- 同一个 key 按 proposal 的顺序应用，最后一次为准。删除后读取返回 `found: false`；之后再写入，读到新值。
-- 写入 `null` 是存了一个值，不等于删除。
-- `plugin.data.update` 的操作叠加在已存的值（或前面待提交的写入）之上，用的是提交时同一个 `applyDataOps`。操作在这个值上失败的那条更新被跳过，因为提交时它也会被拒。
-- 同一个插件里已经完成的上游 runtime 本次的写入也叠加上去，排在本 runtime 自己的写入前面，按提交顺序应用。其他插件、同一层的兄弟 runtime、重试和后台作业带来的上游结果不叠加。规则见[执行内的插件数据可见性](./plugins.md#执行内的插件数据可见性)。
-- 读到上游写入的 runtime 依赖那次写入：上游在提交时被丢弃，辅助 runtime 一起丢弃。
-- 工具上下文带 `context.store` 时，两个读取工具都经它读取，所以看到的内容和函数 handler 的 `ctx.store` 一样，并记下读取依赖；没有 `context.store` 的宿主只叠加 `context.pendingProposals`。
-
-**读不到的东西。**
-
-- 隐藏世界数据（`_hidden.<namespace>`，来自 `visibility: hidden` 的 source，或插件在剧情中追加的）不会返回给模型，读取一律是 `found: false`。
-- 任何 `_` 开头的内核 namespace 都不向模型暴露。
-- `plugin-data-set` / `plugin-data-set-batch` 拒绝任何 `_` 开头的 namespace，所以模型也不能借通用工具写入隐藏数据。
-
-### plugin-data-list
-
-列出**当前插件**某个 namespace 下的全部条目。
-
-| 参数      | 类型   | 必需 | 描述                           |
-| --------- | ------ | ---- | ------------------------------ |
-| namespace | string |      | 数据命名空间（不传则列出所有） |
-
-**输出**: `{ count, items: [{ namespace, key, value, updatedAt? }] }`
-
-- 和 `plugin-data-get` 一样，叠加本次执行里没提交的写入和删除，包括同插件上游 runtime 的写入。被删除的条目不出现在列表里。
-- 带 `namespace` 的列表依赖写过这个 namespace 的全部上游 runtime；不传时依赖写过插件数据的全部上游 runtime。
-- `namespace` 过滤同样作用于待提交的条目。不传时合并所有 namespace。
-- 隐藏世界数据的 namespace 不出现在结果里。
-
-读取和合并按完整的 `(namespace, key)` 这一对字符串精确匹配，不按控制字符拆分，也不改写字段。框架导出的 `overlayPluginDataRows()` 用 `JSON.stringify([namespace, key])` 作为 Map 的 key；它的第四个参数 `baseRows` 是已存的行，`plugin.data.update` 从这些行开始应用操作。函数 runtime 和 guard 的缓冲读取遵循同样的规则。
-
 ### runtime-done
 
 agent 用它告诉框架“我做完了”。业务工具都调用完之后调用它，这个 runtime 就结束，不用再让模型写一段收尾的话。只有成功的 `runtime-done` 调用返回结束哨兵才会结束循环；其他工具返回同名字段只是普通数据。
@@ -723,7 +602,7 @@ agent 用它告诉框架“我做完了”。业务工具都调用完之后调�
 
 模型看到的 `topic` schema 是本会话公开 topic 的 enum。`data` 带上对应的 payload schema；多个 topic 时放在 `data.anyOf` 中，每支的 `title` 是 topic。只有一个 topic 时直接使用该 schema，省略 `$schema` / `$id`。包含 `$ref` / `$defs` 或无法读取的 schema 只展示普通对象。没有公开 topic 时使用通用定义。
 
-每回合准备工具时刷新这份定义，不要求会话有角色 schema。执行时仍接受字符串 topic，并由目录的 Ajv 校验 payload：未知 topic 仍是 `refused`，不会变成 `invalid-input`。提示词目录保持原样。
+每回合准备工具时刷新这份定义，不要求会话有角色 schema。执行时仍接受字符串 topic，并由目录的 Ajv 校验 payload：未知 topic 仍是 `refused`，不会变成 `invalid-input`。提示词目录保留 topic、描述和必填字段摘要；工具定义已包含的 payload schema 不再重复。schema 在任意深度含 `$ref` / `$defs` 时，目录仍显示完整 payload schema；读取失败时只标注 `(schema unavailable)`。事件发射说明指向工具定义中的 topic 和 payload 格式。
 
 #### 一次调用的四种结果
 
@@ -864,14 +743,14 @@ agent runtime 用它把一件事交给[子 agent](./plugins.md#子-agent)：另�
 | data     | object | —    | 子 agent 需要的事实，JSON 对象，最多 32 KB                                       |
 | maxSteps | number | —    | 子 agent 的步数上限，只能比提供方自己的更低                                      |
 
-**输出**：成功时，模型收到 `{data: output}`，其中 output 经过 `modelFacingJson`，不含簿记字段；代码仍读取原始输出；`stopReason` 和用量只记在 `subagent.completed` 里。`delegate` 列在 `completeAfterTools` 里时，这份输出直接作为调用方的输出接受校验。失败时收到 `{error:{code,message,hint?}}`，`code` 是 `ctx.agents.run` 的错误码之一。除 `invalid-input` 外的失败不算这个 runtime 的工具失败，模型可以换个办法继续。
+**输出**：成功时，模型收到 `{data: output}`；本次委托暂存了操作时还带 `staged: {count, kinds, notice}`，只统计这次委托的操作，说明仍需等回合提交、可能被拒绝。其中 output 经过 `modelFacingJson`，不含簿记字段；代码仍读取原始输出；`stopReason` 和用量只记在 `subagent.completed` 里。`delegate` 列在 `completeAfterTools` 里时，这份输出直接作为调用方的输出接受校验。失败时收到 `{error:{code,message,hint?}}`，`code` 是 `ctx.agents.run` 的错误码之一。除 `invalid-input` 外的失败不算这个 runtime 的工具失败，模型可以换个办法继续。
 
 **注意事项**：
 
 - 调用由内核在 agent 循环里接住，不交给工具本身执行。trace 和普通工具一样：`tool.calling` / `tool.completed` / `tool.failed`，`approvalStatus` 是 `auto-allowed`。子 agent 的事件用 `parentCallId` 指回这次调用。
 - 上限：一次执行最多同时运行 8 个子 agent，超过的调用立刻得到 `unavailable`。子 agent 拿不到 `delegate`，不能再往下调用。
-- 子 agent 只能用只读工具，自己的写入工具被拿掉；它不产生 proposal，调用方的提交不受它影响。
-- 注解是 `readOnly`，但不是 `idempotent` 也不是 `concurrencySafe`：两次运行的答案不一样。
+- 子 agent 保留只读工具和服务导入；调用方允许暂存操作时，也保留写服务。操作随调用方的提交单元提交，子 agent 失败时撤回。
+- 注解为 `readOnly: false`、`stagesWrites: true`、`idempotent: false`、`concurrencySafe: false`。
 
 契约声明在 `packages/tools/src/builtin/delegate.ts`，执行逻辑在 `packages/runtime/src/agent-loop/subagent-delegate.ts` 和 `subagent-runner.ts`。
 
@@ -1050,7 +929,7 @@ Character "苏婉" (npc) already exists as char-abc123. No new record created. U
 
 `char-creator/player-init` 用插件工具 `create-character-form` 包装通用的 `create-form`：
 
-`create-character-form` 的模板和默认值检查失败时返回 `invalid-input`，包括缺少 `{{characterName}}` 占位符。模型修正后才能发布交互；下游意外异常保留原分类。
+`create-character-form` 的字段、模板和默认值检查失败时都返回 `invalid-input`，包括不可收集的字段、字符串输入类型错误、非原有枚举选项、缺少必填姓名字段，以及缺少 `{{characterName}}` 占位符。模型修正后才能发布交互；下游意外异常保留原分类。
 
 - 只允许必填的 `characterName`，以及世界 schema 里的 string / enum 字段。enum 的提交值必须来自原来的 options。
 - 数字和复合属性保留默认值，不能改成叙事里的 select。
@@ -1197,6 +1076,163 @@ Attributes:
   status: wounded
 ```
 
+<a id="plugin-data-set"></a>
+
+## 数据集工具
+
+插件在 `contributes.datasets` 里声明一个数据集（记录的 JSON Schema、可选的键字段和允许的操作），agent runtime 再在 `agent.tools.datasets` 里列出它，框架就在 runtime 开始时为这个数据集生成一组带类型的读写工具。工具只读写调用方插件自己的这个 namespace，写入一律暂存成 proposal，交给回合末的提交流程。数据集本身的声明规则见[数据集](./plugins.md#数据集contributesdatasets)。
+
+数据集工具不在注册表里，所以不在概览表里，也不能写进 `tools.builtin` / `tools.plugin`。模型想保存数据，只能写进声明过的数据集；数据集的 schema 可以宽松到 `{ "type": "object" }`。插件自己的工具（返回 `plugin.data*` proposal）和函数 runtime 的 `ctx.pluginData` 不受影响。
+
+### 名字与选择
+
+数据集 `<d>` 最多生成四个工具：
+
+<!-- prettier-ignore -->
+| 工具 | 作用 | 注解 |
+| --- | --- | --- |
+| `<d>-get` | 按键读一条记录 | `readOnly`, `idempotent`, `concurrencySafe` |
+| `<d>-list` | 分页列出记录，可按顶层字段精确筛选 | `readOnly`, `idempotent`, `concurrencySafe` |
+| `<d>-upsert` | 写入整条记录：键已存在时替换，否则新建 | `stagesWrites`, `idempotent` |
+| `<d>-update` | 用操作修改一条已有记录 | `stagesWrites` |
+
+数据集提供哪些工具由声明里的 `tools` 决定。省略时从 `ops` 推出：总有 `get` 和 `list`；`ops` 含 `set` 时加 `upsert`；`ops` 含 `set` 以外的操作时加 `update`。四个工具都没有单工具时限。
+
+runtime 用两种写法选择：
+
+```yaml
+agent:
+  tools:
+    datasets:
+      - npcs # 数据集提供的全部工具
+      - { dataset: clock, tools: [get] } # 只取其中几个
+```
+
+- 不写 `datasets` 的 runtime 没有任何数据集工具，单 runtime 包的内联 runtime 也一样。
+- 函数 runtime 不能写 `datasets`，它用 `ctx.pluginData` 读写。
+- 工具名不带插件 ID 或版本。
+- story runtime 也可以选数据集工具。和 story 的其他写入一样，提交时被拒绝的写入会让回合回滚。
+
+加载、`pnpm validate:plugin` 和安装用同一套规则检查引用，在字段 `agent.tools.datasets.<i>`（选择的工具在 `.tools.<j>`）上报告：
+
+- 数据集没有在 `contributes.datasets` 里声明；
+- 选了数据集不提供的工具；
+- 生成的名字超过 64 个字符，所以被引用的数据集名最多 57 个字符；
+- 生成的名字和框架工具、runtime 的 `tools.builtin` / `tools.plugin`、包的 `contributes.tools` 或导入服务的工具名重名，例如数据集 `world-dimension` 会生成框架已有的 `world-dimension-get`；
+- 同一个数据集列了两次。
+
+### 参数与返回
+
+<!-- prettier-ignore -->
+| 工具 | 参数 | 返回 |
+| --- | --- | --- |
+| `<d>-get` | `{ key }` | `{ key, record }` |
+| `<d>-list` | `{ where?, offset?, limit? }` | `{ total, items: [{ key, record }], nextOffset? }` |
+| `<d>-upsert` | 有键字段时 `{ record }`，没有时 `{ key, record }` | `{ key, record, created }` |
+| `<d>-update` | `{ key, ops }` | `{ key, record }`；执行了 `delete` 操作时为 `{ key, deleted: true }` |
+
+- `list` 按键排序。`where` 把记录的顶层字段和 string / number / boolean / null 值做精确比较；`offset` 默认 0，`limit` 1–50，默认 20。还有下一页时返回 `nextOffset`。
+- `update` 接受 1–64 条操作，种类是数据集的 `ops` 去掉 `set`；整条替换用 `upsert`。操作的写法和语义见[操作式写入](./transactions.md#操作式写入plugindataupdate)。
+- 返回里没有 `updatedAt` 或行 ID。结果按[统一返回格式](#统一返回格式与错误码)交给模型：正文在 `data` 里，写入工具另带 `staged` 暂存提示，说明 proposal 已暂存、提交时仍可能被拒绝。
+
+### 模型看到的 schema
+
+- `record` 参数就是数据集的 JSON Schema。schema 根上的 `$defs` / `definitions` 移到工具 schema 的根上，`#/$defs/…` 引用因此仍能解析；`$schema` 和 `$id` 被去掉；`pattern` 和 `tool()` 生成的 schema 一样处理。
+- `ops` 的每个元素是一种允许操作的对象 schema。
+- `key` 和 `where` 的描述写明键字段，并说明大小写和空格不影响查找。
+- 工具描述是英文，末尾附上数据集的 `description`。
+- 有的服务商不接受某些 JSON Schema 关键字，例如 `if` / `then`、外部 `$ref` 和 `patternProperties`。记录 schema 尽量写成普通的对象 schema。服务商拒绝时，只有这个 runtime 的请求失败。
+
+### 键的规则与查找
+
+数据集键的规则是 SDK 导出的 `datasetKey(text)`（`@covel/plugin-handlers-utils`，`@covel/shared` 也导出）：
+
+```ts
+text.normalize("NFKC").trim().replace(/\s+/gu, " ").toLowerCase();
+```
+
+- 新记录存在 `datasetKey(原始键)` 下。有键字段的数据集，原始键是 `record` 里键字段的值；没有键字段时是参数 `key`。
+- 键字段的值保持原样：`name: "Iron Sword"` 存在键 `iron sword` 下，记录里仍是 `"Iron Sword"`。
+- 查找先精确、后规范化：`get`、`update`，以及 `upsert` 判断替换还是新建时，先找存在原始键下的行，没有再找 `datasetKey(原始键)`。世界数据导入、RPC、REST `PUT` 或插件代码用别的写法存的行因此仍能找到。两种写法的行同时存在时（例如 `Sword_01` 和 `sword_01`），`get "Sword_01"` 和 `get "sword_01"` 返回不同的行。
+- 规范化之后为空的键，或长于 256 个 UTF-16 单元的键，返回 `invalid-input`。
+- `update` 不能改变键字段规范化之后的值，返回 `update cannot change <field>; upsert a new record and delete this one`。
+- 提交时不检查键。插件代码写同一个数据集时，用 `datasetKey(...)` 生成键，才能落在工具找得到的行上。
+
+### 调用时的检查
+
+写入工具在暂存 proposal 之前先算出结果并检查：
+
+1. 通过 `context.store` 读当前值。这是本插件的视图，叠加了本次执行里自己暂存的写入和同插件上游 runtime 的写入，并记下读取依赖，规则见[执行内的插件数据可见性](./plugins.md#执行内的插件数据可见性)。读取工具也经它读取。
+2. 用提交时同一个 `applyDataOps` 应用操作；`upsert` 相当于一条 `set`。
+3. 检查[单条记录的大小上限](#单个值的大小上限)。
+4. 用数据集的 schema 校验结果。
+
+任何一步失败，调用返回错误，什么也不暂存。检查通过后，每次写入暂存**一条** `plugin.data.update` proposal：`{ namespace: <d>, key, ops }`。`upsert` 的 ops 是 `[{ op: "set", value: record }]`，`update` 原样带上模型给的 ops。提交时照常再检查一遍（数据集策略、MediaRef 规范化、大小上限）；两次检查之间基值变了，提交仍可能拒绝。
+
+宿主没有提供 `context.store` 时，四个工具都返回 `unavailable`。
+
+### 错误
+
+<!-- prettier-ignore -->
+| 情况 | 错误码 |
+| --- | --- |
+| 参数形状不对，或 `update` 用了数据集不允许的操作 | `invalid-input` |
+| 键规范化之后为空或过长 | `invalid-input` |
+| 结果不符合 schema，消息列出前 3 条校验错误 | `invalid-input` |
+| 结果超过大小上限 | `invalid-input` |
+| 操作写错了（`invalid-op` / `invalid-path`），或 `update` 改了键字段 | `invalid-input` |
+| 操作写法正确，但和当前记录对不上（`path-not-found`、`type-mismatch`、`out-of-bounds`、`index-out-of-range`、`duplicate-item`） | `conflict`，写明操作序号；runtime 选了 `<d>-get` 时提示 `Read the record with <d>-get and adjust.` |
+| `get` / `update` 找不到记录 | `not-found`；runtime 选了对应工具时，`get` 提示 `List records with <d>-list.`，`update` 提示 `Create it with <d>-upsert.` |
+| 数据集的 schema 无法编译 | `internal`：`The <d> dataset's schema cannot be used.`，服务端另记一行日志 |
+| 宿主没有 `context.store` | `unavailable` |
+
+消息写数据集名和键，不写插件 ID。`conflict` 和 `invalid-input` 都算失败的业务调用。
+
+### 子 agent
+
+`delegate` 启动的子 agent 按提供方 runtime 自己的 `agent.tools.datasets` 选择数据集，只保留其中的 `<d>-get` / `<d>-list` 工具，并以提供方插件的身份读取数据。一个数据集只选了写入工具时，子 agent 拿不到它。
+
+<a id="保留命名空间"></a>
+
+### 不能到达的命名空间
+
+数据集名以字母开头，所以数据集工具到不了任何 `_` 开头的 namespace，包括隐藏世界数据 `_hidden.<namespace>`。
+
+`_` 开头的 namespace 属于框架自己的记账，插件不能写。例如 `_jobs`（旧的后台任务）、`_runtime_jobs`（detached 作业）、`_logs`（runtime 日志环）。读取不受影响。
+
+这条限制由 `reservedPluginDataNamespaceError()`（`packages/shared/src/utils/plugin-data-namespace.ts`）统一实施，覆盖插件一侧的全部写入口：
+
+- REST `PUT /api/sessions/:id/plugin-data/...`
+- `plugin.data` / `plugin.data.batch` 的提交，包括由函数 runtime 的输出规范化出来的 proposal
+- 函数 runtime 和 agent guard 的 `ctx.pluginData`
+- RPC handler 的 store view。所有插件的 RPC action（包括内置插件的）都通过 `createRpcHandlerStoreView()` 得到一个绑定了会话和插件的即时写入能力
+
+两类插件句柄都不暴露宿主的事务、会话生命周期或关闭存储的方法。框架自己的特权写入者（后台任务运行器、runtime 日志）直接调用 store，不走这些入口。
+
+<a id="单个值的大小上限"></a>
+
+### 单条记录的大小上限
+
+一个值序列化成 JSON 后不得超过 **256 KiB**（UTF-8 字节；`MAX_PLUGIN_DATA_VALUE_BYTES`，`packages/shared/src/utils/plugin-data-limits.ts`）。
+
+超出时发生什么：
+
+- 数据集写入工具在调用时就报错：`The value for <namespace>/<key> is N bytes; the limit for one value is 262144 bytes. …`。模型据此少写或拆分，不用等到提交时连同这个 runtime 的其他写入一起被丢掉。
+- 其他入口上写入失败。错误写明插件 ID、`namespace/key`、实际字节数和上限。已存的值不变，也不会被截断。
+
+同一个上限适用于所有写入口：
+
+| 入口                                                                      | 超限时                                                                        |
+| ------------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
+| 数据集工具 `<d>-upsert` / `<d>-update`                                    | 调用时报错                                                                    |
+| `plugin.data` / `plugin.data.batch` 的提交                                | 提交失败                                                                      |
+| `plugin.data.update` 的提交（按操作之后的结果算）                         | 提交失败                                                                      |
+| `ctx.pluginData.set` / `ctx.pluginData.update`、RPC handler 的 store view | 写入失败                                                                      |
+| REST `PUT /api/sessions/:id/plugin-data/...`                              | 返回 `413`                                                                    |
+| 世界包导入                                                                | 该记录得到一条 error 诊断，导入失败、不截断。`pnpm validate:world` 同样报告。 |
+
+作为参照，内置世界里最大的一条种子记录约 7 KB。要存更多内容时，拆成多个 key，或只保留之后的回合会读的部分。
+
 ## Plugin tools（内部来源标签：`local`）
 
 插件自带的工具。实现文件通常放在插件包自己的 `tools/` 或 `server/` 目录，用 `tool()` 创建，由 `entry` 导入并注册。下面是内置插件的工具。
@@ -1208,6 +1244,16 @@ Attributes:
 - 为每个 plugin 工具写独立的测试。
 - 持久化写入返回 `withPendingProposals(...)`，让提交流程负责落库。
 - 用 plugin 工具封装插件自己的数据 schema 和批量写入逻辑。
+
+### advance-world-time
+
+`advance-world-time` 缺少服务端提供的时钟或叙事输入时返回 `unavailable`。叙事开始后时钟变化报 `conflict`，应停止并等下一回合读取当前时钟；存储的 tick 损坏仍是内部异常。
+
+### plan-story-events
+
+**所属**: story-events (`plugins/story-events/tools/plan-story-events.js`)
+
+校验后续隐藏事件计划，返回确定性的计划内容，不产生 proposal，声明 `{stagesWrites:false, idempotent:true}`。缺少服务端提供的事件账本输入报 `unavailable`。参数语义校验失败报 `invalid-input`，消息按行保留去重后的问题列表；超过 1900 字符时截断并加省略号。模型据此修正计划后重交。
 
 <a id="set-world-schema"></a>
 <a id="set-world-dimensions"></a>
@@ -1240,7 +1286,7 @@ Attributes:
 | valueType    | enum           |      | `map` 的值类型（`string` / `number` / `boolean`）                     |
 | description  | I18nText       |      | 属性说明（字符串或 locale → string 记录）                             |
 
-**输出**: `{success, attributeCount, dimensionCount, worldSchema, preGameDone:true}`
+**正文输出**: `{success:true, attributeCount, dimensionCount, worldSchema, preGameDone:true}`。代码和 `world-data-provider@1` 继续读取这份完整内容。模型只看到 `summary`（例如 `World initialized: 15 attributes, 2 dimensions.`），没有 `data`；摘要按指令语言选择 English 或简体中文。暂存的改动仍附带 `staged` 提示。
 
 生成的 `defaultValue` 是每个新玩家和 NPC 的起始值，不是某个设定人物的示例。姓名、身份、背景等字段归入 `bio`，使用中性或空值。工具会把生成的 `bio` 字符串默认值清为空字符串，数组清为空数组，对象和 map 清为空对象，枚举则移除默认值；嵌套的个人信息采用同样的规则。数值和布尔默认值保留。世界作者提供的 schema 由 guard 原样采用，不经过这一步处理。
 
@@ -1271,6 +1317,8 @@ Attributes:
 | `offset` | integer           |      | 默认 0                                      |
 | `limit`  | integer           |      | 默认 6000，范围 1–6000，按 Unicode 字符分页 |
 
+声明 `{readOnly:true, idempotent:true, concurrencySafe:true}`，不产生 proposal。缺少叙事来源报 `unavailable`，未知维度报 `not-found`，版本变化报 `conflict`；此时停止，本回合不能重试，下一回合读取当前版本。
+
 返回 `{id,version,content,complete,nextOffset?}`。`complete:false` 时要继续取下一页，不能只凭被截断的规则预览就结算。
 
 ### update-dimensions
@@ -1281,7 +1329,11 @@ Attributes:
 
 参数：`{followsClock:[id], updates:[{id, value|changes, reason?}]}`
 
-返回 `{success,updateCount}` 和 `dimension.update` proposal。这个来源已经结算过时，返回 `{success,alreadySettled:true}`，不重复补算。
+返回 `{updateCount}` 和 `dimension.update` proposal。这个来源已经结算过时，返回 `{alreadySettled:true}`，不产生第二条 proposal。工具声明 `idempotent:true`。
+
+模型只看到摘要，没有 `data`：有更新时为 `Dimensions updated: N change(s).`，无变化为 `No change recorded.`，已结算为 `This turn's dimensions were already settled.`；简体中文指令下分别为「维度已更新：N 项改动。」「未记录改动。」「本回合的维度已结算。」。
+
+不安全路径、同时给出 `value` 和 `changes`、漏写随时钟变化的维度都报 `invalid-input`，并保留完整修正说明；时钟说明过长时截到 1900 字符后加省略号。未知维度报 `not-found` 并指出已知维度或条目所属的维度；缺少服务端提供的叙事输入报 `unavailable`。
 
 维度值校验失败（例如字符串超过声明的长度上限）在返回任何 proposal 之前报 `invalid-input`。版本冲突和意外异常不会被归类为输入错误。
 
@@ -1363,6 +1415,8 @@ schema 里带 `x-derive` 的字段由 `world-init/dimension-clock` 按时钟计�
 | `entities` / `relations` / `events` / `statements` | ✓    | 四类事实数组；无内容时传空数组，插件扩展字段放入各项 `attributes` |
 
 参数 schema 在 `worldIRV1Schema` 上增加工具专用评估字段，并在 Zod 的 `superRefine` 里执行 `validateWorldIRV1` 语义校验。所以全局 ID 重复、实体引用缺失、深度或节点数超预算这些错误，都报在具体的参数路径上，模型只需要修正对应的字段。
+
+工具声明 `{stagesWrites:false, idempotent:true}`。补全后的引用校验失败报 `invalid-input`，提示在 `entities` 中声明每个引用的 id 后重试。
 
 工具移除评估字段后返回补全并校验的事实，不产生持久化 proposal。`world-ir` 声明了 `completeAfterTools: [submit-world-facts]`：框架把成功的结果直接作为 runtime 的类型化输出，再用 `contract:world-ir@1` 的输出 schema 检查一次。
 
@@ -1473,7 +1527,7 @@ schema 里带 `x-derive` 的字段由 `world-init/dimension-clock` 按时钟计�
 
 ## 导入的服务工具
 
-agent 在 `agent.tools.services` 里导入别的插件给模型用的服务（[怎样提供](./plugin-extensions.md#给模型用的服务)）。每个导入在 runtime 开始时变成一个只读工具。
+agent 在 `agent.tools.services` 里导入别的插件给模型用的服务（[怎样提供](./plugin-extensions.md#给模型用的服务)）。每个导入在 runtime 开始时变成一个工具：读服务的导入只读，写服务的导入暂存写入（见下文[写服务的导入](#写服务的导入)）。
 
 ```yaml
 agent:
@@ -1485,7 +1539,7 @@ agent:
 
 - **名字**：默认是去掉版本号、`.` 换成 `-` 的契约名（`inventory.items@1` → `inventory-items`），`as` 另起名字。名字只能有字母、数字、`_` 和 `-`，最长 64；推导出来的名字太长时要写 `as`。名字不能和框架工具、这个 runtime 的 `tools.builtin` / `tools.plugin`、本包的 `contributes.tools` 或另一个导入重名；同一个契约只能导入一次。重名时清单校验报错。
 - **说明和参数**：说明是提供方注册时的 `description`。参数的 JSON Schema 来自提供方的 Zod 输入（不带 `$schema`），或提供方显式给的 `inputSchema`。输入是 Zod 时（显式给了 `inputSchema` 也一样），参数先在工具这一侧校验，错误照常写明字段，写成 JSON 文本的数组或对象会被修复；提供方收到的是模型发来的参数（或修复后的参数），由它自己解析一次后交给处理函数，所以 `transform` 只作用一次。输入不是 Zod 时，参数只由提供方校验。
-- **注解**：`{ readOnly: true, stagesWrites: false, idempotent: true, concurrencySafe: true }`。导入的服务只读，可以和其他只读工具一起并发。子 agent 保留导入。
+- **注解**：读服务是 `{ readOnly: true, stagesWrites: false, idempotent: true, concurrencySafe: true }`，可以和其他只读工具一起并发。写服务见[写服务的导入](#写服务的导入)。子 agent 保留导入，写服务的导入也保留。
 - **结果**：和其他工具一样回给模型 `{ "data": … }`，ID、UUID 和时间戳由 `modelFacingJson` 去掉。审批、`PreToolUse` / `PostToolUse`、`tool_calls` 记录和 `tool.*` trace 都照常；审批来源按 `local` 算。
 - **时限**：一次调用最多等提供方 15 秒，超时回答 `timeout`。
 - **延迟加载**：`tools.defer: true`，或在 `defer` 列表里写导入的名字，导入就和其他工具一样延迟，用 `search-tools` 找到。
@@ -1500,7 +1554,20 @@ agent:
 - `…: its provider is paused after repeated errors.`
 - `…: its provider does not offer it to models.`
 
+写服务的导入在不能改数据的运行里（能挂起的 agent，以及没有暂存区的执行，比如恢复执行和后台执行）也不出现，原因是 `not-allowed`：
+
+- `The tool "inventory-change" is unavailable in this run: it changes data, which this runtime cannot do here.`
+
 服务端日志另有一行带插件 ID 的说明，给作者排查用。
+
+### 写服务的导入
+
+导入的[写服务](./plugin-extensions.md#写服务)替调用方改提供方自己的数据：
+
+- **注解**：`{ readOnly: false, stagesWrites: true, idempotent: false, concurrencySafe: false }`。它不和别的工具并发；同一个调用方对同一个提供方的调用一个接一个执行。
+- **结果**：调用成功时回答 `{ "data": …, "staged": { "count": 1, "kinds": [...], "notice": "Staged: it takes effect when the turn ends and may still be rejected." } }`，`kinds` 是这次操作的写入种类。写入随调用方的提交单元提交，见[事务 · 写服务的操作](./transactions.md#写服务的操作)。
+- **冲突**：提供方的更新在当前值上不成立时抛出 `conflict`，模型收到 `conflict`，`refused: true`。
+- **撤回**：调用它的工具调用或子 agent 之后失败时，这次操作被撤回，即使模型已经看到成功的回答。只读工具（`readOnly: true`）里调用写服务，工具调用失败（“read-only tool returned writes”）。
 
 ### 服务失败怎样回答
 
@@ -1595,7 +1662,7 @@ export default function ({ tool, z, shortId, shortIdBatch }) {
 
 ### 装配
 
-宿主用 `@covel/tools` 的 `createDefaultToolRegistry({ store, eventDirectory })` 一次装好全部内置工具：UI、suspend、runtime-done、plugin-data、emit-event 和 character。
+宿主用 `@covel/tools` 的 `createDefaultToolRegistry({ store, eventDirectory })` 一次装好全部内置工具：UI、suspend、runtime-done、emit-event 和 character。
 
 - 服务端传入真实的事件目录，并按会话覆盖角色写入工具。
 - `test-runtime` 传入一个不允许任何 topic 的隔离目录。

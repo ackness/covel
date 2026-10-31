@@ -13,21 +13,21 @@
 
 先按需求在表里找接口：
 
-| 需求                             | 接口                                                                                          | 执行与数据边界                                                                                   |
-| -------------------------------- | --------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
-| 消费本轮上游结果                 | `runtime.io.inputs` + `accepts`                                                               | 按版本化 contract/runtime 绑定，建立调度依赖，携带来源；必需输入缺失时跳过                       |
-| 消费已提交的历史结果             | `runtime.io.output.recordAs` + `io.inputs` 的 `scope: committed`                              | 读取本次执行开始前的快照                                                                         |
-| 发出事件、触发后续工作           | handler 结果的 events / `emit-event` 工具 + event trigger                                     | 由调度和提交链路管理；不是内存中任意广播                                                         |
-| 调用其他插件的公共函数或模型协议 | `covel.registerService` + `ctx.services` / 工具的 `context.services` / `agent.tools.services` | 请求/响应，校验输入输出，只调用活跃且已获准运行的服务；agent 把给模型用的服务导入成工具          |
-| 让另一个 agent 回答一段简报      | `schedule.subagentOnly` 提供方 + `ctx.agents.run` / `delegate` 工具                           | [子 agent](./plugins.md#子-agent) 在调用方的执行里运行，只交回输出，不写入；按契约找跨包的提供方 |
-| Runtime 执行领域写入             | 已声明工具、handler effects / `ctx.pluginData`                                                | 走 runtime 的 proposal/commit 边界，不直接写别的插件                                             |
-| UI 触发自己的服务端逻辑          | `invokeRuntime` / `invokePluginAction` / `invokeCommand`                                      | 复用现有 RPC、会话归属与审批；写入边界见下文                                                     |
-| UI 发出领域事件                  | `emitEvent`                                                                                   | 只能发本插件声明的 topic，按 schema 校验；订阅的 runtime 以事件任务执行                          |
-| 自由绘制 UI                      | JSON `view` 或 HTML `webview`                                                                 | HTML 在独立 sandbox 中运行，使用消息桥读取数据、发出动作                                         |
+| 需求                             | 接口                                                                                          | 执行与数据边界                                                                                                 |
+| -------------------------------- | --------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| 消费本轮上游结果                 | `runtime.io.inputs` + `accepts`                                                               | 按版本化 contract/runtime 绑定，建立调度依赖，携带来源；必需输入缺失时跳过                                     |
+| 消费已提交的历史结果             | `runtime.io.output.recordAs` + `io.inputs` 的 `scope: committed`                              | 读取本次执行开始前的快照                                                                                       |
+| 发出事件、触发后续工作           | handler 结果的 events / `emit-event` 工具 + event trigger                                     | 由调度和提交链路管理；不是内存中任意广播                                                                       |
+| 调用其他插件的公共函数或模型协议 | `covel.registerService` + `ctx.services` / 工具的 `context.services` / `agent.tools.services` | 请求/响应，校验输入输出，只调用活跃且已获准运行的服务；agent 把给模型用的服务导入成工具                        |
+| 让另一个 agent 回答一段简报      | `schedule.subagentOnly` 提供方 + `ctx.agents.run` / `delegate` 工具                           | [子 agent](./plugins.md#子-agent) 在调用方的执行里运行，只交回输出，可通过写服务暂存操作；按契约找跨包的提供方 |
+| Runtime 执行领域写入             | 已声明工具、handler effects / `ctx.pluginData`                                                | 走 runtime 的 proposal/commit 边界，不直接写别的插件                                                           |
+| UI 触发自己的服务端逻辑          | `invokeRuntime` / `invokePluginAction` / `invokeCommand`                                      | 复用现有 RPC、会话归属与审批；写入边界见下文                                                                   |
+| UI 发出领域事件                  | `emitEvent`                                                                                   | 只能发本插件声明的 topic，按 schema 校验；订阅的 runtime 以事件任务执行                                        |
+| 自由绘制 UI                      | JSON `view` 或 HTML `webview`                                                                 | HTML 在独立 sandbox 中运行，使用消息桥读取数据、发出动作                                                       |
 
 下面是表里装不下的细节。
 
-函数 runtime 改自己的数据时，可以交一串操作而不是算好的整个值：`ctx.pluginData.update(namespace, key, ops)` 产生 `plugin.data.update`，提交时在最新的值上应用（见[事务 · 操作式写入](./transactions.md#操作式写入plugindataupdate)）。这只属于 runtime 的写入边界：扩展点和服务 handler 的 `ctx.pluginData` 都只读。
+函数 runtime 改自己的数据时，可以交一串操作而不是算好的整个值：`ctx.pluginData.update(namespace, key, ops)` 产生 `plugin.data.update`，提交时在最新的值上应用（见[事务 · 操作式写入](./transactions.md#操作式写入plugindataupdate)）。这只属于 runtime 的写入边界：扩展点和读服务的 `ctx.pluginData` 只读。别的插件要改这个插件的数据，调用它的[写服务](#写服务)。
 
 `ctx.recursiveCall` 的用途是[包内嵌套调用](./plugins.md#嵌套调用ctxrecursivecall)。要请求其他包的结果，使用服务；要触发其他包的后续工作，使用事件。
 
@@ -39,7 +39,7 @@
 
 - 函数 runtime 的 handler 和 agent 的 guard 用 `ctx.services`。
 - 插件工具用 `context.services`，规则和函数 runtime 相同：调用方是工具所属的插件和 runtime，调用继承工具的截止时间和取消，读到的数据和工具自己的 `context.store` 读取用同一个范围、记在同一处读取依赖上。工具返回时还没结束的调用会被取消。服务失败时调用抛出服务的错误；工具不处理就让它抛出，这次工具调用会按[导入的服务工具](./tools.md#导入的服务工具)的错误对应表回答模型，失败的服务调用记录里仍是这个提供方，这次失败不算调用方的错误。
-- agent 可以在 `agent.tools.services` 里导入**给模型用**的服务，每个导入变成一个只读工具，见下文[给模型用的服务](#给模型用的服务)。框架不会把所有服务自动给每个 agent。
+- agent 可以在 `agent.tools.services` 里导入**给模型用**的服务，每个导入变成一个工具：读服务是只读工具，写服务的工具会暂存写入，见下文[给模型用的服务](#给模型用的服务)和[写服务](#写服务)。框架不会把所有服务自动给每个 agent。
 
 从工具或导入调用的服务拿不到 `gateway` 和 `utils`：需要模型的工作由调用方自己做。
 
@@ -256,7 +256,7 @@ export default function (covel) {
 - 服务名在所属插件内唯一。
 - `contract` 是插件作者定义的公开契约标识，形如 `<名称>@<主版本>`：小写字母开头，只有小写字母、数字、`.` 和 `-`，例如 `my-plugin.rank@1`。
 - 不兼容的修改用一个新的契约，不为开发数据写迁移。
-- 每个注册的服务都要在 `PLUGIN.md` 的 `contributes.services` 里声明，写契约 ID；给模型用的服务写成 `{ contract, modelFacing: true }`。声明和注册对不上时，整批注册失败。
+- 每个注册的服务都要在 `PLUGIN.md` 的 `contributes.services` 里声明，写契约 ID；给模型用的服务写成 `{ contract, modelFacing: true }`，[写服务](#写服务)写成 `{ contract, access: write }`。声明和注册对不上时，整批注册失败。
 
 ```js
 export default function (covel) {
@@ -321,6 +321,8 @@ const value = await ctx.services.call(
 
 ### 服务能拿到什么，不能拿到什么
 
+服务分两种访问级别：`access: read`（默认）的**读服务**只读，`access: write` 的**写服务**可以改提供者自己的数据。下表是读服务的上下文；写服务的差别见下文[写服务能拿到什么](#写服务能拿到什么)。
+
 <!-- prettier-ignore -->
 | 字段 | 含义 |
 | --- | --- |
@@ -331,13 +333,14 @@ const value = await ctx.services.call(
 | `services` | 继续发现和调用其他公共服务。 |
 | `sessionId` | 当前会话。 |
 | `locale` | 会话内容语言；宿主未提供时可省略。 |
+| `messages` | 提供者自己的消息目录，与函数 runtime 相同；没有目录时省略。`translate(ctx, text)` 按会话内容语言取译文，`labelText(ctx, text)` 保留全部语言供界面选择。嵌套服务使用各自提供者的目录。 |
 | `pluginData` | 提供者自己的只读数据；`get(namespace, key)` 返回值或 `null`，`list(namespace)` 按存储顺序返回 `{ key, value }[]`。`_hidden.*` 命名空间返回 `null` / 空列表。 |
 | `world` | 调用方 runtime 所见世界的独立只读副本，首次访问时复制。 |
 | `getOwnSettings()` | 提供者本回合已解析、冻结的设置；没有设置时返回空对象。 |
 
 - 输入和输出按 schema 校验，并被复制一份。不能靠对象引用去改对方的状态。
 - 数据读取每次都返回独立副本，没有调用方的 store、工具、设置或写入缓冲。
-- 服务没有写入方法，也不能产生 proposal。怎么保存结果，由发起调用的 runtime 决定；写服务将在后续提供。
+- 读服务没有写入方法，也不能产生 proposal。怎么保存结果，由发起调用的 runtime 决定；要改提供者自己的数据，用[写服务](#写服务)。
 - 服务调用链不允许循环，最多八层。它继承 runtime 的截止时间和能力撤销。
 - 服务必须把 `signal` 传给异步工作，不能把任务留在脱离调用的后台。
 - 服务端的普通 JavaScript 仍遵循社区代码的授权模型。这不是进程级沙箱。
@@ -347,6 +350,87 @@ const value = await ctx.services.call(
 读到了尚未提交的上游写入，就在调用 runtime 的结果上记录读取依赖。嵌套服务仍读各自提供者的数据，依赖始终记在原始调用 runtime 上。提交时产出方被作废，辅助调用方随之作废；故事调用方照常提交，并在 trace 里记录（见[事务](./transactions.md)）。调用读服务本身不建立新的调度依赖；故事 runtime 可以按需调用并处理服务缺失或失败。
 
 工具和导入的调用读同样的数据：顶层 agent 的工具和函数 runtime 一样叠加上游写入并记录读取依赖。恢复执行的 runtime 和子 agent 的工具调用服务时只读已提交数据，不记录读取依赖，和它们自己的工具读取一样。
+
+读服务还读得到同一个调用方此前通过写服务为这个提供者暂存的写入（见下文），但不为它们记录读取依赖。
+
+### 写服务
+
+写服务替调用方改**提供者自己**的数据，例如商店插件调用背包插件的 `inventory.change@1` 扣钱、加物品。声明和注册都要写 `access: write`，对不上时整批注册失败：
+
+```yaml
+# PLUGIN.md
+contributes:
+  services:
+    - { contract: inventory.change@1, access: write, modelFacing: true }
+```
+
+```js
+covel.registerService({
+  name: "change",
+  contract: "inventory.change@1",
+  access: "write",
+  modelFacing: true,
+  description: "Pay coins and add an item to the player's bag.",
+  input: z.object({ item: z.string(), cost: z.number().int().min(0) }),
+  output: z.object({ coins: z.number() }),
+  async handler({ item, cost }, ctx) {
+    await ctx.pluginData.set("items", item, { owned: true });
+    await ctx.pluginData.update("purse", "coins", [
+      { op: "inc", path: "/amount", by: -cost, min: 0 },
+    ]);
+    const purse = await ctx.pluginData.get("purse", "coins");
+    return { coins: purse.amount };
+  },
+});
+```
+
+能力快照把写服务记成 `"<契约> (write)"`：改成写服务、或者新加写服务，已信任来源的包也要重新确认（见[插件安装](./plugin-installation.md)）。扩展点提供者不能是写服务。
+
+#### 写服务能拿到什么
+
+写服务的上下文是读服务的上下文去掉 `gateway` 和 `utils`，再加上三样：
+
+<!-- prettier-ignore -->
+| 字段 | 含义 |
+| --- | --- |
+| `pluginData` | 提供者自己数据的读写：`get`、`list`、`set`、`delete`、`update`。读到的是已提交数据，叠加本次执行里提供者上游的写入、同一调用方此前调用暂存的写入，以及这次调用自己的写入。 |
+| `random` | 确定性的随机数，流名是 `service:<服务名>`。 |
+| `turnId` | 调用方的回合。 |
+
+- 即使调用方有模型或 HTTP 能力，写服务也拿不到：写服务应当短小、确定。
+- 不能写任何 `_` 开头的命名空间，包括提供者自己的 `_hidden.*`，抛出 `invalid-input`。
+- `update` 在它看到的值上不成立时抛出代码为 `conflict` 的 `ToolError`。
+- 写服务里还能调用读服务，但不能调用另一个写服务（`unavailable`）。读服务里也不能调用写服务。
+- 调用结束后再写入会报错，也不会被暂存。
+
+#### 暂存：一次调用就是一个操作
+
+写服务的写入不立即落库。一次成功的调用把它的全部写入暂存为一个**操作**，挂在发起调用的 runtime 的结果上，随调用方的提交单元一起提交（见[事务 · 写服务的操作](./transactions.md#写服务的操作)）：
+
+- 操作里的写入以提供者的身份提交（`source.pluginId` 是提供者，`runtimeId` 是 `service:<服务名>`）；PreStateCommit、数据集规则和错误统计看到的都是提供者。
+- handler 抛错、超时、被取消或输出不合规时，什么都不暂存。没有写入的调用不留操作。
+- 只有发起调用的那段代码成功时，操作才算数：工具调用失败、子 agent 失败、函数 handler 失败时，它们暂存的操作都被撤回（`discarded`），即使写服务当时对模型已经回答成功。
+- 同一个调用方对同一个提供者的调用一个接一个执行，包括并行的工具调用和并行的子 agent；每次调用都读得到前面调用暂存的写入。
+- 每个操作留下一条[操作记录](./transactions.md#操作记录)，提交后写明它最终提交、失败还是被撤回。
+
+故事附带的操作在提交时失败，不会让故事失败。提交后玩家立即看到固定提示，说明有多少操作没有生效；调试 trace 保留 `operation.failed`。这样的失败不算执行失败：回合流里没有它的 `proposal.failed`，回合照常显示已提交。下一次玩家或续行执行中，发起操作的 agent 收到 `operations-not-applied` 块，列出上一个已提交回合失败操作的摘要，最多十条；子 agent 发起的操作，由这个子 agent 下次被调用时收到。其他 runtime 和定向重试不显示这个通知。通知只跟随最新的已提交玩家或续行回合，详见[回合管线](../internals/flow.md)。
+
+#### 哪里不能调用写服务
+
+以下位置调用写服务得到 `unavailable`（“Write services cannot be called here.”），什么都不暂存：
+
+- 脱离回合的后台 runtime（`detached`）和 `background` 执行；
+- 恢复执行（`resume`）和只修复内容的重试（带源回合的手动重试）：它们会把一笔交易结算两次；
+- agent 的 guard、Hook、RPC handler 和扩展点提供者；
+- 能挂起（`tools.builtin` 含 `suspend`）的 agent：它的写服务导入不出现，原因是 `not-allowed`。
+
+函数 runtime 暂存了操作之后又返回 `suspended` 时，这次运行失败（“<runtime> cannot suspend after changing another plugin's data through a write service”），操作被撤回。
+
+一个插件不能调用自己的写服务（`refused`）：它直接写自己的数据，这些写入已经随它自己的 runtime 提交。子 agent 也不能调用委托它的那个插件的写服务。
+
+#### 模型看到什么
+
+导入的写服务工具带写入注解（`readOnly: false`、`stagesWrites: true`、`idempotent: false`、`concurrencySafe: false`）。调用成功时回答 `{ data, staged: { count, kinds, notice } }`，`notice` 说明写入要到回合结束才生效、仍可能被拒绝。提供者抛出的 `conflict` 原样到达模型，并标为 `refused`。见[导入的服务工具](./tools.md#导入的服务工具)。
 
 ### 给模型用的服务
 

@@ -125,7 +125,7 @@ describe("runTurnPipeline: output.schema.json", () => {
     };
     const runtime = manifest({
       output: { schema: "./output.schema.json" },
-      tools: { builtin: ["plugin-data-set"] },
+      tools: { builtin: ["sync-characters"] },
     });
     const toolExecutor: ToolExecutor = {
       async execute() {
@@ -158,7 +158,7 @@ describe("runTurnPipeline: output.schema.json", () => {
 
     expect(
       (llm.tools as Array<{ name: string }>).map((tool) => tool.name),
-    ).toEqual(["plugin-data-set"]);
+    ).toEqual(["sync-characters"]);
   });
 
   it("uses a required completing tool as the sole structured output channel", async () => {

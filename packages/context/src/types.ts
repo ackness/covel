@@ -252,6 +252,8 @@ export interface ContextBuildParams {
    * (docs 02 §3.4.3). Absent → no block.
    */
   readonly exportSlots?: Readonly<Record<string, InputSlot>>;
+  /** Failed actions from the previous committed turn, for this agent only. */
+  readonly failedOperationSummaries?: readonly string[];
   /**
    * Canonical activation for this run. Rendered into segment 5 as the reserved
    * `<runtime-activation>` block (`{ source, detached, payload }` JSON) that a

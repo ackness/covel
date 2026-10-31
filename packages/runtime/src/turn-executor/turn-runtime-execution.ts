@@ -1,3 +1,6 @@
+import { buildOperationsInput } from "./operations-input.js";
+import { attachReadDependencies } from "../read-dependencies.js";
+import { commitEligibility } from "../session/session-runtime-result.js";
 import { buildTurnDigest, freezeSnapshot } from "./turn-digest.js";
 import { projectExecutionStory } from "./session-state.js";
 import { collectUpstreamWorldProposals } from "../function-runtime/world-model-view.js";
@@ -49,6 +52,11 @@ import {
   resolveRuntimeTimeoutMs,
 } from "./runtime-scaffold.js";
 import { isScopedRuntimeRecovery } from "./scheduling.js";
+import {
+  createOperationExecutionScope,
+  createRootOperationStage,
+  type RootOperationStage,
+} from "../operations/operation-stage.js";
 
 export type ExecuteTurnFn = (
   input: TurnInput,
@@ -85,6 +93,7 @@ export interface RuntimeInvocation {
   readonly messageHistory: readonly TurnMessageRecord[];
   readonly sessionMeta:
     | {
+        failedOperationSummaries?: Readonly<Record<string, readonly string[]>>;
         turnNumber: number;
         logicalTurn?: number;
         characters: readonly {
@@ -146,8 +155,64 @@ export interface RuntimeInvocation {
   readonly setupRuntimeDone: (runtimeId: string) => boolean;
 }
 
+/** Executions whose runs can call write services. */
+const OPERATION_ORIGINS: ReadonlySet<ExecutionContext["origin"]> = new Set([
+  "player",
+  "continuation",
+  "manual",
+  "recursive",
+]);
+
+/**
+ * Whether a run can call write services, and so gets an operation stage.
+ * Not when its operations could settle twice or have nowhere to wait: a
+ * detached or background run, a retry of committed work, a resume (which
+ * never comes through here), a nested run of a run that could not, and an
+ * agent that can suspend.
+ */
+export function canStageOperations(
+  manifest: RuntimeManifest,
+  input: TurnInput,
+  executionContext: ExecutionContext,
+  activation: { readonly detached: boolean },
+): boolean {
+  if ((input as RecursiveTurnInput).withoutOperations) return false;
+  if (input.detachedStage !== undefined || activation.detached) return false;
+  if (!OPERATION_ORIGINS.has(executionContext.origin)) return false;
+  if (
+    executionContext.sourceTurnId !== undefined ||
+    isScopedRuntimeRecovery(input)
+  )
+    return false;
+  return !(
+    manifest.runtimeType !== "function" &&
+    (manifest.tools?.builtin ?? []).includes("suspend")
+  );
+}
+
 export async function executeOneRuntime(
   inv: RuntimeInvocation,
+): Promise<RuntimeResult> {
+  const stage: InvocationState = { operationReads: new Set() };
+  const result = await executeRuntime(inv, stage);
+  // A run that did not succeed keeps its records, taken back.
+  stage.current?.attachTo(result, false);
+  // A run that read upstream operations through its `operations@1` input
+  // built on writes that are not committed yet: it depends on them.
+  if (stage.operationReads.size > 0 && commitEligibility(result) !== "none")
+    attachReadDependencies(result, stage.operationReads);
+  return result;
+}
+
+interface InvocationState {
+  current?: RootOperationStage;
+  /** Ids of the operations the run's `operations@1` input showed. */
+  readonly operationReads: Set<string>;
+}
+
+async function executeRuntime(
+  inv: RuntimeInvocation,
+  stage: InvocationState,
 ): Promise<RuntimeResult> {
   const {
     manifest,
@@ -234,6 +299,7 @@ export async function executeOneRuntime(
         // and parent so it is excluded from player-turn accounting.
         origin: "recursive",
         parentTurnId: input.turnId,
+        ...(stage.current ? {} : { withoutOperations: true as const }),
       };
 
       const tracePayload = {
@@ -563,6 +629,23 @@ export async function executeOneRuntime(
     const inputSlots: Record<string, InputSlot> = { ...binding.slots };
     for (const inject of manifest.input?.inject ?? []) {
       if (inject.kind !== "kernel") continue;
+      if (inject.from === "operations@1") {
+        const snapshot = buildOperationsInput(
+          completedResults,
+          inv.seedResults,
+        );
+        for (const id of snapshot.producerIds) stage.operationReads.add(id);
+        inputSlots[inject.name] = {
+          cardinality: "one",
+          value: snapshot.value,
+          source: {
+            pluginId: "__kernel",
+            runtimeId: inject.from,
+            resultId: executionContext.executionId,
+          },
+        };
+        continue;
+      }
       if (input.detachedStage && !input.detachedStage.turnDigest)
         throw new Error(
           "Detached kernel input turn-digest@1 is missing its source snapshot",
@@ -671,6 +754,20 @@ export async function executeOneRuntime(
       }
       return writes;
     };
+    if (canStageOperations(manifest, input, executionContext, activation))
+      stage.current = createRootOperationStage({
+        caller: {
+          pluginId: manifest.pluginId,
+          runtimeId: manifest.name,
+          runId,
+        },
+        sessionId: input.sessionId,
+        turnId: input.turnId,
+        scope:
+          deps.operationScope ??
+          createOperationExecutionScope(deps.loadPluginDatasets),
+      });
+    const operations = stage.current;
     if (manifest.runtimeType === "function") {
       return await executeFunctionRuntime({
         upstreamPluginData,
@@ -696,6 +793,7 @@ export async function executeOneRuntime(
         timeoutMs,
         executionId: progressScopeId,
         upstreamOf,
+        ...(operations ? { operations } : {}),
       });
     }
 
@@ -756,6 +854,7 @@ export async function executeOneRuntime(
       ...(progressScopeId !== undefined ? { progressScopeId } : {}),
       startTime,
       runId,
+      ...(operations ? { operations } : {}),
     });
   } catch (error: unknown) {
     return finalizeThrownRuntime(

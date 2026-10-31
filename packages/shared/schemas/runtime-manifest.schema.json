@@ -267,8 +267,8 @@
                     "properties": {
                       "kernel": {
                         "type": "string",
-                        "const": "turn-digest@1",
-                        "description": "Kernel input: the frozen last player input and the runtime results observed so far."
+                        "enum": ["turn-digest@1", "operations@1"],
+                        "description": "Kernel input: the turn digest or staged operations from completed upstream runs."
                       }
                     },
                     "required": ["kernel"],
@@ -489,7 +489,44 @@
                   }
                 ]
               },
-              "description": "Services the agent imports as read-only tools. Each names a contract; the one active provider that offers it to models answers the call. Without one the tool is left out for the run."
+              "description": "Services the agent imports as tools. Each names a contract; the one active provider that offers it to models answers the call. Without one the tool is left out for the run. A write service's tool stages the provider's writes, which commit with this runtime's work; it is left out of a run that cannot change data there."
+            },
+            "datasets": {
+              "type": "array",
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 64,
+                    "pattern": "^[a-zA-Z][a-zA-Z0-9_-]*$"
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "dataset": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 64,
+                        "pattern": "^[a-zA-Z][a-zA-Z0-9_-]*$",
+                        "description": "A dataset of this package (`contributes.datasets`)."
+                      },
+                      "tools": {
+                        "minItems": 1,
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "enum": ["get", "list", "upsert", "update"]
+                        },
+                        "description": "The dataset tools this agent gets; each must be one the dataset offers."
+                      }
+                    },
+                    "required": ["dataset", "tools"],
+                    "additionalProperties": false
+                  }
+                ]
+              },
+              "description": "Datasets of this package the agent reads and writes through generated tools (`<dataset>-get`, `-list`, `-upsert`, `-update`). A name gives every tool the dataset offers; `{ dataset, tools }` gives some of them."
             }
           },
           "additionalProperties": false,
@@ -633,7 +670,7 @@
               "properties": {
                 "maxSteps": {
                   "type": "boolean",
-                  "description": "At the step limit, ask once for the answer with tools off. `false` makes the step limit always fail. Defaults to true."
+                  "description": "At the step limit or when the request no longer fits the model's context, ask once for the answer with tools off. `false` makes these stops always fail. Defaults to true."
                 },
                 "deadlineReserveMs": {
                   "type": "integer",

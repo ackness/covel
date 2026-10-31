@@ -626,6 +626,111 @@ export function registerCoreStoreSuites(getStore: () => DataStore): void {
         runtimeResults: [{ ...nestedRun, status: "failed", error: "dropped" }],
       });
     });
+
+    it("settles operation records by ID on every row of the turn", async () => {
+      const record = (id: string, seq: number) => ({
+        id,
+        contract: "bank.pay@1",
+        providerPluginId: "bank",
+        service: "pay",
+        invokedBy: { pluginId: "shop", runtimeId: "shop/buy" },
+        seq,
+        status: "staged",
+        summary: "{}",
+      });
+      const top = makeTurnResult({
+        turnId: "turn-x",
+        runtimeResults: [
+          {
+            runtimeId: "story",
+            status: "success",
+            operations: [record("op-1", 1), record("op-2", 2)],
+          },
+        ],
+      });
+      const nested = makeTurnResult({
+        turnId: "turn-x",
+        origin: "recursive",
+        runtimeResults: [
+          {
+            runtimeId: "helper",
+            status: "success",
+            operations: [record("op-3", 3)],
+          },
+        ],
+        createdAt: ts(1),
+      });
+      await store.saveTurnResult(top);
+      await store.saveTurnResult(nested);
+
+      await store.setTurnResultCommitStatus(
+        "sess-1",
+        "turn-x",
+        "committed",
+        [],
+        [
+          { id: "op-1", status: "committed" },
+          { id: "op-2", status: "failed", reason: "conflict" },
+          { id: "op-3", status: "discarded", reason: "caller-dropped" },
+        ],
+      );
+
+      const rows = await store.listTurnResults("sess-1");
+      const byId = new Map(rows.map((row) => [row.id, row]));
+      expect(byId.get(top.id)).toMatchObject({
+        commitStatus: "committed",
+        runtimeResults: [
+          {
+            operations: [
+              { ...record("op-1", 1), status: "committed" },
+              {
+                ...record("op-2", 2),
+                status: "failed",
+                reason: "conflict",
+              },
+            ],
+          },
+        ],
+      });
+      expect(byId.get(nested.id)).toMatchObject({
+        runtimeResults: [
+          {
+            operations: [
+              {
+                ...record("op-3", 3),
+                status: "discarded",
+                reason: "caller-dropped",
+              },
+            ],
+          },
+        ],
+      });
+    });
+
+    it("leaves rows without operations unchanged when operations are settled", async () => {
+      const results = [
+        { runtimeId: "story", status: "success", output: { text: "kept" } },
+      ];
+      const row = makeTurnResult({ turnId: "turn-x", runtimeResults: results });
+      await store.saveTurnResult(row);
+
+      await store.setTurnResultCommitStatus(
+        "sess-1",
+        "turn-x",
+        "failed",
+        undefined,
+        [{ id: "op-1", status: "discarded", reason: "execution-failed" }],
+      );
+
+      const [saved] = await store.listTurnResults("sess-1");
+      expect(saved).toMatchObject({
+        commitStatus: "failed",
+        runtimeResults: results,
+      });
+      expect((saved!.runtimeResults as unknown[])[0]).not.toHaveProperty(
+        "operations",
+      );
+    });
   });
 
   describe("ToolCalls", () => {

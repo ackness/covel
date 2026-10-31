@@ -29,7 +29,11 @@ import type {
   TurnResultRow,
 } from "./mappers/runtime-mappers.js";
 import type { SqlRunner } from "./sql-runner.js";
-import { settleFailedRuntimeResults } from "../records/runtime-records.js";
+import {
+  settleFailedRuntimeResults,
+  settleOperationRecords,
+} from "../records/runtime-records.js";
+import type { OperationSettlement } from "@covel/shared";
 import type {
   DataStore,
   FailedRuntimeResult,
@@ -168,12 +172,13 @@ export function createSqlRuntimeRecords(
       turnId: string,
       status: TurnResultRecord["commitStatus"],
       failedRuntimes: readonly FailedRuntimeResult[] = [],
+      settledOperations: readonly OperationSettlement[] = [],
     ): Promise<void> {
       const where = and(
         eq(turnResults.sessionId, sessionId),
         eq(turnResults.turnId, turnId),
       )!;
-      if (failedRuntimes.length === 0) {
+      if (failedRuntimes.length === 0 && settledOperations.length === 0) {
         await runner.update(turnResults, { commitStatus: status }, where);
         return;
       }
@@ -186,9 +191,9 @@ export function createSqlRuntimeRecords(
           values.turnResultSettlement({
             ...record,
             commitStatus: status,
-            runtimeResults: settleFailedRuntimeResults(
-              record.runtimeResults,
-              failedRuntimes,
+            runtimeResults: settleOperationRecords(
+              settleFailedRuntimeResults(record.runtimeResults, failedRuntimes),
+              settledOperations,
             ),
           }),
           eq(turnResults.id, row.id),

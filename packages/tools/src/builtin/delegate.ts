@@ -60,10 +60,10 @@ export const delegateParametersSchema = z.strictObject({
 export const delegateTool: ToolModule = tool({
   name: DELEGATE_TOOL_NAME,
   description:
-    "Run another agent as a sub-agent and get its output back. It works from your brief and data only, cannot write anything, and returns its output or an error you can act on.",
+    "Run another agent as a sub-agent and get its output back. It works from your brief and data only, can stage changes through write services when allowed in this run, and returns its output or an error you can act on. Staged changes take effect at turn end and may still be rejected.",
   annotations: {
-    readOnly: true,
-    stagesWrites: false,
+    readOnly: false,
+    stagesWrites: true,
     idempotent: false,
     concurrencySafe: false,
   },

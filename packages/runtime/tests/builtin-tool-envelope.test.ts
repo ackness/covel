@@ -48,12 +48,6 @@ const cases: Record<string, Record<string, unknown>> = {
   "world-dimension-get": { queries: [{ dimension: "gold" }] },
   "world-dimension-list": {},
   "memory-search": { query: "Ada" },
-  "plugin-data-set": { namespace: "notes", key: "k", value: 1 },
-  "plugin-data-set-batch": {
-    items: [{ namespace: "notes", key: "k", value: 1 }],
-  },
-  "plugin-data-get": { namespace: "notes", key: "k" },
-  "plugin-data-list": { namespace: "notes" },
   "sync-characters": { creates: [{ name: "Wren", type: "npc" }] },
   "list-characters": {},
   "get-character": { name: "Ada" },
@@ -214,14 +208,7 @@ describe("builtin tool envelopes", () => {
           ["summary", "data", "staged"].filter((key) => keys.includes(key)),
         );
         expect(result.result).not.toMatch(/"_text"|"success"/);
-        if (
-          [
-            "plugin-data-set",
-            "plugin-data-set-batch",
-            "sync-characters",
-            "emit-event",
-          ].includes(name)
-        )
+        if (["sync-characters", "emit-event"].includes(name))
           expect(envelope.staged.count).toBeGreaterThanOrEqual(1);
         if (Object.hasOwn(expectedUI, name)) {
           expect(result.parsedResult).toEqual(expectedUI[name]);

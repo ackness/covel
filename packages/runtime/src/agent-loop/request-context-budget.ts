@@ -19,7 +19,47 @@ import type {
 import type { RetryPolicy } from "../retry/retry-common.js";
 import { retryHint } from "../retry/retry-common.js";
 
+import type { LoopContextPolicy } from "./loop-context-policy.js";
+
 import type { TurnEmitter } from "../trace/turn-emitter.js";
+
+interface OverflowDetails {
+  readonly estimatedTokens: number;
+  readonly limitTokens: number;
+  readonly fixedInputTokens: number;
+  readonly systemTokens: number;
+  readonly toolDefinitionTokens: number;
+  readonly responseFormatTokens: number;
+  readonly messageTokens: number;
+  readonly toolResultSaved: number;
+  readonly summarySaved: number;
+}
+
+/** A request that cannot fit, or invalid configuration that trimming cannot fix. */
+export class ContextOverflowError extends RangeError {
+  readonly kind: "over-limit" | "invalid-limits";
+  readonly estimatedTokens?: number;
+  readonly limitTokens?: number;
+  readonly breakdown?: OverflowDetails;
+
+  constructor(
+    message: string,
+    options: ErrorOptions &
+      (
+        | { kind: "over-limit"; breakdown: OverflowDetails }
+        | { kind: "invalid-limits" }
+      ),
+  ) {
+    super(message, options);
+    this.name = "ContextOverflowError";
+    this.kind = options.kind;
+    if (options.kind === "over-limit") {
+      this.breakdown = options.breakdown;
+      this.estimatedTokens = options.breakdown.estimatedTokens;
+      this.limitTokens = options.breakdown.limitTokens;
+    }
+  }
+}
 
 /** Reserve the requested output before pruning the final provider request. */
 export function resolveRequestContextBudget(
@@ -59,12 +99,16 @@ export function applyPerCallBudget(params: {
   readonly contextBudget: Omit<BudgetOptions, "estimator">;
   /** Session locale: the markers this adds are in its instruction language. */
   readonly locale?: string;
+  readonly loopPolicy?: LoopContextPolicy;
+  readonly trim?: "normal" | "emergency";
 }): {
   readonly messages: LLMMessage[];
   readonly prunedMessageCount: number;
   readonly truncatedToolResultCount: number;
   readonly truncatedSummaryCount: number;
   readonly maxOutputTokens: number;
+  readonly elidedToolResultCount: number;
+  readonly collapsedStepCount: number;
 } {
   try {
     return budgetProviderRequest({
@@ -86,9 +130,14 @@ export function applyPerCallBudget(params: {
       ? `provider: ${target.provider}, model: ${target.model}, `
       : "";
     const message = error instanceof Error ? error.message : String(error);
-    throw new RangeError(
+    throw new ContextOverflowError(
       `[${identity}slot: ${params.slot ?? "default"}] ${message}`,
-      { cause: error },
+      {
+        cause: error,
+        ...(error instanceof ContextOverflowError && error.kind === "over-limit"
+          ? { kind: "over-limit" as const, breakdown: error.breakdown! }
+          : { kind: "invalid-limits" as const }),
+      },
     );
   }
 }
@@ -131,16 +180,25 @@ function budgetProviderRequest(
   ]
     .filter(Boolean)
     .join("\n");
+  const inputLimit = limits.maxInputTokens - limits.reservedForResponse;
+  const fitted = params.loopPolicy?.fit(
+    hasPrimarySystem ? rest : params.messages,
+    {
+      inputLimit,
+      fixedTokens: params.estimator(fixedInput),
+      estimator: params.estimator,
+      mode: params.trim ?? "normal",
+    },
+  );
   const budgeted = applyBudget(
     fixedInput,
-    hasPrimarySystem ? rest : params.messages,
+    fitted?.messages ?? (hasPrimarySystem ? rest : params.messages),
     {
       ...params.contextBudget,
       estimator: params.estimator,
       locale: params.locale,
     },
   );
-  const inputLimit = limits.maxInputTokens - limits.reservedForResponse;
   const overflow = Math.max(0, budgeted.totalTokens - inputLimit);
   const zh = instructionLocaleFor(params.locale) === "zh";
   // Tool messages after the current user turn cannot be removed without
@@ -169,8 +227,22 @@ function budgetProviderRequest(
     const systemTokens = params.estimator(primarySystemText);
     const toolDefinitionTokens = params.estimator(toolDefinitionsText);
     const responseFormatTokens = params.estimator(responseFormatText);
-    throw new RangeError(
+    throw new ContextOverflowError(
       `Context budget exceeded before LLM call for runtime "${params.runtimeId}": estimated ${compactedTotal} input tokens, limit ${inputLimit} (fixed=${fixedInputTokens}, system=${systemTokens}, tools=${toolDefinitionTokens}, responseFormat=${responseFormatTokens}, messages=${budgeted.totalTokens - fixedInputTokens}, toolResultSaved=${compacted.savedTokens}, summarySaved=${compactedSummaries.savedTokens})`,
+      {
+        kind: "over-limit",
+        breakdown: {
+          estimatedTokens: compactedTotal,
+          limitTokens: inputLimit,
+          fixedInputTokens,
+          systemTokens,
+          toolDefinitionTokens,
+          responseFormatTokens,
+          messageTokens: budgeted.totalTokens - fixedInputTokens,
+          toolResultSaved: compacted.savedTokens,
+          summarySaved: compactedSummaries.savedTokens,
+        },
+      },
     );
   }
   return {
@@ -182,6 +254,8 @@ function budgetProviderRequest(
     truncatedToolResultCount: compacted.truncatedCount,
     truncatedSummaryCount: compactedSummaries.truncatedCount,
     maxOutputTokens: limits.reservedForResponse,
+    elidedToolResultCount: fitted?.elidedToolResultCount ?? 0,
+    collapsedStepCount: fitted?.collapsedStepCount ?? 0,
   };
 }
 
@@ -306,7 +380,9 @@ export async function prepareBudgetedRequest(
   if (
     budgeted.prunedMessageCount > 0 ||
     budgeted.truncatedToolResultCount > 0 ||
-    budgeted.truncatedSummaryCount > 0
+    budgeted.truncatedSummaryCount > 0 ||
+    budgeted.elidedToolResultCount > 0 ||
+    budgeted.collapsedStepCount > 0
   ) {
     await params.emitter?.emit("context.pruned", {
       runtimeId: params.runtimeId,
@@ -314,6 +390,8 @@ export async function prepareBudgetedRequest(
       prunedMessageCount: budgeted.prunedMessageCount,
       truncatedToolResultCount: budgeted.truncatedToolResultCount,
       truncatedSummaryCount: budgeted.truncatedSummaryCount,
+      elidedToolResultCount: budgeted.elidedToolResultCount,
+      collapsedStepCount: budgeted.collapsedStepCount,
     });
   }
   return budgeted;

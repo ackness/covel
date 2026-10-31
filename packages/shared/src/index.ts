@@ -1,6 +1,7 @@
 export {
   playerInputSubmissionSchema,
   turnDigestSchema,
+  operationsInputSchema,
 } from "./schemas/execution-snapshots.js";
 export * from "./extension-points/index.js";
 export {
@@ -163,6 +164,7 @@ export {
   type DataOpsCurrent,
   type DataOpsResult,
 } from "@covel/plugin-handlers-utils";
+export { datasetKey } from "@covel/plugin-handlers-utils";
 
 // ── Utilities ─────────────────────────────────────────────────────
 export { deepMerge } from "./utils/deep-merge.js";
@@ -257,7 +259,10 @@ export {
 } from "./utils/json-value.js";
 export {
   CONCEALED_FAILURE_MESSAGE,
+  CONCEALED_OPERATION_SUMMARY,
   concealedRuntimeIds,
+  concealOperationRecord,
+  concealOperationsOf,
   concealRuntimeResult,
   concealTracePayload,
 } from "./utils/concealed-runtime.js";
@@ -373,6 +378,13 @@ export {
   effectsDeclSchema,
   permissionsDeclSchema,
 } from "./schemas/plugin.js";
+export {
+  DATASET_TOOL_KINDS,
+  datasetToolKinds,
+  datasetToolName,
+  datasetToolsIssues,
+  type DatasetToolKind,
+} from "./schemas/dataset-tools.js";
 export {
   isRuntimeDisablingIssue,
   SERVICE_IMPORT_NAME_PATTERN,
@@ -633,6 +645,7 @@ export {
 export {
   authoringSourceKind,
   isModelFacingServiceContribution,
+  serviceContributionAccess,
   pluginIdSchema,
   pluginManifestSchema,
   serviceContributionContract,

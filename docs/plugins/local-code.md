@@ -128,6 +128,8 @@ export default function makeSaveNote({
 | `ToolError`            | 抛出带错误码和可选提示的失败                        |
 | `shortId`              | 生成短 ID。第四个参数传 `context.random`            |
 
+内置 `initialize-world` 也用摘要视图保留契约正文；`dimension-rule-get` 声明只读注解，见[工具参考](../reference/tools.md#initialize-world)。
+
 模型读取[统一工具结果](../reference/tools.md#统一返回格式与错误码)。这个例子只发送摘要和自动附加的暂存提示；代码仍读取 `{id}`。需要报告可修正的失败时，可抛出 `new ToolError("not-found", "The requested note was not found.", { hint: "Check the name." })`。`ctx.tools.call` 成功时返回完整正文，失败时抛出 `ToolError`；message 是纯文本，code 和 hint 是独立字段。
 
 工具不直接写存档。它返回一条**写入请求**（proposal）：类型是 `plugin.data`，内容是“往 `notes` 里写这一条”。Covel 在执行提交时检查这些请求。这个 runtime 失败或提交被拒时，不会保存这份写入。
@@ -277,12 +279,12 @@ agent 的最后一条回复里即使写了看起来像“要保存的数据”�
 
 要让 agent 写东西，就给它一个工具，并列进 `agent.tools`：
 
-| 想做的事           | 工具                                                                                                 |
-| ------------------ | ---------------------------------------------------------------------------------------------------- |
-| 写自己的数据       | 自己的工具，或内置的 `plugin-data-set`                                                               |
-| 发一个事件         | 内置的 `emit-event`（会话 topic enum 与 payload schema，见[工具](../reference/tools.md#emit-event)） |
-| 给玩家一条通知     | 内置的 `create-notification`                                                                         |
-| 向玩家要结构化输入 | 内置的 `create-form`                                                                                 |
+| 想做的事           | 工具                                                                                                               |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------ |
+| 写自己的数据       | 自己的工具，或声明的数据集生成的 `<数据集>-upsert` / `-update`（见[数据集工具](../reference/tools.md#数据集工具)） |
+| 发一个事件         | 内置的 `emit-event`（会话 topic enum 与 payload schema，见[工具](../reference/tools.md#emit-event)）               |
+| 给玩家一条通知     | 内置的 `create-notification`                                                                                       |
+| 向玩家要结构化输入 | 内置的 `create-form`                                                                                               |
 
 想要求 agent 每次运行都必须成功调用一次工具，写 `completion: { require: tool-use }`。这时“没有变化”也要通过工具提交（例如提交一个空列表），否则这次运行算失败。
 

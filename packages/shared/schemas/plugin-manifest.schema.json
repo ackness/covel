@@ -516,6 +516,11 @@
                     "pattern": "^[a-z][a-z0-9.-]*@[1-9][0-9]*$",
                     "description": "The contract ID the service is registered under."
                   },
+                  "access": {
+                    "type": "string",
+                    "enum": ["read", "write"],
+                    "description": "`write` lets the service change its own plugin's data for the caller: its writes commit with the caller's work. `read` (the default) only reads. The registration must say the same."
+                  },
                   "modelFacing": {
                     "type": "boolean",
                     "description": "`true` lets agents import the service as a tool with `agent.tools.services`. The registration must say the same and give a description and an input that exports JSON Schema."
@@ -526,7 +531,7 @@
               }
             ]
           },
-          "description": "Services the entry registers with `registerService`: a contract ID, or `{ contract, modelFacing: true }` for one that agents may import as a tool."
+          "description": "Services the entry registers with `registerService`: a contract ID, or `{ contract, access, modelFacing }` for one that changes its plugin's data (`access: write`) or that agents may import as a tool (`modelFacing: true`)."
         },
         "extensions": {
           "type": "array",
@@ -866,6 +871,21 @@
                   ]
                 },
                 "description": "Operation kinds allowed on this dataset. Defaults to every kind."
+              },
+              "tools": {
+                "minItems": 1,
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "enum": ["get", "list", "upsert", "update"]
+                },
+                "description": "Dataset tools an agent may select with `agent.tools.datasets`. Defaults to get and list, upsert when ops allow set, and update when ops allow any other operation."
+              },
+              "description": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 500,
+                "description": "What the dataset holds, in English. Agents read it in the description of each dataset tool."
               }
             },
             "required": ["schema"],
@@ -1498,8 +1518,8 @@
                         "properties": {
                           "kernel": {
                             "type": "string",
-                            "const": "turn-digest@1",
-                            "description": "Kernel input: the frozen last player input and the runtime results observed so far."
+                            "enum": ["turn-digest@1", "operations@1"],
+                            "description": "Kernel input: the turn digest or staged operations from completed upstream runs."
                           }
                         },
                         "required": ["kernel"],
@@ -1720,7 +1740,44 @@
                       }
                     ]
                   },
-                  "description": "Services the agent imports as read-only tools. Each names a contract; the one active provider that offers it to models answers the call. Without one the tool is left out for the run."
+                  "description": "Services the agent imports as tools. Each names a contract; the one active provider that offers it to models answers the call. Without one the tool is left out for the run. A write service's tool stages the provider's writes, which commit with this runtime's work; it is left out of a run that cannot change data there."
+                },
+                "datasets": {
+                  "type": "array",
+                  "items": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 64,
+                        "pattern": "^[a-zA-Z][a-zA-Z0-9_-]*$"
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "dataset": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 64,
+                            "pattern": "^[a-zA-Z][a-zA-Z0-9_-]*$",
+                            "description": "A dataset of this package (`contributes.datasets`)."
+                          },
+                          "tools": {
+                            "minItems": 1,
+                            "type": "array",
+                            "items": {
+                              "type": "string",
+                              "enum": ["get", "list", "upsert", "update"]
+                            },
+                            "description": "The dataset tools this agent gets; each must be one the dataset offers."
+                          }
+                        },
+                        "required": ["dataset", "tools"],
+                        "additionalProperties": false
+                      }
+                    ]
+                  },
+                  "description": "Datasets of this package the agent reads and writes through generated tools (`<dataset>-get`, `-list`, `-upsert`, `-update`). A name gives every tool the dataset offers; `{ dataset, tools }` gives some of them."
                 }
               },
               "additionalProperties": false,
@@ -1864,7 +1921,7 @@
                   "properties": {
                     "maxSteps": {
                       "type": "boolean",
-                      "description": "At the step limit, ask once for the answer with tools off. `false` makes the step limit always fail. Defaults to true."
+                      "description": "At the step limit or when the request no longer fits the model's context, ask once for the answer with tools off. `false` makes these stops always fail. Defaults to true."
                     },
                     "deadlineReserveMs": {
                       "type": "integer",

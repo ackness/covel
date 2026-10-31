@@ -20,7 +20,11 @@ const service = {
   handler: () => [],
 };
 
-function register(declared: Contributions, modelFacing: boolean | undefined) {
+function register(
+  declared: Contributions,
+  modelFacing: boolean | undefined,
+  access?: "read" | "write",
+) {
   const registerService = vi.fn();
   const contract = enforcePluginRegistrationContract(
     { registerService } as unknown as PluginAPI,
@@ -29,7 +33,8 @@ function register(declared: Contributions, modelFacing: boolean | undefined) {
   contract.api.registerService({
     ...service,
     ...(modelFacing !== undefined ? { modelFacing } : {}),
-  });
+    ...(access !== undefined ? { access } : {}),
+  } as never);
   contract.validate();
   return registerService;
 }
@@ -65,6 +70,59 @@ describe("the service registration contract", () => {
     ).toHaveBeenCalledOnce();
     expect(
       register({ services: ["inventory.items@1"] }, false),
+    ).toHaveBeenCalledOnce();
+  });
+
+  it("rejects a write registration declared as a read service", () => {
+    expect(() =>
+      register({ services: ["inventory.items@1"] }, undefined, "write"),
+    ).toThrow(
+      "Undeclared or duplicate registration: service:inventory.items@1 (write)",
+    );
+  });
+
+  it("rejects a read registration declared as a write service", () => {
+    expect(() =>
+      register(
+        { services: [{ contract: "inventory.items@1", access: "write" }] },
+        undefined,
+        "read",
+      ),
+    ).toThrow(
+      "Undeclared or duplicate registration: service:inventory.items@1",
+    );
+  });
+
+  it("publishes a write service that both declare, model-facing or not", () => {
+    expect(
+      register(
+        { services: [{ contract: "inventory.items@1", access: "write" }] },
+        undefined,
+        "write",
+      ),
+    ).toHaveBeenCalledOnce();
+    expect(
+      register(
+        {
+          services: [
+            {
+              contract: "inventory.items@1",
+              access: "write",
+              modelFacing: true,
+            },
+          ],
+        },
+        true,
+        "write",
+      ),
+    ).toHaveBeenCalledOnce();
+    // `access: read` and no access mean the same.
+    expect(
+      register(
+        { services: [{ contract: "inventory.items@1", access: "read" }] },
+        undefined,
+        undefined,
+      ),
     ).toHaveBeenCalledOnce();
   });
 });

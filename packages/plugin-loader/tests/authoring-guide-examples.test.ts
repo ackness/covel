@@ -2,7 +2,9 @@ import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { expect, it } from "vitest";
+import { Document, parseDocument } from "yaml";
 import { parsePluginMd, parseRuntimeMd } from "../src/index.js";
+import { readPlainYamlFrontmatter } from "../src/plain-yaml-frontmatter.js";
 import { validateRuntimeDeclarations } from "../src/static-validation.js";
 import { runValidateManifest } from "../scripts/run-validate-manifest.js";
 
@@ -10,6 +12,7 @@ const guidesRoot = path.resolve(import.meta.dirname, "../../../docs/plugins");
 
 it.each([
   { guide: "essentials.md", id: "my-plugin", multiRuntime: false },
+  { guide: "prompt-only.md", id: "observation", multiRuntime: false },
   { guide: "local-code.md", id: "notebook", multiRuntime: false },
   {
     guide: "advanced.md",
@@ -36,7 +39,49 @@ it.each([
     try {
       // The guides ship no package.json: the folder name is the ID and the
       // version lives in PLUGIN.md.
-      await write("PLUGIN.md", manifests[0]!);
+      let primary = manifests[0]!;
+      if (guide === "prompt-only.md") {
+        expect(manifests).toHaveLength(2);
+        const { data, body } = readPlainYamlFrontmatter(manifests[1]!);
+        const config = new Document(data);
+        // Apply the memory section's additions to the complete example,
+        // preserving its settings, schedule and narrative input.
+        const additions = document.match(
+          /```yaml\n(contributes:\n  datasets:[\s\S]*?)\n```/,
+        )?.[1];
+        expect(additions).toBeDefined();
+        const memory = parseDocument(additions!);
+        for (const field of [
+          ["contributes", "datasets"],
+          ["runtime", "io", "selfData"],
+          ["runtime", "agent"],
+        ])
+          config.setIn(field, memory.getIn(field));
+        primary = `---\n${config.toString()}---\n${body}`;
+        const recordSchema = document.match(
+          /```json\n(\{\n  "type": "object",[\s\S]*?)\n```/,
+        )?.[1];
+        expect(recordSchema).toBeDefined();
+        expect(JSON.parse(recordSchema!)).toMatchObject({
+          required: ["id", "text"],
+          properties: { id: { type: "string" }, text: { type: "string" } },
+        });
+        await write("schemas/observation.schema.json", recordSchema!);
+      }
+      await write("PLUGIN.md", primary);
+      if (guide === "prompt-only.md") {
+        const parsed = parsePluginMd(
+          await readFile(path.join(root, "PLUGIN.md"), "utf8"),
+          path.join(root, "PLUGIN.md"),
+        );
+        expect(parsed.manifest.datasets?.observations).toMatchObject({
+          schema: "./schemas/observation.schema.json",
+          key: "id",
+        });
+        expect(parsed.plugin.runtime?.agent?.tools?.datasets).toEqual([
+          { dataset: "observations", tools: ["upsert"] },
+        ]);
+      }
       // The guides describe these support files separately. Manifest references
       // still use the exact paths and declarations extracted from the document.
       if (guide === "local-code.md") {

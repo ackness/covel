@@ -7,6 +7,7 @@ import { readPlainYamlFrontmatter } from "./plain-yaml-frontmatter.js";
 import path from "node:path";
 import {
   DATA_OP_KINDS,
+  datasetToolKinds,
   isRuntimeDisablingIssue,
   pluginIdSchema,
   pluginManifestSchema,
@@ -328,6 +329,10 @@ export function normalizePackageManifest(
             schema: decl.schema,
             ...(decl.key === undefined ? {} : { key: decl.key }),
             ops: decl.ops ?? DATA_OP_KINDS,
+            tools: datasetToolKinds(decl),
+            ...(decl.description === undefined
+              ? {}
+              : { description: decl.description }),
           },
         ]),
       ),

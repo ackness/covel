@@ -9,12 +9,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { LLMMessage, RuntimeManifest, TurnInput } from "@covel/shared";
 import type { SuspensionRecord } from "@covel/store";
 import { createMemoryStore } from "@covel/store/memory";
-import {
-  createPluginDataTools,
-  suspendTool,
-  tool,
-  type ToolModule,
-} from "@covel/tools";
+import { suspendTool, tool, type ToolModule } from "@covel/tools";
 import { z } from "zod";
 import { createToolExecutor } from "../src/agent-loop/tool-executor.js";
 import { createHookPipeline } from "../src/hooks/pipeline.js";
@@ -404,10 +399,19 @@ describe("context on resume", () => {
       name: "plug/agent",
       stage: "post-turn",
       tools: {
-        builtin: ["plugin-data-get", "plugin-data-set", "suspend"],
+        builtin: ["suspend"],
+        datasets: [{ dataset: "notes", tools: ["get", "upsert"] }],
+      },
+      datasets: {
+        notes: {
+          namespace: "notes",
+          schema: "./schemas/note.json",
+          ops: ["set"],
+          tools: ["get", "list", "upsert"],
+        },
       },
     });
-    const modules = [...createPluginDataTools(store), suspendTool];
+    const modules = [suspendTool];
     const executionDeps = (llm: TurnExecutorDeps["llm"]) => ({
       store,
       llm,
@@ -418,6 +422,7 @@ describe("context on resume", () => {
       loadRuntime: async (rt: RuntimeManifest) => ({
         manifest: rt,
         promptTemplate: "Do the work.",
+        datasetSchemas: { notes: { type: "string" } },
         handler: async (ctx: {
           pluginData?: {
             set(namespace: string, key: string, value: unknown): Promise<void>;
@@ -438,8 +443,8 @@ describe("context on resume", () => {
       executionDeps(
         queuedLLM([
           toolCall(
-            "plugin-data-set",
-            { namespace: "notes", key: "own", value: "from the agent" },
+            "notes-upsert",
+            { key: "own", record: "from the agent" },
             "tc-1",
           ),
           toolCall("suspend", ASK, "tc-2"),
@@ -462,17 +467,9 @@ describe("context on resume", () => {
 
     const llm = scriptedLLM((_params, call) =>
       call === 1
-        ? toolCall(
-            "plugin-data-get",
-            { namespace: "notes", key: "upstream" },
-            "tc-3",
-          )
+        ? toolCall("notes-get", { key: "upstream" }, "tc-3")
         : call === 2
-          ? toolCall(
-              "plugin-data-get",
-              { namespace: "notes", key: "own" },
-              "tc-4",
-            )
+          ? toolCall("notes-get", { key: "own" }, "tc-4")
           : prose("done"),
     );
     const resumed = await resumeSuspendedRuntime(

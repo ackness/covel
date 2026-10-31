@@ -28,7 +28,7 @@ import {
  * `scripts/e2e-plugin-verify.ts`, not here.
  */
 
-import { describe, it, expect, beforeAll, beforeEach } from "vitest";
+import { describe, it, expect, beforeAll, beforeEach, vi } from "vitest";
 import path from "node:path";
 import {
   discoverPlugins,
@@ -741,6 +741,15 @@ describe("inventory plugin manifest", () => {
       accepts: "contract:world-ir@1",
     });
     expect(declaration.requires).toContain("world-ir-provider@1");
+    expect(manifest.input.inject).toContainEqual({
+      kind: "kernel",
+      name: "operations",
+      from: "operations@1",
+    });
+    expect(declaration.contributes.services).toEqual([
+      { contract: "inventory.bag@1", modelFacing: true },
+      { contract: "inventory.change@1", access: "write", modelFacing: true },
+    ]);
     expect(manifest.runtimeType).toBe("function");
     expect(manifest.handler).toBe("./handler.js");
     expect(manifest.tools).toBeUndefined();
@@ -925,6 +934,58 @@ describe("inventory from WorldIR", () => {
     });
   });
 
+  it("avoids any store read when operations already cover every extracted change", async () => {
+    const store = {
+      listPluginData: vi.fn(() => {
+        throw new Error("Unexpected store read");
+      }),
+      getPluginData: vi.fn(() => {
+        throw new Error("Unexpected store read");
+      }),
+    };
+    const result = await ledger({
+      store,
+      world: {
+        characters: [player],
+        seats: [
+          {
+            id: "main",
+            controller: "human",
+            role: "player",
+            characters: "auto",
+          },
+        ],
+      },
+      inputs: {
+        worldIR: {
+          value: worldIR([
+            change({
+              item: "iron-sword",
+              holder: player.id,
+              operation: "gain",
+            }),
+          ]),
+        },
+        operations: {
+          value: {
+            operations: [
+              {
+                contract: "inventory.change@1",
+                request: { changes: [{ op: "add", item: "Iron Sword" }] },
+              },
+            ],
+          },
+        },
+      },
+    });
+    expect(result).toEqual({
+      outcome: "success",
+      value: { applied: 0, skipped: 0, results: [], alreadyApplied: 1 },
+    });
+    expect(store.listPluginData).not.toHaveBeenCalled();
+    expect(store.getPluginData).not.toHaveBeenCalled();
+  });
+
   it("applies only the acting character's holdings when another player is current", async () => {
     const other = { id: "mira", name: "Mira", type: "player" };
     const result = await ledger({
@@ -1056,4 +1117,205 @@ describe("inventory from WorldIR", () => {
       value: { entries: [{ type: "item", name: "Torch" }] },
     });
   });
+});
+
+it("preserves the ledger proposals for a representative item exchange", async () => {
+  vi.useFakeTimers();
+  vi.setSystemTime(new Date("2026-01-02T03:04:05.000Z"));
+  try {
+    const result = await ledger({
+      sessionId: "session",
+      turnId: "turn",
+      pluginId: "inventory",
+      runtimeId: "inventory/ledger",
+      random: makeRandom(),
+      store: {
+        listPluginData: async () => [
+          {
+            key: "gold",
+            value: {
+              id: "gold",
+              name: "Gold",
+              quantity: 12,
+              tags: ["currency"],
+            },
+          },
+        ],
+        getPluginData: async () => null,
+      },
+      world: {
+        characters: [{ id: "player", name: "Ren", type: "player" }],
+        seats: [
+          {
+            id: "main",
+            controller: "human",
+            role: "player",
+            characters: "auto",
+          },
+        ],
+      },
+      inputs: {
+        worldIR: {
+          value: {
+            schemaVersion: 1,
+            entities: [
+              { id: "gold", type: "item", name: "Gold" },
+              { id: "sword", type: "item", name: "Sword" },
+            ],
+            events: [
+              {
+                type: "inventory_change",
+                attributes: {
+                  item: "gold",
+                  holder: "player",
+                  operation: "lose",
+                  quantity: 10,
+                },
+              },
+              {
+                type: "inventory_change",
+                attributes: {
+                  item: "sword",
+                  holder: "player",
+                  operation: "gain",
+                },
+              },
+            ],
+          },
+        },
+      },
+    });
+    // Proposal UUIDs are transport identities; all proposal contents stay pinned.
+    for (const proposal of result.pendingProposals)
+      proposal.id = "[proposal-id]";
+    expect(result).toMatchInlineSnapshot(`
+      {
+        "content": {
+          "outcome": "success",
+          "value": {
+            "applied": 2,
+            "results": [
+              {
+                "itemId": "gold",
+                "name": "Gold",
+                "op": "remove",
+                "quantity": 2,
+                "status": "updated",
+              },
+              {
+                "itemId": "item-sword-3c88596c",
+                "name": "Sword",
+                "op": "add",
+                "quantity": 1,
+                "status": "created",
+              },
+            ],
+            "skipped": 0,
+          },
+        },
+        "kind": "covel.tool-result",
+        "pendingProposals": [
+          {
+            "id": "[proposal-id]",
+            "payload": {
+              "key": "gold",
+              "namespace": "items",
+              "ops": [
+                {
+                  "by": -10,
+                  "min": 0,
+                  "onBound": "clamp",
+                  "op": "inc",
+                  "path": "/quantity",
+                },
+                {
+                  "op": "merge",
+                  "value": {
+                    "updatedAt": "2026-01-02T03:04:05.000Z",
+                  },
+                },
+              ],
+            },
+            "sessionId": "session",
+            "source": {
+              "pluginId": "inventory",
+              "runtimeId": "inventory/ledger",
+            },
+            "timestamp": "2026-01-02T03:04:05.000Z",
+            "turnId": "turn",
+            "type": "plugin.data.update",
+          },
+          {
+            "id": "[proposal-id]",
+            "payload": {
+              "key": "item-sword-3c88596c",
+              "namespace": "items",
+              "ops": [
+                {
+                  "op": "set",
+                  "value": {
+                    "description": "",
+                    "equipped": false,
+                    "id": "item-sword-3c88596c",
+                    "name": "Sword",
+                    "quantity": 1,
+                    "tags": [],
+                    "updatedAt": "2026-01-02T03:04:05.000Z",
+                  },
+                },
+              ],
+            },
+            "sessionId": "session",
+            "source": {
+              "pluginId": "inventory",
+              "runtimeId": "inventory/ledger",
+            },
+            "timestamp": "2026-01-02T03:04:05.000Z",
+            "turnId": "turn",
+            "type": "plugin.data.update",
+          },
+          {
+            "id": "[proposal-id]",
+            "payload": {
+              "items": [
+                {
+                  "key": "turn",
+                  "namespace": "message",
+                  "value": {
+                    "changes": [
+                      {
+                        "badge": "Lost",
+                        "color": "red",
+                        "op": "remove",
+                        "seq": 0,
+                        "text": "− Gold ×10",
+                      },
+                      {
+                        "badge": "Gained",
+                        "color": "green",
+                        "op": "add",
+                        "seq": 1,
+                        "text": "+ Sword ×1",
+                      },
+                    ],
+                    "turnId": "turn",
+                  },
+                },
+              ],
+            },
+            "sessionId": "session",
+            "source": {
+              "pluginId": "inventory",
+              "runtimeId": "inventory/ledger",
+            },
+            "timestamp": "2026-01-02T03:04:05.000Z",
+            "turnId": "turn",
+            "type": "plugin.data.batch",
+          },
+        ],
+      }
+    `);
+  } finally {
+    vi.useRealTimers();
+  }
 });

@@ -34,3 +34,22 @@ export const turnDigestSchema = z
     locale: z.string().optional(),
   })
   .readonly();
+
+/** Model-facing operations staged by completed runs of this execution. */
+export const operationsInputSchema = z
+  .strictObject({
+    operations: z
+      .array(
+        z
+          .strictObject({
+            contract: z.string(),
+            summary: z.string(),
+            request: z.json().optional(),
+            result: z.json().optional(),
+            truncated: z.literal(true).optional(),
+          })
+          .readonly(),
+      )
+      .readonly(),
+  })
+  .readonly();

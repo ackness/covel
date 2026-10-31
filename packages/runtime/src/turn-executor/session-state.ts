@@ -1,3 +1,5 @@
+import { z } from "zod";
+import { isScopedRuntimeRecovery } from "./scheduling.js";
 import { currentCharacterField } from "@covel/context";
 import { snapshotPlayerInput } from "./turn-digest.js";
 import type {
@@ -23,6 +25,20 @@ import {
   type RuntimeTriggerRecord,
 } from "../trigger/trigger-ledger.js";
 
+const previousOperationsSchema = z.array(
+  z.object({
+    operations: z
+      .array(
+        z.object({
+          status: z.string(),
+          summary: z.string(),
+          invokedBy: z.object({ runtimeId: z.string() }),
+        }),
+      )
+      .optional(),
+  }),
+);
+
 export interface TurnSessionCharacter {
   readonly id?: string;
   readonly name: string;
@@ -32,6 +48,9 @@ export interface TurnSessionCharacter {
 }
 
 export interface TurnSessionMeta {
+  readonly failedOperationSummaries?: Readonly<
+    Record<string, readonly string[]>
+  >;
   readonly turnNumber: number;
   /** `completedPlayerTurns + 1`, frozen for the execution. */
   readonly logicalTurn: number;
@@ -98,6 +117,8 @@ export async function loadTurnSessionState(args: {
   // in-memory history is only the uncompacted suffix — the compacted prefix is
   // represented by session summaries at prompt-build time, so a long session
   // never re-loads its whole history every turn.
+  const failedOperationSummaries: Record<string, string[]> =
+    Object.create(null);
   let messageHistory: readonly TurnMessageRecord[] = [];
   let recentMessages: readonly TurnMessageRecord[] = [];
   let turnNumber = 0;
@@ -118,6 +139,7 @@ export async function loadTurnSessionState(args: {
       charRecords,
       newest,
       recent,
+      previousTurns,
     ] = await Promise.all([
       deps.store.listUncompactedTurnMessages(input.sessionId),
       deps.store.getTurnMessageStats(input.sessionId),
@@ -128,7 +150,25 @@ export async function loadTurnSessionState(args: {
         ? lastPlayerInput
         : loadLastPlayerInput(deps.store, input.sessionId),
       deps.store.listRecentTurnMessages(input.sessionId, 20),
+      (input.origin === "player" || input.origin === "continuation") &&
+      !isScopedRuntimeRecovery(input)
+        ? deps.store.queryTurnResults(input.sessionId, {
+            origins: ["player", "continuation"],
+            commitStatus: "committed",
+            newestFirst: true,
+            limit: 1,
+          })
+        : [],
     ]);
+    const previous = previousOperationsSchema.safeParse(
+      previousTurns[0]?.runtimeResults,
+    );
+    if (previous.success)
+      for (const result of previous.data)
+        for (const operation of result.operations ?? [])
+          if (operation.status === "failed")
+            (failedOperationSummaries[operation.invokedBy.runtimeId] ??=
+              []).push(operation.summary);
     messageHistory = uncompacted;
     recentMessages = recent;
     turnNumber = stats.playerMessageCount;
@@ -180,6 +220,7 @@ export async function loadTurnSessionState(args: {
       completedPlayerTurns + (shouldAppendPlayerMessage ? 1 : 0),
     ),
     sessionMeta: {
+      failedOperationSummaries,
       turnNumber,
       logicalTurn:
         input.detachedStage?.sourceLogicalTurn ?? completedPlayerTurns + 1,

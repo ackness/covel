@@ -55,6 +55,8 @@ describe("event directory — real scene-stage manifest", () => {
     expect(catalog).toContain('"enum":["actor.enter","actor.update"]');
     expect(catalog).toContain('"required":["type","character"]');
     expect(catalog).toContain('"$defs"');
+    expect(catalog).toContain("payload schema:");
+    expect(catalog).not.toContain('"timeOfDay"');
   });
 
   it("validates a conforming scene.set payload against the on-disk schema", async () => {

@@ -414,11 +414,12 @@ describe("runtime debug host integration", () => {
       pluginRoot,
       "follower",
       `
-      await ctx.tools.call("plugin-data-set", {namespace: "notes", key: "follower", value: ctx.triggerEvent.data});
+      await ctx.tools.call("list-characters", {});
+      await ctx.pluginData.set("notes", "follower", ctx.triggerEvent.data);
       return {outcome: "success", effects: {events: [{topic: "next.ready", data: {source: "follower"}}]}};
     `,
       "schedule: {trigger: {type: event, topic: root.ready}, background: true}",
-      ", tools: {builtin: [plugin-data-set]}",
+      ", tools: {builtin: [list-characters]}",
     );
     await runtimeFixture(
       pluginRoot,

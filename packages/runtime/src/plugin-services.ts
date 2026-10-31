@@ -1,4 +1,8 @@
-import { compareText } from "@covel/shared";
+import {
+  compareText,
+  pluginMessagesFor,
+  type PluginMessageCatalog,
+} from "@covel/shared";
 import { toolParametersJsonSchema } from "@covel/tools";
 import { AsyncLocalStorage } from "node:async_hooks";
 import type {
@@ -6,7 +10,9 @@ import type {
   PluginServiceContext,
   PluginServiceDefinition,
   PluginServiceDescriptor,
+  PluginWriteServiceContext,
 } from "@covel/shared/plugin-runtime";
+import { ToolError, type Proposal } from "@covel/shared";
 import type {
   ExtensionDeclaration,
   ExtensionPoint,
@@ -22,9 +28,28 @@ import type { TurnEmitter } from "./trace/turn-emitter.js";
 import { withGatewayTrace } from "./function-runtime/gateway-trace.js";
 import { currentOwnSettings } from "./hooks/hook-scope.js";
 import {
+  providerVisibility,
   readProviderData,
   type PluginDataVisibility,
 } from "./function-runtime/upstream-plugin-data.js";
+import { createServicePluginDataWriter } from "./function-runtime/plugin-handler-helpers.js";
+import { createExecutionWriteBuffer } from "./function-runtime/execution-write-buffer.js";
+import { createPluginRandom } from "./function-runtime/plugin-random.js";
+import type {
+  OperationStage,
+  StagedOperation,
+} from "./operations/operation-stage.js";
+
+/** Fixed answers of a write call that cannot run where it was made. */
+export const WRITE_SERVICE_MESSAGES = Object.freeze({
+  noStage: "Write services cannot be called here.",
+  nestedWrite: "A write service cannot call another write service.",
+  nestedInRead: "A read service cannot call a write service.",
+  selfCall:
+    "A plugin changes its own data directly, not through its own write service.",
+  datasets:
+    "The write service is unavailable: its plugin's data rules could not be loaded.",
+});
 
 class ServiceOutputValidationError extends Error {
   constructor() {
@@ -59,13 +84,17 @@ export class ServiceInputValidationError extends Error {
 }
 
 interface Entry extends PluginServiceDescriptor {
+  readonly access: "read" | "write";
   readonly extension?: ExtensionDeclaration;
   /** Set for a model-facing service: the schema its imported tool shows. */
   readonly modelFacing?: {
     readonly jsonSchema: Readonly<Record<string, unknown>>;
     readonly input: { parse(value: unknown): unknown };
   };
-  invoke(input: unknown, context: PluginServiceContext): Promise<unknown>;
+  invoke(
+    input: unknown,
+    context: PluginServiceContext | PluginWriteServiceContext,
+  ): Promise<unknown>;
 }
 
 /** How an agent's import of a contract resolves for one run. */
@@ -75,6 +104,8 @@ export type ServiceImportResolution =
       readonly pluginId: string;
       readonly name: string;
       readonly contract: string;
+      /** `write`: a call stages the provider's writes for the caller. */
+      readonly access: "read" | "write";
       readonly description: string;
       readonly jsonSchema: Readonly<Record<string, unknown>>;
       /** The provider's own parser; the imported tool checks arguments with it. */
@@ -105,7 +136,44 @@ export interface KernelServiceCaller extends Omit<Caller, "pluginId"> {
   ): ExtensionContextFields;
 }
 
+export interface ServiceCallOutcome {
+  readonly providerPluginId: string;
+  readonly callerRuntimeId?: string;
+  /**
+   * The scheduled runtime a sub-agent made the call for. Absent when the
+   * caller is that runtime itself. A setup runtime's exemption follows it.
+   */
+  readonly originRuntimeId?: string;
+  readonly verdict: "fault" | "clean" | "neutral";
+}
+
+function providerVerdict(
+  code: PluginServiceCallEvent["errorCode"],
+  error: unknown,
+  ownImportTimeout: boolean,
+): ServiceCallOutcome["verdict"] {
+  if (serviceFailureOf(error)) return "neutral";
+  const deliberate =
+    error instanceof ToolError &&
+    [
+      "invalid-input",
+      "not-found",
+      "ambiguous",
+      "refused",
+      "conflict",
+      "unavailable",
+      "cancelled",
+    ].includes(error.code);
+  return code === "output-validation" ||
+    (code === "invocation-error" && !deliberate) ||
+    (code === "timeout" && ownImportTimeout)
+    ? "fault"
+    : "neutral";
+}
+
 interface Caller {
+  /** Kernel-only execution collector; inherited by nested service clients. */
+  readonly onSettled?: (outcome: ServiceCallOutcome) => void;
   /** Host-owned trace destination; never exposed in the plugin context. */
   readonly emitter?: TurnEmitter;
   readonly sessionId: string;
@@ -128,6 +196,16 @@ interface Caller {
     readonly visibility?: PluginDataVisibility;
     readonly writeBuffer?: readonly import("@covel/shared").Proposal[];
   };
+  /**
+   * Kernel only: the stage a write-service call stages into. Without it a
+   * write service answers `unavailable`. Read services read what it staged.
+   */
+  readonly operations?: OperationStage;
+  /**
+   * Kernel only: set for calls made from inside a service handler, which
+   * reach read services only.
+   */
+  readonly nestedIn?: "read" | "write";
 }
 
 export interface PluginServiceCallEvent {
@@ -197,6 +275,7 @@ interface CallState {
   readonly callId: string;
   diagnosticScope?: string;
   cancellation?: "timeout" | "cancelled";
+  ownTimeout?: boolean;
 }
 
 async function runCall(
@@ -247,6 +326,7 @@ async function runCall(
       timer = setTimeout(() => {
         if (controller.signal.aborted) return;
         state.cancellation = "timeout";
+        state.ownTimeout = true;
         controller.abort(
           new DOMException("Plugin service call timed out", "TimeoutError"),
         );
@@ -372,6 +452,37 @@ function modelFacingSchema(
 
 /** Scoped to one host instance; activation owns registration disposal. */
 export class PluginServiceRegistry {
+  private readonly executionObservers = new AsyncLocalStorage<
+    (outcome: ServiceCallOutcome) => void
+  >();
+  private readonly importedCalls = new AsyncLocalStorage<boolean>();
+
+  /** Bind execution collection without exposing the observer to plugin code. */
+  withExecutionObserver<T>(
+    observer: (outcome: ServiceCallOutcome) => void,
+    run: () => T,
+  ): T {
+    return this.executionObservers.run(observer, run);
+  }
+
+  executionObserver(): ((outcome: ServiceCallOutcome) => void) | undefined {
+    return this.executionObservers.getStore();
+  }
+
+  /** Generated tools are kernel service imports; plugin tools choose their own deadlines. */
+  observeToolCalls(
+    inner: import("./agent-loop/tool-executor.js").ToolExecutor,
+  ): import("./agent-loop/tool-executor.js").ToolExecutor {
+    return {
+      getToolInfo: (name, context) => inner.getToolInfo(name, context),
+      execute: (call, context) =>
+        this.importedCalls.run(
+          context.generatedTools?.has(call.name) === true,
+          () => inner.execute(call, context),
+        ),
+    };
+  }
+
   private readonly entries = new Map<string, Entry>();
   private readonly snapshots = new AsyncLocalStorage<Map<string, Entry>>();
   private readEntries(): ReadonlyMap<string, Entry> {
@@ -411,6 +522,9 @@ export class PluginServiceRegistry {
       /** Host-owned observer; failures must never affect service execution. */
       onCallCompleted?(event: PluginServiceCallEvent): void | Promise<void>;
     },
+    private readonly messagesOf?: (
+      pluginId: string,
+    ) => readonly PluginMessageCatalog[] | undefined,
   ) {}
 
   /** Host diagnostics only: registered descriptors, without handlers or parsers. */
@@ -537,6 +651,11 @@ export class PluginServiceRegistry {
       throw new TypeError(
         "Service requires input/output parsers, a handler, and an optional string description",
       );
+    const access = (definition as { access?: unknown }).access ?? "read";
+    if (access !== "read" && access !== "write")
+      throw new TypeError('Service access must be "read" or "write"');
+    if (access === "write" && extension)
+      throw new TypeError("An extension provider cannot be a write service");
     const modelFacing =
       definition.modelFacing === true && !extension
         ? modelFacingSchema(definition)
@@ -549,6 +668,7 @@ export class PluginServiceRegistry {
       name: definition.name,
       contract: definition.contract,
       description: definition.description,
+      access,
       extension,
       ...(modelFacing
         ? { modelFacing: { jsonSchema: modelFacing, input: definition.input } }
@@ -566,7 +686,11 @@ export class PluginServiceRegistry {
           throw new ServiceInputValidationError(cause);
         }
         context.signal.throwIfAborted();
-        const result = await definition.handler(parsed, context);
+        const handler = definition.handler as (
+          input: I,
+          context: PluginServiceContext | PluginWriteServiceContext,
+        ) => Promise<O> | O;
+        const result = await handler(parsed, context);
         context.signal.throwIfAborted();
         try {
           return structuredClone(definition.output.parse(result));
@@ -627,6 +751,7 @@ export class PluginServiceRegistry {
       pluginId: only.pluginId,
       name: only.name,
       contract: only.contract,
+      access: only.access,
       description: only.description ?? "",
       jsonSchema: only.modelFacing!.jsonSchema,
       input: only.modelFacing!.input,
@@ -679,15 +804,23 @@ export class PluginServiceRegistry {
         };
         let errorCode: PluginServiceCallEvent["errorCode"] = "invalid-options";
         let outcome: PluginServiceCallEvent["outcome"] = "success";
+        let verdict: ServiceCallOutcome["verdict"] = "clean";
+        const imported =
+          path.length === 0 && this.importedCalls.getStore() === true;
         let extension: PluginServiceCallEvent["extension"];
         let target = {
           providerPluginId: "<unavailable>",
           name: "<unavailable>",
           contract: "<unavailable>",
         };
+        // A write call holds its provider's lock until the call ends, and
+        // stages its operation only once the call has returned in time.
+        let release: (() => void) | undefined;
+        let staged:
+          Omit<StagedOperation, "id" | "seq" | "invokedBy"> | undefined;
         try {
           const { pluginId, name, contract, input } = request;
-          return await runCall(
+          const output = await runCall(
             caller.signal,
             options,
             async (signal) => {
@@ -759,6 +892,52 @@ export class PluginServiceRegistry {
                 name: entry.name,
                 contract: entry.contract,
               };
+              const stage = caller.operations;
+              if (entry.access === "write") {
+                if (caller.nestedIn)
+                  throw new ToolError(
+                    "unavailable",
+                    caller.nestedIn === "write"
+                      ? WRITE_SERVICE_MESSAGES.nestedWrite
+                      : WRITE_SERVICE_MESSAGES.nestedInRead,
+                  );
+                if (!stage || kernel)
+                  throw new ToolError(
+                    "unavailable",
+                    WRITE_SERVICE_MESSAGES.noStage,
+                  );
+                if (
+                  entry.pluginId === caller.pluginId ||
+                  entry.pluginId === stage.caller.pluginId ||
+                  entry.pluginId === stage.owner.pluginId
+                ) {
+                  errorCode = "invocation-error";
+                  throw new ToolError(
+                    "refused",
+                    WRITE_SERVICE_MESSAGES.selfCall,
+                  );
+                }
+                try {
+                  await stage.scope.prepareProvider(entry.pluginId);
+                } catch (cause) {
+                  console.warn(
+                    `[plugin-services] write service ${key} is unavailable:`,
+                    cause,
+                  );
+                  throw new ToolError(
+                    "unavailable",
+                    WRITE_SERVICE_MESSAGES.datasets,
+                  );
+                }
+                signal.throwIfAborted();
+                const unlock = await stage.lock(entry.pluginId);
+                // The call may have ended while it waited.
+                if (signal.aborted) {
+                  unlock();
+                  signal.throwIfAborted();
+                }
+                release = unlock;
+              }
               extension = entry.extension
                 ? {
                     point: entry.extension.point,
@@ -796,32 +975,135 @@ export class PluginServiceRegistry {
                 : undefined;
               errorCode = "invocation-error";
               let providerWorld: PluginServiceContext["world"] | undefined;
+              const world = () =>
+                (providerWorld ??= structuredClone(
+                  caller.reads?.world ?? {
+                    characterSchema: null,
+                    characters: [],
+                    dimensions: {},
+                    seats: [],
+                  },
+                ));
+              const stagedWrites = stage
+                ? () => stage.stagedWrites(entry.pluginId)
+                : undefined;
+              if (entry.access === "write" && stage) {
+                // No model, HTTP or media access, and nested calls reach
+                // read services only; the provider's own data is writable.
+                const buffer = createExecutionWriteBuffer();
+                const identity = {
+                  sessionId: caller.sessionId,
+                  turnId: stage.turnId,
+                  pluginId: entry.pluginId,
+                  runtimeId: `service:${entry.name}`,
+                };
+                const context: PluginWriteServiceContext = {
+                  callerPluginId: caller.pluginId,
+                  sessionId: caller.sessionId,
+                  turnId: stage.turnId,
+                  locale: caller.reads?.locale,
+                  messages: pluginMessagesFor(
+                    this.messagesOf?.(entry.pluginId),
+                    caller.reads?.locale,
+                  ),
+                  pluginData: createServicePluginDataWriter({
+                    ...(caller.reads?.store
+                      ? { store: caller.reads.store }
+                      : {}),
+                    identity,
+                    signal,
+                    ...(caller.reads?.visibility
+                      ? {
+                          visibility: providerVisibility(
+                            caller.reads.visibility,
+                            entry.pluginId,
+                          )!,
+                        }
+                      : {}),
+                    staged: stagedWrites!,
+                    buffer,
+                  }),
+                  random: createPluginRandom({
+                    sessionId: caller.sessionId,
+                    pluginId: entry.pluginId,
+                    stream: identity.runtimeId,
+                  }),
+                  get world() {
+                    return world();
+                  },
+                  getOwnSettings: () => currentOwnSettings(entry.pluginId),
+                  signal,
+                  services: this.createClient(
+                    {
+                      ...caller,
+                      pluginId,
+                      signal,
+                      gateway: undefined,
+                      utils: undefined,
+                      nestedIn: "write",
+                    },
+                    [...path, key],
+                    state,
+                  ),
+                };
+                const result = await entry.invoke(input, context);
+                if (!signal.aborted && buffer.length > 0)
+                  staged = {
+                    contract: entry.contract,
+                    providerPluginId: entry.pluginId,
+                    service: entry.name,
+                    ...(caller.toolCallId !== undefined
+                      ? { toolCallId: caller.toolCallId }
+                      : {}),
+                    // Identity is the provider's, whatever the code wrote.
+                    writes: buffer.map(
+                      (proposal) =>
+                        ({
+                          ...proposal,
+                          sessionId: identity.sessionId,
+                          turnId: identity.turnId,
+                          source: {
+                            pluginId: identity.pluginId,
+                            runtimeId: identity.runtimeId,
+                          },
+                        }) as Proposal,
+                    ),
+                    request: structuredClone(input),
+                    result: structuredClone(result),
+                  };
+                return result;
+              }
               const context: PluginServiceContext = {
                 callerPluginId: caller.pluginId,
                 sessionId: caller.sessionId,
                 locale: caller.reads?.locale,
+                messages: pluginMessagesFor(
+                  this.messagesOf?.(entry.pluginId),
+                  caller.reads?.locale,
+                ),
                 pluginData: readProviderData({
                   ...caller.reads,
                   sessionId: caller.sessionId,
                   pluginId: entry.pluginId,
                   signal,
+                  ...(stagedWrites ? { staged: stagedWrites } : {}),
                 }),
                 get world() {
-                  return (providerWorld ??= structuredClone(
-                    caller.reads?.world ?? {
-                      characterSchema: null,
-                      characters: [],
-                      dimensions: {},
-                      seats: [],
-                    },
-                  ));
+                  return world();
                 },
                 getOwnSettings: () => currentOwnSettings(entry.pluginId),
                 signal,
                 gateway,
                 utils,
                 services: this.createClient(
-                  { ...caller, pluginId, signal, gateway, utils },
+                  {
+                    ...caller,
+                    pluginId,
+                    signal,
+                    gateway,
+                    utils,
+                    nestedIn: caller.nestedIn ?? "read",
+                  },
                   [...path, key],
                   state,
                 ),
@@ -838,6 +1120,8 @@ export class PluginServiceRegistry {
             state,
             parentState,
           );
+          if (staged) caller.operations!.record(staged);
+          return output;
         } catch (error) {
           outcome = state.cancellation ?? "error";
           if (state.cancellation) errorCode = state.cancellation;
@@ -845,12 +1129,29 @@ export class PluginServiceRegistry {
             errorCode = "output-validation";
           else if (error instanceof ServiceInputValidationError)
             errorCode = "input-validation";
+          verdict = providerVerdict(
+            errorCode,
+            error,
+            state.ownTimeout === true && imported,
+          );
           throw tagServiceFailure(error, {
             callerPluginId: caller.pluginId,
             providerPluginId: target.providerPluginId,
             errorCode,
           });
         } finally {
+          release?.();
+          try {
+            caller.onSettled?.({
+              providerPluginId: target.providerPluginId,
+              ...(caller.runtimeId !== undefined
+                ? { callerRuntimeId: caller.runtimeId }
+                : {}),
+              verdict,
+            });
+          } catch {
+            // Observation cannot change the service result.
+          }
           const event: PluginServiceCallEvent = {
             sessionId: caller.sessionId,
             ...(state.diagnosticScope !== undefined

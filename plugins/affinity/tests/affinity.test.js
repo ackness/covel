@@ -792,6 +792,7 @@ describe("affinity plugin manifest", () => {
       schema: "./schemas/affinity.schema.json",
       key: "id",
       ops: ["set", "merge", "inc"],
+      tools: ["get", "list", "upsert", "update"],
     });
     expect(loaded.datasetSchemas.affinity).toBeDefined();
     expect(packageManifest.dataSchemas?.affinity).toMatchObject({

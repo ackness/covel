@@ -289,6 +289,8 @@ agent runtime 的每次工具调用之前触发，函数 runtime 经 `ctx.tools.
 - `abort` 拒绝这条 proposal，带上原因。
 - `replace.proposal.payload` 替换 payload。proposal 的类型、来源和 ID 保持不变。
 
+[写服务](./plugin-extensions.md#写服务)暂存的写入以提供者为来源到达：`ctx.pluginId` 是提供者，`ctx.runtimeId` 是 `service:<服务名>`，发起调用的插件不出现在 Hook 里。拒绝其中任何一条，整个操作被拒（见[事务 · 写服务的操作](./transactions.md#写服务的操作)）。
+
 ### `PostStateCommit`
 
 一条 proposal 提交之后触发。要在数据真正写入之后做事，用这个事件。

@@ -376,13 +376,13 @@ describe("codex plugin manifest", () => {
     );
   });
 
-  it("should expose one atomic sync tool but NOT plugin-data-list", () => {
+  it("should expose one atomic sync tool and no builtin tools", () => {
     expect(manifest.tools?.plugin).toEqual(["sync-codex-entries"]);
     expect(manifest.completeAfterTools).toEqual(["sync-codex-entries"]);
     expect(manifest.maxSteps).toBeUndefined(); // Inherit the framework budget.
     expect(manifest.maxRetries).toBe(3);
-    // plugin-data-list was removed — existing entries now arrive via input.inject
-    expect(manifest.tools?.builtin ?? []).not.toContain("plugin-data-list");
+    // Existing entries arrive via input.inject, not a list tool.
+    expect(manifest.tools?.builtin).toBeUndefined();
   });
 
   it("should declare post-history completion contract", () => {

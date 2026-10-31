@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
+import {
+  ToolError,
+  getPendingProposals,
+  getToolContent,
+} from "@covel/plugin-handlers-utils";
 import createTool from "../tools/plan-story-events.js";
 
 const planTool = createTool({ tool: (definition) => definition, z });
@@ -417,4 +422,85 @@ describe("plan-story-events", () => {
       reason: "Thread from this turn.",
     });
   });
+});
+
+describe("planning correction errors and annotations", () => {
+  it("preserves separate issues for multiple invalid events", async () => {
+    const error = await run({
+      events: [
+        {
+          id: "first",
+          title: "First",
+          payload: "Brief.",
+          all: [{ dimension: "missing-first", equals: 1 }],
+        },
+        {
+          id: "second",
+          title: "Second",
+          payload: "Brief.",
+          all: [{ dimension: "missing-second", equals: 1 }],
+        },
+      ],
+    }).catch((error) => error);
+    expect(error).toBeInstanceOf(ToolError);
+    expect(error.code).toBe("invalid-input");
+    expect(error.message.split("\n")).toEqual([
+      expect.stringContaining("first:"),
+      expect.stringContaining("second:"),
+    ]);
+    expect(error.message).toContain("missing-first");
+    expect(error.message).toContain("missing-second");
+  });
+
+  it("bounds long issue lists without losing the correctable error code", async () => {
+    const error = await run({
+      events: Array.from({ length: 2 }, (_, i) => ({
+        id: `event-${i}`,
+        title: "Event",
+        payload: "Brief.",
+        all: Array.from({ length: 6 }, (_, j) => ({
+          dimension: `missing-${i}-${j}-${"x".repeat(100)}`,
+          equals: 1,
+        })),
+      })),
+    }).catch((error) => error);
+    expect(error).toBeInstanceOf(ToolError);
+    expect(error.code).toBe("invalid-input");
+    expect(error.message).toHaveLength(1901);
+    expect(error.message.endsWith("…")).toBe(true);
+  });
+
+  it("reports unavailable when the host supplies no ledger input", async () => {
+    await expect(
+      planTool.execute({ events: [] }, { inputSlots: {} }),
+    ).rejects.toMatchObject({
+      name: "ToolError",
+      code: "unavailable",
+      message: "Story planning requires the storyEvents ledger input",
+    });
+  });
+
+  it.each([
+    {
+      plugin: "story-events",
+      tool: "plan-story-events",
+      annotations: { stagesWrites: false, idempotent: true },
+    },
+  ])(
+    "declares proven annotations for $plugin/$tool",
+    async ({ annotations }) => {
+      expect(planTool.annotations).toEqual(annotations);
+      const params = planTool.parameters.parse(
+        plan({ all: [{ afterTurns: 2 }] }),
+      );
+      const ctx = context();
+      const original = structuredClone(ctx);
+      const first = await planTool.execute(params, ctx);
+      const second = await planTool.execute(params, ctx);
+      expect(getToolContent(first)).toEqual(getToolContent(second));
+      expect(getPendingProposals(first)).toEqual([]);
+      expect(getPendingProposals(second)).toEqual([]);
+      expect(ctx).toEqual(original);
+    },
+  );
 });

@@ -22,6 +22,8 @@ import { createEventBus } from "@covel/events";
 import type { EventBus } from "@covel/events";
 import { createHookPipeline } from "../src/index.js";
 import { collectExecutionSuspensions } from "../src/suspension-artifact.js";
+import * as agentToolLoop from "../src/agent-loop/turn-agent-tool-loop.js";
+import { makeEmitterSpy } from "./_helpers/emitter-spy.js";
 import {
   runTurnPipeline,
   resumeRuntimePipeline,
@@ -1148,55 +1150,153 @@ describe("resumeRuntimePipeline", () => {
     );
   });
 
-  it("re-applies the context budget after a resumed tool step grows the transcript", async () => {
-    const suspensionId = await createTestSuspension("tc-budget-resume");
-    let attempts = 0;
-    let firstMaxOutputTokens: number | undefined;
-    const llm: LLMAdapter = {
-      async generate(params) {
-        attempts += 1;
-        firstMaxOutputTokens ??= params.maxOutputTokens;
-        return {
-          content: null,
-          toolCalls: [
-            {
-              id: "tc-large-resume",
-              name: "mark",
-              arguments: JSON.stringify({ note: "x".repeat(3_000) }),
-            },
-          ],
-          finishReason: "tool_calls",
-          usage: { inputTokens: 5, outputTokens: 5 },
-        };
-      },
-    };
-    const manifest = makeManifest();
-    const loaded: LoadedRuntime = { manifest, promptTemplate: "" };
-    const suspension = await store.getSuspension(suspensionId);
-    const deps: TurnExecutorDeps = {
-      loadRuntime: async () => loaded,
-      llm,
-      store,
-      toolExecutor: mockToolExecutor,
-      eventBus,
-      estimator: (text) => text.length,
-      contextBudget: {
-        maxInputTokens: 1_000,
-        reservedForResponse: 100,
-        protectLastUserTurns: 1,
-      },
-    };
+  it.each([true, false])(
+    "returns overflow after a resumed tool step, with only the allowed finalizer call (finalizer: %s)",
+    async (allowFinalizer) => {
+      const suspensionId = await createTestSuspension("tc-budget-resume");
+      const requests: Parameters<LLMAdapter["generate"]>[0][] = [];
+      const llm: LLMAdapter = {
+        async generate(params) {
+          requests.push({
+            ...params,
+            messages: structuredClone(params.messages),
+          });
+          return {
+            content: null,
+            toolCalls: [
+              {
+                id: "tc-large-resume",
+                name: "mark",
+                arguments: JSON.stringify({ note: "x".repeat(3_000) }),
+              },
+            ],
+            finishReason: "tool_calls",
+            usage: { inputTokens: 5, outputTokens: 5 },
+          };
+        },
+      };
+      const manifest = makeManifest(
+        allowFinalizer
+          ? {}
+          : { loopProfile: { finalizer: { maxSteps: false } } },
+      );
+      const loaded: LoadedRuntime = { manifest, promptTemplate: "" };
+      const saved = await store.getSuspension(suspensionId);
+      if (!saved) throw new Error("expected a saved suspension");
+      // This fixture's tool result needs its assistant call to form a complete step group.
+      const suspension = {
+        ...saved,
+        pendingContinuation: {
+          ...saved.pendingContinuation,
+          messages: (
+            saved.pendingContinuation.messages as LLMMessage[]
+          ).flatMap<LLMMessage>((message) =>
+            message.toolCallId === "tc-budget-resume"
+              ? [
+                  {
+                    role: "assistant",
+                    content: "",
+                    toolCalls: [
+                      {
+                        id: "tc-budget-resume",
+                        name: "suspend",
+                        arguments: "{}",
+                      },
+                    ],
+                  },
+                  message,
+                ]
+              : [message],
+          ),
+        },
+      };
+      const emitter = makeEmitterSpy("sess-resume", "turn-resume");
+      const deps: TurnExecutorDeps = {
+        loadRuntime: async () => loaded,
+        llm,
+        store,
+        toolExecutor: mockToolExecutor,
+        eventBus,
+        emitter,
+        estimator: (text) => text.length,
+        contextBudget: {
+          maxInputTokens: 1_000,
+          reservedForResponse: 100,
+          protectLastUserTurns: 1,
+        },
+      };
+      // Observe the real loop result so a thrown overflow cannot pass as a returned stop.
+      const loopSpy = vi.spyOn(agentToolLoop, "runAgentToolLoop");
+      try {
+        const result = await resumeRuntimePipeline(
+          suspension,
+          { name: "Budget" },
+          manifest,
+          deps,
+        );
+        expect(loopSpy).toHaveBeenCalledOnce();
+        const loopResult = await loopSpy.mock.results[0]!.value;
+        expect(loopResult).toMatchObject({
+          stop: { reason: "context-overflow" },
+          stopMessage: expect.stringMatching(
+            /^\[slot: gpt-4o-mini\] Context budget exceeded before LLM call/,
+          ),
+        });
+        if ("status" in loopResult)
+          throw new Error("expected the completed loop result");
+        expect(loopResult.stop).toEqual({ reason: "context-overflow" });
+        expect(result).toMatchObject({ status: "failed", output: null });
+        expect(result.stop).toEqual(loopResult.stop);
+        expect(result.error).toBe(loopResult.stopMessage);
+        expect(result.toolCalls.map((call) => call.toolCallId)).toEqual([
+          "tc-large-resume",
+        ]);
+        expect(requests).toHaveLength(allowFinalizer ? 2 : 1);
+        expect(requests[0]?.maxOutputTokens).toBe(100);
 
-    await expect(
-      resumeRuntimePipeline(suspension!, { name: "Budget" }, manifest, deps),
-    ).resolves.toMatchObject({
-      status: "failed",
-      output: null,
-      error: expect.stringMatching(/Context budget exceeded before LLM call/),
-    });
-    expect(attempts).toBe(1);
-    expect(firstMaxOutputTokens).toBe(100);
-  });
+        const completed = emitter.events.filter(
+          (event) => event.type === "step.completed",
+        );
+        expect(completed[1]?.payload).toMatchObject({
+          step: 2,
+          stopReason: "context-overflow",
+        });
+        expect(completed[1]?.payload).not.toHaveProperty("usage");
+        const finalizers = emitter.events.filter(
+          (event) =>
+            event.type === "step.started" && event.payload.finalizer === true,
+        );
+        expect(finalizers).toHaveLength(allowFinalizer ? 1 : 0);
+        if (allowFinalizer) {
+          expect(finalizers[0]?.payload).toMatchObject({
+            step: 3,
+            toolCount: 0,
+          });
+          const finalizer = requests[1]!;
+          expect(finalizer.tools).toBeUndefined();
+          expect(
+            finalizer.messages.some(
+              (message) => message.toolCalls?.length || message.role === "tool",
+            ),
+          ).toBe(false);
+          expect(
+            finalizer.messages.some(
+              (message) =>
+                message.role === "system" &&
+                String(message.content).includes(
+                  "Earlier tool steps of this run, condensed",
+                ),
+            ),
+          ).toBe(true);
+          expect(JSON.stringify(finalizer.messages)).not.toContain(
+            "x".repeat(3_000),
+          );
+        }
+      } finally {
+        loopSpy.mockRestore();
+      }
+    },
+  );
 
   it("keeps the whole suspended turn under the context budget on resume", async () => {
     const story = `CURRENT_STORY ${"s".repeat(1_200)}`;

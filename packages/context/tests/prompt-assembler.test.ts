@@ -430,6 +430,25 @@ describe("prompt-assembler", () => {
       expect(result.systemPrompt).toContain("<available-events>");
       expect(result.systemPrompt).toContain(CATALOG);
       expect(result.systemPrompt).toContain("call the emit-event tool");
+      expect(result.systemPrompt).toContain(
+        "one call per event; the tool definition lists the topics and the payload each one takes",
+      );
+      expect(result.systemPrompt).not.toContain("one topic per call");
+      expect(result.systemPrompt).toContain("</available-events>");
+    });
+
+    it("points Chinese event instructions to the tool definition", async () => {
+      const result = await buildContext(
+        baselineParams({
+          manifest: makeManifest({ advertiseEvents: true }),
+          eventCatalogText: CATALOG,
+          turnInput: makeTurnInput({ locale: "zh-CN", playerMessage: "go" }),
+        }),
+      );
+      expect(result.systemPrompt).toContain(
+        "调用 emit-event 工具——每个事件一次调用；工具定义列出了各 topic 及其 payload 的格式",
+      );
+      expect(result.systemPrompt).not.toContain("每次调用一个 topic");
       expect(result.systemPrompt).toContain("</available-events>");
     });
 

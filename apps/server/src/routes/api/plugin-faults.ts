@@ -55,6 +55,7 @@ export async function recordExecutionFaults(args: {
     logicalKey: plan.executionContext.logicalTurnId ?? args.turnId,
     results: plan.results,
     subagentRuns: plan.subagentRuns,
+    serviceCalls: plan.serviceCalls,
     outcome: args.outcome,
     exempt: faults.exemptions(plan.sessionId, plan.runtimes),
     setupRuntimeIds: new Set(

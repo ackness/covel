@@ -4,6 +4,8 @@ Covel comes with a set of plugins and four worlds. This chapter tells you what e
 
 The built-in plugins and worlds are only demos, and you do not have to use them.
 
+Narrators supply location and mood cues when they change, for the stage and music to read; see [Narrative and Memory](./story.md).
+
 Dimension tools report schema-invalid values as correctable input errors; see [update-dimensions](../reference/tools.md#update-dimensions).
 
 Opening character templates must include a placeholder for every collected field. Template/default errors are correctable `invalid-input` failures; see [character tools](../reference/tools.md#opening-character-form).
@@ -59,7 +61,7 @@ A session may have several player characters. The two narrator plugins follow th
 | [Dice Check](./rpg.md) `dice-check`            | Pre-rolled dice decide risky actions; no attribute label appears when no ability is available |               |
 | [Tabletop Rules](./rpg.md) `tabletop-rules`    | Assigns attribute points at the start, and lets the player start attribute checks             |               |
 | [Quest Log](./rpg.md) `core-quest`             | Records quests and objectives, with localized status badges                                   |               |
-| [Inventory](./rpg.md) `inventory`              | Records what the player character carries; items can be used and dropped                      |               |
+| [Inventory](./rpg.md) `inventory`              | Looks up carried items, settles trades, and records item changes                              |               |
 | [Affinity](./rpg.md) `affinity`                | Tracks numeric player–NPC affinity and supplies current scores to narration                   |               |
 | [Hidden Story Events](./rpg.md) `story-events` | Story events that only happen when their conditions are met                                   |               |
 

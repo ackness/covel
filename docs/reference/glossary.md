@@ -22,15 +22,19 @@
 | Contract | 契约 | 带版本号的 ID，例如 `narrative-engine@2`。 |
 | Credits | 作者信息 | 一个包的 `author`、`license` 和 `homepage` 字段。 |
 | Dataset | 数据集 | 插件声明的带类型数据（`contributes.datasets`）。不是安装用的 **Collection**。 |
+| Dataset key | 数据集键 | 数据集工具给记录用的键：`datasetKey()` 规范化（NFKC、去首尾空白、合并空白、小写）后的文本；见[键的规则与查找](./tools.md#键的规则与查找)。 |
+| Dataset tool | 数据集工具 | 框架按 `agent.tools.datasets` 为数据集生成的 `<数据集>-get`、`-list`、`-upsert`、`-update` 工具；见[数据集工具](./tools.md#数据集工具)。 |
 | Deployment form | 部署形态 | 桌面客户端、自部署网页版、官方网页版。不是 `DEPLOYMENT_TIER`。 |
 | Edition | 语言版本 | 世界的一种语言：`defaultLocale`，以及根目录里每个 `world.<locale>.yaml` 或 `WORLD.<locale>.md` 的语言。 |
 | Execution | 执行 | 一次调度及其提交计划；玩家回合、手动调用和后台作业都可以发起执行。 |
 | Fault latch | 熔断 | 辅助插件在同一会话连续因自身故障失败后暂停，可由玩家重新启用；只在进程内存中保存。见[协议](./protocol.md#插件故障熔断)。 |
 | Finalizer step | 收尾步骤 | agent 用完步数后关掉工具、要求直接给出答案的那一次请求。 |
-| Imported tool | 导入工具 | agent 用 `agent.tools.services` 从别的插件导入、给模型用的服务生成的只读工具。 |
+| Imported tool | 导入工具 | agent 用 `agent.tools.services` 从别的插件导入、给模型用的服务生成的工具；读服务的导入只读，写服务的导入暂存写入。 |
 | Kernel | 内核 | 负责调度、上下文、工具调用、提案校验和提交的框架核心。 |
 | Local model relay | 本地模型中继 | 共享形态的服务端经玩家浏览器访问玩家电脑或局域网上的模型。见[安全边界](../internals/security.md#local-model-relay)。 |
 | Official web app | 官方网页版 | 尚未支持的官方托管产品；已有的 browser-private 基础设施不等于完整产品。 |
+| Operation | 操作 | 一次成功的写服务调用暂存下来的全部写入，随调用方的提交单元一起提交或丢弃。不同于数据操作列表里的单个 `op`。见[写服务的操作](./transactions.md#写服务的操作)。 |
+| Operation record | 操作记录 | 一个操作留在调用方结果上的记录（`runtimeResults[].operations`），提交后写明它最终的状态和原因。 |
 | Operation-based write | 操作式写入 | 交一串操作（`plugin.data.update`），不交算好的整个值。 |
 | Pack | 玩法包 | 供玩家选择的一组已安装插件，不负责安装包。 |
 | Perspective | 视角 | 叙事从谁的角度讲：以角色为中心的第一、第二、第三人称，全知旁白，或主持人。 |
@@ -49,6 +53,7 @@
 | Session | 会话 | 用某个世界进行的一局游戏，拥有独立的角色、插件数据和进度。 |
 | Slot | 槽位 | 设置界面里叫“模型用途”。 |
 | Stop reason | 结束原因 | agent 工具循环怎样结束（`RuntimeResult.stop.reason`）。 |
+| Story-attached operation | 故事附带的操作 | 故事或 setup 所在提交单元里的操作：各自一个 savepoint，失败只丢它自己，故事照常提交。 |
 | Story segment | 故事段落 | 故事输出里的一段：旁白、对白或动作。上下文清楚时简称“段落”。 |
 | Sub-agent | 子 agent | 另一个 runtime 在自己的执行里运行、只交回输出的 agent runtime。 |
 | Tool result | 工具结果 | 代码读取的内容与模型看到的反馈是两种形状；工具成功不代表已保存。 |
@@ -56,6 +61,7 @@
 | Trusted source | 可信来源 | 实例所有者或运营者选定的 GitHub 来源，只减少审批提示。 |
 | Turn | 回合 | “This turn” 是“本回合”。 |
 | World | 世界 | 世界的安装包叫“世界包”。 |
+| Write service | 写服务 | `access: write` 的服务，替调用方改提供者自己的数据；写入暂存为一个**操作**。见[写服务](./plugin-extensions.md#写服务)。 |
 
 ## Prompt vocabulary
 
@@ -155,7 +161,9 @@
 
 它和 **Collection** 无关：Collection 是安装时用的清单（`covel-collection.yaml`）。提交时，插件写入自己数据集的每一条 proposal 都按声明的操作种类和 schema 校验。
 
-详见：[数据集](./plugins.md#数据集contributesdatasets)、[世界数据](./world-data.md)。
+agent 通过**数据集工具**读写数据集：runtime 在 `agent.tools.datasets` 里列出数据集，框架就为它生成带类型的读写工具，记录按**数据集键**存放。
+
+详见：[数据集](./plugins.md#数据集contributesdatasets)、[数据集工具](./tools.md#数据集工具)、[世界数据](./world-data.md)。
 
 ## Deployment form
 
@@ -183,7 +191,7 @@
 
 ## Finalizer step
 
-agent runtime 用完步数之后，内核再发的一次模型请求：关掉工具，要求模型根据已有的信息直接给出最终答案。
+agent runtime 到步数上限、时限预留或上下文超限时，循环 profile 允许内核再发的一次模型请求：关掉工具，要求根据已有的信息给出最终答案。超限收尾由 `finalizer.maxSteps` 开启，按[提示词预算](./prompt-structure.md#预算)按需裁剪完整工具步骤；没有救回时 runtime 仍以最初的超限文字失败。
 
 步数用完本身不算成功。只有收尾步骤写出了答案，runtime 才成功，结果的 `stop.finalizer` 为 `true`。输出由完成工具交出，或者完成条件还没满足时，不发收尾请求。
 

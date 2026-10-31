@@ -585,6 +585,29 @@
             "required": ["contract", "name"],
             "additionalProperties": false
           }
+        },
+        "datasets": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "dataset": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 64,
+                "pattern": "^[a-zA-Z][a-zA-Z0-9_-]*$"
+              },
+              "tools": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "enum": ["get", "list", "upsert", "update"]
+                }
+              }
+            },
+            "required": ["dataset", "tools"],
+            "additionalProperties": false
+          }
         }
       },
       "additionalProperties": false
@@ -720,7 +743,7 @@
                   },
                   "from": {
                     "type": "string",
-                    "const": "turn-digest@1"
+                    "enum": ["turn-digest@1", "operations@1"]
                   },
                   "name": {
                     "type": "string",
@@ -874,9 +897,24 @@
               ]
             },
             "description": "Operation kinds allowed on this dataset. Defaults to every kind."
+          },
+          "tools": {
+            "minItems": 1,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": ["get", "list", "upsert", "update"]
+            },
+            "description": "Dataset tools an agent may select."
+          },
+          "description": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500,
+            "description": "What the dataset holds, in English. Agents read it in the description of each dataset tool."
           }
         },
-        "required": ["namespace", "schema", "ops"],
+        "required": ["namespace", "schema", "ops", "tools"],
         "additionalProperties": false
       }
     },

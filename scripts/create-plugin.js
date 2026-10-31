@@ -335,10 +335,11 @@ function runCustomMultiRuntime(runtimes) {
   }
 
   // Custom runtimes do not include the demo's note panel. The directory name
-  // is the plugin ID, and the loader works out the rest.
+  // is the plugin ID, and the loader works out the rest. The notes dataset
+  // (schemas/ comes from the template) types the records every stub writes.
   writeFileSync(
     join(targetDir, "PLUGIN.md"),
-    `---\nversion: "0.1.0"\ncovel: "${placeholders["{{hostRange}}"]}"\ndescription: ${placeholders["{{pluginDescription}}"]}\n---\n`,
+    `---\nversion: "0.1.0"\ncovel: "${placeholders["{{hostRange}}"]}"\ndescription: ${placeholders["{{pluginDescription}}"]}\ncontributes:\n  datasets:\n    notes:\n      schema: ./schemas/note.schema.json\n      key: id\n      description: Short notes this plugin keeps about the story.\n---\n`,
     "utf-8",
   );
   mkdirSync(join(targetDir, "locales"), { recursive: true });
@@ -440,6 +441,7 @@ export default async function ${camelize(runtimeName)}Handler(ctx) {
     key = \`${runtimeName}-\${random.int(0, 0x100000000).toString(36)}\`;
   } while (await pluginData.get(NOTES_NAMESPACE, key));
   const note = {
+    id: key,
     kind: 'function',
     title,
     text: 'Replace this with deterministic plugin logic.',
@@ -472,7 +474,9 @@ io:
       as: <existing-notes>
 agent:
   tools:
-    builtin: [plugin-data-set]
+    datasets:
+      - dataset: notes
+        tools: [upsert]
 ---
 
 You are the ${runtimeName} runtime in the ${pluginName} plugin. Your job is to turn narrative information relevant to this plugin into one maintainable plugin note.
@@ -492,17 +496,21 @@ Replace this section with the real goal. Examples: track player promises, record
 - If \`runtime-inputs.narrator-output.value\` is empty, call \`runtime-done\` and stop.
 - If there is no new information relevant to the plugin goal, call \`runtime-done\` and stop.
 - If existing notes already cover the same fact, call \`runtime-done\` and stop.
-- If there is useful new information, call \`plugin-data-set\` once to write into \`notes\`, then immediately call \`runtime-done\`.
+- If there is useful new information, call \`notes-upsert\` once to save it, then immediately call \`runtime-done\`.
 
 ## Write Shape
 
-Call \`plugin-data-set\` with:
+Call \`notes-upsert\` with one \`record\`:
 
-| Param       | Value |
-| ----------- | ----- |
-| \`namespace\` | \`notes\` |
-| \`key\`       | \`${runtimeName}-\` plus a stable short fact key |
-| \`value\`     | \`{ "kind": "analysis", "title": "<short title>", "text": "<one or two actionable sentences>", "tags": ["<1-3 tags>"] }\` |
+| Field   | Value |
+| ------- | ----- |
+| \`id\`    | \`${runtimeName}-\` plus a stable short fact key |
+| \`kind\`  | \`analysis\` |
+| \`title\` | A short title |
+| \`text\`  | One or two actionable sentences |
+| \`tags\`  | One to three tags |
+
+A record with the \`id\` of an existing note replaces it.
 
 Keep the note short and concrete. Do not emit explanatory prose.
 `;
@@ -562,11 +570,10 @@ function renderCustomRuntimeCases(runtimes) {
           toolCalls: [
             {
               id: `tc-${rt.name}-record`,
-              name: "plugin-data-set",
+              name: "notes-upsert",
               arguments: JSON.stringify({
-                namespace: "notes",
-                key: `${rt.name}-test`,
-                value: {
+                record: {
+                  id: `${rt.name}-test`,
                   kind: "analysis",
                   title: `${rt.name} test note`,
                   text: "The player promised the gatekeeper to return before dawn.",

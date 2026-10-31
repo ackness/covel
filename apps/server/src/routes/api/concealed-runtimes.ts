@@ -7,6 +7,7 @@
 import {
   CONCEALED_FAILURE_MESSAGE,
   concealedRuntimeIds,
+  concealOperationsOf,
   concealRuntimeResult,
   type RuntimeResult,
 } from "@covel/shared";
@@ -52,10 +53,13 @@ export function concealTurnResultRecord(
   concealed: ReadonlySet<string>,
 ): TurnResultRecord {
   if (!concealed.size) return record;
+  // A visible result can still carry a concealed sub-agent's operations.
   const conceal = (value: unknown): unknown =>
-    isRuntimeResult(value) && concealed.has(value.runtimeId)
-      ? concealRuntimeResult(value)
-      : value;
+    !isRuntimeResult(value)
+      ? value
+      : concealed.has(value.runtimeId)
+        ? concealRuntimeResult(value)
+        : concealOperationsOf(value, concealed);
   return {
     ...record,
     runtimeResults: Array.isArray(record.runtimeResults)

@@ -400,6 +400,8 @@ SqliteStore、MemoryStore 和 PgStore（都在 Node 上）用同一种办法：
 | story 或 setup runtime 的硬上游                   | 整回合回滚                                |
 | 读取了它未提交的插件数据（辅助单元）              | 下游一起丢弃                              |
 | 读取了它未提交的插件数据（story 或 setup 单元）   | 照常提交，trace 记 `read-dependency.kept` |
+| 读取了没有提交的写服务操作（辅助单元）            | 下游一起丢弃                              |
+| 读取了没有提交的写服务操作（story 或 setup 单元） | 照常提交，trace 记 `read-dependency.kept` |
 
 **读取依赖。** 同一次执行里，runtime 读自己插件的数据时能看到同插件上游 runtime 还没提交的写入（见[执行内的插件数据可见性](./plugins.md#执行内的插件数据可见性)）。每次读取记下它实际看到了哪些上游的写入（`read-dependencies.ts`），执行把这些依赖带进提交计划。
 
@@ -409,6 +411,37 @@ SqliteStore、MemoryStore 和 PgStore（都在 Node 上）用同一种办法：
 - 它和硬依赖共用同一个丢弃集合：它的硬依赖方、读过它的写入的 runtime、`extraInTx` 和挂起保留的作业都把它当作被丢弃。
 - story 或 setup 单元不因读取依赖丢弃。每个被丢弃的上游在同一个事务里写一条 `read-dependency.kept` trace，载荷是 `runtimeId`、`runId`、`producerRuntimeId`、`producerRunId` 和 `reason`。
 - 生产者总是排在读者前面。依赖指向提交顺序更靠后的 run 是内核错误，只记警告并忽略。
+- 写服务的操作也是生产者：提供者的 runtime 读到某个操作暂存的写入时，或任何 runtime 通过内核输入 `operations@1` 读到某个操作时，依赖记的是操作的 ID。操作排在它的调用方单元的位置；它失败、被撤回或调用方单元被丢弃时算作没有提交。辅助读者一起丢弃，错误是 `read data of <契约> that did not commit`；story 或 setup 读者照常提交，`read-dependency.kept` 的载荷用 `producerOperationId` 和 `producerContract` 代替 run 的两个字段。
+
+#### 写服务的操作
+
+[写服务](./plugin-extensions.md#写服务)的一次成功调用暂存为一个**操作**，挂在调用方 run 的结果上，不混进调用方自己的 proposal。操作的写入以提供者的身份（`runtimeId: "service:<服务名>"`）在事务外和其他 proposal 一样准备：proposal 守卫，再逐条跑 PreStateCommit。任何一条被拒，整个操作被拒。
+
+提交时，一个单元里的操作排在**全部成员自己的写入之后**，按调用顺序（`seq`）提交。下游读取也按这个顺序叠加：先处理该单元全部成员自己的写入，再把父调用与所有递归子调用的操作一起按 `seq` 排序，读取依赖记录仍影响最终值的写入方：
+
+| 单元                                       | 操作怎样提交                                        | 一个操作被拒时                                                                                 |
+| ------------------------------------------ | --------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| 本次执行有故事，单元含 story 或 setup 运行 | 每个操作在事务下各自一个 savepoint                  | 只丢这个操作（`failed`，原因 `rejected` 或 `conflict`），单元自己的写入和故事照常提交          |
+| 故事旁边的辅助单元                         | 在单元的 savepoint 里，每个操作再各自一个 savepoint | 整个单元丢弃：它的写入和全部操作；被拒的操作记 `failed`，其他记 `discarded` / `caller-dropped` |
+| 没有故事的执行                             | 直接在执行事务里                                    | 整次执行回滚                                                                                   |
+
+- 准备阶段的拒绝（PreStateCommit 否决、proposal 守卫）走同一个分支，只是发生在事务开始之前。
+- 一个操作的多条写入同成同败：它先写物品再扣钱，扣钱失败时物品也不留下。
+- store 没有 savepoint 时，故事所在单元的操作不尝试提交，记 `failed` / `store-unsupported`；故事照常提交。
+- 被拒操作的 proposal 列在 `failedProposals` 里，和被丢弃单元的一样。
+- 提供者的数据集在调用时由 `TurnExecutorDeps.loadPluginDatasets` 载入，随提交计划（`providerDatasets`）进入提交，没有 runtime 在本次执行里运行的提供者也一样检查。载入不了时，这次调用在 handler 运行前就以 `unavailable` 失败。
+
+#### 操作记录
+
+每个操作在调用方 run 的结果上留下一条 `OperationRecord`（`runtimeResults[].operations`），随 `turn_results` 保存，不需要改表：
+
+- `id`、`contract`、`providerPluginId`、`service`、`invokedBy`（发起调用的插件和 runtime）、`toolCallId`（从工具发起时）、`seq`。
+- `status`：`staged`、`committed`、`failed` 或 `discarded`；不是 `committed` 时 `reason` 是 `rejected`、`conflict`、`caller-dropped`、`execution-failed` 或 `store-unsupported`。
+- `request`、`result`：调用的输入和输出经过 `modelFacingJson`，单个超过 4 KB 的 JSON 时省略并标 `truncated: true`。`summary` 是两者的前 300 个字符。这三处都不含 ID 和时间。
+
+`commit_status` 结算时，`setTurnResultCommitStatus` 的第五个参数把每个操作的最终状态按 ID 写进这一回合的每一行，在提交事务里完成。整次执行回滚时，事务外的 `failed` 结算把全部操作记为 `discarded` / `execution-failed`。`FinalizeExecutionOutcome.operations` 列出同样的结果（`id`、`status`、`reason`、`contract`、`invokedBy`）。
+
+父函数抛错、返回失败或因暂存操作后挂起而被拒绝时，递归子调用的写入不会保留。内核仍保留它们的操作记录，提交时把已经持久化的记录结算为 `discarded` / `caller-dropped`，不会留下永久的 `staged`。整次执行失败时使用上面的 `execution-failed` 原因。
 
 `extraInTx` 的第二个参数给出被丢弃的 runtime。主回合据此不排入依赖它们的 detached 作业和后台事件 follower。仍然排入的 detached 作业，在冻结的 turn digest 和上游结果里把被丢弃的 runtime 记为 `failed`。
 
@@ -436,6 +469,7 @@ SqliteStore、MemoryStore 和 PgStore（都在 Node 上）用同一种办法：
 - 成功时，`turn_results.commit_status` 在同一个事务里结算为 `committed`。回滚时，在事务外幂等地结算为 `failed`。
 - 嵌套的 recursiveCall 复用顶层的 `turnId`。所以对顶层 `[turnId]` 的一次结算就覆盖了所有嵌套的行。
 - `committed` 结算同时把被丢弃 runtime 在 `runtimeResults` 里的记录改成 `failed`，并写入原因。历史、重试和刷新看到的都是实际保存的结果。它们上报的 job 也收尾为 `failed`。
+- 同一次结算按 ID 写入每个写服务操作的最终状态（见[操作记录](#操作记录)）。
 - 和其他失败的 runtime 一样，被丢弃的 runtime 不写入对话日志（文本、交互和 UI 卡片），也不计入触发台账（`maxTriggerCount` / `cooldownTurns`）。
 
 **完成屏障仍被扣留。** 任何一处失败时，`turn.completed`、回合后的记忆摄入和 auto-snapshot 都不触发。每个失败的 proposal 发出一个 `proposal.failed` 事件。回合对客户端呈现为可见的未完成状态，而不是“成功但状态缺失”。
@@ -527,7 +561,7 @@ await store.withTransaction(async (tx) => {
 
 ### 操作式写入（plugin.data.update）
 
-插件可以对一个插件数据键提交一串操作，而不是先算好的整个值。function runtime 调用 `ctx.pluginData.update(namespace, key, ops)`；工具用 `makeProposal(ctx, now, "plugin.data.update", { namespace, key, ops })`。操作的种类和语义见[插件数据操作](./plugins.md#数据集contributesdatasets)里的 `ops`。
+插件可以对一个插件数据键提交一串操作，而不是先算好的整个值。function runtime 调用 `ctx.pluginData.update(namespace, key, ops)`；工具用 `makeProposal(ctx, now, "plugin.data.update", { namespace, key, ops })`；[数据集工具](./tools.md#数据集工具)的 `<数据集>-upsert` / `-update` 每次写入也提交一条 `plugin.data.update`。操作的种类和语义见[插件数据操作](./plugins.md#数据集contributesdatasets)里的 `ops`。
 
 **在提交事务里读改写。** 提交时，`plugin.data.update` 的处理器在提交事务里读出这个键当前存的值，用 `applyDataOps` 依次应用这些操作，再把结果写回：
 
@@ -544,6 +578,9 @@ await store.withTransaction(async (tx) => {
 | `data-op-rejected`                                                    | 操作作用在当前值上失败，比如 `inc` 越过 `min`                                                   | `plugin.data.update: inc result is outside the allowed range (op 0, out-of-bounds)`，有路径时写成 `(op 1 at /gold, …)` |
 | `dataset-violation`                                                   | 违反了声明的数据集：操作种类不允许、结果不符合记录 schema，或数据集的 schema 文档缺失、无法编译 | `plugin.data.update: dataset inventory: operation kind append is not allowed`                                          |
 | `media-not-found` / `media-ownership-invalid` / `media-mime-mismatch` | 结果里的 `MediaRef` 指向不存在的资源、本会话没有引用的资源，或 MIME 类型不符                    | `plugin.data.update: session … has no reference to media …`                                                            |
+| `conflict`                                                            | 写服务操作里的更新在当前值上失败：暂存时它在调用方看到的值上成立，说明值已被别的提交改了        | 和 `data-op-rejected` 相同                                                                                             |
+
+写服务操作里的 `plugin.data.update` 在这里失败时报告 `conflict` 而不是 `data-op-rejected`：它暂存时已经在同样的检查下成立。runtime 自己的更新仍然报告 `data-op-rejected`。
 
 缺少 namespace / key、空的或不合法的操作列表在处理器之前就被载荷检查拒绝，`code` 是 `proposal-invalid`。保留命名空间和超过大小上限的拒绝发生在处理器里，没有 `code`，只有 `error`。
 
@@ -560,7 +597,7 @@ await store.withTransaction(async (tx) => {
 
 `isolatedRuntimes[].cause` 是结构化的丢弃原因：`rejected`（本单元提案被拒）、`upstream`（硬依赖未提交）、`read`（读过的生产方未提交）、`nested`（随父单元丢弃）。保留原有 `error` 文本；熔断不靠匹配文本归因。被拒提案按 `proposal.source.pluginId` 归属，不把整个单元都算成有错。
 
-`FailedProposal.code: "hook-failed"` 表示 `PreStateCommit` 因 handler 抛错、超时或无效结果而失败，不是主动否决。只计 Hook 所属插件的故障，不能把 proposal 所属插件算成被主动拒绝。`dimension-version-conflict` 和 `suspension-data-changed` 也不计入[熔断](./protocol.md#插件故障熔断)。
+`FailedProposal.code: "hook-failed"` 表示 `PreStateCommit` 因 handler 抛错、超时或无效结果而失败，不是主动否决。只计 Hook 所属插件的故障，不能把 proposal 所属插件算成被主动拒绝。`dimension-version-conflict`、`conflict` 和 `suspension-data-changed` 也不计入[熔断](./protocol.md#插件故障熔断)。
 
 ## World Data import
 

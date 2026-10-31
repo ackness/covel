@@ -200,6 +200,8 @@ stateDiagram-v2
 
 其中这些在同一个 `finalizeExecution` 事务里一起提交或一起回滚：执行日志、提案、会话时钟、挂起记录。
 
+写服务的操作也在这个事务里提交。它挂在调用方 run 的结果上，跟着调用方的提交单元，排在单元自己的写入之后：故事所在单元的操作各自一个 savepoint，失败只丢它自己，故事照常提交；辅助单元里一个操作被拒，整个单元丢弃；没有故事的执行里一个操作被拒，整次执行回滚。各操作的最终状态在同一个事务里写回 `turn_results`。规则见[事务 · 写服务的操作](../reference/transactions.md#写服务的操作)。
+
 要记住的细节：
 
 - 持锁期间派生出去的后台工作，例如被唤醒的作业 worker，不继承这把锁。它自己排队取锁，不会被当成锁的主人。
@@ -413,6 +415,12 @@ flowchart LR
 - `committing` 状态的作业必须先不阻塞地拿到同一把提交锁，锁忙时留到下一轮。
 - 关闭时停止后续调度，并等待进行中的扫描和锁回调。
 
+内核输入还包括 `operations@1`：绑定时冻结本次执行已完成上游的暂存操作，不增加调度依赖，但读者在提交时依赖它读到的暂存操作，也不能用于 detached runtime。重试或恢复失败 runtime 时，输入还包含来源回合及已提交重试的种子结果中 `committed` 的操作，供下游识别已处理的变化。这些操作只读，不重复提交写入，也不建立本次执行的提交依赖；失败、丢弃或仍暂存的种子操作不提供给下游。字段和可见性见[插件输入](../reference/plugins.md#内核输入-operations1)。
+
+提交成功但有操作失败时，action 流发出一次 `operation.failed`，玩家立即看到数量提示。只因自身失败而被丢弃的故事附带操作不再发 `proposal.failed`，回合不显示执行失败。agent 的下一次玩家或续行执行读取最新一条已提交的 `player` / `continuation` 回合记录；只给 `invokedBy.runtimeId` 对应的 agent 显示 `operations-not-applied`，位于输入和导出块之后，最多十条摘要。子 agent 发起的操作记的是子 agent 的 runtime ID，这个子 agent 下次被调用时在自己的上下文里收到通知。定向重试不显示。读取随会话状态每次执行只做一次，不增加持久状态。
+
+如果后续尝试没有提交，最新的已提交记录没有改变，下次尝试仍显示同一通知。任意更晚的玩家或续行执行一旦提交，旧通知便消失。通知放在每回合变化的上下文段，不改变缓存前缀。
+
 ### 2.4 下一次执行前的 settle 屏障
 
 有的后台工作必须在下一回合开始前做完，因为下一回合要读它的结果。这类 `post-turn` / `audit` function 可以声明 `schedule.detached: { settle: true, maxSettleWaitMs: … }`。
@@ -578,14 +586,16 @@ deciding → finalizing → stopped        running-tools → suspended
 1. 检查取消；profile 开了 `steering` 时，把玩家插话并入对话。
 2. `PreStep` Hook：可以收窄这一步的工具、改工具选择、减少剩余步数，或结束循环（见 [Hook 参考](../reference/hooks.md#prestep)）。
 3. 发 `step.started`。
-4. `PreLLMCall` → 上下文预算 → 模型调用（`llm.calling` / `llm.responded`）。
+4. `PreLLMCall` → 移除目标不支持的图片 → 重放本次运行的上下文账本 → 省略旧工具数据 → 把旧的完整工具步骤变成确定性摘要 → `applyBudget` 历史裁剪 → 首尾截断 → 模型调用（`llm.calling` / `llm.responded`）。策略只改请求副本；原始对话、trace、工具记录和挂起状态保留完整内容。详见[提示词预算](../reference/prompt-structure.md#预算)。
 5. `PostLLMResponse` 审查；接受后按模型顺序将连续的安全只读工具组成并行池，其他调用作为单独的屏障执行（`tool.*`），每一步全部结束后才开始下一步。具体条件和 Hook 顺序见[工具参考](../reference/tools.md#同一批调用的执行)和 [Hook 参考](../reference/hooks.md#pretooluse)。
 6. 判断是否结束：完成工具、`runtime-done`、Hook 的 `terminate`、没有工具调用的最终回复，否则进入下一步。
 7. 这一步的 `step.completed` 在下一步开始或循环结束时发出，每个开始了的步骤恰好一次。
 
-每一种结束方式对应一个结束原因（`StopReason`），写进 `RuntimeResult.stop` 和 runtime 生命周期事件的 `stopReason`，完整的表见 [协议参考的结束原因](../reference/protocol.md#stop-reasons)。正常的出口（`completed`、`tool-finished`、`max-steps`、`deadline`、PreStep 的 `cancelled`）由循环自己记下，`settleAgentLoop` 按它定结果。抛出的出口保留原来的错误对象，原因挂在错误上（`agent-loop/stop-reason.ts`）：调用点给模型错误、输出无效、上下文超限和循环检测打标，循环外层的 catch 再把玩家停止、自己的超时和上级取消分出来，`finalizeRuntimeResult` 从错误上读出原因，放进失败的结果。标记属于打标的那次运行（`runId`）：上级超时取消正在等待的子 agent 时，两者共用同一个错误对象，子 agent 的“上级取消”不会变成上级自己的结束原因。
+每一种结束方式对应一个结束原因（`StopReason`），写进 `RuntimeResult.stop` 和 runtime 生命周期事件的 `stopReason`，完整的表见 [协议参考的结束原因](../reference/protocol.md#stop-reasons)。正常的出口（`completed`、`tool-finished`、`max-steps`、`deadline`、`context-overflow`、PreStep 的 `cancelled`）由循环自己记下，`settleAgentLoop` 按它定结果。抛出的出口保留原来的错误对象，原因挂在错误上（`agent-loop/stop-reason.ts`）：调用点给模型错误、输出无效、无效上下文限制和循环检测打标，循环外层的 catch 再把玩家停止、自己的超时和上级取消分出来，`finalizeRuntimeResult` 从错误上读出原因，放进失败的结果。标记属于打标的那次运行（`runId`）：上级超时取消正在等待的子 agent 时，两者共用同一个错误对象，子 agent 的“上级取消”不会变成上级自己的结束原因。
 
 **步数上限不算成功。** 用完步数时，模型在工具调用旁边写的文字只是草稿。只要输出不是由完成工具交出、`requireToolUse` 和 `requireExplicitCompletion` 已满足或没开、离截止时间还有至少 3 秒，内核再发一次关掉工具的收尾请求，要求直接给出最终答案。故事的输出 schema 要求 `segments` 时，收尾、仅读取工具后的续写以及循环检测后的续写都要求按 JSON 对象输出，将段落放入 `segments` 数组，标明 narration、dialogue 或 action，且对话带 speaker。收尾写出文字时 runtime 成功，结果标明 `stop.finalizer: true`；否则以 `max-steps` 失败，暂存的写入不提交。profile 的 `finalizer.maxSteps: false` 关掉这次收尾。超时是失败，不尝试收尾；例外是 profile 写了 `finalizer.deadlineReserveMs`：剩余时间不足预留、而且上面的收尾条件满足时，循环不再开始新的一步，先并入排队的玩家插话（profile 开了 `steering` 时），再发收尾请求，写出答案时以 `{ reason: "deadline", finalizer: true }` 成功。
+
+**上下文超限也可收尾。** `finalizer.maxSteps` 开启时，已有完整工具步骤、且通常的收尾条件满足，超限出口会尝试一次关闭工具的请求。该请求按[提示词预算](../reference/prompt-structure.md#预算)按需裁剪工具步骤，最新一组也可处理。救回的答案以 `{ reason: "context-overflow", finalizer: true }` 成功，仍可修复输出；否则结算保留最初的超限失败文字。账本不持久保存：恢复挂起时确定性地重新计算决定，因此请求前缀可能变化一次。
 
 ## 四、插件设计
 
@@ -1129,7 +1139,7 @@ sequenceDiagram
         Note over Kernel: 仅显式 effects 与 story 叙事生成 Proposal[]，统一提交
         Kernel-->>Web: SSE: narrative.delta / narrative.completed
         Kernel-->>Web: SSE: interaction.requested (如 guide 的 action 卡片)
-        Kernel-->>Web: SSE: plugin-data.changed (plugin-data-set 工具写入)
+        Kernel-->>Web: SSE: plugin-data.changed (数据集工具等写入提交后)
         Kernel-->>Web: SSE: event.emitted
         Server-->>Web: SSE: runtime.completed / runtime.failed / runtime.skipped { status, runId }
     end

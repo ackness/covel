@@ -126,13 +126,14 @@ contributes:
 | `contributes.tools` | `PLUGIN.md`          | 这个插件注册了哪些工具      |
 | `agent.tools`       | agent runtime 的配置 | 这个 agent 可以调用哪些工具 |
 
-`agent.tools` 分两组：`builtin` 是 Covel 自带的工具，`plugin` 是你自己的工具。
+`agent.tools` 常用三组：`builtin` 是 Covel 自带的工具，`plugin` 是你自己的工具，`datasets` 是 Covel 为你在 `contributes.datasets` 里声明的数据集生成的读写工具（例如 `notes-get`、`notes-upsert`）。
 
 ```yaml
 agent:
   tools:
-    builtin: [plugin-data-set]
+    builtin: [get-character]
     plugin: [save-note]
+    datasets: [notes]
 ```
 
 规则：
@@ -142,6 +143,7 @@ agent:
 - 写了 `plugin` 就以写的为准。`plugin: []` 表示一个自己的工具都不给。
 - 有多个 runtime 的插件里，每个 runtime 各自列出要用的工具。没有 runtime 使用的内部 helpers 不要注册成工具，也不要列进 `contributes.tools`。
 - 工具名只在自己的插件里唯一。一个插件调用不了另一个插件的工具，要用服务，见[插件扩展与通信](../reference/plugin-extensions.md)。
+- 数据集工具只在写了 `datasets` 的 runtime 里出现，只写自己插件的数据集。写数据集名得到它提供的全部工具，写 `{ dataset: notes, tools: [upsert] }` 只取其中几个，见[数据集工具](../reference/tools.md#数据集工具)。
 
 内置工具的清单见[工具参考](../reference/tools.md)。
 

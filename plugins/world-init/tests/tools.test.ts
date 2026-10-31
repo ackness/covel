@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   getPendingProposals,
+  getModelView,
+  ToolError,
   getToolContent,
 } from "@covel/plugin-handlers-utils";
 import { tool, z } from "@covel/tools";
@@ -76,7 +78,11 @@ describe("world-init domain tools", () => {
           },
         },
       ),
-    ).rejects.toThrow("A successful authoritative narrative input is required");
+    ).rejects.toMatchObject({
+      name: "ToolError",
+      code: "unavailable",
+      message: "A successful authoritative narrative input is required",
+    });
   });
 
   it("classifies overlong dimension values as correctable without staging writes", async () => {
@@ -350,7 +356,7 @@ describe("world-init domain tools", () => {
         getToolContent(
           await settle({ ...quiet, updates: [update] }, clock(12)),
         ),
-      ).toMatchObject({ success: true });
+      ).toHaveProperty("updateCount");
     // Nothing to check: the clock stood still, no clock is bound, the list
     // is left out, or it names something that is not a dimension.
     for (const [params, worldTime] of [
@@ -360,7 +366,6 @@ describe("world-init domain tools", () => {
       [{ followsClock: ["storm"], updates: [] }, clock(12)],
     ] as const)
       expect(getToolContent(await settle(params, worldTime))).toMatchObject({
-        success: true,
         updateCount: 0,
       });
   });
@@ -423,12 +428,18 @@ describe("world-init domain tools", () => {
         { updates: [{ id, changes: [{ path: "status", value: "x" }] }] },
         ctx,
       );
-    await expect(run("letter")).rejects.toThrow(
-      'Unknown dimension: letter. It is an entry of the dimension board: use id "board" and start each path with "letter."',
-    );
-    await expect(run("ledger")).rejects.toThrow(
-      "Unknown dimension: ledger. The dimensions are: reputation, board",
-    );
+    await expect(run("letter")).rejects.toMatchObject({
+      name: "ToolError",
+      code: "not-found",
+      message:
+        'Unknown dimension: letter. It is an entry of the dimension board: use id "board" and start each path with "letter."',
+    });
+    await expect(run("ledger")).rejects.toMatchObject({
+      name: "ToolError",
+      code: "not-found",
+      message:
+        "Unknown dimension: ledger. The dimensions are: reputation, board",
+    });
   });
   it("patches large dimensions by path instead of rewriting them", async () => {
     const boardSchema = {
@@ -587,7 +598,11 @@ describe("world-init domain tools", () => {
           },
           ctx,
         ),
-      ).rejects.toThrow(/Unsafe change path/);
+      ).rejects.toMatchObject({
+        name: "ToolError",
+        code: "invalid-input",
+        message: `Unsafe change path: ${path}`,
+      });
     }
     expect(({} as Record<string, unknown>).polluted).toBeUndefined();
     expect(({} as Record<string, unknown>).x).toBeUndefined();
@@ -599,7 +614,11 @@ describe("world-init domain tools", () => {
         { updates: [] },
         { ...trackerContext(), inputSlots: {} },
       ),
-    ).rejects.toThrow("narrative");
+    ).rejects.toMatchObject({
+      name: "ToolError",
+      code: "unavailable",
+      message: "A successful authoritative narrative input is required",
+    });
     expect(
       await trackerGuard({
         ...trackerContext(),
@@ -659,4 +678,202 @@ describe("world-init domain tools", () => {
     expect(result).not.toHaveProperty("_text");
     expect(JSON.stringify(result).length).toBeLessThan(500);
   });
+});
+
+describe("world tool model views", () => {
+  it.each([
+    ["en-US", "World initialized: 15 attributes, 1 dimensions."],
+    ["zh-CN", "世界已初始化：15 个属性，1 个维度。"],
+  ])(
+    "keeps initialization contract content and exposes only a summary in %s",
+    async (locale, summary) => {
+      const result = await initializeWorld({ tool, z }).execute(
+        { attributes, definitions: { reputation: definition } },
+        { ...base, locale },
+      );
+      expect(getToolContent(result)).toEqual({
+        success: true,
+        preGameDone: true,
+        attributeCount: 15,
+        dimensionCount: 1,
+        worldSchema: { types: ["npc", "companion"], attributes },
+      });
+      expect(getModelView(result)).toEqual({ summary });
+    },
+  );
+
+  it.each([
+    [
+      "en-US",
+      "Dimensions updated: 1 change(s).",
+      "No change recorded.",
+      "This turn's dimensions were already settled.",
+    ],
+    ["zh-CN", "维度已更新：1 项改动。", "未记录改动。", "本回合的维度已结算。"],
+  ])(
+    "summarizes updates, no change and a committed retry in %s",
+    async (locale, updated, unchanged, settled) => {
+      const ctx = { ...trackerContext(), locale };
+      const instance = updateDimensions({ tool, z });
+      const params = { updates: [{ id: "reputation", value: 5 }] };
+      const result = await instance.execute(params, ctx);
+      expect(getToolContent(result)).toEqual({ updateCount: 1 });
+      expect(getModelView(result)).toEqual({ summary: updated });
+      const noChange = await instance.execute({ updates: [] }, ctx);
+      expect(getToolContent(noChange)).toEqual({ updateCount: 0 });
+      expect(getModelView(noChange)).toEqual({ summary: unchanged });
+      const [proposal] = getPendingProposals(result);
+      expect(proposal).toBeDefined();
+      // A committed source receipt prevents another proposal on a later retry.
+      ctx.store.getPluginData = async () => ({
+        value: {
+          source: proposal.payload.source,
+          status: "settled",
+          readVersions: proposal.payload.readVersions,
+          definitions: { reputation: definition },
+          sourceTurnId: "t",
+          version: 1,
+        },
+      });
+      const retry = await instance.execute(params, ctx);
+      expect(getToolContent(retry)).toEqual({ alreadySettled: true });
+      expect(getModelView(retry)).toEqual({ summary: settled });
+      expect(getPendingProposals(retry)).toEqual([]);
+    },
+  );
+});
+
+describe("world tool correction errors", () => {
+  it("rejects conflicting value and changes as invalid-input", async () => {
+    const error = await updateDimensions({ tool, z })
+      .execute(
+        {
+          updates: [
+            { id: "reputation", value: 5, changes: [{ path: "x", value: 1 }] },
+          ],
+        },
+        trackerContext(),
+      )
+      .catch((error: unknown) => error);
+    expect(error).toBeInstanceOf(ToolError);
+    expect(error).toMatchObject({
+      code: "invalid-input",
+      message: "reputation: provide either value or changes, not both",
+    });
+  });
+
+  it("preserves a multiline clock correction and bounds long clock corrections", async () => {
+    const ctx = trackerContext();
+    const run = (display: string) =>
+      updateDimensions({ tool, z })
+        .execute(
+          {
+            followsClock: ["reputation"],
+            updates: [],
+          },
+          {
+            ...ctx,
+            inputSlots: {
+              ...ctx.inputSlots,
+              worldTime: {
+                cardinality: "one",
+                value: {
+                  display,
+                  elapsedThisTurn: 12,
+                  elapsedSinceStart: 72,
+                  unit: "minute",
+                },
+              },
+            },
+          },
+        )
+        .catch((error: unknown) => error);
+    const error = await run("Year 1\n07:26");
+    expect(error).toBeInstanceOf(ToolError);
+    expect(error).toMatchObject({
+      code: "invalid-input",
+      message:
+        "The world clock moved this turn: it is now Year 1\n07:26, 12 minute later than last turn and 72 minute after the start. followsClock lists reputation without an update. Add one entry for each: the value its rule gives for this clock, or only {id, reason} when the rule gives the value it already has.",
+    });
+    const longError = (await run("x".repeat(2100))) as ToolError;
+    expect(longError.message).toHaveLength(1901);
+    expect(longError.message.endsWith("…")).toBe(true);
+  });
+
+  it.each([
+    ["missing narrative", "unavailable", "Narrative provenance required"],
+    ["unknown dimension", "not-found", "Unknown dimension: reputation"],
+    [
+      "stale version",
+      "conflict",
+      "The dimension changed since this narrative started",
+    ],
+  ])("classifies a rule lookup with %s", async (condition, code, message) => {
+    const ctx = trackerContext();
+    const error = await ruleGet({ tool, z })
+      .execute(
+        { id: "reputation", part: "rule" },
+        {
+          ...ctx,
+          ...(condition === "missing narrative" ? { inputSlots: {} } : {}),
+          store: {
+            ...ctx.store,
+            getPluginData: async () =>
+              condition === "unknown dimension"
+                ? null
+                : { value: { ...record, version: 2 } },
+          },
+        },
+      )
+      .catch((error: unknown) => error);
+    expect(error).toBeInstanceOf(ToolError);
+    expect(error).toMatchObject({ code, message });
+    if (condition === "stale version")
+      expect((error as ToolError).hint).toBe(
+        "Stop; the next turn reads the current version.",
+      );
+  });
+});
+
+describe("world tool annotations", () => {
+  it.each([
+    {
+      plugin: "world-init",
+      tool: "dimension-rule-get",
+      create: ruleGet,
+      annotations: { readOnly: true, idempotent: true, concurrencySafe: true },
+    },
+    {
+      plugin: "world-init",
+      tool: "update-dimensions",
+      create: updateDimensions,
+      annotations: { idempotent: true },
+    },
+  ])(
+    "declares proven annotations for $plugin/$tool",
+    async ({ create, annotations }) => {
+      const instance = create({ tool, z });
+      expect(instance.annotations).toEqual({
+        readOnly: false,
+        stagesWrites: true,
+        concurrencySafe: false,
+        ...annotations,
+        ...("readOnly" in annotations ? { stagesWrites: false } : {}),
+      });
+      if ("readOnly" in annotations) {
+        const ctx = trackerContext();
+        ctx.store.getPluginData = async (namespace: string) =>
+          namespace === "_dimensions" ? { value: record } : null;
+        const result = await instance.execute(
+          { id: "reputation", part: "rule" },
+          ctx,
+        );
+        expect(result).toMatchObject({
+          content: definition.updateRule,
+          complete: true,
+        });
+        expect(getPendingProposals(result)).toEqual([]);
+      }
+    },
+  );
 });

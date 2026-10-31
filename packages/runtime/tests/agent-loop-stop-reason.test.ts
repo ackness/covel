@@ -435,24 +435,20 @@ describe("thrown exits (E8–E11)", () => {
     expect(stopOf(error, "run-loop")).toEqual({ reason: "invalid-output" });
   });
 
-  it("E10: a context budget overflow is context-overflow", async () => {
-    const error = await thrownBy(
-      runLoop({
-        llm: queuedLLM([
-          toolCall("mark", { note: "x".repeat(3_000) }),
-          prose("unreached"),
-        ]),
-        maxSteps: 3,
-        estimator: (text) => text.length,
-        contextBudget: {
-          maxInputTokens: 1_000,
-          reservedForResponse: 100,
-          protectLastUserTurns: 1,
-        },
-      }),
-    );
-    expect(error).toBeInstanceOf(RangeError);
-    expect(stopOf(error, "run-loop")).toEqual({ reason: "context-overflow" });
+  it("returns a context-overflow stop without throwing or losing tool calls", async () => {
+    const result = await runLoop({
+      manifest: manifest({ loopProfile: { finalizer: { maxSteps: false } } }),
+      llm: queuedLLM([
+        toolCall("mark", { note: "x".repeat(3_000) }),
+        prose("unreached"),
+      ]),
+      maxSteps: 3,
+      estimator: (text) => text.length,
+      contextBudget: { maxInputTokens: 1_000, reservedForResponse: 100 },
+    });
+    expect(result.stop).toEqual({ reason: "context-overflow" });
+    expect(result.stopMessage).toMatch(/Context budget exceeded/);
+    expect(result.collectedToolCalls).toHaveLength(1);
   });
 
   it("E11: a second loop detection is loop-detected", async () => {

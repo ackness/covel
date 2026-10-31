@@ -832,8 +832,9 @@ The following describes the behavior of the web client itself. It is written for
 `GET /api/sessions/:id/turns`:
 
 - Each item carries `commitStatus` and `origin`.
+- `runtimeResults[].operations` lists the operations the runtime staged through [write services](./plugin-extensions.md#write-services) and their status after the commit (`committed` / `failed` / `discarded`, with a reason); the shape is in [Operation records](./transactions.md#operation-records). A runtime that called no write service has no such field.
 - The upper limit of `?limit=n` is 500.
-- For a runtime that declares `io.concealed`, the `output` and the tool arguments and results in the response are emptied.
+- For a runtime that declares `io.concealed`, the `output` and the tool arguments and results in the response are emptied. Its operation records, including those it made as a sub-agent on a visible caller's result, lose `request` and `result`, and `summary` becomes fixed text.
 - This is a thin route. It is mainly for verifying tools with a real model (see [Verify with a real model](../ship/real-model.md)).
 
 A few things to know about `GET /api/sessions/:id/view`:
@@ -1336,7 +1337,7 @@ The three kinds of list (session-level, per plugin, per namespace) follow the sa
 
 Namespaces that start with `_` are reserved for the kernel:
 
-- PUT / DELETE and the general plugin-data tool cannot change `_dimensions` and `_dimension-settlements`.
+- PUT / DELETE cannot change `_dimensions` and `_dimension-settlements`; dataset names start with a letter, so dataset tools never reach them either.
 - `_hidden.<namespace>` (world data with `visibility: hidden`) does not appear in lists, in `/state`, or in discovery. A single read returns 404.
 - A player changes dimensions through the [manual runtime RPC](#dimension-editing-and-recovery-of-pending-settlements). Public reads use the session view. They do not scan the provider's private rules.
 
@@ -3895,7 +3896,8 @@ Returns an index of the framework's capabilities. Third-party developers, extern
       "scope": "(sessionId, pluginId, namespace, key)",
       "reservedNamespaces": ["_runtime_jobs", "_logs"],
       "writePaths": [
-        "builtin-tool:plugin-data-set",
+        "dataset-tool:<dataset>-upsert",
+        "dataset-tool:<dataset>-update",
         "function-output:pluginData[]",
         "function-ctx.pluginData.update",
         "local-tool:withPendingProposals(plugin.data.update)",
@@ -6262,7 +6264,7 @@ For the full classification table, see [protocol.md § 1. Event types](./protoco
 | `world.dimensions.changed` | World | The author's dimension declaration changed (hot update); does not reset the session's current values |
 | `dimensions.changed` | State | A committed current value changed; the payload has the provider, the public snapshot subset, and an optional settlement summary |
 | `dimensions.settlement.changed` | State | A pending receipt or a receipt with no value change; the payload has no rules or initial values |
-| `plugin-data.changed` | Plugin data | Sent by every write path: `plugin-data-set`, DELETE, batch, and so on |
+| `plugin-data.changed` | Plugin data | Sent by every write path: dataset tool writes, DELETE, batch, and so on |
 | `turn.suspended` | Flow control | Sent after `finalizeExecution` successfully commits a suspension record |
 | `turn.resumed` | Flow control | Sent when `POST /api/sessions/:id/suspensions/:suspensionId/resume` restarts a runtime |
 | `proposal.failed` | Flow control | One proposal failed to submit. It is reported clearly and never dropped quietly; the submitter writes it straight to the action stream |
@@ -6270,7 +6272,7 @@ For the full classification table, see [protocol.md § 1. Event types](./protoco
 | `plugin.fault.counted` | Plugin faults | Counts a self-caused fault; trace-only, not forwarded to the action stream |
 | `plugin.fault.latched` | Plugin faults | Pauses a repeatedly failing plugin; forwarded to the action stream, with session events for other executions |
 | `plugin.fault.cleared` | Plugin faults | Clears the count after a clean run or player re-enable; same delivery as above |
-| `context.pruned` | System | The prompt went over the slot budget and the history was cut hard; only goes to the trace (used by `/debug`), not the action stream |
+| `context.pruned` | System | Prompt-budget trimming; trace only (`/debug`). Payload has `runtimeId`, `pluginId`, `prunedMessageCount`; loop requests also report `truncatedToolResultCount`, `truncatedSummaryCount`, `elidedToolResultCount`, `collapsedStepCount`. The last two are cumulative decisions applied to this request, including ledger replay; any non-zero count emits the event |
 | `context.compaction.failed` | System | History compaction failed, with the reason; only goes to the trace (used by `/debug`) |
 | `commit.fanout.failed` | System | The turn was committed, but some events sent after the commit could not be published; only goes to the trace, and the subscription stream also receives `system.reset` |
 | `error.occurred` | System | An execution error |

@@ -8,12 +8,12 @@
  * each read actually saw, and `finalizeExecution` drops an auxiliary reader
  * with its producer (a story or setup reader commits and is traced instead).
  *
- * Edges are keyed by a **producer id**. Today a producer id is always the
- * `runId` of a result in the same execution. Story-attached operations
- * will commit as units that are not runs, and readers of their staged writes
- * must cascade too; they will add producer ids that are not runs, and finalize
- * will need a second source of dropped producers. Nothing here assumes a
- * producer id names a run.
+ * Edges are keyed by a **producer id**: the `runId` of a result in the same
+ * execution, or the id of a write-service operation whose staged writes the
+ * read saw (`OperationRecord.id`). An operation commits at the end of its
+ * caller's commit unit and can fail on its own, so finalize drops or traces
+ * its readers like those of a dropped run. Nothing here assumes a producer
+ * id names a run.
  *
  * Like the execution journal, the edges ride on the reader's result under a
  * non-enumerable symbol, so `structuredClone` and JSON keep them out of

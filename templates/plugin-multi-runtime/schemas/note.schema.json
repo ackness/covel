@@ -1,0 +1,16 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Note",
+  "description": "One note this plugin keeps. The id is the record's key.",
+  "type": "object",
+  "properties": {
+    "id": { "type": "string" },
+    "kind": { "type": "string" },
+    "title": { "type": "string" },
+    "text": { "type": "string" },
+    "tags": { "type": "array", "items": { "type": "string" } },
+    "turnId": { "type": "string" },
+    "createdAt": { "type": "string" }
+  },
+  "required": ["id", "kind", "title", "text"]
+}

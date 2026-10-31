@@ -16,8 +16,33 @@ import {
   type RpcApprovalGate,
 } from "@covel/approval";
 import type { DataStore } from "@covel/store";
+import type { LoadPluginDatasets } from "@covel/runtime";
 import { runnablePluginIds } from "../session/plugins.js";
 import { sessionApprovalScope } from "../session/session-guard.js";
+
+/**
+ * A write-service provider's datasets and their schemas, read from its
+ * registered package (runtime-less packages included), for the commit to
+ * check the writes it staged for its callers.
+ */
+export function pluginDatasetsLoader(
+  registry: PluginRegistry | undefined,
+): LoadPluginDatasets {
+  return async (pluginId) => {
+    const entry = registry?.get(pluginId);
+    if (!entry) return undefined;
+    return {
+      datasets: Object.fromEntries(
+        Object.entries(entry.datasets ?? {}).map(([name, dataset]) => [
+          name,
+          { namespace: dataset.namespace, ops: dataset.ops },
+        ]),
+      ),
+      // Shared, not copied: the commit's Ajv cache keys on schema identity.
+      schemas: entry.packageManifest?.datasetSchemas ?? {},
+    };
+  };
+}
 
 export interface RuntimeLoaderParams {
   readonly pluginRegistry?: PluginRegistry;

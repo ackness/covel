@@ -126,14 +126,14 @@ Session prep groups the plugins by whether they call a model, that is by the der
 | `tools` | Tool names passed to `registerTool` |
 | `actions` | Nonempty `registerRpc` action names; `covel:`, `runtime:` and `event:` prefixes are reserved for framework approvals and rejected in declarations, registration and action requests. |
 | `commands` | Player command metadata. Its `action` must be listed in `actions`. |
-| `services` | Contract IDs passed to `registerService`. A model-facing service is written as `{contract, modelFacing: true}`; see [Model-facing services](./plugin-extensions.md#model-facing-services) |
+| `services` | Contract IDs passed to `registerService`. A model-facing service is written as `{contract, modelFacing: true}`; see [Model-facing services](./plugin-extensions.md#model-facing-services). A service that changes its provider's own data is written as `{contract, access: write}` (default `read`); see [Write services](./plugin-extensions.md#write-services) |
 | `extensions` | Extensions provided with `provideExtension`, written as `<point>/<id>`, such as `prompt.segment@1/notes`. To set options such as `order` or `slot`, write `{point, id, …}`. |
 | `hooks` | The hook events the package listens to, written as event names, such as `PreToolUse`. To set `enforce`, write `{event, enforce}`. See [Hooks](./hooks.md). |
 | `forms` | Form IDs passed to `registerFormValidator` |
 | `events` | Plugin event contracts |
 | `settings` | Player settings. The runtime reads them through `ctx.userSettings`. |
 | `data` | The schema, version, accepts, and search settings for this plugin's data namespace |
-| `datasets` | Typed datasets the package owns: the name is the namespace, with schema, key and ops. See [Datasets](#datasets-contributesdatasets) |
+| `datasets` | Typed datasets the package owns: the name is the namespace, with schema, key and ops, and optional `tools` and `description`. See [Datasets](#datasets-contributesdatasets) |
 | `actionKinds` | Action kinds players may submit: name, roles, text rule, `fields` schema and display label. See [Action kinds](#action-kinds-contributesactionkinds) |
 | `ui` | Paths, relative to the package root, of the `right/message/view/segment` UI spec files |
 | `ui.view` | Full-column view spec paths relative to the package root; see [Plugin views](./ui-panels.md#plugin-views) for declarations and consent |
@@ -255,7 +255,8 @@ The tags the author writes come first, followed by the derived tags in this orde
 - When a package has only one inline runtime (its runtime ID equals the plugin ID), an agent that does not set `agent.tools.plugin` gets all of the tools in `contributes.tools` automatically. Set `plugin: []` to give it none.
 - If you add a tool to such a package that only a UI action should use, also write the agent's allowlist. Otherwise the model can call that tool too.
 - In a package with several runtimes, each runtime must declare its own tools.
-- `agent.tools.services` imports other plugins' model-facing services as tools: write a contract ID, or `{contract, as}` to name it otherwise. An imported tool is read-only; without a provider it is absent and the runtime runs as usual. Names, parameters and failure answers are in [Imported service tools](./tools.md#imported-service-tools). A function runtime cannot set it and uses `ctx.services` directly.
+- `agent.tools.services` imports other plugins' model-facing services as tools: write a contract ID, or `{contract, as}` to name it otherwise. A read service's import is read-only and a write service's import stages writes (an agent that can suspend does not get it); without a provider it is absent and the runtime runs as usual. Names, parameters and failure answers are in [Imported service tools](./tools.md#imported-service-tools). A function runtime cannot set it and uses `ctx.services` directly.
+- `agent.tools.datasets` lists datasets from the package's `contributes.datasets`, and the framework generates `<dataset>-get`, `-list`, `-upsert` and `-update` tools for them. A dataset name gives every tool the dataset offers; `{ dataset, tools }` gives some of them. A runtime that does not write it gets none, even the inline runtime of a single-runtime package. See [Dataset tools](./tools.md#dataset-tools). A function runtime cannot set it and uses `ctx.pluginData` directly.
 
 ### Agent guards
 
@@ -278,7 +279,7 @@ A guard gets the same `ctx` as a function handler, and a bundled plugin gets the
 Use `io.concealed: true` for runtimes that handle hidden content, such as an agent that plans hidden events in the story.
 
 - Before the framework writes a trace or pushes the live stream, it removes the runtime's prompt, model replies, tool arguments, tool results, and output. Only the runtime name, the tool names, the status, the duration, and the usage are kept.
-- The execution results returned by `/turns` and by manual RPC also have their output and tool content cleared.
+- The execution results returned by `/turns` and by manual RPC also have their output and tool content cleared. In `/turns`, the operation records its [write-service](./plugin-extensions.md#write-services) calls left lose `request` and `result`, and `summary` becomes fixed text; only the contract and how the operation ended remain. The same holds for operations it made as a sub-agent, recorded on a visible caller's result.
 - When the runtime fails, the failure reason shown to the player (in the turn stream, the trace, and the returned result) is replaced with one fixed, generic message. The real reason is written only to the server console log.
 - The stored execution record keeps the full content, so that retries can use it.
 - The text in its output (`narrativeOutput` or `content`) is not written to the conversation log. So it does not reach other runtimes' prompt history, the message API, or the "rebuild prompt" API. Content it shows to the player directly (interactive forms and UI blocks) is written as usual.
@@ -474,7 +475,7 @@ io:
 
 - A normal input reads the result of an upstream runtime that has already finished in the same execution. `select` is a JSON Pointer into the result value.
 - To read a result left by an earlier execution, use `scope: committed` with `recordAs`.
-- A kernel input (`from: { kernel: turn-digest@1 }`) has only `from`. It always has a value and is not checked against a schema, so writing `scope`, `select`, `required`, `accepts` or `recordAs` is rejected.
+- A kernel input (`from: { kernel: turn-digest@1 }` or `from: { kernel: operations@1 }`) has only `from`. It always has a value and is not checked against a schema, so writing `scope`, `select`, `required`, `accepts` or `recordAs` is rejected.
 - A schema can be a local path, or it can be written as `contract:<contractId>`. A contract schema from another provider is resolved when the package loads.
 - In the prompt, an input is at `runtime-inputs.<binding>.value`. Do not rely on the old injection tags.
 - If an agent runs after the narrative and it is bound to this turn's story text, that `value` is a sentence that points to the story message in the conversation. The story text itself is not repeated (see [Prompt structure](./prompt-structure.md#this-turns-story-text)).
@@ -501,6 +502,7 @@ When you publish a runtime's output contract, declare the public schema of the c
 
 - All providers of the same contract ID must publish the same schema.
 - The public schema covers both model output and guard skip output. For example, `world-init` publishes `world-data-provider@1` with support for authored schemas of fewer than 15 attributes; the requirement to generate at least 15 stays in the `initialize-world` tool parameters.
+- The model view of `initialize-world` shows only a summary; code and contract validation still read the full tool content. See [tool output](./tools.md#initialize-world).
 - `world-data-provider@1` requires `success`, `attributeCount`, `dimensionCount`, and `worldSchema`. The same schema also validates tool and guard results before separation, so it permits an optional `preGameDone: true`. This is a completion signal; agent finalization moves it to `RuntimeResult.completion`, and the public business output does not require it.
 - A replacement plugin provides a contract through the `io.output.contract` of its own runtime (`provides` includes it on its own). Output from other installed plugins cannot satisfy the declaration in its place.
 - A consumed contract that has no schema, or a provider that declares a contract but never produces it, causes a loading diagnostic.
@@ -634,7 +636,7 @@ At commit, a top-level runtime and the nested calls at every level below it are 
 - When the unit holds a run of a story or setup runtime, at top level or nested inside, the unit commits under the story rule: when any of its writes is rejected, the whole execution rolls back.
 - When a unit is discarded, the suspensions of its nested calls are void too: they are not saved, cannot be resumed, and do not replace an existing suspension. When the execution leaves no other suspension, the turn ends and counts as usual, and the detached jobs the suspension held back are queued as usual.
 
-`ctx.recursiveCall` returns a copy of the nested result. Changing it does not change what commits or who owns it.
+`ctx.recursiveCall` returns a copy of the nested result. Every result, including flattened descendants, omits the kernel-held `operationWrites`, keeping write-service providers' private staged values out of the caller's result. Changing the returned value does not change what commits or who owns it.
 
 `manualTrigger.runtimeId` may only name a runtime in the caller's own package: the package ID for an inline runtime, or `<pluginId>/<runtimeId>` for a multi-runtime package. A target in another package throws before the nested execution starts. The error names the target runtime and the caller's package ID. Bundled and community plugins follow the same rule.
 
@@ -644,7 +646,7 @@ A `manualTrigger.runtimeId` that names a `schedule.subagentOnly` runtime is an e
 
 #### Sub-agents
 
-A sub-agent is another agent runtime that the caller runs inside its own execution. It has its own transcript and budget and **returns output only**: it makes no writes, emits no events and forms no top-level runtime result, so it is never a commit unit. A function runtime uses `ctx.agents.run`; an agent runtime uses the builtin tool [`delegate`](./tools.md#sub-agents-delegate).
+A sub-agent is another agent runtime that the caller runs inside its own execution. It has its own transcript and budget and **returns output only**: it makes no proposals of its own, emits no events and forms no top-level runtime result, so it is never a commit unit. When writes are allowed, it can stage operations through write services that commit with the delegating run; those operations are discarded if the sub-agent fails. A function runtime uses `ctx.agents.run`; an agent runtime uses the builtin tool [`delegate`](./tools.md#sub-agents-delegate).
 
 ```ts
 const result = await ctx.agents?.run({
@@ -669,7 +671,7 @@ The provider is an agent runtime that names the contract it provides in `io.outp
 Rules at run time:
 
 - **Own transcript**: the sub-agent's prompt is the provider's own body, the framework's completion instructions, then the brief. It sees neither the session history nor the caller's conversation.
-- **Read-only tools**: tools in the provider's `agent.tools` without the `readOnly` annotation (plugin tools, write tools such as `plugin-data-set`), `suspend` and `delegate` are taken away. A declared plugin tool that is not registered still fails the run as it always does. Imported service tools are read-only and stay.
+- **Read-only tools**: tools in the provider's `agent.tools` without the `readOnly` annotation (plugin tools, write tools such as a dataset's `-upsert` / `-update`), `suspend` and `delegate` are taken away. A declared plugin tool that is not registered still fails the run as it always does. Of the dataset tools, only `-get` / `-list` stay. Imported service tools stay, write-service imports included: the sub-agent calls as itself, and the operations it stages ride on the run that delegated to it and are taken back when the sub-agent fails.
 - **Loop profile**: without `agent.loop.profile` it runs `actor`: no streaming, no player interjections.
 - **Model**: it uses the model role the provider declares. The session's `runtimeModelOverrides` apply by the provider's runtimeId, also in a run resumed after suspension; the caller's override and the request's story model override do not.
 - **Caps**: one execution runs at most 8 sub-agents at a time, nested executions included, and a sub-agent cannot call another one (depth cap 1). A call over a cap gets `unavailable` at once; nothing queues.
@@ -768,6 +770,18 @@ The kernel input `turn-digest@1` freezes the facts of the source turn. A foregro
 - A background (detached) worker reads the snapshot of the source execution. It does not query the latest form or turn state again.
 - After this input contract is updated, old jobs and snapshots must be rebuilt. There is no compatible read path.
 
+#### The kernel input `operations@1`
+
+`io.inputs.operations: { from: { kernel: operations@1 } }` reads operations staged by completed, commit-eligible upstream runtimes in this execution. Functions read `ctx.inputs.operations.value`; agents read the `runtime-inputs` block. Tools cannot access this input.
+
+The value is always present: `{ operations: [{ contract, summary, request?, result?, truncated? }] }`, with an empty array when there are no operations. The kernel copies and deeply freezes it in call order, without operation, plugin, runtime or run IDs. `request` and `result` use the operation record's existing model-facing projections; `truncated: true` indicates a value omitted for exceeding the size limit.
+
+It adds no scheduling dependency, but it adds a commit dependency: the reader depends on every staged operation it saw from this execution, and the kernel keeps their IDs outside the value. When such an operation does not land at commit, an auxiliary reader is dropped with it; a story or setup reader commits and records `read-dependency.kept` (see [Transactions · Turn-level single transaction](./transactions.md#turn-level-single-transaction)). A rejected write of the reader itself does not affect the operations it read. Binding collects only completed, commit-eligible results, including nested results, and retains only `staged` operations. `discarded` operations are excluded. A same-stage sibling that started earlier cannot see unfinished operations; a `post-turn` runtime sees all completed narrative-stage operations. Declare `schedule.after` or use a later stage when ordering must be stable.
+
+When retrying or recovering a failed runtime, seed results from the source turn and committed retries contribute only `committed` operations. They appear before this execution’s staged operations so consumers can recognize changes already handled. Their writes are not replayed and they add no new commit dependencies. Failed, discarded or still-staged seed operations are excluded.
+
+A `detached` runtime cannot declare this input: static validation and loading report the field path. Its source snapshot carries no operation records; only `turn-digest@1` reads that snapshot. Kernel inputs take only `from`, with no other binding options.
+
 ## Advanced fields
 
 No bundled plugin uses the fields below, and a first plugin does not need them. They are there for community plugins with special needs. The type and values of each field are in the [manifest field tables](./schema/plugin-manifest.md) and the [runtime field tables](./schema/runtime-manifest.md).
@@ -821,7 +835,7 @@ When only one thing differs from the profile, write only that key; the rest keep
 | `steering` | Merge the player's queued interjections into the conversation before each step and after the story text is written |
 | `truncation` | `accept`: story text cut off at the output limit is kept; `reject`: it fails |
 | `fallback` | When the model keeps calling the same tool: `answer-without-tools` turns the tools off and asks for the answer; `fail` fails with `loop-detected` |
-| `finalizer.maxSteps` | At the step limit, turn the tools off and ask once more for the final answer. With `false` the step limit always fails |
+| `finalizer.maxSteps` | At the step limit or when the request no longer fits the model context, turn tools off and ask once for the final answer, subject to the finalizer conditions. Overflow rescue requires a complete tool step and trims tool groups as needed under [prompt budgeting](./prompt-structure.md#budget). `false` disables both rescues |
 | `finalizer.deadlineReserveMs` | With this many milliseconds left before the time limit, start no new step and ask for the final answer with tools off. `0` turns it off |
 | `corrections.toolUse` | Corrections for missing required tool work or explicit completion. Integer 0–3, default 1 |
 | `corrections.review` | Corrections after `PostLLMResponse` rejects a draft. Integer 0–5, default 2 |
@@ -928,7 +942,7 @@ Writes made during an execution commit when it ends. Until then, a plugin that r
 - The writes this runtime has already buffered.
 - The writes of completed upstream runtimes of the same plugin: a successful result, or a guard that skipped its agent and left writes. They apply in commit order: upstream first, then the runtime's own; the results of a nested call before their parent; within one result, `effects.pluginData` first, then buffered writes. `plugin.data.update` operations are computed in the same order and give the value the commit stores.
 
-`ctx.pluginData.get/list`, `ctx.store.getPluginData/listPluginData`, `context.store` in tools (agent tools and `ctx.tools.call`) and the builtin `plugin-data-get/list` all read this way. The early check of `ctx.pluginData.update` uses the same view.
+`ctx.pluginData.get/list`, `ctx.store.getPluginData/listPluginData`, `context.store` in tools (agent tools and `ctx.tools.call`) and the dataset tools all read this way. The early check of `ctx.pluginData.update` uses the same view.
 
 These writes are not visible:
 
@@ -1084,7 +1098,7 @@ After a namespace declares `search`, its records enter the framework's memory re
 - Extension points, model tools, `io.selfData`, and the public API cannot read it.
 - Revealing it should happen through this turn's runtime output. See [World Data · Hidden data](./world-data.md#hidden-data-visibility-hidden) for details.
 - The plugin's own code (`ctx.pluginData.set` / `ctx.pluginData.update` in a function runtime, and `plugin.data` / `plugin.data.update` proposals produced by the plugin's local tools) can also write to its own `_hidden.<namespace>`. This is used to append hidden content during the story. A write always belongs to the plugin that issued the proposal, so it cannot reach another plugin's hidden data.
-- The REST interface and the built-in `plugin-data-set` and `plugin-data-set-batch` tools cannot write to any namespace that starts with `_`.
+- The REST interface cannot write to any namespace that starts with `_`; dataset names start with a letter, so dataset tools never reach these namespaces either.
 
 ## Prompt and memory extensions
 
@@ -1148,6 +1162,7 @@ The directory-level command `pnpm validate:plugin <dir>` and the ZIP install sha
 - The built-in tool names and the plugin tool declarations, the runtime references inside the package, and the root contract dependencies must all be consistent.
 - A `contributes.actionKinds` `name` must not be a base action kind or repeat; its `schema` file must be in the package and be a JSON object.
 - Each `contributes.datasets` schema file must be in the package and valid JSON. `key` must be a required property in the schema's top-level `properties` (skipped when the schema has none). A name that is also in `contributes.data` must use the same schema in both.
+- A dataset that `agent.tools.datasets` references must be declared in `contributes.datasets`, the selected tools must be ones the dataset offers, and a dataset cannot be listed twice; a generated tool name cannot be longer than 64 characters or equal a framework tool, a tool the runtime declares, a `contributes.tools` entry or an imported service tool (see [Dataset tools](./tools.md#names-and-selection)).
 - An error from a cross-field rule (for example, `schedule.detached` is only allowed on `post-turn` or `audit`, or a story runtime's contract input must set `required: false`) gives the file path and the field path you wrote, for example `runtimes/note/RUNTIME.md: schedule.stage: …`.
 
 Loading, `pnpm validate:plugin` and installation use one copy of the manifest rules (the schemas in `@covel/shared`), and the same holds for UI specs: a panel that passes the check is not dropped in the game for its format.
@@ -1290,13 +1305,17 @@ contributes:
       schema: ./schemas/journal.json # required: a package-relative .json path
       key: id # optional: the top-level record field that is the key
       ops: [upsertItem, delete] # optional: allowed operations, default all
+      tools: [get, list, update] # optional: generated agent tools, derived from ops
+      description: What the agent keeps here. # optional: added to the tool descriptions
 ```
 
 - **The name is the namespace.** The `journal` dataset is the plugin-data space `journal`. A name starts with a letter and holds only letters, digits, `_` and `-`, at most 64 characters. A name starting with `_` is reserved for the kernel and cannot be declared.
 - `schema` must be a `.json` file in the package, with no `..` and no leading `/`.
 - `key`: which top-level field of a record (a string value) is its key. Leave it out to derive no key; the caller then chooses keys.
 - `ops`: the operation kinds this dataset allows, from `set`, `merge`, `inc`, `append`, `insert`, `remove`, `upsertItem`, `delete`. Leaving it out means all of them. When written it cannot be empty or contain duplicates.
-- Omitted fields take their defaults. The compiled declaration always carries `namespace`, `schema` and `ops` (`key` only when written). The compiled result is copied onto `datasets` of every runtime in the package.
+- `tools`: which tools this dataset generates for agents, from `get`, `list`, `upsert`, `update`. When omitted it is derived from `ops`: always `get` and `list`; `upsert` when `ops` has `set`; `update` when `ops` has any operation other than `set`. When written it cannot be empty or contain duplicates; `upsert` without `set` in `ops`, or `update` when `ops` has only `set`, is an error at `contributes.datasets.<name>.tools`. Only runtimes that reference the dataset in `agent.tools.datasets` get these tools; see [Dataset tools](./tools.md#dataset-tools).
+- `description`: 1–500 characters, added to the generated tool descriptions to tell the model what is kept here.
+- Omitted fields take their defaults. The compiled declaration always carries `namespace`, `schema`, `ops` and `tools` (`key` and `description` only when written). The compiled result is copied onto `datasets` of every runtime in the package.
 - **Relation to `contributes.data`.** When the same name appears in both `data` and `datasets`, the two `schema` paths must point at the same file: a namespace has one schema. `data` still governs world-pack import; the dataset governs the records in the namespace.
 - A namespace without a dataset declaration behaves as before.
 
@@ -1307,7 +1326,7 @@ At commit, every proposal a plugin writes into a dataset namespace it declares i
 - **Operation kinds.** Each operation kind of a `plugin.data.update` must be in `ops`. A whole-value write (`ctx.pluginData.set`, `plugin.data`, each item of `plugin.data.batch`) counts as `set`, and a delete (`plugin.data.delete`) counts as `delete`. So a dataset whose `ops` lack `set` cannot be overwritten with `set`.
 - **Record schema.** The written value (for `plugin.data.update`, the result after the operations) must satisfy `schema`.
 - A violation rejects the proposal with `code: "dataset-violation"`, under the commit-unit rules. When the host did not capture the schema document, every write is refused instead of let through.
-- `key` is not checked at commit.
+- `key` is not checked at commit. Dataset tools normalize keys with the [dataset key rule](./tools.md#the-key-rule-and-lookup) `datasetKey(...)` (exported by the SDK), and look up the key as written first, then the normalized key. Plugin code that writes the same dataset should build its keys with `datasetKey(...)` so they land on the rows the tools find.
 - Writes outside the commit pipeline skip these checks: world data import and sync (validated against the source's `schema`, see [World Data · Companion plugin data](./world-data.md#companion-plugin-data)), `context.store.setPluginData` in a plugin action RPC, and the management API `PUT`.
 
 See [Transactions · Operation-based writes](./transactions.md#operation-based-writes-plugindataupdate).

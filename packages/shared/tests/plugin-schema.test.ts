@@ -518,7 +518,8 @@ describe("plugin manifest datasets", () => {
     expect(accepted({ a: { schema: "s.json", key: "1id" } })).toBe(false);
     expect(accepted({ a: { schema: "s.json", key: "a.b" } })).toBe(false);
     expect(accepted({ a: { schema: "s.json", extra: true } })).toBe(false);
-    expect(accepted({ a: { schema: "s.json", tools: ["get"] } })).toBe(false);
+    expect(accepted({ a: { schema: "s.json", tools: ["read"] } })).toBe(false);
+    expect(accepted({ a: { schema: "s.json", tools: ["get"] } })).toBe(true);
     expect(accepted({ a: {} })).toBe(false);
   });
 });
@@ -532,16 +533,20 @@ describe("compiled runtime manifest datasets", () => {
       datasets,
     }).success;
 
-  it("requires resolved ops and a matching namespace", () => {
+  it("requires resolved ops and tools and a matching namespace", () => {
     const ok = {
       journal: {
         namespace: "journal",
         schema: "./j.json",
         ops: ["set"],
+        tools: ["get", "list", "upsert"],
       },
     };
     expect(compiled(ok)).toBe(true);
     expect(compiled({ journal: { ...ok.journal, ops: undefined } })).toBe(
+      false,
+    );
+    expect(compiled({ journal: { ...ok.journal, tools: undefined } })).toBe(
       false,
     );
     expect(compiled({ other: ok.journal })).toBe(false);

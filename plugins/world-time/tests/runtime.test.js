@@ -380,6 +380,7 @@ describe("world-time pipeline", () => {
         namespace: "clock",
         schema: "./schemas/clock.schema.json",
         ops: ["set", "merge", "inc"],
+        tools: ["get", "list", "upsert", "update"],
       });
       expect(runtime.datasetSchemas.clock).toMatchObject({
         required: ["schemaVersion", "definition", "tick"],

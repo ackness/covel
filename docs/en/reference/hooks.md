@@ -289,6 +289,8 @@ Payload: `{ proposal }`.
 - `abort` rejects this proposal, with the reason.
 - `replace.proposal.payload` replaces the payload. The proposal's type, source, and ID stay the same.
 
+The writes a [write service](./plugin-extensions.md#write-services) staged arrive with the provider as their source: `ctx.pluginId` is the provider and `ctx.runtimeId` is `service:<service name>`; the calling plugin does not appear in the hook. Rejecting any one of them rejects the whole operation (see [Transactions · Write-service operations](./transactions.md#write-service-operations)).
+
 ### `PostStateCommit`
 
 Fires after a proposal is committed. To do something after the data is actually written, use this event.

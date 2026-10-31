@@ -84,9 +84,12 @@ export function createToolExecutionContext(
     // The tool's plugin and runtime are the caller, with the same read scope
     // and recorder as the tool's own store reads.
     const client = caller.services.createClient({
+      onSettled: caller.services.executionObserver(),
       ...(caller.emitter ? { emitter: caller.emitter } : {}),
       ...identity,
       ...(toolCallId !== undefined ? { toolCallId } : {}),
+      // Write-service calls stage into this invocation's own stage.
+      ...(caller.operations ? { operations: caller.operations } : {}),
       signal:
         combineAbortSignals(signal, invocation.signal) ?? invocation.signal,
       reads: {
@@ -112,7 +115,19 @@ export function createToolExecutionContext(
     ...(caller.locale !== undefined ? { locale: caller.locale } : {}),
     // Frozen by the host and shared across calls; nothing to copy.
     ...(caller.messages !== undefined ? { messages: caller.messages } : {}),
-    inputSlots: structuredClone(caller.inputSlots),
+    inputSlots: caller.inputSlots
+      ? structuredClone(
+          Object.fromEntries(
+            Object.entries(caller.inputSlots).filter(
+              ([, slot]) =>
+                !(
+                  slot.cardinality === "one" &&
+                  slot.source?.runtimeId === "operations@1"
+                ),
+            ),
+          ),
+        )
+      : undefined,
     pendingProposals: structuredClone(pending),
     upstreamProposals: structuredClone(caller.upstreamProposals),
     world: structuredClone(caller.world),

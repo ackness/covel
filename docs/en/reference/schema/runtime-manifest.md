@@ -118,9 +118,9 @@ In the path headings below, `[]` is a list item and `.*` is a map value.
 
 ## `io.inputs.*.from` (form 3 of 3)
 
-| Field    | Type              | Required | Description                                                                         |
-| -------- | ----------------- | -------- | ----------------------------------------------------------------------------------- |
-| `kernel` | `"turn-digest@1"` | yes      | Kernel input: the frozen last player input and the runtime results observed so far. |
+| Field    | Type                                  | Required | Description                                                                      |
+| -------- | ------------------------------------- | -------- | -------------------------------------------------------------------------------- |
+| `kernel` | `"turn-digest@1"` or `"operations@1"` | yes      | Kernel input: the turn digest or staged operations from completed upstream runs. |
 
 ## `io.selfData[]`
 
@@ -168,12 +168,13 @@ In the path headings below, `[]` is a list item and `.*` is a map value.
 
 ## `agent.tools`
 
-| Field      | Type                     | Required | Description                                                                                                                                                                                   |
-| ---------- | ------------------------ | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `builtin`  | list of string           | no       | Names of builtin tools the runtime may call.                                                                                                                                                  |
-| `plugin`   | list of string           | no       | Names of this package's own tools the runtime may call. Each must be listed in `contributes.tools`. The runtime of a single-runtime package gets every contributed tool when this is omitted. |
-| `defer`    | `true` or list of string | no       | Deferred tool loading. `true` defers the whole whitelist; a list defers only those names.                                                                                                     |
-| `services` | list of string or object | no       | Services the agent imports as read-only tools. Each names a contract; the one active provider that offers it to models answers the call. Without one the tool is left out for the run.        |
+| Field      | Type                     | Required | Description                                                                                                                                                                                                                                                                                                                     |
+| ---------- | ------------------------ | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `builtin`  | list of string           | no       | Names of builtin tools the runtime may call.                                                                                                                                                                                                                                                                                    |
+| `plugin`   | list of string           | no       | Names of this package's own tools the runtime may call. Each must be listed in `contributes.tools`. The runtime of a single-runtime package gets every contributed tool when this is omitted.                                                                                                                                   |
+| `defer`    | `true` or list of string | no       | Deferred tool loading. `true` defers the whole whitelist; a list defers only those names.                                                                                                                                                                                                                                       |
+| `services` | list of string or object | no       | Services the agent imports as tools. Each names a contract; the one active provider that offers it to models answers the call. Without one the tool is left out for the run. A write service's tool stages the provider's writes, which commit with this runtime's work; it is left out of a run that cannot change data there. |
+| `datasets` | list of string or object | no       | Datasets of this package the agent reads and writes through generated tools (`<dataset>-get`, `-list`, `-upsert`, `-update`). A name gives every tool the dataset offers; `{ dataset, tools }` gives some of them.                                                                                                              |
 
 ## `agent.tools.services[]`
 
@@ -181,6 +182,13 @@ In the path headings below, `[]` is a list item and `.*` is a map value.
 | ---------- | ------ | -------- | ------------------------------------------------------------------------------------------------------------------------------------- |
 | `contract` | string | yes      | The contract ID of the model-facing service to import.                                                                                |
 | `as`       | string | no       | The tool name the model sees. Defaults to the contract without its version, dots as dashes (`inventory.items@1` → `inventory-items`). |
+
+## `agent.tools.datasets[]`
+
+| Field     | Type                                                    | Required | Description                                                             |
+| --------- | ------------------------------------------------------- | -------- | ----------------------------------------------------------------------- |
+| `dataset` | string                                                  | yes      | A dataset of this package (`contributes.datasets`).                     |
+| `tools`   | list of `"get"` or `"list"` or `"upsert"` or `"update"` | yes      | The dataset tools this agent gets; each must be one the dataset offers. |
 
 ## `agent.completion`
 
@@ -222,7 +230,7 @@ In the path headings below, `[]` is a list item and `.*` is a map value.
 
 | Field               | Type    | Required | Description                                                                                                                                                                                                           |
 | ------------------- | ------- | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `maxSteps`          | boolean | no       | At the step limit, ask once for the answer with tools off. `false` makes the step limit always fail. Defaults to true.                                                                                                |
+| `maxSteps`          | boolean | no       | At the step limit or when the request no longer fits the model's context, ask once for the answer with tools off. `false` makes these stops always fail. Defaults to true.                                            |
 | `deadlineReserveMs` | integer | no       | Stop starting steps this many ms before the time limit and ask for the answer with tools off, when prose can complete the runtime. At most half of `timeoutMs` is used; smaller than `timeoutMs`. Defaults to 0, off. |
 
 ## `function`

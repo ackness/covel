@@ -135,6 +135,62 @@ describe("world-ir extraction context", () => {
     );
   });
 
+  it("places only public operation fields after vocabulary and before narrative", async () => {
+    const operation = {
+      id: "private-operation",
+      summary: "private summary",
+      status: "staged",
+      contract: "bag.change@1",
+      request: { changes: [{ item: "Brass Key", quantity: 1 }] },
+      result: { received: true },
+      truncated: false,
+    };
+    const result = await extractionContext(worldIr, {
+      promptTemplate: "Extract facts only.",
+      inputSlots: {
+        narrative,
+        operations: { cardinality: "one", value: { operations: [operation] } },
+        vocabulary: {
+          cardinality: "all",
+          items: [
+            { value: { entries: [{ type: "item", name: "Brass Key" }] } },
+          ],
+        },
+      },
+    });
+    const data = JSON.parse(result.replace.messages[0].content);
+    expect(Object.keys(data)).toEqual([
+      "characters",
+      "vocabulary",
+      "operations",
+      "narrative",
+    ]);
+    expect(data.operations).toEqual([
+      {
+        contract: operation.contract,
+        request: operation.request,
+        result: operation.result,
+      },
+    ]);
+  });
+
+  it("keeps the exact existing message when the operations slot is empty", async () => {
+    const payload = {
+      promptTemplate: "Extract facts only.",
+      inputSlots: { narrative },
+    };
+    const without = await extractionContext(worldIr, payload);
+    const empty = await extractionContext(worldIr, {
+      ...payload,
+      inputSlots: {
+        ...payload.inputSlots,
+        operations: { cardinality: "one", value: { operations: [] } },
+      },
+    });
+    expect(empty).toEqual(without);
+    expect(empty.replace.messages[0].content).not.toContain('"operations"');
+  });
+
   it("does not reshape other runtimes or guess inputs from rendered text", async () => {
     expect(
       await extractionContext(

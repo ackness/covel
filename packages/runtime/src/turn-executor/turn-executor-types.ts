@@ -96,6 +96,17 @@ export interface AgentLoopDeps {
 }
 
 export interface TurnExecutorDeps extends AgentLoopDeps {
+  /**
+   * Summaries of the previous player turn's failed operations, by the
+   * runtime ID that made them. Set with the execution's session state; a
+   * sub-agent reads its own entry, a scheduled agent its `sessionMeta`.
+   */
+  readonly failedOperationSummaries?: Readonly<
+    Record<string, readonly string[]>
+  >;
+  readonly serviceOutcomes?: (
+    outcome: import("../plugin-services.js").ServiceCallOutcome,
+  ) => void;
   /** Captured at execution entry; latch changes apply to the next execution. */
   readonly pluginFaults?: {
     isLatched(sessionId: string, pluginId: string): boolean;
@@ -213,6 +224,22 @@ export interface TurnExecutorDeps extends AgentLoopDeps {
    * when absent. Nested executions share its pool cap.
    */
   readonly subagents?: import("../agent-loop/subagent-runner.js").SubagentRunner;
+
+  /**
+   * A plugin's declared datasets and compiled record schemas, for a write
+   * service whose plugin has no runtime in the execution: the commit checks
+   * the service's writes against them. `undefined` when the plugin cannot be
+   * loaded, which makes its write services unavailable. Absent, write
+   * services are checked only against datasets of plugins that ran.
+   */
+  readonly loadPluginDatasets?: import("../operations/operation-stage.js").LoadPluginDatasets;
+
+  /**
+   * Kernel only: the write-service state of the execution (call sequence,
+   * provider datasets), shared with its nested executions. The execution
+   * entry point creates it; a run without one gets its own.
+   */
+  readonly operationScope?: import("../operations/operation-stage.js").OperationExecutionScope;
 }
 
 export interface TurnExecutorOptions {
@@ -234,6 +261,11 @@ export interface TurnInputExecutionFlags {
    * commit. Set only by the kernel; a plugin cannot choose it.
    */
   readonly progressScopeId?: string;
+  /**
+   * Set by the kernel when the run that made a `ctx.recursiveCall` could not
+   * call write services: the nested runs cannot either.
+   */
+  readonly withoutOperations?: true;
 }
 
 export class MaxRecursionExceeded extends Error {

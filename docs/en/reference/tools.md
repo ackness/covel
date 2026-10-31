@@ -2,11 +2,12 @@
 
 A tool is a function the model can call during a run. The model gives a name and arguments, the framework runs it, and the result goes back to the model. This page lists every tool, the arguments and return value of each one, how to write your own tool, and how a tool writes data to storage. Plugin authors who write runtime prompts or tools need it.
 
-There are four kinds of tool:
+There are five kinds of tool:
 
 - **builtin**: included with the framework. Any plugin can use it.
 - **plugin**: registered by a plugin in its own `entry` module. Only that plugin can use it.
 - **imported**: an agent imports another plugin's model-facing service in `agent.tools.services`, and the framework generates a tool for it when the runtime starts; see [Imported service tools](#imported-service-tools). It is not in the registry, so the overview table does not list it.
+- **dataset**: an agent lists datasets that its plugin declares in `contributes.datasets` in `agent.tools.datasets`, and the framework generates read and write tools for each one when the runtime starts; see [Dataset tools](#dataset-tools). They are not in the registry either.
 - **injected**: a tool the framework adds for a run because of the runtime's declaration, such as `search-tools`.
 
 > [!NOTE]
@@ -24,10 +25,6 @@ There are four kinds of tool:
 | create-choices | builtin | — | auto-allow | Create a list of choices | defaults |
 | create-notification | builtin | — | auto-allow | Show a notification message | defaults |
 | render-ui | builtin | — | auto-allow | Render a UI block with its own part states | defaults |
-| plugin-data-set | builtin | — | auto-allow | Write one item of persistent plugin data | defaults |
-| plugin-data-set-batch | builtin | — | auto-allow | Write several items of persistent plugin data at once | defaults |
-| plugin-data-get | builtin | — | auto-allow | Read the current plugin's persistent data | `readOnly`, `idempotent`, `concurrencySafe` |
-| plugin-data-list | builtin | — | auto-allow | List the current plugin's persistent data | `readOnly`, `idempotent`, `concurrencySafe` |
 | **sync-characters** | builtin | — | auto-allow | Create or update characters in one atomic batch. Up to 5 new characters and up to 10 updated characters | defaults |
 | **list-characters** | builtin | — | auto-allow | List all characters in this session (session scope, visible across plugins) | `readOnly`, `idempotent`, `concurrencySafe` |
 | **get-character** | builtin | — | auto-allow | Find one character by id, name, or alias | `readOnly`, `idempotent`, `concurrencySafe` |
@@ -36,20 +33,20 @@ There are four kinds of tool:
 | **emit-event** | builtin | — | auto-allow | Emit a domain event that the current session has declared (one topic at a time). Advertises a topic enum and per-topic payload schemas | defaults |
 | **suspend** | builtin | — | auto-allow | Describe answers with form fields and suspend the runtime to wait for player input. Writes to the `suspensions` table. Can be resumed through the resume API | defaults |
 | **runtime-done** | builtin | — | auto-allow | The end signal for the agent tool loop. Call it after the business tool calls are done to end this runtime | defaults |
-| **delegate** | builtin | — | auto-allow | Hand one job to a sub-agent and get its output back; the sub-agent writes nothing | `readOnly` |
+| **delegate** | builtin | — | auto-allow | Hand one job to a sub-agent and get its output back; it can stage operations through write services | `stagesWrites` |
 | **search-tools** | injected | — | auto-allow | Deferred tool search. The framework injects it automatically when a manifest declares `tools.defer`. It uses BM25 search to find and activate tools that were not preloaded | — |
 | **memory-search** | builtin | — | auto-allow | Search memory: conversation history and past summaries (recall), plus the long-term knowledge base (archival), which includes lorebook data, characters, and data that plugins declare as searchable | `readOnly`, `idempotent`, `concurrencySafe` |
 | initialize-world | local | world-init | auto-allow | Initialize the world by combining the character attribute schema and the dimension declarations | defaults |
 | create-character-form | local | char-creator | auto-allow | Create the opening character form. It collects only the character name and the declared string and enum attributes. Numeric and composite attributes keep their defaults | defaults |
 | update-affinity | local | affinity | auto-allow | Apply this turn's affinity changes between the player and NPCs in one batch. An unknown name starts at 0. Scores add up across turns and are limited to [-100, 100] | defaults |
 | advance-world-time | local | world-time | auto-allow | Settle a reached target time or a duration; the tool computes calendar differences. Random mode takes only a reason. Commits with the story | defaults |
-| dimension-rule-get | local | world-init | auto-allow | During maintenance, read private rules or value schemas with paging | defaults |
-| update-dimensions | local | world-init | auto-allow | Bind to this turn's narrative. Update the whole batch with compare-and-swap (CAS), or explicitly settle that nothing changed | defaults |
-| submit-world-facts | local | world-ir | auto-allow | Submit and validate a complete `contract:world-ir@1` as function calling arguments | defaults |
+| dimension-rule-get | local | world-init | auto-allow | During maintenance, read private rules or value schemas with paging | `readOnly`, `idempotent`, `concurrencySafe` |
+| update-dimensions | local | world-init | auto-allow | Bind to this turn's narrative. Update the whole batch with compare-and-swap (CAS), or explicitly settle that nothing changed | `idempotent` |
+| submit-world-facts | local | world-ir | auto-allow | Submit and validate a complete `contract:world-ir@1` as function calling arguments | `stagesWrites: false`, `idempotent` |
 | sync-codex-entries | local | codex | auto-allow | Submit this turn's codex changes at once. Creates or adds to entries by title | defaults |
 | generate-guide | local | guide | auto-allow | Write a plot summary, the current decisions, and quick replies in the player's voice, atomically | defaults |
 | upsert-npc-graph | local | npc-graph | auto-allow | Write NPC nodes and relationship edges in one batch. Refers to nodes by name. The tool removes duplicates and assigns short IDs | defaults |
-| plan-story-events | local | story-events | auto-allow | Validate the hidden future story events the plot plans (up to 2 per call). Can withdraw planned events that have not happened yet | defaults |
+| plan-story-events | local | story-events | auto-allow | Validate the hidden future story events the plot plans (up to 2 per call). Can withdraw planned events that have not happened yet | `stagesWrites: false`, `idempotent` |
 | submit-dashscope-text-prompt | local | dashscope-image-gen | auto-allow | Submit a text scene prompt and emit the fixed DashScope image event | defaults |
 | submit-dashscope-structured-prompt | local | dashscope-image-gen | auto-allow | Submit a structured scene prompt and emit the fixed DashScope image event | defaults |
 | submit-openai-image-text-prompt | local | openai-image-gen | auto-allow | Submit a text scene prompt and emit the fixed OpenAI-compatible image event | defaults |
@@ -176,7 +173,7 @@ What happens at runtime:
 
 Two related points:
 
-- **To save data**: use the builtin `plugin-data-set` instead (list it in `tools.builtin`). It returns `{ namespace, key }`, and it hands the write to the end-of-turn commit flow as a `plugin.data` proposal, so the result the model reads carries the `staged` notice.
+- **To save data**: declare a dataset in `contributes.datasets` and list it in the runtime's `agent.tools.datasets`. The model then gets typed tools such as `<dataset>-upsert`; see [Dataset tools](#dataset-tools). Your own tool can also return a `plugin.data*` proposal. Either way, the write goes to the end-of-turn commit flow, so the result the model reads carries the `staged` notice.
 - **To let the UI or HTTP trigger one plugin action directly**: that is not a tool. Register it in the entry with `covel.registerRpc(action, handler)`, and call it through `POST /api/sessions/:id/plugin-rpc`. RPC is not given to the model, so do not put it in `tools.plugin`.
 
 #### Malformed argument JSON from the model
@@ -235,7 +232,6 @@ pnpm --filter @covel/runtime exec vitest run tests/proposal-type-contract.test.t
 
 Builtin tools are system-level building blocks, suited to being reused directly by many plugins. For example:
 
-- `plugin-data-*`
 - `render-ui`
 - `create-form`
 - `create-choices`
@@ -455,123 +451,6 @@ interface UIRenderPart {
 
 The tool returns `{ ui: [{ parts, layout? }] }`, and the framework builds a `ui.render` proposal from it. Every UI block must include `parts`; blocks without `parts` are rejected.
 
-### plugin-data-set
-
-Write one item into the plugin's persistent storage. Data is isolated by `(sessionId, pluginId, namespace, key)`. Writing the same `(namespace, key)` again replaces the old value.
-
-| Argument  | Type    | Required | Description                                            |
-| --------- | ------- | -------- | ------------------------------------------------------ |
-| namespace | string  | ✓        | Data namespace (such as `schema`, `entries`, `config`) |
-| key       | string  | ✓        | Data key name                                          |
-| value     | unknown | ✓        | JSON data to store                                     |
-
-**Output**: `{ namespace, key }`
-
-**Governance path**: the write is not saved right away. It is committed through the session kernel's commit flow, like any other write. It goes through `PreStateCommit` / `PostStateCommit`, the trace, and the storage transaction.
-
-#### Size limit for one value
-
-A value, once serialized to JSON, must not be larger than **256 KiB** (in UTF-8 bytes; `MAX_PLUGIN_DATA_VALUE_BYTES`, `packages/shared/src/utils/plugin-data-limits.ts`).
-
-What happens when the limit is exceeded:
-
-- `plugin-data-set` and `plugin-data-set-batch` report an error at call time: `The value for <namespace>/<key> is N bytes; the limit for one value is 262144 bytes. …`. In a batch, if one item is over the limit, the whole call fails. The model then writes less or splits the data, and it does not wait until commit, when the value would be dropped together with the runtime's other writes.
-- Writes fail through the other entry points. The error gives the plugin ID, the `namespace/key`, the actual size in bytes, and the limit. The stored value stays as it was, and it is not cut short.
-
-The same limit applies at every write entry point:
-
-| Entry point                                                                      | When the limit is exceeded                                                                                        |
-| -------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
-| Tools `plugin-data-set` / `plugin-data-set-batch`                                | Error at call time                                                                                                |
-| Commit of `plugin.data` / `plugin.data.batch`                                    | The commit fails                                                                                                  |
-| Commit of `plugin.data.update` (the result after the operations)                 | The commit fails                                                                                                  |
-| `ctx.pluginData.set` / `ctx.pluginData.update`, the store view of an RPC handler | The write fails                                                                                                   |
-| REST `PUT /api/sessions/:id/plugin-data/...`                                     | Returns `413`                                                                                                     |
-| World package import                                                             | The record gets an error diagnostic. The import fails and is not truncated. `pnpm validate:world` reports it too. |
-
-For reference, the largest seed record in the bundled worlds is about 7 KB. To store more, split it into several keys, or keep only the part that later turns will read.
-
-#### Reserved namespaces
-
-A namespace that starts with `_` belongs to the framework's own bookkeeping, and plugins cannot write to it. For example: `_jobs` (old background jobs), `_runtime_jobs` (detached jobs), and `_logs` (the runtime log ring). Reading is not affected.
-
-This rule is enforced in one place, by `reservedPluginDataNamespaceError()` (`packages/shared/src/utils/plugin-data-namespace.ts`). It covers every plugin-side write entry point:
-
-- REST `PUT /api/sessions/:id/plugin-data/...`
-- Commit of `plugin.data` / `plugin.data.batch`, including proposals normalized from a function runtime's output
-- `ctx.pluginData` in a function runtime or an agent guard
-- The store view of an RPC handler. Every plugin's RPC action, including those of bundled plugins, gets an immediate write capability bound to the session and the plugin through `createRpcHandlerStoreView()`
-
-Neither kind of plugin handle exposes the host's transaction, session lifecycle, or store-closing methods. The framework's own privileged writers (the background job runner and the runtime log) call the store directly and do not use these entry points.
-
-### plugin-data-set-batch
-
-Write several items in one call. The model does not have to call once per item, which saves many round trips. It suits cases where a lot of entries must be written at once, such as world initialization.
-
-| Argument | Type                           | Required | Description                             |
-| -------- | ------------------------------ | -------- | --------------------------------------- |
-| items    | Array<{namespace, key, value}> | ✓        | Array of data items to write in a batch |
-
-Each item:
-
-| Field     | Type    | Required | Description        |
-| --------- | ------- | -------- | ------------------ |
-| namespace | string  | ✓        | Data namespace     |
-| key       | string  | ✓        | Data key name      |
-| value     | unknown | ✓        | JSON data to store |
-
-**Output**: `{ count, items: [{ namespace, key }] }`
-
-**Governance path**: committed through the commit flow, the same as a single write. The whole batch is one proposal. Hooks, the trace, and the transaction are handled the same way as for a single write.
-
-**Design principle**: this is a general batch write. For a specialized case, such as world initialization, it is better for the plugin to write its own tool. A more precise schema then guides the model to produce correctly structured data.
-
-### plugin-data-get
-
-Read one item from the **current plugin's** storage. Reading across plugins is not allowed.
-
-| Argument  | Type   | Required | Description    |
-| --------- | ------ | -------- | -------------- |
-| namespace | string | ✓        | Data namespace |
-| key       | string | ✓        | Data key name  |
-
-**Output**: `{ found, namespace, key, value?, updatedAt? }`
-
-`updatedAt` is the stored timestamp, even when pending writes change the visible value. Pending-only rows omit it. The scoped store view and plugin-data lists follow the same rule; `createdAt` is also omitted until a row has been stored.
-
-**It can read what it just wrote.** A write is committed only when execution finishes. But a read adds in the uncommitted `plugin.data` / `plugin.data.batch` / `plugin.data.delete` / `plugin.data.update` operations from this execution:
-
-- Only pending operations for the **current session and current plugin** are applied.
-- For the same key, operations are applied in proposal order, and the last one wins. After a delete, the read returns `found: false`. A later write makes the read return the new value.
-- Writing `null` stores a value. It is not the same as a delete.
-- The operations of a `plugin.data.update` are applied on top of the stored value (or the pending writes before it), with the same `applyDataOps` the commit uses. An update whose operations fail on that value is skipped, because the commit rejects it too.
-- The writes that completed upstream runtimes of the same plugin made in this execution are added in too, before this runtime's own writes and in commit order. Other plugins, siblings of the same level, and the upstream results a retry or a background job brings are not added. Rules: [In-execution plugin-data visibility](./plugins.md#in-execution-plugin-data-visibility).
-- A runtime that read an upstream write depends on it: when the upstream is dropped at commit, an auxiliary runtime is dropped with it.
-- When the tool context has `context.store`, both read tools read through it, so they see what a function handler's `ctx.store` sees and record read dependencies; a host without `context.store` adds only `context.pendingProposals`.
-
-**What cannot be read.**
-
-- Hidden world data (`_hidden.<namespace>`, from a source with `visibility: hidden`, or added by a plugin during the story) is not returned to the model. Reads always return `found: false`.
-- Any kernel namespace that starts with `_` is never exposed to the model.
-- `plugin-data-set` / `plugin-data-set-batch` reject any namespace that starts with `_`, so the model cannot use the general tools to write hidden data either.
-
-### plugin-data-list
-
-List all items in one namespace of the **current plugin**.
-
-| Argument  | Type   | Required | Description                            |
-| --------- | ------ | -------- | -------------------------------------- |
-| namespace | string |          | Data namespace (if omitted, lists all) |
-
-**Output**: `{ count, items: [{ namespace, key, value, updatedAt? }] }`
-
-- As with `plugin-data-get`, pending writes and deletes from this execution are added in, including the writes of upstream runtimes of the same plugin. A deleted item does not appear in the list.
-- A list with a `namespace` depends on every upstream runtime that wrote that namespace; without one, it depends on every upstream runtime that wrote plugin data.
-- The `namespace` filter also applies to pending items. When it is omitted, all namespaces are merged.
-- The namespaces of hidden world data do not appear in the results.
-
-Reads and merges match the full `(namespace, key)` pair of strings exactly. They do not split on control characters, and they do not rewrite fields. The exported `overlayPluginDataRows()` uses `JSON.stringify([namespace, key])` as the Map key; its fourth parameter `baseRows` holds the stored rows that a `plugin.data.update` starts from. Buffered reads in a function runtime and in a guard follow the same rules.
-
 ### runtime-done
 
 Only a successful `runtime-done` call returning its sentinel ends the loop. The same field in another tool’s result is ordinary data.
@@ -725,7 +604,7 @@ Validation, and the list of available topics, are handled by an event directory 
 
 The model-facing `topic` schema is an enum of this session's advertised topics. `data` carries the topic's payload schema, or an `anyOf` with one titled branch per topic when several topics are available. A single topic uses its schema directly under `data`; `$schema` and `$id` are omitted. Schemas containing `$ref` or `$defs`, and unreadable schemas, are advertised as plain objects. With no advertised topics, the generic definition is used.
 
-Session preparation refreshes this definition every turn, including sessions without a character schema. Execution still accepts a string topic and delegates payload validation to the directory's Ajv validator: an unknown topic remains `refused`, not `invalid-input`. The prompt catalogue is unchanged.
+Session preparation refreshes this definition every turn, including sessions without a character schema. Execution still accepts a string topic and delegates payload validation to the directory's Ajv validator: an unknown topic remains `refused`, not `invalid-input`. The prompt catalogue keeps the topic, description and required-field summary. It no longer repeats payload schemas carried by the tool definition. Schemas with `$ref` or `$defs` at any depth still appear in full in the catalogue; unreadable schemas only show `(schema unavailable)`. The event-emission instruction points to the topics and payload shapes in the tool definition.
 
 #### The four results of a call
 
@@ -866,14 +745,14 @@ An agent runtime uses it to hand a job to a [sub-agent](./plugins.md#sub-agents)
 | data      | object | —        | Facts the sub-agent needs, as a JSON object, at most 32 KB                                         |
 | maxSteps  | number | —        | The sub-agent's step limit; it can only be lower than the provider's own                           |
 
-**Output**: on success the model receives `{data: output}`, with output projected through `modelFacingJson`; code still reads the original output. `stopReason` and usage stay on `subagent.completed`. A completing `delegate` passes the original output to the caller's output gate. Failure uses `{error:{code,message,hint?}}`, with the same codes in `tool.failed`. All failures except `invalid-input` retain the `refused` accounting flag.
+**Output**: on success the model receives `{data: output}`. If this delegation staged operations, it also receives `staged: {count, kinds, notice}`, counting only this invocation and explaining that the writes await commit and may be rejected. Output is projected through `modelFacingJson`; code still reads the original output. `stopReason` and usage stay on `subagent.completed`. A completing `delegate` passes the original output to the caller's output gate. Failure uses `{error:{code,message,hint?}}`, with the same codes in `tool.failed`. All failures except `invalid-input` retain the `refused` accounting flag.
 
 **Notes**:
 
 - The kernel answers the call inside the agent loop; the tool itself never runs. It is traced like any tool: `tool.calling` / `tool.completed` / `tool.failed`, with `approvalStatus: auto-allowed`. The sub-agent's events point back to the call with `parentCallId`.
 - Caps: one execution runs at most 8 sub-agents at a time, and a call over the cap gets `unavailable` at once. A sub-agent does not get `delegate`, so it cannot go one level deeper.
-- The sub-agent can use read-only tools only; its write tools are taken away. It makes no proposals, and the caller's commit does not change because of it.
-- It is annotated `readOnly`, but neither `idempotent` nor `concurrencySafe`: two runs give different answers.
+- The sub-agent keeps read-only tools and service imports, including write services when the caller may stage operations. Its operations join the caller's commit unit and are discarded if the sub-agent fails.
+- Its annotations are `readOnly: false`, `stagesWrites: true`, `idempotent: false` and `concurrencySafe: false`.
 
 The contract is declared in `packages/tools/src/builtin/delegate.ts`; the execution logic is in `packages/runtime/src/agent-loop/subagent-delegate.ts` and `subagent-runner.ts`.
 
@@ -1052,7 +931,7 @@ Version and argument checks run again at commit time. Seeing a write in the pend
 
 `char-creator/player-init` wraps the general `create-form` with the plugin tool `create-character-form`:
 
-Template/default checks in `create-character-form` return `invalid-input`, including a missing `{{characterName}}` placeholder. The model must correct the template before an interaction is published; unexpected downstream failures retain their original classification.
+Field, template and default checks in `create-character-form` return `invalid-input`. These include uncollectable fields, incorrect string input types, invented enum options, a missing required name field and a missing `{{characterName}}` placeholder. The model must correct the template before an interaction is published; unexpected downstream failures retain their original classification.
 
 - It allows only the required `characterName`, plus the string and enum fields in the world schema. The submitted value of an enum must come from its original options.
 - Numeric and composite attributes keep their default values. They cannot be turned into a select in the narrative.
@@ -1199,6 +1078,163 @@ Attributes:
   status: wounded
 ```
 
+<a id="plugin-data-set"></a>
+
+## Dataset tools
+
+A plugin declares a dataset in `contributes.datasets` (the JSON Schema of its records, an optional key field, and the operations it allows). When an agent runtime lists it in `agent.tools.datasets`, the framework generates a set of typed read and write tools for that dataset when the runtime starts. The tools read and write only this namespace of the calling plugin. Every write is staged as a proposal and handed to the end-of-turn commit flow. The rules for the declaration itself are in [Datasets](./plugins.md#datasets-contributesdatasets).
+
+Dataset tools are not in the registry, so they are not in the overview table, and they cannot be listed in `tools.builtin` / `tools.plugin`. A model saves data only into a declared dataset; the dataset's schema can be as loose as `{ "type": "object" }`. A plugin's own tools (which return `plugin.data*` proposals) and `ctx.pluginData` in a function runtime are not affected.
+
+### Names and selection
+
+A dataset `<d>` generates up to four tools:
+
+<!-- prettier-ignore -->
+| Tool | What it does | Annotations |
+| --- | --- | --- |
+| `<d>-get` | Read one record by its key | `readOnly`, `idempotent`, `concurrencySafe` |
+| `<d>-list` | List records a page at a time, optionally filtered by exact top-level fields | `readOnly`, `idempotent`, `concurrencySafe` |
+| `<d>-upsert` | Write a whole record: replace it when the key exists, create it otherwise | `stagesWrites`, `idempotent` |
+| `<d>-update` | Change an existing record with operations | `stagesWrites` |
+
+The declaration's `tools` decides which tools a dataset offers. When it is omitted, it is derived from `ops`: always `get` and `list`; `upsert` when `ops` has `set`; `update` when `ops` has any operation other than `set`. None of the four tools has a per-tool timeout.
+
+A runtime selects them in one of two forms:
+
+```yaml
+agent:
+  tools:
+    datasets:
+      - npcs # every tool the dataset offers
+      - { dataset: clock, tools: [get] } # only some of them
+```
+
+- A runtime that writes no `datasets` gets no dataset tools, even the inline runtime of a single-runtime package.
+- A function runtime cannot write `datasets`; it reads and writes through `ctx.pluginData`.
+- Tool names carry no plugin ID or version.
+- A story runtime can select dataset tools too. As with any other story write, a write rejected at commit rolls the turn back.
+
+Loading, `pnpm validate:plugin` and installation check references with the same rules, and report at the field `agent.tools.datasets.<i>` (a selected tool at `.tools.<j>`):
+
+- the dataset is not declared in `contributes.datasets`;
+- a selected tool is one the dataset does not offer;
+- a generated name is longer than 64 characters, so a referenced dataset name has at most 57 characters;
+- a generated name equals a framework tool, a name in the runtime's `tools.builtin` / `tools.plugin`, an entry of the package's `contributes.tools`, or an imported service tool's name. For example, a dataset `world-dimension` would generate `world-dimension-get`, which the framework already has;
+- the same dataset is listed twice.
+
+### Arguments and results
+
+<!-- prettier-ignore -->
+| Tool | Arguments | Result |
+| --- | --- | --- |
+| `<d>-get` | `{ key }` | `{ key, record }` |
+| `<d>-list` | `{ where?, offset?, limit? }` | `{ total, items: [{ key, record }], nextOffset? }` |
+| `<d>-upsert` | `{ record }` with a key field, `{ key, record }` without one | `{ key, record, created }` |
+| `<d>-update` | `{ key, ops }` | `{ key, record }`; `{ key, deleted: true }` after a `delete` operation |
+
+- `list` sorts by key. `where` compares top-level fields of the record exactly with string / number / boolean / null values; `offset` defaults to 0, and `limit` is 1–50 with a default of 20. `nextOffset` is returned when there is another page.
+- `update` takes 1–64 operations, of the dataset's `ops` kinds except `set`; a whole replacement uses `upsert`. For how operations are written and what they do, see [Operation-based writes](./transactions.md#operation-based-writes-plugindataupdate).
+- Results carry no `updatedAt` or row IDs. They reach the model in the [unified result format](#unified-result-format-and-error-codes): the content is in `data`, and a write tool adds the `staged` notice, which says the proposal is staged and can still be rejected at commit.
+
+### The schema the model sees
+
+- The `record` argument is the dataset's JSON Schema. `$defs` / `definitions` at the schema's root move to the root of the tool schema, so `#/$defs/…` references still resolve; `$schema` and `$id` are dropped; `pattern` is handled as in a schema that `tool()` generates.
+- Each item of `ops` is the object schema of one allowed operation.
+- The descriptions of `key` and `where` name the key field and say that case and spacing do not matter for lookup.
+- Tool descriptions are in English and end with the dataset's `description`.
+- Some providers do not accept some JSON Schema keywords, such as `if` / `then`, an external `$ref` and `patternProperties`. Keep record schemas to plain object schemas where you can. When a provider rejects one, only that runtime's request fails.
+
+### The key rule and lookup
+
+The dataset key rule is `datasetKey(text)`, exported by the SDK (`@covel/plugin-handlers-utils`, also exported by `@covel/shared`):
+
+```ts
+text.normalize("NFKC").trim().replace(/\s+/gu, " ").toLowerCase();
+```
+
+- A new record is stored under `datasetKey(raw key)`. For a dataset with a key field, the raw key is the key field's value in `record`; without one, it is the `key` argument.
+- The key field keeps its written value: `name: "Iron Sword"` is stored under the key `iron sword`, and the record still says `"Iron Sword"`.
+- Lookup is exact first, then normalized: `get`, `update`, and `upsert` choosing between replace and create, first look for a row stored under the raw key, then under `datasetKey(raw key)`. Rows that world data import, RPC, REST `PUT` or plugin code stored under another form of the key stay reachable. When both forms are stored (for example `Sword_01` and `sword_01`), `get "Sword_01"` and `get "sword_01"` return different rows.
+- A key that is empty after normalization, or longer than 256 UTF-16 units, is `invalid-input`.
+- `update` cannot change the normalized value of the key field: `update cannot change <field>; upsert a new record and delete this one`.
+- The commit does not check keys. Plugin code that writes the same dataset should build its keys with `datasetKey(...)` so they land on the rows the tools find.
+
+### Checks at call time
+
+A write tool computes the result and checks it before it stages a proposal:
+
+1. Read the current value through `context.store`. This is the plugin's own view: it adds this execution's staged writes of the runtime and the writes of upstream runtimes of the same plugin, and records the read dependency; the rules are under [In-execution plugin-data visibility](./plugins.md#in-execution-plugin-data-visibility). The read tools read through it too.
+2. Apply the operations with the same `applyDataOps` the commit uses; `upsert` is one `set`.
+3. Check the [size limit for one record](#size-limit-for-one-value).
+4. Validate the result against the dataset's schema.
+
+When any step fails, the call answers an error and nothing is staged. When the checks pass, each write stages **one** `plugin.data.update` proposal: `{ namespace: <d>, key, ops }`. The ops of `upsert` are `[{ op: "set", value: record }]`; `update` carries the model's ops unchanged. The commit checks again as usual (the dataset policy, MediaRef canonicalization, the size limit); when the base value changes between the two checks, the commit can still reject the write.
+
+When the host provides no `context.store`, all four tools answer `unavailable`.
+
+### Errors
+
+<!-- prettier-ignore -->
+| Case | Error code |
+| --- | --- |
+| The arguments have the wrong shape, or `update` uses an operation the dataset does not allow | `invalid-input` |
+| The key is empty or too long after normalization | `invalid-input` |
+| The result does not match the schema; the message lists the first 3 validation errors | `invalid-input` |
+| The result is over the size limit | `invalid-input` |
+| An operation is malformed (`invalid-op` / `invalid-path`), or `update` changes the key field | `invalid-input` |
+| A well-formed operation does not fit the current record (`path-not-found`, `type-mismatch`, `out-of-bounds`, `index-out-of-range`, `duplicate-item`) | `conflict`, naming the operation's index; when the runtime selected `<d>-get`, the hint is `Read the record with <d>-get and adjust.` |
+| `get` / `update` finds no record | `not-found`; when the runtime selected the matching tool, `get` hints `List records with <d>-list.` and `update` hints `Create it with <d>-upsert.` |
+| The dataset's schema cannot be compiled | `internal`: `The <d> dataset's schema cannot be used.`, plus a server log line |
+| The host has no `context.store` | `unavailable` |
+
+Messages name the dataset and the key, never a plugin ID. Both `conflict` and `invalid-input` count as failed business calls.
+
+### Sub-agents
+
+A sub-agent that `delegate` starts uses the dataset selections in the provider runtime's own `agent.tools.datasets`, keeping only the selected `<d>-get` / `<d>-list` tools. It reads data as the provider's plugin. When a dataset was selected only with write tools, the sub-agent does not get it.
+
+<a id="reserved-namespaces"></a>
+
+### Namespaces out of reach
+
+A dataset name starts with a letter, so dataset tools never reach a namespace that starts with `_`, including hidden world data `_hidden.<namespace>`.
+
+A namespace that starts with `_` belongs to the framework's own bookkeeping, and plugins cannot write to it. For example: `_jobs` (old background jobs), `_runtime_jobs` (detached jobs), and `_logs` (the runtime log ring). Reading is not affected.
+
+This rule is enforced in one place, by `reservedPluginDataNamespaceError()` (`packages/shared/src/utils/plugin-data-namespace.ts`). It covers every plugin-side write entry point:
+
+- REST `PUT /api/sessions/:id/plugin-data/...`
+- Commit of `plugin.data` / `plugin.data.batch`, including proposals normalized from a function runtime's output
+- `ctx.pluginData` in a function runtime or an agent guard
+- The store view of an RPC handler. Every plugin's RPC action, including those of bundled plugins, gets an immediate write capability bound to the session and the plugin through `createRpcHandlerStoreView()`
+
+Neither kind of plugin handle exposes the host's transaction, session lifecycle, or store-closing methods. The framework's own privileged writers (the background job runner and the runtime log) call the store directly and do not use these entry points.
+
+<a id="size-limit-for-one-value"></a>
+
+### Size limit for one record
+
+A value, once serialized to JSON, must not be larger than **256 KiB** (in UTF-8 bytes; `MAX_PLUGIN_DATA_VALUE_BYTES`, `packages/shared/src/utils/plugin-data-limits.ts`).
+
+What happens when the limit is exceeded:
+
+- A dataset write tool reports an error at call time: `The value for <namespace>/<key> is N bytes; the limit for one value is 262144 bytes. …`. The model then writes less or splits the data, and it does not wait until commit, when the value would be dropped together with the runtime's other writes.
+- Writes fail through the other entry points. The error gives the plugin ID, the `namespace/key`, the actual size in bytes, and the limit. The stored value stays as it was, and it is not cut short.
+
+The same limit applies at every write entry point:
+
+| Entry point                                                                      | When the limit is exceeded                                                                                        |
+| -------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| Dataset tools `<d>-upsert` / `<d>-update`                                        | Error at call time                                                                                                |
+| Commit of `plugin.data` / `plugin.data.batch`                                    | The commit fails                                                                                                  |
+| Commit of `plugin.data.update` (the result after the operations)                 | The commit fails                                                                                                  |
+| `ctx.pluginData.set` / `ctx.pluginData.update`, the store view of an RPC handler | The write fails                                                                                                   |
+| REST `PUT /api/sessions/:id/plugin-data/...`                                     | Returns `413`                                                                                                     |
+| World package import                                                             | The record gets an error diagnostic. The import fails and is not truncated. `pnpm validate:world` reports it too. |
+
+For reference, the largest seed record in the bundled worlds is about 7 KB. To store more, split it into several keys, or keep only the part that later turns will read.
+
 ## Plugin tools (internal source label: `local`)
 
 These are the tools that plugins bring with them. The implementation files are usually in the plugin package's own `tools/` or `server/` directory. They are created with `tool()`, and the `entry` imports and registers them. Below are the tools of the bundled plugins.
@@ -1210,6 +1246,16 @@ These are the tools that plugins bring with them. The implementation files are u
 - Write a separate test for each plugin tool.
 - A persistent write returns `withPendingProposals(...)`, so the commit flow saves it to the database.
 - Use plugin tools to wrap the plugin's own data schema and batch write logic.
+
+### advance-world-time
+
+`advance-world-time` returns `unavailable` when host-provided clock or narrative inputs are missing. A clock changed since narration began returns `conflict`: stop and let the next turn read the current clock. A corrupt stored tick remains an internal fault.
+
+### plan-story-events
+
+**Owner**: story-events (`plugins/story-events/tools/plan-story-events.js`)
+
+Validates future hidden event plans and returns deterministic plan content without proposals. It declares `{stagesWrites:false, idempotent:true}`. Missing host-provided event ledger input returns `unavailable`. Semantic argument failures return `invalid-input` with distinct issues on separate lines; messages longer than 1900 characters are cut there with an ellipsis. The model can correct the plan and resubmit it.
 
 <a id="set-world-schema"></a>
 <a id="set-world-dimensions"></a>
@@ -1242,7 +1288,7 @@ At the start of a game, it does two things at once: it sets the character attrib
 | valueType    | enum           |          | Value type of a `map` (`string` / `number` / `boolean`)               |
 | description  | I18nText       |          | Description of the attribute (a string, or a locale → string record)  |
 
-**Output**: `{success, attributeCount, dimensionCount, worldSchema, preGameDone:true}`
+**Content output**: `{success:true, attributeCount, dimensionCount, worldSchema, preGameDone:true}`. Code and `world-data-provider@1` still read the complete content. The model sees only `summary` (for example, `World initialized: 15 attributes, 2 dimensions.`), with no `data`. The summary uses English or Simplified Chinese according to the instruction language. Staged changes still carry the `staged` notice.
 
 Generated `defaultValue`s are starting values for every new player and NPC, not examples of a person from the lore. Name, role, background, and other identity fields belong in `bio`, with neutral or empty values. The tool clears generated `bio` string defaults to empty strings, arrays to empty arrays, and objects and maps to empty objects; it removes enum defaults. Nested biography fields follow the same rules. Numeric and boolean defaults remain. The guard adopts author-provided schemas unchanged, without this normalization.
 
@@ -1273,6 +1319,8 @@ When retrying, prefer the definitions frozen in the source receipt, and check th
 | `offset` | integer           |          | Default 0                                              |
 | `limit`  | integer           |          | Default 6000, range 1–6000, paged by Unicode character |
 
+It declares `{readOnly:true, idempotent:true, concurrencySafe:true}` and produces no proposals. Missing narrative provenance returns `unavailable`, an unknown dimension returns `not-found`, and a changed version returns `conflict`. Stop on a conflict; the next turn reads the current version.
+
 It returns `{id,version,content,complete,nextOffset?}`. When `complete:false`, fetch the next page. Do not settle based on a rule preview that was cut short.
 
 ### update-dimensions
@@ -1283,7 +1331,11 @@ After each narrative turn, update the current values of the world dimensions, or
 
 Arguments: `{followsClock:[id], updates:[{id, value|changes, reason?}]}`
 
-It returns `{success,updateCount}` and a `dimension.update` proposal. When this source has already been settled, it returns `{success,alreadySettled:true}`, and it does not calculate again.
+It returns `{updateCount}` and a `dimension.update` proposal. A source that is already settled returns `{alreadySettled:true}` without a second proposal. The tool declares `idempotent:true`.
+
+The model sees only a summary, with no `data`: `Dimensions updated: N change(s).`, `No change recorded.`, or `This turn's dimensions were already settled.` Under Simplified Chinese instructions these are 「维度已更新：N 项改动。」「未记录改动。」「本回合的维度已结算。」 respectively.
+
+Unsafe paths, supplying both `value` and `changes`, and missing clock-following dimensions return `invalid-input` with the full correction text. Clock messages exceeding 1900 characters are cut there with an ellipsis. Unknown dimensions return `not-found` with known dimensions or the owning dimension; missing host-provided narrative input returns `unavailable`.
 
 Dimension value validation failures (such as a string exceeding its declared maximum length) return `invalid-input` before any proposal is exposed. Version conflicts and unexpected exceptions are not reclassified as input errors.
 
@@ -1365,6 +1417,8 @@ The model submits the complete facts of this turn through the tool arguments, as
 | `entities` / `relations` / `events` / `statements` | ✓        | Four arrays of facts. Pass an empty array when there is nothing; put plugin extension fields in each item's `attributes` |
 
 The argument schema extends `worldIRV1Schema` with tool-only assessments, and runs the `validateWorldIRV1` semantic checks inside Zod's `superRefine`. So errors such as duplicate global IDs, missing entity references, or going over the depth or node budget are all reported at the specific argument path. The model only has to fix the corresponding field.
+
+The tool declares `{stagesWrites:false, idempotent:true}`. Reference validation after completion returns `invalid-input` with a hint to declare every referenced id in `entities` and retry.
 
 The tool returns the filled-in and validated facts after removing assessments, and produces no persistent proposal. `world-ir` declares `completeAfterTools: [submit-world-facts]`. The framework takes the successful result directly as the runtime's typed output, and it checks it once more against the output schema of `contract:world-ir@1`.
 
@@ -1475,7 +1529,7 @@ Both prompt generators are agents that are triggered manually, and they declare 
 
 ## Imported service tools
 
-An agent imports another plugin's model-facing services in `agent.tools.services` ([how to provide one](./plugin-extensions.md#model-facing-services)). Each import becomes a read-only tool when the runtime starts.
+An agent imports another plugin's model-facing services in `agent.tools.services` ([how to provide one](./plugin-extensions.md#model-facing-services)). Each import becomes a tool when the runtime starts: a read service's import is read-only, and a write service's import stages writes (see [Imported write services](#imported-write-services) below).
 
 ```yaml
 agent:
@@ -1487,7 +1541,7 @@ agent:
 
 - **Name**: by default the contract without its version, dots as dashes (`inventory.items@1` → `inventory-items`); `as` names it otherwise. A name has only letters, digits, `_` and `-`, at most 64; a derived name that is too long needs `as`. A name cannot repeat a framework tool, the runtime's `tools.builtin` / `tools.plugin`, the package's `contributes.tools` or another import, and one contract is imported once. Manifest validation reports a clash.
 - **Description and parameters**: the description is the provider's registered `description`. The parameters' JSON Schema comes from the provider's Zod input (without `$schema`), or from the provider's explicit `inputSchema`. A Zod input (also one shown through an explicit `inputSchema`) is checked on the tool side first, with the usual field-by-field errors and repair of arrays or objects sent as JSON text. The provider receives the arguments the model sent, or their repair, and parses them once for its handler, so a `transform` applies once. An input that is not a Zod schema is checked by the provider only.
-- **Annotations**: `{ readOnly: true, stagesWrites: false, idempotent: true, concurrencySafe: true }`. Imported services are read-only and can run together with other read-only tools. A sub-agent keeps its imports.
+- **Annotations**: a read service gets `{ readOnly: true, stagesWrites: false, idempotent: true, concurrencySafe: true }` and can run together with other read-only tools. Write services are in [Imported write services](#imported-write-services). A sub-agent keeps its imports, write-service imports included.
 - **Result**: the model gets `{ "data": … }` like any other tool, with IDs, UUIDs and timestamps removed by `modelFacingJson`. Approval, `PreToolUse` / `PostToolUse`, `tool_calls` records and `tool.*` traces work as usual; approval counts the source as `local`.
 - **Time limit**: a call waits at most 15 seconds for the provider and answers `timeout` after that.
 - **Deferred loading**: with `tools.defer: true`, or with an import's name in the `defer` list, the import is deferred like other tools and found through `search-tools`.
@@ -1502,7 +1556,20 @@ Without exactly one active provider, the tool is absent: it is not in the model 
 - `…: its provider is paused after repeated errors.`
 - `…: its provider does not offer it to models.`
 
+A write-service import is also absent from a run that cannot change data (an agent that can suspend, and executions without a stage, such as resumed and background ones), with the reason `not-allowed`:
+
+- `The tool "inventory-change" is unavailable in this run: it changes data, which this runtime cannot do here.`
+
 The server log has a line with the plugin IDs for the author.
+
+### Imported write services
+
+An imported [write service](./plugin-extensions.md#write-services) changes its provider's own data for the caller:
+
+- **Annotations**: `{ readOnly: false, stagesWrites: true, idempotent: false, concurrencySafe: false }`. It never runs together with other tools, and calls of one caller to one provider run one after the other.
+- **Result**: a successful call answers `{ "data": …, "staged": { "count": 1, "kinds": [...], "notice": "Staged: it takes effect when the turn ends and may still be rejected." } }`, where `kinds` are the kinds of the operation's writes. The writes commit with the caller's commit unit; see [Transactions · Write-service operations](./transactions.md#write-service-operations).
+- **Conflict**: when the provider's update does not fit the current value, it throws `conflict`, and the model receives `conflict` with `refused: true`.
+- **Taken back**: when the tool call or sub-agent that made the call fails afterwards, the operation is taken back, even though the model already saw a successful answer. A read-only tool (`readOnly: true`) that calls a write service fails ("read-only tool returned writes").
 
 ### How a service failure is answered
 
@@ -1597,7 +1664,7 @@ An embedding host must wait for this to finish before it closes the Store, the p
 
 ### Assembly
 
-A host installs all the builtin tools at once with `createDefaultToolRegistry({ store, eventDirectory })` from `@covel/tools`. These are UI, suspend, runtime-done, plugin-data, emit-event, and character.
+A host installs all the builtin tools at once with `createDefaultToolRegistry({ store, eventDirectory })` from `@covel/tools`. These are UI, suspend, runtime-done, emit-event, and character.
 
 - The server passes in the real event directory, and it overrides the character write tools per session.
 - `test-runtime` passes in an isolated directory that does not allow any topic.

@@ -18,12 +18,7 @@ import type {
   TurnInput,
 } from "@covel/shared";
 import type { LoadedRuntime } from "@covel/shared/plugin-runtime";
-import {
-  createPluginDataTools,
-  delegateTool,
-  tool,
-  ToolRegistry,
-} from "@covel/tools";
+import { delegateTool, tool, ToolRegistry } from "@covel/tools";
 import { runTurnPipeline } from "../src/turn-executor/turn-executor.js";
 import type { TurnExecutorDeps } from "../src/turn-executor/turn-executor-types.js";
 import { createToolExecutor } from "../src/agent-loop/tool-executor.js";
@@ -217,10 +212,8 @@ const writeTool = (name: string) =>
 function makeRegistry(): ToolRegistry {
   const registry = new ToolRegistry();
   registry.registerBuiltin(delegateTool);
-  for (const module of createPluginDataTools(
-    {} as Parameters<typeof createPluginDataTools>[0],
-  ))
-    registry.registerBuiltin(module);
+  registry.registerBuiltin(readTool("get-character"));
+  registry.registerBuiltin(writeTool("sync-characters"));
   registry.registerPlugin("actor-pkg", readTool("peek"));
   registry.registerPlugin("actor-pkg", writeTool("poke"));
   registry.registerPlugin("director", readTool("glance"));
@@ -383,7 +376,7 @@ describe("ctx.agents.run", () => {
   it("offers the sub-agent only read-only tools and refuses a write tool its model calls anyway", async () => {
     const provider = actor(undefined, {
       tools: {
-        builtin: ["plugin-data-set", "plugin-data-get", "suspend"],
+        builtin: ["sync-characters", "get-character", "suspend"],
         plugin: ["peek", "poke"],
       },
     });
@@ -409,8 +402,8 @@ describe("ctx.agents.run", () => {
     );
 
     expect(requests[0]?.tools?.map((t) => t.name).sort()).toEqual([
+      "get-character",
       "peek",
-      "plugin-data-get",
     ]);
     const refusal = eventsOf(emitter, "tool.failed").find(
       (e) => e.payload.toolName === "poke",
@@ -992,17 +985,24 @@ describe("sub-agent caps and tool filter", () => {
     expect(runner.inFlight).toBe(0);
   });
 
-  it("keeps read-only and unresolved names, drops writes, suspend and delegate at the cap", () => {
+  it("keeps read-only and unresolved names, drops write tools, suspend and delegate at any depth", () => {
     const registry = makeRegistry();
     const executor = createToolExecutor({
       findTool: (name, context) => registry.find(name, context.pluginId),
     });
     const provider = actor(undefined, {
       tools: {
-        builtin: ["delegate", "plugin-data-get", "plugin-data-set", "suspend"],
+        builtin: ["delegate", "get-character", "sync-characters", "suspend"],
         plugin: ["peek", "poke", "unknown"],
-        services: [{ contract: "inventory.items@1", name: "inventory-items" }],
-        defer: ["peek", "poke", "inventory-items"],
+        services: [
+          { contract: "inventory.items@1", name: "inventory-items" },
+          { contract: "bank.pay@1", name: "bank-pay" },
+        ],
+        datasets: [
+          { dataset: "npcs", tools: ["get", "list", "upsert", "update"] },
+          { dataset: "log", tools: ["upsert"] },
+        ],
+        defer: ["peek", "poke", "inventory-items", "bank-pay"],
       },
     });
     const at = (depth: number) =>
@@ -1011,14 +1011,22 @@ describe("sub-agent caps and tool filter", () => {
         sessionId: "s",
         turnId: "t",
       });
-    // Imported services are read-only: the sub-agent keeps them.
+    // Imported services stay as declared, write services included: the
+    // sub-agent resolves them as itself. Dataset tools keep their reads; a
+    // dataset with only writes is dropped.
     expect(at(1)).toEqual({
-      builtin: ["plugin-data-get"],
+      builtin: ["get-character"],
       plugin: ["peek", "unknown"],
-      services: [{ contract: "inventory.items@1", name: "inventory-items" }],
-      defer: ["peek", "inventory-items"],
+      services: [
+        { contract: "inventory.items@1", name: "inventory-items" },
+        { contract: "bank.pay@1", name: "bank-pay" },
+      ],
+      datasets: [{ dataset: "npcs", tools: ["get", "list"] }],
+      defer: ["peek", "inventory-items", "bank-pay"],
     });
-    expect(at(0)?.builtin).toEqual(["delegate", "plugin-data-get"]);
+    // Delegate stages writes, so the read-only filter excludes it below
+    // the depth cap too.
+    expect(at(0)?.builtin).toEqual(["get-character"]);
   });
 });
 

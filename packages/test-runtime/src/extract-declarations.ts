@@ -12,6 +12,7 @@ import {
   DEFAULT_PLUGIN_ENTRY,
   isModelFacingServiceContribution,
   pluginManifestSchema,
+  serviceContributionAccess,
   serviceContributionContract,
   type ServiceContribution,
 } from "@covel/shared";
@@ -111,17 +112,24 @@ export async function extractDeclarations(
     },
     registerService(definition) {
       const contract = z.string().min(1).parse(definition.contract);
-      // A model-facing service is declared as an object; others as a string.
+      const modelFacing = definition.modelFacing === true;
+      const write = definition.access === "write";
+      // A write or model-facing service is declared as an object; others as
+      // a string.
       const entry: ServiceContribution =
-        definition.modelFacing === true
-          ? { contract, modelFacing: true }
+        modelFacing || write
+          ? {
+              contract,
+              ...(write ? { access: "write" as const } : {}),
+              ...(modelFacing ? { modelFacing: true } : {}),
+            }
           : contract;
       if (
         !services.some(
           (service) =>
             serviceContributionContract(service) === contract &&
-            isModelFacingServiceContribution(service) ===
-              (definition.modelFacing === true),
+            isModelFacingServiceContribution(service) === modelFacing &&
+            (serviceContributionAccess(service) === "write") === write,
         )
       )
         services.push(entry);

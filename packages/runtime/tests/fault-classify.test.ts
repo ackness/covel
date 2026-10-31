@@ -30,10 +30,12 @@ const committed: FinalizeExecutionOutcome = {
   status: "committed",
   events: [],
   failedProposals: [],
+  operations: [],
 };
 const rejected = (code?: string): FinalizeExecutionOutcome => ({
   status: "failed",
   events: [],
+  operations: [],
   failedProposals: [
     {
       proposal: {
@@ -234,6 +236,11 @@ describe("self-caused runtime attribution", () => {
       stop: { reason: "context-overflow" },
       expected: "runtime",
     },
+    {
+      name: "rescued context overflow",
+      stop: { reason: "context-overflow", finalizer: true },
+      extra: { status: "success", error: undefined },
+    },
     ...(["player", "parent", "hook", "host"] as const).map((cancelledBy) => ({
       name: `cancelled by ${cancelledBy}`,
       cause: new RuntimeTimeoutError("cancel"),
@@ -366,6 +373,12 @@ describe("execution fault classification", () => {
       "dimension conflict",
       faultResult({ status: "success" }),
       rejected("dimension-version-conflict"),
+      "neutral",
+    ],
+    [
+      "operation write conflict",
+      faultResult({ status: "success" }),
+      rejected("conflict"),
       "neutral",
     ],
     [

@@ -1,5 +1,6 @@
 import {
   isModelFacingServiceContribution,
+  serviceContributionAccess,
   serviceContributionContract,
   type PluginManifest,
 } from "@covel/shared";
@@ -20,16 +21,26 @@ export function enforcePluginRegistrationContract(
   };
   for (const id of declarations.tools ?? []) declare("tool", id);
   for (const id of declarations.actions ?? []) declare("action", id);
-  // Offering a service to models is part of what is declared: the marker
-  // makes a registration that says otherwise a mismatch.
-  const serviceKey = (contract: string, modelFacing: boolean) =>
-    modelFacing ? `${contract} (model-facing)` : contract;
+  // Offering a service to models, and letting it write, are part of what is
+  // declared: the markers make a registration that says otherwise a mismatch.
+  const serviceKey = (
+    contract: string,
+    modelFacing: boolean,
+    access: "read" | "write",
+  ) => {
+    const markers = [
+      ...(modelFacing ? ["model-facing"] : []),
+      ...(access === "write" ? ["write"] : []),
+    ];
+    return markers.length ? `${contract} (${markers.join(", ")})` : contract;
+  };
   for (const entry of declarations.services ?? [])
     declare(
       "service",
       serviceKey(
         serviceContributionContract(entry),
         isModelFacingServiceContribution(entry),
+        serviceContributionAccess(entry),
       ),
     );
   for (const id of declarations.forms ?? []) declare("form", id);
@@ -70,7 +81,11 @@ export function enforcePluginRegistrationContract(
         api.registerService(definition);
         record(
           "service",
-          serviceKey(definition.contract, definition.modelFacing === true),
+          serviceKey(
+            definition.contract,
+            definition.modelFacing === true,
+            definition.access === "write" ? "write" : "read",
+          ),
         );
       },
       registerFormValidator(name, validator) {

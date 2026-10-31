@@ -2,7 +2,7 @@
  * Effects read/write-set derivation and same-layer hazard policy (01 §7).
  *
  * A runtime's read/write sets are derived from its declared surfaces — builtin
- * tools, `dataSchemas` namespaces, `outputKind` — and
+ * tools, dataset tools, `outputKind` — and
  * optionally supplemented by an explicit `effects` declaration. Two runtimes
  * scheduled in the SAME level (parallel group) are checked pairwise: a
  * read/write conflict with no ordering edge between them is a hazard. The
@@ -74,24 +74,11 @@ export function deriveEffects(manifest: RuntimeManifest): RuntimeEffects {
     if (r) reads.add(r);
   }
 
-  // plugin-data: declared dataSchemas namespaces → per-ns self keys; an
-  // undeclared namespace collapses to the conservative `unknown:*` global write.
-  const dataNamespaces = Object.keys(manifest.dataSchemas ?? {});
-  const pluginDataKeys: readonly EffectResource[] =
-    dataNamespaces.length > 0
-      ? dataNamespaces.map((ns) => `plugin-data:self:${ns}` as EffectResource)
-      : ["unknown:*"];
-  if (
-    builtinTools.includes("plugin-data-set") ||
-    builtinTools.includes("plugin-data-set-batch")
-  ) {
-    for (const k of pluginDataKeys) writes.add(k);
-  }
-  if (
-    builtinTools.includes("plugin-data-get") ||
-    builtinTools.includes("plugin-data-list")
-  ) {
-    for (const k of pluginDataKeys) reads.add(k);
+  // Dataset tools read and write exactly their dataset's namespace.
+  for (const { dataset, tools } of manifest.tools?.datasets ?? []) {
+    const key = `plugin-data:self:${dataset}` as EffectResource;
+    if (tools.includes("get") || tools.includes("list")) reads.add(key);
+    if (tools.includes("upsert") || tools.includes("update")) writes.add(key);
   }
 
   // emit-event: the tool can emit any topic the package declares, so it

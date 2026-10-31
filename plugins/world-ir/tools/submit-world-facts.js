@@ -384,6 +384,7 @@ export default function ({ tool }) {
 
   return tool({
     name: "submit-world-facts",
+    annotations: { stagesWrites: false, idempotent: true },
     description:
       "Submit this turn's facts plus objectiveAssessments: one assessment for every open objective in vocabulary, with an exact narrative quote (empty for not_addressed). Achieved objectives must also appear in quest_change.completedObjectives. The tool checks coverage and returns only WorldIR facts; put non-contract fact details inside attributes.",
     parameters,
@@ -417,8 +418,10 @@ export default function ({ tool }) {
       const details = validation.errors
         .map((error) => `${error.path}: ${error.message}`)
         .join("; ");
-      throw new Error(
+      throw new ToolError(
+        "invalid-input",
         `Invalid parameters for tool "submit-world-facts": ${details}. Declare every referenced id in entities and retry.`,
+        { hint: "Declare every referenced id in entities and retry." },
       );
     },
   });

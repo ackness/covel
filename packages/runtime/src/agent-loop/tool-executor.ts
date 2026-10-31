@@ -133,6 +133,12 @@ export interface ToolCallContext {
    * services), resolved before the registry's tools.
    */
   readonly generatedTools?: ReadonlyMap<string, ToolModule>;
+  /**
+   * Kernel only: the calling run's operation stage. Each invocation gets a
+   * child of it: the write-service operations a tool stages count only when
+   * the tool succeeds. Without it, write services answer `unavailable`.
+   */
+  readonly operations?: import("../operations/operation-stage.js").OperationStage;
 }
 
 export interface ToolCallResult {
@@ -570,6 +576,10 @@ export function createToolExecutor(
 
       // 4. Execute
       let invocation: ReturnType<typeof createToolExecutionContext> | undefined;
+      // The operations this invocation stages through write services; kept
+      // only when the call succeeds.
+      const operations = context.operations?.child();
+      let operationsKept = false;
       try {
         const timeoutController =
           tool.timeoutMs !== undefined ? new AbortController() : undefined;
@@ -578,7 +588,11 @@ export function createToolExecutor(
           timeoutController?.signal,
         );
         invocation = createToolExecutionContext(
-          { ...context, signal: executionSignal },
+          {
+            ...context,
+            signal: executionSignal,
+            ...(operations ? { operations } : {}),
+          },
           config.store,
           call.toolCallId,
         );
@@ -635,10 +649,12 @@ export function createToolExecutor(
             }
           })();
         context.signal?.throwIfAborted();
+        const stagedOperations = operations?.held() ?? [];
         if (
           tool.annotations.readOnly &&
           ((pendingProposals?.length ?? 0) > 0 ||
-            (emittedEvents?.length ?? 0) > 0)
+            (emittedEvents?.length ?? 0) > 0 ||
+            stagedOperations.length > 0)
         )
           throw new Error("read-only tool returned writes");
 
@@ -647,6 +663,20 @@ export function createToolExecutor(
           model,
           pendingProposals,
           emittedEvents,
+          ...(stagedOperations.length > 0
+            ? {
+                stagedOperations: {
+                  count: stagedOperations.length,
+                  kinds: [
+                    ...new Set(
+                      stagedOperations.flatMap((operation) =>
+                        operation.writes.map((write) => write.type),
+                      ),
+                    ),
+                  ],
+                },
+              }
+            : {}),
           locale: context.locale,
         });
 
@@ -654,6 +684,8 @@ export function createToolExecutor(
         // Cancellation after this point still aborts the enclosing runtime,
         // but cannot turn this accepted call into a second, failed record.
         context.signal?.throwIfAborted();
+        operations?.commit();
+        operationsKept = true;
         const durationMs = Date.now() - startTime;
         await recordCall(
           config.store,
@@ -807,6 +839,7 @@ export function createToolExecutor(
         };
       } finally {
         invocation?.close();
+        if (!operationsKept) operations?.discard();
       }
     },
   };

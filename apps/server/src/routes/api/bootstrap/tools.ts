@@ -2,7 +2,7 @@
  * Bootstrap tool wiring.
  *
  * Builds the framework tool registry (builtin UI tools, suspend / runtime-done
- * sentinels, plugin-data tools, character tools, world-dimension tools), wires
+ * sentinels, emit-event, character tools, world-dimension tools), wires
  * per-session character-tool overrides, and assembles the approval-gated
  * `ToolExecutor`. Plugins register their own tools into the returned registry
  * from their entry modules (`bootstrap/plugin-entry.ts`).

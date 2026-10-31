@@ -199,6 +199,8 @@ For one session, these operations are queued behind the same session lock, so th
 
 These are committed or rolled back together in the same `finalizeExecution` transaction: the execution log, the proposals, the session clock, and the suspension record.
 
+Write-service operations commit in this transaction too. An operation rides on its caller run's result, follows the caller's commit unit and commits after the unit's own writes: each operation of the story's unit gets its own savepoint and only it is dropped when it fails, while the story commits; a rejected operation in an auxiliary unit drops the whole unit; in an execution without a story it rolls the whole execution back. The final status of each operation is written back to `turn_results` in the same transaction. See [Transactions · Write-service operations](../reference/transactions.md#write-service-operations).
+
 Details to remember:
 
 - Background work started while the lock is held, such as a job worker that was woken, does not inherit the lock. It queues for the lock itself and is never taken for its owner.
@@ -412,6 +414,12 @@ When the player retries on purpose, a new jobId is created.
 - A job in the `committing` state must first get the same commit lock without blocking. If the lock is busy, the job waits for the next round.
 - On shutdown, scheduling stops, and the worker waits for ongoing scans and lock callbacks to finish.
 
+Kernel inputs also include `operations@1`: it freezes staged operations from completed upstream runs at binding time, adds no scheduling dependency, makes the reader depend at commit on the staged operations it saw, and is unavailable to detached runtimes. Retrying or recovering a failed runtime also includes `committed` operations from seed results of the source turn and committed retries, so downstream consumers can recognize changes already handled. These operations are read-only: their writes are not replayed and they add no commit dependencies to this execution. Failed, discarded or still-staged seed operations are excluded. See [plugin inputs](../reference/plugins.md#the-kernel-input-operations1) for its fields and visibility.
+
+When a turn commits with failed operations, the action stream emits one `operation.failed` and the player immediately sees a count notice. A story-attached operation dropped only for its own failure emits no `proposal.failed`, and the turn shows no execution failure. The next player or continuation execution reads the newest committed `player` / `continuation` turn result. Only the agent named by `invokedBy.runtimeId` receives `operations-not-applied`, after the input and export blocks, with at most ten summaries. An operation a sub-agent made records the sub-agent's runtime ID; that sub-agent receives the notice in its own context the next time it is called. Scoped retries omit it. This read happens once per execution with session state and adds no persistent state.
+
+If a later attempt does not commit, the newest committed row stays unchanged, so the next attempt repeats the notice. Once any later player or continuation execution commits, the old notice disappears. The block lives in the context that varies per turn and leaves cached prefixes unchanged.
+
 ### 2.4 The settle barrier before the next execution
 
 Some background work must finish before the next turn starts, because the next turn reads its result. A `post-turn` / `audit` function like this can declare `schedule.detached: { settle: true, maxSettleWaitMs: … }`.
@@ -577,14 +585,16 @@ The order within each step:
 1. Check for cancellation; when the profile has `steering`, add the player's interjections to the conversation.
 2. The `PreStep` hook: it can narrow this step's tools, change its tool choice, lower the steps left, or end the loop (see the [hook reference](../reference/hooks.md#prestep)).
 3. Send `step.started`.
-4. `PreLLMCall` → context budget → model call (`llm.calling` / `llm.responded`).
+4. `PreLLMCall` → strip unsupported pictures → replay the per-run context ledger → elide older tool data → collapse older complete tool steps into deterministic digests → `applyBudget` history pruning → head/tail truncation → model call (`llm.calling` / `llm.responded`). The policy changes only the request copy; canonical messages, traces, tool records and suspension state retain their full content. Details: [prompt budgeting](../reference/prompt-structure.md#budget).
 5. The `PostLLMResponse` review; once accepted, consecutive safe read-only tools form parallel pools in model order, with other calls running as single barriers (`tool.*`). Each step finishes before the next starts. See [the tool rules](../reference/tools.md#execution-within-one-batch) and [hook order](../reference/hooks.md#pretooluse).
 6. Decide whether to end: a completing tool, `runtime-done`, a hook's `terminate`, a final reply without tool calls; otherwise go to the next step.
 7. The step's `step.completed` is sent when the next step starts or the loop ends, exactly once for each step that started.
 
-Every way of ending maps to one stop reason (`StopReason`), written to `RuntimeResult.stop` and to the `stopReason` of the runtime lifecycle events. The full table is in [the protocol reference's stop reasons](../reference/protocol.md#stop-reasons). The loop records the ordinary exits itself (`completed`, `tool-finished`, `max-steps`, `deadline`, PreStep's `cancelled`), and `settleAgentLoop` settles the result by it. A thrown exit keeps its original error object, and the reason is attached to the error (`agent-loop/stop-reason.ts`): call sites tag model errors, invalid output, context overflow and loop detection; the loop's outer catch tells apart the player's stop, the loop's own timeout and a parent's cancellation; and `finalizeRuntimeResult` reads the reason from the error into the failed result. A tag belongs to the run (`runId`) that made it: when a parent's timeout cancels the child agent it awaits, both share one error object, and the child's "cancelled by parent" never becomes the parent's own stop reason.
+Every way of ending maps to one stop reason (`StopReason`), written to `RuntimeResult.stop` and to the `stopReason` of the runtime lifecycle events. The full table is in [the protocol reference's stop reasons](../reference/protocol.md#stop-reasons). The loop records the ordinary exits itself (`completed`, `tool-finished`, `max-steps`, `deadline`, `context-overflow`, PreStep's `cancelled`), and `settleAgentLoop` settles the result by it. A thrown exit keeps its original error object, and the reason is attached to the error (`agent-loop/stop-reason.ts`): call sites tag model errors, invalid output, invalid context limits and loop detection; the loop's outer catch tells apart the player's stop, the loop's own timeout and a parent's cancellation; and `finalizeRuntimeResult` reads the reason from the error into the failed result. A tag belongs to the run (`runId`) that made it: when a parent's timeout cancels the child agent it awaits, both share one error object, and the child's "cancelled by parent" never becomes the parent's own stop reason.
 
 **A step limit is not a success.** When the steps run out, text the model wrote beside a tool call is only a draft. As long as the output is not handed over by a completing tool, `requireToolUse` and `requireExplicitCompletion` are met or off, and at least 3 seconds remain before the deadline, the kernel sends one more request with tools off, the finalizer, asking for the final answer now. When the story output schema asks for `segments`, the finalizer, the prompt after lookup-only work and the loop-detection fallback all ask for a JSON object with paragraphs in `segments`, using narration, dialogue or action, and a speaker for dialogue. When the finalizer writes text, the runtime succeeds and its result is marked `stop.finalizer: true`; otherwise it fails with `max-steps` and its staged writes are not committed. The profile's `finalizer.maxSteps: false` turns this finalizer off. A timeout is a failure and does not try a finalizer; the exception is a profile that sets `finalizer.deadlineReserveMs`: when less time than the reserve is left and the finalizer conditions above hold, the loop starts no new step, merges queued player interjections when the profile has `steering` on, and sends the finalizer instead, which succeeds with `{ reason: "deadline", finalizer: true }` when it writes the answer.
+
+**A context overflow can also be finalized.** `finalizer.maxSteps` enables one tools-off request after an over-limit stop when a complete tool step exists and the normal finalizer conditions hold. That request trims tool steps as needed under [prompt budgeting](../reference/prompt-structure.md#budget), with the newest group also eligible. A rescued answer succeeds with `{ reason: "context-overflow", finalizer: true }` and can be repaired; otherwise settlement retains the original overflow failure text. The ledger is not persisted: resume recomputes its decisions deterministically, so the request prefix may change once.
 
 ## 4. Plugin design
 
@@ -1130,7 +1140,7 @@ sequenceDiagram
         Note over Kernel: Only explicit effects and story narrative produce Proposal[], committed together
         Kernel-->>Web: SSE: narrative.delta / narrative.completed
         Kernel-->>Web: SSE: interaction.requested (e.g. the guide's action cards)
-        Kernel-->>Web: SSE: plugin-data.changed (written by the plugin-data-set tool)
+        Kernel-->>Web: SSE: plugin-data.changed (after a commit of writes such as dataset tools)
         Kernel-->>Web: SSE: event.emitted
         Server-->>Web: SSE: runtime.completed / runtime.failed / runtime.skipped { status, runId }
     end

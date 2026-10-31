@@ -17,6 +17,9 @@
     "primary": "主导航"
   },
   "session": {
+    "operationFailedNotice": "本回合有 {{count}} 个操作没有生效。",
+    "operationFailedNotice_one": "本回合有 {{count}} 个操作没有生效。",
+    "operationFailedNotice_other": "本回合有 {{count}} 个操作没有生效。",
     "cached": "已缓存",
     "historyLoadFailed": "无法读取历史存档，请重试。",
     "reasoningContent": "思考内容",

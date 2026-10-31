@@ -95,9 +95,9 @@ const sourceSchema = z.union([
   runtimeSourceSchema,
   z.strictObject({
     kernel: z
-      .literal("turn-digest@1")
+      .enum(["turn-digest@1", "operations@1"])
       .describe(
-        "Kernel input: the frozen last player input and the runtime results observed so far.",
+        "Kernel input: the turn digest or staged operations from completed upstream runs.",
       ),
   }),
 ]);
@@ -467,7 +467,7 @@ export const runtimeAuthoringManifestSchema = z
                 maxSteps: z
                   .boolean()
                   .describe(
-                    "At the step limit, ask once for the answer with tools off. `false` makes the step limit always fail. Defaults to true.",
+                    "At the step limit or when the request no longer fits the model's context, ask once for the answer with tools off. `false` makes these stops always fail. Defaults to true.",
                   )
                   .optional(),
                 deadlineReserveMs: z
@@ -593,6 +593,13 @@ export const runtimeAuthoringManifestSchema = z
         requireExplicitCompletion:
           value.agent?.completion?.require === "explicit",
         ...(value.agent ? { loop: authoredLoopView(value.agent.loop) } : {}),
+        operationsInputs: inputs
+          .filter(
+            ([, binding]) =>
+              "kernel" in binding.from &&
+              binding.from.kernel === "operations@1",
+          )
+          .map(([name]) => ({ name })),
         turnInputs: inputs
           .filter(
             ([, binding]) =>

@@ -42,6 +42,7 @@ import {
   interpolateTemplate,
   resolveFrameworkCompletion,
 } from "./prompt-internals.js";
+import { loadPrompt } from "./prompts-loader.js";
 import { serializeSystemPrompt } from "./prompt-serialization.js";
 import { fitWorldLore } from "./world-lore.js";
 import {
@@ -143,8 +144,8 @@ function buildAvailableEventsBlock(params: ContextBuildParams): string {
   if (!catalog) return "";
   const instruction =
     instructionLocaleFor(params.turnInput.locale) === "zh"
-      ? "叙事里发生了已声明的领域事件时，调用 emit-event 工具——每次调用一个 topic；工具调用不属于正文。"
-      : "When a declared domain event occurs in your narration, call the emit-event tool — one topic per call; tool calls are not part of the prose.";
+      ? "叙事里发生了已声明的领域事件时，调用 emit-event 工具——每个事件一次调用；工具定义列出了各 topic 及其 payload 的格式。工具调用不属于正文。"
+      : "When a declared domain event occurs in your narration, call the emit-event tool — one call per event; the tool definition lists the topics and the payload each one takes. Tool calls are not part of the prose.";
   return `<available-events>\n${escapeXmlContent(catalog)}\n\n${instruction}\n</available-events>`;
 }
 
@@ -256,6 +257,26 @@ function buildExportsBindingBlock(params: ContextBuildParams): string {
   return `<runtime-exports>\n${escapeXmlContent(JSON.stringify(modelFacingSlots(slots)))}\n</runtime-exports>`;
 }
 
+async function buildOperationNoticeBlock(
+  params: ContextBuildParams,
+): Promise<string> {
+  if (!params.failedOperationSummaries?.length) return "";
+  const text = await loadPrompt(
+    "server",
+    "operation-notice",
+    instructionLocaleFor(params.turnInput.locale),
+  );
+  const summaries = params.failedOperationSummaries
+    .slice(0, 10)
+    .map((summary) => `- ${escapeXmlContent(summary.replace(/\s+/g, " "))}`);
+  return [
+    "<operations-not-applied>",
+    text.trim(),
+    ...summaries,
+    "</operations-not-applied>",
+  ].join("\n");
+}
+
 /** Build prompt segments, resolving plugin-data injects through the store. */
 async function buildPromptSegments(
   params: ContextBuildParams,
@@ -295,6 +316,7 @@ async function buildPromptSegments(
     rawInjects,
     buildInputsBindingBlock(params),
     buildExportsBindingBlock(params),
+    await buildOperationNoticeBlock(params),
     staged ? "" : activation,
   ]
     .filter(Boolean)

@@ -126,14 +126,14 @@ Extract facts supported by runtime-inputs.narrative.value, then call save-facts.
 | `tools` | `registerTool` 的工具名 |
 | `actions` | `registerRpc` 的非空 action 名；`covel:`、`runtime:`、`event:` 前缀保留给框架审批，声明、注册和 action 请求均拒绝这些前缀。 |
 | `commands` | 玩家命令元数据；`action` 必须列入 `actions` |
-| `services` | `registerService` 的契约 ID。给模型用的服务写成 `{contract, modelFacing: true}`，见[给模型用的服务](./plugin-extensions.md#给模型用的服务) |
+| `services` | `registerService` 的契约 ID。给模型用的服务写成 `{contract, modelFacing: true}`，见[给模型用的服务](./plugin-extensions.md#给模型用的服务)；改提供者自己数据的服务写成 `{contract, access: write}`（默认 `read`），见[写服务](./plugin-extensions.md#写服务) |
 | `extensions` | `provideExtension` 提供的扩展，写成 `<point>/<id>`，例如 `prompt.segment@1/notes`。要写 `order`、`slot` 这些选项时写成 `{point, id, …}` |
 | `hooks` | 监听的 hook 事件，写事件名，例如 `PreToolUse`。要写 `enforce` 时写成 `{event, enforce}`，见 [Hooks](./hooks.md) |
 | `forms` | `registerFormValidator` 的表单 ID |
 | `events` | 插件事件契约 |
 | `settings` | 玩家配置项，运行时通过 `ctx.userSettings` 读取 |
 | `data` | 本插件数据 namespace 的 schema、version、accepts、search |
-| `datasets` | 本插件拥有的带类型数据集：名字即 namespace，写 schema、key、ops，见[数据集](#数据集contributesdatasets) |
+| `datasets` | 本插件拥有的带类型数据集：名字即 namespace，写 schema、key、ops，以及可选的 `tools`、`description`，见[数据集](#数据集contributesdatasets) |
 | `actionKinds` | 玩家能提交的行动类型：名字、可用身份、文字规则、`fields` 的 schema、显示名称，见[行动类型](#行动类型contributesactionkinds) |
 | `ui` | 包根相对的 `right/message/view/segment` UI spec 路径 |
 | `ui.view` | 包根相对的完整故事栏视图 spec 路径；声明与授权见[插件视图](./ui-panels.md#插件视图) |
@@ -255,7 +255,8 @@ permissions:
 - 包里只有一个内联 runtime（runtime ID 等于插件 ID）时，没有写 `agent.tools.plugin` 的 agent 自动获得 `contributes.tools` 的全部工具。写 `plugin: []` 表示一个也不给。
 - 给这样的包新增一个只想让界面动作使用的工具时，要同时给 agent 写明白名单，否则模型也能调用它。
 - 多 runtime 的包里，每个 runtime 都要自己声明工具。
-- `agent.tools.services` 把别的插件给模型用的服务导入成工具，写契约 ID，或者 `{contract, as}` 另起名字。导入的工具只读，没有提供方时不出现，runtime 照常运行。命名、参数和失败的回答见[导入的服务工具](./tools.md#导入的服务工具)。函数 runtime 不能写它，直接用 `ctx.services`。
+- `agent.tools.services` 把别的插件给模型用的服务导入成工具，写契约 ID，或者 `{contract, as}` 另起名字。读服务的导入只读，写服务的导入暂存写入（能挂起的 agent 拿不到）；没有提供方时不出现，runtime 照常运行。命名、参数和失败的回答见[导入的服务工具](./tools.md#导入的服务工具)。函数 runtime 不能写它，直接用 `ctx.services`。
+- `agent.tools.datasets` 列出本包 `contributes.datasets` 里的数据集，框架为它们生成 `<数据集>-get`、`-list`、`-upsert`、`-update` 工具。写数据集名得到它提供的全部工具，写 `{ dataset, tools }` 只取其中几个。没写的 runtime 一个也没有，单 runtime 包的内联 runtime 也一样。见[数据集工具](./tools.md#数据集工具)。函数 runtime 不能写它，直接用 `ctx.pluginData`。
 
 ### Agent 的 guard
 
@@ -278,7 +279,7 @@ guard 拿到的 `ctx` 和函数 handler 的一样，内置插件和社区插件�
 `io.concealed: true` 用于处理隐藏内容的 runtime，例如在剧情中策划隐藏事件的 agent。
 
 - 框架在写入 trace 和推送实时流之前，去掉它的提示词、模型回复、工具参数、工具结果和输出，只保留 runtime 名、工具名、状态、耗时和用量。
-- `/turns` 和手动 RPC 返回的执行结果也会清空它的输出和工具内容。
+- `/turns` 和手动 RPC 返回的执行结果也会清空它的输出和工具内容。`/turns` 里它调用[写服务](./plugin-extensions.md#写服务)留下的操作记录去掉 `request` 和 `result`，`summary` 换成固定文字，只留契约和提交结果；它作为子 agent 发起、记在可见调用方结果上的操作也一样。
 - runtime 失败时，发给玩家的失败原因（回合流、trace、返回的结果）换成一句固定的通用提示，真实原因只写入服务端控制台日志。
 - 持久化的执行记录保留完整内容，供重试使用。
 - 它输出里的文字（`narrativeOutput` 或 `content`）不写入对话日志，所以不会进入其他 runtime 的提示词历史、消息接口和“重建提示词”接口。它主动展示给玩家的内容（交互表单、UI 块）照常写入。
@@ -474,7 +475,7 @@ io:
 
 - 普通输入读同一次执行里已完成的上游结果。`select` 是结果值上的 JSON Pointer。
 - 要读更早的执行留下的结果，用 `scope: committed` 加 `recordAs`。
-- 内核输入（`from: { kernel: turn-digest@1 }`）只写 `from`。它总有值，也不按 schema 检查，所以写 `scope`、`select`、`required`、`accepts` 或 `recordAs` 会被拒绝。
+- 内核输入（`from: { kernel: turn-digest@1 }` 或 `from: { kernel: operations@1 }`）只写 `from`。它总有值，也不按 schema 检查，所以写 `scope`、`select`、`required`、`accepts` 或 `recordAs` 会被拒绝。
 - schema 可以是本地路径，也可以写 `contract:<contractId>`。跨提供者的契约 schema 在加载时解析。
 - 在提示词里，一个输入位于 `runtime-inputs.<binding>.value`。不要依赖旧的注入标签。
 - 叙事之后运行的 agent 如果绑定的是本回合的故事正文，这个 `value` 是一句指向对话里那条正文消息的话，正文本身不重复（见 [Prompt 结构](./prompt-structure.md#本回合正文)）。
@@ -501,6 +502,7 @@ CLI 和安装器的静态校验对 `scope: turn` 和 `scope: committed` 的输�
 
 - 同一个契约 ID 的所有提供者必须发布一致的 schema。
 - 公共 schema 同时覆盖模型输出和 guard 跳过输出。例如 `world-init` 的 `world-data-provider@1` 允许作者提供少于 15 项的属性结构；生成至少 15 项的要求留在 `initialize-world` 的工具参数中。
+- `initialize-world` 的模型视图只显示摘要；代码和契约校验仍读取完整工具内容，见[工具输出](./tools.md#initialize-world)。
 - `world-data-provider@1` 要求 `success`、`attributeCount`、`dimensionCount` 和 `worldSchema`。同一份 schema 也校验尚未拆分的工具和 guard 结果，因此允许可选的 `preGameDone: true`。它是完成信号；agent 完成时把它移到 `RuntimeResult.completion`，公共业务输出不要求保留它。
 - 替代插件靠它自己 runtime 的 `io.output.contract` 提供契约（`provides` 自动包含它）。其他已安装插件的产出不能替它满足声明。
 - 被消费的契约缺少 schema，或者提供者只有声明而没有产出，都会产生加载诊断。
@@ -634,7 +636,7 @@ Agent 的副作用只来自工具：模型能写什么，以 `agent.tools` 白�
 - 整体里有故事或 setup runtime 的运行时，不论它在顶层还是嵌套在里面，整体按故事的规则提交：其中任何写入被拒，整次执行回滚。
 - 整体被丢弃时，其中嵌套调用的挂起也一起作废：不保存，也不能恢复，不会替换已有的挂起。本次执行没有别的挂起留下时，这一回合照常结束并计数，被挂起扣住的 detached 作业照常排入。
 
-`ctx.recursiveCall` 返回的是嵌套结果的副本。改动它不会影响提交的内容和归属。
+`ctx.recursiveCall` 返回的是嵌套结果的副本。每个结果（包括展平的后代结果）都不含内核持有的 `operationWrites`，不会把写服务提供者的私有暂存值交给调用方。改动返回值不会影响提交的内容和归属。
 
 `manualTrigger.runtimeId` 只能点名调用者自己包里的 runtime：内联 runtime 用包 ID，多 runtime 包用 `<pluginId>/<runtimeId>`。点名别的包会在嵌套执行开始前报错，错误写明目标 runtime 和调用者的包 ID。内置插件和社区插件遵守同一条规则。
 
@@ -644,7 +646,7 @@ Agent 的副作用只来自工具：模型能写什么，以 `agent.tools` 白�
 
 #### 子 agent
 
-子 agent 是调用方在自己这次执行里运行的另一个 agent runtime。它有自己的对话记录和预算，**只交回输出**：不产生写入、不发事件，也不形成顶层 runtime 结果，所以不会成为提交单位。函数 runtime 用 `ctx.agents.run`，agent runtime 用内置工具 [`delegate`](./tools.md#子-agentdelegate)。
+子 agent 是调用方在自己这次执行里运行的另一个 agent runtime。它有自己的对话记录和预算，**只交回输出**：不产生自己的 proposal、不发事件，也不形成顶层 runtime 结果，所以不会成为提交单位。允许改数据时，它可以通过写服务暂存操作，随委托它的 run 提交；子 agent 失败时这些操作撤回。函数 runtime 用 `ctx.agents.run`，agent runtime 用内置工具 [`delegate`](./tools.md#子-agentdelegate)。
 
 ```ts
 const result = await ctx.agents?.run({
@@ -669,7 +671,7 @@ const result = await ctx.agents?.run({
 运行时的规则：
 
 - **独立的对话**：子 agent 的提示词是提供方自己的正文，加上框架的完成说明，再加简报。看不到会话历史，也看不到调用方的对话。
-- **只读工具**：提供方 `agent.tools` 里没有 `readOnly` 注解的工具（插件工具、`plugin-data-set` 这类写入工具）、`suspend` 和 `delegate` 都被拿掉。声明了却没注册的插件工具仍按原规则让这次运行失败。导入的服务工具只读，保留。
+- **只读工具**：提供方 `agent.tools` 里没有 `readOnly` 注解的工具（插件工具、数据集的 `-upsert` / `-update` 这类写入工具）、`suspend` 和 `delegate` 都被拿掉。声明了却没注册的插件工具仍按原规则让这次运行失败。数据集工具只保留 `-get` / `-list`。导入的服务工具保留，写服务的导入也保留：子 agent 以自己的身份调用，暂存的操作挂在委托它的 run 上，子 agent 失败时撤回。
 - **循环 profile**：没写 `agent.loop.profile` 时用 `actor`，不流式显示，也不读玩家插话。
 - **模型**：用提供方自己声明的模型用途。会话的 `runtimeModelOverrides` 按提供方的 runtimeId 生效，挂起后恢复的运行里也一样；调用方的覆盖和请求里的故事模型覆盖都不生效。
 - **上限**：一次执行最多同时运行 8 个子 agent，嵌套执行也算在内；子 agent 不能再调用子 agent（深度上限 1）。超过上限的调用立刻得到 `unavailable`，不排队。
@@ -768,6 +770,18 @@ const result = await ctx.agents?.run({
 - 后台（detached）worker 读的是源执行的快照，不重新查询最新的表单或回合状态。
 - 这个输入契约更新之后，旧作业和快照需要重建，不做兼容读取。
 
+#### 内核输入 `operations@1`
+
+`io.inputs.operations: { from: { kernel: operations@1 } }` 读取本次执行里已完成、可提交的上游 runtime 暂存的操作。函数通过 `ctx.inputs.operations.value` 读取，agent 在 `runtime-inputs` 块中读取；工具拿不到这个输入。
+
+值总是存在，形状为 `{ operations: [{ contract, summary, request?, result?, truncated? }] }`，没有操作时数组为空。内核按调用顺序复制并深度冻结它，不带操作 ID、插件 ID、runtime ID 或 run ID。`request`、`result` 是操作记录已有的模型视图；超过大小限制而省略时带 `truncated: true`。
+
+它不增加调度依赖，但增加提交依赖：读者依赖它读到的每个本次执行的暂存操作，内核在值之外记下这些操作的 ID。操作在提交时没有落库，辅助读者一起丢弃；story 或 setup 读者照常提交并记 `read-dependency.kept`（见[事务 · 回合级单事务](./transactions.md#回合级单事务)）。读者自己的写入被拒绝，不影响它读到的操作。绑定时只收集已结束、可提交的结果，包括嵌套结果；本次执行只保留 `staged` 操作，排除 `discarded` 操作。较早启动的同阶段兄弟 runtime 看不到尚未完成的操作；`post-turn` runtime 能读到 narrative 阶段全部已完成的操作。需要稳定的先后顺序时，声明 `schedule.after` 或使用后续阶段。
+
+重试或恢复失败 runtime 时，来源回合及已提交重试的种子结果只提供 `committed` 操作。它们排在本次执行的暂存操作之前，用于识别已处理的变化；写入不重放，也不建立新的提交依赖。种子中失败、丢弃或仍暂存的操作不出现在输入里。
+
+`detached` runtime 不能声明这个输入，静态校验和加载都会报出字段位置。它的来源快照没有操作记录；只有 `turn-digest@1` 可以读取该快照。内核输入只写 `from`，不带其他绑定选项。
+
 ## 高级字段
 
 下面这些字段内置插件都没有用到，写第一个插件时也用不上。它们留给有特殊需要的社区插件。每个字段的类型和取值见[清单字段表](./schema/plugin-manifest.md)和 [runtime 字段表](./schema/runtime-manifest.md)。
@@ -821,7 +835,7 @@ Agent 循环怎么跑由一个 profile 决定：文字是否流式显示给玩�
 | `steering` | 每步之前、以及写完正文之后，把玩家排队的插话并入对话 |
 | `truncation` | `accept`：在输出上限处被截断的正文保留；`reject`：判为失败 |
 | `fallback` | 模型反复调用同一个工具时：`answer-without-tools` 关掉工具、要答案；`fail` 以 `loop-detected` 失败 |
-| `finalizer.maxSteps` | 到步数上限时，关掉工具再要一次最终答案。`false` 时步数上限总是失败 |
+| `finalizer.maxSteps` | 到步数上限或请求不再装得进模型上下文时，在满足收尾条件后关闭工具再要一次最终答案。超限收尾要求已有完整工具步骤，按[提示词预算](./prompt-structure.md#预算)按需裁剪工具组。`false` 关闭这两种收尾 |
 | `finalizer.deadlineReserveMs` | 离时限只剩这么多毫秒时不再开始新的一步，关掉工具要最终答案。`0` 关闭 |
 | `corrections.toolUse` | 缺少必需的工具工作或显式完成时的纠正次数。整数 0–3，默认 1 |
 | `corrections.review` | `PostLLMResponse` 退回草稿后的纠正次数。整数 0–5，默认 2 |
@@ -928,7 +942,7 @@ homepage: https://example.com/tidefall
 - 自己这个 runtime 已经缓冲的写入。
 - 同一个插件里已经完成的上游 runtime 的写入：成功的结果，或者跳过了 agent、但留下了写入的 guard。它们按提交顺序叠加：先上游，再自己；嵌套调用的子结果排在父结果前面；一个结果里先叠 `effects.pluginData`，再叠缓冲的写入。`plugin.data.update` 的操作也按这个顺序计算，和提交时得到的值一样。
 
-`ctx.pluginData.get/list`、`ctx.store.getPluginData/listPluginData`、工具里的 `context.store`（agent 工具和 `ctx.tools.call`）以及内置的 `plugin-data-get/list` 都这样读。`ctx.pluginData.update` 的提前检查也按这个视图算。
+`ctx.pluginData.get/list`、`ctx.store.getPluginData/listPluginData`、工具里的 `context.store`（agent 工具和 `ctx.tools.call`）以及数据集工具都这样读。`ctx.pluginData.update` 的提前检查也按这个视图算。
 
 下面这些写入看不到：
 
@@ -1084,7 +1098,7 @@ namespace 声明 `search` 之后，它的记录进入框架的记忆检索（[`m
 - 扩展点、模型工具、`io.selfData` 和公共 API 都读不到它。
 - 揭示应该通过本回合的 runtime 输出完成，详见 [World Data · 隐藏数据](./world-data.md#隐藏数据visibility-hidden)。
 - 插件自己的代码（function runtime 的 `ctx.pluginData.set` / `ctx.pluginData.update`、插件本地工具产生的 `plugin.data` / `plugin.data.update` 提案）也可以写入自己的 `_hidden.<namespace>`，用于在剧情中追加隐藏内容。写入总是归属提案来源的插件，碰不到其他插件的隐藏数据。
-- REST 接口和内置的 `plugin-data-set` / `plugin-data-set-batch` 工具不能写任何 `_` 开头的命名空间。
+- REST 接口不能写任何 `_` 开头的命名空间；数据集名以字母开头，数据集工具也到不了这些命名空间。
 
 ## 提示词与记忆扩展
 
@@ -1148,6 +1162,7 @@ namespace 声明 `search` 之后，它的记录进入框架的记忆检索（[`m
 - 内置工具名和插件工具声明、包内的 runtime 引用，以及根契约依赖必须一致。
 - `contributes.actionKinds` 的 `name` 不能是基础行动类型、不能重复；`schema` 文件必须在包里并且是 JSON 对象。
 - `contributes.datasets` 的 schema 文件必须在包里并且是合法 JSON；`key` 必须是 schema 顶层 `properties` 里的必填属性（schema 顶层没有 `properties` 时跳过）；同名出现在 `contributes.data` 时两边必须用同一份 schema。
+- `agent.tools.datasets` 引用的数据集必须在 `contributes.datasets` 里声明，选的工具必须是数据集提供的，同一个数据集不能列两次；生成的工具名不能超过 64 个字符，也不能和框架工具、runtime 声明的工具、`contributes.tools` 或导入服务的工具重名（见[数据集工具](./tools.md#名字与选择)）。
 - 跨字段的规则（例如 `schedule.detached` 只能用在 `post-turn` 或 `audit`，故事 runtime 的契约输入必须写 `required: false`）报错时给出文件路径和你写的字段路径，例如 `runtimes/note/RUNTIME.md: schedule.stage: …`。
 
 加载、`pnpm validate:plugin` 和安装用同一份清单规则（`@covel/shared` 的 schema），UI spec 也一样：校验通过的面板，游戏里不会因为格式被去掉。
@@ -1290,13 +1305,17 @@ contributes:
       schema: ./schemas/journal.json # required: a package-relative .json path
       key: id # optional: the top-level record field that is the key
       ops: [upsertItem, delete] # optional: allowed operations, default all
+      tools: [get, list, update] # optional: generated agent tools, derived from ops
+      description: What the agent keeps here. # optional: added to the tool descriptions
 ```
 
 - **名字就是 namespace。** `journal` 数据集对应插件数据的 `journal` 空间。名字用字母开头，只含字母、数字、`_`、`-`，最长 64 个字符；以 `_` 开头的空间留给内核，不能声明。
 - `schema` 必须是包内的 `.json` 文件，不能含 `..` 或前导 `/`。
 - `key`：记录的哪个顶层字段（字符串值）充当它的键。不写就不推导键，由调用方决定。
 - `ops`：这个数据集允许的操作种类，取自 `set`、`merge`、`inc`、`append`、`insert`、`remove`、`upsertItem`、`delete`。不写等于全部；写了就不能为空，也不能重复。
-- 不写的字段按默认处理，编译后的声明总会带齐 `namespace`、`schema`、`ops`（`key` 仅在写了时存在）。编译结果复制到包里每个 runtime 的 `datasets`。
+- `tools`：这个数据集给 agent 生成哪些工具，取自 `get`、`list`、`upsert`、`update`。不写时从 `ops` 推出：总有 `get` 和 `list`；`ops` 含 `set` 时加 `upsert`；`ops` 含 `set` 以外的操作时加 `update`。写了就不能为空、不能重复；写 `upsert` 而 `ops` 没有 `set`，或写 `update` 而 `ops` 只有 `set`，都是 `contributes.datasets.<name>.tools` 上的错误。只有在 `agent.tools.datasets` 里引用它的 runtime 才拿到这些工具，见[数据集工具](./tools.md#数据集工具)。
+- `description`：1–500 个字符，附在生成的工具描述后面，告诉模型这里存什么。
+- 不写的字段按默认处理，编译后的声明总会带齐 `namespace`、`schema`、`ops`、`tools`（`key`、`description` 仅在写了时存在）。编译结果复制到包里每个 runtime 的 `datasets`。
 - **与 `contributes.data` 的关系。** 同一个名字同时出现在 `data` 和 `datasets` 里时，两边的 `schema` 必须指向同一个文件：一个 namespace 只有一份 schema。`data` 仍管世界包导入，数据集管 namespace 里的记录。
 - 没有声明数据集的 namespace，行为和以前一样。
 
@@ -1307,7 +1326,7 @@ contributes:
 - **操作种类。** `plugin.data.update` 里每个操作的种类都必须在 `ops` 里。整值写入（`ctx.pluginData.set`、`plugin.data`、`plugin.data.batch` 的每一项）算作 `set`，删除（`plugin.data.delete`）算作 `delete`。所以 `ops` 里没有 `set` 的数据集，不能用 `set` 整个覆盖。
 - **记录 schema。** 写入后的值（对 `plugin.data.update` 是应用操作之后的结果）必须满足 `schema`。
 - 违反任何一条，这条 proposal 以 `code: "dataset-violation"` 被拒，按提交单元规则处理。宿主没有拿到 schema 文档时，写入一律被拒，不会放过。
-- `key` 在提交时不检查。
+- `key` 在提交时不检查。数据集工具按[数据集键规则](./tools.md#键的规则与查找) `datasetKey(...)`（SDK 导出）规范化键，查找时先找原样的键，再找规范化的键。插件代码写同一个数据集时，用 `datasetKey(...)` 生成键，才能落在工具找得到的行上。
 - 不经过提交流水线的写入不做这些检查：世界数据的导入和同步（按 source 的 `schema` 校验，见 [World Data · 配套插件数据](./world-data.md#配套插件数据)）、plugin action RPC 的 `context.store.setPluginData`，以及管理 API 的 `PUT`。
 
 详见[事务 · 操作式写入](./transactions.md#操作式写入plugindataupdate)。

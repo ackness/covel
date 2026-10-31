@@ -22,15 +22,19 @@ Each English term has only one Chinese term. The Chinese docs, the UI text, and 
 | Contract | 契约 | A versioned ID, for example `narrative-engine@2`. |
 | Credits | 作者信息 | The `author`, `license`, and `homepage` fields of a package. |
 | Dataset | 数据集 | Typed plugin data a plugin declares (`contributes.datasets`). Not the install-time **Collection**. |
+| Dataset key | 数据集键 | The key dataset tools give a record: text normalized by `datasetKey()` (NFKC, trimmed, whitespace collapsed, lower-cased); see [The key rule and lookup](./tools.md#the-key-rule-and-lookup). |
+| Dataset tool | 数据集工具 | A `<dataset>-get`, `-list`, `-upsert` or `-update` tool the framework generates for a dataset listed in `agent.tools.datasets`; see [Dataset tools](./tools.md#dataset-tools). |
 | Deployment form | 部署形态 | The desktop app, the self-hosted web app, the official web app. Not `DEPLOYMENT_TIER`. |
 | Edition | 语言版本 | One language of a world: `defaultLocale`, and the language of each `world.<locale>.yaml` or `WORLD.<locale>.md` at the root. |
 | Execution | 执行 | One scheduled run and its commit plan; player turns, manual calls and background jobs can each start one. |
 | Fault latch | 熔断 | A session-local pause after consecutive self-caused auxiliary plugin faults, cleared by the player or a process restart. See the [protocol](./protocol.md#plugin-fault-latch). |
 | Finalizer step | 收尾步骤 | The one request, after an agent runs out of steps, that turns tools off and asks for the answer now. |
-| Imported tool | 导入工具 | A read-only tool generated from another plugin's model-facing service, which an agent imports with `agent.tools.services`. |
+| Imported tool | 导入工具 | A tool generated from another plugin's model-facing service, which an agent imports with `agent.tools.services`; a read service's import is read-only and a write service's import stages writes. |
 | Kernel | 内核 | The framework core that schedules work, assembles context, runs tools, validates proposals and commits writes. |
 | Local model relay | 本地模型中继 | On a shared form, the server reaches a model on the player's computer or local network through the player's browser. See [Security boundaries](../internals/security.md#local-model-relay). |
 | Official web app | 官方网页版 | A hosted product that is not yet supported; browser-private infrastructure alone is not the complete product. |
+| Operation | 操作 | All the writes one successful write-service call staged, which commit or drop with the caller's commit unit. Not a single `op` of a data operation list. See [Write-service operations](./transactions.md#write-service-operations). |
+| Operation record | 操作记录 | The record an operation leaves on its caller's result (`runtimeResults[].operations`), which says after the commit how it ended and why. |
 | Operation-based write | 操作式写入 | Submitting a list of operations (`plugin.data.update`) instead of a computed whole value. |
 | Pack | 玩法包 | A player-selectable set of installed plugins, not an installer. |
 | Perspective | 视角 | Whose point of view the narration takes: character-centred first, second or third person, an omniscient narrator, or a game master. |
@@ -49,6 +53,7 @@ Each English term has only one Chinese term. The Chinese docs, the UI text, and 
 | Session | 会话 | One game played in a world, with its own characters, plugin data and progress. |
 | Slot | 槽位 | In the settings UI it is called "model role". |
 | Stop reason | 结束原因 | How an agent tool loop ended (`RuntimeResult.stop.reason`). |
+| Story-attached operation | 故事附带的操作 | An operation in the commit unit of the story or setup: each gets its own savepoint, and when it fails only it is dropped while the story commits. |
 | Story segment | 故事段落 | One part of a story output: narration, dialogue or action. Called just "segment" (段落) when the context is clear. |
 | Sub-agent | 子 agent | An agent runtime another runtime runs inside its own execution, returning output only. |
 | Tool result | 工具结果 | Code-facing content and model-facing feedback have different shapes; success does not confirm persistence. |
@@ -56,6 +61,7 @@ Each English term has only one Chinese term. The Chinese docs, the UI text, and 
 | Trusted source | 可信来源 | A GitHub source chosen by the instance owner or operator to reduce approval prompts. |
 | Turn | 回合 | "This turn" is 本回合 in Chinese. |
 | World | 世界 | A world's installation package is called a "world package". |
+| Write service | 写服务 | A service with `access: write` that changes its provider's own data for the caller; its writes are staged as one **operation**. See [Write services](./plugin-extensions.md#write-services). |
 
 ## Prompt vocabulary
 
@@ -155,7 +161,9 @@ A dataset is a typed kind of plugin data that a plugin declares with `contribute
 
 It has nothing to do with a **Collection**, which is an install-time manifest (`covel-collection.yaml`). At commit, every proposal a plugin writes into its own dataset is checked against the declared operation kinds and schema.
 
-See: [Datasets](./plugins.md#datasets-contributesdatasets), [world data](./world-data.md).
+An agent reads and writes a dataset through **dataset tools**: when a runtime lists the dataset in `agent.tools.datasets`, the framework generates typed read and write tools for it, and records are stored under their **dataset key**.
+
+See: [Datasets](./plugins.md#datasets-contributesdatasets), [dataset tools](./tools.md#dataset-tools), [world data](./world-data.md).
 
 ## Deployment form
 
@@ -185,7 +193,7 @@ See: [extension points](./extension-points.md), [plugin extensions and communica
 
 ## Finalizer step
 
-The one more model request the kernel sends after an agent runtime runs out of steps: tools off, asking the model for its final answer from what it already has.
+The one more model request the kernel sends at the step limit, deadline reserve, or context overflow when the loop profile allows it: tools off, asking for the final answer from the information already available. `finalizer.maxSteps` enables overflow rescue, which trims complete tool steps as needed under [prompt budgeting](./prompt-structure.md#budget). An unfinished overflow remains a failed runtime with its original overflow text.
 
 Running out of steps is not a success by itself. The runtime succeeds only when the finalizer step writes the answer, and its result's `stop.finalizer` is `true`. No finalizer is sent when the output is handed over by a completing tool, or when a completion condition is still unmet.
 

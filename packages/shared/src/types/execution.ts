@@ -75,8 +75,8 @@ export type StopReason =
 export interface LoopStop {
   readonly reason: StopReason;
   /**
-   * A final answer without tools produced the output after the step limit
-   * or the deadline reserve.
+   * A final answer without tools produced the output at the step limit,
+   * at the deadline reserve, or after a context overflow.
    */
   readonly finalizer?: true;
   /** A repair request produced a replacement answer before output validation. */
@@ -86,7 +86,7 @@ export interface LoopStop {
 }
 
 export type PluginFaultReason =
-  "runtime" | "hook" | "proposal-rejected" | "timeout";
+  "runtime" | "hook" | "proposal-rejected" | "timeout" | "service";
 
 export interface RuntimeResult {
   readonly pluginId: string;
@@ -100,6 +100,20 @@ export interface RuntimeResult {
   readonly effects?: import("./handler-result.js").RuntimeEffects;
   /** Validated execution-buffered commands, committed separately from business output. */
   readonly pendingProposals?: readonly import("./proposal.js").Proposal[];
+  /**
+   * Write-service operations this run's code made, in call order. Persisted
+   * with the result and settled at commit; a run that did not succeed keeps
+   * them `discarded`.
+   */
+  readonly operations?: readonly import("./operation-record.js").OperationRecord[];
+  /**
+   * Kernel only: the staged writes of each `staged` operation, by operation
+   * id, already carrying the provider's identity. Like `pendingProposals`,
+   * never persisted or sent to a client.
+   */
+  readonly operationWrites?: Readonly<
+    Record<string, readonly import("./proposal.js").Proposal[]>
+  >;
   /** Setup completion is independent of business output. */
   readonly completion?: "done" | "pending";
   /** Exact function value, including scalar/array values, for schemas and bindings. */

@@ -1,5 +1,5 @@
 ---
-version: 0.0.41
+version: 0.0.42
 displayName: Inventory
 description: >-
   Records explicit item gains, losses, and equipment changes from each turn's
@@ -13,6 +13,12 @@ license: MIT
 requires:
   - world-ir-provider@1
 contributes:
+  services:
+    - contract: inventory.bag@1
+      modelFacing: true
+    - contract: inventory.change@1
+      access: write
+      modelFacing: true
   commands:
     - name: bag
       aliases:

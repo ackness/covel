@@ -832,8 +832,9 @@ curl -X DELETE http://localhost:3001/api/sessions/<sessionId>
 `GET /api/sessions/:id/turns`：
 
 - 每项带 `commitStatus` 和 `origin`。
+- `runtimeResults[].operations` 列出这个 runtime 通过[写服务](./plugin-extensions.md#写服务)暂存的操作和它们提交后的状态（`committed` / `failed` / `discarded` 及原因），形状见[操作记录](./transactions.md#操作记录)。没有调用写服务的 runtime 没有这个字段。
 - `?limit=n` 的上限是 500。
-- 声明了 `io.concealed` 的 runtime，结果里的 `output` 和工具参数 / 结果会被清空。
+- 声明了 `io.concealed` 的 runtime，结果里的 `output` 和工具参数 / 结果会被清空。它的操作记录（包括它作为子 agent 记在可见调用方结果上的操作）去掉 `request`、`result`，`summary` 换成固定文字。
 - 这是一条很薄的路由，主要给真实模型验证工具（见 [用真实模型验证](../ship/real-model.md)）使用。
 
 `GET /api/sessions/:id/view` 有几点要知道：
@@ -1336,7 +1337,7 @@ GitHub 插件安装和更新预览始终返回 `capabilities` 与 `trustedSource
 
 以 `_` 开头的 namespace 保留给内核：
 
-- PUT / DELETE 和通用的 plugin-data 工具不能修改 `_dimensions` 和 `_dimension-settlements`。
+- PUT / DELETE 不能修改 `_dimensions` 和 `_dimension-settlements`；数据集名以字母开头，数据集工具也到不了它们。
 - `_hidden.<namespace>`（`visibility: hidden` 的世界数据）不出现在列表、`/state` 和 discovery 里。单条读取返回 404。
 - 玩家修改维度走 [manual runtime RPC](#维度编辑与待结算恢复)。公共读取用 session view，不去扫描提供者的私有规则。
 
@@ -3895,7 +3896,8 @@ runtime 报告失败时，它的原始错误保留在 `result.runtimeResults` �
       "scope": "(sessionId, pluginId, namespace, key)",
       "reservedNamespaces": ["_runtime_jobs", "_logs"],
       "writePaths": [
-        "builtin-tool:plugin-data-set",
+        "dataset-tool:<dataset>-upsert",
+        "dataset-tool:<dataset>-update",
         "function-output:pluginData[]",
         "function-ctx.pluginData.update",
         "local-tool:withPendingProposals(plugin.data.update)",
@@ -6260,7 +6262,7 @@ SSE 是服务器向客户端持续推送事件的方式。Covel 有两条独立�
 | `world.dimensions.changed` | 世界 | 作者的维度声明变了（热更新），不重置会话的当前值 |
 | `dimensions.changed` | 状态 | 已提交的当前值变了；payload 含提供者、公共 snapshot 子集和可选的 settlement 摘要 |
 | `dimensions.settlement.changed` | 状态 | pending 或没有数值变化的回执变更；payload 不含规则和初值 |
-| `plugin-data.changed` | 插件数据 | 所有写路径都会发出：`plugin-data-set`、DELETE、batch 等 |
+| `plugin-data.changed` | 插件数据 | 所有写路径都会发出：数据集工具的写入、DELETE、batch 等 |
 | `turn.suspended` | 流程控制 | `finalizeExecution` 成功提交挂起记录后发出 |
 | `turn.resumed` | 流程控制 | `POST /api/sessions/:id/suspensions/:suspensionId/resume` 重启 runtime 时发出 |
 | `proposal.failed` | 流程控制 | 单条 proposal 提交失败。明确上报，不悄悄丢弃；由提交方直接写入 action stream |
@@ -6268,7 +6270,7 @@ SSE 是服务器向客户端持续推送事件的方式。Covel 有两条独立�
 | `plugin.fault.counted` | 插件故障 | 自身故障计数；只进 trace，不转发到 action stream |
 | `plugin.fault.latched` | 插件故障 | 插件因反复故障暂停；转发到 action stream，其他执行通过会话事件流通知 |
 | `plugin.fault.cleared` | 插件故障 | 正常运行或玩家重新启用清零；投递方式同上 |
-| `context.pruned` | 系统 | 提示词超出 slot 预算，历史被硬裁剪；只进 trace（`/debug` 用），不进 action stream |
+| `context.pruned` | 系统 | 提示词预算裁剪，只进 trace（`/debug`）。负载含 `runtimeId`、`pluginId`、`prunedMessageCount`；循环请求还报告 `truncatedToolResultCount`、`truncatedSummaryCount`、`elidedToolResultCount`、`collapsedStepCount`。后两项是本次请求应用的累计账本计数，包含重放；任一计数非零就发事件 |
 | `context.compaction.failed` | 系统 | 历史压缩失败和原因；只进 trace（`/debug` 用） |
 | `commit.fanout.failed` | 系统 | 回合已提交，但部分提交后的事件没能发布；只进 trace，订阅流同时收到 `system.reset` |
 | `error.occurred` | 系统 | 执行错误 |

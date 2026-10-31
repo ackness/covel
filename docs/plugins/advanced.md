@@ -220,14 +220,35 @@ Authoring examples match their schemas.
 - 两者都用带版本号的名字，输入输出都会按 schema 检查。
 - 注册的名字必须和清单一致。
 - `contributes.prompt` 里的固定片段由 Covel 自动注册，不用再声明成扩展。
-- 函数 runtime 用 `ctx.services`、工具用 `context.services` 调用服务。注册时写 `modelFacing: true` 和 `description`、在清单里写成 `{contract, modelFacing: true}` 的只读服务，agent 还可以在 `agent.tools.services` 里导入成工具，见[给模型用的服务](../reference/plugin-extensions.md#给模型用的服务)。
+- 函数 runtime 用 `ctx.services`、工具用 `context.services` 调用服务。注册时写 `modelFacing: true` 和 `description`、在清单里写成 `{contract, modelFacing: true}` 的服务，agent 还可以在 `agent.tools.services` 里导入成工具，见[给模型用的服务](../reference/plugin-extensions.md#给模型用的服务)。
 
-服务 handler 可以读取提供者自己的非隐藏数据，不能写入：
+读服务（默认）的 handler 可以读取提供者自己的非隐藏数据，不能写入：
 
 ```js
 const item = await ctx.pluginData.get("items", key);
 return { item };
 ```
+
+别的插件需要改你的数据时（商店买东西要扣你背包里的钱），提供一个**写服务**：注册和清单都写 `access: write`（清单里是 `{contract, access: write}`）。它的 `ctx.pluginData` 能写，写入暂存为一个操作，随调用方的回合一起提交或丢弃；它拿不到模型和 HTTP，不能写 `_` 开头的命名空间，`update` 不成立时抛 `conflict`：
+
+```js
+covel.registerService({
+  name: "change",
+  contract: "my-inventory.change@1",
+  access: "write",
+  input: z.object({ item: z.string(), cost: z.number().int().min(0) }),
+  output: z.object({ ok: z.literal(true) }),
+  async handler({ item, cost }, ctx) {
+    await ctx.pluginData.set("items", item, { owned: true });
+    await ctx.pluginData.update("purse", "coins", [
+      { op: "inc", path: "/amount", by: -cost, min: 0 },
+    ]);
+    return { ok: true };
+  },
+});
+```
+
+在哪里能调用、怎样提交、模型看到什么，见[写服务](../reference/plugin-extensions.md#写服务)。不用起一个回合就能测它：[`callTestService`](./testing.md#测一个写服务)。
 
 每个扩展点的输入、输出、多个提供者怎样合并、出错时怎样处理，见[插件扩展与通信](../reference/plugin-extensions.md)和[扩展点参考](../reference/extension-points.md)。
 
@@ -305,7 +326,7 @@ io:
 agent:
   model: actor
   tools:
-    builtin: [plugin-data-get]
+    builtin: [get-character]
 ```
 
 函数 runtime 用 `ctx.agents.run` 调用它：

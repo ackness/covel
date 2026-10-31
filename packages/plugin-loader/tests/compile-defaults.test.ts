@@ -1,4 +1,4 @@
-import { AGENT_LOOP_DEFAULTS } from "@covel/shared";
+import { AGENT_LOOP_DEFAULTS, runtimeManifestInputSchema } from "@covel/shared";
 import type { PluginManifest, RuntimeAuthoringManifest } from "@covel/shared";
 import { describe, expect, it } from "vitest";
 import { compileRuntimeManifest } from "../src/compile-manifest.js";
@@ -14,6 +14,34 @@ function compile(runtime: RuntimeAuthoringManifest) {
 }
 
 describe("defaults the compiler fills in", () => {
+  it("compiles operation inputs without adding a dependency", () => {
+    const manifest = compile({
+      schedule: { stage: "post-turn" },
+      io: { inputs: { operations: { from: { kernel: "operations@1" } } } },
+    });
+    expect(manifest.input?.inject).toEqual([
+      { kind: "kernel", from: "operations@1", name: "operations" },
+    ]);
+    expect(manifest.needs ?? []).toEqual([]);
+    expect(manifest.after ?? []).toEqual([]);
+  });
+  it("rejects a compiled detached operation input at its inject field", () => {
+    const manifest = compile({
+      function: {},
+      schedule: { stage: "post-turn" },
+      io: { inputs: { operations: { from: { kernel: "operations@1" } } } },
+    });
+    const result = runtimeManifestInputSchema.safeParse({
+      ...manifest,
+      turnCompletion: { mode: "detached" },
+    });
+    expect(result.success).toBe(false);
+    if (!result.success)
+      expect(result.error.issues).toContainEqual(
+        expect.objectContaining({ path: ["input", "inject", 0] }),
+      );
+  });
+
   it("makes a runtime without a visibility a system runtime", () => {
     const manifest = compile({
       function: { handler: "./handler.js" },

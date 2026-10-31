@@ -22,11 +22,22 @@ const IMPORTED_TOOL_ANNOTATIONS = Object.freeze({
   concurrencySafe: true,
 });
 
+/**
+ * Write services stage their provider's writes: a repeat changes the data
+ * again, and calls to one provider run one after the other.
+ */
+const IMPORTED_WRITE_TOOL_ANNOTATIONS = Object.freeze({
+  readOnly: false,
+  stagesWrites: true,
+  idempotent: false,
+  concurrencySafe: false,
+});
+
 type Ready = Extract<ServiceImportResolution, { status: "ready" }>;
-export type AbsentImport = Exclude<
-  ServiceImportResolution,
-  { status: "ready" }
->;
+export type AbsentImport =
+  | Exclude<ServiceImportResolution, { status: "ready" }>
+  /** A write service in a run that cannot change data there. */
+  | { readonly status: "not-allowed"; readonly pluginId: string };
 
 /** Model-facing text: tool and contract only, never a plugin ID. */
 export function absentImportMessage(
@@ -34,6 +45,8 @@ export function absentImportMessage(
   contract: string,
   reason: AbsentImport["status"],
 ): string {
+  if (reason === "not-allowed")
+    return `The tool "${name}" is unavailable in this run: it changes data, which this runtime cannot do here.`;
   const why = {
     missing: `no active provider offers ${contract}`,
     ambiguous: "more than one plugin provides it",
@@ -86,6 +99,10 @@ function argumentCheck(input: SafeParser): z.ZodType {
  * way the provider receives the arguments the model sent, or their repair.
  */
 export function importedServiceTool(name: string, target: Ready): ToolModule {
+  const annotations =
+    target.access === "write"
+      ? IMPORTED_WRITE_TOOL_ANNOTATIONS
+      : IMPORTED_TOOL_ANNOTATIONS;
   const execute = async (
     args: unknown,
     context: Parameters<ToolModule["execute"]>[1],
@@ -118,7 +135,7 @@ export function importedServiceTool(name: string, target: Ready): ToolModule {
         name,
         description: target.description,
         parameters: argumentCheck(target.input),
-        annotations: IMPORTED_TOOL_ANNOTATIONS,
+        annotations,
         execute,
       }),
       jsonSchema: target.jsonSchema,
@@ -129,7 +146,7 @@ export function importedServiceTool(name: string, target: Ready): ToolModule {
     description: target.description,
     parametersSchema: z.unknown(),
     jsonSchema: target.jsonSchema,
-    annotations: IMPORTED_TOOL_ANNOTATIONS,
+    annotations,
     execute,
   };
 }

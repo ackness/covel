@@ -250,19 +250,22 @@ export async function loadRuntimeBundle(args: {
     if (!session) throw new Error(`session "${sessionId}" not found`);
     return session.activePlugins.filter((id) => selected.has(id));
   };
-  const services = new PluginServiceRegistry({
-    list: sessionPlugins,
-    ensure: async (sessionId, pluginId) => {
-      if (
-        !selected.has(pluginId) ||
-        !(await sessionPlugins(sessionId)).includes(pluginId)
-      ) {
-        throw new Error(
-          `plugin "${pluginId}" is not active in session "${sessionId}"`,
-        );
-      }
+  const services = new PluginServiceRegistry(
+    {
+      list: sessionPlugins,
+      ensure: async (sessionId, pluginId) => {
+        if (
+          !selected.has(pluginId) ||
+          !(await sessionPlugins(sessionId)).includes(pluginId)
+        ) {
+          throw new Error(
+            `plugin "${pluginId}" is not active in session "${sessionId}"`,
+          );
+        }
+      },
     },
-  });
+    (pluginId) => definitions.get(pluginId)?.messages,
+  );
   const extensions = new PluginExtensionHost(services);
   const hookPipeline = createHookPipeline();
   const entries: Awaited<ReturnType<typeof loadEntryTools>>[] = [];
@@ -429,12 +432,18 @@ export async function loadEntryTools(
     registerService(definition) {
       if (!services) throw new Error("Plugin service registry is unavailable");
       scope.stage(() => {
+        // The registry hands a write service its write context; the union's
+        // handler cannot be called with either context directly.
+        const handler = definition.handler as (
+          input: unknown,
+          context: unknown,
+        ) => unknown;
         scope.track(
           services.register(discovery.id, {
             ...definition,
             handler: (input, context) =>
-              scope.invoke(() => definition.handler(input, context)),
-          }),
+              scope.invoke(() => handler(input, context)),
+          } as typeof definition),
         );
       });
     },

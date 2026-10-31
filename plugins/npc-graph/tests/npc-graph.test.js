@@ -97,13 +97,12 @@ describe("npc-graph manifests", () => {
     });
   });
 
-  it("extractor drops the never-used generic plugin-data builtin tools", () => {
+  it("extractor declares no builtin tools", () => {
     // These were scaffold residue — the prompt never referenced them; the
     // graph injections already cover the same need.
     const builtin = manifests.find((m) => m.name === "npc-graph/extractor")
       .tools?.builtin;
-    expect(builtin ?? []).not.toContain("plugin-data-list");
-    expect(builtin ?? []).not.toContain("plugin-data-get");
+    expect(builtin).toBeUndefined();
   });
 
   it("extractor injects the existing graph as plugin-data (no list round-trip)", () => {

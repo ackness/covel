@@ -91,6 +91,30 @@ describe(`${PLUGIN_ID} package`, () => {
       );
   });
 
+  it("imports optional bag tools and explains payment and refusal in both languages", () => {
+    expect(manifest.tools.services).toEqual([
+      { contract: "inventory.bag@1", name: "check-bag" },
+      { contract: "inventory.change@1", name: "change-inventory" },
+    ]);
+    expect(definition.packageManifest.plugin.requires ?? []).toEqual([]);
+    expect(manifest.needs ?? []).toEqual([]);
+    expect(
+      Object.values(manifest.inputs ?? {}).every(
+        (input) => input.required === false,
+      ),
+    ).toBe(true);
+    expect(english).toContain("When the `change-inventory` tool is offered");
+    expect(english).toContain("with the payment first");
+    expect(english).toContain(
+      "If it is refused, narrate that the exchange does not happen",
+    );
+    expect(english).toContain("Call `check-bag`");
+    expect(chinese).toContain("提供了 `change-inventory` 工具");
+    expect(chinese).toContain("付款排在前面");
+    expect(chinese).toContain("若被拒绝，就叙述交易没有发生");
+    expect(chinese).toContain("调用 `check-bag`");
+  });
+
   it("hands every player setting to the prompt, in both languages", () => {
     const settings = definition.packageManifest.manifest.userSettings ?? [];
     expect(settings.length).toBeGreaterThan(0);
@@ -121,5 +145,94 @@ describe(`${PLUGIN_ID} package`, () => {
     ];
     for (const contract of definition.packageManifest.plugin.requires ?? [])
       expect(companions).not.toContain(contract);
+  });
+
+  it("guides correctable lookups, staged changes and changed scene cues in both languages", () => {
+    const source = (file) => readFileSync(path.join(PLUGIN_DIR, file), "utf8");
+    const en = source("PLUGIN.md");
+    const zh = source("PLUGIN.zh.md");
+    expect(en).toContain("not-found error that lists the closest names");
+    expect(zh).toContain("「未找到」错误并列出最接近的名字");
+    expect(en).not.toContain("candidate names");
+    expect(zh).not.toContain("候选名字");
+    expect(en).toContain("A tool result may carry a `staged` notice.");
+    expect(zh).toContain("工具结果里的 `staged` 提示");
+    expect(
+      english.match(/Start a new segment whenever the speaker changes/g),
+    ).toHaveLength(1);
+    expect(zh.match(/说话者一变就另起一段/g)).toHaveLength(1);
+    expect(en).toContain("Set `cues.scene` to the place");
+    expect(en).toContain("Leave a cue out while it has not changed.");
+    expect(zh).toContain("没有变化时省略该提示");
+    expect(en).not.toContain("`cues.scene` and `cues.mood` are optional");
+    expect(zh).not.toContain("`cues.scene` 和 `cues.mood` 可以不写");
+    expect(en.replace(/\s+/g, " ")).toContain(
+      "tool definition lists the topics and payload shapes",
+    );
+    expect(zh).toContain("工具定义列出了各 topic 和 payload 的格式");
+    for (const text of [en, zh]) {
+      expect(text).not.toContain("stage.direction");
+      expect(text).not.toContain("actor.focus");
+    }
+  });
+
+  it("preserves the declared runtime inputs, tools and scheduling", () => {
+    expect(definition.packageManifest.plugin.runtime).toEqual({
+      schedule: { stage: "narrative" },
+      io: {
+        inputs: {
+          worldTime: {
+            from: { contract: "world-time-context@1" },
+            required: false,
+          },
+          storyEvent: {
+            from: { contract: "story-event-cue@1" },
+            select: "/cueContext",
+            required: false,
+          },
+          tabletopCheck: {
+            from: { contract: "tabletop-check@1" },
+            select: "/checkContext",
+            required: false,
+          },
+          "active-cast": {
+            from: { contract: "scene-cast@1" },
+            select: "/activeCastContext",
+            required: false,
+          },
+          "npc-relationships": {
+            from: { contract: "graph-rag@1" },
+            select: "/npcContext",
+            required: false,
+          },
+          "check-results": {
+            from: { contract: "action-check@1" },
+            select: "/checkContext",
+            required: false,
+          },
+        },
+        output: {
+          contract: "narrative-engine@2",
+          schema: "contract:narrative-engine@2",
+        },
+        visibility: "story",
+      },
+      agent: {
+        tools: {
+          services: [
+            { contract: "inventory.bag@1", as: "check-bag" },
+            { contract: "inventory.change@1", as: "change-inventory" },
+          ],
+          builtin: [
+            "list-characters",
+            "get-character",
+            "memory-search",
+            "emit-event",
+          ],
+        },
+        advertiseEvents: true,
+      },
+    });
+    expect(definition.packageManifest.plugin.imports ?? []).toEqual([]);
   });
 });

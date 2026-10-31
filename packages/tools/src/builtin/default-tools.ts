@@ -4,7 +4,6 @@ import { ToolRegistry } from "../registry.js";
 import { createCharacterTools } from "./character-tools.js";
 import { delegateTool } from "./delegate.js";
 import { createEmitEventTool, type EventDirectoryLike } from "./emit-event.js";
-import { createPluginDataTools } from "./plugin-data-tools.js";
 import { runtimeDoneTool } from "./runtime-done.js";
 import { suspendTool } from "./suspend.js";
 import {
@@ -13,8 +12,7 @@ import {
 } from "./world-dimension-tools.js";
 import { builtinUITools } from "@covel/plugin-handlers-utils";
 
-type DefaultToolStore = Parameters<typeof createPluginDataTools>[0] &
-  Parameters<typeof createCharacterTools>[0];
+type DefaultToolStore = Parameters<typeof createCharacterTools>[0];
 
 export interface DefaultToolRegistryDeps {
   readonly store: DefaultToolStore;
@@ -32,9 +30,6 @@ export function createDefaultToolRegistry(
   registry.registerBuiltin(delegateTool);
   registry.registerBuiltin(worldDimensionGetTool);
   registry.registerBuiltin(worldDimensionListTool);
-  for (const module of createPluginDataTools(deps.store)) {
-    registry.registerBuiltin(module);
-  }
   registry.registerBuiltin(
     createEmitEventTool({ directory: deps.eventDirectory }),
   );

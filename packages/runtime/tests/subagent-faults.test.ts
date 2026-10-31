@@ -74,6 +74,7 @@ const committed = {
   status: "committed" as const,
   events: [],
   failedProposals: [],
+  operations: [],
 };
 const open: DataStore[] = [];
 afterEach(async () => {

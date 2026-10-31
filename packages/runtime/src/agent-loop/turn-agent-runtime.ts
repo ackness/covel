@@ -35,6 +35,7 @@ import {
 import { MAX_PICTURE_ATTACHMENTS } from "./picture-attachments.js";
 import { createStorySegmentStream } from "./story-stream.js";
 import { attachReadDependencies } from "../read-dependencies.js";
+import type { RootOperationStage } from "../operations/operation-stage.js";
 import {
   createPluginDataVisibility,
   type PluginDataVisibility,
@@ -65,6 +66,7 @@ export interface ExecuteAgentRuntimeOptions {
   readonly executionStory?: readonly import("@covel/store").TurnMessageRecord[];
   readonly sessionMeta:
     | {
+        failedOperationSummaries?: Readonly<Record<string, readonly string[]>>;
         turnNumber: number;
         logicalTurn?: number;
         characters: readonly {
@@ -104,6 +106,11 @@ export interface ExecuteAgentRuntimeOptions {
   readonly exports?: Readonly<Record<string, InputSlot>>;
   readonly startTime: number;
   readonly runId: string;
+  /**
+   * The run's operation stage. Without it the run cannot call write
+   * services: their imports are absent (`not-allowed`).
+   */
+  readonly operations?: RootOperationStage;
 }
 
 export async function executeAgentRuntime({
@@ -131,6 +138,7 @@ export async function executeAgentRuntime({
   exports: exportSlots,
   startTime,
   runId,
+  operations,
 }: ExecuteAgentRuntimeOptions): Promise<RuntimeResult> {
   // ── Agent runtime: LLM pipeline ─────────────────────────────
   // Emit start AFTER guard passes (or no guard exists) — prevents
@@ -216,6 +224,8 @@ export async function executeAgentRuntime({
         ? applyHistoryWindow(visibleHistory, historyPolicy)
         : visibleHistory,
       sessionMeta,
+      failedOperationSummaries:
+        sessionMeta?.failedOperationSummaries?.[manifest.name],
       summaries:
         historyPolicy && !historyPolicy.includeSummaries
           ? []
@@ -331,8 +341,14 @@ export async function executeAgentRuntime({
   const toolExecutor = deps.toolExecutor
     ? withAgentToolSurface(
         deps.toolExecutor,
-        await prepareAgentToolSurface({ manifest, input, deps }),
+        await prepareAgentToolSurface({
+          manifest,
+          input,
+          deps,
+          canWrite: operations !== undefined,
+        }),
         deps.services,
+        operations,
       )
     : undefined;
   const loopDeps =
@@ -348,6 +364,7 @@ export async function executeAgentRuntime({
             input,
             deps,
             executionContext,
+            ...(operations ? { operations } : {}),
           }),
         }
       : toolExecutor
@@ -409,8 +426,10 @@ export async function executeAgentRuntime({
         : {}),
     },
   );
-  if (settled.kind === "success" && result.status === "success")
+  if (settled.kind === "success" && result.status === "success") {
     attachReadDependencies(result, pluginDataVisibility.recorder);
+    operations?.attachTo(result, true);
+  }
   if (settled.kind === "success" && deps.store && result.output) {
     attachRuntimeJournal(
       result,

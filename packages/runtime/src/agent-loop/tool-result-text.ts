@@ -27,6 +27,14 @@ export function renderToolSuccess(args: {
   model?: ToolModelView;
   pendingProposals?: readonly { readonly type: string }[];
   emittedEvents?: readonly unknown[];
+  /**
+   * Write-service operations the call staged: one per successful write call,
+   * with the proposal types of their writes.
+   */
+  stagedOperations?: {
+    readonly count: number;
+    readonly kinds: readonly string[];
+  };
   locale?: string;
 }): string {
   const result: ToolSuccessText = {};
@@ -37,12 +45,14 @@ export function renderToolSuccess(args: {
   if (data !== undefined) result.data = data;
   const proposals = args.pendingProposals ?? [];
   const events = args.emittedEvents ?? [];
-  if (proposals.length + events.length > 0) {
+  const operations = args.stagedOperations?.count ?? 0;
+  if (proposals.length + events.length + operations > 0) {
     result.staged = {
-      count: proposals.length + events.length,
+      count: proposals.length + events.length + operations,
       kinds: [
         ...new Set([
           ...proposals.map((p) => p.type),
+          ...(operations > 0 ? (args.stagedOperations?.kinds ?? []) : []),
           ...(events.length ? ["event"] : []),
         ]),
       ],
