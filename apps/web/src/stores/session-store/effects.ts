@@ -69,6 +69,7 @@ export function useUiSpecHydrationEffect(
   useEffect(() => {
     if (!sessionId) {
       dispatch({ type: "LOAD_MESSAGE_UI_SPECS", specs: [] });
+      dispatch({ type: "LOAD_SEGMENT_UI_SPECS", specs: [] });
       return;
     }
     let cancelled = false;
@@ -80,6 +81,7 @@ export function useUiSpecHydrationEffect(
       apply: (res) => {
         const specs = res.message ?? [];
         dispatch({ type: "LOAD_MESSAGE_UI_SPECS", specs });
+        dispatch({ type: "LOAD_SEGMENT_UI_SPECS", specs: res.segment ?? [] });
         const rightPluginIds = new Set(
           res.right.map((entry) => entry.pluginId),
         );
@@ -135,7 +137,10 @@ export function useUiSpecHydrationEffect(
         }
       },
     }).catch(() => {
-      if (isCurrent()) dispatch({ type: "LOAD_MESSAGE_UI_SPECS", specs: [] });
+      if (isCurrent()) {
+        dispatch({ type: "LOAD_MESSAGE_UI_SPECS", specs: [] });
+        dispatch({ type: "LOAD_SEGMENT_UI_SPECS", specs: [] });
+      }
     });
     return () => {
       cancelled = true;

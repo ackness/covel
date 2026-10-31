@@ -840,6 +840,7 @@ curl -X DELETE http://localhost:3001/api/sessions/<sessionId>
 
 - **只含最近窗口。** `messages` 和 `executionSteps` 默认是最新的 80 条消息和 600 条 trace 事件，不是全量。
 - **故事消息带 `segments`**，形状和 [`GET /messages`](#get-apisessionsidmessages) 相同，舞台据此显示每段的说话人。
+- **玩家消息带 `actions`**：这条消息提交的解析后行动（`SnapshotMessage.actions`，和 `GET /messages` 的 `actions` 相同）。恢复后的聊天据此显示“角色名 · 类型名”署名；没有记录行动的旧消息没有这个字段。
 - **向上翻页。** 视图带一个不透明的 `messagesCursor`。前端向上滚动时，把它原样作为 `?cursor=` 传给 `GET /api/sessions/:id/messages/page`。
 - **窗口外的旧回合**不渲染执行时间线。
 - **会话时钟。** 视图内嵌的 session 对象带有和会话 API 相同的必填时钟：`phase`、`completedPlayerTurns`、`setupRuntimes`。恢复和重连只以这些字段判断进度。
@@ -1065,6 +1066,7 @@ setup runtime 挂起等玩家回答时，这次尝试不占重试次数。挂起
 - `text` 是文字规则：`required` 必须有文字，`optional` 可有可无，`none` 不能带文字。`actor` 表示这种行动是否以角色的身份进行。
 - `fieldsSchema` 是插件类型的 `fields` 要符合的 JSON Schema；没有它的类型不接受 `fields`。
 - `seats[].allowed` 是座位身份能提交的类型；没有人控制的座位（`controller` 不是 `human`）为空。身份和基础类型的对应见[座位](./world-model.md#座位)。
+- 输入框的模式就是输入框所属座位的 `allowed` 里除 `command` 以外的类型，名称、图标和占位符取自 `display`。`fieldsSchema` 在输入框里只显示一个子集，见[输入框模式](./ui-panels.md#输入框模式)。
 
 ### 玩家交互
 
@@ -1442,7 +1444,7 @@ fork 和社区插件的授权：
 ### 角色数据
 
 > [!NOTE]
-> 内置 Web 界面主要通过 `GET /api/sessions/:id/view` 拿角色视图。这一节的端点是轻量的读取和管理 API。在插件里，一次追踪一批角色的 runtime 推荐用 `sync-characters` 工具；其它插件可以按需使用底层的 `create-character` / `update-character`，以及读取工具 `list-characters` / `get-character`。
+> 内置 Web 界面主要通过 `GET /api/sessions/:id/view` 拿角色视图。这一节的端点是轻量的读取和管理 API。在插件里，用 `sync-characters` 的 creates / updates 写角色，用 `list-characters` / `get-character` 读取。
 
 角色 `id` 只需要在当前会话内唯一。不同会话可以放心使用同一个 ID。
 
@@ -1659,6 +1661,7 @@ fork 和社区插件的授权：
   ],
   "message": [...],
   "view": [...],
+  "segment": [...],
   "diagnostics": []
 }
 ```
@@ -1670,10 +1673,12 @@ fork 和社区插件的授权：
 - 聚合时，每个 spec 都用 `pnpm validate:plugin` 的同一套规则校验（结构、`specVersion`、数据归属、`webview`）。
 - `specVersion` 可以省略，按 v1 处理。声明的版本高于服务端支持的版本（当前 `CURRENT_UI_SPEC_VERSION = 1`）会被拒绝。
 - 一个 spec 校验失败，**不会影响整个响应**：只把它从所在的 slot 里去掉。
-- 失败原因写在顶层的 `diagnostics[]` 里，每项是 `{ pluginId, runtimeId, slot, specIndex, specId?, issues[{ path, message, code }] }`，说明是哪个插件、哪个字段、什么问题。文件读不出来（不存在、不是 JSON、指向插件目录以外）也写在这里；`code` 都是 `invalid`。
+- 失败原因写在顶层的 `diagnostics[]` 里，每项是 `{ pluginId, runtimeId, slot, specIndex, declaredPath?, specId?, issues[{ path, message, code }] }`（`declaredPath` 是清单里写的 spec 路径），说明是哪个插件、哪个字段、什么问题。文件读不出来（不存在、不是 JSON、指向插件目录以外）也写在这里；`code` 都是 `invalid`。
 - 带 `sessionId` 时，`diagnostics` 只包含该会话已激活的插件。
 
 `view` 始终为数组（可以为空），项为 `{ pluginId, specs }`。仅列出当前会话活跃插件的视图；同一插件重复的视图 ID 保留第一份，其余报告 `slot: "view"` 诊断。这里只读取 UI JSON、HTML 和已发布资源，不导入插件代码，不需要服务端代码审批。读取会话的玩家授权在浏览器挂载前单独处理，见[插件视图](./ui-panels.md#插件视图)。
+
+`segment` 始终为数组（可以为空），项为 `{ pluginId, specs }`，是 `contributes.ui.segment` 的段落模板，按与 `message` 相同的会话筛选，插件的顺序就是模板同级时的先后。缺少 `match`、写了 `webview` / `dataSource` 等面板字段或带 `on` / `watch` 的模板报 `slot: "segment"` 诊断，同一插件的其他模板照常返回。见[段落模板](./ui-panels.md#段落模板)。
 
 **开发热重载**：`POST /api/plugins/:id/reload` 重新加载一个社区插件。
 
@@ -2981,7 +2986,7 @@ SSE。先发一个 `ready` 事件，之后每 15 秒发一行注释保持连接�
   "kind": "act",
   "interaction": {
     "turnId": "t1",
-    "interactionId": "create-character",
+    "interactionId": "character-opening",
     "type": "form"
   },
   "fields": { "name": "艾尔文", "class": "法师" }
@@ -3881,7 +3886,7 @@ runtime 报告失败时，它的原始错误保留在 `result.runtimeResults` �
         "runtime-export",
         "kernel"
       ],
-      "uiSlots": ["right", "message"]
+      "uiSlots": ["right", "message", "view", "segment"]
     },
     "scheduling": {
       "effectsPolicy": "warn"
@@ -4549,7 +4554,7 @@ runtime 可以中途停下来等玩家提供数据，这叫挂起。本节的端
 - 同一个逻辑回合有多个并行挂起项时，等最后一个恢复完才计数。重试不会重复计数。
 - 恢复后又挂起时，回合仍未完成。整条挂起链在最后一次恢复成功时计数，只计一次。
 - 挂起项被放弃、过期或作废时，按回合正常结束的方式收尾：它是这个逻辑回合最后一个还在等待的挂起项时，玩家回合数加一，回合扣下的后台作业（`schedule.detached`）照常入队。这些和删除记录在同一个事务里完成。正在被另一个请求恢复的挂起项也算“还在等待”。
-- 挂起的执行上报过的进度作业（`ctx.progress`）停在 `waiting-input`。恢复的运行也在原执行的进度范围里上报，所以整条挂起链的作业一起收尾：最后一次恢复成功提交后，它们以 `succeeded` 结束；挂起项被放弃、过期或作废时，以 `cancelled` 结束。恢复失败可以重试，或者恢复后又挂起时，它们继续等待。
+- 挂起的执行上报过的进度作业（`ctx.progress`）停在 `waiting-input`，挂起的 runtime 通过 `ctx.recursiveCall` 发起的子调用上报的作业也一样。恢复的运行也在原执行的进度范围里上报，所以整条挂起链的作业一起收尾：最后一次恢复成功提交后，它们以 `succeeded` 结束；挂起项被放弃、过期或作废时，以 `cancelled` 结束。恢复失败可以重试，或者恢复后又挂起时，它们继续等待。
 
 ##### 恢复 setup runtime
 
@@ -4870,7 +4875,7 @@ runtime 导出的处理：
 > [!NOTE]
 > 内置 Web UI 主要通过 `GET /api/sessions/:id/view` 拿角色视图。本节的端点是轻量的读取和管理接口。
 >
-> 插件里写角色请用工具：一批一批追踪角色的 runtime 推荐 `sync-characters`；其他插件可以按需用 `create-character` / `update-character`，读取用 `list-characters` / `get-character`。
+> 插件里写角色请用工具：用 `sync-characters` 的 creates / updates 写入，用 `list-characters` / `get-character` 读取。
 
 #### `GET /api/sessions/:id/characters`
 

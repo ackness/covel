@@ -1,6 +1,7 @@
 // @vitest-environment node
 import { describe, expect, it } from "vitest";
 import type { SnapshotTraceEvent } from "@covel/shared";
+import { projectExecutionTurns } from "../execution-projection.js";
 import {
   buildSnapshotExecutionSteps,
   reconcileExecutionSteps,
@@ -149,3 +150,162 @@ describe("authoritative execution recovery", () => {
     ]);
   });
 });
+
+it("recovers separate runs and settles only the run named by the terminal event", () => {
+  const steps = buildSnapshotExecutionSteps([
+    event("runtime.started", { runId: "a" }),
+    event("runtime.started", { runId: "b" }),
+    event("runtime.completed", { runId: "b", status: "success" }),
+  ]);
+  expect(steps).toEqual([
+    expect.objectContaining({ runId: "a", status: "running" }),
+    expect.objectContaining({ runId: "b", status: "completed" }),
+  ]);
+  expect(
+    reconcileExecutionSteps(steps, [
+      event("runtime.failed", { runId: "a", error: "Failure" }),
+    ]),
+  ).toEqual([
+    expect.objectContaining({ runId: "a", status: "failed" }),
+    expect.objectContaining({ runId: "b", status: "completed" }),
+  ]);
+});
+
+it("adopts a snapshot run id into a legacy local row and merges the same run", () => {
+  const events = [
+    event("runtime.completed", { runId: "a", status: "success" }),
+  ];
+  const steps = reconcileExecutionSteps([running], events);
+  expect(steps).toEqual([
+    expect.objectContaining({ runId: "a", status: "completed" }),
+  ]);
+  expect(reconcileExecutionSteps(steps, events)).toEqual(steps);
+});
+
+it.each(["success", "suspended"])(
+  "supersedes earlier suspensions when a recovered continuation finishes with %s",
+  (status) => {
+    const traces = [
+      event("runtime.started", { runId: "original" }),
+      event("runtime.completed", { runId: "original", status: "suspended" }),
+      {
+        ...event("runtime.started", { runId: "continuation", resumed: true }),
+        timestamp: "2026-09-05T04:00:01Z",
+      },
+      {
+        ...event("runtime.completed", { runId: "continuation", status }),
+        timestamp: "2026-09-05T04:00:02Z",
+      },
+    ];
+    const steps = buildSnapshotExecutionSteps(traces);
+    expect(steps).toHaveLength(2);
+    expect(projectExecutionTurns([], steps).turns[0]?.steps).toEqual([
+      expect.objectContaining({
+        runId: "continuation",
+        status: status === "success" ? "completed" : "suspended",
+        resumed: true,
+      }),
+    ]);
+    const cached = [
+      { ...running, runId: "original", status: "suspended" as const },
+    ];
+    expect(
+      projectExecutionTurns(
+        [],
+        reconcileExecutionSteps(cached, traces.slice(2)),
+      ).turns[0]?.steps,
+    ).toEqual([
+      expect.objectContaining({
+        runId: "continuation",
+        status: status === "success" ? "completed" : "suspended",
+      }),
+    ]);
+  },
+);
+
+it("keeps the cached start of a recovered continuation when the snapshot only carries its terminal event", () => {
+  const traces = [
+    event("runtime.started", { runId: "original" }),
+    event("runtime.completed", { runId: "original", status: "suspended" }),
+    {
+      ...event("runtime.started", { runId: "continuation", resumed: true }),
+      timestamp: "2026-09-05T04:00:01Z",
+    },
+    {
+      ...event("runtime.completed", {
+        runId: "continuation",
+        status: "success",
+      }),
+      timestamp: "2026-09-05T04:00:02Z",
+    },
+  ];
+  const cached = buildSnapshotExecutionSteps(traces);
+  const terminalOnly = buildSnapshotExecutionSteps(traces.slice(3));
+  const steps = reconcileExecutionSteps(cached, traces.slice(3));
+  expect(steps).toEqual([
+    expect.objectContaining({
+      runId: "original",
+      status: "suspended",
+    }),
+    expect.objectContaining({
+      runId: "continuation",
+      status: "completed",
+      startedAt: "2026-09-05T04:00:01Z",
+    }),
+  ]);
+  expect(terminalOnly[0]?.startedAt).toBeUndefined();
+  expect(projectExecutionTurns([], steps).turns[0]?.steps).toEqual([
+    expect.objectContaining({ runId: "continuation", status: "completed" }),
+  ]);
+});
+
+it.each([
+  ["success", "completed"],
+  ["suspended", "suspended"],
+] as const)(
+  "lets a recovered resume finishing with %s replace an earlier failed resume",
+  (status, expected) => {
+    const at = (second: number) => `2026-09-05T04:00:0${second}Z`;
+    const traces = [
+      event("runtime.started", { runId: "original" }),
+      event("runtime.completed", { runId: "original", status: "suspended" }),
+      {
+        ...event("runtime.started", { runId: "first-resume", resumed: true }),
+        timestamp: at(1),
+      },
+      {
+        ...event("runtime.failed", {
+          runId: "first-resume",
+          error: "timeout",
+        }),
+        timestamp: at(2),
+      },
+      {
+        ...event("runtime.started", { runId: "second-resume", resumed: true }),
+        timestamp: at(3),
+      },
+      {
+        ...event("runtime.completed", { runId: "second-resume", status }),
+        timestamp: at(4),
+      },
+    ];
+    const shown = [
+      expect.objectContaining({ runId: "second-resume", status: expected }),
+    ];
+    expect(
+      projectExecutionTurns([], buildSnapshotExecutionSteps(traces)).turns[0]
+        ?.steps,
+    ).toEqual(shown);
+    // A browser cache that already holds the failed resume adopts the rest.
+    const cached = buildSnapshotExecutionSteps(traces.slice(0, 4));
+    expect(projectExecutionTurns([], cached).turns[0]?.steps).toEqual([
+      expect.objectContaining({ runId: "first-resume", status: "failed" }),
+    ]);
+    expect(
+      projectExecutionTurns(
+        [],
+        reconcileExecutionSteps(cached, traces.slice(4)),
+      ).turns[0]?.steps,
+    ).toEqual(shown);
+  },
+);

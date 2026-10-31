@@ -179,7 +179,7 @@ pnpm plugin:extract ~/.covel/plugins/notebook --check
 pnpm plugin:extract ~/.covel/plugins/notebook --check --json
 ```
 
-The first command runs the entry factory on the author's machine, writes the six registration lists (`tools`, `actions`, `services`, `forms`, `wires`, `hooks`) into `contributes` in the root `PLUGIN.md`, and prints changed keys. When already in sync, it prints `Declarations are in sync.`. Lists are deduplicated in first-registration order; normal hooks become event names, and other phases become `{ event, enforce }`. Empty list keys are removed. Comments, other fields and the Markdown body are preserved.
+The first command runs the entry factory on the author's machine, writes the six registration lists (`tools`, `actions`, `services`, `forms`, `wires`, `hooks`) into `contributes` in the root `PLUGIN.md`, and prints changed keys. When already in sync, it prints `Declarations are in sync.`. Lists are deduplicated in first-registration order; normal hooks become event names, and other phases become `{ event, enforce }`; a plain service becomes its contract ID, and a model-facing service becomes `{ contract, modelFacing: true }`. Empty list keys are removed. Comments, other fields and the Markdown body are preserved.
 
 `--check` writes nothing and shows removed names with `-` and added names with `+` per key; changes only to order or spelling are described separately. It exits 1 on drift and 0 when in sync, for CI. `--json` emits `extracted` and `drift`. Extraction errors exit 1; invalid arguments exit 2.
 
@@ -277,12 +277,12 @@ Even if the agent's final reply includes fields that look like "data to save", t
 
 To let an agent write something, give it a tool, and list it in `agent.tools`:
 
-| What you want to do                 | Tool                                            |
-| ----------------------------------- | ----------------------------------------------- |
-| Write its own data                  | Its own tool, or the built-in `plugin-data-set` |
-| Emit an event                       | The built-in `emit-event`                       |
-| Send the player a notice            | The built-in `create-notification`              |
-| Ask the player for structured input | The built-in `create-form`                      |
+| What you want to do                 | Tool                                                                                                              |
+| ----------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| Write its own data                  | Its own tool, or the built-in `plugin-data-set`                                                                   |
+| Emit an event                       | The built-in `emit-event` (session topic enum and payload schemas; see [tools](../reference/tools.md#emit-event)) |
+| Send the player a notice            | The built-in `create-notification`                                                                                |
+| Ask the player for structured input | The built-in `create-form`                                                                                        |
 
 If you want to require the agent to call a tool successfully on every run, write `completion: { require: tool-use }`. In this case, "no change" must also be submitted through a tool (for example, by submitting an empty list). Otherwise the run counts as failed.
 
@@ -437,19 +437,20 @@ Plugin data works the same way: what you read includes what earlier, completed r
 
 ### Who the player is
 
-A session may have several `type: player` characters (one person playing two characters, for example). The session's seats decide which one the player is acting as right now, and you read them on `ctx.world.seats`. Find that character with the SDK helpers:
+A session may have several `type: player` characters (one person playing two characters, for example). The action's `actorId` identifies the character being played; without an actor, use the primary seat's current character from `ctx.world.seats`. Find that character with the SDK helper:
 
 ```js
-import { currentCharacterOf, primarySeat } from "@covel/plugin-handlers-utils";
+import { actingCharacterOf } from "@covel/plugin-handlers-utils";
 
-const player = currentCharacterOf(
-  primarySeat(ctx.world.seats),
+const player = actingCharacterOf(
+  ctx.playerActions,
   ctx.world.characters,
   ctx.world.seats,
-); // the character record, or undefined when nobody is seated or bound
+); // the character record, or undefined when no actor or current character exists
 ```
 
 - Do not use `ctx.world.characters.find((c) => c.type === "player")`: with several player characters it finds only the first.
+- A detached job uses `ctx.inputs.turn.value.actions ?? []` to retain its source turn’s actor. Tools and extension providers have no actions and pass `[]`. The action’s actor takes precedence over the primary seat’s current character; see [Seats](../reference/world-model.md#seats) for the full rule.
 - `seatCharacterIds(seat, characters, seats)` gives every character ID bound to a seat, including the other characters the player controls.
 - Seats are read-only. After the player switches the current character, reads see the new one from the next turn. For the binding and current-character rules, see [Seats](../reference/world-model.md#seats).
 

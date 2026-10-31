@@ -19,6 +19,7 @@
 | -------------------------------------------- | --------------------------------------------------- | -------------------------------- | -------------------- |
 | 可以随时翻看的完整数据（图鉴、背包、关系图） | 侧栏面板 `ui.right`                                 | 右侧面板的一个页签               | 一份 JSON            |
 | 跟着某个回合出现的内容（建议、摘要、提示）   | 正文内容块 `ui.message`                             | 正文里，挂在那个回合下面         | 一份 JSON            |
+| 故事段落换一种画法（对白名牌、角色头像）     | 段落模板 `ui.segment`                               | 正文里，替换匹配段落的默认画法   | 一份 JSON            |
 | 给玩家选的选项                               | `ChoiceList` / `Choice` 组件                        | 正文里；舞台视图的决策区         | JSON，或一次工具调用 |
 | 必须回答才能继续的表单                       | `create-form` 工具                                  | 正文里，回答之前输入框是锁住的   | 一次工具调用         |
 | 一眼就该看到的状态（目标、时间、行囊）       | 状态摘要 `session.summary@1`                        | 面板页签下方，或场景图上的状态条 | 十几行代码           |
@@ -340,6 +341,41 @@ pnpm test:runtime -- tavern-rumors --pretty
 
 > [!NOTE]
 > 每个回合里只读的内容块（提示、状态变化这一类）在默认的界面布局下会合并成一行“本回合更新 · N 项”，点开才展开。表单、选项和警告不会被折叠。
+
+### 给故事段落换一种画法
+
+内容块挂在回合下面；想改的是故事正文本身，例如给对白加名牌，就用段落模板。新建 `ui/nameplate.json`：
+
+```json
+{
+  "id": "tavern-rumors-nameplate",
+  "match": { "kind": "dialogue" },
+  "view": {
+    "component": "Stack",
+    "children": [
+      {
+        "component": "Badge",
+        "props": { "label": { "$state": "/segment/speaker" } }
+      },
+      {
+        "component": "Text",
+        "props": { "content": { "$state": "/segment/text" } }
+      }
+    ]
+  }
+}
+```
+
+在 `PLUGIN.md` 里登记：
+
+```yaml
+contributes:
+  ui:
+    segment:
+      - ./ui/nameplate.json
+```
+
+`match` 是必填的：`kind` 按段落类型匹配，`speaker` 按角色 ID 或名字匹配。模板只负责显示，不能有按钮和数据来源；没命中模板的段落和以前一样。可读的状态和选择规则见[段落模板](../reference/ui-panels.md#段落模板)。
 
 ## 5. 给玩家选项
 

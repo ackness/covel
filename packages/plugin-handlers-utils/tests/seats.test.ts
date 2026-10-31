@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
+  actingCharacterOf,
   currentCharacterOf,
   primarySeat,
   seatCharacterIds,
   type Seat,
+  type TurnAction,
 } from "../src/index.js";
 
 const characters = [
@@ -108,5 +110,61 @@ describe("primarySeat", () => {
     expect(primarySeat([host, empty, player])).toBe(player);
     expect(primarySeat([host, empty])).toBeUndefined();
     expect(primarySeat([])).toBeUndefined();
+  });
+});
+
+describe("actingCharacterOf", () => {
+  const action = (
+    actorId: string,
+    source: TurnAction["source"] = "player",
+  ): TurnAction => ({ seatId: "main", kind: "act", source, actorId });
+
+  it("returns the first existing actor named by a player action", () => {
+    expect(
+      actingCharacterOf(
+        [
+          action("gone"),
+          action("guide", "system"),
+          action("lin"),
+          action("kai"),
+        ],
+        characters,
+        [auto()],
+      ),
+    ).toBe(characters[2]);
+    expect(actingCharacterOf([action("guide")], characters, [])).toBe(
+      characters[1],
+    );
+  });
+
+  it("ignores missing actors and system actions and falls back to the primary seat", () => {
+    const seats = [auto({ currentCharacterId: "kai" })];
+    expect(
+      actingCharacterOf(
+        [action("gone"), action("lin", "system")],
+        characters,
+        seats,
+      ),
+    ).toBe(characters[3]);
+    expect(actingCharacterOf([], characters, seats)).toBe(characters[3]);
+  });
+
+  it("returns nothing without a seat or a bound character", () => {
+    expect(actingCharacterOf([], characters, [])).toBeUndefined();
+    expect(
+      actingCharacterOf([], characters, [auto({ characters: [] })]),
+    ).toBeUndefined();
+    expect(actingCharacterOf([], [], [auto()])).toBeUndefined();
+  });
+
+  it("follows changes to the current character", () => {
+    expect(
+      actingCharacterOf([], characters, [auto({ currentCharacterId: "lin" })])
+        ?.id,
+    ).toBe("lin");
+    expect(
+      actingCharacterOf([], characters, [auto({ currentCharacterId: "kai" })])
+        ?.id,
+    ).toBe("kai");
   });
 });

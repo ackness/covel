@@ -1,4 +1,5 @@
 import { compareText } from "@covel/shared";
+import { toolParametersJsonSchema } from "@covel/tools";
 import { AsyncLocalStorage } from "node:async_hooks";
 import type {
   PluginServiceClient,
@@ -31,10 +32,65 @@ class ServiceOutputValidationError extends Error {
   }
 }
 
+/** The provider's input parser rejected the call's input. */
+export class ServiceInputValidationError extends Error {
+  /** `path: message` of each problem the parser reported, when it says. */
+  readonly details: readonly string[];
+  constructor(cause: unknown) {
+    super("Plugin service input failed validation", { cause });
+    this.name = "ServiceInputValidationError";
+    const issues =
+      cause && typeof cause === "object" && "issues" in cause
+        ? (cause as { issues?: unknown }).issues
+        : undefined;
+    this.details = Array.isArray(issues)
+      ? issues.flatMap((issue: unknown) => {
+          if (!issue || typeof issue !== "object") return [];
+          const { path, message } = issue as {
+            path?: unknown;
+            message?: unknown;
+          };
+          if (typeof message !== "string") return [];
+          const at = Array.isArray(path) && path.length ? path.join(".") : "";
+          return [at ? `${at}: ${message}` : message];
+        })
+      : [];
+  }
+}
+
 interface Entry extends PluginServiceDescriptor {
   readonly extension?: ExtensionDeclaration;
+  /** Set for a model-facing service: the schema its imported tool shows. */
+  readonly modelFacing?: {
+    readonly jsonSchema: Readonly<Record<string, unknown>>;
+    readonly input: { parse(value: unknown): unknown };
+  };
   invoke(input: unknown, context: PluginServiceContext): Promise<unknown>;
 }
+
+/** How an agent's import of a contract resolves for one run. */
+export type ServiceImportResolution =
+  | {
+      readonly status: "ready";
+      readonly pluginId: string;
+      readonly name: string;
+      readonly contract: string;
+      readonly description: string;
+      readonly jsonSchema: Readonly<Record<string, unknown>>;
+      /** The provider's own parser; the imported tool checks arguments with it. */
+      readonly input: { parse(value: unknown): unknown };
+    }
+  /** No active provider offers the contract. */
+  | { readonly status: "missing" }
+  /** Providers exist, but none offers the contract to models. */
+  | {
+      readonly status: "not-model-facing";
+      readonly providers: readonly string[];
+    }
+  /** More than one provider offers it to models; none is chosen. */
+  | { readonly status: "ambiguous"; readonly providers: readonly string[] }
+  /** The one provider is paused after repeated errors. */
+  | { readonly status: "paused"; readonly pluginId: string };
 
 type ExtensionContextFields = Pick<
   PluginExtensionContext,
@@ -56,6 +112,8 @@ interface Caller {
   readonly pluginId: string;
   readonly turnId?: string;
   readonly runtimeId?: string;
+  /** The tool call that made this call; nested calls inherit it. */
+  readonly toolCallId?: string;
   readonly signal: AbortSignal;
   readonly gateway?: PluginServiceContext["gateway"];
   readonly utils?: PluginServiceContext["utils"];
@@ -79,6 +137,8 @@ export interface PluginServiceCallEvent {
   readonly diagnosticScope?: string;
   readonly turnId?: string;
   readonly runtimeId?: string;
+  /** The tool call that made the call, for calls made from a tool. */
+  readonly toolCallId?: string;
   readonly callId: string;
   readonly parentCallId?: string;
   readonly callerPluginId: string;
@@ -93,13 +153,14 @@ export interface PluginServiceCallEvent {
     | "cycle-or-depth-limit"
     | "admission-error"
     | "unavailable"
+    | "input-validation"
     | "invocation-error"
     | "output-validation"
     | "timeout"
     | "cancelled";
 }
 
-type ServiceFailure = Pick<
+export type ServiceFailure = Pick<
   PluginServiceCallEvent,
   "callerPluginId" | "providerPluginId"
 > & { readonly errorCode: NonNullable<PluginServiceCallEvent["errorCode"]> };
@@ -115,7 +176,14 @@ export function serviceFailureOf(error: unknown): ServiceFailure | undefined {
     : undefined;
 }
 
-function withServiceFailure(error: unknown, failure: ServiceFailure): unknown {
+/**
+ * Kernel only: attach service provenance to an error, so a caller's failure
+ * caused by a provider is attributed to the provider. The first tag wins.
+ */
+export function tagServiceFailure(
+  error: unknown,
+  failure: ServiceFailure,
+): unknown {
   // Box primitive throws so they can carry the same provenance as Error throws.
   const tagged =
     typeof error === "object" && error !== null
@@ -246,6 +314,62 @@ function lendGateway(
   };
 }
 
+/**
+ * The JSON Schema a model-facing service's imported tool shows. Checked at
+ * registration, so a bad declaration fails the entry, not a later turn.
+ */
+function modelFacingSchema(
+  definition: Pick<
+    PluginServiceDefinition<unknown, unknown>,
+    "name" | "description" | "inputSchema" | "input"
+  >,
+): Readonly<Record<string, unknown>> {
+  const service = `Model-facing service "${definition.name}"`;
+  if (
+    typeof definition.description !== "string" ||
+    !definition.description.trim()
+  )
+    throw new Error(`${service} requires a description`);
+  let schema: unknown;
+  if (definition.inputSchema !== undefined) {
+    schema = definition.inputSchema;
+  } else {
+    const input = definition.input as {
+      toJSONSchema?: (params: { io: "input" }) => Record<string, unknown>;
+    };
+    if (typeof input.toJSONSchema !== "function")
+      throw new Error(
+        `${service} requires a Zod input or an explicit inputSchema`,
+      );
+    try {
+      schema = toolParametersJsonSchema(
+        input as Parameters<typeof toolParametersJsonSchema>[0],
+      );
+    } catch (cause) {
+      throw new Error(
+        `${service}: its input cannot be represented as JSON Schema: ${cause instanceof Error ? cause.message : String(cause)}`,
+        { cause },
+      );
+    }
+  }
+  if (
+    !schema ||
+    typeof schema !== "object" ||
+    Array.isArray(schema) ||
+    (schema as { type?: unknown }).type !== "object"
+  )
+    throw new Error(`${service}: its input schema root must be type "object"`);
+  let copy: Record<string, unknown>;
+  try {
+    copy = structuredClone(schema as Record<string, unknown>);
+  } catch (cause) {
+    throw new Error(`${service}: its input schema must be plain JSON`, {
+      cause,
+    });
+  }
+  return Object.freeze(copy);
+}
+
 /** Scoped to one host instance; activation owns registration disposal. */
 export class PluginServiceRegistry {
   private readonly entries = new Map<string, Entry>();
@@ -278,6 +402,12 @@ export class PluginServiceRegistry {
       /** Only active, approved plugins; may activate deferred entries. */
       list(sessionId: string): Promise<readonly string[]>;
       ensure(sessionId: string, pluginId: string): Promise<void | string>;
+      /**
+       * Active plugins paused after repeated errors: inside an execution the
+       * set it started with. Imports count them so that a paused provider is
+       * never silently replaced; without it paused providers are unknown.
+       */
+      paused?(sessionId: string): Promise<readonly string[]>;
       /** Host-owned observer; failures must never affect service execution. */
       onCallCompleted?(event: PluginServiceCallEvent): void | Promise<void>;
     },
@@ -400,11 +530,17 @@ export class PluginServiceRegistry {
       !isParser(definition.output) ||
       typeof definition.handler !== "function" ||
       (definition.description !== undefined &&
-        typeof definition.description !== "string")
+        typeof definition.description !== "string") ||
+      (definition.modelFacing !== undefined &&
+        typeof definition.modelFacing !== "boolean")
     )
       throw new TypeError(
         "Service requires input/output parsers, a handler, and an optional string description",
       );
+    const modelFacing =
+      definition.modelFacing === true && !extension
+        ? modelFacingSchema(definition)
+        : undefined;
     const key = `${pluginId}/${definition.name}`;
     if (this.entries.has(key))
       throw new Error(`Duplicate plugin service: ${key}`);
@@ -414,13 +550,21 @@ export class PluginServiceRegistry {
       contract: definition.contract,
       description: definition.description,
       extension,
+      ...(modelFacing
+        ? { modelFacing: { jsonSchema: modelFacing, input: definition.input } }
+        : {}),
       invoke: async (input, context) => {
         // The extension host validates kernel inputs before composition/caching.
         // Each provider still owns its input, including unknown schema fields.
         const detached = structuredClone(input);
-        const parsed = extension
-          ? (detached as I)
-          : definition.input.parse(detached);
+        let parsed: I;
+        try {
+          parsed = extension
+            ? (detached as I)
+            : definition.input.parse(detached);
+        } catch (cause) {
+          throw new ServiceInputValidationError(cause);
+        }
         context.signal.throwIfAborted();
         const result = await definition.handler(parsed, context);
         context.signal.throwIfAborted();
@@ -434,6 +578,58 @@ export class PluginServiceRegistry {
     this.entries.set(key, entry);
     return () => {
       if (this.entries.get(key) === entry) this.entries.delete(key);
+    };
+  }
+
+  /**
+   * Kernel only: the one provider an agent's import of `contract` binds to
+   * for a run. Candidates are model-facing entries whose plugin is active and
+   * approved, or paused: a paused provider still counts, so the import is
+   * never silently bound to another one.
+   */
+  async resolveImport(
+    caller: { readonly sessionId: string; readonly pluginId: string },
+    contract: string,
+  ): Promise<ServiceImportResolution> {
+    await this.admission.ensure(caller.sessionId, caller.pluginId);
+    const admitted = new Set(await this.admission.list(caller.sessionId));
+    const paused = new Set(
+      (await this.admission.paused?.(caller.sessionId)) ?? [],
+    );
+    const entries = [...this.readEntries().values()]
+      .filter(
+        (entry) =>
+          !entry.extension &&
+          entry.contract === contract &&
+          (admitted.has(entry.pluginId) || paused.has(entry.pluginId)),
+      )
+      .sort((a, b) =>
+        compareText(`${a.pluginId}/${a.name}`, `${b.pluginId}/${b.name}`),
+      );
+    const candidates = entries.filter((entry) => entry.modelFacing);
+    const [only] = candidates;
+    if (!only)
+      return entries.length
+        ? {
+            status: "not-model-facing",
+            providers: [...new Set(entries.map((entry) => entry.pluginId))],
+          }
+        : { status: "missing" };
+    if (candidates.length > 1)
+      return {
+        status: "ambiguous",
+        providers: [...new Set(candidates.map((entry) => entry.pluginId))],
+      };
+    if (!admitted.has(only.pluginId))
+      return { status: "paused", pluginId: only.pluginId };
+    return {
+      status: "ready",
+      pluginId: only.pluginId,
+      name: only.name,
+      contract: only.contract,
+      description: only.description ?? "",
+      jsonSchema: only.modelFacing!.jsonSchema,
+      input: only.modelFacing!.input,
     };
   }
 
@@ -647,7 +843,9 @@ export class PluginServiceRegistry {
           if (state.cancellation) errorCode = state.cancellation;
           else if (error instanceof ServiceOutputValidationError)
             errorCode = "output-validation";
-          throw withServiceFailure(error, {
+          else if (error instanceof ServiceInputValidationError)
+            errorCode = "input-validation";
+          throw tagServiceFailure(error, {
             callerPluginId: caller.pluginId,
             providerPluginId: target.providerPluginId,
             errorCode,
@@ -661,6 +859,9 @@ export class PluginServiceRegistry {
             ...(caller.turnId !== undefined ? { turnId: caller.turnId } : {}),
             ...(caller.runtimeId !== undefined
               ? { runtimeId: caller.runtimeId }
+              : {}),
+            ...(caller.toolCallId !== undefined
+              ? { toolCallId: caller.toolCallId }
               : {}),
             callId: state.callId,
             ...(parentState ? { parentCallId: parentState.callId } : {}),

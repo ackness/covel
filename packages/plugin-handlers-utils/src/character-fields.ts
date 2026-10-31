@@ -1,7 +1,7 @@
 /**
  * CharacterAttributeSchema → Zod converter.
  *
- * Phase 2 lets the LLM see named character `fields` directly in the tool
+ * The converter lets the LLM see named character `fields` directly in the tool
  * parameter schema instead of the generic `Record<string, unknown>`. The
  * conversion is performed on the server at turn start (once per session,
  * cached) so the LLM receives a JSON schema that precisely describes the
@@ -109,8 +109,8 @@ function attributeToZod(attr: AttributeDefinition): ZodType {
 /**
  * Build a compact human-readable description per attribute. The JSON schema
  * already carries type/range/enum structure; repeating each world's full
- * prose description in both create-character and update-character made those
- * two tool definitions exceed small model windows before any history was
+ * prose description in both creates and updates made the
+ * tool definition exceed small model windows before any history was
  * added. Keep the localized label, category, and terse structural hints only.
  */
 function attrDescribe(attr: AttributeDefinition): string {

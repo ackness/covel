@@ -205,6 +205,14 @@ export interface PluginToolContext {
   readonly emittedEventTopics?: readonly string[];
   /** Dice and other game rolls. */
   readonly random: import("./function-runtime.js").PluginRandom;
+  /**
+   * Services of other plugins, with the same rules as a function runtime's
+   * `ctx.services`: only active, approved providers answer, a call inherits
+   * the tool's deadline and cancellation, and a failure rejects with the
+   * service error. Calls still running when the tool returns are cancelled.
+   * Absent in hosts without a service registry.
+   */
+  readonly services?: PluginServiceClient;
 }
 export type PluginInputSlot =
   | {
@@ -535,7 +543,20 @@ export interface PluginServiceGateway {
 export interface PluginServiceDefinition<Input, Output> {
   readonly name: string;
   readonly contract: string;
+  /** Required for a model-facing service: the imported tool's description. */
   readonly description?: string;
+  /**
+   * `true` lets agents import the service as a tool. Declare it the same way
+   * in `contributes.services` (`{ contract, modelFacing: true }`). Needs a
+   * description and an input that exports JSON Schema: a Zod schema, or
+   * `inputSchema`.
+   */
+  readonly modelFacing?: boolean;
+  /**
+   * The JSON Schema (root `type: "object"`) the imported tool shows the
+   * model, for an input that is not a Zod schema. `input` still validates.
+   */
+  readonly inputSchema?: Readonly<Record<string, unknown>>;
   readonly input: { parse(value: unknown): Input };
   readonly output: { parse(value: unknown): Output };
   readonly handler: (

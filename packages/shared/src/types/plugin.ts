@@ -308,6 +308,15 @@ export interface ToolsConfig {
    * dominate the prompt budget.
    */
   readonly defer?: true | readonly string[];
+  /**
+   * Services an agent imports as read-only tools, each with its resolved
+   * tool name. At run start the kernel binds each to the one active provider
+   * that offers the contract to models; without one the tool is left out.
+   */
+  readonly services?: readonly {
+    readonly contract: string;
+    readonly name: string;
+  }[];
 }
 
 // ── User-declared plugin settings ────────────────────────────────
@@ -367,8 +376,9 @@ export type { HookEventName, HookEnforce, HookDeclaration } from "./hooks.js";
  * - `right`: Right sidebar panel tabs (status panels, dashboards)
  * - `message`: Inline blocks in the chat message area
  * - `view`: Full-column pages replacing the story column
+ * - `segment`: Display-only templates for committed story paragraphs
  */
-export type UISlotType = "right" | "message" | "view";
+export type UISlotType = "right" | "message" | "view" | "segment";
 
 /**
  * UI contribution spec — declares which JSON files a plugin contributes
@@ -384,6 +394,8 @@ export interface UISpec {
   readonly message?: readonly string[];
   /** Full-column view specs. */
   readonly view?: readonly string[];
+  /** Story paragraph template specs, each with a `match`. */
+  readonly segment?: readonly string[];
 }
 
 // ── Slash commands ──────────────────────────────────────────────

@@ -1,4 +1,5 @@
 import { planPluginAssetRoot } from "./ui-assets.js";
+import { PLUGIN_UI_SLOTS } from "./ui-spec.js";
 import {
   FRAMEWORK_TOOL_NAMES,
   isKernelExtensionContract,
@@ -254,7 +255,7 @@ export function validatePluginFiles(
   }
   // The same rules decide whether the game shows the panel (`loadPluginUiSpecs`).
   const viewIds = new Set<string>();
-  for (const slot of ["right", "message", "view"] as const)
+  for (const slot of PLUGIN_UI_SLOTS)
     for (const reference of plugin.contributes?.ui?.[slot] ?? []) {
       const source = packageManifest.sourcePath;
       const field = `contributes.ui.${slot}`;
@@ -352,6 +353,12 @@ export function validatePluginFiles(
       if (!plugin.contributes?.tools?.includes(tool))
         throw new Error(
           `${parsed.sourcePath}: tools.plugin: ${tool} is not declared in contributes.tools`,
+        );
+    }
+    for (const [i, entry] of (runtime.tools?.services ?? []).entries()) {
+      if (plugin.contributes?.tools?.includes(entry.name))
+        throw new Error(
+          `${parsed.sourcePath}: agent.tools.services.${i}: the imported tool "${entry.name}" has the name of a tool in contributes.tools; name it with as`,
         );
     }
     for (const [field, refs] of [

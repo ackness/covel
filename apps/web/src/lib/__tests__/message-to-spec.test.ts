@@ -1,6 +1,10 @@
 // @vitest-environment node
 import { describe, expect, it } from "vitest";
-import { messageToSpec } from "../message-to-spec.js";
+import {
+  formFieldsToSpec,
+  messageToSpec,
+  type FormFieldDefinition,
+} from "../message-to-spec.js";
 import type { StreamMessage } from "@/stores/session-store.js";
 
 type Spec = {
@@ -148,5 +152,58 @@ describe("choice block", () => {
         },
       ],
     });
+  });
+});
+
+describe("formFieldsToSpec", () => {
+  const fields: FormFieldDefinition[] = [
+    {
+      type: "select",
+      name: "mood",
+      label: "Mood",
+      required: true,
+      placeholder: "Pick one",
+      options: ["calm", "angry"],
+    },
+    { type: "number", name: "dice", min: 1, max: 6, step: 1, defaultValue: 3 },
+  ];
+
+  it("gives a form the same field elements it always had", () => {
+    const spec = messageToSpec({
+      id: "m1",
+      role: "assistant",
+      content: "",
+      block: { type: "interactive_form", title: "T", fields },
+    } as unknown as StreamMessage) as Spec;
+    const children = spec.children?.filter((c) => c.type === "FormField");
+    expect(children).toEqual(formFieldsToSpec(fields));
+    expect(children?.[0]).toEqual({
+      type: "FormField",
+      props: {
+        fieldType: "select",
+        label: "Mood",
+        placeholder: "Pick one",
+        required: true,
+        options: [
+          { value: "calm", label: "calm" },
+          { value: "angry", label: "angry" },
+        ],
+        defaultValue: undefined,
+        min: undefined,
+        max: undefined,
+        step: undefined,
+        error: undefined,
+        value: { $bindState: "/form/mood" },
+      },
+    });
+  });
+
+  it("puts a refusal under its field", () => {
+    const [first, second] = formFieldsToSpec(
+      fields,
+      new Map([["dice", ["Too high.", "Try again."]]]),
+    );
+    expect(first?.props).toMatchObject({ error: undefined });
+    expect(second?.props).toMatchObject({ error: "Too high. Try again." });
   });
 });

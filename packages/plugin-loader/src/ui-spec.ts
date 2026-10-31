@@ -5,6 +5,7 @@ import {
   pluginAssetUrl,
   pluginUiSpecIssues,
   type PluginUiSpecIssue,
+  type PluginUiSpecSlot,
 } from "@covel/shared";
 import fs from "node:fs/promises";
 import path from "node:path";
@@ -106,7 +107,15 @@ export async function loadPluginUiSpec(
   return spec;
 }
 
-export type PluginUiSlot = "right" | "message" | "view";
+export type PluginUiSlot = PluginUiSpecSlot;
+
+/** Every `contributes.ui` key, in the order specs are loaded. */
+export const PLUGIN_UI_SLOTS = [
+  "right",
+  "message",
+  "view",
+  "segment",
+] as const satisfies readonly PluginUiSlot[];
 
 /** One declared UI spec the host does not show. */
 export interface PluginUiSpecDiagnostic {
@@ -145,7 +154,7 @@ export async function loadPluginUiSpecs(
   const diagnostics: PluginUiSpecDiagnostic[] = [];
   const assets: PluginAssetRoot[] = [];
   const viewIds = new Set<string>();
-  for (const slot of ["right", "message", "view"] as const)
+  for (const slot of PLUGIN_UI_SLOTS)
     for (const [specIndex, declaredPath] of (ui?.[slot] ?? []).entries()) {
       try {
         if (!declaredPath.endsWith(".json"))

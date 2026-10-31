@@ -53,6 +53,11 @@ export {
   turnActionRequestsSchema,
   turnActionSchema,
 } from "./schemas/action.js";
+export {
+  COMPOSER_TEXTAREA_MIN_LENGTH,
+  composerFieldsOf,
+} from "./action-kind-fields.js";
+export type { ComposerField } from "./action-kind-fields.js";
 export type {
   ActionKindDescriptor,
   ActionKindRule,
@@ -370,6 +375,8 @@ export {
 } from "./schemas/plugin.js";
 export {
   isRuntimeDisablingIssue,
+  SERVICE_IMPORT_NAME_PATTERN,
+  serviceImportName,
   type RuntimeRuleIssue,
 } from "./schemas/runtime-rules.js";
 export {
@@ -377,8 +384,11 @@ export {
   MAX_UI_WEBVIEW_BYTES,
   pluginUiSpecIssues,
   pluginUiSpecSchema,
+  segmentTemplateMatchSchema,
   uiMapDirectiveSchema,
   type PluginUiSpecIssue,
+  type PluginUiSpecSlot,
+  type SegmentTemplateMatch,
 } from "./schemas/ui-spec.js";
 export {
   PLUGIN_VIEW_ID_PATTERN,
@@ -622,8 +632,12 @@ export {
 
 export {
   authoringSourceKind,
+  isModelFacingServiceContribution,
   pluginIdSchema,
   pluginManifestSchema,
+  serviceContributionContract,
+  serviceContributionSchema,
+  type ServiceContribution,
 } from "./schemas/plugin-manifest.js";
 export { FRAMEWORK_PLUGIN_ID } from "./framework-plugin-id.js";
 export {

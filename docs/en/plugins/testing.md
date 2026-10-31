@@ -165,6 +165,7 @@ it("rejects an empty id", async () => {
 - When a write is not valid (for example, a write into a namespace that starts with `_`), the save fails, and all writes from the whole execution are undone.
 - To test several writes in the same execution, call the tool separately for each one first, and then save them together once with `commitToolResults([first, second], ctx, store)`.
 - It does not include the server interfaces, authorization, or the event catalog. The server tests and the real model checks cover those boundaries.
+- When a tool calls another plugin's service, build a real service registry with `makeTestServiceRegistry({ activePluginIds, services })` and pass it as `services` in the context given to `executeToolAndCommit`; the tool then has `context.services`. `services` lists the services to register by the providing plugin's ID; `pausedPluginIds` simulates providers paused after faults.
 
 ### Test a function
 
@@ -215,6 +216,7 @@ The exports of `@covel/plugin-test-utils`:
 | `makeManualFunctionContext`                                            | Builds the `ctx` for a function                                                                                     |
 | `makeRandom(seed?)`                                                    | The `ctx.random` for tests. Tests that write their own `ctx` put it in themselves                                   |
 | `makeScriptedAgents(results)` | A `ctx.agents` for tests: answers `ctx.agents.run` from a script and records each request |
+| `makeTestServiceRegistry(options)` | A service registry for tests, in which every listed plugin is active and approved; gives a tool `context.services` |
 | `loadPluginMessages(pluginRoot, locale)`                               | Reads the translations in the plugin's `locales/` and gets `ctx.messages`. Use it when you assert on Chinese output |
 | `createPluginTestStore` / `executeToolAndCommit` / `commitToolResults` | Makes a tool go through the real execution and save flow                                                            |
 | `MockLLM`                                                              | A fake model. It records each call. It supports one default reply and a list of replies used in order               |

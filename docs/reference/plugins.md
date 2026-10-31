@@ -126,7 +126,7 @@ Extract facts supported by runtime-inputs.narrative.value, then call save-facts.
 | `tools` | `registerTool` 的工具名 |
 | `actions` | `registerRpc` 的非空 action 名；`covel:`、`runtime:`、`event:` 前缀保留给框架审批，声明、注册和 action 请求均拒绝这些前缀。 |
 | `commands` | 玩家命令元数据；`action` 必须列入 `actions` |
-| `services` | `registerService` 的契约 ID |
+| `services` | `registerService` 的契约 ID。给模型用的服务写成 `{contract, modelFacing: true}`，见[给模型用的服务](./plugin-extensions.md#给模型用的服务) |
 | `extensions` | `provideExtension` 提供的扩展，写成 `<point>/<id>`，例如 `prompt.segment@1/notes`。要写 `order`、`slot` 这些选项时写成 `{point, id, …}` |
 | `hooks` | 监听的 hook 事件，写事件名，例如 `PreToolUse`。要写 `enforce` 时写成 `{event, enforce}`，见 [Hooks](./hooks.md) |
 | `forms` | `registerFormValidator` 的表单 ID |
@@ -135,8 +135,9 @@ Extract facts supported by runtime-inputs.narrative.value, then call save-facts.
 | `data` | 本插件数据 namespace 的 schema、version、accepts、search |
 | `datasets` | 本插件拥有的带类型数据集：名字即 namespace，写 schema、key、ops，见[数据集](#数据集contributesdatasets) |
 | `actionKinds` | 玩家能提交的行动类型：名字、可用身份、文字规则、`fields` 的 schema、显示名称，见[行动类型](#行动类型contributesactionkinds) |
-| `ui` | 包根相对的 `right/message/view` UI spec 路径 |
+| `ui` | 包根相对的 `right/message/view/segment` UI spec 路径 |
 | `ui.view` | 包根相对的完整故事栏视图 spec 路径；声明与授权见[插件视图](./ui-panels.md#插件视图) |
+| `ui.segment` | 包根相对的段落模板 spec 路径：按段落类型或说话人匹配，只用于显示已提交的故事段落，见[段落模板](./ui-panels.md#段落模板) |
 | `worldProjections` | 世界数据投影声明 |
 | `prompt` | 静态提示词段 |
 
@@ -254,6 +255,7 @@ permissions:
 - 包里只有一个内联 runtime（runtime ID 等于插件 ID）时，没有写 `agent.tools.plugin` 的 agent 自动获得 `contributes.tools` 的全部工具。写 `plugin: []` 表示一个也不给。
 - 给这样的包新增一个只想让界面动作使用的工具时，要同时给 agent 写明白名单，否则模型也能调用它。
 - 多 runtime 的包里，每个 runtime 都要自己声明工具。
+- `agent.tools.services` 把别的插件给模型用的服务导入成工具，写契约 ID，或者 `{contract, as}` 另起名字。导入的工具只读，没有提供方时不出现，runtime 照常运行。命名、参数和失败的回答见[导入的服务工具](./tools.md#导入的服务工具)。函数 runtime 不能写它，直接用 `ctx.services`。
 
 ### Agent 的 guard
 
@@ -326,7 +328,7 @@ runtime 的 `schedule.needs[].contract` 和 `io.inputs.*.from.contract` 引用�
 
 ### setup runtime 的注意事项
 
-开场角色模板须包含每个收集字段的占位符。模板和默认值错误属于可修正的 `invalid-input`，见[角色工具](./tools.md#create-character)。
+开场角色模板须包含每个收集字段的占位符。模板和默认值错误属于可修正的 `invalid-input`，见[角色工具](./tools.md#开场角色表单)。
 
 包级的 `requires` 保证契约的提供者被激活，但不要求提供者每次执行都重新产出。
 
@@ -417,7 +419,7 @@ agent:
 
 完成工具应在返回成功之前检查任务所需的覆盖条件。例如[世界事实提取](./tools.md#逐目标评估)要求逐项评估已提供的未完成目标；仅有合法 JSON 不证明提取完整。
 
-有几个完成工具，或者没有变化时要调用 `runtime-done`，就写完整的 `completion`。`finishWith` 和 `completion` 只能写一个。
+有几个完成工具，或者没有变化时要调用 `runtime-done`，就写完整的 `completion`。`finishWith` 和 `completion` 只能写一个。导入的服务工具不能做完成工具：runtime 不能靠另一个插件才能结束。
 
 - `completion.afterTools`：列出的工具成功后就结束。
 - 需要模型读完工具结果再修改时，使用 `completion.require: tool-use` 并省略 `afterTools`。例如角色创建会先返回填好的叙事，模型复核后才结束。
@@ -562,7 +564,7 @@ CLI 和安装器的静态校验对 `scope: turn` 和 `scope: committed` 的输�
 - 故事消息的元数据记下 `segments`、`cues`、`yield`，以及在场记录 `presentCharacterIds`：解析成功的说话人和 `cues.present` 里的角色。在场记录现在只保存，留给以后的按角色历史使用。
 - `/messages` 和 `/view` 的故事消息带 `segments`（见 [API](./api.md)）。角色 ID 不进入模型看到的文字。
 
-**流式显示。** 回复是分段 JSON 时，叙事流只转发各段的 `text`，段与段之间是空行，和提交后的正文一致；JSON 的键、`speaker` 和 `cues` 不会出现在流里。纯文本回复照常流式显示。
+**流式显示。** 回复是分段 JSON 时，叙事流只转发各段的 `text`，段与段之间是空行，和提交后的正文一致；JSON 的键、`speaker` 和 `cues` 不会出现在流的正文里。每段的类型和模型写的说话人放在 `narrative.delta` 的 `segment` 里，舞台据此在流式时显示名牌，提交后换成解析后的名字（见[协议](./protocol.md#叙事事件)）。纯文本回复照常流式显示，不带 `segment`。
 
 #### Function 的输出
 
@@ -600,17 +602,17 @@ Agent 的副作用只来自工具：模型能写什么，以 `agent.tools` 白�
 
 #### handler 上下文里的回合信息
 
-| 字段                          | 含义                                                                                                                                                                                                                                                         |
-| ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `ctx.playerMessage`           | 玩家这一回合的输入：内核从 `ctx.playerActions` 渲染出的文字。单人玩家的普通输入是原文；多个角色、主持人或插件类型会标出角色名和类型名，见 [API · 玩家消息怎么渲染](./api.md#玩家消息怎么渲染)                                                                |
-| `ctx.playerActions`           | 这一回合玩家解析后的行动，按提交顺序，每个是 `{ seatId, kind, actorId?, text?, fields?, interaction?, source }`。开场、手动运行、事件、后台作业和 `ctx.recursiveCall` 的嵌套运行是空数组                                                                     |
-| `ctx.logicalTurn`             | 调度器的逻辑回合：已提交的主循环玩家回合数加一。函数 handler 和插件工具的上下文里都有。setup、开场续写和第一条玩家消息同为第 1 回合，`startTurn` / `every` 也按它计数                                                                                        |
-| 工具上下文的 `turnNumber`     | 会话里已记录的玩家消息数，包括 setup 的表单提交                                                                                                                                                                                                              |
-| `ctx.session.lastPlayerInput` | 源执行开始时最近的一条 `PlayerInputSubmission \| null`，包含 `id/sessionId/turnId/formId/values/createdAt`                                                                                                                                                   |
-| `ctx.execution.origin`        | 这次执行因何而起：`player`、`continuation`、`manual`、`background`、`recursive` 或 `resume`                                                                                                                                                                  |
-| `ctx.execution.sourceTurnId`  | 重试一个已提交的回合时，是那个回合的 ID。用它做键，重试时复用上次的掷骰和揭示，不重新抽                                                                                                                                                                      |
-| `ctx.recursionDepth`          | 顶层执行是 `0`，`ctx.recursiveCall` 每嵌套一层加一                                                                                                                                                                                                           |
-| `ctx.world.seats`             | 会话的[座位](./world-model.md#座位)，只读。玩家当前扮演的角色是 SDK 的 `currentCharacterOf(primarySeat(seats), ctx.world.characters, seats)`；`seatCharacterIds` 给出一个座位绑定的角色。guard、工具（`context.world`）和扩展提供者（`ctx.world`）读到同一份 |
+| 字段                          | 含义                                                                                                                                                                                                                                                                             |
+| ----------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ctx.playerMessage`           | 玩家这一回合的输入：内核从 `ctx.playerActions` 渲染出的文字。单人玩家的普通输入是原文；多个角色、主持人或插件类型会标出角色名和类型名，见 [API · 玩家消息怎么渲染](./api.md#玩家消息怎么渲染)                                                                                    |
+| `ctx.playerActions`           | 这一回合玩家解析后的行动，按提交顺序，每个是 `{ seatId, kind, actorId?, text?, fields?, interaction?, source }`。开场、手动运行、事件、后台作业和 `ctx.recursiveCall` 的嵌套运行是空数组                                                                                         |
+| `ctx.logicalTurn`             | 调度器的逻辑回合：已提交的主循环玩家回合数加一。函数 handler 和插件工具的上下文里都有。setup、开场续写和第一条玩家消息同为第 1 回合，`startTurn` / `every` 也按它计数                                                                                                            |
+| 工具上下文的 `turnNumber`     | 会话里已记录的玩家消息数，包括 setup 的表单提交                                                                                                                                                                                                                                  |
+| `ctx.session.lastPlayerInput` | 源执行开始时最近的一条 `PlayerInputSubmission \| null`，包含 `id/sessionId/turnId/formId/values/createdAt`                                                                                                                                                                       |
+| `ctx.execution.origin`        | 这次执行因何而起：`player`、`continuation`、`manual`、`background`、`recursive` 或 `resume`                                                                                                                                                                                      |
+| `ctx.execution.sourceTurnId`  | 重试一个已提交的回合时，是那个回合的 ID。用它做键，重试时复用上次的掷骰和揭示，不重新抽                                                                                                                                                                                          |
+| `ctx.recursionDepth`          | 顶层执行是 `0`，`ctx.recursiveCall` 每嵌套一层加一                                                                                                                                                                                                                               |
+| `ctx.world.seats`             | 会话的[座位](./world-model.md#座位)，只读。SDK 的 `actingCharacterOf(ctx.playerActions, ctx.world.characters, seats)` 优先读取行动的角色，否则取主座位的当前角色；`seatCharacterIds` 给出一个座位绑定的角色。guard、工具（`context.world`）和扩展提供者（`ctx.world`）读到同一份 |
 
 `ctx.session.lastPlayerInput` 可能来自更早的回合。有这条记录不等于本回合提交了表单。
 
@@ -623,6 +625,7 @@ Agent 的副作用只来自工具：模型能写什么，以 `agent.tools` 白�
 - 父 handler 成功时，子调用的写入和父写入一起提交，排在父结果之前。
 - 父 handler 失败时（抛错、超时、返回 `failed` 或 `skipped`），子调用的写入一起丢弃。PostRuntime Hook 改写了父结果的状态（例如把失败改成成功）时也丢弃，和父 handler 自己的写入一样。多层嵌套逐层适用：任何一层父 handler 失败，它下面所有层的写入都丢弃。
 - 父 handler 挂起等待输入时，子调用的结果连同写入随挂起项保存。恢复后的 handler 成功时，它们和父写入一起提交，排在父结果之前，提交顺序和不挂起时相同；恢复失败、PostRuntime Hook 改了状态，或挂起项被放弃、过期、作废时，它们和父写入一起丢弃。自己也挂起了的子调用不保存，trace 里记一条 `code` 为 `nested-suspension-dropped` 的 `recursive.failed`。
+- 子调用用 `ctx.progress` 上报的进度作业，和父调用在同一个进度范围里，随父执行的提交一起收尾，同一个 runtime 的多次调用（例如父调用多次触发同一个子调用）共用这个范围；作业在完整身份键（`pluginId`、`runtimeId` 等）内按 `jobId` 和序号去重，所以父子或兄弟 runtime 的作业不会互相冲突；同一个 runtime 的多次调用共用一个身份键，要用不同的 `jobId`。子调用保留自己的执行身份，只是在根执行的进度范围里上报。父 handler 成功时，它们按各自的结果结束；父 handler 失败时，以 `cancelled` 结束；父 handler 挂起时，它们和父调用的作业一起停在 `waiting-input`，恢复成功后以保存时的结果结束，挂起项被放弃、过期、作废时以 `cancelled` 结束。
 - agent 的 guard 里发起的子调用，只在 guard 返回 `{ skip: true }`、结果仍是跳过时提交；guard 放行、agent 照常运行时丢弃。
 
 提交时，顶层 runtime 和它下面所有层的嵌套调用是一个整体，要么全部提交，要么全部丢弃：
@@ -666,7 +669,7 @@ const result = await ctx.agents?.run({
 运行时的规则：
 
 - **独立的对话**：子 agent 的提示词是提供方自己的正文，加上框架的完成说明，再加简报。看不到会话历史，也看不到调用方的对话。
-- **只读工具**：提供方 `agent.tools` 里没有 `readOnly` 注解的工具（插件工具、`plugin-data-set` 这类写入工具）、`suspend` 和 `delegate` 都被拿掉。声明了却没注册的插件工具仍按原规则让这次运行失败。
+- **只读工具**：提供方 `agent.tools` 里没有 `readOnly` 注解的工具（插件工具、`plugin-data-set` 这类写入工具）、`suspend` 和 `delegate` 都被拿掉。声明了却没注册的插件工具仍按原规则让这次运行失败。导入的服务工具只读，保留。
 - **循环 profile**：没写 `agent.loop.profile` 时用 `actor`，不流式显示，也不读玩家插话。
 - **模型**：用提供方自己声明的模型用途。会话的 `runtimeModelOverrides` 按提供方的 runtimeId 生效，挂起后恢复的运行里也一样；调用方的覆盖和请求里的故事模型覆盖都不生效。
 - **上限**：一次执行最多同时运行 8 个子 agent，嵌套执行也算在内；子 agent 不能再调用子 agent（深度上限 1）。超过上限的调用立刻得到 `unavailable`，不排队。
@@ -1244,8 +1247,8 @@ pnpm lint
 | [narrator](../../plugins/narrator/README.md) | 叙事 | `core` | `narrative-engine@2`（默认提供者） | 内联 | 根据玩家的行动推进故事 |
 | [npc-graph](../../plugins/npc-graph/README.md) | 关系图谱 | `plugin` | `npc-graph@1`、`graph-rag@1` | `extractor`、`rag-retriever` | 记录人物之间的关系 |
 | [pregame](../../plugins/pregame/README.md) | 开局准备 | `core` | `session.opening@1` | 内联 | 开局时读取世界资料，准备第一段冒险 |
-| [scene-stage](../../plugins/scene-stage/README.md) | 场景舞台 | `plugin` | `stage-direction@1`、`scene-stage@1`、`scene-cast@1` | `seed`、`direction`、`resolver`、`cast` | 跟踪场景与昼夜，换地点先清理旧方向演员，再应用新指令 |
-| [soundtrack](../../plugins/soundtrack/README.md) | 配乐 | `plugin` | 无 | `scene`、`cue` | 播放世界自带的背景音乐，随场景和情绪切换 |
+| [scene-stage](../../plugins/scene-stage/README.md) | 场景舞台 | `plugin` | `stage-direction@1`、`scene-stage@1`、`scene-cast@1` | `seed`、`direction`、`resolver`、`cast`、`story-cues` | 可选读取故事的场景与在场角色提示，随故事提交舞台变化；事件仍可覆盖场景、昼夜和演员演出 |
+| [soundtrack](../../plugins/soundtrack/README.md) | 配乐 | `plugin` | 无 | `scene`、`cue`、`story-cues` | 可选读取故事的场景与情绪提示，播放世界自带的音乐；场景不依赖场景舞台，事件仍可覆盖 |
 | [story-events](../../plugins/story-events/README.md) | 隐藏事件 | `plugin` | `story-event-cue@1`、`story-event.plan@1` | `intake`、`evaluate`、`plot` | 条件满足前隐藏世界包声明的剧情，满足时交给叙事演出 |
 | [tabletop-rules](../../plugins/tabletop-rules/README.md) | 跑团规则 | `plugin` | `tabletop-check@1` | `creation`、`check` | 开局配点，并用程序结算属性检定 |
 | [world-init](../../plugins/world-init/README.md) | 世界维度 | `core` | `world-data-provider@1`、`world.dimensions@1` | `schema-gen`、`dimension-context`、`dimension-tracker`、`dimension-clock`、`edit-dimensions` | 初始化角色属性和世界维度，并持续维护 |
@@ -1330,8 +1333,9 @@ contributes:
 - **线上的类型名是 `<pluginId>/<name>`。** 上例在 `whisper-pack` 里就是 `whisper-pack/whisper`。两个插件可以用同一个 `name`，不会冲突。`name` 用小写 kebab-case，不能是基础类型的名字，在包里不能重复。
 - `roles` 不能为空。身份和基础类型的对应见[座位](./world-model.md#座位)。
 - `schema` 是包内的 JSON 文件，加载、`pnpm validate:plugin` 和安装都会读取它；缺文件、不是 JSON 对象、路径越出包根都会报错。没有 `schema` 的类型不接受 `fields`。
-- `display.label` 是输入框里的名称，也是渲染给模型看的类型名，按会话语言选。`fields` 以 JSON 跟在文字后面；没有文字的行动只写类型名和 `fields`，照样进入玩家消息和聊天记录。例如 `【阿雅·耳语】在这边。{"target":"守卫"}`、`【阿雅·让过】`。
+- `display.label` 是输入框里的名称，也是渲染给模型看的类型名，按会话语言选。输入框直接显示 `display`：`label` 是模式名，`icon` 是图标，`placeholder` 是输入框的占位符；不需要另外声明输入框模式，见[输入框模式](./ui-panels.md#输入框模式)。`fields` 以 JSON 跟在文字后面；没有文字的行动只写类型名和 `fields`，照样进入玩家消息和聊天记录。例如 `【阿雅·耳语】在这边。{"target":"守卫"}`、`【阿雅·让过】`。
 - 表单、选项和确认框可以用 `actionKind` 声明玩家的回答算哪种行动（基础类型或 `<pluginId>/<name>`），默认选项是 `say`，表单和确认框是 `act`。回答按这个类型校验座位身份，见 [API · 玩家交互](./api.md#玩家交互-1)。
+- 输入框只能显示 `schema` 的一个子集：根是 `type: object`，`properties` 是平的 `string`（可带 `enum`）、`number`、`integer` 或 `boolean`，`required` 只列出已有的属性。超出这个子集的 schema 不显示这种模式（交互仍可提交这种类型），`pnpm validate:plugin` 警告“fields schema of `<name>` cannot be shown in the composer”。服务端校验不受影响。
 - 只有这局可运行的插件声明的类型可用。服务端按目录校验每个行动，见 [`GET /api/sessions/:id/action-kinds`](./api.md#行动类型目录)。
 - 函数 runtime 从 `ctx.playerActions` 读到行动，`fields` 原样保留，见[handler 上下文里的回合信息](#handler-上下文里的回合信息)。
 

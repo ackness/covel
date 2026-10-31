@@ -15,8 +15,13 @@ import type { SuspensionRecord } from "@covel/store";
 import type { EmittedEvent } from "@covel/tools";
 import type { LLMMessage } from "@covel/shared";
 import { runAgentToolLoop } from "../agent-loop/turn-agent-tool-loop.js";
+import { buildResumedToolMessage } from "../agent-loop/turn-agent-tool-loop-messages.js";
 import { createSubagentRunner } from "../agent-loop/subagent-runner.js";
 import { withSubagentDelegate } from "../agent-loop/subagent-delegate.js";
+import {
+  prepareAgentToolSurface,
+  withAgentToolSurface,
+} from "../agent-loop/agent-tool-surface.js";
 import { freezeInputSlots } from "../agent-loop/runtime-input-slots.js";
 import { executeFunctionRuntime } from "../function-runtime/turn-function-runtime.js";
 import { createWorldModelView } from "../function-runtime/world-model-view.js";
@@ -28,6 +33,7 @@ import {
   resolveRuntimeTimeoutMs,
 } from "../turn-executor/runtime-scaffold.js";
 import { restoreNestedResults } from "./suspended-nested-results.js";
+import { suspensionProgressScopeId } from "./suspension-progress-scope.js";
 import { throwIfTurnExecutionAborted } from "../turn-executor/turn-control.js";
 import type { TurnExecutorDeps } from "../turn-executor/turn-executor-types.js";
 
@@ -178,7 +184,7 @@ async function executeResumedRuntime(
   // A resumed run reports progress under the suspended execution, so the
   // resume that ends the chain settles every leg's jobs once and an abandon
   // cancels them.
-  const progressScopeId = inherited.executionId;
+  const progressScopeId = suspensionProgressScopeId(pendingContinuation);
   if (manifest.runtimeType === "function") {
     // Function continuations are deterministic handler invocations, not LLM
     // conversations. Feed resume data through the explicit handler context and
@@ -245,11 +251,10 @@ async function executeResumedRuntime(
   let currentTurnUserMessages =
     pendingContinuation.currentTurnUserMessages ?? 1;
   if (pendingContinuation.suspendToolCallId) {
-    const resumedToolResult: LLMMessage = {
-      role: "tool",
-      content: JSON.stringify({ resumeData }),
-      toolCallId: pendingContinuation.suspendToolCallId,
-    };
+    const resumedToolResult = buildResumedToolMessage(
+      pendingContinuation.suspendToolCallId,
+      resumeData,
+    );
     // The placeholder is the last result under this ID: an endpoint that
     // repeats an ID across the steps of a loop must not get an earlier
     // step's result rewritten.
@@ -295,27 +300,33 @@ async function executeResumedRuntime(
   // in. The context is restored, not assembled again: the transcript already
   // holds this runtime's system prompt, and the saved prompt segments go to
   // `PreLLMCall` as before. The loop may suspend again.
-  // `delegate` runs a sub-agent; the wrapper answers it and forwards the rest.
+  // Imports resolve again for the resumed run; the surface wraps the raw
+  // executor, then `delegate` (which runs a sub-agent) wraps that.
+  const toolExecutor = deps.toolExecutor
+    ? withAgentToolSurface(
+        deps.toolExecutor,
+        await prepareAgentToolSurface({ manifest, input, deps }),
+        deps.services,
+      )
+    : undefined;
   const loopDeps =
-    deps.subagents && deps.toolExecutor
+    deps.subagents && toolExecutor
       ? {
           ...deps,
-          toolExecutor: withSubagentDelegate(
-            deps.toolExecutor,
-            deps.subagents,
-            {
-              caller: {
-                pluginId: manifest.pluginId,
-                runtimeId: manifest.name,
-                depth: 0,
-              },
-              input,
-              deps,
-              executionContext: resumeExecutionContext,
+          toolExecutor: withSubagentDelegate(toolExecutor, deps.subagents, {
+            caller: {
+              pluginId: manifest.pluginId,
+              runtimeId: manifest.name,
+              depth: 0,
             },
-          ),
+            input,
+            deps,
+            executionContext: resumeExecutionContext,
+          }),
         }
-      : deps;
+      : toolExecutor
+        ? { ...deps, toolExecutor }
+        : deps;
   const toolLoop = await runAgentToolLoop({
     worldBase,
     manifest,

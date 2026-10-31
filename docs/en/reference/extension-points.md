@@ -4,7 +4,7 @@ Some work is not done by the kernel itself. Instead, it is handed to plugins: ad
 
 This page explains how to declare and register a provider, how the kernel combines several providers, and the inputs and outputs of two extension points: session world context and history compression. Plugin authors who write providers need it.
 
-For requests or follow-up work between packages, choose a service or event from the [communication guide](./plugin-extensions.md#choose-a-way-to-communicate); [nested calls with `ctx.recursiveCall`](./plugins.md#nested-calls-ctxrecursivecall) stay within one package.
+For requests or follow-up work between packages, choose a service or event from the [communication guide](./plugin-extensions.md#choose-a-way-to-communicate); [nested calls with `ctx.recursiveCall`](./plugins.md#nested-calls-ctxrecursivecall) stay within one package. Function runtimes and tools call services, and an agent can import a model-facing service as a tool; see [How tools and agents use services](./plugin-extensions.md#how-tools-and-agents-use-services).
 
 To have another agent answer a brief, no extension point is needed: the provider is an agent runtime that declares `schedule.subagentOnly` and `io.output.contract`, and the caller runs it as a [sub-agent](./plugins.md#sub-agents) with `ctx.agents.run` or the `delegate` tool. A sub-agent runs inside the caller's execution, can be found by contract in another package, and returns output only, with no writes.
 
@@ -82,7 +82,7 @@ A provider's handler receives two arguments: the input the extension point defin
 
 - `ctx.pluginData` is read-only, and it can read only the provider's own data. It cannot read `_hidden.*` hidden world data, because the output of an extension point goes into the prompt or to the client. It has no `set` or `update`: an extension point handler does not write data. Writes belong to runtimes; a function runtime uses `ctx.pluginData.set` or the operation-based `ctx.pluginData.update`, which commit with the execution's proposals (see [Local code · Change data](../plugins/local-code.md#change-data) and [Transactions · Operation-based writes](./transactions.md#operation-based-writes-plugindataupdate)).
 - `ctx.world` is the session's World Model view: `characters`, `characterSchema`, `dimensions`, and the session's seats, `seats`. Every call site gives this session's view, including calls outside a turn (the image flow, history compaction, UI slots), which read the committed state.
-- To find the character the player is acting as, use the SDK's `currentCharacterOf(primarySeat(ctx.world.seats), ctx.world.characters, ctx.world.seats)`, not `find(type === "player")`: a session may have several `type: player` characters. For the binding and current-character rules, see [Seats](./world-model.md#seats).
+- To find the character the player is acting as, use the SDK's `actingCharacterOf([], ctx.world.characters, ctx.world.seats)`, not `find(type === "player")`: a session may have several `type: player` characters. Extension providers have no actions and pass `[]`, returning the primary seat’s current character. For the full rule, see [Seats](./world-model.md#seats).
 - It cannot read other plugins' private namespaces from here.
 - A community provider's `ctx.utils`, like its `covel.http`, reaches only the origins listed in the `permissions.http` of its own package (see [the plugin reference](./plugins.md#runtime-field-groups)).
 

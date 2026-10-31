@@ -528,7 +528,10 @@ describe("suspension (E12) and settle failures (E13, E14)", () => {
       llm: queuedLLM([
         toolCall(
           "suspend",
-          { reason: "Need a name", resumeSchema: { type: "object" } },
+          {
+            reason: "Need a name",
+            fields: [{ type: "text", name: "answer", label: "Answer" }],
+          },
           "tc-suspend",
         ),
       ]),

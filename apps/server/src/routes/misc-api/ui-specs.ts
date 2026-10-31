@@ -1,15 +1,15 @@
-import { loadPluginUiSpecs, pluginDeclarations } from "@covel/plugin-loader";
+import {
+  loadPluginUiSpecs,
+  PLUGIN_UI_SLOTS,
+  pluginDeclarations,
+} from "@covel/plugin-loader";
 import type { PluginAssetRoot, PluginRegistry } from "@covel/plugin-loader";
 import type { DataStore, SessionRecord } from "@covel/store";
 import { runnablePluginIds } from "../api/session/plugins.js";
 import { type UiSlotName } from "./shared.js";
 import type { UiSpecDiagnostic } from "./ui-spec-schema.js";
 
-const UI_SLOTS = [
-  "right",
-  "message",
-  "view",
-] as const satisfies readonly UiSlotName[];
+const UI_SLOTS = PLUGIN_UI_SLOTS satisfies readonly UiSlotName[];
 
 type SlotSpecs = Partial<
   Record<UiSlotName, readonly Readonly<Record<string, unknown>>[]>
@@ -80,6 +80,7 @@ async function projectRegistryUiSpecs(
           runtimeId: manifest.name,
           slot: diagnostic.slot,
           specIndex: diagnostic.specIndex,
+          declaredPath: diagnostic.declaredPath,
           ...(diagnostic.specId ? { specId: diagnostic.specId } : {}),
           issues: diagnostic.issues.map((issue) => ({
             ...issue,
@@ -159,23 +160,35 @@ export async function buildUiSpecsResponse(params: {
     specs: readonly Record<string, unknown>[];
   }>;
   view: Array<{ pluginId: string; specs: readonly Record<string, unknown>[] }>;
+  /**
+   * Story paragraph templates, in the session's plugin order when a session
+   * is given; the client breaks ties in this order.
+   */
+  segment: Array<{
+    pluginId: string;
+    specs: readonly Record<string, unknown>[];
+  }>;
   diagnostics: UiSpecDiagnostic[];
 }> {
   const { sessionId, session: knownSession, registry, store } = params;
   const session =
     knownSession ?? (sessionId ? await store.getSession(sessionId) : undefined);
-  const activeFilter = session
-    ? new Set(runnablePluginIds(session.activePlugins ?? [], registry))
+  const runnable = session
+    ? runnablePluginIds(session.activePlugins ?? [], registry)
     : undefined;
+  const activeFilter = runnable ? new Set(runnable) : undefined;
   const loaded = await loadValidatedSpecs(registry);
 
   type SlotEntry = {
     pluginId: string;
     specs: readonly Record<string, unknown>[];
   };
-  const right: SlotEntry[] = [];
-  const message: SlotEntry[] = [];
-  const view: SlotEntry[] = [];
+  const bySlot: Record<UiSlotName, SlotEntry[]> = {
+    right: [],
+    message: [],
+    view: [],
+    segment: [],
+  };
 
   for (const plugin of loaded.pluginSpecs) {
     if (activeFilter && !activeFilter.has(plugin.pluginId)) continue;
@@ -184,16 +197,23 @@ export async function buildUiSpecsResponse(params: {
         (runtime) => runtime.slots[slot] ?? [],
       );
       if (specs.length === 0) continue;
-      const target =
-        slot === "right" ? right : slot === "view" ? view : message;
-      target.push({ pluginId: plugin.pluginId, specs });
+      bySlot[slot].push({ pluginId: plugin.pluginId, specs });
     }
+  }
+
+  // Equally specific templates go to the earlier plugin, so segment entries
+  // follow the session's plugin order, not the registry's.
+  if (runnable) {
+    const position = new Map(runnable.map((id, index) => [id, index]));
+    bySlot.segment.sort(
+      (a, b) => position.get(a.pluginId)! - position.get(b.pluginId)!,
+    );
   }
 
   const diagnostics = loaded.diagnostics.filter(
     (diagnostic) => !activeFilter || activeFilter.has(diagnostic.pluginId),
   );
-  return { right, message, view, diagnostics };
+  return { ...bySlot, diagnostics };
 }
 
 export async function findPluginAssetRoot(

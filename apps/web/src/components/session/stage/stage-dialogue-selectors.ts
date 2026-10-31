@@ -11,7 +11,8 @@ export function splitStageParagraphs(text: string): string[] {
 /**
  * The nameplate of each paragraph of a committed story: one entry per
  * segment (a story's text is its segments joined by blank lines), `null` for
- * narration and unattributed lines. A streaming placeholder has no segments.
+ * narration and unattributed lines. A streaming placeholder has no segments;
+ * its live speakers come from the streaming store.
  */
 export function storyParagraphSpeakers(
   message: Pick<StreamMessage, "segments"> | undefined,
@@ -19,11 +20,19 @@ export function storyParagraphSpeakers(
   return message?.segments?.map((segment) => segment.speaker ?? null);
 }
 
-/** The last attributed segment of a committed story: who is speaking now. */
+/**
+ * Who is speaking now: the last attributed segment of a committed story, or,
+ * while the story streams, the last live speaker by name as written.
+ */
 export function lastStorySpeaker(
   message: Pick<StreamMessage, "id" | "segments"> | undefined,
+  liveSpeakers?: readonly (string | null)[],
 ): { readonly name: string; readonly characterId?: string } | undefined {
-  if (!message || message.id.startsWith("stream_")) return undefined;
+  if (!message) return undefined;
+  if (message.id.startsWith("stream_")) {
+    const name = liveSpeakers?.findLast((speaker) => speaker !== null);
+    return name ? { name } : undefined;
+  }
   const segment = message.segments?.findLast((entry) => entry.speaker);
   return segment?.speaker
     ? {

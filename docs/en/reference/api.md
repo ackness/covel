@@ -840,6 +840,7 @@ A few things to know about `GET /api/sessions/:id/view`:
 
 - **It contains only the recent window.** By default `messages` and `executionSteps` hold the latest 80 messages and 600 trace events, not the full history.
 - **Story messages carry `segments`**, in the same shape as [`GET /messages`](#get-apisessionsidmessages); the stage uses them to show each paragraph's speaker.
+- **Player messages carry `actions`**: the resolved actions the message submitted (`SnapshotMessage.actions`, the same as `actions` on `GET /messages`). A restored chat uses them to label the message "character · kind"; older messages that recorded no actions have no such field.
 - **Paging backward.** The view carries an opaque `messagesCursor`. When the front end scrolls up, it passes this value unchanged as `?cursor=` to `GET /api/sessions/:id/messages/page`.
 - **Older turns outside the window** do not render an execution timeline.
 - **Session clock.** The session object embedded in the view carries the same required clock fields as the session API: `phase`, `completedPlayerTurns`, and `setupRuntimes`. Restore and reconnect judge progress only from these fields.
@@ -1065,6 +1066,7 @@ Authentication is the same as for the other session endpoints (owner token). Res
 - `text` is the text rule: `required` needs text, `optional` may have it, `none` takes none. `actor` says whether the action is taken as a character.
 - `fieldsSchema` is the JSON Schema a plugin kind's `fields` must match; a kind without one takes no `fields`.
 - `seats[].allowed` is the kinds the seat's role may submit; it is empty for a seat no human controls (`controller` is not `human`). Which role may submit which base kind is in [seats](./world-model.md#seats).
+- The composer's modes are the kinds in the composer seat's `allowed` other than `command`, named by `display` (label, icon, placeholder). It draws only a subset of `fieldsSchema`; see [Composer Modes](./ui-panels.md#composer-modes).
 
 ### Player interaction
 
@@ -1442,7 +1444,7 @@ Fork and community plugin grants:
 ### Character data
 
 > [!NOTE]
-> The built-in web interface gets the character view mainly through `GET /api/sessions/:id/view`. The endpoints in this section are lightweight read and management APIs. Inside a plugin, for a runtime that tracks a batch of characters at once, the recommended tool is `sync-characters`. Other plugins can use the lower-level `create-character` / `update-character` as needed, along with the read tools `list-characters` / `get-character`.
+> The built-in web interface gets the character view mainly through `GET /api/sessions/:id/view`. The endpoints in this section are lightweight read and management APIs. Inside a plugin, write characters with `sync-characters` (creates and updates), and read with `list-characters` / `get-character`.
 
 A character `id` only has to be unique within the current session. Different sessions can safely use the same ID.
 
@@ -1659,6 +1661,7 @@ A webview spec returns `webview: { html, height? }` for a single file or `webvie
   ],
   "message": [...],
   "view": [...],
+  "segment": [...],
   "diagnostics": []
 }
 ```
@@ -1670,10 +1673,12 @@ Each slot is an array. Its elements are `{ pluginId, specs[] }`. Each item in `s
 - When aggregating, every spec is validated with the same rules as `pnpm validate:plugin` (structure, `specVersion`, data ownership, `webview`).
 - `specVersion` can be left out, and is treated as v1. A declared version higher than the server supports (currently `CURRENT_UI_SPEC_VERSION = 1`) is rejected.
 - If one spec fails validation, it **does not affect the whole response**. Only that spec is removed from its slot.
-- The reason for failure is written in the top-level `diagnostics[]`. Each item is `{ pluginId, runtimeId, slot, specIndex, specId?, issues[{ path, message, code }] }`. It says which plugin, which field, and what the problem is. A file that cannot be read (missing, not JSON, or pointing outside the plugin directory) is reported here too; `code` is always `invalid`.
+- The reason for failure is written in the top-level `diagnostics[]`. Each item is `{ pluginId, runtimeId, slot, specIndex, declaredPath?, specId?, issues[{ path, message, code }] }` (`declaredPath` is the spec path as the manifest writes it). It says which plugin, which field, and what the problem is. A file that cannot be read (missing, not JSON, or pointing outside the plugin directory) is reported here too; `code` is always `invalid`.
 - With `sessionId`, `diagnostics` includes only the plugins active in that session.
 
 `view` is always an array (possibly empty) of `{ pluginId, specs }`. With a session, it lists only active plugins. The first view ID within a plugin wins; later duplicates produce `slot: "view"` diagnostics. Loading reads UI JSON, HTML and published assets without importing plugin code or requiring server-code approval. The browser separately gates mounting on player consent for session reading; see [Plugin views](./ui-panels.md#plugin-views).
+
+`segment` is always an array (possibly empty) of `{ pluginId, specs }`: the story paragraph templates of `contributes.ui.segment`, filtered by session like `message`. Plugin order is the tie-break order between templates of the same specificity. A template without `match`, with `webview`, `dataSource` or another panel field, or with an `on` / `watch` binding gets a `slot: "segment"` diagnostic, and the plugin's other templates are still returned. See [Segment templates](./ui-panels.md#segment-templates).
 
 **Development hot reload**: `POST /api/plugins/:id/reload` reloads one community plugin.
 
@@ -2981,7 +2986,7 @@ Sends the answer to one or more player interactions with `submit_actions`, and r
   "kind": "act",
   "interaction": {
     "turnId": "t1",
-    "interactionId": "create-character",
+    "interactionId": "character-opening",
     "type": "form"
   },
   "fields": { "name": "艾尔文", "class": "法师" }
@@ -3881,7 +3886,7 @@ Returns an index of the framework's capabilities. Third-party developers, extern
         "runtime-export",
         "kernel"
       ],
-      "uiSlots": ["right", "message"]
+      "uiSlots": ["right", "message", "view", "segment"]
     },
     "scheduling": {
       "effectsPolicy": "warn"
@@ -4549,7 +4554,7 @@ A resumed runtime can suspend again: an agent calls `suspend` once more, or a fu
 - If one logical turn has several parallel suspended items, the count happens only after the last one is resumed. Retries do not count twice.
 - When a resumed runtime suspends again, the turn is still not complete. The whole chain counts once, when its last resume succeeds.
 - When a suspended item is abandoned, expires or is voided, the turn ends the way a normal end does: if it was the last item of the logical turn still waiting, the player's turn count goes up by one and the background jobs the turn held back (`schedule.detached`) are queued as usual. Both happen in the transaction that deletes the record. An item that another request is resuming still counts as waiting.
-- Progress jobs (`ctx.progress`) that the suspended execution reported stay in `waiting-input`. A resumed run reports progress under the original execution too, so the jobs of the whole chain end together: when the last resume commits, they end as `succeeded`; when the item is abandoned, expires or is voided, they end as `cancelled`. While a failed resume can be retried, or after a resume suspends again, they keep waiting.
+- Progress jobs (`ctx.progress`) that the suspended execution reported stay in `waiting-input`, including those reported by the nested calls (`ctx.recursiveCall`) that the suspended runtime made. A resumed run reports progress under the original execution too, so the jobs of the whole chain end together: when the last resume commits, they end as `succeeded`; when the item is abandoned, expires or is voided, they end as `cancelled`. While a failed resume can be retried, or after a resume suspends again, they keep waiting.
 
 ##### Resuming setup runtimes
 
@@ -4872,7 +4877,7 @@ Other rules:
 > [!NOTE]
 > The built-in Web UI gets the character view mainly through `GET /api/sessions/:id/view`. The endpoints in this section are lightweight read and management endpoints.
 >
-> In a plugin, write characters with tools. For a runtime that tracks characters in batches, `sync-characters` is recommended. Other plugins can use `create-character` / `update-character` as needed, and read with `list-characters` / `get-character`.
+> In a plugin, write characters with tools. Use `sync-characters` (creates and updates), and read with `list-characters` / `get-character`.
 
 #### `GET /api/sessions/:id/characters`
 

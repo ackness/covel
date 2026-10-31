@@ -125,3 +125,31 @@ describe.each(["narrator", "chat-mode-narrator"])(
     });
   },
 );
+
+it("finishes a story after a missing-character read while recording the failed call", async () => {
+  const { runRuntime, manifest, queuedLLM, toolCall, prose, makeExecutor } =
+    await import("./_helpers/agent-loop-fixture.js");
+  const store = createMemoryStore();
+  const executor = makeExecutor(createCharacterTools(store));
+  const execute = vi.spyOn(executor, "execute");
+  const result = await runRuntime({
+    manifest: manifest({
+      outputKind: "story",
+      tools: { builtin: ["get-character"] },
+    }),
+    llm: queuedLLM([
+      toolCall("get-character", { name: "Unknown traveler" }),
+      prose("A traveler approaches the gate."),
+    ]),
+    deps: { toolExecutor: executor },
+  });
+  expect(result.status).toBe("success");
+  expect(result.toolCalls).toEqual([
+    expect.objectContaining({ toolName: "get-character", output: null }),
+  ]);
+  expect(await execute.mock.results[0]?.value).toMatchObject({
+    success: false,
+    error: { code: "not-found" },
+  });
+  await store.close();
+});

@@ -1,4 +1,5 @@
 import {
+  actingCharacterOf,
   getToolContent,
   withModelView,
   translate,
@@ -140,7 +141,12 @@ export default function ({ tool }, createFormTool) {
       // here: the id must not depend on what the model passed. The validator
       // gets the names the world's characters have now, so a taken name is
       // refused at the field, before the answer is stored.
-      const taken = takenNameKeys(context.world.characters);
+      const playerId = actingCharacterOf(
+        [],
+        context.world.characters ?? [],
+        context.world.seats ?? [],
+      )?.id;
+      const taken = takenNameKeys(context.world.characters, playerId);
       const form = {
         ...params,
         formId: CHARACTER_FORM_ID,
@@ -150,6 +156,7 @@ export default function ({ tool }, createFormTool) {
           data: takenNameDigests(
             context.world.characters,
             `${context.sessionId}:${context.turnId}`,
+            playerId,
           ),
         },
       };

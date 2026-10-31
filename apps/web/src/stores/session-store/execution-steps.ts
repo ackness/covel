@@ -31,6 +31,28 @@ const DURABLE_ACTIVE_PHASES: Readonly<Record<string, number>> = {
   committing: 3,
 };
 
+/** Match a run, adopting the newest placeholder when its run ID first arrives. */
+export function findExecutionStepIndex(
+  steps: readonly ExecutionStep[],
+  step: Pick<ExecutionStep, "turnId" | "runtimeId" | "runId">,
+): number {
+  let newest = -1;
+  let newestTime = Number.NEGATIVE_INFINITY;
+  for (const [index, row] of steps.entries()) {
+    if (row.turnId !== step.turnId || row.runtimeId !== step.runtimeId)
+      continue;
+    if (step.runId && row.runId === step.runId) return index;
+    if (step.runId && row.runId) continue;
+    const parsed = Date.parse(row.startedAt ?? row.turnStartedAt ?? "");
+    const time = Number.isFinite(parsed) ? parsed : Number.NEGATIVE_INFINITY;
+    if (time >= newestTime) {
+      newest = index;
+      newestTime = time;
+    }
+  }
+  return newest;
+}
+
 /** Merge live/recovered rows without letting a handoff undo durable progress. */
 export function mergeExecutionStep(
   previous: ExecutionStep | undefined,
@@ -102,6 +124,7 @@ export function mergeExecutionStep(
         }
       : {}),
     ...step,
+    ...(previous?.runId && !step.runId ? { runId: previous.runId } : {}),
     ...(startedAt !== undefined ? { startedAt } : {}),
     ...(previous?.reasoning || incoming.reasoning
       ? { reasoning: mergeReasoning(previous?.reasoning, incoming.reasoning) }
@@ -160,6 +183,9 @@ export function createExecutionStepUpdate(args: {
         ? readFailureTarget(payload.failureTarget)
         : undefined,
     turnId,
+    ...(typeof payload.runId === "string" && payload.runId
+      ? { runId: payload.runId }
+      : {}),
     ...retryStepMetadata(payload, turnId),
     ...(typeof payload.jobId === "string" ? { jobId: payload.jobId } : {}),
     ...(payload.mode === "detached" || status === "deferred"
@@ -429,6 +455,7 @@ export function buildResumedExecutionStep(
 
   return {
     runtimeId,
+    resumed: true,
     pluginId: typeof payload.pluginId === "string" ? payload.pluginId : "",
     status: toExecutionStepStatus(
       typeof payload.status === "string" ? payload.status : "completed",

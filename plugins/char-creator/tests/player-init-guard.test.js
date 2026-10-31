@@ -27,7 +27,13 @@ function context(values, characters = []) {
     turnId: "turn",
     pluginId: "char-creator",
     runtimeId: "char-creator/player-init",
-    world: { characterSchema: schema, characters },
+    world: {
+      seats: [
+        { id: "main", controller: "human", role: "player", characters: "auto" },
+      ],
+      characterSchema: schema,
+      characters,
+    },
     store: {
       listPlayerInputs: async () =>
         values ? [{ formId: "char-creation", values }] : [],
@@ -233,4 +239,26 @@ describe("player initialization World Model", () => {
     ];
     expect(await guard(ctx)).toEqual({ skip: false });
   });
+});
+
+it("skips for the current character rather than the first player character", async () => {
+  const ctx = context(null, [
+    { id: "first", type: "player" },
+    { id: "second", type: "player" },
+  ]);
+  ctx.world.seats[0].currentCharacterId = "second";
+  expect(await guard(ctx)).toMatchObject({ skip: true, playerId: "second" });
+});
+
+it("creates a character when existing player characters are not bound to the seat", async () => {
+  const ctx = context({ characterName: "Rowan" }, [
+    { id: "other", type: "player", name: "Wren" },
+  ]);
+  ctx.world.seats[0].characters = [];
+  const result = await guard(ctx);
+  expect(getPendingProposals(result)).toEqual([
+    expect.objectContaining({
+      payload: expect.objectContaining({ name: "Rowan", type: "player" }),
+    }),
+  ]);
 });

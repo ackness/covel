@@ -22,6 +22,10 @@ const context = {
   runtimeId: "char-creator/player-init",
   pluginId: "char-creator",
   world: {
+    seats: [
+      { id: "main", controller: "human", role: "player", characters: "auto" },
+    ],
+    characters: [],
     characterSchema: {
       attributes: [
         { id: "motive", name: "Motive", type: "string", category: "bio" },
@@ -65,6 +69,14 @@ describe("create-character-form schema boundary", () => {
       {
         ...context,
         world: {
+          seats: [
+            {
+              id: "main",
+              controller: "human",
+              role: "player",
+              characters: "auto",
+            },
+          ],
           ...context.world,
           characters: [
             { id: "p", name: "Wren", type: "player" },
@@ -112,6 +124,14 @@ describe("create-character-form schema boundary", () => {
       {
         ...context,
         world: {
+          seats: [
+            {
+              id: "main",
+              controller: "human",
+              role: "player",
+              characters: "auto",
+            },
+          ],
           ...context.world,
           characters: [
             { id: "a", name: "Tomas Vale", aliases: ["Tomas"], type: "npc" },
@@ -217,6 +237,14 @@ describe("create-character-form schema boundary", () => {
       createCharacterForm.execute(invented, {
         ...context,
         world: {
+          seats: [
+            {
+              id: "main",
+              controller: "human",
+              role: "player",
+              characters: "auto",
+            },
+          ],
           characterSchema: {
             attributes: [context.world.characterSchema.attributes[1]],
           },
@@ -325,6 +353,9 @@ describe("create-character-form narrative defaults", () => {
     ...context,
     locale,
     world: {
+      seats: [
+        { id: "main", controller: "human", role: "player", characters: "auto" },
+      ],
       characterSchema: {
         attributes: ["calling", "background"].map((id) => ({
           id,
@@ -467,6 +498,14 @@ describe("create-character-form narrative defaults", () => {
         ...context,
         locale: "en-US",
         world: {
+          seats: [
+            {
+              id: "main",
+              controller: "human",
+              role: "player",
+              characters: "auto",
+            },
+          ],
           characterSchema: {
             attributes: [
               context.world.characterSchema.attributes[0],
@@ -599,4 +638,40 @@ describe("create-character-form narrative defaults", () => {
       ),
     ).rejects.toThrow(/must include \{\{characterName\}\}/);
   });
+});
+
+it("includes another player character's name in the form validator", async () => {
+  const result = await createCharacterForm.execute(params, {
+    ...context,
+    world: {
+      ...context.world,
+      characters: [
+        { id: "first", type: "player", name: "Wren" },
+        { id: "second", type: "player", name: "Rowan" },
+      ],
+      seats: [
+        {
+          id: "main",
+          controller: "human",
+          role: "player",
+          characters: "auto",
+          currentCharacterId: "second",
+        },
+      ],
+    },
+  });
+  expect(
+    validatePlayerName(
+      { characterName: "Wren" },
+      result.interaction.validation.data,
+      { locale: "en" },
+    ),
+  ).toMatchObject({ field: "characterName" });
+  expect(
+    validatePlayerName(
+      { characterName: "Rowan" },
+      result.interaction.validation.data,
+      { locale: "en" },
+    ),
+  ).toBeUndefined();
 });

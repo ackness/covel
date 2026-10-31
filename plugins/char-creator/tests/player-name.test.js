@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { takenNameDigests, validatePlayerName } from "../lib/player-name.js";
+import {
+  takenNameKeys,
+  takenNameDigests,
+  validatePlayerName,
+} from "../lib/player-name.js";
 
 const characters = [
   {
@@ -16,7 +20,7 @@ const characters = [
   },
   { id: "char-old", name: "Wren", aliases: ["Birdie"], type: "player" },
 ];
-const data = takenNameDigests(characters, "session:turn");
+const data = takenNameDigests(characters, "session:turn", "char-old");
 const en = { locale: "en" };
 
 describe("player name validator", () => {
@@ -61,7 +65,7 @@ describe("player name validator", () => {
     // 2 + 3 names; the player's own are not counted.
     expect(data.taken).toHaveLength(5);
     // Another form of the same world shares no digest with this one.
-    const other = takenNameDigests(characters, "session:turn-2");
+    const other = takenNameDigests(characters, "session:turn-2", "char-old");
     expect(other.taken.filter((d) => data.taken.includes(d))).toEqual([]);
   });
 
@@ -70,4 +74,18 @@ describe("player name validator", () => {
       validatePlayerName({ characterName: "Tomas" }, undefined, en),
     ).toBeUndefined();
   });
+});
+
+it("exempts only the acting character's name and aliases", () => {
+  const cast = [
+    ...characters,
+    { id: "second", type: "player", name: "Rowan", aliases: ["Rook"] },
+  ];
+  expect(takenNameKeys(cast, "char-old")).toEqual(
+    expect.arrayContaining(["rowan", "rook"]),
+  );
+  expect(takenNameKeys(cast, "char-old")).not.toContain("wren");
+  expect(takenNameKeys(cast)).toEqual(
+    expect.arrayContaining(["wren", "birdie", "rowan"]),
+  );
 });

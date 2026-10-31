@@ -353,3 +353,110 @@ describe("SSE retry commit settlement", () => {
     expect(h.getState().executionError).toBe("Unable to save");
   });
 });
+
+it("keeps an outer run running when a nested run completes", () => {
+  const h = harness(false);
+  h.send("runtime.started", { runId: "a" });
+  h.send("runtime.started", { runId: "b" });
+  h.send("runtime.completed", { runId: "b", status: "success" });
+  expect(
+    h.getState().executionSteps.filter((step) => step.turnId === "attempt"),
+  ).toEqual([
+    expect.objectContaining({ runId: "a", status: "running" }),
+    expect.objectContaining({ runId: "b", status: "completed" }),
+  ]);
+});
+
+it("shows successful resumed runs as completed instead of retaining the earlier suspension", () => {
+  const h = harness(false);
+  h.send("runtime.started", { runId: "original" });
+  h.send("runtime.completed", { runId: "original", status: "suspended" });
+  h.send("runtime.started", { runId: "continuation", resumed: true });
+  const displayed = () =>
+    projectExecutionTurns([], h.getState().executionSteps).turns.find(
+      (turn) => turn.turnId === "attempt",
+    )?.steps;
+  expect(displayed()).toEqual([
+    expect.objectContaining({ runId: "continuation", status: "running" }),
+  ]);
+  h.send("runtime.completed", { runId: "continuation", status: "success" });
+  expect(displayed()).toEqual([
+    expect.objectContaining({
+      runId: "continuation",
+      status: "completed",
+      resumed: true,
+    }),
+  ]);
+  h.send("turn.resumed", { suspensionId: "suspension", status: "success" });
+  expect(displayed()).toEqual([
+    expect.objectContaining({ runId: "continuation", status: "completed" }),
+  ]);
+  expect(
+    h.getState().executionSteps.find((step) => step.runId === "original")
+      ?.status,
+  ).toBe("suspended");
+});
+
+it("supersedes an earlier suspension when only the committed resume notification marks the continuation", () => {
+  const h = harness(false);
+  h.send("runtime.started", { runId: "original" });
+  h.send("runtime.completed", { runId: "original", status: "suspended" });
+  h.send("runtime.started", { runId: "continuation" });
+  h.send("runtime.completed", { runId: "continuation", status: "success" });
+  h.send("turn.resumed", { suspensionId: "suspension", status: "success" });
+  expect(
+    projectExecutionTurns([], h.getState().executionSteps).turns.find(
+      (turn) => turn.turnId === "attempt",
+    )?.steps,
+  ).toEqual([
+    expect.objectContaining({
+      runId: "continuation",
+      status: "completed",
+      resumed: true,
+    }),
+  ]);
+});
+
+it.each([
+  ["success", "completed"],
+  ["suspended", "suspended"],
+] as const)(
+  "lets a later resume finishing with %s replace an earlier failed resume",
+  (status, expected) => {
+    const h = harness(false);
+    h.send("runtime.started", { runId: "original" });
+    h.send("runtime.completed", { runId: "original", status: "suspended" });
+    h.send("runtime.started", { runId: "first-resume", resumed: true });
+    h.send("runtime.failed", { runId: "first-resume", error: "timeout" });
+    const displayed = () =>
+      projectExecutionTurns([], h.getState().executionSteps).turns.find(
+        (turn) => turn.turnId === "attempt",
+      )?.steps;
+    expect(displayed()).toEqual([
+      expect.objectContaining({ runId: "first-resume", status: "failed" }),
+    ]);
+    h.send("runtime.started", { runId: "second-resume", resumed: true });
+    expect(displayed()).toEqual([
+      expect.objectContaining({ runId: "second-resume", status: "running" }),
+    ]);
+    h.send("runtime.completed", { runId: "second-resume", status });
+    expect(displayed()).toEqual([
+      expect.objectContaining({ runId: "second-resume", status: expected }),
+    ]);
+  },
+);
+
+it("still reports a failed nested run of the runtime after a later resume succeeds", () => {
+  const h = harness(false);
+  h.send("runtime.started", { runId: "original" });
+  h.send("runtime.started", { runId: "nested" });
+  h.send("runtime.failed", { runId: "nested", error: "nested failure" });
+  h.send("runtime.completed", { runId: "original", status: "suspended" });
+  h.send("runtime.started", { runId: "continuation", resumed: true });
+  h.send("runtime.completed", { runId: "continuation", status: "success" });
+  expect(
+    projectExecutionTurns([], h.getState().executionSteps).turns.find(
+      (turn) => turn.turnId === "attempt",
+    )?.steps,
+  ).toEqual([expect.objectContaining({ runId: "nested", status: "failed" })]);
+});

@@ -33,7 +33,10 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog.js";
 import { useMediaQuery } from "@/hooks/use-media-query.js";
-import { useStreamingText } from "@/stores/streaming-text-store.js";
+import {
+  useStreamingSpeakers,
+  useStreamingText,
+} from "@/stores/streaming-text-store.js";
 import type { StreamMessage, ExecutionStep } from "@/stores/session-store.js";
 import type {
   SessionRecord,
@@ -50,6 +53,7 @@ import { StageDialog } from "./StageDialog.js";
 import type { RightPanelState } from "../right-panel-state.js";
 import { StagePluginPanels } from "./StagePluginPanels.js";
 import { StageChoices } from "./StageChoices.js";
+import type { ComposerModes } from "../game-view/use-composer-modes.js";
 import { StageExecutionStatus } from "./StageExecutionStatus.js";
 import { storyParagraphSpeakers } from "./stage-dialogue-selectors.js";
 import {
@@ -64,6 +68,8 @@ import {
 
 export interface StageViewProps {
   readonly composerDraft?: { value: string; onChange: (value: string) => void };
+  /** The composer's modes and character switcher, shared with the free input. */
+  readonly composerModes?: ComposerModes;
   readonly panelState: Pick<
     RightPanelState,
     "rightSpecs" | "specsStatus" | "retrySpecs"
@@ -183,10 +189,12 @@ export function StageView(props: StageViewProps): ReactElement {
   const storyKey = stageStoryKey(storyMsg);
   const isStreaming =
     executing && (storyMsg?.id.startsWith("stream_") ?? false);
-  // Nameplates come from the committed story's segments; a story still
-  // streaming has none yet.
+  // Nameplates come from the committed story's segments. While the story
+  // streams they are the live speakers as written; commit replaces them with
+  // the resolved names.
+  const liveSpeakers = useStreamingSpeakers(storyMsg?.id ?? "");
   const segmentSpeakers = isStreaming
-    ? undefined
+    ? liveSpeakers
     : storyParagraphSpeakers(storyMsg);
 
   // ── Cross-layer state ─────────────────────────────────────────
@@ -294,6 +302,7 @@ export function StageView(props: StageViewProps): ReactElement {
       />
       <StageChoices
         composerDraft={props.composerDraft}
+        composerModes={props.composerModes}
         extensions={(choices, onDraftMessage) => (
           <StagePluginPanels
             panelState={props.panelState}

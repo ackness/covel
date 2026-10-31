@@ -179,7 +179,7 @@ pnpm plugin:extract ~/.covel/plugins/notebook --check
 pnpm plugin:extract ~/.covel/plugins/notebook --check --json
 ```
 
-第一条命令在作者本机运行入口工厂，把 `tools`、`actions`、`services`、`forms`、`wires`、`hooks` 六组注册写回根 `PLUGIN.md` 的 `contributes`，并打印变化的键。一致时显示 `Declarations are in sync.`。列表按首次注册顺序去重；普通 hook 写成事件名，其他阶段写成 `{ event, enforce }`。空列表的键会删除。注释、其他字段和 Markdown 正文保留。
+第一条命令在作者本机运行入口工厂，把 `tools`、`actions`、`services`、`forms`、`wires`、`hooks` 六组注册写回根 `PLUGIN.md` 的 `contributes`，并打印变化的键。一致时显示 `Declarations are in sync.`。列表按首次注册顺序去重；普通 hook 写成事件名，其他阶段写成 `{ event, enforce }`；普通服务写成契约 ID，给模型用的服务写成 `{ contract, modelFacing: true }`。空列表的键会删除。注释、其他字段和 Markdown 正文保留。
 
 `--check` 不写文件，按键显示 `-` 移除的名字和 `+` 新增的名字；只有顺序或写法变化时单独说明。有漂移时退出 1，一致时退出 0，适合 CI。`--json` 输出 `extracted` 和 `drift`。提取失败退出 1，参数错误退出 2。
 
@@ -277,12 +277,12 @@ agent 的最后一条回复里即使写了看起来像“要保存的数据”�
 
 要让 agent 写东西，就给它一个工具，并列进 `agent.tools`：
 
-| 想做的事           | 工具                                   |
-| ------------------ | -------------------------------------- |
-| 写自己的数据       | 自己的工具，或内置的 `plugin-data-set` |
-| 发一个事件         | 内置的 `emit-event`                    |
-| 给玩家一条通知     | 内置的 `create-notification`           |
-| 向玩家要结构化输入 | 内置的 `create-form`                   |
+| 想做的事           | 工具                                                                                                 |
+| ------------------ | ---------------------------------------------------------------------------------------------------- |
+| 写自己的数据       | 自己的工具，或内置的 `plugin-data-set`                                                               |
+| 发一个事件         | 内置的 `emit-event`（会话 topic enum 与 payload schema，见[工具](../reference/tools.md#emit-event)） |
+| 给玩家一条通知     | 内置的 `create-notification`                                                                         |
+| 向玩家要结构化输入 | 内置的 `create-form`                                                                                 |
 
 想要求 agent 每次运行都必须成功调用一次工具，写 `completion: { require: tool-use }`。这时“没有变化”也要通过工具提交（例如提交一个空列表），否则这次运行算失败。
 
@@ -437,19 +437,20 @@ const characters = ctx.world?.characters ?? [];
 
 ### 谁是玩家
 
-一局游戏可以有多个 `type: player` 的角色（例如一个人同时扮演两个角色）。玩家此刻扮演哪一个，由会话的座位决定，`ctx.world.seats` 里能读到。用 SDK 的辅助函数找它：
+一局游戏可以有多个 `type: player` 的角色（例如一个人同时扮演两个角色）。本次扮演哪一个，先看行动的 `actorId`；没有行动角色时，再看 `ctx.world.seats` 里主座位的当前角色。用 SDK 的辅助函数找它：
 
 ```js
-import { currentCharacterOf, primarySeat } from "@covel/plugin-handlers-utils";
+import { actingCharacterOf } from "@covel/plugin-handlers-utils";
 
-const player = currentCharacterOf(
-  primarySeat(ctx.world.seats),
+const player = actingCharacterOf(
+  ctx.playerActions,
   ctx.world.characters,
   ctx.world.seats,
-); // the character record, or undefined when nobody is seated or bound
+); // the character record, or undefined when no actor or current character exists
 ```
 
 - 不要用 `ctx.world.characters.find((c) => c.type === "player")`：有多个玩家角色时它只找到第一个。
+- 后台作业用 `ctx.inputs.turn.value.actions ?? []`，保留源回合的行动角色；工具和扩展提供者没有行动，传 `[]`。行动角色优先于主座位的当前角色，完整规则见[座位](../reference/world-model.md#座位)。
 - `seatCharacterIds(seat, characters, seats)` 给出一个座位绑定的全部角色 `id`，玩家控制的其他角色也在里面。
 - 座位只读。玩家换当前角色后，下一回合起读到新的角色。绑定和当前角色的规则见[座位](../reference/world-model.md#座位)。
 

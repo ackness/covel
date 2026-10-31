@@ -126,7 +126,7 @@ Session prep groups the plugins by whether they call a model, that is by the der
 | `tools` | Tool names passed to `registerTool` |
 | `actions` | Nonempty `registerRpc` action names; `covel:`, `runtime:` and `event:` prefixes are reserved for framework approvals and rejected in declarations, registration and action requests. |
 | `commands` | Player command metadata. Its `action` must be listed in `actions`. |
-| `services` | Contract IDs passed to `registerService` |
+| `services` | Contract IDs passed to `registerService`. A model-facing service is written as `{contract, modelFacing: true}`; see [Model-facing services](./plugin-extensions.md#model-facing-services) |
 | `extensions` | Extensions provided with `provideExtension`, written as `<point>/<id>`, such as `prompt.segment@1/notes`. To set options such as `order` or `slot`, write `{point, id, …}`. |
 | `hooks` | The hook events the package listens to, written as event names, such as `PreToolUse`. To set `enforce`, write `{event, enforce}`. See [Hooks](./hooks.md). |
 | `forms` | Form IDs passed to `registerFormValidator` |
@@ -135,8 +135,9 @@ Session prep groups the plugins by whether they call a model, that is by the der
 | `data` | The schema, version, accepts, and search settings for this plugin's data namespace |
 | `datasets` | Typed datasets the package owns: the name is the namespace, with schema, key and ops. See [Datasets](#datasets-contributesdatasets) |
 | `actionKinds` | Action kinds players may submit: name, roles, text rule, `fields` schema and display label. See [Action kinds](#action-kinds-contributesactionkinds) |
-| `ui` | Paths, relative to the package root, of the `right/message/view` UI spec files |
+| `ui` | Paths, relative to the package root, of the `right/message/view/segment` UI spec files |
 | `ui.view` | Full-column view spec paths relative to the package root; see [Plugin views](./ui-panels.md#plugin-views) for declarations and consent |
+| `ui.segment` | Paths, relative to the package root, of segment template specs: matched by segment kind or speaker, display-only, for committed story paragraphs; see [Segment templates](./ui-panels.md#segment-templates) |
 | `worldProjections` | Declarations of world data projections |
 | `prompt` | Static prompt sections |
 
@@ -254,6 +255,7 @@ The tags the author writes come first, followed by the derived tags in this orde
 - When a package has only one inline runtime (its runtime ID equals the plugin ID), an agent that does not set `agent.tools.plugin` gets all of the tools in `contributes.tools` automatically. Set `plugin: []` to give it none.
 - If you add a tool to such a package that only a UI action should use, also write the agent's allowlist. Otherwise the model can call that tool too.
 - In a package with several runtimes, each runtime must declare its own tools.
+- `agent.tools.services` imports other plugins' model-facing services as tools: write a contract ID, or `{contract, as}` to name it otherwise. An imported tool is read-only; without a provider it is absent and the runtime runs as usual. Names, parameters and failure answers are in [Imported service tools](./tools.md#imported-service-tools). A function runtime cannot set it and uses `ctx.services` directly.
 
 ### Agent guards
 
@@ -326,7 +328,7 @@ A provider that already succeeded in an earlier stage or event layer can also sa
 
 ### Notes on setup runtimes
 
-Opening character templates must include a placeholder for every collected field. Template/default errors are correctable `invalid-input` failures; see [character tools](./tools.md#create-character).
+Opening character templates must include a placeholder for every collected field. Template/default errors are correctable `invalid-input` failures; see [character tools](./tools.md#opening-character-form).
 
 A package-level `requires` makes sure the contract's provider is activated. It does not require the provider to produce output again on every execution.
 
@@ -417,7 +419,7 @@ agent:
 
 Completion tools should check required coverage before reporting success. For example, [world fact extraction](./tools.md#per-objective-assessment) requires an assessment of every supplied open objective. Valid JSON alone does not prove complete extraction.
 
-When there are several completing tools, or the model should call `runtime-done` when nothing changed, write the full `completion`. Write only one of `finishWith` and `completion`.
+When there are several completing tools, or the model should call `runtime-done` when nothing changed, write the full `completion`. Write only one of `finishWith` and `completion`. An imported service tool cannot be a completing tool: a runtime must not need another plugin to finish.
 
 - `completion.afterTools`: the run finishes once one of the listed tools succeeds.
 - When the model must read the tool result and revise it, use `completion.require: tool-use` without `afterTools`. Character creation, for example, returns the filled narrative for review before the model finishes.
@@ -562,7 +564,7 @@ The kernel derives `narrativeOutput` by joining each segment’s `text` with bla
 - The story message's metadata records `segments`, `cues`, `yield` and the presence record `presentCharacterIds`: the resolved speakers and the characters in `cues.present`. The presence record is only stored for now, ready for per-character history later.
 - Story messages on `/messages` and `/view` carry `segments` (see [API](./api.md)). Character IDs never reach model-facing text.
 
-**Streaming.** When the answer is segmented JSON, the narrative stream forwards only each segment's `text`, with a blank line between segments, matching the committed text. JSON keys, `speaker` and `cues` never appear in the stream. A prose answer streams as before.
+**Streaming.** When the answer is segmented JSON, the narrative stream forwards only each segment's `text`, with a blank line between segments, matching the committed text. JSON keys, `speaker` and `cues` never appear in the streamed text. Each paragraph's kind and speaker as written travel in the `segment` of `narrative.delta`, so the stage shows name tags while the story streams and replaces them with the resolved names at commit (see [protocol](./protocol.md#narrative-events)). A prose answer streams as before, without `segment`.
 
 #### Function output
 
@@ -600,17 +602,17 @@ An agent's side effects come only from its tools. What the model can write is de
 
 #### Turn information in the handler context
 
-| Field                            | Meaning                                                                                                                                                                                                                                                                                                                               |
-| -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `ctx.playerMessage`              | The player's input for this turn: the text the kernel renders from `ctx.playerActions`. A single player's ordinary input is the text as written; several characters, a host or a plugin kind name the character and the kind. See [API · How the player message is rendered](./api.md#how-the-player-message-is-rendered)             |
-| `ctx.playerActions`              | The player's resolved actions of this turn, in submission order, each `{ seatId, kind, actorId?, text?, fields?, interaction?, source }`. Empty for the opening, a manual run, an event, a detached job, and a nested `ctx.recursiveCall` run                                                                                         |
-| `ctx.logicalTurn`                | The scheduler's logical turn: the number of committed main-loop player turns, plus one. It is in the context of function handlers and plugin tools. Setup, the opening continuation, and the first player message are all turn 1. `startTurn` and `every` also count by it.                                                           |
-| `turnNumber` in the tool context | The number of player messages recorded in the session, including the form submission during setup                                                                                                                                                                                                                                     |
-| `ctx.session.lastPlayerInput`    | The most recent `PlayerInputSubmission \| null` when the source execution starts. It includes `id/sessionId/turnId/formId/values/createdAt`.                                                                                                                                                                                          |
-| `ctx.execution.origin`           | Why this execution runs: `player`, `continuation`, `manual`, `background`, `recursive`, or `resume`                                                                                                                                                                                                                                   |
-| `ctx.execution.sourceTurnId`     | When a committed turn is retried, the ID of that turn. Use it as a key so a retry reuses the earlier rolls and reveals instead of drawing again                                                                                                                                                                                       |
-| `ctx.recursionDepth`             | `0` for a top-level execution, one more for each level of `ctx.recursiveCall`                                                                                                                                                                                                                                                         |
-| `ctx.world.seats`                | The session's [seats](./world-model.md#seats), read-only. The character the player plays now is the SDK's `currentCharacterOf(primarySeat(seats), ctx.world.characters, seats)`; `seatCharacterIds` gives the characters bound to one seat. Guards, tools (`context.world`) and extension providers (`ctx.world`) read the same seats |
+| Field                            | Meaning                                                                                                                                                                                                                                                                                                                                                                      |
+| -------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ctx.playerMessage`              | The player's input for this turn: the text the kernel renders from `ctx.playerActions`. A single player's ordinary input is the text as written; several characters, a host or a plugin kind name the character and the kind. See [API · How the player message is rendered](./api.md#how-the-player-message-is-rendered)                                                    |
+| `ctx.playerActions`              | The player's resolved actions of this turn, in submission order, each `{ seatId, kind, actorId?, text?, fields?, interaction?, source }`. Empty for the opening, a manual run, an event, a detached job, and a nested `ctx.recursiveCall` run                                                                                                                                |
+| `ctx.logicalTurn`                | The scheduler's logical turn: the number of committed main-loop player turns, plus one. It is in the context of function handlers and plugin tools. Setup, the opening continuation, and the first player message are all turn 1. `startTurn` and `every` also count by it.                                                                                                  |
+| `turnNumber` in the tool context | The number of player messages recorded in the session, including the form submission during setup                                                                                                                                                                                                                                                                            |
+| `ctx.session.lastPlayerInput`    | The most recent `PlayerInputSubmission \| null` when the source execution starts. It includes `id/sessionId/turnId/formId/values/createdAt`.                                                                                                                                                                                                                                 |
+| `ctx.execution.origin`           | Why this execution runs: `player`, `continuation`, `manual`, `background`, `recursive`, or `resume`                                                                                                                                                                                                                                                                          |
+| `ctx.execution.sourceTurnId`     | When a committed turn is retried, the ID of that turn. Use it as a key so a retry reuses the earlier rolls and reveals instead of drawing again                                                                                                                                                                                                                              |
+| `ctx.recursionDepth`             | `0` for a top-level execution, one more for each level of `ctx.recursiveCall`                                                                                                                                                                                                                                                                                                |
+| `ctx.world.seats`                | The session's [seats](./world-model.md#seats), read-only. The SDK’s `actingCharacterOf(ctx.playerActions, ctx.world.characters, seats)` reads the action’s actor, falling back to the primary seat’s current character; `seatCharacterIds` gives the characters bound to one seat. Guards, tools (`context.world`) and extension providers (`ctx.world`) read the same seats |
 
 `ctx.session.lastPlayerInput` may come from an earlier turn. Having this record does not mean that a form was submitted in this turn.
 
@@ -623,6 +625,7 @@ The nested call's writes follow the parent handler:
 - When the parent handler succeeds, the nested writes commit with the parent's, ahead of the parent's result.
 - When the parent handler fails (it throws, times out, or returns `failed` or `skipped`), the nested writes are discarded with it. They are also discarded when a PostRuntime Hook changes the parent result's status (for example, rewrites a failure as a success), just like the parent's own writes. The rule applies at every level: when any parent handler fails, the writes of every level below it are discarded.
 - When the parent handler suspends for input, the nested results and their writes are saved with the suspended item. When the resumed handler succeeds, they commit with the parent's writes, ahead of the parent's result, in the same order as without a suspension. When the resume fails, a PostRuntime Hook changes the status, or the item is abandoned, expires or is voided, they are discarded with the parent's writes. A nested call that suspended itself is not saved; the trace records a `recursive.failed` with `code` `nested-suspension-dropped`.
+- Progress tasks that a nested call reports with `ctx.progress` share the parent's progress scope and end with the parent execution's commit. Several calls of the same runtime (for example a parent that triggers the same child more than once) share that scope. Tasks are deduplicated by `jobId` and sequence within the full identity key (`pluginId`, `runtimeId`, and so on), so the jobs of a parent, its child or sibling runtimes never collide with each other; repeated calls of one runtime share one identity key, so they need different `jobId`s. A nested child keeps its own execution identity and only reports under the root execution's progress scope. When the parent handler succeeds, each task ends with its own runtime's result. When the parent fails, the nested tasks end as `cancelled`. When the parent suspends, they wait for input (`waiting-input`) together with the parent's tasks; a successful resume ends them with the result they were saved with, and an abandoned, expired or voided item ends them as `cancelled`.
 - A nested call made from an agent's guard commits only when the guard returns `{ skip: true }` and the result is still skipped; it is discarded when the guard lets the agent run.
 
 At commit, a top-level runtime and the nested calls at every level below it are one unit: they all commit, or they are all discarded.
@@ -666,7 +669,7 @@ The provider is an agent runtime that names the contract it provides in `io.outp
 Rules at run time:
 
 - **Own transcript**: the sub-agent's prompt is the provider's own body, the framework's completion instructions, then the brief. It sees neither the session history nor the caller's conversation.
-- **Read-only tools**: tools in the provider's `agent.tools` without the `readOnly` annotation (plugin tools, write tools such as `plugin-data-set`), `suspend` and `delegate` are taken away. A declared plugin tool that is not registered still fails the run as it always does.
+- **Read-only tools**: tools in the provider's `agent.tools` without the `readOnly` annotation (plugin tools, write tools such as `plugin-data-set`), `suspend` and `delegate` are taken away. A declared plugin tool that is not registered still fails the run as it always does. Imported service tools are read-only and stay.
 - **Loop profile**: without `agent.loop.profile` it runs `actor`: no streaming, no player interjections.
 - **Model**: it uses the model role the provider declares. The session's `runtimeModelOverrides` apply by the provider's runtimeId, also in a run resumed after suspension; the caller's override and the request's story model override do not.
 - **Caps**: one execution runs at most 8 sub-agents at a time, nested executions included, and a sub-agent cannot call another one (depth cap 1). A call over a cap gets `unavailable` at once; nothing queues.
@@ -1244,8 +1247,8 @@ Below are all the plugins that ship with Covel from [plugins/](../../../plugins/
 | [narrator](../../../plugins/narrator/README.md) | Narrator | `core` | `narrative-engine@2` (default provider) | inline | Advances the story based on the player's actions. |
 | [npc-graph](../../../plugins/npc-graph/README.md) | Relationship Graph | `plugin` | `npc-graph@1`, `graph-rag@1` | `extractor`, `rag-retriever` | Records the relationships between people. |
 | [pregame](../../../plugins/pregame/README.md) | Pre-Game Setup | `core` | `session.opening@1` | inline | Reads the world material at the start and prepares the first adventure. |
-| [scene-stage](../../../plugins/scene-stage/README.md) | Scene Stage | `plugin` | `stage-direction@1`, `scene-stage@1`, `scene-cast@1` | `seed`, `direction`, `resolver`, `cast` | Tracks scenes and day/night; a location change clears old direction actors before new cues. |
-| [soundtrack](../../../plugins/soundtrack/README.md) | Soundtrack | `plugin` | none | `scene`, `cue` | Plays the background music a world includes, and switches it with the scene and mood. |
+| [scene-stage](../../../plugins/scene-stage/README.md) | Scene Stage | `plugin` | `stage-direction@1`, `scene-stage@1`, `scene-cast@1` | `seed`, `direction`, `resolver`, `cast`, `story-cues` | Optionally reads story scene and presence cues and commits stage changes with the story; events still override scenes, day/night, and actor direction. |
+| [soundtrack](../../../plugins/soundtrack/README.md) | Soundtrack | `plugin` | none | `scene`, `cue`, `story-cues` | Optionally reads story scene and mood cues to play the world's music; scene selection works without Scene Stage, and events remain overrides. |
 | [story-events](../../../plugins/story-events/README.md) | Hidden Story Events | `plugin` | `story-event-cue@1`, `story-event.plan@1` | `intake`, `evaluate`, `plot` | Hides story events that a world package declares until their conditions are met. When they are met, hands them to the narrative to be played out. |
 | [tabletop-rules](../../../plugins/tabletop-rules/README.md) | Tabletop Rules | `plugin` | `tabletop-check@1` | `creation`, `check` | Assigns attribute points at the start, and settles attribute checks with code. |
 | [world-init](../../../plugins/world-init/README.md) | World Dimensions | `core` | `world-data-provider@1`, `world.dimensions@1` | `schema-gen`, `dimension-context`, `dimension-tracker`, `dimension-clock`, `edit-dimensions` | Initializes character attributes and world dimensions, and keeps maintaining them. |
@@ -1330,8 +1333,9 @@ contributes:
 - **The wire kind is `<pluginId>/<name>`.** In `whisper-pack`, the example is `whisper-pack/whisper`. Two plugins may use the same `name` without a conflict. `name` is lower-case kebab-case, must not be a base kind's name, and must be unique in the package.
 - `roles` must not be empty. Which role may submit which base kind is in [seats](./world-model.md#seats).
 - `schema` is a JSON file in the package. Loading, `pnpm validate:plugin` and installation read it; a missing file, a file that is not a JSON object, or a path that leaves the package root is an error. A kind without `schema` takes no `fields`.
-- `display.label` is the name in the composer and the kind label rendered for the model, chosen by the session language. `fields` follow the text as JSON; an action without text renders as its label and `fields`, and still reaches the player message and the chat history. For example `[Aya · whispers] Over here. {"target":"Guard"}` or `[Aya · passes]`.
+- `display.label` is the name in the composer and the kind label rendered for the model, chosen by the session language. The composer shows `display` directly: `label` is the mode name, `icon` its icon and `placeholder` the input's placeholder. No separate composer mode needs declaring; see [Composer Modes](./ui-panels.md#composer-modes). `fields` follow the text as JSON; an action without text renders as its label and `fields`, and still reaches the player message and the chat history. For example `[Aya · whispers] Over here. {"target":"Guard"}` or `[Aya · passes]`.
 - A form, choice or confirmation can declare in `actionKind` which kind the player's answer is (a base kind or `<pluginId>/<name>`); by default a choice is `say` and a form or confirmation `act`. The answer is checked against the seat's role by this kind; see [API · player interactions](./api.md#player-interactions).
+- The composer can show only a subset of `schema`: the root is `type: object`, and `properties` are flat `string` (optionally with `enum`), `number`, `integer` or `boolean`, with `required` naming only listed properties. A schema outside this subset hides the mode (an interaction can still submit the kind), and `pnpm validate:plugin` warns "fields schema of `<name>` cannot be shown in the composer". Server validation is unaffected.
 - Only the kinds that the session's runnable plugins declare are available. The server checks each action against that catalogue; see [`GET /api/sessions/:id/action-kinds`](./api.md#action-kind-catalogue).
 - Function runtimes read the actions from `ctx.playerActions`, with `fields` as submitted; see [turn information in the handler context](#turn-information-in-the-handler-context).
 

@@ -4,11 +4,13 @@ import type { FunctionStoreView } from "@covel/shared/plugin-runtime";
 import { createFunctionStoreView } from "../function-runtime/plugin-handler-helpers.js";
 import { createPluginRandom } from "../function-runtime/plugin-random.js";
 import type { ToolCallContext } from "./tool-executor.js";
+import { combineAbortSignals } from "../turn-executor/turn-control.js";
 
 /** Own input snapshots and bind read authority to this invocation's identity. */
 export function createToolExecutionContext(
   caller: ToolCallContext,
   store: DataStore | undefined,
+  toolCallId?: string,
 ): {
   context: ToolExecutionContext;
   assertLive(): void;
@@ -18,6 +20,9 @@ export function createToolExecutionContext(
   let closed = false;
   const pendingReads = new Set<Promise<unknown>>();
   const signal = caller.signal;
+  // Service calls end with the invocation: one the tool did not await is
+  // cancelled when the tool returns, and `drain` waits for it to settle.
+  const invocation = new AbortController();
   const identity = {
     sessionId: caller.sessionId,
     turnId: caller.turnId,
@@ -74,6 +79,34 @@ export function createToolExecutionContext(
       ) => read(() => reads.readTurnMessages(options)),
     });
   }
+  let services: ToolExecutionContext["services"];
+  if (caller.services) {
+    // The tool's plugin and runtime are the caller, with the same read scope
+    // and recorder as the tool's own store reads.
+    const client = caller.services.createClient({
+      ...(caller.emitter ? { emitter: caller.emitter } : {}),
+      ...identity,
+      ...(toolCallId !== undefined ? { toolCallId } : {}),
+      signal:
+        combineAbortSignals(signal, invocation.signal) ?? invocation.signal,
+      reads: {
+        ...(caller.locale !== undefined ? { locale: caller.locale } : {}),
+        ...(caller.world ? { world: caller.world } : {}),
+        ...(store ? { store } : {}),
+        ...(caller.pluginDataVisibility
+          ? { visibility: caller.pluginDataVisibility }
+          : {}),
+        writeBuffer: pending,
+      },
+    });
+    services = Object.freeze({
+      discover: (contract: string) => read(() => client.discover(contract)),
+      call: (
+        request: Parameters<typeof client.call>[0],
+        options?: Parameters<typeof client.call>[1],
+      ) => read(() => client.call(request, options)),
+    });
+  }
   const context: ToolExecutionContext = Object.freeze({
     ...identity,
     ...(caller.locale !== undefined ? { locale: caller.locale } : {}),
@@ -93,12 +126,14 @@ export function createToolExecutionContext(
     signal,
     random: createPluginRandom({ ...identity, stream: identity.runtimeId }),
     ...(view ? { store: view } : {}),
+    ...(services ? { services } : {}),
   });
   return {
     context,
     assertLive,
     close() {
       closed = true;
+      invocation.abort(new Error("Tool invocation has completed"));
     },
     async drain() {
       await Promise.allSettled(pendingReads);

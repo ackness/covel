@@ -54,6 +54,8 @@ export interface AgentLoopDeps {
     textDelta: string;
     /** Drop the text streamed so far for this runtime before appending. */
     reset?: true;
+    /** The story paragraph this text belongs to (segmented stories only). */
+    segment?: import("@covel/shared").NarrativeDeltaSegment;
   }) => Promise<void>;
   /** Called when a runtime completes execution (e.g. on suspension). */
   readonly onRuntimeComplete?: (info: {
@@ -226,6 +228,12 @@ export interface TurnExecutorOptions {
 
 export interface TurnInputExecutionFlags {
   readonly suppressPlayerMessage?: boolean;
+  /**
+   * Progress scope of the root execution a `ctx.recursiveCall` execution runs
+   * under, so the nested runs' `ctx.progress` tasks settle with the root's
+   * commit. Set only by the kernel; a plugin cannot choose it.
+   */
+  readonly progressScopeId?: string;
 }
 
 export class MaxRecursionExceeded extends Error {

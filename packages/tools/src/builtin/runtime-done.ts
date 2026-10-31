@@ -1,20 +1,6 @@
 /**
- * Runtime-done builtin tool.
- *
- * Auto-registered on every agent runtime. Lets the LLM declare "I'm done"
- * without the framework having to round-trip another LLM call just so the
- * model can write a terminator message.
- *
- * Single-shot plugins (guide / codex / character-tracker / npc-graph
- * extractor / world-init schema-gen) follow this pattern:
- *   1. Call their business tool once (e.g. `generate-guide`)
- *   2. Immediately call `runtime-done` to finish
- *
- * The turn-executor detects the sentinel after each tool execution and
- * breaks out of the agent loop, using the preceding business tool calls as
- * the runtime's final output.
- *
- * Pattern mirrors `suspend` — sentinel + type guard + early exit.
+ * Completion sentinel for system agents whose resolved completion rule uses it.
+ * The runtime ends after the response containing a successful call.
  */
 
 import { z } from "zod";
@@ -40,9 +26,10 @@ export function isRuntimeDoneSentinel(
 
 export const runtimeDoneTool: ToolModule = tool({
   name: "runtime-done",
-  description: "Finish this runtime after all required tool calls.",
+  description:
+    "Call this last, only after every needed tool call has succeeded or when nothing needs doing. It records nothing. The run ends after this response; do not make more calls or write more prose.",
   parameters: z.object({
-    reason: z.string().optional().describe("Optional trace note."),
+    reason: z.string().optional().describe("Optional note kept in the trace."),
   }),
   execute: async ({ reason }) => {
     return withModelView(

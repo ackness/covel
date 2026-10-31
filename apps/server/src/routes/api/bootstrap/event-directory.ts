@@ -5,7 +5,7 @@ import type { PackageManifest } from "@covel/plugin-loader";
  * a session's active plugin runtimes so the builtin `emit-event` tool
  * (see `@covel/tools`'s `EventDirectoryLike`) can list known topics,
  * validate emitted payloads against their JSON Schema, and render a
- * locale-aware catalogue for segment 5 prompt injection (task 5).
+ * locale-aware catalogue for prompt injection.
  *
  * Declarations are re-aggregated on every call (session activation can
  * change between turns) — only the compiled ajv validators are cached,
@@ -25,6 +25,9 @@ import { resolveContainedPath } from "../../../world-data/safe-path.js";
 
 export interface EventDirectory {
   listTopics(sessionId: string): Promise<readonly string[]>;
+  describeTopics?(
+    sessionId: string,
+  ): Promise<readonly { topic: string; schema?: Record<string, unknown> }[]>;
   validate(
     sessionId: string,
     topic: string,
@@ -214,6 +217,26 @@ export function createEventDirectory(
       return [...collectSessionEvents(sessionId).values()]
         .filter((entry) => entry.decl.advertise)
         .map((entry) => entry.decl.topic);
+    },
+
+    async describeTopics(sessionId) {
+      return Promise.all(
+        [...collectSessionEvents(sessionId).values()]
+          .filter((entry) => entry.decl.advertise)
+          .map(async (entry) => {
+            try {
+              const { raw } = await loadSchema(entry);
+              return {
+                topic: entry.decl.topic,
+                ...(typeof raw === "object" && raw !== null
+                  ? { schema: raw as Record<string, unknown> }
+                  : {}),
+              };
+            } catch {
+              return { topic: entry.decl.topic };
+            }
+          }),
+      );
     },
 
     async validate(sessionId, topic, data) {

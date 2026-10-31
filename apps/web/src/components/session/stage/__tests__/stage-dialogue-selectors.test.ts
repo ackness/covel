@@ -30,17 +30,29 @@ describe("story segment speakers", () => {
     expect(storyParagraphSpeakers({})).toBeUndefined();
   });
 
-  it("reads the last attributed segment, never a streaming placeholder", () => {
+  it("reads the last attributed segment of a committed story", () => {
     expect(lastStorySpeaker({ id: "msg-1", segments })).toEqual({
       name: "陌生人",
     });
     expect(
       lastStorySpeaker({ id: "msg-1", segments: segments.slice(0, 2) }),
     ).toEqual({ name: "阿雅", characterId: "char-aya" });
+    // Live speakers belong to a streaming story only.
     expect(
-      lastStorySpeaker({ id: "stream_turn_narrator", segments }),
+      lastStorySpeaker({ id: "msg-1", segments: [] }, ["小雅"]),
     ).toBeUndefined();
     expect(lastStorySpeaker(undefined)).toBeUndefined();
+  });
+
+  it("reads a streaming story's last live speaker by name, or nobody", () => {
+    const stream = { id: "stream_turn_narrator" };
+    // The placeholder's segments are never read; its live speakers are.
+    expect(lastStorySpeaker({ ...stream, segments })).toBeUndefined();
+    expect(lastStorySpeaker(stream, [null, "小雅", null])).toEqual({
+      name: "小雅",
+    });
+    expect(lastStorySpeaker(stream, [null])).toBeUndefined();
+    expect(lastStorySpeaker(stream, [])).toBeUndefined();
   });
 });
 

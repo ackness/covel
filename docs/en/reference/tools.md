@@ -2,10 +2,12 @@
 
 A tool is a function the model can call during a run. The model gives a name and arguments, the framework runs it, and the result goes back to the model. This page lists every tool, the arguments and return value of each one, how to write your own tool, and how a tool writes data to storage. Plugin authors who write runtime prompts or tools need it.
 
-There are two kinds of tool:
+There are four kinds of tool:
 
 - **builtin**: included with the framework. Any plugin can use it.
 - **plugin**: registered by a plugin in its own `entry` module. Only that plugin can use it.
+- **imported**: an agent imports another plugin's model-facing service in `agent.tools.services`, and the framework generates a tool for it when the runtime starts; see [Imported service tools](#imported-service-tools). It is not in the registry, so the overview table does not list it.
+- **injected**: a tool the framework adds for a run because of the runtime's declaration, such as `search-tools`.
 
 > [!NOTE]
 > In the tables and approval rules below, `local` is an internal source label used by the executor. It means "a tool that a plugin's entry registered successfully." It is not a manifest field. The manifest has no `tools.local` field, and a manifest that sets one fails to load.
@@ -26,16 +28,13 @@ There are two kinds of tool:
 | plugin-data-set-batch | builtin | — | auto-allow | Write several items of persistent plugin data at once | defaults |
 | plugin-data-get | builtin | — | auto-allow | Read the current plugin's persistent data | `readOnly`, `idempotent`, `concurrencySafe` |
 | plugin-data-list | builtin | — | auto-allow | List the current plugin's persistent data | `readOnly`, `idempotent`, `concurrencySafe` |
-| **create-character** | builtin | — | auto-allow | Create a world model character. The type is checked against the schema, and the character is written to characters | defaults |
-| **update-character** | builtin | — | auto-allow | Update a character's description or fields by id, name, or alias (shallow merge). Can add aliases. Increments version automatically | defaults |
 | **sync-characters** | builtin | — | auto-allow | Create or update characters in one atomic batch. Up to 5 new characters and up to 10 updated characters | defaults |
-| **list-characters** | builtin | — | auto-allow | List all characters in this session (session scope, visible across plugins) | defaults |
-| **get-character** | builtin | — | auto-allow | Find one character by id, name, or alias | defaults |
-| **get-character-schema** | builtin | — | auto-allow | Read the character attribute schema of the current session. Lets character creation resume across turns | defaults |
+| **list-characters** | builtin | — | auto-allow | List all characters in this session (session scope, visible across plugins) | `readOnly`, `idempotent`, `concurrencySafe` |
+| **get-character** | builtin | — | auto-allow | Find one character by id, name, or alias | `readOnly`, `idempotent`, `concurrencySafe` |
 | **world-dimension-get** | builtin | — | auto-allow | Read current dimension values, frozen for the turn, by ID or path, with paging | `readOnly`, `idempotent`, `concurrencySafe` |
 | **world-dimension-list** | builtin | — | auto-allow | List open dimensions with their ID, name, type, and version. Does not dump values or rules | `readOnly`, `idempotent`, `concurrencySafe` |
-| **emit-event** | builtin | — | auto-allow | Emit a domain event that the current session has declared (one topic at a time). Checks the topic and payload schema | defaults |
-| **suspend** | builtin | — | auto-allow | Suspend the current runtime to wait for player input. Writes to the `suspensions` table. Can be resumed through the resume API | defaults |
+| **emit-event** | builtin | — | auto-allow | Emit a domain event that the current session has declared (one topic at a time). Advertises a topic enum and per-topic payload schemas | defaults |
+| **suspend** | builtin | — | auto-allow | Describe answers with form fields and suspend the runtime to wait for player input. Writes to the `suspensions` table. Can be resumed through the resume API | defaults |
 | **runtime-done** | builtin | — | auto-allow | The end signal for the agent tool loop. Call it after the business tool calls are done to end this runtime | defaults |
 | **delegate** | builtin | — | auto-allow | Hand one job to a sub-agent and get its output back; the sub-agent writes nothing | `readOnly` |
 | **search-tools** | injected | — | auto-allow | Deferred tool search. The framework injects it automatically when a manifest declares `tools.defer`. It uses BM25 search to find and activate tools that were not preloaded | — |
@@ -91,6 +90,16 @@ If a `readOnly: true` tool returns proposals or domain events, the call fails wi
 In the overview table, “defaults” means the default combination above; `—` means the loop handles the call directly without module annotations. Character tools currently retain defaults too. The SDK's `FRAMEWORK_TOOL_NAMES` is the single source of reserved names. A test checks equality in both directions against the default registry, optional memory tools and `search-tools`.
 
 If a declared `tools.plugin` tool is not registered, even when deferred by `tools.defer`, the runtime fails before calling the model: `runtime "<id>" declares plugin tool "<name>", but its plugin did not register it`. A builtin capability absent from the host is still omitted with a warning: `builtin tool "<name>" is not installed on this host — not offered`.
+
+## Execution within one batch
+
+One model reply can contain several agent tool calls. After `PreToolUse` rewrites a call, it joins the parallel pool only when the runtime authorizes its name and the tool declares both `readOnly: true` and `concurrencySafe: true`. Consecutive eligible calls form one pool, with at most 8 running at once. `concurrencySafe` is the author's promise that concurrent reads do not cause side effects through shared state. The kernel rejects writes and events returned by a read-only tool, but cannot inspect external side effects.
+
+Every other call is a barrier and runs alone: it waits for the preceding pool to finish, and later calls wait for the barrier. Unknown tools, undeclared names and the loop-handled `search-tools`, `suspend` and `runtime-done` calls are barriers. `delegate` does not declare concurrency safety and always runs serially.
+
+Tool messages, call records, proposals and events are collected in model order, regardless of completion order. A pooled call that exceeds its own `timeoutMs` returns `timeout` and counts as a failed call; its siblings and the loop continue. There is no default per-tool timeout. Omitting it keeps the runtime deadline as the limit; concurrent tools that wait on network reads should set `timeoutMs`.
+
+Calls skipped by a hook, suspension or loop termination still receive tool results and trace events explaining the reason. They do not count as executed calls, failures or step tool statistics. Before another model request, including output repair, the loop answers every unanswered call without executing it again.
 
 ## How tool calls work
 
@@ -230,7 +239,7 @@ Builtin tools are system-level building blocks, suited to being reused directly 
 - `render-ui`
 - `create-form`
 - `create-choices`
-- `create-character`
+- `sync-characters`
 - `world-dimension-get` / `world-dimension-list`
 
 ### What plugin tools are for (internal source label: `local`)
@@ -248,7 +257,7 @@ A plugin tool wraps the plugin's own business logic. Its schema, text, and data 
 - Tools are registered by `(pluginId, name)`. Different plugins can use the same name. If one plugin uses a duplicate name, or a framework reserved name, that whole batch of registrations fails and is rolled back.
 - A declaration in `tools.plugin` does not register an implementation. A call passes two checks: the runtime's tool allow-list, and the calling plugin's own registry. A name that is not registered does not fall through to another plugin's tool with the same name.
 - The model, `ctx.tools.call`, and `tools.defer` all use the tool's original name.
-- To expose a capability across plugins, use `ctx.services`.
+- To expose a capability across plugins, use a service. A running tool calls another plugin's services through `context.services`, with the same rules as a function runtime's `ctx.services`; an agent imports model-facing services as tools with `agent.tools.services`.
 
 ### Not a tool: framework features on `FunctionHandlerContext`
 
@@ -569,6 +578,8 @@ Only a successful `runtime-done` call returning its sentinel ends the loop. The 
 
 An agent uses it to tell the framework "I am done." Call it after all the business tools have been called. The runtime then ends, and the model does not have to write a closing message.
 
+Call it last, only after every needed tool call has succeeded or when nothing needs doing. It records nothing. The run ends after this response; make no more calls or prose. The optional reason is kept in the trace.
+
 | Argument | Type   | Required | Description                 |
 | -------- | ------ | -------- | --------------------------- |
 | reason   | string |          | Optional note for the trace |
@@ -712,6 +723,10 @@ Emit a domain event. The event must be declared in `events` by an enabled plugin
 
 Validation, and the list of available topics, are handled by an event directory (`EventDirectoryLike`; the server implementation is in `apps/server/src/routes/api/bootstrap/event-directory.ts`). It collects the declarations of the enabled plugins in the current session. In one session, a topic has only one plugin that declares it (see [plugins.md § Session plugin selection](./plugins.md#session-plugin-selection)). So the payload is always checked against that single schema.
 
+The model-facing `topic` schema is an enum of this session's advertised topics. `data` carries the topic's payload schema, or an `anyOf` with one titled branch per topic when several topics are available. A single topic uses its schema directly under `data`; `$schema` and `$id` are omitted. Schemas containing `$ref` or `$defs`, and unreadable schemas, are advertised as plain objects. With no advertised topics, the generic definition is used.
+
+Session preparation refreshes this definition every turn, including sessions without a character schema. Execution still accepts a string topic and delegates payload validation to the directory's Ajv validator: an unknown topic remains `refused`, not `invalid-input`. The prompt catalogue is unchanged.
+
 #### The four results of a call
 
 Checked in this order:
@@ -772,25 +787,39 @@ Only a successful `suspend` call returning its sentinel suspends the runtime. A 
 
 Pause the current runtime until the player gives input, then continue. It is declared in `packages/tools/src/builtin/suspend.ts`.
 
-| Argument     | Type   | Required | Description                                                                                                                                                                             |
-| ------------ | ------ | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| reason       | string | ✓        | A short note for the player, explaining why input is needed                                                                                                                             |
-| resumeSchema | object | ✓        | A **plain JSON Schema object** (`type` / `properties` / `required`). If a plugin defines it with Zod, it must first convert it with `zod-to-json-schema`. Do not pass a live Zod schema |
+| Argument | Type        | Required | Description                                                                                        |
+| -------- | ----------- | -------- | -------------------------------------------------------------------------------------------------- |
+| reason   | string      | ✓        | Short explanation shown to the player                                                              |
+| fields   | FormField[] | ✓        | At least one `create-form` field object; unique, non-empty names; selects need at least one option |
+
+The field objects support `type`, `name`, `label`, `placeholder`, `options`, `required`, `defaultValue`, `min`, `max` and `step`. Select defaults must match an option value.
+
+The player form initializes answers from defaults, including optional fields and `false`, `0` and `""`. Submitting without edits preserves those defaults; optional fields without defaults remain omitted.
+
+| Field type      | Compiled property                                                                                     |
+| --------------- | ----------------------------------------------------------------------------------------------------- |
+| text / textarea | `type: "string"`, `title: label`, `minLength: 1` when required                                        |
+| number          | `type: "number"`, `title: label`, `minimum: min` / `maximum: max` when supplied; `step` is not stored |
+| checkbox        | `type: "boolean"`, `title: label`                                                                     |
+| select          | `type: "string"`, `title: label`, `enum` of option values; option labels are not stored               |
+| Every type      | `defaultValue` becomes `default` when supplied                                                        |
+
+The compiled schema is an object with `properties`, `additionalProperties: false` and a `required` list for required fields (omitted when empty). The answer is an object keyed by field name, for example `{ "name": "Alex", "age": 21 }`. Function runtimes still return a raw JSON Schema in `outcome: "suspended"`; the tool does not accept a raw-schema argument.
 
 **Output**: a marker object `{ _covelSuspend: true, reason, resumeSchema }`. The framework intercepts it, and normally it does not return to the model as an ordinary tool result.
 
 What happens after the call:
 
-1. The agent calls `suspend({ reason, resumeSchema })`, and the tool returns the marker object above.
+1. The agent calls `suspend({ reason, fields })`, and the tool returns the marker object above.
 2. After each tool execution, the framework checks the result with `isSuspendSentinel()`. When it recognizes the marker, it writes the state of this run to the `suspensions` table: the identity of the execution, the proposals and events already buffered, the full conversation record with the model, and the state of the tool loop (see the notes below).
 3. The framework emits a `turn.suspended` event, and the whole tool loop stops right away.
 4. Afterwards, data that matches `resumeSchema` is submitted through `POST /api/sessions/:id/suspensions/:suspensionId/resume`, and this runtime continues from where it stopped (see [api.md](./api.md) for details).
 
-When one of the model's replies has several tool calls, the `suspend` call first leaves a placeholder result that can be replaced. Each call after it that has not run yet writes a "cancelled" result. This way, after resuming, the conversation record still meets the provider's requirement that tool calls and results come in pairs.
+When one model reply has several tool calls, `suspend` leaves a `summary` placeholder in the tool success envelope. Each later call that has not run receives an error envelope with `error.code: "cancelled"`. Resume replaces the placeholder by the same `toolCallId`, returning a `summary` and the player's answer in `data`; suspensions saved with older placeholder text are also replaced by ID. The player's `data` is preserved in full, including nested identifiers and timestamps, without `modelFacingJson` projection. The resumed transcript therefore still meets the provider's requirement that tool calls and results come in pairs.
 
 **Things to note:**
 
-- `resumeSchema` must be serializable with `JSON.stringify`, because the state is written to storage.
+- The compiled `resumeSchema` is the JSON Schema stored and validated on resume.
 - A runtime has only one suspended item waiting to resume at a time: when it suspends again, the older item is voided at once. When the player played another turn, the plugin changed version, or a record the item would change was changed by another execution afterwards (for example a background job or a manual run), the suspended item is voided on resume; see [Out-of-date suspended items](./api.md#out-of-date-suspended-items). The resume endpoint looks it up by the suspended item's ID.
 - `createDefaultToolRegistry` in `@covel/tools` registers it as a builtin tool. An agent still has to list `suspend` in `agent.tools.builtin` before it can call it.
 - A runtime that runs in the background cannot suspend, because no player is waiting on it. A runtime that declares `schedule.background: true` or `schedule.detached` and lists `suspend` in `agent.tools.builtin` is rejected at load. If a runtime in a background job suspends anyway (a function handler returns a suspension, or an event runtime triggered by the background run calls `suspend`), the job is recorded as `failed` and nothing is committed.
@@ -901,16 +930,53 @@ The SDK's `TOOL_ERROR_CODES` is the single error-code list. Authors throw `new T
 | `unavailable` | Not authorized or currently unavailable | Tool authorization, missing executor, tools or sub-agents | No for tools/executor; yes for delegate |
 | `timeout` | Tool or sub-agent timed out | Executor, tools or sub-agents | No for tools/executor; yes for delegate |
 | `conflict` | Write conflict, reserved | No builtin producer yet | No |
-| `cancelled` | Call cancelled | Executor, tools or sub-agents | No for tools/executor; yes for delegate |
+| `cancelled` | Call cancelled, including calls skipped within a batch | Executor, tool loop, tools or sub-agents | No for tools/executor or skipped batch calls; yes for delegate |
 | `internal` | Unexpected execution failure | Executor, tools or sub-agents | No for tools/executor; yes for delegate |
 
-The code and accounting flag are separate. Approval denial, undeclared calls and hook aborts still count as failed calls. Only a tool's own `ToolError("refused", …)` is excluded from runtime failure accounting. `delegate` keeps its own rule: every failure except `invalid-input` sets the flag.
+The code and accounting flag are separate. Approval denial and undeclared calls still count as failed calls. A call skipped by `PreToolUse` in an agent loop appears only in history and trace, without failure accounting; a hook abort still fails a function-runtime call. For tools that execute, only a tool's own `ToolError("refused", …)` is excluded from runtime failure accounting. `delegate` keeps its own rule: every failure except `invalid-input` sets the flag.
 
 `ToolCallResult.error` provides the same `{code,message,hint?}` for code. Failed calls have `parsedResult: null`; `delegate` retains its own failure result. A failed `ctx.tools.call` rejects with `ToolError`, whose message is plain text rather than JSON.
 
 For `internal`, the model reads `Tool "<name>" failed: <text>`: only the first error line, UUIDs replaced by `<id>`, and at most 300 characters of error text. Author-thrown `ToolError.message` is limited to 2 000 characters. Non-concealed `tool.failed.error` retains the full message; unexpected exceptions are also logged server-side. Stack frames and cause chains are not sent to the model. Trace `code` uses the same vocabulary, with optional `hint` and validation `details`; `tool.completed.result` is the JSON text above. Concealed runtimes still strip these fields.
 
-### create-character
+### sync-characters
+
+Merge the new characters and the changes to existing characters found in one narrative turn into a single commit. Either everything succeeds, or nothing is written: if any create or update fails partway through, this call leaves no partial writes.
+
+It handles duplicate checks, default value merging, schema warnings, and reads of buffered writes within the batch.
+
+Agents receive the type enum and compact field constraints through the session variant of this tool. Function runtimes read the full schema from `ctx.world.characterSchema`.
+
+| Argument  | Type              | Required | Description                                                   |
+| --------- | ----------------- | -------- | ------------------------------------------------------------- |
+| `creates` | CharacterCreate[] |          | New characters, default `[]`, up to 5 items                   |
+| `updates` | CharacterUpdate[] |          | Patches for existing characters, default `[]`, up to 10 items |
+
+The entry fields are listed below. Failures name the entry, such as `creates[1]` or `updates[0]`, and preserve the error code and correction text. Alias ownership, player-name collisions and unknown types use `invalid-input`; unresolved updates use `not-found` or `ambiguous`.
+
+**Output (parsedResult)**: `{ created, updated, unchanged }`
+
+Rules:
+
+- Both lists can be empty at the same time. An empty batch means "no character changes this turn." The call succeeds and produces no proposal.
+- A duplicate create with the same `(name, type)` in the same session is not an error. It returns `unchanged`, along with the id of the existing character. It does not overwrite the existing description and fields, and it does not block other valid operations in the batch. To change an existing character, you must explicitly put it in `updates`.
+- Other validation failures make the whole batch fail. After fixing it, submit the full batch again.
+- A create or update earlier in the same batch is visible to the items after it.
+
+Host developers who write composite tools need to be careful here. When the host provides `context.world`, the composite tool adds only the proposals new in this batch on top of that snapshot. Outer upstream proposals and pending proposals that are already in the snapshot must not be added again. Otherwise the version would advance one extra time, or newer fields would be overwritten.
+
+**Used by**: `char-creator/character-tracker`. It puts `sync-characters` in `completeAfterTools`, so the run ends right away after the tool succeeds, and the model is not asked to write a closing message. The configuration of this tracker:
+
+- It declares `toolChoice: required`, so every reply must call a tool. When nothing has changed, it submits an empty batch.
+- It uses the default budget of 20 steps for the tool loop, so it can first read characters, and it can also fix a failed batch. It ends right after a successful sync.
+- The limit for each batch is still 5 new characters and 10 updates to existing characters.
+- The `<existing-characters>` roster, which only this tracker sees, lists each character's id, name, aliases (only when there are any), type, and description. This section changes only when characters are added or rewritten.
+- `<character-fields>` has one line per id. Within a 12000-character budget, it includes each character's current `fields`, and it is updated every turn. Usually one model call is enough to finish the sync. For a character that is over the budget, its line says `fieldsOmitted`, and the full fields are read with `get-character`.
+- Reasoning is turned off, a single call times out after 30 seconds, and it retries once.
+
+The tracker spends its detail-read budget only after a successful `get-character` result. A failed read remains available for correction; an explicit-completion runtime must resolve that failure with a successful read.
+
+#### creates[]
 
 Create a new character record: a player character, an NPC, or a companion.
 
@@ -918,11 +984,11 @@ Create a new character record: a player character, an NPC, or a companion.
 | ----------- | ----------------------- | -------- | -------------------------------------------------------------------------------- |
 | name        | string                  | ✓        | Character name                                                                   |
 | aliases     | string[]                |          | Other names for the same person (nicknames, titles, a name in another script)    |
-| type        | enum                    | ✓        | `player` / `npc` / `companion`                                                   |
+| type        | enum                    | ✓        | `player` plus the world schema types                                             |
 | description | string                  |          | Short description of the character                                               |
 | fields      | Record<string, unknown> |          | Attribute key-value pairs (should match the world schema's character-attributes) |
 
-**Output (parsedResult)**: `{ existed, characterId, name, type }`
+Created entries appear in `created`; existing matches appear in `unchanged`, with `characterId`, `name` and `type`.
 
 The id of a new character is made from its name, and it is a readable word form (see [short IDs](#short-ids-entity-references-the-llm-can-read)).
 
@@ -943,7 +1009,7 @@ Created npc "苏婉" as char-abc123. — 青萍宗外门首席弟子，冰灵根
 When the duplicate check matches:
 
 ```
-Character "苏婉" (npc) already exists as char-abc123. No new record created. Use update-character to modify it.
+Character "苏婉" (npc) already exists as char-abc123. No new record created. Use sync-characters updates to modify it.
 ```
 
 When `aliases` contains the name or alias of another character, the call fails, and no proposal is produced. The error says which character it is, so the model can update that character instead:
@@ -954,19 +1020,19 @@ When `aliases` contains the name or alias of another character, the call fails, 
 
 #### How attributes are validated
 
-- The `fields` argument the model sees is a compact object. The two tool definitions, `create-character` and `update-character`, do not repeat the whole world attribute table. This way, a small model with an 8k context is not filled up by two copies of a long JSON Schema just because the character has many attributes.
+- The model sees a compact `fields` object. The batch description shares one set of structural constraints across creates and updates, keeping large world attribute tables out of the parameter schema.
 - The authoritative definition of each attribute (id, type, range, enum, default value, description) is stored in the session's world schema.
 - The tool description adds a short list of field constraints: type, numeric upper and lower bounds, enum options, element types for arrays and maps, and nested structure. It does not repeat long descriptions or default values. The creates and updates of `sync-characters` share one constraint description.
 - At execution time, the authoritative schema is read again: default values are merged in, and the declared fields are checked strictly. The check happens **before** the write proposal is produced. An invalid string, `null`, or a non-finite number cannot pass as a numeric attribute.
 - Keys that are not declared are still kept, but a warning is returned.
-- `create-character` merges the default values first, and then validates. `update-character` validates only the patch in this call, so it can fix old data one field at a time.
+- `creates` merges the default values first, and then validates. `updates` validates only the patch in this call, so it can fix old data one field at a time.
 - A numeric patch writes the new absolute value, not a change.
 
 Plugins can use the same rules: `mergeSchemaDefaults` and `assertCharacterFields`. On failure, they throw `CharacterFieldValidationError`.
 
 #### Which data is read
 
-`get-character-schema`, default value filling, and character write validation all read the session's World Model. This view merges three things in execution order: the committed records, the domain proposals of upstream runtimes that succeeded, and the pending proposals of this runtime. An invalid schema or an invalid character write does not enter this view. Character records are not mirrored into plugin private data.
+Default value filling and character write validation all read the session's World Model. This view merges three things in execution order: the committed records, the domain proposals of upstream runtimes that succeeded, and the pending proposals of this runtime. An invalid schema or an invalid character write does not enter this view. Character records are not mirrored into plugin private data.
 
 When reading, updates are applied in proposal order, using `materializeCharacterUpsert`, the same function the commit uses:
 
@@ -994,10 +1060,10 @@ Template/default checks in `create-character-form` return `invalid-input`, inclu
 - Validation uses the schema given by the same upstream round, and it happens before the form is shown. The general `create-form` is not affected by these character-specific rules.
 - A submission that was accepted and later found not to meet the rules is kept as an audit record, and its values are not rewritten. In that case, character creation must start again in a new session. A normal setup retry does not clear this input.
 
-**Used by**: the general builtin. The bundled `char-creator/character-tracker` reuses it indirectly through `sync-characters` below. The form submission of `player-init` is turned into the same kind of proposal directly by the guard. The tool is not exposed to the model.
+The form submission of `player-init` is turned into a proposal directly by its guard.
 
 > [!IMPORTANT]
-> **Writes are buffered.** When `create-character` / `update-character` runs, it does not write to the `characters` table directly. It buffers the write as a [`character.upsert`](#characterupsert) proposal.
+> **Writes are buffered.** When `sync-characters` runs, it does not write to the `characters` table directly. It buffers the write as a [`character.upsert`](#characterupsert) proposal.
 >
 > - Within the same tool loop, you can read your own buffered writes: a create followed by an update, and the update can see the create just before it.
 > - The actual table write happens at the end of the turn, in the **same transaction** as the other writes of this execution.
@@ -1005,7 +1071,7 @@ Template/default checks in `create-character-form` return `invalid-input`, inclu
 
 This tool does not change the session's phase. Setup completion is signaled by the runtime output `preGameDone: true`. The framework uses that to update `session.setupRuntimes`, and it advances `session.phase` itself (`setup` / `playing`).
 
-### update-character
+#### updates[]
 
 Update an existing character. Use it for changes in state, changing equipment, injury, death, and when the story reveals another name for a character.
 
@@ -1034,7 +1100,7 @@ What each argument does:
 - Within one call, removal happens before addition, so one call can replace an alias.
 - In `sync-characters.updates[]`, an alias removed by an earlier item can be added to another character by a later item.
 
-**Successful output (parsedResult)**: `{ characterId, version }`
+Each successful patch appears in `updated` as `{ characterId, version }`.
 
 **Example `summary` the model sees**:
 
@@ -1065,48 +1131,17 @@ Missing characters throw `ToolError("not-found", …)`; non-unique names throw `
 
 The executor records this call as failed. It does not satisfy the agent's `completeAfterTools`. Even if a function runtime catches this error, it does not commit the writes buffered before it.
 
-### sync-characters
-
-Merge the new characters and the changes to existing characters found in one narrative turn into a single commit. Either everything succeeds, or nothing is written: if any create or update fails partway through, this call leaves no partial writes.
-
-It reuses the duplicate check, default value merging, schema warnings, and "reads its own buffered writes" of `create-character` / `update-character`.
-
-| Argument  | Type              | Required | Description                                                   |
-| --------- | ----------------- | -------- | ------------------------------------------------------------- |
-| `creates` | CharacterCreate[] |          | New characters, default `[]`, up to 5 items                   |
-| `updates` | CharacterUpdate[] |          | Patches for existing characters, default `[]`, up to 10 items |
-
-Each item in `creates[]` takes the same arguments as `create-character`, and each item in `updates[]` takes the same arguments as `update-character`.
-
-**Output (parsedResult)**: `{ created, updated, unchanged }`
-
-Rules:
-
-- Both lists can be empty at the same time. An empty batch means "no character changes this turn." The call succeeds and produces no proposal.
-- A duplicate create with the same `(name, type)` in the same session is not an error. It returns `unchanged`, along with the id of the existing character. It does not overwrite the existing description and fields, and it does not block other valid operations in the batch. To change an existing character, you must explicitly put it in `updates`.
-- Other validation failures make the whole batch fail. After fixing it, submit the full batch again.
-- A create or update earlier in the same batch is visible to the items after it.
-
-Host developers who write composite tools need to be careful here. When the host provides `context.world`, the composite tool adds only the proposals new in this batch on top of that snapshot. Outer upstream proposals and pending proposals that are already in the snapshot must not be added again. Otherwise the version would advance one extra time, or newer fields would be overwritten.
-
-**Used by**: `char-creator/character-tracker`. It puts `sync-characters` in `completeAfterTools`, so the run ends right away after the tool succeeds, and the model is not asked to write a closing message. The configuration of this tracker:
-
-- It declares `toolChoice: required`, so every reply must call a tool. When nothing has changed, it submits an empty batch.
-- It uses the default budget of 20 steps for the tool loop, so it can first read characters, and it can also fix a failed batch. It ends right after a successful sync.
-- The limit for each batch is still 5 new characters and 10 updates to existing characters.
-- The `<existing-characters>` roster, which only this tracker sees, lists each character's id, name, aliases (only when there are any), type, and description. This section changes only when characters are added or rewritten.
-- `<character-fields>` has one line per id. Within a 12000-character budget, it includes each character's current `fields`, and it is updated every turn. Usually one model call is enough to finish the sync. For a character that is over the budget, its line says `fieldsOmitted`, and the full fields are read with `get-character`.
-- Reasoning is turned off, a single call times out after 30 seconds, and it retries once.
-
 ### list-characters
 
 List all the characters in this session. Characters belong to the session, and every plugin can see them.
 
 The output is a **compact text list**, with one character per line: id, name (followed by `(aka …)` when there are aliases), type, version, and a short description. The model uses it to match known people quickly. When it needs the full attributes, it calls `get-character` separately.
 
-| Argument | Type | Required | Description                              |
-| -------- | ---- | -------- | ---------------------------------------- |
-| type     | enum |          | Filter by `player` / `npc` / `companion` |
+| Argument | Type   | Required | Description                                          |
+| -------- | ------ | -------- | ---------------------------------------------------- |
+| type     | string |          | Optional non-empty type string from the world schema |
+
+Omit `type` to read all types. `null` and the empty string fail validation; `"none"` and `"all"` are literal filters. An empty filtered result lists the types present in the session.
 
 **Output (parsedResult)**: `{ count, characters: CharacterSnapshot[] }`
 
@@ -1129,17 +1164,6 @@ Characters in session (3 total, sorted by frequency then recency):
 
 **Used by**: the narrative and chat narrative plugins declare this tool, to look up characters outside the current scene. Third-party plugins can also declare it. A plugin that already has the character roster from its context can use `get-character` to fill in the full attributes that the summary does not have.
 
-### get-character-schema
-
-Read the session's character attribute schema. The argument is `{}`, and it returns `{ schema: CharacterSchemaRecord | null }`.
-
-- The schema belongs to the session's World Model. It contains `version` / `types` / `attributes`. When it does not exist, it returns `null`.
-- The `summary` the model reads passes through `modelFacingJson`, removing the session ID and write timestamps. Code still receives the complete `schema` record.
-- The read includes the validated pending domain proposals. It does not infer the schema from the plugin's private `schema` data.
-- This tool does not write data, and it does not accept IDs of other sessions or plugins.
-
-A third-party character creation plugin can first use the schema input bound in this execution. When resuming an old session, use this tool to read the result of a setup that was already completed. This way, the plugin does not need to read other plugins' private data, and it does not need to depend on the name of an official provider.
-
 ### get-character
 
 Look up the **full attributes** of one character by id, name, or alias: aliases, description, version, timestamps, and all fields. You must pass one of `id` or `name`.
@@ -1155,8 +1179,8 @@ A narrative plugin can declare only the two read-only tools `list-characters` an
 
 **Output (parsedResult)**:
 
-- Found: `{ found, character: CharacterSnapshot }`
-- Not found: `{ found: false, candidates: string[] }`. `summary` carries the same information as when `update-character` cannot find a character (the closest name, or the ambiguous candidates). `candidates` are the names of those characters.
+- Found: `{ character: CharacterSnapshot }`, with no `found` key.
+- Missing: `ToolError("not-found", …)` with the closest known names. Multiple matches: `ToolError("ambiguous", …)` with candidate names and IDs. The executor records a failed call and returns an error envelope; there is no successful miss result.
 
 **Example `summary` the model sees**:
 
@@ -1448,6 +1472,54 @@ The tool does two things: it writes the normalized `{ prompt, promptMode, compos
 The model does not have to write a `{ topic, data }` event envelope itself, so it cannot leave out the topic or write an empty one. The runtime's output schema checks only the trusted result that the tool produces.
 
 Both prompt generators are agents that are triggered manually, and they declare `schedule.background: true`. Their `agent.completion.afterTools` lists the matching tool, so the run ends after one successful submit. The image generator that follows keeps running in the background.
+
+## Imported service tools
+
+An agent imports another plugin's model-facing services in `agent.tools.services` ([how to provide one](./plugin-extensions.md#model-facing-services)). Each import becomes a read-only tool when the runtime starts.
+
+```yaml
+agent:
+  tools:
+    services:
+      - inventory.items@1
+      - { contract: world.map@2, as: look-at-map }
+```
+
+- **Name**: by default the contract without its version, dots as dashes (`inventory.items@1` → `inventory-items`); `as` names it otherwise. A name has only letters, digits, `_` and `-`, at most 64; a derived name that is too long needs `as`. A name cannot repeat a framework tool, the runtime's `tools.builtin` / `tools.plugin`, the package's `contributes.tools` or another import, and one contract is imported once. Manifest validation reports a clash.
+- **Description and parameters**: the description is the provider's registered `description`. The parameters' JSON Schema comes from the provider's Zod input (without `$schema`), or from the provider's explicit `inputSchema`. A Zod input (also one shown through an explicit `inputSchema`) is checked on the tool side first, with the usual field-by-field errors and repair of arrays or objects sent as JSON text. The provider receives the arguments the model sent, or their repair, and parses them once for its handler, so a `transform` applies once. An input that is not a Zod schema is checked by the provider only.
+- **Annotations**: `{ readOnly: true, stagesWrites: false, idempotent: true, concurrencySafe: true }`. Imported services are read-only and can run together with other read-only tools. A sub-agent keeps its imports.
+- **Result**: the model gets `{ "data": … }` like any other tool, with IDs, UUIDs and timestamps removed by `modelFacingJson`. Approval, `PreToolUse` / `PostToolUse`, `tool_calls` records and `tool.*` traces work as usual; approval counts the source as `local`.
+- **Time limit**: a call waits at most 15 seconds for the provider and answers `timeout` after that.
+- **Deferred loading**: with `tools.defer: true`, or with an import's name in the `defer` list, the import is deferred like other tools and found through `search-tools`.
+- **Cannot complete a runtime**: `finishWith` and `completion.afterTools` cannot name an imported tool. A runtime must not need another plugin to finish.
+
+### Absent tools
+
+Without exactly one active provider, the tool is absent: it is not in the model request's tool list, and `search-tools` does not find it. The runtime starts and the story commits as usual. When the model still calls it (a resumed transcript still holds it, or the model guessed the name), the call answers `unavailable` with the reason and no plugin ID:
+
+- `The tool "inventory-items" is unavailable in this session: no active provider offers inventory.items@1.`
+- `…: more than one plugin provides it.`
+- `…: its provider is paused after repeated errors.`
+- `…: its provider does not offer it to models.`
+
+The server log has a line with the plugin IDs for the author.
+
+### How a service failure is answered
+
+An imported tool, and any plugin tool that lets a service error through, answers the model by this table. Only an input error is the model's to fix; the other failures are the provider's, so the result carries `refused: true` and does not count as the caller's failed call. A function runtime that fails because of one is not counted as faulty either; the service call trace names the provider. These failures do not count toward pausing the provider.
+
+<!-- prettier-ignore -->
+| Service outcome | Tool error code | `refused` |
+| --- | --- | --- |
+| Provider unavailable, unapproved or revoked; a call cycle or the depth limit | `unavailable` | yes |
+| Timed out waiting | `timeout` | yes |
+| The call was cancelled | `cancelled` | no |
+| The provider rejected the input | `invalid-input` (names the fields) | no |
+| The provider's result fails its output schema | `internal`: "The service returned an invalid result." | yes |
+| The provider threw a `ToolError` | Its own code, message and hint | yes (except `invalid-input` and `cancelled`) |
+| The provider threw another error | `internal`, first line only, UUIDs as `<id>` | yes |
+
+A tool's own timeout, the caller's cancellation, an approval denial and a `PreToolUse` block are unchanged.
 
 ## Short IDs (entity references the LLM can read)
 
@@ -1896,7 +1968,7 @@ The HTTP `POST /api/sessions/:id/characters` also commits through this proposal 
 | expectedVersion | number  |          | The version the update proposal read. At commit time, `fields` is merged into the latest character as a shallow patch, and the live version is incremented |
 | createdAt       | string  |          | Creation time, defaults to the commit time                                                                                                                 |
 
-`update-character` fills in `expectedVersion` automatically.
+`sync-characters` fills in `expectedVersion` automatically.
 
 **Parallel updates do not drop each other's fields.** Two runtimes running in parallel in the same stage, even if both start from v1, re-read the latest character in order at commit time, and then merge each one's fields patch. A later commit does not lose a new field from an earlier commit. If both changed the same field, the later patch overwrites the earlier one.
 

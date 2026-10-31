@@ -1904,7 +1904,7 @@ describe("effects hazard (same-layer W/W, W/R, R/W detection)", () => {
 
   it("scenario 18b: 同层 effects 检查覆盖 W/W、W/R、R/W 且放行 R/R；双方 parallelSafe 只豁免不含 unknown:* 的纯 W/W；相同输入在 default/strict policy 下分别产出稳定的 warning/串行 level — 断言 hazard 矩阵与两种 policy 的稳定输出", () => {
     const writer = deriveEffects(
-      rt("p/writer", { tools: { builtin: ["update-character"] } }),
+      rt("p/writer", { tools: { builtin: ["sync-characters"] } }),
     );
     const reader = deriveEffects(
       rt("p/reader", { tools: { builtin: ["list-characters"] } }),
@@ -1923,14 +1923,12 @@ describe("effects hazard (same-layer W/W, W/R, R/W detection)", () => {
     // and never a W/W overlap that involves unknown:*.
     const safeWriterA = deriveEffects(
       rt("p/sa", {
-        tools: { builtin: ["update-character"] },
-        effects: { parallelSafe: true },
+        effects: { writes: ["characters:*"], parallelSafe: true },
       }),
     );
     const safeWriterB = deriveEffects(
       rt("q/sb", {
-        tools: { builtin: ["create-character"] },
-        effects: { parallelSafe: true },
+        effects: { writes: ["characters:*"], parallelSafe: true },
       }),
     );
     expect(effectsHazard(safeWriterA, safeWriterB)).toBe(false); // pure W/W exempt
@@ -1951,8 +1949,8 @@ describe("effects hazard (same-layer W/W, W/R, R/W detection)", () => {
     const group: ScheduledGroup = {
       runtimes: [
         rt("p/narrator", { outputKind: "story" }),
-        rt("z/writer2", { tools: { builtin: ["create-character"] } }),
-        rt("a/writer1", { tools: { builtin: ["update-character"] } }),
+        rt("z/writer2", { tools: { builtin: ["sync-characters"] } }),
+        rt("a/writer1", { tools: { builtin: ["sync-characters"] } }),
       ],
     };
 

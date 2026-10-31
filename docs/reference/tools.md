@@ -2,10 +2,12 @@
 
 工具是模型在一次运行中可以调用的函数：模型给出名字和参数，框架执行它，把结果回给模型。本页列出全部工具、每个工具的参数和返回，以及怎样写自己的工具、工具怎样把数据写进存储。写 runtime 提示词或写工具的插件作者需要它。
 
-工具分两类：
+工具分四类：
 
 - **builtin**：框架自带，任何插件都可以用。
 - **plugin**：插件在自己的 `entry` 模块里注册，只有这个插件能用。
+- **导入**：agent 在 `agent.tools.services` 里导入别的插件给模型用的服务，框架在 runtime 开始时为它生成一个工具，见[导入的服务工具](#导入的服务工具)。它不在注册表里，所以不在下面的概览表里。
+- **注入**：框架按 runtime 的声明临时加上的工具，例如 `search-tools`。
 
 > [!NOTE]
 > 下文表格和审批规则里的 `local` 是执行器内部使用的来源标签，指“由插件 entry 注册成功的工具”。它不是清单字段。清单里没有 `tools.local`，写了它的清单加载失败。
@@ -26,16 +28,13 @@
 | plugin-data-set-batch | builtin | — | auto-allow | 批量写入插件持久化数据 | 默认 |
 | plugin-data-get | builtin | — | auto-allow | 读取当前插件持久化数据 | `readOnly`, `idempotent`, `concurrencySafe` |
 | plugin-data-list | builtin | — | auto-allow | 列出当前插件持久化数据 | `readOnly`, `idempotent`, `concurrencySafe` |
-| **create-character** | builtin | — | auto-allow | 创建世界模型角色，类型按 schema 校验，写入 characters | 默认 |
-| **update-character** | builtin | — | auto-allow | 按 id、名字或别名更新角色描述/字段（shallow merge）并可追加别名，自动 version++ | 默认 |
 | **sync-characters** | builtin | — | auto-allow | 原子批量创建/更新角色；新角色 ≤5、已有角色更新 ≤10 | 默认 |
-| **list-characters** | builtin | — | auto-allow | 列出本 session 所有角色（session 作用域，跨插件可见） | 默认 |
-| **get-character** | builtin | — | auto-allow | 按 id、名字或别名查找单个角色 | 默认 |
-| **get-character-schema** | builtin | — | auto-allow | 读取当前会话的角色属性 schema，支持跨回合恢复创角 | 默认 |
+| **list-characters** | builtin | — | auto-allow | 列出本 session 所有角色（session 作用域，跨插件可见） | `readOnly`, `idempotent`, `concurrencySafe` |
+| **get-character** | builtin | — | auto-allow | 按 id、名字或别名查找单个角色 | `readOnly`, `idempotent`, `concurrencySafe` |
 | **world-dimension-get** | builtin | — | auto-allow | 按 ID/path 分页读取回合冻结的当前维度值 | `readOnly`, `idempotent`, `concurrencySafe` |
 | **world-dimension-list** | builtin | — | auto-allow | 列出开放维度 ID、名称、类型与版本，不倾倒值或规则 | `readOnly`, `idempotent`, `concurrencySafe` |
-| **emit-event** | builtin | — | auto-allow | 发射当前 session 已声明的领域事件（一次一个 topic），校验 topic + payload schema | 默认 |
-| **suspend** | builtin | — | auto-allow | 挂起当前 runtime 等待玩家输入，写 `suspensions` 表，可通过 resume API 恢复 | 默认 |
+| **emit-event** | builtin | — | auto-allow | 发射当前 session 已声明的领域事件（一次一个 topic），工具定义含 topic enum 与 payload schema | 默认 |
+| **suspend** | builtin | — | auto-allow | 用表单字段声明答案，挂起等待玩家输入，写 `suspensions` 表，可通过 resume API 恢复 | 默认 |
 | **runtime-done** | builtin | — | auto-allow | Agent 工具循环的结束信号——业务工具调用完毕后调用以结束本 runtime | 默认 |
 | **delegate** | builtin | — | auto-allow | 把一件事交给子 agent 运行并拿回它的输出；子 agent 不写入 | `readOnly` |
 | **search-tools** | 注入 | — | auto-allow | 延迟工具搜索——manifest 声明 `tools.defer` 时框架自动注入，BM25 检索并激活未预载工具 | — |
@@ -91,6 +90,16 @@ tool({
 概览表中的“默认”指上表的默认组合；`—` 表示由循环直接处理，没有工具模块注解。角色工具目前也保留默认组合。框架保留名只有 SDK 的 `FRAMEWORK_TOOL_NAMES` 一份来源；测试双向核对默认注册表、可选记忆工具和 `search-tools` 的名字集合。
 
 runtime 声明的 `tools.plugin` 中有工具未注册时，即使它被 `tools.defer` 延迟，runtime 也会在模型调用前失败：`runtime "<id>" declares plugin tool "<name>", but its plugin did not register it`。宿主没有安装的 builtin 能力仍会被省略并告警：`builtin tool "<name>" is not installed on this host — not offered`。
+
+## 同一批调用的执行
+
+agent 的一条模型回复可以包含多个工具调用。调用经过 `PreToolUse` 改写后，只有在 runtime 已授权、工具声明 `readOnly: true` 且 `concurrencySafe: true` 时才进入并行池。连续满足条件的调用组成一池，最多同时执行 8 个。`concurrencySafe` 是作者的承诺：工具与其他只读调用并发时不会通过共享状态产生副作用；内核会拒绝只读工具返回的写入和事件，但不能检查外部副作用。
+
+其他调用是屏障，单独执行：先等前一池全部结束，屏障结束后才启动后面的调用。未知工具、未声明的名字和循环内处理的 `search-tools`、`suspend`、`runtime-done` 都是屏障。`delegate` 没有声明安全并发，始终串行。
+
+工具消息、调用记录、proposal 和事件都按模型给出的顺序汇总，不按完成时间排序。池中某个工具触发自己的 `timeoutMs` 时，它返回 `timeout` 并计入失败调用；其他调用和后续循环继续。没有默认的单工具超时，省略时仍受 runtime 总时限约束；会等待网络读取的并发工具应自行设置 `timeoutMs`。
+
+因 Hook、挂起或循环结束而没有执行的调用仍有工具结果和 trace，注明跳过原因；它们不计入已执行调用、失败计数或步骤的工具统计。循环在后续模型请求（包括输出修复）前补齐所有未回答的调用，不重新执行工具。
 
 ## 工具调用方向
 
@@ -230,7 +239,7 @@ builtin 工具是系统级的积木，适合被多个插件直接复用。例如
 - `render-ui`
 - `create-form`
 - `create-choices`
-- `create-character`
+- `sync-characters`
 - `world-dimension-get` / `world-dimension-list`
 
 ### Plugin tool 的职责（内部来源标签：`local`）
@@ -248,7 +257,7 @@ plugin 工具封装插件自己的业务。它的 schema、文案和数据结构
 - 工具按 `(pluginId, name)` 注册。不同插件可以用同一个名字。同一个插件里重名，或用了框架保留名，会让这一批注册全部失败并撤回。
 - `tools.plugin` 的声明不注册实现。一次调用要过两关：这个 runtime 的工具白名单，以及调用方插件自己的注册表。没注册的名字不会落到别的插件的同名实现上。
 - 模型、`ctx.tools.call`、`tools.defer` 都用工具原来的名字。
-- 要跨插件公开的能力用 `ctx.services`。
+- 要跨插件公开的能力用服务。工具执行时用 `context.services` 调用别的插件的服务，规则和函数 runtime 的 `ctx.services` 相同；agent 用 `agent.tools.services` 把给模型用的服务导入成工具。
 
 ### 不是 Tool：`FunctionHandlerContext` 上的框架能力
 
@@ -567,6 +576,8 @@ interface UIRenderPart {
 
 agent 用它告诉框架“我做完了”。业务工具都调用完之后调用它，这个 runtime 就结束，不用再让模型写一段收尾的话。只有成功的 `runtime-done` 调用返回结束哨兵才会结束循环；其他工具返回同名字段只是普通数据。
 
+最后才调用：所需工具调用都已成功，或没有事情要做。它不记录数据。本次回复结束后运行就结束，不再调用工具或补充正文。可选 `reason` 只保留在 trace 中。
+
 | 参数   | 类型   | 必需 | 描述              |
 | ------ | ------ | ---- | ----------------- |
 | reason | string |      | 可选的 trace 备注 |
@@ -710,6 +721,10 @@ agent 用它告诉框架“我做完了”。业务工具都调用完之后调�
 
 校验和可用 topic 的列举交给一个事件目录（`EventDirectoryLike`；服务端的实现在 `apps/server/src/routes/api/bootstrap/event-directory.ts`）。它汇总当前会话里已启用插件的声明。一个 topic 在一个会话里只有一个声明它的插件（见 [plugins.md § 会话插件选择](./plugins.md#会话插件选择)），所以 payload 总是按这唯一的一份 schema 校验。
 
+模型看到的 `topic` schema 是本会话公开 topic 的 enum。`data` 带上对应的 payload schema；多个 topic 时放在 `data.anyOf` 中，每支的 `title` 是 topic。只有一个 topic 时直接使用该 schema，省略 `$schema` / `$id`。包含 `$ref` / `$defs` 或无法读取的 schema 只展示普通对象。没有公开 topic 时使用通用定义。
+
+每回合准备工具时刷新这份定义，不要求会话有角色 schema。执行时仍接受字符串 topic，并由目录的 Ajv 校验 payload：未知 topic 仍是 `refused`，不会变成 `invalid-input`。提示词目录保持原样。
+
 #### 一次调用的四种结果
 
 按顺序检查：
@@ -770,25 +785,39 @@ JSON Schema 只能检查字段的形状，检查不了“这个结果和骰子�
 
 让当前 runtime 停下来，等玩家给出输入后再继续。声明在 `packages/tools/src/builtin/suspend.ts`。
 
-| 参数         | 类型   | 必需 | 描述                                                                                                                                             |
-| ------------ | ------ | ---- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
-| reason       | string | ✓    | 给玩家看的简短说明，解释为什么需要输入                                                                                                           |
-| resumeSchema | object | ✓    | **纯 JSON Schema 对象**（`type` / `properties` / `required`）。插件如需用 Zod 定义，必须先用 `zod-to-json-schema` 转换 —— 不要传 live Zod schema |
+| 参数   | 类型        | 必需 | 描述                                                                       |
+| ------ | ----------- | ---- | -------------------------------------------------------------------------- |
+| reason | string      | ✓    | 给玩家看的简短说明                                                         |
+| fields | FormField[] | ✓    | 至少一项，复用 `create-form` 字段对象；名字非空且唯一；select 至少一个选项 |
+
+字段对象支持 `type`、`name`、`label`、`placeholder`、`options`、`required`、`defaultValue`、`min`、`max`、`step`。select 的默认值必须匹配某个选项值。
+
+玩家表单用默认值初始化答案，包括可选字段和 `false`、`0`、`""`。玩家未修改时，提交会保留这些默认值；没有默认值的可选字段仍省略。
+
+| 字段类型        | 编译后的属性                                                                              |
+| --------------- | ----------------------------------------------------------------------------------------- |
+| text / textarea | `type: "string"`、`title: label`；必填时 `minLength: 1`                                   |
+| number          | `type: "number"`、`title: label`；提供时写入 `minimum: min` / `maximum: max`；不存 `step` |
+| checkbox        | `type: "boolean"`、`title: label`                                                         |
+| select          | `type: "string"`、`title: label`、选项值组成的 `enum`；不存选项标签                       |
+| 所有类型        | 提供了 `defaultValue` 时写为 `default`                                                    |
+
+根 schema 是对象，含 `properties`、`additionalProperties: false`；`required` 列出必填字段，没有时省略。答案是按字段名索引的对象，例如 `{ "name": "Alex", "age": 21 }`。函数 runtime 的 `outcome: "suspended"` 仍返回原始 JSON Schema；工具不再接受原始 schema 参数。
 
 **输出**: 一个标记对象 `{ _covelSuspend: true, reason, resumeSchema }`。它被框架拦下，正常情况下不会作为普通工具结果回到模型。
 
 调用之后发生的事：
 
-1. agent 调用 `suspend({ reason, resumeSchema })`，工具返回上面的标记对象。
+1. agent 调用 `suspend({ reason, fields })`，工具返回上面的标记对象。
 2. 框架在每次工具执行后用 `isSuspendSentinel()` 检查结果。认出标记后，它把这次运行的现场写进 `suspensions` 表：执行的身份、已经缓冲的 proposal 和事件、和模型的完整对话记录，以及工具循环的状态（见下面的注意事项）。
 3. 框架发出 `turn.suspended` 事件，整个工具循环立即停止。
 4. 之后通过 `POST /api/sessions/:id/suspensions/:suspensionId/resume` 提交一份符合 `resumeSchema` 的数据，这个 runtime 就从停下的地方继续（详见 [api.md](./api.md)）。
 
-模型的一条回答里有多个工具调用时：`suspend` 那次调用先留一个可以替换的占位结果，它后面还没执行的调用各写入一条“已取消”的结果。这样恢复之后，对话记录仍然满足服务商“工具调用和结果必须成对”的要求。
+模型的一条回答里有多个工具调用时：`suspend` 那次调用先留一个统一工具成功信封中的 `summary` 占位结果，它后面还没执行的调用各写入一条 `error.code: "cancelled"` 的错误信封。恢复时按同一 `toolCallId` 替换占位结果，返回 `summary` 和承载玩家回答的 `data`；保存过旧占位文本的挂起项也按 ID 替换。玩家提交的 `data` 完整保留，包括嵌套标识符和时间戳，不经过 `modelFacingJson`。这样恢复之后，对话记录仍然满足服务商“工具调用和结果必须成对”的要求。
 
 **注意事项**：
 
-- `resumeSchema` 必须能被 `JSON.stringify`，因为现场要写进存储。
+- 编译后的 `resumeSchema` 仍是存储和恢复校验使用的 JSON Schema。
 - 一个 runtime 同时只有一条待恢复的挂起项：它再次挂起时，旧的那条立刻作废。玩家之后又玩了回合、插件换了版本，或者挂起项要改的记录之后被别的执行（例如后台作业或手动运行）改过，挂起项在恢复时被作废，见[过时的挂起项](./api.md#过时的挂起项)。恢复接口按挂起项的 ID 查找。
 - `@covel/tools` 的 `createDefaultToolRegistry` 把它注册为内置工具。agent 仍要在 `agent.tools.builtin` 里列出 `suspend` 才能调用。
 - 后台运行的 runtime 不能挂起，因为没有玩家在等它。声明了 `schedule.background: true` 或 `schedule.detached` 的 runtime 在 `agent.tools.builtin` 里列出 `suspend`，加载时被拒绝。后台作业里的 runtime 真的挂起了（function handler 返回挂起，或者后台运行触发的事件 runtime 调用了 `suspend`），作业记为 `failed`，什么也不提交。
@@ -899,16 +928,53 @@ SDK 的 `TOOL_ERROR_CODES` 是唯一错误码列表。工具作者用 `new ToolE
 | `unavailable` | 当前未授权或能力不可用 | 工具授权、无执行器、工具或子 agent | 工具或执行器否；delegate 是 |
 | `timeout` | 工具或子 agent 超时 | 执行器、工具或子 agent | 工具或执行器否；delegate 是 |
 | `conflict` | 写入冲突，保留码 | 当前没有内置产生方 | 否 |
-| `cancelled` | 调用被取消 | 执行器、工具或子 agent | 工具或执行器否；delegate 是 |
+| `cancelled` | 调用被取消，包括批里被跳过的调用 | 执行器、工具循环、工具或子 agent | 工具、执行器或批里跳过的调用否；delegate 是 |
 | `internal` | 未预期的执行错误 | 执行器、工具或子 agent | 工具或执行器否；delegate 是 |
 
-错误码和计数标志是两件事。审批拒绝、未授权调用和 Hook 中止仍算失败调用；只有工具自己抛出 `ToolError("refused", …)` 不算 runtime 的失败。`delegate` 延续自己的规则：除 `invalid-input` 外都设置标志。
+错误码和计数标志是两件事。审批拒绝和未授权调用仍算失败调用；agent 循环中被 `PreToolUse` 跳过的调用只记历史和 trace，不计失败，函数 runtime 的 Hook 中止仍使调用失败。对于实际执行的工具，只有工具自己抛出 `ToolError("refused", …)` 不算 runtime 的失败。`delegate` 延续自己的规则：除 `invalid-input` 外都设置标志。
 
 `ToolCallResult.error` 为代码提供同一份 `{code,message,hint?}`，失败时 `parsedResult` 为 `null`；`delegate` 保留自己的失败结果。`ctx.tools.call` 失败时抛出 `ToolError`，message 是错误消息，不是 JSON。
 
 `internal` 的模型消息为 `Tool "<name>" failed: <text>`：只留原错误第一行，UUID 替换成 `<id>`，错误正文最多 300 字符。作者抛出的 `ToolError.message` 最多 2 000 字符。完整消息仍记入非隐藏 runtime 的 `tool.failed.error`；意外异常也记入服务端日志，不发送堆栈和 cause 链。trace 的 `code` 使用同一错误码，另可带 `hint` 和校验用的 `details`；`tool.completed.result` 是上述 JSON 文本。隐藏 runtime 仍去掉这些内容。
 
-### create-character
+### sync-characters
+
+把同一个叙事回合里发现的新角色和已有角色的变化，合并成一次提交。要么全部成功，要么什么都不写：中途任何一条创建或更新失败，这次调用不留下部分写入。
+
+它负责去重、默认值合并、schema warning，以及批次内读取自己缓冲的写入。
+
+agent 通过本工具的会话版本获得类型 enum 和精简字段约束；函数 runtime 从 `ctx.world.characterSchema` 读取完整 schema。
+
+| 参数      | 类型              | 必需 | 描述                                  |
+| --------- | ----------------- | ---- | ------------------------------------- |
+| `creates` | CharacterCreate[] |      | 新角色，默认 `[]`，最多 5 条          |
+| `updates` | CharacterUpdate[] |      | 已有角色 patch，默认 `[]`，最多 10 条 |
+
+每项的字段见下表。失败消息注明条目，如 `creates[1]` 或 `updates[0]`，并保留错误码与完整纠正建议。别名占用、玩家重名、未知类型使用 `invalid-input`；找不到更新目标或名字不唯一使用 `not-found` / `ambiguous`。
+
+**输出 (parsedResult)**: `{ created, updated, unchanged }`
+
+规则：
+
+- 两组可以同时为空。空批次表示“本回合没有角色变化”，调用成功，不产生 proposal。
+- 同会话同 `(name, type)` 的重复 create 不算错：它返回 `unchanged`，带上已有角色的 id。它不覆盖已有的 description 和 fields，也不妨碍批次里其他合法的操作。要修改已有角色，必须明确放进 `updates`。
+- 其他校验失败会让整批失败。修正后要重新提交完整的批次。
+- 同一批里靠前的创建和更新，对靠后的条目可见。
+
+写组合工具的宿主开发者要注意：宿主提供了 `context.world` 时，组合工具只把本批新增的 proposal 叠加到这份快照上。快照里已经包含的外层上游 proposal 和待提交 proposal 不能再叠加一遍，否则版本会被多推进一次，或覆盖更新的字段。
+
+**使用者**: `char-creator/character-tracker`。它把 `sync-characters` 放进 `completeAfterTools`：工具成功后立即结束，不再请求模型收尾。这个 tracker 的配置：
+
+- 声明 `toolChoice: required`，每次回复都必须调用工具。没有变化时提交空批次。
+- 使用默认的 20 步工具循环预算，所以它可以先读取角色，也可以修正失败的批次。成功同步后立即结束。
+- 每个批次的上限仍是 5 个新角色和 10 个已有角色更新。
+- 它自己才看得到的 `<existing-characters>` 名册列出每个角色的 id、姓名、别名（有才出现）、类型和 description。这一段只在角色新增或改写时才变。
+- `<character-fields>` 每行一个 id，在 12000 字符的预算内带上该角色当前的 `fields`，每回合更新。通常一次模型调用就能完成同步。超出预算的角色那一行写 `fieldsOmitted`，再用 `get-character` 读取。
+- 关闭推理，单次调用超时 30 秒，重试一次。
+
+追踪器只在 `get-character` 成功后用掉详情读取预算。失败后仍可重读；要求显式完成的 runtime 必须通过一次成功读取解决此前的失败。
+
+#### creates[]
 
 创建一个新的角色记录：玩家、NPC 或同伴。
 
@@ -916,11 +982,11 @@ SDK 的 `TOOL_ERROR_CODES` 是唯一错误码列表。工具作者用 `new ToolE
 | ----------- | ----------------------- | ---- | --------------------------------------------------------- |
 | name        | string                  | ✓    | 角色名称                                                  |
 | aliases     | string[]                |      | 同一个人的其他叫法（昵称、头衔、另一种文字的名字）        |
-| type        | enum                    | ✓    | `player` / `npc` / `companion`                            |
+| type        | enum                    | ✓    | `player` 加上世界 schema 的类型                           |
 | description | string                  |      | 角色简短描述                                              |
 | fields      | Record<string, unknown> |      | 属性键值对（应符合世界 schema 中的 character-attributes） |
 
-**输出 (parsedResult)**: `{ existed, characterId, name, type }`
+新建结果进入 `created`，已有匹配进入 `unchanged`；每项包含 `characterId`、`name`、`type`。
 
 新角色的 id 由名字生成，是可读的单词形式（见[短 ID](#短-idllm-友好实体引用)）。
 
@@ -941,7 +1007,7 @@ Created npc "苏婉" as char-abc123. — 青萍宗外门首席弟子，冰灵根
 去重命中时：
 
 ```
-Character "苏婉" (npc) already exists as char-abc123. No new record created. Use update-character to modify it.
+Character "苏婉" (npc) already exists as char-abc123. No new record created. Use sync-characters updates to modify it.
 ```
 
 `aliases` 里有别的角色的名字或别名时，调用失败，不产生 proposal。错误写明是哪个角色，模型可以改为更新它：
@@ -952,19 +1018,19 @@ Character "苏婉" (npc) already exists as char-abc123. No new record created. U
 
 #### 属性怎么校验
 
-- 模型看到的 `fields` 参数是一个紧凑的对象。`create-character` 和 `update-character` 两份工具定义里都不重复整张世界属性表。这样上下文只有 8k 的小模型不会因为角色属性多，就被两份重复的 JSON Schema 占满。
+- 模型看到的 `fields` 参数是紧凑的对象。批次描述里共享一份结构约束，不在 creates / updates 参数中重复整张世界属性表。
 - 属性的权威定义（id、类型、范围、enum、默认值、说明）保存在会话的 world schema 里。
 - 工具描述里另附一份精简的字段约束：类型、数值上下界、enum 选项、数组和映射的元素类型、嵌套结构。不重复长描述和默认值。`sync-characters` 的 creates 和 updates 共用一份约束说明。
 - 执行时重新读取权威 schema：合并默认值，强制校验声明过的字段。校验发生在产生写入 proposal **之前**。非法的字符串、`null` 或非有限数值不能冒充数值属性。
 - 没有声明的键仍然保留，但返回一条 warning。
-- `create-character` 先合并缺省值再校验。`update-character` 只校验这一次的 patch，所以可以逐个字段修好已有的旧数据。
+- `creates` 先合并缺省值再校验。`updates` 只校验这一次的 patch，所以可以逐个字段修好已有的旧数据。
 - 数值 patch 写的是更新后的绝对值，不是增量。
 
 插件可以用同一套规则：`mergeSchemaDefaults` 和 `assertCharacterFields`，失败时抛出 `CharacterFieldValidationError`。
 
 #### 读到的是哪一份数据
 
-`get-character-schema`、默认值填充和角色写入校验都读会话的 World Model。这份视图按执行顺序合并三样东西：已提交的记录、成功的上游 runtime 的领域 proposal、本 runtime 待提交的 proposal。无效的 schema 或角色写入不会进入这份视图。角色记录不镜像到插件私有数据。
+默认值填充和角色写入校验都读会话的 World Model。这份视图按执行顺序合并三样东西：已提交的记录、成功的上游 runtime 的领域 proposal、本 runtime 待提交的 proposal。无效的 schema 或角色写入不会进入这份视图。角色记录不镜像到插件私有数据。
 
 读取时按 proposal 的顺序应用更新，用的是和提交相同的 `materializeCharacterUpsert`：
 
@@ -992,10 +1058,10 @@ Character "苏婉" (npc) already exists as char-abc123. No new record created. U
 - 校验用同一轮上游给出的 schema，发生在展示表单之前。普通的 `create-form` 不受这些角色专属规则影响。
 - 一份已被接受、后来才发现不合规则的提交，保留作为审计记录，values 不改写。这时要重新开始建角会话；普通的 setup 重试不会清除这份输入。
 
-**使用者**: 通用 builtin。内置的 `char-creator/character-tracker` 通过下面的 `sync-characters` 间接复用它。`player-init` 的表单提交由 guard 直接生成同类 proposal，不向模型暴露这个工具。
+`player-init` 的表单提交由 guard 直接生成同类 proposal。
 
 > [!IMPORTANT]
-> **写入是缓冲的。** `create-character` / `update-character` 执行时不直接写 `characters` 表，而是缓冲成一条 [`character.upsert`](#characterupsert) proposal。
+> **写入是缓冲的。** `sync-characters` 执行时不直接写 `characters` 表，而是缓冲成一条 [`character.upsert`](#characterupsert) proposal。
 >
 > - 同一个工具循环里能读到自己缓冲的写入：先 create 再 update，update 读得到刚才的 create。
 > - 真正写表发生在回合结束时，和这次执行的其他写入在**同一个事务**里。
@@ -1003,7 +1069,7 @@ Character "苏婉" (npc) already exists as char-abc123. No new record created. U
 
 这个工具不改变会话的阶段。setup 的完成由 runtime 输出 `preGameDone: true` 表示，框架据此更新 `session.setupRuntimes`，并自己推进 `session.phase`（`setup` / `playing`）。
 
-### update-character
+#### updates[]
 
 更新一个已有的角色。适用于状态变化、换装备、受伤、死亡，以及故事揭示了角色的另一个名字。
 
@@ -1032,7 +1098,7 @@ Character "苏婉" (npc) already exists as char-abc123. No new record created. U
 - 同一次调用里先去掉再追加，所以一次调用可以换掉一个别名。
 - 在 `sync-characters.updates[]` 里，前一项去掉的别名，后一项可以加给另一个角色。
 
-**成功输出 (parsedResult)**: `{ characterId, version }`
+每条成功更新进入 `updated`：`{ characterId, version }`。
 
 **模型看到的 `summary` 示例**：
 
@@ -1063,48 +1129,17 @@ Updated npc "苏婉" (char-abc123) → v2.
 
 执行器把这次调用记为失败。它不满足 agent 的 `completeAfterTools`。函数 runtime 即使捕获了这个错误，也不会提交之前缓冲的写入。
 
-### sync-characters
-
-把同一个叙事回合里发现的新角色和已有角色的变化，合并成一次提交。要么全部成功，要么什么都不写：中途任何一条创建或更新失败，这次调用不留下部分写入。
-
-它复用 `create-character` / `update-character` 的去重、默认值合并、schema warning 和“读到自己缓冲的写入”。
-
-| 参数      | 类型              | 必需 | 描述                                  |
-| --------- | ----------------- | ---- | ------------------------------------- |
-| `creates` | CharacterCreate[] |      | 新角色，默认 `[]`，最多 5 条          |
-| `updates` | CharacterUpdate[] |      | 已有角色 patch，默认 `[]`，最多 10 条 |
-
-`creates[]` 的每一项和 `create-character` 的参数相同，`updates[]` 的每一项和 `update-character` 的参数相同。
-
-**输出 (parsedResult)**: `{ created, updated, unchanged }`
-
-规则：
-
-- 两组可以同时为空。空批次表示“本回合没有角色变化”，调用成功，不产生 proposal。
-- 同会话同 `(name, type)` 的重复 create 不算错：它返回 `unchanged`，带上已有角色的 id。它不覆盖已有的 description 和 fields，也不妨碍批次里其他合法的操作。要修改已有角色，必须明确放进 `updates`。
-- 其他校验失败会让整批失败。修正后要重新提交完整的批次。
-- 同一批里靠前的创建和更新，对靠后的条目可见。
-
-写组合工具的宿主开发者要注意：宿主提供了 `context.world` 时，组合工具只把本批新增的 proposal 叠加到这份快照上。快照里已经包含的外层上游 proposal 和待提交 proposal 不能再叠加一遍，否则版本会被多推进一次，或覆盖更新的字段。
-
-**使用者**: `char-creator/character-tracker`。它把 `sync-characters` 放进 `completeAfterTools`：工具成功后立即结束，不再请求模型收尾。这个 tracker 的配置：
-
-- 声明 `toolChoice: required`，每次回复都必须调用工具。没有变化时提交空批次。
-- 使用默认的 20 步工具循环预算，所以它可以先读取角色，也可以修正失败的批次。成功同步后立即结束。
-- 每个批次的上限仍是 5 个新角色和 10 个已有角色更新。
-- 它自己才看得到的 `<existing-characters>` 名册列出每个角色的 id、姓名、别名（有才出现）、类型和 description。这一段只在角色新增或改写时才变。
-- `<character-fields>` 每行一个 id，在 12000 字符的预算内带上该角色当前的 `fields`，每回合更新。通常一次模型调用就能完成同步。超出预算的角色那一行写 `fieldsOmitted`，再用 `get-character` 读取。
-- 关闭推理，单次调用超时 30 秒，重试一次。
-
 ### list-characters
 
 列出本会话的全部角色。角色属于会话，所有插件都能看到。
 
 输出是**紧凑的文本列表**，一行一个角色：id、名字（有别名时后面跟 `(aka …)`）、类型、版本、简短描述。模型用它快速对上已知的人物；需要完整属性时，再单独调用 `get-character`。
 
-| 参数 | 类型 | 必需 | 描述                                |
-| ---- | ---- | ---- | ----------------------------------- |
-| type | enum |      | `player` / `npc` / `companion` 过滤 |
+| 参数 | 类型   | 必需 | 描述                                   |
+| ---- | ------ | ---- | -------------------------------------- |
+| type | string |      | 世界 schema 里的非空类型字符串，可省略 |
+
+省略 `type` 才是不筛选。`null` 和空字符串校验失败；`"none"` / `"all"` 按字面筛选。筛选结果为空时，摘要列出会话已有的类型。
 
 **输出 (parsedResult)**: `{ count, characters: CharacterSnapshot[] }`
 
@@ -1127,17 +1162,6 @@ Characters in session (3 total, sorted by frequency then recency):
 
 **使用者**：叙事和聊天叙事插件声明了这个工具，用来查当前场景之外的角色。第三方插件也可以声明。已经通过上下文拿到角色名册的插件，可以用 `get-character` 补上摘要里没有的完整属性。
 
-### get-character-schema
-
-读取会话的角色属性 schema。参数为 `{}`，返回 `{ schema: CharacterSchemaRecord | null }`。
-
-- schema 属于会话的 World Model，包含 `version` / `types` / `attributes`。不存在时返回 `null`。
-- 模型读取的 `summary` 经过 `modelFacingJson`，不含会话 ID 和写入时间。代码读取的 `schema` 保留完整记录。
-- 读取包括已验证的待提交领域 proposal。它不根据插件私有的 `schema` 数据推断。
-- 这个工具不写数据，也不接受其他会话或插件的 ID。
-
-第三方创角插件可以优先用本次执行里绑定的 schema 输入。恢复一个旧会话时，用这个工具读取之前已经完成的 setup 结果。这样既不用读其他插件的私有数据，也不用依赖官方提供者的名字。
-
 ### get-character
 
 按 id、名字或别名查一个角色的**完整属性**：别名、description、version、时间戳、全部 fields。`id` 和 `name` 必须传其中一个。
@@ -1153,8 +1177,8 @@ Characters in session (3 total, sorted by frequency then recency):
 
 **输出 (parsedResult)**:
 
-- 找到：`{ found, character: CharacterSnapshot }`
-- 没找到：`{ found: false, candidates: string[] }`。`summary` 和 `update-character` 找不到角色时的信息相同（最相近的名字，或有歧义的候选）。`candidates` 是这些角色的名字。
+- 找到：`{ character: CharacterSnapshot }`，没有 `found` 字段。
+- 找不到：抛出 `ToolError("not-found", …)`，消息列出相近名字；多个匹配：抛出 `ToolError("ambiguous", …)`，消息列出候选及其 id。执行器记录失败调用并返回错误信封，不返回成功的未命中结果。
 
 **模型看到的 `summary` 示例**：
 
@@ -1446,6 +1470,54 @@ schema 里带 `x-derive` 的字段由 `world-init/dimension-clock` 按时钟计�
 模型不用自己写 `{ topic, data }` 事件信封，所以不会漏写 topic 或写成空的。runtime 的输出 schema 只校验工具产生的可信结果。
 
 两个 prompt-generator 都是手动触发的 agent，声明了 `schedule.background: true`。它们的 `agent.completion.afterTools` 列出了对应的工具，所以一次成功提交后就结束。之后的 image-generator 在后台继续执行。
+
+## 导入的服务工具
+
+agent 在 `agent.tools.services` 里导入别的插件给模型用的服务（[怎样提供](./plugin-extensions.md#给模型用的服务)）。每个导入在 runtime 开始时变成一个只读工具。
+
+```yaml
+agent:
+  tools:
+    services:
+      - inventory.items@1
+      - { contract: world.map@2, as: look-at-map }
+```
+
+- **名字**：默认是去掉版本号、`.` 换成 `-` 的契约名（`inventory.items@1` → `inventory-items`），`as` 另起名字。名字只能有字母、数字、`_` 和 `-`，最长 64；推导出来的名字太长时要写 `as`。名字不能和框架工具、这个 runtime 的 `tools.builtin` / `tools.plugin`、本包的 `contributes.tools` 或另一个导入重名；同一个契约只能导入一次。重名时清单校验报错。
+- **说明和参数**：说明是提供方注册时的 `description`。参数的 JSON Schema 来自提供方的 Zod 输入（不带 `$schema`），或提供方显式给的 `inputSchema`。输入是 Zod 时（显式给了 `inputSchema` 也一样），参数先在工具这一侧校验，错误照常写明字段，写成 JSON 文本的数组或对象会被修复；提供方收到的是模型发来的参数（或修复后的参数），由它自己解析一次后交给处理函数，所以 `transform` 只作用一次。输入不是 Zod 时，参数只由提供方校验。
+- **注解**：`{ readOnly: true, stagesWrites: false, idempotent: true, concurrencySafe: true }`。导入的服务只读，可以和其他只读工具一起并发。子 agent 保留导入。
+- **结果**：和其他工具一样回给模型 `{ "data": … }`，ID、UUID 和时间戳由 `modelFacingJson` 去掉。审批、`PreToolUse` / `PostToolUse`、`tool_calls` 记录和 `tool.*` trace 都照常；审批来源按 `local` 算。
+- **时限**：一次调用最多等提供方 15 秒，超时回答 `timeout`。
+- **延迟加载**：`tools.defer: true`，或在 `defer` 列表里写导入的名字，导入就和其他工具一样延迟，用 `search-tools` 找到。
+- **不能完成 runtime**：`finishWith` 和 `completion.afterTools` 不能写导入的工具。runtime 不能靠另一个插件才能结束。
+
+### 不在的工具
+
+没有恰好一个活跃的提供方时，这个工具不出现：不在模型请求的工具列表里，`search-tools` 也找不到。runtime 照常开始，故事照常提交。模型仍然调用它（比如恢复执行的对话里还留着它，或者模型猜了这个名字）时，得到 `unavailable`，说明写清原因，不带插件 ID：
+
+- `The tool "inventory-items" is unavailable in this session: no active provider offers inventory.items@1.`
+- `…: more than one plugin provides it.`
+- `…: its provider is paused after repeated errors.`
+- `…: its provider does not offer it to models.`
+
+服务端日志另有一行带插件 ID 的说明，给作者排查用。
+
+### 服务失败怎样回答
+
+导入的工具，以及任何让服务错误抛出来的插件工具，都按下表回答模型。只有输入错误是模型能改的；其他失败是提供方的问题，结果带 `refused: true`，不算调用方的失败调用；函数 runtime 因此失败时，也不算这个 runtime 的错误，服务调用记录里写明提供方。这些失败不会累计到提供方身上让它暂停。
+
+<!-- prettier-ignore -->
+| 服务的结果 | 工具错误码 | `refused` |
+| --- | --- | --- |
+| 提供方不可用、未获准或被撤销，调用成环或超过深度 | `unavailable` | 是 |
+| 等待超时 | `timeout` | 是 |
+| 调用被取消 | `cancelled` | 否 |
+| 提供方拒绝输入 | `invalid-input`（写明字段） | 否 |
+| 提供方的返回不符合它的输出 schema | `internal`："The service returned an invalid result." | 是 |
+| 提供方抛出 `ToolError` | 它自己的错误码、说明和提示 | 是（`invalid-input`、`cancelled` 除外） |
+| 提供方抛出其他错误 | `internal`，只留第一行，UUID 换成 `<id>` | 是 |
+
+工具自己的超时、调用方取消、审批拒绝和 `PreToolUse` 拦截不变。
 
 ## 短 ID（LLM 友好实体引用）
 
@@ -1894,7 +1966,7 @@ HTTP `POST /api/sessions/:id/characters` 内部也通过这条 proposal 提交�
 | expectedVersion | number  |      | 更新 proposal 读取到的版本；提交时把 `fields` 作为 shallow patch 合并到最新角色并从 live version 递增 |
 | createdAt       | string  |      | 创建时间，缺省为提交时间                                                                              |
 
-`update-character` 自动填写 `expectedVersion`。
+`sync-characters` 自动填写 `expectedVersion`。
 
 **并行更新不会互相丢字段。** 同一个阶段里并行的两个 runtime 即使都从 v1 开始，提交时也会按顺序重新读取最新的角色，再合并各自的 fields patch。后提交的不会弄丢先提交的新字段。两者改了同一个字段时，后提交的 patch 覆盖前一个。
 

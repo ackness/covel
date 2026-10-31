@@ -95,7 +95,7 @@ Before comparing names and aliases, `characterNameKey` normalizes the spelling:
 **Where aliases come from:**
 
 - The world author writes `aliases` in `characters/characters.json` (see [the character file](./world-data.md#one-character-file-per-world)). A language file can replace the whole list.
-- When the story reveals a new name, the model adds it through the `aliases` parameter of `update-character` / `sync-characters.updates[]`. `create-character` also accepts `aliases`.
+- When the story reveals a new name, the model adds it through the `aliases` parameter of `sync-characters.updates[]`. `sync-characters.creates[]` also accepts `aliases`.
 - The `aliases` of the `character.upsert` proposal:
   - With `expectedVersion`, the aliases are appended after the existing ones. Two appends in the same turn are both kept, in the same way that `fields` are merged.
   - Without it, the value is the complete list.
@@ -112,7 +112,7 @@ Before comparing names and aliases, `characterNameKey` normalizes the spelling:
   - The form is sent to the client and stays in the session messages. So it does not carry any character's name or alias. It carries a SHA-256 digest of those names, salted with the form (stored in `validation.data`).
   - The digest only stops the list of names from being read directly. It does not stop someone who already has a guessed name from checking it.
 - **The guard of `player-init`** checks again, because the characters in the world may have changed after the form was sent. If the name still conflicts, it does not produce `character.upsert`. Instead, it makes the runtime send the form again, and the `notice` explains that a character already uses this name. The other answers are kept. This keeps the opening from failing over and over.
-- **`create-character`**, when it creates `type: "player"`, reports an error if the name is another character's name or alias. It says the player must give another name. It does not return that NPC as an "already existing character".
+- **`sync-characters.creates[]`**, when it creates `type: "player"`, reports an error if the name is another character's name or alias. It says the player must give another name. It does not return that NPC as an "already existing character".
 
 The save rule has not changed: two non-player characters can share a name (lookup then returns `ambiguous`), but a name that equals someone else's alias is rejected.
 
@@ -137,7 +137,7 @@ A seat describes who plays, in which role, and which characters they control. Th
 
 - `"auto"` binds every character of type `player`, in the order of the character list, leaving out the characters another seat lists explicitly.
 - An explicit list binds the characters on it that still exist, in list order.
-- Creating a player character (a character-creation plugin, a world import, `create-character`) needs no seat write: the next read binds it to the `"auto"` seat.
+- Creating a player character (a character-creation plugin, a world import, `sync-characters.creates[]`) needs no seat write: the next read binds it to the `"auto"` seat.
 
 Every write checks these rules: seat IDs are unique; at most one seat uses `"auto"`; a character ID appears in one seat's list only, and only once in it.
 
@@ -150,7 +150,7 @@ Every write checks these rules: seat IDs are unique; at most one seat uses `"aut
 - The `PostContextAssembly` payload names it in `currentCharacterId` (see [hooks](./hooks.md)).
 - The player status in the game view shows it.
 
-A plugin reads the same rule through three SDK helpers:
+A plugin reads the same rule through the SDK helpers:
 
 ```js
 import { currentCharacterOf, primarySeat } from "@covel/plugin-handlers-utils";
@@ -164,7 +164,9 @@ const player = currentCharacterOf(
 
 `seatCharacterIds(seat, characters, seats)` returns the IDs of the characters bound to one seat.
 
-**Switching the current character**: `PATCH /api/sessions/:id/seats/:seatId` with the body `{ "currentCharacterId": "…" }`. The character must be bound to that seat, and a human must control the seat. It applies from the next turn. See [API](./api.md#session-seats). The game view has no switch control yet.
+`actingCharacterOf(actions, characters, seats)` finds the acting character for a turn: it reads `source: "player"` actions in order and returns the first existing character named by an `actorId`; otherwise it falls back to the primary seat's current character, then `undefined`. Unknown actor IDs and system actions do not select a character. Function runtimes and guards pass `ctx.playerActions`; extension providers and tools have no actions and pass `[]`. Detached jobs pass their source turn's `ctx.inputs.turn.value.actions` (defaulting to `[]`) to retain its actor.
+
+**Switching the current character**: `PATCH /api/sessions/:id/seats/:seatId` with the body `{ "currentCharacterId": "…" }`. The character must be bound to that seat, and a human must control the seat. It applies from the next turn. See [API](./api.md#session-seats). The game view has a current-character selector above the composer (above the free input in stage mode). It appears when the seat binds two or more characters; see [Composer Modes](./ui-panels.md#composer-modes).
 
 **The role decides which actions a seat may submit.** What a player submits each time is a list of actions (see [API · submit_actions](./api.md#submit_actions)). The server checks them against the seat's role:
 
@@ -178,7 +180,7 @@ const player = currentCharacterOf(
 - A plugin's action kind declares which roles may use it (`contributes.actionKinds[].roles`, default `[player]`).
 - An action taken as a character (`say`, `act`, and plugin kinds by default) may use only a character bound to the seat; left out, it is the seat's current character. A seat no human controls cannot submit actions.
 
-The bundled plugins that still use `find(type === "player")` (inventory, checks, memory, character creation and others) act on the first player character when there are several, until they move to seats.
+The bundled character profiles, character creator, dice checks, inventory, memory and tabletop rules follow the action’s actor, falling back to the primary seat’s current character. Roleplay notes, recall names and taken names exclude only that character; other player characters remain included. Scene Stage still uses the first player character.
 
 ## Dynamic dimension snapshot
 

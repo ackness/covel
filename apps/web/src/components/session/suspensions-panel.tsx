@@ -61,6 +61,29 @@ interface SuspensionCardProps {
   onCancel: (suspensionId: string) => Promise<void>;
 }
 
+interface SuspensionAnswerSchema extends DimensionValueSchema {
+  readonly default?: JsonValue;
+  readonly properties?: Readonly<Record<string, SuspensionAnswerSchema>>;
+}
+
+function initialFormValue(schema: SuspensionAnswerSchema): JsonValue {
+  if (schema.default !== undefined) return schema.default;
+  const types = Array.isArray(schema.type) ? schema.type : [schema.type];
+  if (types.includes("object")) {
+    const properties = schema.properties ?? {};
+    const keys = new Set([
+      ...(schema.required ?? []),
+      ...Object.keys(properties).filter(
+        (key) => properties[key]?.default !== undefined,
+      ),
+    ]);
+    return Object.fromEntries(
+      [...keys].map((key) => [key, initialFormValue(properties[key] ?? {})]),
+    );
+  }
+  return emptyValue(schema);
+}
+
 function SuspensionCard({
   suspension,
   onResume,
@@ -74,7 +97,7 @@ function SuspensionCard({
   );
   const [payload, setPayload] = useState("");
   const [formValue, setFormValue] = useState<JsonValue>(() =>
-    input.kind === "form" ? emptyValue(input.schema) : null,
+    input.kind === "form" ? initialFormValue(input.schema) : null,
   );
   const [busy, setBusy] = useState<"resume" | "cancel" | null>(null);
   const [error, setError] = useState<string | null>(null);

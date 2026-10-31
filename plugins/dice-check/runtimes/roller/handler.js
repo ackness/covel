@@ -1,4 +1,7 @@
-import { pickLocaleText } from "@covel/plugin-handlers-utils";
+import {
+  actingCharacterOf,
+  pickLocaleText,
+} from "@covel/plugin-handlers-utils";
 import { attributeName, checkAttributes } from "../../lib/attributes.js";
 import { DIFFICULTY_DCS, MODIFIER_LIMIT } from "../../lib/check-rules.js";
 import { rememberPool } from "../../lib/turn-pool.js";
@@ -28,6 +31,11 @@ export default async function handler(ctx) {
   // For the guard that checks the receipt while the narrative still runs.
   if (!owned) rememberPool(ctx.sessionId, ctx.turnId, dice);
 
+  const player = actingCharacterOf(
+    ctx.playerActions ?? [],
+    ctx.world?.characters ?? [],
+    ctx.world?.seats ?? [],
+  );
   return {
     outcome: "success",
     value: {
@@ -36,7 +44,7 @@ export default async function handler(ctx) {
       dice,
       checkContext: owned
         ? ownedContext(ctx.locale)
-        : buildCheckContext(dice, ctx.locale, ctx.world),
+        : buildCheckContext(dice, ctx.locale, ctx.world, player),
     },
     effects: {
       // Audit trail: the raw pool survives even when the narrative never uses it.
@@ -68,8 +76,7 @@ function signed(value) {
  * not +2. `tabletop-rules` converts the same way (`checkModifier` in its
  * `lib/rules.js`); change both together.
  */
-function playerModifiers(world, locale) {
-  const player = world?.characters?.find((c) => c.type === "player");
+function playerModifiers(world, locale, player) {
   if (!player?.fields) return [];
   const lines = [];
   for (const attr of checkAttributes(world)) {
@@ -159,9 +166,12 @@ function table(dice, header, words) {
  * @param {string | undefined} locale
  * @returns {string}
  */
-function buildCheckContext(dice, locale, world) {
+function buildCheckContext(dice, locale, world, player) {
   const dcs = Object.entries(DIFFICULTY_DCS);
-  const modifiers = modifierBlock(playerModifiers(world, locale), locale);
+  const modifiers = modifierBlock(
+    playerModifiers(world, locale, player),
+    locale,
+  );
   const step2 = modifiers
     ? pickLocaleText(
         locale,

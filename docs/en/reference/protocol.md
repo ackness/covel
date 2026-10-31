@@ -126,13 +126,14 @@ In the tables, "S→C" means sent from the server to the client.
 
 | Event type            | Dir. | Description                        | Payload                                                                             |
 | --------------------- | ---- | ---------------------------------- | ----------------------------------------------------------------------------------- |
-| `narrative.delta`     | S→C  | A streamed piece of narrative text | `{ runtimeId, pluginId, kind, delta }`                                              |
+| `narrative.delta`     | S→C  | A streamed piece of narrative text | `{ runtimeId, pluginId, kind, delta, reset?, segment? }`                            |
 | `narrative.completed` | S→C  | The complete narrative message     | `{ content, kind, messageId, runtimeId, pluginId, segments?, unresolvedSpeakers? }` |
 
 - `narrative.delta`, `narrative.completed`, and `runtime.started` must all carry `kind`; clients read it directly rather than inferring it from `label`.
-- `narrative.delta` can carry `reset: true`. In that case `delta` is an empty string. It means: the text this runtime already streamed was a preparation step before a tool call, or a draft that the review rejected, and it will not become the final narrative. The client should clear the part already shown, then take in the later pieces.
+- `narrative.delta` can carry `reset: true`. In that case `delta` is usually an empty string. It means: the text this runtime already streamed was a preparation step before a tool call, or a draft that the review rejected, and it will not become the final narrative. The client should clear the part already shown and its paragraph metadata, then take in the later pieces.
 - The `content` of `narrative.completed` is always the final text after review has passed. It replaces what was shown while streaming.
-- For a segmented story (the `segments` of `narrative-engine@2`), `narrative.delta` carries only segment text, with a blank line between segments, matching `content`. JSON keys, speakers and `cues` never reach `delta`. See [Story output](./plugins.md#story-output).
+- For a segmented story (a story runtime with a declared output schema, such as the `segments` of `narrative-engine@2`), `delta` carries only segment text, with a blank line between segments, matching `content`. JSON keys, speakers and `cues` never reach `delta`. See [Story output](./plugins.md#story-output).
+- Such a story's `narrative.delta` also carries `segment: { index, kind, speaker? }`, naming the paragraph the text belongs to. `index` starts at 0 and counts only paragraphs that showed text, so it equals the paragraph's position when the streamed text is split at blank lines. The event with each paragraph's first visible character carries the `kind` and `speaker` known so far; when `kind` or `speaker` is finished after the text, one more event with an empty `delta` carries the updated `segment`. The rules match commit: an unknown `kind` counts as `narration`, narration has no speaker, and a speaker is trimmed and cut to 80 characters. `speaker` is the name as the model wrote it, unresolved; the `segments` of `narrative.completed` carry the resolved names. Events of a prose story have no `segment`.
 - When a speaker or present name in the story could not be resolved to a character (no match, or more than one), `narrative.completed` carries `unresolvedSpeakers`: those names in order of first appearance; it is omitted when there are none.
 - A story's `narrative.completed` carries `segments`: the segments with the speakers resolved at commit, in the same shape as `segments` from `/messages` (see [api.md](./api.md#get-apisessionsidmessages)). The client uses them to show nameplates and the speaker for the turn it just watched without reading messages again; events of other kinds have no such field.
 
@@ -381,8 +382,9 @@ When an execution ends, the framework handles the jobs that this execution repor
 
 - A job that has not finished gets a final state that matches the runtime's result.
 - If the plugin already reported `succeeded`, but this execution's domain writes were not committed (the whole execution rolled back, this runtime failed, or its writes were discarded on their own at commit time), the framework appends a `failed` entry and does not keep the success state.
+- If a nested child call (`ctx.recursiveCall`) already reported `succeeded` but its parent runtime did not succeed, so the child's writes were discarded with it, the framework appends `cancelled`, not `failed`: a nested child is not an execution that failed on its own, so its success is only withdrawn.
 - A `failed` or `cancelled` that the plugin reported itself is not rewritten.
-- The jobs of a suspended runtime stay in `waiting-input`, and one it already reported `succeeded` before suspending goes back to `waiting-input`: a suspended runtime's writes are held until it is resumed and discarded if the suspended item is abandoned. These jobs belong to the execution that suspended, and a resumed run reports under it too, so a chain of suspensions has one progress scope: the jobs become `succeeded` once the last resume commits, `cancelled` when the suspended item is abandoned, expires or is voided, and keep waiting while a failed resume can be retried or after a resume suspends again. When a resume does not commit (its runtime fails, throws, times out or is stopped by `PostRuntime`, or the commit rolls back), its unfinished jobs move to `waiting-input`, and one already reported `succeeded` goes back to `waiting-input` too: its writes did not land, and the suspended item stays open for a retry.
+- The jobs of a suspended runtime stay in `waiting-input`, and one it already reported `succeeded` before suspending goes back to `waiting-input`: a suspended runtime's writes are held until it is resumed and discarded if the suspended item is abandoned. These jobs belong to the progress scope of the execution that suspended, and a resumed run reports in that scope too, so a chain of suspensions has one progress scope. A nested child keeps its own execution identity but reports under the root execution's progress scope, so the jobs of a suspended parent's children stay in `waiting-input` with the parent and are `cancelled` together with it when the suspended item is abandoned: the jobs become `succeeded` once the last resume commits, `cancelled` when the suspended item is abandoned, expires or is voided, and keep waiting while a failed resume can be retried or after a resume suspends again. When a resume does not commit (its runtime fails, throws, times out or is stopped by `PostRuntime`, or the commit rolls back), its unfinished jobs move to `waiting-input`, and one already reported `succeeded` goes back to `waiting-input` too: its writes did not land, and the suspended item stays open for a retry.
 
 **How background job states map**
 
@@ -878,6 +880,8 @@ The names in the "Command" column of the tables below (`session.create`, `turn.s
 | `session.restore` | GET    | `/api/sessions/:id/view` | JSON: `SessionSnapshot` |
 | `session.delete`  | DELETE | `/api/sessions/:id`      | JSON: `{ deleted }`     |
 
+Each item of `SessionSnapshot.messages` is a `SnapshotMessage`. A player message carries `actions`: the resolved actions it submitted (`metadata.actions` in storage, in the same shape as `actions` on `GET /messages`), and a story message carries `segments`. Other messages have neither field.
+
 The top-level `dimensions` of `SessionSnapshot` is the [public snapshot of current values](./world-model.md#dynamic-dimension-snapshot). The optional `dimensionSettlements` is a summary of receipts. The provider and recovery metadata is bound and validated by the host.
 
 > [!WARNING]
@@ -1276,9 +1280,9 @@ These events use the standard SSE envelope, and they are saved to `trace_events`
 <!-- prettier-ignore -->
 | Type | Payload |
 | --- | --- |
-| `tool.calling` | `{ runtimeId, pluginId, toolName, toolCallId, label, arguments, source, approvalStatus }` |
+| `tool.calling` | `{ runtimeId, pluginId, toolName, toolCallId, label, arguments, source, approvalStatus, skipped?: true, skipReason? }` |
 | `tool.completed` | `{ runtimeId, pluginId, toolName, toolCallId, label, result, parsedResult, durationMs, approvalStatus, success: true }` |
-| `tool.failed` | `{ runtimeId, pluginId, toolName, toolCallId, label, code, error, hint?, details?, durationMs, approvalStatus, success: false }`  `code` uses `ToolErrorCode`; `error` is the full message and `hint` is optional correction guidance. Codes: `invalid-input`, `not-found`, `ambiguous`, `refused`, `unavailable`, `timeout`, `conflict`, `cancelled`, `internal`. |
+| `tool.failed` | `{ runtimeId, pluginId, toolName, toolCallId, label, code, error, hint?, details?, durationMs, approvalStatus, success: false, skipped?: true, skipReason? }`  `code` uses `ToolErrorCode`; `error` is the full message and `hint` is optional correction guidance. Codes: `invalid-input`, `not-found`, `ambiguous`, `refused`, `unavailable`, `timeout`, `conflict`, `cancelled`, `internal`. |
 | `domain-event.previewed` | `{ runtimeId, pluginId, toolCallId, topic, data }`. A temporary display signal after `emit-event` passes validation. Persistent business state is still committed by the normal event chain |
 | `llm.calling` | `{ runtimeId, pluginId, slot, model, provider?: string \| null, messages, tools, attempt, startedAt, queueWaitMs?, streaming? }`. `slot` is the role the runtime requests. In production, the gateway resolves it to `model` / `provider` before the call. A custom adapter that does not support role resolution can omit `provider` |
 | `llm.responded` | `{ runtimeId, pluginId, text?, reasoningContent?, toolCalls?, usage, finishReason, durationMs, attempt, error? }`. `usage` is `{ inputTokens, outputTokens, cachedInputTokens?, cacheWriteInputTokens? }`. `inputTokens` is the total input including cache reads and writes. The last two are subsets reported by the provider. With `agent.loop.truncation: accept`, `finishReason: length` can report a reply kept at the output limit; it must still pass final output and commit checks. With `reject`, truncation is reported as failure. The story profile accepts by default; the other profiles reject, and authors can override this |
@@ -1295,7 +1299,7 @@ These events use the standard SSE envelope, and they are saved to `trace_events`
 | `command.completed` | The fields of `command.invoked` + `{ durationMs, resultOk? }` |
 | `command.failed` | The fields of `command.invoked` + `{ durationMs, error }` |
 
-`tool.completed` means the executor accepted the tool result; it does not mean its proposals were committed. Cancellation before acceptance emits only `tool.failed`; cancellation after acceptance does not emit a failure for the same call. Tool trace or domain-event preview delivery failures only warn and do not turn a successful tool result into a failure.
+`tool.completed` means the executor accepted the tool result; it does not mean its proposals were committed. Cancellation before acceptance emits only `tool.failed`; cancellation after acceptance does not emit a failure for the same call. Tool trace or domain-event preview delivery failures only warn and do not turn a successful tool result into a failure. A call that never executed emits a `tool.calling` / `tool.failed` pair without `tool.completed`. Both carry `skipped: true`, `skipReason` (`hook-aborted`, `suspended`, `terminated` or `aborted`), `durationMs: 0` and `approvalStatus: "auto-allowed"`. They appear only in the transcript and trace, not executed tool records, failure accounting or `step.completed.toolCalls`; concealed runtimes still strip `code`, `error`, `skipped` and `skipReason`.
 
 Narrative fragments are still sent live to the interface through `narrative.delta`. To keep `trace_events` lean, only `message.completed` is saved.
 
@@ -1451,7 +1455,8 @@ How snapshots are saved:
 
 `plugin.service.completed` is a trace-only event, with `forwardToActionStream: false`.
 
-- The payload includes `callId/parentCallId?/sessionId/turnId?/runtimeId?/callerPluginId/providerPluginId/name/contract/durationMs/outcome/errorCode?`.
+- The payload includes `callId/parentCallId?/sessionId/turnId?/runtimeId?/toolCallId?/callerPluginId/providerPluginId/name/contract/durationMs/outcome/errorCode?`. A call made from a tool (including an agent's imported service tool) carries `toolCallId`, which matches the `tool.*` trace of the same tool call.
+- `errorCode` is a fixed classification: `invalid-options`, `cycle-or-depth-limit`, `admission-error`, `unavailable`, `input-validation`, `invocation-error`, `output-validation`, `timeout`, `cancelled`. `input-validation` means the provider rejected the input.
 - Extension calls also carry the metadata the host registers: `extension: { point, id, slot? }`.
 - The input, the output, the raw exception, and the private `diagnosticScope` are not recorded.
 

@@ -126,13 +126,14 @@ return { result: execution.result, committed: outcome.status === "committed" };
 
 | 事件类型              | 方向 | 描述             | 负载                                                                                |
 | --------------------- | ---- | ---------------- | ----------------------------------------------------------------------------------- |
-| `narrative.delta`     | S→C  | 流式叙事文本片段 | `{ runtimeId, pluginId, kind, delta }`                                              |
+| `narrative.delta`     | S→C  | 流式叙事文本片段 | `{ runtimeId, pluginId, kind, delta, reset?, segment? }`                            |
 | `narrative.completed` | S→C  | 完整叙事消息     | `{ content, kind, messageId, runtimeId, pluginId, segments?, unresolvedSpeakers? }` |
 
 - `narrative.delta`、`narrative.completed` 和 `runtime.started` 都必须带 `kind`；客户端直接读取它，不从 `label` 推断。
-- `narrative.delta` 可以带 `reset: true`，这时 `delta` 是空字符串。意思是：同一个 runtime 已经流出来的文字属于工具调用之前的准备步骤，或者是被审查驳回的草稿，不会成为最终的叙事。客户端应该清掉已经显示的部分，再接收后面的片段。
+- `narrative.delta` 可以带 `reset: true`，这时 `delta` 通常是空字符串。意思是：同一个 runtime 已经流出来的文字属于工具调用之前的准备步骤，或者是被审查驳回的草稿，不会成为最终的叙事。客户端应该清掉已经显示的部分和段落信息，再接收后面的片段。
 - `narrative.completed` 的 `content` 始终是审查通过之后的最终文本。它替换流式显示的内容。
-- 分段故事（`narrative-engine@2` 的 `segments`）的 `narrative.delta` 只带段落正文，段与段之间是空行，和 `content` 一致；JSON 的键、说话人和 `cues` 不进入 `delta`。见[故事输出](./plugins.md#故事输出)。
+- 分段故事（声明了输出 schema 的故事 runtime，例如 `narrative-engine@2` 的 `segments`）的 `delta` 只带段落正文，段与段之间是空行，和 `content` 一致；JSON 的键、说话人和 `cues` 不进入 `delta`。见[故事输出](./plugins.md#故事输出)。
+- 这类故事的 `narrative.delta` 另带 `segment: { index, kind, speaker? }`，说明这段文字属于哪个段落。`index` 从 0 开始，只数显示出文字的段落，所以等于流式正文里按空行切出的段落序号。每个段落第一个可见字符所在的事件带上已知的 `kind` 和 `speaker`；`kind` 或 `speaker` 在正文之后才写完时，再发一个 `delta` 为空的事件带上更新后的 `segment`。规则和提交时相同：未知的 `kind` 算 `narration`，旁白没有说话人，说话人去掉首尾空白并截到 80 个字符。`speaker` 是模型写的名字，没有解析；`narrative.completed` 的 `segments` 带解析后的名字。纯文本故事的事件没有 `segment`。
 - 故事里有说话人或在场名字没能解析成角色（没有匹配，或匹配到多个）时，`narrative.completed` 带 `unresolvedSpeakers`：这些名字按首次出现的顺序排列，没有时省略。
 - 故事的 `narrative.completed` 带 `segments`：提交时解析过说话人的段落，形状和 `/messages` 的 `segments` 相同（见 [api.md](./api.md#get-apisessionsidmessages)）。客户端用它给刚看完的这一回合显示名牌和说话人，不必再读消息；其他 `kind` 的事件没有这个字段。
 
@@ -381,8 +382,9 @@ ctx.progress.report({ jobId, state, progress?, message?, data?, sequence })
 
 - 还没结束的作业，按 runtime 的结果换成终态。
 - 插件已经上报了 `succeeded`，但这次的领域写入没有提交（整次执行回滚、这个 runtime 失败，或者它的写入在提交时被单独丢弃）：框架追加一条 `failed`，不保留成功状态。
+- 嵌套子调用（`ctx.recursiveCall`）上报了 `succeeded`，但它的父 runtime 没有成功，子调用的写入随之丢弃：追加的是 `cancelled`，不是 `failed`，因为子调用不是一次独立失败的执行，它的成功只是被撤回。
 - 插件自己上报的 `failed` / `cancelled` 不会被改写。
-- 挂起的 runtime 的作业停在 `waiting-input`，它在挂起前已经上报 `succeeded` 的也退回 `waiting-input`：挂起时它的写入先扣下，等恢复才提交，放弃挂起项时一并丢弃。这些作业记在挂起那次执行名下，恢复的运行也在这个名下上报，所以一条挂起链只有一个进度范围：最后一次恢复成功提交后换成 `succeeded`；挂起项被放弃、过期或作废时换成 `cancelled`；恢复失败、还能重试，或者恢复后又挂起时继续等待。恢复没有提交时（runtime 失败、抛错、超时、被 `PostRuntime` 拦下，或者提交回滚），这次恢复里还没结束的作业换成 `waiting-input`，已经上报 `succeeded` 的也退回 `waiting-input`：写入没有落地，挂起项还在，可以重试。
+- 挂起的 runtime 的作业停在 `waiting-input`，它在挂起前已经上报 `succeeded` 的也退回 `waiting-input`：挂起时它的写入先扣下，等恢复才提交，放弃挂起项时一并丢弃。这些作业记在挂起那次执行的进度范围里，恢复的运行也在这个范围里上报，所以一条挂起链只有一个进度范围。嵌套子调用保留自己的执行身份，但在根执行的进度范围里上报，挂起的父 runtime 的子调用作业随父一起停在 `waiting-input`，放弃挂起项时一并 `cancelled`：最后一次恢复成功提交后换成 `succeeded`；挂起项被放弃、过期或作废时换成 `cancelled`；恢复失败、还能重试，或者恢复后又挂起时继续等待。恢复没有提交时（runtime 失败、抛错、超时、被 `PostRuntime` 拦下，或者提交回滚），这次恢复里还没结束的作业换成 `waiting-input`，已经上报 `succeeded` 的也退回 `waiting-input`：写入没有落地，挂起项还在，可以重试。
 
 **后台作业的状态对应**
 
@@ -878,6 +880,8 @@ data: {
 | `session.restore` | GET    | `/api/sessions/:id/view` | JSON: `SessionSnapshot` |
 | `session.delete`  | DELETE | `/api/sessions/:id`      | JSON: `{ deleted }`     |
 
+`SessionSnapshot.messages` 的每一项是 `SnapshotMessage`。玩家消息带 `actions`：这条消息提交的解析后行动（存储里 `metadata.actions`，形状同 `GET /messages` 的 `actions`），故事消息带 `segments`。其他消息没有这两个字段。
+
 `SessionSnapshot` 顶层的 `dimensions` 是[当前值的公开快照](./world-model.md#动态维度快照)。可选的 `dimensionSettlements` 是回执摘要。provider 和 recovery 的元数据由宿主绑定并校验。
 
 > [!WARNING]
@@ -1276,9 +1280,9 @@ error.occurred        → executionError
 <!-- prettier-ignore -->
 | Type | Payload |
 | --- | --- |
-| `tool.calling` | `{ runtimeId, pluginId, toolName, toolCallId, label, arguments, source, approvalStatus }` |
+| `tool.calling` | `{ runtimeId, pluginId, toolName, toolCallId, label, arguments, source, approvalStatus, skipped?: true, skipReason? }` |
 | `tool.completed` | `{ runtimeId, pluginId, toolName, toolCallId, label, result, parsedResult, durationMs, approvalStatus, success: true }` |
-| `tool.failed` | `{ runtimeId, pluginId, toolName, toolCallId, label, code, error, hint?, details?, durationMs, approvalStatus, success: false }`  `code` 使用 `ToolErrorCode`；`error` 是完整消息，`hint` 是可选修正提示。错误码为 `invalid-input`、`not-found`、`ambiguous`、`refused`、`unavailable`、`timeout`、`conflict`、`cancelled`、`internal`。 |
+| `tool.failed` | `{ runtimeId, pluginId, toolName, toolCallId, label, code, error, hint?, details?, durationMs, approvalStatus, success: false, skipped?: true, skipReason? }`  `code` 使用 `ToolErrorCode`；`error` 是完整消息，`hint` 是可选修正提示。错误码为 `invalid-input`、`not-found`、`ambiguous`、`refused`、`unavailable`、`timeout`、`conflict`、`cancelled`、`internal`。 |
 | `domain-event.previewed` | `{ runtimeId, pluginId, toolCallId, topic, data }`。`emit-event` 校验成功后的临时显示信号；持久的业务状态仍然由正常的事件链提交 |
 | `llm.calling` | `{ runtimeId, pluginId, slot, model, provider?: string \| null, messages, tools, attempt, startedAt, queueWaitMs?, streaming? }`。`slot` 是 runtime 请求的用途；生产环境的 gateway 在调用之前把它解析成 `model` / `provider`。不支持用途解析的自定义 adapter 可以不给 `provider` |
 | `llm.responded` | `{ runtimeId, pluginId, text?, reasoningContent?, toolCalls?, usage, finishReason, durationMs, attempt, error? }`。`usage` 是 `{ inputTokens, outputTokens, cachedInputTokens?, cacheWriteInputTokens? }`，其中 `inputTokens` 是包含缓存读写的总输入，后两项是服务商报告的子集。`agent.loop.truncation: accept` 时可报告 `finishReason: length`：回复在输出上限处被截断，但被保留，仍须通过最终输出和提交检查；`reject` 时按失败上报。story profile 默认接受，其他 profile 默认拒绝，作者可覆盖 |
@@ -1295,7 +1299,7 @@ error.occurred        → executionError
 | `command.completed` | `command.invoked` 的字段 + `{ durationMs, resultOk? }` |
 | `command.failed` | `command.invoked` 的字段 + `{ durationMs, error }` |
 
-`tool.completed` 表示执行器已接受工具结果，不表示 proposal 已提交。接受前取消只报 `tool.failed`；接受后的取消不再为同一调用发失败事件。工具 trace 或领域事件预览发送失败只告警，不把工具成功改为失败。
+`tool.completed` 表示执行器已接受工具结果，不表示 proposal 已提交。接受前取消只报 `tool.failed`；接受后的取消不再为同一调用发失败事件。工具 trace 或领域事件预览发送失败只告警，不把工具成功改为失败。没有执行的调用发出 `tool.calling` / `tool.failed` 一对事件，不发 `tool.completed`；两者都带 `skipped: true`、`skipReason`（`hook-aborted`、`suspended`、`terminated` 或 `aborted`）、`durationMs: 0` 和 `approvalStatus: "auto-allowed"`。它们只进入对话和 trace，不进入已执行工具记录、失败计数或 `step.completed.toolCalls`；concealed runtime 仍会剥除 `code`、`error`、`skipped` 和 `skipReason`。
 
 叙事的片段继续通过 `narrative.delta` 实时发给界面。为了让 `trace_events` 保持精简，只保存 `message.completed`。
 
@@ -1451,7 +1455,8 @@ runtime 的终态：
 
 `plugin.service.completed` 是只进 trace 的事件，`forwardToActionStream: false`。
 
-- payload 包含 `callId/parentCallId?/sessionId/turnId?/runtimeId?/callerPluginId/providerPluginId/name/contract/durationMs/outcome/errorCode?`。
+- payload 包含 `callId/parentCallId?/sessionId/turnId?/runtimeId?/toolCallId?/callerPluginId/providerPluginId/name/contract/durationMs/outcome/errorCode?`。工具发起的调用（包括 agent 导入的服务工具）带 `toolCallId`，对得上同一次工具调用的 `tool.*` trace。
+- `errorCode` 是固定分类：`invalid-options`、`cycle-or-depth-limit`、`admission-error`、`unavailable`、`input-validation`、`invocation-error`、`output-validation`、`timeout`、`cancelled`。`input-validation` 表示提供方拒绝了输入。
 - 扩展调用另外带宿主登记的元数据 `extension: { point, id, slot? }`。
 - 不记录输入、输出、原始异常或私有的 `diagnosticScope`。
 

@@ -61,6 +61,18 @@ for (const width of [1512, 390]) {
       messages,
       random: makeRandom(),
       store: { listPlayerInputs: () => store.listPlayerInputs(fixture.id) },
+      // The check reads the acting character from the session's seats.
+      world: {
+        characters: [{ id: "player", type: "player", fields: { combat: 3 } }],
+        seats: [
+          {
+            id: "main",
+            controller: "human",
+            role: "player",
+            characters: "auto",
+          },
+        ],
+      },
       pluginData: {
         get: async (ns: string, key: string) => data.get(`${ns}/${key}`),
         set: async (ns: string, key: string, value: unknown) => {
@@ -69,8 +81,6 @@ for (const width of [1512, 390]) {
       },
       tools: {
         call: async (name: string, args: Record<string, unknown>) => {
-          if (name === "list-characters")
-            return { characters: [{ id: "player", fields: { combat: 3 } }] };
           // Like the runtime's `ctx.tools.call`, hand the handler the tool's
           // content, not the model-facing result wrapper.
           return getToolContent(

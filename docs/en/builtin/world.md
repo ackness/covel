@@ -31,7 +31,9 @@ Reads the world material before the game starts, prepares the first part of the 
 
 ## Character Creator (`char-creator`)
 
-Opening character templates must include a placeholder for every collected field. Template/default errors are correctable `invalid-input` failures; see [character tools](../reference/tools.md#create-character).
+Opening character templates must include a placeholder for every collected field. Template/default errors are correctable `invalid-input` failures; see [character tools](../reference/tools.md#opening-character-form).
+
+Whether a player character already exists follows the action’s actor, falling back to the primary seat’s current character. Name checks exempt only that character; other player characters’ names remain taken.
 
 At the start, it guides you through creating the player character. It gives you an opening passage that describes arriving in the world, then a short form. Once you fill in the form, the story begins. During play, it also records important new people in the story as characters, and updates their status, injuries and equipment.
 
@@ -54,6 +56,8 @@ At the start, it guides you through creating the player character. It gives you 
 ## Character Profiles (`character-blueprint`)
 
 Keeps the roleplay notes the world author has written for the characters: personality, way of speaking, secrets, and relationships with others. While a character is in the game, the narrative plays them according to these notes. Secrets are passed to the narrator as character data, with instructions to avoid revealing them early. This is not a data-access boundary; see the note below. The characters themselves come from the world's character file and exist without this plugin too.
+
+The narrator leaves out only the primary seat’s current character’s notes. Other player characters’ notes remain included.
 
 **What you will see**
 

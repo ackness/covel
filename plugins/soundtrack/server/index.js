@@ -39,8 +39,8 @@ export default function (covel) {
       );
       const instruction = pickLocaleText(
         ctx.locale,
-        "这个世界为下面这些情绪配了音乐。故事的情绪明显变成其中某一种时，发射 `music.cue` 并带上这种情绪，按列出的写法原样填写。每回合最多发射一次，情绪没有变化时不要发射。情绪 `silence` 会停止音乐。",
-        "This world has music for the moods below. When the mood of the story clearly changes to one of them, emit `music.cue` with that mood, written exactly as listed. Emit at most once per turn, and not while the mood stays the same. The mood `silence` stops the music.",
+        "这个世界为下面这些情绪配了音乐。故事的情绪明显变成其中某一种时，把这种情绪写进 `cues.mood`，按列出的写法原样填写。不以段落作答的故事改为发射 `music.cue` 并带上这种情绪。每回合最多写一次，情绪没有变化时不要写。情绪 `silence` 会停止音乐。",
+        "This world has music for the moods below. When the mood of the story clearly changes to one of them, write it in `cues.mood` exactly as listed. A story that does not answer in segments emits `music.cue` with that mood instead. Cue at most once per turn, and not while the mood stays the same. The mood `silence` stops the music.",
       );
       return [
         {

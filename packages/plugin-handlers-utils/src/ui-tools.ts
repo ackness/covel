@@ -95,7 +95,7 @@ const formFieldOptionSchema = z.union([
   }),
 ]);
 
-const formFieldSchema = z
+export const formFieldSchema = z
   .object({
     type: z.enum(["text", "textarea", "select", "checkbox", "number"]),
     name: z.string().min(1),
@@ -154,6 +154,8 @@ const formFieldSchema = z
     }
   });
 
+export type FormField = z.infer<typeof formFieldSchema>;
+
 const submitBehaviorSchema = z.object({
   echoFilledNarrative: z.boolean().optional(),
 });
@@ -161,7 +163,7 @@ const submitBehaviorSchema = z.object({
 export const createFormTool = tool({
   name: "create-form",
   description:
-    "Create a form for the player to fill in. The framework renders it in the client; the submitted values enter the next turn's context (through `{{ player.lastFormValues }}`). Use it for character creation, NPC dialogue choices, quest confirmation, or any input from the player. After submission, the plugin that created the form reads lastFormValues on the next turn and calls its own tool (for example create-character).",
+    "Create a form for the player to fill in. The framework renders it in the client; the submitted values enter the next turn's context (through `{{ player.lastFormValues }}`). Use it for character creation, NPC dialogue choices, quest confirmation, or any input from the player. After submission, the plugin that created the form reads lastFormValues on the next turn and calls its own tool (for example sync-characters).",
   parameters: z.object({
     formId: z.string().min(1).describe("Unique form id"),
     title: z.string().min(1).describe("Form title"),

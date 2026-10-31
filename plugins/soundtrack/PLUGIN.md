@@ -1,5 +1,5 @@
 ---
-version: 0.0.5
+version: 0.0.6
 displayName: Soundtrack
 description: >-
   Plays the background music a world ships, and follows the scene and the mood
@@ -61,4 +61,4 @@ contributes:
           key: registryId
 ---
 
-Soundtrack chooses the background music of a session from the tracks a world ships. Two facts decide the track: the current scene, taken from `scene.set`, and the mood, taken from `music.cue`. The choice goes to the `stage.music@1` slot; the app plays it. This root `PLUGIN.md` is metadata only — the runtimes that record the two facts live under `runtimes/`.
+Soundtrack chooses background music from the tracks a world ships. Its post-turn `story-cues` runtime reads the optional `narrative-engine@2` story input and records `cues.scene` and known `cues.mood` values. It does not activate a narrator. The `scene` and `cue` event runtimes still accept `scene.set` and `music.cue` as overrides. The choice goes to `stage.music@1`; the app plays it. Executable runtimes live under `runtimes/`.

@@ -3,9 +3,12 @@ import {
   AUTHORING_RULE_FIELD_PATHS,
   RUNTIME_DISABLING_ISSUE_PARAMS,
   runtimeRuleIssues,
+  serviceImportName,
 } from "./runtime-rules.js";
 import {
+  agentToolsConfigSchema,
   authoringEverySchema,
+  contractIdSchema,
   authoringTriggerSchema,
   detachedOptionsSchema,
   stageSchema,
@@ -46,9 +49,7 @@ function authoredLoopView(
   };
 }
 
-export const contractIdSchema = z
-  .string()
-  .regex(/^[a-z][a-z0-9.-]*@[1-9][0-9]*$/);
+export { contractIdSchema };
 const textSchema = z.union([
   z.string().min(1),
   z.record(z.string(), z.string()),
@@ -284,7 +285,7 @@ export const runtimeAuthoringManifestSchema = z
           )
           .optional(),
         history: runtimeManifestInputSchema.shape.history,
-        tools: toolsConfigSchema
+        tools: agentToolsConfigSchema
           .describe("Tools the agent's model may call.")
           .optional(),
         advertiseEvents: z
@@ -579,6 +580,14 @@ export const runtimeAuthoringManifestSchema = z
         ...(detached ? { detached: detached === true ? {} : detached } : {}),
         background: value.schedule?.background,
         builtinTools: (value.function ?? value.agent)?.tools?.builtin,
+        pluginTools: (value.function ?? value.agent)?.tools?.plugin,
+        serviceImports: value.agent?.tools?.services?.map((entry) => ({
+          contract: typeof entry === "string" ? entry : entry.contract,
+          name: serviceImportName(entry),
+          explicit: typeof entry !== "string" && entry.as !== undefined,
+        })),
+        completingTools: value.agent?.completion?.afterTools,
+        finishWith: value.agent?.finishWith,
         visibility: value.io?.visibility,
         output: value.io?.output,
         requireExplicitCompletion:

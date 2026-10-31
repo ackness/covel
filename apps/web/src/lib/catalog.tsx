@@ -11,7 +11,11 @@
  */
 
 import type { ComponentRenderer } from "@json-render/react";
-import type { PluginUiComponentName } from "@covel/shared";
+import {
+  SEGMENT_TEMPLATE_COMPONENT_NAMES,
+  type PluginUiComponentName,
+  type SegmentTemplateComponentName,
+} from "@covel/shared";
 import { GraphCanvas } from "./graph-canvas.js";
 import {
   filterItems,
@@ -160,3 +164,42 @@ export const covelRegistry: Record<string, ComponentRenderer> = Object.assign(
   Object.create(null) as Record<string, ComponentRenderer>,
   covelComponents,
 );
+
+/**
+ * Media renderers accept a `sessionId` prop that reads another session's
+ * media. A segment template draws inside the current session only.
+ */
+function inCurrentSession(Inner: ComponentRenderer): ComponentRenderer {
+  const Scoped: ComponentRenderer = (props) => {
+    const scoped: Record<string, unknown> = { ...props.element.props };
+    delete scoped.sessionId;
+    return <Inner {...props} element={{ ...props.element, props: scoped }} />;
+  };
+  return Scoped;
+}
+
+const SESSION_MEDIA = new Set<SegmentTemplateComponentName>([
+  "Image",
+  "Media",
+  "AudioPlayer",
+]);
+
+/**
+ * The registry segment templates render with: only the display components
+ * that validation allows (`SEGMENT_TEMPLATE_COMPONENT_NAMES`). Any other
+ * component in a template renders nothing, so a template that slipped past
+ * validation still cannot send a message, call a runtime or read session
+ * data.
+ */
+export const segmentTemplateRegistry: Record<string, ComponentRenderer> =
+  Object.assign(
+    Object.create(null) as Record<string, ComponentRenderer>,
+    Object.fromEntries(
+      SEGMENT_TEMPLATE_COMPONENT_NAMES.map((name) => [
+        name,
+        SESSION_MEDIA.has(name)
+          ? inCurrentSession(covelComponents[name])
+          : covelComponents[name],
+      ]),
+    ),
+  );

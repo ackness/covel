@@ -95,7 +95,7 @@ interface CharacterRecord {
 **别名从哪里来：**
 
 - 世界作者在 `characters/characters.json` 里写 `aliases`（见[角色文件](./world-data.md#一个世界一份角色文件)）。语言文件可以整列替换。
-- 故事揭示新名字时，模型通过 `update-character` / `sync-characters.updates[]` 的 `aliases` 参数追加。`create-character` 也接受 `aliases`。
+- 故事揭示新名字时，模型通过 `sync-characters.updates[]` 的 `aliases` 参数追加。`sync-characters.creates[]` 也接受 `aliases`。
 - `character.upsert` proposal 的 `aliases`：
   - 带 `expectedVersion` 时，追加到已有别名之后。同一回合两次追加都保留，和 `fields` 的合并方式一样。
   - 不带时，它就是完整的列表。
@@ -112,7 +112,7 @@ interface CharacterRecord {
   - 表单会发给客户端并留在会话消息里，所以它不带任何角色的名字或别名。它带的是这些名字按表单加盐后的 SHA-256 摘要（放在 `validation.data`）。
   - 摘要只防止直接读出名单，防不住拿着已经猜到的名字去验证。
 - **`player-init` 的 guard** 再查一次，因为表单发出之后世界里的角色可能变了。名字仍然冲突时，它不产生 `character.upsert`，而是让 runtime 重新发出表单，`notice` 说明这个名字已有角色使用，其余答案保留。开局不会因此反复失败。
-- **`create-character`** 创建 `type: "player"` 时，名字是其他角色的名字或别名就报错，并说明要向玩家另要一个名字。它不会把那个 NPC 当作“已经存在的角色”返回。
+- **`sync-characters.creates[]`** 创建 `type: "player"` 时，名字是其他角色的名字或别名就报错，并说明要向玩家另要一个名字。它不会把那个 NPC 当作“已经存在的角色”返回。
 
 保存时的规则没有变：两个非玩家角色可以同名（查找时是 `ambiguous`），名字等于别人的别名才被拒绝。
 
@@ -137,7 +137,7 @@ interface CharacterRecord {
 
 - `"auto"` 绑定所有 `type: player` 的角色，按角色列表的顺序，跳过别的座位明确列出的角色。
 - 明确的列表绑定其中仍然存在的角色，按列表的顺序。
-- 新建一个玩家角色（建角插件、世界导入、`create-character`）不需要写座位：下一次读取时它就绑定到 `"auto"` 座位上。
+- 新建一个玩家角色（建角插件、世界导入、`sync-characters.creates[]`）不需要写座位：下一次读取时它就绑定到 `"auto"` 座位上。
 
 每次写入都检查这些约束：座位 `id` 不重复；最多一个座位用 `"auto"`；一个角色 `id` 只能出现在一个座位的列表里，在同一个列表里也只出现一次。
 
@@ -150,7 +150,7 @@ interface CharacterRecord {
 - `PostContextAssembly` 的载荷用 `currentCharacterId` 指出它（见[Hook](./hooks.md)）。
 - 游玩界面的玩家状态显示它。
 
-插件用 SDK 的三个辅助函数读同一条规则：
+插件用 SDK 的辅助函数读同一条规则：
 
 ```js
 import { currentCharacterOf, primarySeat } from "@covel/plugin-handlers-utils";
@@ -164,7 +164,9 @@ const player = currentCharacterOf(
 
 `seatCharacterIds(seat, characters, seats)` 返回一个座位绑定的角色 `id`。
 
-**切换当前角色**：`PATCH /api/sessions/:id/seats/:seatId`，请求体 `{ "currentCharacterId": "…" }`。角色必须绑定在这个座位上，座位必须由人控制。从下一回合起生效。见 [API](./api.md#会话座位)。现在游玩界面还没有切换控件。
+`actingCharacterOf(actions, characters, seats)` 找出本回合行动的角色：按顺序读取 `source: "player"` 的行动，返回第一个 `actorId` 对应的现存角色；没有时退回主座位的当前角色；仍没有时返回 `undefined`。未知的 `actorId` 和系统行动不会选中角色。函数 runtime 和 guard 传 `ctx.playerActions`；扩展提供者和工具没有行动，传 `[]`。后台作业传源回合的 `ctx.inputs.turn.value.actions`（缺省为 `[]`），保留源行动的角色。
+
+**切换当前角色**：`PATCH /api/sessions/:id/seats/:seatId`，请求体 `{ "currentCharacterId": "…" }`。角色必须绑定在这个座位上，座位必须由人控制。从下一回合起生效。见 [API](./api.md#会话座位)。游玩界面在输入框上方（舞台模式在自由输入上方）提供当前角色选择，座位绑定两个或更多角色时显示，见[输入框模式](./ui-panels.md#输入框模式)。
 
 **身份决定能提交的行动。** 玩家每次提交的是一组行动（见 [API · submit_actions](./api.md#submit_actions)）。服务端按座位身份校验：
 
@@ -178,7 +180,7 @@ const player = currentCharacterOf(
 - 插件的行动类型自己声明哪些身份能用（`contributes.actionKinds[].roles`，默认 `[player]`）。
 - 以角色进行的行动（`say`、`act` 和默认的插件类型）只能用绑定在这个座位上的角色，省略时是座位的当前角色。没有人控制的座位不能提交行动。
 
-还在用 `find(type === "player")` 的内置插件（背包、检定、记忆、建角等）在有多个玩家角色时按第一个处理，之后再改用座位。
+内置的角色资料、角色创建、骰子判定、行囊、故事记忆和跑团规则按行动角色处理，没有行动角色时跟随主座位的当前角色。排除角色说明、回忆匹配姓名和建角占用姓名时也只排除这个角色，其他玩家角色照常参与。场景舞台仍按第一个玩家角色处理。
 
 ## 动态维度快照
 

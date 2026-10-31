@@ -46,7 +46,7 @@
 | 玩家状态量表         | 会话 World Model：主座位当前扮演的角色记录（见[座位](./world-model.md#座位)），加角色 schema 里 `category: "stats"`、`type: "number"` 且同时声明 `min` / `max` 的属性；最多 4 项 |
 | 随身物品             | 同一条玩家角色记录里，角色 schema 中 `category: "equipment"`、`type: "array"` 的属性的字符串项，按 schema 顺序合并                                                               |
 | 在场角色（场景 HUD） | `stage.cast@1` 的未退场演员（最多 3 位）与按角色 ID 取的 `character.visual@1` 头像；没有图时只显示名字                                                                           |
-| “正在说话”标记       | 最新一条已提交故事里最后一个有说话人的段落；有 `speakerId` 时按角色 ID 匹配在场演员，否则按 `displayName` 匹配；故事还在流式输出时不显示                                         |
+| “正在说话”标记       | 最新故事里最后一个有说话人的段落；有 `speakerId` 时按角色 ID 匹配在场演员，否则按 `displayName` 匹配；故事流式输出时按模型写的名字匹配，提交后换成解析结果                       |
 | 章节横幅             | `backdrop: "banner"` 的布局里，世界头图、世界名和前三个标签，放在第一条消息上方                                                                                                  |
 | 状态摘要             | `session.summary@1` 槽位：任何插件都可以提供的几行“一眼就该看到”的内容（当前目标、时间、行囊），见下方 [Session summary](#session-summary)                                       |
 
@@ -212,7 +212,7 @@ contributes:
       - ./ui/my-panel.json
 ```
 
-本页说的 `ui.right`、`ui.message`、`ui.view` 都是指 `contributes.ui` 下的键。支持这三个位置；舞台决策区通过右侧面板的 `surfaces` 选择。清单里的其他位置（包括已删除的 `left`）在加载时被忽略并记入日志，`pnpm validate:plugin` 则报未知字段错误。
+本页说的 `ui.right`、`ui.message`、`ui.view`、`ui.segment` 都是指 `contributes.ui` 下的键。支持这四个位置；舞台决策区通过右侧面板的 `surfaces` 选择，故事段落的模板见[段落模板](#段落模板)。清单里的其他位置（包括已删除的 `left`）在加载时被忽略并记入日志，`pnpm validate:plugin` 则报未知字段错误。
 
 ### JSON Spec 格式
 
@@ -656,6 +656,63 @@ guide 分析叙事 → `generate-guide` 写入 `plugin_data[message]`
   → InputBar 统一发送待发送草稿与手写输入
 ```
 
+### 段落模板
+
+插件可以用 `ui.segment` 给已提交故事的段落换一种画法，例如给某个角色的对白加名牌和头像。模板只负责显示：它是一份 json-render view，不带操作，不读插件数据，也不开沙箱页面。
+
+```yaml
+# PLUGIN.md
+contributes:
+  ui:
+    segment:
+      - ./ui/dialogue-nameplate.json
+```
+
+```json
+{
+  "id": "dialogue-nameplate",
+  "match": { "kind": "dialogue" },
+  "view": {
+    "component": "Stack",
+    "children": [
+      {
+        "component": "Badge",
+        "props": { "label": { "$state": "/segment/speaker" } }
+      },
+      {
+        "component": "Text",
+        "props": { "content": { "$state": "/segment/text" } }
+      }
+    ]
+  }
+}
+```
+
+- **`match`（必填）。** `kind` 写段落类型（`narration` / `dialogue` / `action`），`speaker` 写角色 ID 或段落里写的名字；两者可以只写一个，也可以都写，都写时都要符合。每项可以是单个值或 1–16 项的列表，名字 1–80 个字符。旁白没有说话人，`speaker` 规则不会匹配旁白。
+- **说话人怎样比较。** 先和段落的 `speakerId` 比，再和去掉首尾空白的 `speaker` 名字比。世界角色有稳定的 ID，按 ID 写能对准某个世界的角色；不知道 ID 的插件可以按名字写。
+- **选哪个模板。** 每个段落在所有匹配的模板里选最具体的：`kind + speaker` 优先于只写 `speaker`，只写 `speaker` 优先于只写 `kind`；同一级里按 ID 匹配的优先于按名字匹配的。还相同时，按 `/api/ui-specs?sessionId=` 返回的插件顺序，再按声明顺序。只有在会话里可运行的插件提供模板，与 `ui.message` 的筛选相同。
+- **模板读到的状态。** `/segment` 是已提交的段落 `{ kind, text, speaker?, speakerId? }`；`/index` 是段落位置（从 0 开始）；`/character` 是 `speakerId` 指向会话角色时的 `{ id, name, type }`；`/visual` 是这个角色已有的 `character.visual@1` 槽位值。没有插件数据、设置和别的 ID。
+- **哪里用。** 只在聊天视图的 `parsed` 和 `detailed` 模式、只对带 `segments` 的已提交故事使用。有段落命中模板时，整条故事按段落依次显示：命中的段落用模板，其余段落用默认正文。一个段落都没命中时，消息和以前完全一样。流式输出中的故事、舞台对话框和 `raw` 视图不用模板（`raw` 的 JSON 里能看到 `segments`）。
+- **能用哪些组件。** 只能用只显示自身 props 的组件：`Stack`、`Row`、`Grid`、`Separator`、`Text`、`Badge`、`Icon`、`TagList`、`Source`、`Image`、`Media`、`AudioPlayer`、`Card`、`CardList`、`EntryCard`、`StatBar`、`Progress`、`Accordion`、`Section`、`JsonView`、`EntryList`、`Prose`、`PlayerMessage`、`Alert`。会发消息、调用运行时、接收输入或读取会话数据的组件（如 `CandidateList`、`Button`、`Choice`、表单与输入组件、`SceneCastList`、`CharacterFieldsView`、`CharacterAvatar`、各类画廊）都不能用；头像用 `Image` 读 `/visual/avatar`。媒体总在当前会话里解析，`sessionId` prop 不生效。
+- **出错怎么办。** 某个模板渲染失败时，只有这一段退回默认正文。模板写错时（缺少或空的 `match`、写了 `webview`、`dataSource`、`surfaces`、`group*`、`shortLabel`、`navTarget`、`alwaysRender`、`bridge`，view 里有 `on` / `watch`，或用了上面列表以外的组件），`pnpm validate:plugin` 和安装报错；加载时这一项给出带声明路径的诊断，同一个插件的其他模板照常使用。
+- `ui.segment` 不派生能力（与 `ui.view` 相同）：模板不运行代码，也不读数据。
+
+### 输入框模式
+
+输入框不是只发一句“说”。它按这局的**行动类型目录**（[`GET /api/sessions/:id/action-kinds`](./api.md#行动类型目录)）显示输入框模式，提交的就是所选类型的行动。
+
+- **模式从目录来，不需要单独声明。** 一个模式就是输入框所属座位现在能提交的一种行动类型，`command` 除外：斜杠命令仍然走 `/` 输入，在任何模式下都能用。输入框所属的座位是主座位（第一个由人控制的玩家座位），没有主座位时是第一个由人控制的座位；只有它不是主座位时，请求才带 `seatId`。
+- **顺序。** `say` 排第一，然后是其他允许的基础类型，最后是插件类型，插件类型按目录顺序。只剩一种模式时不显示模式选择。目录读完之前只有 `say`。目录跟着启用的插件走：插件启用或停用、重连恢复、重新读取插件列表时都会重新读取；某次读取失败，就丢掉旧目录，回到只有 `say`，不会继续显示已经不可用的类型，也不弹错误提示。所选模式只保存在当前页面里，目录变化后所选类型已不在时回到第一个，目录之后恢复也不会自动回到原来的类型和字段。
+- **名称。** 基础类型用界面语言的 `session.actionKind.<类型>`；插件类型用 `contributes.actionKinds[].display.label`，图标用 `display.icon`（不认识的图标名不显示图标），输入框占位符用 `display.placeholder`。
+- **文字规则。** `text: required` 的类型在没有文字时不能发送；`optional` 的类型在有字段时可以只发字段；`none` 的类型（例如 `advance`）没有文字输入，由一个以类型名为标签的按钮发送。
+- **字段。** 声明了 `schema` 的类型在输入框下方显示字段，字段用和表单相同的输入组件。`fields` 只支持一个子集：根是 `type: object`，`properties` 是平的，每项是 `string`（有 `enum` 时是下拉；`maxLength` 超过 200 时是多行输入）、`number` / `integer`（`minimum` / `maximum` 作为范围）或 `boolean`（复选框）。`title` 是标签（缺省用属性名），`description` 是占位符，`required` 决定哪些字段必填。数字按数字、布尔按布尔提交；复选框没碰过时显示未勾选，也按 `false` 校验和提交，所以必填的布尔字段不需要先勾选再取消。必填字段为空时提示“请填写必填项”，不发送。服务端仍然完整校验 `fields`。**超出这个子集的 schema 不显示这种模式**，它仍可以通过交互提交，`pnpm validate:plugin` 会警告。
+- **排队的选择。** `say` 模式下，排队的选择和输入的文字合成一条 `say`，请求和以前完全一样。其他模式下是两个行动：先把排队的选择作为 `say`，再是所选类型的行动。所选类型需要文字而没有文字时什么都不发送（发送按钮停用），排队的选择保留，不会被改成一条 `say` 发出。
+- **执行中。** 插话只能带文字，所以只有 `say` 能在回合执行中插话。其他模式的发送按钮在回合结束前停用，并提示“本回合结束后可用”。斜杠命令在任何模式下都能用，执行中发送按钮对完整的斜杠命令仍然可用。
+- **回合停止在开始之前。** 输入的文字、所选模式和字段值一起回到输入框。回到输入框的是玩家当时输入的内容，不是气泡里显示的合并文字或字段摘要：排队的选择仍然和输入的文字分开，在下次发送时作为先发的 `say`，所以再发一次得到的行动和第一次完全相同。
+- **当前角色。** 输入框所属的座位绑定两个或更多角色，并且所选模式以角色身份进行（`actor: true`）时，输入框上方显示当前角色选择。切换调用 `PATCH /api/sessions/:id/seats/:seatId`，成功后座位更新，状态面板和场景 HUD 随之变化，下一回合起行动者是新选的角色；失败时提示服务端的原因，保留原来的选择。回合执行中选择停用，因为这个请求要等会话锁。切换还没完成时发送的内容会等切换完成再发出，气泡和服务端用的是同一个角色。浏览器私有模式下这个请求在会话工作区里执行，否则下一次 checkpoint 上传会把切换覆盖掉。请求不带 `actorId`，行动者始终是座位的当前角色。
+- **舞台自由输入。** 舞台模式的自由输入和输入框共用同一套模式、字段和角色选择，经同一条路径提交。决策面板的选项按钮仍然发送 `say`。
+- **玩家消息的署名。** 玩家消息的署名默认是“玩家”。消息记录了行动时，署名换成“角色名 · 类型名”，多个行动用逗号连接；一个座位只绑定一个角色、消息只是普通的 `say` 或斜杠命令时仍然是“玩家”。没有记录行动的旧消息也是“玩家”。
+
 ## 舞台模式（Stage View）
 
 舞台模式是视觉小说式的画面：场景背景、角色立绘和逐字出现的对话框。
@@ -671,13 +728,13 @@ guide 分析叙事 → `generate-guide` 写入 `plugin_data[message]`
 
 舞台读的是服务端的 `ui.slot@1` 投影。各个提供者从自己的数据、领域事件和 World Model 构造通用的槽位值；前端不按插件 namespace 自己拼舞台。
 
-| 层           | 数据源                                                 | 前端用途                                           |
-| ------------ | ------------------------------------------------------ | -------------------------------------------------- |
-| **Backdrop** | `stage.backdrop@1`                                     | 展示背景、场景名称和状态；缺图时使用世界视觉回退   |
-| **Sprites**  | `stage.cast@1` 与按角色 ID 索引的 `character.visual@1` | 站位、高亮、立绘与无图时的占位                     |
-| **Hud**      | `stage.backdrop@1`                                     | 展示名称、变体和来源状态                           |
-| **Dialog**   | 最新 story 正文与它的 `segments`                       | 打字、段落切分和逐段署名                           |
-| **Choices**  | `stage.choices@1` 与待提交 interaction choice block    | 情境回顾、决策问题、选项（`.ui-choice`）与自由输入 |
+| 层           | 数据源                                                   | 前端用途                                           |
+| ------------ | -------------------------------------------------------- | -------------------------------------------------- |
+| **Backdrop** | `stage.backdrop@1`                                       | 展示背景、场景名称和状态；缺图时使用世界视觉回退   |
+| **Sprites**  | `stage.cast@1` 与按角色 ID 索引的 `character.visual@1`   | 站位、高亮、立绘与无图时的占位                     |
+| **Hud**      | `stage.backdrop@1`                                       | 展示名称、变体和来源状态                           |
+| **Dialog**   | 最新 story 正文与它的 `segments`（流式时是实时段落信息） | 打字、段落切分和逐段署名                           |
+| **Choices**  | `stage.choices@1` 与待提交 interaction choice block      | 情境回顾、决策问题、选项（`.ui-choice`）与自由输入 |
 
 **打字与决策面板的切换。**
 
@@ -685,7 +742,7 @@ guide 分析叙事 → `generate-guide` 写入 `plugin_data[message]`
 - 新叙事由 `StageDialog` 逐字显示，每一段停下来等玩家点击。最后一段读完同样停一次，等收尾的点击。自动播放按停顿时间自动往下走；正文末尾的空段落不产生空白的停顿。
 - 正文独立于“点击继续对话”按钮，读屏可以读取。逐字显示时暂停实时朗读，段落显示完再朗读；Tab 可聚焦推进按钮，Enter 或空格继续。
 - 打字追上流的结尾时，不会自动跳到决策面板。
-- 读完，并且回合执行结束后，同一个位置换成统一的决策面板。它依次显示：场景、“当前信息”摘要、“现在需要决定”的问题、分组的选项、行内的自由输入。
+- 读完，并且回合执行结束后，同一个位置换成统一的决策面板。它依次显示：场景、“当前信息”摘要、“现在需要决定”的问题、分组的选项、行内的自由输入（和输入框共用模式、字段和角色选择，见[输入框模式](#输入框模式)）。
 - 提交后立刻隐藏整个旧的决策面板，包括插件扩展的区域。等新叙事时显示“生成中”，不重播已经读过的旧叙事。
 - 恢复会话，或从别的视图切进舞台时，挂载之前就存在的最新叙事算已读，不会重新打字。
 - `stage.choices@1` 的 `recap` 可省略；省略或为空时不显示“当前信息”，也不从叙事里截取摘要。`decision` 省略时，用 `scene` 或通用问题引导自由输入。没有建议提供者也能阅读叙事、提交自由输入。
@@ -703,7 +760,7 @@ guide 分析叙事 → `generate-guide` 写入 `plugin_data[message]`
 **对白名牌。**
 
 - 名牌来自已提交故事消息的 `segments`（见 [`narrative-engine@2` 的故事输出](./plugins.md#故事输出)）：每个段落就是一段，名牌是这一段的 `speaker`。内核在提交时把能解析的说话人换成角色的当前名字。没有插件需要为名牌提供数据。
-- 故事流式输出期间没有名牌，提交后才显示。
+- 故事流式输出时，名牌来自 `narrative.delta` 的 `segment`（见[协议](./protocol.md)）：某一段的说话人一到就显示，显示的是模型写的名字。提交后 `narrative.completed` 的 `segments` 把它换成解析后的当前名字，例如别名换成正名。客户端自己不解析名字。
 - 打字机和署名校验共用 `splitStageParagraphs`：CRLF 转成 LF，三个以上的换行算一个空行分隔。正文结束后，分段的数量必须和段落数一致。
 - 以下情况不显示人物名牌：旁白、没有说话人的段落、没有 `segments` 的旧消息或纯文本故事。演员的焦点不参与署名。
 
@@ -1152,13 +1209,14 @@ agent runtime 调用 `suspend` 之后，会话工具条上出现一个徽标。�
 
 每张卡片以 `reason` 为标题，并按 `resumeSchema` 选择作答的控件（`suspension-input.ts`）：
 
-| `resumeSchema`                         | 控件                                |
-| -------------------------------------- | ----------------------------------- |
-| `boolean`                              | 是 / 否按钮                         |
-| `enum`，或 `oneOf` 里的 `const`        | 选项按钮                            |
-| `string`                               | 文本框                              |
-| 维度值编辑器能覆盖的对象 / 数字 schema | 表单（复用 `DimensionValueEditor`） |
-| 没有 schema，或没有控件能覆盖          | “高级”折叠区里的原始 JSON 文本框    |
+| `resumeSchema`                         | 控件                                            |
+| -------------------------------------- | ----------------------------------------------- |
+| `boolean`                              | 是 / 否按钮                                     |
+| `enum`，或 `oneOf` 里的 `const`        | 选项按钮                                        |
+| `string`                               | 文本框                                          |
+| `suspend.fields` 编译的对象 schema     | 按属性的 `title` 显示控件标签，答案以字段名为键 |
+| 维度值编辑器能覆盖的对象 / 数字 schema | 表单（复用 `DimensionValueEditor`）             |
+| 没有 schema，或没有控件能覆盖          | “高级”折叠区里的原始 JSON 文本框                |
 
 ### 加载更早消息与执行状态
 

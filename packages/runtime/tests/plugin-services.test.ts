@@ -777,3 +777,165 @@ describe("public plugin services", () => {
     expect(resolved.apiKey).toBe("sk-secret");
   });
 });
+
+describe("model-facing services", () => {
+  const facing = {
+    name: "items",
+    contract: "inventory.items@1",
+    description: "List the items in a bag",
+    modelFacing: true,
+    input: z.object({
+      bag: z
+        .string()
+        .regex(/^\p{Letter}+$/u)
+        .describe("Bag name"),
+    }),
+    output: z.unknown(),
+    handler: () => [],
+  };
+
+  it("requires a description and an input that exports an object schema", () => {
+    const { registry } = fixture();
+    expect(() =>
+      registry.register("provider", { ...facing, description: undefined }),
+    ).toThrow('Model-facing service "items" requires a description');
+    expect(() =>
+      registry.register("provider", {
+        ...facing,
+        input: { parse: (value: unknown) => value },
+      }),
+    ).toThrow("requires a Zod input or an explicit inputSchema");
+    expect(() =>
+      registry.register("provider", {
+        ...facing,
+        inputSchema: { type: "array" },
+      }),
+    ).toThrow('its input schema root must be type "object"');
+    expect(() =>
+      registry.register("provider", { ...facing, input: z.string() }),
+    ).toThrow('its input schema root must be type "object"');
+    // A service not offered to models needs none of this.
+    expect(() =>
+      registry.register("provider", {
+        ...facing,
+        modelFacing: false,
+        description: undefined,
+        input: { parse: (value: unknown) => value },
+      }),
+    ).not.toThrow();
+  });
+
+  it("exports a Zod input's schema without $schema or unportable patterns, and takes inputSchema as written", async () => {
+    const { registry } = fixture();
+    registry.register("provider", facing);
+    const zod = await registry.resolveImport(
+      { sessionId: "test", pluginId: "consumer" },
+      facing.contract,
+    );
+    expect(zod).toMatchObject({ status: "ready", pluginId: "provider" });
+    const schema = (zod as { jsonSchema: Record<string, unknown> }).jsonSchema;
+    expect(schema).not.toHaveProperty("$schema");
+    expect(schema).toMatchObject({
+      type: "object",
+      properties: { bag: { type: "string", description: "Bag name" } },
+    });
+    expect(JSON.stringify(schema)).not.toContain("pattern");
+
+    const written = {
+      type: "object",
+      properties: { bag: { type: "string" } },
+      $schema: "https://json-schema.org/draft/2020-12/schema",
+    };
+    registry.register("provider", {
+      ...facing,
+      name: "raw",
+      contract: "inventory.raw@1",
+      input: { parse: (value: unknown) => value },
+      inputSchema: written,
+    });
+    await expect(
+      registry.resolveImport(
+        { sessionId: "test", pluginId: "consumer" },
+        "inventory.raw@1",
+      ),
+    ).resolves.toMatchObject({ status: "ready", jsonSchema: written });
+  });
+
+  it("resolves an import to one model-facing provider and never substitutes a paused one", async () => {
+    const active = new Set(["consumer", "a", "b", "plain"]);
+    const paused = new Set<string>();
+    const registry = new PluginServiceRegistry({
+      list: async () => [...active].filter((id) => !paused.has(id)),
+      ensure: async () => {},
+      paused: async () => [...paused],
+    });
+    const resolve = (contract: string) =>
+      registry.resolveImport(
+        { sessionId: "test", pluginId: "consumer" },
+        contract,
+      );
+    expect(await resolve("inventory.items@1")).toEqual({ status: "missing" });
+
+    registry.register("plain", { ...facing, modelFacing: false });
+    expect(await resolve("inventory.items@1")).toEqual({
+      status: "not-model-facing",
+      providers: ["plain"],
+    });
+
+    registry.register("a", facing);
+    expect(await resolve("inventory.items@1")).toMatchObject({
+      status: "ready",
+      pluginId: "a",
+      name: "items",
+      description: facing.description,
+    });
+
+    registry.register("b", facing);
+    expect(await resolve("inventory.items@1")).toEqual({
+      status: "ambiguous",
+      providers: ["a", "b"],
+    });
+    // A paused provider still counts: the active one is not chosen alone.
+    paused.add("b");
+    expect(await resolve("inventory.items@1")).toMatchObject({
+      status: "ambiguous",
+    });
+    active.delete("a");
+    expect(await resolve("inventory.items@1")).toEqual({
+      status: "paused",
+      pluginId: "b",
+    });
+
+    // Extension providers are never imports.
+    registry.registerExtension(
+      "a",
+      {
+        id: "ext.point@1",
+        input: z.unknown(),
+        output: z.unknown(),
+      } as never,
+      { point: "ext.point@1", id: "one" },
+      { handler: () => null },
+    );
+    active.add("a");
+    expect(await resolve("ext.point@1")).toEqual({ status: "missing" });
+  });
+
+  it("reports an input the provider rejects as input-validation", async () => {
+    const { registry, client, events } = fixture();
+    registry.register("provider", {
+      name: "rank",
+      contract: request.contract,
+      input: schema,
+      output: schema,
+      handler: (input) => input,
+    });
+    await expect(
+      client.call({ ...request, input: { value: "three" } }),
+    ).rejects.toThrow("Plugin service input failed validation");
+    expect(events[0]).toMatchObject({
+      outcome: "error",
+      errorCode: "input-validation",
+    });
+  });
+});

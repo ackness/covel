@@ -16,6 +16,7 @@ import {
   declaredToolNames,
   resolveDeferredToolNames,
 } from "../agent-loop/tool-search.js";
+import { generatedToolNames } from "../agent-loop/agent-tool-surface.js";
 
 /**
  * Force-retain Pre-Game runtimes a PreSchedule hook tried to drop.
@@ -88,6 +89,16 @@ export function buildToolDefinitions(
         `runtime "${manifest.name}" declares plugin tool "${name}", but its plugin did not register it`,
       );
   }
+  // Manifest validation keeps generated names apart from declared ones.
+  const generated = new Set(generatedToolNames(manifest));
+  for (const name of [
+    ...(manifest.tools?.builtin ?? []),
+    ...(manifest.tools?.plugin ?? []),
+  ])
+    if (generated.has(name))
+      throw new Error(
+        `runtime "${manifest.name}" imports a service as tool "${name}", a name it also declares`,
+      );
   // Deferred tools (tools.defer) are registered and authorized but withheld
   // from the initial advertisement — the LLM discovers them through the
   // injected `search-tools` tool (see agent-loop/tool-search.ts).
@@ -127,6 +138,8 @@ export function buildToolDefinitions(
         description: info.description,
         parameters: info.jsonSchema as Record<string, unknown>,
       });
+    } else if (generated.has(name)) {
+      // A generated tool that did not resolve is left out for this run.
     } else if (frameworkNames.has(name)) {
       // Framework-contracted sentinel pushed above, not a manifest
       // declaration — keep a minimal definition even when the hosting

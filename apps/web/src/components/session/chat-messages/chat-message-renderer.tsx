@@ -4,10 +4,12 @@ import { ImageIcon } from "lucide-react";
 import { Button } from "@/components/ui/button.js";
 import type { StreamMessage } from "@/stores/session-store.js";
 import { useStreamingText } from "@/stores/streaming-text-store.js";
+import { PlayerMessageLabel } from "./player-message-label.js";
 import {
   NarrativeMessageBody,
   SystemMessageLine,
 } from "./message-primitives.js";
+import { StoryMessageBody } from "./story-segments-body.js";
 
 export interface ChatMessageRendererProps {
   readonly msg: StreamMessage;
@@ -72,6 +74,7 @@ export const ChatMessageRenderer = memo(function ChatMessageRenderer({
               runtimeId: msg.runtimeId,
               content: msg.content,
               turnId: msg.turnId,
+              segments: msg.segments,
             },
             null,
             2,
@@ -127,9 +130,11 @@ export const ChatMessageRenderer = memo(function ChatMessageRenderer({
       <span
         className={`ui-message-role ui-eyebrow text-xs ${isUser ? "text-primary" : "text-muted-foreground"}`}
       >
-        {isUser
-          ? t("session.player", "Player")
-          : t("session.assistant", "Assistant")}
+        {isUser ? (
+          <PlayerMessageLabel actions={msg.actions} />
+        ) : (
+          t("session.assistant", "Assistant")
+        )}
         {/* Author-facing detail, same gate as the source badge above: a raw
             turn UUID means nothing to a player and eats a full line on a
             phone. */}
@@ -140,11 +145,21 @@ export const ChatMessageRenderer = memo(function ChatMessageRenderer({
         )}
       </span>
 
-      <NarrativeMessageBody
-        isUser={isUser}
-        isHiddenAssistantKind={Boolean(isHiddenAssistantKind)}
-        content={msg.content}
-      />
+      {/* A committed story may draw its segments through plugin
+          templates; a live one always streams as plain text. */}
+      {isAssistant &&
+      msg.kind === "story" &&
+      msg.segments?.length &&
+      liveText === undefined &&
+      !msg.id.startsWith("stream_") ? (
+        <StoryMessageBody message={msg} sessionId={sessionId} />
+      ) : (
+        <NarrativeMessageBody
+          isUser={isUser}
+          isHiddenAssistantKind={Boolean(isHiddenAssistantKind)}
+          content={msg.content}
+        />
+      )}
 
       {showImageButton && (
         <div className="flex items-center gap-1.5">

@@ -1,4 +1,8 @@
-import { pickLocaleText, translate } from "@covel/plugin-handlers-utils";
+import {
+  actingCharacterOf,
+  pickLocaleText,
+  translate,
+} from "@covel/plugin-handlers-utils";
 import { checkModifier } from "../../lib/rules.js";
 
 export default async function (ctx) {
@@ -20,10 +24,11 @@ export default async function (ctx) {
       value: { receipt: null },
     };
   }
-  const { characters } = await ctx.tools.call("list-characters", {
-    type: "player",
-  });
-  const player = characters[0];
+  const player = actingCharacterOf(
+    ctx.playerActions ?? [],
+    ctx.world?.characters ?? [],
+    ctx.world?.seats ?? [],
+  );
   if (!player) throw new Error("Create a player character before rolling");
   if (ctx.manualPayload?.openForm === true) return openForm(ctx, rules);
   const sourceTurn = ctx.execution?.sourceTurnId ?? ctx.turnId;

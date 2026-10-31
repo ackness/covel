@@ -14,6 +14,7 @@ import {
   PluginServiceRegistry,
   PluginExtensionHost,
 } from "@covel/runtime";
+import { serviceContributionContract } from "@covel/shared";
 import { createMemoryStore } from "@covel/store/memory";
 import { ToolRegistry } from "@covel/tools";
 import { createBootstrapPluginEntries } from "../../src/routes/api/bootstrap/plugin-entry.js";
@@ -81,8 +82,9 @@ it("publishes and disposes every real builtin entry against its root declaration
           `${discovery.id}: tool ${name}`,
         ).toBeDefined();
       }
-      for (const contract of entry.packageManifest?.plugin?.contributes
-        ?.services ?? []) {
+      for (const contract of (
+        entry.packageManifest?.plugin?.contributes?.services ?? []
+      ).map(serviceContributionContract)) {
         expect(
           services
             .list()

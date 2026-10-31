@@ -1,0 +1,33 @@
+{
+  "id": "dialogue-line",
+  "match": { "kind": "dialogue" },
+  "view": {
+    "component": "Row",
+    "props": { "gap": "sm", "align": "start" },
+    "children": [
+      {
+        "component": "Image",
+        "visible": { "$state": "/visual/avatar" },
+        "props": {
+          "ref": { "$state": "/visual/avatar" },
+          "alt": { "$state": "/segment/speaker" },
+          "aspectRatio": "1/1"
+        }
+      },
+      {
+        "component": "Stack",
+        "props": { "gap": "sm" },
+        "children": [
+          {
+            "component": "Badge",
+            "props": { "label": { "$state": "/segment/speaker" } }
+          },
+          {
+            "component": "Prose",
+            "props": { "content": { "$state": "/segment/text" } }
+          }
+        ]
+      }
+    ]
+  }
+}

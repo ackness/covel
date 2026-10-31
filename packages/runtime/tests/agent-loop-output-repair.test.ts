@@ -20,6 +20,7 @@ import { makeEmitterSpy } from "./_helpers/emitter-spy.js";
 import { createGatewayAdapter } from "../src/llm/gateway-llm-adapter.js";
 import {
   input,
+  expectMatchedToolCalls,
   makeExecutor,
   manifest,
   prose,
@@ -271,14 +272,16 @@ describe("output repair", () => {
     )!.createAdapter();
     const llm = createGatewayAdapter({
       resolveSlot: () => null,
-      generateText: (request) =>
-        adapter.generateText(
+      generateText: (request) => {
+        expectMatchedToolCalls(request.messages);
+        return adapter.generateText(
           {
             baseUrl: "https://generativelanguage.googleapis.com/v1beta",
             apiKey: "synthetic-key",
           },
           { ...request, model: "gemini-fixture" },
-        ),
+        );
+      },
     });
     const hookPipeline = createHookPipeline();
     hookPipeline.register({

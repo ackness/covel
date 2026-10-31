@@ -1,6 +1,8 @@
 import { cueVisual } from "../../lib/stage-view.js";
 import {
+  currentCharacterOf,
   makeProposal,
+  primarySeat,
   resolveCharacter,
   withPendingProposals,
 } from "@covel/plugin-handlers-utils";
@@ -30,10 +32,15 @@ export default async function handler(ctx) {
   const previous =
     (await ctx.pluginData?.get(DIRECTION_NS, DIRECTION_KEY)) ?? null;
   const characters = listCharacters(ctx.world);
+  const seats = ctx.world?.seats ?? [];
+  const viewpoint = currentCharacterOf(primarySeat(seats), characters, seats);
   const hadDirectionState = previous !== null && previous !== undefined;
-  let actors = normalizeActors(previous?.actors);
+  const previousActors = normalizeActors(previous?.actors);
+  let actors = previousActors.filter(
+    (actor) => actor.characterId !== viewpoint?.id,
+  );
   const diagnostics = [];
-  let changed = false;
+  let changed = actors.length !== previousActors.length;
 
   for (const cue of cues) {
     if (!cue || typeof cue !== "object") continue;
@@ -46,7 +53,7 @@ export default async function handler(ctx) {
     const matched = resolveActor(
       cue.character,
       actors,
-      characters.filter((character) => character.type !== "player"),
+      characters.filter((character) => character.id !== viewpoint?.id),
     );
     if (!matched) {
       diagnostics.push(`unresolved character: ${String(cue.character ?? "")}`);

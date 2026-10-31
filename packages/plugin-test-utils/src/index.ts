@@ -24,3 +24,4 @@ export {
   executeToolAndCommit,
   commitToolResults,
 } from "./tool-harness.js";
+export { makeTestServiceRegistry } from "./service-registry.js";

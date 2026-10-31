@@ -3,7 +3,7 @@ import type { PluginRuntimeGateway, PluginRuntimeUtils } from "./services.js";
 export interface PluginServiceDescriptor {
   readonly pluginId: string;
   readonly name: string;
-  /** Versioned, plugin-defined public contract, e.g. "example/rank@1". */
+  /** Versioned, plugin-defined public contract, e.g. "example.rank@1". */
   readonly contract: string;
   readonly description?: string;
 }
@@ -43,7 +43,20 @@ export interface PluginServiceContext {
 export interface PluginServiceDefinition<Input, Output> {
   readonly name: string;
   readonly contract: string;
+  /** Required for a model-facing service: the imported tool's description. */
   readonly description?: string;
+  /**
+   * `true` lets agents import the service as a tool. Must match the
+   * `contributes.services` declaration, and needs a description and an input
+   * that exports JSON Schema: a Zod schema, or `inputSchema`.
+   */
+  readonly modelFacing?: boolean;
+  /**
+   * The JSON Schema (root `type: "object"`) the imported tool shows the
+   * model, for an input that is not a Zod schema. The provider's `input`
+   * still validates the call.
+   */
+  readonly inputSchema?: Readonly<Record<string, unknown>>;
   /** Structural parser interface; Zod schemas work without a host dependency. */
   readonly input: { parse(value: unknown): Input };
   readonly output: { parse(value: unknown): Output };

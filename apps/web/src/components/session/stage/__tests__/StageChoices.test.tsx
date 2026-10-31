@@ -1,6 +1,9 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { composerFieldsOf } from "@covel/shared";
 import { StageChoices } from "../StageChoices.js";
+import type { ComposerMode } from "../../game-view/composer-modes.js";
+import type { ComposerModes } from "../../game-view/use-composer-modes.js";
 
 afterEach(cleanup);
 
@@ -238,5 +241,143 @@ describe("StageChoices", () => {
       (screen.getByTestId("stage-decision-input") as HTMLTextAreaElement)
         .disabled,
     ).toBe(false);
+  });
+});
+
+describe("StageChoices composer modes", () => {
+  const sayMode: ComposerMode = {
+    kind: "say",
+    label: "Say",
+    text: "required",
+    actor: true,
+    fields: [],
+  };
+  const actMode: ComposerMode = { ...sayMode, kind: "act", label: "Act" };
+  const whisperMode: ComposerMode = {
+    kind: "p/whisper",
+    label: "Whisper",
+    placeholder: "Whisper to someone",
+    text: "optional",
+    actor: true,
+    fields: composerFieldsOf({
+      type: "object",
+      properties: { target: { type: "string", title: "Target" } },
+      required: ["target"],
+    })!,
+  };
+  const advanceMode: ComposerMode = {
+    kind: "advance",
+    label: "Advance",
+    text: "none",
+    actor: false,
+    fields: [],
+  };
+
+  function controller(
+    mode: ComposerMode,
+    overrides: Partial<ComposerModes> = {},
+  ): ComposerModes {
+    return {
+      modes: [sayMode, actMode, whisperMode, advanceMode],
+      mode,
+      selectKind: vi.fn(),
+      fieldValues: {},
+      setFieldValue: vi.fn(),
+      fieldsKey: `${mode.kind}:0`,
+      restore: vi.fn(),
+      switcher: null,
+      switchCharacter: vi.fn(async () => {}),
+      acceptsInput: (text: string) =>
+        mode.text === "none" || text.trim().length > 0,
+      submit: vi.fn(() => true),
+      ...overrides,
+    };
+  }
+
+  it("submits the free input through the selected mode", () => {
+    const onSendMessage = vi.fn();
+    const onChange = vi.fn();
+    const modes = controller(actMode);
+    render(
+      <StageChoices
+        {...baseProps}
+        onSendMessage={onSendMessage}
+        composerModes={modes}
+        composerDraft={{ value: "Draw the sword", onChange }}
+      />,
+    );
+    fireEvent.keyDown(screen.getByTestId("stage-decision-input"), {
+      key: "Enter",
+    });
+    expect(modes.submit).toHaveBeenCalledExactlyOnceWith("Draw the sword");
+    expect(onSendMessage).not.toHaveBeenCalled();
+    expect(onChange).toHaveBeenCalledWith("");
+  });
+
+  it("keeps the text when the mode refuses the submission", () => {
+    const onChange = vi.fn();
+    const modes = controller(whisperMode, { submit: vi.fn(() => false) });
+    render(
+      <StageChoices
+        {...baseProps}
+        composerModes={modes}
+        composerDraft={{ value: "psst", onChange }}
+      />,
+    );
+    fireEvent.keyDown(screen.getByTestId("stage-decision-input"), {
+      key: "Enter",
+    });
+    expect(modes.submit).toHaveBeenCalledOnce();
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it("offers the modes and changes the selected one", () => {
+    const modes = controller(sayMode);
+    render(<StageChoices {...baseProps} composerModes={modes} />);
+    fireEvent.click(screen.getByTestId("composer-mode-act"));
+    expect(modes.selectKind).toHaveBeenCalledWith("act");
+    expect(
+      screen.getByTestId("composer-mode-say").getAttribute("aria-checked"),
+    ).toBe("true");
+  });
+
+  it("shows the selected kind's fields and reports their values", () => {
+    const modes = controller(whisperMode);
+    render(<StageChoices {...baseProps} composerModes={modes} />);
+    const field = screen.getByText("Target");
+    expect(field).toBeDefined();
+    const input = field.closest("div")!.querySelector("input")!;
+    fireEvent.change(input, { target: { value: "Bo" } });
+    expect(modes.setFieldValue).toHaveBeenCalledWith("target", "Bo");
+    expect(
+      (screen.getByTestId("stage-decision-input") as HTMLTextAreaElement)
+        .placeholder,
+    ).toBe("Whisper to someone");
+  });
+
+  it("replaces the input with a send button for a kind without text", () => {
+    const modes = controller(advanceMode);
+    render(<StageChoices {...baseProps} composerModes={modes} />);
+    expect(screen.queryByTestId("stage-decision-input")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Advance" }));
+    expect(modes.submit).toHaveBeenCalledExactlyOnceWith("");
+  });
+
+  it("shows the character switcher", () => {
+    const modes = controller(sayMode, {
+      switcher: {
+        seatId: "main",
+        options: [
+          { id: "aya", name: "Aya" },
+          { id: "bo", name: "Bo" },
+        ],
+        currentId: "aya",
+      },
+    });
+    render(<StageChoices {...baseProps} composerModes={modes} />);
+    fireEvent.change(screen.getByTestId("composer-character-switcher"), {
+      target: { value: "bo" },
+    });
+    expect(modes.switchCharacter).toHaveBeenCalledWith("bo");
   });
 });

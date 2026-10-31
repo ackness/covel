@@ -136,7 +136,7 @@ describe("resume context", () => {
                   name: "suspend",
                   arguments: JSON.stringify({
                     reason: "Confirm",
-                    resumeSchema: { type: "object" },
+                    fields: [{ type: "text", name: "answer", label: "Answer" }],
                   }),
                 },
               ],
@@ -280,7 +280,7 @@ describe("resume completion evidence", () => {
   });
   const suspend = call("suspend", "suspend", {
     reason: "Confirm",
-    resumeSchema: { type: "object" },
+    fields: [{ type: "text", name: "answer", label: "Answer" }],
   });
 
   /**
@@ -507,7 +507,9 @@ describe.each(["step limit", "hook stop"] as const)(
                       name: "suspend",
                       arguments: JSON.stringify({
                         reason: "Confirm",
-                        resumeSchema: { type: "object" },
+                        fields: [
+                          { type: "text", name: "answer", label: "Answer" },
+                        ],
                       }),
                     },
                   ],

@@ -2,6 +2,8 @@ import * as api from "@/services/api.js";
 import { ApiError } from "@/services/api/request.js";
 import type { SessionWorkspace } from "@/services/data-service.js";
 import { interactionActionKind, type JsonValue } from "@covel/shared";
+import { sessionCharacters } from "@/lib/session-characters.js";
+import { echoedActions } from "./composer-actions.js";
 import type { SessionActions } from "./context.js";
 import {
   enrichGameStateFromSnapshot,
@@ -94,6 +96,24 @@ export async function submitInteractionBlock(
   let rejected: FormIssue[] | undefined;
   let answeredElsewhere: string | undefined;
   let stored = false;
+  const request = {
+    kind: interactionActionKind(
+      type,
+      declaredActionKind(deps.stateRef.current.messages, blockId),
+    ),
+    interaction: { turnId, interactionId, type },
+    fields: values as Record<string, JsonValue>,
+  };
+  // The answer is an action of the acting character like any other, so its
+  // bubble names whoever the server will record it for.
+  const { session, gameState, sessionActionKinds } = deps.stateRef.current;
+  const actions = session
+    ? echoedActions([request], {
+        seats: session.seats ?? [],
+        characters: sessionCharacters(gameState),
+        catalogue: sessionActionKinds?.kinds,
+      })
+    : undefined;
 
   const onEvent: SseEventHandler = (envelope) => {
     if (envelope.type === "interaction.submitted") {
@@ -123,6 +143,7 @@ export async function submitInteractionBlock(
             content: message.content,
             timestamp: envelope.timestamp,
             turnId: envelope.turnId,
+            ...(actions ? { actions } : {}),
           },
         });
       return;
@@ -158,16 +179,7 @@ export async function submitInteractionBlock(
             sessionId: sid,
             type: "submit_actions",
             payload: {
-              actions: [
-                {
-                  kind: interactionActionKind(
-                    type,
-                    declaredActionKind(deps.stateRef.current.messages, blockId),
-                  ),
-                  interaction: { turnId, interactionId, type },
-                  fields: values as Record<string, JsonValue>,
-                },
-              ],
+              actions: [request],
             },
           },
           onEvent,

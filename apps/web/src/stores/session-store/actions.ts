@@ -1,7 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef } from "react";
 import i18n from "i18next";
 import { confirmPluginApproval } from "@/lib/approval-message.js";
-import type { PluginMutationResponse, SessionPlugin } from "@covel/shared";
+import type {
+  PluginMutationResponse,
+  Seat,
+  SessionPlugin,
+  TurnActionRequest,
+} from "@covel/shared";
 import * as api from "@/services/api";
 import { ignoreError } from "@/lib/ignore-error.js";
 import { requestChoices, requestConfirm } from "@/lib/confirm-channel.js";
@@ -17,7 +22,14 @@ import {
   setActiveSession as setActivePluginDataSession,
 } from "@/stores/plugin-data-store.js";
 import { invalidateWorldRecord } from "@/services/world-records.js";
+import { sessionCharacters } from "@/lib/session-characters.js";
 import { bootSessionStore } from "./boot.js";
+import {
+  composerActions,
+  echoedActions,
+  textActions,
+  type ComposerSubmission,
+} from "./composer-actions.js";
 import type { SessionActions } from "./context.js";
 import { submitInteractionBlock } from "./interaction-submission.js";
 import { useExecutionRecoveryActions } from "./execution-recovery-actions.js";
@@ -39,7 +51,11 @@ import {
   type SessionActionOwner,
   type SessionRuntimeRefs,
 } from "./runtime-refs.js";
-import { refreshSessionResource } from "./session-resource-reads.js";
+import { refreshSessionActionKinds } from "./action-kinds-refresh.js";
+import {
+  invalidateSessionResource,
+  refreshSessionResource,
+} from "./session-resource-reads.js";
 import { canRunSessionAction } from "./selectors.js";
 import type { SseEventHandler } from "./sse-handler.js";
 import { applyResumeEvents as applyResumeSseEvents } from "./sse-handler.js";
@@ -75,6 +91,16 @@ export function useBuildSessionActions({
 }: UseSessionActionsOptions): SessionActions {
   const { sessionIdRef, sessionGenerationRef, stateRef } = refs;
   const activeActionRef = useRef<symbol | null>(null);
+  // The character switch under way, which a submission waits for.
+  const pendingSeatSwitch = useRef<Promise<readonly Seat[] | undefined> | null>(
+    null,
+  );
+  const settleSeatSwitches = useCallback(async () => {
+    let seats: readonly Seat[] | undefined;
+    while (pendingSeatSwitch.current)
+      seats = (await pendingSeatSwitch.current) ?? seats;
+    return seats;
+  }, []);
   const claimAction = useCallback(
     (sessionId: string, requestId?: string) =>
       claimSessionAction(
@@ -253,14 +279,25 @@ export function useBuildSessionActions({
 
   const runSingleAction = useCallback(
     (
-      content: string,
-      opts: { echoUserMessage: boolean; owner: SessionActionOwner },
+      actions: readonly TurnActionRequest[],
+      opts: {
+        echoUserMessage: boolean;
+        owner: SessionActionOwner;
+        /** Seats a character switch just returned, ahead of the state. */
+        seats?: readonly Seat[];
+      },
     ): Promise<void> => {
-      const session = stateRef.current.session;
+      const { session, gameState, sessionActionKinds } = stateRef.current;
+      const { seats, ...rest } = opts;
       return session
         ? runSingleSessionAction({
-            content,
-            ...opts,
+            actions,
+            echoActions: echoedActions(actions, {
+              seats: seats ?? session.seats,
+              characters: sessionCharacters(gameState),
+              catalogue: sessionActionKinds?.kinds,
+            }),
+            ...rest,
             session,
             workspace,
             dispatch,
@@ -272,8 +309,8 @@ export function useBuildSessionActions({
     [workspace, dispatch, stateRef, handleSseEvent, sessionIdRef],
   );
 
-  const sendMessage = useCallback(
-    (content: string) => {
+  const startActions = useCallback(
+    (actions: readonly TurnActionRequest[], seats?: readonly Seat[]) => {
       const state = stateRef.current;
       if (!canRunSessionAction(state) || !state.session) return;
       const owner = claimAction(state.session.id);
@@ -281,7 +318,11 @@ export function useBuildSessionActions({
       dispatch({ type: "SET_EXECUTING", value: true });
       dispatch({ type: "SET_EXECUTION_ERROR", error: null });
 
-      runSingleAction(content, { echoUserMessage: true, owner }).finally(() => {
+      runSingleAction(actions, {
+        echoUserMessage: true,
+        owner,
+        ...(seats ? { seats } : {}),
+      }).finally(() => {
         finalizeActionExecution(
           dispatch,
           state.session?.id,
@@ -299,6 +340,74 @@ export function useBuildSessionActions({
       sessionIdRef,
       claimAction,
     ],
+  );
+
+  // A submission waits for a character switch under way: the server acts as
+  // the seat's current character, so a request sent first would act as the
+  // old one while the bubble named the new one (or the reverse).
+  const sendActions = useCallback(
+    (actions: readonly TurnActionRequest[]) => {
+      if (!pendingSeatSwitch.current) return startActions(actions);
+      const sid = sessionIdRef.current;
+      const generation = sessionGenerationRef.current;
+      void settleSeatSwitches().then((seats) => {
+        if (
+          sessionIdRef.current === sid &&
+          sessionGenerationRef.current === generation
+        )
+          startActions(actions, seats);
+      });
+    },
+    [startActions, sessionIdRef, sessionGenerationRef],
+  );
+
+  const sendMessage = useCallback(
+    (content: string) => sendActions(textActions(content)),
+    [sendActions],
+  );
+
+  const submitComposerAction = useCallback(
+    (submission: ComposerSubmission, opts?: { drafts?: string }) =>
+      sendActions(composerActions(submission, opts?.drafts)),
+    [sendActions],
+  );
+
+  const switchSeatCharacter = useCallback(
+    async (seatId: string, characterId: string): Promise<void> => {
+      const sid = sessionIdRef.current;
+      if (!sid) return;
+      const generation = sessionGenerationRef.current;
+      // The checkpoint of a browser-private session is uploaded and taken
+      // back around the write, or the next upload would undo the switch.
+      const switching = workspace
+        .run(sid, `seat-switch:${crypto.randomUUID()}`, () =>
+          api.setSeatCurrentCharacter(sid, seatId, characterId),
+        )
+        .then(({ seats }) => {
+          if (
+            sessionIdRef.current === sid &&
+            sessionGenerationRef.current === generation
+          ) {
+            // A session read that began before the switch holds the old seats
+            // and would restore them when it lands; it reads again instead.
+            invalidateSessionResource(dispatch, ["game-state", sid]);
+            dispatch({ type: "SET_SESSION_SEATS", seats });
+          }
+          return seats;
+        });
+      const settled: Promise<readonly Seat[] | undefined> = switching
+        .then(
+          (seats) => seats,
+          () => undefined,
+        )
+        .finally(() => {
+          if (pendingSeatSwitch.current === settled)
+            pendingSeatSwitch.current = null;
+        });
+      pendingSeatSwitch.current = settled;
+      await switching;
+    },
+    [workspace, dispatch, sessionIdRef, sessionGenerationRef],
   );
 
   const steerMessage = useCallback(
@@ -586,11 +695,14 @@ export function useBuildSessionActions({
     const sid = sessionIdRef.current;
     if (!sid) return;
     const generation = sessionGenerationRef.current;
-    try {
-      await refreshSessionResource(dispatch, ["plugins", sid], {
-        isCurrent: () =>
-          sessionIdRef.current === sid &&
-          sessionGenerationRef.current === generation,
+    const isCurrent = () =>
+      sessionIdRef.current === sid &&
+      sessionGenerationRef.current === generation;
+    // The catalogue follows the plugin list: the same activations decide
+    // both. Each read stands alone, so one failing leaves the other.
+    await Promise.all([
+      refreshSessionResource(dispatch, ["plugins", sid], {
+        isCurrent,
         read: () => api.listSessionPlugins(sid),
         apply: (res) =>
           dispatch({
@@ -599,10 +711,11 @@ export function useBuildSessionActions({
             commands: [...res.commands],
             unavailable: res.unavailable,
           }),
-      });
-    } catch {
-      // Non-critical: plugins panel is optional.
-    }
+      }).catch(() => {
+        // Non-critical: plugins panel is optional.
+      }),
+      refreshSessionActionKinds(dispatch, sid, isCurrent),
+    ]);
   }, [dispatch, sessionIdRef, sessionGenerationRef]);
 
   const toggleSessionPlugin = useCallback(
@@ -938,6 +1051,8 @@ export function useBuildSessionActions({
       loadWorldSessions,
       deleteSession,
       sendMessage,
+      submitComposerAction,
+      switchSeatCharacter,
       steerMessage,
       abortActiveTurn,
       loadOlderMessages,
@@ -974,6 +1089,8 @@ export function useBuildSessionActions({
       loadWorldSessions,
       deleteSession,
       sendMessage,
+      submitComposerAction,
+      switchSeatCharacter,
       loadOlderMessages,
       steerMessage,
       abortActiveTurn,

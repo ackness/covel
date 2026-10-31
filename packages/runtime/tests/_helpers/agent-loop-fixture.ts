@@ -7,6 +7,7 @@
 import type {
   LLMAdapter,
   LLMResponse,
+  LLMMessage,
   RuntimeManifest,
   RuntimeResult,
   TurnInput,
@@ -15,6 +16,7 @@ import type { LoadedRuntime } from "@covel/plugin-loader";
 import { tool, withPendingProposals, type ToolModule } from "@covel/tools";
 import { createMemoryStore } from "@covel/store/memory";
 import { z } from "zod";
+import { expect } from "vitest";
 import {
   runAgentToolLoop,
   type AgentToolLoopCompleted,
@@ -96,7 +98,8 @@ export function scriptedLLM(
   return {
     requests,
     async generate(params) {
-      requests.push(params);
+      expectMatchedToolCalls(params.messages);
+      requests.push({ ...params, messages: structuredClone(params.messages) });
       return reply(params, requests.length);
     },
   };
@@ -139,7 +142,8 @@ export interface LoopRunOptions {
   readonly maxSteps?: number;
   readonly timeoutMs?: number;
   readonly hookPipeline?: RunAgentToolLoopOptions["hookPipeline"];
-  readonly messages?: { role: string; content: string }[];
+  readonly messages?: LLMMessage[];
+  readonly allowSuspend?: boolean;
   readonly initialState?: RunAgentToolLoopOptions["initialState"];
   readonly estimator?: (text: string) => number;
   readonly contextBudget?: RunAgentToolLoopOptions["contextBudget"];
@@ -160,7 +164,11 @@ export async function runLoop(
     manifest: opts.manifest ?? manifest(),
     input,
     loaded: opts.loaded ?? loaded,
-    deps: { llm: opts.llm, toolExecutor: makeExecutor(), ...opts.deps },
+    deps: {
+      toolExecutor: makeExecutor(),
+      ...opts.deps,
+      llm: checkedLLM(opts.llm),
+    },
     maxSteps: opts.maxSteps ?? 5,
     timeoutMs: opts.timeoutMs ?? 10_000,
     messages: (opts.messages ?? [
@@ -172,6 +180,7 @@ export async function runLoop(
       : {}),
     hookPipeline: opts.hookPipeline,
     initialState: opts.initialState,
+    allowSuspend: opts.allowSuspend,
     startTime: Date.now(),
     runId: "run-loop",
   })) as AgentToolLoopCompleted;
@@ -194,15 +203,74 @@ export async function runRuntime(opts: {
     [runtime],
     {
       store,
-      llm: opts.llm,
       toolExecutor: makeExecutor(),
       loadRuntime: async () => ({
         manifest: runtime,
         promptTemplate: "Do the work.",
       }),
       ...opts.deps,
+      llm: checkedLLM(opts.llm),
     },
     opts.maxSteps ? { maxSteps: opts.maxSteps } : undefined,
   );
   return result.runtimeResults[0]!;
+}
+
+/** Check each occurrence separately: providers may reuse an ID across steps. */
+export function expectMatchedToolCalls(
+  messages: readonly {
+    role: string;
+    toolCalls?: readonly { id: string }[];
+    toolCallId?: string;
+  }[],
+): void {
+  const pending = new Set<string>();
+  for (const message of messages) {
+    if (message.role === "assistant" && message.toolCalls?.length) {
+      expect([...pending], "previous assistant calls must be answered").toEqual(
+        [],
+      );
+      for (const call of message.toolCalls) {
+        expect(
+          pending.has(call.id),
+          "call IDs must be unique within a response",
+        ).toBe(false);
+        pending.add(call.id);
+      }
+    } else if (message.role === "tool") {
+      expect(
+        message.toolCallId && pending.delete(message.toolCallId),
+        "tool result must match one unanswered call",
+      ).toBe(true);
+    }
+  }
+  expect([...pending], "every tool call must have a result").toEqual([]);
+}
+
+function checkedLLM(llm: LLMAdapter): LLMAdapter {
+  return {
+    ...llm,
+    generate: async (params) => {
+      expectMatchedToolCalls(params.messages);
+      return llm.generate(params);
+    },
+    ...(llm.stream
+      ? {
+          stream: (params) => {
+            expectMatchedToolCalls(params.messages);
+            return llm.stream!(params);
+          },
+        }
+      : {}),
+  };
+}
+
+/** All participants wait until the last one arrives. */
+export function latch(participants: number): () => Promise<void> {
+  const ready = Promise.withResolvers<void>();
+  let remaining = participants;
+  return () => {
+    if (--remaining === 0) ready.resolve();
+    return ready.promise;
+  };
 }

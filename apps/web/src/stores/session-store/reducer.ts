@@ -13,12 +13,17 @@ import {
 import {
   buildDurableRuntimeJobExecutionStep,
   foldBackgroundExecutionSteps,
+  findExecutionStepIndex,
   mergeExecutionStep,
 } from "./execution-steps.js";
 import {
   applyPluginMessageSurface,
   refreshPluginMessageSurfaces,
 } from "./plugin-message-surface.js";
+import {
+  stoppedSubmissionOf,
+  type StoppedSubmission,
+} from "./composer-actions.js";
 import { mergeRecoveredMessages } from "./recovered-messages.js";
 import { settleExecutionAttempt } from "./execution-attempts.js";
 import { orderStoryBeforePluginMessages } from "./message-order.js";
@@ -35,10 +40,7 @@ function upsertExecutionStep(
   steps: SessionState["executionSteps"],
   step: SessionState["executionSteps"][number],
 ): SessionState["executionSteps"] {
-  const key = `${step.turnId ?? "__no_turn__"}|${step.runtimeId}`;
-  const idx = steps.findIndex(
-    (item) => `${item.turnId ?? "__no_turn__"}|${item.runtimeId}` === key,
-  );
+  const idx = findExecutionStepIndex(steps, step);
   const next = [...steps];
   // A later transport/trace failure cannot undo a transaction already committed.
   const committed =
@@ -163,9 +165,11 @@ export const initialState: SessionState = {
   sessionPlugins: [],
   sessionCommands: [],
   sessionCommandsLoaded: false,
+  sessionActionKinds: null,
   unavailableSessionPlugins: [],
   worldDataNotices: [],
   messageUiSpecs: [],
+  segmentUiSpecs: [],
   pendingInteractionDrafts: [],
   suspensions: [],
   assetsByTurn: new Map<string, readonly AssetGenerateView[]>(),
@@ -196,9 +200,11 @@ const SESSION_RESET: Partial<SessionState> = {
   sessionPlugins: [],
   sessionCommands: [],
   sessionCommandsLoaded: false,
+  sessionActionKinds: null,
   unavailableSessionPlugins: [],
   worldDataNotices: [],
   messageUiSpecs: [],
+  segmentUiSpecs: [],
   pendingInteractionDrafts: [],
   suspensions: [],
   assetsByTurn: new Map<string, readonly AssetGenerateView[]>(),
@@ -527,10 +533,10 @@ export function reducer(
         gameState: mergeGameStateForReplacement(state.gameState, action.state),
       };
     case "APPEND_REASONING": {
-      const previous = state.executionSteps.find(
-        (step) =>
-          step.turnId === action.turnId && step.runtimeId === action.runtimeId,
-      );
+      const previous =
+        state.executionSteps[
+          findExecutionStepIndex(state.executionSteps, action)
+        ];
       return {
         ...state,
         executionSteps: upsertExecutionStep(
@@ -540,7 +546,7 @@ export function reducer(
       };
     }
     case "UPSERT_EXECUTION_STEP": {
-      // Upsert on (turnId, runtimeId). Transitions running → completed/failed/
+      // Upsert on (turnId, runtimeId, runId). Transitions running → completed/failed/
       // skipped / etc happen in place — missed runtime.completed no longer
       // leaves the chip spinning. New turn creates a new row; existing turn's
       // row is merged so we keep label/startedAt while overwriting status.
@@ -657,6 +663,17 @@ export function reducer(
         unavailableSessionPlugins:
           action.unavailable ?? state.unavailableSessionPlugins,
       };
+    case "SET_SESSION_ACTION_KINDS":
+      if (action.catalogue === null && state.sessionActionKinds === null)
+        return state;
+      return { ...state, sessionActionKinds: action.catalogue };
+    case "SET_SESSION_SEATS":
+      return state.session
+        ? {
+            ...state,
+            session: { ...state.session, seats: [...action.seats] },
+          }
+        : state;
     case "SET_WORLD_DATA_NOTICES":
       return { ...state, worldDataNotices: action.notices };
     case "TOGGLE_SESSION_PLUGIN": {
@@ -683,10 +700,19 @@ export function reducer(
           message.role === "user" && message.requestId === action.requestId,
       );
       if (!input) return state;
+      const stopped: StoppedSubmission = input.actions?.length
+        ? stoppedSubmissionOf(input.actions)
+        : { text: input.content };
       return {
         ...state,
         messages: state.messages.filter((message) => message !== input),
-        restoredInput: { requestId: action.requestId, content: input.content },
+        restoredInput: {
+          requestId: action.requestId,
+          content: stopped.text,
+          ...(stopped.kind ? { kind: stopped.kind } : {}),
+          ...(stopped.fields ? { fields: stopped.fields } : {}),
+          ...(stopped.drafts ? { drafts: stopped.drafts } : {}),
+        },
       };
     }
     case "CLEAR_RESTORED_INPUT":
@@ -830,6 +856,8 @@ export function reducer(
     }
     case "LOAD_MESSAGE_UI_SPECS":
       return { ...state, messageUiSpecs: action.specs };
+    case "LOAD_SEGMENT_UI_SPECS":
+      return { ...state, segmentUiSpecs: action.specs };
     case "UPSERT_PLUGIN_MESSAGE_SURFACE":
       return applyPluginMessageSurface(state, action.pluginId);
     case "UPSERT_DRAFT": {

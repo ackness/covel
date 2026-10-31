@@ -1,4 +1,8 @@
-import type { PluginManifest } from "@covel/shared";
+import {
+  isModelFacingServiceContribution,
+  serviceContributionContract,
+  type PluginManifest,
+} from "@covel/shared";
 import type { PluginAPI } from "./plugin-api.js";
 
 type Contributions = NonNullable<PluginManifest["contributes"]>;
@@ -16,7 +20,18 @@ export function enforcePluginRegistrationContract(
   };
   for (const id of declarations.tools ?? []) declare("tool", id);
   for (const id of declarations.actions ?? []) declare("action", id);
-  for (const id of declarations.services ?? []) declare("service", id);
+  // Offering a service to models is part of what is declared: the marker
+  // makes a registration that says otherwise a mismatch.
+  const serviceKey = (contract: string, modelFacing: boolean) =>
+    modelFacing ? `${contract} (model-facing)` : contract;
+  for (const entry of declarations.services ?? [])
+    declare(
+      "service",
+      serviceKey(
+        serviceContributionContract(entry),
+        isModelFacingServiceContribution(entry),
+      ),
+    );
   for (const id of declarations.forms ?? []) declare("form", id);
   for (const id of declarations.wires ?? []) declare("wire", id);
   // Hooks declare event/phase access, not a handler count. Multiple independent
@@ -53,7 +68,10 @@ export function enforcePluginRegistrationContract(
         if (!definition || typeof definition !== "object")
           throw invalid("Invalid service definition");
         api.registerService(definition);
-        record("service", definition.contract);
+        record(
+          "service",
+          serviceKey(definition.contract, definition.modelFacing === true),
+        );
       },
       registerFormValidator(name, validator) {
         api.registerFormValidator(name, validator);

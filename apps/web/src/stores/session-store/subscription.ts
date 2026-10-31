@@ -1,3 +1,4 @@
+import { refreshSessionActionKinds } from "./action-kinds-refresh.js";
 import { handlePluginFaultNotice } from "./fault-notices.js";
 import type { MutableRef } from "./runtime-refs.js";
 import { applyUiSlotEvent, recoverUiSlots } from "@/stores/ui-slot-store.js";
@@ -206,6 +207,14 @@ export function createSubscriptionEventHandler(
                 }),
             },
           ).catch(ignoreError("reload session plugins on plugin toggle"));
+          void refreshSessionActionKinds(
+            options.dispatch,
+            currentSid,
+            () =>
+              options.isCurrent() &&
+              options.sessionIdRef.current === currentSid &&
+              recovery === options.getRecoveryGeneration(),
+          );
         }
         break;
       }
@@ -448,9 +457,12 @@ export async function rehydrateSessionSideState(
     return;
   }
 
-  const pluginsTask = readPluginsAndData().catch(
-    ignoreError("reload session plugins and data after reconnect"),
-  );
+  const pluginsTask = Promise.all([
+    readPluginsAndData().catch(
+      ignoreError("reload session plugins and data after reconnect"),
+    ),
+    refreshSessionActionKinds(dispatch, sessionId, isCurrent),
+  ]);
   const suspensionsTask = refreshSessionResource(
     dispatch,
     ["suspensions", sessionId],
