@@ -8,6 +8,8 @@ The official catalogue is [covel-ai/covel-plugins](https://github.com/covel-ai/c
 
 A community package containing prompts, data declarations and declarative UI can be enabled without server-code or runtime approval. Preparation and session plugin rows disclose model use before enable: automatic agents can call the configured model on scheduled turns; manual, event, setup and delegated agents describe their actual trigger. An execution may call the model several times. The notice promises no fixed price and adds no cost-consent dialog. UI-only packages show no model notice.
 
+Player actions can also explicitly invoke event runtimes. Start-turn, cooldown and maximum-run limits apply only to automatic event delivery. Explicit calls bypass these limits, so each player action may call the model again.
+
 The host derives the required `executionMode` from actual files and declarations: `declarative`, `code` or `unknown`. Authors cannot set a mode flag. Static validation, archive previews, discovery and execution checks share the assessment. Incomplete reads, links and changing inventories yield `unknown`, which receives no exemption. CLI and API diagnostics report package-relative files, fields and reasons.
 
 - Agents, own datasets, settings, data receivers, static prompt segments, JSON UI, templates, views, composer modes and optional read/write service imports are allowed. Publishing an output contract does not register an executable service.

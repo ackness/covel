@@ -886,6 +886,8 @@ contributes:
 
 授权能力为“读取会话”，绑定插件 ID 和整份已加载 spec（含内联 HTML）的 SHA-256 内容哈希。记录通过 SettingsStore 保存在本设备，键为 `ui.pluginViewConsent.<pluginId>.<hash>.session`。spec 或 HTML 改变后重新请求授权；在视图栏的“视图权限”菜单里点“撤销故事读取授权”可以撤销，并返回默认视图。授权独立于服务端代码审批，适用于所有来源的插件。
 
+内容更换或切换会话时，宿主关闭旧 iframe 的连接和流订阅。新内容的哈希尚未完成或尚未授权时不挂载页面；已授权的相同内容在另一个会话也会建立新的 iframe，旧页面不会收到新会话的状态或流文本。
+
 ### SessionProjection（版本 1）
 
 授权后的页面从 `window.covel` 的状态对象读取 `session` 字段，也可用 `window.covel.subscribe` 订阅变化。下表是该字段的内容。它不重复顶层的 `locale` 和 `theme`。

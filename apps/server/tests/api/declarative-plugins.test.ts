@@ -8,6 +8,7 @@ import {
   pluginSummarySchema,
   readRuntimeEnv,
   type LLMAdapter,
+  type RuntimeResult,
 } from "@covel/shared";
 import { createMemoryStore } from "@covel/store/memory";
 import {
@@ -168,6 +169,40 @@ async function assertNoGrants() {
     pending: [],
   });
 }
+it.each(["", "/turns", "/turns/page"])(
+  "refreshes trace discovery to match plugin classification (%s)",
+  async (suffix) => {
+    await build(false, true);
+    for (const mode of ["declarative", "code"] as const) {
+      if (mode === "code") {
+        await writeFile(path.join(directory, "unloaded.js"), "export {};");
+        expect((await reload()).status).toBe(200);
+      }
+      const refresh = vi.spyOn(api!.trustedSources, "ensureFresh");
+      refresh.mockClear();
+      // Trace discovery must refresh the assessment itself, before /api/plugins.
+      const trace = await request(`/api/traces/${sessionId}${suffix}`);
+      expect(trace.status, await trace.clone().text()).toBe(200);
+      expect(refresh).toHaveBeenCalledWith(id);
+      const snapshot = (await trace.json()).discovery;
+      const plugins = apiListResponseSchema(pluginSummarySchema).parse(
+        await (await request("/api/plugins")).json(),
+      );
+      const plugin = plugins.items.find((item) => item.id === id);
+      expect(plugin?.executionMode).toBe(mode);
+      expect(snapshot.plugins).toContainEqual(
+        expect.objectContaining({
+          id,
+          executionMode: mode,
+          ...(plugin?.executionDiagnostics
+            ? { executionDiagnostics: plugin.executionDiagnostics }
+            : {}),
+          trust: plugin?.trust,
+        }),
+      );
+    }
+  },
+);
 it.each([false, true])(
   "enables and commits own data without provenance or synthetic grants (selected=%s)",
   async (selected) => {
@@ -464,6 +499,371 @@ export default c => { c.registerService({ name: "review", contract: "notebook.re
   ).toBeNull();
   await assertNoGrants();
 });
+
+const reviewProvider = "notebook-review-provider";
+async function writeReviewProvider() {
+  const providerDir = path.join(root, "user", reviewProvider);
+  await mkdir(providerDir);
+  await writeFile(
+    path.join(providerDir, "PLUGIN.md"),
+    `---
+description: Reviews public notes.
+entry: ./entry.js
+contributes:
+  datasets:
+    reviews: { schema: ./review.json, key: id }
+    receipts: { schema: ./review.json, key: id }
+  services: [{ contract: notebook.review@1, access: write, modelFacing: true }]
+---
+`,
+  );
+  await writeFile(
+    path.join(providerDir, "review.json"),
+    JSON.stringify({
+      type: "object",
+      properties: { id: { type: "string" }, text: { type: "string" } },
+      required: ["id", "text"],
+      additionalProperties: false,
+    }),
+  );
+  await writeFile(
+    path.join(providerDir, "entry.js"),
+    `export default api => {
+  const z = api.toolkit.z;
+  api.registerService({
+    name: "review", contract: "notebook.review@1", access: "write", modelFacing: true,
+    description: "Review a public note", input: z.object({ text: z.string() }),
+    output: z.object({ reviewed: z.boolean() }),
+    handler: async ({ text }, ctx) => {
+      await ctx.pluginData.update("receipts", text, [{ op: "set", value: {
+        id: text, text: "Review requested",
+      } }]);
+      await ctx.pluginData.update("reviews", text, [{ op: "set", value: {
+        id: text, text: text === "rejected" ? 17 : text,
+      } }]);
+      if (text === "throws") throw new Error("Review failed after staging");
+      return { reviewed: true };
+    },
+  });
+};
+`,
+  );
+}
+async function approveReviewProvider() {
+  const enableProvider = () =>
+    request(`/api/sessions/${sessionId}/plugins/${reviewProvider}`, "PUT");
+  const pending = await enableProvider();
+  expect(pending.status, await pending.clone().text()).toBe(202);
+  const { approvalId } = await pending.json();
+  const approved = await request(
+    `/api/approvals/${approvalId}/decision`,
+    "POST",
+    {
+      decision: "allow",
+      scope: "session",
+    },
+  );
+  expect(approved.status, await approved.clone().text()).toBe(200);
+  expect((await enableProvider()).status).toBe(200);
+}
+const storyReply = (): Awaited<ReturnType<LLMAdapter["generate"]>> => ({
+  content: JSON.stringify({
+    segments: [{ kind: "narration", text: "The notebook story continues." }],
+    yield: "user",
+  }),
+  toolCalls: [],
+  finishReason: "stop",
+  usage: { inputTokens: 2, outputTokens: 2 },
+});
+const eventsFrom = (stream: string) =>
+  parseJsonFrames<{ type: string; payload: Record<string, unknown> }>(stream);
+async function savedExecution() {
+  const turns = await api!.store.listTurnResults(sessionId);
+  expect(turns).toHaveLength(1);
+  const turn = turns[0]!;
+  return {
+    turn,
+    results: turn.runtimeResults as RuntimeResult[],
+    operations: (turn.runtimeResults as RuntimeResult[]).flatMap(
+      (result) => result.operations ?? [],
+    ),
+  };
+}
+
+it("discards a throwing provider's staged writes while a declarative caller recovers", async () => {
+  await writeReviewProvider();
+  generate
+    .mockResolvedValueOnce(toolReply("review-note", { text: "throws" }))
+    .mockResolvedValueOnce(toolReply("review-note", { text: "kept" }))
+    .mockResolvedValueOnce(
+      toolReply("notes-upsert", { record: { id: "own", text: "Recovered" } }),
+    );
+  await build(false, true);
+  await approveReviewProvider();
+  const response = await run();
+  const stream = await response.text();
+  expect(response.status, stream).toBe(200);
+  expect(eventsFrom(stream)).toContainEqual(
+    expect.objectContaining({
+      type: "execution.completed",
+      payload: expect.objectContaining({ committed: true }),
+    }),
+  );
+  const { turn, operations } = await savedExecution();
+  expect(turn.commitStatus).toBe("committed");
+  expect(operations).toEqual([
+    expect.objectContaining({
+      providerPluginId: reviewProvider,
+      status: "committed",
+    }),
+  ]);
+  expect(
+    await api!.store.getPluginData(
+      sessionId,
+      reviewProvider,
+      "reviews",
+      "throws",
+    ),
+  ).toBeNull();
+  expect(
+    await api!.store.getPluginData(
+      sessionId,
+      reviewProvider,
+      "receipts",
+      "throws",
+    ),
+  ).toBeNull();
+  expect(
+    (
+      await api!.store.getPluginData(
+        sessionId,
+        reviewProvider,
+        "reviews",
+        "kept",
+      )
+    )?.value,
+  ).toEqual({ id: "kept", text: "kept" });
+  expect(
+    (
+      await api!.store.getPluginData(
+        sessionId,
+        reviewProvider,
+        "receipts",
+        "kept",
+      )
+    )?.value,
+  ).toEqual({ id: "kept", text: "Review requested" });
+  expect(await api!.store.listPluginData(sessionId, id, "reviews")).toEqual([]);
+  expect(
+    (await api!.store.getPluginData(sessionId, id, "notes", "own"))?.value,
+  ).toMatchObject({ text: "Recovered" });
+  expect(
+    JSON.stringify(
+      generate.mock.calls.flatMap(([params]) =>
+        params.messages.filter((message) => message.role === "tool"),
+      ),
+    ),
+  ).toContain("error");
+  await assertNoGrants();
+});
+
+it("discards a failed declarative auxiliary caller and its imported writes while completing the story", async () => {
+  await writeReviewProvider();
+  const narrator = "notebook-story";
+  const narratorDir = path.join(root, "user", narrator);
+  await mkdir(narratorDir);
+  await writeFile(
+    path.join(narratorDir, "PLUGIN.md"),
+    `---
+description: Tells a public story.
+runtime:
+  schedule: { stage: narrative }
+  io: { visibility: story, output: { contract: narrative-engine@2 } }
+---
+Tell the story.
+`,
+  );
+  generate.mockImplementation(async (params) => {
+    if (!params.tools?.some((tool) => tool.name === "notes-upsert"))
+      return storyReply();
+    const answers = params.messages.filter(
+      (message) => message.role === "tool",
+    );
+    if (!answers.length)
+      return toolReply("notes-upsert", {
+        record: { id: "discarded", text: "Caller note" },
+      });
+    if (answers.length === 1)
+      return toolReply("review-note", { text: "discarded" });
+    throw new Error("Caller failed after importing a review");
+  });
+  await build(false, true);
+  expect(
+    (await request(`/api/sessions/${sessionId}/plugins/${narrator}`, "PUT"))
+      .status,
+  ).toBe(200);
+  await approveReviewProvider();
+  const response = await run();
+  const stream = await response.text();
+  expect(response.status, stream).toBe(200);
+  const events = eventsFrom(stream);
+  expect(events.at(-1)).toMatchObject({
+    type: "execution.completed",
+    payload: { committed: true },
+  });
+  expect(events.some((event) => event.type === "narrative.completed")).toBe(
+    true,
+  );
+  const { turn, results, operations } = await savedExecution();
+  expect(turn.commitStatus).toBe("committed");
+  expect(results).toContainEqual(
+    expect.objectContaining({ pluginId: id, status: "failed" }),
+  );
+  expect(operations).toEqual([
+    expect.objectContaining({
+      providerPluginId: reviewProvider,
+      status: "discarded",
+      reason: "caller-dropped",
+    }),
+  ]);
+  expect(
+    await api!.store.listPluginData(sessionId, reviewProvider, "reviews"),
+  ).toEqual([]);
+  expect(
+    await api!.store.listPluginData(sessionId, reviewProvider, "receipts"),
+  ).toEqual([]);
+  expect(await api!.store.listPluginData(sessionId, id, "notes")).toEqual([]);
+  expect(await api!.store.listMessages(sessionId)).toContainEqual(
+    expect.objectContaining({
+      metadata: expect.objectContaining({ kind: "story" }),
+      content: expect.stringContaining("The notebook story continues."),
+    }),
+  );
+  await assertNoGrants();
+});
+
+it.each([false, true])(
+  "settles declarative imported operations with story isolation or whole-execution rollback (story=%s)",
+  async (story) => {
+    await writeReviewProvider();
+    if (story)
+      await manifest((config) => {
+        config.setIn(["runtime", "schedule", "stage"], "narrative");
+        config.setIn(["runtime", "io", "visibility"], "story");
+        config.setIn(["runtime", "io", "output"], {
+          contract: "narrative-engine@2",
+        });
+      });
+    generate.mockImplementation(async (params) => {
+      const count = params.messages.filter(
+        (message) => message.role === "tool",
+      ).length;
+      if (!count)
+        return toolReply("notes-upsert", {
+          record: { id: "own", text: "Story note" },
+        });
+      if (count === 1) return toolReply("review-note", { text: "kept" });
+      if (count === 2) return toolReply("review-note", { text: "rejected" });
+      return story ? storyReply() : toolReply("runtime-done", {});
+    });
+    await build(false, true);
+    await approveReviewProvider();
+    expect((await listed()).executionMode).toBe("declarative");
+    const response = await run();
+    const stream = await response.text();
+    expect(response.status, stream).toBe(200);
+    const { turn, operations } = await savedExecution();
+    expect(turn.commitStatus).toBe(story ? "committed" : "failed");
+    expect(
+      operations.map((operation) => [
+        operation.providerPluginId,
+        operation.status,
+        operation.reason,
+      ]),
+    ).toEqual(
+      story
+        ? [
+            [reviewProvider, "committed", undefined],
+            [reviewProvider, "failed", "rejected"],
+          ]
+        : [
+            [reviewProvider, "discarded", "execution-failed"],
+            [reviewProvider, "discarded", "execution-failed"],
+          ],
+    );
+    expect(
+      await api!.store.getPluginData(
+        sessionId,
+        reviewProvider,
+        "reviews",
+        "rejected",
+      ),
+    ).toBeNull();
+    expect(
+      (
+        await api!.store.listPluginData(sessionId, reviewProvider, "receipts")
+      ).map((record) => record.key),
+    ).toEqual(story ? ["kept"] : []);
+    expect(await api!.store.listPluginData(sessionId, id, "reviews")).toEqual(
+      [],
+    );
+    expect(
+      Boolean(
+        await api!.store.getPluginData(
+          sessionId,
+          reviewProvider,
+          "reviews",
+          "kept",
+        ),
+      ),
+    ).toBe(story);
+    expect(
+      Boolean(await api!.store.getPluginData(sessionId, id, "notes", "own")),
+    ).toBe(story);
+    const events = eventsFrom(stream);
+    if (story) {
+      expect(events.at(-1)).toMatchObject({
+        type: "execution.completed",
+        payload: { committed: true },
+      });
+      expect(events.some((event) => event.type === "narrative.completed")).toBe(
+        true,
+      );
+      expect(
+        events.filter((event) => event.type === "operation.failed"),
+      ).toEqual([
+        expect.objectContaining({
+          payload: expect.objectContaining({ count: 1 }),
+        }),
+      ]);
+      expect(
+        events.filter((event) =>
+          ["proposal.failed", "error.occurred"].includes(event.type),
+        ),
+      ).toEqual([]);
+      expect(await api!.store.listMessages(sessionId)).toContainEqual(
+        expect.objectContaining({
+          metadata: expect.objectContaining({ kind: "story" }),
+          content: expect.stringContaining("The notebook story continues."),
+        }),
+      );
+    } else {
+      expect(
+        events.some(
+          (event) =>
+            event.type === "execution.completed" &&
+            event.payload.committed === true,
+        ),
+      ).toBe(false);
+      expect(await api!.store.listMessages(sessionId)).not.toContainEqual(
+        expect.objectContaining({
+          metadata: expect.objectContaining({ kind: "story" }),
+        }),
+      );
+    }
+    await assertNoGrants();
+  },
+);
 
 it.each(["", "en/"])(
   "executes the exact documented notebook through public admission and commit (%s)",
