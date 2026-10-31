@@ -21,15 +21,16 @@ export interface SessionActions {
   resumeSessionById: (sessionId: string) => Promise<void>;
   loadWorldSessions: () => Promise<void>;
   deleteSession: (sessionId: string) => Promise<void>;
-  sendMessage: (content: string) => void;
+  sendMessage: (content: string) => boolean;
   /**
    * Submit one composer action (a mode's kind, its text and fields). Queued
-   * selections in `drafts` are sent first as a `say`.
+   * selections in `drafts` are sent first as a `say`. False means admission
+   * is busy or unavailable; the caller must keep its draft.
    */
   submitComposerAction: (
     submission: ComposerSubmission,
     opts?: { drafts?: string },
-  ) => void;
+  ) => boolean;
   /**
    * Switch the character a seat acts as. Rejects with the server's refusal;
    * the seat keeps its current character then.

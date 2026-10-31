@@ -341,7 +341,7 @@ export function useBuildSessionActions({
         state.session.status !== "active" ||
         (!afterAdvance && !canRunSessionAction(state))
       )
-        return;
+        return false;
       const owner = claimAction(state.session.id);
 
       dispatch({ type: "SET_ADVANCE", advance: null });
@@ -361,6 +361,7 @@ export function useBuildSessionActions({
         );
         if (state.session) resyncSession(state.session.id, owner.isCurrent);
       });
+      return true;
     },
     [
       dispatch,
@@ -378,6 +379,13 @@ export function useBuildSessionActions({
   const sendActions = useCallback(
     (actions: readonly TurnActionRequest[]) => {
       const state = stateRef.current;
+      // The old stream can finish before its checkpoint does. Keep admission
+      // closed until the entire interrupt-and-submit operation has settled.
+      if (
+        pendingAdvanceInput.current?.sessionId === state.session?.id &&
+        pendingAdvanceInput.current?.generation === sessionGenerationRef.current
+      )
+        return false;
       const advance = state.advance;
       if (
         advance &&
@@ -386,11 +394,6 @@ export function useBuildSessionActions({
       ) {
         const sessionId = state.session.id;
         const generation = sessionGenerationRef.current;
-        if (
-          pendingAdvanceInput.current?.sessionId === sessionId &&
-          pendingAdvanceInput.current.generation === generation
-        )
-          return;
         const token = Symbol("advance-input");
         pendingAdvanceInput.current = { sessionId, generation, token };
         const isCurrent = () =>
@@ -420,7 +423,7 @@ export function useBuildSessionActions({
               pendingAdvanceInput.current = null;
           }
         })();
-        return;
+        return true;
       }
       if (!pendingSeatSwitch.current) return startActions(actions);
       const sid = sessionIdRef.current;
@@ -432,6 +435,7 @@ export function useBuildSessionActions({
         )
           startActions(actions, seats);
       });
+      return true;
     },
     [
       startActions,

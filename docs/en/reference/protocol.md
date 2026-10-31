@@ -1488,6 +1488,8 @@ Plugin views reuse the sandbox MessagePort. Full `{ type: "state", value }` mess
 
 ### Advancement events
 
+When the web client submits new input, it stops the old request and waits for the browser checkpoint before sending the accepted input. A further submission during that wait shows a session-busy notice and preserves the new text, fields and queued selections. The composer must retain its draft when the submission call reports that it was not accepted.
+
 | Event                       | Payload                                                                                                                                                                         | Client handling                                                                        |
 | --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
 | `execution.round.completed` | `requestId`, `rootId`, `turnId`, `round`, `limit`, plus completion fields `runtimeCount`, `resultCount`, `durationMs`, `committed`, `error?`, `abortReason?`, `resyncRequired?` | Settle only the named execution's messages, steps and deltas; keep the request running |

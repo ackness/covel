@@ -149,7 +149,14 @@ describe("advancement execution boundaries", () => {
         (await f.store.getSession(f.sessionId))?.completedPlayerTurns,
       ).toBe(5);
       expect(f.calls()).toBe(2);
-      expect((await f.status()).status).not.toBe("running");
+      const recovered = await f.status();
+      expect(recovered.state).toBe("completed");
+      expect(recovered.advance).toBeUndefined();
+      expect(
+        (await f.store.listSuspensions(f.sessionId)).filter(
+          (row) => !row.resolvedAt,
+        ),
+      ).toEqual([]);
     } finally {
       await f.close();
     }
