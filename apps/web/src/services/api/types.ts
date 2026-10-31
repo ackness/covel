@@ -122,6 +122,7 @@ export interface TurnCompletionSummary {
 export type WorldDataPreflightDiagnosticLevel = "info" | "warning" | "error";
 
 export interface WorldDataPreflightDiagnostic {
+  publicLabel?: string;
   level: WorldDataPreflightDiagnosticLevel;
   sourceId?: string;
   path?: string;

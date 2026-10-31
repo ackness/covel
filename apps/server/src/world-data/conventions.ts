@@ -15,7 +15,10 @@ import { readdir, stat } from "node:fs/promises";
 import path from "node:path";
 import type { PluginRegistry } from "@covel/plugin-loader";
 import { resolveContainedPath } from "./safe-path.js";
-import type { WorldDataDiagnostic } from "./types.js";
+import type {
+  LoadedWorldDataDescriptor,
+  WorldDataDiagnostic,
+} from "./types.js";
 
 /**
  * Well-known paths of a world package.
@@ -117,7 +120,11 @@ export function pluginSourceEntry(
 interface Claim {
   readonly source: ConventionalSource;
   /** The declaring plugin and `pluginId/namespace (contract)`; absent for the kernel's. */
-  readonly claimant?: { readonly pluginId: string; readonly label: string };
+  readonly claimant?: {
+    readonly pluginId: string;
+    readonly namespace: string;
+    readonly label: string;
+  };
 }
 
 /**
@@ -156,6 +163,7 @@ function claimsOf(
           },
           claimant: {
             pluginId,
+            namespace,
             label: `${pluginId}/${namespace} (${contract})`,
           },
         });
@@ -201,6 +209,8 @@ export function conventionsOfPlugins(
 /** A path that more than one data contract of the same plugin set names. */
 export interface ConventionCollision {
   readonly path: string;
+  /** Private source identities used to defer previously imported content. */
+  readonly sources: readonly ConventionalSource[];
   /** Each declaration that names it, labelled `pluginId/namespace (contract)`. */
   readonly claimants: readonly {
     readonly pluginId: string;
@@ -213,7 +223,8 @@ export function conventionCollisions(
   catalogue: Pick<PluginRegistry, "getAll">,
   activePlugins?: readonly string[],
 ): readonly ConventionCollision[] {
-  const claims = distinctClaims(claimsOf(catalogue, activePlugins));
+  const allClaims = claimsOf(catalogue, activePlugins);
+  const claims = distinctClaims(allClaims);
   const counts = claimCounts(claims);
   const byPath = new Map<string, NonNullable<Claim["claimant"]>[]>();
   for (const { source, claimant } of claims)
@@ -224,7 +235,54 @@ export function conventionCollisions(
       ]);
   return [...byPath]
     .sort(([a], [b]) => compareText(a, b))
-    .map(([path, claimants]) => ({ path, claimants }));
+    .map(([path, claimants]) => ({
+      path,
+      claimants: claimants.map(({ pluginId, label }) => ({ pluginId, label })),
+      sources: [
+        ...new Map(
+          allClaims
+            .filter((claim) => claim.source.entry.path === path)
+            .flatMap(({ source, claimant }) =>
+              claimant
+                ? [
+                    source,
+                    { ...source, id: claimant.namespace },
+                    {
+                      ...source,
+                      id: `${claimant.pluginId}-${claimant.namespace}`,
+                    },
+                  ]
+                : [source],
+            )
+            .map((source) => [JSON.stringify(source), source]),
+        ).values(),
+      ],
+    }));
+}
+
+/** A collision is unavailable content, never authoritative empty output. */
+export async function deferredConventionSourceIds(
+  worldRoot: string,
+  collisions: readonly ConventionCollision[],
+  descriptor: LoadedWorldDataDescriptor,
+): Promise<readonly string[]> {
+  const explicitPaths = new Set([
+    ...descriptor.sources.map((source) => source.descriptor.path),
+    ...(descriptor.disabledPaths ?? []),
+  ]);
+  const deferred = new Set<string>();
+  for (const collision of collisions) {
+    if (explicitPaths.has(collision.path)) continue;
+    for (const claim of collision.sources) {
+      // Keep both unqualified and package-qualified identities: installing a
+      // claimant must also protect rows imported before the namespace clashed.
+      const sources = await presentConventionalSources(worldRoot, [claim]);
+      if (!isDirectoryConvention(claim.entry.path)) deferred.add(claim.id);
+      for (const source of sources)
+        if (!explicitPaths.has(source.entry.path)) deferred.add(source.id);
+    }
+  }
+  return [...deferred];
 }
 
 /**
@@ -275,6 +333,7 @@ export interface CharacterBlockRoute {
 /** A field of a character record that more than one data contract names. */
 export interface CharacterBlockCollision {
   readonly field: string;
+  readonly contracts: readonly string[];
   /** Each declaration that names it, labelled `pluginId/namespace (contract)`. */
   readonly claimants: readonly string[];
 }
@@ -326,7 +385,11 @@ export function characterBlockRoutes(
     compareText(a, b),
   )) {
     if (claim.contracts.size > 1)
-      collisions.push({ field, claimants: claim.claimants });
+      collisions.push({
+        field,
+        contracts: [...claim.contracts],
+        claimants: claim.claimants,
+      });
     else routes.push({ field, contract: [...claim.contracts][0]! });
   }
   return { routes, collisions };

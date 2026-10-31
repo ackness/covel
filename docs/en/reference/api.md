@@ -2110,6 +2110,8 @@ Each dimension is handled by the rules below:
 
 #### `POST /api/worlds/:id/world-data/preflight`
 
+Preflight, `sync-data` and `sync-dimensions` share receiver admission ordering: check current authorization, load errors and fault pauses before resolving dependencies in the fixed plugin set. An unavailable direct or transitive dependency excludes the receiver from writes and preserves its managed data. Omission notices for public sources may carry a declared title in `publicLabel`; hidden sources carry neither a title nor an identity.
+
 Preflight also checks receivers' declared [dimension references and candidate values](./world-data.md), reporting `dimension-reference` with safe player text. File and record locations remain on the author validation surface. Import and sync use the same check.
 
 Does a read-only preflight of one worldData import. It tells you how many entries will be imported and where they will go, but it writes nothing. Destination dataset schema or `set` violations return safe error diagnostics. Source locations and record details remain on the author validation surface. Media placeholders check `set` admission only; the actual index record schema and final size are checked at apply. Preflight does not materialize media.

@@ -108,7 +108,10 @@ export async function worldDataSelectionScenario(
     const off = await create("excluded", ["probe"]);
     expect(off.status, await off.clone().text()).toBe(201);
     expect(await off.json()).toMatchObject({
-      worldDataNotices: [{ code: "receiver-excluded" }],
+      worldDataNotices: Array.from({ length: portable ? 2 : 1 }, () => ({
+        code: "receiver-excluded",
+        publicLabel: "Notes",
+      })),
     });
     expect((await store.getSession("excluded"))?.activePlugins).toEqual([]);
     expect(await store.listPluginData("excluded", "probe", "notes")).toEqual(
@@ -220,7 +223,9 @@ export async function worldDataSelectionScenario(
     expect(unavailable.status, await unavailable.clone().text()).toBe(201);
     expect(await unavailable.json()).toMatchObject({
       activePlugins: [],
-      worldDataNotices: [{ code: "receiver-missing" }],
+      worldDataNotices: Array.from({ length: portable ? 2 : 1 }, () => ({
+        code: "receiver-missing",
+      })),
     });
     expect(await store.listPluginData("unavailable", "probe", "notes")).toEqual(
       [],

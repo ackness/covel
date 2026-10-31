@@ -27,6 +27,7 @@ fixtures/
 !tests/fixtures/
 tests/fixtures/*
 !tests/fixtures/st-import/
+!tests/fixtures/world-data-receivers/
 output/
 .pi/subagents/
 

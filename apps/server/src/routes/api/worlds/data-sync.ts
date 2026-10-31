@@ -7,7 +7,6 @@ import { worldDataImportNotices } from "../../../world-data/receiver-import.js";
 import {
   authorizedSessionPluginIds,
   readSessionPluginSelection,
-  resolveSessionPluginSet,
   worldRequiredContracts,
 } from "../session/plugins.js";
 import { sessionContentLocale, resolveSessionPlugins } from "@covel/shared";
@@ -25,7 +24,9 @@ import { hasServerCodeGrant } from "../approval-verdict.js";
  * (the global error handler) on all three.
  */
 
-import { Hono } from "hono";
+import { Hono, type Context } from "hono";
+import type { SessionRecord } from "@covel/store";
+import type { PluginRegistryEntry } from "@covel/plugin-loader";
 import { z } from "zod";
 import { errorBody, okBody, readJsonBody } from "../../../api-error.js";
 import {
@@ -44,6 +45,48 @@ import { withLockedSessionMutation } from "../session/locked-mutation.js";
 import type { WorldEnv } from "./shared.js";
 
 export const worldDataSyncRoutes = new Hono<WorldEnv>();
+
+function eligibleCandidates(
+  entries: Iterable<PluginRegistryEntry>,
+  authorized: readonly string[],
+  paused: ReadonlySet<string>,
+) {
+  return [...entries]
+    .filter((entry) => entry.status !== "error" && !paused.has(entry.id))
+    .map((entry) => ({
+      ...pluginContractFacts(entry),
+      authorized: authorized.includes(entry.id),
+    }));
+}
+
+/** Resolve dependencies against current eligibility, as in preflight. */
+function admittedWorldDataPluginIds(
+  c: Context<WorldEnv>,
+  session: SessionRecord,
+) {
+  const registry = c.get("pluginRegistry");
+  const authorized = authorizedSessionPluginIds(
+    registry,
+    c.get("rpcApprovalGate"),
+    session,
+    c.get("trustedSources"),
+  );
+  const paused = new Set(
+    c
+      .get("pluginFaults")
+      ?.latched(session.id)
+      .map((fault) => fault.pluginId) ?? [],
+  );
+  const selection = readSessionPluginSelection(session);
+  return resolveSessionPlugins({
+    requested: session.activePlugins,
+    excluded: selection.excluded,
+    fixed: true,
+    requiredContracts: selection.requiredContracts,
+    requiredDataContracts: selection.requiredDataContracts,
+    plugins: eligibleCandidates(registry.getAll().values(), authorized, paused),
+  }).active;
+}
 
 // POST /worlds/:id/world-data/preflight — build a read-only import plan for a
 // proposed or existing session. The caller may pass either sessionId or plugins.
@@ -147,12 +190,7 @@ worldDataSyncRoutes.post("/:id/world-data/preflight", async (c) => {
     fixed: Boolean(session),
     requiredContracts: selection.requiredContracts,
     requiredDataContracts: selection.requiredDataContracts,
-    plugins: [...entries.values()]
-      .filter((entry) => entry.status !== "error" && !paused.has(entry.id))
-      .map((entry) => ({
-        ...pluginContractFacts(entry),
-        authorized: authorized.includes(entry.id),
-      })),
+    plugins: eligibleCandidates(entries.values(), authorized, paused),
   });
   const result = await preflightWorldDataForSession({
     world,
@@ -214,24 +252,7 @@ worldDataSyncRoutes.post("/:id/sync-data", async (c) => {
   const dryRun = body.dryRun !== false;
   const now = new Date().toISOString();
   const admittedIds = (liveSession: typeof session) => {
-    const authorized = new Set(
-      authorizedSessionPluginIds(
-        pluginRegistry,
-        c.get("rpcApprovalGate"),
-        liveSession,
-        c.get("trustedSources"),
-      ),
-    );
-    const paused = new Set(
-      c
-        .get("pluginFaults")
-        ?.latched(sessionId)
-        .map((fault) => fault.pluginId) ?? [],
-    );
-    return resolveSessionPluginSet(
-      liveSession.activePlugins,
-      pluginRegistry.getAll(),
-    ).active.filter((id) => authorized.has(id) && !paused.has(id));
+    return admittedWorldDataPluginIds(c, liveSession);
   };
   const plannedActive = admittedIds(session);
   const syncOptions = (liveSession: typeof session) => ({
@@ -392,18 +413,7 @@ worldDataSyncRoutes.post("/:id/sync-dimensions", async (c) => {
   // definition, so a record loaded from unchanged files matches what the
   // session imported from them.
   const admittedIds = (liveSession: typeof session) => {
-    const authorized = new Set(
-      authorizedSessionPluginIds(
-        pluginRegistry,
-        c.get("rpcApprovalGate"),
-        liveSession,
-        c.get("trustedSources"),
-      ),
-    );
-    return resolveSessionPluginSet(
-      liveSession.activePlugins,
-      pluginRegistry.getAll(),
-    ).active.filter((id) => authorized.has(id));
+    return admittedWorldDataPluginIds(c, liveSession);
   };
   const plannedActive = admittedIds(session);
   const syncOptions = (liveSession: typeof session) => ({

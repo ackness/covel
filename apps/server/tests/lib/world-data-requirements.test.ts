@@ -552,3 +552,81 @@ it("uses the reader's locale fallback for explicit sources and keeps source iden
     await f.cleanup();
   }
 });
+
+it("keeps safe public labels and distinct source omissions while hiding private identities", async () => {
+  const f = await datasetWriteFixture();
+  try {
+    await writeFile(
+      path.join(f.worldRoot, "world.yaml"),
+      "id: dataset-world\nworldData: descriptor.yaml\n",
+    );
+    await writeFile(
+      path.join(f.worldRoot, "descriptor.yaml"),
+      `sources:
+  publicOne:
+    kind: json
+    path: data/notes.json
+    to: contract:probe.notes@1
+  publicTwo:
+    kind: json
+    path: data/other.json
+    to: contract:probe.notes@1
+  secret_SOURCE:
+    kind: json
+    path: data/SECRET_FILE.json
+    to: contract:probe.notes@1
+    visibility: hidden
+`,
+    );
+    await writeFile(path.join(f.worldRoot, "data/other.json"), "[]");
+    await writeFile(
+      path.join(f.worldRoot, "data/SECRET_FILE.json"),
+      '[{"id":"SECRET_RECORD","text":"SECRET_VALUE"}]',
+    );
+    const inventory = await inventoryWorldData({
+      ...f.options,
+      registry: f.registry,
+    });
+    const notices = worldDataRequirementNotices(
+      inventory,
+      [{ contract: "probe.notes@1", code: "excluded" }],
+      [
+        {
+          level: "warning",
+          code: "receiver-missing",
+          sourceId: "publicOne",
+          message: "Duplicate import report",
+        },
+        {
+          level: "warning",
+          code: "receiver-missing",
+          sourceId: "secret_SOURCE",
+          message: "SECRET_ERROR",
+        },
+      ],
+    );
+    expect(notices).toHaveLength(3);
+    expect(notices.map((notice) => notice.publicLabel)).toEqual([
+      "Notes",
+      "Notes",
+      undefined,
+    ]);
+    expect(notices.every((notice) => notice.code === "receiver-excluded")).toBe(
+      true,
+    );
+    expect(JSON.stringify(notices)).not.toMatch(
+      /SECRET|publicOne|publicTwo|data\//,
+    );
+    const duplicateInventory = {
+      ...inventory,
+      sources: [...inventory.sources, ...inventory.sources],
+    };
+    expect(
+      worldDataRequirementNotices(duplicateInventory, [
+        { contract: "probe.notes@1", code: "excluded" },
+      ]),
+    ).toEqual(notices);
+  } finally {
+    await f.cleanup();
+  }
+});
