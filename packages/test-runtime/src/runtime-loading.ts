@@ -429,12 +429,18 @@ export async function loadEntryTools(
     registerService(definition) {
       if (!services) throw new Error("Plugin service registry is unavailable");
       scope.stage(() => {
+        // The registry hands a write service its write context; the union's
+        // handler cannot be called with either context directly.
+        const handler = definition.handler as (
+          input: unknown,
+          context: unknown,
+        ) => unknown;
         scope.track(
           services.register(discovery.id, {
             ...definition,
             handler: (input, context) =>
-              scope.invoke(() => definition.handler(input, context)),
-          }),
+              scope.invoke(() => handler(input, context)),
+          } as typeof definition),
         );
       });
     },

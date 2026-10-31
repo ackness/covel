@@ -199,6 +199,8 @@ For one session, these operations are queued behind the same session lock, so th
 
 These are committed or rolled back together in the same `finalizeExecution` transaction: the execution log, the proposals, the session clock, and the suspension record.
 
+Write-service operations commit in this transaction too. An operation rides on its caller run's result, follows the caller's commit unit and commits after the unit's own writes: each operation of the story's unit gets its own savepoint and only it is dropped when it fails, while the story commits; a rejected operation in an auxiliary unit drops the whole unit; in an execution without a story it rolls the whole execution back. The final status of each operation is written back to `turn_results` in the same transaction. See [Transactions · Write-service operations](../reference/transactions.md#write-service-operations).
+
 Details to remember:
 
 - Background work started while the lock is held, such as a job worker that was woken, does not inherit the lock. It queues for the lock itself and is never taken for its owner.

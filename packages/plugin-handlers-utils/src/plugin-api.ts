@@ -306,6 +306,7 @@ export interface PluginServiceClient {
     options?: { readonly signal?: AbortSignal; readonly timeoutMs?: number },
   ): Promise<unknown>;
 }
+/** What a read service's handler receives. */
 export interface PluginServiceContext {
   readonly callerPluginId: string;
   readonly sessionId: string;
@@ -317,6 +318,23 @@ export interface PluginServiceContext {
   readonly services: PluginServiceClient;
   readonly gateway?: PluginServiceGateway;
   readonly utils?: PluginHttp;
+}
+
+/**
+ * What a write service's handler receives. It has no model or HTTP access.
+ * `pluginData` writes the provider's own data: the writes are staged for the
+ * caller and commit with the caller's work, and reads see what earlier calls
+ * of the same caller staged. `_` namespaces are refused, and nested
+ * `services` calls reach read services only.
+ */
+export interface PluginWriteServiceContext extends Omit<
+  PluginServiceContext,
+  "pluginData" | "gateway" | "utils"
+> {
+  readonly pluginData: import("./function-runtime.js").PluginDataWriter;
+  readonly random: import("./function-runtime.js").PluginRandom;
+  /** The calling execution's turn. */
+  readonly turnId: string;
 }
 export type PluginEvaluationJson =
   | string
@@ -540,7 +558,7 @@ export interface PluginServiceGateway {
     warnings: readonly string[];
   }>;
 }
-export interface PluginServiceDefinition<Input, Output> {
+interface PluginServiceDefinitionFields<Input, Output> {
   readonly name: string;
   readonly contract: string;
   /** Required for a model-facing service: the imported tool's description. */
@@ -559,11 +577,38 @@ export interface PluginServiceDefinition<Input, Output> {
   readonly inputSchema?: Readonly<Record<string, unknown>>;
   readonly input: { parse(value: unknown): Input };
   readonly output: { parse(value: unknown): Output };
+}
+
+/** A service that reads. Declare it as a contract, or `access: read`. */
+export interface PluginReadServiceDefinition<
+  Input,
+  Output,
+> extends PluginServiceDefinitionFields<Input, Output> {
+  readonly access?: "read";
   readonly handler: (
     input: Input,
     context: PluginServiceContext,
   ) => Promise<Output> | Output;
 }
+
+/**
+ * A service that changes its own plugin's data for the caller. Declare it the
+ * same way in `contributes.services` (`{ contract, access: write }`).
+ */
+export interface PluginWriteServiceDefinition<
+  Input,
+  Output,
+> extends PluginServiceDefinitionFields<Input, Output> {
+  readonly access: "write";
+  readonly handler: (
+    input: Input,
+    context: PluginWriteServiceContext,
+  ) => Promise<Output> | Output;
+}
+
+export type PluginServiceDefinition<Input, Output> =
+  | PluginReadServiceDefinition<Input, Output>
+  | PluginWriteServiceDefinition<Input, Output>;
 
 export interface PluginRpcStore {
   /** Read the current session's clock, language and setup progress. */

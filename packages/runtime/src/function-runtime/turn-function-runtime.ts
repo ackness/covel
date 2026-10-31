@@ -30,7 +30,14 @@ import { suspensionBasis } from "../resume/suspension-settlement.js";
 import { freezeInputSlots } from "../agent-loop/runtime-input-slots.js";
 import { deepFreeze } from "../hooks/hook-settings.js";
 import { createPluginRuntimeContext } from "./plugin-runtime-context.js";
-import { attachNestedResults } from "../turn-executor/nested-results.js";
+import {
+  attachNestedResults,
+  inCommitOrder,
+} from "../turn-executor/nested-results.js";
+import {
+  hasOperationWrites,
+  type RootOperationStage,
+} from "../operations/operation-stage.js";
 import { suspendNestedResults } from "../resume/suspended-nested-results.js";
 import { attachReadDependencies } from "../read-dependencies.js";
 import {
@@ -101,6 +108,11 @@ export interface ExecuteFunctionRuntimeOptions {
    * and a further suspension carries them on.
    */
   readonly restoredNested?: readonly RuntimeResult[];
+  /**
+   * The run's operation stage. Without it (a resume) the handler cannot call
+   * write services.
+   */
+  readonly operations?: RootOperationStage;
 }
 
 export async function executeFunctionRuntime({
@@ -129,6 +141,7 @@ export async function executeFunctionRuntime({
   resumedFromSuspensionId,
   pendingProposals = [],
   restoredNested = [],
+  operations,
 }: ExecuteFunctionRuntimeOptions): Promise<RuntimeResult> {
   const inputs = originalInputs ? freezeInputSlots(originalInputs) : undefined;
   const exportSlots = originalExports
@@ -192,6 +205,7 @@ export async function executeFunctionRuntime({
     ...(executionId !== undefined ? { executionId } : {}),
     runId,
     writeBuffer,
+    ...(operations ? { operations } : {}),
     pluginDataVisibility: createPluginDataVisibility({
       pluginId: manifest.pluginId,
       runtimeId: manifest.name,
@@ -255,6 +269,19 @@ export async function executeFunctionRuntime({
   // A resumed handler may suspend again; the commit resolves the old record
   // and saves this one in one transaction.
   if (handlerOutcome.outcome === "suspended") {
+    // A suspension keeps writes for a resume, which never stages operations;
+    // a write-service operation cannot wait in it.
+    if (
+      operations?.hasOperations() ||
+      hasOperationWrites(
+        inCommitOrder([...restoredNested, ...runtimeContext.nestedResults]),
+      )
+    )
+      return finalizeRuntimeFailure(
+        { ...deps, hookPipeline },
+        run,
+        `${manifest.name} cannot suspend after changing another plugin's data through a write service`,
+      );
     const suspensionId = crypto.randomUUID();
     // Nested results wait with the suspension and commit with the resume
     // that succeeds. A nested run that itself suspended cannot be resumed
@@ -425,8 +452,10 @@ export async function executeFunctionRuntime({
       ...restoredNested,
       ...runtimeContext.nestedResults,
     ]);
-  if (ownSuccess)
+  if (ownSuccess) {
     attachReadDependencies(completedResult, runtimeContext.readDependencies());
+    operations?.attachTo(completedResult, true);
+  }
 
   const finalOutput = (completedResult.output ??
     getToolContent(output)) as Record<string, unknown>;

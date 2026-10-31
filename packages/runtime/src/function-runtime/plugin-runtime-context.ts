@@ -37,6 +37,7 @@ import {
 } from "./plugin-handler-helpers.js";
 import type { ExecutionWriteBuffer } from "./execution-write-buffer.js";
 import type { PluginDataVisibility } from "./upstream-plugin-data.js";
+import type { OperationStage } from "../operations/operation-stage.js";
 import {
   createRuntimeMediaContext,
   createRuntimeMediaWriter,
@@ -116,6 +117,13 @@ export interface PluginRuntimeContextOptions {
    * `ctx.tools`; absent, reads see the store and the buffer only.
    */
   readonly pluginDataVisibility?: PluginDataVisibility;
+  /**
+   * The run's operation stage: `ctx.services`, `ctx.tools` and
+   * `ctx.agents.run` stage write-service operations in it. Absent (a guard,
+   * a resume, a detached or background run), write services answer
+   * `unavailable`.
+   */
+  readonly operations?: OperationStage;
 }
 
 export interface PluginRuntimeContext {
@@ -165,6 +173,7 @@ export async function createPluginRuntimeContext({
   pluginDataVisibility,
   recursionDepth,
   runId,
+  operations,
 }: PluginRuntimeContextOptions): Promise<PluginRuntimeContext> {
   const helperCtx: HandlerHelperContext = {
     sessionId: input.sessionId,
@@ -386,6 +395,7 @@ export async function createPluginRuntimeContext({
       if (capabilitiesRevoked)
         throw new Error("function runtime tools capability is revoked");
     },
+    ...(operations ? { operations } : {}),
   });
   const inFlightRecursiveCalls = new Set<Promise<unknown>>();
   const nestedResults: RuntimeResult[] = [];
@@ -438,6 +448,7 @@ export async function createPluginRuntimeContext({
                 subagentAbort.signal,
               ]),
               parentDeadline: startTime + timeoutMs,
+              ...(operations ? { operations } : {}),
             })
             .then((result) => structuredClone(result));
           inFlightSubagents.add(run);
@@ -515,6 +526,7 @@ export async function createPluginRuntimeContext({
       visibility: pluginDataVisibility,
       writeBuffer,
     },
+    ...(operations ? { operations } : {}),
   });
   const services = serviceClient
     ? makeRevocableCapability(serviceClient, isRevoked, "services")

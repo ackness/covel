@@ -62,6 +62,7 @@ export function classifyExecutionFaults(
   for (const failed of outcome.failedProposals) {
     if (
       failed.code === "dimension-version-conflict" ||
+      failed.code === "conflict" ||
       failed.code === "hook-failed"
     )
       continue;

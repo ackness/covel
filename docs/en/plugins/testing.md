@@ -167,6 +167,50 @@ it("rejects an empty id", async () => {
 - It does not include the server interfaces, authorization, or the event catalog. The server tests and the real model checks cover those boundaries.
 - When a tool calls another plugin's service, build a real service registry with `makeTestServiceRegistry({ activePluginIds, services })` and pass it as `services` in the context given to `executeToolAndCommit`; the tool then has `context.services`. `services` lists the services to register by the providing plugin's ID; `pausedPluginIds` simulates providers paused after faults.
 
+### Test a write service
+
+A [write service](../reference/plugin-extensions.md#write-services) can be tested without a turn. Put it in `makeTestServiceRegistry` (with `access: "write"`), then call it as another plugin with `callTestService`:
+
+```js
+import { expect, it } from "vitest";
+import {
+  callTestService,
+  createPluginTestStore,
+  makeTestServiceRegistry,
+} from "@covel/plugin-test-utils";
+
+it("takes the coins and adds the item", async () => {
+  const store = await createPluginTestStore({
+    sessionId: "s",
+    pluginId: "my-inventory",
+  });
+  const registry = makeTestServiceRegistry({
+    activePluginIds: ["shop"],
+    services: { "my-inventory": [changeService] },
+  });
+  const { output, operations } = await callTestService({
+    registry,
+    caller: { pluginId: "shop", sessionId: "s" },
+    request: {
+      pluginId: "my-inventory",
+      name: "change",
+      contract: "my-inventory.change@1",
+      input: { item: "sword", cost: 3 },
+    },
+    store,
+  });
+  expect(output).toEqual({ ok: true });
+  expect(operations[0].writes.map((write) => write.type)).toEqual([
+    "plugin.data",
+    "plugin.data.update",
+  ]);
+});
+```
+
+- `store` holds the provider's committed data; the write service reads it with this call's own writes on top.
+- The result's `operations` are the operations the call staged: `record` is the [operation record](../reference/transactions.md#operation-records), and `writes` are the writes with the provider's identity. Nothing is saved.
+- When the handler throws or returns invalid output, `callTestService` throws that error and nothing is staged; when it writes nothing, `operations` is empty.
+
 ### Test a function
 
 `makeManualFunctionContext` builds the `ctx` that a function needs. You only provide the parts that this test uses:
@@ -217,6 +261,7 @@ The exports of `@covel/plugin-test-utils`:
 | `makeRandom(seed?)`                                                    | The `ctx.random` for tests. Tests that write their own `ctx` put it in themselves                                   |
 | `makeScriptedAgents(results)` | A `ctx.agents` for tests: answers `ctx.agents.run` from a script and records each request |
 | `makeTestServiceRegistry(options)` | A service registry for tests, in which every listed plugin is active and approved; gives a tool `context.services` |
+| `callTestService(options)` | Calls a service without a turn and returns its output and the operations a write service staged |
 | `loadPluginMessages(pluginRoot, locale)`                               | Reads the translations in the plugin's `locales/` and gets `ctx.messages`. Use it when you assert on Chinese output |
 | `createPluginTestStore` / `executeToolAndCommit` / `commitToolResults` | Makes a tool go through the real execution and save flow                                                            |
 | `MockLLM`                                                              | A fake model. It records each call. It supports one default reply and a list of replies used in order               |

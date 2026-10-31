@@ -1527,7 +1527,7 @@ schema 里带 `x-derive` 的字段由 `world-init/dimension-clock` 按时钟计�
 
 ## 导入的服务工具
 
-agent 在 `agent.tools.services` 里导入别的插件给模型用的服务（[怎样提供](./plugin-extensions.md#给模型用的服务)）。每个导入在 runtime 开始时变成一个只读工具。
+agent 在 `agent.tools.services` 里导入别的插件给模型用的服务（[怎样提供](./plugin-extensions.md#给模型用的服务)）。每个导入在 runtime 开始时变成一个工具：读服务的导入只读，写服务的导入暂存写入（见下文[写服务的导入](#写服务的导入)）。
 
 ```yaml
 agent:
@@ -1539,7 +1539,7 @@ agent:
 
 - **名字**：默认是去掉版本号、`.` 换成 `-` 的契约名（`inventory.items@1` → `inventory-items`），`as` 另起名字。名字只能有字母、数字、`_` 和 `-`，最长 64；推导出来的名字太长时要写 `as`。名字不能和框架工具、这个 runtime 的 `tools.builtin` / `tools.plugin`、本包的 `contributes.tools` 或另一个导入重名；同一个契约只能导入一次。重名时清单校验报错。
 - **说明和参数**：说明是提供方注册时的 `description`。参数的 JSON Schema 来自提供方的 Zod 输入（不带 `$schema`），或提供方显式给的 `inputSchema`。输入是 Zod 时（显式给了 `inputSchema` 也一样），参数先在工具这一侧校验，错误照常写明字段，写成 JSON 文本的数组或对象会被修复；提供方收到的是模型发来的参数（或修复后的参数），由它自己解析一次后交给处理函数，所以 `transform` 只作用一次。输入不是 Zod 时，参数只由提供方校验。
-- **注解**：`{ readOnly: true, stagesWrites: false, idempotent: true, concurrencySafe: true }`。导入的服务只读，可以和其他只读工具一起并发。子 agent 保留导入。
+- **注解**：读服务是 `{ readOnly: true, stagesWrites: false, idempotent: true, concurrencySafe: true }`，可以和其他只读工具一起并发。写服务见[写服务的导入](#写服务的导入)。子 agent 保留导入，写服务的导入也保留。
 - **结果**：和其他工具一样回给模型 `{ "data": … }`，ID、UUID 和时间戳由 `modelFacingJson` 去掉。审批、`PreToolUse` / `PostToolUse`、`tool_calls` 记录和 `tool.*` trace 都照常；审批来源按 `local` 算。
 - **时限**：一次调用最多等提供方 15 秒，超时回答 `timeout`。
 - **延迟加载**：`tools.defer: true`，或在 `defer` 列表里写导入的名字，导入就和其他工具一样延迟，用 `search-tools` 找到。
@@ -1554,7 +1554,20 @@ agent:
 - `…: its provider is paused after repeated errors.`
 - `…: its provider does not offer it to models.`
 
+写服务的导入在不能改数据的运行里（能挂起的 agent，以及没有暂存区的执行，比如恢复执行和后台执行）也不出现，原因是 `not-allowed`：
+
+- `The tool "inventory-change" is unavailable in this run: it changes data, which this runtime cannot do here.`
+
 服务端日志另有一行带插件 ID 的说明，给作者排查用。
+
+### 写服务的导入
+
+导入的[写服务](./plugin-extensions.md#写服务)替调用方改提供方自己的数据：
+
+- **注解**：`{ readOnly: false, stagesWrites: true, idempotent: false, concurrencySafe: false }`。它不和别的工具并发；同一个调用方对同一个提供方的调用一个接一个执行。
+- **结果**：调用成功时回答 `{ "data": …, "staged": { "count": 1, "kinds": [...], "notice": "Staged: it takes effect when the turn ends and may still be rejected." } }`，`kinds` 是这次操作的写入种类。写入随调用方的提交单元提交，见[事务 · 写服务的操作](./transactions.md#写服务的操作)。
+- **冲突**：提供方的更新在当前值上不成立时抛出 `conflict`，模型收到 `conflict`，`refused: true`。
+- **撤回**：调用它的工具调用或子 agent 之后失败时，这次操作被撤回，即使模型已经看到成功的回答。只读工具（`readOnly: true`）里调用写服务，工具调用失败（“read-only tool returned writes”）。
 
 ### 服务失败怎样回答
 

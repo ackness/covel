@@ -281,7 +281,8 @@ export const pluginIdSchema = z
 
 /**
  * A `contributes.services` entry: a contract ID, or an object that also says
- * whether agents may import the service as a tool.
+ * whether agents may import the service as a tool and whether it changes the
+ * provider's data.
  */
 export const serviceContributionSchema = z.union([
   contractIdSchema,
@@ -290,6 +291,12 @@ export const serviceContributionSchema = z.union([
       contract: contractIdSchema.describe(
         "The contract ID the service is registered under.",
       ),
+      access: z
+        .enum(["read", "write"])
+        .describe(
+          "`write` lets the service change its own plugin's data for the caller: its writes commit with the caller's work. `read` (the default) only reads. The registration must say the same.",
+        )
+        .optional(),
       modelFacing: z
         .boolean()
         .describe(
@@ -306,6 +313,15 @@ export function serviceContributionContract(
   entry: ServiceContribution,
 ): string {
   return typeof entry === "string" ? entry : entry.contract;
+}
+
+/** What a `contributes.services` entry's service may do: `read` unless declared `write`. */
+export function serviceContributionAccess(
+  entry: ServiceContribution,
+): "read" | "write" {
+  return typeof entry !== "string" && entry.access === "write"
+    ? "write"
+    : "read";
 }
 
 /** Whether a `contributes.services` entry offers its service to models. */
@@ -443,7 +459,7 @@ export const pluginManifestSchema = z.strictObject({
       services: z
         .array(serviceContributionSchema)
         .describe(
-          "Services the entry registers with `registerService`: a contract ID, or `{ contract, modelFacing: true }` for one that agents may import as a tool.",
+          "Services the entry registers with `registerService`: a contract ID, or `{ contract, access, modelFacing }` for one that changes its plugin's data (`access: write`) or that agents may import as a tool (`modelFacing: true`).",
         )
         .optional(),
       extensions: z

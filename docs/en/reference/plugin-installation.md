@@ -30,10 +30,10 @@ GitHub plugin previews always contain `capabilities` and `trustedSource`. Confir
 - `http`: the union of origins and methods declared by the root and every runtime; omitted methods mean `GET`.
 - `hooks`: event and `enforce` pairs, defaulting to `normal`.
 - `tools`: contributed tool names and runtime `tools.builtin`.
-- `actions`, `services` (contract IDs), `wires`, `extensions` (`<point>/<id>`), and `forms`.
+- `actions`, `services` (contract IDs; a [write service](./plugin-extensions.md#write-services) is recorded as `<contract> (write)`), `wires`, `extensions` (`<point>/<id>`), and `forms`.
 - `datasets`: namespaces and allowed write operations from `contributes.datasets`, separate from installation collections.
 
-All lists are sorted and deduplicated. Current capabilities must be subsets of the snapshot, including HTTP methods and dataset operations. Changing a hook's phase counts as growth. Updating a trusted-source plugin carries the previous snapshot forward unchanged; no previous snapshot means none is written. Updates therefore cannot silently widen consent. Untrusted sources receive no new snapshot, and worlds receive none.
+All lists are sorted and deduplicated. Current capabilities must be subsets of the snapshot, including HTTP methods and dataset operations. Changing a hook's phase counts as growth, and so does turning a service into a write service (`access: write`): it can change its provider's data within a caller's turn, so the player confirms again. Being model-facing (`modelFacing`) is not in the snapshot. Updating a trusted-source plugin carries the previous snapshot forward unchanged; no previous snapshot means none is written. Updates therefore cannot silently widen consent. Untrusted sources receive no new snapshot, and worlds receive none.
 
 ### File verification and automatic approval
 

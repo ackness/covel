@@ -385,7 +385,12 @@ resumeRoutes.post("/:id/suspensions/:suspensionId/resume", async (c) => {
           await recordExecutionFaults({
             store,
             execution,
-            outcome: { status: "failed", events: [], failedProposals: [] },
+            outcome: {
+              status: "failed",
+              events: [],
+              failedProposals: [],
+              operations: [],
+            },
             turnId: suspension.turnId,
             emitter,
             eventBus,

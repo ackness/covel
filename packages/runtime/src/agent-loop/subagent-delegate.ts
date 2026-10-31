@@ -22,6 +22,7 @@ import {
 } from "@covel/tools";
 import type { TurnExecutorDeps } from "../turn-executor/turn-executor-types.js";
 import type { SubagentCaller, SubagentRunner } from "./subagent-runner.js";
+import type { OperationStage } from "../operations/operation-stage.js";
 import type {
   ToolCall,
   ToolCallContext,
@@ -36,6 +37,11 @@ export interface SubagentDelegateScope {
   /** The caller's dependencies with the unwrapped tool executor. */
   readonly deps: TurnExecutorDeps;
   readonly executionContext: ExecutionContext;
+  /**
+   * The caller's operation stage. Each sub-agent stages its write-service
+   * operations in a child of it, kept when the sub-agent succeeds.
+   */
+  readonly operations?: OperationStage;
 }
 
 const APPROVAL: ApprovalStatus = "auto-allowed";
@@ -107,6 +113,7 @@ async function runDelegate(
     input: scope.input,
     deps: scope.deps,
     executionContext: scope.executionContext,
+    ...(scope.operations ? { operations: scope.operations } : {}),
     parentCallId: call.toolCallId,
     ...(context.signal ? { parentSignal: context.signal } : {}),
   });

@@ -14,7 +14,10 @@ import {
   assertCommittedPlayerInput,
 } from "../common/player-input-message.js";
 import type { SessionSummaryRecord } from "../types.js";
-import { settleFailedRuntimeResults } from "../records/runtime-records.js";
+import {
+  settleFailedRuntimeResults,
+  settleOperationRecords,
+} from "../records/runtime-records.js";
 import {
   appendUniqueRow,
   assertNewRowId,
@@ -60,6 +63,7 @@ export function createRuntimeMethods(state: MemoryState): MemoryStoreMethods {
       turnId,
       status,
       failedRuntimes = [],
+      settledOperations = [],
     ) {
       for (let i = 0; i < state.turnResults.length; i += 1) {
         const row = state.turnResults[i]!;
@@ -67,9 +71,9 @@ export function createRuntimeMethods(state: MemoryState): MemoryStoreMethods {
           state.turnResults[i] = {
             ...row,
             commitStatus: status,
-            runtimeResults: settleFailedRuntimeResults(
-              row.runtimeResults,
-              failedRuntimes,
+            runtimeResults: settleOperationRecords(
+              settleFailedRuntimeResults(row.runtimeResults, failedRuntimes),
+              settledOperations,
             ),
           };
         }

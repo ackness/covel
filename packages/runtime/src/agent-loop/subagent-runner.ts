@@ -45,6 +45,7 @@ import type { TurnEmitter } from "../trace/turn-emitter.js";
 import { DEFAULT_MAX_TOOL_STEPS } from "./agent-loop-policy.js";
 import { settleAgentLoop } from "./settle-agent-loop.js";
 import { stopOf } from "./stop-reason.js";
+import type { OperationStage } from "../operations/operation-stage.js";
 import {
   prepareAgentToolSurface,
   withAgentToolSurface,
@@ -84,6 +85,12 @@ export interface SubagentRunArgs {
   readonly parentSignal?: AbortSignal;
   /** Epoch ms when the caller's own time runs out, when it is fixed. */
   readonly parentDeadline?: number;
+  /**
+   * The caller's operation stage. The sub-agent's write-service calls stage
+   * in a child of it, handed to the caller only when the sub-agent
+   * succeeds. Without it the sub-agent cannot call write services.
+   */
+  readonly operations?: OperationStage;
 }
 
 /** How one sub-agent run ended, for the fault latch. */
@@ -318,10 +325,10 @@ function resolveTarget(
  * A name that does not resolve is kept, so the missing-tool check still fails
  * the run with its own diagnostic.
  *
- * Imported services (`tools.services`) are read-only and stay as declared;
- * the sub-agent resolves them as itself when it starts. Write services, once
- * they exist, will add their writes to the caller's commit unit. Dataset
- * tools keep only their reads (`get`, `list`); a dataset left with none is
+ * Imported services (`tools.services`) stay as declared, write services
+ * included: the sub-agent resolves them as itself when it starts, and a
+ * write service's operations join the caller's commit unit. Dataset tools
+ * keep only their reads (`get`, `list`); a dataset left with none is
  * dropped.
  */
 export function subagentToolNames(
@@ -396,12 +403,18 @@ async function runProvider({
   };
   const usage = { inputTokens: 0, outputTokens: 0, reported: false };
   const emitter = subagentEmitter(deps.emitter, trace, usage);
+  // Operations of this run count only when it succeeds, and are its own.
+  const operations = args.operations?.child({
+    pluginId: provider.pluginId,
+    runtimeId: provider.name,
+  });
   const fail = async (
     code: SubagentErrorCode,
     message: string,
     stop?: LoopStop,
     cause?: unknown,
   ): Promise<SubagentResult & { readonly fault?: "runtime" | "timeout" }> => {
+    operations?.discard();
     let fault: "runtime" | "timeout" | undefined;
     if (
       !args.parentSignal?.aborted &&
@@ -518,8 +531,14 @@ async function runProvider({
   const surfaceExecutor = innerExecutor
     ? withAgentToolSurface(
         innerExecutor,
-        await prepareAgentToolSurface({ manifest, input, deps }),
+        await prepareAgentToolSurface({
+          manifest,
+          input,
+          deps,
+          canWrite: operations !== undefined,
+        }),
         deps.services,
+        operations,
       )
     : undefined;
   const subDeps: TurnExecutorDeps = {
@@ -543,6 +562,7 @@ async function runProvider({
             input,
             deps: { ...deps, toolExecutor: innerExecutor },
             executionContext: args.executionContext,
+            ...(operations ? { operations } : {}),
           })
         : surfaceExecutor,
   };
@@ -651,6 +671,7 @@ async function runProvider({
         );
     }
     const stopReason = settled.result.stop?.reason ?? "completed";
+    operations?.commit();
     await emitSafely(deps.emitter, "subagent.completed", {
       ...identity,
       stopReason,

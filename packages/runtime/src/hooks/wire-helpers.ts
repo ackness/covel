@@ -297,6 +297,10 @@ export async function runPostRuntimeHook(
     pendingProposals: _hookProposals,
     effects: _hookEffects,
     completion: _hookCompletion,
+    // Write-service operations are the kernel's record of what the run's
+    // code called; the kernel attaches them after this hook.
+    operations: _hookOperations,
+    operationWrites: _hookOperationWrites,
     ...replaced
   } = replacedResult;
   // A hook may rewrite output/status, never execution identity: the proposal

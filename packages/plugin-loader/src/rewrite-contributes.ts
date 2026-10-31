@@ -12,6 +12,7 @@ import {
 import {
   isModelFacingServiceContribution,
   pluginManifestSchema,
+  serviceContributionAccess,
   serviceContributionContract,
   serviceContributionSchema,
   type PluginManifest,
@@ -55,8 +56,12 @@ function names(values: readonly unknown[], key: Kind): string[] {
     if (key !== "hooks" && typeof value === "string") return value;
     if (key === "services") {
       const service = serviceContributionSchema.parse(value);
-      return isModelFacingServiceContribution(service)
-        ? `${serviceContributionContract(service)} (model-facing)`
+      const markers = [
+        ...(isModelFacingServiceContribution(service) ? ["model-facing"] : []),
+        ...(serviceContributionAccess(service) === "write" ? ["write"] : []),
+      ];
+      return markers.length > 0
+        ? `${serviceContributionContract(service)} (${markers.join(", ")})`
         : serviceContributionContract(service);
     }
     const hook = pluginManifestSchema.shape.contributes

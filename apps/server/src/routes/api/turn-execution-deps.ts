@@ -2,6 +2,7 @@ import type { EventBus } from "@covel/events";
 import { estimateTokens } from "@covel/context";
 import type { ExecutionDeps, TurnExecutorDeps } from "@covel/runtime";
 import type { Context } from "hono";
+import { pluginDatasetsLoader } from "./bootstrap/runtime-loader.js";
 
 /**
  * Dependencies shared by player, manual, detached and resumed execution.
@@ -26,6 +27,7 @@ export function buildTurnExecutorDeps(
     ...(c.get("pluginFaults") ? { pluginFaults: c.get("pluginFaults") } : {}),
     ...(executionSignal ? { turnControl: { executionSignal } } : {}),
     loadRuntime: c.get("loadRuntimeFn"),
+    loadPluginDatasets: pluginDatasetsLoader(c.get("pluginRegistry")),
     llm: c.get("llmAdapter"),
     ...(hookPipeline ? { hookPipeline } : {}),
     ...(gateway ? { gateway } : {}),

@@ -126,7 +126,7 @@ Extract facts supported by runtime-inputs.narrative.value, then call save-facts.
 | `tools` | `registerTool` 的工具名 |
 | `actions` | `registerRpc` 的非空 action 名；`covel:`、`runtime:`、`event:` 前缀保留给框架审批，声明、注册和 action 请求均拒绝这些前缀。 |
 | `commands` | 玩家命令元数据；`action` 必须列入 `actions` |
-| `services` | `registerService` 的契约 ID。给模型用的服务写成 `{contract, modelFacing: true}`，见[给模型用的服务](./plugin-extensions.md#给模型用的服务) |
+| `services` | `registerService` 的契约 ID。给模型用的服务写成 `{contract, modelFacing: true}`，见[给模型用的服务](./plugin-extensions.md#给模型用的服务)；改提供者自己数据的服务写成 `{contract, access: write}`（默认 `read`），见[写服务](./plugin-extensions.md#写服务) |
 | `extensions` | `provideExtension` 提供的扩展，写成 `<point>/<id>`，例如 `prompt.segment@1/notes`。要写 `order`、`slot` 这些选项时写成 `{point, id, …}` |
 | `hooks` | 监听的 hook 事件，写事件名，例如 `PreToolUse`。要写 `enforce` 时写成 `{event, enforce}`，见 [Hooks](./hooks.md) |
 | `forms` | `registerFormValidator` 的表单 ID |
@@ -255,7 +255,7 @@ permissions:
 - 包里只有一个内联 runtime（runtime ID 等于插件 ID）时，没有写 `agent.tools.plugin` 的 agent 自动获得 `contributes.tools` 的全部工具。写 `plugin: []` 表示一个也不给。
 - 给这样的包新增一个只想让界面动作使用的工具时，要同时给 agent 写明白名单，否则模型也能调用它。
 - 多 runtime 的包里，每个 runtime 都要自己声明工具。
-- `agent.tools.services` 把别的插件给模型用的服务导入成工具，写契约 ID，或者 `{contract, as}` 另起名字。导入的工具只读，没有提供方时不出现，runtime 照常运行。命名、参数和失败的回答见[导入的服务工具](./tools.md#导入的服务工具)。函数 runtime 不能写它，直接用 `ctx.services`。
+- `agent.tools.services` 把别的插件给模型用的服务导入成工具，写契约 ID，或者 `{contract, as}` 另起名字。读服务的导入只读，写服务的导入暂存写入（能挂起的 agent 拿不到）；没有提供方时不出现，runtime 照常运行。命名、参数和失败的回答见[导入的服务工具](./tools.md#导入的服务工具)。函数 runtime 不能写它，直接用 `ctx.services`。
 - `agent.tools.datasets` 列出本包 `contributes.datasets` 里的数据集，框架为它们生成 `<数据集>-get`、`-list`、`-upsert`、`-update` 工具。写数据集名得到它提供的全部工具，写 `{ dataset, tools }` 只取其中几个。没写的 runtime 一个也没有，单 runtime 包的内联 runtime 也一样。见[数据集工具](./tools.md#数据集工具)。函数 runtime 不能写它，直接用 `ctx.pluginData`。
 
 ### Agent 的 guard
@@ -671,7 +671,7 @@ const result = await ctx.agents?.run({
 运行时的规则：
 
 - **独立的对话**：子 agent 的提示词是提供方自己的正文，加上框架的完成说明，再加简报。看不到会话历史，也看不到调用方的对话。
-- **只读工具**：提供方 `agent.tools` 里没有 `readOnly` 注解的工具（插件工具、数据集的 `-upsert` / `-update` 这类写入工具）、`suspend` 和 `delegate` 都被拿掉。声明了却没注册的插件工具仍按原规则让这次运行失败。导入的服务工具只读，保留；数据集工具只保留 `-get` / `-list`。
+- **只读工具**：提供方 `agent.tools` 里没有 `readOnly` 注解的工具（插件工具、数据集的 `-upsert` / `-update` 这类写入工具）、`suspend` 和 `delegate` 都被拿掉。声明了却没注册的插件工具仍按原规则让这次运行失败。数据集工具只保留 `-get` / `-list`。导入的服务工具保留，写服务的导入也保留：子 agent 以自己的身份调用，暂存的操作挂在委托它的 run 上，子 agent 失败时撤回。
 - **循环 profile**：没写 `agent.loop.profile` 时用 `actor`，不流式显示，也不读玩家插话。
 - **模型**：用提供方自己声明的模型用途。会话的 `runtimeModelOverrides` 按提供方的 runtimeId 生效，挂起后恢复的运行里也一样；调用方的覆盖和请求里的故事模型覆盖都不生效。
 - **上限**：一次执行最多同时运行 8 个子 agent，嵌套执行也算在内；子 agent 不能再调用子 agent（深度上限 1）。超过上限的调用立刻得到 `unavailable`，不排队。

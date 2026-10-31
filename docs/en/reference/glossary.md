@@ -29,10 +29,12 @@ Each English term has only one Chinese term. The Chinese docs, the UI text, and 
 | Execution | 执行 | One scheduled run and its commit plan; player turns, manual calls and background jobs can each start one. |
 | Fault latch | 熔断 | A session-local pause after consecutive self-caused auxiliary plugin faults, cleared by the player or a process restart. See the [protocol](./protocol.md#plugin-fault-latch). |
 | Finalizer step | 收尾步骤 | The one request, after an agent runs out of steps, that turns tools off and asks for the answer now. |
-| Imported tool | 导入工具 | A read-only tool generated from another plugin's model-facing service, which an agent imports with `agent.tools.services`. |
+| Imported tool | 导入工具 | A tool generated from another plugin's model-facing service, which an agent imports with `agent.tools.services`; a read service's import is read-only and a write service's import stages writes. |
 | Kernel | 内核 | The framework core that schedules work, assembles context, runs tools, validates proposals and commits writes. |
 | Local model relay | 本地模型中继 | On a shared form, the server reaches a model on the player's computer or local network through the player's browser. See [Security boundaries](../internals/security.md#local-model-relay). |
 | Official web app | 官方网页版 | A hosted product that is not yet supported; browser-private infrastructure alone is not the complete product. |
+| Operation | 操作 | All the writes one successful write-service call staged, which commit or drop with the caller's commit unit. Not a single `op` of a data operation list. See [Write-service operations](./transactions.md#write-service-operations). |
+| Operation record | 操作记录 | The record an operation leaves on its caller's result (`runtimeResults[].operations`), which says after the commit how it ended and why. |
 | Operation-based write | 操作式写入 | Submitting a list of operations (`plugin.data.update`) instead of a computed whole value. |
 | Pack | 玩法包 | A player-selectable set of installed plugins, not an installer. |
 | Perspective | 视角 | Whose point of view the narration takes: character-centred first, second or third person, an omniscient narrator, or a game master. |
@@ -51,6 +53,7 @@ Each English term has only one Chinese term. The Chinese docs, the UI text, and 
 | Session | 会话 | One game played in a world, with its own characters, plugin data and progress. |
 | Slot | 槽位 | In the settings UI it is called "model role". |
 | Stop reason | 结束原因 | How an agent tool loop ended (`RuntimeResult.stop.reason`). |
+| Story-attached operation | 故事附带的操作 | An operation in the commit unit of the story or setup: each gets its own savepoint, and when it fails only it is dropped while the story commits. |
 | Story segment | 故事段落 | One part of a story output: narration, dialogue or action. Called just "segment" (段落) when the context is clear. |
 | Sub-agent | 子 agent | An agent runtime another runtime runs inside its own execution, returning output only. |
 | Tool result | 工具结果 | Code-facing content and model-facing feedback have different shapes; success does not confirm persistence. |
@@ -58,6 +61,7 @@ Each English term has only one Chinese term. The Chinese docs, the UI text, and 
 | Trusted source | 可信来源 | A GitHub source chosen by the instance owner or operator to reduce approval prompts. |
 | Turn | 回合 | "This turn" is 本回合 in Chinese. |
 | World | 世界 | A world's installation package is called a "world package". |
+| Write service | 写服务 | A service with `access: write` that changes its provider's own data for the caller; its writes are staged as one **operation**. See [Write services](./plugin-extensions.md#write-services). |
 
 ## Prompt vocabulary
 

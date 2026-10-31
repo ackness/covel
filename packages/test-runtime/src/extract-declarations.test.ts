@@ -108,6 +108,27 @@ export default async (covel) => {
     expect(await cli(["extract", root, "--check"])).toMatchObject({ code: 0 });
   });
 
+  it("records a write service with its access, and reports a change of access", async () => {
+    const root = await fixture(
+      `export default (covel) => {
+  const handler = () => null;
+  covel.registerService({ contract: "bank.pay@1", access: "write", modelFacing: true, handler });
+  covel.registerService({ contract: "bank.log@1", access: "write", handler });
+  covel.registerService({ contract: "bank.peek@1", access: "read", handler });
+};`,
+    );
+    expect((await extractDeclarations(root)).services).toEqual([
+      { contract: "bank.pay@1", access: "write", modelFacing: true },
+      { contract: "bank.log@1", access: "write" },
+      "bank.peek@1",
+    ]);
+    expect(await cli(["extract", root, "--check"])).toMatchObject({ code: 1 });
+    expect((await cli(["extract", root])).code).toBe(0);
+    const manifest = await fs.readFile(path.join(root, "PLUGIN.md"), "utf8");
+    expect(manifest).toContain("access: write");
+    expect(await cli(["extract", root, "--check"])).toMatchObject({ code: 0 });
+  });
+
   it("supports explicit entry paths and awaits async factories and disposal", async () => {
     const root = await fixture(
       `export default async (covel) => {

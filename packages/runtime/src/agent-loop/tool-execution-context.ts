@@ -87,6 +87,8 @@ export function createToolExecutionContext(
       ...(caller.emitter ? { emitter: caller.emitter } : {}),
       ...identity,
       ...(toolCallId !== undefined ? { toolCallId } : {}),
+      // Write-service calls stage into this invocation's own stage.
+      ...(caller.operations ? { operations: caller.operations } : {}),
       signal:
         combineAbortSignals(signal, invocation.signal) ?? invocation.signal,
       reads: {

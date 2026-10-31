@@ -16,6 +16,7 @@ import {
   type ProposalFor,
   type ProposalType,
   type ProposalPayloadMap,
+  type RuntimeManifest,
 } from "@covel/shared";
 import type { DataStore } from "@covel/store";
 import { overlayPluginDataValue } from "@covel/tools";
@@ -27,6 +28,7 @@ import {
   type DatasetSchemas,
 } from "../src/commit/commit-plugin-data.js";
 import { createHookPipeline } from "../src/hooks/pipeline.js";
+import { commitExecution, executeTurn } from "../src/index.js";
 import type { MediaOwnershipStore } from "../src/media/canonicalize-media-refs.js";
 
 const SESSION = "s";
@@ -135,6 +137,58 @@ const OP_CASES: readonly (readonly [string, JsonValue, readonly DataOp[]])[] = [
     ],
   ],
 ];
+
+describe("a runtime's own update at commit", () => {
+  it("keeps data-op-rejected when it no longer fits the stored value", async () => {
+    const store = await setup();
+    await seed(store, 5);
+    const runtime = {
+      name: `${PLUGIN}/main`,
+      pluginId: PLUGIN,
+      description: "spend",
+      runtimeType: "function",
+      stage: "post-turn",
+      outputKind: "system",
+      trigger: { type: "auto" },
+    } as RuntimeManifest;
+    const execution = await executeTurn(
+      {
+        sessionId: SESSION,
+        turnId: "turn",
+        playerMessage: "",
+        origin: "manual",
+      },
+      [runtime],
+      {
+        store,
+        llm: { generate: async () => ({}) } as never,
+        loadRuntime: async (manifest) => ({
+          manifest,
+          promptTemplate: "",
+          handler: async (ctx) => {
+            await ctx.pluginData!.update("wallet", "gold", [
+              { op: "inc", by: -3, min: 0 },
+            ]);
+            return { outcome: "success", value: {} };
+          },
+        }),
+      },
+    );
+    // Another commit spent the gold meanwhile.
+    await seed(store, 2);
+    const outcome = await commitExecution({
+      store,
+      execution,
+      completion: { kind: "turn", turnId: "turn", durationMs: 0 },
+    });
+    expect(outcome.status).toBe("failed");
+    // Only a write-service operation's update reports `conflict`.
+    expect(outcome.failedProposals.map((failed) => failed.code)).toEqual([
+      "data-op-rejected",
+    ]);
+    expect(await stored(store)).toEqual({ exists: true, value: 2 });
+  });
+});
 
 describe("plugin.data.update commit", () => {
   it.each(OP_CASES)(

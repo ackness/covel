@@ -1529,7 +1529,7 @@ Both prompt generators are agents that are triggered manually, and they declare 
 
 ## Imported service tools
 
-An agent imports another plugin's model-facing services in `agent.tools.services` ([how to provide one](./plugin-extensions.md#model-facing-services)). Each import becomes a read-only tool when the runtime starts.
+An agent imports another plugin's model-facing services in `agent.tools.services` ([how to provide one](./plugin-extensions.md#model-facing-services)). Each import becomes a tool when the runtime starts: a read service's import is read-only, and a write service's import stages writes (see [Imported write services](#imported-write-services) below).
 
 ```yaml
 agent:
@@ -1541,7 +1541,7 @@ agent:
 
 - **Name**: by default the contract without its version, dots as dashes (`inventory.items@1` → `inventory-items`); `as` names it otherwise. A name has only letters, digits, `_` and `-`, at most 64; a derived name that is too long needs `as`. A name cannot repeat a framework tool, the runtime's `tools.builtin` / `tools.plugin`, the package's `contributes.tools` or another import, and one contract is imported once. Manifest validation reports a clash.
 - **Description and parameters**: the description is the provider's registered `description`. The parameters' JSON Schema comes from the provider's Zod input (without `$schema`), or from the provider's explicit `inputSchema`. A Zod input (also one shown through an explicit `inputSchema`) is checked on the tool side first, with the usual field-by-field errors and repair of arrays or objects sent as JSON text. The provider receives the arguments the model sent, or their repair, and parses them once for its handler, so a `transform` applies once. An input that is not a Zod schema is checked by the provider only.
-- **Annotations**: `{ readOnly: true, stagesWrites: false, idempotent: true, concurrencySafe: true }`. Imported services are read-only and can run together with other read-only tools. A sub-agent keeps its imports.
+- **Annotations**: a read service gets `{ readOnly: true, stagesWrites: false, idempotent: true, concurrencySafe: true }` and can run together with other read-only tools. Write services are in [Imported write services](#imported-write-services). A sub-agent keeps its imports, write-service imports included.
 - **Result**: the model gets `{ "data": … }` like any other tool, with IDs, UUIDs and timestamps removed by `modelFacingJson`. Approval, `PreToolUse` / `PostToolUse`, `tool_calls` records and `tool.*` traces work as usual; approval counts the source as `local`.
 - **Time limit**: a call waits at most 15 seconds for the provider and answers `timeout` after that.
 - **Deferred loading**: with `tools.defer: true`, or with an import's name in the `defer` list, the import is deferred like other tools and found through `search-tools`.
@@ -1556,7 +1556,20 @@ Without exactly one active provider, the tool is absent: it is not in the model 
 - `…: its provider is paused after repeated errors.`
 - `…: its provider does not offer it to models.`
 
+A write-service import is also absent from a run that cannot change data (an agent that can suspend, and executions without a stage, such as resumed and background ones), with the reason `not-allowed`:
+
+- `The tool "inventory-change" is unavailable in this run: it changes data, which this runtime cannot do here.`
+
 The server log has a line with the plugin IDs for the author.
+
+### Imported write services
+
+An imported [write service](./plugin-extensions.md#write-services) changes its provider's own data for the caller:
+
+- **Annotations**: `{ readOnly: false, stagesWrites: true, idempotent: false, concurrencySafe: false }`. It never runs together with other tools, and calls of one caller to one provider run one after the other.
+- **Result**: a successful call answers `{ "data": …, "staged": { "count": 1, "kinds": [...], "notice": "Staged: it takes effect when the turn ends and may still be rejected." } }`, where `kinds` are the kinds of the operation's writes. The writes commit with the caller's commit unit; see [Transactions · Write-service operations](./transactions.md#write-service-operations).
+- **Conflict**: when the provider's update does not fit the current value, it throws `conflict`, and the model receives `conflict` with `refused: true`.
+- **Taken back**: when the tool call or sub-agent that made the call fails afterwards, the operation is taken back, even though the model already saw a successful answer. A read-only tool (`readOnly: true`) that calls a write service fails ("read-only tool returned writes").
 
 ### How a service failure is answered
 

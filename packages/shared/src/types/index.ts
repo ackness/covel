@@ -161,6 +161,13 @@ export type {
 } from "./execution.js";
 
 export type {
+  OperationFailureReason,
+  OperationRecord,
+  OperationSettlement,
+  OperationStatus,
+} from "./operation-record.js";
+
+export type {
   SubagentTarget,
   SubagentRequest,
   SubagentErrorCode,

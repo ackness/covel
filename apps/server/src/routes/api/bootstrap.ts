@@ -132,7 +132,10 @@ import {
 import { discoverAndRegisterPlugins } from "./bootstrap/plugin-discovery.js";
 import { setupPluginTools } from "./bootstrap/tools.js";
 import { createBootstrapPluginEntries } from "./bootstrap/plugin-entry.js";
-import { createRuntimeLoader } from "./bootstrap/runtime-loader.js";
+import {
+  createRuntimeLoader,
+  pluginDatasetsLoader,
+} from "./bootstrap/runtime-loader.js";
 import { createEventDirectory } from "./bootstrap/event-directory.js";
 import { requestLlmServices } from "./bootstrap/request-llm-services.js";
 import { createBootstrapMemorySystem } from "./bootstrap/memory.js";
@@ -690,6 +693,7 @@ async function assembleApi(
         pluginFaults,
         loadRuntime: (manifest, locale) =>
           loadRuntimeFn(manifest, locale, job.sessionId),
+        loadPluginDatasets: pluginDatasetsLoader(registry),
         llm: requestServices.llm,
         services,
         extensions,

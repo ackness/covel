@@ -220,14 +220,35 @@ There are two ways to let other code call yours:
 - Both use versioned names, and both inputs and outputs are checked against a schema.
 - The registered name must match the manifest.
 - Fixed fragments in `contributes.prompt` are registered by Covel automatically, so you do not need to declare them as extensions.
-- A function runtime calls services with `ctx.services`, a tool with `context.services`. A read-only service registered with `modelFacing: true` and a `description`, and declared as `{contract, modelFacing: true}`, can also be imported as a tool by an agent in `agent.tools.services`; see [Model-facing services](../reference/plugin-extensions.md#model-facing-services).
+- A function runtime calls services with `ctx.services`, a tool with `context.services`. A service registered with `modelFacing: true` and a `description`, and declared as `{contract, modelFacing: true}`, can also be imported as a tool by an agent in `agent.tools.services`; see [Model-facing services](../reference/plugin-extensions.md#model-facing-services).
 
-A service handler can read its provider's own non-hidden data. It cannot write:
+A read service's handler (the default) can read its provider's own non-hidden data. It cannot write:
 
 ```js
 const item = await ctx.pluginData.get("items", key);
 return { item };
 ```
+
+When another plugin needs to change your data (a shop takes coins from your inventory), offer a **write service**: both the registration and the manifest say `access: write` (`{contract, access: write}` in the manifest). Its `ctx.pluginData` can write, and the writes are staged as one operation that commits or drops with the caller's turn. It gets no model or HTTP access, cannot write namespaces that start with `_`, and an `update` that does not fit throws `conflict`:
+
+```js
+covel.registerService({
+  name: "change",
+  contract: "my-inventory.change@1",
+  access: "write",
+  input: z.object({ item: z.string(), cost: z.number().int().min(0) }),
+  output: z.object({ ok: z.literal(true) }),
+  async handler({ item, cost }, ctx) {
+    await ctx.pluginData.set("items", item, { owned: true });
+    await ctx.pluginData.update("purse", "coins", [
+      { op: "inc", path: "/amount", by: -cost, min: 0 },
+    ]);
+    return { ok: true };
+  },
+});
+```
+
+Where it can be called, how it commits and what the model sees are in [Write services](../reference/plugin-extensions.md#write-services). You can test it without a turn: [`callTestService`](./testing.md#test-a-write-service).
 
 For the inputs and outputs of each extension point, how several providers are combined, and how errors are handled, see [Plugin extensions and communication](../reference/plugin-extensions.md) and the [Extension point reference](../reference/extension-points.md).
 

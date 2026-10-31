@@ -30,10 +30,12 @@ const committed: FinalizeExecutionOutcome = {
   status: "committed",
   events: [],
   failedProposals: [],
+  operations: [],
 };
 const rejected = (code?: string): FinalizeExecutionOutcome => ({
   status: "failed",
   events: [],
+  operations: [],
   failedProposals: [
     {
       proposal: {
@@ -371,6 +373,12 @@ describe("execution fault classification", () => {
       "dimension conflict",
       faultResult({ status: "success" }),
       rejected("dimension-version-conflict"),
+      "neutral",
+    ],
+    [
+      "operation write conflict",
+      faultResult({ status: "success" }),
+      rejected("conflict"),
       "neutral",
     ],
     [

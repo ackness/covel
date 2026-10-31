@@ -994,12 +994,15 @@ describe("sub-agent caps and tool filter", () => {
       tools: {
         builtin: ["delegate", "get-character", "sync-characters", "suspend"],
         plugin: ["peek", "poke", "unknown"],
-        services: [{ contract: "inventory.items@1", name: "inventory-items" }],
+        services: [
+          { contract: "inventory.items@1", name: "inventory-items" },
+          { contract: "bank.pay@1", name: "bank-pay" },
+        ],
         datasets: [
           { dataset: "npcs", tools: ["get", "list", "upsert", "update"] },
           { dataset: "log", tools: ["upsert"] },
         ],
-        defer: ["peek", "poke", "inventory-items"],
+        defer: ["peek", "poke", "inventory-items", "bank-pay"],
       },
     });
     const at = (depth: number) =>
@@ -1008,14 +1011,18 @@ describe("sub-agent caps and tool filter", () => {
         sessionId: "s",
         turnId: "t",
       });
-    // Imported services are read-only: the sub-agent keeps them. Dataset
-    // tools keep their reads; a dataset with only writes is dropped.
+    // Imported services stay as declared, write services included: the
+    // sub-agent resolves them as itself. Dataset tools keep their reads; a
+    // dataset with only writes is dropped.
     expect(at(1)).toEqual({
       builtin: ["get-character"],
       plugin: ["peek", "unknown"],
-      services: [{ contract: "inventory.items@1", name: "inventory-items" }],
+      services: [
+        { contract: "inventory.items@1", name: "inventory-items" },
+        { contract: "bank.pay@1", name: "bank-pay" },
+      ],
       datasets: [{ dataset: "npcs", tools: ["get", "list"] }],
-      defer: ["peek", "inventory-items"],
+      defer: ["peek", "inventory-items", "bank-pay"],
     });
     expect(at(0)?.builtin).toEqual(["delegate", "get-character"]);
   });

@@ -118,14 +118,18 @@ export function buildEntryApi(
         throw new Error("Plugin service registry is unavailable");
       batch.stage(() => {
         try {
+          // The registry hands a write service its write context; the
+          // union's handler cannot be called with either context directly.
+          const handler = definition.handler as (
+            input: unknown,
+            context: Parameters<typeof ownUtils>[0],
+          ) => unknown;
           batch.track(
             params.services!.register(pluginId, {
               ...definition,
               handler: (input, context) =>
-                batch.invoke(() =>
-                  definition.handler(input, ownUtils(context)),
-                ),
-            }),
+                batch.invoke(() => handler(input, ownUtils(context))),
+            } as typeof definition),
           );
         } catch (error) {
           throw new PluginRegistrationError(
