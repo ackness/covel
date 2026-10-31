@@ -1192,7 +1192,7 @@ Messages name the dataset and the key, never a plugin ID. Both `conflict` and `i
 
 ### Sub-agents
 
-A sub-agent that `delegate` starts gets only the `get` / `list` tools of the datasets its parent runtime selected. When a dataset was selected only with write tools, the sub-agent does not get it.
+A sub-agent that `delegate` starts uses the dataset selections in the provider runtime's own `agent.tools.datasets`, keeping only the selected `<d>-get` / `<d>-list` tools. It reads data as the provider's plugin. When a dataset was selected only with write tools, the sub-agent does not get it.
 
 <a id="reserved-namespaces"></a>
 

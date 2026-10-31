@@ -1190,7 +1190,7 @@ text.normalize("NFKC").trim().replace(/\s+/gu, " ").toLowerCase();
 
 ### 子 agent
 
-`delegate` 启动的子 agent 只拿到父 runtime 所选数据集的 `get` / `list`。一个数据集只选了写入工具时，子 agent 拿不到它。
+`delegate` 启动的子 agent 按提供方 runtime 自己的 `agent.tools.datasets` 选择数据集，只保留其中的 `<d>-get` / `<d>-list` 工具，并以提供方插件的身份读取数据。一个数据集只选了写入工具时，子 agent 拿不到它。
 
 <a id="保留命名空间"></a>
 
