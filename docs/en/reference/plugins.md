@@ -974,6 +974,8 @@ Upstream writes are only read. They never enter the reader's own buffer, so noth
 
 The commit rules are under [Turn-level single transaction](./transactions.md#turn-level-single-transaction).
 
+**Read-derived replacements.** Explicit same-key reads automatically guard later replacements, including derived `inc` + `merge` lists. Blind writes and pure relative lists keep their existing semantics. Guards and the agent they allow to run have separate scopes. See [read-baseline preconditions](./transactions.md#read-baselines).
+
 ### Dynamic dimensions
 
 `world.dimensions@1` publishes `{id: {name, description?, schema, value, version}}`.

@@ -251,6 +251,7 @@ describe("checkpoint record validation", () => {
             promptSegments: [{ pluginId: "rules", id: "house-rules" }],
             nestedResults: [
               {
+                readScopes: [],
                 result: {
                   pluginId: "probe",
                   runtimeId: "probe/child",

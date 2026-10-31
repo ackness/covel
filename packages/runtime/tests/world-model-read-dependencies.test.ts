@@ -2,7 +2,8 @@ import { describe, expect, it } from "vitest";
 import { createMemoryStore } from "@covel/store/memory";
 import { createSqliteStore } from "@covel/store/sqlite";
 import { z } from "zod";
-import type { RuntimeResult } from "@covel/shared";
+import type { Proposal, RuntimeResult } from "@covel/shared";
+import { createHookPipeline } from "../src/hooks/pipeline.js";
 import { classifyExecutionFaults } from "../src/index.js";
 import { PluginServiceRegistry } from "../src/plugin-services.js";
 import { latch } from "./_helpers/agent-loop-fixture.js";
@@ -21,6 +22,105 @@ import {
 } from "./_helpers/world-read-fixture.js";
 
 describe("world reads through commit", () => {
+  it.each([false, true])(
+    "protects an upstream character's exact version at the mutation boundary (changed=%s)",
+    async (changed) => {
+      const f = await fixture();
+      const reader = fn("read");
+      const r = await f.execute([producer, story, reader], {
+        [producer.name]: async () => writes(character("source", "staged", 1)),
+        [story.name]: tell,
+        [reader.name]: async (ctx) => {
+          expect(
+            ctx.world!.characters.find((row) => row.id === "source")?.version,
+          ).toBe(2);
+          return writes(character("source", "consumer", 2));
+        },
+      });
+      if (changed) {
+        const row = await f.store.getCharacter(SESSION, "source");
+        await f.store.upsertCharacter({
+          ...row!,
+          version: 2,
+          description: "concurrent",
+        });
+      }
+      const out = await r.commit();
+      expect(out.status).toBe("committed");
+      expect(out.failedProposals.map((failure) => failure.code)).toEqual(
+        changed ? ["conflict"] : [],
+      );
+      expect((await f.store.getCharacter(SESSION, "source"))?.description).toBe(
+        changed ? "staged" : "consumer",
+      );
+    },
+  );
+
+  it("detects a successful producer hook's semantic rewrite at the same predicted version", async () => {
+    const hookPipeline = createHookPipeline();
+    hookPipeline.register<{ proposal: Proposal }>({
+      id: "rewrite",
+      pluginId: "source",
+      event: "PreStateCommit",
+      handler: async (_ctx, { proposal }) => ({
+        action: "continue",
+        replace: {
+          proposal:
+            proposal.type === "character.upsert" &&
+            proposal.source.runtimeId === producer.name
+              ? {
+                  ...proposal,
+                  payload: { ...proposal.payload, description: "rewritten" },
+                }
+              : proposal,
+        },
+      }),
+    });
+    const f = await fixture({ deps: { hookPipeline } });
+    const reader = fn("read");
+    const r = await f.execute([producer, story, reader], {
+      [producer.name]: async () => writes(character()),
+      [story.name]: tell,
+      [reader.name]: async (ctx) => {
+        expect(
+          ctx.world!.characters.find((row) => row.id === "source")?.description,
+        ).toBe("staged");
+        return writes(character("source", "consumer", 1));
+      },
+    });
+    const out = await r.commit();
+    expect(out.failedProposals[0]?.code).toBe("conflict");
+    expect((await f.store.getCharacter(SESSION, "source"))?.description).toBe(
+      "rewritten",
+    );
+  });
+
+  it("keeps committed-only character observations on ordinary expectedVersion rebase semantics", async () => {
+    const f = await fixture();
+    const reader = fn("read");
+    const r = await f.execute([reader], {
+      [reader.name]: async (ctx) => {
+        expect(
+          ctx.world!.characters.find((row) => row.id === "source")?.version,
+        ).toBe(1);
+        return writes(character("source", "consumer", 1));
+      },
+    });
+    const row = await f.store.getCharacter(SESSION, "source");
+    await f.store.upsertCharacter({
+      ...row!,
+      version: 3,
+      fields: { concurrent: true },
+    });
+    const out = await r.commit();
+    expect(out.failedProposals).toEqual([]);
+    expect(await f.store.getCharacter(SESSION, "source")).toMatchObject({
+      description: "consumer",
+      version: 4,
+      fields: { concurrent: true },
+    });
+  });
+
   it.each([
     ["memory", createMemoryStore],
     ["sqlite", () => createSqliteStore(":memory:")],

@@ -191,6 +191,42 @@ async function fixture({
 }
 
 describe("world-time pipeline", () => {
+  it("rejects a derived clock update changed after the tool's early guard while preserving story", async () => {
+    const { store, run, commit } = await fixture();
+    expect((await commit(await run("seed"))).status).toBe("committed");
+    const execution = await run("changed");
+    const base = await loadTime(clockReader(store), "en");
+    const concurrent = {
+      ...(await store.getPluginData("s", "world-time", "clock", "current"))
+        .value,
+      tick: base.tick + 30,
+      ...describeTime(base.definition, base.tick + 30, "en"),
+    };
+    await store.setPluginData({
+      id: "concurrent-clock",
+      sessionId: "s",
+      pluginId: "world-time",
+      namespace: "clock",
+      key: "current",
+      value: concurrent,
+      createdAt: now,
+      updatedAt: now,
+    });
+    const outcome = await commit(execution);
+    expect(outcome.status).toBe("committed");
+    expect(outcome.failedProposals).toEqual([
+      expect.objectContaining({ code: "conflict" }),
+    ]);
+    expect(
+      (await store.getPluginData("s", "world-time", "clock", "current")).value,
+    ).toEqual(concurrent);
+    expect(
+      (await store.listMessages("s")).some(
+        (message) => message.role === "assistant",
+      ),
+    ).toBe(true);
+  });
+
   it("stages an exact target and commits its calculated clock atomically", async () => {
     const target = { ...DEFAULT_TIME.initial, hour: 12, minute: 20 };
     const { store, run, commit } = await fixture({

@@ -3,6 +3,7 @@ import { isRecord } from "../utils/is-record.js";
 
 import type { HandlerResult, RuntimeResult } from "@covel/shared";
 import { getPendingProposals } from "@covel/tools";
+import { ownScopeProposals } from "../read-baselines.js";
 
 type SuccessOutcome = Extract<HandlerResult, { outcome: "success" }>;
 
@@ -13,6 +14,7 @@ type SuccessOutcome = Extract<HandlerResult, { outcome: "success" }>;
 export function materializeHandlerSuccess(
   outcome: SuccessOutcome,
   rawOutput: unknown,
+  reserved: readonly import("@covel/shared").Proposal[] = [],
 ): Pick<
   RuntimeResult,
   "output" | "effects" | "completion" | "pendingProposals"
@@ -23,7 +25,7 @@ export function materializeHandlerSuccess(
     : value === undefined
       ? {}
       : { value };
-  const pending = getPendingProposals(rawOutput);
+  const pending = ownScopeProposals(getPendingProposals(rawOutput), reserved);
   return {
     output: projected,
     ...(pending.length > 0 ? { pendingProposals: pending } : {}),

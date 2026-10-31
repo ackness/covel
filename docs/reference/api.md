@@ -4555,6 +4555,8 @@ runtime 可以中途停下来等玩家提供数据，这叫挂起。本节的端
 
 一个 runtime 同时只有一条待恢复的挂起项。它在另一次执行里再次挂起时，旧的那条在保存新挂起项的同一个事务里按放弃的方式作废，不另发事件。网页端收到新的 `turn.suspended` 时，去掉同一个 runtime 的旧挂起项。
 
+待提交的读后计算写入还会保留最初的私有[读取基线](./transactions.md#read-baselines)。已有写目标摘要发现变化时，仍返回上面的 `suspension_outdated`；仅读取基线不匹配时是普通提交 `conflict`。新读取或再次挂起不能刷新旧计算。客户端不发送指纹令牌。
+
 ##### 再次挂起
 
 恢复后的 runtime 可以再次挂起：agent 再调用一次 `suspend`，function handler 再返回一次挂起。这次恢复照常提交，返回 `200`，`result.status` 是 `suspended`。

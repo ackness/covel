@@ -187,6 +187,38 @@ export interface ProposalPayloadMap {
 
 export type ProposalType = keyof ProposalPayloadMap;
 
+/** Host-owned content basis. Never accepted from a plugin or a tool argument. */
+export type ProposalReadPrecondition =
+  | {
+      readonly kind: "plugin-data";
+      readonly pluginId: string;
+      readonly namespace: string;
+      readonly key: string;
+      readonly basis:
+        | { readonly exists: false }
+        | { readonly exists: true; readonly fingerprint: string };
+      readonly unstable?: true;
+    }
+  | {
+      readonly kind: "character";
+      readonly id: string;
+      readonly basis:
+        | { readonly exists: false }
+        | {
+            readonly exists: true;
+            readonly version: number;
+            readonly fingerprint: string;
+          };
+      readonly unstable?: true;
+    };
+
+/** Compact private continuation evidence for one invocation or service call. */
+export interface ProposalReadScope {
+  readonly reads: readonly ProposalReadPrecondition[];
+  /** Omitted for the current invocation; saved scopes name their pending writes. */
+  readonly proposalIds?: readonly string[];
+}
+
 /**
  * A single proposal envelope for proposal type `K`. `type` and `payload`
  * are correlated, so narrowing on `type` precisely narrows `payload`.
@@ -199,6 +231,15 @@ export type ProposalFor<K extends ProposalType = ProposalType> = {
   readonly sessionId: string;
   readonly payload: ProposalPayloadMap[K];
   readonly timestamp: string;
+  readonly preconditions?: readonly (K extends
+    | "plugin.data"
+    | "plugin.data.batch"
+    | "plugin.data.delete"
+    | "plugin.data.update"
+    ? Extract<ProposalReadPrecondition, { kind: "plugin-data" }>
+    : K extends "character.upsert"
+      ? Extract<ProposalReadPrecondition, { kind: "character" }>
+      : never)[];
 };
 
 /**

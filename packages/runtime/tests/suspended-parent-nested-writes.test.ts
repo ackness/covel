@@ -18,6 +18,10 @@ import type {
 } from "@covel/shared/plugin-runtime";
 import { createMemoryStore } from "@covel/store/memory";
 import {
+  exportSessionCheckpoint,
+  validateBrowserCheckpoint,
+} from "@covel/store";
+import {
   applySuspensionAbandonTx,
   commitExecution,
   createHookPipeline,
@@ -244,6 +248,64 @@ function commitResume(
 }
 
 describe("nested writes of a suspended parent", () => {
+  it.each([false, true])(
+    "retains a child's original read basis through checkpoint and resume (changed=%s)",
+    async (changed) => {
+      const f = await fixture({
+        child: async (ctx) => {
+          expect(await ctx.pluginData!.get("notes", "B")).toBeNull();
+          await ctx.pluginData!.update("notes", "B", [
+            { op: "inc", path: "/score", by: 5 },
+            { op: "merge", value: { bar: 105 } },
+          ]);
+          return ok();
+        },
+      });
+      const checkpoint = validateBrowserCheckpoint(
+        JSON.parse(
+          JSON.stringify(
+            await exportSessionCheckpoint(f.store, SESSION, {
+              revision: 1,
+              actionId: "roundtrip",
+            }),
+          ),
+        ),
+      );
+      const suspension = checkpoint.suspensions[0]!;
+      expect(
+        suspension.pendingContinuation.nestedResults?.[0]?.readScopes[0]?.reads,
+      ).toHaveLength(1);
+      if (changed)
+        await f.store.setPluginData({
+          id: "intervening",
+          sessionId: SESSION,
+          pluginId: "probe",
+          namespace: "notes",
+          key: "B",
+          value: { score: 20, bar: 120 },
+          createdAt: timestamp,
+          updatedAt: timestamp,
+        });
+      const resumed = await resumeSuspendedRuntime(
+        suspension,
+        {},
+        parent,
+        f.deps,
+        { activeRuntimes: f.runtimes },
+      );
+      const out = await commitResume(f, resumed);
+      expect(out.failedProposals.map((failure) => failure.code)).toEqual(
+        changed ? ["conflict"] : [],
+      );
+      expect(out.status).toBe(changed ? "failed" : "committed");
+      expect(
+        (await f.store.getPluginData(SESSION, "probe", "notes", "B"))?.value,
+      ).toEqual(changed ? { score: 20, bar: 120 } : { score: 5, bar: 105 });
+      expect(f.childRuns.count).toBe(1);
+      await f.store.close();
+    },
+  );
+
   it("wait with the suspension and commit with its resume, children first", async () => {
     const f = await fixture();
     expect(await f.keys()).toEqual([]);

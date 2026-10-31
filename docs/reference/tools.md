@@ -2088,3 +2088,5 @@ payload 是 `{entries:[{id,keys,content,strategy,position?,insertionOrder?,enabl
 ## 呈现函数的调用边界
 
 带 `presentation` 的函数没有工具、服务或委派入口，也不能发事件、挂起或发布 UI / completion。gateway 与媒体 helper 共享来源回合的持久额度；零额度在派发前拒绝，额度耗尽是正常 no-op。普通 runtime 的工具清单不变，见[呈现 runtime](./plugins.md#presentation-runtimes)。
+
+工具的显式读取参与自动[同键读取基线保护](./transactions.md#read-baselines)。生成的数据集写工具为校验而读取，不会把盲写变成显式读取。提交时的基线冲突走既有提案或操作失败路径；暂存回答仍不承诺落库。

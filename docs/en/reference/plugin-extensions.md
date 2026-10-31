@@ -422,6 +422,8 @@ A write service's writes do not land right away. A successful call stages all it
 
 A story-attached operation that fails at commit does not fail the story. The player immediately sees a fixed notice with the number of actions that did not take effect; the debug trace retains `operation.failed`. Such a failure is not an execution failure: the action stream carries no `proposal.failed` for it, and the turn still shows as committed. On the next player or continuation execution, the calling agent receives an `operations-not-applied` block listing at most ten failed operation summaries from the previous committed turn; for an operation a sub-agent made, that sub-agent receives it the next time it is called. Other runtimes and scoped retries do not receive it. The notice follows only the newest committed player or continuation turn; see [turn flow](../internals/flow.md).
 
+Each provider call retains its own external read basis, including earlier accepted calls. A stale derived replacement fails with `conflict` in that operation's existing failure domain, without faulting caller or provider or rerunning service code. Story text survives an attached operation failing. See [read baselines](./transactions.md#read-baselines).
+
 #### Where write services cannot be called
 
 A call from these places answers `unavailable` ("Write services cannot be called here.") and stages nothing:

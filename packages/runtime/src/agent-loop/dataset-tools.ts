@@ -1,3 +1,4 @@
+import type { PluginDataVisibility } from "../function-runtime/upstream-plugin-data.js";
 /**
  * Dataset tools: the typed tools an agent gets over a dataset of its own
  * package (`agent.tools.datasets`). For each selected kind the kernel builds
@@ -76,6 +77,41 @@ export function datasetToolNames(manifest: RuntimeManifest): string[] {
   );
 }
 
+const datasetKinds = new WeakMap<ToolModule, DatasetToolKind>();
+
+/** Distinguish explicit dataset reads from internal mutation checks. */
+export function datasetReadKeys(
+  tool: ToolModule,
+  result: unknown,
+): ReadonlySet<string> | undefined {
+  const kind = datasetKinds.get(tool);
+  if (!kind) return undefined;
+  if (kind === "upsert" || kind === "update") return new Set();
+  const data = result as { key?: string; items?: readonly { key: string }[] };
+  return new Set(
+    kind === "get"
+      ? data.key === undefined
+        ? []
+        : [data.key]
+      : (data.items ?? []).map((item) => item.key),
+  );
+}
+
+/** Internal mutation reads and unreturned list rows are not author reads. */
+export function datasetReadPolicy(
+  tool: ToolModule,
+  params: unknown,
+): PluginDataVisibility["baselineReads"] {
+  const kind = datasetKinds.get(tool);
+  if (kind === "upsert" || kind === "update")
+    return { get: false, list: () => [] };
+  if (kind !== "list") return undefined;
+  return {
+    get: false,
+    list: (rows) => selectListPage(rows, params as ListQuery).page,
+  };
+}
+
 /**
  * Build the dataset tools a runtime selected. Throws when a selected
  * dataset's declaration or record schema is not loaded: the manifest is
@@ -104,8 +140,11 @@ export function createDatasetTools(
       schema,
       selected: new Set(kinds),
     };
-    for (const kind of kinds)
-      tools.set(datasetToolName(dataset, kind), buildTool(spec, kind));
+    for (const kind of kinds) {
+      const module = buildTool(spec, kind);
+      datasetKinds.set(module, kind);
+      tools.set(datasetToolName(dataset, kind), module);
+    }
   }
   return tools;
 }
@@ -383,6 +422,23 @@ function getTool(spec: DatasetSpec): ToolModule {
 
 const whereValue = z.union([z.string(), z.number(), z.boolean(), z.null()]);
 
+interface ListQuery {
+  readonly where?: Readonly<Record<string, unknown>>;
+  readonly offset?: number;
+  readonly limit?: number;
+}
+function selectListPage<T extends Row>(
+  rows: readonly T[],
+  { where, offset = 0, limit = LIST_DEFAULT_LIMIT }: ListQuery,
+) {
+  const conditions = Object.entries(where ?? {});
+  const matching = rows
+    .filter((row) => matches(row.value, conditions))
+    .sort((a, b) => compareText(a.key, b.key));
+  const page = matching.slice(offset, offset + limit);
+  return { matching, page, next: offset + page.length };
+}
+
 function listTool(spec: DatasetSpec): ToolModule {
   const name = datasetToolName(spec.dataset, "list");
   const field = spec.declaration.key;
@@ -402,12 +458,11 @@ function listTool(spec: DatasetSpec): ToolModule {
     annotations: READ_ANNOTATIONS,
     async execute({ where, offset = 0, limit = LIST_DEFAULT_LIMIT }, context) {
       const rows = await storeOf(spec, context).listPluginData(spec.dataset);
-      const conditions = Object.entries(where ?? {});
-      const matching = rows
-        .filter((row) => matches(row.value, conditions))
-        .sort((a, b) => compareText(a.key, b.key));
-      const page = matching.slice(offset, offset + limit);
-      const next = offset + page.length;
+      const { matching, page, next } = selectListPage(rows, {
+        where,
+        offset,
+        limit,
+      });
       return {
         total: matching.length,
         items: page.map((row) => ({ key: row.key, record: row.value })),

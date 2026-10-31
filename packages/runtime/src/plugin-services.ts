@@ -1,3 +1,5 @@
+import { createPluginDataVisibility } from "./function-runtime/upstream-plugin-data.js";
+import { createReadBaselineRecorder } from "./read-baselines.js";
 import { snapshotWorldModelView } from "./function-runtime/world-model-view.js";
 import {
   TURN_POLICY_CONTRACT,
@@ -1124,6 +1126,20 @@ export class PluginServiceRegistry {
                   pluginId: entry.pluginId,
                   runtimeId: `service:${entry.name}`,
                 };
+                const callBaselines = createReadBaselineRecorder();
+                const callVisibility = {
+                  ...(providerVisibility(
+                    caller.reads?.visibility,
+                    entry.pluginId,
+                  ) ??
+                    createPluginDataVisibility({
+                      pluginId: entry.pluginId,
+                      runtimeId: identity.runtimeId,
+                    })),
+                  pluginId: entry.pluginId,
+                  baselines: callBaselines,
+                  basisWrites: stagedWrites,
+                };
                 const context: PluginWriteServiceContext = {
                   callerPluginId: caller.pluginId,
                   sessionId: caller.sessionId,
@@ -1139,14 +1155,7 @@ export class PluginServiceRegistry {
                       : {}),
                     identity,
                     signal,
-                    ...(caller.reads?.visibility
-                      ? {
-                          visibility: providerVisibility(
-                            caller.reads.visibility,
-                            entry.pluginId,
-                          )!,
-                        }
-                      : {}),
+                    visibility: callVisibility,
                     staged: stagedWrites!,
                     buffer,
                   }),
@@ -1168,6 +1177,11 @@ export class PluginServiceRegistry {
                       gateway: undefined,
                       utils: undefined,
                       nestedIn: "write",
+                      reads: {
+                        ...caller.reads,
+                        visibility: callVisibility,
+                        writeBuffer: buffer,
+                      },
                     },
                     [...path, key],
                     state,
@@ -1195,6 +1209,7 @@ export class PluginServiceRegistry {
                           },
                         }) as Proposal,
                     ),
+                    readScopes: [{ reads: callBaselines.snapshot() }],
                     request: structuredClone(input),
                     result: structuredClone(result),
                   };

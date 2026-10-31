@@ -209,6 +209,7 @@ export async function fixture(
       commitExecution({
         store,
         eventBus,
+        hookPipeline: deps.hookPipeline,
         execution,
         completion: {
           kind: "turn",

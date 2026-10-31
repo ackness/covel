@@ -162,6 +162,7 @@ async function createSuspension(
       required: ["name"],
     },
     pendingContinuation: {
+      readScopes: [],
       takenUnder: overrides?.takenUnder ?? {
         playerTurns: 0,
         pluginVersion: "0.0.0",

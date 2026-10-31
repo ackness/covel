@@ -1,3 +1,4 @@
+import { collectReadBaselines } from "./read-baselines.js";
 import { presentationState } from "./presentation/state.js";
 import {
   captureSuspensionClaim,
@@ -91,6 +92,7 @@ export interface ExecutionCommitPlan extends Pick<
   | "providerDatasets"
   | "operationRecords"
   | "readDependencies"
+  | "readBaselines"
   | "presentationStates"
   | "progressScopeId"
 > {
@@ -364,6 +366,7 @@ export async function executeTurn(
         journalMessageRuns: collectExecutionJournalRuns(turn),
         // A resume has no upstream in its execution, so it carries none.
         readDependencies: collectExecutionReadDependencies(turn),
+        readBaselines: collectReadBaselines(results),
         suspensionRuns: collectExecutionSuspensionRuns(turn),
         runtimeTriggers: collectExecutionTriggers(turn),
         runtimeTriggerRuns: collectExecutionTriggerRuns(turn),
@@ -627,6 +630,7 @@ export async function resumeSuspendedRuntime(
         }),
       ),
       ...structuredClone({
+        readBaselines: collectReadBaselines(results),
         sessionId: suspension.sessionId,
         executionContext: {
           ...inherited,

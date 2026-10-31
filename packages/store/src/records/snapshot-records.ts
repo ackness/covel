@@ -188,6 +188,7 @@ export function settledSuspensionContinuation(
     messages: [],
     toolCallsSoFar: [],
     pendingProposals: [],
+    readScopes: [],
     executionContext,
     takenUnder,
     ...(locale !== undefined ? { locale } : {}),
@@ -249,6 +250,10 @@ export interface SuspendedLoopState {
  * commits with the parent's successful resume.
  */
 export interface SuspendedNestedResult {
+  readonly readScopes: readonly import("@covel/shared").ProposalReadScope[];
+  readonly operationReadScopes?: Readonly<
+    Record<string, readonly import("@covel/shared").ProposalReadScope[]>
+  >;
   /** The `RuntimeResult`, including its buffered proposals. */
   readonly result: unknown;
   /** Conversation rows (`TurnMessageRecord`) it adds when it commits. */
@@ -310,6 +315,8 @@ export interface SuspensionRecord {
      * final runtime output.
      */
     readonly pendingProposals: readonly unknown[];
+    /** Private original read bases for pending writes. */
+    readonly readScopes: readonly import("@covel/shared").ProposalReadScope[];
     /** Frozen declared inputs for tools resumed in the same logical turn. */
     readonly inputSlots?: Readonly<Record<string, InputSlot>>;
     /** Frozen cross-execution exports supplied to a suspended function. */

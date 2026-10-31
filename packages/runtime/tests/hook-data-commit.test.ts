@@ -350,6 +350,7 @@ describe("Hook data at the commit boundary", () => {
       resumeSchema: {},
       createdAt: now,
       pendingContinuation: {
+        readScopes: [{ reads: [], proposalIds: ["proposal"] }],
         takenUnder: { playerTurns: 0, pluginVersion: "1.0.0", writes: [] },
         executionContext: {
           executionId: "execution",

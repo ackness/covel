@@ -542,3 +542,5 @@ SillyTavern 内容导入使用有上限的 PNG 块遍历（读数据前先检查
 ## 呈现投影与内核记账
 
 呈现上下文使用独立构造路径，只复制公开 `segments` / `cues`、精简角色身份和明确允许的自有数据。concealed / 失败 / 非故事结果、隐藏 namespace、原始 digest 和服务入口不进入它。`_presentation_budget` 属于 `__kernel:presentation` 的控制面，只保存来源与计数；插件、RPC、数据工具和可移植视图不可见，snapshot / fork / 浏览器 checkpoint 排除它。额度保留到会话删除；restore / reset 改变代次，旧作业不能接到新会话。函数 JS 本身仍非沙箱，原有代码批准不变。见[呈现 runtime](../reference/plugins.md#presentation-runtimes)。
+
+读取基线指纹和目标身份只留在宿主提交证据及私有 continuation 中。公开 runtime 副本去掉缓冲和操作写入；Hook、响应、trace、模型和沙箱投影不暴露条件。采集基线不增加隐藏数据或呈现上下文的访问能力。见[事务](../reference/transactions.md#read-baselines)。

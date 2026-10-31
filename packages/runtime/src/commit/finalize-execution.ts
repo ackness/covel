@@ -1,4 +1,11 @@
 import {
+  checkPendingReadBaselines,
+  stampReadPreconditions,
+  withoutReadPreconditions,
+  readScopesOf,
+  type ExecutionReadBaselines,
+} from "../read-baselines.js";
+import {
   presentationCommitGuard,
   presentationSuperseded,
   presentationMutationError,
@@ -318,6 +325,7 @@ export interface FinalizeExecutionArgs {
    * producer outside the unit is dropped too; a story or setup unit commits,
    * with one `read-dependency.kept` trace row per dropped producer.
    */
+  readonly readBaselines?: ExecutionReadBaselines;
   readonly readDependencies?: Readonly<Record<string, readonly string[]>>;
 }
 
@@ -417,6 +425,12 @@ export function applyIsolatedRuntimes<
 class ProposalCommitFailure extends Error {
   constructor(readonly failedProposals: readonly FailedProposal[]) {
     super(`${failedProposals.length} proposal(s) failed to commit`);
+    this.failedProposals = failedProposals.map((failure) => ({
+      ...failure,
+      proposal: withoutReadPreconditions(
+        failure.proposal,
+      ) as typeof failure.proposal,
+    }));
     this.name = "ProposalCommitFailure";
   }
 }
@@ -1279,7 +1293,11 @@ export async function finalizeExecution(
             store,
             sessionId,
             kindOf(result),
-            commitOpts(result),
+            {
+              ...commitOpts(result),
+              readScopes:
+                args.readBaselines?.runs[result.runId] ?? readScopesOf(result),
+            },
           ),
         );
         // A run's operations are prepared after its own writes.
@@ -1287,10 +1305,10 @@ export async function finalizeExecution(
           args.signal?.throwIfAborted();
           preparedOperations.set(
             entry,
-            await prepareOperationProposals(
-              entry.writes,
-              operationCommitOpts(entry),
-            ),
+            await prepareOperationProposals(entry.writes, {
+              ...operationCommitOpts(entry),
+              readScopes: args.readBaselines?.operations[entry.record.id] ?? [],
+            }),
           );
         }
       }
@@ -1373,6 +1391,36 @@ export async function finalizeExecution(
           defer: (fn: () => Promise<void>) => void,
         ): Promise<readonly SessionEvent[]> => {
           const { proposals, failedProposals } = prepared.get(result)!;
+          // Pending calculations keep their read-time basis; suspension-time
+          // write digests cannot certify a calculation that was already stale.
+          for (const suspension of args.suspensions ?? []) {
+            if (args.suspensionRuns?.[suspension.id] !== result.runId) continue;
+            const continuation = suspension.pendingContinuation;
+            const nested = (continuation.nestedResults ?? []).flatMap((entry) =>
+              stampReadPreconditions(
+                nestedResultProposals([entry], sessionId),
+                entry.readScopes ?? [],
+              ),
+            );
+            const pending = (
+              continuation.pendingProposals as readonly Proposal[]
+            ).map(
+              (proposal) =>
+                ({
+                  ...withoutReadPreconditions(proposal),
+                  sessionId,
+                  source: {
+                    pluginId: suspension.pluginId,
+                    runtimeId: suspension.runtimeId,
+                  },
+                }) as Proposal,
+            );
+            const failure = await checkPendingReadBaselines(sink, [
+              ...nested,
+              ...stampReadPreconditions(pending, continuation.readScopes ?? []),
+            ]);
+            if (failure) throw new ProposalCommitFailure([failure]);
+          }
           const presentationSource = presentationState(result);
           if (presentationSource && failedProposals.length)
             throw new ProposalCommitFailure(failedProposals);
@@ -1510,6 +1558,9 @@ export async function finalizeExecution(
           isolatedFailures.push(
             ...failed.map((item) => ({
               ...item,
+              proposal: withoutReadPreconditions(
+                item.proposal,
+              ) as typeof item.proposal,
               operationId: entry.record.id,
             })),
           );

@@ -1409,6 +1409,7 @@ describe("Snapshot routes", () => {
           required: ["answer"],
         },
         pendingContinuation: {
+          readScopes: [],
           takenUnder: { playerTurns: 0, pluginVersion: "0.0.0", writes: [] },
           executionContext: {
             executionId: "exec-snapshot-unresolved",
@@ -1469,6 +1470,7 @@ describe("Snapshot routes", () => {
         reason: "Already handled",
         resumeSchema: {},
         pendingContinuation: {
+          readScopes: [],
           takenUnder: { playerTurns: 0, pluginVersion: "0.0.0", writes: [] },
           executionContext: {
             executionId: "exec-snapshot-resolved",

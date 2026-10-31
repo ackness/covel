@@ -422,6 +422,8 @@ covel.registerService({
 
 故事附带的操作在提交时失败，不会让故事失败。提交后玩家立即看到固定提示，说明有多少操作没有生效；调试 trace 保留 `operation.failed`。这样的失败不算执行失败：回合流里没有它的 `proposal.failed`，回合照常显示已提交。下一次玩家或续行执行中，发起操作的 agent 收到 `operations-not-applied` 块，列出上一个已提交回合失败操作的摘要，最多十条；子 agent 发起的操作，由这个子 agent 下次被调用时收到。其他 runtime 和定向重试不显示这个通知。通知只跟随最新的已提交玩家或续行回合，详见[回合管线](../internals/flow.md)。
 
+每次提供者调用保留独立的外部读取依据，包括前面已接受的调用。过时的派生替换以 `conflict` 进入该操作既有的失败域，不增加调用方或提供者故障计数，也不重跑服务。故事附带操作失败时正文保留。见[读取基线](./transactions.md#read-baselines)。
+
 #### 哪里不能调用写服务
 
 以下位置调用写服务得到 `unavailable`（“Write services cannot be called here.”），什么都不暂存：

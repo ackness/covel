@@ -13,6 +13,8 @@ This page covers six built-in plugins that make the story feel more like a game:
 
 All six are optional and are not turned on automatically. For which worlds include them by default, see [the overview at the end of this page](#overview-of-when-they-are-on).
 
+If a concurrent change makes an affinity or clock calculation stale, that derived update is skipped while an independent successful story survives. A later explicit retry reads and recalculates it; see [read-baseline conflicts](../reference/transactions.md#read-baselines).
+
 ## Dice Check and Tabletop Rules: what is different
 
 Both plugins involve dice, but they do different jobs. You can use one, or both together.

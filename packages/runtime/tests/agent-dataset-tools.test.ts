@@ -846,6 +846,101 @@ describe("dataset list", () => {
 });
 
 describe("dataset tools and the execution", () => {
+  it("bounds evidence by the returned page and leaves unreturned records unobserved", async () => {
+    const { deps, toolExecutor, seed, stored, commit } = await fixture();
+    for (let index = 0; index < 4100; index++) {
+      const name = `npc-${String(index).padStart(4, "0")}`;
+      await seed("npcs", name, { name, trust: 10 });
+    }
+    const { llm, requests } = scripted({
+      [MARK]: (index) =>
+        [
+          call("npcs-list", { limit: 1 }),
+          call("npcs-update", {
+            key: "npc-4099",
+            ops: [{ op: "merge", value: { trust: 11 } }],
+          }),
+          text("The list is ready."),
+        ][index]!,
+    });
+    try {
+      const execution = await executeTurn(input, [agent()], deps(llm));
+      expect(toolMessage(requests[1])).not.toHaveProperty("error");
+      await seed("npcs", "npc-4099", { name: "npc-4099", trust: 20 });
+      expect((await commit(execution)).failedProposals).toEqual([]);
+      expect(await stored("npcs", "npc-4099")).toEqual({
+        name: "npc-4099",
+        trust: 11,
+      });
+      const reads = Object.values(execution.commit.readBaselines!.runs).flatMap(
+        (scopes) => scopes.flatMap((scope) => scope.reads),
+      );
+      expect(reads).toHaveLength(1);
+      expect(reads[0]).toMatchObject({ namespace: "npcs", key: "npc-0000" });
+    } finally {
+      await toolExecutor.close();
+    }
+  });
+  it.each(["get", "list"] as const)(
+    "guards a replacement derived from a real dataset %s without exposing its basis to the model",
+    async (kind) => {
+      const { deps, toolExecutor, seed, stored, commit } = await fixture();
+      await seed("npcs", "mara", { name: "Mara", trust: 10 });
+      const { llm, requests } = scripted({
+        [MARK]: (index) =>
+          [
+            call(`npcs-${kind}`, kind === "get" ? { key: "mara" } : {}),
+            call("npcs-update", {
+              key: "mara",
+              ops: [
+                { op: "inc", path: "/trust", by: 5 },
+                { op: "merge", value: { mood: "hopeful" } },
+              ],
+            }),
+            text("Mara smiles."),
+          ][index]!,
+      });
+      try {
+        const execution = await executeTurn(input, [agent()], deps(llm));
+        await seed("npcs", "mara", { name: "Mara", trust: 20 });
+        const out = await commit(execution);
+        expect(out.failedProposals[0]?.code).toBe("conflict");
+        expect(await stored("npcs", "mara")).toEqual({
+          name: "Mara",
+          trust: 20,
+        });
+        expect(JSON.stringify(requests)).not.toMatch(
+          /preconditions|fingerprint|readScopes/,
+        );
+        expect(JSON.stringify(execution.result)).not.toMatch(
+          /preconditions|fingerprint|readScopes/,
+        );
+      } finally {
+        await toolExecutor.close();
+      }
+    },
+  );
+
+  it("keeps dataset upserts blind when only internal mutation checks read the record", async () => {
+    const { deps, toolExecutor, seed, stored, commit } = await fixture();
+    await seed("npcs", "mara", { name: "Mara", trust: 10 });
+    const { llm } = scripted({
+      [MARK]: (index) =>
+        [
+          call("npcs-upsert", { record: { name: "Mara", trust: 11 } }),
+          text("Mara smiles."),
+        ][index]!,
+    });
+    try {
+      const execution = await executeTurn(input, [agent()], deps(llm));
+      await seed("npcs", "mara", { name: "Mara", trust: 20 });
+      expect((await commit(execution)).failedProposals).toEqual([]);
+      expect(await stored("npcs", "mara")).toEqual({ name: "Mara", trust: 11 });
+    } finally {
+      await toolExecutor.close();
+    }
+  });
+
   it("see an upstream runtime's write, record the read and drop with a rejected producer", async () => {
     const { store, deps, toolExecutor } = await fixture();
     vi.spyOn(console, "warn").mockImplementation(() => {});

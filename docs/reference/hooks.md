@@ -291,6 +291,8 @@ agent runtime 的每次工具调用之前触发，函数 runtime 经 `ctx.tools.
 
 [写服务](./plugin-extensions.md#写服务)暂存的写入以提供者为来源到达：`ctx.pluginId` 是提供者，`ctx.runtimeId` 是 `service:<服务名>`，发起调用的插件不出现在 Hook 里。拒绝其中任何一条，整个操作被拒（见[事务 · 写服务的操作](./transactions.md#写服务的操作)）。
 
+读取基线条件由内核独立持有，不进入交给 Hook 的 payload 对象，也不能被删除或替换。Hook 不能重定向已保护的目标或 batch 成员；同目标改写保留检查，新加入的替换也会获得适用的已记录基线。见[事务](./transactions.md#read-baselines)。
+
 ### `PostStateCommit`
 
 一条 proposal 提交之后触发。要在数据真正写入之后做事，用这个事件。

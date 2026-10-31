@@ -171,6 +171,7 @@ describe("prepared execution host API", () => {
       reason: "Need input",
       resumeSchema: {},
       pendingContinuation: {
+        readScopes: [],
         takenUnder: { playerTurns: 0, pluginVersion: "1.0.0", writes: [] },
         messages: [],
         toolCallsSoFar: [],

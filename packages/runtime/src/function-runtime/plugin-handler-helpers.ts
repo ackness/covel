@@ -50,6 +50,7 @@ import {
 } from "./execution-write-buffer.js";
 import {
   listPluginDataProducers,
+  pluginDataListBases,
   noteRead,
   observedRows,
   readPluginDataKey,
@@ -274,7 +275,10 @@ export function createPluginDataWriter(
       });
     },
     async get(namespace: string, key: string) {
-      const { base, current, producers } = await readKey(namespace, key);
+      const { base, current, external, producers } = await readKey(
+        namespace,
+        key,
+      );
       const visible = current.exists ? current.value : null;
       if (buffer)
         noteRead(visibility, {
@@ -282,6 +286,7 @@ export function createPluginDataWriter(
           namespace,
           key,
           visible,
+          bases: [{ pluginId, namespace, key, current: external }],
           producers,
           withoutUpstream: () => {
             const own = overlayPluginDataValue(
@@ -312,6 +317,7 @@ export function createPluginDataWriter(
         kind: "list",
         namespace,
         visible: observedRows(merged),
+        bases: pluginDataListBases(visibility, pluginId, rows, merged),
         producers: listPluginDataProducers(visibility, namespace),
         withoutUpstream: () =>
           observedRows(
@@ -446,13 +452,17 @@ export function createServicePluginDataWriter(args: {
     async get(namespace: string, key: string) {
       live();
       if (isHiddenPluginDataNamespace(namespace)) return null;
-      const { base, current, producers } = await readKey(namespace, key);
+      const { base, current, external, producers } = await readKey(
+        namespace,
+        key,
+      );
       const visible = current.exists ? current.value : null;
       noteRead(visibility, {
         kind: "get",
         namespace,
         key,
         visible,
+        bases: [{ pluginId, namespace, key, current: external }],
         producers,
         withoutUpstream: () => {
           const own = overlayPluginDataValue(
@@ -485,6 +495,7 @@ export function createServicePluginDataWriter(args: {
         kind: "list",
         namespace,
         visible: observedRows(merged),
+        bases: pluginDataListBases(visibility, pluginId, rows, merged),
         producers: listPluginDataProducers(visibility, namespace),
         withoutUpstream: () =>
           observedRows(
@@ -789,7 +800,7 @@ export function createFunctionStoreView(
         ? { exists: true, value: row.value as JsonValue }
         : { exists: false };
       // Read lazily: the buffer grows while the handler runs.
-      const { hit, current, producers } = readPluginDataKey(
+      const { hit, current, external, producers } = readPluginDataKey(
         visibility,
         overlay,
         pluginId,
@@ -802,6 +813,7 @@ export function createFunctionStoreView(
         namespace,
         key,
         visible: current.exists ? current.value : null,
+        bases: [{ pluginId, namespace, key, current: external }],
         producers,
         withoutUpstream: () => {
           const own = overlayPluginDataValue(
@@ -842,6 +854,7 @@ export function createFunctionStoreView(
         kind: "list",
         ...(namespace !== undefined ? { namespace } : {}),
         visible: observedRows(merged),
+        bases: pluginDataListBases(visibility, pluginId, stored, merged),
         producers: listPluginDataProducers(visibility, namespace),
         withoutUpstream: () =>
           observedRows(

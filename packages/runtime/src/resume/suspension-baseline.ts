@@ -14,8 +14,8 @@
  * proposals are left out: they carry the version they were built from and the
  * commit rejects them when it moved on. A `plugin.data.update` counts only
  * when its operations contain `set` or `delete`: relative operations (`inc`,
- * `merge`, array operations) apply to whatever value is stored at commit, so
- * they cannot put back a stale whole value.
+ * `merge`, array operations) are excluded from this save-time digest. The
+ * separate read-time preconditions protect read-derived replacements.
  *
  * A suspended function also holds the results of its `ctx.recursiveCall`s,
  * which commit with its resume; their writes join the baseline the way the

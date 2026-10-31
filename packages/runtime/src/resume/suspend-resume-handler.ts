@@ -123,6 +123,7 @@ export async function handleSuspension(
   // for the suspender and cancellation results for later calls in its batch)
   // together with buffered writes so resume can continue atomically.
   const pendingContinuation: SuspensionRecord["pendingContinuation"] = {
+    readScopes: [],
     messages: [...messages],
     partialContent: finalContent ?? undefined,
     toolCallsSoFar: [...collectedToolCalls],

@@ -1,4 +1,9 @@
 import {
+  baselinesFor,
+  characterBasisOf,
+  type ReadBaselineRecorder,
+} from "../read-baselines.js";
+import {
   materializeWorldModel,
   DIMENSION_DATA_NAMESPACE,
   dimensionRecordSchema,
@@ -31,6 +36,8 @@ type ObservedProperty = "characters" | "characterSchema";
 interface WorldReadTracking {
   readonly producers: Readonly<Record<ObservedProperty, readonly string[]>>;
   readonly recorder: ReadRecorder;
+  readonly baselines?: ReadBaselineRecorder;
+  readonly characterBaselines: readonly import("@covel/shared").ProposalReadPrecondition[];
 }
 
 // Only the host can snapshot a facade without observing its properties. Neither
@@ -48,6 +55,9 @@ function noteWorldRead(
   key: keyof WorldModelView,
 ) {
   if (!tracking || (key !== "characters" && key !== "characterSchema")) return;
+  if (key === "characters")
+    for (const baseline of tracking.characterBaselines)
+      (tracking.baselines ?? baselinesFor(tracking.recorder)).observe(baseline);
   for (const producer of tracking.producers[key])
     tracking.recorder.add(producer);
 }
@@ -60,10 +70,15 @@ function ownedSnapshot(view: WorldModelView): WorldModelView {
 export function snapshotWorldModelView(
   view: WorldModelView,
   assertLive: () => void = () => {},
+  baselines?: ReadBaselineRecorder,
 ): WorldModelView {
   assertLive();
   const snapshot = ownedSnapshot(view);
-  const tracking = views.get(view)?.tracking;
+  const sourceTracking = views.get(view)?.tracking;
+  const tracking =
+    sourceTracking && baselines
+      ? { ...sourceTracking, baselines }
+      : sourceTracking;
   const copy = Object.defineProperties(
     {},
     Object.fromEntries(
@@ -244,6 +259,21 @@ export async function createWorldModelView(
     reads
       ? {
           recorder: reads.recorder,
+          characterBaselines: [
+            ...new Set(
+              reads.upstream.flatMap(({ proposal }) =>
+                proposal.type === "character.upsert"
+                  ? [proposal.payload.id]
+                  : [],
+              ),
+            ),
+          ].map((id) => ({
+            kind: "character" as const,
+            id,
+            basis: characterBasisOf(
+              base.characters.find((character) => character.id === id),
+            ),
+          })),
           producers: {
             characters: [
               ...new Set(
