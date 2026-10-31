@@ -1205,7 +1205,7 @@ These checks do not run plugin code, and they cannot replace the registration co
 
 ### Text the player sees
 
-- Labels the player sees (`displayName`, `description`, `label`, `title`, `summary`, `about`) are written in English in the main manifest.
+- Labels the player sees (`displayName`, `description`, `label`, `title`, `summary`, `about`, `placeholder`) are written in English in the main manifest.
 - Translations go in `locales/<locale>.yaml` at the plugin root. They are organized by section of the manifest file, and they contain only the translated text. They can be in any language. The loader compiles them into a locale map.
 - A label file can translate only these fields. An entry written on a contract field or on prompt content is ignored, and `pnpm validate:plugin` reports it as an error. An inline locale map in the main manifest is also an error.
 - The `messages` section of the same file translates the text in the UI spec and in the code (from the English original to the translation). For the rules on interface text, see [UI panels](./ui-panels.md#plugin-ui-text-rules). The code reads them with `translate(ctx, …)` or `labelText(ctx, …)`.

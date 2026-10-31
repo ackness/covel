@@ -1205,7 +1205,7 @@ namespace 声明 `search` 之后，它的记录进入框架的记忆检索（[`m
 
 ### 玩家看到的文字
 
-- 玩家可见的标签（`displayName`、`description`、`label`、`title`、`summary`、`about`）在主清单里写 English。
+- 玩家可见的标签（`displayName`、`description`、`label`、`title`、`summary`、`about`、`placeholder`）在主清单里写 English。
 - 译文放在插件根目录的 `locales/<locale>.yaml`，按清单文件分节，只写译文，可以是任意语言。加载器把它们编译成 locale map。
 - 标签文件只能翻译这些字段。写到契约字段或提示词内容上的条目会被忽略，`pnpm validate:plugin` 报为错误。主清单里的内联 locale map 同样报错。
 - 同一个文件的 `messages` 一节翻译 UI spec 和代码里的文字（English 原文 → 译文）。界面文字的规则见 [UI 面板](./ui-panels.md#插件-ui-文本规范)，代码用 `translate(ctx, …)` / `labelText(ctx, …)` 读取。

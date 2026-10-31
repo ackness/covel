@@ -356,7 +356,7 @@ personal 形态信任本机上的其他进程。回环监听、Host 和 Origin �
 `$COVEL_HOME/translations`（`COVEL_USER_TRANSLATIONS_DIR`）存放不是随插件一起来的插件翻译：用户自己拷进去的翻译包，以及在这台机器上做的机器翻译。加载器把它们当数据读：
 
 - 只读标签和 `messages`。提示词正文（`*.zh.md`）只从插件包里读，所以翻译改不了指令。
-- 标签段只保留标签字段（`displayName`、`description`、`label`、`title`、`summary`、`about`），其余内容丢弃。插件自己的 locale 文件也是这样处理的。
+- 标签段只保留标签字段（`displayName`、`description`、`label`、`title`、`summary`、`about`、`placeholder`），其余内容丢弃。插件自己的 locale 文件也是这样处理的。
 - 同一段文本两边都翻译了时，以作者的翻译为准。
 - 不跟随符号链接，只读普通文件。
 

@@ -356,7 +356,7 @@ This is a second door, narrower than the few desktop-only endpoints. `/api/confi
 `$COVEL_HOME/translations` (`COVEL_USER_TRANSLATIONS_DIR`) holds plugin translations that do not come with a plugin: translation packs that the user copied in, and machine translations made on this machine. The loader reads them as data:
 
 - It reads only labels and `messages`. Prompt bodies (`*.zh.md`) are read only from the plugin package, so a translation cannot change the instructions.
-- A label section keeps only the label fields (`displayName`, `description`, `label`, `title`, `summary`, `about`), and the rest is discarded. A plugin's own locale files are handled the same way.
+- A label section keeps only the label fields (`displayName`, `description`, `label`, `title`, `summary`, `about`, `placeholder`), and the rest is discarded. A plugin's own locale files are handled the same way.
 - When the same text is translated on both sides, the author's translation wins.
 - Symbolic links are not followed, and only regular files are read.
 

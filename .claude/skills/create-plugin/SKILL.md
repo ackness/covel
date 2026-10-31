@@ -57,7 +57,7 @@ out fields written with their default value.
 
 Write `PLUGIN.md`, `RUNTIME.md` and `ui/*.json` in English: labels, tool
 descriptions, UI text, and the prompt body. Put label translations
-(`displayName`, `description`, `label`, `title`, `summary`, `about`) in
+(`displayName`, `description`, `label`, `title`, `summary`, `about`, `placeholder`) in
 `locales/<locale>.yaml`, one section per manifest file, and UI text translations
 in the same file under `messages` (English text, then its translation). Code
 writes English too and reads the same `messages` through `translate(ctx, "…")`
