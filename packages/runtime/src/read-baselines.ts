@@ -226,36 +226,60 @@ export function orderReadScopeProposals(
 function targets(
   proposal: Proposal,
 ): { readonly key: string; readonly replacement: boolean }[] {
+  // Raw commands reach preparation before payload validation. Invalid shapes
+  // must remain proposal failures in their own commit unit.
+  if (!proposal.payload || typeof proposal.payload !== "object") return [];
   switch (proposal.type) {
     case "plugin.data.batch":
-      return proposal.payload.items.map((item) => ({
-        key: targetKey({
-          kind: "plugin-data",
-          pluginId: proposal.source.pluginId,
-          ...item,
-          basis: { exists: false },
-        }),
-        replacement: true,
-      }));
+      return Array.isArray(proposal.payload.items)
+        ? proposal.payload.items.flatMap((item) =>
+            item &&
+            typeof item.namespace === "string" &&
+            typeof item.key === "string"
+              ? [
+                  {
+                    key: targetKey({
+                      kind: "plugin-data",
+                      pluginId: proposal.source.pluginId,
+                      namespace: item.namespace,
+                      key: item.key,
+                      basis: { exists: false },
+                    }),
+                    replacement: true,
+                  },
+                ]
+              : [],
+          )
+        : [];
     case "plugin.data":
     case "plugin.data.delete":
     case "plugin.data.update":
+      if (
+        typeof proposal.payload.namespace !== "string" ||
+        typeof proposal.payload.key !== "string"
+      )
+        return [];
       return [
         {
           key: targetKey({
             kind: "plugin-data",
             pluginId: proposal.source.pluginId,
-            ...proposal.payload,
+            namespace: proposal.payload.namespace,
+            key: proposal.payload.key,
             basis: { exists: false },
           }),
           replacement:
             proposal.type !== "plugin.data.update" ||
-            proposal.payload.ops.some((op) =>
-              ["set", "merge", "upsertItem", "delete"].includes(op.op),
-            ),
+            (Array.isArray(proposal.payload.ops) &&
+              proposal.payload.ops.some(
+                (op) =>
+                  op &&
+                  ["set", "merge", "upsertItem", "delete"].includes(op.op),
+              )),
         },
       ];
     case "character.upsert":
+      if (typeof proposal.payload.id !== "string") return [];
       return [
         {
           key: targetKey({

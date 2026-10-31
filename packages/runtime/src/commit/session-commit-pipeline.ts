@@ -351,6 +351,11 @@ export function createCommitPipeline(
       // the buffer along with the rollback — clients never see events for
       // rolled-back data.
       const postCommit: Array<() => Promise<void>> = [];
+      // A hook veto removes the proposal from screening, but cannot remove
+      // the original batch's atomicity requirement.
+      const guardedBatch = proposals.some(
+        (proposal) => (proposal.preconditions?.length ?? 0) > 0,
+      );
       // PreStateCommit runs before the transaction opens; a vetoed proposal
       // keeps its slot as a failed result without reaching a handler.
       const screened: Array<
@@ -399,13 +404,7 @@ export function createCommitPipeline(
             );
           }
           signal?.throwIfAborted();
-          if (
-            txResults.some((result) => !result.committed) &&
-            screened.some(
-              (entry) =>
-                "proposal" in entry && entry.proposal.preconditions?.length,
-            )
-          )
+          if (txResults.some((result) => !result.committed) && guardedBatch)
             throw new GuardedBatchRejected(txResults);
           return txResults;
         });

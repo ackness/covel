@@ -4,8 +4,8 @@
 
 ### Added
 
-- **The host guards read-derived replacements against stale same-key data.** Explicit reads capture private content baselines, including absence, with separate invocation and provider-call scopes. Hooks cannot erase or redirect guards. Checks run at the serialized transaction mutation boundary and survive suspension and resume. Accepted sub-agent reads through inherited world views contribute character baselines to the caller; failed or cancelled children discard them.
+- **The host guards read-derived replacements against stale same-key data.** Explicit reads capture private content baselines, including absence, with separate invocation and provider-call scopes. Payload fields cannot override the host's target identity. Hooks cannot erase or redirect guards; vetoing a guarded prefix rolls back the batch and its success notifications. Checks run at the serialized transaction mutation boundary and survive suspension and resume. Accepted sub-agent reads through inherited world views contribute character baselines to the caller; failed or cancelled children discard them.
 
 ### Changed
 
-- **Derived replacements can be rejected with `conflict`.** Guards include `merge`, `upsertItem` and delete, protecting an entire `inc` plus derived `merge` list. Pure relative lists and blind writes keep their existing semantics. Auxiliary conflicts discard their unit; a failed story-attached operation preserves story text and unrelated operations. Retries are explicit and conflicts do not increment plugin fault counts. Cross-key and phantom protection are excluded.
+- **Derived replacements can be rejected with `conflict`.** Guards include `merge`, `upsertItem` and delete, protecting an entire `inc` plus derived `merge` list. Pure relative lists and blind writes keep their existing semantics. Auxiliary conflicts discard their unit; malformed auxiliary payloads fail ordinary proposal validation and preserve valid story text. A failed story-attached operation preserves story text and unrelated operations. Retries are explicit and conflicts do not increment plugin fault counts. Cross-key and phantom protection are excluded.
