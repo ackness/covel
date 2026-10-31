@@ -362,3 +362,31 @@ it("validates the bridge adopter without executing handlers and keeps a UI-only 
   expect(clean.executionAssessment?.mode).toBe("declarative");
   expect((await validatePluginPackage(root)).ok).toBe(true);
 });
+
+it("theme resource declarations never create executable browser exceptions", () => {
+  const theme = {
+    runtime: undefined,
+    contributes: { ui: { theme: ["./theme.json"] } },
+  };
+  const files = {
+    "theme.json": JSON.stringify({
+      id: "reading",
+      label: "Reading",
+      css: "theme.css",
+      assets: { root: "art" },
+    }),
+    "theme.css": ".story{color:var(--story-color)}",
+  };
+  expect(assess(theme, files).mode).toBe("declarative");
+  for (const extension of ["js", "ts", "wasm", "node"])
+    expect(
+      assess(theme, { ...files, [`art/code.${extension}`]: "code" }).mode,
+    ).toBe("code");
+  expect(assess({ ...theme, entry: "./server/index.js" }, files).mode).toBe(
+    "code",
+  );
+  expect(
+    assess(theme, { ...files, "theme.json": "invalid", "art/code.js": "code" })
+      .mode,
+  ).toBe("code");
+});

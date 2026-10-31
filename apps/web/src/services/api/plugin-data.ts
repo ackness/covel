@@ -1,6 +1,9 @@
 import i18n from "@/i18n/index.js";
 import { request } from "./request.js";
-import type { SegmentTemplateMatch } from "@covel/shared";
+import type {
+  ResolvedPluginThemeEntry,
+  SegmentTemplateMatch,
+} from "@covel/shared";
 
 // -- Plugin Data API -------------------------------------------
 
@@ -72,14 +75,15 @@ export interface UISlotEntry {
 export interface UiSpecDiagnostic {
   pluginId: string;
   runtimeId: string;
-  slot: "right" | "message" | "view" | "segment";
+  slot: "right" | "message" | "view" | "segment" | "theme";
   specIndex: number;
   declaredPath?: string;
   specId?: string;
-  issues: { path: string; message: string; code: string }[];
+  issues: { path: string; message: string; code: string; file?: string }[];
 }
 
 export interface UISpecsResponse {
+  theme: ResolvedPluginThemeEntry[];
   right: UISlotEntry[];
   message?: UISlotEntry[];
   view?: UISlotEntry[];

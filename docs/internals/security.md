@@ -546,3 +546,7 @@ SillyTavern 内容导入使用有上限的 PNG 块遍历（读数据前先检查
 呈现上下文使用独立构造路径，只复制公开 `segments` / `cues`、精简角色身份和明确允许的自有数据。concealed / 失败 / 非故事结果、隐藏 namespace、原始 digest 和服务入口不进入它。`_presentation_budget` 属于 `__kernel:presentation` 的控制面，只保存来源与计数；插件、RPC、数据工具和可移植视图不可见，snapshot / fork / 浏览器 checkpoint 排除它。额度保留到会话删除；restore / reset 改变代次，旧作业不能接到新会话。函数 JS 本身仍非沙箱，原有代码批准不变。见[呈现 runtime](../reference/plugins.md#presentation-runtimes)。
 
 普通 session 页面只接收版本 2 的公开 DTO，不继承右侧面板的 KV、context、jobs 或 action/command/event 处理器。所有修改通过认证宿主进入普通玩家行动/交互或所属插件的手动 runtime 提案通道；opaque iframe 仍不能请求 `/api`、读取存储、密钥或 Electron IPC。会话/内容/授权/页面尝试变化会使租约失效，等待中的审批不能重试旧调用。回复只含安全状态；失败和成功都不发送嵌套执行输出。资源路由在 HEAD/304 判断前也核对实际内容哈希，避免旧摘要执行同长度新内容。沙箱不防护恶意操作系统所有者；旧不可变缓存仍是旧的已同意内容。不提供整块替换或心跳恢复。详见[会话页面契约](../reference/ui-panels.md#读取会话前的授权)。
+
+## 插件主题的样式边界
+
+插件主题使用 shared 的 `css-tree` AST 编译器，严格限制目标、属性和值，拒绝解析恢复、转义、at-rule 和表外声明；不是应用级导入主题的作用域检查。编译后的 scope 与 part 只匹配宿主指定的正文/装饰元素，不能放在含宿主控件的祖先上。URL 只从本包当前摘要的位图清单生成，公共 DTO 再校验确切 owner/digest/path；CSP 的本源图片许可不能代替此检查。磁盘和 ZIP 使用相同字节校验，主题资源无脚本例外、无 bridge、无能力授权；内置来源也不放宽策略。位图服务同时拒绝链接父目录和内容哈希不匹配。完整规则见[主题契约](../reference/theme-packages.md#插件提供的受限主题)。应用级导入 CSS 的既有限制与风险保持不变。

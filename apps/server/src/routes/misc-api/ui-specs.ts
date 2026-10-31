@@ -1,6 +1,10 @@
+import type {
+  ResolvedPluginTheme,
+  ResolvedPluginThemeEntry,
+} from "@covel/shared";
 import {
   loadPluginUiSpecs,
-  PLUGIN_UI_SLOTS,
+  PLUGIN_UI_SPEC_SLOTS,
   pluginDeclarations,
 } from "@covel/plugin-loader";
 import type { PluginAssetRoot, PluginRegistry } from "@covel/plugin-loader";
@@ -9,10 +13,13 @@ import { runnablePluginIds } from "../api/session/plugins.js";
 import { type UiSlotName } from "./shared.js";
 import type { UiSpecDiagnostic } from "./ui-spec-schema.js";
 
-const UI_SLOTS = PLUGIN_UI_SLOTS satisfies readonly UiSlotName[];
+const UI_SLOTS = PLUGIN_UI_SPEC_SLOTS satisfies readonly UiSlotName[];
 
 type SlotSpecs = Partial<
-  Record<UiSlotName, readonly Readonly<Record<string, unknown>>[]>
+  Record<
+    Exclude<UiSlotName, "theme">,
+    readonly Readonly<Record<string, unknown>>[]
+  >
 >;
 
 interface RuntimeSlotSpecs {
@@ -21,6 +28,7 @@ interface RuntimeSlotSpecs {
 }
 
 interface PluginSlotSpecs {
+  readonly themes: readonly ResolvedPluginTheme[];
   readonly pluginId: string;
   readonly runtimes: readonly RuntimeSlotSpecs[];
 }
@@ -53,6 +61,8 @@ async function projectRegistryUiSpecs(
     if (entry.status === "error" || !entry.rootPath) continue;
     const runtimes: RuntimeSlotSpecs[] = [];
     const viewIds = new Set<string>();
+    const themes: ResolvedPluginTheme[] = [];
+    const themeState = { ids: new Set<string>(), count: 0 };
 
     for (const { manifest } of pluginDeclarations(entry)) {
       if (!manifest.ui) continue;
@@ -62,7 +72,9 @@ async function projectRegistryUiSpecs(
         entry.rootPath,
         entry.id,
         manifest.ui,
+        themeState,
       );
+      themes.push(...loaded.themes);
       for (const asset of loaded.assets) {
         const roots =
           assets.get(entry.id) ?? new Map<string, PluginAssetRoot>();
@@ -124,8 +136,8 @@ async function projectRegistryUiSpecs(
       }
     }
 
-    if (runtimes.length > 0) {
-      pluginSpecs.push({ pluginId: entry.id, runtimes });
+    if (runtimes.length > 0 || themes.length > 0) {
+      pluginSpecs.push({ pluginId: entry.id, runtimes, themes });
     }
   }
 
@@ -168,6 +180,7 @@ export async function buildUiSpecsResponse(params: {
     pluginId: string;
     specs: readonly Record<string, unknown>[];
   }>;
+  theme: ResolvedPluginThemeEntry[];
   diagnostics: UiSpecDiagnostic[];
 }> {
   const { sessionId, session: knownSession, registry, store } = params;
@@ -183,15 +196,21 @@ export async function buildUiSpecsResponse(params: {
     pluginId: string;
     specs: readonly Record<string, unknown>[];
   };
-  const bySlot: Record<UiSlotName, SlotEntry[]> = {
+  const bySlot: Record<Exclude<UiSlotName, "theme">, SlotEntry[]> = {
     right: [],
     message: [],
     view: [],
     segment: [],
   };
 
+  const theme: ResolvedPluginThemeEntry[] = [];
   for (const plugin of loaded.pluginSpecs) {
     if (activeFilter && !activeFilter.has(plugin.pluginId)) continue;
+    if (plugin.themes.length)
+      theme.push({
+        pluginId: plugin.pluginId,
+        specs: plugin.themes.map((spec) => structuredClone(spec)),
+      });
     for (const slot of UI_SLOTS) {
       const specs = plugin.runtimes.flatMap(
         (runtime) => runtime.slots[slot] ?? [],
@@ -213,7 +232,7 @@ export async function buildUiSpecsResponse(params: {
   const diagnostics = loaded.diagnostics.filter(
     (diagnostic) => !activeFilter || activeFilter.has(diagnostic.pluginId),
   );
-  return { ...bySlot, diagnostics };
+  return { ...bySlot, theme, diagnostics };
 }
 
 export async function findPluginAssetRoot(

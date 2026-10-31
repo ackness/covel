@@ -1496,3 +1496,7 @@ runtime:
 调用 `ctx.presentation.note(reason)` 记录固定代码：`no-story`、`no-scene-change`、`asset-missing`、`budget-exhausted`、`unavailable`、`superseded`、`no-output`、`failed`。不能传自由文本。没有展示写入且没有 note 时推导 `no-output`；业务返回值本身不算可见产出。预算拒绝是正常 no-op，可以捕获后继续使用已有素材；未捕获则丢弃未完成写入，不归为插件故障。自身异常、无效输出和超时保持原有故障归属。
 
 每次结算通过 [`presentation.completed`](./protocol.md#presentation-completed) 留下状态、来源关联和额度计数。它不增加每回合玩家通知。呈现 function 仍是已批准的非沙箱服务端 JS；这个 API 策略不替代[代码审批](./plugin-installation.md)，也不限制代码直接使用 Node 的权限。
+
+## 静态主题声明
+
+`contributes.ui.theme: [./ui/reading-theme.json]` 声明受限静态主题。它可单独存在于无 runtime、无 entry 的包中，不是 view/webview。CLI、应用内校验、ZIP 安装和发现共用同一编译器；坏主题只在发现响应中被移除并返回 `slot: "theme"` 诊断。字段、安全边界与资源限制见[插件主题契约](./theme-packages.md#插件提供的受限主题)。当前只提供作者与 API 支持，尚无玩家启用入口。

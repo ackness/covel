@@ -779,3 +779,7 @@ export {
 export { resolveWorldPluginSelection } from "./world-plugin-selection.js";
 
 export * from "./schemas/session-bridge.js";
+
+export * from "./schemas/plugin-theme.js";
+export * from "./plugin-theme-css.js";
+export * from "./plugin-theme.js";

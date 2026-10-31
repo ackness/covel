@@ -218,7 +218,7 @@ contributes:
       - ./ui/my-panel.json
 ```
 
-本页说的 `ui.right`、`ui.message`、`ui.view`、`ui.segment` 都是指 `contributes.ui` 下的键。支持这四个位置；舞台决策区通过右侧面板的 `surfaces` 选择，故事段落的模板见[段落模板](#段落模板)。清单里的其他位置（包括已删除的 `left`）在加载时被忽略并记入日志，`pnpm validate:plugin` 则报未知字段错误。
+本页说的 `ui.right`、`ui.message`、`ui.view`、`ui.segment` 都是指 `contributes.ui` 下的键。这四个位置使用面板/模板 schema；另外的 `ui.theme` 使用[独立主题 schema](./theme-packages.md#插件提供的受限主题)；舞台决策区通过右侧面板的 `surfaces` 选择，故事段落的模板见[段落模板](#段落模板)。清单里的其他位置（包括已删除的 `left`）在加载时被忽略并记入日志，`pnpm validate:plugin` 则报未知字段错误。
 
 ### JSON Spec 格式
 
@@ -1273,3 +1273,7 @@ agent runtime 调用 `suspend` 之后，会话工具条上出现一个徽标。�
 ## 呈现数据与位置降级
 
 界面槽位消费已提交的呈现自有状态。没有公开故事、素材、额度或生成失败时，故事与输入框继续工作；只少对应展示。呈现不能直接返回 UI proposal，也不增加组件或提供方选择控件。见[呈现 runtime](./plugins.md#presentation-runtimes)。
+
+## 独立的主题位置
+
+`contributes.ui.theme` 使用独立的严格主题 schema，不执行 view/webview，不读取会话或申请 bridge。位图根没有 HTML 入口，和页面资源清单分开；坏主题仅报告该项，合法面板和主题继续发现。当前只提供编译和发现，尚不挂载样式。详见[插件主题](./theme-packages.md#插件提供的受限主题)。

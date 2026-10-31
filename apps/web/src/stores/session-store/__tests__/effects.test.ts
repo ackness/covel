@@ -19,6 +19,7 @@ const { useUiSpecHydrationEffect, usePersistExecutionStepsEffect } =
 const generationRef = { current: 0 };
 
 const messageSpecs = {
+  theme: [],
   right: [],
   message: [
     {
@@ -87,7 +88,9 @@ describe("useUiSpecHydrationEffect", () => {
   it("drops message rows that resolve after switching sessions", async () => {
     let releaseRows!: (rows: unknown[]) => void;
     api.fetchUiSpecs.mockImplementation(async (sessionId: string) =>
-      sessionId === "sess-a" ? messageSpecs : { right: [], message: [] },
+      sessionId === "sess-a"
+        ? messageSpecs
+        : { right: [], theme: [], message: [] },
     );
     api.listPluginData.mockReturnValue(
       new Promise((resolve) => {

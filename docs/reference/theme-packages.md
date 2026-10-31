@@ -611,3 +611,92 @@ html[data-theme="my-theme"][data-turn="executing"] .ui-composer-input {
 - `apps/web/src/themes/builtins/modern/theme.css`
 - `apps/web/src/themes/builtins/paper/theme.css`
 - `apps/web/src/themes/builtins/abyss/theme.css`
+
+## 插件提供的受限主题
+
+`contributes.ui.theme` 发布静态主题 JSON，与本页前面的应用级导入主题不同。目前支持作者校验、编译、资源发布和 API 发现；客户端尚未提供按会话选择或挂载插件主题。此声明不启用插件，不授予服务器代码、会话读取或桥接能力，也不增加故事依赖。
+
+```yaml
+contributes:
+  ui:
+    theme: [./ui/reading-theme.json]
+```
+
+```json
+{
+  "specVersion": 1,
+  "id": "reading",
+  "label": "Reading room",
+  "description": "Quiet colors for the story and stage text.",
+  "tokens": {
+    "light": { "--story-color": "#302818", "--surface-story": "#fff5dd" },
+    "dark": { "--story-color": "#f5ead2", "--surface-story": "#24201a" }
+  },
+  "layout": { "preset": "book" },
+  "css": "./ui/reading-theme.css",
+  "assets": { "root": "./ui/reading-assets" }
+}
+```
+
+所有对象严格拒绝未知字段。`specVersion` 省略为当前版本 1，未来版本拒绝。`id` 匹配 `^[a-z][a-z0-9-]{0,63}$`，身份由宿主绑定为 `(pluginId, id)`。`label` 必填，每个语言值最多 80 字符；可选 `description` 最多 240 字符，均只作为文本显示。作者在文件中写英文，译文放 `locales/<locale>.yaml` 的 `messages`，加载器编译为 `I18nText`，按统一规则解析，见 [i18n](./i18n.md)。
+
+`tokens`、`layout`、`css` 至少提供一项；只有 `assets` 不算主题。各模式的 token 是非空部分映射，缺少的模式或颜色继承基础外观。`layout` 只接受 `{ preset: "classic" | "book" | "stage" | "panel" }`，不接受单项覆盖。消费方只能采用预设的 `panelTabs`、`backdrop`、`turnNotes`，保留玩家的 `nav`、`worldList`；省略时保留全部基础布局。不得修改全局 scheme 或 `ui.appearance`，不得替换 SettingsStore 或增加 ThemeProvider。
+
+### 插件调色板
+
+只接受不透明 `#rgb` / `#rrggbb`，统一展开为小写六位颜色。允许的变量只有：
+
+```text
+--color-background       --surface-page
+--surface-story          --surface-elevated
+--color-foreground       --story-color
+--color-muted-foreground --color-border
+--rule-color             --accent-primary
+--color-primary-foreground
+--accent-success         --accent-warning          --accent-danger
+```
+
+不得使用完整外观工作室 token 列表、透明色、`var()`、表达式或 CSS 字符串。消费方只在宿主标出的正文和装饰表面设置调色板；不得放在 `<html>` 或包含宿主控件的祖先元素上。外观顺序为基础外观、所选插件外观、适用的玩家 token 覆盖。导航、设置、审批、执行控制和返回默认界面控件必须保持独立，不得被选择、继承影响或覆盖。
+
+### 插件 CSS 语言
+
+只接受 `.story`、`.dialogue`、`.surface`，逗号列表中每一项都必须是其中一个完整选择器。宿主把它们编译为同一元素上的两个属性，例如 `[data-covel-theme-scope="<contentHash>"][data-covel-theme-part="story"]`，不拼接作者选择器。重复的合法目标会合并，避免扩大生成样式。任何组合器、额外 class、类型、ID、属性、通配符、伪类、伪元素、选择器函数或嵌套均拒绝。
+
+<!-- prettier-ignore -->
+| 目标 | 属性 | 唯一允许的值 |
+| --- | --- | --- |
+| 三者 | `background-color`、`border-color` | 单个 `var(--允许的调色板变量)`，无回退或嵌套 |
+| story / dialogue | `color` | 同上；surface 不接受文字颜色 |
+| 三者 | `border-style` | `none` / `solid` / `dashed` / `dotted` |
+| 三者 | `border-width` / `border-radius` | 单个有限 `0..4px` / `0..24px` |
+| story / dialogue | `font-family` | `serif` / `sans-serif` / `monospace` |
+| story / dialogue | `font-weight` / `font-style` | 整数 `400..700` / `normal` 或 `italic` |
+| story / dialogue | `font-size` / `line-height` / `letter-spacing` | 有限 `0.875..1.5rem` / 无单位 `1.2..2.4` / `0..0.08em` |
+| surface | `background-image` | `none` 或单个经过资源校验的 `url()` |
+| surface | `background-repeat` / `background-size` | `repeat` 或 `no-repeat` / `auto`、`cover` 或 `contain` |
+
+完整样式表由 `css-tree` 解析成 AST；拒绝解析恢复、Raw / 未知节点、全部 at-rule（包括 media、supports、import、font-face、keyframes、property、layer、scope）、转义、`!important`、私有属性、厂商别名及表外所有属性和值。注释忽略，CSS 不区分大小写的标识符先规范化；class 与 token 名仍区分大小写。禁止定位、尺寸、边距、隐藏、透明度、交互、内容、动画、滤镜、变换、混合、计数器、字体来源和任意网络请求。只从通过校验的节点生成样式，不返回或挂载源 CSS；一条违规会移除整个主题，合法的其他主题、面板和游戏继续可用。显式空 CSS 或 CSS 文件缺失同样拒绝。
+
+### 位图资源与限制
+
+描述文件、CSS 文件和 `assets.root` 均相对包根目录。CSS 中的 URL 相对素材根目录，而非 CSS 所在目录；例如 `url(paper.png)` 编译为 `/plugin-assets/<pluginId>/<digest>/paper.png`。只允许列表中本包、本摘要的 PNG、JPEG、WebP、GIF、AVIF，扩展名、MIME 和文件签名必须一致。拒绝绝对地址、协议相对地址、所有 scheme、查询、片段、用户信息、反斜线、NUL、父路径、隐藏/保留目录、编码分隔符或穿越、外包和旧摘要地址。百分号编码只解码一次再校验；不下载或代理图片。
+
+<!-- prettier-ignore -->
+| 内容 | 上限 |
+| --- | --- |
+| 每个包的主题声明 | 8 |
+| 描述 JSON，包括编译后的完整译文 | 32 KiB UTF-8 |
+| 作者 CSS | 64 KiB UTF-8 |
+| CSS 规则 / 每条声明 / 总声明 | 128 / 32 / 2,048 |
+| 每个作者声明值 | 256 字符 |
+| 每个主题素材根的位图数 / 总大小 / 单文件 | 32 / 8 MiB / 2 MiB |
+
+超限即拒绝，不截断。所有文件读取有界；目录、文件及父路径不得含链接或 junction，禁止发布包根目录、隐藏目录、`node_modules` 或保留的 `__covel__`。主题素材根没有 HTML 入口，不注入 bridge，也不发布 HTML、JS、SVG 或字体。即使与页面目录重叠，两种用途的清单和摘要仍独立；普通页面保留原有资源/CSP 规则。资源公开、静态，不属于会话媒体或 KV。服务时检查当前列表、路径、大小与确切字节哈希；同大小替换也拒绝，重新注册后新摘要生效，旧地址统一 404。
+
+### 已解析主题与内容身份
+
+`GET /api/ui-specs` 必有 `theme: [{ pluginId, specs: ResolvedPluginTheme[] }]`，没有主题时为 `[]`。每项只含宿主绑定的 `pluginId`、本地 `id`、编译后的 `label` / `description`、可选 `tokens` / `layout`、`contentHash`、可选已编译的 `cssText` 和 `assets: { digest, files: [{ path, mime, size }] }`。不包含源 CSS、磁盘根目录、数据行、设置、密钥或能力。`resolvedPluginThemeSchema` 再次校验生成的选择器以及 URL 与确切 owner、digest、列表路径的对应关系。
+
+`contentHash` 是小写完整 SHA-256（64 位），不同于资源的 32 位摘要。规范化载荷覆盖策略版本、包身份、语义字段、全部语言映射、源 CSS 字节和位图内容摘要；键顺序不影响身份，切换 UI 语言也不影响，修改译文则影响。先计算哈希，再代入 scope，避免循环。每次响应复制已解析主题；registry 按快照缓存，重新注册时失效，GET 不导入 entry、不扫描包、不读写插件数据。无 runtime、无 entry 的 JSON/CSS/位图包仍为声明式社区插件；主题根中的可执行文件不获得浏览器代码例外，实际 entry 保持原有代码授权要求。
+
+诊断的 `slot` 为 `theme`，含声明位置、可用的本地 ID 和字段/规则路径；CSS 问题可附包内 `file`，不含宿主路径或原始 CSS。重复 ID 保留首个合法主题，其余诊断；不同包可用同一本地 ID。CLI、应用内包校验、ZIP 安装与运行时发现使用同一 schema、资源规划和编译器。作者检查可报告包无效，运行时只隐藏出错的主题。

@@ -700,3 +700,7 @@ For story-driven backdrops or music, use a [presentation selector](./advanced.md
 ## Request player actions from a session page
 
 See the two ordinary views and shared page in [sandbox-surface-probe](../../../tests/third-party/sandbox-surface-probe/README.md). It reads public story and input context, answers interactions using handles, and saves dataset records through its own manual function runtime. Adding `capabilities` to the spec gives the player individual capability descriptions; server-code approval and page consent do not replace each other. Clear the action draft only for an accepted outcome, preserving it on refusal. Ordinary view layout is unchanged; main/composer replacement and heartbeat recovery are unavailable. See [page requests](../reference/ui-panels.md#page-requests-and-safe-outcomes) for the full contract.
+
+## Publishing static themes
+
+Put palettes and restricted styles in separate JSON files under `contributes.ui.theme`, without a runtime, dummy panel or entry. Descriptor, CSS and asset-root paths are package-relative; CSS image paths are asset-root-relative. See [plugin themes](../reference/theme-packages.md#restricted-themes-supplied-by-plugins) for the example and validation limits. Static validation and API discovery are available; the player interface does not yet mount them.

@@ -612,3 +612,92 @@ You can use the built-in themes as real references:
 - `apps/web/src/themes/builtins/modern/theme.css`
 - `apps/web/src/themes/builtins/paper/theme.css`
 - `apps/web/src/themes/builtins/abyss/theme.css`
+
+## Restricted themes supplied by plugins
+
+`contributes.ui.theme` publishes static theme JSON, separately from the app-wide imported themes above. Author validation, compilation, resource publication and API discovery are available; the client does not yet offer session selection or mount plugin themes. A declaration does not enable its plugin, grant server code, session reads or bridge capabilities, or add a story dependency.
+
+```yaml
+contributes:
+  ui:
+    theme: [./ui/reading-theme.json]
+```
+
+```json
+{
+  "specVersion": 1,
+  "id": "reading",
+  "label": "Reading room",
+  "description": "Quiet colors for the story and stage text.",
+  "tokens": {
+    "light": { "--story-color": "#302818", "--surface-story": "#fff5dd" },
+    "dark": { "--story-color": "#f5ead2", "--surface-story": "#24201a" }
+  },
+  "layout": { "preset": "book" },
+  "css": "./ui/reading-theme.css",
+  "assets": { "root": "./ui/reading-assets" }
+}
+```
+
+All objects reject unknown fields. Omitted `specVersion` means the current version 1; future versions are rejected. `id` matches `^[a-z][a-z0-9-]{0,63}$`; the host binds identity to `(pluginId, id)`. Required `label` has at most 80 characters per language; optional `description` has at most 240. Both are text only. Authors write English in the file and translations under `messages` in `locales/<locale>.yaml`. The loader compiles `I18nText`; use the shared resolution rules in [i18n](./i18n.md).
+
+At least one of `tokens`, `layout`, or `css` must contribute; `assets` alone is not a theme. Each scheme's tokens are a nonempty partial map; missing schemes or colors inherit base appearance. `layout` accepts only `{ preset: "classic" | "book" | "stage" | "panel" }`, without option overrides. Consumers may take only the preset's `panelTabs`, `backdrop`, and `turnNotes`, retaining the player's `nav` and `worldList`; omission retains the full base layout. Consumers must preserve the global scheme, `ui.appearance` and SettingsStore authority, without a separate ThemeProvider.
+
+### Plugin palette
+
+Only opaque `#rgb` / `#rrggbb` colors are accepted and expanded to lowercase six-digit colors. The only allowed variables are:
+
+```text
+--color-background       --surface-page
+--surface-story          --surface-elevated
+--color-foreground       --story-color
+--color-muted-foreground --color-border
+--rule-color             --accent-primary
+--color-primary-foreground
+--accent-success         --accent-warning          --accent-danger
+```
+
+The full appearance-studio token list, alpha colors, `var()`, expressions and CSS strings are unavailable. Consumers apply the palette only to host-designated narrative and decorative parts, never `<html>` or ancestors containing host controls. Appearance order is base appearance, selected plugin appearance, then applicable player token overrides. Navigation, settings, approvals, execution controls and return-to-default controls must stay independent of selectors, inheritance and coverage.
+
+### Plugin CSS language
+
+Only `.story`, `.dialogue`, and `.surface` are accepted; every member of a comma list must be one complete target. The host compiles them to two attributes on the same element, for example `[data-covel-theme-scope="<contentHash>"][data-covel-theme-part="story"]`, without appending author selectors. Repeated valid targets collapse to bound generated scope expansion. Combinators, additional classes, types, IDs, attributes, universal selectors, pseudo-classes/elements, selector functions and nesting are rejected.
+
+<!-- prettier-ignore -->
+| Target | Properties | Only accepted values |
+| --- | --- | --- |
+| All three | `background-color`, `border-color` | One `var(--allowed-palette-token)`, without fallback or nesting |
+| story / dialogue | `color` | Same as above; surface does not accept text color |
+| All three | `border-style` | `none` / `solid` / `dashed` / `dotted` |
+| All three | `border-width` / `border-radius` | One finite `0..4px` / `0..24px` |
+| story / dialogue | `font-family` | `serif` / `sans-serif` / `monospace` |
+| story / dialogue | `font-weight` / `font-style` | Integer `400..700` / `normal` or `italic` |
+| story / dialogue | `font-size` / `line-height` / `letter-spacing` | Finite `0.875..1.5rem` / unitless `1.2..2.4` / `0..0.08em` |
+| surface | `background-image` | `none` or one resource-validated `url()` |
+| surface | `background-repeat` / `background-size` | `repeat` or `no-repeat` / `auto`, `cover`, or `contain` |
+
+`css-tree` parses the entire stylesheet into an AST. Parse recovery, Raw/unknown nodes, every at-rule (including media, supports, import, font-face, keyframes, property, layer, scope), escapes, `!important`, custom properties, vendor aliases and everything outside the table are rejected. Comments are ignored and CSS case-insensitive identifiers normalized; classes and token names remain case-sensitive. Positioning, dimensions, margins, hiding, opacity, interaction, content, animation, filters, transforms, blending, counters, font sources and arbitrary network requests are forbidden. CSS is generated only from accepted nodes; source CSS is never returned or mounted. One violation removes the whole theme while valid sibling themes, panels and the game remain available. Explicit empty CSS and missing CSS files are also rejected.
+
+### Bitmap resources and limits
+
+Descriptors, CSS files and `assets.root` are package-relative. CSS URLs are asset-root-relative, independently of the CSS directory: `url(paper.png)` becomes `/plugin-assets/<pluginId>/<digest>/paper.png`. Only listed own-owner/current-digest PNG, JPEG, WebP, GIF and AVIF files are accepted, with matching extensions, MIME and file signatures. Absolute/protocol-relative URLs, all schemes, queries, fragments, userinfo, backslashes, NUL, parent paths, hidden/reserved directories, encoded separators/traversal, foreign owners and stale digests are rejected. Percent encoding is decoded once before validation; images are never downloaded or proxied.
+
+<!-- prettier-ignore -->
+| Content | Limit |
+| --- | --- |
+| Theme declarations per package | 8 |
+| Descriptor JSON, including complete compiled translations | 32 KiB UTF-8 |
+| Author CSS | 64 KiB UTF-8 |
+| CSS rules / declarations per rule / total declarations | 128 / 32 / 2,048 |
+| Each authored declaration value | 256 characters |
+| Bitmaps per theme root / combined size / individual size | 32 / 8 MiB / 2 MiB |
+
+Overflow rejects without truncation. Reads are bounded; roots, files and parents cannot contain links or junctions. Package roots, hidden directories, `node_modules` and reserved `__covel__` cannot be published. A theme root has no HTML entry or bridge injection and publishes no HTML, JS, SVG or fonts. Even overlapping page/theme directories have separate purpose-specific listings and digests; ordinary pages retain their existing resources and CSP. Resources are public static files, not session media or KV. Serving verifies current listing, containment, size and exact byte hash. Same-size replacements are refused; re-registration publishes the new digest and old URLs uniformly return 404.
+
+### Resolved themes and content identity
+
+`GET /api/ui-specs` always includes `theme: [{ pluginId, specs: ResolvedPluginTheme[] }]`, or `[]` when absent. Each item contains only host-bound `pluginId`, local `id`, compiled `label` / `description`, optional `tokens` / `layout`, `contentHash`, optional compiled `cssText`, and `assets: { digest, files: [{ path, mime, size }] }`. There is no source CSS, filesystem root, data row, setting, secret or capability. `resolvedPluginThemeSchema` revalidates generated selectors and the exact owner/digest/listed-path URL relationship.
+
+`contentHash` is full lowercase SHA-256 (64 characters), distinct from the 32-character asset digest. A canonical payload covers policy version, owner identity, semantic fields, all localized text maps, source CSS bytes and bitmap content digest. Key order and UI language switching do not change identity; translation edits do. The hash is computed before inserting it into selectors. Responses copy resolved themes from a registry-snapshot cache invalidated on re-registration; GET never imports entries, scans packages or reads/writes plugin data. A zero-runtime JSON/CSS/bitmap-only package remains declarative/community. Executable files in theme roots receive no browser-code exception; actual entries retain existing code approval requirements.
+
+Diagnostics use `slot: "theme"`, declaration position, available local ID and field/rule paths. CSS issues may include a package-relative `file`, never host locations or raw CSS. The first valid duplicate ID survives; other duplicates are diagnosed, while different packages may share a local ID. CLI, in-app package validation, ZIP admission and live discovery use the same schema, resource planner and compiler. Author checks may fail the package; live discovery hides only the broken theme.

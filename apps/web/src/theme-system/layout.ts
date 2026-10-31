@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { THEME_LAYOUT_PRESET_IDS } from "@covel/shared";
 
 /**
  * Layout is the structural half of a theme package: where navigation sits, how
@@ -12,7 +13,6 @@ const THEME_PANEL_TABS = ["rail", "bar"] as const;
 const THEME_SESSION_BACKDROPS = ["ambient", "scene", "banner", "none"] as const;
 const THEME_WORLD_LISTS = ["covers", "cards", "list", "showcase"] as const;
 const THEME_TURN_NOTES = ["fold", "inline", "margin"] as const;
-const THEME_LAYOUT_PRESET_IDS = ["classic", "book", "stage", "panel"] as const;
 
 export type ThemeNavPlacement = (typeof THEME_NAV_PLACEMENTS)[number];
 export type ThemePanelTabs = (typeof THEME_PANEL_TABS)[number];

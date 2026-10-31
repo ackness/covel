@@ -700,3 +700,7 @@ messages:
 ## 从会话页面请求玩家行动
 
 查看 [sandbox-surface-probe](../../tests/third-party/sandbox-surface-probe/README.md) 的两个普通视图和共享页面。它读取公开故事和输入信息，用句柄回答交互，用所属插件的手动函数 runtime 保存数据集记录。为 spec 添加 `capabilities` 后，玩家会看到每项能力的单独说明；服务端代码审批与页面授权互不替代。页面只在结果为 `accepted` 时清除行动草稿，拒绝时保留。普通视图布局不变，主区域/输入框替换和心跳恢复尚不支持。完整字段与限制见[页面请求](../reference/ui-panels.md#页面请求与安全结果)。
+
+## 发布静态主题
+
+配色和受限样式放在 `contributes.ui.theme` 的独立 JSON 中，无须添加 runtime、虚假面板或 entry。描述文件、CSS 和素材根相对包目录，CSS 图片相对素材根；完整例子与校验限制见[插件主题](../reference/theme-packages.md#插件提供的受限主题)。目前可静态验证和通过 API 发现，尚不挂载到玩家界面。
