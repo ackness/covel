@@ -834,7 +834,7 @@ curl -X DELETE http://localhost:3001/api/sessions/<sessionId>
 - 每项带 `commitStatus` 和 `origin`。
 - `runtimeResults[].operations` 列出这个 runtime 通过[写服务](./plugin-extensions.md#写服务)暂存的操作和它们提交后的状态（`committed` / `failed` / `discarded` 及原因），形状见[操作记录](./transactions.md#操作记录)。没有调用写服务的 runtime 没有这个字段。
 - `?limit=n` 的上限是 500。
-- 声明了 `io.concealed` 的 runtime，结果里的 `output` 和工具参数 / 结果会被清空。
+- 声明了 `io.concealed` 的 runtime，结果里的 `output` 和工具参数 / 结果会被清空。它的操作记录（包括它作为子 agent 记在可见调用方结果上的操作）去掉 `request`、`result`，`summary` 换成固定文字。
 - 这是一条很薄的路由，主要给真实模型验证工具（见 [用真实模型验证](../ship/real-model.md)）使用。
 
 `GET /api/sessions/:id/view` 有几点要知道：

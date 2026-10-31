@@ -834,7 +834,7 @@ The following describes the behavior of the web client itself. It is written for
 - Each item carries `commitStatus` and `origin`.
 - `runtimeResults[].operations` lists the operations the runtime staged through [write services](./plugin-extensions.md#write-services) and their status after the commit (`committed` / `failed` / `discarded`, with a reason); the shape is in [Operation records](./transactions.md#operation-records). A runtime that called no write service has no such field.
 - The upper limit of `?limit=n` is 500.
-- For a runtime that declares `io.concealed`, the `output` and the tool arguments and results in the response are emptied.
+- For a runtime that declares `io.concealed`, the `output` and the tool arguments and results in the response are emptied. Its operation records, including those it made as a sub-agent on a visible caller's result, lose `request` and `result`, and `summary` becomes fixed text.
 - This is a thin route. It is mainly for verifying tools with a real model (see [Verify with a real model](../ship/real-model.md)).
 
 A few things to know about `GET /api/sessions/:id/view`:

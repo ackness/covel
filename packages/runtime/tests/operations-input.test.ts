@@ -52,7 +52,7 @@ describe("execution operation input", () => {
     const parent = attachNestedResults(result(3), [result(1)]);
     const seed = attachNestedResults(result(4), [result(5)]);
     const discarded = { ...result(6), operations: [record(6, "discarded")] };
-    const snapshot = buildOperationsInput(
+    const { value: snapshot, producerIds } = buildOperationsInput(
       new Map(
         [parent, seed, discarded, result(2, "failed")].map((r) => [
           r.runtimeId,
@@ -61,6 +61,8 @@ describe("execution operation input", () => {
       ),
       new Set([seed]),
     );
+    // The ids stay with the kernel, for the reader's commit dependency.
+    expect(producerIds).toEqual(["operation-1", "operation-3"]);
     expect(snapshot.operations.map((op) => op.summary)).toEqual([
       "Changed 1",
       "Changed 3",

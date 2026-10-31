@@ -61,8 +61,9 @@ export function classifyExecutionFaults(
     else put(run.pluginId, { kind: "neutral" });
   }
   for (const call of serviceCalls) {
-    if (call.callerRuntimeId && setupRuntimeIds.has(call.callerRuntimeId))
-      continue;
+    // A call a sub-agent made for a setup runtime is the setup's call.
+    const scope = call.originRuntimeId ?? call.callerRuntimeId;
+    if (scope && setupRuntimeIds.has(scope)) continue;
     if (call.verdict === "fault")
       put(call.providerPluginId, { kind: "fault", reason: "service" });
     else if (call.verdict === "clean" && outcome.status === "committed")

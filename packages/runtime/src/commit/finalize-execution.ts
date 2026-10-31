@@ -1387,7 +1387,12 @@ export async function finalizeExecution(
           entry: OperationEntry,
           failed: readonly FailedProposal[],
         ) => {
-          isolatedFailures.push(...failed);
+          isolatedFailures.push(
+            ...failed.map((item) => ({
+              ...item,
+              operationId: entry.record.id,
+            })),
+          );
           settleOperation(entry, "failed", operationFailureReason(failed));
           console.warn(
             `[finalize-execution] ${entry.record.contract} called by ${entry.member.runtimeId} did not commit for session ${sessionId}: ` +

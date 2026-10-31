@@ -343,7 +343,7 @@ agent runtime 的工具循环每一种结束方式都对应一个结束原因（
 
 Hook 自己抛错或超时记在 Hook 所属插件；主动 `abort` 不是 Hook 故障。插件自己的 proposal 被处理器拒绝或被 `PreStateCommit` 主动否决，记在 proposal 所属插件；其他插件的 Hook 抛错或超时只记 Hook 所属插件。提供当前 `outputKind: "story"` runtime 或维度契约的插件只记 trace，永不暂停。
 
-执行中的服务调用按提供方归因：输出校验失败、自身未处理的异常，以及内核给导入工具设置的超时，计作 `service`。主动抛出的 `ToolError`（`invalid-input`、`not-found`、`ambiguous`、`refused`、`conflict`、`unavailable`、`cancelled`）不计；`internal` 仍计。服务不可用、准入失败、调用环、输入校验、无效选项、取消和调用方自选的超时均为中性。嵌套失败只记最深的失败提供方一次，不重复记中间提供方。成功调用只有在执行真正提交后才清零；setup runtime 发起的调用既不计数也不清零。执行外的 RPC 或内核扩展调用不参与。故事和维度提供方仍豁免暂停。
+执行中的服务调用按提供方归因：输出校验失败、自身未处理的异常，以及内核给导入工具设置的超时，计作 `service`。主动抛出的 `ToolError`（`invalid-input`、`not-found`、`ambiguous`、`refused`、`conflict`、`unavailable`、`cancelled`）不计；`internal` 仍计。服务不可用、准入失败、调用环、输入校验、无效选项、取消和调用方自选的超时均为中性。嵌套失败只记最深的失败提供方一次，不重复记中间提供方。成功调用只有在执行真正提交后才清零；setup runtime 发起的调用既不计数也不清零，它调用的子 agent 发起的调用也一样。执行外的 RPC 或内核扩展调用不参与。故事和维度提供方仍豁免暂停。
 
 <!-- prettier-ignore -->
 | 事件 | Payload | 投递 |
@@ -658,7 +658,7 @@ Gemini 原生的思考强度、`providerOptions.google.thinkingConfig`、`cached
 | `operation.failed`              | 已提交回合有操作未生效 | `{sessionId,turnId,count}`                                                                                                              |
 | `context.compacted`             | 压缩摘要保存           | `{summaryId,summaryIds,messagesCompacted,tokenSavings,focusSections,summariesMerged,summaryTokens,totalSummaryTokens,summaryTruncated}` |
 
-提交失败会扣住“执行完成”这一步，客户端把错误显示成执行失败。后台的结果不能重新打开已经结束的 action 流，重连时用保存下来的会话状态恢复。
+提交失败会扣住“执行完成”这一步，客户端把错误显示成执行失败。故事附带的写服务操作只因自身写入被拒而丢弃时不算执行失败：action 流不发它的 `proposal.failed`，只发一次 `operation.failed`，回合照常提交。后台的结果不能重新打开已经结束的 action 流，重连时用保存下来的会话状态恢复。
 
 ### SSE 帧格式按通道区分
 

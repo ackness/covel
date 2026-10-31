@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
-import type { LLMMessage } from "@covel/shared";
+import type { LLMMessage, RuntimeManifest } from "@covel/shared";
 import { executeTurn } from "../src/execution.js";
 import { commitExecution } from "../src/commit/commit-execution.js";
 import { createToolExecutor } from "../src/agent-loop/tool-executor.js";
@@ -142,4 +142,147 @@ describe("previous-turn operation notices", () => {
       }
     },
   );
+
+  it("tells a sub-agent whose delegated write was rejected on the next turn", async () => {
+    const { store, services } = await fixture();
+    services.register("provider", {
+      name: "change",
+      contract: "change@1",
+      modelFacing: true,
+      description: "Record a change",
+      access: "write",
+      input: z.object({ key: z.string() }),
+      output: z.unknown(),
+      handler: async ({ key }, ctx) => {
+        await ctx.pluginData.set("values", key, true);
+        return { key };
+      },
+    });
+    const lineSchema = {
+      type: "object",
+      properties: { line: { type: "string" } },
+      required: ["line"],
+    };
+    const helper: RuntimeManifest = runtime("nested/actor", {
+      runtimeType: "agent",
+      subagentOnly: true,
+      trigger: { type: "manual" },
+      outputContract: "fixture.helper@1",
+      output: { schema: "output.schema.json" },
+      tools: { services: [{ contract: "change@1", name: "change" }] },
+    });
+    const main = runtime("caller/main", { outputKind: "story" });
+    let turn = "first";
+    let helperCalls = 0;
+    const helperRequests = new Map<string, string>();
+    const otherRequests: string[] = [];
+    const deps = {
+      store,
+      services,
+      toolExecutor: createToolExecutor({ store, findTool: () => undefined }),
+      llm: {
+        generate: async (request: { messages: readonly LLMMessage[] }) => {
+          const text = request.messages
+            .map((message) => String(message.content))
+            .join("\n");
+          if (!text.includes("HELPER-PROMPT")) {
+            otherRequests.push(text);
+            return answer();
+          }
+          helperRequests.set(turn, helperRequests.get(turn) ?? text);
+          const index = turn === "first" ? helperCalls++ : 2;
+          return index < 2
+            ? {
+                ...answer(),
+                content: null,
+                finishReason: "tool_calls" as const,
+                toolCalls: [
+                  {
+                    id: `call-${index}`,
+                    name: "change",
+                    arguments: JSON.stringify({
+                      key: index === 0 ? "kept" : "rejected",
+                    }),
+                  },
+                ],
+              }
+            : answer(JSON.stringify({ line: "Done." }));
+        },
+      },
+      loadRuntime: async (manifest: RuntimeManifest) =>
+        manifest.name === helper.name
+          ? {
+              manifest,
+              promptTemplate: "HELPER-PROMPT You help.",
+              outputSchema: lineSchema,
+              outputContractSchema: lineSchema,
+            }
+          : {
+              manifest,
+              promptTemplate: "",
+              handler: async (ctx: {
+                agents?: { run(request: object): Promise<unknown> };
+              }) => {
+                await ctx.agents!.run({
+                  target: { contract: "fixture.helper@1" },
+                  brief: "Record the changes.",
+                });
+                return {
+                  outcome: "success" as const,
+                  value: { narrativeOutput: "The changes are recorded." },
+                };
+              },
+            },
+    };
+    const run = (turnId: string) =>
+      executeTurn({ ...input, turnId }, [main, helper], deps as never);
+    const commit = (
+      execution: Awaited<ReturnType<typeof executeTurn>>,
+      turnId: string,
+    ) =>
+      commitExecution({
+        store,
+        execution,
+        completion: { kind: "turn", turnId, durationMs: 0 },
+        proposalGuard: (proposal) =>
+          "key" in proposal.payload && proposal.payload.key === "rejected"
+            ? "The change was refused."
+            : undefined,
+      });
+    const block = (text: string | undefined) =>
+      text?.match(
+        /<operations-not-applied>([\s\S]*?)<\/operations-not-applied>/,
+      )?.[1];
+    try {
+      const first = await run("first");
+      const operations = first.commit.results.flatMap(
+        (result) => result.operations ?? [],
+      );
+      expect(operations).toMatchObject([
+        { invokedBy: { runtimeId: helper.name } },
+        { invokedBy: { runtimeId: helper.name } },
+      ]);
+      const settled = await commit(first, "first");
+      expect(settled.status).toBe("committed");
+      expect(settled.operations.map((operation) => operation.status)).toEqual([
+        "committed",
+        "failed",
+      ]);
+      expect(block(helperRequests.get("first"))).toBeUndefined();
+
+      turn = "second";
+      await commit(await run("second"), "second");
+      const notice = block(helperRequests.get("second"));
+      expect(notice).toContain(operations[1]!.summary);
+      expect(notice).not.toContain(operations[0]!.summary);
+      expect(notice?.match(/^- /gm)).toHaveLength(1);
+      expect(otherRequests.join("\n")).not.toContain("operations-not-applied");
+
+      turn = "third";
+      await run("third");
+      expect(block(helperRequests.get("third"))).toBeUndefined();
+    } finally {
+      await store.close();
+    }
+  });
 });

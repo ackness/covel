@@ -204,15 +204,17 @@ export function createSubagentRunner(
 
       inFlight++;
       try {
-        const { fault, ...result } = await runProvider({
-          args,
-          request: parsed,
-          provider: target.provider,
-          subagentCallId,
-          startTime,
-          trace,
-          runner,
-        });
+        const { fault, ...result } = await withServiceOrigin(args, () =>
+          runProvider({
+            args,
+            request: parsed,
+            provider: target.provider,
+            subagentCallId,
+            startTime,
+            trace,
+            runner,
+          }),
+        );
         options.onSettled?.({
           pluginId: target.provider.pluginId,
           runtimeId: target.provider.name,
@@ -230,6 +232,30 @@ export function createSubagentRunner(
     },
   };
   return runner;
+}
+
+/**
+ * Run a sub-agent with the execution's service observer tagging each call
+ * with the scheduled runtime the sub-agent works for, so the fault latch
+ * classifies the call in that runtime's scope (a setup runtime's calls
+ * neither count nor clear).
+ */
+function withServiceOrigin<T>(
+  args: SubagentRunArgs,
+  run: () => Promise<T>,
+): Promise<T> {
+  const services = args.deps.services;
+  const observer = services?.executionObserver();
+  if (!services || !observer) return run();
+  return services.withExecutionObserver(
+    (outcome) =>
+      observer(
+        outcome.originRuntimeId !== undefined
+          ? outcome
+          : { ...outcome, originRuntimeId: args.caller.runtimeId },
+      ),
+    run,
+  );
 }
 
 /** The validated request, or the reason it is invalid. */
@@ -577,12 +603,16 @@ async function runProvider({
 
     // The provider's own prompt with no session history: the context
     // builder's framework frame and completion contract, then the brief.
+    // A write the provider asked for in the previous turn that did not
+    // take effect is told to it, as to a scheduled agent.
+    const notices = deps.failedOperationSummaries?.[provider.name];
     const assembled = await buildContext({
       promptTemplate: loaded.promptTemplate,
       manifest,
       turnInput: input,
       completedResults: new Map(),
       messageHistory: [],
+      ...(notices?.length ? { failedOperationSummaries: notices } : {}),
       ...(deps.store ? { store: deps.store } : {}),
       ...withUserSettings(manifest, input),
     });

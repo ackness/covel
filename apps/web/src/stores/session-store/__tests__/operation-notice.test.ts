@@ -2,7 +2,9 @@
 import { describe, expect, it, vi } from "vitest";
 import i18n from "@/i18n";
 import { subscribeToast } from "@/lib/toast-channel.js";
-import { initialState } from "../reducer.js";
+import type { SseEnvelope } from "@/services/api.js";
+import { initialState, reducer } from "../reducer.js";
+import type { SessionAction } from "../types.js";
 import {
   createSseEventHandler,
   type SseEventHandlerDeps,
@@ -52,4 +54,62 @@ describe("operation failure notice", () => {
       }
     },
   );
+
+  it("leaves a committed turn with one isolated operation failure without an execution error", async () => {
+    await i18n.changeLanguage("en-US");
+    let state = { ...initialState, executing: true } as typeof initialState;
+    const handler = createSseEventHandler({
+      dispatch: (action: SessionAction) => {
+        state = reducer(state, action);
+      },
+      ds: {} as SseEventHandlerDeps["ds"],
+      stateRef: { current: state },
+      sessionIdRef: { current: "session" },
+      deltaBufferRef: { current: new Map() },
+      deltaRafRef: { current: null },
+      lastBackfilledTurnIdRef: { current: null },
+    });
+    const toast = vi.fn();
+    const unsubscribe = subscribeToast(toast);
+    const story = { runtimeId: "narrator", pluginId: "narrator", runId: "run" };
+    // The action stream of a story turn whose second write-service call was
+    // rejected at commit: the story commits, the operation alone is dropped.
+    const sequence: Array<[string, Record<string, unknown>]> = [
+      ["execution.started", { status: "executing", runtimeCount: 1 }],
+      ["runtime.started", { ...story, stage: "narrative", kind: "story" }],
+      ["tool.completed", { ...story, toolName: "change", success: true }],
+      ["tool.completed", { ...story, toolName: "change", success: true }],
+      ["runtime.completed", { ...story, status: "success" }],
+      ["operation.failed", { sessionId: "session", turnId: "turn", count: 1 }],
+      ["execution.completed", { committed: true }],
+    ];
+    try {
+      sequence.forEach(([type, payload], seq) =>
+        handler({
+          type,
+          payload,
+          sessionId: "session",
+          turnId: "turn",
+          requestId: "request",
+          traceId: "trace",
+          flowId: "flow",
+          seq,
+          timestamp: "2026-10-31T00:00:00Z",
+        } as SseEnvelope),
+      );
+      expect(toast).toHaveBeenCalledExactlyOnceWith(
+        expect.objectContaining({
+          kind: "info",
+          message: "1 action from this turn did not take effect.",
+        }),
+      );
+      expect(state.executionError).toBeNull();
+      expect(state.executing).toBe(false);
+      expect(
+        state.executionSteps.find((step) => step.runtimeId === "narrator"),
+      ).toMatchObject({ status: "completed", attemptStatus: "committed" });
+    } finally {
+      unsubscribe();
+    }
+  });
 });

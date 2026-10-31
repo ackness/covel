@@ -6,6 +6,7 @@
  */
 
 import type { RuntimeResult } from "../types/execution.js";
+import type { OperationRecord } from "../types/operation-record.js";
 import type { RuntimeManifest } from "../types/plugin.js";
 
 /** Trace payload fields that describe an execution without carrying content. */
@@ -71,7 +72,27 @@ export function concealTracePayload(
 export const CONCEALED_FAILURE_MESSAGE =
   "Runtime failed (details withheld for a concealed runtime)";
 
-/** Strip a concealed runtime's outputs, tool payloads, and proposals. */
+/** Summary a player sees for an operation a concealed runtime made. */
+export const CONCEALED_OPERATION_SUMMARY =
+  "Operation details withheld for a concealed runtime";
+
+/**
+ * An operation record without its content: the service request, its result
+ * and the summary written from them. Identity and how it ended stay.
+ */
+export function concealOperationRecord(
+  record: OperationRecord,
+): OperationRecord {
+  const {
+    request: _request,
+    result: _result,
+    truncated: _truncated,
+    ...rest
+  } = record;
+  return { ...rest, summary: CONCEALED_OPERATION_SUMMARY };
+}
+
+/** Strip a concealed runtime's outputs, tool payloads, proposals, and operation content. */
 export function concealRuntimeResult(result: RuntimeResult): RuntimeResult {
   const {
     effects: _effects,
@@ -88,6 +109,34 @@ export function concealRuntimeResult(result: RuntimeResult): RuntimeResult {
       input: null,
       output: null,
     })),
+    ...(result.operations
+      ? { operations: result.operations.map(concealOperationRecord) }
+      : {}),
+  };
+}
+
+/**
+ * Strip the content of the operations a concealed runtime made inside a
+ * result that stays visible, such as a concealed sub-agent's write-service
+ * calls riding on its visible caller's result.
+ */
+export function concealOperationsOf(
+  result: RuntimeResult,
+  concealed: ReadonlySet<string>,
+): RuntimeResult {
+  if (
+    !result.operations?.some((record) =>
+      concealed.has(record.invokedBy.runtimeId),
+    )
+  )
+    return result;
+  return {
+    ...result,
+    operations: result.operations.map((record) =>
+      concealed.has(record.invokedBy.runtimeId)
+        ? concealOperationRecord(record)
+        : record,
+    ),
   };
 }
 

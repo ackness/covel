@@ -259,7 +259,10 @@ export {
 } from "./utils/json-value.js";
 export {
   CONCEALED_FAILURE_MESSAGE,
+  CONCEALED_OPERATION_SUMMARY,
   concealedRuntimeIds,
+  concealOperationRecord,
+  concealOperationsOf,
   concealRuntimeResult,
   concealTracePayload,
 } from "./utils/concealed-runtime.js";

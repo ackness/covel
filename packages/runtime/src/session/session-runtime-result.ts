@@ -42,6 +42,11 @@ export type FailedProposal = {
       });
   readonly error: string;
   readonly code?: string;
+  /**
+   * Set on a write of a story-attached operation that failed alone: only
+   * that operation was dropped, and the execution can still commit.
+   */
+  readonly operationId?: string;
 };
 
 /** The result shape every commit entry point accepts (top-level or nested). */

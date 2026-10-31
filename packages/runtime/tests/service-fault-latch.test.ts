@@ -288,6 +288,161 @@ describe("service provider fault latch", () => {
     }
   });
 
+  it("neither counts nor clears a provider called by a setup runtime's sub-agent", async () => {
+    const h = await harness();
+    let crash = true;
+    h.services.register("provider", {
+      name: "probe",
+      contract: "probe@1",
+      modelFacing: true,
+      description: "Probe",
+      input: z.object({}),
+      output: z.unknown(),
+      handler: () => {
+        if (crash) throw new Error("Provider crashed");
+        return {};
+      },
+    });
+    const lineSchema = {
+      type: "object",
+      properties: { line: { type: "string" } },
+      required: ["line"],
+    };
+    const helper = runtime("nested/actor", {
+      runtimeType: "agent",
+      subagentOnly: true,
+      trigger: { type: "manual" },
+      outputContract: "fixture.helper@1",
+      output: { schema: "output.schema.json" },
+      tools: { services: [{ contract: "probe@1", name: "probe" }] },
+    });
+    const opening = runtime("caller/opening", { stage: "setup" });
+    const story = runtime("caller/story", { outputKind: "story" });
+    const toolExecutor = createToolExecutor({
+      store: h.store,
+      findTool: () => undefined,
+    });
+    let index = 0;
+    async function chain(caller: RuntimeManifest) {
+      const turnId = `chain-${++index}`;
+      let helperCalls = 0;
+      const execution = await executeTurn(
+        { ...input, turnId },
+        [caller, helper],
+        {
+          store: h.store,
+          services: h.services,
+          pluginFaults: h.latch,
+          toolExecutor,
+          llm: {
+            generate: async () =>
+              helperCalls++ === 0
+                ? {
+                    ...answer(),
+                    content: null,
+                    toolCalls: [{ id: "call", name: "probe", arguments: "{}" }],
+                    finishReason: "tool_calls",
+                  }
+                : answer(JSON.stringify({ line: "Done." })),
+          },
+          loadRuntime: async (manifest) =>
+            manifest.name === helper.name
+              ? {
+                  manifest,
+                  promptTemplate: "You help.",
+                  outputSchema: lineSchema,
+                  outputContractSchema: lineSchema,
+                }
+              : {
+                  manifest,
+                  promptTemplate: "",
+                  handler: async (ctx) => {
+                    await ctx.agents!.run({
+                      target: { contract: "fixture.helper@1" },
+                      brief: "Probe the provider.",
+                    });
+                    return {
+                      outcome: "success",
+                      value: { narrativeOutput: "The story continues." },
+                    };
+                  },
+                },
+        },
+      );
+      const outcome = await commitExecution({
+        store: h.store,
+        execution,
+        completion: { kind: "turn", turnId, durationMs: 0 },
+      });
+      expect(outcome.status).toBe("committed");
+      const transitions = h.latch.recordExecution({
+        sessionId: input.sessionId,
+        logicalKey: turnId,
+        results: execution.commit.results,
+        outcome,
+        exempt: new Set(["caller"]),
+        setupRuntimeIds: new Set([opening.name]),
+        serviceCalls: execution.commit.serviceCalls,
+        subagentRuns: execution.commit.subagentRuns,
+      });
+      return { execution, outcome, transitions };
+    }
+    const providerVerdict = (run: Awaited<ReturnType<typeof chain>>) =>
+      classifyExecutionFaults(
+        run.execution.commit.results,
+        run.outcome,
+        new Set([opening.name]),
+        run.execution.commit.subagentRuns,
+        run.execution.commit.serviceCalls,
+      ).get("provider");
+    try {
+      // A story's sub-agent hitting the crash counts against the provider.
+      const counted = await chain(story);
+      expect(counted.execution.commit.serviceCalls).toEqual([
+        {
+          providerPluginId: "provider",
+          callerRuntimeId: helper.name,
+          originRuntimeId: story.name,
+          verdict: "fault",
+        },
+      ]);
+      expect(providerVerdict(counted)).toEqual({
+        kind: "fault",
+        reason: "service",
+      });
+      // The same crash under setup neither counts...
+      for (let i = 0; i < 3; i++) {
+        const setup = await chain(opening);
+        expect(setup.execution.commit.serviceCalls).toEqual([
+          {
+            providerPluginId: "provider",
+            callerRuntimeId: helper.name,
+            originRuntimeId: opening.name,
+            verdict: "fault",
+          },
+        ]);
+        expect(providerVerdict(setup)).toBeUndefined();
+      }
+      expect(h.latch.latched(input.sessionId)).toEqual([]);
+      // ...nor does a clean call under setup clear the story's streak.
+      crash = false;
+      const clean = await chain(opening);
+      expect(clean.execution.commit.serviceCalls?.[0]?.verdict).toBe("clean");
+      expect(providerVerdict(clean)).toBeUndefined();
+      expect(clean.transitions).toEqual([]);
+      crash = true;
+      await chain(story);
+      expect(h.latch.latched(input.sessionId)).toEqual([]);
+      await chain(story);
+      expect(h.latch.latched(input.sessionId)).toEqual([
+        expect.objectContaining({ pluginId: "provider", reason: "service" }),
+      ]);
+    } finally {
+      await toolExecutor.close();
+      await h.store.close();
+    }
+  });
+
   it.each([false, true])(
     "distinguishes a kernel import deadline from the same caller-chosen duration (import: %s)",
     async (imported) => {

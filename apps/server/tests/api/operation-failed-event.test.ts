@@ -173,6 +173,16 @@ contributes:
       expect(
         events.find((event) => event.type === "execution.completed")?.payload,
       ).toMatchObject({ committed: true });
+      // The notice is the only failure the player hears of: the rejected
+      // write of the operation is not an execution failure.
+      expect(
+        events.filter((event) => event.type === "proposal.failed"),
+      ).toEqual([]);
+      expect(
+        events.findIndex((event) => event.type === "operation.failed"),
+      ).toBeLessThan(
+        events.findIndex((event) => event.type === "execution.completed"),
+      );
       expect(
         (
           await store.queryTurnResults("session", {
