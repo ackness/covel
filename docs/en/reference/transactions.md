@@ -417,7 +417,7 @@ Who calls it:
 
 A successful call of a [write service](./plugin-extensions.md#write-services) is staged as one **operation** on the calling run's result, apart from the caller's own proposals. Its writes carry the provider's identity (`runtimeId: "service:<service name>"`) and are prepared outside the transaction like any other proposal: the proposal guard, then PreStateCommit for each proposal. When any of them is refused, the whole operation is rejected.
 
-At commit, a unit's operations commit **after all its members' own writes**, in call order (`seq`):
+At commit, a unit's operations commit **after all its members' own writes**, in call order (`seq`). Downstream reads overlay writes in the same order: first all members' own writes, then operations from the parent and all recursive children sorted together by `seq`. Read dependencies record the producers whose writes still affect the final value:
 
 | Unit                                                     | How its operations commit                                          | When one operation is rejected                                                                                                              |
 | -------------------------------------------------------- | ------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -440,6 +440,8 @@ Each operation leaves one `OperationRecord` on the calling run's result (`runtim
 - `request` and `result`: the call's input and output through `modelFacingJson`; each is left out above 4 KB of JSON and marked `truncated: true`. `summary` is their first 300 characters. None of the three holds IDs or times.
 
 When `commit_status` is settled, the fifth argument of `setTurnResultCommitStatus` writes each operation's final status by ID into every row of the turn, inside the commit transaction. When the whole execution rolls back, the `failed` settlement outside the transaction records every operation as `discarded` / `execution-failed`. `FinalizeExecutionOutcome.operations` lists the same result (`id`, `status`, `reason`, `contract`, `invokedBy`).
+
+When a parent function throws, returns failure or is rejected for suspending after staging operations, its recursive children's writes are dropped. The kernel retains their operation records and settles the persisted records as `discarded` / `caller-dropped` at commit, leaving none permanently `staged`. If the whole execution fails, the reason is `execution-failed` as above.
 
 The second argument of `extraInTx` gives the dropped runtimes. The main turn uses it so it does not queue detached jobs and background event followers that depend on them. A detached job that is still queued records the dropped runtimes as `failed` in the frozen turn digest and in the upstream results.
 

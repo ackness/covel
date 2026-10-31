@@ -13,17 +13,17 @@
 
 先按需求在表里找接口：
 
-| 需求                             | 接口                                                                                          | 执行与数据边界                                                                                   |
-| -------------------------------- | --------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
-| 消费本轮上游结果                 | `runtime.io.inputs` + `accepts`                                                               | 按版本化 contract/runtime 绑定，建立调度依赖，携带来源；必需输入缺失时跳过                       |
-| 消费已提交的历史结果             | `runtime.io.output.recordAs` + `io.inputs` 的 `scope: committed`                              | 读取本次执行开始前的快照                                                                         |
-| 发出事件、触发后续工作           | handler 结果的 events / `emit-event` 工具 + event trigger                                     | 由调度和提交链路管理；不是内存中任意广播                                                         |
-| 调用其他插件的公共函数或模型协议 | `covel.registerService` + `ctx.services` / 工具的 `context.services` / `agent.tools.services` | 请求/响应，校验输入输出，只调用活跃且已获准运行的服务；agent 把给模型用的服务导入成工具          |
-| 让另一个 agent 回答一段简报      | `schedule.subagentOnly` 提供方 + `ctx.agents.run` / `delegate` 工具                           | [子 agent](./plugins.md#子-agent) 在调用方的执行里运行，只交回输出，不写入；按契约找跨包的提供方 |
-| Runtime 执行领域写入             | 已声明工具、handler effects / `ctx.pluginData`                                                | 走 runtime 的 proposal/commit 边界，不直接写别的插件                                             |
-| UI 触发自己的服务端逻辑          | `invokeRuntime` / `invokePluginAction` / `invokeCommand`                                      | 复用现有 RPC、会话归属与审批；写入边界见下文                                                     |
-| UI 发出领域事件                  | `emitEvent`                                                                                   | 只能发本插件声明的 topic，按 schema 校验；订阅的 runtime 以事件任务执行                          |
-| 自由绘制 UI                      | JSON `view` 或 HTML `webview`                                                                 | HTML 在独立 sandbox 中运行，使用消息桥读取数据、发出动作                                         |
+| 需求                             | 接口                                                                                          | 执行与数据边界                                                                                                 |
+| -------------------------------- | --------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| 消费本轮上游结果                 | `runtime.io.inputs` + `accepts`                                                               | 按版本化 contract/runtime 绑定，建立调度依赖，携带来源；必需输入缺失时跳过                                     |
+| 消费已提交的历史结果             | `runtime.io.output.recordAs` + `io.inputs` 的 `scope: committed`                              | 读取本次执行开始前的快照                                                                                       |
+| 发出事件、触发后续工作           | handler 结果的 events / `emit-event` 工具 + event trigger                                     | 由调度和提交链路管理；不是内存中任意广播                                                                       |
+| 调用其他插件的公共函数或模型协议 | `covel.registerService` + `ctx.services` / 工具的 `context.services` / `agent.tools.services` | 请求/响应，校验输入输出，只调用活跃且已获准运行的服务；agent 把给模型用的服务导入成工具                        |
+| 让另一个 agent 回答一段简报      | `schedule.subagentOnly` 提供方 + `ctx.agents.run` / `delegate` 工具                           | [子 agent](./plugins.md#子-agent) 在调用方的执行里运行，只交回输出，可通过写服务暂存操作；按契约找跨包的提供方 |
+| Runtime 执行领域写入             | 已声明工具、handler effects / `ctx.pluginData`                                                | 走 runtime 的 proposal/commit 边界，不直接写别的插件                                                           |
+| UI 触发自己的服务端逻辑          | `invokeRuntime` / `invokePluginAction` / `invokeCommand`                                      | 复用现有 RPC、会话归属与审批；写入边界见下文                                                                   |
+| UI 发出领域事件                  | `emitEvent`                                                                                   | 只能发本插件声明的 topic，按 schema 校验；订阅的 runtime 以事件任务执行                                        |
+| 自由绘制 UI                      | JSON `view` 或 HTML `webview`                                                                 | HTML 在独立 sandbox 中运行，使用消息桥读取数据、发出动作                                                       |
 
 下面是表里装不下的细节。
 

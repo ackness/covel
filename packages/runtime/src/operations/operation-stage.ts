@@ -72,11 +72,15 @@ export type LoadPluginDatasets = (
 
 /**
  * Per-execution state shared by every root stage of the execution, nested
- * executions included: the call sequence and the datasets of the providers
- * that were called.
+ * executions included: the call sequence, the records of completed runs, and
+ * the datasets of the providers that were called.
  */
 export interface OperationExecutionScope {
   nextSeq(): number;
+  /** Retain records even when a failed ancestor drops the calling result. */
+  retainRecords(records: readonly OperationRecord[]): void;
+  /** Records of completed runs so far, without provider-private write payloads. */
+  records(): readonly OperationRecord[];
   /**
    * Make sure the commit can check a provider's dataset writes. Throws when
    * its datasets cannot be loaded, before the provider's handler runs.
@@ -92,8 +96,14 @@ export function createOperationExecutionScope(
   let seq = 0;
   const loaded = new Map<string, Promise<ProviderDatasets>>();
   const settled: Record<string, ProviderDatasets> = {};
+  const records = new Map<string, OperationRecord>();
   return {
     nextSeq: () => ++seq,
+    retainRecords: (entries) => {
+      for (const record of entries)
+        records.set(record.id, structuredClone(record));
+    },
+    records: () => structuredClone([...records.values()]),
     async prepareProvider(pluginId) {
       if (!loadPluginDatasets) return;
       let pending = loaded.get(pluginId);
@@ -323,6 +333,7 @@ export function createRootOperationStage(args: {
         operationWrites?: Readonly<Record<string, readonly Proposal[]>>;
       };
       target.operations = [...(result.operations ?? []), ...records];
+      ledger.scope.retainRecords(records);
       if (Object.keys(writes).length > 0)
         target.operationWrites = { ...result.operationWrites, ...writes };
       return result;

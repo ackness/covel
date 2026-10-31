@@ -82,6 +82,7 @@ export interface ExecutionCommitPlan extends Pick<
   | "abortReason"
   | "datasetSchemas"
   | "providerDatasets"
+  | "operationRecords"
   | "readDependencies"
   | "progressScopeId"
 > {
@@ -382,6 +383,7 @@ export async function executeTurn(
       // Datasets of the providers of write services this execution called,
       // so their writes are checked even when no runtime of theirs ran.
       providerDatasets: operationScope.providerDatasets(),
+      operationRecords: operationScope.records(),
       hookSettings: hookScope.settings,
       hookLocale: hookScope.locale,
     },

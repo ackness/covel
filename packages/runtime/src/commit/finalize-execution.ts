@@ -164,6 +164,8 @@ export interface FinalizeExecutionArgs {
    * preceded by the nested recursiveCall results of its successful handler.
    */
   readonly results: readonly FinalizableResult[];
+  /** Execution-wide records, including recursive runs abandoned by a parent. */
+  readonly operationRecords?: readonly OperationRecord[];
   /**
    * How `results` group into commit units: the length of each unit, in order.
    * A unit is one top-level result preceded by every result nested under it
@@ -931,6 +933,9 @@ export async function finalizeExecution(
   const operationById = new Map(
     operations.map((entry) => [entry.record.id, entry]),
   );
+  const abandonedOperations = (args.operationRecords ?? []).filter(
+    (record) => !operationById.has(record.id),
+  );
   const operationState = new Map<
     string,
     { status: OperationStatus; reason?: OperationFailureReason }
@@ -978,16 +983,20 @@ export async function finalizeExecution(
   const finalizedOperations = (
     override?: Pick<FinalizedOperation, "status" | "reason">,
   ): FinalizedOperation[] =>
-    [...operations]
-      .sort((a, b) => a.record.seq - b.record.seq)
-      .map((entry) => {
-        const state = override ?? operationState.get(entry.record.id)!;
+    [...operations.map((entry) => entry.record), ...abandonedOperations]
+      .sort((a, b) => a.seq - b.seq)
+      .map((record) => {
+        const state = override ??
+          operationState.get(record.id) ?? {
+            status: "discarded" as const,
+            reason: "caller-dropped" as const,
+          };
         return {
-          id: entry.record.id,
+          id: record.id,
           status: state.status,
           ...(state.reason !== undefined ? { reason: state.reason } : {}),
-          contract: entry.record.contract,
-          invokedBy: entry.record.invokedBy,
+          contract: record.contract,
+          invokedBy: record.invokedBy,
         };
       });
   const settlementsOf = (

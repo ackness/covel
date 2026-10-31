@@ -102,27 +102,49 @@ async function runDelegate(
     source: "builtin",
   });
   const { target, brief, data, maxSteps } = parsed.data;
-  const result = await runner.run({
-    caller: scope.caller,
-    request: {
-      target,
-      brief,
-      ...(data !== undefined ? { data } : {}),
-      ...(maxSteps !== undefined ? { budget: { maxSteps } } : {}),
-    },
-    input: scope.input,
-    deps: scope.deps,
-    executionContext: scope.executionContext,
-    ...(scope.operations ? { operations: scope.operations } : {}),
-    parentCallId: call.toolCallId,
-    ...(context.signal ? { parentSignal: context.signal } : {}),
-  });
-  if (!result.ok) return failed(call, context, startTime, result);
-  // The tool's result is the sub-agent's output alone, as the model sees it:
-  // a completing `delegate` hands it to the caller's output gate. Stop reason
-  // and usage stay on the sub-agent's own `subagent.completed` trace.
+  // Isolate this invocation's operations from earlier or concurrent calls.
+  const operations = scope.operations?.child();
+  let result: SubagentResult;
+  try {
+    result = await runner.run({
+      caller: scope.caller,
+      request: {
+        target,
+        brief,
+        ...(data !== undefined ? { data } : {}),
+        ...(maxSteps !== undefined ? { budget: { maxSteps } } : {}),
+      },
+      input: scope.input,
+      deps: scope.deps,
+      executionContext: scope.executionContext,
+      ...(operations ? { operations } : {}),
+      parentCallId: call.toolCallId,
+      ...(context.signal ? { parentSignal: context.signal } : {}),
+    });
+  } catch (error) {
+    operations?.discard();
+    throw error;
+  }
+  if (!result.ok) {
+    operations?.discard();
+    return failed(call, context, startTime, result);
+  }
+  const staged = operations?.held() ?? [];
+  operations?.commit();
+  // A completing `delegate` hands the original output to the caller's output
+  // gate; only the model-facing envelope carries the staged notice. Stop
+  // reason and usage stay on the sub-agent's own `subagent.completed` trace.
   const output = result.output;
-  const resultText = renderToolSuccess({ content: output });
+  const resultText = renderToolSuccess({
+    content: output,
+    locale: scope.input.locale,
+    stagedOperations: {
+      count: staged.length,
+      kinds: staged.flatMap((operation) =>
+        operation.writes.map((write) => write.type),
+      ),
+    },
+  });
   await emitToolEvent(context, call, "tool.completed", {
     result: resultText,
     parsedResult: output,

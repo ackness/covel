@@ -33,7 +33,7 @@
 | **emit-event** | builtin | — | auto-allow | 发射当前 session 已声明的领域事件（一次一个 topic），工具定义含 topic enum 与 payload schema | 默认 |
 | **suspend** | builtin | — | auto-allow | 用表单字段声明答案，挂起等待玩家输入，写 `suspensions` 表，可通过 resume API 恢复 | 默认 |
 | **runtime-done** | builtin | — | auto-allow | Agent 工具循环的结束信号——业务工具调用完毕后调用以结束本 runtime | 默认 |
-| **delegate** | builtin | — | auto-allow | 把一件事交给子 agent 运行并拿回它的输出；子 agent 不写入 | `readOnly` |
+| **delegate** | builtin | — | auto-allow | 把一件事交给子 agent 运行并拿回它的输出；可通过写服务暂存操作 | `stagesWrites` |
 | **search-tools** | 注入 | — | auto-allow | 延迟工具搜索——manifest 声明 `tools.defer` 时框架自动注入，BM25 检索并激活未预载工具 | — |
 | **memory-search** | builtin | — | auto-allow | 搜索记忆：对话历史与历史摘要(recall) + 长期知识库(archival，含 lorebook/角色/插件声明可检索的数据) | `readOnly`, `idempotent`, `concurrencySafe` |
 | initialize-world | local | world-init | auto-allow | 组合角色属性 schema 与维度声明初始化 | 默认 |
@@ -743,14 +743,14 @@ agent runtime 用它把一件事交给[子 agent](./plugins.md#子-agent)：另�
 | data     | object | —    | 子 agent 需要的事实，JSON 对象，最多 32 KB                                       |
 | maxSteps | number | —    | 子 agent 的步数上限，只能比提供方自己的更低                                      |
 
-**输出**：成功时，模型收到 `{data: output}`，其中 output 经过 `modelFacingJson`，不含簿记字段；代码仍读取原始输出；`stopReason` 和用量只记在 `subagent.completed` 里。`delegate` 列在 `completeAfterTools` 里时，这份输出直接作为调用方的输出接受校验。失败时收到 `{error:{code,message,hint?}}`，`code` 是 `ctx.agents.run` 的错误码之一。除 `invalid-input` 外的失败不算这个 runtime 的工具失败，模型可以换个办法继续。
+**输出**：成功时，模型收到 `{data: output}`；本次委托暂存了操作时还带 `staged: {count, kinds, notice}`，只统计这次委托的操作，说明仍需等回合提交、可能被拒绝。其中 output 经过 `modelFacingJson`，不含簿记字段；代码仍读取原始输出；`stopReason` 和用量只记在 `subagent.completed` 里。`delegate` 列在 `completeAfterTools` 里时，这份输出直接作为调用方的输出接受校验。失败时收到 `{error:{code,message,hint?}}`，`code` 是 `ctx.agents.run` 的错误码之一。除 `invalid-input` 外的失败不算这个 runtime 的工具失败，模型可以换个办法继续。
 
 **注意事项**：
 
 - 调用由内核在 agent 循环里接住，不交给工具本身执行。trace 和普通工具一样：`tool.calling` / `tool.completed` / `tool.failed`，`approvalStatus` 是 `auto-allowed`。子 agent 的事件用 `parentCallId` 指回这次调用。
 - 上限：一次执行最多同时运行 8 个子 agent，超过的调用立刻得到 `unavailable`。子 agent 拿不到 `delegate`，不能再往下调用。
-- 子 agent 只能用只读工具，自己的写入工具被拿掉；它不产生 proposal，调用方的提交不受它影响。
-- 注解是 `readOnly`，但不是 `idempotent` 也不是 `concurrencySafe`：两次运行的答案不一样。
+- 子 agent 保留只读工具和服务导入；调用方允许暂存操作时，也保留写服务。操作随调用方的提交单元提交，子 agent 失败时撤回。
+- 注解为 `readOnly: false`、`stagesWrites: true`、`idempotent: false`、`concurrencySafe: false`。
 
 契约声明在 `packages/tools/src/builtin/delegate.ts`，执行逻辑在 `packages/runtime/src/agent-loop/subagent-delegate.ts` 和 `subagent-runner.ts`。
 

@@ -90,26 +90,33 @@ function committedPluginData(
 }
 
 /**
- * The writes of a result's write-service operations into `pluginId`'s data,
+ * The writes of a commit unit's write-service operations into `pluginId`'s data,
  * in call order, each with its operation's id as producer. The writes
  * already carry the provider's identity.
  */
 function operationPluginData(
-  result: RuntimeResult,
+  members: readonly RuntimeResult[],
   pluginId: string,
 ): UpstreamPluginDataWrite[] {
-  const writes = result.operationWrites;
-  if (!writes || commitEligibility(result) === "none") return [];
-  if (malformedDomainEffect(result.effects)) return [];
-  return [...(result.operations ?? [])]
-    .filter(
-      (operation) =>
-        operation.providerPluginId === pluginId &&
-        Object.hasOwn(writes, operation.id),
-    )
-    .sort((a, b) => a.seq - b.seq)
-    .flatMap((operation) =>
-      (writes[operation.id] ?? [])
+  return members
+    .flatMap((result) => {
+      const writes = result.operationWrites;
+      if (!writes || commitEligibility(result) === "none") return [];
+      if (malformedDomainEffect(result.effects)) return [];
+      return (result.operations ?? [])
+        .filter(
+          (operation) =>
+            operation.providerPluginId === pluginId &&
+            Object.hasOwn(writes, operation.id),
+        )
+        .map((operation) => ({
+          operation,
+          writes: writes[operation.id] ?? [],
+        }));
+    })
+    .sort((a, b) => a.operation.seq - b.operation.seq)
+    .flatMap(({ operation, writes }) =>
+      writes
         .filter((proposal) => PLUGIN_DATA_PROPOSALS.has(proposal.type))
         .map((proposal) => ({
           runId: operation.id,
@@ -121,8 +128,8 @@ function operationPluginData(
 
 /**
  * The plugin-data writes of `pluginId` that the completed, commit-eligible
- * results would commit, in commit order: each result's own writes, then the
- * writes its write-service operations staged into `pluginId`'s data. `seeds`
+ * results would commit, in commit order: all members' own writes in each unit,
+ * then the unit's operations in call order. `seeds`
  * are results seeded from another execution; they and everything nested
  * under them are skipped. Returns an owned copy.
  */
@@ -134,16 +141,21 @@ export function collectUpstreamPluginDataWrites(
 ): readonly UpstreamPluginDataWrite[] {
   const own = [...results.values()].filter((result) => !seeds?.has(result));
   return structuredClone(
-    inCommitOrder(own).flatMap((result) => [
-      ...(result.pluginId === pluginId
-        ? committedPluginData(result, sessionId).map((proposal) => ({
-            runId: result.runId,
-            runtimeId: result.runtimeId,
-            proposal,
-          }))
-        : []),
-      ...operationPluginData(result, pluginId),
-    ]),
+    own.flatMap((root) => {
+      const members = inCommitOrder([root]);
+      return [
+        ...members.flatMap((result) =>
+          result.pluginId === pluginId
+            ? committedPluginData(result, sessionId).map((proposal) => ({
+                runId: result.runId,
+                runtimeId: result.runtimeId,
+                proposal,
+              }))
+            : [],
+        ),
+        ...operationPluginData(members, pluginId),
+      ];
+    }),
   );
 }
 
