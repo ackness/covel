@@ -43,7 +43,7 @@ export interface SessionActions {
    */
   steerMessage: (content: string) => Promise<boolean>;
   /** Abort the in-flight turn. No-op when nothing is running. */
-  abortActiveTurn: () => Promise<void>;
+  abortActiveTurn: (options?: { isCurrent?: () => boolean }) => Promise<void>;
   /**
    * Fetch the page of messages immediately older than the current window (from
    * `olderMessagesCursor`) and prepend them. No-op when the cursor is `null`

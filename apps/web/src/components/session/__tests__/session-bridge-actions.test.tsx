@@ -1,5 +1,7 @@
-import { useReducer, type ReactNode } from "react";
-import { act, renderHook, cleanup } from "@testing-library/react";
+import { useReducer, type ReactNode, type ComponentProps } from "react";
+import { MessageChannel } from "node:worker_threads";
+import { runInNewContext } from "node:vm";
+import { act, render, renderHook, cleanup } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import * as api from "@/services/api.js";
 import * as dataServices from "@/services/data-service.js";
@@ -13,6 +15,22 @@ import { createSseEventHandler } from "@/stores/session-store/sse-handler.js";
 import { reducer } from "@/stores/session-store/reducer.js";
 import { useSessionBridgeActions } from "../use-session-bridge-actions.js";
 import { viewEntry } from "./plugin-view-fixtures.js";
+import { PLUGIN_BRIDGE_SCRIPT } from "@covel/shared";
+import { connectPluginBridge } from "../plugin-bridge.js";
+import { PluginPanel } from "../plugin-panel.js";
+import type { PluginWebview } from "../plugin-webview.js";
+import type { SessionProjection } from "../session-bridge.js";
+
+const webview = vi.hoisted(() => ({
+  props: undefined as ComponentProps<typeof PluginWebview> | undefined,
+}));
+vi.mock("../plugin-webview.js", () => ({
+  PluginWebview: (props: ComponentProps<typeof PluginWebview>) => {
+    webview.props = props;
+    return null;
+  },
+}));
+vi.mock("react-force-graph-2d", () => ({ default: () => null }));
 
 vi.mock("@/stores/ui-slot-store.js", () => {
   const empty: [] = [];
@@ -25,6 +43,7 @@ vi.mock("@/stores/ui-slot-store.js", () => {
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
+  vi.unstubAllGlobals();
 });
 import type { PluginRpcResponse } from "@covel/shared";
 import type { SessionActions } from "@/stores/session-store/context.js";
@@ -121,7 +140,7 @@ function fixture() {
       rejected: [],
       status: "accepted" as const,
     })),
-    abortActiveTurn: vi.fn(async () => {}),
+    abortActiveTurn: vi.fn<SessionActions["abortActiveTurn"]>(async () => {}),
   };
   const invokeRuntime = vi.fn(
     async (
@@ -313,6 +332,9 @@ describe("session bridge actions", () => {
     const f = fixture();
     f.state.executing = true;
     expect(await f.invoke("abortExecution")).toEqual({ status: "accepted" });
+    expect(f.actions.abortActiveTurn).toHaveBeenCalledExactlyOnceWith({
+      isCurrent: expect.any(Function),
+    });
     expect(await f.invoke("openPanel", { panelId: "notes" })).toEqual({
       status: "accepted",
     });
@@ -458,11 +480,50 @@ it("rechecks the current interaction after workspace or approval waits", async (
   await pending;
 });
 
-it("runs the mounted host adapter through real session actions, workspace and RPC approval boundaries", async () => {
+it("keeps every page-script port message public through the mounted host and session action boundaries", async () => {
+  vi.stubGlobal("MessageChannel", MessageChannel);
   const f = fixture();
   f.state.gameState = {
-    characters: [{ id: "hero", name: "Hero", type: "player" }],
+    characters: [
+      {
+        id: "hero",
+        name: "Hero",
+        type: "player",
+        fields: { private: "private-character-sentinel" },
+      },
+    ],
   };
+  f.state.messages = [
+    {
+      ...form,
+      id: "story",
+      kind: "story",
+      block: undefined,
+      content: "Public story",
+    },
+    {
+      ...form,
+      id: "private",
+      kind: "plugin",
+      block: undefined,
+      content: "private-output-sentinel",
+    },
+  ];
+  f.state.executionSteps = [
+    {
+      runtimeId: "p/write",
+      pluginId: "p",
+      status: "completed",
+      detail: "private-step-sentinel",
+      reasoning: [
+        {
+          id: "reason",
+          content: "private-reasoning-sentinel",
+          timestamp: "private",
+        },
+      ],
+    },
+  ];
   const ds = {} as dataServices.DataService;
   const workspace: dataServices.SessionWorkspace = {
     run: (_id, _request, mutate) => mutate(),
@@ -478,7 +539,15 @@ it("runs the mounted host adapter through real session actions, workspace and RP
         runtimeId: "p/write",
         status: "success",
         durationMs: 1,
-        output: { providerContinuation: "credential-sentinel" },
+        output: {
+          privateResult: "private-runtime-sentinel",
+          providerContinuation: "private-continuation-sentinel",
+          compactedSummary: "private-compaction-sentinel",
+          children: [
+            { concealed: true, output: "concealed-descendant-sentinel" },
+          ],
+          _hidden: { private: "private-hidden-sentinel" },
+        },
       },
     ],
   });
@@ -489,6 +558,7 @@ it("runs the mounted host adapter through real session actions, workspace and RP
       return new AbortController();
     });
   vi.spyOn(api, "getSession").mockResolvedValue(f.state.session!);
+  const abort = vi.spyOn(api, "abortTurn").mockResolvedValue(true);
   let dispatch!: React.Dispatch<Parameters<typeof reducer>[1]>;
   function Wrapper({ children }: { children: ReactNode }) {
     const [state, update] = useReducer(reducer, f.state);
@@ -514,51 +584,237 @@ it("runs the mounted host adapter through real session actions, workspace and RP
     ...viewEntry,
     spec: {
       ...viewEntry.spec,
-      capabilities: ["submitAction", "invokeRuntime"] as const,
+      capabilities: [
+        "submitAction",
+        "invokeRuntime",
+        "abortExecution",
+      ] as const,
     },
   };
   const hook = renderHook(
     () => useSessionBridgeActions(entry, "session", () => true),
     { wrapper: Wrapper },
   );
-  await act(async () => {
-    expect(
-      await hook.result.current.handlers.submitAction!({
-        kind: "say",
-        text: "/literal player text",
+  const panelProps = () => ({
+    pluginId: "p",
+    spec: entry.spec,
+    sessionBridge: {
+      ...hook.result.current,
+      projection: hook.result.current.projection!,
+    },
+    stateOverride: {
+      data: "private-kv-sentinel",
+      sources: "private-source-sentinel",
+      jobs: "private-job-sentinel",
+      "_hidden.notes": { value: "private-hidden-kv-sentinel" },
+    },
+    surfaceContext: { credential: "credential-sentinel" },
+    handlers: {
+      invokePluginAction: () => ({ private: "private-handler-sentinel" }),
+    },
+  });
+  const panel = render(<PluginPanel {...panelProps()} />);
+  let connectPage!: (event: unknown) => void;
+  const page: {
+    covel?: {
+      getState(): { session?: SessionProjection };
+      invoke(
+        method: string,
+        params?: Record<string, unknown>,
+      ): Promise<unknown>;
+    };
+  } = {};
+  const parent = {};
+  const captured: unknown[] = [];
+  runInNewContext(PLUGIN_BRIDGE_SCRIPT, {
+    window: page,
+    parent,
+    setTimeout,
+    clearTimeout,
+    document: { documentElement: { style: { setProperty() {} }, dataset: {} } },
+    addEventListener: (type: string, callback: (event: unknown) => void) => {
+      if (type === "message") connectPage = callback;
+    },
+  });
+  let pagePort!: MessagePort;
+  const bridge = connectPluginBridge(
+    {
+      postMessage: (
+        _message: unknown,
+        _origin: string,
+        ports: MessagePort[],
+      ) => {
+        pagePort = ports[0]!;
+        const post = pagePort.postMessage.bind(pagePort);
+        pagePort.postMessage = (message: unknown) => {
+          captured.push(message);
+          post(message);
+        };
+        connectPage({
+          source: parent,
+          data: { type: "covel:connect" },
+          ports: [pagePort],
+        });
+        const deliver = pagePort.onmessage!;
+        pagePort.onmessage = (event) => {
+          captured.push(event.data);
+          deliver.call(pagePort, event);
+        };
+      },
+    } as unknown as Pick<Window, "postMessage">,
+    undefined,
+    () => webview.props!,
+  );
+  const pushProjection = async () => {
+    panel.rerender(<PluginPanel {...panelProps()} />);
+    bridge.pushState(webview.props!.state);
+    await vi.waitFor(() =>
+      expect(page.covel!.getState().session).toEqual(
+        hook.result.current.projection,
+      ),
+    );
+  };
+  try {
+    await pushProjection();
+    expect(page.covel!.getState().session).toMatchObject({
+      messages: [{ text: "Public story" }],
+      input: {
+        kinds: [{ kind: "say", label: "Say" }],
+        seats: [{ id: "main" }],
+      },
+    });
+    await act(async () => {
+      expect(
+        await page.covel!.invoke("submitAction", {
+          kind: "say",
+          text: "/literal player text",
+        }),
+      ).toEqual({ status: "accepted" });
+    });
+    expect(send.mock.calls[0]?.[0]).toMatchObject({
+      type: "submit_actions",
+      payload: { actions: [{ kind: "say", text: "/literal player text" }] },
+    });
+    await pushProjection();
+    expect(page.covel!.getState().session?.messages).toContainEqual(
+      expect.objectContaining({ role: "user", text: "/literal player text" }),
+    );
+    await act(async () => {
+      expect(
+        await page.covel!.invoke("invokeRuntime", {
+          runtimeId: "p/write",
+          payload: { text: "Public" },
+        }),
+      ).toEqual({ status: "committed" });
+    });
+    expect(rpc).toHaveBeenCalledExactlyOnceWith(
+      "session",
+      {
+        kind: "runtime",
+        pluginId: "p",
+        runtimeId: "p/write",
+        payload: { text: "Public" },
+      },
+      expect.any(Function),
+    );
+    expect(JSON.stringify(hook.result.current.projection)).not.toContain(
+      "credential-sentinel",
+    );
+    rpc.mockResolvedValueOnce({
+      status: "ok",
+      abortReason: "private-failure-sentinel",
+      result: {
+        children: [{ concealed: true, output: "concealed-failure-sentinel" }],
+      },
+    });
+    await expect(
+      page.covel!.invoke("invokeRuntime", { runtimeId: "p/write" }),
+    ).resolves.toEqual({ status: "rejected", code: "runtime-refused" });
+    rpc.mockRejectedValueOnce(new Error("credential-sentinel"));
+    await expect(
+      page.covel!.invoke("invokeRuntime", { runtimeId: "p/write" }),
+    ).resolves.toEqual({ status: "rejected", code: "failed" });
+    await expect(page.covel!.invoke("invokePluginAction")).rejects.toThrow(
+      "Plugin UI action failed",
+    );
+    await expect(page.covel!.invoke("abortExecution")).resolves.toEqual({
+      status: "accepted",
+    });
+    expect(abort).toHaveBeenCalledExactlyOnceWith(
+      "session",
+      expect.any(Function),
+    );
+    const abortLease = abort.mock.lastCall?.[1];
+    expect(abortLease?.()).toBe(true);
+    act(() => dispatch({ type: "ADD_MESSAGE", message: form }));
+    await pushProjection();
+    expect(page.covel!.getState().session?.pending[0]).toMatchObject({
+      interaction: {
+        type: "form",
+        title: "Public form",
+        fields: [{ label: "Name" }],
+      },
+      handle: expect.any(String),
+    });
+    bridge.pushStream(42, "Public stream");
+    await vi.waitFor(() =>
+      expect(page.covel!.getState().session?.streaming?.text).toBe(
+        "Public stream",
+      ),
+    );
+    expect(captured).toContainEqual(
+      expect.objectContaining({
+        type: "result",
+        value: { status: "committed" },
       }),
-    ).toEqual({ status: "accepted" });
-  });
-  expect(send.mock.calls[0]?.[0]).toMatchObject({
-    type: "submit_actions",
-    payload: { actions: [{ kind: "say", text: "/literal player text" }] },
-  });
-  await act(async () => {
+    );
+    expect(captured).toContainEqual(
+      expect.objectContaining({
+        type: "result",
+        error: "Plugin UI action failed",
+      }),
+    );
+    const json = JSON.stringify(captured);
+    for (const secret of [
+      "credential-sentinel",
+      "private-output-sentinel",
+      "private-runtime-sentinel",
+      "private-continuation-sentinel",
+      "private-compaction-sentinel",
+      "concealed-descendant-sentinel",
+      "concealed-failure-sentinel",
+      "private-hidden-sentinel",
+      "private-step-sentinel",
+      "private-reasoning-sentinel",
+      "private-character-sentinel",
+      "private-kv-sentinel",
+      "private-source-sentinel",
+      "private-job-sentinel",
+      "private-failure-sentinel",
+      "private-handler-sentinel",
+      "private-hidden-kv-sentinel",
+      "private-validator",
+      "internal-block",
+      "internal-turn",
+      "internal-ref",
+    ])
+      expect(json).not.toContain(secret);
+    act(() =>
+      dispatch({
+        type: "LOAD_SESSION_PLUGINS",
+        plugins: [{ ...sessionPlugin, active: false }],
+      }),
+    );
+    expect(hook.result.current.isCurrent()).toBe(false);
+    expect(abortLease?.()).toBe(false);
     expect(
       await hook.result.current.handlers.invokeRuntime!({
         runtimeId: "p/write",
-        payload: { text: "Public" },
       }),
-    ).toEqual({ status: "committed" });
-  });
-  expect(rpc).toHaveBeenCalledExactlyOnceWith("session", {
-    kind: "runtime",
-    pluginId: "p",
-    runtimeId: "p/write",
-    payload: { text: "Public" },
-  });
-  expect(JSON.stringify(hook.result.current.projection)).not.toContain(
-    "credential-sentinel",
-  );
-  act(() =>
-    dispatch({
-      type: "LOAD_SESSION_PLUGINS",
-      plugins: [{ ...sessionPlugin, active: false }],
-    }),
-  );
-  expect(hook.result.current.isCurrent()).toBe(false);
-  expect(
-    await hook.result.current.handlers.invokeRuntime!({ runtimeId: "p/write" }),
-  ).toMatchObject({ status: "unavailable" });
-  expect(rpc).toHaveBeenCalledTimes(1);
+    ).toMatchObject({ status: "unavailable" });
+    expect(rpc).toHaveBeenCalledTimes(3);
+  } finally {
+    bridge.close();
+    pagePort.close();
+  }
 });

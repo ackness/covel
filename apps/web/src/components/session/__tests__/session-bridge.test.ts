@@ -14,6 +14,10 @@ import {
   type SessionProjectionInput,
   SESSION_BRIDGE_MAX_CHARACTER_BYTES,
 } from "../session-bridge.js";
+import {
+  createInteractionHandles,
+  publicInteraction,
+} from "../session-bridge-interactions.js";
 
 const message = (
   id: string,
@@ -231,20 +235,48 @@ describe("public session projection", () => {
       },
     ]);
   });
-  it("bounds pending blocks and replaces an oversized block", () => {
+  it("bounds pending blocks and withholds handles only for interactions over the byte limit", () => {
+    const handles = createInteractionHandles();
+    const choice = (id: string, length: number) =>
+      message(id, "", {
+        kind: "plugin",
+        block: {
+          type: "interactive_choice",
+          data: { choices: [{ id: "left", label: "字".repeat(length) }] },
+        },
+      });
+    const small = choice("small", 5000);
+    const large = choice("large", 6000);
+    for (const item of [small, large])
+      expect(publicInteraction(item.block!).type).toBe("choice");
+    expect(
+      new TextEncoder().encode(JSON.stringify(publicInteraction(small.block!)))
+        .length,
+    ).toBeLessThan(16384);
+    expect(
+      new TextEncoder().encode(JSON.stringify(publicInteraction(large.block!)))
+        .length,
+    ).toBeGreaterThan(16384);
+    const messages = [
+      small,
+      large,
+      ...Array.from({ length: 10 }, (_, index) => choice(String(index), 5000)),
+    ];
     const result = buildSessionProjection(
       input({
-        messages: Array.from({ length: 12 }, (_, index) =>
-          message(String(index), "", {
-            kind: "plugin",
-            block: { type: "interactive_choice", content: "x".repeat(17000) },
-          }),
-        ),
+        messages,
+        interactionHandle: handles.issue,
       }),
     );
     expect(result.pending).toHaveLength(8);
-    expect(result.pending[0]?.interaction).toEqual({ type: "unavailable" });
-    expect(result.pending[0]).not.toHaveProperty("handle");
+    const handle = result.pending[0]?.handle;
+    expect(handle).toEqual(expect.any(String));
+    expect(handles.resolve(handle!, messages, new Set())).toMatchObject({
+      blockId: "small",
+      type: "choice",
+    });
+    expect(result.pending[1]?.interaction).toEqual({ type: "unavailable" });
+    expect(result.pending[1]).not.toHaveProperty("handle");
   });
   it("removes all reserved keys recursively and cuts values beyond depth 8", () => {
     expect(

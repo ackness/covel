@@ -1565,4 +1565,4 @@ runtime 的终态：
 
 ## 沙箱区域生命周期
 
-主视图和输入框共用已有公开会话协议；ready、固定 page-error、带递增 id 的 ping/pong 与关闭信号使用同一 MessagePort，没有新增 HTTP/SSE 通道。每个 frame 的租约和句柄独立，失效后不能发送投影、追加或回复。协议字段、可见性宽限与恢复规则见[页面失效与恢复](./ui-panels.md#页面失效与恢复)。
+主视图和输入框共用已有公开会话协议；ready、固定 page-error、带递增 id 的 ping/pong 与关闭信号使用同一 MessagePort，没有新增 HTTP/SSE 通道。每个 frame 的租约和句柄独立，失效后不能发送投影、追加或回复；修改和审批授权还在凭据读取后、HTTP 派发前核对租约。应用脚本资源加载失败也发送固定 page-error，即使 HTML 和桥接脚本已成功加载。协议字段、可见性宽限与恢复规则见[页面失效与恢复](./ui-panels.md#页面失效与恢复)。

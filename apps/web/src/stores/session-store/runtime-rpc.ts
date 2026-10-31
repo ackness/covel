@@ -370,6 +370,9 @@ export function runActionStream(
           proceed ? "allow" : "deny",
           "session",
           request.sessionId,
+          ...(proceed
+            ? [() => isCurrent() && (opts?.canDispatch?.() ?? true)]
+            : []),
         );
         if (proceed) {
           // A restart revokes community grants without changing activePlugins.

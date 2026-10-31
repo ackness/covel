@@ -476,7 +476,11 @@ it("executes the shipped page script against a real channel, reconstructs text a
       handlers: {
         run: () =>
           new Promise((resolve) => {
-            finish = () => resolve({ status: "committed" });
+            finish = () =>
+              resolve({
+                status: "committed",
+                output: { credential: "credential-sentinel" },
+              });
           }),
       },
     }),
@@ -501,6 +505,7 @@ it("executes the shipped page script against a real channel, reconstructs text a
   );
   finish?.();
   expect(JSON.stringify(captured)).not.toContain("credential-sentinel");
+  expect(captured).toContainEqual({ type: "closed" });
 });
 
 it.each(["error", "unhandledrejection"])(

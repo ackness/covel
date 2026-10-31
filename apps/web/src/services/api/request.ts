@@ -77,6 +77,8 @@ export interface RequestOptions extends RequestInit {
   silentCodes?: readonly string[];
   /** Disable the shared GET retry loop when the caller owns its own backoff. */
   retry?: boolean;
+  /** Recheck the caller's lease after credentials, immediately before fetch. */
+  canDispatch?: () => boolean;
 }
 
 export interface ResponseSchema<T> {
@@ -256,6 +258,7 @@ export async function requestResponse(
     sessionId,
     operatorAuth,
     retry,
+    canDispatch,
     ...fetchInit
   } = init ?? {};
   // Only GETs are retried — they're idempotent, so a boot-race ECONNREFUSED (dev
@@ -279,6 +282,7 @@ export async function requestResponse(
   // transport retries. Cancellation during credential I/O still stops fetch.
   for (let attempt = 0; ; attempt++) {
     fetchInit.signal?.throwIfAborted();
+    if (canDispatch && !canDispatch()) throw new Error("Request owner retired");
     const isLastAttempt = attempt >= MAX_RETRIES;
 
     let res: Response;

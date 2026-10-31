@@ -973,7 +973,7 @@ KiB counts UTF-8 bytes. Appends coalesce every 100 ms; full pushes while streami
 
 ### Page failure and recovery
 
-Inline HTML and URL views wait for ready from frame mount, with an 8-second deadline independent of load events. The shared script reports uncaught errors and unhandled Promise rejections through a fixed page-error signal on the existing port, without error text, stacks or URLs. Normal pagehide/unload does not report a page error; the host detects navigation through load and heartbeat checks. Load failure, a connected element navigating again, React render errors and invalid required public projection also retire the attempt.
+Inline HTML and URL views wait for ready from frame mount, with an 8-second deadline independent of load events. The shared script reports uncaught errors, unhandled Promise rejections and application script resource failures through a fixed page-error signal on the existing port, without error text, stacks or URLs. Script resource errors are captured even when they do not bubble; image load failures do not trigger page fallback. Normal pagehide/unload does not report a page error; the host detects navigation through load and heartbeat checks. Load failure, a connected element navigating again, React render errors and invalid required public projection also retire the attempt.
 
 After ready, the host sends increasing ping probes every 5 seconds while visible; the script replies with the matching pong on the same port. Three unanswered probes trigger fallback. Hidden tabs do not accumulate missed probes; returning resets probes and grants 8 seconds of grace. This measures the document event loop, not model/RPC duration, and cannot recover a browser-wide renderer freeze.
 
@@ -996,7 +996,7 @@ Outcomes contain only `{status,code?,issues?}`. Status is `accepted`, `committed
 
 Each connection allows eight calls in flight and 128 KiB serialized request bytes. Seen IDs cannot execute again. A connection remembers at most 4096 IDs, then refuses new calls until explicit frame reconstruction instead of evicting old IDs. Closing rejects deliverable page promises and drops late replies. Timeouts never automatically resend mutations. This is not exactly-once across reloads.
 
-Session navigation, plugin disable, content replacement, revocation, return and unmount retire the lease. The host rechecks ownership after awaits and before approval retries. Normal input also rechecks the caller after seat-switch, automatic-stop and workspace waits. Server-admitted work may settle normally, without replying to the retired frame.
+Session navigation, plugin disable, content replacement, revocation, return and unmount retire the lease. The host rechecks ownership after awaits and before approval retries. Mutations and approval grants recheck the lease after credential lookup, immediately before HTTP dispatch; revocation or navigation during that lookup prevents dispatch. A stale approval may still be denied to clean up the request. Normal input also rechecks the caller after seat-switch, automatic-stop and workspace waits. Work already dispatched may settle normally, without replying to the retired frame.
 
 There is no media-byte/blob channel. Views and replacement regions use the recovery rules below; ordinary non-session panels keep their separate data and action contract.
 

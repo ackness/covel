@@ -565,4 +565,6 @@ Inheritance and painting are also bounded: story markers cover only Markdown tex
 
 ## Host controls around sandbox regions
 
+Mutations and approval grants check the page lease after asynchronous credential lookup, immediately before HTTP dispatch. Revocation or navigation during lookup prevents stale dispatch; work already dispatched can still settle, without replying to the retired page. A capturing listener reports application script resource failures through fixed page-error messages without resource URLs or error details; only the affected region recovers.
+
 Main and composer iframes keep `sandbox="allow-scripts"`, no referrer and existing CSP, without network, form, fullscreen, popup, top-navigation, same-origin or IPC privileges. The authenticated host forwards granted requests; opaque requests receive no origin/token exception. Each region closes its own ports and streams; stale ready/approval/RPC callbacks cannot revive it. Probes count visible time and cannot guarantee recovery from a whole-renderer freeze. Outside clipped regions, host return, Stop and recovery remain clickable and keyboard reachable in immersive stage and narrow layouts. Theme selectors must exclude `data-covel-host-controls` and descendants. See [page failure and recovery](../reference/ui-panels.md#page-failure-and-recovery) for the lifecycle.

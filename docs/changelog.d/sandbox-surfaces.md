@@ -1,7 +1,7 @@
 ### Added
 
 - **Plugins can provide independently selected main and composer pages.** Both reuse content-bound capability consent and the existing public session bridge. Host return, Stop, permissions and interaction recovery remain outside sandbox frames, including narrow screens and immersive stage.
-- **Broken pages restore only their affected region.** Inline and URL views have ready deadlines, fixed page-error reporting and visible-tab heartbeat recovery, with explicit consent-checked Retry.
+- **Broken pages restore only their affected region.** Inline and URL views have ready deadlines, fixed page-error reporting for exceptions and application script load failures, and visible-tab heartbeat recovery, with explicit consent-checked Retry.
 
 ### Changed
 
