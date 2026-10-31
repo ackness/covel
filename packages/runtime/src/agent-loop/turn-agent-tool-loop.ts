@@ -44,7 +44,14 @@ import {
   closeUnansweredToolCalls,
   emitSkippedToolCall,
 } from "./tool-batch.js";
-import { prepareBudgetedRequest } from "./request-context-budget.js";
+import {
+  ContextOverflowError,
+  prepareBudgetedRequest,
+} from "./request-context-budget.js";
+import {
+  createLoopContextPolicy,
+  hasToolStepGroup,
+} from "./loop-context-policy.js";
 import { createDeltaForwarder } from "./delta-forwarder.js";
 import {
   deferredToolDefinitions,
@@ -120,7 +127,7 @@ export interface AgentToolLoopCompleted {
   readonly streamDeltaCount: number;
   /** How the loop ended. */
   readonly stop: LoopStop;
-  /** The message a PreStep hook gave when it cancelled the loop. */
+  /** The PreStep cancellation message or the context overflow text. */
   readonly stopMessage?: string;
   /** The configured step limit; a PreStep hook may have lowered the one used. */
   readonly effectiveMaxSteps: number;
@@ -316,7 +323,7 @@ async function runAgentToolLoopWithinBudget(
   // The loop's phase, step count and stop reason.
   const loop = createLoopState();
   let lastStartedStep = 0;
-  // Set when a PreStep hook cancels the loop.
+  // Set by a PreStep cancellation or a request that cannot fit.
   let stopMessage: string | undefined;
 
   // The policy owns tool surfaces, model settings, and execution budgets.
@@ -430,6 +437,7 @@ async function runAgentToolLoopWithinBudget(
     input.locale,
     policy,
   );
+  const loopContextPolicy = createLoopContextPolicy({ locale: input.locale });
   const pictureLoader = createPictureLoader(deps.mediaStore, input.sessionId);
   // A player's interjection is one more user message of the current turn.
   let currentTurnUserMessages = initialTurnUserMessages;
@@ -449,6 +457,7 @@ async function runAgentToolLoopWithinBudget(
     readonly toolChoice?: StepToolChoice;
     readonly requireToolCall: boolean;
     readonly disableTools?: boolean;
+    readonly trim?: "normal" | "emergency";
   }) => {
     // Model resolution chain for story runtimes:
     // API override > manifest.model (a role the player binds) > undefined.
@@ -487,6 +496,8 @@ async function runAgentToolLoopWithinBudget(
     // Budget after hooks and tool results, immediately before each call.
     const budgetedRequest = await tagging(runId, "context-overflow", () =>
       prepareBudgetedRequest({
+        loopPolicy: loopContextPolicy,
+        trim: step.trim,
         runtimeId: manifest.name,
         pluginId: manifest.pluginId,
         messages: llmRequest.messages as LLMMessage[],
@@ -517,6 +528,7 @@ async function runAgentToolLoopWithinBudget(
       ? await inlinePictureAttachments(requestMessages, pictureLoader)
       : requestMessages;
 
+    if (loop.phase === "awaiting-pre-step") loop.enter("requesting-model");
     budget.pauseForModel();
     let rawResponse: Awaited<ReturnType<typeof requestLLMResponse>>;
     try {
@@ -584,6 +596,8 @@ async function runAgentToolLoopWithinBudget(
       const { rawResponse, reviewMessages } = await callModel({
         tools: undefined,
         requireToolCall: false,
+        disableTools: true,
+        trim: "emergency",
       });
       lastTarget = rawResponse.target;
       const response = await reviewResponse(rawResponse, reviewMessages);
@@ -596,7 +610,7 @@ async function runAgentToolLoopWithinBudget(
       return text;
     } catch (error) {
       // Only an abort or the deadline ends the loop here; any other failure
-      // leaves the step-limit failure in place.
+      // leaves the original stop in place.
       budget.assertLive();
       console.warn(
         `[runtime-loop] ${manifest.name} finalizer failed: ${
@@ -611,7 +625,7 @@ async function runAgentToolLoopWithinBudget(
   /**
    * Whether a finalizer may run now: prose can satisfy the runtime's
    * completion contract, and there is time left to write it. Shared by the
-   * step limit and the deadline reserve.
+   * step limit, deadline reserve and context overflow.
    */
   const finalizerEligible = (): boolean =>
     !outputFromCompletingTool &&
@@ -717,12 +731,25 @@ async function runAgentToolLoopWithinBudget(
     });
     lastStartedStep = step;
 
-    loop.enter("requesting-model");
-    const { rawResponse, reviewMessages } = await callModel({
-      tools: stepTools,
-      ...(preStep.toolChoice ? { toolChoice: preStep.toolChoice } : {}),
-      requireToolCall: toolCallRequested,
-    });
+    let modelCall: Awaited<ReturnType<typeof callModel>>;
+    try {
+      modelCall = await callModel({
+        tools: stepTools,
+        ...(preStep.toolChoice ? { toolChoice: preStep.toolChoice } : {}),
+        requireToolCall: toolCallRequested,
+      });
+    } catch (error) {
+      if (
+        !(error instanceof ContextOverflowError) ||
+        error.kind !== "over-limit"
+      )
+        throw error;
+      loop.stop = { reason: "context-overflow" };
+      stopMessage = error.message;
+      await stepEvents.close(loop.stop.reason);
+      break;
+    }
+    const { rawResponse, reviewMessages } = modelCall;
 
     lastTarget = rawResponse.target;
     loop.enter("reviewing");
@@ -1380,15 +1407,19 @@ async function runAgentToolLoopWithinBudget(
   // ── Finalizer ──────────────────────────────────────────────────
   // A step limit is never a success by itself: text the model wrote beside a
   // tool call is scratch. One request with tools off asks for the answer,
-  // when the profile's finalizer covers this exit (the step limit, or the
-  // deadline reserve), prose can satisfy the runtime's completion contract
-  // and there is time left to write it.
+  // when the profile's finalizer covers this exit (the step limit, context
+  // overflow or the deadline reserve), prose can satisfy the runtime's
+  // completion contract and there is time left to write it.
   const finalizerExit =
     loop.stop.reason === "max-steps" && profile.finalizer.maxSteps
       ? ("max-steps" as const)
       : reserveReached
         ? ("deadline" as const)
-        : undefined;
+        : loop.stop.reason === "context-overflow" &&
+            profile.finalizer.maxSteps &&
+            hasToolStepGroup(messages)
+          ? ("context-overflow" as const)
+          : undefined;
   if (finalizerExit && finalizerEligible()) {
     loop.enter("finalizing");
     // The reserve stops the loop before its pre-step drain, so an
@@ -1408,6 +1439,7 @@ async function runAgentToolLoopWithinBudget(
           ? [...steeredProse, answer].join("\n\n")
           : answer;
       loop.stop = { reason: finalizerExit, finalizer: true };
+      stopMessage = undefined;
     }
   }
   // Output repair follows every success-shaped exit, including a finalizer.
@@ -1426,7 +1458,9 @@ async function runAgentToolLoopWithinBudget(
   const repairableExit =
     loop.stop.reason === "completed" ||
     loop.stop.reason === "tool-finished" ||
-    ((loop.stop.reason === "max-steps" || loop.stop.reason === "deadline") &&
+    ((loop.stop.reason === "max-steps" ||
+      loop.stop.reason === "deadline" ||
+      loop.stop.reason === "context-overflow") &&
       loop.stop.finalizer);
   if (
     repairableExit &&

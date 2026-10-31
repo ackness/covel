@@ -229,12 +229,21 @@ export function extractToolFailureMessage(result: string): string | undefined {
 export function formatToolLoopFailure(args: {
   runtimeId: string;
   reason:
-    "max_steps" | "timeout" | "tool_failed_without_output" | "stopped_by_hook";
+    | "max_steps"
+    | "timeout"
+    | "tool_failed_without_output"
+    | "stopped_by_hook"
+    | "context_overflow";
   maxSteps?: number;
-  /** `stopped_by_hook`: the message the hook gave. */
+  /** Hook cancellation or the original context overflow message. */
   message?: string;
   failedToolCalls: readonly FailedToolCallState[];
 }): string {
+  if (args.reason === "context_overflow")
+    return (
+      args.message ??
+      `Runtime "${args.runtimeId}" stopped because the request no longer fits the model's context window.`
+    );
   if (args.reason === "stopped_by_hook")
     return `Runtime "${args.runtimeId}" was stopped by a PreStep hook${
       args.message ? `: ${args.message}` : "."

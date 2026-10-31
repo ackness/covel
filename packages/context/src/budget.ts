@@ -160,7 +160,7 @@ export function resolveBudgetOptions(
   return { maxInputTokens, reservedForResponse, protectLastUserTurns };
 }
 
-function estimateMessageTokens<
+export function estimateMessageTokens<
   M extends {
     readonly role: string;
     readonly content: string | readonly LLMContentPart[];

@@ -222,7 +222,7 @@ In the path headings below, `[]` is a list item and `.*` is a map value.
 
 | Field               | Type    | Required | Description                                                                                                                                                                                                           |
 | ------------------- | ------- | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `maxSteps`          | boolean | no       | At the step limit, ask once for the answer with tools off. `false` makes the step limit always fail. Defaults to true.                                                                                                |
+| `maxSteps`          | boolean | no       | At the step limit or when the request no longer fits the model's context, ask once for the answer with tools off. `false` makes these stops always fail. Defaults to true.                                            |
 | `deadlineReserveMs` | integer | no       | Stop starting steps this many ms before the time limit and ask for the answer with tools off, when prose can complete the runtime. At most half of `timeoutMs` is used; smaller than `timeoutMs`. Defaults to 0, off. |
 
 ## `function`

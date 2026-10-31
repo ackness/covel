@@ -25,6 +25,7 @@ export {
   DEFAULT_PROTECT_LAST_USER_TURNS,
   applyBudget,
   estimateTokens,
+  estimateMessageTokens,
   flattenMessageContent,
   isCompactedHistoryEnvelope,
   resolveBudgetOptions,

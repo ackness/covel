@@ -6270,7 +6270,7 @@ For the full classification table, see [protocol.md § 1. Event types](./protoco
 | `plugin.fault.counted` | Plugin faults | Counts a self-caused fault; trace-only, not forwarded to the action stream |
 | `plugin.fault.latched` | Plugin faults | Pauses a repeatedly failing plugin; forwarded to the action stream, with session events for other executions |
 | `plugin.fault.cleared` | Plugin faults | Clears the count after a clean run or player re-enable; same delivery as above |
-| `context.pruned` | System | The prompt went over the slot budget and the history was cut hard; only goes to the trace (used by `/debug`), not the action stream |
+| `context.pruned` | System | Prompt-budget trimming; trace only (`/debug`). Payload has `runtimeId`, `pluginId`, `prunedMessageCount`; loop requests also report `truncatedToolResultCount`, `truncatedSummaryCount`, `elidedToolResultCount`, `collapsedStepCount`. The last two are cumulative decisions applied to this request, including ledger replay; any non-zero count emits the event |
 | `context.compaction.failed` | System | History compaction failed, with the reason; only goes to the trace (used by `/debug`) |
 | `commit.fanout.failed` | System | The turn was committed, but some events sent after the commit could not be published; only goes to the trace, and the subscription stream also receives `system.reset` |
 | `error.occurred` | System | An execution error |

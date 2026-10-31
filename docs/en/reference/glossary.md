@@ -185,7 +185,7 @@ See: [extension points](./extension-points.md), [plugin extensions and communica
 
 ## Finalizer step
 
-The one more model request the kernel sends after an agent runtime runs out of steps: tools off, asking the model for its final answer from what it already has.
+The one more model request the kernel sends at the step limit, deadline reserve, or context overflow when the loop profile allows it: tools off, asking for the final answer from the information already available. Overflow rescue condenses every complete tool step into a deterministic digest; `finalizer.maxSteps` enables it. An unfinished overflow remains a failed runtime with its original overflow text.
 
 Running out of steps is not a success by itself. The runtime succeeds only when the finalizer step writes the answer, and its result's `stop.finalizer` is `true`. No finalizer is sent when the output is handed over by a completing tool, or when a completion condition is still unmet.
 
