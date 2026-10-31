@@ -30,7 +30,14 @@ export async function resolveContainedPath(
     return null;
   }
 
-  if (options?.rejectSymlinks && stat.isSymbolicLink()) return null;
+  if (options?.rejectSymlinks) {
+    if (stat.isSymbolicLink()) return null;
+    let parent = path.dirname(resolved);
+    while (parent !== rootRealPath && isInsideRoot(rootRealPath, parent)) {
+      if ((await lstat(parent)).isSymbolicLink()) return null;
+      parent = path.dirname(parent);
+    }
+  }
 
   const realResolved = await realpath(resolved);
   return isInsideRoot(rootRealPath, realResolved) ? realResolved : null;

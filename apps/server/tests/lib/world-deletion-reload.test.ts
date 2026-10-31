@@ -46,15 +46,18 @@ async function writeManifest(genre: string) {
 name: Reload world
 summary: Synthetic deletion fixture.
 defaultLocale: en-US
-dimensions:
-  tone:
-    name: tone
-    schema: {}
-    initialValue:
-      genres: [${genre}]
-      contentRating: teen
 `,
     "utf8",
+  );
+  await mkdir(path.join(directory, "data"), { recursive: true });
+  await writeFile(
+    path.join(directory, "data/dimensions.yaml"),
+    `tone:
+  name: tone
+  schema: {}
+  initialValue:
+    genres: [${genre}]
+    contentRating: teen`,
   );
 }
 

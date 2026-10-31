@@ -932,6 +932,8 @@ Until every requested grant has persisted, the page is not mounted, receives no 
 | `abortExecution` | Stop execution in the current session |
 | `openPanel` | Open the owning plugin's declared panels |
 
+Replacing content or switching sessions closes the old iframe's connection and stream subscription. The page stays unmounted while new content is being hashed or awaiting consent. Already authorized content also gets a new iframe in another session; the old page receives no state or streamed text from the new session.
+
 SettingsStore saves device-local records at `ui.pluginViewConsent.<pluginId>.<hash>.<capability>`, retaining the `.session` read suffix. The hash is SHA-256 of canonical JSON for the entire resolved spec, including capabilities, inline HTML or a URL digest covering every resource. Changed content asks again; an old reading grant adds no capabilities. Pending optimistic notifications do not grant access. “View permissions” can revoke one capability or all permissions, immediately stopping delivery and dispatch and returning to the default even if persistence fails. Refresh from another window can revoke access too.
 
 <a id="sessionprojection-version-1"></a>
@@ -939,6 +941,8 @@ SettingsStore saves device-local records at `ui.pluginViewConsent.<pluginId>.<ha
 ### SessionProjection (version 2)
 
 Read the `session` field of the state object exposed on `window.covel`, or subscribe with `window.covel.subscribe`. Top-level state contains only `session`, `locale` and host `theme`, without ordinary panel `data`, `sources`, `jobs`, `context` or own-plugin KV.
+
+When another client commits a turn, the host also refreshes messages and the turn count and pushes the updated projection. The page does not need to reload.
 
 <!-- prettier-ignore -->
 | Field | Content |

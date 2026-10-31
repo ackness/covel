@@ -52,7 +52,10 @@ test("a declarative community notebook commits without grants, retains content c
       "ui.onboardedVersion": ONBOARDING_VERSION,
       "ui.locale": "en-US",
     });
-    await useServerWorlds(page);
+    // Cleanup removes an imported module, so watch mode may still be restarting.
+    await expect(async () => {
+      await useServerWorlds(page);
+    }).toPass({ timeout: 60_000 });
     const discovery = await request.get("/api/plugins");
     const { items } = await discovery.json();
     expect(items).toContainEqual(
@@ -141,8 +144,6 @@ test("a declarative community notebook commits without grants, retains content c
     });
     expect(status.serverCodeApprovedBy).toBeUndefined();
 
-    // The API client consumed the turn stream; reload the browser's own session history.
-    await page.reload();
     await expect(
       page
         .locator('[data-role="user"]')

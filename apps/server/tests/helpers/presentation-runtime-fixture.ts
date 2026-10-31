@@ -27,6 +27,7 @@ export async function presentationFixture(
     hooks?: HookPipeline;
     handler?: FunctionHandler;
     storyHandler?: FunctionHandler;
+    auxiliaryHandler?: FunctionHandler;
     queueMs?: number;
     ready?: () => boolean;
   } = {},
@@ -161,7 +162,8 @@ export async function presentationFixture(
             },
           })))
         : manifest.name !== presentation.name
-          ? async () => ({ outcome: "success" as const, value: {} })
+          ? (options.auxiliaryHandler ??
+            (async () => ({ outcome: "success" as const, value: {} })))
           : (options.handler ??
             ((async (ctx) => {
               const input = ctx.inputs?.story;

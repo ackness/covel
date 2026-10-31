@@ -2,11 +2,15 @@
 
 This page explains how plugins get into Covel from GitHub or a ZIP file: the flow the player sees, which links can be pasted, the HTTP interfaces for installing and updating, and the limits. For step-by-step instructions for players, see [Install plugins and world packs](../start/packages.md). For authors, see [Publishing](../ship/publish.md). Read this page when you deploy, troubleshoot an installation problem, or connect to the installation interfaces.
 
+See [world data receivers](./world-data.md#data-receivers) for static discovery, inferred selection and omission notices. Data acceptance does not satisfy service or runtime capability dependencies.
+
 The official catalogue is [covel-ai/covel-plugins](https://github.com/covel-ai/covel-plugins). Each plugin in the catalogue is one JSON entry, and the table in the README is generated from these entries. A third-party plugin's source stays in its author's own repository. Official extensions and examples can live in separate subdirectories of the catalogue repository.
 
 ## Declarative plugins
 
 A community package containing prompts, data declarations and declarative UI can be enabled without server-code or runtime approval. Preparation and session plugin rows disclose model use before enable: automatic agents can call the configured model on scheduled turns; manual, event, setup and delegated agents describe their actual trigger. An execution may call the model several times. The notice promises no fixed price and adds no cost-consent dialog. UI-only packages show no model notice.
+
+Player actions can also explicitly invoke event runtimes. Start-turn, cooldown and maximum-run limits apply only to automatic event delivery. Explicit calls bypass these limits, so each player action may call the model again.
 
 The host derives the required `executionMode` from actual files and declarations: `declarative`, `code` or `unknown`. Authors cannot set a mode flag. Static validation, archive previews, discovery and execution checks share the assessment. Incomplete reads, links and changing inventories yield `unknown`, which receives no exemption. CLI and API diagnostics report package-relative files, fields and reasons.
 

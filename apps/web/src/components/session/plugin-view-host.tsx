@@ -122,7 +122,12 @@ export function PluginViewHost({
       >
         {(!readsSession || sessionBridgeAllowed) && (
           <PluginSurfaceBoundary
-            key={entry.mode}
+            key={JSON.stringify([
+              sessionId,
+              entry.pluginId,
+              entry.mode,
+              pluginViewContent(entry.spec),
+            ])}
             surfaceLabel={entry.label}
             onError={failed}
           >

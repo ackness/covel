@@ -218,13 +218,19 @@ export async function executeOneRuntime(
       ? { ...inv.manifest, presentation: {} }
       : inv.manifest;
     const captured = presentationSnapshotSchema.safeParse(
-      inv.input.detachedStage?.presentation,
+      inv.input.detachedStage?.presentation ??
+        inv.input.manualTrigger?.presentationSnapshots?.find(
+          (snapshot) => snapshot.runtimeId === inv.manifest.name,
+        ),
     );
     const snapshot =
       captured.success &&
       captured.data.committed &&
       captured.data.runtimeId === inv.manifest.name &&
-      captured.data.pluginId === inv.manifest.pluginId
+      captured.data.pluginId === inv.manifest.pluginId &&
+      captured.data.sourceTurnId ===
+        (inv.input.detachedStage?.sourceTurnId ??
+          inv.input.manualTrigger?.sourceTurnId)
         ? captured.data
         : await takePresentationSnapshot({
             manifest: admitted,
@@ -300,6 +306,11 @@ async function executeRuntime(
   const progressScopeId =
     (input as RecursiveTurnInput).progressScopeId ?? executionId;
   const runId = inv.runId ?? crypto.randomUUID();
+  const recoverySnapshot = isScopedRuntimeRecovery(input)
+    ? input.manualTrigger?.presentationSnapshots?.find(
+        (snapshot) => snapshot.runtimeId === manifest.name,
+      )
+    : undefined;
   const timeoutMs = resolveRuntimeTimeoutMs(manifest, defaultTimeoutMs);
   // Resolves to the nested execution's kernel-held result. The invocation
   // context keeps those originals for the commit, attached to the parent's
@@ -474,8 +485,8 @@ async function executeRuntime(
           (manifest.turnCompletion?.mode === "detached" ||
             limits.calls > 0 ||
             limits.generations > 0 ||
-            input.manualTrigger ||
-            input.origin === "manual" ||
+            ((input.manualTrigger || input.origin === "manual") &&
+              !recoverySnapshot) ||
             input.origin === "background" ||
             input.origin === "recursive" ||
             input.origin === "resume"))
@@ -619,17 +630,20 @@ async function executeRuntime(
     if (manifest.presentation !== undefined) {
       let snapshot: import("@covel/shared").PresentationSnapshot;
       try {
-        if (input.detachedStage) {
+        if (input.detachedStage || recoverySnapshot) {
           const parsed = presentationSnapshotSchema.safeParse(
-            input.detachedStage.presentation,
+            input.detachedStage?.presentation ?? recoverySnapshot,
           );
           if (
             !parsed.success ||
             parsed.data.runtimeId !== manifest.name ||
             parsed.data.pluginId !== manifest.pluginId ||
-            parsed.data.sourceTurnId !== input.detachedStage.sourceTurnId ||
-            parsed.data.sourceExecutionId !==
-              input.detachedStage.sourceExecutionId ||
+            parsed.data.sourceTurnId !==
+              (input.detachedStage?.sourceTurnId ??
+                input.manualTrigger?.sourceTurnId) ||
+            (input.detachedStage &&
+              parsed.data.sourceExecutionId !==
+                input.detachedStage.sourceExecutionId) ||
             !parsed.data.committed
           )
             throw new PresentationUnavailable();

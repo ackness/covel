@@ -3,6 +3,27 @@ import {
   parseWorldDataIndexTarget,
 } from "../world-data-target.js";
 import { z } from "zod";
+import { KERNEL_WORLD_DATA_PATHS } from "../world-package-paths.js";
+
+/** A dimension table has one authored path, including in a separate override root. */
+function canonicalDimensions(
+  source: { path?: string; to?: string },
+  ctx: z.RefinementCtx,
+): void {
+  if (source.to !== "world:metadata.dimensions" || source.path === undefined)
+    return;
+  const relative = source.path
+    .split("/")
+    .filter((part) => part !== "." && part !== "")
+    .join("/");
+  if (relative !== KERNEL_WORLD_DATA_PATHS.dimensions)
+    ctx.addIssue({
+      code: "custom",
+      path: ["path"],
+      message:
+        "Define dimensions only at data/dimensions.yaml; put locale overlays beside it and keep one descriptor entry for the base file",
+    });
+}
 
 export const worldDataSourceIdRegex = /^[a-z][a-zA-Z0-9_-]{0,63}$/;
 
@@ -46,7 +67,7 @@ const worldDataSourceDescriptorBaseSchema = z
       .min(1)
       .meta({
         description:
-          "File or directory, relative to the world root. A variant `<name>.<locale>.<ext>` is used when it exists for the session locale.",
+          "File or directory, relative to the world root (or the separate override root for an overridden path). A variant `<name>.<locale>.<ext>` is used when it exists for the session locale. A dimension destination must use data/dimensions.yaml; its overlays are not separate sources.",
         examples: ["data/quests.yaml"],
       }),
     schema: z
@@ -119,6 +140,7 @@ const worldDataSourceDescriptorBaseSchema = z
 
 export const worldDataSourceDescriptorSchema =
   worldDataSourceDescriptorBaseSchema.superRefine((source, ctx) => {
+    canonicalDimensions(source, ctx);
     const issue = (field: string, message: string) =>
       ctx.addIssue({ code: "custom", path: [field], message });
     if (!parseWorldDataTarget(source.to))
@@ -155,7 +177,8 @@ export const worldDataDescriptorEntrySchema =
   worldDataSourceDescriptorBaseSchema
     .partial()
     .required({ path: true })
-    .strict();
+    .strict()
+    .superRefine(canonicalDimensions);
 
 export const worldDataDescriptorSchema = z
   .object({
@@ -165,10 +188,31 @@ export const worldDataDescriptorSchema = z
         "Changes to the conventional sources and further sources, keyed by source ID. An entry whose `path` is that of a conventional source changes it; any other entry adds a source and needs `kind` and `to`. A source ID starts with a letter and uses letters, digits, `_` or `-`.",
       ),
   })
-  .strict();
+  .strict()
+  .superRefine((descriptor, ctx) => {
+    const seen = new Set<string>();
+    for (const [id, source] of Object.entries(descriptor.sources)) {
+      const relative = source.path
+        .split("/")
+        .filter((part) => part !== "." && part !== "")
+        .join("/");
+      if (relative !== KERNEL_WORLD_DATA_PATHS.dimensions) continue;
+      if (seen.has(relative))
+        ctx.addIssue({
+          code: "custom",
+          path: ["sources", id, "path"],
+          message:
+            "Keep one descriptor entry for data/dimensions.yaml; locale overlays are read automatically",
+        });
+      seen.add(relative);
+    }
+  });
 
 export const worldDataSourceDescriptorOverrideSchema =
-  worldDataSourceDescriptorBaseSchema.partial().strict();
+  worldDataSourceDescriptorBaseSchema
+    .partial()
+    .strict()
+    .superRefine(canonicalDimensions);
 
 export const worldDataDescriptorOverrideSchema = z
   .object({

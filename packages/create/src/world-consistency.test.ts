@@ -38,6 +38,21 @@ function scripted(replies: readonly string[]) {
 }
 
 describe("protected world revisions", () => {
+  it("requests correction of malformed manifest YAML before isolating public replacements", async () => {
+    const { llm, requests } = scripted([
+      patch("UNCHANGED", "UNCHANGED", "name: [unterminated"),
+      patch("UNCHANGED"),
+    ]);
+    const result = await createWorld({
+      llm,
+      concept: "Harbor",
+      locale: "en-US",
+      revision: { current, instruction: "Polish the public setting." },
+    });
+    expect(result.success).toBe(true);
+    expect(requests).toHaveLength(2);
+    expect(JSON.stringify(requests[1]?.messages)).toContain("Invalid YAML");
+  });
   it("does not synthesize public headings from the secret-aware manifest answer", async () => {
     const { llm, requests } = scripted([
       patch(
@@ -45,6 +60,7 @@ describe("protected world revisions", () => {
         "UNCHANGED",
         `name: ${secret}`,
       ),
+      patch("UNCHANGED", "UNCHANGED", "UNCHANGED"),
       `===WORLD_MD===\n${visible.replace("# Harbor\n\n", "")}\n===END===`,
     ]);
     const result = await createWorld({
@@ -55,9 +71,74 @@ describe("protected world revisions", () => {
     });
     expect(result.success).toBe(false);
     expect(result.errors?.join(" ")).toContain("H1 title");
+    expect(requests).toHaveLength(3);
+    expect(JSON.stringify(requests[1]?.messages)).not.toContain(secret);
+    expect(JSON.stringify(requests[2]?.messages)).not.toContain(secret);
+  });
+  it("rebuilds public dimensions and manifest from sources that never receive hidden revision lore", async () => {
+    const dimensions = {
+      alarm: { name: "Alarm", schema: { type: "integer" }, initialValue: 17 },
+    };
+    const { llm, requests } = scripted([
+      patch(
+        "UNCHANGED",
+        stringify({
+          dimensions: {
+            leaked: {
+              name: secret,
+              schema: { type: "string" },
+              initialValue: secret,
+            },
+          },
+        }),
+        `summary: ${secret}\npluginPitch: {label: "${secret}"}`,
+      ),
+      patch("UNCHANGED", "UNCHANGED", "UNCHANGED"),
+    ]);
+    const result = await createWorld({
+      llm,
+      concept: "PRIVATE_CONCEPT_SENTINEL",
+      locale: "en-US",
+      revision: {
+        current: { ...current, packageYaml: stringify({ dimensions }) },
+        instruction: "Polish the public setting.",
+      },
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.packageContent.dimensions).toEqual(dimensions);
+      expect(JSON.stringify(result.manifest)).not.toContain(secret);
+      expect(result.manifest).not.toHaveProperty("dimensions");
+    }
     expect(requests).toHaveLength(2);
     expect(JSON.stringify(requests[1]?.messages)).not.toContain(secret);
+    expect(JSON.stringify(requests[1]?.messages)).not.toContain(
+      "PRIVATE_CONCEPT_SENTINEL",
+    );
   });
+
+  it.each(["dimensions: {}", "dimensions: {alarm: null}"])(
+    "clears the last portable definition through %s",
+    async (packageYaml) => {
+      const { llm } = scripted([patch("UNCHANGED", packageYaml)]);
+      const result = await createWorld({
+        llm,
+        concept: "Harbor",
+        locale: "en-US",
+        revision: {
+          current: {
+            yaml,
+            lore: visible,
+            packageYaml:
+              "dimensions: {alarm: {name: Alarm, schema: {type: integer}, initialValue: 17}}",
+          },
+          instruction: "Remove the alarm.",
+        },
+      });
+      expect(result.success).toBe(true);
+      if (result.success) expect(result.packageContent.dimensions).toEqual({});
+    },
+  );
   it("allows a public first-paragraph edit without changing hidden lore", async () => {
     const changed = lore.replace(
       "A courier arrives.",

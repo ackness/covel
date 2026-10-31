@@ -230,6 +230,31 @@ describe("shared API contracts", () => {
     ).toBe(true);
   });
 
+  it("preserves explicitly public labels in world data omission notices", () => {
+    const dataNotices = [
+      {
+        level: "warning",
+        code: "receiver-missing",
+        publicLabel: "Starting notes",
+        message: "This data has no plugin to receive it.",
+      },
+    ];
+    expect(
+      worldPluginPlanSchema.parse({
+        worldId: "world-1",
+        packs: [],
+        selection: {
+          requestedPluginIds: [],
+          requiredContracts: [],
+          requiredDataContracts: ["notes@1"],
+        },
+        defaultPluginIds: [],
+        diagnostics: [],
+        dataNotices,
+      }).dataNotices,
+    ).toEqual(dataNotices);
+  });
+
   it.each(["verified", "modified", "no-receipt", "unreadable"] as const)(
     "preserves community source trust with %s integrity in discovery",
     (integrity) => {

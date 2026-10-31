@@ -106,7 +106,10 @@ export async function createRecoveryFixture(
       ],
     },
   });
-  expect(response.ok()).toBeTruthy();
+  const creationFailure = response.ok()
+    ? undefined
+    : `POST /api/sessions returned ${response.status()}: ${await response.text()}`;
+  expect(response.ok(), creationFailure).toBeTruthy();
   const session = (await response.json()) as { id: string };
   const [sessionResponse, snapshotResponse] = await Promise.all([
     page.request.get(`/api/sessions/${session.id}`),

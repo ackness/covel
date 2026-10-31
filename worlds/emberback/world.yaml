@@ -19,11 +19,6 @@ accentColor: "oklch(72% 0.14 50)"
 plugins:
   - pack:traditional-story
   - plugin:dice-check
-  - plugin:core-quest
-  - plugin:inventory
-  - plugin:affinity
-  - plugin:character-blueprint
-  - plugin:story-events
 pluginPitch:
   label: Emberback Rescue
   description: >-

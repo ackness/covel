@@ -83,12 +83,17 @@ vi.mock("@/theme-system/use-theme-layout.js", () => ({
   useThemeLayout: () => ({ backdrop: "plain" }),
 }));
 vi.mock("@/settings/SettingsDialog.js", () => ({ SettingsDialog: () => null }));
-vi.mock("../plugin-view-consent.js", () => ({
-  usePluginViewConsent: () => ({
-    isAllowed: () => true,
-    isCurrent: () => () => true,
-  }),
-}));
+vi.mock("../plugin-view-consent.js", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("../plugin-view-consent.js")>();
+  return {
+    ...actual,
+    usePluginViewConsent: () => ({
+      isAllowed: () => true,
+      isCurrent: () => () => true,
+    }),
+  };
+});
 vi.mock("../right-panel-state.js", () => ({ useRightPanelState: () => ({}) }));
 vi.mock("../stage/use-stage-media-preload.js", () => ({
   useStageMediaPreload: () => {},

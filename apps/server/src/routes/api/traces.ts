@@ -94,6 +94,7 @@ async function readTraceWindow(c: Context<Env>, sessionId: string) {
         isEntryPublished: c.get("isPluginEntryPublished"),
         store,
         registry: c.get("pluginRegistry"),
+        trustedSources: c.get("trustedSources"),
         sessionId,
         builtinToolNames: c.get("builtinToolNames"),
       });
@@ -176,6 +177,7 @@ traceRoutes.get(
           isEntryPublished: c.get("isPluginEntryPublished"),
           store,
           registry: c.get("pluginRegistry"),
+          trustedSources: c.get("trustedSources"),
           sessionId,
           builtinToolNames: c.get("builtinToolNames"),
         });

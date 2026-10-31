@@ -2,6 +2,8 @@
 
 这一页说明 Covel 服务端有哪些安全边界，以及每条边界为什么画在那里。它写给要改服务端、部署托管实例，或者想知道“批准一个社区插件意味着什么”的人。
 
+世界数据的静态发现、接收者推导与缺失提示见[接收规则](../reference/world-data.md#data-receivers)。接收声明不满足服务或 runtime 能力依赖。
+
 相关内容在别的页面：
 
 - 每条路由的鉴权约定：[`../reference/api.md`](../reference/api.md#鉴权session-owner-token)
@@ -12,6 +14,8 @@
 - 报告漏洞：[`SECURITY.md`](../../SECURITY.md)
 
 下文多次提到“部署档位”（`DEPLOYMENT_TIER`）。`self` 是默认值，指桌面客户端和自己部署给自己用的实例。`demo` 是给公开网页实例用的档位，为以后的官方网页版准备；官方网页版现在还不支持。`commercial` 是给以后可能有的商业版预留的最严格档位：现在没有账号、租户隔离和配额，这个仓库也不为它更新。`demo` 和 `commercial` 都要求令牌，合称托管档位。
+
+插件文件引用按[声明目录规则](../reference/plugins.md#declaration-paths)解析，并检查解析后的真实路径仍在包内。约定的 `output.schema.json` 也不能通过符号链接逃出包，或从父仓库继承。
 
 ## 声明式执行边界
 

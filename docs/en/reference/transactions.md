@@ -2,6 +2,8 @@
 
 This page explains how Covel makes sure that "a batch of writes either all takes effect, or none of it does". It is for developers who change a storage backend, change the turn commit flow, or track down "why this write was not saved". Writing a plugin does not require this page. A plugin's writes all go through proposals, and the kernel commits them.
 
+See [world data receivers](./world-data.md#data-receivers) for static discovery, inferred selection and omission notices. Data acceptance does not satisfy service or runtime capability dependencies.
+
 There are three key points:
 
 - The storage interface `DataStore` has only one kind of transaction: `withTransaction(fn)`. Every backend must implement it.
@@ -13,6 +15,8 @@ A world package digest is saved with the world record’s metadata and needs no 
 World package files are outside the database transaction. Generation, revision, and translation coordinate files and world records through staging, package preflight, directory replacement, and failure recovery; the [API write-back rules](./api.md#post-apiworldsidtranslate) describe what survives a failure.
 
 SillyTavern content import reuses ZIP world activation: conversion and preview stay in memory, then the world lock protects atomic materialization, read-back preflight and record creation. Failure removes only the newly created directory. See [world installation](./world-installation.md).
+
+Dimension sources are separated only at authoring and generation boundaries: canonical `data/dimensions.yaml` for files and `packageContent.dimensions` for portable results. Record edits keep the existing world lifecycle lock; session import/sync still commits atomically with the ledger, preserving provider binding, CAS and player-edit conflicts.
 
 ## Contract
 
@@ -643,7 +647,7 @@ When a session is created with `worldData`, the same `DataStore` transaction con
 - the media index rows stored in `plugin_data`
 - `world_data_import_ledger`
 
-Data without a receiving plugin is skipped during planning under the [world-data receiver rules](./world-data.md#target-uri). Warnings do not fail the transaction. The skipped portion produces no writes or new import ledger rows; sync preserves its existing managed data, ledger rows, and media references. Active projections produce and sync their own writes independently.
+Data without a receiving plugin is skipped during planning under the [world-data receiver rules](./world-data.md#target-uri). Warnings do not fail the transaction. The skipped portion produces no writes or new import ledger rows; sync preserves its existing managed data, ledger rows, and media references. Active projections produce and sync their own writes independently. A collision on a conventional path or character field also defers the original source until the declarations are disambiguated. Installing an inactive or unapproved conflicting package does not authorize deleting existing data.
 
 Before the import starts planning any writes, it parses the locale override file. A source's `localeArrayKeys` gives the identity fields of nested lists (placed after `key` and `id`). So when the author reorders a list, the translation records still match. Sync works the same way.
 

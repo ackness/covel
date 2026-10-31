@@ -2,6 +2,8 @@
 
 Preparation keeps independent world requests and manual exclusions when switching packs. Missing references reduce only their features. The first pack card uses public world text unless `pluginPitch` overrides it.
 
+See [world data receivers](../reference/world-data.md#data-receivers) for static discovery, inferred selection and omission notices. Data acceptance does not satisfy service or runtime capability dependencies.
+
 This page covers the start of a game and the world itself: what happens when a game begins, how the player character is created, and how the people, rules, time and new discoveries in the world are recorded.
 
 This page introduces the plugins in the order you encounter them in a game. First come the four that run at the start, then the five that keep updating as the story goes on.
@@ -24,6 +26,8 @@ Character tracking, fact extraction, and dimension updates read the attribution 
 > None of the plugins on this page has settings for you to adjust, so there is no "What you can change" section below. Plugins that are on by default (`kind: core`) can be turned off on the session-prep screen. Other plugins are chosen by the world or the gameplay pack. For how to install and manage them, see [Install and manage](../start/packages.md).
 
 If a concurrent change makes an affinity or clock calculation stale, that derived update is skipped while an independent successful story survives. A later explicit retry reads and recalculates it; see [read-baseline conflicts](../reference/transactions.md#read-baselines).
+
+A world package has one authored dimension file, `data/dimensions.yaml`. The world editor saves resolved records without directly changing installed packages; an empty table clears definitions. See [dimension sources](../reference/world-data.md#dimension-sources).
 
 ## Pre-Game Setup (`pregame`)
 

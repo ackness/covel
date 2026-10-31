@@ -233,6 +233,7 @@ describe("GET /api/worlds/:id/plugin-plan", () => {
     expect(result.selection).toEqual({
       requestedPluginIds: ["traditional"],
       requiredContracts: [],
+      requiredDataContracts: [],
     });
     expect(result.selectedPackId).toBe("dialogue-mode");
     const pack = result.packs[0]!;

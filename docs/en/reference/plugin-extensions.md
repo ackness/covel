@@ -2,6 +2,8 @@
 
 A plugin rarely works alone. It may need to read a result that another plugin computed, emit an event, call another plugin's function, or draw its own panel in the interface. This page explains which interface to use for each of these jobs and where the boundary of each one is. Plugin authors who write several plugins that work together, connect a new model protocol, or build a custom UI need it.
 
+See [world data receivers](./world-data.md#data-receivers) for static discovery, inferred selection and omission notices. Data acceptance does not satisfy service or runtime capability dependencies.
+
 The split of work is this: the framework handles discovery, authorization, scheduling, validation, cancellation, and mounting. The structure of business data, the algorithms, the provider protocols, and the UI components stay inside the plugin package.
 
 Examples you can install and look at:

@@ -122,6 +122,7 @@ export interface TurnCompletionSummary {
 export type WorldDataPreflightDiagnosticLevel = "info" | "warning" | "error";
 
 export interface WorldDataPreflightDiagnostic {
+  publicLabel?: string;
   level: WorldDataPreflightDiagnosticLevel;
   sourceId?: string;
   path?: string;
@@ -133,7 +134,11 @@ export interface WorldDataPreflightDiagnostic {
     | "convention-collision"
     | "dimension-provider-missing"
     | "dimension-reference"
-    | "receiver-missing";
+    | "receiver-missing"
+    | "receiver-ambiguous"
+    | "receiver-excluded"
+    | "receiver-approval-required"
+    | "unclaimed-data-source";
 }
 
 export interface WorldDataPreflightTarget {

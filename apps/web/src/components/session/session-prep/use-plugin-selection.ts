@@ -27,7 +27,7 @@ export interface UsePluginSelectionResult {
   selectedPlugins: ReadonlySet<string>;
   enabledPluginSummaries: api.PluginSummary[];
   enabledPluginIds: string[];
-  /** Selected community plugins waiting for this new session's approval. */
+  /** Community plugins awaiting approval, separate from explicit requests. */
   pendingApproval: readonly import("@covel/shared").PluginResolutionRejection[];
   requestedPluginIds: string[];
   excludedPluginIds: string[];
@@ -154,6 +154,8 @@ export function usePluginSelection(
   );
   const requiredContracts =
     pluginPlan?.selection.requiredContracts ?? NO_CONTRACTS;
+  const requiredDataContracts =
+    pluginPlan?.selection.requiredDataContracts ?? NO_CONTRACTS;
   const [otherSelectedPlugins, setOtherSelectedPlugins] = useState<Set<string>>(
     () => new Set(corePluginIds),
   );
@@ -175,13 +177,15 @@ export function usePluginSelection(
   );
   const candidates = useMemo(
     () =>
-      plugins.map((plugin) => ({
-        ...plugin,
-        authorized:
-          plugin.source === "builtin" ||
-          plugin.executionMode === "declarative" ||
-          plugin.trust?.autoApproved === true,
-      })),
+      plugins
+        .filter((plugin) => plugin.hostState !== "error")
+        .map((plugin) => ({
+          ...plugin,
+          authorized:
+            plugin.source === "builtin" ||
+            plugin.executionMode === "declarative" ||
+            plugin.trust?.autoApproved === true,
+        })),
     [plugins],
   );
   const resolution = useMemo(
@@ -191,6 +195,7 @@ export function usePluginSelection(
         excluded: [...excludedPlugins],
         plugins: candidates,
         requiredContracts,
+        requiredDataContracts,
       }),
     [
       candidates,
@@ -198,6 +203,7 @@ export function usePluginSelection(
       excludedPlugins,
       worldRequiredPluginIds,
       requiredContracts,
+      requiredDataContracts,
     ],
   );
   const enabledPluginIds = resolution.active;
@@ -231,9 +237,22 @@ export function usePluginSelection(
         (item) =>
           item.code === "approval-required" &&
           (selectedPlugins.has(item.pluginId) ||
-            worldRequiredPluginIds.has(item.pluginId)),
+            worldRequiredPluginIds.has(item.pluginId) ||
+            candidates.some(
+              (candidate) =>
+                candidate.id === item.pluginId &&
+                requiredDataContracts.some((contract) =>
+                  candidate.acceptsWorldData?.includes(contract),
+                ),
+            )),
       ),
-    [resolution, selectedPlugins, worldRequiredPluginIds],
+    [
+      resolution,
+      selectedPlugins,
+      worldRequiredPluginIds,
+      candidates,
+      requiredDataContracts,
+    ],
   );
   const dependentsOff = useMemo(
     () =>
@@ -352,6 +371,7 @@ export function usePluginSelection(
         requested: story,
         plugins: candidates.map((plugin) => ({ ...plugin, kind: "plugin" })),
         requiredContracts,
+        requiredDataContracts,
       }).active,
     );
     // The world's defaults stay requested and are turned off the way a pack
@@ -386,6 +406,7 @@ export function usePluginSelection(
     pluginPacks,
     selectedPluginIdSet,
     requiredContracts,
+    requiredDataContracts,
     worldRequiredPluginIds,
   ]);
 
@@ -422,6 +443,7 @@ export function usePluginSelection(
           excluded: [...excluded],
           plugins: candidates,
           requiredContracts,
+          requiredDataContracts,
         });
         // A successful explicit choice replaces only previously active conflicts.
         // Keep unresolved requests so missing dependencies still reach validation.
@@ -451,6 +473,7 @@ export function usePluginSelection(
       candidates,
       worldRequiredPluginIds,
       requiredContracts,
+      requiredDataContracts,
       enabledPluginIds,
     ],
   );

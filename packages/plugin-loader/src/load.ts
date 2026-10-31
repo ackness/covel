@@ -667,6 +667,11 @@ async function loadOutputSchema(
 
   const conventionPath = path.join(runtimeDir, "output.schema.json");
   if (!(await fileExists(conventionPath))) return undefined;
+  await assertInsideRoot(
+    pluginRoot,
+    conventionPath,
+    "Output schema path traversal rejected",
+  );
   return readSchemaFile(conventionPath, "io.output.schema");
 }
 

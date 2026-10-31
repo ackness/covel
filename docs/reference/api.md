@@ -57,6 +57,12 @@ Covel 的服务器对外只有一套 HTTP JSON 接口。网页和桌面应用用
 - 审批决定先检查 `decision` 和 `scope` 是不是合法取值，通过了才会消耗那条待决审批。
 - 事件注入先检查各个标识符是字符串、`payload` 是对象，然后才发布。
 
+插件摘要新增 `acceptsWorldData`；世界计划新增 `selection.requiredDataContracts` 和安全的 `dataNotices`。创建由服务端推导需求并写入 `metadata.pluginSelection.requiredDataContracts`，不信任客户端提示；准备接口接收 `excludedPlugins`。过期创建返回 `409 world_data_create_plan_stale`，`details.reason` 为 `world_content_changed`、`world_files_changed`、`plugin_manifest_changed` 或 `plugin_authorization_changed`，分别指本世界记录内容、包文件、计划所用插件的注册身份或授权变化；诊断不带世界或插件 ID。详见[接收规则](./world-data.md#data-receivers)。
+
+世界数据导入失败返回固定说明与 `world_data_import_failed`，开发模式也不返回作者诊断；详细原因只记服务端日志。
+
+世界 API 的 `dimensions` 与 `metadata.dimensions` 是解析后的记录投影，不是 `world.yaml` 字段；现有 metadata 规范化入口检查定义，顶层值优先，空表明确清空。生成器的可携带结果使用 `packageContent.dimensions`；生成／修订 API 的 `done.world` 继续返回解析后的世界记录。详见[生成与导出](./world-data.md#ai-生成结果与文件导出)。
+
 ## 声明式插件的 API 状态
 
 插件摘要（列表、详情和会话列表）必含 `executionMode: declarative | code | unknown`。`executionDiagnostics` 可选，只有包内文件、字段和原因；不公开宿主证明、绝对路径或提示词。GitHub 预览也带分类，`hasServerCode` 对 `code` 和 `unknown` 均为真。静态校验的 `summary` 带 `executionMode` 与 `executionDiagnostics`。
@@ -1581,7 +1587,7 @@ fork 和社区插件的授权：
 各端点的补充说明：
 
 - `GET /api/plugins`：数据来自 registry 快照。加载失败的插件也会返回，是一条 `status: "error"` 的 item。它的 `error` 文字里，插件目录的服务器绝对路径写成 `<plugin>`（例如 `<plugin>/PLUGIN.md: …`）；完整原文只写进服务器日志。
-- `GET /api/worlds/:id/plugin-plan`：返回 `selection: { requestedPluginIds, requiredContracts }`、按世界偏好排序的全部 `packs`、可选 `selectedPackId`、`defaultPluginIds` 和最多 256 条 `diagnostics`。
+- `GET /api/worlds/:id/plugin-plan`：返回 `selection: { requestedPluginIds, requiredContracts, requiredDataContracts }`、按世界偏好排序的全部 `packs`、可选 `selectedPackId`、`defaultPluginIds` 和最多 256 条 `diagnostics`。
   - 只有第一个玩法包引用决定初始包。未知首包报告 `unknown-pack`，不自动选别的包；备选包不展开为默认请求。
   - 独立插件请求与选中包的请求构成 `defaultPluginIds`。提交的 ID 都已安装；`missing-plugin` 诊断带 `pluginId`、`path` 和可选 `packId`。其他诊断码为 `invalid-reference`、`redundant-reference`、`unknown-pack`，可带 `reference`。
   - 初始包使用公开世界名称、简介与标签，`pluginPitch` 逐字段覆盖；派生介绍不保存，见[插件选择](./world-data.md#插件选择pluginpolicy)。
@@ -1697,7 +1703,7 @@ fork 和社区插件的授权：
 
 - 请求 body：`{ "sessionId"?: string }`。
 - 响应：`{ "ok": true, "pluginId": string, "generation": string }`。
-- 只在开发环境、只对社区插件可用。需要通过安装 API 的鉴权，代码导入还要求该会话当前持有服务端代码授权；未授权时仅发布元数据。
+- 只在开发环境、只对社区插件可用，需要通过安装 API 的鉴权。新鲜证明为声明式的包无需代码授权即可发布；其他包的代码导入要求该会话当前持有服务端代码授权，未授权时仅发布元数据。
 - 重载失败返回 `409 plugin_reload_failed`，旧的一代继续生效。
 - 功能关闭时返回 `403 plugin_reload_disabled`。
 - 已经开始的执行继续用旧一代的能力、handler 和 guard；之后的执行用新一代。
@@ -1833,10 +1839,10 @@ SSE。先发一个 `ready` 事件，之后每 15 秒发一行注释保持连接�
 
 - 没有 `lore` 和 `dimensions`。
 - 顶层可选的 `updateAvailable` 比较包文件与记录导入时保存的摘要：不同为 `true`，相同为 `false`。没有包、没有已保存摘要，或包当前不可读时省略。每次读取重新检查，不写世界记录，也不查询 GitHub。
-- `metadata` 只保留这些键：`source`、`storage`、`packageManaged`、`generated`、`cover`、`accentColor`、`supportedLocales`、`packageInfo`、`defaultViewMode`、`pluginSettings`，以及 `localizedText` 里的 `name` / `description`。
+- `metadata` 只保留这些键：`source`、`storage`、`packageManaged`、`generated`、`cover`、`accentColor`、`supportedLocales`、`packageInfo`、`defaultViewMode`、`pluginSettings`、`plugins`、`pluginPitch`，以及 `localizedText` 里的 `name` / `description`。
 - 各语言的设定正文 `localizedText.lore` 不在摘要里。
-- 其余键（`dimensions`、`embeddedCharacters`、`embeddedLorebook`、`characterSchema`、`plugins`、`worldData` 等）要用 `GET /api/worlds/:id` 读完整记录。
-- 世界的插件策略解析结果见 `GET /api/worlds/:id/plugin-plan`。
+- 其余键（`dimensions`、`embeddedCharacters`、`embeddedLorebook`、`characterSchema`、`worldData` 等）要用 `GET /api/worlds/:id` 读完整记录。
+- 世界的插件选择解析结果见 `GET /api/worlds/:id/plugin-plan`。
 
 内置四个世界的列表约 3.9 KB。
 
@@ -2023,7 +2029,7 @@ SSE。先发一个 `ready` 事件，之后每 15 秒发一行注释保持连接�
 
 行为：
 
-- 顶层 `dimensions` 会写入 `metadata.dimensions`。
+- 顶层 `dimensions` 会写入 `metadata.dimensions`。浏览器本地编辑同样更新这份规范字段与展示字段，空表在存档点上传／恢复后仍保持清空。
 - `metadata` 是合并写入：没提到的同级字段保留原样。
 - `dimensions` 与 `metadata.dimensions` 都会经过世界维度校验。
 - 新会话、预检和同步用这条记录里的维度和 `characterSchema`，不读世界包里的文件。
@@ -2111,18 +2117,20 @@ SSE。先发一个 `ready` 事件，之后每 15 秒发一行注释保持连接�
 
 #### `POST /api/worlds/:id/world-data/preflight`
 
-预检也检查接收插件声明的[维度引用和候选值](./world-data.md)，错误诊断使用 `dimension-reference`，并带文件和记录位置。正式导入与同步使用同一检查。
+预检与 `sync-data`、`sync-dimensions` 共用接收者准入顺序：先检查当前授权、加载错误和故障暂停，再解析固定插件集合的依赖。直接或间接依赖不可用时，接收者也不参与写入，已有托管数据保留。公开来源的省略提示可以携带声明标题 `publicLabel`；隐藏来源不携带标题或身份。
 
-只读地预检一次 worldData 导入：告诉你会导入多少条、写到哪里，但什么都不写。目的数据集违反 schema 或 `set` 规则时返回带 `sourceId` 和可用记录位置的 error 诊断。媒体占位值只检查 `set` 准入，实际索引记录的 schema 与最终大小在 apply 时检查；预检不物化媒体。
+预检也检查接收插件声明的[维度引用和候选值](./world-data.md)，错误诊断使用 `dimension-reference`。玩家响应只返回安全说明；文件和记录位置保留在作者校验里。正式导入与同步使用同一检查。
+
+只读地预检一次 worldData 导入：告诉你会导入多少条、写到哪里，但什么都不写。目的数据集违反 schema 或 `set` 规则时返回安全的 error 诊断；来源位置和记录详情只在作者校验中提供。媒体占位值只检查 `set` 准入，实际索引记录的 schema 与最终大小在 apply 时检查；预检不物化媒体。
 
 请求有两种写法：
 
-- 传 `sessionId`：使用这个会话**已保存的 `activePlugins`**。这时请求里的 `plugins` 会被忽略。
-- 只传 `plugins`：在创建会话之前，预检某一组插件选择。
+- 传 `sessionId`：使用这个会话固定集合中当前已授权且未熔断的插件，以及会话内容语言。请求里的 `plugins`、`excludedPlugins` 和 `locale` 会被忽略。
+- 只传 `plugins`：作为新会话请求，与实际数据需求及 `excludedPlugins` 一起解析；可用 `locale` 预览世界支持的内容版本。
 
 维度和角色 schema 读世界记录，和创建会话一样；其他数据读世界包的 `data/`。
 
-预检不会加载也不会执行 `worldProjections` handler，所以 projection 的输出不计入 `planned` / `targets`。响应会带一条 warning，说明这部分推迟到真正导入或同步时执行。
+预检不会加载也不会执行 `worldProjections` handler，所以 projection 的输出不计入 `planned` / `targets`。响应会带安全的 warning；这部分推迟到真正导入或同步时执行。
 
 世界声明了维度，而这组插件里没有提供 `world.dimensions@1` 的，响应带一条 `code: "dimension-provider-missing"` 的 warning：这些维度不会导入。准备页据此提示玩家。
 
@@ -4504,7 +4512,7 @@ runtime 可以中途停下来等玩家提供数据，这叫挂起。本节的端
 | ------ | ------ | ---- | ----------------------------------------------- |
 | `data` | object | 是   | 玩家提交的数据，必须符合挂起项的 `resumeSchema` |
 
-- 缺少社区插件的运行授权时，先返回 `202 approval-required`，依次请求 `covel:plugin-server-code` 和 `runtime:<runtimeId>`。授权只针对这次恢复的 runtime 和会话里的子 agent 提供方；持有会话锁后还会重查。客户端逐项审批并重试原请求，拒绝审批则保留挂起项。托管部署还要求运营者凭据。
+- 非声明式社区插件缺少运行授权时，先返回 `202 approval-required`，依次请求 `covel:plugin-server-code` 和 `runtime:<runtimeId>`。授权只针对这次恢复的 runtime 和会话里的子 agent 提供方；持有会话锁后还会重查。客户端逐项审批并重试原请求，拒绝审批则保留挂起项。这些代码审批在托管部署还要求运营者凭据；新鲜证明为声明式的包免去代码、runtime 审批和此运营者门槛，但仍检查会话所有权。
 - 服务端用 `resumeSchema` 对 `data` 做完整的 JSON Schema 校验（Ajv）：`enum`、嵌套对象、`min` / `max`、`minLength` / `maxLength`、`pattern`、数组 `items`、`oneOf` / `anyOf` 等都会检查。不符合返回 `400 resume_data_invalid`。schema 不是对象或无法编译时，返回 `400 resume_schema_invalid`；不会占用挂起项或运行插件，作者需修正插件产生的 schema，再发起新的挂起请求；玩家可以放弃原挂起项。
 - 浏览器客户端可以带 `X-Provider-Keys` 请求头，为这次请求提供模型密钥。桌面版和自部署客户端可以省略，沿用服务端启动时配置的密钥。服务端不会通过这个接口回传密钥。
 
@@ -5184,9 +5192,11 @@ id: example-epoch:2
 - 只把原回合和相关已提交重试里**成功的、非目标**的结果当作上下文。这些结果不会重复提交，也不会重发事件。
 - 在目标之间保持正常的输入校验、依赖顺序和相互独立任务的并行。
 - 因为依赖失败而被跳过（skipped）的任务，不会被标成“已修复”。
-- 保持在前台执行。批量恢复和带明确来源回合的单任务恢复，都不会通过事件订阅、递归调用或后台分发扩大范围。
+- 普通目标保持在前台执行；已有呈现作业按下文的受限来源恢复。批量恢复和带明确来源回合的单任务恢复，都不会通过事件订阅、递归调用或后台分发扩大范围。
 
 带来源回合的单任务重试同样核对来源和最新的失败状态。不带来源的普通手动调用和插件 RPC 调用，保留原有的事件链、递归和分发行为。
+
+呈现选择器的限定恢复由宿主提供已提交的公开来源，不能由请求携带快照。已有付费呈现作业的恢复保留 detached 执行和剩余额度；具体边界见[呈现 runtime](./plugins.md#presentation-runtimes)。
 
 ##### 重试的事件与状态
 
@@ -5219,7 +5229,7 @@ id: example-epoch:2
 
 ##### 社区插件授权
 
-会话里的社区插件还没有得到授权时，服务端在开始 SSE 和写入回合**之前**返回 HTTP `202` 和一段 JSON：
+会话里的非声明式社区插件还没有得到授权时，服务端在开始 SSE 和写入回合**之前**返回 HTTP `202` 和一段 JSON：
 
 ```json
 { "status": "approval-required", "approvalId": "...", "pending": { ... } }
@@ -5821,7 +5831,7 @@ Trace 是服务器为每个回合记下的调试事件：哪个 runtime 开始�
 - 事件按时间从旧到新排列。
 - 响应里的 `nextCursor` 是一个不透明字符串。它不为 `null` 时，说明还有更早的事件；把它原样作为 `?cursor` 再请求，就能读到更早的一段。
 - 非法的 `cursor` 返回 `400 { "code": "invalid_cursor" }`。
-- `discovery` 是这个会话的插件和 runtime 发现快照，调试页用它显示名称。
+- `discovery` 是这个会话的插件和 runtime 发现快照，调试页用它显示名称。序列化前重新检查当前文件的执行分类与来源信任，与 `/api/plugins` 使用同一评估结果。
 
 #### `GET /api/traces/:sessionId`
 

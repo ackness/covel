@@ -18,7 +18,7 @@ export async function resolveApproval(
     body: JSON.stringify({ decision, scope }),
     sessionId,
     operatorAuth: true,
-    silentStatuses: [409],
+    silentCodes: ["approval_obsolete"],
   }).catch((error: unknown) => {
     // The server consumed this request without a grant. Callers retry the
     // original enable/run against current policy, retaining their visit guards.

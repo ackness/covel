@@ -864,3 +864,46 @@ it("serialises simultaneous validations and continues after a rejection", async 
   await Promise.all([first, caught, third]);
   expect(calls).toEqual([1, 2, 3, 4]);
 });
+
+it("matches static author diagnostics for unknown content and an explicit missing receiver", async () => {
+  const dir = path.join(root, "worlds/sample");
+  await files(dir, {
+    "world.yaml": world + "worldData: data/world.data.yaml\n",
+    "WORLD.md": "Lore.",
+    "data/world.data.yaml":
+      "sources:\n  notes:\n    kind: json\n    path: data/notes.json\n    to: contract:missing.notes@1\n",
+    "data/notes.json": "[]",
+    "data/unknown.yaml": "[]",
+  });
+  const core = await validateWorldPackage({
+    worldDir: dir,
+    catalogue: registry,
+    pluginsDirs: [],
+  });
+  const response = await post("world", { kind: "installed", id: "sample" });
+  expect(response.status).toBe(200);
+  const report = packageValidationReportSchema.parse(await response.json());
+  const selected = new Set(["unclaimed-data-source", "unresolved-contract"]);
+  expect(
+    report.issues
+      .filter((issue) => selected.has(issue.code))
+      .map((issue) => ({
+        code: issue.code,
+        severity: issue.severity,
+        file: issue.file,
+        field: issue.field,
+      })),
+  ).toEqual(
+    core.diagnostics
+      .filter((issue) => selected.has(issue.code))
+      .map((issue) => ({
+        code: issue.code,
+        severity: issue.level,
+        file: issue.file,
+        field: issue.pointer,
+      })),
+  );
+  expect(
+    report.issues.filter((issue) => selected.has(issue.code)),
+  ).toHaveLength(2);
+});

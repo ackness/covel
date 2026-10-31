@@ -1,5 +1,7 @@
 # SSE protocol
 
+Preparation freezes distinct capability `requiredContracts` and data `requiredDataContracts` in session metadata. Safe `dataNotices` / `worldDataNotices` report omissions. See [receiver rules](./world-data.md#data-receivers).
+
 World preparation reads `plugins` references through the public plan's `selection`. Creation submits explicit plugin IDs and exclusions; the server freezes world `contract:` references independently. Missing features produce notices and do not block play.
 
 This page explains how a client and the Covel server talk to each other: what requests the client sends, what events the server pushes, what data each event carries, and how a client recovers after a dropped connection.
@@ -105,6 +107,7 @@ The return value of `executeTurn` is the `{ result, commit }` shown above, not `
 
 ### A few rules for concurrency
 
+- Session creation freezes the preparation plan for its own world. Changes to other worlds or unrelated plugins do not invalidate it. See the [API](./api.md) for stale-plan diagnostics and [world data receiver rules](./world-data.md#data-receivers) for the comparison scope.
 - When a form is submitted during an execution, the mutual-exclusion check runs first, and only then does it try to take ownership of the stream. So it cannot take over the action stream that is in progress.
 - An interjection that arrives after narration has ended is not accepted, because the model no longer has a chance to read it. The record saved for an interjection and the live message use the same identity.
 - The SSE operations for generate, revise, and translate use a "only one running at a time" flag. The flag stays set until the stream callback finishes, including the cleanup phase.
@@ -699,6 +702,7 @@ The data of `system.connected` has a `cursor`. It is the latest event ID this se
 - `apps/web/src/services/subscription.ts` subscribes by default to `runtime / state / game / plugin / session / system`. It does not include `store`. To recover background tasks, the session store subscribes to `job` explicitly as well.
 - The client dispatches by `event.topic`. When you add a new topic or event, **you must update this file at the same time**.
 - In-turn events on `/api/actions` (`narrative.delta` / `narrative.completed` / `interaction.requested` / `plugin-data.changed`, and so on) are handled by the callback of `sendAction`. They do not go through `subscription.ts`.
+- The `game` event `turn.completed` reports a committed turn. An observing web client rereads the session snapshot to update messages and the turn count, including turns without character or dimension writes. Existing recovery generation and execution ownership checks preserve a healthy local action stream.
 
 **Authentication**
 
@@ -938,6 +942,8 @@ It requires the session to already have a non-empty `activePlugins` (chosen when
 - `payload.runtimeId` must be provided.
 - An explicit `retryFromTurnId` must point to an original turn that is committed and still belongs to the current story. The target must still be in the failed state.
 - Without a source, it is handled as an ordinary manual call.
+
+Scoped selector retries use host-validated committed public sources; manual calls without a valid source are skipped. Existing paid presentation jobs retain their source and remaining allowance; see [presentation runtimes](./plugins.md#presentation-runtimes).
 
 **`retry_failed_runtimes`**
 

@@ -1,4 +1,6 @@
 #!/usr/bin/env tsx
+import { inventoryWorldData } from "../apps/server/src/world-data/requirements.js";
+import { loadPluginCatalogue } from "../apps/server/src/world-data/validate-world-package.js";
 import { BUILTIN_PLUGIN_PACKS } from "../apps/server/src/config/plugin-packs.js";
 
 /**
@@ -18,6 +20,7 @@ import { loadPluginDefinition } from "../packages/plugin-loader/src/load.js";
 import {
   COLLECTION_MANIFEST_FILE,
   checkCollection,
+  getRuntimeSpec,
   collectionManifestSchema,
   collectionPluginFacts,
   collectionWorldFacts,
@@ -40,10 +43,16 @@ if (!directory) {
  * The loaded root manifest: its ID comes from the directory when it writes
  * none, and it provides the contracts its runtimes output.
  */
-async function readPluginManifest(pluginDir: string) {
+async function readPluginFacts(pluginDir: string) {
   const discovery = await discoverPluginAt(pluginDir);
   if (!discovery) throw new Error(`no PLUGIN.md in ${pluginDir}`);
-  return (await loadPluginDefinition(discovery)).packageManifest.plugin;
+  const definition = await loadPluginDefinition(discovery);
+  return collectionPluginFacts(
+    definition.packageManifest.plugin,
+    definition.manifests.map(({ manifest }) => ({
+      presentation: getRuntimeSpec(manifest).presentation,
+    })),
+  );
 }
 
 async function bundledPlugins(): Promise<CollectionPluginFacts[]> {
@@ -52,11 +61,7 @@ async function bundledPlugins(): Promise<CollectionPluginFacts[]> {
   for (const entry of await readdir(root, { withFileTypes: true })) {
     if (!entry.isDirectory() || entry.name.startsWith("_")) continue;
     try {
-      facts.push(
-        collectionPluginFacts(
-          await readPluginManifest(path.join(root, entry.name)),
-        ),
-      );
+      facts.push(await readPluginFacts(path.join(root, entry.name)));
     } catch {
       // A directory without a readable manifest is not a bundled plugin.
     }
@@ -93,6 +98,7 @@ if (!parsed.success) {
 const manifest = parsed.data;
 
 const plugins: CollectionPluginFacts[] = [];
+const includedPluginDirs: string[] = [];
 for (const member of manifest.plugins) {
   if ("repository" in member) {
     notes.push(
@@ -102,7 +108,8 @@ for (const member of manifest.plugins) {
   }
   const pluginDir = path.join(directory, member.path);
   try {
-    plugins.push(collectionPluginFacts(await readPluginManifest(pluginDir)));
+    plugins.push(await readPluginFacts(pluginDir));
+    includedPluginDirs.push(pluginDir);
   } catch (error) {
     fail(
       `${member.path}: not an installable plugin (${error instanceof Error ? error.message : String(error)})`,
@@ -111,6 +118,32 @@ for (const member of manifest.plugins) {
 }
 
 const worlds: CollectionWorldFacts[] = [];
+const sourceEntries = new Map(
+  (await loadPluginCatalogue([path.join(REPO_ROOT, "plugins")])).getAll(),
+);
+for (const pluginDir of includedPluginDirs) {
+  const discovery = await discoverPluginAt(pluginDir);
+  if (!discovery) continue;
+  const definition = await loadPluginDefinition(discovery);
+  sourceEntries.set(discovery.id, {
+    id: discovery.id,
+    ...definition,
+    source: "community",
+    status: "discovered",
+    loadedRuntimes: new Map(),
+    summary: {
+      id: discovery.id,
+      name: discovery.id,
+      description: definition.packageManifest.plugin.description,
+      kind: definition.packageManifest.plugin.kind ?? "plugin",
+      runtimeCount: definition.manifests.length,
+    },
+  });
+}
+const sourceCatalogue = {
+  get: (id: string) => sourceEntries.get(id),
+  getAll: () => sourceEntries,
+};
 for (const member of manifest.worlds) {
   if ("repository" in member) {
     notes.push(
@@ -129,13 +162,23 @@ for (const member of manifest.worlds) {
       );
       continue;
     }
-    worlds.push(
-      collectionWorldFacts(
-        world,
-        BUILTIN_PLUGIN_PACKS,
-        path.basename(path.resolve(directory, member.path)),
-      ),
+    const facts = collectionWorldFacts(
+      world,
+      BUILTIN_PLUGIN_PACKS,
+      path.basename(path.resolve(directory, member.path)),
     );
+    const inventory = await inventoryWorldData({
+      worldRoot: path.join(directory, member.path),
+      worldId: facts.id,
+      registry: sourceCatalogue,
+    });
+    worlds.push({
+      ...facts,
+      requires: [
+        ...new Set([...facts.requires, ...inventory.requiredContracts]),
+      ],
+      requiredDataContracts: inventory.requiredDataContracts,
+    });
   } catch (error) {
     fail(
       `${member.path}: not a world package (${error instanceof Error ? error.message : String(error)})`,

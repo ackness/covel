@@ -20,7 +20,7 @@ describe("WorldDataNotices", () => {
   it("lists the skipped data until hidden, and shows a later import again", () => {
     const { rerender } = render(<WorldDataNotices notices={[skipped]} />);
     expect(screen.getByTestId("world-data-notices").textContent).toContain(
-      '"facts": no enabled plugin receives this data.',
+      "This data has no plugin to receive it.",
     );
     fireEvent.click(screen.getByRole("button", { name: "Hide" }));
     expect(screen.queryByTestId("world-data-notices")).toBeNull();
@@ -63,3 +63,70 @@ describe("WorldDataNotices", () => {
     expect(details?.textContent).toContain("invalid target URI");
   });
 });
+
+it.each([
+  "receiver-missing",
+  "receiver-ambiguous",
+  "receiver-excluded",
+  "receiver-approval-required",
+])(
+  "renders a fixed player message for %s without source or error sentinels",
+  async (code) => {
+    await i18n.changeLanguage("en-US");
+    const { container, unmount } = render(
+      <WorldDataNotices
+        notices={[
+          {
+            level: "warning",
+            code,
+            sourceId: "SECRET_SOURCE",
+            message: "SECRET_FILE: SECRET_RECORD",
+          },
+        ]}
+      />,
+    );
+    try {
+      expect(container.textContent).toContain(
+        "This data has no plugin to receive it.",
+      );
+      expect(container.textContent).not.toContain("SECRET");
+    } finally {
+      unmount();
+    }
+  },
+);
+
+it.each([
+  "receiver-missing",
+  "receiver-ambiguous",
+  "receiver-excluded",
+  "receiver-approval-required",
+])(
+  "renders the safe public label for %s through the interface language",
+  async (code) => {
+    await i18n.changeLanguage("zh-CN");
+    const { container, unmount } = render(
+      <WorldDataNotices
+        notices={[
+          {
+            level: "warning",
+            code,
+            publicLabel: "公开笔记",
+            sourceId: "SECRET_SOURCE",
+            message: "SECRET_ERROR",
+          },
+          { level: "warning", code, message: "SECRET_ERROR" },
+        ]}
+      />,
+    );
+    try {
+      const items = container.querySelectorAll("li");
+      expect(items).toHaveLength(2);
+      expect(items[0]?.textContent).toContain("公开笔记");
+      expect(items[1]?.textContent).not.toContain("公开笔记");
+      expect(container.textContent).not.toMatch(/SECRET|This data/);
+    } finally {
+      unmount();
+    }
+  },
+);

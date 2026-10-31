@@ -88,7 +88,16 @@ export const pluginRelativeJsonSchemaPath = z
 
 /** Public framework schemas may be referenced by URI without plugin copies. */
 const runtimeJsonSchemaReference = z.union([
-  pluginRelativeJsonSchemaPath,
+  z
+    .string()
+    .min(1)
+    .regex(/^(?!\/)[a-z0-9_./-]+\.json$/i, {
+      message:
+        "schema must be a declaration-relative .json path contained inside the plugin package",
+    })
+    .describe(
+      "JSON Schema path relative to RUNTIME.md (or the root for an inline runtime); parent segments are allowed only within the package. The loader checks real-path containment.",
+    ),
   z.string().regex(/^contract:[a-z][a-z0-9.-]*@[1-9][0-9]*$/),
 ]);
 

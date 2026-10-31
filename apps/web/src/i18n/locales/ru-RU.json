@@ -306,9 +306,13 @@
       "hint": "Данные для выключенного плагина или плагина, ожидающего вашего одобрения, появятся, когда вы его включите.",
       "hide": "Скрыть",
       "dimensionsMissing": "Измерения мира (например, отношения и ресурсы): ни один включённый плагин их не хранит, поэтому в этой игре они не учитываются.",
-      "receiverMissing": "«{{source}}»: ни один включённый плагин не принимает эти данные.",
+      "labeled": "{{source}}: {{message}}",
+      "receiverMissing": "This data has no plugin to receive it.",
       "sourceNotImported": "Данные «{{source}}» не импортированы (подробности)",
-      "notImported": "Часть данных не импортирована (подробности)"
+      "notImported": "Часть данных не импортирована (подробности)",
+      "receiverAmbiguous": "This data has no plugin to receive it. Choose a receiving plugin.",
+      "receiverExcluded": "This data has no plugin to receive it. Receiving plugins are disabled.",
+      "receiverApprovalRequired": "This data has no plugin to receive it. A receiver needs approval."
     },
     "pendingApproval": {
       "title": "Требуется разрешение",
@@ -2251,7 +2255,7 @@
       "notice": "Использует настроенную вами модель; возможны расходы.",
       "delegated": "Запускается, когда другая задача передаёт ему работу.",
       "manual": "Запускается при явном вызове.",
-      "event": "Запускается при получении соответствующего события.",
+      "event": "Запускается по соответствующим событиям, включая явные действия игрока. Явные вызовы обходят начальный ход, паузу между запусками и ограничение числа запусков.",
       "setup": "Запускается во время подготовки игры.",
       "scheduled": "Запускается в запланированные ходы (интервал: {{count}}).",
       "start": "Начиная с хода {{count}}.",

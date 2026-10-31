@@ -1,6 +1,8 @@
 import { act, renderHook } from "@testing-library/react";
 import { useReducer } from "react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { subscribeToast } from "@/lib/toast-channel.js";
+import { resolveApproval } from "@/services/api/approvals.js";
 import type { SessionPlugin, SessionRecord } from "@/services/api.js";
 import {
   SessionWorkspaceSyncError,
@@ -138,6 +140,51 @@ beforeEach(() => {
       request.choices.map((choice) => choice.id),
   );
 });
+afterEach(() => vi.unstubAllGlobals());
+
+it.each(["toggle", "bulk"])(
+  "shows an approval conflict while enabling through %s",
+  async (flow) => {
+    const { result } = setup();
+    api.enableSessionPlugin.mockResolvedValueOnce(approval);
+    api.resolveApproval.mockImplementation(resolveApproval);
+    const fetch = vi
+      .fn()
+      .mockResolvedValue(
+        Response.json(
+          { error: "Approval scope changed", code: "approval_scope_changed" },
+          { status: 409 },
+        ),
+      );
+    vi.stubGlobal("fetch", fetch);
+    const toast = vi.fn();
+    const unsubscribe = subscribeToast(toast);
+    try {
+      await act(async () => {
+        if (flow === "toggle")
+          await result.current.actions.toggleSessionPlugin(plugin.id, true);
+        else {
+          result.current.dispatch({
+            type: "LOAD_SESSION_PLUGINS",
+            plugins: [{ ...plugin, approvalRequired: true }],
+          });
+        }
+      });
+      await vi.waitFor(() => expect(toast).toHaveBeenCalledOnce());
+      expect(fetch).toHaveBeenCalledOnce();
+      expect(api.enableSessionPlugin).toHaveBeenCalledOnce();
+      expect(result.current.state.sessionPlugins[0]?.active).toBe(false);
+      expect(toast).toHaveBeenCalledExactlyOnceWith(
+        expect.objectContaining({
+          kind: "error",
+          detail: expect.stringContaining("Approval scope changed"),
+        }),
+      );
+    } finally {
+      unsubscribe();
+    }
+  },
+);
 
 describe.each(["session-b", "session-a"])(
   "plugin operations after navigating to %s",

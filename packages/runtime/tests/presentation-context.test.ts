@@ -22,6 +22,74 @@ import {
 } from "./presentation-fixture.js";
 
 describe("restricted presentation context", () => {
+  it.each([
+    "unseeded",
+    "unscoped",
+    "wrong-source",
+    "wrong-owner",
+    "wrong-incarnation",
+    "extra-namespace",
+    "uncommitted",
+  ])(
+    "refuses inline recovery with an invalid committed source (%s)",
+    async (mode) => {
+      const f = await setup();
+      try {
+        const manifest = presenter();
+        const captured = await takePresentationSnapshot({
+          store: f.store,
+          manifest,
+          sessionId: input.sessionId,
+          sourceTurnId: input.turnId,
+          sourceExecutionId: "source-execution",
+          story,
+        });
+        const snapshot = {
+          ...captured,
+          committed: mode !== "uncommitted",
+          ...(mode === "wrong-source" ? { sourceTurnId: "other" } : {}),
+          ...(mode === "wrong-owner" ? { pluginId: "other" } : {}),
+          ...(mode === "wrong-incarnation" ? { incarnation: "other" } : {}),
+          ...(mode === "extra-namespace"
+            ? { data: { ...captured.data, other: [] } }
+            : {}),
+        };
+        const handler = vi.fn(async () => ({
+          outcome: "success" as const,
+          value: {},
+        }));
+        const execution = await f.run(
+          handler,
+          manifest,
+          {},
+          {
+            ...input,
+            turnId: "retry",
+            origin: "manual",
+            manualTrigger: {
+              runtimeId: manifest.name,
+              ...(mode === "unscoped" ? {} : { sourceTurnId: input.turnId }),
+              ...(mode === "unseeded"
+                ? {}
+                : { presentationSnapshots: [snapshot] }),
+            },
+          },
+        );
+        expect(handler).not.toHaveBeenCalled();
+        expect(execution.result.runtimeResults[0]?.status).toBe("skipped");
+        expect((await f.commit(execution)).status).toBe("committed");
+        expect(
+          await f.store.listPluginData(
+            input.sessionId,
+            manifest.pluginId,
+            "display",
+          ),
+        ).toEqual([]);
+      } finally {
+        await f.store.close();
+      }
+    },
+  );
   it("refuses a captured presentation source after its target removes the policy", async () => {
     const f = await setup();
     const manifest = presenter({

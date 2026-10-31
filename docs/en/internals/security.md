@@ -2,6 +2,8 @@
 
 This page explains which security boundaries the Covel server has, and why each boundary is drawn where it is. It is written for people who change the server, run a hosted instance, or want to know "what it means to approve a community plugin".
 
+See [world data receivers](../reference/world-data.md#data-receivers) for static discovery, inferred selection and omission notices. Data acceptance does not satisfy service or runtime capability dependencies.
+
 Related material is on other pages:
 
 - Authentication rules for each route: [`../reference/api.md`](../reference/api.md#authentication-session-owner-token)
@@ -12,6 +14,8 @@ Related material is on other pages:
 - Reporting a vulnerability: [`SECURITY.md`](../../../SECURITY.md)
 
 Below, the "deployment tier" (`DEPLOYMENT_TIER`) comes up many times. `self` is the default. It means the desktop app, and instances that a person deploys for their own use. `demo` is the tier for public web instances, meant for the official web app, which is not supported yet. `commercial` is the strictest tier, reserved for a possible future commercial edition. There are no accounts, tenant isolation, or quotas, and this repository does not maintain it. `demo` and `commercial` both require tokens. Together they are called the hosted tiers.
+
+Plugin file references follow the [declaration-directory rules](../reference/plugins.md#declaration-paths) and must remain inside the package after real-path resolution. Conventional `output.schema.json` cannot escape through a symlink or be inherited from a parent repository.
 
 ## Declarative execution boundary
 

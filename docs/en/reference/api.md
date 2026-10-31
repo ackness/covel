@@ -57,6 +57,12 @@ This page lists every endpoint, request field, response, and error code. Use it 
 - An approval decision first checks that `decision` and `scope` are valid values. Only then is the pending approval used up.
 - An event injection first checks that each identifier is a string and that `payload` is an object. Only then is the event published.
 
+Plugin summaries expose `acceptsWorldData`; world plans add `selection.requiredDataContracts` and safe `dataNotices`. Creation derives requirements on the server and stores `metadata.pluginSelection.requiredDataContracts`, independent of client hints. Preflight accepts `excludedPlugins`. Stale creation returns `409 world_data_create_plan_stale` with `details.reason`: `world_content_changed`, `world_files_changed`, `plugin_manifest_changed` or `plugin_authorization_changed`, identifying a change to this world’s record content, package files, or the registered identity or authorization of a plugin used by the plan. These diagnostics contain no world or plugin IDs. See [receiver rules](./world-data.md#data-receivers).
+
+World-data import failures return fixed text and `world_data_import_failed`, including in development. Author diagnostics remain in server logs.
+
+World API `dimensions` and `metadata.dimensions` are resolved record projections, not `world.yaml` fields. The existing metadata normalizer validates definitions, gives the top-level value precedence, and treats an empty table as an explicit clear. Portable generator results use `packageContent.dimensions`; generation/revision API `done.world` still returns the resolved world record. See [generation and export](./world-data.md#ai-generated-results-and-file-export).
+
 ## Declarative plugin API state
 
 Plugin summaries in lists, details and session lists require `executionMode: declarative | code | unknown`. Optional `executionDiagnostics` contains only package-relative files, fields and reasons, never host proof, absolute paths or prompts. GitHub previews also carry the mode; `hasServerCode` is true for both `code` and `unknown`. Static validation includes `executionMode` and `executionDiagnostics` in `summary`.
@@ -1581,7 +1587,7 @@ In the table below, "hosted deployment" means `DEPLOYMENT_TIER` is `demo` or `co
 Notes on each endpoint:
 
 - `GET /api/plugins`: the data comes from a snapshot of the registry. Plugins that failed to load are also returned, as an item with `status: "error"`. In that `error` text the server's absolute plugin-directory path is written as `<plugin>` (for example `<plugin>/PLUGIN.md: …`); the full original message goes only to the server log.
-- `GET /api/worlds/:id/plugin-plan`: returns `selection: { requestedPluginIds, requiredContracts }`, all `packs` in world preference order, optional `selectedPackId`, `defaultPluginIds` and up to 256 `diagnostics`.
+- `GET /api/worlds/:id/plugin-plan`: returns `selection: { requestedPluginIds, requiredContracts, requiredDataContracts }`, all `packs` in world preference order, optional `selectedPackId`, `defaultPluginIds` and up to 256 `diagnostics`.
   - Only the first pack reference selects the initial pack. An unknown first pack reports `unknown-pack` and selects none. Alternatives do not expand into the defaults.
   - Independent plugin requests and the selected pack's requests form `defaultPluginIds`. Every submitted ID is installed; `diagnostics` reports `missing-plugin` with `pluginId`, `path` and optional `packId`. Other codes are `invalid-reference`, `redundant-reference` and `unknown-pack`, with optional `reference`.
   - The initial pack uses the world's public name, summary and tags, with independent `pluginPitch` overrides. Derived presentation is never persisted; see [plugin selection](./world-data.md#plugin-selection-pluginpolicy).
@@ -1697,7 +1703,7 @@ Each slot is an array. Its elements are `{ pluginId, specs[] }`. `theme` uses a 
 
 - Request body: `{ "sessionId"?: string }`.
 - Response: `{ "ok": true, "pluginId": string, "generation": string }`.
-- Available only in the development environment, and only for community plugins. It needs authentication through the install API, and the session must currently hold the server-code grant.
+- Available only in development and only for community plugins, with install API authorization. Freshly proven declarative packages publish without a code grant. Importing other packages' code requires the session's current server-code grant; without it, reload publishes metadata only.
 - If the reload fails, it returns `409 plugin_reload_failed`, and the old generation stays in effect.
 - When the feature is off, it returns `403 plugin_reload_disabled`.
 - Executions that have already started keep using the old generation's capabilities, handlers, and guards. Later executions use the new generation.
@@ -1833,10 +1839,10 @@ What the summary has and does not have:
 
 - It has no `lore` and no `dimensions`.
 - Optional top-level `updateAvailable` compares package files with the digest saved when the record was imported: `true` means different, `false` means identical. It is omitted when there is no package, no saved digest, or the package cannot currently be read. Each read checks again without writing the world record or querying GitHub.
-- `metadata` keeps only these keys: `source`, `storage`, `packageManaged`, `generated`, `cover`, `accentColor`, `supportedLocales`, `packageInfo`, `defaultViewMode`, `pluginSettings`, plus `name` / `description` inside `localizedText`.
+- `metadata` keeps only these keys: `source`, `storage`, `packageManaged`, `generated`, `cover`, `accentColor`, `supportedLocales`, `packageInfo`, `defaultViewMode`, `pluginSettings`, `plugins`, `pluginPitch`, plus `name` / `description` inside `localizedText`.
 - The setting text for each language, `localizedText.lore`, is not in the summary.
-- For the other keys (`dimensions`, `embeddedCharacters`, `embeddedLorebook`, `characterSchema`, `plugins`, `worldData`, and so on), read the full record with `GET /api/worlds/:id`.
-- For the result of resolving a world's plugin policy, see `GET /api/worlds/:id/plugin-plan`.
+- For the other keys (`dimensions`, `embeddedCharacters`, `embeddedLorebook`, `characterSchema`, `worldData`, and so on), read the full record with `GET /api/worlds/:id`.
+- For the result of resolving a world's plugin selection, see `GET /api/worlds/:id/plugin-plan`.
 
 The list for the four built-in worlds is about 3.9 KB.
 
@@ -2023,7 +2029,7 @@ Partly updates a world. You can update the basic fields, or submit the top-level
 
 Behavior:
 
-- The top-level `dimensions` are written to `metadata.dimensions`.
+- The top-level `dimensions` are written to `metadata.dimensions`. Browser-local edits update the canonical field and its projection together; an empty table stays empty after checkpoint upload and restoration.
 - `metadata` is merged on write. Sibling fields that are not mentioned are kept as they are.
 - Both `dimensions` and `metadata.dimensions` go through world dimension validation.
 - New sessions, preflight and sync use the dimensions and the `characterSchema` of this record. They do not read the world package's files.
@@ -2111,18 +2117,20 @@ Each dimension is handled by the rules below:
 
 #### `POST /api/worlds/:id/world-data/preflight`
 
-Preflight also checks receivers' declared [dimension references and candidate values](./world-data.md), reporting `dimension-reference` with the file and record location. Import and sync use the same check.
+Preflight, `sync-data` and `sync-dimensions` share receiver admission ordering: check current authorization, load errors and fault pauses before resolving dependencies in the fixed plugin set. An unavailable direct or transitive dependency excludes the receiver from writes and preserves its managed data. Omission notices for public sources may carry a declared title in `publicLabel`; hidden sources carry neither a title nor an identity.
 
-Does a read-only preflight of one worldData import. It tells you how many entries will be imported and where they will go, but it writes nothing. Destination dataset schema or `set` violations return error diagnostics with `sourceId` and available record locations. Media placeholders check `set` admission only; the actual index record schema and final size are checked at apply. Preflight does not materialize media.
+Preflight also checks receivers' declared [dimension references and candidate values](./world-data.md), reporting `dimension-reference` with safe player text. File and record locations remain on the author validation surface. Import and sync use the same check.
+
+Does a read-only preflight of one worldData import. It tells you how many entries will be imported and where they will go, but it writes nothing. Destination dataset schema or `set` violations return safe error diagnostics. Source locations and record details remain on the author validation surface. Media placeholders check `set` admission only; the actual index record schema and final size are checked at apply. Preflight does not materialize media.
 
 The request can be written in two ways:
 
-- Pass `sessionId`: this uses the session's **saved `activePlugins`**. In this case, any `plugins` in the request is ignored.
-- Pass only `plugins`: preflights a certain set of plugin choices before a session is created.
+- Pass `sessionId`: uses currently authorized, unpaused members of the session's fixed set and its content locale. Request `plugins`, `excludedPlugins` and `locale` are ignored.
+- Pass `plugins`: resolves new-session requests with actual data requirements and `excludedPlugins`. Optional `locale` previews a world-supported content edition.
 
 Dimensions and the character schema are read from the world record, as for a new session; other data is read from `data/` of the world package.
 
-Preflight does not load or run the `worldProjections` handlers. So the output of a projection is not counted in `planned` / `targets`. The response carries a warning that says this part is deferred until the real import or sync runs.
+Preflight does not load or run the `worldProjections` handlers. So the output of a projection is not counted in `planned` / `targets`. The response carries a safe warning; this part is deferred until the real import or sync runs.
 
 When the world declares dimensions and none of these plugins provides `world.dimensions@1`, the response carries a warning with `code: "dimension-provider-missing"`: these dimensions will not be imported. The session-prep screen uses it to tell the player.
 
@@ -4504,7 +4512,7 @@ Resume a suspended runtime with the data the player submitted.
 | ------ | ------ | -------- | ---------------------------------------------------------------------------- |
 | `data` | object | Yes      | Data the player submitted. It must match the suspended item's `resumeSchema` |
 
-- If a non-declarative community plugin lacks execution grants, the server first returns `202 approval-required`, asking for `covel:plugin-server-code` and then `runtime:<runtimeId>`. Only the resumed runtime and the session's sub-agent providers need approval; the server rechecks the grants under the session lock. The client approves each request and retries the original submission. Denying approval leaves the suspension pending. Hosted deployments also require an operator credential.
+- If a non-declarative community plugin lacks execution grants, the server first returns `202 approval-required`, asking for `covel:plugin-server-code` and then `runtime:<runtimeId>`. Only the resumed runtime and the session's sub-agent providers need approval; the server rechecks the grants under the session lock. The client approves each request and retries the original submission. Denying approval leaves the suspension pending. These code approvals also require an operator credential on hosted deployments. Freshly proven declarative packages skip code/runtime approval and this operator restriction; session ownership is still checked.
 - The server checks `data` against `resumeSchema` with full JSON Schema validation (Ajv). This covers `enum`, nested objects, `min` / `max`, `minLength` / `maxLength`, `pattern`, array `items`, `oneOf` / `anyOf`, and more. If the data does not match, the server returns `400 resume_data_invalid`. If the schema is not an object or cannot compile, it returns `400 resume_schema_invalid` without claiming the suspension or running the plugin. The author must correct the schema produced by the plugin and create a new suspension. The player can abandon the original item.
 - A browser client can send an `X-Provider-Keys` header to give model keys for this request. The desktop app and self-hosted clients can leave it out, and the server then uses the keys it was started with. The server never returns keys through this endpoint.
 
@@ -5186,9 +5194,11 @@ Extra notes for each type:
 - Uses only the **successful, non-target** results from the original turn and related committed retries as context. These results are not committed again, and their events are not sent again.
 - Keeps normal input validation, dependency order, and parallel running of independent tasks across the targets.
 - Does not mark tasks that were skipped because a dependency failed as "fixed".
-- Runs in the foreground. Neither a batch recovery nor a single-task recovery with a clear source turn expands its scope through event subscriptions, recursive calls, or background dispatch.
+- Ordinary targets run in the foreground; existing presentation jobs recover from the restricted source described below. Neither a batch recovery nor a single-task recovery with a clear source turn expands its scope through event subscriptions, recursive calls, or background dispatch.
 
 A single-task retry with a source turn also checks the source and the latest failure status. An ordinary manual call without a source turn, and a plugin RPC call, keep their existing event chain, recursion, and dispatch behavior.
+
+The host supplies committed public sources for scoped selector recovery; requests cannot carry snapshots. Recovery of an existing paid presentation job retains detached execution and remaining allowance. See [presentation runtimes](./plugins.md#presentation-runtimes) for the boundaries.
 
 ##### Retry events and state
 
@@ -5823,7 +5833,7 @@ All three endpoints follow the same rules:
 - Events are ordered from oldest to newest.
 - The `nextCursor` in the response is an opaque string. When it is not `null`, there are earlier events. Send it back unchanged as `?cursor` to read the earlier part.
 - An invalid `cursor` returns `400 { "code": "invalid_cursor" }`.
-- `discovery` is the plugin and runtime discovery snapshot for this session. The debug page uses it to show names.
+- `discovery` is the plugin and runtime discovery snapshot for this session. The debug page uses it to show names. Before serialization, current files are reassessed for execution mode and source trust using the same assessment as `/api/plugins`.
 
 #### `GET /api/traces/:sessionId`
 

@@ -302,9 +302,13 @@
       "hint": "Data for a plugin that is off or waiting for approval is imported when you turn it on.",
       "hide": "Hide",
       "dimensionsMissing": "World dimensions (such as relationships and resources): no enabled plugin keeps them, so this game does not track them.",
-      "receiverMissing": "\"{{source}}\": no enabled plugin receives this data.",
+      "labeled": "{{source}}: {{message}}",
+      "receiverMissing": "This data has no plugin to receive it.",
       "sourceNotImported": "The data in \"{{source}}\" was not imported (details)",
-      "notImported": "Some data was not imported (details)"
+      "notImported": "Some data was not imported (details)",
+      "receiverAmbiguous": "This data has no plugin to receive it. Choose a receiving plugin.",
+      "receiverExcluded": "This data has no plugin to receive it. Receiving plugins are disabled.",
+      "receiverApprovalRequired": "This data has no plugin to receive it. A receiver needs approval."
     },
     "pendingApproval": {
       "title": "Needs approval",
@@ -2177,7 +2181,7 @@
       "notice": "Uses your configured model; charges may apply.",
       "delegated": "Runs when another runtime delegates work.",
       "manual": "Runs when explicitly invoked.",
-      "event": "Runs when a matching event arrives.",
+      "event": "Runs on matching events, including explicit player actions. Explicit calls bypass start-turn, cooldown and maximum-run limits.",
       "setup": "Runs during session setup.",
       "scheduled": "Runs on scheduled turns (every {{count}} turns).",
       "start": "Starts at turn {{count}}.",

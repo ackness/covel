@@ -2,6 +2,8 @@
 
 这一页列出插件包能写的全部声明：根 `PLUGIN.md` 的字段、runtime 的字段、输入输出的规则，以及随 Covel 内置的插件清单。写插件、改插件或审查插件时来这里查。第一次写插件请先读[第一个插件](../plugins/first-plugin.md)和[插件要点](../plugins/essentials.md)。
 
+世界数据的静态发现、接收者推导与缺失提示见[接收规则](./world-data.md#data-receivers)。接收声明不满足服务或 runtime 能力依赖。
+
 一个插件包做三件事：
 
 - 在根 `PLUGIN.md` 里说明自己是谁、提供和需要哪些契约、贡献了什么（工具、数据、界面等）。
@@ -12,6 +14,14 @@
 
 > [!IMPORTANT]
 > Covel 只支持本页描述的格式。平铺的旧清单、放在子目录里的 `PLUGIN.md`、角色镜像和旧 checkpoint 开发数据都读不了，需要重新生成；没有迁移读取，也没有双写。
+
+<a id="declaration-paths"></a>
+
+## 声明文件与资源路径
+
+根 `PLUGIN.md` 的文件引用相对包根目录；`RUNTIME.md` 的 handler、guard、私有输入／输出 schema 相对该清单所在目录。内联 runtime 相对根目录。`../../` 仅可在解析后仍位于包内时使用；真实路径与符号链接检查继续生效，约定的 `output.schema.json` 同样受限，不会从父仓库继承。
+
+包 UI 和事件只在根清单声明。契约 URI 是标识符，不是文件路径。`authoring.source.path` 相对消费它的世界包；descriptor 使用世界或 override 的独立根；`webview.entry` 相对声明的 webview root。JS import 和 JSON Schema `$ref` 使用各自的文档相对规则。署名和许可证仍由每个独立分发的包明确提供，没有父目录默认值。
 
 ## 声明式包的字段边界
 
@@ -1139,18 +1149,18 @@ namespace 声明 `search` 之后，它的记录进入框架的记忆检索（[`m
 - 内置玩法包（`packs/builtin.yaml`）还可以写 `defaultViewMode`（`stage`、`parsed` 或 `plugin:<pluginId>:<viewId>`；桥接视图先请求玩家授权）。AI 创建世界时选了这个玩法包，生成的世界就带上这个 `defaultViewMode`。框架不按玩法包的 ID 做判断：AI 创建世界的选项就是这份目录里的全部玩法包，见 [`GET /api/framework/authoring`](./api.md#get-apiframeworkauthoring) 的 `packs`。
 - 推荐项不自动启用，也不会覆盖玩家的显式排除。
 - `GET /api/worlds/:id/plugin-plan` 的 `defaultPluginIds` 是初始的显式请求。准备页和创建端再用同一个解析器计算活动集合。
-- 这个接口返回的各 `requested` 和 `defaultPluginIds` 只含已安装的插件。世界或玩法包请求了但没有安装的插件列在 `missing` 里，由准备页提示，不进入创建请求。
+- 这个接口返回的各 `requested` 和 `defaultPluginIds` 只含已安装的插件。世界或玩法包请求了但没有安装的插件列在 `diagnostics` 的 `missing-plugin` 项里，保留 `pluginId`、字段 `path` 和可选 `packId`；未知玩法包使用 `unknown-pack` 项并保留引用位置。准备页显示提示，缺失的插件 ID 不进入创建请求。
 
 **在准备页切换玩法包。**
 
 - 切换玩法包不会改变视图模式。玩法包的 `defaultViewMode` 只在 AI 生成世界时写进世界。
 - 切换会替换上一个包贡献的请求，包括世界初始选中的包。
-- 初始默认请求里被初始包请求的插件归该包所有。切换后只有新包也请求它才保留，所以新包的叙事引擎能替换旧包的引擎。
-- 世界的独立插件引用 和玩家手动添加的请求保留。显式排除继续优先。
+- 仅由初始包请求的插件归该包所有，切换后只有新包也请求它才保留。世界通过 `plugin:` 独立请求的同一个插件仍然保留；包请求和独立请求各自记录来源。
+- 世界的独立插件引用和玩家手动添加的请求保留。显式排除继续优先。
 - 手动修改会清除包卡片的高亮，但旧包的来源仍然记着，下一次切换不会把旧包累加进来。手动重新启用的包内插件作为手选保留。
-- 世界的契约引用 仍由解析器独立校验。不能把独立插件引用当作不可取消的必需项。
+- 世界的契约引用仍由解析器独立校验。不能把独立插件引用当作不可取消的必需项。
 - 玩法包可以带 `excluded`：选中这个包时关掉其中的插件，`kind: core` 的也一样，玩家可以再打开。切换到下一个包时只撤销上一个包加的排除，玩家自己的排除保留。世界初始选中的包，它的排除从一开始就生效。没有安装的插件不出现在 `excluded` 里。
-- “回到最小集合”按钮只留叙事插件（已选的；一个都没选时用 core 里的），以及它们和世界的契约引用 拉进来的插件。不会额外要求 `world.dimensions@1` 的提供者；其余的 core 插件和世界独立请求的插件都被排除，玩法包的高亮清除。
+- “回到最小集合”按钮只留叙事插件（已选的；一个都没选时用 core 里的），以及它们和世界的契约引用拉进来的插件。不会额外要求 `world.dimensions@1` 的提供者；其余的 core 插件和世界独立请求的插件都被排除，玩法包的高亮清除。
 
 **存档固定玩家确认的那一组。**
 
@@ -1447,6 +1457,8 @@ const reply = await ctx.agents.run({
 
 `presentation` 是 function runtime 的受限执行策略，用于按公开故事选择背景、在场角色或配乐。它要求 `schedule.stage: post-turn`、有效的 `io.visibility: system` 和 staged auto 激活。agent、guard、sub-agent、manual、event、background、concealed、挂起和 `recordAs` 都不能使用它。无效声明只停用对应 runtime；校验和安装仍会报告字段路径。
 
+<!-- presentation-file:gallery-display/PLUGIN.md -->
+
 ```yaml
 ---
 id: gallery-display
@@ -1477,6 +1489,8 @@ runtime:
 
 零预算函数在故事提交前读取公开候选；候选故事未提交时，其呈现写入也不会保留。detached 呈现读取 `PreStateCommit` 改写之后实际保存的故事，以及该次提交接受的本插件数据。作业只保存这一份版本化快照，不附带原始上游结果、玩家消息、行动或表单。快照总计最多 256 KiB，每个 namespace 最多 50 行，角色身份最多 100 个；超限整份拒绝，内联读取也一样。
 
+失败的零预算选择器可通过限定 runtime 的重试恢复。宿主核对已提交的原始回合、失败记录和来源诊断，再从实际保存的公开故事与当前自有素材、展示状态构造有界快照；不会把历史原始结果作为呈现输入。来源记录缺失或故事已推进时拒绝恢复，普通手动调用仍不可用。
+
 `ctx.presentation` 提供只读 `characters: {id, name, aliases?}[]`、可选 `viewpointCharacterId` 和 `note(reason)`。身份仅取故事里名字的精确匹配，保留歧义；没有角色描述、私有字段或座位列表。ID 只用于索引展示状态，发给模型的内容仍使用名字。`ctx.world`、历史、exports、services、tools、递归和 agents 不可用；玩家消息、行动和激活 payload 不提供额外内容。普通上下文不会先构造再遮住。能力在结束、取消或超时后失效。
 
 `effects` 必须明确列出自己的非保留 namespace。可读取本包 `contributes.data` 声明且来源非 hidden 的公开素材，或同时列在 writes 中的展示状态；不能使用 `plugin-data:self:*`、`_`、其他插件数据、历史或内核输入。`pluginData.get/list` 及 store 别名执行同一范围检查，不能省略 namespace。
@@ -1488,6 +1502,8 @@ runtime:
 `presentation: {budget: {calls, generations}}` 的两个整数默认都是 0。`calls` 范围 0–16，统计获准的 gateway 派发；`generations` 范围 0–4，另外统计图片、音乐、语音的输出份数。请求 `n` 张图片必须一次获得 `n` 份额度。文本和对象生成也消耗 calls；缓存命中和可用性探测不消耗。evaluation、转录和任意 HTTP 不开放。
 
 任一正数要求 `schedule.detached: true`，不能 `settle: true`。失去安全叶节点资格、版本变化、快照不可用时只跳过呈现，绝不退回前台生成。故事与下一条玩家输入都不等待生成。普通 pre-turn cast 选择与显式事件覆盖不属于这个策略。
+
+呈现队列已满时仅跳过该次生成，并记录 `no-op / unavailable`；故事与独立辅助写入仍提交，尚未派发的调用不扣额度。
 
 额度按会话代次、真实来源 turn ID 和 runtime 共享。开场、首条玩家消息、每个自动回合各有自己的来源，即使 logicalTurn 相同。来源重试、新作业 ID、关机重排、取消、提供方失败和提交失败都不会补回额度。当前配置只能缩小捕获的上限。内核在外部调用前用持久 CAS 扣除；没有账本时不能付费调用。停滞包装器重新派发会再扣一次；单次逻辑请求内部的 transport attempts 仍由独立 `LLMRequestBudget` 限制，额度不保证精确账单。
 

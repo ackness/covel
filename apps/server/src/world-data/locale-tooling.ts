@@ -23,6 +23,7 @@ import { DEFAULT_LOCALE, validateWorldManifest } from "@covel/shared";
 import { worldHasData } from "./conventions.js";
 import { loadWorldDataDescriptor } from "./descriptor.js";
 import { findLocaleOverlays } from "./locale-overlays.js";
+import type { OrderedWorldDataSource } from "./types.js";
 import { fileExists } from "./session-import/utils.js";
 
 /** One step from a file's root to a text: a key, a list item by id, or by position. */
@@ -479,7 +480,10 @@ interface WorldFiles {
 }
 
 /** The files of a world package that hold text, with the main value of each. */
-async function worldFiles(worldDir: string): Promise<WorldFiles> {
+async function worldFiles(
+  worldDir: string,
+  effectiveSources?: readonly OrderedWorldDataSource[],
+): Promise<WorldFiles> {
   const manifest = (await readStructured(worldDir, "world.yaml")) as Record<
     string,
     unknown
@@ -505,14 +509,23 @@ async function worldFiles(worldDir: string): Promise<WorldFiles> {
 
   const worldData =
     typeof manifest.worldData === "string" ? manifest.worldData : undefined;
-  if (validation.valid && (await worldHasData(worldDir, worldData))) {
-    const descriptor = await loadWorldDataDescriptor({
-      worldRoot: worldDir,
-      worldDataPath: worldData,
-      worldId:
-        typeof manifest.id === "string" ? manifest.id : path.basename(worldDir),
-    });
-    for (const source of descriptor.sources) {
+  if (
+    validation.valid &&
+    (effectiveSources || (await worldHasData(worldDir, worldData)))
+  ) {
+    const sources =
+      effectiveSources ??
+      (
+        await loadWorldDataDescriptor({
+          worldRoot: worldDir,
+          worldDataPath: worldData,
+          worldId:
+            typeof manifest.id === "string"
+              ? manifest.id
+              : path.basename(worldDir),
+        })
+      ).sources;
+    for (const source of sources) {
       const { kind, path: file, key, localeArrayKeys = [] } = source.descriptor;
       if (source.inlineValue !== undefined || typeof file !== "string")
         continue;
@@ -547,8 +560,12 @@ async function overlayOf(
 export async function worldTranslationStatus(
   worldDir: string,
   locale: string,
+  effectiveSources?: readonly OrderedWorldDataSource[],
 ): Promise<WorldTranslationStatus> {
-  const { baseLocale, structured, prose } = await worldFiles(worldDir);
+  const { baseLocale, structured, prose } = await worldFiles(
+    worldDir,
+    effectiveSources,
+  );
   const files: WorldFileTranslationStatus[] = [];
   for (const source of structured) {
     const blocked: string[] = [];

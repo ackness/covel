@@ -4,6 +4,10 @@ This page covers what a plugin needs as it grows: splitting work into several ru
 
 Before you read this page, read [Plugins with Local Code](./local-code.md). You can read each section on its own, and read the section you need when you need it.
 
+`authoring.source` and `accepts` let the host discover data requirements from actual world content. They provide no runtime or service capability and grant no code permission. Only equivalent declarations share a source path. See [receiver rules](../reference/world-data.md#data-receivers).
+
+For file references, follow [declaration files and resource paths](../reference/plugins.md#declaration-paths): root declarations and runtime-private files have explicit base directories.
+
 ## Layout for multiple runtimes
 
 When a plugin has several runtimes, each runtime lives in its own folder under `runtimes/`:
@@ -165,9 +169,9 @@ PLUGIN.md:
           title: 已知事实
 ```
 
-The world package puts the file where `source.path` says, and it is imported. No other configuration is needed. When two plugins enabled in the same session declare the same `path`, that path no longer counts as an agreed location. So choose a path that no other plugin uses. The kernel's and the world package's own paths (such as `data/dimensions.yaml` and `world.yaml`) cannot be declared; the list is in [World data](../reference/world-data.md).
+The world package puts the file where `source.path` says, and it is imported. No other configuration is needed. When declarations for one `path` disagree, the path requires explicit descriptor disambiguation, independently of activation. So choose a path that no other plugin uses. The kernel's and the world package's own paths (such as `data/dimensions.yaml` and `world.yaml`) cannot be declared; the list is in [World data](../reference/world-data.md).
 
-`generate` takes two values. `offer` lists this kind of content as an option on the authoring screen. `default` lists it and selects it by default. It requires an `example`. Its `source` must be public, not media, and use `id` as the `key`. When a player selects it, the generator writes the schema, the hint, and the example into its prompt. It also adds this plugin to the plugins the world enables. Declare it only for content whose generation quality has been checked with a real model.
+`generate` takes two values. `offer` lists this kind of content as an option on the authoring screen. `default` lists it and selects it by default. It requires an `example`. Its `source` must be public, not media, and use `id` as the `key`. When a player selects it, the generator writes the schema, the hint, and the example into its prompt. The resulting content participates in receiver inference. Declare it only for content whose generation quality has been checked with a real model.
 
 ### Checking the declarations
 
@@ -747,6 +751,14 @@ Historical segments inform policy selection without automatically entering the s
 
 Create `~/.covel/plugins/gallery-display/` with the [presentation example manifest](../reference/plugins.md#presentation-runtimes). Write `{"type":"object"}` to `art.schema.json` and import public assets into `art`, keyed by scene name. Place this `handler.js` beside the manifest. Missing story or art preserves existing display:
 
+<!-- presentation-file:gallery-display/art.schema.json -->
+
+```json
+{ "type": "object" }
+```
+
+<!-- presentation-file:gallery-display/handler.js -->
+
 ```js
 export default async function handler(ctx) {
   const slot = ctx.inputs?.story;
@@ -773,6 +785,17 @@ export default async function handler(ctx) {
 
 For generation, create a separate `gallery-generator` package whose root `PLUGIN.md` contains only `id: gallery-generator` and `description: Generates public story art.`. These are `runtimes/render/RUNTIME.md` and its neighboring `handler.js`. Configure the image role through session model settings; the package names no provider.
 
+<!-- presentation-file:gallery-generator/PLUGIN.md -->
+
+```yaml
+---
+id: gallery-generator
+description: Generates public story art.
+---
+```
+
+<!-- presentation-file:gallery-generator/runtimes/render/RUNTIME.md -->
+
 ```yaml
 ---
 schedule: { stage: post-turn, detached: true }
@@ -788,6 +811,8 @@ effects:
   writes: [plugin-data:self:display, media:*]
 ---
 ```
+
+<!-- presentation-file:gallery-generator/runtimes/render/handler.js -->
 
 ```js
 export default async function handler(ctx) {

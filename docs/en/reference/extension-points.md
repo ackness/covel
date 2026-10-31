@@ -2,6 +2,8 @@
 
 Some work is not done by the kernel itself. Instead, it is handed to plugins: adding a passage to the prompt, compressing the history, or filling a slot in the interface. For each such job, the kernel defines a versioned contract called an **extension point**. A plugin that implements it is called a **provider**.
 
+See [world data receivers](./world-data.md#data-receivers) for static discovery, inferred selection and omission notices. Data acceptance does not satisfy service or runtime capability dependencies.
+
 This page explains how to declare and register a provider, how the kernel combines several providers, and the inputs and outputs of two extension points: session world context and history compression. Plugin authors who write providers need it.
 
 For requests or follow-up work between packages, choose a service or event from the [communication guide](./plugin-extensions.md#choose-a-way-to-communicate); [nested calls with `ctx.recursiveCall`](./plugins.md#nested-calls-ctxrecursivecall) stay within one package. Function runtimes and tools call services, and an agent can import a model-facing service as a tool; see [How tools and agents use services](./plugin-extensions.md#how-tools-and-agents-use-services).

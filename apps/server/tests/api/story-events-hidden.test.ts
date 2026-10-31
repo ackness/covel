@@ -123,12 +123,15 @@ async function makeWorld(): Promise<{ worldsDir: string; worldDir: string }> {
 name: Hidden Demo
 summary: A harbor with a secret.
 defaultLocale: en-US
-dimensions:
-  location:
-    name: Location
-    schema: { type: string, enum: [harbor, lighthouse] }
-    initialValue: harbor
 worldData: data/world.data.yaml
+`,
+  );
+  await writeFile(
+    path.join(worldDir, "data/dimensions.yaml"),
+    `location:
+  name: Location
+  schema: { type: string, enum: [harbor, lighthouse] }
+  initialValue: harbor
 `,
   );
   await writeFile(

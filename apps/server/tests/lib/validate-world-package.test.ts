@@ -199,20 +199,18 @@ describe("validateWorldPackage", () => {
   });
 
   it("warns about large permanent prompt contributions without rejecting the package", async () => {
-    const worldDir = await makeWorld(
-      {
-        "WORLD.md": "setting ".repeat(4400),
-        "data/lorebook.yaml": `- id: permanent\n  content: ${"lore ".repeat(2000)}\n  strategy: constant\n`,
-      },
-      `${MANIFEST}dimensions:\n  archive:\n    name: Archive\n    schema: {type: string}\n    initialValue: ${"fact ".repeat(6800)}\n`,
-    );
+    const worldDir = await makeWorld({
+      "WORLD.md": "setting ".repeat(4400),
+      "data/dimensions.yaml": `archive:\n  name: Archive\n  schema: {type: string}\n  initialValue: ${"fact ".repeat(6800)}\n`,
+      "data/lorebook.yaml": `- id: permanent\n  content: ${"lore ".repeat(2000)}\n  strategy: constant\n`,
+    });
     const diagnostics = await validate(worldDir);
     expect(diagnostics.filter((item) => item.code === "prompt-size")).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ level: "warning", file: "WORLD.md" }),
         expect.objectContaining({
           level: "warning",
-          file: "world.yaml",
+          file: "data/dimensions.yaml",
           pointer: "dimensions",
         }),
         expect.objectContaining({
@@ -300,8 +298,8 @@ describe("validateWorldPackage", () => {
     const worldDir = await makeWorld(
       {
         "data/world.data.yaml":
-          "sources:\n  dimensions:\n    kind: json\n    path: data/dimensions.json\n    to: world:metadata.dimensions\n",
-        "data/dimensions.json": JSON.stringify({
+          "sources:\n  dimensions:\n    kind: yaml\n    path: data/dimensions.yaml\n    to: world:metadata.dimensions\n",
+        "data/dimensions.yaml": JSON.stringify({
           archive: {
             name: "Archive",
             schema: { type: "string" },
@@ -370,7 +368,7 @@ describe("validateWorldPackage", () => {
     expect(world?.metadata).not.toHaveProperty("pluginPolicy");
   });
 
-  it("finds unclaimed files recursively in all data directories", async () => {
+  it("finds unclaimed structured content without warning about arbitrary assets", async () => {
     const files = {
       "data/nested/forgotten.json": "[]",
       "characters/custom.json": "[]",
@@ -379,10 +377,10 @@ describe("validateWorldPackage", () => {
     const diagnostics = await validate(await makeWorld(files));
     expect(
       diagnostics
-        .filter((item) => item.code === "data-file-unused")
+        .filter((item) => item.code === "unclaimed-data-source")
         .map((item) => item.file)
         .sort(),
-    ).toEqual(Object.keys(files).sort());
+    ).toEqual(["data/nested/forgotten.json"]);
   });
 
   it("finds undeclared files beside an explicit descriptor without flagging its sources", async () => {
@@ -396,17 +394,16 @@ describe("validateWorldPackage", () => {
         "data/known.zh-CN.json": JSON.stringify([
           { id: "known", content: "已知设定。" },
         ]),
-        "data/nested/forgotten.md": "An unclaimed story fragment.",
+        "data/nested/forgotten.json": "[]",
         "characters/custom.json": "[]",
       },
       `${MANIFEST}worldData: data/world.data.yaml\n`,
     );
     const unused = (await validate(worldDir)).filter(
-      (item) => item.code === "data-file-unused",
+      (item) => item.code === "unclaimed-data-source",
     );
     expect(unused.map((item) => item.file).sort()).toEqual([
-      "characters/custom.json",
-      "data/nested/forgotten.md",
+      "data/nested/forgotten.json",
     ]);
   });
 
@@ -574,7 +571,7 @@ describe("validateWorldPackage", () => {
         expect.objectContaining({
           level: "error",
           code: "unknown-plugin",
-          message: expect.stringContaining('"story-events"'),
+          message: expect.stringContaining('"pregame"'),
         }),
       );
       // Without its plugin, the roleplay notes in the character records are
@@ -643,16 +640,10 @@ describe("validateWorldPackage", () => {
         pointer: "[id=mara].blueprint.persona.voice",
       }),
     );
-    // A new session has no plugin for the notes unless the world asks for it.
+    // A unique accepting receiver is selected from actual character content.
     const unrequested = (items: readonly WorldPackageDiagnostic[]) =>
       items.filter((item) => item.code === "unrequested-receiver");
-    expect(unrequested(diagnostics)).toEqual([
-      expect.objectContaining({
-        level: "warning",
-        file: "characters/characters.json",
-        message: expect.stringContaining('the "blueprint" field'),
-      }),
-    ]);
+    expect(unrequested(diagnostics)).toEqual([]);
     expect(
       unrequested(
         await validate(
@@ -944,26 +935,25 @@ describe("validateWorldPackage", () => {
   });
 
   it("checks the dimensions a plugin's data names against the world's dimensions", async () => {
-    const withDimensions = `${MANIFEST}dimensions:
-  alarm:
-    name: Alarm
-    schema:
+    const withDimensions = `alarm:
+  name: Alarm
+  schema:
+    type: object
+    properties:
+      level: { type: integer, minimum: 0 }
+    required: [level]
+    additionalProperties: false
+  initialValue: { level: 0 }
+rooms:
+  name: Rooms
+  schema:
+    type: object
+    additionalProperties:
       type: object
       properties:
-        level: { type: integer, minimum: 0 }
-      required: [level]
+        status: { type: string }
       additionalProperties: false
-    initialValue: { level: 0 }
-  rooms:
-    name: Rooms
-    schema:
-      type: object
-      additionalProperties:
-        type: object
-        properties:
-          status: { type: string }
-        additionalProperties: false
-    initialValue: {}
+  initialValue: {}
 `;
     const events = (when: unknown[]) =>
       when.map((condition, index) => ({
@@ -971,14 +961,15 @@ describe("validateWorldPackage", () => {
         when: condition,
         payload: "Something happens.",
       }));
-    const references = async (when: unknown[], manifest = withDimensions) =>
+    const references = async (when: unknown[], dimensions = withDimensions) =>
       (
         await validate(
           await makeWorld(
             {
               "data/hidden/story-events.yaml": JSON.stringify(events(when)),
+              "data/dimensions.yaml": dimensions,
             },
-            manifest,
+            MANIFEST,
           ),
         )
       ).filter((item) => item.code === "dimension-reference");
@@ -1053,23 +1044,20 @@ describe("validateWorldPackage", () => {
       additionalProperties: false,
     };
     const findings = await validate(
-      await makeWorld(
-        {
-          "data/hidden/story-events.yaml": JSON.stringify([
-            {
-              id: "array-event",
-              when: { dimension: "mixed", path: [0], equals: "open" },
-              payload: "The room opens.",
-            },
-          ]),
-        },
-        `${MANIFEST}dimensions:
-  mixed:
-    name: Mixed
-    schema: ${JSON.stringify(schema)}
-    initialValue: [open]
+      await makeWorld({
+        "data/dimensions.yaml": `mixed:
+  name: Mixed
+  schema: ${JSON.stringify(schema)}
+  initialValue: [open]
 `,
-      ),
+        "data/hidden/story-events.yaml": JSON.stringify([
+          {
+            id: "array-event",
+            when: { dimension: "mixed", path: [0], equals: "open" },
+            payload: "The room opens.",
+          },
+        ]),
+      }),
     );
     expect(findings.filter((item) => item.level === "error")).toEqual([]);
   });
@@ -1188,7 +1176,7 @@ describe("world validation catalogue ownership", () => {
     try {
       const catalogue = await loadPluginCatalogue(pluginsDirs);
       const cli = await validateWorldPackage({ worldDir, pluginsDirs });
-      expect(spy).toHaveBeenCalledTimes(1);
+      expect(spy).not.toHaveBeenCalled();
       spy.mockClear();
       const app = await validateWorldPackage({ worldDir, catalogue });
       expect(spy).not.toHaveBeenCalled();

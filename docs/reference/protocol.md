@@ -1,5 +1,7 @@
 # SSE 协议
 
+准备计划的两类需求分开冻结在会话 metadata 中：`requiredContracts` 对应能力，`requiredDataContracts` 对应数据 `accepts`；缺失数据通过安全的 `dataNotices` / `worldDataNotices` 告知玩家。见[接收规则](./world-data.md#data-receivers)。
+
 世界准备通过公开计划的 `selection` 读取 `plugins` 引用。创建请求提交明确的插件 ID 与排除项；服务端独立冻结世界的 `contract:` 引用。缺少功能只产生提示，不阻止游玩。
 
 这一页讲客户端和 Covel 服务端之间怎样通讯：客户端发什么请求，服务端推什么事件，每个事件带什么数据，断线之后怎样恢复。
@@ -105,6 +107,7 @@ return { result: execution.result, committed: outcome.status === "committed" };
 
 ### 并发时的几条规则
 
+- 会话创建冻结本世界的准备计划；其他世界和无关插件的变化不会使它过期。过期拒绝的诊断字段见 [API](./api.md)，比较范围见[世界数据接收规则](./world-data.md#data-receivers)。
 - 执行期间提交表单时，先检查互斥，再去取得流的所有权。所以它抢不走正在进行的 action 流。
 - 叙事结束之后才到的插话不会被接收，因为模型已经没有机会读它。插话保存下来的记录和实时消息使用同一个身份。
 - 生成、修订、翻译这些 SSE 操作有“同一时间只跑一个”的标记。这个标记一直保持到流的回调完成，包括清理阶段。
@@ -699,6 +702,7 @@ Gemini 原生的思考强度、`providerOptions.google.thinkingConfig`、`cached
 - `apps/web/src/services/subscription.ts` 默认订阅 `runtime / state / game / plugin / session / system`，不含 `store`。session store 为了恢复后台任务，另外明确订阅 `job`。
 - 客户端按 `event.topic` 分发。新增 topic 或事件时，**必须同时更新这个文件**。
 - `/api/actions` 的回合内事件（`narrative.delta` / `narrative.completed` / `interaction.requested` / `plugin-data.changed` 等）由 `sendAction` 的回调处理，不经过 `subscription.ts`。
+- `game` 的 `turn.completed` 表示回合已提交。旁观该会话的网页端收到后重读会话快照，更新消息和回合数；即使回合没有角色或维度写入也会刷新。复用现有的恢复代次和执行所有权检查，保留正在进行的本地 action 流。
 
 **鉴权**
 
@@ -938,6 +942,8 @@ data: {
 - 必须提供 `payload.runtimeId`。
 - 明确给出的 `retryFromTurnId` 必须指向一个已提交、并且仍然属于当前故事的原回合，而且目标仍然处于失败状态。
 - 不带来源时，按普通的 manual 调用处理。
+
+呈现选择器的限定重试使用宿主核验的已提交公开来源；未提供有效来源的手动调用被跳过。已有付费呈现作业保留来源与剩余额度，见[呈现 runtime](./plugins.md#presentation-runtimes)。
 
 **`retry_failed_runtimes`**
 

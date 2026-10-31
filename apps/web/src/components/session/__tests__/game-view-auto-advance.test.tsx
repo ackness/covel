@@ -51,9 +51,14 @@ vi.mock("@/settings/SettingsDialog.js", () => ({ SettingsDialog: () => null }));
 vi.mock("../game-view/use-plugin-views.js", () => ({
   usePluginViews: () => ({ views: [], status: "ready" }),
 }));
-vi.mock("../plugin-view-consent.js", () => ({
-  usePluginViewConsent: () => ({ isAllowed: () => true }),
-}));
+vi.mock("../plugin-view-consent.js", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("../plugin-view-consent.js")>();
+  return {
+    ...actual,
+    usePluginViewConsent: () => ({ isAllowed: () => true }),
+  };
+});
 vi.mock("../game-view/use-game-view-composer.js", () => ({
   useGameViewComposer: () => ({ pendingDrafts: [], suspensions: [] }),
 }));

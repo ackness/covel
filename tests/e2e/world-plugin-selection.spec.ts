@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import type { ExecutionOrigin, RuntimeResult } from "@covel/shared";
 import { startFakeLlmProvider } from "./helpers/fake-llm-provider.js";
 import {
   ONBOARDING_VERSION,
@@ -8,21 +9,106 @@ import {
   waitForTurnIdle,
 } from "./helpers/player.js";
 
-test("local world selection survives preparation, hydration, the first turn and reload", async ({
+test("local world selection survives preparation, hydration, the opening, the first turn and reload", async ({
   page,
 }) => {
   const provider = await startFakeLlmProvider();
-  provider.reply = () => ({
-    text: JSON.stringify({
-      segments: [
-        {
-          kind: "narration",
-          text: "The relay lamp holds against the long night.",
-        },
-      ],
-      cues: { present: [] },
-    }),
-  });
+  provider.reply = (request) => {
+    const systemPrompt = request.rawMessages
+      .filter(({ role }) => role === "system" || role === "developer")
+      .map(({ content }) => (typeof content === "string" ? content : ""))
+      .join("\n");
+    if (
+      systemPrompt.includes("You are a memory manager.") ||
+      systemPrompt.includes("你是一个记忆管理器。")
+    )
+      return { text: "{}" };
+    if (request.tools.some((tool) => tool.function.name === "initialize-world"))
+      return {
+        text: "",
+        toolCalls: [
+          {
+            id: "initialize-watch",
+            type: "function",
+            function: {
+              name: "initialize-world",
+              arguments: JSON.stringify({
+                attributes: [
+                  "stats",
+                  "bio",
+                  "abilities",
+                  "equipment",
+                  "social",
+                ].flatMap((category) =>
+                  Array.from({ length: 3 }, (_, index) => ({
+                    id: `${category}-${index}`,
+                    name: `${category} ${index}`,
+                    type: "number",
+                    category,
+                    defaultValue: 0,
+                  })),
+                ),
+                definitions: {},
+              }),
+            },
+          },
+        ],
+      };
+    if (
+      request.tools.some((tool) => tool.function.name === "advance-world-time")
+    )
+      return {
+        text: "",
+        toolCalls: [
+          {
+            id: "settle-watch-time",
+            type: "function",
+            function: {
+              name: "advance-world-time",
+              arguments: JSON.stringify({
+                amount: 0,
+                reason: "The relay watch remains in the same moment.",
+              }),
+            },
+          },
+        ],
+      };
+    if (
+      request.tools.some((tool) => tool.function.name === "submit-world-facts")
+    )
+      return {
+        text: "",
+        toolCalls: [
+          {
+            id: "facts",
+            type: "function",
+            function: {
+              name: "submit-world-facts",
+              arguments: JSON.stringify({
+                schemaVersion: 1,
+                summary: "The lamp holds.",
+                entities: [],
+                relations: [],
+                events: [],
+                statements: [],
+                objectiveAssessments: [],
+              }),
+            },
+          },
+        ],
+      };
+    return {
+      text: JSON.stringify({
+        segments: [
+          {
+            kind: "narration",
+            text: "The relay lamp holds against the long night.",
+          },
+        ],
+        cues: { present: [] },
+      }),
+    };
+  };
   await seedBrowserSettings(page, {
     "ui.onboardedVersion": ONBOARDING_VERSION,
     "ui.locale": "en-US",
@@ -58,8 +144,9 @@ test("local world selection survives preparation, hydration, the first turn and 
   const plugins = [
     "pack:traditional-story",
     "pack:narrative-only",
+    "pack:dm-mode",
     "plugin:dice-check",
-    "contract:missing-check@1",
+    "contract:session.opening@1",
   ];
   const worldId = await page.evaluate(
     async ({ name, plugins }) => {
@@ -71,7 +158,21 @@ test("local world selection survives preparation, hydration, the first turn and 
         locale: "en-US",
         lore: "One relay, one lamp, one long night.",
         tags: ["frontier"],
-        metadata: { plugins },
+        metadata: {
+          plugins,
+          contractData: [
+            {
+              contract: "quests@1",
+              key: "relay",
+              value: {
+                id: "relay",
+                name: "Keep the lamp",
+                description: "Keep the relay alive.",
+                status: "active",
+              },
+            },
+          ],
+        },
       });
       return world.id as string;
     },
@@ -101,40 +202,78 @@ test("local world selection survives preparation, hydration, the first turn and 
       .locator('[data-plugin-id="dice-check"]')
       .getByRole("switch");
     await expect(dice).toHaveAttribute("aria-checked", "true");
+    await expect(
+      advanced.locator('[data-plugin-id="core-quest"]').getByRole("switch"),
+    ).toHaveAttribute("aria-checked", "true");
     await dice.click();
     await initial.click();
     await expect(dice).toHaveAttribute("aria-checked", "false");
     await alternative.click();
     await expect(dice).toHaveAttribute("aria-checked", "false");
+    const openingPack = page
+      .locator("button[aria-pressed]")
+      .filter({ hasText: "DM Mode" });
+    await openingPack.click();
+    await expect(openingPack).toHaveAttribute("aria-pressed", "true");
+    await expect(dice).toHaveAttribute("aria-checked", "false");
+    await expect(
+      advanced.locator('[data-plugin-id="pregame"]').getByRole("switch"),
+    ).toHaveAttribute("aria-checked", "true");
+    await expect(
+      advanced.locator('[data-plugin-id="world-init"]').getByRole("switch"),
+    ).toHaveAttribute("aria-checked", "true");
     await startGame(
       page,
       page.getByRole("button", { name: "Start Game", exact: true }),
     );
     await expect(page).toHaveURL(/sid=/);
     const sessionId = new URL(page.url()).searchParams.get("sid")!;
-    // The chosen pack has no setup runtime, so the session starts in play.
+    await page
+      .getByRole("button", { name: "Begin Adventure", exact: true })
+      .click();
+    const committedTurn = (kind: "opening" | "player") =>
+      expect
+        .poll(() =>
+          page.evaluate(
+            async ({ id, kind }) => {
+              const origin: ExecutionOrigin =
+                kind === "opening" ? "continuation" : "player";
+              const credentialsPath = "/src/services/session-credentials.ts";
+              const { getSessionToken } = await import(credentialsPath);
+              const token = await getSessionToken(id);
+              const response = await fetch(`/api/sessions/${id}/turns`, {
+                headers: token ? { "X-Session-Token": token } : {},
+              });
+              const body = (await response.json()) as {
+                items: {
+                  origin: ExecutionOrigin;
+                  commitStatus: string;
+                  runtimeResults: RuntimeResult[];
+                }[];
+              };
+              return body.items.some(
+                (turn) =>
+                  turn.origin === origin &&
+                  turn.commitStatus === "committed" &&
+                  turn.runtimeResults.some(
+                    (result) =>
+                      result.pluginId === "narrator" &&
+                      result.status === "success",
+                  ),
+              );
+            },
+            { id: sessionId, kind },
+          ),
+        )
+        .toBe(true);
+    await committedTurn("opening");
+    await waitForTurnIdle(page);
     await sendPlayerMessage(page, "I trim the relay lamp.");
     await waitForTurnIdle(page);
-    await expect
-      .poll(() =>
-        page.evaluate(async (id) => {
-          const credentialsPath = "/src/services/session-credentials.ts";
-          const { getSessionToken } = await import(credentialsPath);
-          const token = await getSessionToken(id);
-          const response = await fetch(`/api/sessions/${id}/turns`, {
-            headers: token ? { "X-Session-Token": token } : {},
-          });
-          const body = (await response.json()) as {
-            items: { origin: string; commitStatus: string }[];
-          };
-          return body.items.some(
-            (turn) =>
-              turn.origin === "player" && turn.commitStatus === "committed",
-          );
-        }, sessionId),
-      )
-      .toBe(true);
+    await committedTurn("player");
     await page.reload();
+    await committedTurn("opening");
+    await committedTurn("player");
     const saved = await page.evaluate(
       async ({ sessionId, worldId }) => {
         const servicePath = "/src/services/data-service.ts";
@@ -147,6 +286,9 @@ test("local world selection survives preparation, hydration, the first turn and 
           worldMetadata: world?.metadata,
           active: session.activePlugins as string[],
           selection: session.metadata?.pluginSelection,
+          data: await (
+            await import(apiPath)
+          ).listPluginData(sessionId, "core-quest", "quests"),
         };
       },
       { sessionId, worldId },
@@ -155,9 +297,15 @@ test("local world selection survives preparation, hydration, the first turn and 
     expect(saved.worldMetadata).not.toHaveProperty("pluginPitch");
     expect(saved.selection).toMatchObject({
       excluded: expect.arrayContaining(["dice-check"]),
-      requiredContracts: ["missing-check@1"],
+      requiredContracts: ["session.opening@1"],
+      requiredDataContracts: ["quests@1"],
     });
+    expect(saved.active).toContain("pregame");
     expect(saved.active).toContain("narrator");
+    expect(saved.active).toContain("core-quest");
+    expect(saved.data).toEqual(
+      expect.arrayContaining([expect.objectContaining({ key: "relay" })]),
+    );
     expect(saved.active).not.toContain("dice-check");
   } finally {
     await page.evaluate(async (id) => {

@@ -60,7 +60,44 @@ describe("WorldDataPreflightPanel", () => {
     expect(screen.getByText("1 lore entry")).toBeTruthy();
     expect(screen.queryByText(/portrait-assets/)).toBeNull();
     expect(
-      screen.getByText('"portraits": no enabled plugin receives this data.'),
+      screen.getByText("This data has no plugin to receive it."),
     ).toBeTruthy();
   });
+});
+
+it.each([
+  "receiver-ambiguous",
+  "receiver-excluded",
+  "receiver-approval-required",
+] as const)("shows a nonfatal safe warning for %s", async (code) => {
+  await i18n.changeLanguage("en-US");
+  const { container, unmount } = render(
+    <WorldDataPreflightPanel
+      status="success"
+      error={null}
+      onRetry={() => {}}
+      result={{
+        imported: true,
+        planned: 0,
+        targets: [],
+        diagnostics: [
+          {
+            level: "warning",
+            code,
+            message: "SECRET_ERROR",
+            sourceId: "SECRET_SOURCE",
+          },
+        ],
+      }}
+    />,
+  );
+  try {
+    expect(container.textContent).toContain(
+      "This data has no plugin to receive it.",
+    );
+    expect(container.textContent).not.toContain("SECRET");
+    expect(screen.queryByText("Check failed")).toBeNull();
+  } finally {
+    unmount();
+  }
 });

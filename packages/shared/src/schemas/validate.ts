@@ -90,8 +90,23 @@ export function validateWorldManifest(
   data: unknown,
   options?: { ignoreUnknownRootFields?: boolean },
 ): ManifestValidationResult {
-  if (!options?.ignoreUnknownRootFields || !isRecord(data))
-    return validate(worldManifestSchema, data);
+  if (!options?.ignoreUnknownRootFields || !isRecord(data)) {
+    const result = validate(worldManifestSchema, data);
+    if (isRecord(data) && Object.hasOwn(data, "dimensions"))
+      return {
+        ...result,
+        errors: [
+          ...(result.errors ?? []),
+          {
+            path: "dimensions",
+            message:
+              "Author dimensions in data/dimensions.yaml, not world.yaml; generated results use packageContent.dimensions",
+            code: "custom",
+          },
+        ],
+      };
+    return result;
+  }
   const ignoredFields = Object.keys(data).filter(
     (key) => !Object.hasOwn(worldManifestSchema.shape, key),
   );

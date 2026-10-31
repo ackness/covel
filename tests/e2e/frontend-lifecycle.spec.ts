@@ -112,60 +112,64 @@ test("debugger navigation opens the selected session and resets the previous com
 test("browser world edits and cascading deletion survive reload without a server world", async ({
   page,
 }) => {
+  const worldId = `review-local-world-${crypto.randomUUID()}`;
+  const sessionId = `review-local-session-${crypto.randomUUID()}`;
+  const worldName = `Review local world ${worldId}`;
   await seedAppSettings(page);
   await page.goto("/session");
   await expect(page.locator("article").first()).toBeVisible();
-  await page.evaluate(async () => {
-    const modulePath = "/src/services/data-service.ts";
-    const { getDataService } = await import(modulePath);
-    const ds = getDataService();
-    await ds.saveGeneratedWorld({
-      id: "review-local-world",
-      name: "Review local world",
-      description: "Synthetic lifecycle fixture",
-      dimensions: {
-        geography: {
-          name: "Geography",
-          schema: {
-            type: "object",
-            properties: {
-              overview: { type: "string" },
-              regions: {
-                type: "array",
-                items: {
-                  type: "object",
-                  properties: {
-                    name: { type: "string" },
-                    description: { type: "string" },
-                    climate: { type: "string" },
+  await page.evaluate(
+    async ({ worldId, sessionId, worldName }) => {
+      const modulePath = "/src/services/data-service.ts";
+      const { getDataService } = await import(modulePath);
+      const ds = getDataService();
+      await ds.saveGeneratedWorld({
+        id: worldId,
+        name: worldName,
+        description: "Synthetic lifecycle fixture",
+        dimensions: {
+          geography: {
+            name: "Geography",
+            schema: {
+              type: "object",
+              properties: {
+                overview: { type: "string" },
+                regions: {
+                  type: "array",
+                  items: {
+                    type: "object",
+                    properties: {
+                      name: { type: "string" },
+                      description: { type: "string" },
+                      climate: { type: "string" },
+                    },
+                    required: ["name", "description", "climate"],
+                    additionalProperties: false,
                   },
-                  required: ["name", "description", "climate"],
-                  additionalProperties: false,
                 },
               },
+              additionalProperties: false,
             },
-            additionalProperties: false,
-          },
-          initialValue: {
-            overview: "Original overview",
-            regions: [
-              {
-                name: "Harbor",
-                description: "A quiet harbor",
-                climate: "Mild",
-              },
-            ],
+            initialValue: {
+              overview: "Original overview",
+              regions: [
+                {
+                  name: "Harbor",
+                  description: "A quiet harbor",
+                  climate: "Mild",
+                },
+              ],
+            },
           },
         },
-      },
-      createdAt: "2026-01-01T00:00:00Z",
-    });
-    await ds.createSession("review-local-world", "review-local-session");
-  });
+        createdAt: "2026-01-01T00:00:00Z",
+      });
+      await ds.createSession(worldId, sessionId);
+    },
+    { worldId, sessionId, worldName },
+  );
   await page.reload();
-  const card = page
-    .locator("article")
-    .filter({ hasText: "Review local world" });
+  const card = page.locator("article").filter({ hasText: worldName });
   await card.getByRole("button", { name: "查看详情" }).click();
   await page.getByRole("button", { name: "编辑", exact: true }).click();
   // The editor opens on the JSON definitions tab; the template form is a tab.
@@ -175,7 +179,7 @@ test("browser world edits and cascading deletion survive reload without a server
     .fill("Edited browser overview");
   await page.getByRole("button", { name: "保存", exact: true }).click();
   await expect(
-    page.getByRole("heading", { name: "Review local world", exact: true }),
+    page.getByRole("heading", { name: worldName, exact: true }),
   ).toBeVisible();
   await page.reload();
   await card.getByRole("button", { name: "查看详情" }).click();
@@ -199,40 +203,39 @@ test("browser world edits and cascading deletion survive reload without a server
   await expect(page.locator("article").first()).toBeVisible();
   await expect(card).toHaveCount(0);
   expect(
-    await page.evaluate(async () => {
+    await page.evaluate(async (sessionId) => {
       const modulePath = "/src/services/data-service.ts";
       const { getDataService } = await import(modulePath);
-      return getDataService().getSession("review-local-session");
-    }),
+      return getDataService().getSession(sessionId);
+    }, sessionId),
   ).toBeNull();
 });
 
 test("portrait replacement reaches the runtime and survives a browser checkpoint reload", async ({
   page,
 }) => {
+  const worldId = `review-portrait-world-${crypto.randomUUID()}`;
+  const sessionId = `review-portrait-session-${crypto.randomUUID()}`;
+  const worldName = `Portrait review ${worldId}`;
   await seedAppSettings(page);
   await page.goto("/session");
   await expect(page.locator("article").first()).toBeVisible();
-  const seeded = await page.evaluate(async () => {
-    const dataPath = "/src/services/data-service.ts";
-    const apiPath = "/src/services/api.ts";
-    const { getDataService, getSessionWorkspace } = await import(dataPath);
-    const { postPluginRpc } = await import(apiPath);
-    const ds = getDataService();
-    await ds.saveGeneratedWorld({
-      id: "review-portrait-world",
-      name: "Portrait review",
-      description: "Synthetic media test",
-      createdAt: "2026-01-01T00:00:00Z",
-    });
-    await ds.createSession("review-portrait-world", "review-portrait-session", [
-      "character-blueprint",
-    ]);
-    return getSessionWorkspace().run(
-      "review-portrait-session",
-      "seed-presence",
-      () =>
-        postPluginRpc("review-portrait-session", {
+  const seeded = await page.evaluate(
+    async ({ worldId, sessionId, worldName }) => {
+      const dataPath = "/src/services/data-service.ts";
+      const apiPath = "/src/services/api.ts";
+      const { getDataService, getSessionWorkspace } = await import(dataPath);
+      const { postPluginRpc } = await import(apiPath);
+      const ds = getDataService();
+      await ds.saveGeneratedWorld({
+        id: worldId,
+        name: worldName,
+        description: "Synthetic media test",
+        createdAt: "2026-01-01T00:00:00Z",
+      });
+      await ds.createSession(worldId, sessionId, ["character-blueprint"]);
+      return getSessionWorkspace().run(sessionId, "seed-presence", () =>
+        postPluginRpc(sessionId, {
           kind: "runtime",
           pluginId: "character-blueprint",
           runtimeId: "character-blueprint/presence",
@@ -244,10 +247,12 @@ test("portrait replacement reaches the runtime and survives a browser checkpoint
             },
           },
         }),
-    );
-  });
+      );
+    },
+    { worldId, sessionId, worldName },
+  );
   expect(seeded.status).toBe("ok");
-  await page.goto("/session?sid=review-portrait-session");
+  await page.goto(`/session?sid=${sessionId}`);
   const portraits = page.getByRole("tab", { name: "角色立绘", exact: true });
   await portraits.click();
   await expect(page.getByText("Review hero", { exact: true })).toBeVisible();
@@ -270,14 +275,12 @@ test("portrait replacement reaches the runtime and survives a browser checkpoint
   ).toBeVisible();
   await expect
     .poll(() =>
-      page.evaluate(async () => {
+      page.evaluate(async (sessionId) => {
         const dataPath = "/src/services/storage/browser-vault.ts";
         const { BrowserVault } = await import(dataPath);
         const vault = new BrowserVault();
         try {
-          const checkpoint = await vault.getCheckpoint(
-            "review-portrait-session",
-          );
+          const checkpoint = await vault.getCheckpoint(sessionId);
           return !!checkpoint?.pluginData.find(
             (row: { key: string; value?: { avatar?: unknown } }) =>
               row.key === "review-hero",
@@ -285,7 +288,7 @@ test("portrait replacement reaches the runtime and survives a browser checkpoint
         } finally {
           vault.close();
         }
-      }),
+      }, sessionId),
     )
     .toBe(true);
   await page.reload();

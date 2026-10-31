@@ -1,8 +1,11 @@
 import { createTurnEmitter } from "../trace/turn-emitter.js";
 import {
   presentationSnapshotSchema,
+  presentationCompletionSchema,
   type DeferredRuntimeJob,
   type RuntimeManifest,
+  type RuntimeResult,
+  type PresentationSnapshot,
 } from "@covel/shared";
 import type { StoreTransaction } from "@covel/store";
 import { createPresentationBudget } from "./budget.js";
@@ -15,6 +18,83 @@ import {
   takePresentationSnapshot,
   PresentationUnavailable,
 } from "./projection.js";
+
+/** Recover an inline selector from persisted public story, never retry seeds. */
+export async function capturePresentationRecovery(
+  store: StoreTransaction,
+  sessionId: string,
+  manifest: RuntimeManifest,
+  source: RuntimeResult,
+  runtimes: readonly RuntimeManifest[],
+): Promise<PresentationSnapshot | undefined> {
+  const limits = presentationLimits(manifest);
+  if (
+    !manifest.presentation ||
+    source.status !== "failed" ||
+    source.pluginId !== manifest.pluginId ||
+    source.runtimeId !== manifest.name ||
+    limits.calls ||
+    limits.generations ||
+    manifest.turnCompletion?.mode === "detached"
+  )
+    return undefined;
+  const events = await store.queryTraceEvents(sessionId, {
+    types: ["presentation.completed"],
+    turnId: source.turnId,
+  });
+  const terminal = events
+    .map((event) => {
+      const {
+        flowId: _flowId,
+        seq: _seq,
+        ...payload
+      } = event.payload as Record<string, unknown>;
+      return presentationCompletionSchema.safeParse(payload);
+    })
+    .find(
+      (parsed) =>
+        parsed.success &&
+        parsed.data.runId === source.runId &&
+        parsed.data.runtimeId === manifest.name &&
+        parsed.data.pluginId === manifest.pluginId &&
+        parsed.data.sourceTurnId === source.turnId &&
+        parsed.data.status === "failed",
+    );
+  if (!terminal?.success) return undefined;
+  const providers = runtimes.filter(
+    (runtime) =>
+      runtime.outputKind === "story" &&
+      !runtime.concealed &&
+      runtime.outputContract === "narrative-engine@2",
+  );
+  if (providers.length !== 1) return undefined;
+  const messages = (await store.listMessages(sessionId)).filter((message) => {
+    const metadata = message.metadata as Record<string, unknown> | undefined;
+    return (
+      metadata?.turnId === source.turnId &&
+      metadata?.runtimeId === providers[0]!.name &&
+      metadata?.kind === "story"
+    );
+  });
+  if (messages.length !== 1) return undefined;
+  const story = projectPresentationStory(messages[0]!.metadata);
+  if (!story) return undefined;
+  try {
+    const snapshot = await takePresentationSnapshot({
+      store,
+      manifest,
+      sessionId,
+      sourceTurnId: source.turnId,
+      sourceExecutionId: terminal.data.sourceExecutionId,
+      locale: (await store.getSession(sessionId))?.locale,
+      story,
+    });
+    return presentationSnapshotSchema.parse({ ...snapshot, committed: true });
+  } catch (error) {
+    if (!(error instanceof PresentationUnavailable)) throw error;
+    return undefined;
+  }
+}
 
 /** Admission can settle a valid source before a handler or execution exists. */
 export async function unavailablePresentationJob(

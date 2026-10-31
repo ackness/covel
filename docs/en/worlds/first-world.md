@@ -4,6 +4,10 @@ This page takes you through writing a world package by hand. It is called "ÊΩÆÁÅ
 
 It takes about twenty minutes. You do not need to write code.
 
+Seed content automatically selects its unique eligible receiver under the [receiver rules](../reference/world-data.md#data-receivers). Additional `plugin:` references express gameplay without seed data or an intentional receiver choice.
+
+Write structured dimensions only in `data/dimensions.yaml`, without copying them into `world.yaml`. The editor changes the world record; explicit export writes the canonical file. See [dimension sources](../reference/world-data.md#dimension-sources).
+
 ## Before you start
 
 - You have finished [your first game](../start/first-session.md), so you know how a game plays.

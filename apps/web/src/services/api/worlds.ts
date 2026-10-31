@@ -173,7 +173,12 @@ export async function deleteWorld(id: string): Promise<void> {
 
 export async function preflightWorldData(
   worldId: string,
-  body: { plugins?: string[]; sessionId?: string },
+  body: {
+    plugins?: string[];
+    sessionId?: string;
+    excludedPlugins?: string[];
+    locale?: string;
+  },
 ): Promise<WorldDataPreflightResponse> {
   return request<WorldDataPreflightResponse>(
     `/api/worlds/${encodeURIComponent(worldId)}/world-data/preflight`,

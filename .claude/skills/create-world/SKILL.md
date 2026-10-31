@@ -36,7 +36,7 @@ pnpm describe:authoring
 ### 3. 选玩法和内容
 
 - 按玩法选一个内置玩法包写进 `plugins` 的 `pack:<id>` 引用：传统叙事 `traditional-story`，对话/校园/群像 `dialogue-mode`，省 token `low-cost`。世界不能自己定义玩法包。
-- 从第 2 步的内容列表里挑与概念相符的。要预置某种内容，接收它的插件不在所选玩法包里时，把它写进 `plugins` 的 `plugin:<id>` 引用；`kind: core` 的插件不写。
+- 从第 2 步的内容列表里挑与概念相符的。实际预置内容会推导唯一合格接收者；不要为数据重复请求插件。只有没有种子数据的玩法或有意指定多个候选之一时才写 `plugin:<id>`。规则见 `docs/reference/world-data.md#data-receivers`。
 - 准备页默认使用公开名称、简介和标签介绍玩法，不读取私有设定或调用模型。需要覆盖时才写 `pluginPitch`（`label`、`description`、`reason`），每项独立可省略。字段见 `docs/reference/world-data.md` 的“插件选择”。
 - 第一个 `pack:` 引用决定初始包，后续引用只排列备选；未知首包给提示但不改选其他包。省略 `plugins` 或写 `[]` 都保留通常的 core 默认。用 `contract:name@version` 声明非数据能力请求；缺提供者只减少该功能，不阻止开局。
 - 视觉小说世界再声明 `defaultViewMode: stage`。立绘和场景图是渐进增强，没有也能运行。
@@ -70,6 +70,7 @@ worlds/<id>/
 要求：
 
 - `world.yaml` 第一行写 `# yaml-language-server: $schema=../../packages/shared/schemas/world-manifest.schema.json`，编辑器会给出补全和报错。
+- 维度只写 `data/dimensions.yaml`，不写在 `world.yaml`；可携带生成／修订结果用 `packageContent.dimensions`。Descriptor 只能在相同规范路径修改或关闭这份来源，不能定义第二张表。
 - `world.yaml` 和 descriptor 只写当前字段；按生成的字段表编写，不添加 `schemaVersion`。
 - 每个数据文件按第 2 步的写作提示和示例来写。
 - 多个文件提到同一个角色、物品或地点时，使用完全相同的 ID 和名字，并与 `WORLD.md` 一致。

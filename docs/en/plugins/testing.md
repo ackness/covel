@@ -12,6 +12,8 @@ For form tools, assert the error code and that failed validation publishes no in
 
 The clean declarative distribution example is [`declarative-notebook`](../../../tests/third-party/declarative-notebook/README.md). Tests stay outside the package and exercise real community discovery, code-free admission, model tool calls, commit, code upgrades and independent sandbox consent. Validation reports classification; runtime tests should assert stored commit outcomes, not just model text.
 
+For file references, follow [declaration files and resource paths](../reference/plugins.md#declaration-paths): root declarations and runtime-private files have explicit base directories.
+
 ## Choose a kind of test
 
 From top to bottom, the tests get slower and closer to the real game:

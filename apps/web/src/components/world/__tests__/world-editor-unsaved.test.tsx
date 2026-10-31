@@ -18,13 +18,30 @@ import {
 import i18n from "@/i18n/index.js";
 import type { WorldRecord } from "@/services/api.js";
 import { emitWorldListRequest } from "@/lib/nav-events.js";
-import { WorldEditor } from "../world-editor.js";
+import { createMemoryStore } from "@covel/store/memory";
+import type { WorldRecord as StoreWorldRecord } from "@covel/store/browser-sync";
+import { BrowserVault } from "@/services/storage/browser-vault.js";
+import { LocalDataService } from "@/services/data-service/local.js";
+import { fakeSessionServer } from "@/services/__tests__/support/fake-session-server.js";
+import { invalidateAllWorldRecords } from "@/services/world-records.js";
+import { WorldEditor, WorldEditorLoader } from "../world-editor.js";
 
 const mocks = vi.hoisted(() => ({
   updateWorld: vi.fn(),
+  getWorld: vi.fn(),
   requestConfirm: vi.fn(),
 }));
+const api = vi.hoisted(() => ({
+  getWorld: vi.fn(),
+  updateWorld: vi.fn(),
+  createSession: vi.fn(),
+  getSession: vi.fn(),
+  deleteSession: vi.fn(),
+  uploadBrowserCheckpoint: vi.fn(),
+  fetchBrowserCommit: vi.fn(),
+}));
 vi.mock("@/services/data-service.js", () => ({ getDataService: () => mocks }));
+vi.mock("@/services/api.js", () => api);
 vi.mock("@/lib/confirm-channel.js", () => ({
   requestConfirm: mocks.requestConfirm,
 }));
@@ -52,7 +69,7 @@ const world: WorldRecord = {
 
 const disposeHistories: Array<() => void> = [];
 
-function openEditor(browser = false) {
+function openEditor(browser = false, editorWorld = world, loadRecord = false) {
   const onSave = vi.fn();
   const onCancel = vi.fn();
   const onExit = vi.fn();
@@ -72,10 +89,11 @@ function openEditor(browser = false) {
   }
   disposeHistories.push(() => history.destroy());
   const router = createRouter({ routeTree, history });
+  const Editor = loadRecord ? WorldEditorLoader : WorldEditor;
   const view = render(
     <RouterContextProvider router={router}>
-      <WorldEditor
-        world={world}
+      <Editor
+        world={editorWorld}
         onSave={onSave}
         onCancel={onCancel}
         onExit={onExit}
@@ -115,10 +133,148 @@ beforeEach(async () => {
 });
 afterEach(() => {
   cleanup();
+  invalidateAllWorldRecords();
   for (const dispose of disposeHistories.splice(0)) dispose();
 });
 
 describe("WorldEditor unsaved changes", () => {
+  it.each([false, true])(
+    "round-trips applied JSON through editor save, browser reload and canonical hydration (clear=%s)",
+    async (clear) => {
+      const alarm = {
+        name: "Harbor alarm",
+        schema: { type: "integer" as const, minimum: 0 },
+        initialValue: 17,
+      };
+      const dimensions = clear ? {} : { alarm: { ...alarm, initialValue: 23 } };
+      const dbName = `editor-roundtrip-${crypto.randomUUID()}`;
+      let vault = new BrowserVault({ dbName });
+      const mirror = createMemoryStore();
+      let releaseSave: (() => void) | undefined;
+      try {
+        let service = new LocalDataService(vault);
+        // Match portable generation: the authored definitions start in metadata.
+        const original: StoreWorldRecord = {
+          id: world.id,
+          name: "Harbor watch",
+          description: "Keep the lamp lit.",
+          createdAt: world.createdAt,
+          metadata: { ...world.metadata, dimensions: { alarm } },
+        };
+        await vault.upsertWorld(original);
+        await mirror.upsertWorld(original);
+        mocks.getWorld.mockImplementation((id: string) => service.getWorld(id));
+        mocks.updateWorld.mockImplementation((id: string, patch) =>
+          service.updateWorld(id, patch),
+        );
+        const server = fakeSessionServer({
+          vault: () => vault,
+          // A server response must not replace the browser's edited document.
+          patch: () => ({ world: original }),
+        });
+        api.getWorld.mockImplementation((id: string) => mirror.getWorld(id));
+        api.updateWorld.mockImplementation(
+          async (id: string, patch: Partial<StoreWorldRecord>) => {
+            await mirror.upsertWorld({ ...original, ...patch, id });
+            return mirror.getWorld(id);
+          },
+        );
+        api.createSession.mockImplementation(server.createSession);
+        api.deleteSession.mockImplementation(server.deleteSession);
+        api.fetchBrowserCommit.mockImplementation(server.fetchBrowserCommit);
+        api.getSession.mockResolvedValue({ id: "edited-session" });
+        api.uploadBrowserCheckpoint.mockImplementation(
+          async (_id, checkpoint) => {
+            await mirror.upsertWorld(checkpoint.world);
+            return { ok: true, revision: checkpoint.revision };
+          },
+        );
+        const { onSave, unmount } = openEditor(false, world, true);
+        const input = await screen.findByLabelText(
+          i18n.t("world.dimensionDefinitions"),
+          {
+            selector: "textarea",
+          },
+        );
+        fireEvent.change(input, {
+          target: { value: JSON.stringify(dimensions) },
+        });
+        fireEvent.click(
+          screen.getByRole("button", { name: i18n.t("world.applyDimensions") }),
+        );
+
+        // Saving is asynchronous. Its completion signal must follow the durable
+        // write even while another browser document holds the world lock.
+        let markHeld!: () => void;
+        const gate = new Promise<void>((resolve) => {
+          releaseSave = resolve;
+        });
+        const held = new Promise<void>((resolve) => {
+          markHeld = resolve;
+        });
+        const lock = vault.withWorldLock(world.id, "exclusive", async () => {
+          markHeld();
+          await gate;
+        });
+        await held;
+        fireEvent.click(
+          screen.getByRole("button", { name: i18n.t("common.save") }),
+        );
+        expect(onSave).not.toHaveBeenCalled();
+        expect((await vault.getWorld(world.id))?.metadata?.dimensions).toEqual({
+          alarm,
+        });
+        releaseSave!();
+        await lock;
+        await waitFor(() => expect(onSave).toHaveBeenCalledOnce());
+        expect(mocks.updateWorld).toHaveBeenCalledWith(world.id, {
+          dimensions,
+        });
+        expect(onSave.mock.calls[0]?.[0].metadata.dimensions).toEqual(
+          dimensions,
+        );
+        unmount();
+        invalidateAllWorldRecords();
+        vault.close();
+        vault = new BrowserVault({ dbName });
+        service = new LocalDataService(vault);
+        expect((await service.getWorld(world.id))?.dimensions).toEqual(
+          dimensions,
+        );
+        const reopened = openEditor(false, world, true);
+        expect(
+          JSON.parse(
+            (
+              await screen.findByLabelText<HTMLTextAreaElement>(
+                i18n.t("world.dimensionDefinitions"),
+                { selector: "textarea" },
+              )
+            ).value,
+          ),
+        ).toEqual(dimensions);
+        reopened.unmount();
+        await service.createSession(world.id, "edited-session", [], "en-US");
+        await service.syncToServer("edited-session");
+        expect((await mirror.getWorld(world.id))?.dimensions).toEqual(
+          dimensions,
+        );
+        expect((await mirror.getWorld(world.id))?.metadata?.dimensions).toEqual(
+          dimensions,
+        );
+        await service.commitFromServer("edited-session", "opening");
+        vault.close();
+        vault = new BrowserVault({ dbName });
+        expect(
+          (await new LocalDataService(vault).getWorld(world.id))?.dimensions,
+        ).toEqual(dimensions);
+      } finally {
+        releaseSave?.();
+        await vault.deleteDatabase();
+        await mirror.close();
+      }
+    },
+  );
+
   it("saves a dimension patch while preserving authored selection and pitch", async () => {
     const { onSave } = openEditor();
     mocks.updateWorld.mockImplementation(

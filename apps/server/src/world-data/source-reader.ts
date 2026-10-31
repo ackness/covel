@@ -5,7 +5,7 @@ import {
   applyLocaleOverlay,
   canonicalizeLocale,
 } from "@covel/shared";
-import { parse as parseYaml } from "yaml";
+import { readStructuredFile } from "./structured-file.js";
 import {
   findLocaleOverlays,
   pickLocaleOverlay,
@@ -87,8 +87,21 @@ function isStructured(source: OrderedWorldDataSource): boolean {
   return source.descriptor.kind === "json" || source.descriptor.kind === "yaml";
 }
 
-function parseSource(source: OrderedWorldDataSource, text: string): unknown {
-  return source.descriptor.kind === "json" ? JSON.parse(text) : parseYaml(text);
+/** Resolve existence with the same base/locale fallback as the actual reader. */
+export async function resolveWorldDataSourcePath(
+  source: OrderedWorldDataSource,
+  locale?: string,
+): Promise<string | null> {
+  // Structured overlays merge into a base file; without a base the selected
+  // locale file can stand alone. Prose and media prefer the locale variant.
+  const mainPath = isStructured(source)
+    ? await resolveContainedPath(
+        source.pathOrigin.descriptorRoot,
+        source.descriptor.path,
+        { rejectSymlinks: true },
+      )
+    : null;
+  return mainPath ?? resolveSourcePath(source, locale);
 }
 
 export async function readWorldDataSource(
@@ -104,14 +117,13 @@ export async function readWorldDataSource(
 }> {
   const diagnostics: WorldDataDiagnostic[] = [];
   const root = source.pathOrigin.descriptorRoot;
-  // A structured source is read from its main file and merged with overlays.
-  // Without a main file, a locale file still stands in for it.
   const mainPath = isStructured(source)
     ? await resolveContainedPath(root, source.descriptor.path, {
         rejectSymlinks: true,
       })
     : null;
-  const resolved = mainPath ?? (await resolveSourcePath(source, locale));
+  const resolved =
+    mainPath ?? (await resolveWorldDataSourcePath(source, locale));
   if (!resolved) {
     const declared = source.descriptor.path;
     const reason = await explainUnresolvedPath(root, declared);
@@ -149,7 +161,7 @@ export async function readWorldDataSource(
     source.descriptor.kind === "markdown" || source.descriptor.kind === "text"
       ? MAX_TEXT_BYTES
       : MAX_STRUCTURED_BYTES;
-  const fileStat = await stat(resolved);
+  const fileStat = await stat(resolved, { bigint: true });
   if (!fileStat.isFile()) {
     return {
       path: resolved,
@@ -181,14 +193,18 @@ export async function readWorldDataSource(
   }
 
   try {
-    const text = await readFile(resolved, "utf-8");
     if (
       source.descriptor.kind === "markdown" ||
       source.descriptor.kind === "text"
     ) {
-      return { value: text, path: resolved, diagnostics };
+      return {
+        value: await readFile(resolved, "utf-8"),
+        path: resolved,
+        diagnostics,
+      };
     }
-    let value = parseSource(source, text);
+    const kind = source.descriptor.kind === "json" ? "json" : "yaml";
+    let value = await readStructuredFile(resolved, kind, fileStat);
     const overlayPaths: string[] = [];
     if (mainPath) {
       const found = await findLocaleOverlays(
@@ -202,7 +218,7 @@ export async function readWorldDataSource(
             (overlay): overlay is LocaleOverlayFile => overlay !== undefined,
           );
       for (const overlay of picked) {
-        const overlayStat = await stat(overlay.path);
+        const overlayStat = await stat(overlay.path, { bigint: true });
         if (!overlayStat.isFile() || overlayStat.size > limit) {
           diagnostics.push({
             level: "error",
@@ -214,7 +230,7 @@ export async function readWorldDataSource(
         }
         const merged = applyLocaleOverlay(
           value,
-          parseSource(source, await readFile(overlay.path, "utf-8")),
+          await readStructuredFile(overlay.path, kind, overlayStat),
           {
             mode: options.overlays ? "compile" : "resolve",
             locale: overlay.locale,

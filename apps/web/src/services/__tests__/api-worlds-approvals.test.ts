@@ -336,11 +336,23 @@ it.each(["allow", "deny"] as const)(
   },
 );
 it("preserves unrelated approval conflicts as failures", async () => {
-  mockFetchOnce(
-    { error: "Approval scope changed", code: "approval_scope_changed" },
-    409,
-  );
-  await expect(
-    resolveApproval("outdated", "allow", "session", "sess-1"),
-  ).rejects.toMatchObject({ status: 409, code: "approval_scope_changed" });
+  const toasts: unknown[] = [];
+  const unsubscribe = subscribeToast((toast) => toasts.push(toast));
+  try {
+    mockFetchOnce(
+      { error: "Approval scope changed", code: "approval_scope_changed" },
+      409,
+    );
+    await expect(
+      resolveApproval("outdated", "allow", "session", "sess-1"),
+    ).rejects.toMatchObject({ status: 409, code: "approval_scope_changed" });
+    expect(toasts).toEqual([
+      expect.objectContaining({
+        kind: "error",
+        detail: expect.stringContaining("Approval scope changed"),
+      }),
+    ]);
+  } finally {
+    unsubscribe();
+  }
 });

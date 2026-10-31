@@ -8,6 +8,7 @@ import type {
 } from "@covel/shared";
 import type { DataStore } from "@covel/store";
 import { ActionRejectedError } from "./action-rejection.js";
+import { capturePresentationRecovery } from "@covel/runtime";
 
 type RuntimeRetryAction = Extract<
   ActionRequest,
@@ -18,6 +19,7 @@ type RuntimeRetryAction = Extract<
 
 export interface RuntimeRetryPlan {
   readonly presentationJobs?: readonly import("@covel/shared").DeferredRuntimeJob[];
+  readonly presentationSnapshots?: readonly import("@covel/shared").PresentationSnapshot[];
   readonly scope?: RuntimeRetryScope;
   readonly seedResults: readonly RuntimeResult[];
   readonly sourceRuntimeIds: readonly string[];
@@ -163,7 +165,32 @@ export async function prepareRuntimeRetry(
       "retry_target_not_failed",
     );
   }
+  const presentationSnapshots: import("@covel/shared").PresentationSnapshot[] =
+    [];
+  for (const runtime of activeRuntimes) {
+    const failed = results.get(runtime.name);
+    // Only the original failed selector can supply recovery provenance.
+    const original = sourceResults.find(
+      (result) => result.runtimeId === runtime.name,
+    );
+    if (
+      !runtime.presentation ||
+      !runtimeIds.includes(runtime.name) ||
+      failed?.status !== "failed" ||
+      !original
+    )
+      continue;
+    const snapshot = await capturePresentationRecovery(
+      store,
+      sessionId,
+      runtime,
+      original,
+      activeRuntimes,
+    );
+    if (snapshot) presentationSnapshots.push(snapshot);
+  }
   return {
+    presentationSnapshots,
     presentationJobs,
     sourceRuntimeIds: [
       ...new Set([

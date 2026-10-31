@@ -57,7 +57,9 @@ version: 0.1.0
 summary: 一个用于生成器测试的世界。
 defaultLocale: zh-CN
 tags: [test]
-dimensions:
+`;
+
+const WORLD_DIMENSIONS_YAML = `dimensions:
   geography:
     name: geography
     schema: {}
@@ -135,7 +137,8 @@ const WORLD_LORE = `# 测试世界
 2. 公会记录出现不存在的名字。
 3. 街区尽头的门只在雨夜打开。`;
 
-const WORLD_PACKAGE_YAML = `characters:
+const WORLD_PACKAGE_YAML = `${WORLD_DIMENSIONS_YAML}
+characters:
   - schemaVersion: 1
     id: bell-keeper
     name: 守钟人
@@ -198,7 +201,7 @@ describe("createWorld", () => {
     async ({ model, expected, revision }) => {
       const models: (string | undefined)[] = [];
       const valid = new FixedLlm(
-        `===WORLD_YAML===\n${WORLD_YAML}\n===WORLD_MD===\n${WORLD_LORE}\n===END===`,
+        `===WORLD_YAML===\n${WORLD_YAML}\n===WORLD_MD===\n${WORLD_LORE}\n===WORLD_PACKAGE_YAML===\n${WORLD_DIMENSIONS_YAML}\n===END===`,
       );
       const result = await createWorld({
         concept: "Clockwork city",
@@ -230,7 +233,7 @@ describe("createWorld", () => {
   it("chooses an unused ID before writing the remaining parts", async () => {
     const result = await createWorld({
       llm: new FixedLlm(
-        `===WORLD_YAML===\n${WORLD_YAML}\n===WORLD_MD===\n${WORLD_LORE}\n===END===`,
+        `===WORLD_YAML===\n${WORLD_YAML}\n===WORLD_MD===\n${WORLD_LORE}\n===WORLD_PACKAGE_YAML===\n${WORLD_DIMENSIONS_YAML}\n===END===`,
       ),
       concept: "Clockwork city",
       existingWorldIds: ["test-world", "test-world-2"],
@@ -246,7 +249,7 @@ describe("createWorld", () => {
     const rejected = "===WORLD_YAML===\nnot: a-world\n===END===";
     const requests: unknown[] = [];
     const valid = new FixedLlm(
-      `===WORLD_YAML===\n${WORLD_YAML}\n===WORLD_MD===\n${WORLD_LORE}\n===END===`,
+      `===WORLD_YAML===\n${WORLD_YAML}\n===WORLD_MD===\n${WORLD_LORE}\n===WORLD_PACKAGE_YAML===\n${WORLD_DIMENSIONS_YAML}\n===END===`,
     );
     await createWorld({
       concept: "Clockwork city",
@@ -268,22 +271,64 @@ describe("createWorld", () => {
   it("returns portable content without writes and exports without mutating it", async () => {
     const result = await createWorld({
       llm: new FixedLlm(
-        `===WORLD_YAML===\n${WORLD_YAML}\n===WORLD_MD===\n${WORLD_LORE}\n===END===`,
+        `===WORLD_YAML===\n${WORLD_YAML}\n===WORLD_MD===\n${WORLD_LORE}\n===WORLD_PACKAGE_YAML===\n${WORLD_DIMENSIONS_YAML}\n===END===`,
       ),
       concept: "Clockwork city",
     });
     if (!result.success) throw new Error(result.errors.join("; "));
     expect(await readdir(tmp)).toEqual([]);
-    expect(result.manifest.dimensions).toHaveProperty("geography");
+    expect(result.packageContent.dimensions).toHaveProperty("geography");
     expect(result.lore).toBe(WORLD_LORE);
     const original = structuredClone(result);
     Object.freeze(result.manifest);
     await writeWorldPackage(tmp, result);
     expect(result).toEqual(original);
+    expect(
+      parseYaml(
+        await readFile(path.join(tmp, result.id, "world.yaml"), "utf8"),
+      ),
+    ).not.toHaveProperty("dimensions");
+    expect(
+      parseYaml(
+        await readFile(
+          path.join(tmp, result.id, "data/dimensions.yaml"),
+          "utf8",
+        ),
+      ),
+    ).toEqual(result.packageContent.dimensions);
     await expect(
       writeWorldPackage(tmp, { ...result, id: "../escaped" }),
     ).rejects.toThrow("invalid generated world");
   });
+
+  it.each([true, false])(
+    "requires correction of obsolete inline generator answers (corrected=%s)",
+    async (corrected) => {
+      const requests: string[] = [];
+      const result = await createWorld({
+        concept: "Clockwork city",
+        llm: {
+          async generate(request) {
+            requests.push(JSON.stringify(request.messages));
+            const inline = !corrected || requests.length === 1;
+            return {
+              content: `===WORLD_YAML===\n${WORLD_YAML}\n${inline ? WORLD_DIMENSIONS_YAML : ""}\n===WORLD_MD===\n${WORLD_LORE}\n===WORLD_PACKAGE_YAML===\n${inline ? "{}" : WORLD_DIMENSIONS_YAML}\n===END===`,
+              toolCalls: [],
+              finishReason: "stop",
+              usage: { inputTokens: 0, outputTokens: 0 },
+            };
+          },
+        },
+      });
+      expect(result.success).toBe(corrected);
+      expect(requests[1]).toContain("packageContent.dimensions");
+      if (result.success) {
+        expect(result.manifest).not.toHaveProperty("dimensions");
+        expect(result.packageContent.dimensions).toHaveProperty("geography");
+      }
+      expect(await readdir(tmp)).toEqual([]);
+    },
+  );
 
   it("returns the validated manifest with canonical locales and schema defaults", async () => {
     const yaml = WORLD_YAML.replace(
@@ -295,7 +340,7 @@ describe("createWorld", () => {
     );
     const result = await createWorld({
       llm: new FixedLlm(
-        `===WORLD_YAML===\n${yaml}\n===WORLD_MD===\n${WORLD_LORE}\n===END===`,
+        `===WORLD_YAML===\n${yaml}\n===WORLD_MD===\n${WORLD_LORE}\n===WORLD_PACKAGE_YAML===\n${WORLD_DIMENSIONS_YAML}\n===END===`,
       ),
       concept: "Clockwork city",
       locale: "zh_hant_tw",
@@ -313,14 +358,11 @@ describe("createWorld", () => {
         ],
       },
       pluginSettings: { memory: { cadence: 2 } },
-      dimensions: {
-        geography: {
-          name: "geography",
-          schema: {},
-          initialValue: { regions: [{ name: "中央街区" }] },
-        },
-      },
     });
+    expect(result.manifest).not.toHaveProperty("dimensions");
+    expect(
+      result.packageContent.dimensions?.geography?.initialValue,
+    ).toMatchObject({ regions: [{ name: "中央街区" }] });
   });
 
   it("binds new manifest and export editions to the canonical request locale", async () => {
@@ -332,7 +374,7 @@ describe("createWorld", () => {
     ).replace("tags: [test]", "tags: [test]\nsupportedLocales: [en-US, ru-RU]");
     const result = await createWorld({
       llm: new FixedLlm(
-        `===WORLD_YAML===\n${yaml}\n===WORLD_MD===\n${WORLD_LORE}\n===END===`,
+        `===WORLD_YAML===\n${yaml}\n===WORLD_MD===\n${WORLD_LORE}\n===WORLD_PACKAGE_YAML===\n${WORLD_DIMENSIONS_YAML}\n===END===`,
       ),
       concept: "Synthetic world",
       locale: "zh_cn",
@@ -488,7 +530,7 @@ describe("createWorld", () => {
                 ? (answers.cast ?? cast)
                 : asked.includes("records of contract")
                   ? (answers.notes[noteCalls++] ?? "")
-                  : "";
+                  : WORLD_DIMENSIONS_YAML;
               return new FixedLlm(
                 `===WORLD_YAML===\n${WORLD_YAML}\n===WORLD_MD===\n${WORLD_LORE}\n===WORLD_PACKAGE_YAML===\n${pack}\n===END===`,
               ).generate();
@@ -530,7 +572,7 @@ describe("createWorld", () => {
         { id: "courier", name: "Courier", type: "npc" },
       ]);
       expect(result.manifest).toMatchObject({
-        plugins: ["plugin:character-blueprint"],
+        plugins: [],
       });
 
       // One character file; no file of the plugin's and no descriptor.
@@ -597,7 +639,7 @@ describe("createWorld", () => {
   it("rejects unresolved file references before returning generated content", async () => {
     const result = await createWorld({
       llm: new FixedLlm(
-        `===WORLD_YAML===\n${WORLD_YAML}\nworldData: missing.yaml\n===WORLD_MD===\n${WORLD_LORE}\n===END===`,
+        `===WORLD_YAML===\n${WORLD_YAML}\nworldData: missing.yaml\n===WORLD_MD===\n${WORLD_LORE}\n===WORLD_PACKAGE_YAML===\n${WORLD_DIMENSIONS_YAML}\n===END===`,
       ),
       concept: "Clockwork city",
     });
@@ -847,7 +889,7 @@ rules:
   it("preserves an existing package and admits only one concurrent creator", async () => {
     const options = {
       llm: new FixedLlm(
-        `===WORLD_YAML===\n${WORLD_YAML}\n===WORLD_MD===\n${WORLD_LORE}\n===END===`,
+        `===WORLD_YAML===\n${WORLD_YAML}\n===WORLD_MD===\n${WORLD_LORE}\n===WORLD_PACKAGE_YAML===\n${WORLD_DIMENSIONS_YAML}\n===END===`,
       ),
       concept: "Synthetic world",
       idleTimeoutMs: 5_000,
@@ -883,7 +925,7 @@ rules:
   it("writes full lore when the model includes the end delimiter", async () => {
     const result = await createWorld({
       llm: new FixedLlm(
-        `===WORLD_YAML===\n${WORLD_YAML}\n===WORLD_MD===\n${WORLD_LORE}\n===END===`,
+        `===WORLD_YAML===\n${WORLD_YAML}\n===WORLD_MD===\n${WORLD_LORE}\n===WORLD_PACKAGE_YAML===\n${WORLD_DIMENSIONS_YAML}\n===END===`,
       ),
       concept: "测试世界",
       idleTimeoutMs: 5_000,
@@ -918,7 +960,7 @@ rules:
   it("writes the lore once, as the main file in the world's own language", async () => {
     const result = await createWorld({
       llm: new FixedLlm(
-        `===WORLD_YAML===\n${WORLD_YAML}\n===WORLD_MD===\n${WORLD_LORE}\n===END===`,
+        `===WORLD_YAML===\n${WORLD_YAML}\n===WORLD_MD===\n${WORLD_LORE}\n===WORLD_PACKAGE_YAML===\n${WORLD_DIMENSIONS_YAML}\n===END===`,
       ),
       concept: "繁體世界",
       locale: "zh_hant_tw",
@@ -942,7 +984,7 @@ rules:
   it("writes full lore when the model omits the trailing end delimiter", async () => {
     const result = await createWorld({
       llm: new FixedLlm(
-        `===WORLD_YAML===\n${WORLD_YAML}\n===WORLD_MD===\n${WORLD_LORE}`,
+        `===WORLD_YAML===\n${WORLD_YAML}\n===WORLD_MD===\n${WORLD_LORE}\n===WORLD_PACKAGE_YAML===\n${WORLD_DIMENSIONS_YAML}`,
       ),
       concept: "测试世界",
       idleTimeoutMs: 5_000,
@@ -986,7 +1028,8 @@ summary: 一个用于生成器测试的世界。
 defaultLocale: zh-CN
 tags: [test]
 extraRoot: ignored
-dimensions:
+`;
+    const data = `dimensions:
   factions:
     name: factions
     schema: {}
@@ -1036,7 +1079,7 @@ dimensions:
 
     const result = await createWorld({
       llm: new FixedLlm(
-        `===WORLD_YAML===\n\`\`\`yaml\n${malformed}\n\`\`\`\n===WORLD_MD===\n${WORLD_LORE}`,
+        `===WORLD_YAML===\n\`\`\`yaml\n${malformed}\n\`\`\`\n===WORLD_MD===\n${WORLD_LORE}\n===WORLD_PACKAGE_YAML===\n${data}\n===END===`,
       ),
       concept: "测试世界",
       idleTimeoutMs: 5_000,
@@ -1064,44 +1107,34 @@ dimensions:
     expect(dimensions).toContain('铜分: "3"');
   });
 
-  it("keeps a usable world when one dimension is invalid and content falls short", async () => {
-    const flawedYaml = WORLD_YAML.replace(
-      "dimensions:",
-      `dimensions:
-  discoveries:
-    name: 已知地点
-    schema:
-      type: object
-      properties:
-        visited: { boolean: true }
-    initialValue: {}`,
-    );
-    const shortPackage = WORLD_PACKAGE_YAML.replace(
-      /\n {2}- \{ id: reverse-hour[^\n]*\n/,
-      "\n",
-    );
+  it("retries invalid portable definitions and preserves the corrected table", async () => {
+    const requests: string[] = [];
     const result = await createWorld({
-      llm: new FixedLlm(
-        `===WORLD_YAML===\n${flawedYaml}\n===WORLD_MD===\n${WORLD_LORE}\n===WORLD_PACKAGE_YAML===\n${shortPackage}\n===END===`,
-      ),
-      concept: "雨中的倒转钟城",
-      idleTimeoutMs: 5_000,
-      brief: { content: ["characters", "lorebook", "rules"] },
+      concept: "Clockwork city",
+      llm: {
+        async generate(request) {
+          requests.push(JSON.stringify(request.messages));
+          const dimensions =
+            requests.length === 1
+              ? "dimensions: { coins: { name: Coins, schema: { type: integer }, initialValue: bad } }"
+              : WORLD_DIMENSIONS_YAML;
+          return {
+            content: `===WORLD_YAML===\n${WORLD_YAML}\n===WORLD_MD===\n${WORLD_LORE}\n===WORLD_PACKAGE_YAML===\n${dimensions}\n===END===`,
+            toolCalls: [],
+            finishReason: "stop",
+            usage: { inputTokens: 0, outputTokens: 0 },
+          };
+        },
+      },
     });
-
-    expect(result.success, JSON.stringify(result.errors)).toBe(true);
-    if (!result.success) throw new Error(result.errors.join("; "));
-    expect(result.manifest.dimensions).not.toHaveProperty("discoveries");
-    expect(result.manifest.dimensions).toHaveProperty("geography");
-    expect(result.packageContent.lorebook).toHaveLength(3);
-    expect(result.warnings).toEqual([
-      expect.stringContaining('dropped dimension "discoveries"'),
-      "generated 3 lorebook entries; the brief asks for 4",
-    ]);
+    expect(result.success).toBe(true);
+    expect(requests[1]).toContain("packageContent.dimensions");
+    if (result.success)
+      expect(result.packageContent.dimensions).toHaveProperty("geography");
   });
 
   it("writes requested portable world-package supplements", async () => {
-    const enrichedYaml = WORLD_YAML.replace(
+    const enrichedDimensions = WORLD_DIMENSIONS_YAML.replace(
       "  startingConditions:",
       `  coins:
     name: Coins
@@ -1114,7 +1147,7 @@ dimensions:
   startingConditions:`,
     );
     const memoryPackage =
-      WORLD_PACKAGE_YAML +
+      WORLD_PACKAGE_YAML.replace(WORLD_DIMENSIONS_YAML, enrichedDimensions) +
       `
 contractData:
   - contract: memory.blocks@1
@@ -1131,7 +1164,7 @@ contractData:
 `;
     const result = await createWorld({
       llm: new FixedLlm(
-        `===WORLD_YAML===\n${enrichedYaml}\n===WORLD_MD===\n${WORLD_LORE}\n===WORLD_PACKAGE_YAML===\n${memoryPackage}\n===END===`,
+        `===WORLD_YAML===\n${WORLD_YAML}\n===WORLD_MD===\n${WORLD_LORE}\n===WORLD_PACKAGE_YAML===\n${memoryPackage}\n===END===`,
       ),
       concept: "雨中的倒转钟城",
       idleTimeoutMs: 5_000,
@@ -1192,7 +1225,7 @@ contractData:
     expect(manifest).toContain("pack:dialogue-mode");
     expect(manifest).toContain("defaultViewMode: stage");
     expect(manifest).not.toContain("memoryBlocks:");
-    expect(manifest).toMatch(/plugin:memory/);
+    expect(manifest).not.toMatch(/plugin:memory/);
     expect(descriptor).toContain("to: contract:memory.blocks@1");
     expect(descriptor).not.toContain("schemaVersion:");
     expect(
@@ -1223,7 +1256,7 @@ describe("createWorld plugin pack", () => {
         `===WORLD_YAML===\n${WORLD_YAML.replace(
           "tags: [test]",
           "tags: [test]\nplugins:\n  - pack:traditional-story",
-        )}defaultViewMode: stage\n===WORLD_MD===\n${WORLD_LORE}\n===END===`,
+        )}defaultViewMode: stage\n===WORLD_MD===\n${WORLD_LORE}\n===WORLD_PACKAGE_YAML===\n${WORLD_DIMENSIONS_YAML}\n===END===`,
       ),
       concept: "Clockwork city",
       idleTimeoutMs: 5_000,
@@ -1441,7 +1474,7 @@ describe("createWorld revision", () => {
     if (!result.success) throw new Error(result.errors.join("; "));
     expect(result.id).toBe("test-world");
     expect(result.lore).toContain("自称对手的校时官");
-    expect(result.manifest.dimensions).toHaveProperty("factions");
+    expect(result.packageContent.dimensions).toHaveProperty("factions");
     expect(result.packageContent.characters.map((item) => item.id)).toEqual([
       "bell-keeper",
       "rain-courier",
@@ -1476,9 +1509,11 @@ describe("createWorld revision", () => {
 
     if (!result.success) throw new Error(result.errors.join("; "));
     expect(result.manifest.name).toBe("倒转之城");
-    // The rest of the manifest, with its dimensions, is still there.
+    // The manifest and portable dimension content are preserved.
     expect(result.manifest.summary).toBe("一个用于生成器测试的世界。");
-    expect(Object.keys(result.manifest.dimensions as object)).toHaveLength(9);
+    expect(
+      Object.keys(result.packageContent.dimensions as object),
+    ).toHaveLength(9);
     // The cast keeps its three characters, as they were, and gains one.
     expect(result.packageContent.characters.map((item) => item.id)).toEqual([
       "bell-keeper",
@@ -1533,16 +1568,13 @@ rules:
       - { id: reverse-hand, name: 逆针会, description: 想让全城的钟倒着走。, type: cult, influence: minor }
   history: null`;
     const result = await createWorld({
-      llm: new RecordingLlm([sections(yaml, "UNCHANGED", "UNCHANGED")]),
+      llm: new RecordingLlm([sections("UNCHANGED", "UNCHANGED", yaml)]),
       concept: "测试世界",
       revision: { current, instruction: "改成两个派系，去掉历史" },
     });
 
     if (!result.success) throw new Error(result.errors.join("; "));
-    const dimensions = result.manifest.dimensions as Record<
-      string,
-      { initialValue: unknown[] }
-    >;
+    const dimensions = result.packageContent.dimensions!;
     expect(dimensions.factions!.initialValue).toHaveLength(2);
     expect(dimensions).toHaveProperty("geography");
     expect(dimensions).not.toHaveProperty("history");

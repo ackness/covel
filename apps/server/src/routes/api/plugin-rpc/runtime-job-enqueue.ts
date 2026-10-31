@@ -1,4 +1,7 @@
-import { finalizePresentationJobs } from "@covel/runtime";
+import {
+  finalizePresentationJobs,
+  unavailablePresentationJob,
+} from "@covel/runtime";
 import type { JobStatusRecord } from "@covel/shared";
 import {
   assertJsonValue,
@@ -8,7 +11,11 @@ import {
   type RuntimeManifest,
 } from "@covel/shared";
 import type { SessionRecord, StoreTransaction } from "@covel/store";
-import { createRuntimeJob, type RuntimeJobRecord } from "./jobs.js";
+import {
+  createRuntimeJob,
+  RuntimeJobQueueFullError,
+  type RuntimeJobRecord,
+} from "./jobs.js";
 import {
   makeRuntimeJobStatusRecord,
   type ActivatedRuntimeJobPayload,
@@ -93,32 +100,40 @@ export async function enqueueDeferredRuntimeJobs(
       ...(args.userSettings ? { userSettings: args.userSettings } : {}),
     };
     assertJsonValue(jobPayload, `detached runtime job ${descriptor.jobId}`);
-    const job = await createRuntimeJob(tx, {
-      jobId: descriptor.jobId,
-      sessionId: args.sessionId,
-      pluginId: descriptor.pluginId,
-      runtimeId: descriptor.runtimeId,
-      origin: {
-        activation: "stage",
-        sourceTurnId: descriptor.sourceTurnId,
-        sourceExecutionId: descriptor.sourceExecutionId,
-        sourceRuntimeId: descriptor.runtimeId,
-      },
-      payload: jobPayload,
-      // The job record names the barrier it holds.
-      ...(policy.settle
-        ? {
-            settle: "before-next-execution" as const,
-            maxSettleWaitMs: policy.maxSettleWaitMs,
-          }
-        : {}),
-      ...(policy.maxQueueMs !== undefined
-        ? { maxQueueMs: policy.maxQueueMs }
-        : {}),
-      ...(policy.maxExecutionMs !== undefined
-        ? { maxExecutionMs: policy.maxExecutionMs }
-        : {}),
-    });
+    let job: RuntimeJobRecord;
+    try {
+      job = await createRuntimeJob(tx, {
+        jobId: descriptor.jobId,
+        sessionId: args.sessionId,
+        pluginId: descriptor.pluginId,
+        runtimeId: descriptor.runtimeId,
+        origin: {
+          activation: "stage",
+          sourceTurnId: descriptor.sourceTurnId,
+          sourceExecutionId: descriptor.sourceExecutionId,
+          sourceRuntimeId: descriptor.runtimeId,
+        },
+        payload: jobPayload,
+        // The job record names the barrier it holds.
+        ...(policy.settle
+          ? {
+              settle: "before-next-execution" as const,
+              maxSettleWaitMs: policy.maxSettleWaitMs,
+            }
+          : {}),
+        ...(policy.maxQueueMs !== undefined
+          ? { maxQueueMs: policy.maxQueueMs }
+          : {}),
+        ...(policy.maxExecutionMs !== undefined
+          ? { maxExecutionMs: policy.maxExecutionMs }
+          : {}),
+      });
+    } catch (error) {
+      if (!(error instanceof RuntimeJobQueueFullError) || !target.presentation)
+        throw error;
+      await unavailablePresentationJob(tx, args.sessionId, descriptor);
+      continue;
+    }
     const status = makeRuntimeJobStatusRecord(job, 0);
     if (!(await tx.appendJobStatus(status))) {
       throw new Error(

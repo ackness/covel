@@ -15,7 +15,10 @@ import { readdir, stat } from "node:fs/promises";
 import path from "node:path";
 import type { PluginRegistry } from "@covel/plugin-loader";
 import { resolveContainedPath } from "./safe-path.js";
-import type { WorldDataDiagnostic } from "./types.js";
+import type {
+  LoadedWorldDataDescriptor,
+  WorldDataDiagnostic,
+} from "./types.js";
 
 /**
  * Well-known paths of a world package.
@@ -85,7 +88,8 @@ export function pluginSourceEntry(
   contract: string,
   source: AuthoringSourceDeclaration,
 ): WorldDataSourceDescriptor {
-  const kind = authoringSourceKind(source.path);
+  const sourcePath = path.posix.normalize(source.path).replace(/\/$/, "");
+  const kind = authoringSourceKind(sourcePath);
   if (!kind)
     throw new Error(
       `authoring.source.path ${source.path} names neither a .yaml, .yml or .json file nor a media directory`,
@@ -93,14 +97,15 @@ export function pluginSourceEntry(
   if (kind === "media")
     return {
       kind: "media",
-      path: source.path,
+      path: sourcePath,
       to: "media",
       indexTo: `contract:${contract}`,
       key: source.key ?? "filename",
+      ...(source.visibility === "hidden" ? { visibility: "hidden" } : {}),
     };
   return {
     kind,
-    path: source.path,
+    path: sourcePath,
     schema: `contract:${contract}`,
     to: `contract:${contract}${source.lorebook ? "+lorebook" : ""}`,
     key: source.key ?? "id",
@@ -115,14 +120,17 @@ export function pluginSourceEntry(
 interface Claim {
   readonly source: ConventionalSource;
   /** The declaring plugin and `pluginId/namespace (contract)`; absent for the kernel's. */
-  readonly claimant?: { readonly pluginId: string; readonly label: string };
+  readonly claimant?: {
+    readonly pluginId: string;
+    readonly namespace: string;
+    readonly label: string;
+  };
 }
 
 /**
  * The kernel's sources, then one for each data contract whose plugin names a
- * path (`contributes.data.<ns>.authoring.source`). Only plugins that loaded
- * count, and of those only `activePlugins` when it is given: a plugin the
- * session does not run has no say in how its world is read. A plugin cannot
+ * path (`contributes.data.<ns>.authoring.source`). Valid static declarations
+ * remain discoverable independently of execution approval. A plugin cannot
  * name a kernel path; the manifest schema rejects it.
  */
 function claimsOf(
@@ -133,7 +141,7 @@ function claimsOf(
   const entries = [...catalogue.getAll()]
     .filter(
       ([pluginId, entry]) =>
-        entry.status !== "error" &&
+        entry.packageManifest !== undefined &&
         (!activePlugins || activePlugins.includes(pluginId)),
     )
     .sort(([a], [b]) => compareText(a, b));
@@ -155,11 +163,22 @@ function claimsOf(
           },
           claimant: {
             pluginId,
+            namespace,
             label: `${pluginId}/${namespace} (${contract})`,
           },
         });
     }
   return claims;
+}
+
+function distinctClaims(claims: readonly Claim[]): Claim[] {
+  const seen = new Set<string>();
+  return claims.filter(({ source }) => {
+    const identity = JSON.stringify(source.entry);
+    if (seen.has(identity)) return false;
+    seen.add(identity);
+    return true;
+  });
 }
 
 function claimCounts(claims: readonly Claim[]): Map<string, number> {
@@ -171,16 +190,16 @@ function claimCounts(claims: readonly Claim[]): Map<string, number> {
 
 /**
  * The conventional sources of a set of plugins: the kernel's, then one for
- * each data contract whose plugin names a path. `activePlugins` limits the
- * plugins to those of one session; without it every plugin that loaded
- * counts. A path two contracts claim is not a convention for either: the
- * world must say which one it means (see `conventionCollisions`).
+ * each data contract whose valid static declaration names a path. Optional
+ * `activePlugins` restricts a caller's catalogue; session discovery uses all
+ * declarations independently of admission. Incompatible claims require an
+ * explicit descriptor (see `conventionCollisions`).
  */
 export function conventionsOfPlugins(
   catalogue: Pick<PluginRegistry, "getAll">,
   activePlugins?: readonly string[],
 ): readonly ConventionalSource[] {
-  const claims = claimsOf(catalogue, activePlugins);
+  const claims = distinctClaims(claimsOf(catalogue, activePlugins));
   const counts = claimCounts(claims);
   return claims
     .filter(({ source }) => counts.get(source.entry.path) === 1)
@@ -190,6 +209,8 @@ export function conventionsOfPlugins(
 /** A path that more than one data contract of the same plugin set names. */
 export interface ConventionCollision {
   readonly path: string;
+  /** Private source identities used to defer previously imported content. */
+  readonly sources: readonly ConventionalSource[];
   /** Each declaration that names it, labelled `pluginId/namespace (contract)`. */
   readonly claimants: readonly {
     readonly pluginId: string;
@@ -202,7 +223,8 @@ export function conventionCollisions(
   catalogue: Pick<PluginRegistry, "getAll">,
   activePlugins?: readonly string[],
 ): readonly ConventionCollision[] {
-  const claims = claimsOf(catalogue, activePlugins);
+  const allClaims = claimsOf(catalogue, activePlugins);
+  const claims = distinctClaims(allClaims);
   const counts = claimCounts(claims);
   const byPath = new Map<string, NonNullable<Claim["claimant"]>[]>();
   for (const { source, claimant } of claims)
@@ -213,7 +235,54 @@ export function conventionCollisions(
       ]);
   return [...byPath]
     .sort(([a], [b]) => compareText(a, b))
-    .map(([path, claimants]) => ({ path, claimants }));
+    .map(([path, claimants]) => ({
+      path,
+      claimants: claimants.map(({ pluginId, label }) => ({ pluginId, label })),
+      sources: [
+        ...new Map(
+          allClaims
+            .filter((claim) => claim.source.entry.path === path)
+            .flatMap(({ source, claimant }) =>
+              claimant
+                ? [
+                    source,
+                    { ...source, id: claimant.namespace },
+                    {
+                      ...source,
+                      id: `${claimant.pluginId}-${claimant.namespace}`,
+                    },
+                  ]
+                : [source],
+            )
+            .map((source) => [JSON.stringify(source), source]),
+        ).values(),
+      ],
+    }));
+}
+
+/** A collision is unavailable content, never authoritative empty output. */
+export async function deferredConventionSourceIds(
+  worldRoot: string,
+  collisions: readonly ConventionCollision[],
+  descriptor: LoadedWorldDataDescriptor,
+): Promise<readonly string[]> {
+  const explicitPaths = new Set([
+    ...descriptor.sources.map((source) => source.descriptor.path),
+    ...(descriptor.disabledPaths ?? []),
+  ]);
+  const deferred = new Set<string>();
+  for (const collision of collisions) {
+    if (explicitPaths.has(collision.path)) continue;
+    for (const claim of collision.sources) {
+      // Keep both unqualified and package-qualified identities: installing a
+      // claimant must also protect rows imported before the namespace clashed.
+      const sources = await presentConventionalSources(worldRoot, [claim]);
+      if (!isDirectoryConvention(claim.entry.path)) deferred.add(claim.id);
+      for (const source of sources)
+        if (!explicitPaths.has(source.entry.path)) deferred.add(source.id);
+    }
+  }
+  return [...deferred];
 }
 
 /**
@@ -264,6 +333,7 @@ export interface CharacterBlockRoute {
 /** A field of a character record that more than one data contract names. */
 export interface CharacterBlockCollision {
   readonly field: string;
+  readonly contracts: readonly string[];
   /** Each declaration that names it, labelled `pluginId/namespace (contract)`. */
   readonly claimants: readonly string[];
 }
@@ -271,8 +341,9 @@ export interface CharacterBlockCollision {
 /**
  * The fields of a character record that hold data for a plugin
  * (`contributes.data.<ns>.authoring.characterField`). As with conventional
- * paths, only plugins that loaded count, and of those only `activePlugins`
- * when it is given. A field that two contracts name is read for neither.
+ * paths, discovery uses valid static declarations independently of execution.
+ * A caller can explicitly restrict its catalogue with `activePlugins`.
+ * A field that two contracts name is read for neither.
  */
 export function characterBlockRoutes(
   catalogue: Pick<PluginRegistry, "getAll">,
@@ -288,7 +359,7 @@ export function characterBlockRoutes(
   const entries = [...catalogue.getAll()]
     .filter(
       ([pluginId, entry]) =>
-        entry.status !== "error" &&
+        entry.packageManifest !== undefined &&
         (!activePlugins || activePlugins.includes(pluginId)),
     )
     .sort(([a], [b]) => compareText(a, b));
@@ -314,7 +385,11 @@ export function characterBlockRoutes(
     compareText(a, b),
   )) {
     if (claim.contracts.size > 1)
-      collisions.push({ field, claimants: claim.claimants });
+      collisions.push({
+        field,
+        contracts: [...claim.contracts],
+        claimants: claim.claimants,
+      });
     else routes.push({ field, contract: [...claim.contracts][0]! });
   }
   return { routes, collisions };

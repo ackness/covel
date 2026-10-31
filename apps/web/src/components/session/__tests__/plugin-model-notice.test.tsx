@@ -48,7 +48,18 @@ it.each(["en-US", "zh-CN", "ru-RU"])(
         "manual",
         { trigger: { type: "manual" as const, every: 3, maxTriggerCount: 5 } },
       ],
-      ["event", { trigger: { type: "event" as const, topic: "note.updated" } }],
+      [
+        "event",
+        {
+          trigger: {
+            type: "event" as const,
+            topic: "note.updated",
+            startTurn: 2,
+            cooldownTurns: 4,
+            maxTriggerCount: 5,
+          },
+        },
+      ],
       ["setup", { stage: "setup" as const }],
       ["delegated", { subagentOnly: true }],
     ] as const) {
@@ -59,6 +70,12 @@ it.each(["en-US", "zh-CN", "ru-RU"])(
       );
       expect(notice()).not.toContain(
         i18n.t("plugin.modelUse.limit", { count: 5 }),
+      );
+      expect(notice()).not.toContain(
+        i18n.t("plugin.modelUse.start", { count: 2 }),
+      );
+      expect(notice()).not.toContain(
+        i18n.t("plugin.modelUse.cooldown", { count: 4 }),
       );
     }
     rerender(<PluginModelNotice runtimes={[]} />);

@@ -2,11 +2,13 @@
 
 Bundled worlds use the same prefixed `plugins` selection as community worlds. All host packs remain available; unavailable content produces notices and play can start.
 
+See [world data receivers](../reference/world-data.md#data-receivers) for static discovery, inferred selection and omission notices. Data acceptance does not satisfy service or runtime capability dependencies.
+
 Covel comes with a set of plugins and four worlds. This chapter tells you what each one is, what you will see in the game, and what you can adjust. To find out which plugin gives you a certain panel, or whether a feature can be turned off, look here.
 
 The built-in plugins and worlds are only demos, and you do not have to use them.
 
-Manage session policy providers and execution limits in [orchestration settings](./features.md#session-orchestration-settings).
+Manage session policy providers and execution limits in [orchestration settings](./features.md#session-orchestration-settings). Plugin list refreshes preserve unsaved orchestration edits.
 
 Narrators supply location and mood cues when they change, for the stage and music to read; see [Narrative and Memory](./story.md).
 
@@ -15,6 +17,8 @@ Dimension tools report schema-invalid values as correctable input errors; see [u
 Opening character templates must include a placeholder for every collected field. Template/default errors are correctable `invalid-input` failures; see [character tools](../reference/tools.md#opening-character-form).
 
 If a concurrent change makes an affinity or clock calculation stale, that derived update is skipped while an independent successful story survives. A later explicit retry reads and recalculates it; see [read-baseline conflicts](../reference/transactions.md#read-baselines).
+
+All four bundled worlds keep their complete dimension tables in `data/dimensions.yaml`; manifests carry no dimensions. See [dimension sources](../reference/world-data.md#dimension-sources) for the distinction between definitions and session values.
 
 ## What is in this chapter
 

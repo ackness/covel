@@ -2,6 +2,8 @@
 
 这一页说明怎样从 GitHub 安装别人做的世界、怎样更新它，以及更新时哪些数据不会被动到。玩家和世界作者看前半部分和最后一节；做工具集成的人看 API 一节。
 
+世界数据的静态发现、接收者推导与缺失提示见[接收规则](./world-data.md#data-receivers)。接收声明不满足服务或 runtime 能力依赖。
+
 想自己做一个世界，看[第一个世界](../worlds/first-world.md)。想把世界和它需要的插件一起发布，看[合集](../ship/collections.md)。
 
 **官方目录**是 [covel-worlds](https://github.com/covel-ai/covel-worlds)。
@@ -13,6 +15,8 @@
 
 > [!WARNING]
 > 被目录收录不等于通过了安全审核。第三方世界里的提示词、设置和媒体，仍然需要你自己看过再用。
+
+维度只从规范文件 `data/dimensions.yaml` 及旁边的语言覆盖读取。安装预览拒绝清单内联维度、非规范维度路径和重复 descriptor 来源；详见[维度来源](./world-data.md#维度来源)。
 
 ## 设置页流程
 

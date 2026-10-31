@@ -94,6 +94,7 @@ export interface PluginSummary extends PluginLoadDiagnostics {
     import("./plugin-manifest.js").PluginManifest["provides"]
   >;
   readonly requires: readonly string[];
+  readonly acceptsWorldData?: readonly string[];
   readonly optional: readonly string[];
   readonly conflicts: readonly string[];
   readonly extensions: readonly import("../extension-points/index.js").ExtensionDeclaration[];
@@ -258,6 +259,7 @@ export interface PluginPack {
 export interface WorldPluginSelection {
   readonly requestedPluginIds: readonly string[];
   readonly requiredContracts: readonly string[];
+  readonly requiredDataContracts?: readonly string[];
 }
 
 /** Bounded public findings about references and unavailable requests. */
@@ -280,4 +282,5 @@ export interface WorldPluginPlan {
   readonly selectedPackId?: string;
   readonly defaultPluginIds: readonly string[];
   readonly diagnostics: readonly WorldPluginSelectionDiagnostic[];
+  readonly dataNotices?: readonly import("./world-data.js").WorldDataImportNotice[];
 }

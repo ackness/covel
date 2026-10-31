@@ -302,9 +302,13 @@
       "hint": "插件已关闭或正在等待你批准时，分配给它的数据会在启用后导入。",
       "hide": "隐藏",
       "dimensionsMissing": "世界维度（如关系、资源）：没有启用的插件保存它们，这局不记录。",
-      "receiverMissing": "“{{source}}”：没有启用的插件接收这份数据。",
+      "labeled": "{{source}}: {{message}}",
+      "receiverMissing": "这些数据没有插件接收。",
       "sourceNotImported": "“{{source}}”的数据没有导入（详情）",
-      "notImported": "有一部分数据没有导入（详情）"
+      "notImported": "有一部分数据没有导入（详情）",
+      "receiverAmbiguous": "这些数据没有插件接收。请选择一个接收插件。",
+      "receiverExcluded": "这些数据没有插件接收。接收插件已停用。",
+      "receiverApprovalRequired": "这些数据没有插件接收。接收插件需要批准。"
     },
     "pendingApproval": {
       "title": "需要批准",
@@ -2111,7 +2115,7 @@
       "notice": "使用你配置的模型，可能产生费用。",
       "delegated": "其他运行时委托任务时运行。",
       "manual": "明确调用时运行。",
-      "event": "收到匹配的事件时运行。",
+      "event": "收到匹配的事件时运行，也可由玩家操作显式触发。显式调用不受起始回合、冷却和运行次数上限约束。",
       "setup": "会话准备期间运行。",
       "scheduled": "按计划运行（每 {{count}} 回合）。",
       "start": "从第 {{count}} 回合开始。",

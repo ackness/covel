@@ -16,6 +16,7 @@ import type { PluginRegistry, PluginRegistryEntry } from "@covel/plugin-loader";
 import type { DataStore, PluginDataRecord } from "@covel/store";
 import { buildPluginDetail } from "../../lib/plugin-descriptor.js";
 import { runnablePluginIds } from "./session/plugins.js";
+import type { TrustedSourceService } from "../../trust/trusted-source-service.js";
 
 type JsonRecord = Record<string, unknown>;
 
@@ -214,12 +215,18 @@ export async function buildSessionDiscoverySnapshot(options: {
   readonly sessionId: string;
   readonly builtinToolNames: readonly string[];
   readonly isEntryPublished?: (pluginId: string) => boolean;
+  readonly trustedSources?: TrustedSourceService;
 }): Promise<SessionDiscoverySnapshot> {
   const session = await options.store.getSession(options.sessionId);
   const activePluginIds =
     session && options.registry
       ? runnablePluginIds(session.activePlugins, options.registry)
       : (session?.activePlugins ?? []);
+  await Promise.all(
+    activePluginIds.map((pluginId) =>
+      options.trustedSources?.ensureFresh(pluginId),
+    ),
+  );
   const pluginEntries = options.registry
     ? activePluginIds
         .map((pluginId) => options.registry?.get(pluginId))
@@ -229,7 +236,11 @@ export async function buildSessionDiscoverySnapshot(options: {
   return {
     framework: buildFrameworkCapabilities(options.builtinToolNames).framework,
     plugins: pluginEntries.map((entry) =>
-      buildPluginDetail(entry, options.isEntryPublished),
+      buildPluginDetail(
+        entry,
+        options.isEntryPublished,
+        options.trustedSources,
+      ),
     ),
     pluginData: await Promise.all(
       activePluginIds.map(async (pluginId) => ({

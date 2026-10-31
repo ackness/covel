@@ -73,17 +73,21 @@ vi.mock("../game-view/use-plugin-views.js", () => ({
     reload: surfaces.reload,
   }),
 }));
-vi.mock("../plugin-view-consent.js", () => ({
-  requestedViewGrants: () => ["session"],
-  usePluginViewConsent: () => ({
-    isAllowed: (entry: PluginViewEntry) =>
-      surfaces.allowed && !surfaces.denied.has(entry.mode),
-    isCurrent: () => () => surfaces.allowed,
-    ready: () => true,
-    grant: surfaces.grant,
-    revoke: vi.fn(),
-  }),
-}));
+vi.mock("../plugin-view-consent.js", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("../plugin-view-consent.js")>();
+  return {
+    ...actual,
+    usePluginViewConsent: () => ({
+      isAllowed: (entry: PluginViewEntry) =>
+        surfaces.allowed && !surfaces.denied.has(entry.mode),
+      isCurrent: () => () => surfaces.allowed,
+      ready: () => true,
+      grant: surfaces.grant,
+      revoke: vi.fn(),
+    }),
+  };
+});
 vi.mock("../game-view/use-game-view-composer.js", () => ({
   useGameViewComposer: () => ({ pendingDrafts: [], suspensions: [] }),
 }));

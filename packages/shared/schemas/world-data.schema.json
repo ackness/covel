@@ -22,7 +22,7 @@
           "path": {
             "type": "string",
             "minLength": 1,
-            "description": "File or directory, relative to the world root. A variant `<name>.<locale>.<ext>` is used when it exists for the session locale.",
+            "description": "File or directory, relative to the world root (or the separate override root for an overridden path). A variant `<name>.<locale>.<ext>` is used when it exists for the session locale. A dimension destination must use data/dimensions.yaml; its overlays are not separate sources.",
             "examples": ["data/quests.yaml"]
           },
           "schema": {

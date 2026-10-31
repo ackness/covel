@@ -54,16 +54,15 @@ it("accepts records only for contracts the brief requests, and requires each req
   ]);
 });
 
-it("adds the receiving plugin of every selected contract", () => {
+it("keeps gameplay requests independent of generated data receivers", () => {
   const manifest: Record<string, unknown> = {
     plugins: ["plugin:narrator"],
   };
-  expect(
-    applyCreationBriefToManifest(manifest, brief, [
-      { ...contract, pluginId: "custom-plugin" },
-    ]),
-  ).toEqual({ errors: [], warnings: [] });
-  expect(manifest.plugins).toEqual(["plugin:narrator", "plugin:custom-plugin"]);
+  expect(applyCreationBriefToManifest(manifest, brief)).toEqual({
+    errors: [],
+    warnings: [],
+  });
+  expect(manifest.plugins).toEqual(["plugin:narrator"]);
 });
 
 it("writes portable contract records as validated contract-targeted world sources", async () => {
@@ -248,7 +247,7 @@ it("still rejects a requested kind that is missing entirely", () => {
 });
 
 it("reports an opening kit with too few numeric resources as a warning", () => {
-  const manifest: Record<string, unknown> = {
+  const content = {
     dimensions: {
       coins: { name: "Coins", schema: { type: "integer" }, initialValue: 8 },
       opening: {
@@ -259,8 +258,8 @@ it("reports an opening kit with too few numeric resources as a warning", () => {
     },
   };
   expect(
-    applyCreationBriefToManifest(manifest, { content: ["opening-kit"] }),
-  ).toEqual({
+    normalizeGeneratedPackage(content, { content: ["opening-kit"] }),
+  ).toMatchObject({
     errors: [],
     warnings: [
       "opening kit has 1 numeric resource dimensions; the brief asks for 2",

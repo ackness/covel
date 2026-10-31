@@ -930,6 +930,8 @@ contributes:
 | `abortExecution` | 停止当前会话的执行 |
 | `openPanel` | 打开所属插件已声明的面板 |
 
+内容更换或切换会话时，宿主关闭旧 iframe 的连接和流订阅。新内容的哈希尚未完成或尚未授权时不挂载页面；已授权的相同内容在另一个会话也会建立新的 iframe，旧页面不会收到新会话的状态或流文本。
+
 记录通过 SettingsStore 保存在本设备，键为 `ui.pluginViewConsent.<pluginId>.<hash>.<capability>`；读取键的 `.session` 后缀保留。`hash` 是整份已解析 spec 的规范 JSON 的 SHA-256，包含能力列表、内联 HTML 或覆盖所有资源的摘要 URL。内容改变后重新询问；旧读取授权不授予额外能力。所有写入完成持久化后才生效，保存期间的乐观通知不算同意。视图栏的“视图权限”可单独撤销能力或撤销全部；撤销立即停止投影和调用并返回默认视图，即使保存失败也不会继续授权。其他窗口的设置刷新也能撤销访问。
 
 <a id="sessionprojection版本-1"></a>
@@ -937,6 +939,8 @@ contributes:
 ### SessionProjection（版本 2）
 
 页面读取 `window.covel` 暴露的状态对象的 `session` 字段，或通过 `window.covel.subscribe` 订阅投影。顶层只提供 `session`、`locale` 和宿主 `theme`；不再提供普通面板的 `data`、`sources`、`jobs`、`context` 或自己的 KV。
+
+其他客户端提交回合后，宿主也会刷新消息和回合数，并推送更新后的投影；页面无需重新加载。
 
 <!-- prettier-ignore -->
 | 字段 | 内容 |
