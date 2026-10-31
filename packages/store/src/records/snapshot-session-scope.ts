@@ -26,6 +26,16 @@ export function rebindSnapshotPayloadSession(
           ? record.id
           : `fork:${encodeURIComponent(sessionId)}:${encodeURIComponent(record.id)}`,
       sessionId,
+      pendingContinuation:
+        record.pendingContinuation.delegation && record.sessionId !== sessionId
+          ? {
+              ...record.pendingContinuation,
+              delegation: {
+                ...record.pendingContinuation.delegation,
+                scopeId: `fork:${encodeURIComponent(sessionId)}:${encodeURIComponent(record.pendingContinuation.delegation.scopeId)}`,
+              },
+            }
+          : record.pendingContinuation,
     })),
     sessionSummaries: rebind(payload.sessionSummaries),
   };

@@ -209,6 +209,9 @@ export interface PluginSubagentRequest {
   readonly target: PluginSubagentTarget;
   /** The task, as the sub-agent's only user message (1–20 000 characters). */
   readonly brief: string;
+  /** Private routing identity for a character actor. */
+  readonly characterId?: string;
+  readonly instruction?: string;
   /** Structured context appended to the brief as JSON (at most 32 KB). */
   readonly data?: Readonly<Record<string, unknown>>;
   /** Narrows the provider's own limits; it never raises them. */
@@ -343,6 +346,11 @@ export interface ProgressReporter {
  * gateway when a model is configured, `inputs` when the runtime binds any).
  */
 export interface PluginFunctionContext {
+  /** Bounded committed stories witnessed by a character in this world view. */
+  readonly historyFor: (
+    characterId: string,
+    options?: { readonly limit?: number },
+  ) => Promise<import("./orchestration-contracts.js").CharacterHistory>;
   readonly sessionId: string;
   readonly turnId: string;
   readonly pluginId: string;

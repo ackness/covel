@@ -1,3 +1,10 @@
+import {
+  turnPolicyRequestJsonSchema,
+  turnPolicyInputJsonSchema,
+  turnPolicyOutputJsonSchema,
+  characterActorInputJsonSchema,
+  characterActorOutputJsonSchema,
+} from "@covel/plugin-handlers-utils";
 /**
  * Generate JSON Schema (draft-7) for the author-facing Zod schemas using
  * Zod 4's built-in `z.toJSONSchema` — no `zod-to-json-schema` dependency.
@@ -68,6 +75,7 @@ const SHARED_UNREPRESENTABLE_CONSTRAINTS = [
   "turnCompletion.mode 'detached' is only valid on post-turn/audit staged runtimes.",
   "turnCompletion.mode 'detached' cannot be used with outputKind 'story'.",
   "event/manual runtimes use execution and cannot use detached turn completion.",
+  "character-actor@1 requires a subagentOnly agent with system output; turn-policy@1 is a read service, not a runtime result.",
   "a subagentOnly runtime is an agent runtime with an implied 'manual' trigger and no stage, needs, after, background execution, output.recordAs, guard or outputKind 'story'.",
   "turnCompletion settle/wait/queue/execution options require mode 'detached', and maxSettleWaitMs requires settle.",
   "effects.reads, effects.writes and permissions.http[].methods must contain unique entries.",
@@ -186,7 +194,15 @@ const AUTHOR_SCHEMAS = {
 >;
 
 export type AuthorSchemaName = keyof typeof AUTHOR_SCHEMAS;
-export type SchemaArtifactName = AuthorSchemaName | "compiled";
+const CONTRACT_SCHEMAS = {
+  "turn-policy-request": turnPolicyRequestJsonSchema,
+  "turn-policy-input": turnPolicyInputJsonSchema,
+  "turn-policy-output": turnPolicyOutputJsonSchema,
+  "character-actor-input": characterActorInputJsonSchema,
+  "character-actor-output": characterActorOutputJsonSchema,
+} as const;
+export type SchemaArtifactName =
+  AuthorSchemaName | keyof typeof CONTRACT_SCHEMAS | "compiled";
 
 export const AUTHOR_SCHEMA_NAMES = Object.keys(
   AUTHOR_SCHEMAS,
@@ -212,6 +228,11 @@ export function buildManifestJsonSchemas(): Record<
   Record<string, unknown>
 > {
   return {
+    "turn-policy-request": turnPolicyRequestJsonSchema(),
+    "turn-policy-input": turnPolicyInputJsonSchema(),
+    "turn-policy-output": turnPolicyOutputJsonSchema(),
+    "character-actor-input": characterActorInputJsonSchema(),
+    "character-actor-output": characterActorOutputJsonSchema(),
     runtimeCases: toAuthorJsonSchema("runtimeCases"),
     plugin: toAuthorJsonSchema("plugin"),
     runtime: toAuthorJsonSchema("runtime"),
@@ -227,7 +248,9 @@ export function schemaOutputPath(name: SchemaArtifactName): string {
   const file =
     name === "compiled"
       ? "runtime-manifest.compiled.schema.json"
-      : AUTHOR_SCHEMAS[name].file;
+      : name in CONTRACT_SCHEMAS
+        ? `${name}.schema.json`
+        : AUTHOR_SCHEMAS[name as AuthorSchemaName].file;
   return fileURLToPath(new URL(`../schemas/${file}`, import.meta.url));
 }
 

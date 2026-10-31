@@ -1,3 +1,4 @@
+import { orchestrationSettingsSchema } from "@covel/shared";
 /**
  * Snapshot payload builder.
  *
@@ -137,6 +138,13 @@ export async function buildSnapshotPayload(
       completedPlayerTurns: session.completedPlayerTurns,
       setupRuntimes: session.setupRuntimes,
       seats: session.seats,
+      ...(session.metadata?.orchestration !== undefined
+        ? {
+            orchestration: orchestrationSettingsSchema.parse(
+              session.metadata.orchestration,
+            ),
+          }
+        : {}),
       ...(typeof session.metadata?.loreOverride === "string"
         ? { loreOverride: session.metadata.loreOverride }
         : {}),

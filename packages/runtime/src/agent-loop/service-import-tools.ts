@@ -1,10 +1,14 @@
+import {
+  policyModelRequest,
+  policyModelResult,
+} from "../orchestration/policy-tools.js";
 /**
  * Imported services as agent tools: the tool an agent's
  * `agent.tools.services` import becomes when its provider resolves, and the
  * stand-in that answers a call to one that did not.
  */
 
-import { ToolError } from "@covel/shared";
+import { TURN_POLICY_CONTRACT, ToolError } from "@covel/shared";
 import { tool, z, type ToolModule } from "@covel/tools";
 import {
   tagServiceFailure,
@@ -102,7 +106,13 @@ export function importedServiceTool(name: string, target: Ready): ToolModule {
   const annotations =
     target.access === "write"
       ? IMPORTED_WRITE_TOOL_ANNOTATIONS
-      : IMPORTED_TOOL_ANNOTATIONS;
+      : target.contract === TURN_POLICY_CONTRACT
+        ? {
+            ...IMPORTED_TOOL_ANNOTATIONS,
+            idempotent: false,
+            concurrencySafe: false,
+          }
+        : IMPORTED_TOOL_ANNOTATIONS;
   const execute = async (
     args: unknown,
     context: Parameters<ToolModule["execute"]>[1],
@@ -119,15 +129,20 @@ export function importedServiceTool(name: string, target: Ready): ToolModule {
           errorCode: "unavailable",
         },
       );
-    return context.services.call(
+    const policy =
+      target.contract === TURN_POLICY_CONTRACT
+        ? policyModelRequest(args, context.world, context.playerActions ?? [])
+        : undefined;
+    const result = await context.services.call(
       {
         pluginId: target.pluginId,
         name: target.name,
         contract: target.contract,
-        input: args,
+        input: policy ?? args,
       },
       { timeoutMs: SERVICE_IMPORT_TIMEOUT_MS },
     );
+    return policy ? policyModelResult(result, policy.present) : result;
   };
   if (hasSafeParse(target.input))
     return {

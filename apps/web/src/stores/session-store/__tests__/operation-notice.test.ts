@@ -77,6 +77,35 @@ describe("operation failure notice", () => {
     const sequence: Array<[string, Record<string, unknown>]> = [
       ["execution.started", { status: "executing", runtimeCount: 1 }],
       ["runtime.started", { ...story, stage: "narrative", kind: "story" }],
+      [
+        "subagent.started",
+        {
+          pluginId: "cast",
+          runtimeId: "cast/actor",
+          parentCallId: "delegate-one",
+          subagentCallId: "child-one",
+        },
+      ],
+      [
+        "subagent.completed",
+        {
+          pluginId: "cast",
+          runtimeId: "cast/actor",
+          parentCallId: "delegate-one",
+          subagentCallId: "child-one",
+        },
+      ],
+      [
+        "subagent.failed",
+        {
+          pluginId: "cast",
+          runtimeId: "cast/actor",
+          parentCallId: "delegate-two",
+          subagentCallId: "child-two",
+          code: "unavailable",
+          error: "Finish without further children",
+        },
+      ],
       ["tool.completed", { ...story, toolName: "change", success: true }],
       ["tool.completed", { ...story, toolName: "change", success: true }],
       ["runtime.completed", { ...story, status: "success" }],

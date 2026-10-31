@@ -69,6 +69,8 @@ const ROUTES: Record<string, RouteAccess> = {
   "POST /api/sessions": needs("session.create"),
   "GET /api/sessions/:id": SESSION,
   "PATCH /api/sessions/:id": SESSION,
+  "GET /api/sessions/:id/orchestration": SESSION,
+  "PATCH /api/sessions/:id/orchestration": SESSION,
   "DELETE /api/sessions/:id": SESSION,
   "GET /api/sessions/:id/view": SESSION,
   "GET /api/sessions/:id/media-token": SESSION,

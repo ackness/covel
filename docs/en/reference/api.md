@@ -6740,3 +6740,21 @@ Each snapshot is `{ slot, key?, value, revision }`:
 
 - When translating nested object lists, the locale overrides of world data follow each source's `localeArrayKeys`.
 - The preflight, import, sync, and translation endpoints all share this key-matching rule. Reordering the main list does not give a keyed translation to a different entry.
+
+<a id="orchestration-settings"></a>
+
+## Session orchestration settings
+
+`GET /api/sessions/:id/orchestration` returns `{settings, policies, status}`. Settings normalize `metadata.orchestration`: optional `turnPolicy: {pluginId, name}`, `maxActors` default 4 and `maxSubagentCalls` default 16. Policies are `{pluginId, name, label, status: available|paused|unavailable}[]`. Enumeration reads registered metadata for enabled, authorized providers without running services or importing unapproved code. A saved stale choice remains as unavailable. Overall status is `selected`, `unique`, `missing`, `ambiguous` or `paused`.
+
+`PATCH /api/sessions/:id/orchestration` accepts only these three fields. `turnPolicy: null` clears selection; omitted fields stay unchanged. `maxActors` must be an integer from 0–16 and `maxSubagentCalls` from 0–64. Unknown fields, invalid numbers or a new choice outside the session's known providers return 400 without mutation. Cap-only edits retain stale choices. Selection neither activates nor approves packages.
+
+Both routes use existing host-profile/session-owner guards. PATCH uses the settle barrier and session lock, merging the subtree by field under the lock while preserving other metadata. Edits apply next execution. Normal persistence, snapshot/fork and BrowserVault/checkpoint retain settings; spent execution counts belong to continuations, not preferences.
+
+```json
+{
+  "turnPolicy": { "pluginId": "conversation", "name": "ensemble" },
+  "maxActors": 2,
+  "maxSubagentCalls": 8
+}
+```

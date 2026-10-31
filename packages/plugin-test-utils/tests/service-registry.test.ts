@@ -15,7 +15,7 @@ const context = {
 };
 
 describe("test service registry", () => {
-  it("gives a tool context.services that calls the registered provider", async () => {
+  it("resolves a contract-only service call from a real tool context", async () => {
     const store = await createPluginTestStore(context);
     const services = makeTestServiceRegistry({
       sessionId: context.sessionId,
@@ -39,8 +39,6 @@ describe("test service registry", () => {
       parameters: z.object({ bag: z.string() }),
       async execute({ bag }, ctx) {
         const items = (await ctx.services!.call({
-          pluginId: "inventory",
-          name: "items",
           contract: "inventory.items@1",
           input: { bag },
         })) as string[];
@@ -137,4 +135,61 @@ describe("test service registry", () => {
       await store.close();
     }
   });
+});
+
+it("exposes a scoped witnessed-history capability to public tool authors", async () => {
+  const store = await createPluginTestStore(context);
+  const now = "2026-01-01";
+  const character = {
+    id: "mara",
+    name: "Mara",
+    sessionId: context.sessionId,
+    type: "npc",
+    version: 1,
+    createdAt: now,
+    updatedAt: now,
+  };
+  const world = {
+    characters: [character],
+    characterSchema: null,
+    seats: [],
+    dimensions: {},
+  };
+  await store.upsertCharacter(character);
+  await store.addMessage({
+    id: "seen",
+    sessionId: context.sessionId,
+    role: "assistant",
+    content: "RAW-SECRET",
+    metadata: {
+      kind: "story",
+      presentCharacterIds: ["mara"],
+      segments: [{ kind: "narration", text: "The door opens." }],
+    },
+    createdAt: now,
+  });
+  const remember = tool({
+    name: "remember",
+    description: "Read witnessed stories",
+    annotations: { readOnly: true },
+    parameters: z.object({}),
+    execute: (_args, ctx) => ctx.historyFor!("mara"),
+  });
+  try {
+    const result = await executeToolAndCommit(
+      remember,
+      {},
+      { ...context, world },
+      store,
+    );
+    expect(result).toMatchObject({
+      messages: [{ content: "The door opens." }],
+      truncated: false,
+    });
+    expect(JSON.stringify(result)).not.toMatch(
+      /RAW-SECRET|speakerId|sessionId/,
+    );
+  } finally {
+    await store.close();
+  }
 });

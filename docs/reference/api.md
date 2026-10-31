@@ -6738,3 +6738,21 @@ STORE_BACKEND=memory pnpm dev:server  # 临时 Memory 后端（重启即丢失�
 
 - 翻译嵌套的对象列表时，世界数据的语言覆盖遵守每个 source 的 `localeArrayKeys`。
 - preflight、导入、同步和翻译端点共用这套按 key 匹配的规则。主列表重新排序，不会把带 key 的翻译配给别的条目。
+
+<a id="orchestration-settings"></a>
+
+## 会话编排设置
+
+`GET /api/sessions/:id/orchestration` 返回 `{settings, policies, status}`。settings 是规范化的 `metadata.orchestration`；`turnPolicy?: {pluginId, name}`，`maxActors` 默认 4，`maxSubagentCalls` 默认 16。policies 是 `{pluginId, name, label, status: available|paused|unavailable}[]`；只枚举本会话已授权、启用的已注册服务，不运行服务或导入未批准代码。保存但失效的选择作为 unavailable 保留。总状态为 `selected`、`unique`、`missing`、`ambiguous` 或 `paused`。
+
+`PATCH /api/sessions/:id/orchestration` 只接受这三个设置字段；`turnPolicy: null` 清除选择，省略字段不变。`maxActors` 必须为 0–16 整数，`maxSubagentCalls` 为 0–64 整数。未知字段、无效数字或新选择不属于会话已知提供方时返回 400，完全不修改。只改名额时保留失效选择。选择不激活、不批准插件。
+
+两个路由使用现有 host-profile / session-owner 守卫。PATCH 经 settle 屏障和会话锁，在锁内逐字段合并子树，保留其他 metadata。编辑影响下一次执行。设置随正常存储、snapshot/fork 和 BrowserVault/checkpoint 保存；运行中的累计计数属于 continuation，不属于设置。
+
+```json
+{
+  "turnPolicy": { "pluginId": "conversation", "name": "ensemble" },
+  "maxActors": 2,
+  "maxSubagentCalls": 8
+}
+```

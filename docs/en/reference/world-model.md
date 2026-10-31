@@ -324,3 +324,15 @@ For the management interface, see the [lorebook API](./api.md#lorebook). For imp
 
 > [!NOTE]
 > Old lorebook tables that have only a `plugin_id` column and no owner are not upgraded automatically. For how to handle this in a development environment, see the [migration notes](./env-registry.md#plugin-extension-development-data).
+
+<a id="witnessed-history"></a>
+
+## Stories a character witnessed
+
+`await ctx.historyFor(characterId, {limit: 20})` returns `{messages: [{role: "assistant", content, segments}], truncated}`. Functions, guards and plugin tools can read it; character delegation uses it automatically. `segments` contains only `{kind, speaker?, text}`. The shared story renderer builds content, without stored IDs, timestamps, attachments or raw metadata.
+
+An execution lazily freezes the newest 200 display messages; concurrent calls share one load. Only committed assistant stories with valid metadata whose `presentCharacterIds` exactly contains the character ID qualify. A matching message retains every segment, not just that character's speech. Missing, empty or malformed presence is never inferred; unresolved or ambiguous original names do not invent IDs. Player actions, direct/system/tool messages, compaction summaries, transformed history and the current uncommitted story are excluded. Compacting canonical history does not erase the display-message source.
+
+Filter first, take the newest matches, then return chronological order. Limit defaults to 20 and must be an integer from 1–50. Aggregate text is at most 16,000 characters, retaining recent whole messages/segments without clipping JSON or surrogate pairs. A full 200-row scan or omitted messages/text sets `truncated: true`. An ID outside the current World Model returns `not-found`; a known character with no matches usually gets an empty array.
+
+Resumes keep the source execution's history snapshot and exclude intervening scenes. New roots capture again. Forks see only messages copied through the snapshot boundary. This API defines the stored history supplied by the host; arbitrary briefs, fields and approved tools or services may reveal other knowledge.

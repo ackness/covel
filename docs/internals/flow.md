@@ -729,7 +729,7 @@ io:
 子 agent 由另一个 runtime 在自己的执行里运行：函数用 `ctx.agents.run`，agent 用 `delegate` 工具。
 
 - **同一次执行**：子 agent 没有自己的调度、执行或提交。它用的是调用方这次执行的 trace、取消信号和会话快照；trace 事件带 `parentCallId`，调试页能看出调用树。
-- **不形成提交单位**：它只交回输出、结束原因和用量。工具只剩只读的，没有 proposal 和事件；万一出现也被丢弃，并记一条 `subagent.writes-dropped`。调用方的提交单位只含调用方自己的写入。
+- **不形成提交单位**：它交回输出、结束原因和用量。直接写工具和事件不开放，越界写记 `subagent.writes-dropped`；成功子调用通过写服务暂存的操作加入调用方提交单元，失败子调用撤回自己的操作。
 - **上限**：每次顶层执行一个 runner（`executeTurn` / `resumeSuspendedRuntime` 在入口冻结激活和暂停的提供方集合并创建，`runTurnPipeline` 只提供缺省 runner，嵌套执行共用），同时最多 8 个子 agent，深度 1。满了立刻拒绝，不排队，所以调用方不会等自己的名额。
 - **取消**：调用方的 `executionSignal`、运行时限和收尾时的撤销都传到子 agent；玩家的中止也一样。
 - **循环**：子 agent 走同一个 `runAgentToolLoop` 和收尾步骤，`allowSuspend: false`，默认 `actor` profile，没有会话历史。`PreRuntime` / `PostRuntime` 不触发，循环内的 Hook 照常触发。
@@ -1212,3 +1212,11 @@ sequenceDiagram
 宿主共享的 `recordExecutionFaults` 负责归因和发布熔断事件。`commitExecution` 在玩家、手动、恢复和后台提交之后调用它；恢复的 runtime 失败、尚未进入提交时，恢复路由也在返回错误前调用它，不提交缓冲写入或解决挂起项。子 agent 的已结算结果通过提交计划的 `subagentRuns` 交给 `recordExecutionFaults`，与顶层结果一起归因；runner 结算时不修改 latch。Hook 管线在 handler 完成时单独报告所属插件的故障。内存里的 latch 按会话和插件计数，以 `logicalTurnId ?? turnId` 合并同一输入。详细计数、豁免和事件见[协议](../reference/protocol.md#插件故障熔断)。
 
 `executeTurn` 在执行入口过滤已暂停插件的 runtime 和 Hook 启用集合，恢复入口和服务准入也检查暂停状态。注册表快照不在运行中修改；服务捕获同一执行的暂停集合。重启、会话结束和删除只清内存，不写入领域数据或快照。
+
+## 组合角色与持久执行名额
+
+一个故事 runtime 可先调用策略服务，再委托角色，最后只提交一份普通故事。成功子调用的写服务操作仍属于调用方的提交单元。策略建议不构成新调度阶段，也不自动启用插件。
+
+settle 屏障后冻结策略绑定与执行预算。函数、agent、递归和直接 pipeline 入口共享一个根预算，原子准入在加载提供方前完成。display-message 的 presence 尾页按执行懒捕获；挂起保存前冻结该边界并等待子调用排空。恢复持有会话锁，在入口捕获当前 claim，从同根挂起项读取最新预算；结算时必须仍是该 claim。只有预算、私有调用来源或历史快照发生变化时才打开 continuation 事务，以条件更新同步尚未解决的兄弟，并保留原 claim。失败恢复同样记录已经消耗的次数，但没有变化的失败恢复不写 continuation、不提交领域写入，也不解决挂起项。完成或放弃不留下永久会话计数。
+
+`metadata.orchestration` 属于可分叉的会话设置，由 snapshot builder 显式捕获，BrowserVault/checkpoint 也保存。预算、私有调用来源和历史快照属于框架 continuation；分叉隔离 scopeId，保留消耗量。详见[执行名额](../reference/plugins.md#character-orchestration)。

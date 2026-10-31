@@ -81,3 +81,24 @@ it("records the cursor and compaction tags without reading the model history", a
     "summary-gone",
   );
 });
+
+it("captures orchestration settings at the snapshot boundary", async () => {
+  const store = createMemoryStore();
+  const orchestration = {
+    turnPolicy: { pluginId: "missing-provider", name: "draw" },
+    maxActors: 0,
+    maxSubagentCalls: 3,
+  };
+  try {
+    await store.createSession(
+      makeSession({ id: "sess-1", metadata: { orchestration } }),
+    );
+    const payload = await buildSnapshotPayload(store, "sess-1", "turn");
+    await store.updateSession("sess-1", {
+      metadata: { orchestration: { maxActors: 4 } },
+    });
+    expect(payload.session?.orchestration).toEqual(orchestration);
+  } finally {
+    await store.close();
+  }
+});

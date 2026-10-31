@@ -1,4 +1,7 @@
-import { isKernelExtensionContract } from "@covel/shared";
+import {
+  frameworkContractSchemas,
+  isKernelExtensionContract,
+} from "@covel/shared";
 import { pluginRuntimeManifests } from "./declarations.js";
 import type { PluginRegistryEntry } from "./types.js";
 
@@ -11,11 +14,12 @@ export function contractReferenceDiagnostics(
   entries: Iterable<PluginRegistryEntry>,
 ): string[] {
   const loaded = [...entries].filter((entry) => entry.status !== "error");
-  const schemas = new Set(
-    loaded.flatMap((entry) =>
+  const schemas = new Set([
+    ...Object.keys(frameworkContractSchemas),
+    ...loaded.flatMap((entry) =>
       Object.keys(entry.packageManifest?.contractSchemas ?? {}),
     ),
-  );
+  ]);
   const providers = new Map<string, string[]>();
   for (const entry of loaded)
     for (const provided of entry.packageManifest?.plugin?.provides ?? []) {

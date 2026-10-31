@@ -1481,3 +1481,9 @@ How snapshots are saved:
 ## Plugin view read-only port
 
 Plugin views reuse the sandbox MessagePort. Full `{ type: "state", value }` messages carry the projection in `value.session`; streaming messages are `{ type: "stream", seq, append }`. This adds no HTTP or SSE endpoint. Reading requires player consent before mounting, bound to the plugin ID and the content hash of the spec plus HTML. Revocation closes the page. Existing page action handlers are unchanged. See [Plugin views](./ui-panels.md#plugin-views) for projection, throttling and consent rules.
+
+## Private delegation projections
+
+Actor `intent` stays in the orchestrator's live in-memory conversation. The kernel records provenance from the resolved provider and tool-call ID, projecting child model traces, parent delegate arguments/results, persisted tool records and transcript copies in later parent `llm.request` events. `/turns`, action streams and trace APIs read projected values. Concealed providers' complete delegated content receives the same protection. The live model transcript retains paired tool calls and results. When a completing tool becomes output directly, an ordinary actor supplies only public segments; a concealed delegate supplies no content. Arbitrary business JSON keys named `intent` do not determine provenance.
+
+Actor failures and cap refusals use `subagent.failed`, without a new actor event family or `runtime.failed`/execution errors for isolated failures. The story may commit. Rejected independent operations still produce only the existing fixed `operation.failed` notice. Deliberately rewriting private data into story prose is outside this structured projection guarantee.

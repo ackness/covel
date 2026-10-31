@@ -1,0 +1,33 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "properties": {
+    "segments": {
+      "minItems": 1,
+      "maxItems": 8,
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": ["dialogue", "action"]
+          },
+          "text": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 4000
+          }
+        },
+        "required": ["kind", "text"],
+        "additionalProperties": false
+      }
+    },
+    "intent": {
+      "type": "string",
+      "maxLength": 2000
+    }
+  },
+  "required": ["segments"],
+  "additionalProperties": false
+}

@@ -55,7 +55,7 @@ export async function prepareAgentToolSurface(args: {
   readonly manifest: RuntimeManifest;
   readonly input: Pick<TurnInput, "sessionId"> &
     Partial<Pick<TurnInput, "locale">>;
-  readonly deps: Pick<TurnExecutorDeps, "services"> &
+  readonly deps: Pick<TurnExecutorDeps, "services" | "delegation"> &
     Partial<Pick<TurnExecutorDeps, "loadRuntime">>;
   readonly canWrite?: boolean;
 }): Promise<AgentToolSurface> {
@@ -85,7 +85,11 @@ export async function prepareAgentToolSurface(args: {
     try {
       resolution = deps.services
         ? await deps.services.resolveImport(
-            { sessionId: input.sessionId, pluginId: manifest.pluginId },
+            {
+              sessionId: input.sessionId,
+              pluginId: manifest.pluginId,
+              delegation: deps.delegation,
+            },
             contract,
           )
         : { status: "missing" };

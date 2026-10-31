@@ -102,6 +102,7 @@ export const WRITE_METHOD_TOUCHES: Readonly<Record<string, Touched>> = {
   deleteLorebookEntry: ["lorebookEntries", "recordChanges"],
   // suspensions + snapshots
   saveSuspension: ["suspensions"],
+  updateSuspensionContinuation: ["suspensions"],
   claimSuspension: ["suspensions"],
   releaseSuspensionClaim: ["suspensions"],
   markSuspensionResolved: ["suspensions"],

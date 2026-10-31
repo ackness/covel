@@ -1,0 +1,21 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "properties": {
+    "characterId": {
+      "type": "string",
+      "minLength": 1
+    },
+    "brief": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 20000
+    },
+    "instruction": {
+      "type": "string",
+      "maxLength": 2000
+    }
+  },
+  "required": ["characterId", "brief"],
+  "additionalProperties": false
+}

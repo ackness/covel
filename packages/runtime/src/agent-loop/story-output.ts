@@ -172,8 +172,15 @@ export function normalizeStoryOutput(
     segments,
     ...(cues ? { cues } : {}),
     yield: output.yield === "continue" ? "continue" : "user",
-    narrativeOutput: segments.map((segment) => segment.text).join("\n\n"),
+    narrativeOutput: renderStorySegments(segments),
   };
+}
+
+/** Display prose shared by committed stories and witnessed-history projections. */
+export function renderStorySegments(
+  segments: readonly { readonly text: string }[],
+): string {
+  return segments.map((segment) => segment.text).join("\n\n");
 }
 
 /** Story completion requires player-visible text, including after hooks. */

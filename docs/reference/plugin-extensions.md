@@ -331,6 +331,7 @@ const value = await ctx.services.call(
 | `gateway` | 可选的模型访问，不携带调用方的密钥材料。 |
 | `utils` | 可选的 HTTP 辅助能力，继承本次调用的信号。 |
 | `services` | 继续发现和调用其他公共服务。 |
+| `random` | 提供方作用域的确定性随机数，流名 `service:<name>`。 |
 | `sessionId` | 当前会话。 |
 | `locale` | 会话内容语言；宿主未提供时可省略。 |
 | `messages` | 提供者自己的消息目录，与函数 runtime 相同；没有目录时省略。`translate(ctx, text)` 按会话内容语言取译文，`labelText(ctx, text)` 保留全部语言供界面选择。嵌套服务使用各自提供者的目录。 |
@@ -388,7 +389,7 @@ covel.registerService({
 
 #### 写服务能拿到什么
 
-写服务的上下文是读服务的上下文去掉 `gateway` 和 `utils`，再加上三样：
+写服务继承读服务的 `random`，去掉 `gateway` 和 `utils`，把 `pluginData` 换成读写接口，并增加 `turnId`：
 
 <!-- prettier-ignore -->
 | 字段 | 含义 |
@@ -826,3 +827,37 @@ trace 事件不含原始错误。自己的片段或槽位没有出现时，作�
 - 没激活或没批准的提供者在发现阶段就被排除，不算调用失败。
 - 调用发出之后准入失败的，保留失败事件。
 - 这份统计只代表当前窗口，会随旧记录被淘汰而变化，不是累计用量。
+
+<a id="orchestration-contracts"></a>
+
+## 回合策略与角色表演契约
+
+框架提供 schema，插件提供行为：`turn-policy@1` 是只读服务，`character-actor@1` 是只供委托的 agent runtime。它们不是内核扩展点。故事必须在任一提供方缺失时仍可运行，不能把它们放进故事包的 `requires`、必需契约输入或 `needs`。
+
+SDK 导出 `TURN_POLICY_CONTRACT`、`CHARACTER_ACTOR_CONTRACT`，以及 `turnPolicyRequestSchema`、`turnPolicyInputSchema`、`turnPolicyOutputSchema`、`characterActorInputSchema`、`characterActorOutputSchema`；同名的 `…JsonSchema()` 导出 draft-7 JSON Schema，类型名分别是 `TurnPolicyRequest`、`TurnPolicyInput`、`TurnPolicyOutput`、`CharacterActorInput`、`CharacterActorOutput`。`@covel/shared` 重导出同一份 schema。对象严格校验，不接受额外字段。
+
+<!-- prettier-ignore -->
+| 契约值 | 字段与边界 |
+| --- | --- |
+| 策略请求 | `actions: TurnAction[]` 使用已解析行动的校验与提交边界；`present: {characterId, name}[]` 最多 32 人，名字最多 80 字符；`recentSegments: StorySegment[]` 最多 60 段，无 `speakerId`；可选 `limits` |
+| 策略 handler 输入 | 请求加必需的 `limits: {maxActors, maxSubagentCalls}`。宿主填入剩余的新角色名额和调用次数；调用方只能调低 |
+| 策略输出 | `actors: {characterId, reason?, instruction?}[]` 最多 32 人，可为空；`reason` 最多 500 字符，`instruction` 最多 2,000；必需 `order: sequential / parallel`、`narrator: before / after / none`、`yieldHint: user / continue` |
+| 角色输入 | `characterId`、1–20,000 字符的 `brief`、可选且最多 2,000 字符的 `instruction` |
+| 角色输出 | 1–8 个 `{kind: dialogue / action, text}`，每段 1–4,000 字符；可选 `intent` 最多 2,000。没有 speaker、叙述段或 effects |
+
+策略的角色必须是 `present` 中不重复的 ID；`validateTurnPolicyOutput(input, output)` 提供相同的上下文校验。宿主即使面对宽松的提供方 parser 也会校验规范输入输出，然后按提供方顺序收窄计划。已准入的角色再次发言只占调用次数；新角色名额用完时，跳过新角色但保留后面的已准入角色。计划不预占名额，真正委托时仍可能被拒绝。三个建议字段由编排插件解释，不会改变内核调度。
+
+```ts
+const plan = await ctx.services.call({
+  contract: "turn-policy@1",
+  input: { actions: ctx.playerActions, present, recentSegments: [] },
+});
+```
+
+`services.call` 接受完整的 `{pluginId, name, contract, input}` 或 `{contract, input}`，不能只写一个定位字段。零个或多个候选都返回 `unavailable`；多个候选带歧义说明。策略契约还读取会话的精确 `{pluginId, name}` 选择。同包的两个服务也需要选择。已选服务缺失、停用、撤销或因故障暂停时，不会换用另一项；`discover` 仍返回列表。选择和注册表在执行准入时冻结，调用时仍检查实时权限。嵌套服务继承这个绑定；修改选择只影响下一次执行。
+
+模型导入只接受 `{present: string[], recentSegments}`。宿主按名字或别名解析角色，补入当前执行的行动和名额，返回 `actors[].character` 名字；模型参数和结果都没有规范角色 ID。未知或歧义名字在调用服务前失败，原始 ID 不作为名字接受。先应用会话选择，再检查 `modelFacing`：选中代码专用服务时，模型工具缺席，不能转用别的服务。策略工具注解为 `readOnly: true`、`stagesWrites: false`、`idempotent: false`、`concurrencySafe: false`。
+
+读服务也有提供方作用域的 `ctx.random`，流名为 `service:<name>`，遵守现有种子规则。导演服务只能使用调用路径原本提供的 gateway：函数调用可借用，工具或 agent 导入不带 gateway/utils。没有 gateway 时，提供方返回不可用，编排插件继续写兜底故事。注册与声明仍须对应，策略不能注册成写服务、runtime 输出或扩展 handler。
+
+角色声明与执行边界见[角色委托](./plugins.md#character-orchestration)，完整组合示例见[进阶指南](../plugins/advanced.md#orchestration-example)。

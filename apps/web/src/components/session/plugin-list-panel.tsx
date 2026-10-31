@@ -1,3 +1,4 @@
+import { OrchestrationSettings } from "./orchestration-settings.js";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { stageRank } from "@covel/shared";
@@ -101,9 +102,19 @@ export function PluginListPanel({
 
   if (plugins.length === 0 && loadErrors.length === 0 && !hasSessionPlugins) {
     return (
-      <p className="text-xs text-muted-foreground italic">
-        {t("session.noPluginsLoaded")}
-      </p>
+      <div className="space-y-1.5">
+        {sessionId && (
+          <OrchestrationSettings
+            key={sessionId}
+            sessionId={sessionId}
+            disabled={executing}
+            refreshKey={sessionPlugins}
+          />
+        )}
+        <p className="text-xs text-muted-foreground italic">
+          {t("session.noPluginsLoaded")}
+        </p>
+      </div>
     );
   }
 
@@ -125,6 +136,14 @@ export function PluginListPanel({
 
   return (
     <div className="space-y-1.5">
+      {sessionId && (
+        <OrchestrationSettings
+          key={sessionId}
+          sessionId={sessionId}
+          disabled={executing}
+          refreshKey={sessionPlugins}
+        />
+      )}
       <label className="flex items-center gap-2 py-2 text-xs text-muted-foreground">
         <input
           type="checkbox"

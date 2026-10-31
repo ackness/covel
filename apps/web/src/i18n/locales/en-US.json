@@ -2772,5 +2772,19 @@
     "localRelay": "This address is on your computer or local network, so your browser relays the model requests: keep the page open while you play, and let the model server accept {{origin}} through CORS (for Ollama, set OLLAMA_ORIGINS={{origin}}). Your browser may ask whether this site may access your device or local network.",
     "localHttp": "Browsers do not let this HTTPS page reach a plain-http address on your local network. Serve the model over HTTPS on your network, or forward it on this computer through 127.0.0.1 or localhost.",
     "keyAdvice": "Create a temporary API key just for this trial, ideally with a spending limit. We do our best to protect your data, but please delete or rotate the key at your provider when you finish."
+  },
+  "orchestration": {
+    "title": "Orchestration",
+    "policy": "Turn policy",
+    "automatic": "Automatic selection",
+    "maxActors": "Distinct characters (0–16)",
+    "maxSubagentCalls": "Child calls (0–64)",
+    "selected": "Selected policy",
+    "unique": "One policy available",
+    "missing": "No available policy",
+    "ambiguous": "Choose a policy to resolve ambiguity",
+    "paused": "Paused",
+    "unavailable": "Unavailable",
+    "error": "Could not load or save orchestration settings"
   }
 }

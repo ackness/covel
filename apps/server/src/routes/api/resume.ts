@@ -359,7 +359,7 @@ resumeRoutes.post("/:id/suspensions/:suspensionId/resume", async (c) => {
           hookScope,
         };
         const execution = await resumeSuspendedRuntime(
-          liveSuspension,
+          { ...liveSuspension, resolvedAt: claimed },
           data,
           effectiveManifest!,
           resumeDeps,

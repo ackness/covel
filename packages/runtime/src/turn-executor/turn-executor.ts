@@ -1,3 +1,4 @@
+import { createDelegationBudget } from "../orchestration/delegation-budget.js";
 import { createSubagentRunner } from "../agent-loop/subagent-runner.js";
 import { buildTurnDigest } from "./turn-digest.js";
 /**
@@ -170,7 +171,16 @@ export async function runTurnPipeline(
     settings: buildHookSettings(activeRuntimes, userSettings),
   };
   // One sub-agent runner per top-level execution; nested executions share it.
-  const subagents = deps.subagents ?? createSubagentRunner({ activeRuntimes });
+  const delegation =
+    deps.delegation ??
+    (await createDelegationBudget(input.sessionId, deps.store));
+  deps = {
+    ...deps,
+    delegation,
+    emitter: delegation.privacy.emitter(deps.emitter, activeRuntimes),
+  };
+  const subagents =
+    deps.subagents ?? createSubagentRunner({ activeRuntimes, delegation });
   return runWithHookScope(
     { ...hookScope, locale: hookScope.locale ?? input.locale },
     () =>

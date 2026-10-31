@@ -234,6 +234,7 @@ describe("npc-graph core plugin write-read-inject path", () => {
         await store.listPluginData(sessionId, "npc-graph", "index"),
       ).toEqual([]);
       const recalled = await ragRetrieverHandler({
+        historyFor: async () => ({ messages: [], truncated: false }),
         sessionId,
         turnId: "turn-recall",
         pluginId: "npc-graph",

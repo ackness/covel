@@ -43,12 +43,23 @@ export const delegateParametersSchema = z.strictObject({
     .min(1)
     .max(SUBAGENT_BRIEF_MAX_CHARS)
     .describe(
-      "The whole task. The sub-agent sees only this brief and data, not this conversation.",
+      "The task brief. Character actors also receive their own profile and witnessed history; the parent conversation is not copied.",
     ),
   data: z
     .record(z.string(), z.unknown())
     .optional()
-    .describe("Structured facts the sub-agent needs, as a JSON object."),
+    .describe(
+      "Structured facts for a generic sub-agent. Character actors reject data; use brief and instruction.",
+    ),
+  character: z
+    .string()
+    .min(1)
+    .max(80)
+    .optional()
+    .describe(
+      "Required for a character actor: a character name or alias, never an ID.",
+    ),
+  instruction: z.string().max(2_000).optional(),
   maxSteps: z
     .number()
     .int()
@@ -60,7 +71,7 @@ export const delegateParametersSchema = z.strictObject({
 export const delegateTool: ToolModule = tool({
   name: DELEGATE_TOOL_NAME,
   description:
-    "Run another agent as a sub-agent and get its output back. It works from your brief and data only, can stage changes through write services when allowed in this run, and returns its output or an error you can act on. Staged changes take effect at turn end and may still be rejected.",
+    "Run another agent as a sub-agent and get its output back. It works from your brief and data, with a selected profile and witnessed history for character actors, can stage changes through write services when allowed in this run, and returns its output or an error you can act on. Staged changes take effect at turn end and may still be rejected.",
   annotations: {
     readOnly: false,
     stagesWrites: true,

@@ -517,3 +517,9 @@ A `bridge: session` view in `contributes.ui.view` can additionally read a valida
 ## Importing third-party content: data conversion only
 
 SillyTavern content import uses bounded PNG chunk walking (including remaining-length checks before reading data), bounded JSON with Zod validation, fixed output paths, text sanitizing and fixed macro substitutions. PNG cover files have text and other metadata removed. No extension, script, card regex or executable macro runs. Unsupported fields and conversion losses are reported. Preview writes nothing; import uses the ZIP world's existing validation and activation under the world lock, guarded by `host.files` and `world.write`. Sanitizing does not make prompts trustworthy: lore and narration notes enter model context at the same trust level as other third-party world packages. See [the import guide](../worlds/import-sillytavern.md).
+
+## Character perspective and private delegation
+
+Witnessed history and name-addressed calls are bounded context capabilities, not security isolation for approved server code. This helper reads committed presence-bearing stories only for characters in the current world. Existing tool/service approvals and read permissions remain unchanged. Callers remain responsible for their brief and instruction.
+
+Delegation privacy uses kernel-recorded provider and call identity to project streams, persisted traces, parent tool records and trace copies of later requests. It trusts neither plugin-supplied redaction flags nor global key-name deletion. The actual parent model still uses intent. Settings routes retain host-profile, session-owner, settle and lock checks; choosing a service grants no execution permission. See [protocol](../reference/protocol.md#private-delegation-projections).

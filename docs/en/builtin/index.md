@@ -104,3 +104,5 @@ To build your own world based on these, the files are in the repository's [`worl
 ## More
 
 Plugins such as image and voice generation are not built into Covel. You install them separately. See [Install plugins and world packages](../start/packages.md). To write your own, see [Develop plugins](../plugins/index.md).
+
+Generic policy selection and delegation caps are in [session orchestration settings](./features.md#session-orchestration-settings). These controls add no bundled policies or play packs; plugins provide the behavior.

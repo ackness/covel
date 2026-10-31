@@ -1,3 +1,4 @@
+import { CharacterHistoryReader } from "../orchestration/character-history.js";
 import type { DataStore } from "@covel/store";
 import type { ToolExecutionContext } from "@covel/tools";
 import type { FunctionStoreView } from "@covel/shared/plugin-runtime";
@@ -84,6 +85,7 @@ export function createToolExecutionContext(
     // The tool's plugin and runtime are the caller, with the same read scope
     // and recorder as the tool's own store reads.
     const client = caller.services.createClient({
+      delegation: caller.delegation,
       onSettled: caller.services.executionObserver(),
       ...(caller.emitter ? { emitter: caller.emitter } : {}),
       ...identity,
@@ -110,7 +112,13 @@ export function createToolExecutionContext(
       ) => read(() => client.call(request, options)),
     });
   }
+  const history =
+    caller.delegation?.history ??
+    new CharacterHistoryReader(store, caller.sessionId);
   const context: ToolExecutionContext = Object.freeze({
+    historyFor: (characterId: string, options?: { readonly limit?: number }) =>
+      read(() => history.read(characterId, caller.world, options)),
+    playerActions: structuredClone(caller.playerActions),
     ...identity,
     ...(caller.locale !== undefined ? { locale: caller.locale } : {}),
     // Frozen by the host and shared across calls; nothing to copy.

@@ -9,7 +9,11 @@
  * list them in their `description`.
  */
 
-import { FRAMEWORK_TOOL_NAMES } from "@covel/plugin-handlers-utils";
+import {
+  CHARACTER_ACTOR_CONTRACT,
+  TURN_POLICY_CONTRACT,
+  FRAMEWORK_TOOL_NAMES,
+} from "@covel/plugin-handlers-utils";
 import { isKernelExtensionContract } from "../extension-points/contracts.js";
 import {
   defaultAgentLoop,
@@ -463,6 +467,19 @@ export function runtimeRuleIssues(
     message: string,
     disables?: "runtime",
   ) => issues.push({ path, message, ...(disables ? { disables } : {}) });
+
+  if (m.outputContract === TURN_POLICY_CONTRACT)
+    add(
+      at("outputContract"),
+      "turn-policy@1 is a read service, not a runtime output",
+      "runtime",
+    );
+  if (m.outputContract === CHARACTER_ACTOR_CONTRACT && !m.subagentOnly)
+    add(
+      at("subagentOnly"),
+      "character-actor@1 requires a sub-agent-only agent runtime",
+      "runtime",
+    );
 
   if (m.defaultProvider && !m.outputContract)
     add(

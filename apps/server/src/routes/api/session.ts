@@ -1,3 +1,4 @@
+import { registerOrchestrationRoutes } from "./orchestration.js";
 import { readLockedSession } from "./session/locked-mutation.js";
 import {
   invalidateSessionEvents,
@@ -174,6 +175,7 @@ registerSessionViewRoute(sessionRoutes);
 registerSessionDeleteRoute(sessionRoutes);
 registerSessionMemoryIndexRoutes(sessionRoutes);
 registerSessionSeatRoutes(sessionRoutes);
+registerOrchestrationRoutes(sessionRoutes);
 registerSessionActionKindRoutes(sessionRoutes);
 
 /**

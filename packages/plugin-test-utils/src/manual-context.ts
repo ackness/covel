@@ -91,6 +91,9 @@ export function makeManualFunctionContext({
   ...capabilities
 }: ManualFunctionContextOptions): FunctionHandlerContext {
   return {
+    historyFor: async () => {
+      throw new Error("historyFor is not configured for this test context");
+    },
     ...(subagents ? { agents: makeScriptedAgents(subagents).agents } : {}),
     sessionId,
     turnId,
