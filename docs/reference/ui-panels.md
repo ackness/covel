@@ -699,7 +699,8 @@ contributes:
 - **选哪个模板。** 每个段落在所有匹配的模板里选最具体的：`kind + speaker` 优先于只写 `speaker`，只写 `speaker` 优先于只写 `kind`；同一级里按 ID 匹配的优先于按名字匹配的。还相同时，按 `/api/ui-specs?sessionId=` 返回的插件顺序，再按声明顺序。只有在会话里可运行的插件提供模板，与 `ui.message` 的筛选相同。
 - **模板读到的状态。** `/segment` 是已提交的段落 `{ kind, text, speaker?, speakerId? }`；`/index` 是段落位置（从 0 开始）；`/character` 是 `speakerId` 指向会话角色时的 `{ id, name, type }`；`/visual` 是这个角色已有的 `character.visual@1` 槽位值。没有插件数据、设置和别的 ID。
 - **哪里用。** 只在聊天视图的 `parsed` 和 `detailed` 模式、只对带 `segments` 的已提交故事使用。有段落命中模板时，整条故事按段落依次显示：命中的段落用模板，其余段落用默认正文。一个段落都没命中时，消息和以前完全一样。流式输出中的故事、舞台对话框和 `raw` 视图不用模板（`raw` 的 JSON 里能看到 `segments`）。
-- **能用哪些组件。** 只能用只显示自身 props 的组件：`Stack`、`Row`、`Grid`、`Separator`、`Text`、`Badge`、`Icon`、`TagList`、`Source`、`Image`、`Media`、`AudioPlayer`、`Card`、`CardList`、`EntryCard`、`StatBar`、`Progress`、`Accordion`、`Section`、`JsonView`、`EntryList`、`Prose`、`PlayerMessage`、`Alert`。会发消息、调用运行时、接收输入或读取会话数据的组件（如 `CandidateList`、`Button`、`Choice`、表单与输入组件、`SceneCastList`、`CharacterFieldsView`、`CharacterAvatar`、各类画廊）都不能用；头像用 `Image` 读 `/visual/avatar`。媒体总在当前会话里解析，`sessionId` prop 不生效。
+- **能用哪些组件。** 可用的显示组件为：`Stack`、`Row`、`Grid`、`Separator`、`Text`、`Badge`、`Icon`、`TagList`、`Source`、`Image`、`CharacterAvatar`、`Media`、`AudioPlayer`、`Card`、`CardList`、`EntryCard`、`StatBar`、`Progress`、`Accordion`、`Section`、`JsonView`、`EntryList`、`Prose`、`PlayerMessage`、`Alert`。会发消息、调用运行时、接收输入或读取会话数据的组件（如 `CandidateList`、`Button`、`Choice`、表单与输入组件、`SceneCastList`、`CharacterFieldsView`、各类画廊）都不能用。媒体总在当前会话里解析，`sessionId` prop 不生效。
+- **模板头像。** `CharacterAvatar` 的 `characterId` 必须等于已解析的 `/character/id`，通常绑定 `{ "$state": "/character/id" }`；相同的字面 ID 也合法。它只使用该说话人已投影的 `/visual/avatar`，不查槽位、会话、插件数据或服务。未解析的说话人、缺少 ID 或头像时不显示头像，正文仍可读。其他角色 ID 不会显示头像；`sessionId`、`ref`、`visual` 等 props 不能改换来源。缩略图和放大预览都使用宿主明确提供的当前会话。宿主的本地点击放大与关闭属于显示交互；插件 `on` / `watch`、RPC、输入、上传和发送消息仍不允许。切换会话、说话人或头像会关闭旧预览。
 - **出错怎么办。** 某个模板渲染失败时，只有这一段退回默认正文。模板写错时（缺少或空的 `match`、写了 `webview`、`dataSource`、`surfaces`、`group*`、`shortLabel`、`navTarget`、`alwaysRender`、`bridge`，view 里有 `on` / `watch`，或用了上面列表以外的组件），`pnpm validate:plugin` 和安装报错；加载时这一项给出带声明路径的诊断，同一个插件的其他模板照常使用。
 - `ui.segment` 不派生能力（与 `ui.view` 相同）：模板不运行代码，也不读数据。
 
@@ -1078,10 +1079,16 @@ catalog 里的组件不够用时，插件可以带一份自己的 HTML。JSON sp
 
 内置场景舞台在实际换地点时，先清空已有的方向演员记录，再应用本轮新指令；预览与提交使用相同场景身份和顺序。已有方向状态而没有新登场指令时，返回空演员与 `retainWhenEmpty: false`，防止旧场景立绘残留。没有方向状态时继续使用原来的 cast 提供者。
 
-| 字段              | 类型                       | 必填 | 含义                                                                                  |
-| ----------------- | -------------------------- | ---- | ------------------------------------------------------------------------------------- |
-| `actors`          | 下表对象的数组，最多 64 项 | 是   | 当前舞台上的演员，空数组合法                                                          |
-| `retainWhenEmpty` | boolean                    | 是   | `actors` 为空时，`true` 保留上一组立绘并取消高亮；`false` 清空立绘。schema 没有默认值 |
+| 字段              | 类型                       | 必填 | 含义                                                                                              |
+| ----------------- | -------------------------- | ---- | ------------------------------------------------------------------------------------------------- |
+| `actors`          | 下表对象的数组，最多 64 项 | 是   | 当前舞台上的演员，空数组合法                                                                      |
+| `retainWhenEmpty` | boolean                    | 是   | `actors` 为空时，`true` 保留上一组立绘并取消高亮；`false` 在退场结束后清空立绘。schema 没有默认值 |
+
+演员从权威名单移除时，槽位立即更新。客户端仅保留此前实际显示的图片、名字、变体 framing 和旧位置，播放一次 300ms 淡出；旧登场 `transition` 不作为退场指令。最多四名当前演员与四张退场图片同时显示；退场图片不占当前演员名额，也不参与新布局，位于当前演员下方、取消高亮、对辅助技术隐藏且不可交互。快速替换超过上限时先移除最早的退场图片。
+
+已送达的 `exiting: true` 使用指定的 `transition`，省略时才用 `fade`。fade 为 300ms、左右滑出为 320ms、dissolve 为 360ms；`none` 与减少动态效果设置立即移除。提交后名单不再包含该角色时，正在进行的显式退场继续到结束，不重播或改为淡出。匹配的外层动画完成时清理，漏掉动画事件也会在 500ms 内清理；重新登场会取消旧退场。未送达的指令不能从名单差异中还原。
+
+只有仍存在的有效槽位给出 `actors: []` 与 `retainWhenEmpty: true` 时，才保留上一组当前演员并取消高亮；显式退场不会变成这组保留演员。`false` 的空名单退场一次后保持空白。槽位缺失、投影恢复时清空、会话切换或组件卸载会立即丢弃所有本地记忆；重新挂载只显示当前名单。退场图片不进入 snapshot、UI slot、会话桥或模型上下文，也不延迟回合或提交写入。
 
 每位演员：
 

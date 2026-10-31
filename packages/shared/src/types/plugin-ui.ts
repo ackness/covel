@@ -65,7 +65,8 @@ export type PluginUiComponentName = (typeof PLUGIN_UI_COMPONENT_NAMES)[number];
  * ones that draw only their own props. A template is display-only, so
  * anything that sends a message, invokes a runtime, takes input or reads
  * session data beyond the template's own state is left out. Validation and
- * the renderer's registry both read this list.
+ * the renderer's registry both read this list. CharacterAvatar uses only the
+ * host-projected speaker visual; its local portrait preview reads no extra data.
  */
 export const SEGMENT_TEMPLATE_COMPONENT_NAMES = [
   "Stack",
@@ -78,6 +79,7 @@ export const SEGMENT_TEMPLATE_COMPONENT_NAMES = [
   "TagList",
   "Source",
   "Image",
+  "CharacterAvatar",
   "Media",
   "AudioPlayer",
   "Card",

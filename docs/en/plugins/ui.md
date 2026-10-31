@@ -354,6 +354,10 @@ A block sits under a turn. To change the story text itself, for example to add a
     "component": "Stack",
     "children": [
       {
+        "component": "CharacterAvatar",
+        "props": { "characterId": { "$state": "/character/id" } }
+      },
+      {
         "component": "Badge",
         "props": { "label": { "$state": "/segment/speaker" } }
       },
@@ -375,7 +379,7 @@ contributes:
       - ./ui/nameplate.json
 ```
 
-`match` is required: `kind` matches segment kinds, `speaker` matches a character ID or name. A template only displays, with no buttons and no data source; paragraphs no template matches look as before. See [Segment templates](../reference/ui-panels.md#segment-templates) for the state it reads and how a template is chosen.
+`match` is required: `kind` matches segment kinds, `speaker` matches a character ID or name. A template only displays, with no authored action buttons or data source. The avatar above uses only the resolved speaker’s public portrait and supports host-local enlargement; missing imagery leaves the nameplate and prose readable. Paragraphs no template matches look as before. See [Segment templates](../reference/ui-panels.md#segment-templates) for the state it reads and how a template is chosen.
 
 ## 5. Give the player choices
 

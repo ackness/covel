@@ -23,6 +23,8 @@
 
 整批刷新会有界重试扫描期间被其他包激活重新发布的条目，不能把短暂失效的旧缓存当成当前列表状态。
 
+段落模板中的 `CharacterAvatar` 只显示宿主已投影的说话人公开头像；`characterId` 必须匹配，组件不查任意会话或角色槽位。宿主本地放大与关闭不授予插件操作、数据读取或写入能力，也不增加审批。模板仍不接收设置、隐藏 namespace、concealed 输出、私人角色说明、续写或推理内容。退场画面只保存在渲染器内，不进入 snapshot、桥接或模型上下文。见[段落模板](../reference/ui-panels.md#段落模板)。
+
 ## Host profile
 
 服务端在启动时只做一次判断：把部署档位、实际用的存储和几个开关合成一份宿主配置（host profile，`apps/server/src/host-profile.ts`），放进每个请求。路由的权限检查、媒体路由、服务端设置、请求自带的模型设置和 trace 保留期都问它，不再各自读环境变量。`@covel/ai-provider` 在启动时拿到属于它的那部分（`configureProviderHostPolicy`）。桌面客户端启动服务端时固定传 `DEPLOYMENT_TIER=self`。

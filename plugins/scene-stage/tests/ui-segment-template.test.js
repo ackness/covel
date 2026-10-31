@@ -33,9 +33,8 @@ describe("scene-stage dialogue template", () => {
       view: { component: "Row" },
     });
     expect(spec.view.children[0]).toMatchObject({
-      component: "Image",
-      visible: { $state: "/visual/avatar" },
-      props: { ref: { $state: "/visual/avatar" } },
+      component: "CharacterAvatar",
+      props: { characterId: { $state: "/character/id" } },
     });
     expect(spec.view.children[1].children).toEqual([
       { component: "Badge", props: { label: { $state: "/segment/speaker" } } },

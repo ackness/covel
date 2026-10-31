@@ -12,7 +12,6 @@
   "apps/web/src/components/session/right-panel.tsx": 2,
   "apps/web/src/components/shared/ping-button.tsx": 1,
   "apps/web/src/components/theme-manager.tsx": 1,
-  "apps/web/src/lib/catalog/character-avatar-renderer.tsx": 1,
   "apps/web/src/lib/catalog/interactive-form-renderers.tsx": 3,
   "apps/web/src/lib/catalog/media-renderers.tsx": 8,
   "apps/web/src/routes/__root.tsx": 2,

@@ -20,6 +20,7 @@ import {
 import { JSONUIProvider, Renderer } from "@json-render/react";
 import type { CharacterVisualModel, SnapshotCharacter } from "@covel/shared";
 import { Markdown } from "@/components/ui/markdown.js";
+import { SegmentTemplateContext } from "@/lib/catalog/segment-template-context.js";
 import { segmentTemplateRegistry } from "@/lib/catalog.js";
 import { covelDirectives } from "@/lib/json-render-directives.js";
 import { pluginPanelViewToSpec } from "@/lib/plugin-panel-spec.js";
@@ -111,6 +112,7 @@ const TemplatedStory = memo(function TemplatedStory({
             <SegmentTemplateBoundary fallback={fallback}>
               <div className="not-prose">
                 <SegmentTemplateView
+                  sessionId={sessionId}
                   view={template.spec.view}
                   state={segmentTemplateState(
                     segment,
@@ -129,9 +131,11 @@ const TemplatedStory = memo(function TemplatedStory({
 });
 
 function SegmentTemplateView({
+  sessionId,
   view,
   state,
 }: {
+  readonly sessionId: string;
   readonly view: Record<string, unknown> | undefined;
   readonly state: SegmentTemplateState;
 }) {
@@ -139,15 +143,19 @@ function SegmentTemplateView({
   if (!spec) throw new Error("segment template has no view");
   return (
     // Keyed by its state: the provider reads state once, on mount.
-    <JSONUIProvider
-      key={JSON.stringify(state)}
-      registry={segmentTemplateRegistry}
-      initialState={state}
-      handlers={NO_ACTIONS}
-      directives={covelDirectives}
+    <SegmentTemplateContext.Provider
+      value={{ sessionId, character: state.character, visual: state.visual }}
     >
-      <Renderer spec={spec} registry={segmentTemplateRegistry} />
-    </JSONUIProvider>
+      <JSONUIProvider
+        key={JSON.stringify([sessionId, state])}
+        registry={segmentTemplateRegistry}
+        initialState={state}
+        handlers={NO_ACTIONS}
+        directives={covelDirectives}
+      >
+        <Renderer spec={spec} registry={segmentTemplateRegistry} />
+      </JSONUIProvider>
+    </SegmentTemplateContext.Provider>
   );
 }
 

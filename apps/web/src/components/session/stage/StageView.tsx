@@ -274,13 +274,16 @@ export function StageView(props: StageViewProps): ReactElement {
         world={world}
         sessionId={session.id}
       />
-      <StageSprites
-        speakers={speakers}
-        presence={presence}
-        sessionId={session.id}
-        dimmed={choicesVisible}
-        retainWhenEmpty={cast?.retainWhenEmpty ?? true}
-      />
+      {cast && (
+        <StageSprites
+          key={session.id}
+          speakers={speakers}
+          presence={presence}
+          sessionId={session.id}
+          dimmed={choicesVisible}
+          retainWhenEmpty={cast.retainWhenEmpty}
+        />
+      )}
       <StageHud
         sceneCurrent={effectiveSceneCurrent}
         locale={locale}

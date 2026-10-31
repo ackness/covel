@@ -1438,6 +1438,8 @@ Warnings from media resolution in the browser state the session, the media ID, a
 - A preview that arrives late for a turn that has already ended is ignored. Explicitly starting a new execution allows the same turn ID to be retried.
 - A GET that was sent before a newer SSE event must not overwrite those updates when its answer arrives.
 
+Stage departure memory retains only already-displayed public images on the client. It adds no `ui.slot.*` event or bridge payload and does not change revision ordering. Slots still reflect the current cast immediately; see [UI slots](./ui-panels.md#stagecast1) for animation and reset rules.
+
 ## Source execution snapshot
 
 A plugin that reads "what the player typed this time" has two values:

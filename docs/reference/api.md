@@ -1686,7 +1686,7 @@ fork 和社区插件的授权：
 
 `view` 始终为数组（可以为空），项为 `{ pluginId, specs }`。仅列出当前会话活跃插件的视图；同一插件重复的视图 ID 保留第一份，其余报告 `slot: "view"` 诊断。这里只读取 UI JSON、HTML 和已发布资源，不导入插件代码，不需要服务端代码审批。读取会话的玩家授权在浏览器挂载前单独处理，见[插件视图](./ui-panels.md#插件视图)。
 
-`segment` 始终为数组（可以为空），项为 `{ pluginId, specs }`，是 `contributes.ui.segment` 的段落模板，按与 `message` 相同的会话筛选，插件的顺序就是模板同级时的先后。缺少 `match`、写了 `webview` / `dataSource` 等面板字段或带 `on` / `watch` 的模板报 `slot: "segment"` 诊断，同一插件的其他模板照常返回。见[段落模板](./ui-panels.md#段落模板)。
+`segment` 始终为数组（可以为空），项为 `{ pluginId, specs }`，是 `contributes.ui.segment` 的段落模板，按与 `message` 相同的会话筛选，插件的顺序就是模板同级时的先后。缺少 `match`、写了 `webview` / `dataSource` 等面板字段或带 `on` / `watch` 的模板报 `slot: "segment"` 诊断，同一插件的其他模板照常返回。见[段落模板](./ui-panels.md#段落模板)。合法的说话人头像模板 `CharacterAvatar` 走相同校验、逐项诊断与正文回退路径，响应字段不变。
 
 **开发热重载**：`POST /api/plugins/:id/reload` 重新加载一个社区插件。
 

@@ -6,13 +6,8 @@
     "props": { "gap": "sm", "align": "start" },
     "children": [
       {
-        "component": "Image",
-        "visible": { "$state": "/visual/avatar" },
-        "props": {
-          "ref": { "$state": "/visual/avatar" },
-          "alt": { "$state": "/segment/speaker" },
-          "aspectRatio": "1/1"
-        }
+        "component": "CharacterAvatar",
+        "props": { "characterId": { "$state": "/character/id" } }
       },
       {
         "component": "Stack",

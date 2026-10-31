@@ -17,21 +17,32 @@ import { StageView, type StageViewProps } from "../StageView.js";
 
 const stageSlots = vi.hoisted(() => ({
   renders: vi.fn(),
+  realSprites: false,
+  reduce: true,
   items: [] as Array<{ slot: string; value: unknown }>,
 }));
 
-vi.mock("@/hooks/use-media-query.js", () => ({ useMediaQuery: () => true }));
+vi.mock("@/hooks/use-media-query.js", () => ({
+  useMediaQuery: () => stageSlots.reduce,
+}));
 vi.mock("../../chat-messages.js", () => ({ ChatMessages: () => null }));
 vi.mock("../../chat-messages/message-blocks.js", () => ({
   MessageBlockRenderer: () => null,
 }));
 vi.mock("../StageBackdrop.js", () => ({ StageBackdrop: () => null }));
-vi.mock("../StageSprites.js", () => ({
-  StageSprites: ({ speakers }: { speakers: unknown }) => {
-    stageSlots.renders();
-    return <div data-testid="stage-speakers">{JSON.stringify(speakers)}</div>;
-  },
-}));
+vi.mock("../StageSprites.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../StageSprites.js")>();
+  return {
+    StageSprites: (props: Parameters<typeof actual.StageSprites>[0]) => {
+      stageSlots.renders();
+      return stageSlots.realSprites ? (
+        <actual.StageSprites {...props} />
+      ) : (
+        <div data-testid="stage-speakers">{JSON.stringify(props.speakers)}</div>
+      );
+    },
+  };
+});
 vi.mock("../StagePluginPanels.js", () => ({
   StagePluginPanels: () => <div data-testid="plugin-extension" />,
 }));
@@ -43,6 +54,9 @@ afterEach(() => {
   cleanup();
   clearAllStreamingText();
   stageSlots.items = [];
+  stageSlots.realSprites = false;
+  stageSlots.reduce = true;
+  vi.useRealTimers();
 });
 
 const previousStory: StreamMessage = {
@@ -99,6 +113,42 @@ describe("stage decision lifecycle", () => {
       expect(props.onSendMessage).toHaveBeenCalledWith("Look around");
     },
   );
+
+  it("discards a real sprite lifecycle when its cast provider disappears and mounts recovery fresh", () => {
+    vi.useFakeTimers();
+    stageSlots.realSprites = true;
+    stageSlots.reduce = false;
+    const castSlot = (...ids: string[]) => [
+      {
+        slot: "stage.cast@1",
+        value: {
+          actors: ids.map((id) => ({ characterId: id, displayName: id })),
+          retainWhenEmpty: false,
+        },
+      },
+    ];
+    const props = fixture();
+    stageSlots.items = castSlot("A", "B");
+    const { rerender } = render(<StageView {...props} />);
+    expect(document.querySelectorAll(".ui-stage-sprite")).toHaveLength(2);
+    stageSlots.items = castSlot("A");
+    rerender(<StageView {...props} />);
+    expect(
+      document.querySelector('[data-character-id="B"][data-phase="exit"]'),
+    ).not.toBeNull();
+    stageSlots.items = [];
+    rerender(<StageView {...props} />);
+    expect(screen.queryByTestId("stage-sprites")).toBeNull();
+    expect(screen.getByTestId("stage-decision-input")).toBeDefined();
+    stageSlots.items = castSlot("C");
+    rerender(<StageView {...props} />);
+    expect(document.querySelectorAll(".ui-stage-sprite")).toHaveLength(1);
+    expect(
+      document.querySelector('[data-character-id="C"][data-phase="present"]'),
+    ).not.toBeNull();
+    act(() => vi.advanceTimersByTime(500));
+    expect(document.querySelectorAll(".ui-stage-sprite")).toHaveLength(1);
+  });
 
   it("passes explicit cast focus through to the sprite layer", () => {
     stageSlots.items = [

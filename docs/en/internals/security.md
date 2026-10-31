@@ -23,6 +23,8 @@ Declarative runtimes write only their own datasets and validated character recor
 
 Whole-list refresh retries entries republished by another package’s awaited activation, within a fixed limit, so earlier cache invalidation is checked before producing the list.
 
+A segment template’s `CharacterAvatar` displays only the host-projected speaker’s public portrait. `characterId` must match; it does not query arbitrary sessions or character slots. Host-local enlargement and dismissal grant no plugin action, data-read or write capability and add no approval. Settings, hidden namespaces, concealed output, private actor briefs, continuation and reasoning remain excluded. Departure pixels stay in the renderer, outside snapshots, the bridge and model context. See [Segment templates](../reference/ui-panels.md#segment-templates).
+
 ## Host profile
 
 The server decides once, at startup: it combines the deployment tier, the storage it actually uses and a few switches into a host profile (`apps/server/src/host-profile.ts`) and puts it in every request. Route permission checks, the media routes, the server settings, a request's own model settings and the trace retention all ask it, and no longer read environment variables themselves. `@covel/ai-provider` receives its own part at startup (`configureProviderHostPolicy`). The desktop app always passes `DEPLOYMENT_TIER=self` when it starts the server.

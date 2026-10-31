@@ -354,6 +354,10 @@ pnpm test:runtime -- tavern-rumors --pretty
     "component": "Stack",
     "children": [
       {
+        "component": "CharacterAvatar",
+        "props": { "characterId": { "$state": "/character/id" } }
+      },
+      {
         "component": "Badge",
         "props": { "label": { "$state": "/segment/speaker" } }
       },
@@ -375,7 +379,7 @@ contributes:
       - ./ui/nameplate.json
 ```
 
-`match` 是必填的：`kind` 按段落类型匹配，`speaker` 按角色 ID 或名字匹配。模板只负责显示，不能有按钮和数据来源；没命中模板的段落和以前一样。可读的状态和选择规则见[段落模板](../reference/ui-panels.md#段落模板)。
+`match` 是必填的：`kind` 按段落类型匹配，`speaker` 按角色 ID 或名字匹配。模板只负责显示，不能声明操作按钮和数据来源；上例头像只显示已解析说话人的公开头像，可以用宿主本地预览放大，缺少头像时保留名牌和正文。没命中模板的段落和以前一样。可读的状态和选择规则见[段落模板](../reference/ui-panels.md#段落模板)。
 
 ## 5. 给玩家选项
 

@@ -62,6 +62,8 @@ spec 分在两个 project 里。配置按文件内容自动归类，你不用手
 
 `tests/e2e/plugin-assets-isolation.spec.ts` 在 `chromium-dev` 的 PAGE_CSP 宿主页下检查经典页面资源、注入桥接、sandbox/CSP 隔离，以及内嵌字体可用而无 CORS 的 URL 字体被拒绝。
 
+`tests/e2e/stage-render-followups.spec.ts` 使用打包后的页面、隔离 HTTP 宿主、内置场景选择器与实际对白模板，覆盖离场、满员替换、减少动态效果、头像预览与重新加载；模型输出固定，不访问付费模型。动画使用受控时钟和真实 CSS 动画生命周期。
+
 ### 可访问性用例
 
 ```bash

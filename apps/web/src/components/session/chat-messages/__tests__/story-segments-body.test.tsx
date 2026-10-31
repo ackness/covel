@@ -1,14 +1,40 @@
+import { segmentTemplateMatchSchema } from "@covel/shared";
 import type { ComponentProps } from "react";
 import type { TFunction } from "i18next";
-import { cleanup, render, screen, within } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  within,
+} from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import dialogueLine from "../../../../../../../plugins/scene-stage/ui/dialogue-line.json";
 import type { UISlotEntry } from "@/services/api/plugin-data.js";
 import { SessionStateContext } from "@/stores/session-store/context.js";
 import { initialState } from "@/stores/session-store/reducer.js";
 import type { StreamMessage } from "@/stores/session-store.js";
 import { ChatMessageRenderer } from "../chat-message-renderer.js";
 
-vi.mock("@/stores/ui-slot-store.js", () => ({ useUiSlots: () => [] }));
+const visuals = vi.hoisted(() => ({
+  items: [] as Array<{ key: string; value: unknown }>,
+  mediaProps: [] as unknown[],
+}));
+vi.mock("@/stores/ui-slot-store.js", () => ({
+  useUiSlots: () => visuals.items,
+}));
+vi.mock("@/components/Media.js", () => ({
+  Media: (props: { src: { id: string }; sessionId: string }) => {
+    visuals.mediaProps.push(props);
+    return (
+      <img
+        alt="projected portrait"
+        src={props.src.id}
+        data-session={props.sessionId}
+      />
+    );
+  },
+}));
 // A template whose view names "__throw__" fails to render.
 vi.mock("@json-render/react", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@json-render/react")>();
@@ -22,7 +48,11 @@ vi.mock("@json-render/react", async (importOriginal) => {
   };
 });
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  visuals.items = [];
+  visuals.mediaProps = [];
+});
 
 const t = ((key: string, fallback?: string) => fallback ?? key) as TFunction;
 
@@ -83,7 +113,16 @@ function renderMessage(
     ...initialState,
     segmentUiSpecs: specs,
     gameState: {
-      characters: [{ id: "char-aya", name: "阿雅", type: "companion" }],
+      characters: [
+        {
+          id: "char-aya",
+          name: "阿雅",
+          type: "companion",
+          fields: { secret: "PRIVATE-BRIEF" },
+          description: "HIDDEN-DESCRIPTION",
+        },
+        { id: "char-beth", name: "贝丝", type: "npc" },
+      ],
     },
   };
   return render(
@@ -126,6 +165,68 @@ describe("story segment templates in the chat view", () => {
     expect(parts[2]!.dataset.segmentTemplate).toBe("broken");
     expect(parts[2]!.textContent).toBe("「等等！」");
   });
+
+  it.each(["parsed", "detailed"] as const)(
+    "renders the bundled avatar template and keeps unresolved prose readable in %s",
+    (viewMode) => {
+      const avatar = { id: "a".repeat(64), mime: "image/png", size: 1 };
+      visuals.items = [
+        { key: "char-aya", value: { characterId: "char-aya", avatar } },
+        {
+          key: "char-beth",
+          value: {
+            characterId: "char-beth",
+            avatar: { ...avatar, id: "b".repeat(64) },
+          },
+        },
+      ];
+      renderMessage(story, {
+        viewMode,
+        specs: [
+          {
+            pluginId: "scene-stage",
+            specs: [
+              {
+                ...dialogueLine,
+                label: undefined,
+                match: segmentTemplateMatchSchema.parse(dialogueLine.match),
+              },
+            ],
+          },
+        ],
+      });
+      const body = screen.getByTestId("story-segments");
+      expect(within(body).getByText("阿雅")).toBeDefined();
+      expect(within(body).getByText("「走吧。」")).toBeDefined();
+      expect(within(body).getByText("陌生人")).toBeDefined();
+      expect(within(body).getByText("「等等！」")).toBeDefined();
+      const avatarButton = within(body).getByRole("button", {
+        name: "放大立绘",
+      });
+      expect(within(body).getAllByRole("button")).toHaveLength(1);
+      expect(
+        screen.getByAltText("projected portrait").getAttribute("src"),
+      ).toBe(avatar.id);
+      fireEvent.click(avatarButton);
+      expect(screen.getByRole("dialog")).toBeDefined();
+      for (const image of screen.getAllByAltText("projected portrait")) {
+        expect(image.dataset.session).toBe("s");
+        expect(image.getAttribute("src")).toBe(avatar.id);
+      }
+      fireEvent.click(screen.getByRole("button", { name: "关闭" }));
+      expect(screen.queryByRole("dialog")).toBeNull();
+      expect(document.body.textContent).not.toMatch(
+        /PRIVATE-BRIEF|HIDDEN-DESCRIPTION/,
+      );
+      expect(JSON.stringify(visuals.mediaProps)).not.toMatch(
+        /PRIVATE-BRIEF|HIDDEN-DESCRIPTION|char-beth/,
+      );
+      expect(visuals.mediaProps).toContainEqual(
+        expect.objectContaining({ src: avatar, sessionId: "s" }),
+      );
+      expect(within(body).queryByRole("button", { name: "Send" })).toBeNull();
+    },
+  );
 
   it("leaves components that act or read session data inert", () => {
     vi.spyOn(console, "warn").mockImplementation(() => {});
