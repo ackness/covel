@@ -417,7 +417,7 @@ SqliteStore、MemoryStore 和 PgStore（都在 Node 上）用同一种办法：
 
 [写服务](./plugin-extensions.md#写服务)的一次成功调用暂存为一个**操作**，挂在调用方 run 的结果上，不混进调用方自己的 proposal。操作的写入以提供者的身份（`runtimeId: "service:<服务名>"`）在事务外和其他 proposal 一样准备：proposal 守卫，再逐条跑 PreStateCommit。任何一条被拒，整个操作被拒。
 
-提交时，一个单元里的操作排在**全部成员自己的写入之后**，按调用顺序（`seq`）提交：
+提交时，一个单元里的操作排在**全部成员自己的写入之后**，按调用顺序（`seq`）提交。下游读取也按这个顺序叠加：先处理该单元全部成员自己的写入，再把父调用与所有递归子调用的操作一起按 `seq` 排序，读取依赖记录仍影响最终值的写入方：
 
 | 单元                                       | 操作怎样提交                                        | 一个操作被拒时                                                                                 |
 | ------------------------------------------ | --------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
@@ -440,6 +440,8 @@ SqliteStore、MemoryStore 和 PgStore（都在 Node 上）用同一种办法：
 - `request`、`result`：调用的输入和输出经过 `modelFacingJson`，单个超过 4 KB 的 JSON 时省略并标 `truncated: true`。`summary` 是两者的前 300 个字符。这三处都不含 ID 和时间。
 
 `commit_status` 结算时，`setTurnResultCommitStatus` 的第五个参数把每个操作的最终状态按 ID 写进这一回合的每一行，在提交事务里完成。整次执行回滚时，事务外的 `failed` 结算把全部操作记为 `discarded` / `execution-failed`。`FinalizeExecutionOutcome.operations` 列出同样的结果（`id`、`status`、`reason`、`contract`、`invokedBy`）。
+
+父函数抛错、返回失败或因暂存操作后挂起而被拒绝时，递归子调用的写入不会保留。内核仍保留它们的操作记录，提交时把已经持久化的记录结算为 `discarded` / `caller-dropped`，不会留下永久的 `staged`。整次执行失败时使用上面的 `execution-failed` 原因。
 
 `extraInTx` 的第二个参数给出被丢弃的 runtime。主回合据此不排入依赖它们的 detached 作业和后台事件 follower。仍然排入的 detached 作业，在冻结的 turn digest 和上游结果里把被丢弃的 runtime 记为 `failed`。
 

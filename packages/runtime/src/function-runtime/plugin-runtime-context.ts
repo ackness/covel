@@ -9,6 +9,7 @@ import { withRuntimeTextDefaults } from "./plugin-runtime-gateway.js";
 import { snapshotPlayerInput } from "../turn-executor/turn-digest.js";
 import { pluginMessagesFor } from "@covel/shared";
 import type {
+  DeferredRuntimeJob,
   ExecutionContext,
   InputSlot,
   NestedTurnResult,
@@ -405,7 +406,38 @@ export async function createPluginRuntimeContext({
       // The plugin gets a copy; the kernel keeps and commits the originals,
       // so mutating the returned value cannot change what commits or who
       // owns it.
-      const copy = structuredClone(nested);
+      const withoutOperationWrites = ({
+        operationWrites: _writes,
+        ...result
+      }: RuntimeResult): RuntimeResult => result;
+      const visibleJob = (job: DeferredRuntimeJob): DeferredRuntimeJob => ({
+        ...job,
+        upstreamResults: job.upstreamResults.map(withoutOperationWrites),
+      });
+      const copy = structuredClone({
+        ...nested,
+        runtimeResults: nested.runtimeResults.map(withoutOperationWrites),
+        ...(nested.nestedRuntimeResults
+          ? {
+              nestedRuntimeResults: nested.nestedRuntimeResults.map(
+                withoutOperationWrites,
+              ),
+            }
+          : {}),
+        ...(nested.auditResult
+          ? { auditResult: withoutOperationWrites(nested.auditResult) }
+          : {}),
+        ...(nested.deferredRuntimeJobs
+          ? {
+              deferredRuntimeJobs: nested.deferredRuntimeJobs.map(visibleJob),
+            }
+          : {}),
+        ...(nested.withheldRuntimeJobs
+          ? {
+              withheldRuntimeJobs: nested.withheldRuntimeJobs.map(visibleJob),
+            }
+          : {}),
+      });
       nestedResults.push(...nested.runtimeResults);
       return copy;
     });

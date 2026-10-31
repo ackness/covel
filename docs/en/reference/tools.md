@@ -33,7 +33,7 @@ There are five kinds of tool:
 | **emit-event** | builtin | — | auto-allow | Emit a domain event that the current session has declared (one topic at a time). Advertises a topic enum and per-topic payload schemas | defaults |
 | **suspend** | builtin | — | auto-allow | Describe answers with form fields and suspend the runtime to wait for player input. Writes to the `suspensions` table. Can be resumed through the resume API | defaults |
 | **runtime-done** | builtin | — | auto-allow | The end signal for the agent tool loop. Call it after the business tool calls are done to end this runtime | defaults |
-| **delegate** | builtin | — | auto-allow | Hand one job to a sub-agent and get its output back; the sub-agent writes nothing | `readOnly` |
+| **delegate** | builtin | — | auto-allow | Hand one job to a sub-agent and get its output back; it can stage operations through write services | `stagesWrites` |
 | **search-tools** | injected | — | auto-allow | Deferred tool search. The framework injects it automatically when a manifest declares `tools.defer`. It uses BM25 search to find and activate tools that were not preloaded | — |
 | **memory-search** | builtin | — | auto-allow | Search memory: conversation history and past summaries (recall), plus the long-term knowledge base (archival), which includes lorebook data, characters, and data that plugins declare as searchable | `readOnly`, `idempotent`, `concurrencySafe` |
 | initialize-world | local | world-init | auto-allow | Initialize the world by combining the character attribute schema and the dimension declarations | defaults |
@@ -745,14 +745,14 @@ An agent runtime uses it to hand a job to a [sub-agent](./plugins.md#sub-agents)
 | data      | object | —        | Facts the sub-agent needs, as a JSON object, at most 32 KB                                         |
 | maxSteps  | number | —        | The sub-agent's step limit; it can only be lower than the provider's own                           |
 
-**Output**: on success the model receives `{data: output}`, with output projected through `modelFacingJson`; code still reads the original output. `stopReason` and usage stay on `subagent.completed`. A completing `delegate` passes the original output to the caller's output gate. Failure uses `{error:{code,message,hint?}}`, with the same codes in `tool.failed`. All failures except `invalid-input` retain the `refused` accounting flag.
+**Output**: on success the model receives `{data: output}`. If this delegation staged operations, it also receives `staged: {count, kinds, notice}`, counting only this invocation and explaining that the writes await commit and may be rejected. Output is projected through `modelFacingJson`; code still reads the original output. `stopReason` and usage stay on `subagent.completed`. A completing `delegate` passes the original output to the caller's output gate. Failure uses `{error:{code,message,hint?}}`, with the same codes in `tool.failed`. All failures except `invalid-input` retain the `refused` accounting flag.
 
 **Notes**:
 
 - The kernel answers the call inside the agent loop; the tool itself never runs. It is traced like any tool: `tool.calling` / `tool.completed` / `tool.failed`, with `approvalStatus: auto-allowed`. The sub-agent's events point back to the call with `parentCallId`.
 - Caps: one execution runs at most 8 sub-agents at a time, and a call over the cap gets `unavailable` at once. A sub-agent does not get `delegate`, so it cannot go one level deeper.
-- The sub-agent can use read-only tools only; its write tools are taken away. It makes no proposals, and the caller's commit does not change because of it.
-- It is annotated `readOnly`, but neither `idempotent` nor `concurrencySafe`: two runs give different answers.
+- The sub-agent keeps read-only tools and service imports, including write services when the caller may stage operations. Its operations join the caller's commit unit and are discarded if the sub-agent fails.
+- Its annotations are `readOnly: false`, `stagesWrites: true`, `idempotent: false` and `concurrencySafe: false`.
 
 The contract is declared in `packages/tools/src/builtin/delegate.ts`; the execution logic is in `packages/runtime/src/agent-loop/subagent-delegate.ts` and `subagent-runner.ts`.
 

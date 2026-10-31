@@ -206,6 +206,79 @@ describe.skipIf(!isolatedUrl)("write-service operations on real PG", () => {
     return { outcome, items, gold, persisted, execution };
   }
 
+  it.each(["throw", "failure", "suspend"] as const)(
+    "settles abandoned recursive operations when the parent ends with %s",
+    async (ending) => {
+      const session = `pg-abandoned-${ending}`;
+      const parent = fn("shop", "parent", { stage: "pre-turn" });
+      const child = fn("shop", "child", { trigger: { type: "manual" } });
+      const narrator = fn("narrator", "story", {
+        stage: "narrative",
+        outputKind: "story",
+      });
+      const { outcome, items, gold, persisted, execution } = await run(
+        session,
+        [parent, child, narrator],
+        {
+          [parent.name]: async (ctx) => {
+            await ctx.recursiveCall({
+              manualTrigger: { runtimeId: child.name },
+            });
+            if (ending === "throw") throw new Error("Parent failed");
+            if (ending === "failure")
+              return { outcome: "failed", error: "Parent failed" };
+            return {
+              outcome: "suspended",
+              reason: "Wait",
+              resumeSchema: { type: "object" },
+            };
+          },
+          [child.name]: async (ctx) => {
+            await trade(ctx, "a", 5);
+            await ctx.pluginData!.set("notes", "child", "must not commit");
+            return { outcome: "success", value: {} };
+          },
+          [narrator.name]: async () => ({
+            outcome: "success",
+            value: { narrativeOutput: "The story continues." },
+          }),
+        },
+        100,
+      );
+      expect(
+        execution.commit.results.find(
+          (result) => result.runtimeId === parent.name,
+        )?.status,
+      ).toBe("failed");
+      expect(
+        execution.commit.results.some(
+          (result) => result.runtimeId === child.name,
+        ),
+      ).toBe(false);
+      expect(outcome.status).toBe("committed");
+      expect(outcome.operations).toMatchObject([
+        { status: "discarded", reason: "caller-dropped" },
+      ]);
+      expect(
+        (await persisted()).map((record) => [
+          record.id,
+          record.status,
+          record.reason,
+        ]),
+      ).toEqual(
+        outcome.operations.map((operation) => [
+          operation.id,
+          operation.status,
+          operation.reason,
+        ]),
+      );
+      expect(await items()).toEqual([]);
+      expect(await gold()).toBe(100);
+      expect(await store.listPluginData(session, "shop", "notes")).toEqual([]);
+      expect(await store.listSuspensions(session)).toEqual([]);
+    },
+  );
+
   it("drops a story's conflicting operation whole and commits the others and the story", async () => {
     const narrator = fn("narrator", "story", {
       stage: "narrative",

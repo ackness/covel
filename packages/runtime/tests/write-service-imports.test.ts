@@ -19,8 +19,12 @@ import {
   type RuntimeResult,
   type TurnInput,
 } from "@covel/shared";
-import { suspendTool, tool, ToolRegistry } from "@covel/tools";
-import { commitExecution, executeTurn } from "../src/index.js";
+import { delegateTool, suspendTool, tool, ToolRegistry } from "@covel/tools";
+import {
+  commitExecution,
+  executeTurn,
+  resumeSuspendedRuntime,
+} from "../src/index.js";
 import { PluginServiceRegistry } from "../src/plugin-services.js";
 import { createToolExecutor } from "../src/agent-loop/tool-executor.js";
 import {
@@ -183,6 +187,7 @@ async function fixture() {
   });
   const tools = new ToolRegistry();
   tools.registerBuiltin(suspendTool);
+  tools.registerBuiltin(delegateTool);
   const toolExecutor = createToolExecutor({
     store,
     findTool: (name, context) => tools.find(name, context.pluginId),
@@ -363,6 +368,187 @@ describe("an imported write service", () => {
       await toolExecutor.close();
     }
   });
+
+  it("refuses a write import in the actual agent resume path", async () => {
+    const { services, deps, store, toolExecutor, coins } = await fixture();
+    services.register("bank", payService());
+    const manifest = agent({
+      outputKind: "system",
+      tools: {
+        builtin: ["suspend"],
+        services: [{ contract: CONTRACT, name: "bank-pay" }],
+      },
+    });
+    const { llm, requests } = scripted({
+      [AGENT_MARK]: (index) =>
+        [
+          call("suspend", {
+            reason: "Pay?",
+            fields: [{ type: "text", name: "answer", label: "Answer" }],
+          }),
+          call("bank-pay", { amount: 3 }),
+          text(JSON.stringify({ done: true })),
+        ][index]!,
+    });
+    try {
+      const first = await executeTurn(input, [manifest], deps(llm));
+      expect(resultOf(first).status).toBe("suspended");
+      await commitExecution({
+        store,
+        execution: first,
+        completion: { kind: "turn", turnId: input.turnId, durationMs: 0 },
+      });
+      const [suspension] = await store.listSuspensions(SESSION);
+      const execution = await resumeSuspendedRuntime(
+        suspension!,
+        { answer: "yes" },
+        manifest,
+        deps(llm),
+      );
+      expect(execution.result.status).toBe("success");
+      expect(requests[1]!.tools.map((tool) => tool.name)).not.toContain(
+        "bank-pay",
+      );
+      expect(toolMessage(requests[2])).toMatchObject({
+        error: { code: "unavailable" },
+      });
+      expect(execution.result.operations ?? []).toEqual([]);
+      const outcome = await commitExecution({
+        store,
+        execution,
+        completion: {
+          kind: "resume",
+          turnId: input.turnId,
+          suspensionId: suspension!.id,
+          pluginId: manifest.pluginId,
+          runtimeId: manifest.name,
+        },
+      });
+      expect(outcome.status).toBe("committed");
+      expect(outcome.operations).toEqual([]);
+      expect(
+        (await store.listTurnResults(SESSION))
+          .flatMap((row) => row.runtimeResults as RuntimeResult[])
+          .flatMap((result) => result.operations ?? []),
+      ).toEqual([]);
+      expect(await coins()).toBe(10);
+    } finally {
+      await toolExecutor.close();
+    }
+  });
+
+  it.each([false, true])(
+    "reports only this delegation's operations and discards a failed sub-agent (failure: %s)",
+    async (failure) => {
+      const { services, deps, toolExecutor, store, coins } = await fixture();
+      services.register("bank", payService());
+      const helper: RuntimeManifest = {
+        name: "helper/actor",
+        pluginId: "helper",
+        description: "helper",
+        runtimeType: "agent",
+        outputKind: "system",
+        subagentOnly: true,
+        trigger: { type: "manual" },
+        outputContract: "fixture.helper@1",
+        output: { schema: "output.schema.json" },
+        tools: { services: [{ contract: CONTRACT, name: "bank-pay" }] },
+        maxRetries: 0,
+      };
+      const schema = {
+        type: "object",
+        properties: { line: { type: "string" } },
+        required: ["line"],
+      };
+      const { llm, requests } = scripted({
+        [AGENT_MARK]: (index) => {
+          if (!failure && index === 0) return call("bank-pay", { amount: 1 });
+          if (index === (failure ? 0 : 1))
+            return call("delegate", {
+              target: { contract: "fixture.helper@1" },
+              brief: "Pay the smith.",
+            });
+          return text("The story continues.");
+        },
+        [HELPER_MARK]: (index) => {
+          if (index === 0) return call("bank-pay", { amount: 4 });
+          if (failure) throw new Error("The helper failed after paying");
+          return text(JSON.stringify({ line: "Paid." }));
+        },
+      });
+      try {
+        const main = agent({
+          tools: {
+            builtin: ["delegate"],
+            services: [{ contract: CONTRACT, name: "bank-pay" }],
+          },
+        });
+        const execution = await executeTurn(input, [main, helper], {
+          ...deps(llm),
+          loadRuntime: async (manifest: RuntimeManifest) => ({
+            manifest,
+            promptTemplate: manifest.subagentOnly
+              ? `${HELPER_MARK} You help.`
+              : `${AGENT_MARK} You tell the story.`,
+            ...(manifest.subagentOnly
+              ? { outputSchema: schema, outputContractSchema: schema }
+              : {}),
+          }),
+        });
+        const parentRequests = requests.filter(
+          (request) => request.mark === AGENT_MARK,
+        );
+        expect(
+          toolExecutor.getToolInfo("delegate", context)?.annotations,
+        ).toEqual({
+          readOnly: false,
+          stagesWrites: true,
+          idempotent: false,
+          concurrencySafe: false,
+        });
+        expect(
+          parentRequests[0]!.tools.find((tool) => tool.name === "delegate")
+            ?.description,
+        ).toContain("stage");
+        if (failure) {
+          expect(toolMessage(parentRequests.at(-1))).toMatchObject({
+            error: { code: "internal" },
+          });
+          expect(
+            resultOf(execution).operations?.map((op) => op.status),
+          ).toEqual(["discarded"]);
+        } else {
+          expect(toolMessage(parentRequests.at(-1))).toEqual({
+            data: { line: "Paid." },
+            staged: {
+              count: 1,
+              kinds: ["plugin.data.update"],
+              notice:
+                "Staged: it takes effect when the turn ends and may still be rejected.",
+            },
+          });
+        }
+        const outcome = await commitExecution({
+          store,
+          execution,
+          completion: { kind: "turn", turnId: input.turnId, durationMs: 0 },
+        });
+        expect(outcome.status).toBe("committed");
+        expect(outcome.operations.map((op) => op.status)).toEqual(
+          failure ? ["discarded"] : ["committed", "committed"],
+        );
+        const persisted = (await store.listTurnResults(SESSION))
+          .flatMap((row) => row.runtimeResults as RuntimeResult[])
+          .flatMap((result) => result.operations ?? []);
+        expect(persisted.map((op) => op.status)).toEqual(
+          outcome.operations.map((op) => op.status),
+        );
+        expect(await coins()).toBe(failure ? 10 : 5);
+      } finally {
+        await toolExecutor.close();
+      }
+    },
+  );
 
   it("keeps a sub-agent's write import; its operation lands on the delegating story run", async () => {
     const { services, deps, toolExecutor, store, coins } = await fixture();

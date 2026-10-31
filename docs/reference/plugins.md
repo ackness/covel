@@ -636,7 +636,7 @@ Agent 的副作用只来自工具：模型能写什么，以 `agent.tools` 白�
 - 整体里有故事或 setup runtime 的运行时，不论它在顶层还是嵌套在里面，整体按故事的规则提交：其中任何写入被拒，整次执行回滚。
 - 整体被丢弃时，其中嵌套调用的挂起也一起作废：不保存，也不能恢复，不会替换已有的挂起。本次执行没有别的挂起留下时，这一回合照常结束并计数，被挂起扣住的 detached 作业照常排入。
 
-`ctx.recursiveCall` 返回的是嵌套结果的副本。改动它不会影响提交的内容和归属。
+`ctx.recursiveCall` 返回的是嵌套结果的副本。每个结果（包括展平的后代结果）都不含内核持有的 `operationWrites`，不会把写服务提供者的私有暂存值交给调用方。改动返回值不会影响提交的内容和归属。
 
 `manualTrigger.runtimeId` 只能点名调用者自己包里的 runtime：内联 runtime 用包 ID，多 runtime 包用 `<pluginId>/<runtimeId>`。点名别的包会在嵌套执行开始前报错，错误写明目标 runtime 和调用者的包 ID。内置插件和社区插件遵守同一条规则。
 
@@ -646,7 +646,7 @@ Agent 的副作用只来自工具：模型能写什么，以 `agent.tools` 白�
 
 #### 子 agent
 
-子 agent 是调用方在自己这次执行里运行的另一个 agent runtime。它有自己的对话记录和预算，**只交回输出**：不产生写入、不发事件，也不形成顶层 runtime 结果，所以不会成为提交单位。函数 runtime 用 `ctx.agents.run`，agent runtime 用内置工具 [`delegate`](./tools.md#子-agentdelegate)。
+子 agent 是调用方在自己这次执行里运行的另一个 agent runtime。它有自己的对话记录和预算，**只交回输出**：不产生自己的 proposal、不发事件，也不形成顶层 runtime 结果，所以不会成为提交单位。允许改数据时，它可以通过写服务暂存操作，随委托它的 run 提交；子 agent 失败时这些操作撤回。函数 runtime 用 `ctx.agents.run`，agent runtime 用内置工具 [`delegate`](./tools.md#子-agentdelegate)。
 
 ```ts
 const result = await ctx.agents?.run({

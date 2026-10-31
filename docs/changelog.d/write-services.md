@@ -9,3 +9,9 @@
 
 - **The capability snapshot shows write services.** A write service is recorded as `<contract> (write)`, so a trusted-source package that adds one or turns a service into one asks for approval again. See `docs/reference/plugin-installation.md`.
 - **Operation writes that conflict at commit report `conflict`.** An `update` in a write-service operation that no longer fits the stored value fails with the code `conflict` instead of `data-op-rejected`, and does not count toward pausing a plugin.
+
+### Fixed
+
+- Recursive write-service operations now appear to downstream readers in the same order as commit. Failed parents discard and settle their children's operations, including when suspension is rejected.
+- Recursive-call results no longer expose providers' private staged write payloads.
+- `delegate` advertises that it can stage write-service operations and reports only that invocation's staged count and write kinds to the parent model.

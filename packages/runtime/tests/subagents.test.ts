@@ -985,7 +985,7 @@ describe("sub-agent caps and tool filter", () => {
     expect(runner.inFlight).toBe(0);
   });
 
-  it("keeps read-only and unresolved names, drops writes, suspend and delegate at the cap", () => {
+  it("keeps read-only and unresolved names, drops write tools, suspend and delegate at any depth", () => {
     const registry = makeRegistry();
     const executor = createToolExecutor({
       findTool: (name, context) => registry.find(name, context.pluginId),
@@ -1024,7 +1024,9 @@ describe("sub-agent caps and tool filter", () => {
       datasets: [{ dataset: "npcs", tools: ["get", "list"] }],
       defer: ["peek", "inventory-items", "bank-pay"],
     });
-    expect(at(0)?.builtin).toEqual(["delegate", "get-character"]);
+    // Delegate stages writes, so the read-only filter excludes it below
+    // the depth cap too.
+    expect(at(0)?.builtin).toEqual(["get-character"]);
   });
 });
 

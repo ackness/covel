@@ -51,6 +51,28 @@ describe("operation stage", () => {
     expect(a.record(staged("z", 3)).seq).toBe(3);
   });
 
+  it("retains detached copies of every root's records without private writes", () => {
+    const scope = createOperationExecutionScope();
+    const parent = root(scope);
+    const child = root(scope);
+    parent.record(staged("a", "private parent value"));
+    child.record(staged("b", "private child value"));
+    const nested = child.attachTo({} as RuntimeResult, true);
+    parent.attachTo({} as RuntimeResult, false);
+    const records = scope
+      .records()
+      .slice()
+      .sort((a, b) => a.seq - b.seq);
+    expect(records.map((record) => record.status)).toEqual([
+      "discarded",
+      "staged",
+    ]);
+    expect(JSON.stringify(records)).not.toContain("private");
+    expect(records[1]).toEqual(nested.operations![0]);
+    expect(records[1]).not.toBe(nested.operations![0]);
+    expect(scope.records()[0]).not.toBe(scope.records()[0]);
+  });
+
   it("shows later readers the writes of every live operation for one provider, in call order", () => {
     const stage = root();
     const child = stage.child();

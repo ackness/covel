@@ -28,6 +28,7 @@ import {
   classifyExecutionFaults,
   commitExecution,
   executeTurn,
+  resumeSuspendedRuntime,
 } from "../src/index.js";
 import { PluginServiceRegistry } from "../src/plugin-services.js";
 import type { ProviderDatasets } from "../src/operations/operation-stage.js";
@@ -100,6 +101,7 @@ interface Scenario {
   readonly datasets?: ProviderDatasets;
   readonly withoutSavepoints?: boolean;
   readonly abortReason?: string;
+  readonly services?: (registry: PluginServiceRegistry) => void;
 }
 
 async function run(scenario: Scenario) {
@@ -165,6 +167,7 @@ async function run(scenario: Scenario) {
     output: z.unknown(),
     handler: async (_input, ctx) => ctx.pluginData.get("wallet", "gold"),
   });
+  scenario.services?.(registry);
   const hookPipeline = createHookPipeline();
   if (scenario.veto)
     hookPipeline.register<{ proposal: Proposal }>({
@@ -184,7 +187,7 @@ async function run(scenario: Scenario) {
     origin: "player",
     ...scenario.input,
   };
-  const execution = await executeTurn(input, scenario.runtimes, {
+  const deps = {
     store,
     services: registry,
     hookPipeline,
@@ -196,12 +199,13 @@ async function run(scenario: Scenario) {
             pluginId === "bank" ? scenario.datasets : undefined,
         }
       : {}),
-    loadRuntime: async (runtime) => ({
+    loadRuntime: async (runtime: RuntimeManifest) => ({
       manifest: runtime,
       promptTemplate: "",
       handler: scenario.handlers[runtime.name],
     }),
-  });
+  };
+  const execution = await executeTurn(input, scenario.runtimes, deps);
   await scenario.beforeCommit?.(store);
   if (scenario.withoutSavepoints) {
     const withTransaction = store.withTransaction.bind(store);
@@ -265,6 +269,7 @@ async function run(scenario: Scenario) {
     gold,
     persisted,
     kept,
+    deps,
   };
 }
 
@@ -291,6 +296,124 @@ const buyThree = (narrator = story()) => ({
 
 for (const [backend, create] of BACKENDS) {
   describe(`write-service operations at commit: ${backend}`, () => {
+    it("overlays a recursive unit's own writes before its operations in call order", async () => {
+      const parent = story("shop");
+      const child = fn("shop", "child", { trigger: { type: "manual" } });
+      const reader = fn("bank", "reader");
+      let seen: unknown;
+      const set = (ctx: Ctx, value: number) =>
+        ctx.services!.call({
+          pluginId: "bank",
+          name: "set",
+          contract: "bank.set@1",
+          input: value,
+        });
+      const { store, execution, resultOf, outcome } = await run({
+        create,
+        runtimes: [parent, child, reader],
+        services: (registry) =>
+          registry.register("bank", {
+            name: "set",
+            contract: "bank.set@1",
+            access: "write",
+            input: z.number(),
+            output: z.unknown(),
+            handler: async (value, ctx) => {
+              await ctx.pluginData.set("values", "x", value);
+              return { acknowledged: true };
+            },
+          }),
+        handlers: {
+          [parent.name]: async (ctx) => {
+            await set(ctx, 1);
+            await ctx.recursiveCall({
+              manualTrigger: { runtimeId: child.name },
+            });
+            return ok({ narrativeOutput: "Done." });
+          },
+          [child.name]: async (ctx) => {
+            await set(ctx, 2);
+            return ok();
+          },
+          [reader.name]: async (ctx) => {
+            seen = await ctx.pluginData!.get("values", "x");
+            await ctx.pluginData!.set("derived", "x", seen);
+            return ok();
+          },
+        },
+      });
+      expect(outcome.status).toBe("committed");
+      expect(seen).toBe(2);
+      expect(
+        (await store.getPluginData(SESSION, "bank", "values", "x"))?.value,
+      ).toBe(seen);
+      expect(
+        (await store.getPluginData(SESSION, "bank", "derived", "x"))?.value,
+      ).toBe(seen);
+      expect(
+        execution.commit.readDependencies?.[resultOf(reader.name).runId],
+      ).toEqual([resultOf(child.name).operations![0]!.id]);
+    });
+
+    it.each(["throw", "failure", "suspend"] as const)(
+      "discards persisted recursive operations when the parent ends with %s",
+      async (ending) => {
+        const parent = fn("shop", "parent", { stage: "pre-turn" });
+        const child = fn("shop", "child", { trigger: { type: "manual" } });
+        const narrator = story();
+        const { store, outcome, execution, persisted, items, gold, resultOf } =
+          await run({
+            create,
+            runtimes: [parent, child, narrator],
+            handlers: {
+              [parent.name]: async (ctx) => {
+                await ctx.recursiveCall({
+                  manualTrigger: { runtimeId: child.name },
+                });
+                if (ending === "throw") throw new Error("Parent failed");
+                if (ending === "failure")
+                  return { outcome: "failed", error: "Parent failed" };
+                return {
+                  outcome: "suspended",
+                  reason: "Wait",
+                  resumeSchema: { type: "object" },
+                };
+              },
+              [child.name]: async (ctx) => {
+                await trade(ctx, "a", 5);
+                await ctx.pluginData!.set("notes", "child", "must not commit");
+                return ok();
+              },
+              [narrator.name]: async () =>
+                ok({ narrativeOutput: "The story continues." }),
+            },
+          });
+        expect(resultOf(parent.name).status).toBe("failed");
+        if (ending === "suspend")
+          expect(resultOf(parent.name).error).toBe(
+            `${parent.name} cannot suspend after changing another plugin's data through a write service`,
+          );
+        expect(
+          execution.commit.results.some(
+            (result) => result.runtimeId === child.name,
+          ),
+        ).toBe(false);
+        expect(outcome.status).toBe("committed");
+        expect(settled(outcome.operations)).toEqual([
+          "discarded/caller-dropped",
+        ]);
+        expect(settled(await persisted())).toEqual([
+          "discarded/caller-dropped",
+        ]);
+        expect(await items()).toEqual([]);
+        expect(await gold()).toBe(100);
+        expect(await store.listPluginData(SESSION, "shop", "notes")).toEqual(
+          [],
+        );
+        expect(await store.listSuspensions(SESSION)).toEqual([]);
+      },
+    );
+
     it("commits a story's operations after its writes, dropping a conflicting one whole", async () => {
       const { outcome, items, gold, persisted, store, results } = await run({
         ...buyThree(),
@@ -587,6 +710,70 @@ describe("readers of operation writes", () => {
   });
 });
 
+it("keeps provider-private writes out of recursive results at every depth", async () => {
+  const parent = story("shop");
+  const child = fn("shop", "child", { trigger: { type: "manual" } });
+  const grandchild = fn("shop", "grandchild", {
+    trigger: { type: "manual" },
+  });
+  const seen: unknown[] = [];
+  const { outcome, store } = await run({
+    runtimes: [parent, child, grandchild],
+    services: (registry) =>
+      registry.register("bank", {
+        name: "private",
+        contract: "bank.private@1",
+        access: "write",
+        input: z.object({}),
+        output: z.object({ acknowledged: z.boolean() }),
+        handler: async (_input, ctx) => {
+          await ctx.pluginData.set(
+            "private",
+            "secret",
+            "provider-private-content",
+          );
+          return { acknowledged: true };
+        },
+      }),
+    handlers: {
+      [parent.name]: async (ctx) => {
+        seen.push(
+          await ctx.recursiveCall({
+            manualTrigger: { runtimeId: child.name },
+          }),
+        );
+        return ok({ narrativeOutput: "Done." });
+      },
+      [child.name]: async (ctx) => {
+        seen.push(
+          await ctx.recursiveCall({
+            manualTrigger: { runtimeId: grandchild.name },
+          }),
+        );
+        return ok();
+      },
+      [grandchild.name]: async (ctx) => {
+        return ok({
+          answer: (await ctx.services!.call({
+            pluginId: "bank",
+            name: "private",
+            contract: "bank.private@1",
+            input: {},
+          })) as JsonValue,
+        });
+      },
+    },
+  });
+  expect(seen).toHaveLength(2);
+  expect(JSON.stringify(seen)).toContain('"acknowledged":true');
+  expect(JSON.stringify(seen)).not.toContain("operationWrites");
+  expect(JSON.stringify(seen)).not.toContain("provider-private-content");
+  expect(outcome.operations.map((op) => op.status)).toEqual(["committed"]);
+  expect(
+    (await store.getPluginData(SESSION, "bank", "private", "secret"))?.value,
+  ).toBe("provider-private-content");
+});
+
 describe("provider datasets", () => {
   const datasets: ProviderDatasets = {
     datasets: { wallet: { namespace: "wallet", ops: ["inc", "set"] } },
@@ -719,6 +906,134 @@ describe("where write services cannot be called", () => {
       "Write services cannot be called here.",
     );
     expect(await items()).toEqual([]);
+  });
+
+  it("refuses write services when a queued detached runtime actually executes", async () => {
+    const narrator = story();
+    const worker = fn("shop", "worker", {
+      turnCompletion: { mode: "detached" },
+      effects: { writes: [] },
+    });
+    const attempted = vi.fn(async (ctx: Ctx) => {
+      expect(ctx.activation?.detached).toBe(true);
+      await expect(trade(ctx, "a", 5)).rejects.toMatchObject({
+        code: "unavailable",
+        message: "Write services cannot be called here.",
+      });
+      return ok();
+    });
+    const f = await run({
+      runtimes: [narrator, worker],
+      handlers: {
+        [narrator.name]: async () => ok({ narrativeOutput: "Later." }),
+        [worker.name]: attempted,
+      },
+    });
+    expect(attempted).not.toHaveBeenCalled();
+    expect(f.execution.result.deferredRuntimeJobs).toHaveLength(1);
+    const execution = await executeTurn(
+      {
+        sessionId: SESSION,
+        turnId: "background-turn",
+        playerMessage: "",
+        origin: "background",
+        detachedStage: f.execution.result.deferredRuntimeJobs![0]!,
+      },
+      [narrator, worker],
+      f.deps,
+    );
+    expect(attempted).toHaveBeenCalledTimes(1);
+    expect(execution.result.runtimeResults).toMatchObject([
+      { runtimeId: worker.name, status: "success" },
+    ]);
+    const outcome = await commitExecution({
+      store: f.store,
+      execution,
+      completion: {
+        kind: "turn",
+        turnId: "background-turn",
+        durationMs: 0,
+      },
+    });
+    expect(outcome.status).toBe("committed");
+    expect(outcome.operations).toEqual([]);
+    expect(await f.persisted()).toEqual([]);
+    expect(await f.items()).toEqual([]);
+    expect(await f.gold()).toBe(100);
+  });
+
+  it("refuses write services in a background manual execution", async () => {
+    const worker = fn("shop", "worker", { trigger: { type: "manual" } });
+    const attempt = vi.fn(async (ctx: Ctx) => {
+      await expect(trade(ctx, "a", 5)).rejects.toMatchObject({
+        code: "unavailable",
+      });
+      return ok();
+    });
+    const f = await run({
+      runtimes: [worker],
+      input: {
+        origin: "background",
+        manualTrigger: { runtimeId: worker.name },
+      },
+      handlers: { [worker.name]: attempt },
+    });
+    expect(attempt).toHaveBeenCalledTimes(1);
+    expect(f.resultOf(worker.name).status).toBe("success");
+    expect(f.outcome.operations).toEqual([]);
+    expect(await f.persisted()).toEqual([]);
+    expect(await f.gold()).toBe(100);
+    expect(await f.items()).toEqual([]);
+  });
+
+  it("refuses write services after a suspended function actually resumes", async () => {
+    const worker = fn("shop", "worker");
+    let calls = 0;
+    const f = await run({
+      runtimes: [worker],
+      input: { origin: "manual" },
+      handlers: {
+        [worker.name]: async (ctx) => {
+          if (calls++ === 0)
+            return {
+              outcome: "suspended",
+              reason: "Confirm",
+              resumeSchema: { type: "object" },
+            };
+          await expect(trade(ctx, "a", 5)).rejects.toMatchObject({
+            code: "unavailable",
+            message: "Write services cannot be called here.",
+          });
+          return ok();
+        },
+      },
+    });
+    const [suspension] = await f.store.listSuspensions(SESSION);
+    expect(suspension).toBeDefined();
+    const execution = await resumeSuspendedRuntime(
+      suspension!,
+      {},
+      worker,
+      f.deps,
+    );
+    expect(calls).toBe(2);
+    expect(execution.result.status).toBe("success");
+    const outcome = await commitExecution({
+      store: f.store,
+      execution,
+      completion: {
+        kind: "resume",
+        turnId: suspension!.turnId,
+        suspensionId: suspension!.id,
+        pluginId: worker.pluginId,
+        runtimeId: worker.name,
+      },
+    });
+    expect(outcome.status).toBe("committed");
+    expect(outcome.operations).toEqual([]);
+    expect(await f.persisted()).toEqual([]);
+    expect(await f.gold()).toBe(100);
+    expect(await f.items()).toEqual([]);
   });
 
   it("gives no stage to detached, background or resumed runs, or to agents that can suspend", () => {

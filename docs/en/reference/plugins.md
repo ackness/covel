@@ -636,7 +636,7 @@ At commit, a top-level runtime and the nested calls at every level below it are 
 - When the unit holds a run of a story or setup runtime, at top level or nested inside, the unit commits under the story rule: when any of its writes is rejected, the whole execution rolls back.
 - When a unit is discarded, the suspensions of its nested calls are void too: they are not saved, cannot be resumed, and do not replace an existing suspension. When the execution leaves no other suspension, the turn ends and counts as usual, and the detached jobs the suspension held back are queued as usual.
 
-`ctx.recursiveCall` returns a copy of the nested result. Changing it does not change what commits or who owns it.
+`ctx.recursiveCall` returns a copy of the nested result. Every result, including flattened descendants, omits the kernel-held `operationWrites`, keeping write-service providers' private staged values out of the caller's result. Changing the returned value does not change what commits or who owns it.
 
 `manualTrigger.runtimeId` may only name a runtime in the caller's own package: the package ID for an inline runtime, or `<pluginId>/<runtimeId>` for a multi-runtime package. A target in another package throws before the nested execution starts. The error names the target runtime and the caller's package ID. Bundled and community plugins follow the same rule.
 
@@ -646,7 +646,7 @@ A `manualTrigger.runtimeId` that names a `schedule.subagentOnly` runtime is an e
 
 #### Sub-agents
 
-A sub-agent is another agent runtime that the caller runs inside its own execution. It has its own transcript and budget and **returns output only**: it makes no writes, emits no events and forms no top-level runtime result, so it is never a commit unit. A function runtime uses `ctx.agents.run`; an agent runtime uses the builtin tool [`delegate`](./tools.md#sub-agents-delegate).
+A sub-agent is another agent runtime that the caller runs inside its own execution. It has its own transcript and budget and **returns output only**: it makes no proposals of its own, emits no events and forms no top-level runtime result, so it is never a commit unit. When writes are allowed, it can stage operations through write services that commit with the delegating run; those operations are discarded if the sub-agent fails. A function runtime uses `ctx.agents.run`; an agent runtime uses the builtin tool [`delegate`](./tools.md#sub-agents-delegate).
 
 ```ts
 const result = await ctx.agents?.run({
