@@ -57,7 +57,7 @@ This page lists every endpoint, request field, response, and error code. Use it 
 - An approval decision first checks that `decision` and `scope` are valid values. Only then is the pending approval used up.
 - An event injection first checks that each identifier is a string and that `payload` is an object. Only then is the event published.
 
-Plugin summaries expose `acceptsWorldData`; world plans add `selection.requiredDataContracts` and safe `dataNotices`. Creation derives requirements on the server and stores `metadata.pluginSelection.requiredDataContracts`, independent of client hints. Preflight accepts `excludedPlugins`. Stale creation returns `409 world_data_create_plan_stale`. See [receiver rules](./world-data.md#data-receivers).
+Plugin summaries expose `acceptsWorldData`; world plans add `selection.requiredDataContracts` and safe `dataNotices`. Creation derives requirements on the server and stores `metadata.pluginSelection.requiredDataContracts`, independent of client hints. Preflight accepts `excludedPlugins`. Stale creation returns `409 world_data_create_plan_stale` with `details.reason`: `world_content_changed`, `world_files_changed`, `plugin_manifest_changed` or `plugin_authorization_changed`, identifying a change to this world’s record content, package files, or the registered identity or authorization of a plugin used by the plan. These diagnostics contain no world or plugin IDs. See [receiver rules](./world-data.md#data-receivers).
 
 World-data import failures return fixed text and `world_data_import_failed`, including in development. Author diagnostics remain in server logs.
 

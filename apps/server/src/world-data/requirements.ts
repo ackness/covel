@@ -1,7 +1,8 @@
 import { readdir, stat } from "node:fs/promises";
 import { createHash } from "node:crypto";
 import path from "node:path";
-import type { PluginRegistry } from "@covel/plugin-loader";
+import type { PluginRegistry, PluginRegistryEntry } from "@covel/plugin-loader";
+import { createRevisionCache } from "./revision-cache.js";
 import {
   parseWorldDataTarget,
   isReservedWorldPackagePath,
@@ -67,25 +68,23 @@ export async function worldDataRevision(
   overrideRoot?: string,
 ): Promise<string> {
   const digest = createHash("sha256");
-  let count = 0;
-  async function visit(relative: string, depth: number): Promise<void> {
-    if (depth > 12 || ++count > 4096)
-      throw new Error("World package inventory exceeds its scan limit");
+  const pending = [{ relative: "", depth: 0 }];
+  const fingerprints: { relative: string; value: string }[] = [];
+  async function visit({ relative, depth }: (typeof pending)[number]) {
     const full = relative
       ? await resolveContainedPath(root, relative, { rejectSymlinks: true })
       : root;
     if (!full) return;
     const info = await stat(full, { bigint: true });
-    digest.update(
-      JSON.stringify([
-        relative,
-        info.dev.toString(),
-        info.ino.toString(),
-        info.size.toString(),
-        info.mtimeNs.toString(),
-        info.ctimeNs.toString(),
-      ]),
-    );
+    const value = JSON.stringify([
+      relative,
+      info.dev.toString(),
+      info.ino.toString(),
+      info.size.toString(),
+      info.mtimeNs.toString(),
+      info.ctimeNs.toString(),
+    ]);
+    const children: typeof pending = [];
     if (info.isDirectory()) {
       for (const entry of (await readdir(full, { withFileTypes: true })).sort(
         (a, b) => a.name.localeCompare(b.name),
@@ -94,10 +93,36 @@ export async function worldDataRevision(
           ![".git", "node_modules"].includes(entry.name) &&
           !entry.isSymbolicLink()
         )
-          await visit(path.posix.join(relative, entry.name), depth + 1);
+          children.push({
+            relative: path.posix.join(relative, entry.name),
+            depth: depth + 1,
+          });
+    }
+    return { relative, value, children };
+  }
+  // This check also runs under the world mutation lock before creation commits.
+  // Bound parallel filesystem work so independent paths do not serialize starts.
+  const concurrency = 16;
+  let offset = 0;
+  while (offset < pending.length) {
+    const batch = pending.slice(offset, offset + concurrency);
+    offset += batch.length;
+    const results = await Promise.all(batch.map(visit));
+    for (const result of results) {
+      if (!result) continue;
+      fingerprints.push({ relative: result.relative, value: result.value });
+      for (const child of result.children) {
+        if (child.depth > 12 || pending.length >= 4096)
+          throw new Error("World package inventory exceeds its scan limit");
+        pending.push(child);
+      }
     }
   }
-  await visit("", 0);
+  // Completion order must not affect the revision used by the commit fence.
+  for (const fingerprint of fingerprints.sort((a, b) =>
+    a.relative.localeCompare(b.relative),
+  ))
+    digest.update(fingerprint.value);
   if (overrideRoot) {
     digest.update("overrides");
     const override = await stat(overrideRoot).catch(() => undefined);
@@ -172,7 +197,7 @@ export async function unclaimedStructuredData(
   return diagnostics;
 }
 
-export async function inventoryWorldData(options: {
+interface InventoryWorldDataOptions {
   readonly world?: {
     readonly dimensions?: unknown;
     readonly id?: string;
@@ -184,8 +209,69 @@ export async function inventoryWorldData(options: {
   readonly covelHome?: string;
   readonly registry: Pick<PluginRegistry, "get" | "getAll">;
   readonly locale?: string;
-}): Promise<WorldDataRequirements> {
+}
+
+const readCachedInventory = createRevisionCache<WorldDataRequirements>(64);
+const entryGenerations = new WeakMap<PluginRegistryEntry, number>();
+let nextEntryGeneration = 0;
+
+function entryGeneration(entry: PluginRegistryEntry): number {
+  let generation = entryGenerations.get(entry);
+  if (generation === undefined) {
+    generation = ++nextEntryGeneration;
+    entryGenerations.set(entry, generation);
+  }
+  return generation;
+}
+
+export async function inventoryWorldData(
+  options: InventoryWorldDataOptions,
+): Promise<WorldDataRequirements> {
   const entries = new Map(options.registry.getAll());
+  const worldRoot =
+    options.worldRoot ??
+    (options.worldsDirs?.length
+      ? await resolveWorldRoot(options.worldId, options.worldsDirs)
+      : null);
+  const overrideRoot = options.covelHome
+    ? path.join(options.covelHome, "world-overrides", options.worldId)
+    : undefined;
+  // Check disk on every request: the watcher is debounced and may not run at all
+  // for an explicit package root. The commit boundary checks this revision again.
+  const revision = worldRoot
+    ? await worldDataRevision(worldRoot, overrideRoot)
+    : undefined;
+  const metadata = options.world?.metadata;
+  const dimensions = options.world?.dimensions ?? metadata?.dimensions;
+  return readCachedInventory(
+    JSON.stringify([options.worldId, worldRoot, overrideRoot, options.locale]),
+    JSON.stringify([
+      revision,
+      dimensions,
+      metadata?.contractData,
+      metadata?.embeddedCharacters,
+      [...entries].map(([id, entry]) => [id, entryGeneration(entry)]),
+    ]),
+    () =>
+      buildWorldDataInventory(
+        {
+          ...options,
+          registry: { get: (id) => entries.get(id), getAll: () => entries },
+        },
+        worldRoot,
+        overrideRoot,
+        revision,
+      ),
+  );
+}
+
+async function buildWorldDataInventory(
+  options: InventoryWorldDataOptions,
+  worldRoot: string | null,
+  overrideRoot: string | undefined,
+  revision: string | undefined,
+): Promise<WorldDataRequirements> {
+  const entries = options.registry.getAll();
   const publicTitles = new Map<string, Set<string>>();
   for (const plugin of entries.values())
     for (const data of Object.values(
@@ -208,19 +294,8 @@ export async function inventoryWorldData(options: {
     get: (id: string) => entries.get(id),
     getAll: () => entries,
   };
-  const worldRoot =
-    options.worldRoot ??
-    (options.worldsDirs?.length
-      ? await resolveWorldRoot(options.worldId, options.worldsDirs)
-      : null);
   const metadata = options.world?.metadata;
   const dimensions = options.world?.dimensions ?? metadata?.dimensions;
-  const overrideRoot = options.covelHome
-    ? path.join(options.covelHome, "world-overrides", options.worldId)
-    : undefined;
-  const revision = worldRoot
-    ? await worldDataRevision(worldRoot, overrideRoot)
-    : undefined;
   const diagnostics: WorldDataDiagnostic[] = [];
   let sources: readonly OrderedWorldDataSource[];
   let descriptor: WorldDataRequirements["descriptor"];

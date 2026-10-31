@@ -1,5 +1,15 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import {
+  mkdtemp,
+  mkdir,
+  readFile,
+  rename,
+  rm,
+  stat,
+  symlink,
+  utimes,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { readWorldDataSource } from "../../src/world-data/source-reader.js";
@@ -49,6 +59,72 @@ function source(root: string, relative: string): OrderedWorldDataSource {
     },
   };
 }
+
+it("refreshes cached manifest editions and overlays on disk changes and isolates readers", async () => {
+  const root = await world({
+    "world.yaml": "name: Original\ndefaultLocale: zh-CN\n",
+    "world.en-US.yaml": "name: English\n",
+  });
+  const first = await readWorldManifestSource(root);
+  expect(first.raw).toMatchObject({
+    name: { "zh-CN": "Original", "en-US": "English" },
+  });
+  Object.assign(first.raw as object, { name: "mutated" });
+  expect((await readWorldManifestSource(root)).raw).toMatchObject({
+    name: { "zh-CN": "Original", "en-US": "English" },
+  });
+
+  const overlay = path.join(root, "world.en-US.yaml");
+  const before = await stat(overlay);
+  await writeFile(overlay, "name: Changed\n");
+  await utimes(overlay, before.atime, before.mtime);
+  expect((await readWorldManifestSource(root)).raw).toMatchObject({
+    name: { "en-US": "Changed" },
+  });
+  await writeFile(path.join(root, "WORLD.fr-FR.md"), "French lore");
+  expect((await readWorldManifestSource(root)).editions).toContain("fr-FR");
+  await rm(overlay);
+  expect((await readWorldManifestSource(root)).raw).toMatchObject({
+    name: "Original",
+  });
+  await writeFile(
+    path.join(root, "replacement.yaml"),
+    "name: Replaced\ndefaultLocale: en-US\n",
+  );
+  await rename(
+    path.join(root, "replacement.yaml"),
+    path.join(root, "world.yaml"),
+  );
+  expect((await readWorldManifestSource(root)).raw).toMatchObject({
+    name: "Replaced",
+  });
+});
+
+it("refreshes cached source values and retains symlink refusal after a successful read", async () => {
+  const root = await world({
+    "data/items.yaml": "- id: item\n  name: Before\n",
+  });
+  const items = source(root, "data/items.yaml");
+  const first = await readWorldDataSource(items);
+  Object.assign((first.value as object[])[0]!, { name: "mutated" });
+  expect((await readWorldDataSource(items)).value).toEqual([
+    { id: "item", name: "Before" },
+  ]);
+  const file = path.join(root, "data/items.yaml");
+  const before = await stat(file);
+  await writeFile(file, "- id: item\n  name: After!\n");
+  await utimes(file, before.atime, before.mtime);
+  expect((await readWorldDataSource(items)).value).toEqual([
+    { id: "item", name: "After!" },
+  ]);
+  await rename(file, path.join(root, "data/target.yaml"));
+  await symlink(path.join(root, "data/target.yaml"), file);
+  const linked = await readWorldDataSource(items);
+  expect(linked.value).toBeUndefined();
+  expect(linked.diagnostics).toContainEqual(
+    expect.objectContaining({ level: "error" }),
+  );
+});
 
 const ITEMS = `
 - id: lantern
