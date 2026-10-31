@@ -155,6 +155,7 @@ export const pluginUiSpecSchema = z
     shortLabel: i18nTextSchema.optional(),
     description: i18nTextSchema.optional(),
     bridge: z.literal("session").optional(),
+    surface: z.enum(["main", "composer"]).optional(),
     capabilities: z
       .array(sessionBridgeCapabilitySchema)
       .max(5)
@@ -245,11 +246,14 @@ export const pluginUiSpecSchema = z
     }
     const hasView = spec.view !== undefined && spec.view !== null;
     const hasWebview = spec.webview !== undefined && spec.webview !== null;
-    if (Object.hasOwn(spec, "surface"))
+    if (
+      spec.surface !== undefined &&
+      (!hasWebview || spec.bridge !== "session")
+    )
       ctx.addIssue({
         code: "custom",
         path: ["surface"],
-        message: "unknown UI spec field",
+        message: "surface requires a webview with bridge: session",
       });
     if (
       spec.capabilities !== undefined &&
@@ -403,6 +407,11 @@ export function pluginUiSpecIssues(
       issues.push({
         path: "capabilities",
         message: "capabilities are only valid in contributes.ui.view",
+      });
+    if (slot !== "view" && record.surface !== undefined)
+      issues.push({
+        path: "surface",
+        message: "surface is only valid in contributes.ui.view",
       });
     if (slot === "segment") issues.push(...segmentTemplateIssues(record));
     const sessionWidgets = new Set<string>();

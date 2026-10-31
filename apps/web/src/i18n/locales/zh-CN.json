@@ -540,7 +540,14 @@
       "openPanel": "打开此插件的面板"
     },
     "revokeViewCapability": "撤销：{{capability}}",
-    "viewOpenInteraction": "在默认界面中打开交互"
+    "viewOpenInteraction": "在默认界面中打开交互",
+    "surfaceComposer": "输入框",
+    "surfaceMain": "主视图",
+    "surfaceDefault": "框架默认",
+    "surfaceReturn": "切回默认界面",
+    "surfaceStop": "停止",
+    "surfaceRecovery": "交互与恢复",
+    "surfaceFailed": "“{{label}}”未能继续响应，已显示默认界面。"
   },
   "blocks": {
     "actionPlaceholder": "或输入自定义行动...",

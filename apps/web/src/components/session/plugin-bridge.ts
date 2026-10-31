@@ -46,6 +46,7 @@ export interface PluginBridgeHost {
 export interface PluginBridge {
   pushState(state: Readonly<Record<string, unknown>>): void;
   pushStream(seq: number, append: string): void;
+  ping(id: number): void;
   close(): void;
 }
 
@@ -63,7 +64,11 @@ export function connectPluginBridge(
   target: Pick<Window, "postMessage">,
   html: string | undefined,
   host: () => PluginBridgeHost,
-  options?: { onReady?: () => void },
+  options?: {
+    onReady?: () => void;
+    onPageError?: () => void;
+    onPong?: (id: number) => void;
+  },
 ): PluginBridge {
   const channel = new MessageChannel();
   const port = channel.port1;
@@ -78,6 +83,22 @@ export function connectPluginBridge(
     reply({ type: "result", id, error: "Plugin UI action failed" });
   port.onmessage = async ({ data }: MessageEvent<unknown>) => {
     if (!active()) return;
+    if (data && typeof data === "object" && "type" in data) {
+      if (data.type === "page-error") {
+        options?.onPageError?.();
+        return;
+      }
+      if (data.type === "pong") {
+        const parsed = z
+          .strictObject({
+            type: z.literal("pong"),
+            id: z.number().int().positive().safe(),
+          })
+          .safeParse(data);
+        if (parsed.success) options?.onPong?.(parsed.data.id);
+        return;
+      }
+    }
     if (
       data &&
       typeof data === "object" &&
@@ -136,6 +157,7 @@ export function connectPluginBridge(
   );
   reply({ type: "state", value: host().state });
   return {
+    ping: (id) => reply({ type: "ping", id }),
     pushState: (state) => reply({ type: "state", value: state }),
     pushStream: (seq, append) => {
       if (Number.isSafeInteger(seq) && seq > 0 && append)

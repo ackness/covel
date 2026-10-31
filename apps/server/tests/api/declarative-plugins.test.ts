@@ -8,6 +8,7 @@ import {
   pluginSummarySchema,
   readRuntimeEnv,
   type LLMAdapter,
+  type SessionSnapshot,
 } from "@covel/shared";
 import { createMemoryStore } from "@covel/store/memory";
 import {
@@ -216,6 +217,16 @@ it.each([false, true])(
     expect(
       (await api!.store.getPluginData(sessionId, id, "notes", "harbor"))?.value,
     ).toEqual({ id: "harbor", text: "We reached the harbor." });
+    const restored = await request(`/api/sessions/${sessionId}/view`);
+    expect(restored.status, await restored.clone().text()).toBe(200);
+    const snapshot = (await restored.json()) as SessionSnapshot;
+    expect(snapshot.session.completedPlayerTurns).toBe(1);
+    expect(snapshot.messages).toContainEqual(
+      expect.objectContaining({
+        role: "user",
+        content: "We reached the harbor.",
+      }),
+    );
     await assertNoGrants();
     expect(
       (await request(`/api/sessions/${sessionId}/plugins/${id}`, "DELETE"))

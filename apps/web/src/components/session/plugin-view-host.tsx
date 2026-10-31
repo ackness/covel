@@ -1,5 +1,5 @@
 import type { SessionBridgeGrant } from "@covel/shared";
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { ShieldOff } from "lucide-react";
 import { Button } from "@/components/ui/button.js";
@@ -62,8 +62,9 @@ export function PluginViewHost({
       aria-label={entry.label}
     >
       <div
-        className="flex shrink-0 flex-wrap items-center gap-2 border-b px-3 py-2 text-xs"
+        className="relative z-10 flex shrink-0 flex-wrap items-center gap-2 border-b bg-background px-3 py-2 text-xs"
         data-testid="plugin-view-bar"
+        data-covel-host-controls=""
       >
         <strong>{entry.label}</strong>
         <span className="hidden text-muted-foreground sm:inline">
@@ -157,6 +158,7 @@ export function PluginViewHost({
                     : undefined
                 }
                 onRenderError={failed}
+                onPageFailure={failed}
                 onRetry={onRetry}
               />
             )}
@@ -187,12 +189,13 @@ function ConsentedView({
   const bridge = useSessionBridgeActions(entry, sessionId, isCurrent);
   const { t } = useTranslation();
   retire.current = bridge.retire;
+  useEffect(() => {
+    if (!bridge.projection) failed();
+  }, [bridge.projection, failed]);
   if (!bridge.projection) return null;
   return (
     <>
-      {bridge.projection.pending.some(
-        (item) => item.interaction.type === "unavailable",
-      ) && (
+      {bridge.projection.pending.length > 0 && (
         <Button onClick={openInteraction}>
           {t("session.viewOpenInteraction")}
         </Button>
@@ -204,6 +207,7 @@ function ConsentedView({
         expanded
         fill
         onRenderError={failed}
+        onPageFailure={failed}
         onRetry={onRetry}
         sessionBridge={{
           projection: bridge.projection,

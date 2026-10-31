@@ -9,5 +9,9 @@
     "abortExecution",
     "openPanel"
   ],
-  "webview": { "root": "./ui/app", "entry": "index.html" }
+  "webview": {
+    "root": "./ui/app",
+    "entry": "index.html"
+  },
+  "surface": "composer"
 }

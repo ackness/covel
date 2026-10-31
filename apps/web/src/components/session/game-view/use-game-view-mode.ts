@@ -19,11 +19,18 @@ export function useGameViewMode(
   world: World,
   views?: PluginViews,
   canUse?: (entry: PluginViewEntry) => boolean,
+  scope = "",
 ) {
   const [storedMode, setViewMode] = useState<GameViewMode>(() =>
     worldViewMode(world),
   );
   const [awaitingWorld, setAwaitingWorld] = useState(!world);
+  const [visit, setVisit] = useState(scope);
+  if (visit !== scope) {
+    setVisit(scope);
+    setAwaitingWorld(!world);
+    setViewMode(worldViewMode(world));
+  }
   if (awaitingWorld && world) {
     setAwaitingWorld(false);
     setViewMode(worldViewMode(world));
@@ -32,7 +39,9 @@ export function useGameViewMode(
     (mode: GameViewMode) => {
       if (
         parsePluginViewMode(mode) &&
-        !views?.views.some((entry) => entry.mode === mode)
+        !views?.views.some(
+          (entry) => entry.mode === mode && entry.spec.surface !== "composer",
+        )
       )
         return;
       setAwaitingWorld(false);
@@ -41,7 +50,9 @@ export function useGameViewMode(
     [views],
   );
   const pluginMode = parsePluginViewMode(storedMode);
-  const entry = views?.views.find((entry) => entry.mode === storedMode);
+  const entry = views?.views.find(
+    (entry) => entry.mode === storedMode && entry.spec.surface !== "composer",
+  );
   const consentView =
     views?.status === "ready" && entry && canUse && !canUse(entry)
       ? entry
@@ -53,6 +64,7 @@ export function useGameViewMode(
     choose,
     {
       hostDefault: hostDefault(world),
+      requestedMode: storedMode,
       fellBack: Boolean(
         pluginMode &&
         views &&

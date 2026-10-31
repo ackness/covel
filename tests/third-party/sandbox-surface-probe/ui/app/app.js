@@ -1,4 +1,15 @@
 (() => {
+  // A responsive document with deliberately missing heartbeat replies.
+  let ignoreHeartbeat = false;
+  const start = MessagePort.prototype.start;
+  MessagePort.prototype.start = function () {
+    const receive = this.onmessage;
+    this.onmessage = (event) => {
+      if (ignoreHeartbeat && event.data?.type === "ping") return;
+      receive?.call(this, event);
+    };
+    return start.call(this);
+  };
   const find = (id) => document.getElementById(id);
   const draft = find("draft"),
     outcome = find("outcome");
@@ -106,6 +117,24 @@
       find("interactions").append(section);
     }
   });
+  find("page-error").onclick = () => {
+    setTimeout(() => {
+      throw new Error("Probe page error");
+    });
+  };
+  find("rejection").onclick = () => {
+    void Promise.reject(new Error("Probe rejection"));
+  };
+  find("unresponsive").onclick = () => {
+    ignoreHeartbeat = true;
+  };
+  find("navigate").onclick = () => {
+    location.href = "about:blank";
+  };
+  find("fill").onclick = () => {
+    document.documentElement.classList.add("fill");
+    document.body.classList.add("fill");
+  };
   find("submit").onclick = async () => {
     const seat = session?.input.seats.find((item) =>
       item.allowed.includes("say"),

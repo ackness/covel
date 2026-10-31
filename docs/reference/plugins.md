@@ -1506,3 +1506,7 @@ runtime:
 ## 静态主题声明
 
 `contributes.ui.theme: [./ui/reading-theme.json]` 声明受限静态主题。它可单独存在于无 runtime、无 entry 的包中，不是 view/webview。CLI、应用内校验、ZIP 安装和发现共用同一编译器；坏主题只在发现响应中被移除并返回 `slot: "theme"` 诊断。字段、安全边界与资源限制见[插件主题契约](./theme-packages.md#插件提供的受限主题)。当前只提供作者与 API 支持，尚无玩家启用入口。
+
+## 沙箱系统区域
+
+沙箱区域继续使用 `contributes.ui.view` 的 spec 路径，单数 surface 选择主视图或输入框；不增加 placement、runtime 触发类型或提案种类。所属手动 runtime 的调用仍经审批、提案和提交。声明、授权、组合与失效规则见[沙箱主视图与输入框](./ui-panels.md#沙箱主视图与输入框)。

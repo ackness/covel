@@ -141,6 +141,14 @@ test("a declarative community notebook commits without grants, retains content c
     });
     expect(status.serverCodeApprovedBy).toBeUndefined();
 
+    // The API client consumed the turn stream; reload the browser's own session history.
+    await page.reload();
+    await expect(
+      page
+        .locator('[data-role="user"]')
+        .filter({ hasText: "We reached the harbor." }),
+    ).toBeVisible();
+
     const openView = async () => {
       await page
         .getByRole("button", { name: "Plugin views", exact: true })
@@ -167,10 +175,16 @@ test("a declarative community notebook commits without grants, retains content c
         exact: true,
       })
       .click();
-    const view = page
-      .getByTestId("plugin-view-container")
-      .frameLocator("iframe")
-      .frameLocator("iframe");
+    const container = page.getByTestId("plugin-view-container");
+    await expect(container.locator("iframe")).toHaveAttribute(
+      "src",
+      /\/plugin-assets\/declarative-notebook\/[a-f0-9]{32}\/index\.html$/,
+    );
+    await expect(container.locator("iframe")).toHaveAttribute(
+      "sandbox",
+      "allow-scripts",
+    );
+    const view = container.frameLocator("iframe");
     await expect(view.locator("#script-status")).toHaveText(
       "Notebook browser script loaded",
     );

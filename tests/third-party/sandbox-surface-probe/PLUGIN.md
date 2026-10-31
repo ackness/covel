@@ -1,5 +1,5 @@
 ---
-version: 0.1.0
+version: 0.1.1
 displayName: Sandbox bridge probe
 description: Public session actions and proposal writes from an isolated page.
 contributes:
@@ -15,6 +15,6 @@ contributes:
 
 # Sandbox bridge probe
 
-Two ordinary session views share a classic-script page. The manual function
+Two independently selected session surfaces share a classic-script page. The manual function
 runtime is server code and requires its normal approval independently of page
 capability consent.

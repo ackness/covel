@@ -1495,7 +1495,7 @@ runtime 的终态：
 
 声明式 [SessionMessages / SessionComposer](./ui-components.md#实时会话视图组件) 由宿主直接渲染，不使用此端口。输入复用 `submit_actions` 的玩家来源行动和现有交互协议，拒绝或忙碌时保留草稿；UI 回调不是插件 RPC，也不代表已经提交。
 
-插件视图复用沙箱的 MessagePort：完整 `{ type: "state", value }` 在 `value.session` 中带会话投影，流式消息是 `{ type: "stream", seq, append }`。这不是新的 HTTP 或 SSE 端点。读取能力在首次挂载前取得玩家授权，绑定插件 ID 与 spec + HTML 内容哈希；撤销后关闭页面。既有页面 action handler 不变。投影、节流与授权规则统一见[插件视图](./ui-panels.md#插件视图)。
+插件视图复用沙箱的 MessagePort：完整 `{ type: "state", value }` 在 `value.session` 中带会话投影，流式消息是 `{ type: "stream", seq, append }`。这不是新的 HTTP 或 SSE 端点。读取能力在首次挂载前取得玩家授权，绑定插件 ID 与 spec + HTML 内容哈希；撤销后关闭页面。会话页面只暴露逐项授权、经 schema 校验的公开方法与安全结果；普通面板处理器保持独立。投影、节流与授权规则统一见[插件视图](./ui-panels.md#插件视图)。
 
 <a id="auto-advance-events"></a>
 
@@ -1552,3 +1552,7 @@ runtime 的终态：
 ## 沙箱会话页面协议
 
 普通会话 webview 使用单一 MessagePort，公开投影升级到版本 2；`pending[].interaction` 和当前 frame 的不透明句柄替代原始 block，`input` 提供人类座位和当前可用行动。逐能力授权后，页面可请求玩家行动、交互回答、所属插件的手动 runtime、停止和所属面板导航。回复仅含固定安全结果，不传递执行内部对象。协议、上限、重放限制与失效规则的唯一字段表见[会话界面桥](./ui-panels.md#sessionprojection版本-2)。正常 HTTP/SSE 协议和服务端鉴权、提案提交保持原边界。
+
+## 沙箱区域生命周期
+
+主视图和输入框共用已有公开会话协议；ready、固定 page-error、带递增 id 的 ping/pong 与关闭信号使用同一 MessagePort，没有新增 HTTP/SSE 通道。每个 frame 的租约和句柄独立，失效后不能发送投影、追加或回复。协议字段、可见性宽限与恢复规则见[页面失效与恢复](./ui-panels.md#页面失效与恢复)。

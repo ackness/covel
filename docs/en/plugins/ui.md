@@ -699,7 +699,7 @@ For story-driven backdrops or music, use a [presentation selector](./advanced.md
 
 ## Request player actions from a session page
 
-See the two ordinary views and shared page in [sandbox-surface-probe](../../../tests/third-party/sandbox-surface-probe/README.md). It reads public story and input context, answers interactions using handles, and saves dataset records through its own manual function runtime. Adding `capabilities` to the spec gives the player individual capability descriptions; server-code approval and page consent do not replace each other. Clear the action draft only for an accepted outcome, preserving it on refusal. Ordinary view layout is unchanged; main/composer replacement and heartbeat recovery are unavailable. See [page requests](../reference/ui-panels.md#page-requests-and-safe-outcomes) for the full contract.
+See the two independent regions and shared page in [sandbox-surface-probe](../../../tests/third-party/sandbox-surface-probe/README.md). It reads public story and input context, answers interactions using handles, and saves dataset records through its own manual function runtime. Adding `capabilities` to the spec gives the player individual capability descriptions; server-code approval and page consent do not replace each other. Clear the action draft only for an accepted outcome, preserving it on refusal. Ordinary view layout is unchanged; explicit main retains host input, while independent composers also work in stage. See [page requests](../reference/ui-panels.md#page-requests-and-safe-outcomes) for the full contract.
 
 ## Declarative session console
 
@@ -733,3 +733,63 @@ Enable this community package and choose Session desk from Plugin views. It uses
 ## Publishing static themes
 
 Put palettes and restricted styles in separate JSON files under `contributes.ui.theme`, without a runtime, dummy panel or entry. Descriptor, CSS and asset-root paths are package-relative; CSS image paths are asset-root-relative. See [plugin themes](../reference/theme-packages.md#restricted-themes-supplied-by-plugins) for the example and validation limits. Static validation and API discovery are available; the player interface does not yet mount them.
+
+## Build an independent input page
+
+The community `sandbox-surface-probe` example declares `ui/reader.json` as main and the following `ui/input.json` as composer. Both paths remain under `contributes.ui.view`. The shared root's `index.html` loads classic `app.js`; server handlers and schemas stay outside the published root.
+
+```json
+{
+  "id": "input",
+  "label": "Bridge input",
+  "surface": "composer",
+  "bridge": "session",
+  "capabilities": [
+    "submitAction",
+    "submitInteraction",
+    "invokeRuntime",
+    "abortExecution",
+    "openPanel"
+  ],
+  "webview": { "root": "./ui/app", "entry": "index.html" }
+}
+```
+
+```html
+<!doctype html>
+<html lang="en">
+  <head>
+    <script defer src="app.js"></script>
+  </head>
+  <body>
+    <pre id="story"></pre>
+    <label>Player action <textarea id="draft"></textarea></label>
+    <button id="submit">Submit action</button>
+    <output id="outcome"></output>
+  </body>
+</html>
+```
+
+```js
+const draft = document.getElementById("draft");
+window.covel.subscribe(({ session }) => {
+  document.getElementById("story").textContent =
+    (session?.messages ?? []).map((row) => row.text).join("\n") +
+    (session?.streaming?.text ?? "");
+});
+document.getElementById("submit").onclick = async () => {
+  try {
+    const result = await window.covel.invoke("submitAction", {
+      kind: "say",
+      text: draft.value,
+    });
+    document.getElementById("outcome").textContent = result.status;
+    if (result.status === "accepted") draft.value = "";
+  } catch {
+    document.getElementById("outcome").textContent =
+      "Unavailable; draft retained.";
+  }
+};
+```
+
+The complete fixture also answers current interaction handles, invokes its own manual runtime, stops execution and opens its own panel; never render raw execution results. See [page requests](../reference/ui-panels.md#page-requests-and-safe-outcomes) for methods/outcomes and [sandbox regions](../reference/ui-panels.md#sandbox-main-view-and-composer) for consent and timeouts. Changed content or capabilities require consent again. Players revoke, return or explicitly retry from the host. Error/unresponsive modes support acceptance; they never replay mutations or recover drafts through reload.

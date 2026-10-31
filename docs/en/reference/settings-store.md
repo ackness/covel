@@ -316,3 +316,7 @@ Which key belongs to what:
 ### Session page capability consent
 
 Ordinary session webviews reuse device-local SettingsStore preferences, without session, snapshot or database grants. Each capability gets a key bound to the complete content hash; the existing `.session` read grant adds no write authority. Mount waits for the whole save to succeed; optimistic notifications and rollback do not grant access. Revocation first stops the page synchronously, then persists the removal; refresh from another window also closes access. See [consent before reading a session](./ui-panels.md#consent-before-reading-a-session) for keys and retirement conditions.
+
+## Sandbox selection and consent
+
+Main/composer selection lasts only for the current mount/session visit, without SettingsStore, session metadata or snapshot writes. Both reuse the content/capability consent keys above; `surface` participates in the whole-spec hash. Only persisted true grants allow mounting. Revocation or cross-window refresh retires access immediately, even if saving fails. See [sandbox main view and composer](./ui-panels.md#sandbox-main-view-and-composer).

@@ -63,24 +63,55 @@ describe("GET /api/ui-specs plugin views", () => {
     });
     expect(result.diagnostics).toEqual([]);
   });
-  it("preserves requested capabilities in the existing view response", async () => {
-    const file = path.join(root, "session-view-probe/ui/story-view.json");
-    const spec = JSON.parse(await readFile(file, "utf8"));
-    await writeFile(
-      file,
-      JSON.stringify({
-        ...spec,
+  it.each(["main", "composer"])(
+    "preserves the %s surface and requested capabilities in the session-filtered view response",
+    async (surface) => {
+      const file = path.join(root, "session-view-probe/ui/story-view.json");
+      const spec = JSON.parse(await readFile(file, "utf8"));
+      await writeFile(
+        file,
+        JSON.stringify({
+          ...spec,
+          surface,
+          capabilities: ["submitAction", "abortExecution"],
+        }),
+      );
+      await registerTestPlugins(registry, [root]);
+      const result = await read();
+      expect(result.view[0]?.specs[0]).toMatchObject({
+        bridge: "session",
+        surface,
         capabilities: ["submitAction", "abortExecution"],
-      }),
-    );
-    await registerTestPlugins(registry, [root]);
-    const result = await read();
-    expect(result.view[0]?.specs[0]).toMatchObject({
-      bridge: "session",
-      capabilities: ["submitAction", "abortExecution"],
-    });
-    expect(result.diagnostics).toEqual([]);
-  });
+      });
+      expect(result.diagnostics).toEqual([]);
+      await store.createSession({
+        id: "surface-session",
+        status: "active",
+        phase: "playing",
+        locale: "en-US",
+        completedPlayerTurns: 0,
+        setupRuntimes: {},
+        seats: [
+          {
+            id: "main",
+            controller: "human",
+            role: "player",
+            characters: "auto",
+          },
+        ],
+        activePlugins: [],
+        createdAt: "2026-10-31",
+        updatedAt: "2026-10-31",
+      });
+      expect((await read("surface-session")).view).toEqual([]);
+      await store.updateSession("surface-session", {
+        activePlugins: ["session-view-probe"],
+      });
+      expect((await read("surface-session")).view[0]?.specs[0]).toMatchObject({
+        surface,
+      });
+    },
+  );
   it("always returns a view array, excluding plugins disabled in the session", async () => {
     await store.createSession({
       id: "s",

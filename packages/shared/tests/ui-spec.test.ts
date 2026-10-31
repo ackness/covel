@@ -415,10 +415,35 @@ describe("session page capability declarations", () => {
       ),
     ).toBe(true);
   });
-  it("reports unsupported surface declarations instead of silently accepting them", () => {
+  it.each(["main", "composer"])("accepts the %s session surface", (surface) => {
+    expect(pluginUiSpecIssues({ ...page, surface }, "owner", "view")).toEqual(
+      [],
+    );
+    expect(pluginUiSpecSchema.parse({ ...page, surface }).surface).toBe(
+      surface,
+    );
+  });
+  it.each(["right", "message", "segment"] as const)(
+    "refuses surface placement in %s",
+    (slot) => {
+      expect(
+        pluginUiSpecIssues({ ...page, surface: "main" }, "owner", slot).map(
+          (issue) => issue.path,
+        ),
+      ).toContain("surface");
+    },
+  );
+  it.each([
+    { surface: "sidebar" },
+    { surface: ["main", "composer"] },
+    { surface: "main", bridge: undefined },
+    { surface: "composer", webview: undefined, view: { component: "Text" } },
+  ])("rejects invalid surface declarations %j", (change) => {
     expect(
-      pluginUiSpecIssues({ ...page, surface: "main" }, "owner", "view"),
-    ).toContainEqual({ path: "surface", message: "unknown UI spec field" });
+      pluginUiSpecIssues({ ...page, ...change }, "owner", "view").map(
+        (issue) => issue.path,
+      ),
+    ).toContain("surface");
   });
 });
 
