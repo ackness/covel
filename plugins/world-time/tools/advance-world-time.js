@@ -2,6 +2,7 @@ import { z } from "zod";
 import { worldTimeSchema } from "../schema.js";
 import {
   makeProposal,
+  ToolError,
   withPendingProposals,
 } from "@covel/plugin-handlers-utils";
 
@@ -60,7 +61,8 @@ export default function ({ tool }) {
         typeof narrative.value !== "string" ||
         !narrative.value.trim()
       ) {
-        throw new Error(
+        throw new ToolError(
+          "unavailable",
           "World time requires currentTime and a successful same-turn narrative input",
         );
       }
@@ -82,7 +84,11 @@ export default function ({ tool }) {
           ),
         };
       if (previous && previous.value.tick !== base.tick)
-        throw new Error("World time changed since this narrative started");
+        throw new ToolError(
+          "conflict",
+          "World time changed since this narrative started",
+          { hint: "Stop; the next turn reads the current clock." },
+        );
       const next = advanceTime(definition, base.tick, request, context.random);
       const value = {
         schemaVersion: 1,

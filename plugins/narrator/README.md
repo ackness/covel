@@ -23,13 +23,15 @@
 
 ## 故事段落
 
-输出声明 `io.output.schema: contract:narrative-engine@2`，模型以 JSON 返回故事段落（`segments`：`narration`、`dialogue`、`action`，对白和动作带说话者名字），并可在 `cues.present` 列出在场角色。框架把段落文字用空行连接成 `narrativeOutput`，提交时把说话者名字解析成角色，舞台名牌直接读取段落的说话者。格式出错时框架按输出修复预算请求模型改正，只有没有任何正文时才失败。检查草稿时逐段读取段落文字。
+输出声明 `io.output.schema: contract:narrative-engine@2`，模型以 JSON 返回故事段落（`segments`：`narration`、`dialogue`、`action`，对白和动作带说话者名字），并在 `cues.present` 列出在场角色。地点变化时填写 `cues.scene`，氛围变化时填写 `cues.mood`，遵循上下文提供的情绪列表；未变化的提示省略。框架把段落文字用空行连接成 `narrativeOutput`，提交时把说话者名字解析成角色，舞台名牌直接读取段落的说话者。格式出错时框架按输出修复预算请求模型改正，只有没有任何正文时才失败。检查草稿时逐段读取段落文字。
 
 ## 开发
 
 修改提示词或输入注入后，运行 runtime prompt parity 和 story-filter 测试。
 
-人物档案：叙事可通过 `list-characters` / `get-character` 查询当前会话内的完整角色资料，包括尚未出场的 NPC。身份和属性优先核对档案，历史记忆用于查询发生过的事件。
+人物档案：叙事可通过 `list-characters` / `get-character` 查询当前会话内的完整角色资料，包括尚未出场的 NPC。身份和属性优先核对档案，历史记忆用于查询发生过的事件。查询无匹配时返回未找到错误及最接近的名字，可改用其中一个或保留未知事实。
+
+工具结果里的 `staged` 表示改动将在回合结束时生效，仍可能被拒绝；不要等待、在正文复述或为同一改动重复调用工具。
 
 ## 输出检查
 

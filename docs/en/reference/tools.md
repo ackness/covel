@@ -43,13 +43,13 @@ There are four kinds of tool:
 | create-character-form | local | char-creator | auto-allow | Create the opening character form. It collects only the character name and the declared string and enum attributes. Numeric and composite attributes keep their defaults | defaults |
 | update-affinity | local | affinity | auto-allow | Apply this turn's affinity changes between the player and NPCs in one batch. An unknown name starts at 0. Scores add up across turns and are limited to [-100, 100] | defaults |
 | advance-world-time | local | world-time | auto-allow | Settle a reached target time or a duration; the tool computes calendar differences. Random mode takes only a reason. Commits with the story | defaults |
-| dimension-rule-get | local | world-init | auto-allow | During maintenance, read private rules or value schemas with paging | defaults |
-| update-dimensions | local | world-init | auto-allow | Bind to this turn's narrative. Update the whole batch with compare-and-swap (CAS), or explicitly settle that nothing changed | defaults |
-| submit-world-facts | local | world-ir | auto-allow | Submit and validate a complete `contract:world-ir@1` as function calling arguments | defaults |
+| dimension-rule-get | local | world-init | auto-allow | During maintenance, read private rules or value schemas with paging | `readOnly`, `idempotent`, `concurrencySafe` |
+| update-dimensions | local | world-init | auto-allow | Bind to this turn's narrative. Update the whole batch with compare-and-swap (CAS), or explicitly settle that nothing changed | `idempotent` |
+| submit-world-facts | local | world-ir | auto-allow | Submit and validate a complete `contract:world-ir@1` as function calling arguments | `stagesWrites: false`, `idempotent` |
 | sync-codex-entries | local | codex | auto-allow | Submit this turn's codex changes at once. Creates or adds to entries by title | defaults |
 | generate-guide | local | guide | auto-allow | Write a plot summary, the current decisions, and quick replies in the player's voice, atomically | defaults |
 | upsert-npc-graph | local | npc-graph | auto-allow | Write NPC nodes and relationship edges in one batch. Refers to nodes by name. The tool removes duplicates and assigns short IDs | defaults |
-| plan-story-events | local | story-events | auto-allow | Validate the hidden future story events the plot plans (up to 2 per call). Can withdraw planned events that have not happened yet | defaults |
+| plan-story-events | local | story-events | auto-allow | Validate the hidden future story events the plot plans (up to 2 per call). Can withdraw planned events that have not happened yet | `stagesWrites: false`, `idempotent` |
 | submit-dashscope-text-prompt | local | dashscope-image-gen | auto-allow | Submit a text scene prompt and emit the fixed DashScope image event | defaults |
 | submit-dashscope-structured-prompt | local | dashscope-image-gen | auto-allow | Submit a structured scene prompt and emit the fixed DashScope image event | defaults |
 | submit-openai-image-text-prompt | local | openai-image-gen | auto-allow | Submit a text scene prompt and emit the fixed OpenAI-compatible image event | defaults |
@@ -725,7 +725,7 @@ Validation, and the list of available topics, are handled by an event directory 
 
 The model-facing `topic` schema is an enum of this session's advertised topics. `data` carries the topic's payload schema, or an `anyOf` with one titled branch per topic when several topics are available. A single topic uses its schema directly under `data`; `$schema` and `$id` are omitted. Schemas containing `$ref` or `$defs`, and unreadable schemas, are advertised as plain objects. With no advertised topics, the generic definition is used.
 
-Session preparation refreshes this definition every turn, including sessions without a character schema. Execution still accepts a string topic and delegates payload validation to the directory's Ajv validator: an unknown topic remains `refused`, not `invalid-input`. The prompt catalogue is unchanged.
+Session preparation refreshes this definition every turn, including sessions without a character schema. Execution still accepts a string topic and delegates payload validation to the directory's Ajv validator: an unknown topic remains `refused`, not `invalid-input`. The prompt catalogue keeps the topic, description and required-field summary. It no longer repeats payload schemas carried by the tool definition. Schemas with `$ref` or `$defs` at any depth still appear in full in the catalogue; unreadable schemas only show `(schema unavailable)`. The event-emission instruction points to the topics and payload shapes in the tool definition.
 
 #### The four results of a call
 
@@ -1052,7 +1052,7 @@ Version and argument checks run again at commit time. Seeing a write in the pend
 
 `char-creator/player-init` wraps the general `create-form` with the plugin tool `create-character-form`:
 
-Template/default checks in `create-character-form` return `invalid-input`, including a missing `{{characterName}}` placeholder. The model must correct the template before an interaction is published; unexpected downstream failures retain their original classification.
+Field, template and default checks in `create-character-form` return `invalid-input`. These include uncollectable fields, incorrect string input types, invented enum options, a missing required name field and a missing `{{characterName}}` placeholder. The model must correct the template before an interaction is published; unexpected downstream failures retain their original classification.
 
 - It allows only the required `characterName`, plus the string and enum fields in the world schema. The submitted value of an enum must come from its original options.
 - Numeric and composite attributes keep their default values. They cannot be turned into a select in the narrative.
@@ -1211,6 +1211,16 @@ These are the tools that plugins bring with them. The implementation files are u
 - A persistent write returns `withPendingProposals(...)`, so the commit flow saves it to the database.
 - Use plugin tools to wrap the plugin's own data schema and batch write logic.
 
+### advance-world-time
+
+`advance-world-time` returns `unavailable` when host-provided clock or narrative inputs are missing. A clock changed since narration began returns `conflict`: stop and let the next turn read the current clock. A corrupt stored tick remains an internal fault.
+
+### plan-story-events
+
+**Owner**: story-events (`plugins/story-events/tools/plan-story-events.js`)
+
+Validates future hidden event plans and returns deterministic plan content without proposals. It declares `{stagesWrites:false, idempotent:true}`. Missing host-provided event ledger input returns `unavailable`. Semantic argument failures return `invalid-input` with distinct issues on separate lines; messages longer than 1900 characters are cut there with an ellipsis. The model can correct the plan and resubmit it.
+
 <a id="set-world-schema"></a>
 <a id="set-world-dimensions"></a>
 
@@ -1242,7 +1252,7 @@ At the start of a game, it does two things at once: it sets the character attrib
 | valueType    | enum           |          | Value type of a `map` (`string` / `number` / `boolean`)               |
 | description  | I18nText       |          | Description of the attribute (a string, or a locale → string record)  |
 
-**Output**: `{success, attributeCount, dimensionCount, worldSchema, preGameDone:true}`
+**Content output**: `{success:true, attributeCount, dimensionCount, worldSchema, preGameDone:true}`. Code and `world-data-provider@1` still read the complete content. The model sees only `summary` (for example, `World initialized: 15 attributes, 2 dimensions.`), with no `data`. The summary uses English or Simplified Chinese according to the instruction language. Staged changes still carry the `staged` notice.
 
 Generated `defaultValue`s are starting values for every new player and NPC, not examples of a person from the lore. Name, role, background, and other identity fields belong in `bio`, with neutral or empty values. The tool clears generated `bio` string defaults to empty strings, arrays to empty arrays, and objects and maps to empty objects; it removes enum defaults. Nested biography fields follow the same rules. Numeric and boolean defaults remain. The guard adopts author-provided schemas unchanged, without this normalization.
 
@@ -1273,6 +1283,8 @@ When retrying, prefer the definitions frozen in the source receipt, and check th
 | `offset` | integer           |          | Default 0                                              |
 | `limit`  | integer           |          | Default 6000, range 1–6000, paged by Unicode character |
 
+It declares `{readOnly:true, idempotent:true, concurrencySafe:true}` and produces no proposals. Missing narrative provenance returns `unavailable`, an unknown dimension returns `not-found`, and a changed version returns `conflict`. Stop on a conflict; the next turn reads the current version.
+
 It returns `{id,version,content,complete,nextOffset?}`. When `complete:false`, fetch the next page. Do not settle based on a rule preview that was cut short.
 
 ### update-dimensions
@@ -1283,7 +1295,11 @@ After each narrative turn, update the current values of the world dimensions, or
 
 Arguments: `{followsClock:[id], updates:[{id, value|changes, reason?}]}`
 
-It returns `{success,updateCount}` and a `dimension.update` proposal. When this source has already been settled, it returns `{success,alreadySettled:true}`, and it does not calculate again.
+It returns `{updateCount}` and a `dimension.update` proposal. A source that is already settled returns `{alreadySettled:true}` without a second proposal. The tool declares `idempotent:true`.
+
+The model sees only a summary, with no `data`: `Dimensions updated: N change(s).`, `No change recorded.`, or `This turn's dimensions were already settled.` Under Simplified Chinese instructions these are 「维度已更新：N 项改动。」「未记录改动。」「本回合的维度已结算。」 respectively.
+
+Unsafe paths, supplying both `value` and `changes`, and missing clock-following dimensions return `invalid-input` with the full correction text. Clock messages exceeding 1900 characters are cut there with an ellipsis. Unknown dimensions return `not-found` with known dimensions or the owning dimension; missing host-provided narrative input returns `unavailable`.
 
 Dimension value validation failures (such as a string exceeding its declared maximum length) return `invalid-input` before any proposal is exposed. Version conflicts and unexpected exceptions are not reclassified as input errors.
 
@@ -1365,6 +1381,8 @@ The model submits the complete facts of this turn through the tool arguments, as
 | `entities` / `relations` / `events` / `statements` | ✓        | Four arrays of facts. Pass an empty array when there is nothing; put plugin extension fields in each item's `attributes` |
 
 The argument schema extends `worldIRV1Schema` with tool-only assessments, and runs the `validateWorldIRV1` semantic checks inside Zod's `superRefine`. So errors such as duplicate global IDs, missing entity references, or going over the depth or node budget are all reported at the specific argument path. The model only has to fix the corresponding field.
+
+The tool declares `{stagesWrites:false, idempotent:true}`. Reference validation after completion returns `invalid-input` with a hint to declare every referenced id in `entities` and retry.
 
 The tool returns the filled-in and validated facts after removing assessments, and produces no persistent proposal. `world-ir` declares `completeAfterTools: [submit-world-facts]`. The framework takes the successful result directly as the runtime's typed output, and it checks it once more against the output schema of `contract:world-ir@1`.
 

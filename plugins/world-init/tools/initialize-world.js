@@ -1,5 +1,7 @@
 import {
   getPendingProposals,
+  instructionLocaleFor,
+  withModelView,
   getToolContent,
   withPendingProposals,
 } from "@covel/plugin-handlers-utils";
@@ -62,18 +64,26 @@ export default function (toolkit) {
         ctx,
       );
       const schema = getToolContent(schemaResult);
-      return withPendingProposals(
-        {
-          success: true,
-          preGameDone: true,
-          worldSchema: schema.worldSchema,
-          attributeCount: schema.attributeCount,
-          dimensionCount: getToolContent(dimensionsResult).dimensionCount,
-        },
-        [
-          ...getPendingProposals(schemaResult),
-          ...getPendingProposals(dimensionsResult),
-        ],
+      const dimensionCount = getToolContent(dimensionsResult).dimensionCount;
+      const summary =
+        instructionLocaleFor(ctx.locale) === "zh"
+          ? `世界已初始化：${schema.attributeCount} 个属性，${dimensionCount} 个维度。`
+          : `World initialized: ${schema.attributeCount} attributes, ${dimensionCount} dimensions.`;
+      return withModelView(
+        withPendingProposals(
+          {
+            success: true,
+            preGameDone: true,
+            worldSchema: schema.worldSchema,
+            attributeCount: schema.attributeCount,
+            dimensionCount,
+          },
+          [
+            ...getPendingProposals(schemaResult),
+            ...getPendingProposals(dimensionsResult),
+          ],
+        ),
+        { summary },
       );
     },
   });

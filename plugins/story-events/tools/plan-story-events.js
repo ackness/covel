@@ -3,6 +3,7 @@
 // model gets a correctable error instead of a plan that intake will reject
 // or an event that can never fire.
 
+import { ToolError } from "@covel/plugin-handlers-utils";
 import { MAX_EVENTS_PER_PLAN } from "../lib/plan.js";
 
 const EVENT_ID = /^[a-z][a-z0-9-]{0,63}$/;
@@ -557,6 +558,7 @@ export default function ({ tool, z }) {
 
   return tool({
     name: "plan-story-events",
+    annotations: { stagesWrites: false, idempotent: true },
     description:
       "Plant up to two hidden follow-up events, or withdraw pending planned events. An event fires once, on the first turn where every `all` condition holds and no `none` condition holds. A condition tests one dimension field, one numeric world-time field, one story event that fired, or a number of turns to wait. Submit an empty events list when nothing should be planned.",
     parameters: z.preprocess(
@@ -584,7 +586,10 @@ export default function ({ tool, z }) {
     execute: async (params, context) => {
       const ledger = slotValue(context, "storyEvents");
       if (!ledger || typeof ledger !== "object")
-        throw new Error("Story planning requires the storyEvents ledger input");
+        throw new ToolError(
+          "unavailable",
+          "Story planning requires the storyEvents ledger input",
+        );
       const time = slotValue(context, "worldTime") ?? {};
       const known = [...ledger.revealed, ...ledger.planned].map(
         (item) => item.eventId,
@@ -643,7 +648,13 @@ export default function ({ tool, z }) {
           }
         return { item, leaves };
       });
-      if (issues.length) throw new Error([...new Set(issues)].join("\n"));
+      if (issues.length) {
+        const message = [...new Set(issues)].join("\n");
+        throw new ToolError(
+          "invalid-input",
+          message.length > 1900 ? message.slice(0, 1900) + "…" : message,
+        );
+      }
 
       return {
         events: events.map(({ item, leaves }) => ({

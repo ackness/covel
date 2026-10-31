@@ -1,5 +1,5 @@
 ---
-version: 0.0.40
+version: 0.0.41
 displayName: World Fact Extraction
 description: >-
   Extracts people, relationships, events, and clues from each story turn for

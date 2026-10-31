@@ -1,4 +1,5 @@
 import path from "node:path";
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { getPendingProposals } from "@covel/plugin-handlers-utils";
 import { createCharacterTools, runtimeDoneTool } from "@covel/tools";
@@ -367,4 +368,18 @@ it("allows a failed detail read to be repaired before completing the tracker", a
     response("sync-characters", { creates: [], updates: [] }),
   );
   expect(tracker.status).toBe("success");
+});
+
+it("documents that only a successful detail read consumes the read budget", () => {
+  const prompt = (name) =>
+    readFileSync(
+      path.resolve(import.meta.dirname, "../runtimes/character-tracker", name),
+      "utf8",
+    );
+  expect(prompt("RUNTIME.md")).toContain(
+    "After a successful read it is removed",
+  );
+  expect(prompt("RUNTIME.zh.md")).toContain(
+    "读取成功后该工具会从可用工具中移除",
+  );
 });

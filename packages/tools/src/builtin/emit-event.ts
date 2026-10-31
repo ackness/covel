@@ -86,6 +86,15 @@ export function createEmitEventTool(deps: {
   });
 }
 
+/** References may be nested; never send a provider a dangling reference. */
+export function schemaHasReferences(value: unknown): boolean {
+  if (value === null || typeof value !== "object") return false;
+  return Object.entries(value).some(
+    ([key, child]) =>
+      key === "$ref" || key === "$defs" || schemaHasReferences(child),
+  );
+}
+
 /** Advertise payload shapes without tightening the execution-time topic gate. */
 export function buildSessionEmitEventTool(
   deps: { directory: EventDirectoryLike },
@@ -94,15 +103,7 @@ export function buildSessionEmitEventTool(
   if (topics.length === 0) return undefined;
   const base = createEmitEventTool(deps);
   const payloads = topics.map(({ topic, schema }) => {
-    // References may be nested; never send a provider a dangling reference.
-    const hasReferences = (value: unknown): boolean => {
-      if (value === null || typeof value !== "object") return false;
-      return Object.entries(value).some(
-        ([key, child]) =>
-          key === "$ref" || key === "$defs" || hasReferences(child),
-      );
-    };
-    if (!schema || hasReferences(schema))
+    if (!schema || schemaHasReferences(schema))
       return { type: "object", title: topic };
     const { $schema: _schema, $id: _id, ...payload } = schema;
     return { ...payload, title: topic };

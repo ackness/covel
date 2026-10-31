@@ -128,6 +128,8 @@ export default function makeSaveNote({
 | `ToolError`            | 抛出带错误码和可选提示的失败                        |
 | `shortId`              | 生成短 ID。第四个参数传 `context.random`            |
 
+内置 `initialize-world` 也用摘要视图保留契约正文；`dimension-rule-get` 声明只读注解，见[工具参考](../reference/tools.md#initialize-world)。
+
 模型读取[统一工具结果](../reference/tools.md#统一返回格式与错误码)。这个例子只发送摘要和自动附加的暂存提示；代码仍读取 `{id}`。需要报告可修正的失败时，可抛出 `new ToolError("not-found", "The requested note was not found.", { hint: "Check the name." })`。`ctx.tools.call` 成功时返回完整正文，失败时抛出 `ToolError`；message 是纯文本，code 和 hint 是独立字段。
 
 工具不直接写存档。它返回一条**写入请求**（proposal）：类型是 `plugin.data`，内容是“往 `notes` 里写这一条”。Covel 在执行提交时检查这些请求。这个 runtime 失败或提交被拒时，不会保存这份写入。

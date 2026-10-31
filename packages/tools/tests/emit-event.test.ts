@@ -2,6 +2,7 @@ import { getModelView, ToolError } from "@covel/plugin-handlers-utils";
 import { describe, expect, it, vi } from "vitest";
 import {
   buildSessionEmitEventTool,
+  schemaHasReferences,
   createEmitEventTool,
 } from "../src/builtin/emit-event.js";
 import { getEmittedEvents, getPendingProposals } from "../src/result.js";
@@ -211,5 +212,32 @@ describe("session event definitions", () => {
     await expect(
       tool.execute({ topic: "a.b", data: {} }, ctx),
     ).rejects.toMatchObject({ code: "invalid-input" });
+  });
+});
+
+describe("schema reference detection", () => {
+  it.each([
+    ["flat reference", { $ref: "#" }, true],
+    ["flat definitions", { $defs: {} }, true],
+    ["nested reference", { properties: { value: { $ref: "#" } } }, true],
+    ["nested definitions", { properties: { value: { $defs: {} } } }, true],
+    [
+      "reference in an array",
+      { anyOf: [{ type: "string" }, { $ref: "#" }] },
+      true,
+    ],
+    ["array without references", [{ type: "object" }], false],
+    [
+      "plain schema",
+      { type: "object", properties: { value: { type: "number" } } },
+      false,
+    ],
+    ["null", null, false],
+    ["undefined", undefined, false],
+    ["string", "$ref", false],
+    ["number", 1, false],
+    ["boolean", false, false],
+  ])("detects references in %s", (_name, value, expected) => {
+    expect(schemaHasReferences(value)).toBe(expected);
   });
 });

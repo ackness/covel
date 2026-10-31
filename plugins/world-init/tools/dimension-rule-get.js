@@ -1,4 +1,4 @@
-import { resolveI18nText } from "@covel/plugin-handlers-utils";
+import { ToolError, resolveI18nText } from "@covel/plugin-handlers-utils";
 import { resolveI18nDeep } from "@covel/plugin-handlers-utils";
 import {
   DIMENSION_DATA_NAMESPACE,
@@ -14,6 +14,7 @@ import { schemaForTracker } from "../lib/schema-for-tracker.js";
 export default function ({ tool, z }) {
   return tool({
     name: "dimension-rule-get",
+    annotations: { readOnly: true, idempotent: true, concurrencySafe: true },
     description:
       "Read a complete adopted updateRule or value schema for maintenance. Follow nextOffset until complete; do not settle from a truncated rule. Uses the source receipt's frozen definitions when retrying.",
     parameters: z.strictObject({
@@ -25,12 +26,16 @@ export default function ({ tool, z }) {
     execute: async ({ id, part, offset, limit }, ctx) => {
       const narrative = ctx.inputSlots?.narrative;
       if (narrative?.cardinality !== "one")
-        throw new Error("Narrative provenance required");
+        throw new ToolError("unavailable", "Narrative provenance required");
       const row = await ctx.store.getPluginData(DIMENSION_DATA_NAMESPACE, id);
-      if (!row) throw new Error(`Unknown dimension: ${id}`);
+      if (!row) throw new ToolError("not-found", `Unknown dimension: ${id}`);
       const record = dimensionRecordSchema.parse(row.value);
       if (record.version !== ctx.world.dimensions[id]?.version)
-        throw new Error("dimension-version-conflict");
+        throw new ToolError(
+          "conflict",
+          "The dimension changed since this narrative started",
+          { hint: "Stop; the next turn reads the current version." },
+        );
       const receiptRow = await ctx.store.getPluginData(
         DIMENSION_SETTLEMENT_NAMESPACE,
         narrative.source.resultId,

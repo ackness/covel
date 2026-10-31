@@ -1,5 +1,6 @@
 import {
   actingCharacterOf,
+  ToolError,
   getToolContent,
   withModelView,
   translate,
@@ -103,7 +104,8 @@ export default function ({ tool }, createFormTool) {
             : `${field.name} (not an attribute of this world)`,
         );
       if (refused.length)
-        throw new Error(
+        throw new ToolError(
+          "invalid-input",
           `The form cannot collect: ${refused.join(", ")}. ${collectableFields(attributes)}`,
         );
       for (const field of params.fields) {
@@ -113,7 +115,8 @@ export default function ({ tool }, createFormTool) {
           attribute.type === "string" &&
           !["text", "textarea", "select"].includes(field.type)
         ) {
-          throw new Error(
+          throw new ToolError(
+            "invalid-input",
             `Field ${field.name} requires a string-valued input.`,
           );
         }
@@ -127,14 +130,18 @@ export default function ({ tool }, createFormTool) {
             !options.length ||
             options.some((option) => !attribute.options?.includes(option))
           ) {
-            throw new Error(
+            throw new ToolError(
+              "invalid-input",
               `Field ${field.name} must use the world's exact enum options.`,
             );
           }
         }
       }
       if (!params.fields.some(isName)) {
-        throw new Error("Include a required characterName text field.");
+        throw new ToolError(
+          "invalid-input",
+          "Include a required characterName text field.",
+        );
       }
       checkFormDefaults(params, attributes, context.locale);
       // The setup guard finds this form's submission by this id, so it is set

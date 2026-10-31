@@ -219,9 +219,12 @@ describe("event directory", () => {
         value: "old",
       }),
     ).toMatchObject({ ok: false, code: "invalid" });
-    expect(await directory.catalogText("session", "en-US")).toContain(
-      '"type":"number"',
+    const catalog = await directory.catalogText("session", "en-US");
+    expect(catalog).toContain(
+      "- value.changed: A value changed. (required: value: number)",
     );
+    expect(catalog).not.toContain('"type":"number"');
+    expect(catalog).not.toContain("payload schema:");
   });
 
   it("lists active plugins' advertised topics, excluding inactive plugins and advertise:false", async () => {
@@ -276,7 +279,8 @@ describe("event directory", () => {
     const catalog = await directory.catalogText("sess-1", "zh-CN");
     expect(catalog).toContain("scene.set");
     expect(catalog).toContain("场景切换");
-    expect(catalog).toContain("location");
+    expect(catalog).toContain("(required: location: string)");
+    expect(catalog).not.toContain("payload schema:");
   });
 
   it("renders enum-valued required fields as quoted allowed values in catalogText", async () => {
@@ -381,6 +385,9 @@ describe("event directory", () => {
     const result = await directory.validate("sess-x", "x.missing", {});
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.reason).toContain("schema unreadable");
+    const catalog = await directory.catalogText("sess-x", "en-US");
+    expect(catalog).toContain("(schema unavailable)");
+    expect(catalog).not.toContain("payload schema:");
   });
 
   it("warns once and keeps the alphabetically first plugin's schema on cross-plugin topic conflicts", async () => {
@@ -566,4 +573,42 @@ it("keeps an unreadable advertised topic and omits internal topics", async () =>
   expect(await directory.describeTopics!("session")).toEqual([
     { topic: "public.changed" },
   ]);
+});
+
+it("retains referenced payload schemas in the catalogue", async () => {
+  const registry = createPluginRegistry();
+  const root = await makePluginRoot();
+  await writeSchema(root, "referenced.json", {
+    type: "object",
+    properties: { value: { $ref: "#/$defs/value" } },
+    required: ["value"],
+    $defs: { value: { type: "number" } },
+  });
+  registerPlugin(
+    registry,
+    "reference-owner",
+    parsedManifest({
+      name: "reference-owner/main",
+      pluginId: "reference-owner",
+      events: [
+        {
+          topic: "value.changed",
+          schema: "referenced.json",
+          description: "Value changed",
+          advertise: true,
+        },
+      ],
+    }),
+    root,
+  );
+  registry.syncSessionActivations("reference-session", ["reference-owner"]);
+  const directory = createEventDirectory({
+    registry,
+    resolvePluginDir: () => root,
+  });
+  const catalog = await directory.catalogText("reference-session", "en-US");
+  expect(catalog).toContain("- value.changed: Value changed (required: value)");
+  expect(catalog).toContain('payload schema: {"type":"object"');
+  expect(catalog).toContain('"$ref":"#/$defs/value"');
+  expect(catalog).toContain('"$defs":{"value":{"type":"number"}}');
 });

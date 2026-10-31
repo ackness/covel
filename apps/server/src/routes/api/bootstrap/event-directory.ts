@@ -1,3 +1,4 @@
+import { schemaHasReferences } from "@covel/tools";
 import { compareText } from "@covel/shared";
 import type { PackageManifest } from "@covel/plugin-loader";
 /**
@@ -307,18 +308,21 @@ export function createEventDirectory(
         try {
           const raw = (await loadSchema(entry)).raw;
           fields = requiredFieldsSummary(raw);
-          // Required top-level names alone cannot describe array unions or local
-          // $refs. Advertise the actual contract so agents need not guess cues.
-          payloadSchema = JSON.stringify(
-            typeof raw === "object" && raw !== null
-              ? Object.fromEntries(
-                  Object.entries(raw).filter(
-                    ([key]) =>
-                      !["$schema", "$id", "title", "description"].includes(key),
-                  ),
-                )
-              : raw,
-          );
+          // Referenced schemas fall back to a plain object in the tool
+          // definition, so the catalogue keeps their complete payload shape.
+          if (schemaHasReferences(raw))
+            payloadSchema = JSON.stringify(
+              typeof raw === "object" && raw !== null
+                ? Object.fromEntries(
+                    Object.entries(raw).filter(
+                      ([key]) =>
+                        !["$schema", "$id", "title", "description"].includes(
+                          key,
+                        ),
+                    ),
+                  )
+                : raw,
+            );
         } catch {
           fields = "(schema unavailable)";
         }

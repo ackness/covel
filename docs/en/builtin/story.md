@@ -30,6 +30,8 @@ How to choose:
 - If you want to keep model costs down, choose the "Low Cost" pack. It uses "Narrator" and has no extra model calls for things like action suggestions.
 
 > [!NOTE]
+> Both narrators write `cues.scene` when the location changes and `cues.mood` when the mood changes, following any mood list supplied in context. Unchanged cues are omitted. A character lookup with no match returns a not-found error and the closest names; the model can retry a listed name or leave the fact unknown. A tool's `staged` notice means the change commits at turn end and may still be rejected. The narrator should continue without repeating the notice or calling again for the same change.
+>
 > Either narrator can run on its own. Scene Stage adds the stage presentation and Action Suggestions adds suggested actions; the story still works without them.
 
 ## Narrator (`narrator`)

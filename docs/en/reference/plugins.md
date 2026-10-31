@@ -501,6 +501,7 @@ When you publish a runtime's output contract, declare the public schema of the c
 
 - All providers of the same contract ID must publish the same schema.
 - The public schema covers both model output and guard skip output. For example, `world-init` publishes `world-data-provider@1` with support for authored schemas of fewer than 15 attributes; the requirement to generate at least 15 stays in the `initialize-world` tool parameters.
+- The model view of `initialize-world` shows only a summary; code and contract validation still read the full tool content. See [tool output](./tools.md#initialize-world).
 - `world-data-provider@1` requires `success`, `attributeCount`, `dimensionCount`, and `worldSchema`. The same schema also validates tool and guard results before separation, so it permits an optional `preGameDone: true`. This is a completion signal; agent finalization moves it to `RuntimeResult.completion`, and the public business output does not require it.
 - A replacement plugin provides a contract through the `io.output.contract` of its own runtime (`provides` includes it on its own). Output from other installed plugins cannot satisfy the declaration in its place.
 - A consumed contract that has no schema, or a provider that declares a contract but never produces it, causes a loading diagnostic.
