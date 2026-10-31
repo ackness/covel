@@ -333,3 +333,7 @@ This section explains how list components (`EntryList`, `MediaGallery`, `JobList
 ```
 
 The host compares a job's `itemField` value with each media record's `matchField`. An empty value does not count as a match. This way a job row can show its related preview, and the component does not need to know the prompt field or read a second plugin namespace.
+
+## Sandbox pages and component actions
+
+JSON component action handlers and the [consented sandbox interface](./ui-panels.md#page-requests-and-safe-outcomes) are separate. Sandbox regions request mutations through normal player actions, interactions and own manual runtimes, without raw panel data/results or action/command/event RPC. Component allowlists are unchanged.

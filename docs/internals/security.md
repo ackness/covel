@@ -545,4 +545,8 @@ SillyTavern 内容导入使用有上限的 PNG 块遍历（读数据前先检查
 
 呈现上下文使用独立构造路径，只复制公开 `segments` / `cues`、精简角色身份和明确允许的自有数据。concealed / 失败 / 非故事结果、隐藏 namespace、原始 digest 和服务入口不进入它。`_presentation_budget` 属于 `__kernel:presentation` 的控制面，只保存来源与计数；插件、RPC、数据工具和可移植视图不可见，snapshot / fork / 浏览器 checkpoint 排除它。额度保留到会话删除；restore / reset 改变代次，旧作业不能接到新会话。函数 JS 本身仍非沙箱，原有代码批准不变。见[呈现 runtime](../reference/plugins.md#presentation-runtimes)。
 
-普通 session 页面只接收版本 2 的公开 DTO，不继承右侧面板的 KV、context、jobs 或 action/command/event 处理器。所有修改通过认证宿主进入普通玩家行动/交互或所属插件的手动 runtime 提案通道；opaque iframe 仍不能请求 `/api`、读取存储、密钥或 Electron IPC。会话/内容/授权/页面尝试变化会使租约失效，等待中的审批不能重试旧调用。回复只含安全状态；失败和成功都不发送嵌套执行输出。资源路由在 HEAD/304 判断前也核对实际内容哈希，避免旧摘要执行同长度新内容。沙箱不防护恶意操作系统所有者；旧不可变缓存仍是旧的已同意内容。不提供整块替换或心跳恢复。详见[会话页面契约](../reference/ui-panels.md#读取会话前的授权)。
+普通 session 页面只接收版本 2 的公开 DTO，不继承右侧面板的 KV、context、jobs 或 action/command/event 处理器。所有修改通过认证宿主进入普通玩家行动/交互或所属插件的手动 runtime 提案通道；opaque iframe 仍不能请求 `/api`、读取存储、密钥或 Electron IPC。会话/内容/授权/页面尝试变化会使租约失效，等待中的审批不能重试旧调用。回复只含安全状态；失败和成功都不发送嵌套执行输出。资源路由在 HEAD/304 判断前也核对实际内容哈希，避免旧摘要执行同长度新内容。沙箱不防护恶意操作系统所有者；旧不可变缓存仍是旧的已同意内容。沙箱主视图与输入框使用独立租约和有界生命周期，失效只恢复对应区域。详见[会话页面契约](../reference/ui-panels.md#读取会话前的授权)。
+
+## 沙箱区域的宿主控制
+
+主视图和输入框的 iframe 保持 `sandbox="allow-scripts"`、无 referrer 和原 CSP，不增加网络、表单、全屏、弹窗、顶层导航、同源或 IPC 权限。认证宿主代为发出获准请求；不向 opaque 请求发放来源或令牌例外。两个区域分别关闭端口与流订阅，过期 ready/审批/RPC 不能复活页面。探测仅计可见时间，不保证整个渲染进程冻结时恢复。宿主控制条在裁剪区域外，沉浸舞台和窄屏仍可点击或键盘激活返回、停止和恢复。标记 `data-covel-host-controls` 及后代须排除于主题选择器。精确生命周期见[页面失效与恢复](../reference/ui-panels.md#页面失效与恢复)。

@@ -1493,7 +1493,7 @@ How snapshots are saved:
 
 ## Plugin view read-only port
 
-Plugin views reuse the sandbox MessagePort. Full `{ type: "state", value }` messages carry the projection in `value.session`; streaming messages are `{ type: "stream", seq, append }`. This adds no HTTP or SSE endpoint. Reading requires player consent before mounting, bound to the plugin ID and the content hash of the spec plus HTML. Revocation closes the page. Existing page action handlers are unchanged. See [Plugin views](./ui-panels.md#plugin-views) for projection, throttling and consent rules.
+Plugin views reuse the sandbox MessagePort. Full `{ type: "state", value }` messages carry the projection in `value.session`; streaming messages are `{ type: "stream", seq, append }`. This adds no HTTP or SSE endpoint. Reading requires player consent before mounting, bound to the plugin ID and the content hash of the spec plus HTML. Revocation closes the page. Consented session pages expose only their declared, schema-validated public methods and safe outcomes; ordinary panel handlers remain separate. See [Plugin views](./ui-panels.md#plugin-views) for projection, throttling and consent rules.
 
 <a id="auto-advance-events"></a>
 
@@ -1550,3 +1550,7 @@ The event contains no raw input, free-text reason, asset path, reply or credenti
 ## Sandbox session page protocol
 
 Ordinary session webviews use one MessagePort and public projection version 2. `pending[].interaction` and opaque per-frame handles replace raw blocks; `input` exposes human seats and currently permitted actions. Independently consented methods request player actions, interaction answers, own manual runtimes, abort and own-panel navigation. Replies contain only fixed safe outcomes, without execution internals. The authoritative field tables, limits, replay budget and retirement rules are in the [session bridge](./ui-panels.md#sessionprojection-version-2). Normal HTTP/SSE authorization and proposal commit retain their existing boundaries.
+
+## Sandbox region lifecycle
+
+Main and composer share the existing public session protocol. Ready, fixed page-error, ping/pong with increasing IDs and shutdown use the same MessagePort, without another HTTP/SSE channel. Each frame has an independent lease and handles; retirement prevents state, append and reply delivery. See [page failure and recovery](./ui-panels.md#page-failure-and-recovery) for protocol fields, visibility grace and recovery.

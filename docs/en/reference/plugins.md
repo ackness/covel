@@ -1496,3 +1496,7 @@ The allowance is shared by session incarnation, actual source turn ID and runtim
 `ctx.presentation.note(reason)` accepts fixed codes: `no-story`, `no-scene-change`, `asset-missing`, `budget-exhausted`, `unavailable`, `superseded`, `no-output`, `failed`. Free text is refused. Without a display write or note, the host infers `no-output`; a business return value alone is not visible output. Budget refusal is a normal no-op and can be caught to use existing assets. Uncaught refusal discards incomplete writes without a plugin fault. Own exceptions, invalid output and deadlines retain normal fault provenance.
 
 Each settled invocation records [`presentation.completed`](./protocol.md#presentation-completed), with status, source correlation and counters. It adds no per-turn player notification. A presentation function remains approved, unsandboxed server JS: the API policy does not replace [code approval](./plugin-installation.md) or restrict direct Node access.
+
+## Sandbox system regions
+
+Sandbox regions keep spec paths under `contributes.ui.view`; singular surface selects main or composer. No new placement, runtime trigger or proposal kind is introduced. Own manual-runtime invocation retains approvals, proposals and commit. See [sandbox main view and composer](./ui-panels.md#sandbox-main-view-and-composer) for declarations, consent, composition and retirement.

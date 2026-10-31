@@ -15,6 +15,7 @@ import {
   useState,
   type ComponentProps,
   type ReactElement,
+  type ReactNode,
 } from "react";
 import { useTranslation } from "react-i18next";
 import { Loader2 } from "lucide-react";
@@ -67,6 +68,7 @@ import {
 } from "./stage-selectors.js";
 
 export interface StageViewProps {
+  readonly composerRegion?: ReactNode;
   readonly composerDraft?: { value: string; onChange: (value: string) => void };
   /** The composer's modes and character switcher, shared with the free input. */
   readonly composerModes?: ComposerModes;
@@ -266,72 +268,76 @@ export function StageView(props: StageViewProps): ReactElement {
 
   return (
     <div
-      className="relative flex-1 min-h-0 overflow-hidden"
+      className="relative flex flex-col flex-1 min-h-0 overflow-hidden"
       data-testid="stage-view"
     >
-      <StageBackdrop
-        sceneCurrent={effectiveSceneCurrent}
-        world={world}
-        sessionId={session.id}
-      />
-      {cast && (
-        <StageSprites
-          key={session.id}
-          speakers={speakers}
-          presence={presence}
+      <div className="relative flex-1 min-h-0 overflow-hidden">
+        <StageBackdrop
+          sceneCurrent={effectiveSceneCurrent}
+          world={world}
           sessionId={session.id}
-          dimmed={choicesVisible}
-          retainWhenEmpty={cast.retainWhenEmpty}
         />
-      )}
-      <StageHud
-        sceneCurrent={effectiveSceneCurrent}
-        locale={locale}
-        autoPlay={autoPlay}
-        immersive={immersive}
-        onOpenHistory={() => setHistoryOpen(true)}
-        onToggleAutoPlay={() => setAutoPlay((v) => !v)}
-        onToggleImmersive={onToggleImmersive}
-        onExit={() => onViewModeChange("parsed")}
-      />
-      <LiveStageDialog
-        message={storyMsg}
-        allRead={allRead}
-        executing={executing}
-        turnId={storyTurnId}
-        streamEnded={!isStreaming}
-        segmentSpeakers={segmentSpeakers}
-        autoPlay={autoPlay}
-        reducedMotion={reducedMotion}
-        onAllRead={() => setReadStoryKey(storyKey)}
-      />
-      <StageChoices
-        composerDraft={props.composerDraft}
-        composerModes={props.composerModes}
-        extensions={(choices, onDraftMessage) => (
-          <StagePluginPanels
-            panelState={props.panelState}
-            activePluginIds={sessionPlugins
-              .filter((plugin) => plugin.active)
-              .map((plugin) => plugin.id)}
-            choices={choices.map(({ id, label }) => ({ id, text: label }))}
-            turnIds={stageTurnIds}
-            turnId={storyTurnId}
-            executing={executing}
-            onDraftMessage={onDraftMessage}
+        {cast && (
+          <StageSprites
+            key={session.id}
+            speakers={speakers}
+            presence={presence}
+            sessionId={session.id}
+            dimmed={choicesVisible}
+            retainWhenEmpty={cast.retainWhenEmpty}
           />
         )}
-        visible={choicesVisible}
-        advancing={advancing}
-        executing={executing}
-        interactionChoices={interactionChoices}
-        suggestions={freshPrompts}
-        locale={locale}
-        onSubmitInteraction={onSubmitInteraction}
-        onSendMessage={onSendMessage}
-      />
+        <StageHud
+          sceneCurrent={effectiveSceneCurrent}
+          locale={locale}
+          autoPlay={autoPlay}
+          immersive={immersive}
+          onOpenHistory={() => setHistoryOpen(true)}
+          onToggleAutoPlay={() => setAutoPlay((v) => !v)}
+          onToggleImmersive={onToggleImmersive}
+          onExit={() => onViewModeChange("parsed")}
+        />
+        <LiveStageDialog
+          message={storyMsg}
+          allRead={allRead}
+          executing={executing}
+          turnId={storyTurnId}
+          streamEnded={!isStreaming}
+          segmentSpeakers={segmentSpeakers}
+          autoPlay={autoPlay}
+          reducedMotion={reducedMotion}
+          onAllRead={() => setReadStoryKey(storyKey)}
+        />
+        <StageChoices
+          hideInput={Boolean(props.composerRegion)}
+          composerDraft={props.composerDraft}
+          composerModes={props.composerModes}
+          extensions={(choices, onDraftMessage) => (
+            <StagePluginPanels
+              panelState={props.panelState}
+              activePluginIds={sessionPlugins
+                .filter((plugin) => plugin.active)
+                .map((plugin) => plugin.id)}
+              choices={choices.map(({ id, label }) => ({ id, text: label }))}
+              turnIds={stageTurnIds}
+              turnId={storyTurnId}
+              executing={executing}
+              onDraftMessage={onDraftMessage}
+            />
+          )}
+          visible={choicesVisible}
+          advancing={advancing}
+          executing={executing}
+          interactionChoices={interactionChoices}
+          suggestions={freshPrompts}
+          locale={locale}
+          onSubmitInteraction={onSubmitInteraction}
+          onSendMessage={onSendMessage}
+        />
 
-      <StageExecutionStatus {...props} />
+        <StageExecutionStatus {...props} />
+      </div>
+      {props.composerRegion}
 
       {/* History drawer — the full parsed chat, needs a bounded flex column
           for its internal scroll viewport (flex-1 min-h-0). Retain execution

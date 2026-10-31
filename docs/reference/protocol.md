@@ -1493,24 +1493,7 @@ runtime 的终态：
 
 ## 插件视图的只读端口
 
-插件视图复用沙箱的 MessagePort：完整 `{ type: "state", value }` 在 `value.session` 中带会话投影，流式消息是 `{ type: "stream", seq, append }`。这不是新的 HTTP 或 SSE 端点。读取能力在首次挂载前取得玩家授权，绑定插件 ID 与 spec + HTML 内容哈希；撤销后关闭页面。既有页面 action handler 不变。投影、节流与授权规则统一见[插件视图](./ui-panels.md#插件视图)。
-
-<a id="auto-advance-events"></a>
-
-### 自动推进事件
-
-网页端提交新输入时，先停止旧请求并等浏览器 checkpoint 完成，再发送已接收的输入。等待期间再次提交会显示会话忙碌提示，保留新的文字、字段和排队选择。提交调用返回未接收时，输入框不能清空草稿。
-
-| 事件                        | 载荷                                                                                                                                                                  | 客户端处理                                     |
-| --------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------- |
-| `execution.round.completed` | `requestId`, `rootId`, `turnId`, `round`, `limit`，以及完成载荷 `runtimeCount`, `resultCount`, `durationMs`, `committed`, `error?`, `abortReason?`, `resyncRequired?` | 只结算指定执行的消息、步骤和增量；保持请求运行 |
-| `execution.advance`         | `requestId`, `rootId`, `phase: waiting \| running \| stopped`, `round`, `limit`, `turnId?`；停止时还有 `reason`                                                       | 显示或清除推进进度；不生成故事文字             |
-
-根执行和 setup/开场也各发出一条 round 完成事件，自动轮从 `round: 1` 开始。顺序为：根执行 started → round completed → advance waiting → 下一轮 started → advance running → runtime/故事事件 → round completed；可重复下一轮，最后 advance stopped → 唯一一条请求终态 `execution.completed`。开场接力仍保留原来的未开始即停止标记。基础设施错误保留 `error.occurred` 路径；已开始请求仍收尾。没有开始执行的拒绝不产生 round 事件。
-
-停止原因是有限枚举：`yielded-to-player`、`no-eligible-story`、`ambiguous-story`、`limit`、`disabled`、`player-stop`、`new-input`、`pending-input`、`session-unavailable`、`execution-failed`、`prerequisite-unavailable`。原因不携带模型内容。到达上限或交还玩家是正常结束。后续失败只丢弃该轮未提交内容；终态 `resync: true` 汇总任意一轮的提交后发布失败。
-
-恢复状态的可选 `advance` 使用同一载荷；`unknown` 不证明完成。客户端按请求所有权处理事件，忽略旧请求收尾和倒退的进度。新事件不包含提示词、工具参数、操作摘要或 concealed 内容。前台所有轮共用一个故障计数身份：故障立即去重计数，干净结果等组关闭才清零；较新的后台结果不会被旧组清零。setup 不参与，后台任务继续独立计数。
+插件视图复用沙箱 MessagePort 传递公开状态与节流追加。请求能力分别授权，参数与安全结果经过 schema 校验；不转交普通面板的原始处理器或执行内部对象。完整契约见[会话界面桥](./ui-panels.md#sessionprojection版本-2)。
 
 ## 委托的私有投影
 
@@ -1550,3 +1533,7 @@ runtime 的终态：
 ## 沙箱会话页面协议
 
 普通会话 webview 使用单一 MessagePort，公开投影升级到版本 2；`pending[].interaction` 和当前 frame 的不透明句柄替代原始 block，`input` 提供人类座位和当前可用行动。逐能力授权后，页面可请求玩家行动、交互回答、所属插件的手动 runtime、停止和所属面板导航。回复仅含固定安全结果，不传递执行内部对象。协议、上限、重放限制与失效规则的唯一字段表见[会话界面桥](./ui-panels.md#sessionprojection版本-2)。正常 HTTP/SSE 协议和服务端鉴权、提案提交保持原边界。
+
+## 沙箱区域生命周期
+
+主视图和输入框共用已有公开会话协议；ready、固定 page-error、带递增 id 的 ping/pong 与关闭信号使用同一 MessagePort，没有新增 HTTP/SSE 通道。每个 frame 的租约和句柄独立，失效后不能发送投影、追加或回复。协议字段、可见性宽限与恢复规则见[页面失效与恢复](./ui-panels.md#页面失效与恢复)。

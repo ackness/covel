@@ -12,7 +12,7 @@ The basic idea has one rule. A plugin describes its UI in a JSON document (calle
 
 ## UI without server code
 
-JSON panels, templates, views and composer modes can ship in a [declarative package](./plugin-installation.md#declarative-plugins). Classic `.js` files in a valid webview asset plan run only in the browser sandbox and grant no server-code permission. `bridge: session` still needs independent read consent for the current spec, HTML and multi-file asset digest. Denial or revocation leaves the ordinary game UI usable; script changes require consent for new content. Host back/default controls stay outside the iframe. CSP, message-source validation and per-action restrictions remain; page writes require separate capability consent; whole-surface replacement is not available.
+JSON panels, templates, views and composer modes can ship in a [declarative package](./plugin-installation.md#declarative-plugins). Classic `.js` files in a valid webview asset plan run only in the browser sandbox and grant no server-code permission. `bridge: session` still needs independent read consent for the current spec, HTML and multi-file asset digest. Denial or revocation leaves the ordinary game UI usable; script changes require consent for new content. Host back/default controls stay outside the iframe. CSP, message-source validation and per-action restrictions remain; page writes require separate capability consent; independent main/composer replacement follows the same content consent.
 
 Preparation and session plugin rows disclose model use and actual agent triggers before enable. UI-only packages have no model notice. The notice grants no sandbox capability.
 
@@ -826,11 +826,34 @@ Write source text in English and translations under `messages` in `locales/<loca
 - `surfaces`, `group`, `groupLabel`, `groupOrder`, `shortLabel` and `navTarget` are not allowed here; they route panels and stage surfaces.
 - The mode is `plugin:<pluginId>:<viewId>`, for example `plugin:session-view-probe:story`. World and pack `defaultViewMode` accept this format, `parsed` and `stage`. Authors can select `detailed` and `raw` manually only.
 - While views load, the host view is shown. Missing views, disabled plugins, request failures and render errors fall back to it. The host default is `stage` only when the world’s default is exactly `stage`, otherwise `parsed`. A plugin view is never a fallback target. The player’s selection survives a transient request failure and can recover on a later successful load. Render errors select the host default and show a toast.
-- The choice lasts for the current mount and is not saved per session. Plugin views do not use stage immersion and do not show the host composer.
+- The choice lasts for the current mount and is not saved per session. Ordinary plugin views do not use stage immersion and omit the host composer by default; explicit main replacement and independent composer selection are described below.
+
+### Sandbox main view and composer
+
+Add singular `surface` to a spec in the existing `contributes.ui.view`, without a new placement:
+
+```json
+{
+  "id": "input",
+  "label": "Adventure input",
+  "surface": "composer",
+  "bridge": "session",
+  "capabilities": ["submitAction", "submitInteraction", "invokeRuntime"],
+  "webview": { "root": "./ui/app", "entry": "index.html" }
+}
+```
+
+Each spec targets one region; two specs may share a published root. Unknown values, misplaced fields and JSON views receive a `surface` diagnostic while siblings load. The main menu lists ordinary views and `main`; the composer selector lists only `composer`. Each region has at most one provider, chosen by the player without guessing the first. A world's `defaultViewMode` may name main or an ordinary view, never composer, and still requires consent. There is no world/pack composer default.
+
+Explicit main replaces only the story column and retains the host composer by default. An independently selected composer works in chat, ordinary plugin views and stage, including a different plugin's main. Stage places it below narrative and removes duplicate free input, suggestion submission and choice hotkeys; paragraph progression, required forms, suspension and recovery remain host features. Pages without submitAction may offer only interactions or runtime UI. Players can always return to default input.
+
+Selection lasts only for the current mount and session visit; content consent persists on this device. Default UI remains usable while loading or awaiting consent. Each frame owns its lease, handles and stream subscription; failure, disable or revocation in one region does not reset the other.
+
+Outside the clipped frames, a labelled host strip provides “Back to default interface”, Stop, and interactions/recovery. Global return clears both selections; region return clears only its own. The global strip remains in immersive stage and narrow layouts. Page permission menus revoke one capability or all. The `data-covel-host-controls` marker and its descendants belong to the host and must be excluded from theme selectors. Fixed positioning, high z-index and iframe focus cannot cross the clipping boundary.
 
 ### Multi-file pages
 
-Pages are plugin views; there is no `contributes.ui.pages`. Only `contributes.ui.view` accepts `webview.root`; right panels and message blocks keep single-file HTML. Pages keep the story-column layout and do not replace a host main-view or composer system position.
+Pages are plugin views; there is no `contributes.ui.pages`. Only `contributes.ui.view` accepts `webview.root`; right panels and message blocks keep single-file HTML. Ordinary pages keep the story-column layout; singular `surface` opts into a system region below.
 
 Authors declare this in the spec:
 
@@ -877,7 +900,7 @@ The entry response CSP is:
 
 Use classic external scripts such as `<script src="app.js"></script>`, without modules, inline scripts, event attributes or `eval`. Inline styles are allowed; network requests are blocked. Embed custom fonts as `data:font/woff2;base64,...` (or WOFF) in CSS `@font-face`. Font URL requests use CORS, and the sandboxed document has an opaque origin, so even relative `.woff` / `.woff2` URLs are cross-origin. The asset route sends no CORS allow headers, so those URLs cannot load. `font-src 'self' data:` is unchanged; publishing a font file does not make its URL usable. `'self'` uses the browser-visible origin, supporting Vite and reverse proxies without a path-prefix restriction. The route checks the published listing for containment. The main page's `frame-src 'self'` limits iframe navigation; `/api` separately rejects opaque origins and embedded destinations. See the [security boundary](../internals/security.md#plugin-pages-loaded-by-url).
 
-The host injects the classic bridge script `__covel__/bridge-<hash8>.js` after the entry's `<head>`. With no `<head>`, it uses `<html>`, then the doctype, then the start of the document. Nested entries get the required `../` prefix. Authors do not copy bridge code. The script acknowledges its port with `ready`; URL pages wait 8 seconds, then show a failure overlay with Retry over the iframe. A credential-free HEAD probe distinguishes 404 ("This page was updated; reload it.") from other failures ("This page could not be loaded."). A late `ready` clears the error. Retry fetches the spec again and remounts the iframe; host back controls stay available.
+The host injects the classic bridge script `__covel__/bridge-<hash8>.js` after the entry's `<head>`. Without a head it uses `<html>`, the doctype, or the document start, in that order; nested entries receive the appropriate `../` prefix. Authors do not copy the script. Views and replacement regions use the lifecycle below. Ordinary URL panels without region recovery keep their existing failure overlay: a credential-free HEAD distinguishes an expired digest (404) from other failures, late ready may clear that overlay, and Retry reloads declarations and remounts the iframe.
 
 The digest is the first 32 lowercase hexadecimal characters of SHA-256 over JSON lines of `[relativePath, size, sha256(content)]`, sorted by relative path. It is computed on the first registry projection and recomputed on re-registration. Production files should change only on restart; old file copies are not retained. After re-registration old digest URLs return 404 and the new URL works. Every read verifies length and SHA-256 through the same bounded O_NOFOLLOW handle, then serves that buffer; same-length edits receive a no-store 404 before GET, HEAD or 304 success. Entry HTML uses `Cache-Control: no-cache` and must revalidate on every reuse; its ETag includes the bridge script hash. A host upgrade therefore returns HTML referencing the new bridge even when plugin files and the URL are unchanged. Other assets, including the bridge script with its hashed filename, keep a one-year immutable cache.
 
@@ -885,9 +908,9 @@ Per-capability consent for `bridge: "session"` is unchanged. The whole-spec cons
 
 ### Consent before reading a session
 
-Only a `webview` in `contributes.ui.view` can declare `bridge: "session"`. Optional `capabilities` lists at most five distinct additional capabilities. Unknown capabilities, other placements, JSON views and a missing session bridge produce field diagnostics and remove only that feature. `session` is inferred from the bridge and is not written in the list. `surface` is unsupported; plural `surfaces` still routes panels and stage content.
+Only a `webview` in `contributes.ui.view` can declare `bridge: "session"`. Optional `capabilities` lists at most five distinct additional capabilities. Unknown capabilities, other placements, JSON views and a missing session bridge produce field diagnostics and remove only that feature. `session` is inferred from the bridge and is not written in the list. Optional singular `surface: "main" | "composer"` selects a system region and requires the same session webview; plural `surfaces` still routes panels and stage content.
 
-Until every requested grant has persisted, the page is not mounted, receives no projection and cannot invoke methods. A world default opens the same dialog with `parsed` / `stage` underneath. The dialog names the plugin, page and each capability. Builtin or trusted source, declarative classification and server-code approval never replace page consent.
+Until every requested grant has persisted, the page is not mounted, receives no projection and cannot invoke methods. A world default opens the same dialog with `parsed` / `stage` underneath. The dialog names the plugin, page and each capability. While saving, its host return and Stop controls remain available. Builtin or trusted source, declarative classification and server-code approval never replace page consent.
 
 <!-- prettier-ignore -->
 | Capability | Meaning |
@@ -934,6 +957,14 @@ Ordinals are allocated on first observation and never reused within a bridge ins
 
 KiB counts UTF-8 bytes. Appends coalesce every 100 ms; full pushes while streaming coalesce too, so unrelated state changes cannot bypass throttling. Full state includes current stream text and establishes the append baseline. Completion flushes the tail immediately; reset, shrink and retry replace drafts even if replacement text outgrows the previous text before the timer fires. Retirement cancels subscriptions and queued timers.
 
+### Page failure and recovery
+
+Inline HTML and URL views wait for ready from frame mount, with an 8-second deadline independent of load events. The shared script reports uncaught errors and unhandled Promise rejections through a fixed page-error signal on the existing port, without error text, stacks or URLs. Normal pagehide/unload does not report a page error; the host detects navigation through load and heartbeat checks. Load failure, a connected element navigating again, React render errors and invalid required public projection also retire the attempt.
+
+After ready, the host sends increasing ping probes every 5 seconds while visible; the script replies with the matching pong on the same port. Three unanswered probes trigger fallback. Hidden tabs do not accumulate missed probes; returning resets probes and grants 8 seconds of grace. This measures the document event loop, not model/RPC duration, and cannot recover a browser-wide renderer freeze.
+
+Failure closes ports, timers and stream subscriptions before restoring that region's default UI. A retained host notice names the page and offers Retry and permission revocation. Late ready, HEAD and RPC callbacks cannot revive the attempt. Retry requires a player click, refetching declarations and checking current content consent before creating a new frame. Normal action/runtime refusals are not page failures; never automatically replay mutations. Server-admitted work may settle normally without replying to the retired page.
+
 ### Page requests and safe outcomes
 
 Use the existing MessagePort and `window.covel.invoke(method, params)`. Strict schemas reject undeclared fields. Pages cannot select actors, source, session/turn references, plugin identity, HTTP paths, tokens, proposals or model/provider overrides.
@@ -953,7 +984,7 @@ Each connection allows eight calls in flight and 128 KiB serialized request byte
 
 Session navigation, plugin disable, content replacement, revocation, return and unmount retire the lease. The host rechecks ownership after awaits and before approval retries. Normal input also rechecks the caller after seat-switch, automatic-stop and workspace waits. Server-admitted work may settle normally, without replying to the retired frame.
 
-This remains an ordinary view layout, without main/composer replacement or heartbeat recovery. Single-file pages have no ready timeout notice; multi-file pages retain the existing eight-second overlay and Retry. There is no media-byte/blob channel. Host back controls remain available.
+There is no media-byte/blob channel. Views and replacement regions use the recovery rules below; ordinary non-session panels keep their separate data and action contract.
 
 ## Component Catalogue
 

@@ -502,3 +502,69 @@ it("executes the shipped page script against a real channel, reconstructs text a
   finish?.();
   expect(JSON.stringify(captured)).not.toContain("credential-sentinel");
 });
+
+it.each(["error", "unhandledrejection"])(
+  "executes the page lifecycle protocol for %s without transmitting private details",
+  async (eventType) => {
+    const { runInNewContext } = await import("node:vm");
+    const events = new Map<string, (event: unknown) => void>();
+    const parent = {};
+    const page = {};
+    runInNewContext(PLUGIN_BRIDGE_SCRIPT, {
+      window: page,
+      parent,
+      document: {},
+      addEventListener: (type: string, callback: (event: unknown) => void) =>
+        events.set(type, callback),
+    });
+    const port = {
+      start: vi.fn(),
+      postMessage: vi.fn(),
+      onmessage: undefined as ((event: { data: unknown }) => void) | undefined,
+    };
+    events.get("message")?.({
+      source: parent,
+      data: { type: "covel:connect" },
+      ports: [port],
+    });
+    expect(port.postMessage).toHaveBeenCalledExactlyOnceWith({ type: "ready" });
+    port.onmessage?.({ data: { type: "ping", id: 7 } });
+    expect(port.postMessage).toHaveBeenLastCalledWith({ type: "pong", id: 7 });
+    port.postMessage.mockClear();
+    events.get(eventType)?.({
+      message: "private-error",
+      reason: "credential",
+      filename: "private-file",
+    });
+    expect(port.postMessage).toHaveBeenCalledExactlyOnceWith({
+      type: "page-error",
+    });
+  },
+);
+
+it("does not report normal pagehide as a page error", async () => {
+  const { runInNewContext } = await import("node:vm");
+  const events = new Map<string, (event: unknown) => void>();
+  const parent = {};
+  runInNewContext(PLUGIN_BRIDGE_SCRIPT, {
+    window: {},
+    parent,
+    document: {},
+    addEventListener: (type: string, callback: (event: unknown) => void) =>
+      events.set(type, callback),
+  });
+  const port = { start: vi.fn(), postMessage: vi.fn() };
+  events.get("message")?.({
+    source: parent,
+    data: { type: "covel:connect" },
+    ports: [port],
+  });
+  expect(port.postMessage).toHaveBeenCalledExactlyOnceWith({ type: "ready" });
+  port.postMessage.mockClear();
+  events.get("pagehide")?.({ persisted: false });
+  expect(port.postMessage).not.toHaveBeenCalled();
+  events.get("unhandledrejection")?.({ reason: "private-rejection" });
+  expect(port.postMessage).toHaveBeenCalledExactlyOnceWith({
+    type: "page-error",
+  });
+});

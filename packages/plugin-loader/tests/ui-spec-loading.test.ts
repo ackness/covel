@@ -467,3 +467,43 @@ it("preserves valid bridge capabilities while reporting only the invalid sibling
     await fs.rm(root, { recursive: true, force: true });
   }
 });
+
+it("loads both session surfaces with the same static rules and isolates invalid siblings", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "covel-ui-surfaces-"));
+  try {
+    await fs.writeFile(path.join(root, "page.html"), "<p>Surface</p>");
+    const paths = [];
+    for (const surface of ["main", "composer", "sidebar"]) {
+      const file = surface + ".json";
+      paths.push(file);
+      await fs.writeFile(
+        path.join(root, file),
+        JSON.stringify({
+          id: surface,
+          label: surface,
+          surface,
+          bridge: "session",
+          webview: { entry: "./page.html" },
+        }),
+      );
+    }
+    const loaded = await loadPluginUiSpecs(root, "owner", { view: paths });
+    expect(loaded.slots.view?.map((spec) => spec.surface)).toEqual([
+      "main",
+      "composer",
+    ]);
+    expect(loaded.diagnostics).toHaveLength(1);
+    expect(loaded.diagnostics[0]?.issues[0]?.path).toBe("surface");
+    const wrongSlot = await loadPluginUiSpecs(root, "owner", {
+      right: ["main.json"],
+    });
+    expect(wrongSlot.slots.right).toBeUndefined();
+    expect(
+      wrongSlot.diagnostics[0]?.issues.some(
+        (issue) => issue.path === "surface",
+      ),
+    ).toBe(true);
+  } finally {
+    await fs.rm(root, { recursive: true, force: true });
+  }
+});

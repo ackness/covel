@@ -1496,3 +1496,7 @@ runtime:
 调用 `ctx.presentation.note(reason)` 记录固定代码：`no-story`、`no-scene-change`、`asset-missing`、`budget-exhausted`、`unavailable`、`superseded`、`no-output`、`failed`。不能传自由文本。没有展示写入且没有 note 时推导 `no-output`；业务返回值本身不算可见产出。预算拒绝是正常 no-op，可以捕获后继续使用已有素材；未捕获则丢弃未完成写入，不归为插件故障。自身异常、无效输出和超时保持原有故障归属。
 
 每次结算通过 [`presentation.completed`](./protocol.md#presentation-completed) 留下状态、来源关联和额度计数。它不增加每回合玩家通知。呈现 function 仍是已批准的非沙箱服务端 JS；这个 API 策略不替代[代码审批](./plugin-installation.md)，也不限制代码直接使用 Node 的权限。
+
+## 沙箱系统区域
+
+沙箱区域继续使用 `contributes.ui.view` 的 spec 路径，单数 surface 选择主视图或输入框；不增加 placement、runtime 触发类型或提案种类。所属手动 runtime 的调用仍经审批、提案和提交。声明、授权、组合与失效规则见[沙箱主视图与输入框](./ui-panels.md#沙箱主视图与输入框)。

@@ -77,6 +77,7 @@ export interface PluginPanelProps {
   };
   onRenderError?: () => void;
   onRetry?: () => void;
+  onPageFailure?: () => void;
 }
 
 function resolveEmptyMessage(value: unknown, locale: string): string {
@@ -113,6 +114,7 @@ function SessionPluginPanel(props: PluginPanelProps) {
       expanded={props.expanded}
       fill={props.fill}
       onRetry={props.onRetry}
+      onPageFailure={props.onPageFailure}
       stream={session.stream}
       sessionPage
       isCurrent={session.isCurrent}
@@ -207,6 +209,7 @@ function PluginPanelView({
   fill = false,
   onRenderError,
   onRetry,
+  onPageFailure,
   data,
   sources,
   jobs,
@@ -563,6 +566,7 @@ function PluginPanelView({
           html={typeof webview.html === "string" ? webview.html : undefined}
           src={typeof webview.url === "string" ? webview.url : undefined}
           onRetry={onRetry}
+          onPageFailure={onPageFailure}
           height={webview.height}
           expanded={expanded}
           fill={fill}

@@ -18,3 +18,15 @@ button {
 label {
   display: block;
 }
+
+/* Keep overflow on the fixed body instead of propagating it to the viewport. */
+html.fill {
+  overflow: hidden;
+}
+body.fill {
+  position: fixed;
+  inset: 0;
+  z-index: 2147483647;
+  margin: 0;
+  overflow: auto;
+}

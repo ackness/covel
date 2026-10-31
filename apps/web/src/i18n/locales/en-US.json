@@ -583,7 +583,14 @@
       "openPanel": "Open this plugin’s panels"
     },
     "revokeViewCapability": "Revoke: {{capability}}",
-    "viewOpenInteraction": "Open interaction in the default interface"
+    "viewOpenInteraction": "Open interaction in the default interface",
+    "surfaceComposer": "Composer",
+    "surfaceMain": "Main view",
+    "surfaceDefault": "Framework default",
+    "surfaceReturn": "Back to default interface",
+    "surfaceStop": "Stop",
+    "surfaceRecovery": "Interactions and recovery",
+    "surfaceFailed": "“{{label}}” stopped responding. The default interface is available."
   },
   "blocks": {
     "actionPlaceholder": "Or type your own action...",

@@ -633,7 +633,14 @@
       "openPanel": "Открывать панели этого плагина"
     },
     "revokeViewCapability": "Отозвать: {{capability}}",
-    "viewOpenInteraction": "Открыть взаимодействие в стандартном интерфейсе"
+    "viewOpenInteraction": "Открыть взаимодействие в стандартном интерфейсе",
+    "surfaceComposer": "Ввод",
+    "surfaceMain": "Основной вид",
+    "surfaceDefault": "Интерфейс платформы",
+    "surfaceReturn": "Вернуться к обычному интерфейсу",
+    "surfaceStop": "Остановить",
+    "surfaceRecovery": "Ответы и восстановление",
+    "surfaceFailed": "«{{label}}» перестала отвечать. Доступен обычный интерфейс."
   },
   "blocks": {
     "actionPlaceholder": "Или введите собственное действие...",

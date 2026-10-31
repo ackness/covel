@@ -324,3 +324,13 @@ Record the capture's commit, scene, turn, theme, and viewport. If an image inclu
 | A model call or character creation fails                 | The real-model specs in the browser use the model roles configured in the app, such as `story` and `plugin`. `pnpm e2e:verify` also routes by configuration, and it switches to a specified slot only when `--slot` is passed or `E2E_MODEL_SLOT` is set. Confirm that the slots you need exist, and that `.env.llm` has the matching key. |
 | You need to locate an asynchronous failure               | On failure, Playwright keeps screenshots. Traces and videos are kept only on the first retry. Open the HTML report with `pnpm exec playwright show-report tests/e2e/report`.                                                                                                                                                               |
 | Cannot find the output of the plugin verification script | The script writes to `debugs/e2e-logs/` by default. Pass `--no-log` if you only want to see it in the terminal, and `--keep` to keep sessions and snapshots.                                                                                                                                                                               |
+
+## Sandbox surface acceptance
+
+Run `sandbox-surfaces.acceptance.ts` with `tests/e2e/third-party-stage.config.ts`. It loads the real package from a private community directory and covers persisted writes, consent, independent regions and recovery. Serialize every fixed-port Playwright command under `flock /tmp/covel-e2e.lock`; default e2e does not include acceptance files. Example:
+
+```bash
+flock /tmp/covel-e2e.lock pnpm exec playwright test --config tests/e2e/third-party-stage.config.ts tests/e2e/sandbox-surfaces.acceptance.ts
+```
+
+Native Electron acceptance additionally needs the actual unpacked app and a disposable profile: install the same package, test both regions, writes/consent/timeout/error/return, local JS/CSS/images, strict CSP, no Node/storage/covelIpc in either frame form, and working host IPC. Restart the sidecar through normal controls and verify resource/port recovery without leaks or blank regions. Record OS, actual Electron/embedded Node and resource path; Linux or Chromium results cannot replace native Windows/macOS runs. Explicitly mark unavailable GUI checks unrun.

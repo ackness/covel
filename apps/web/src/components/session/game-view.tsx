@@ -3,6 +3,11 @@ import { parsePluginViewMode } from "@covel/shared";
 import { usePluginViews } from "./game-view/use-plugin-views.js";
 import { PluginViewHost } from "./plugin-view-host.js";
 import {
+  SandboxSurfaceHost,
+  SandboxSurfaceControls,
+} from "./sandbox-surface-host.js";
+import type { PluginViewEntry } from "./game-view/use-plugin-views.js";
+import {
   requestedViewGrants,
   usePluginViewConsent,
 } from "./plugin-view-consent.js";
@@ -157,16 +162,108 @@ export function GameView({
   );
 
   const pluginViews = usePluginViews(session.id, sessionPlugins, i18n.language);
-  const viewConsent = usePluginViewConsent(pluginViews.views, session.id);
+  const allViews = useMemo(
+    () => [...pluginViews.views, ...(pluginViews.composers ?? [])],
+    [pluginViews.views, pluginViews.composers],
+  );
+  const viewConsent = usePluginViewConsent(allViews, session.id);
   const [viewMode, setViewMode, viewInfo] = useGameViewMode(
-    world,
+    world?.id === session.worldId ? world : null,
     pluginViews,
     viewConsent.isAllowed,
+    session.id,
   );
   const activePluginView = pluginViews.views.find(
     (entry) => entry.mode === viewMode,
   );
-  const consentEntry = viewInfo.consentView;
+  const [composerSelection, setComposerSelection] = useState<{
+    sessionId: string;
+    mode: string;
+  } | null>(null);
+  const composerMode =
+    composerSelection?.sessionId === session.id ? composerSelection.mode : "";
+  const selectedComposer =
+    pluginViews.status === "ready"
+      ? pluginViews.composers?.find((entry) => entry.mode === composerMode)
+      : undefined;
+  const activeComposer =
+    selectedComposer && viewConsent.isAllowed(selectedComposer)
+      ? selectedComposer
+      : undefined;
+  const consentEntry =
+    viewInfo.consentView ??
+    (selectedComposer && !activeComposer ? selectedComposer : undefined);
+  const consentVisit = useRef(0);
+  const [failures, setFailures] = useState<{
+    sessionId: string;
+    main?: PluginViewEntry;
+    composer?: PluginViewEntry;
+  }>({ sessionId: session.id });
+  const selectionOwner = useRef<{
+    sessionId: string;
+    main?: string;
+    composer?: string;
+  }>({
+    sessionId: session.id,
+    main: viewMode,
+    composer: activeComposer?.mode,
+  });
+  selectionOwner.current = {
+    sessionId: session.id,
+    main: viewMode,
+    composer: activeComposer?.mode,
+  };
+  const currentRegion = (
+    entry: PluginViewEntry,
+    region: "main" | "composer",
+  ) => {
+    const allowed = viewConsent.isCurrent(entry);
+    return () =>
+      selectionOwner.current.sessionId === session.id &&
+      selectionOwner.current[region] === entry.mode &&
+      allowed();
+  };
+  const chooseComposer = (mode: string) => {
+    consentVisit.current++;
+    retryOwner.current.composer++;
+    if (mode && !pluginViews.composers?.some((entry) => entry.mode === mode))
+      return;
+    setComposerSelection(mode ? { sessionId: session.id, mode } : null);
+    setFailures((previous) => ({ ...previous, composer: undefined }));
+  };
+  const declineConsent = () => {
+    consentVisit.current++;
+    if (consentEntry?.spec.surface === "composer") chooseComposer("");
+    else setViewMode(viewInfo.hostDefault);
+  };
+  // Once an active region loses its declaration or permission, require a new explicit choice.
+  const lastActive = useRef<{
+    main?: PluginViewEntry;
+    composer?: PluginViewEntry;
+  }>({});
+  useEffect(() => {
+    const previous = lastActive.current;
+    if (
+      previous.main &&
+      !activePluginView &&
+      viewInfo.requestedMode === previous.main.mode
+    )
+      setViewMode(viewInfo.hostDefault);
+    if (
+      previous.composer &&
+      !activeComposer &&
+      composerMode === previous.composer.mode
+    )
+      setComposerSelection(null);
+    lastActive.current = { main: activePluginView, composer: activeComposer };
+  }, [
+    activePluginView,
+    activeComposer,
+    composerMode,
+    setViewMode,
+    viewInfo.hostDefault,
+    viewInfo.requestedMode,
+  ]);
   const consentDialog = useRef(consentEntry);
   consentDialog.current = consentEntry;
   const [savingViewConsent, setSavingViewConsent] = useState(false);
@@ -327,6 +424,9 @@ export function GameView({
   // Leaving stage always drops immersion so a hidden header can't strand the
   // player in a chrome-less non-stage view.
   const handleViewModeChange = (mode: GameViewMode) => {
+    consentVisit.current++;
+    retryOwner.current.main++;
+    setFailures((previous) => ({ ...previous, main: undefined }));
     if (mode !== "stage") setImmersive(false);
     setViewMode(mode);
   };
@@ -383,6 +483,112 @@ export function GameView({
 
   // ── Layout ─────────────────────────────────────────────────────
 
+  const failRegion = (entry: PluginViewEntry, region: "main" | "composer") => {
+    selectionOwner.current[region] = undefined;
+    if (region === "main") setViewMode(viewInfo.hostDefault);
+    else setComposerSelection(null);
+    setFailures((previous) => ({
+      ...(previous.sessionId === session.id ? previous : {}),
+      sessionId: session.id,
+      [region]: entry,
+    }));
+  };
+  const retryOwner = useRef({ main: 0, composer: 0 });
+  const visitOwner = useRef({ id: session.id });
+  if (visitOwner.current.id !== session.id)
+    visitOwner.current = { id: session.id };
+  const retryRegion = (entry: PluginViewEntry, region: "main" | "composer") => {
+    const attempt = ++retryOwner.current[region];
+    const visit = visitOwner.current;
+    void Promise.resolve(pluginViews.reload())
+      .then(() => {
+        if (
+          visitOwner.current !== visit ||
+          retryOwner.current[region] !== attempt
+        )
+          return;
+        if (region === "main") setViewMode(entry.mode);
+        else setComposerSelection({ sessionId: visit.id, mode: entry.mode });
+        setFailures((previous) => ({ ...previous, [region]: undefined }));
+      })
+      .catch(() => emitToast("error", t("session.pageLoadFailed")));
+  };
+  const composerRegion = activeComposer ? (
+    <SandboxSurfaceHost
+      key={JSON.stringify([session.id, activeComposer.mode])}
+      entry={activeComposer}
+      sessionId={session.id}
+      sessionBridgeAllowed
+      isCurrent={currentRegion(activeComposer, "composer")}
+      onFallback={(reason) => {
+        if (reason) failRegion(activeComposer, "composer");
+        else chooseComposer("");
+      }}
+      onRetry={() => retryRegion(activeComposer, "composer")}
+      onRevoke={(capability) => {
+        chooseComposer("");
+        void viewConsent
+          .revoke(activeComposer, capability)
+          .catch(() => emitToast("error", t("settings.saveFailed")));
+      }}
+    />
+  ) : null;
+  const hostComposer = (
+    <MessageComposer
+      recoveryNoticeVisible={recoveryNoticeVisible}
+      executionState={executionState}
+      t={t}
+      session={session}
+      executing={executing}
+      inputValue={inputValue}
+      composerBlocked={composerBlocked}
+      composerDisabled={composerDisabled}
+      awaitingBegin={awaitingBegin}
+      onInputValueChange={setInputValue}
+      onSubmit={handleSubmit}
+      onAbort={handleAbort}
+      onKeyDown={handleKeyDown}
+      pendingDraftCount={pendingDrafts.length}
+      commandMatches={commandMatches}
+      commandMenuOpen={commandMenuOpen}
+      selectedCommandIndex={selectedCommandIndex}
+      commandExecuting={commandExecuting}
+      commandFeedback={commandFeedback}
+      onCommandSelect={applyCommandCompletion}
+      composerModes={composerModes}
+      canSubmit={canSubmit}
+    />
+  );
+  const returnToDefault = () => {
+    selectionOwner.current.main = undefined;
+    selectionOwner.current.composer = undefined;
+    handleViewModeChange(viewInfo.hostDefault);
+    chooseComposer("");
+    setImmersive(false);
+    setFailures({ sessionId: session.id });
+  };
+  const surfaceNotices =
+    failures.sessionId === session.id
+      ? (["main", "composer"] as const).flatMap((region) => {
+          const entry = failures[region];
+          return entry
+            ? [
+                {
+                  region,
+                  label: entry.label,
+                  onRetry: () => retryRegion(entry, region),
+                  onRevoke: () => {
+                    void viewConsent
+                      .revoke(entry)
+                      .catch(() =>
+                        emitToast("error", t("settings.saveFailed")),
+                      );
+                  },
+                },
+              ]
+            : [];
+        })
+      : [];
   const content = (
     <div className="flex h-full w-full overflow-hidden border-t border-border">
       <SettingsDialog
@@ -528,9 +734,12 @@ export function GameView({
           {/* Header — hidden while the stage is immersive so it fills the
               viewport. Fades back in on exit (rails snap; chrome fades). */}
           {!(immersive && viewMode === "stage") && (
-            // Above the notice bars below it (z-10), so the header's menus
-            // open over them.
-            <div className="relative z-20 animate-in fade-in-0 duration-200">
+            // Host menus must open above both surface controls and notices.
+            <div
+              data-testid="session-header"
+              className="relative animate-in fade-in-0 duration-200"
+              style={{ zIndex: 40 }}
+            >
               <GameViewHeader
                 recoveryNoticeVisible={recoveryNoticeVisible}
                 executionState={executionState}
@@ -558,6 +767,25 @@ export function GameView({
             </div>
           )}
 
+          {(allViews.length > 0 || surfaceNotices.length > 0) && (
+            <SandboxSurfaceControls
+              mainLabel={activePluginView?.label ?? t("session.surfaceDefault")}
+              composers={pluginViews.composers ?? []}
+              composerMode={composerMode}
+              onComposerChange={chooseComposer}
+              onReturn={returnToDefault}
+              onStop={() => void abortActiveTurn()}
+              onRecovery={() => {
+                handleViewModeChange("parsed");
+                if (suspensions.length > 0) setSuspensionsOpen(true);
+              }}
+              executing={
+                executing ||
+                (!!state.advance && state.advance.phase !== "stopped")
+              }
+              notices={surfaceNotices}
+            />
+          )}
           <AutoAdvanceControl key={`auto-advance:${session.id}`} />
 
           {sessionPlugins.some((plugin) => plugin.approvalRequired) && (
@@ -640,7 +868,7 @@ export function GameView({
             <Dialog
               open={viewConsent.ready(consentEntry)}
               onOpenChange={(open) => {
-                if (!open) handleViewModeChange(viewInfo.hostDefault);
+                if (!open) declineConsent();
               }}
             >
               <DialogContent>
@@ -663,21 +891,35 @@ export function GameView({
                     </li>
                   ))}
                 </ul>
-                <div className="flex justify-end gap-2">
-                  <Button
-                    variant="outline"
-                    onClick={() => handleViewModeChange(viewInfo.hostDefault)}
-                  >
+                <div
+                  data-covel-host-controls=""
+                  className="flex flex-wrap justify-end gap-2"
+                >
+                  <Button variant="outline" onClick={returnToDefault}>
+                    {t("session.surfaceReturn")}
+                  </Button>
+                  {executing && (
+                    <Button
+                      variant="outline"
+                      onClick={() => void abortActiveTurn()}
+                    >
+                      {t("session.surfaceStop")}
+                    </Button>
+                  )}
+                  <Button variant="outline" onClick={declineConsent}>
                     {t("session.viewConsentDecline")}
                   </Button>
                   <Button
                     disabled={savingViewConsent}
                     onClick={() => {
                       setSavingViewConsent(true);
+                      const visit = consentVisit.current;
                       void viewConsent
                         .grant(
                           consentEntry,
-                          () => consentDialog.current === consentEntry,
+                          () =>
+                            consentVisit.current === visit &&
+                            consentDialog.current === consentEntry,
                         )
                         .catch(() =>
                           emitToast("error", t("settings.saveFailed")),
@@ -692,23 +934,33 @@ export function GameView({
             </Dialog>
           )}
           {activePluginView && parsePluginViewMode(viewMode) ? (
-            <PluginViewHost
-              onRetry={pluginViews.reload}
-              key={JSON.stringify([session.id, activePluginView.mode])}
-              entry={activePluginView}
-              sessionId={session.id}
-              sessionBridgeAllowed={viewConsent.isAllowed(activePluginView)}
-              isCurrent={viewConsent.isCurrent(activePluginView)}
-              onFallback={() => handleViewModeChange(viewInfo.hostDefault)}
-              onRevoke={(capability) => {
-                handleViewModeChange(viewInfo.hostDefault);
-                void viewConsent
-                  .revoke(activePluginView, capability)
-                  .catch(() => emitToast("error", t("settings.saveFailed")));
-              }}
-            />
+            <div className="relative z-1 flex min-h-0 flex-1 flex-col overflow-hidden">
+              <PluginViewHost
+                onRetry={() => retryRegion(activePluginView, "main")}
+                key={JSON.stringify([session.id, activePluginView.mode])}
+                entry={activePluginView}
+                sessionId={session.id}
+                sessionBridgeAllowed={viewConsent.isAllowed(activePluginView)}
+                isCurrent={currentRegion(activePluginView, "main")}
+                onFallback={(reason) => {
+                  if (reason) failRegion(activePluginView, "main");
+                  else handleViewModeChange(viewInfo.hostDefault);
+                }}
+                onRevoke={(capability) => {
+                  handleViewModeChange(viewInfo.hostDefault);
+                  void viewConsent
+                    .revoke(activePluginView, capability)
+                    .catch(() => emitToast("error", t("settings.saveFailed")));
+                }}
+              />
+              {composerRegion ??
+                (activePluginView.spec.surface === "main"
+                  ? hostComposer
+                  : null)}
+            </div>
           ) : stageActive ? (
             <StageView
+              composerRegion={composerRegion}
               advancing={!!state.advance && state.advance.phase !== "stopped"}
               recoveryTurnId={recoveryTurnId}
               composerDraft={{ value: inputValue, onChange: setInputValue }}
@@ -778,31 +1030,7 @@ export function GameView({
 
               <SessionDimensionsPanel recoveryOnly />
 
-              {/* Input — always fixed at bottom */}
-              <MessageComposer
-                recoveryNoticeVisible={recoveryNoticeVisible}
-                executionState={executionState}
-                t={t}
-                session={session}
-                executing={executing}
-                inputValue={inputValue}
-                composerBlocked={composerBlocked}
-                composerDisabled={composerDisabled}
-                awaitingBegin={awaitingBegin}
-                onInputValueChange={setInputValue}
-                onSubmit={handleSubmit}
-                onAbort={handleAbort}
-                onKeyDown={handleKeyDown}
-                pendingDraftCount={pendingDrafts.length}
-                commandMatches={commandMatches}
-                commandMenuOpen={commandMenuOpen}
-                selectedCommandIndex={selectedCommandIndex}
-                commandExecuting={commandExecuting}
-                commandFeedback={commandFeedback}
-                onCommandSelect={applyCommandCompletion}
-                composerModes={composerModes}
-                canSubmit={canSubmit}
-              />
+              {composerRegion ?? hostComposer}
             </div>
           )}
         </ResizablePanel>

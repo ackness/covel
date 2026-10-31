@@ -699,4 +699,64 @@ messages:
 
 ## 从会话页面请求玩家行动
 
-查看 [sandbox-surface-probe](../../tests/third-party/sandbox-surface-probe/README.md) 的两个普通视图和共享页面。它读取公开故事和输入信息，用句柄回答交互，用所属插件的手动函数 runtime 保存数据集记录。为 spec 添加 `capabilities` 后，玩家会看到每项能力的单独说明；服务端代码审批与页面授权互不替代。页面只在结果为 `accepted` 时清除行动草稿，拒绝时保留。普通视图布局不变，主区域/输入框替换和心跳恢复尚不支持。完整字段与限制见[页面请求](../reference/ui-panels.md#页面请求与安全结果)。
+查看 [sandbox-surface-probe](../../tests/third-party/sandbox-surface-probe/README.md) 的两个独立区域和共享页面。它读取公开故事和输入信息，用句柄回答交互，用所属插件的手动函数 runtime 保存数据集记录。为 spec 添加 `capabilities` 后，玩家会看到每项能力的单独说明；服务端代码审批与页面授权互不替代。页面只在结果为 `accepted` 时清除行动草稿，拒绝时保留。普通视图布局不变；显式主视图保留宿主输入框，独立输入框可用于舞台。完整字段与限制见[页面请求](../reference/ui-panels.md#页面请求与安全结果)。
+
+## 创建独立输入页面
+
+社区示例 `sandbox-surface-probe` 把 `ui/reader.json` 声明为 main，把下面的 `ui/input.json` 声明为 composer。两份路径仍放在 `contributes.ui.view`。共享根目录的 `index.html` 载入经典 `app.js`；服务端 handler 与 schema 留在根目录之外。
+
+```json
+{
+  "id": "input",
+  "label": "Bridge input",
+  "surface": "composer",
+  "bridge": "session",
+  "capabilities": [
+    "submitAction",
+    "submitInteraction",
+    "invokeRuntime",
+    "abortExecution",
+    "openPanel"
+  ],
+  "webview": { "root": "./ui/app", "entry": "index.html" }
+}
+```
+
+```html
+<!doctype html>
+<html lang="en">
+  <head>
+    <script defer src="app.js"></script>
+  </head>
+  <body>
+    <pre id="story"></pre>
+    <label>Player action <textarea id="draft"></textarea></label>
+    <button id="submit">Submit action</button>
+    <output id="outcome"></output>
+  </body>
+</html>
+```
+
+```js
+const draft = document.getElementById("draft");
+window.covel.subscribe(({ session }) => {
+  document.getElementById("story").textContent =
+    (session?.messages ?? []).map((row) => row.text).join("\n") +
+    (session?.streaming?.text ?? "");
+});
+document.getElementById("submit").onclick = async () => {
+  try {
+    const result = await window.covel.invoke("submitAction", {
+      kind: "say",
+      text: draft.value,
+    });
+    document.getElementById("outcome").textContent = result.status;
+    if (result.status === "accepted") draft.value = "";
+  } catch {
+    document.getElementById("outcome").textContent =
+      "Unavailable; draft retained.";
+  }
+};
+```
+
+完整示例还用当前句柄回答交互、调用所属手动 runtime、停止和打开自己的面板；不要把原始结果写进页面。结果与方法见[页面请求](../reference/ui-panels.md#页面请求与安全结果)，授权与超时见[沙箱区域](../reference/ui-panels.md#沙箱主视图与输入框)。内容或能力变化后重新授权；玩家可从宿主撤销、返回或显式重试。错误/失联模式用于验收，不会自动重放修改，也不能用页面重载恢复草稿。

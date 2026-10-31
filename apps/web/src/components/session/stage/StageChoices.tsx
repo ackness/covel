@@ -26,6 +26,7 @@ import {
 } from "./stage-selectors.js";
 
 export interface StageChoicesProps {
+  readonly hideInput?: boolean;
   readonly extensions?: (
     choices: readonly StageChoiceItem[],
     onDraftMessage: (text: string) => void,
@@ -60,6 +61,7 @@ const TWO_COLUMN_GROUP_SIZE = 4;
 const CATEGORY_TONES = ["info", "success", "warning", "primary"] as const;
 
 export function StageChoices({
+  hideInput = false,
   extensions,
   composerDraft,
   composerModes,
@@ -77,7 +79,7 @@ export function StageChoices({
   const draft = composerDraft?.value ?? localDraft;
   const setDraft = composerDraft?.onChange ?? setLocalDraft;
   const [optionsEl, setOptionsEl] = useState<HTMLElement | null>(null);
-  useChoiceHotkeys(optionsEl, visible && !executing);
+  useChoiceHotkeys(optionsEl, visible && !executing && !hideInput);
   const { items, groups, context } = mergeChoices(
     interactionChoices,
     suggestions,
@@ -197,7 +199,7 @@ export function StageChoices({
             </div>
           </div>
 
-          {groups.length > 0 && (
+          {!hideInput && groups.length > 0 && (
             // One numbering for the whole panel, matching the number keys.
             <div
               ref={setOptionsEl}
@@ -269,7 +271,7 @@ export function StageChoices({
           {extensions?.(items, setDraft)}
         </div>
 
-        {composerModes && (
+        {!hideInput && composerModes && (
           <div className="shrink-0 border-t border-border/50 px-3 pt-2.5">
             <ComposerModeBar
               t={t}
@@ -279,49 +281,51 @@ export function StageChoices({
             <ComposerFields composerModes={composerModes} />
           </div>
         )}
-        <div
-          className={clsx(
-            "flex shrink-0 items-end gap-2 px-3 py-2.5",
-            !composerModes && "border-t border-border/50",
-          )}
-        >
-          {textless && composerModes ? (
-            <span className="min-w-0 flex-1 truncate px-1 text-sm text-muted-foreground">
-              {composerModes.mode.placeholder ?? composerModes.mode.label}
-            </span>
-          ) : (
-            <textarea
-              rows={1}
-              value={draft}
-              disabled={inputBusy}
-              onChange={(event) => setDraft(event.target.value)}
-              onKeyDown={handleTextareaKeyDown}
-              placeholder={
-                composerModes?.mode.placeholder ?? t("stage.inputPlaceholder")
-              }
-              aria-label={t("stage.inputPlaceholder")}
-              data-testid="stage-decision-input"
-              className="max-h-24 min-h-11 min-w-0 flex-1 resize-none rounded-(--radius-control) border border-border/60 bg-background/35 px-3 py-2 text-base outline-none transition-colors placeholder:text-muted-foreground focus:border-(--accent-primary) disabled:cursor-wait disabled:opacity-50 md:text-sm"
-            />
-          )}
-          <button
-            type="button"
-            onClick={submitDraft}
-            disabled={!canSend}
-            aria-label={
-              textless && composerModes
-                ? composerModes.mode.label
-                : t("stage.sendLabel")
-            }
-            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-(--radius-control) bg-(--accent-primary) text-black transition-opacity disabled:cursor-not-allowed disabled:opacity-40"
-          >
-            {inputBusy ? (
-              <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
-            ) : (
-              <Send className="h-4 w-4" aria-hidden="true" />
+        {!hideInput && (
+          <div
+            className={clsx(
+              "flex shrink-0 items-end gap-2 px-3 py-2.5",
+              !composerModes && "border-t border-border/50",
             )}
-          </button>
-        </div>
+          >
+            {textless && composerModes ? (
+              <span className="min-w-0 flex-1 truncate px-1 text-sm text-muted-foreground">
+                {composerModes.mode.placeholder ?? composerModes.mode.label}
+              </span>
+            ) : (
+              <textarea
+                rows={1}
+                value={draft}
+                disabled={inputBusy}
+                onChange={(event) => setDraft(event.target.value)}
+                onKeyDown={handleTextareaKeyDown}
+                placeholder={
+                  composerModes?.mode.placeholder ?? t("stage.inputPlaceholder")
+                }
+                aria-label={t("stage.inputPlaceholder")}
+                data-testid="stage-decision-input"
+                className="max-h-24 min-h-11 min-w-0 flex-1 resize-none rounded-(--radius-control) border border-border/60 bg-background/35 px-3 py-2 text-base outline-none transition-colors placeholder:text-muted-foreground focus:border-(--accent-primary) disabled:cursor-wait disabled:opacity-50 md:text-sm"
+              />
+            )}
+            <button
+              type="button"
+              onClick={submitDraft}
+              disabled={!canSend}
+              aria-label={
+                textless && composerModes
+                  ? composerModes.mode.label
+                  : t("stage.sendLabel")
+              }
+              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-(--radius-control) bg-(--accent-primary) text-black transition-opacity disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              {inputBusy ? (
+                <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+              ) : (
+                <Send className="h-4 w-4" aria-hidden="true" />
+              )}
+            </button>
+          </div>
+        )}
       </section>
     </div>
   );

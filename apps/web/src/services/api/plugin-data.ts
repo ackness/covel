@@ -46,6 +46,7 @@ export interface UISlotSpec {
   shortLabel?: unknown;
   description?: unknown;
   bridge?: "session";
+  surface?: "main" | "composer";
   capabilities?: readonly import("@covel/shared").SessionBridgeCapability[];
   alwaysRender?: boolean;
   icon?: string;
