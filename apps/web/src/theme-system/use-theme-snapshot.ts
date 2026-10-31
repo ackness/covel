@@ -1,4 +1,11 @@
-import { useSyncExternalStore } from "react";
+import { getSettings } from "@/settings/store.js";
+import {
+  currentPluginThemeSession,
+  effectivePluginPalette,
+  pluginThemeRevision,
+  subscribePluginThemes,
+} from "./plugin-themes.js";
+import { useSyncExternalStore, useCallback, useMemo } from "react";
 
 /**
  * The part of the active style scheme a plugin's own widget can use. A widget
@@ -97,6 +104,35 @@ function current(): ThemeSnapshot {
 }
 
 /** The active theme's id, colour scheme and a fixed set of resolved tokens. */
-export function useThemeSnapshot(): ThemeSnapshot {
-  return useSyncExternalStore(subscribe, current, current);
+export function useThemeSnapshot(sessionId?: string): ThemeSnapshot {
+  const base = useSyncExternalStore(subscribe, current, current);
+  const store = sessionId ? getSettings() : undefined;
+  const listen = useCallback(
+    (listener: () => void) =>
+      store ? subscribePluginThemes(store, listener) : () => {},
+    [store],
+  );
+  const revision = useCallback(
+    () => (store ? pluginThemeRevision(store) : 0),
+    [store],
+  );
+  const version = useSyncExternalStore(listen, revision, revision);
+  return useMemo(() => {
+    const source =
+      store && sessionId
+        ? currentPluginThemeSession(store, sessionId)?.state.effective
+        : undefined;
+    if (!source || !store) return base;
+    const palette = effectivePluginPalette(store, source.theme);
+    return {
+      ...base,
+      id: `plugin:${source.pluginId}:${source.themeId}:${source.contentHash}`,
+      tokens: Object.fromEntries(
+        Object.entries(TOKEN_SOURCES).map(([name, property]) => [
+          name,
+          palette[property] ?? base.tokens[name as ThemeTokenName],
+        ]),
+      ) as Record<ThemeTokenName, string>,
+    };
+  }, [base, store, sessionId, version]);
 }

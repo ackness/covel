@@ -1,3 +1,7 @@
+import { usePluginThemes } from "./game-view/use-plugin-themes.js";
+import { SessionThemeSettings } from "./session-theme-settings.js";
+import { SessionRecoveryControls } from "./session-recovery-controls.js";
+import { usePluginThemePart } from "@/theme-system/use-plugin-theme.js";
 import { AutoAdvanceControl } from "./auto-advance-control.js";
 import { parsePluginViewMode } from "@covel/shared";
 import { usePluginViews } from "./game-view/use-plugin-views.js";
@@ -161,6 +165,12 @@ export function GameView({
     llmConfig,
   );
 
+  const pluginThemes = usePluginThemes(
+    session.id,
+    sessionPlugins,
+    i18n.language,
+  );
+  const decorativePart = usePluginThemePart(session.id, "surface");
   const pluginViews = usePluginViews(session.id, sessionPlugins, i18n.language);
   const allViews = useMemo(
     () => [...pluginViews.views, ...(pluginViews.composers ?? [])],
@@ -270,6 +280,7 @@ export function GameView({
   // Full-screen stage: collapse both studio rails + hide the session header so
   // the stage fills the viewport. Session-memory only (no persistence).
   const [immersive, setImmersive] = useState(false);
+  const [replayStageStory, setReplayStageStory] = useState(false);
   // Warm the media cache with known stage art (sprites + scene backdrops)
   // during pre-game, so the opening turn paints them without a download stall.
   useStageMediaPreload(session.id);
@@ -428,6 +439,7 @@ export function GameView({
     retryOwner.current.main++;
     setFailures((previous) => ({ ...previous, main: undefined }));
     if (mode !== "stage") setImmersive(false);
+    setReplayStageStory(mode === "stage");
     setViewMode(mode);
   };
 
@@ -790,6 +802,13 @@ export function GameView({
               style={{ zIndex: 40 }}
             >
               <GameViewHeader
+                themeSettings={
+                  <SessionThemeSettings
+                    key={pluginThemes.source?.scope ?? session.id}
+                    source={pluginThemes.source}
+                    onReload={pluginThemes.reload}
+                  />
+                }
                 recoveryNoticeVisible={recoveryNoticeVisible}
                 executionState={executionState}
                 t={t}
@@ -835,6 +854,7 @@ export function GameView({
               notices={surfaceNotices}
             />
           )}
+          <SessionRecoveryControls theme={pluginThemes.source} />
           <AutoAdvanceControl key={`auto-advance:${session.id}`} />
 
           {sessionPlugins.some((plugin) => plugin.approvalRequired) && (
@@ -1030,6 +1050,7 @@ export function GameView({
           ) : stageActive ? (
             <StageView
               composerRegion={composerRegion}
+              replayStoryOnEnter={replayStageStory}
               advancing={!!state.advance && state.advance.phase !== "stopped"}
               recoveryTurnId={recoveryTurnId}
               composerDraft={{ value: inputValue, onChange: setInputValue }}
@@ -1062,7 +1083,14 @@ export function GameView({
             />
           ) : (
             <div className="ui-story-surface relative z-1 flex min-h-0 flex-1 flex-col">
-              {renderMessages()}
+              <div className="relative isolate flex min-h-0 flex-1 flex-col overflow-hidden">
+                <div
+                  aria-hidden="true"
+                  className="ui-session-theme-plane"
+                  {...decorativePart}
+                />
+                {renderMessages()}
+              </div>
 
               {renderComposer()}
             </div>

@@ -11,6 +11,7 @@ import { Markdown } from "@/components/ui/markdown.js";
 import type { StreamMessage } from "@/stores/session-store.js";
 
 interface NarrativeMessageBodyProps {
+  themeSessionId?: string;
   isUser: boolean;
   isHiddenAssistantKind: boolean;
   content: string;
@@ -38,6 +39,7 @@ export function preserveSoftBreaks(text: string): string {
 }
 
 function NonMemoNarrativeMessageBody({
+  themeSessionId,
   isUser,
   isHiddenAssistantKind,
   content,
@@ -62,7 +64,7 @@ function NonMemoNarrativeMessageBody({
         // narrative-prose styling to signal "this is not story".
         content
       ) : (
-        <Markdown>{content}</Markdown>
+        <Markdown themeSessionId={themeSessionId}>{content}</Markdown>
       )}
     </div>
   );

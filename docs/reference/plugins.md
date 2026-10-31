@@ -1521,7 +1521,11 @@ runtime:
 
 ## 静态主题声明
 
-`contributes.ui.theme: [./ui/reading-theme.json]` 声明受限静态主题。它可单独存在于无 runtime、无 entry 的包中，不是 view/webview。CLI、应用内校验、ZIP 安装和发现共用同一编译器；坏主题只在发现响应中被移除并返回 `slot: "theme"` 诊断。字段、安全边界与资源限制见[插件主题契约](./theme-packages.md#插件提供的受限主题)。当前只提供作者与 API 支持，尚无玩家启用入口。
+`contributes.ui.theme: [./ui/reading-theme.json]` 声明受限静态主题。它可单独存在于无 runtime、无 entry 的包中，不是 view/webview。CLI、应用内校验、ZIP 安装和发现共用同一编译器；坏主题只在发现响应中被移除并返回 `slot: "theme"` 诊断。字段、安全边界与资源限制见[插件主题契约](./theme-packages.md#插件提供的受限主题)。玩家从会话工具栏的“会话主题”明确选择；完整工作流程见[主题契约](./theme-packages.md#在会话中选择)。
+
+### 会话中的可选主题
+
+场景舞台通过公共 `contributes.ui.theme` 声明“舞台阅读”，不自动启用或切换视图。无 entry/runtime 的社区 [Reading theme probe](../../tests/third-party/theme-pack-probe/README.md) 通过同一清单、静态验证、资源路由和会话选择路径工作。玩家操作、严格语法与限制统一见[插件主题](./theme-packages.md#插件提供的受限主题)。
 
 ## 沙箱系统区域
 

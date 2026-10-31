@@ -59,6 +59,7 @@ import {
 export type PluginPanelStateCache = Map<string, StateStore>;
 
 export interface PluginPanelProps {
+  themeSessionId?: string;
   pluginId: string;
   panelId?: string;
   spec: Record<string, unknown>;
@@ -124,6 +125,7 @@ function SessionPluginPanel(props: PluginPanelProps) {
   if (!webview || !session) return null;
   return (
     <PluginWebview
+      themeSessionId={props.themeSessionId}
       title={
         resolveEmptyMessage(props.spec.label, i18n.language) || props.pluginId
       }
@@ -581,6 +583,7 @@ function PluginPanelView({
       allowed.setUiState = updateUiState;
       return (
         <PluginWebview
+          themeSessionId={sessionId}
           title={resolveEmptyMessage(spec.label, activeLocale) || pluginId}
           html={typeof webview.html === "string" ? webview.html : undefined}
           src={typeof webview.url === "string" ? webview.url : undefined}

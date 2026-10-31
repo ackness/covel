@@ -4,10 +4,14 @@
  */
 import { useEffect, useRef, type ReactElement } from "react";
 import { useTranslation } from "react-i18next";
+import { usePluginThemePart } from "@/theme-system/use-plugin-theme.js";
 import { useTypewriter } from "./use-typewriter.js";
 import { stageParagraphSpeakerName } from "./stage-dialogue-selectors.js";
 
 export interface StageDialogProps {
+  /** Optional rereading sits in the decision panel without covering its input. */
+  readonly inline?: boolean;
+  readonly sessionId?: string;
   readonly turnId?: string;
   readonly storyText: string;
   readonly streamEnded: boolean;
@@ -22,6 +26,8 @@ export interface StageDialogProps {
 const AUTO_PLAY_PAUSE_MS = 1200;
 
 export function StageDialog({
+  inline = false,
+  sessionId,
   turnId,
   storyText,
   streamEnded,
@@ -31,6 +37,7 @@ export function StageDialog({
   onAllRead,
 }: StageDialogProps): ReactElement {
   const { t } = useTranslation();
+  const themePart = usePluginThemePart(sessionId, "dialogue");
   const { visible, segmentIndex, status, advance, skip } = useTypewriter(
     storyText,
     streamEnded,
@@ -63,7 +70,11 @@ export function StageDialog({
 
   return (
     <div
-      className="pointer-events-none absolute inset-x-0 bottom-0 z-30 flex justify-center px-4 pb-4 md:px-8 md:pb-8"
+      className={
+        inline
+          ? "relative flex justify-center"
+          : "pointer-events-none absolute inset-x-0 bottom-0 z-30 flex justify-center px-4 pb-4 md:px-8 md:pb-8"
+      }
       data-testid="stage-dialog"
     >
       <div className="ui-stage-panel pointer-events-auto relative w-full max-w-3xl rounded-(--radius-card)">
@@ -83,6 +94,7 @@ export function StageDialog({
             </span>
           )}
           <p
+            {...themePart}
             aria-live="polite"
             aria-atomic="true"
             aria-busy={status === "typing"}

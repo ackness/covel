@@ -93,6 +93,8 @@ contributes:
           path: media/scenes.registry.json
           key: registryId
   ui:
+    theme:
+      - ./ui/reading-theme.json
     segment:
       - ./ui/dialogue-line.json
     right:

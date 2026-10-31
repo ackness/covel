@@ -439,3 +439,5 @@ A theme should express one direction, and the result will be more complete. Thre
 - **Look up all variables, class names and fields.** See the [theme package reference](../reference/theme-packages.md).
 - **Make a plugin interface you wrote follow the theme.** See [Add an interface to a plugin](../plugins/ui.md#let-the-interface-follow-the-style).
 - **Give a world a cover and scene pictures.** Some styles fill the screen with the world's pictures. See [World art direction](../worlds/art-direction.md).
+
+Plugin-supplied session appearance uses a separate restricted contract and an explicit session-toolbar choice, without importing into the global theme library. See [plugin themes](../reference/theme-packages.md#selecting-in-a-session) and its installable community example.

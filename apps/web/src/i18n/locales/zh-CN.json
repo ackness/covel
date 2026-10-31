@@ -551,7 +551,19 @@
     "surfaceReturn": "切回默认界面",
     "surfaceStop": "停止",
     "surfaceRecovery": "交互与恢复",
-    "surfaceFailed": "“{{label}}”未能继续响应，已显示默认界面。"
+    "surfaceFailed": "“{{label}}”未能继续响应，已显示默认界面。",
+    "theme": {
+      "menu": "会话主题",
+      "default": "使用默认外观",
+      "readOnly": "设备设置不可用或仍在加载，暂时不能保存主题选择。",
+      "loadFailed": "无法加载此主题，当前保留上次可用的外观。",
+      "active": "正在使用 {{label}} · {{owner}}。",
+      "unavailable": "{{label}} · {{owner}} 未生效。请启用所属插件，或重新选择当前版本。",
+      "offSaveFailed": "本次访问已使用默认外观，但偏好未保存；重启后可能恢复之前的选择。",
+      "apply": "应用",
+      "draftUnavailable": "此选择不可用，请选择当前主题。",
+      "saving": "正在保存…"
+    }
   },
   "blocks": {
     "actionPlaceholder": "或输入自定义行动...",

@@ -27,6 +27,7 @@ import {
 
 export interface StageChoicesProps {
   readonly hideInput?: boolean;
+  readonly storyReview?: ReactNode;
   readonly extensions?: (
     choices: readonly StageChoiceItem[],
     onDraftMessage: (text: string) => void,
@@ -62,6 +63,7 @@ const CATEGORY_TONES = ["info", "success", "warning", "primary"] as const;
 
 export function StageChoices({
   hideInput = false,
+  storyReview,
   extensions,
   composerDraft,
   composerModes,
@@ -153,6 +155,7 @@ export function StageChoices({
           className="min-h-0 overflow-y-auto overscroll-contain"
           data-testid="stage-decision-scroll"
         >
+          {storyReview}
           <div className="border-b border-border/50 px-4 py-3.5">
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">

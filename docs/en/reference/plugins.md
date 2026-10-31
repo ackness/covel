@@ -1521,7 +1521,11 @@ A package may contain only `contributes.ui.view`, with no `entry` or runtime. Su
 
 ## Static theme declarations
 
-`contributes.ui.theme: [./ui/reading-theme.json]` declares restricted static themes, including in packages without runtimes or entries. It is separate from view/webview. CLI, in-app validation, ZIP admission and discovery share one compiler; discovery removes only the broken theme and reports `slot: "theme"`. See the [plugin theme contract](./theme-packages.md#restricted-themes-supplied-by-plugins) for fields, resources and safety limits. Authoring and API support are available; player enablement is not yet available.
+`contributes.ui.theme: [./ui/reading-theme.json]` declares restricted static themes, including in packages without runtimes or entries. It is separate from view/webview. CLI, in-app validation, ZIP admission and discovery share one compiler; discovery removes only the broken theme and reports `slot: "theme"`. See the [plugin theme contract](./theme-packages.md#restricted-themes-supplied-by-plugins) for fields, resources and safety limits. Players explicitly choose a pack in **Session theme** in the session toolbar; see the [theme workflow](./theme-packages.md#selecting-in-a-session).
+
+### Optional session themes
+
+Scene Stage declares **Stage reading** through public `contributes.ui.theme`, without automatic activation or view switching. The no-entry, zero-runtime community [Reading theme probe](../../../tests/third-party/theme-pack-probe/README.md) uses the same manifest, static validation, resource route and session picker. Workflow, strict syntax and limits are defined in [plugin themes](./theme-packages.md#restricted-themes-supplied-by-plugins).
 
 ## Sandbox system regions
 

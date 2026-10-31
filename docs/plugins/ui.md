@@ -732,7 +732,7 @@ contributes:
 
 ## 发布静态主题
 
-配色和受限样式放在 `contributes.ui.theme` 的独立 JSON 中，无须添加 runtime、虚假面板或 entry。描述文件、CSS 和素材根相对包目录，CSS 图片相对素材根；完整例子与校验限制见[插件主题](../reference/theme-packages.md#插件提供的受限主题)。目前可静态验证和通过 API 发现，尚不挂载到玩家界面。
+配色和受限样式放在 `contributes.ui.theme` 的独立 JSON 中，无须添加 runtime、虚假面板或 entry。描述文件、CSS 和素材根相对包目录，CSS 图片相对素材根；完整例子与校验限制见[插件主题](../reference/theme-packages.md#插件提供的受限主题)。可静态验证、通过 API 发现，并由玩家在“会话主题”明确选择。可运行的社区例子见 [Reading theme probe](../../tests/third-party/theme-pack-probe/README.md)：压缩包内容后通过安装入口安装，启用插件，再选择主题。场景舞台的可选“舞台阅读”也只使用这条公共声明。
 
 ## 创建独立输入页面
 

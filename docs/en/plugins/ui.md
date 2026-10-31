@@ -732,7 +732,7 @@ Enable this community package and choose Session desk from Plugin views. It uses
 
 ## Publishing static themes
 
-Put palettes and restricted styles in separate JSON files under `contributes.ui.theme`, without a runtime, dummy panel or entry. Descriptor, CSS and asset-root paths are package-relative; CSS image paths are asset-root-relative. See [plugin themes](../reference/theme-packages.md#restricted-themes-supplied-by-plugins) for the example and validation limits. Static validation and API discovery are available; the player interface does not yet mount them.
+Put palettes and restricted styles in separate JSON files under `contributes.ui.theme`, without a runtime, dummy panel or entry. Descriptor, CSS and asset-root paths are package-relative; CSS image paths are asset-root-relative. See [plugin themes](../reference/theme-packages.md#restricted-themes-supplied-by-plugins) for the example and validation limits. Static validation, API discovery and explicit **Session theme** selection are available. For a runnable community example, zip and install [Reading theme probe](../../../tests/third-party/theme-pack-probe/README.md), enable the plugin, then select its theme. Scene Stage’s optional **Stage reading** uses the same public declaration.
 
 ## Build an independent input page
 

@@ -1,6 +1,15 @@
+import { usePluginThemePart } from "@/theme-system/use-plugin-theme.js";
 import type { Components } from "react-markdown";
 import { importImage } from "@/lib/import-image.js";
-import { memo, Suspense, useContext, useEffect, useState } from "react";
+import {
+  memo,
+  Suspense,
+  useContext,
+  useEffect,
+  useState,
+  useMemo,
+  type ReactNode,
+} from "react";
 import { lazyWithRetry } from "@/lib/lazy-with-retry.js";
 import { useTranslation } from "react-i18next";
 import {
@@ -147,12 +156,32 @@ const LazyReactMarkdown = lazyWithRetry(async () => {
     ),
   };
 
-  function Inner({ children }: { children: string }) {
+  function Inner({
+    children,
+    themeSessionId,
+  }: {
+    children: string;
+    themeSessionId?: string;
+  }) {
+    const part = usePluginThemePart(themeSessionId, "story");
+    const themedComponents = useMemo(
+      () =>
+        ({
+          ...components,
+          "covel-story-text": ({
+            children: text,
+          }: {
+            children?: ReactNode;
+          }) => <span {...part}>{text}</span>,
+        }) as Components,
+      [part["data-covel-theme-scope"]],
+    );
     return (
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         urlTransform={urlTransform}
-        components={components}
+        components={themedComponents}
+        rehypePlugins={part["data-covel-theme-scope"] ? [storyTextLeaves] : []}
       >
         {children}
       </ReactMarkdown>
@@ -162,19 +191,63 @@ const LazyReactMarkdown = lazyWithRetry(async () => {
   return { default: Inner };
 });
 
-function NonMemoizedMarkdown({ children }: { children: string }) {
+function NonMemoizedMarkdown({
+  children,
+  themeSessionId,
+}: {
+  children: string;
+  themeSessionId?: string;
+}) {
+  const part = usePluginThemePart(themeSessionId, "story");
   // While the parser chunk loads, fall back to the raw text so the message is
   // never blank — it simply upgrades to formatted markdown once ready.
   return (
     <Suspense
-      fallback={<span className="whitespace-pre-wrap">{children}</span>}
+      fallback={
+        <span {...part} className="whitespace-pre-wrap">
+          {children}
+        </span>
+      }
     >
-      <LazyReactMarkdown>{children}</LazyReactMarkdown>
+      <LazyReactMarkdown themeSessionId={themeSessionId}>
+        {children}
+      </LazyReactMarkdown>
     </Suspense>
   );
 }
 
 export const Markdown = memo(
   NonMemoizedMarkdown,
-  (prev, next) => prev.children === next.children,
+  (prev, next) =>
+    prev.children === next.children &&
+    prev.themeSessionId === next.themeSessionId,
 );
+
+interface MarkdownNode {
+  type: string;
+  tagName?: string;
+  value?: string;
+  children?: MarkdownNode[];
+}
+/** Only parser-created text leaves get a part; image consent controls are siblings. */
+function storyTextLeaves() {
+  return (tree: MarkdownNode) => {
+    const visit = (node: MarkdownNode) => {
+      if (!node.children) return;
+      node.children = node.children.map((child) => {
+        // Keep structural whitespace as text: an element between paragraphs
+        // would break the host's p + p spacing (and other sibling selectors).
+        if (child.type === "text" && child.value?.trim())
+          return {
+            type: "element",
+            tagName: "covel-story-text",
+            properties: {},
+            children: [child],
+          };
+        visit(child);
+        return child;
+      });
+    };
+    visit(tree);
+  };
+}

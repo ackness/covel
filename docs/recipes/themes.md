@@ -439,3 +439,5 @@ html[data-theme="my-theme"].dark {
 - **查全部变量、类名和字段。** 见[主题包参考](../reference/theme-packages.md)。
 - **让自己写的插件界面跟着主题变。** 见[给插件加界面](../plugins/ui.md#让界面跟着风格走)。
 - **给世界配封面和场景图。** 有些风格会把世界的图片铺满屏幕，见[世界美术方向](../worlds/art-direction.md)。
+
+插件附带的会话配色使用另一份受限契约，从会话工具栏明确选择，不导入全局主题库。见[插件主题](../reference/theme-packages.md#在会话中选择)和可安装的社区例子。

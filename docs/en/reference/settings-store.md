@@ -317,6 +317,14 @@ Which key belongs to what:
 
 Ordinary session webviews reuse device-local SettingsStore preferences, without session, snapshot or database grants. Each capability gets a key bound to the complete content hash; the existing `.session` read grant adds no write authority. Mount waits for the whole save to succeed; optimistic notifications and rollback do not grant access. Revocation first stops the page synchronously, then persists the removal; refresh from another window also closes access. See [consent before reading a session](./ui-panels.md#consent-before-reading-a-session) for keys and retirement conditions.
 
+### Session plugin themes
+
+`ui.sessionTheme.<sessionId>` is a strict device-local choice `{ pluginId, themeId, contentHash }`, defaulting to `null`. Theme helpers retain a validated ephemeral source only for the current session, without persisting CSS, resource listings or bytes, or adding it to the global library. Unavailable stored identities stay inactive; changed content hashes require reselection. Entries register and validate dynamically when their session is visited; malformed entries cannot supply styles.
+
+Selection waits for `ready()` and successful hydration; failed hydration is read-only. Saves use existing `set/clear` and revision/CAS error handling, without merging all sessions into an object or writing server/secret channels. Late saves, reads and old-source disposal cannot affect a newer session. Switching off removes the effective source synchronously; failed persistence keeps it blocked for this mount with an explicit restart warning. Only a later deliberate successful selection releases that block.
+
+Ordinary device-settings export/import can carry the identity; session exports, checkpoints, branches and snapshots do not. Leaving destroys only the ephemeral style source, without deleting the preference or restoring a captured document-style snapshot. See [plugin themes](./theme-packages.md#selecting-in-a-session) for workflow and precedence.
+
 ## Sandbox selection and consent
 
 Main/composer selection lasts only for the current mount/session visit, without SettingsStore, session metadata or snapshot writes. Both reuse the content/capability consent keys above; `surface` participates in the whole-spec hash. Only persisted true grants allow mounting. Revocation or cross-window refresh retires access immediately, even if saving fails. See [sandbox main view and composer](./ui-panels.md#sandbox-main-view-and-composer).

@@ -597,7 +597,19 @@
     "surfaceReturn": "Back to default interface",
     "surfaceStop": "Stop",
     "surfaceRecovery": "Interactions and recovery",
-    "surfaceFailed": "“{{label}}” stopped responding. The default interface is available."
+    "surfaceFailed": "“{{label}}” stopped responding. The default interface is available.",
+    "theme": {
+      "menu": "Session theme",
+      "default": "Use default appearance",
+      "readOnly": "Device settings are unavailable or still loading. Theme selection is read-only.",
+      "loadFailed": "Could not load this theme. Your last available appearance is in use.",
+      "active": "{{label}} · {{owner}} is active.",
+      "unavailable": "{{label}} · {{owner}} is inactive. Enable its plugin or select the current version.",
+      "offSaveFailed": "Default appearance is active for this visit. Could not save the preference; the previous choice may return after restart.",
+      "apply": "Apply",
+      "draftUnavailable": "Selection unavailable. Choose a current theme.",
+      "saving": "Saving…"
+    }
   },
   "blocks": {
     "actionPlaceholder": "Or type your own action...",

@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import {
   compilePluginThemeCss,
+  scopeCompiledPluginThemeCss,
   validateCompiledPluginThemeCss,
   pluginThemeSpecSchema,
   resolvedPluginThemeSchema,
@@ -459,4 +460,34 @@ it("round-trips own bitmap filenames containing URL punctuation without CSS esca
     `url("/plugin-assets/reading-pack/${assets.digest}/paper's(1).png")`,
   );
   expect(validateCompiledPluginThemeCss(result.css, own)).toEqual(result);
+});
+
+it("revalidates and rebinds accepted CSS to one host mount without changing resource ownership", () => {
+  const compiled = css(
+    ".story{color:var(--story-color)}.surface{background-image:url(paper.png)}",
+  );
+  expect(compiled.success).toBe(true);
+  if (!compiled.success) return;
+  const mount = "d".repeat(64);
+  const rebound = scopeCompiledPluginThemeCss(compiled.css, context, mount);
+  expect(rebound.success).toBe(true);
+  if (!rebound.success) return;
+  expect(rebound.css).toContain(`[data-covel-theme-scope="${mount}"]`);
+  expect(rebound.css).not.toContain(`[data-covel-theme-scope="${scope}"]`);
+  expect(rebound.css).toContain(
+    `/plugin-assets/reading-pack/${assets.digest}/paper.png`,
+  );
+  expect(
+    scopeCompiledPluginThemeCss(
+      compiled.css,
+      { ...context, scope: mount },
+      scope,
+    ).success,
+  ).toBe(false);
+  expect(
+    scopeCompiledPluginThemeCss("html{position:fixed}", context, mount).success,
+  ).toBe(false);
+  expect(
+    scopeCompiledPluginThemeCss(compiled.css, context, "bad").success,
+  ).toBe(false);
 });

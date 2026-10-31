@@ -95,6 +95,40 @@ function fixture(): StageViewProps {
 }
 
 describe("stage decision lifecycle", () => {
+  it("keeps choices and free input ready while rereading a story from another view", () => {
+    const props = { ...fixture(), replayStoryOnEnter: true };
+    const { rerender } = render(<StageView {...props} />);
+    expect(screen.getByTestId("stage-dialog")).toBeDefined();
+    expect(screen.getByTestId("stage-choices")).toBeDefined();
+    const input = screen.getByTestId("stage-decision-input");
+    expect((input as HTMLTextAreaElement).disabled).toBe(false);
+    fireEvent.change(input, { target: { value: "Continue the tour" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(props.onSendMessage).toHaveBeenCalledWith("Continue the tour");
+    rerender(<StageView {...props} executing />);
+    expect(screen.queryByTestId("stage-dialog")).toBeNull();
+    expect(screen.queryByTestId("stage-choices")).toBeNull();
+  });
+  it("keeps explicit story review and extensions while an independent composer replaces stage input", () => {
+    const props = {
+      ...fixture(),
+      replayStoryOnEnter: true,
+      composerRegion: <textarea aria-label="Selected sandbox composer" />,
+    };
+    const { rerender } = render(<StageView {...props} />);
+    expect(screen.getByTestId("stage-dialog")).toBeDefined();
+    expect(screen.getByTestId("plugin-extension")).toBeDefined();
+    expect(screen.queryByTestId("stage-decision-input")).toBeNull();
+    expect(
+      screen.getAllByRole("textbox", { name: "Selected sandbox composer" }),
+    ).toHaveLength(1);
+    rerender(<StageView {...props} executing />);
+    expect(screen.queryByTestId("stage-dialog")).toBeNull();
+    expect(screen.queryByTestId("stage-choices")).toBeNull();
+    expect(
+      screen.getByRole("textbox", { name: "Selected sandbox composer" }),
+    ).toBeDefined();
+  });
   it.each([undefined, { choices: [] }, { recap: "", choices: [] }] satisfies (
     StageChoicesModel | undefined
   )[])(

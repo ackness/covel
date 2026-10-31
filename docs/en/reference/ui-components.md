@@ -351,3 +351,7 @@ The host compares a job's `itemField` value with each media record's `matchField
 ## Sandbox pages and component actions
 
 JSON component action handlers and the [consented sandbox interface](./ui-panels.md#page-requests-and-safe-outcomes) are separate. Sandbox regions request mutations through normal player actions, interactions and own manual runtimes, without raw panel data/results or action/command/event RPC. Component allowlists are unchanged.
+
+## Session theme markers
+
+Restricted plugin themes affect only text leaves in host narrative Markdown, stage narrative paragraphs and a separate noninteractive decorative plane. `Prose`, segment templates and other plugin components do not become targets just because they display text. Catalog renderers forward only declared props, without spreading arbitrary DOM attributes, so a spec cannot assign reserved `data-covel-theme-scope` / `data-covel-theme-part`. Host action buttons and image-consent controls stay outside palette nodes. See [plugin themes](./theme-packages.md#selecting-in-a-session) for the boundary.
