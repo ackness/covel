@@ -1,11 +1,15 @@
 import { describe, expect, it, vi } from "vitest";
-import { resumeSuspendedRuntime } from "../src/index.js";
+import { commitExecution, resumeSuspendedRuntime } from "../src/index.js";
 import type { FunctionHandler } from "@covel/shared/plugin-runtime";
+import type { SuspensionRecord } from "@covel/store";
+import { suspendTool, tool, z } from "@covel/tools";
 import {
   makeProposal,
   withPendingProposals,
 } from "@covel/plugin-handlers-utils";
 import { readBaselineFixture } from "./helpers/read-baseline-fixture.js";
+import { prose, queuedLLM, toolCall } from "./_helpers/agent-loop-fixture.js";
+import { createToolExecutor } from "../src/agent-loop/tool-executor.js";
 
 const suspend = {
   outcome: "suspended" as const,
@@ -24,6 +28,156 @@ const derived: FunctionHandler = async (ctx) => {
 };
 
 describe("pending read-derived calculations", () => {
+  it.each([false, true])(
+    "retains an agent's original calculation through fresh reads and resuspension (changed=%s)",
+    async (changed) => {
+      const f = await readBaselineFixture();
+      const derive = tool({
+        name: "derive",
+        description: "Calculate from the current score",
+        parameters: z.object({}),
+        execute: async (_args, ctx) => {
+          const row = await ctx.store!.getPluginData("data", "record");
+          const value = row!.value as { score: number };
+          return withPendingProposals({ staged: true }, [
+            makeProposal(ctx, "2026-10-31T00:00:00Z", "plugin.data.update", {
+              namespace: "data",
+              key: "record",
+              ops: [
+                { op: "inc", path: "/score", by: 5 },
+                { op: "merge", value: { bar: value.score + 105 } },
+              ],
+            }),
+          ]);
+        },
+      });
+      const observations: unknown[] = [];
+      const read = tool({
+        name: "read",
+        description: "Read the pending calculation",
+        parameters: z.object({}),
+        execute: async (_args, ctx) => {
+          const row = await ctx.store!.getPluginData("data", "record");
+          observations.push(row!.value);
+          return { value: row!.value };
+        },
+      });
+      const modules = [derive, read, suspendTool];
+      const toolExecutor = createToolExecutor({
+        store: f.store,
+        findTool: (name) => modules.find((module) => module.name === name),
+      });
+      const manifest = {
+        ...f.manifest,
+        runtimeType: "agent" as const,
+        tools: { plugin: [derive.name, read.name], builtin: ["suspend"] },
+      };
+      const ask = toolCall("suspend", {
+        reason: "Choose",
+        fields: [{ type: "text", name: "answer", label: "Answer" }],
+      });
+      const resume = (saved: SuspensionRecord, again: boolean) =>
+        resumeSuspendedRuntime(saved, { answer: "Continue" }, manifest, {
+          store: f.store,
+          toolExecutor,
+          llm: queuedLLM([
+            toolCall("read", {}),
+            again ? ask : prose("Calculation complete."),
+          ]),
+          loadRuntime: async () => ({ manifest, promptTemplate: "Continue." }),
+        });
+      const commitResume = (
+        execution: Awaited<ReturnType<typeof resume>>,
+        saved: SuspensionRecord,
+      ) =>
+        commitExecution({
+          store: f.store,
+          execution,
+          completion: {
+            kind: "resume",
+            turnId: saved.turnId,
+            suspensionId: saved.id,
+            pluginId: saved.pluginId,
+            runtimeId: saved.runtimeId,
+          },
+        });
+      try {
+        const execution = await f.prepare(
+          async () => ({ outcome: "success", value: {} }),
+          {
+            manifest,
+            deps: {
+              toolExecutor,
+              llm: queuedLLM([toolCall("derive", {}), ask]),
+              loadRuntime: async () => ({
+                manifest,
+                promptTemplate: "Calculate.",
+              }),
+            },
+          },
+        );
+        expect(execution.commit.results[0]?.status).toBe("suspended");
+        expect((await f.commit(execution)).status).toBe("committed");
+        const [first] = await f.store.listSuspensions("session");
+        const original = structuredClone(first!.pendingContinuation.readScopes);
+        const pending = structuredClone(
+          first!.pendingContinuation.pendingProposals,
+        );
+        expect(original).toHaveLength(1);
+        expect(original?.[0]?.reads).toHaveLength(1);
+        expect(first!.pendingContinuation.takenUnder.writes).toEqual([]);
+        expect(await f.get()).toEqual({ score: 10, bar: 110 });
+
+        const again = await resume(first!, true);
+        expect(again.result.status).toBe("suspended");
+        expect((await commitResume(again, first!)).status).toBe("committed");
+        const [next] = (await f.store.listSuspensions("session")).filter(
+          (record) => !record.resolvedAt,
+        );
+        expect(next!.pendingContinuation.readScopes?.[0]).toEqual(
+          original?.[0],
+        );
+        expect(next!.pendingContinuation.pendingProposals).toEqual(pending);
+        expect(observations).toEqual([{ score: 15, bar: 115 }]);
+        expect(await f.get()).toEqual({ score: 10, bar: 110 });
+
+        if (changed) await f.set({ score: 20, bar: 120 });
+        const last = await resume(next!, changed);
+        expect(last.result.status).toBe(changed ? "suspended" : "success");
+        const out = await commitResume(last, next!);
+        expect(out.status).toBe(changed ? "failed" : "committed");
+        expect(out.failedProposals.map((failure) => failure.code)).toEqual(
+          changed ? ["conflict"] : [],
+        );
+        expect(observations.at(-1)).toEqual({
+          score: changed ? 25 : 15,
+          bar: 115,
+        });
+        expect(await f.get()).toEqual(
+          changed ? { score: 20, bar: 120 } : { score: 15, bar: 115 },
+        );
+        const unresolved = (await f.store.listSuspensions("session")).filter(
+          (record) => !record.resolvedAt,
+        );
+        expect(unresolved.map((record) => record.id)).toEqual(
+          changed ? [next!.id] : [],
+        );
+        if (changed) {
+          expect(unresolved[0]!.pendingContinuation.readScopes?.[0]).toEqual(
+            original?.[0],
+          );
+          expect(
+            await f.store.queryTraceEvents("session", {
+              types: ["proposal.committed"],
+            }),
+          ).toEqual([]);
+        }
+      } finally {
+        await toolExecutor.close();
+      }
+    },
+  );
+
   it("saves and guards raw proposal commands returned with a function suspension", async () => {
     const f = await readBaselineFixture();
     const execution = await f.prepare(async (ctx) => {

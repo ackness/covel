@@ -19,6 +19,61 @@ const readers: Record<string, (ctx: Context, key: string) => Promise<unknown>> =
   };
 
 describe("automatic same-key guards", () => {
+  it.each(
+    (
+      [
+        "plugin.data",
+        "plugin.data.delete",
+        "plugin.data.update",
+        "plugin.data.batch",
+      ] as const
+    ).flatMap((type) =>
+      (["pluginId", "kind"] as const).map((field) => [type, field] as const),
+    ),
+  )(
+    "uses the rebound target for raw %s payloads with an extra %s",
+    async (type, field) => {
+      const extra =
+        field === "pluginId"
+          ? { pluginId: "forged-owner" }
+          : { kind: "character", id: "forged-character" };
+      const f = await readBaselineFixture();
+      const execution = await f.prepare(async (ctx) => {
+        const value = (await ctx.pluginData!.get("data", "record")) as {
+          score: number;
+        };
+        const item = {
+          namespace: "data",
+          key: "record",
+          value: { score: value.score + 5, bar: value.score + 105 },
+          ...extra,
+        };
+        const proposal =
+          type === "plugin.data.batch"
+            ? makeProposal(ctx, "2026-10-31T00:00:00Z", type, {
+                items: [item],
+              })
+            : type === "plugin.data.update"
+              ? makeProposal(ctx, "2026-10-31T00:00:00Z", type, {
+                  ...item,
+                  ops: [{ op: "merge", value: item.value }],
+                })
+              : makeProposal(ctx, "2026-10-31T00:00:00Z", type, item);
+        return withPendingProposals({ outcome: "success", value: {} }, [
+          {
+            ...proposal,
+            source: { pluginId: "forged-source", runtimeId: "forged-runtime" },
+          },
+        ]);
+      });
+      await f.set({ score: 20, bar: 120 });
+      expect((await f.commit(execution)).failedProposals).toEqual([
+        expect.objectContaining({ code: "conflict" }),
+      ]);
+      expect(await f.get()).toEqual({ score: 20, bar: 120 });
+    },
+  );
+
   it("discards the speculative reads of a passing guard and a failed tool", async () => {
     const f = await readBaselineFixture();
     const failed = tool({

@@ -14,11 +14,13 @@ import { sessionTurnRoutes } from "../../src/routes/api/session-turns.js";
 import { actionRoutes } from "../../src/routes/api/actions.js";
 import { createInProcessSessionLock } from "../../src/lib/session-lock.js";
 import { createTestRuntimeJobWorker } from "./__helpers/runtime-job-worker.js";
+import { events } from "./__helpers/auto-advance.js";
 
 describe("action read-baseline corrections and projections", () => {
-  it.each([false, true])(
-    "keeps story and private read evidence out of transport and traces (stale=%s)",
-    async (stale) => {
+  it.each(["fresh", "stale-operation", "stale-own"] as const)(
+    "keeps story and private read evidence out of transport and traces (%s)",
+    async (mode) => {
+      const stale = mode !== "fresh";
       const store = createMemoryStore();
       const sessionId = "read-baseline-action";
       const pluginId = "writer";
@@ -54,6 +56,7 @@ describe("action read-baseline corrections and projections", () => {
         metadata: {
           approvalScopeNonce: crypto.randomUUID(),
           sessionIncarnationNonce: crypto.randomUUID(),
+          autoAdvanceLimit: 0,
         },
         createdAt: now,
         updatedAt: now,
@@ -71,9 +74,30 @@ describe("action read-baseline corrections and projections", () => {
         updatedAt: now,
       };
       await store.setPluginData(providerRow);
+      await store.setPluginData({
+        ...providerRow,
+        id: "credits-row",
+        key: "credits",
+        value: { count: 0 },
+      });
       const services = new PluginServiceRegistry({
         list: async () => [pluginId, "bank"],
         ensure: async () => {},
+      });
+      const calls: string[] = [];
+      services.register("bank", {
+        name: "credit",
+        contract: "bank.credit@1",
+        access: "write",
+        input: z.object({}),
+        output: z.object({}),
+        handler: async (_input, ctx) => {
+          calls.push("credit");
+          await ctx.pluginData.update("wallet", "credits", [
+            { op: "inc", path: "/count", by: 1 },
+          ]);
+          return {};
+        },
       });
       services.register("bank", {
         name: "derive",
@@ -82,6 +106,7 @@ describe("action read-baseline corrections and projections", () => {
         input: z.object({ secret: z.string() }),
         output: z.unknown(),
         handler: async ({ secret }, ctx) => {
+          calls.push("derive");
           const value = (await ctx.pluginData.get("wallet", "score")) as {
             score: number;
           };
@@ -107,6 +132,7 @@ describe("action read-baseline corrections and projections", () => {
         stage: "post-turn",
         outputKind: "system",
         concealed: true,
+        inputs: { story: { from: { runtime: story.name }, required: true } },
       } as RuntimeManifest;
       const loaded = new Map<string, LoadedRuntime>([
         [
@@ -114,10 +140,22 @@ describe("action read-baseline corrections and projections", () => {
           {
             manifest: story,
             promptTemplate: "",
-            handler: async () => ({
-              outcome: "success",
-              value: { narrativeOutput: "The story continues." },
-            }),
+            handler: async (ctx) => {
+              calls.push("story");
+              await ctx.services!.call({
+                pluginId: "bank",
+                name: "credit",
+                contract: "bank.credit@1",
+                input: {},
+              });
+              return {
+                outcome: "success",
+                value: {
+                  narrativeOutput: "The story continues.",
+                  yield: "continue",
+                },
+              };
+            },
           },
         ],
         [
@@ -126,6 +164,13 @@ describe("action read-baseline corrections and projections", () => {
             manifest: writer,
             promptTemplate: "",
             handler: async (ctx) => {
+              calls.push("writer");
+              expect(ctx.inputs!.story).toMatchObject({
+                value: {
+                  narrativeOutput: "The story continues.",
+                  yield: "continue",
+                },
+              });
               const hidden = await ctx.pluginData!.get(
                 "_hidden.baseline-private",
                 "private-key",
@@ -142,12 +187,13 @@ describe("action read-baseline corrections and projections", () => {
                 { op: "inc", path: "/score", by: 5 },
                 { op: "merge", value: { bar: value.score + 105 } },
               ]);
-              await ctx.services!.call({
-                pluginId: "bank",
-                name: "derive",
-                contract: "bank.derive@1",
-                input: { secret: String(hidden) },
-              });
+              if (mode !== "stale-own")
+                await ctx.services!.call({
+                  pluginId: "bank",
+                  name: "derive",
+                  contract: "bank.derive@1",
+                  input: { secret: String(hidden) },
+                });
               return { outcome: "success", value: {} };
             },
           },
@@ -161,11 +207,17 @@ describe("action read-baseline corrections and projections", () => {
         handler: async (_ctx, { proposal }) => {
           expect(proposal).not.toHaveProperty("preconditions");
           if (
-            stale &&
+            mode === "stale-operation" &&
             proposal.source.pluginId === "bank" &&
             proposal.type === "plugin.data.update"
           )
             await store.setPluginData({ ...providerRow, value: { score: 20 } });
+          if (
+            mode === "stale-own" &&
+            proposal.source.runtimeId === writer.name &&
+            proposal.type === "plugin.data.update"
+          )
+            await set("notes", "score", { score: 20 });
           return { action: "continue" };
         },
       });
@@ -272,10 +324,99 @@ describe("action read-baseline corrections and projections", () => {
       expect(
         (await store.getPluginData(sessionId, pluginId, "notes", "score"))
           ?.value,
-      ).toEqual(stale ? { score: 10 } : { score: 15, bar: 115 });
+      ).toEqual(
+        mode === "stale-own"
+          ? { score: 20 }
+          : stale
+            ? { score: 10 }
+            : { score: 15, bar: 115 },
+      );
       expect(JSON.stringify(results)).not.toMatch(
         /preconditions|fingerprint|readScopes/,
       );
+      if (mode === "stale-own") {
+        const [source] = await store.listTurnResults(sessionId);
+        expect(source?.commitStatus).toBe("committed");
+        const session = await store.getSession(sessionId);
+        await store.updateSession(sessionId, {
+          metadata: { ...session!.metadata, autoAdvanceLimit: 3 },
+        });
+        const retry = await app.request("/api/actions", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            requestId: "read-baseline-retry",
+            type: "retry_failed_runtimes",
+            sessionId,
+            payload: {
+              runtimeIds: [writer.name],
+              retryFromTurnId: source!.turnId,
+            },
+          }),
+        });
+        const retried = events(await retry.text());
+        expect(
+          retried.filter((event) => event.type === "execution.started"),
+        ).toHaveLength(1);
+        expect(
+          retried
+            .filter((event) => event.type === "runtime.started")
+            .map((event) => event.payload.runtimeId),
+        ).toEqual([writer.name]);
+        expect(
+          retried.filter((event) => event.type === "execution.advance"),
+        ).toEqual([
+          expect.objectContaining({
+            payload: expect.objectContaining({
+              phase: "stopped",
+              reason: "no-eligible-story",
+            }),
+          }),
+        ]);
+        expect(retried.at(-1)).toMatchObject({
+          type: "execution.completed",
+          payload: {
+            committed: true,
+            sourceTurnId: source!.turnId,
+            sourceFailedRuntimeIds: [],
+          },
+        });
+        expect(calls).toEqual(["story", "credit", "writer", "writer"]);
+        expect(
+          (await store.getPluginData(sessionId, "bank", "wallet", "credits"))
+            ?.value,
+        ).toEqual({ count: 1 });
+        expect(
+          (await store.getPluginData(sessionId, "bank", "wallet", "score"))
+            ?.value,
+        ).toEqual({ score: 10 });
+        expect(
+          (await store.getPluginData(sessionId, pluginId, "notes", "score"))
+            ?.value,
+        ).toEqual({ score: 25, bar: 125 });
+        const rows = await store.listTurnResults(sessionId);
+        expect(rows).toHaveLength(2);
+        expect(rows[1]).toMatchObject({
+          commitStatus: "committed",
+          origin: "manual",
+          retryScope: {
+            sourceTurnId: source!.turnId,
+            runtimeIds: [writer.name],
+          },
+        });
+        expect(
+          await store.queryTurnResults(sessionId, { turnId: source!.turnId }),
+        ).toEqual([source]);
+        expect((await store.getSession(sessionId))?.completedPlayerTurns).toBe(
+          1,
+        );
+        expect(
+          JSON.stringify(retried) +
+            JSON.stringify(await store.queryTraceEvents(sessionId, {})),
+        ).not.toMatch(
+          /hidden-read-value-sentinel|baseline-private|private-key|preconditions|fingerprint|readScopes/,
+        );
+      }
       await store.close();
     },
   );
