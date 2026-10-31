@@ -776,7 +776,9 @@ const result = await ctx.agents?.run({
 
 值总是存在，形状为 `{ operations: [{ contract, summary, request?, result?, truncated? }] }`，没有操作时数组为空。内核按调用顺序复制并深度冻结它，不带操作 ID、插件 ID、runtime ID 或 run ID。`request`、`result` 是操作记录已有的模型视图；超过大小限制而省略时带 `truncated: true`。
 
-它不增加调度依赖，但增加提交依赖：读者依赖它读到的每个操作，内核在值之外记下这些操作的 ID。操作在提交时没有落库，辅助读者一起丢弃；story 或 setup 读者照常提交并记 `read-dependency.kept`（见[事务 · 回合级单事务](./transactions.md#回合级单事务)）。读者自己的写入被拒绝，不影响它读到的操作。绑定时只收集已结束、可提交的结果，包括嵌套结果；只保留 `staged` 操作，排除重试种子和 `discarded` 操作。较早启动的同阶段兄弟 runtime 看不到尚未完成的操作；`post-turn` runtime 能读到 narrative 阶段全部已完成的操作。需要稳定的先后顺序时，声明 `schedule.after` 或使用后续阶段。
+它不增加调度依赖，但增加提交依赖：读者依赖它读到的每个本次执行的暂存操作，内核在值之外记下这些操作的 ID。操作在提交时没有落库，辅助读者一起丢弃；story 或 setup 读者照常提交并记 `read-dependency.kept`（见[事务 · 回合级单事务](./transactions.md#回合级单事务)）。读者自己的写入被拒绝，不影响它读到的操作。绑定时只收集已结束、可提交的结果，包括嵌套结果；本次执行只保留 `staged` 操作，排除 `discarded` 操作。较早启动的同阶段兄弟 runtime 看不到尚未完成的操作；`post-turn` runtime 能读到 narrative 阶段全部已完成的操作。需要稳定的先后顺序时，声明 `schedule.after` 或使用后续阶段。
+
+重试或恢复失败 runtime 时，来源回合及已提交重试的种子结果只提供 `committed` 操作。它们排在本次执行的暂存操作之前，用于识别已处理的变化；写入不重放，也不建立新的提交依赖。种子中失败、丢弃或仍暂存的操作不出现在输入里。
 
 `detached` runtime 不能声明这个输入，静态校验和加载都会报出字段位置。它的来源快照没有操作记录；只有 `turn-digest@1` 可以读取该快照。内核输入只写 `from`，不带其他绑定选项。
 

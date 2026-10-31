@@ -1,4 +1,8 @@
-import { compareText } from "@covel/shared";
+import {
+  compareText,
+  pluginMessagesFor,
+  type PluginMessageCatalog,
+} from "@covel/shared";
 import { toolParametersJsonSchema } from "@covel/tools";
 import { AsyncLocalStorage } from "node:async_hooks";
 import type {
@@ -518,6 +522,9 @@ export class PluginServiceRegistry {
       /** Host-owned observer; failures must never affect service execution. */
       onCallCompleted?(event: PluginServiceCallEvent): void | Promise<void>;
     },
+    private readonly messagesOf?: (
+      pluginId: string,
+    ) => readonly PluginMessageCatalog[] | undefined,
   ) {}
 
   /** Host diagnostics only: registered descriptors, without handlers or parsers. */
@@ -995,6 +1002,10 @@ export class PluginServiceRegistry {
                   sessionId: caller.sessionId,
                   turnId: stage.turnId,
                   locale: caller.reads?.locale,
+                  messages: pluginMessagesFor(
+                    this.messagesOf?.(entry.pluginId),
+                    caller.reads?.locale,
+                  ),
                   pluginData: createServicePluginDataWriter({
                     ...(caller.reads?.store
                       ? { store: caller.reads.store }
@@ -1066,6 +1077,10 @@ export class PluginServiceRegistry {
                 callerPluginId: caller.pluginId,
                 sessionId: caller.sessionId,
                 locale: caller.reads?.locale,
+                messages: pluginMessagesFor(
+                  this.messagesOf?.(entry.pluginId),
+                  caller.reads?.locale,
+                ),
                 pluginData: readProviderData({
                   ...caller.reads,
                   sessionId: caller.sessionId,

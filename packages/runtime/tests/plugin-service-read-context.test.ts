@@ -2,7 +2,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 import type { DataStore } from "@covel/store";
 import { createMemoryStore } from "@covel/store/memory";
-import { defaultSessionSeats } from "@covel/shared";
+import { defaultSessionSeats, type PluginMessageCatalog } from "@covel/shared";
+import { labelText, translate } from "@covel/plugin-handlers-utils";
 import type {
   HandlerResult,
   RuntimeManifest,
@@ -71,7 +72,11 @@ afterEach(async () => {
   await Promise.all(open.splice(0).map((store) => store.close()));
 });
 
-async function fixture() {
+async function fixture(
+  messagesOf?: (
+    pluginId: string,
+  ) => readonly PluginMessageCatalog[] | undefined,
+) {
   const store = createMemoryStore();
   open.push(store);
   const active = new Set(["provider", "consumer", "inner", "narrator"]);
@@ -87,12 +92,15 @@ async function fixture() {
     createdAt: timestamp,
     updatedAt: timestamp,
   });
-  const registry = new PluginServiceRegistry({
-    list: async () => [...active],
-    ensure: async (_sessionId, pluginId) => {
-      if (!active.has(pluginId)) throw new Error("Not active");
+  const registry = new PluginServiceRegistry(
+    {
+      list: async () => [...active],
+      ensure: async (_sessionId, pluginId) => {
+        if (!active.has(pluginId)) throw new Error("Not active");
+      },
     },
-  });
+    messagesOf,
+  );
   const registerRead = (pluginId = "provider") =>
     registry.register(pluginId, {
       name: "read",
@@ -503,6 +511,66 @@ describe("read-service context", () => {
     });
     expect(resultOf(reader.name).status).toBe("success");
     expect(seen).toEqual({ tone: "provider setting" });
+  });
+
+  it("gives write and nested read services their own provider's message catalogs", async () => {
+    const catalogs: Record<string, readonly PluginMessageCatalog[]> = {
+      consumer: [{ locale: "zh", messages: { Saved: "调用方" } }],
+      provider: [{ locale: "zh", messages: { Saved: "已保存" } }],
+      inner: [{ locale: "zh", messages: { Saved: "已读取" } }],
+    };
+    const { registry, run } = await fixture((id) => catalogs[id]);
+    registry.register("inner", {
+      name: "read",
+      contract: "fixture/read@1",
+      input: z.unknown(),
+      output: z.unknown(),
+      handler: (_input, ctx) => ({
+        text: translate(ctx, "Saved"),
+        badge: labelText(ctx, "Saved"),
+      }),
+    });
+    registry.register("provider", {
+      name: "save",
+      contract: "fixture/save@1",
+      access: "write",
+      input: z.unknown(),
+      output: z.unknown(),
+      handler: async (_input, ctx) => {
+        const badge = labelText(ctx, "Saved");
+        await ctx.pluginData.set("labels", "saved", badge);
+        return {
+          text: translate(ctx, "Saved"),
+          badge,
+          nested: await ctx.services.call(request("inner")),
+        };
+      },
+    });
+    let seen: unknown;
+    const { resultOf } = await run(
+      [reader],
+      {
+        [reader.name]: async (ctx) => {
+          seen = await ctx.services!.call({
+            pluginId: "provider",
+            name: "save",
+            contract: "fixture/save@1",
+            input: {},
+          });
+          return ok();
+        },
+      },
+      { input: { locale: "zh-CN" } },
+    );
+    expect(resultOf(reader.name).status).toBe("success");
+    expect(seen).toEqual({
+      text: "已保存",
+      badge: { en: "Saved", zh: "已保存" },
+      nested: {
+        text: "已读取",
+        badge: { en: "Saved", zh: "已读取" },
+      },
+    });
   });
 
   it.each(["get", "list"] as const)(

@@ -48,7 +48,7 @@ const result = (
 });
 
 describe("execution operation input", () => {
-  it("takes an owned frozen projection of eligible results, including nested calls and excluding seeds", () => {
+  it("takes an owned frozen projection of eligible results, including nested calls and excluding uncommitted seeds", () => {
     const parent = attachNestedResults(result(3), [result(1)]);
     const seed = attachNestedResults(result(4), [result(5)]);
     const discarded = { ...result(6), operations: [record(6, "discarded")] };
@@ -172,6 +172,38 @@ describe("execution operation input", () => {
     } finally {
       await store.close();
     }
+  });
+
+  it("includes only committed seed operations without new commit dependencies", () => {
+    const seed = attachNestedResults(
+      {
+        ...result(2),
+        operations: [
+          record(2, "committed"),
+          record(3, "failed"),
+          record(4, "discarded"),
+          record(5),
+        ],
+      },
+      [{ ...result(1), operations: [record(1, "committed")] }],
+    );
+    const current = { ...result(6), operations: [record(6)] };
+    const { value, producerIds } = buildOperationsInput(
+      new Map([
+        [seed.runtimeId, seed],
+        [current.runtimeId, current],
+      ]),
+      new Set([seed]),
+    );
+    expect(value.operations.map(({ summary }) => summary)).toEqual([
+      "Changed 1",
+      "Changed 2",
+      "Changed 6",
+    ]);
+    expect(producerIds).toEqual(["operation-6"]);
+    expect(Object.isFrozen(value.operations[0]?.request)).toBe(true);
+    expect(JSON.stringify(value)).not.toMatch(/operation-|private-provider/);
+    expect(seed.operations?.[0]?.status).toBe("committed");
   });
 
   it("does not expose the operation input to tools", () => {

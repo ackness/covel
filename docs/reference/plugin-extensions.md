@@ -333,6 +333,7 @@ const value = await ctx.services.call(
 | `services` | 继续发现和调用其他公共服务。 |
 | `sessionId` | 当前会话。 |
 | `locale` | 会话内容语言；宿主未提供时可省略。 |
+| `messages` | 提供者自己的消息目录，与函数 runtime 相同；没有目录时省略。`translate(ctx, text)` 按会话内容语言取译文，`labelText(ctx, text)` 保留全部语言供界面选择。嵌套服务使用各自提供者的目录。 |
 | `pluginData` | 提供者自己的只读数据；`get(namespace, key)` 返回值或 `null`，`list(namespace)` 按存储顺序返回 `{ key, value }[]`。`_hidden.*` 命名空间返回 `null` / 空列表。 |
 | `world` | 调用方 runtime 所见世界的独立只读副本，首次访问时复制。 |
 | `getOwnSettings()` | 提供者本回合已解析、冻结的设置；没有设置时返回空对象。 |

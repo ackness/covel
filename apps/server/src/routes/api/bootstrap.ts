@@ -517,10 +517,13 @@ async function assembleApi(
     isEntryRetryDeferred: (pluginId) =>
       owned.pluginEntries?.isEntryRetryDeferred(pluginId) ?? false,
   });
-  const services = new PluginServiceRegistry({
-    onCallCompleted: (event) => serviceCalls.record(event),
-    ...serviceAdmission.admission,
-  });
+  const services = new PluginServiceRegistry(
+    {
+      onCallCompleted: (event) => serviceCalls.record(event),
+      ...serviceAdmission.admission,
+    },
+    (pluginId) => registry.get(pluginId)?.messages,
+  );
   const extensions = new PluginExtensionHost(
     services,
     undefined,

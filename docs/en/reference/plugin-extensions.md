@@ -333,6 +333,7 @@ A service has one of two access levels: a **read service** (`access: read`, the 
 | `services` | Discover and call other public services. |
 | `sessionId` | The current session. |
 | `locale` | The session content language; optional when the host supplies none. |
+| `messages` | The provider's own message catalog, as in a function runtime; absent when it has none. `translate(ctx, text)` selects the session content language; `labelText(ctx, text)` retains all languages for the UI to choose. Nested services use their own provider's catalog. |
 | `pluginData` | The provider's own read-only data; `get(namespace, key)` returns a value or `null`, and `list(namespace)` returns `{ key, value }[]` in store order. `_hidden.*` namespaces return `null` / an empty list. |
 | `world` | A separate read-only copy of the calling runtime's world view, cloned on first access. |
 | `getOwnSettings()` | The provider's resolved, frozen settings for this turn; an empty object when none exist. |
