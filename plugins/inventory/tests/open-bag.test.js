@@ -29,6 +29,7 @@ describe("inventory open-bag command", () => {
       toolkit: { shortIdBatch, tool, z, store: {} },
       registerRpc,
       registerTool,
+      registerService: vi.fn(),
       provideExtension: vi.fn(),
     });
 

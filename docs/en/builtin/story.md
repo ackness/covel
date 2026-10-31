@@ -34,6 +34,8 @@ How to choose:
 >
 > Either narrator can run on its own. Scene Stage adds the stage presentation and Action Suggestions adds suggested actions; the story still works without them.
 
+When [Inventory](./rpg.md#inventory-inventory) is active, both narrators can use `check-bag` to look up carried items and `change-inventory` to settle purchases, trades, gifts or consumption before writing prose, with payment first. A refused call means the exchange does not happen. Without Inventory, the tools are absent and narration continues as usual.
+
 ## Narrator (`narrator`)
 
 Continues the story from your latest action, describing the scene, how characters react, and the results. It writes one passage per turn, and usually ends on a cliffhanger, a question, or an action that is not finished yet. It writes only story text and does not list options. Action choices are handled by "Action Suggestions".

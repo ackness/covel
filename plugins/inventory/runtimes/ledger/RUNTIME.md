@@ -6,6 +6,9 @@ schedule:
   stage: post-turn
 io:
   inputs:
+    operations:
+      from:
+        kernel: operations@1
     worldIR:
       from:
         contract: world-ir-provider@1

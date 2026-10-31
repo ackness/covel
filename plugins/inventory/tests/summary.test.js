@@ -1,9 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { loadPluginMessages } from "@covel/plugin-test-utils";
+import { z } from "@covel/tools";
 import register from "../server/index.js";
 
 let project;
 register({
+  toolkit: { z },
+  registerService: () => {},
   registerRpc: () => {},
   provideExtension: (_point, _id, { handler }) => {
     project = handler;

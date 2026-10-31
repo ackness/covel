@@ -29,6 +29,9 @@ runtime:
     stage: post-turn
   io:
     inputs:
+      operations:
+        from:
+          kernel: operations@1
       narrative:
         from:
           contract: narrative-engine@2
@@ -90,6 +93,8 @@ For example, write relation strength as `attributes.strength`, and put an event'
 - Write each id as 1-3 lowercase words joined by hyphens, such as `brass-key` or `tailor-agrees`. Do not add a type or session prefix. IDs are unique inside this output; create an entity once and reuse its id everywhere. Use the given `id` for a character from `characters`.
 
 ## Events with fixed fields
+
+`operations` lists changes plugins already made this turn through tools. They are facts of this turn. When the narrative shows one, write its event with the same item name and quantity as the request. Never invent an event for an operation the narrative does not show.
 
 State plugins read two event types directly, so their `attributes` must include fixed fields (the tool validates them; other fields may be added). A qualifying change must use its event type, never `interaction` or `state_change`; otherwise quests and the bag record nothing:
 

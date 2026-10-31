@@ -165,6 +165,8 @@ Bookkeeping applies only item changes held by the action’s actor, falling back
 - Type `/bag` (or `/inventory`) to see your current bag and open the panel.
 - The session summary says "Your bag contains N item entries."
 
+During a purchase, trade or gift, the narrator can change the bag before writing the story. An unaffordable purchase is refused. If a staged change cannot be applied when the turn is saved, you see a notice and the story is still saved. If a purchase fails, other bag changes from that turn may be skipped. Changes made through the bag tool are not counted again from the story.
+
 Only item changes that clearly happen in the story are recorded. Inventory dataset records are checked when the turn is saved. An invalid record skips that bookkeeping step for this turn; the story is still saved.
 
 ### When it is on
@@ -185,6 +187,10 @@ It has no settings you can change.
 | Starting items | `data/items.yaml` | Things the player starts with. `quantity` is a number. Players see the tags, so write them in the world's language, and give currency a tag that says so. Worn items get `equipped: true`. |
 
 Keep the list short. Items gained during play are recorded automatically. For how to write them, see [Starting content](../recipes/starting-content.md).
+
+### Works with
+
+Both Narrator (`narrator`) and Dialogue Narrator (`chat-mode-narrator`) use the bag lookup and change tools when Inventory is active. Without Inventory, they continue telling the story as usual.
 
 ## Affinity (`affinity`)
 

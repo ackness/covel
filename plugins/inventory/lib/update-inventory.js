@@ -2,7 +2,8 @@
  * Inventory ledger: batch-apply explicit inventory changes for the current
  * turn — gains, losses/consumption, and equip state. The
  * ledger runtime builds the changes from WorldIR inventory events
- * (`lib/world-ir.js`) and calls it once.
+ * (`lib/world-ir.js`) and calls it once. The change service shares the pure
+ * planner below, with stricter checks before staging the exchange.
  *
  * Changes are keyed by item **name** (not ID). The ledger:
  *
@@ -44,7 +45,7 @@ const OP_COLORS = {
  * The badge text in every language the plugin ships. Only the toast block
  * draws it; it picks the player's UI language.
  */
-function opBadge(context, op) {
+export function inventoryLabels(context) {
   // Each text is a literal: the validator reads them from the source.
   const badges = {
     add: labelText(context, "Gained"),
@@ -52,27 +53,44 @@ function opBadge(context, op) {
     equip: labelText(context, "Equipped"),
     unequip: labelText(context, "Unequipped"),
   };
-  return badges[op];
+  return badges;
 }
 
-export default async function updateInventory(params, context) {
-  const now = new Date().toISOString();
-
-  // ── 1. Read items including earlier pending writes ──
-  const rows = (await context.store.listPluginData("items")) ?? [];
-  /** @type {Map<string, any>} */
-  const itemByKey = new Map();
-  for (const row of rows) {
-    if (row.value && typeof row.value === "object") {
-      itemByKey.set(row.key, row.value);
-    }
-  }
-  const previousMessage = await context.store.getPluginData(
-    "message",
-    context.turnId,
+/** Names that need fresh IDs, in first-use order. Tombstones keep their IDs. */
+export function newInventoryNames(changes, items) {
+  const keys = new Set(
+    items
+      .filter(({ value }) => value && typeof value === "object")
+      .map(({ key }) => key),
   );
-  const previousMessageChanges = Array.isArray(previousMessage?.value?.changes)
-    ? previousMessage.value.changes
+  const known = new Set(
+    items
+      .filter(({ value }) => typeof value?.name === "string")
+      .map(({ value }) => value.name.toLowerCase()),
+  );
+  const names = [];
+  for (const change of changes) {
+    if (change.op !== "add") continue;
+    const lower = change.name.toLowerCase();
+    if (known.has(lower) || keys.has(change.name)) continue;
+    known.add(lower);
+    names.push(change.name);
+  }
+  return names;
+}
+
+/** Plan without reading, writing, drawing randomness, or consulting the clock. */
+export function planInventoryChanges(
+  changes,
+  { items, previousMessage, now, newIds, labels },
+) {
+  const itemByKey = new Map();
+  for (const row of items) {
+    if (row.value && typeof row.value === "object")
+      itemByKey.set(row.key, row.value);
+  }
+  const previousMessageChanges = Array.isArray(previousMessage?.changes)
+    ? previousMessage.changes
     : [];
 
   /** @type {Map<string, string>} name (lowercased) → item key */
@@ -86,31 +104,7 @@ export default async function updateInventory(params, context) {
     keyByName.get(name.toLowerCase()) ??
     (itemByKey.has(name) ? name : undefined);
 
-  // ── 2. Pre-assign short IDs for brand-new names in this batch ──
-  const newNames = [];
-  const seenNewNames = new Set();
-  for (const change of params.changes) {
-    if (change.op !== "add") continue;
-    const lower = change.name.toLowerCase();
-    if (resolveKey(change.name) !== undefined || seenNewNames.has(lower)) {
-      continue;
-    }
-    seenNewNames.add(lower);
-    newNames.push(change.name);
-  }
-  const assignedIds = shortIdBatch(
-    "item",
-    newNames,
-    context.sessionId,
-    context.random,
-  );
-  /** @type {Map<string, string>} */
-  const idForNewName = new Map();
-  for (let i = 0; i < newNames.length; i += 1) {
-    idForNewName.set(newNames[i].toLowerCase(), assignedIds[i]);
-  }
-
-  // ── 3. Apply changes sequentially (later changes see earlier ones) ──
+  // Later changes see earlier ones in this plan.
   /** @type {Map<string, any>} staged item writes, key → value */
   const staged = new Map();
   const opsByKey = new Map();
@@ -131,12 +125,12 @@ export default async function updateInventory(params, context) {
     messageChanges.push({
       op,
       text: `${sign}${name}${suffix}`,
-      badge: opBadge(context, op),
+      badge: labels[op],
       color: OP_COLORS[op],
     });
   };
 
-  for (const change of params.changes) {
+  for (const change of changes) {
     const key = resolveKey(change.name);
     const existing = key !== undefined ? itemByKey.get(key) : undefined;
     // Tombstones (removed items) count as "existing" only for ID reuse
@@ -217,7 +211,7 @@ export default async function updateInventory(params, context) {
             quantity: amount,
           });
         } else {
-          const id = idForNewName.get(change.name.toLowerCase());
+          const id = newIds.get(change.name.toLowerCase());
           const value = {
             id,
             name: change.name,
@@ -342,39 +336,64 @@ export default async function updateInventory(params, context) {
     }
   }
 
-  // ── 4. Submit ordered operations per item, then the per-turn message ──
-  const proposals = [...opsByKey].map(([key, ops]) =>
+  return {
+    staged,
+    opsByKey,
+    messageChanges,
+    mergedMessageChanges: [...previousMessageChanges, ...messageChanges].map(
+      (entry, index) => ({ ...entry, seq: index }),
+    ),
+    summary: {
+      applied: results.filter((r) => r.status !== "skipped").length,
+      skipped: results.filter((r) => r.status === "skipped").length,
+      results,
+    },
+  };
+}
+
+export default async function updateInventory(params, context) {
+  const now = new Date().toISOString();
+  const items = (await context.store.listPluginData("items")) ?? [];
+  const previousMessage = await context.store.getPluginData(
+    "message",
+    context.turnId,
+  );
+  const names = newInventoryNames(params.changes, items);
+  const ids = shortIdBatch("item", names, context.sessionId, context.random);
+  const plan = planInventoryChanges(params.changes, {
+    items,
+    previousMessage: previousMessage?.value,
+    now,
+    newIds: new Map(
+      names.map((name, index) => [name.toLowerCase(), ids[index]]),
+    ),
+    labels: inventoryLabels(context),
+  });
+  const proposals = [...plan.opsByKey].map(([key, ops]) =>
     makeProposal(context, now, "plugin.data.update", {
       namespace: "items",
       key,
       ops,
     }),
   );
-  if (messageChanges.length > 0) {
-    const merged = [...previousMessageChanges, ...messageChanges].map(
-      (entry, index) => ({ ...entry, seq: index }),
-    );
+  if (plan.messageChanges.length > 0) {
     proposals.push(
       makeProposal(context, now, "plugin.data.batch", {
         items: [
           {
             namespace: "message",
             key: context.turnId,
-            value: { turnId: context.turnId, changes: merged },
+            value: {
+              turnId: context.turnId,
+              changes: plan.mergedMessageChanges,
+            },
           },
         ],
       }),
     );
   }
-
-  const summary = {
-    applied: results.filter((r) => r.status !== "skipped").length,
-    skipped: results.filter((r) => r.status === "skipped").length,
-    results,
-  };
-  if (proposals.length === 0) return summary;
-
-  return withPendingProposals(summary, proposals);
+  if (proposals.length === 0) return plan.summary;
+  return withPendingProposals(plan.summary, proposals);
 }
 
 function mergeTags(existing, newTags) {
