@@ -539,6 +539,8 @@ Delegation privacy uses kernel-recorded provider and call identity to project st
 
 ## In-game host role
 
+Declarative live views receive only host rendering slots for the current session. Session stores, settings, keys and callbacks are never serialized into plugin state or postMessage. Host-rendered messages and blocks mask context, preventing nested plugin messages from recursively mounting story or input; snapshots and debug panels receive no slots. Webviews receive no live context and retain independent consent and capability rules. A console reads no hidden event payloads, conditions or counts; game roles add no hidden-data or administration authority.
+
 The preparation role changes only a new seat's permitted game actions. It grants no owner/operator identity, bypasses no session.create host-profile check and cannot authorise system-source requests. Actor history and prompts aid perspective; they are not a sandbox for approved server code.
 
 ## Presentation projection and kernel bookkeeping

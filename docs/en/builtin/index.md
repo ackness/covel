@@ -36,9 +36,9 @@ When you start a game, you do not need to choose plugins one by one. A **gamepla
 | Dialogue Mode `dialogue-mode`         | Character dialogue, visual novel           | Dialogue Narrator, Scene Stage, Action Suggestions, Character Profiles, World Rules, Reply Variants             |
 | Low Cost `low-cost`                   | Keeping model costs down                   | Narrator, World Rules                                                                                           |
 | Narrative Only `narrative-only`       | Just reading the story, at the lowest cost | Narrator                                                                                                        |
-| DM Mode `dm-mode`                     | Game-master narration                      | Pregame, world initialization, Narrator; no character creation                                                  |
+| DM Mode `dm-mode`                     | Game-master narration                      | Pregame, world initialization, Narrator, DM Console; no character creation                                      |
 | Ensemble Dialogue `ensemble-dialogue` | A cast performs together                   | Pregame, world initialization, character creation, Dialogue Narrator, Character Actor, Turn Policy, Scene Stage |
-| Spectator `spectator`                 | Observe advancing NPCs                     | The ensemble composition without player character creation                                                      |
+| Spectator `spectator`                 | Observe advancing NPCs                     | The ensemble composition with DM Console, without player character creation                                     |
 
 The first three packs also include Pre-Game Setup, World Dimensions and Character Creator, and they recommend turning on Story Memory. Narrative Only turns off the other plugins that are on by default: there is no opening form, character creation or world dimensions, and no world time, Story Memory or history compaction. The world's declared dimensions are not imported, and the session starts as usual.
 
@@ -48,20 +48,23 @@ A world can add plugins to a built-in pack and give that combination a name. For
 
 ## All built-in plugins
 
+DM Mode and Spectator request DM Console; Ensemble Dialogue recommends it without changing default views, roles or policy. Enabled Codex and Relationship Graph also offer dedicated pages in Plugin views, keeping their original right panels. Pages themselves make no model calls; story actions retain the selected providers’ costs.
+
 Plugins marked "On by default" are added to every game automatically, and you can turn them off on the session-prep screen. Some plugins require capabilities from other plugins. If a provider is missing, its dependents are disabled and the interface explains what is missing; other features keep working. The others are chosen by the gameplay pack, the world, or you.
 
 ### Narrative and memory
 
-| Plugin                                                | What it does                                                                   | On by default |
-| ----------------------------------------------------- | ------------------------------------------------------------------------------ | ------------- |
-| [Narrator](./story.md) `narrator`                     | Writes the story text for each turn                                            | Yes           |
-| [Dialogue Narrator](./story.md) `chat-mode-narrator`  | Tells the story as character dialogue; works alone, Scene Stage is optional    |               |
-| [Character Actor](./story.md) `character-agent`       | Plays the selected character's public speech/actions                           |               |
-| [Turn Policy](./story.md) `turn-policy`               | One service with five strategy settings                                        |               |
-| [Action Suggestions](./story.md) `guide`              | Gives a few actions you can tap below the story text                           |               |
-| [Reply Variants](./story.md) `branch-reply`           | Writes another version of the same turn                                        |               |
-| [Story Memory](./story.md) `memory`                   | Remembers the ongoing plot, the current scene and the player character's state | Yes           |
-| [History Compaction](./story.md) `history-compaction` | When the conversation gets long, summarizes the older part                     | Yes           |
+| Plugin                                                      | What it does                                                                   | On by default |
+| ----------------------------------------------------------- | ------------------------------------------------------------------------------ | ------------- |
+| [Narrator](./story.md) `narrator`                           | Writes the story text for each turn                                            | Yes           |
+| [Dialogue Narrator](./story.md) `chat-mode-narrator`        | Tells the story as character dialogue; works alone, Scene Stage is optional    |               |
+| [Character Actor](./story.md) `character-agent`             | Plays the selected character's public speech/actions                           |               |
+| [Turn Policy](./story.md) `turn-policy`                     | One service with five strategy settings                                        |               |
+| [DM Console](./story.md#dm-console-dm-console) `dm-console` | Public cast, interactions, story and current-role input                        |               |
+| [Action Suggestions](./story.md) `guide`                    | Gives a few actions you can tap below the story text                           |               |
+| [Reply Variants](./story.md) `branch-reply`                 | Writes another version of the same turn                                        |               |
+| [Story Memory](./story.md) `memory`                         | Remembers the ongoing plot, the current scene and the player character's state | Yes           |
+| [History Compaction](./story.md) `history-compaction`       | When the conversation gets long, summarizes the older part                     | Yes           |
 
 A session may have several player characters. The two narrator plugins follow the character you are currently playing (see [Narrator · The character you play](./story.md#the-character-you-play) and [Seats](../reference/world-model.md#seats)). Story Memory, Inventory, Dice Check, Tabletop Rules, Character Creator and Character Profiles follow the action’s actor, falling back to the primary seat’s current character. Scene Stage still uses the first player character.
 

@@ -700,3 +700,32 @@ messages:
 ## 从会话页面请求玩家行动
 
 查看 [sandbox-surface-probe](../../tests/third-party/sandbox-surface-probe/README.md) 的两个普通视图和共享页面。它读取公开故事和输入信息，用句柄回答交互，用所属插件的手动函数 runtime 保存数据集记录。为 spec 添加 `capabilities` 后，玩家会看到每项能力的单独说明；服务端代码审批与页面授权互不替代。页面只在结果为 `accepted` 时清除行动草稿，拒绝时保留。普通视图布局不变，主区域/输入框替换和心跳恢复尚不支持。完整字段与限制见[页面请求](../reference/ui-panels.md#页面请求与安全结果)。
+
+## 声明式会话控制台
+
+在用户插件目录建立 `session-desk/PLUGIN.md`，填写描述并加入下面的声明；创建 `ui/desk.json`，使用后面的 JSON。不需要入口、runtime、硬依赖或浏览器桥。英文标签的中文译文放在 `locales/zh.yaml` 的 `messages` 中。
+
+```yaml
+contributes:
+  ui:
+    view: [./ui/desk.json]
+```
+
+```json
+{
+  "id": "desk",
+  "label": "Session desk",
+  "alwaysRender": true,
+  "view": {
+    "component": "Stack",
+    "children": [
+      { "component": "SceneCastList" },
+      { "component": "SessionMessages", "props": { "content": "pending" } },
+      { "component": "SessionMessages" },
+      { "component": "SessionComposer" }
+    ]
+  }
+}
+```
+
+启用此社区包后，从“插件视图”选择 Session desk。它使用宿主当前身份的真实输入框和公开渲染；没有在场角色提供方也可以继续行动。组件属性、唯一性、重复节点诊断和不可用位置见[组件契约](../reference/ui-components.md#实时会话视图组件)。验证用 `pnpm validate:plugin <plugin-dir>`；不要把这些组件放进 `ui.message` 或行模板。

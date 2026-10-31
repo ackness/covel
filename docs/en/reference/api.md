@@ -1639,6 +1639,8 @@ Successful GET and HEAD responses use the listed MIME, `nosniff`, `ETag`, `Conte
 
 #### GET /api/ui-specs
 
+Declarative live views can compose [SessionMessages / SessionComposer](./ui-components.md#live-session-view-components). They reuse existing player-source actions and interaction responses through `/api/actions`, with no new route, event or bridge capability. Retrieving a view runs no runtime and writes no plugin data.
+
 Returns plugins' UI declarations, grouped by slot. The front end calls it at startup, to build right-panel tabs, message block renderers and plugin view navigation dynamically.
 
 A webview spec returns `webview: { html, height? }` for a single file or `webview: { url, height? }` for a multi-file view. Authoring fields `root` and `entry` are not sent. The URL contains the digest of every published file; a new registration rebuilds the asset index and makes old URLs return 404. Only views allow `root`; a `right` or `message` declaration receives a `webview.root` diagnostic.

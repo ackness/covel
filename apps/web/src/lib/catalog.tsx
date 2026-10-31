@@ -18,6 +18,10 @@ import {
 } from "@covel/shared";
 import { GraphCanvas } from "./graph-canvas.js";
 import {
+  SessionMessages,
+  SessionComposer,
+} from "./catalog/session-view-renderers.js";
+import {
   filterItems,
   resolvePath,
   valueToHaystack,
@@ -130,6 +134,8 @@ const covelComponents = {
   JsonView,
   EntryList,
   SceneCastList,
+  SessionMessages,
+  SessionComposer,
   CharacterFieldsView,
   CharacterAvatar,
   // Interactive

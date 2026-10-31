@@ -184,6 +184,37 @@ describe("session prep narrator-only lore", () => {
 });
 
 describe("session prep full record", () => {
+  it.each(["host", "spectator", "player"] as const)(
+    "waits for the saved lore draft before starting with the %s role",
+    async (role) => {
+      const read = deferred<api.WorldOverlay | null>();
+      vi.mocked(api.getWorldOverlay).mockReturnValueOnce(read.promise);
+      const onStart = vi.fn();
+      render(<SessionPrepScreen {...props({ onStart })} />);
+      fireEvent.change(screen.getByLabelText("Play as"), {
+        target: { value: role },
+      });
+      const start = screen.getAllByRole("button", { name: "Start Game" })[0]!;
+      expect(screen.getByText("Loading saved draft...")).toBeTruthy();
+      expect((start as HTMLButtonElement).disabled).toBe(true);
+      fireEvent.click(start);
+      expect(onStart).not.toHaveBeenCalled();
+
+      await act(async () => read.resolve(null));
+      await waitFor(() =>
+        expect((start as HTMLButtonElement).disabled).toBe(false),
+      );
+      expect((openLore() as HTMLTextAreaElement).value).toBe("Original A");
+      fireEvent.click(start);
+      expect(onStart).toHaveBeenCalledWith(
+        ["fixture-plugin"],
+        undefined,
+        [],
+        role,
+      );
+    },
+  );
+
   it("does not start while the full record loads, and never with an empty lore", async () => {
     const read = deferred<typeof fullWorld | null>();
     invalidateAllWorldRecords();

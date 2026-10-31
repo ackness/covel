@@ -84,6 +84,7 @@ function mapUiText(
   value: unknown,
   translate: (property: string, text: string) => unknown,
   textProperty?: string,
+  preserveContent = false,
 ): unknown {
   if (typeof value === "string")
     return textProperty ? translate(textProperty, value) : value;
@@ -91,9 +92,15 @@ function mapUiText(
     return value.map((item) => mapUiText(item, translate));
   if (value === null || typeof value !== "object") return value;
   const isMap = Object.hasOwn(value, "$map");
+  const node = value as { component?: unknown; type?: unknown };
+  const component = node.component ?? node.type;
   return Object.fromEntries(
     Object.entries(value).map(([property, child]) => {
-      if (isDataSubtree(property) || (isMap && property === "$map"))
+      if (
+        isDataSubtree(property) ||
+        (isMap && property === "$map") ||
+        (preserveContent && property === "content")
+      )
         return [property, child];
       if (
         isMap &&
@@ -121,6 +128,8 @@ function mapUiText(
             : isTextProperty(property)
               ? property
               : undefined,
+          // This component's content is a region selector, not visible text.
+          property === "props" && component === "SessionMessages",
         ),
       ];
     }),

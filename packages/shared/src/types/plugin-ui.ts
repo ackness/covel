@@ -32,6 +32,8 @@ export const PLUGIN_UI_COMPONENT_NAMES = [
   "JsonView",
   "EntryList",
   "SceneCastList",
+  "SessionMessages",
+  "SessionComposer",
   "CharacterFieldsView",
   "CharacterAvatar",
   "Button",

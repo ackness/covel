@@ -383,6 +383,78 @@ export function GameView({
 
   // ── Layout ─────────────────────────────────────────────────────
 
+  const renderComposer = () => (
+    <>
+      <PendingDraftsBar
+        t={t}
+        pendingDrafts={pendingDrafts}
+        executing={executing}
+        onConfirmDrafts={handleConfirmDrafts}
+        onRemoveDraft={removeInteractionDraft}
+      />
+
+      <SessionDimensionsPanel recoveryOnly />
+
+      {/* Input — always fixed at bottom */}
+      <MessageComposer
+        recoveryNoticeVisible={recoveryNoticeVisible}
+        executionState={executionState}
+        t={t}
+        session={session}
+        executing={executing}
+        inputValue={inputValue}
+        composerBlocked={composerBlocked}
+        composerDisabled={composerDisabled}
+        awaitingBegin={awaitingBegin}
+        onInputValueChange={setInputValue}
+        onSubmit={handleSubmit}
+        onAbort={handleAbort}
+        onKeyDown={handleKeyDown}
+        pendingDraftCount={pendingDrafts.length}
+        commandMatches={commandMatches}
+        commandMenuOpen={commandMenuOpen}
+        selectedCommandIndex={selectedCommandIndex}
+        commandExecuting={commandExecuting}
+        commandFeedback={commandFeedback}
+        onCommandSelect={applyCommandCompletion}
+        composerModes={composerModes}
+        canSubmit={canSubmit}
+      />
+    </>
+  );
+
+  const renderMessages = (content?: "story" | "pending") => (
+    <ChatMessages
+      content={content}
+      recoveryTurnId={recoveryTurnId}
+      messages={messages}
+      executionSteps={executionSteps}
+      executionError={executionError}
+      executing={executing}
+      session={session}
+      world={world}
+      plugins={plugins}
+      sessionPlugins={sessionPlugins}
+      submittedBlockIds={submittedBlockIds}
+      submittedBlockValues={submittedBlockValues}
+      viewMode={
+        content
+          ? "parsed"
+          : viewMode === "detailed" ||
+              viewMode === "raw" ||
+              viewMode === "stage"
+            ? viewMode
+            : "parsed"
+      }
+      onSendMessage={onSendMessage}
+      onSubmitBlock={onSubmitBlock}
+      onSubmitInteraction={onSubmitInteraction}
+      onRetryRuntime={onRetryRuntime}
+      onBeginAdventure={onBeginAdventure}
+      messagesEndRef={messagesEndRef}
+    />
+  );
+
   const content = (
     <div className="flex h-full w-full overflow-hidden border-t border-border">
       <SettingsDialog
@@ -697,6 +769,25 @@ export function GameView({
               key={JSON.stringify([session.id, activePluginView.mode])}
               entry={activePluginView}
               sessionId={session.id}
+              executing={executing}
+              onStop={handleAbort}
+              awaitingBegin={awaitingBegin}
+              onBegin={onBeginAdventure}
+              liveSession={{
+                sessionId: session.id,
+                renderMessages: (content) => (
+                  <div
+                    className={
+                      content === "story"
+                        ? "flex h-[60dvh] min-h-48 flex-col"
+                        : "flex max-h-[50dvh] min-h-24 flex-col"
+                    }
+                  >
+                    {renderMessages(content)}
+                  </div>
+                ),
+                renderComposer,
+              }}
               sessionBridgeAllowed={viewConsent.isAllowed(activePluginView)}
               isCurrent={viewConsent.isCurrent(activePluginView)}
               onFallback={() => handleViewModeChange(viewInfo.hostDefault)}
@@ -741,68 +832,9 @@ export function GameView({
             />
           ) : (
             <div className="ui-story-surface relative z-1 flex min-h-0 flex-1 flex-col">
-              <ChatMessages
-                recoveryTurnId={recoveryTurnId}
-                messages={messages}
-                executionSteps={executionSteps}
-                executionError={executionError}
-                executing={executing}
-                session={session}
-                world={world}
-                plugins={plugins}
-                sessionPlugins={sessionPlugins}
-                submittedBlockIds={submittedBlockIds}
-                submittedBlockValues={submittedBlockValues}
-                viewMode={
-                  viewMode === "detailed" ||
-                  viewMode === "raw" ||
-                  viewMode === "stage"
-                    ? viewMode
-                    : "parsed"
-                }
-                onSendMessage={onSendMessage}
-                onSubmitBlock={onSubmitBlock}
-                onSubmitInteraction={onSubmitInteraction}
-                onRetryRuntime={onRetryRuntime}
-                onBeginAdventure={onBeginAdventure}
-                messagesEndRef={messagesEndRef}
-              />
+              {renderMessages()}
 
-              <PendingDraftsBar
-                t={t}
-                pendingDrafts={pendingDrafts}
-                executing={executing}
-                onConfirmDrafts={handleConfirmDrafts}
-                onRemoveDraft={removeInteractionDraft}
-              />
-
-              <SessionDimensionsPanel recoveryOnly />
-
-              {/* Input — always fixed at bottom */}
-              <MessageComposer
-                recoveryNoticeVisible={recoveryNoticeVisible}
-                executionState={executionState}
-                t={t}
-                session={session}
-                executing={executing}
-                inputValue={inputValue}
-                composerBlocked={composerBlocked}
-                composerDisabled={composerDisabled}
-                awaitingBegin={awaitingBegin}
-                onInputValueChange={setInputValue}
-                onSubmit={handleSubmit}
-                onAbort={handleAbort}
-                onKeyDown={handleKeyDown}
-                pendingDraftCount={pendingDrafts.length}
-                commandMatches={commandMatches}
-                commandMenuOpen={commandMenuOpen}
-                selectedCommandIndex={selectedCommandIndex}
-                commandExecuting={commandExecuting}
-                commandFeedback={commandFeedback}
-                onCommandSelect={applyCommandCompletion}
-                composerModes={composerModes}
-                canSubmit={canSubmit}
-              />
+              {renderComposer()}
             </div>
           )}
         </ResizablePanel>

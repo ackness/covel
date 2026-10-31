@@ -1639,6 +1639,8 @@ fork 和社区插件的授权：
 
 #### GET /api/ui-specs
 
+声明式实时视图可组合 [SessionMessages / SessionComposer](./ui-components.md#实时会话视图组件)。它们复用现有 `/api/actions` 的玩家来源行动及交互响应，无新增路由、事件或桥接能力。读取视图不执行运行时或写插件数据。
+
 返回插件的 UI 声明，按 slot 分组。前端在启动时调用它，用来动态构建右侧面板的标签页、消息区的 block 渲染器和插件视图导航。
 
 单文件 webview 返回 `webview: { html, height? }`，多文件视图返回 `webview: { url, height? }`，不返回作者字段 `root` 和 `entry`。URL 包含全部发布文件的摘要；重新注册后重建索引，旧 URL 返回 404。只有视图允许 `root`；在 `right` 或 `message` 中声明会得到 `webview.root` 诊断。

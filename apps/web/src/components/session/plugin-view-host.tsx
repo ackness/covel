@@ -13,6 +13,7 @@ import {
   pluginViewContent,
   requestedViewGrants,
 } from "./plugin-view-consent.js";
+import type { PluginViewSession } from "./plugin-view-session-context.js";
 
 export function PluginViewHost({
   entry,
@@ -22,6 +23,11 @@ export function PluginViewHost({
   isCurrent = () => true,
   onRevoke,
   onRetry,
+  liveSession,
+  executing,
+  onStop,
+  awaitingBegin,
+  onBegin,
 }: {
   entry: PluginViewEntry;
   sessionId: string;
@@ -31,6 +37,11 @@ export function PluginViewHost({
   isCurrent?: () => boolean;
   onRevoke?: (capability?: SessionBridgeGrant) => void;
   onRetry?: () => void;
+  liveSession?: PluginViewSession;
+  executing?: boolean;
+  onStop?: () => void;
+  awaitingBegin?: boolean;
+  onBegin?: () => void;
 }) {
   const { t } = useTranslation();
   const [attempt, setAttempt] = useState(0);
@@ -59,6 +70,16 @@ export function PluginViewHost({
           {entry.pluginName}
         </span>
         {readsSession && <span>{t("session.viewReadsStory")}</span>}
+        {awaitingBegin && onBegin && (
+          <Button size="sm" onClick={onBegin}>
+            {t("session.beginAdventure")}
+          </Button>
+        )}
+        {executing && onStop && (
+          <Button variant="outline" size="sm" onClick={onStop}>
+            {t("session.abortTurn")}
+          </Button>
+        )}
         <Button
           variant="ghost"
           size="sm"
@@ -130,6 +151,11 @@ export function PluginViewHost({
                 spec={{ ...entry.spec }}
                 expanded
                 fill
+                liveSession={
+                  !entry.spec.webview && liveSession?.sessionId === sessionId
+                    ? liveSession
+                    : undefined
+                }
                 onRenderError={failed}
                 onRetry={onRetry}
               />

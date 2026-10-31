@@ -1,0 +1,72 @@
+{
+  "id": "dm-console",
+  "label": "DM Console",
+  "alwaysRender": true,
+  "view": {
+    "component": "Stack",
+    "props": {
+      "gap": "md"
+    },
+    "children": [
+      {
+        "component": "Text",
+        "props": {
+          "content": "Use the current role’s modes for director instructions or Advance. Opening this view does not change your role or turn policy.",
+          "variant": "muted",
+          "size": "sm"
+        }
+      },
+      {
+        "component": "Section",
+        "props": {
+          "title": "Scene cast",
+          "defaultOpen": true
+        },
+        "children": [
+          {
+            "component": "SceneCastList"
+          }
+        ]
+      },
+      {
+        "component": "Section",
+        "props": {
+          "title": "Pending interactions",
+          "defaultOpen": true
+        },
+        "children": [
+          {
+            "component": "SessionMessages",
+            "props": {
+              "content": "pending"
+            }
+          }
+        ]
+      },
+      {
+        "component": "Section",
+        "props": {
+          "title": "Story",
+          "defaultOpen": true
+        },
+        "children": [
+          {
+            "component": "SessionMessages"
+          }
+        ]
+      },
+      {
+        "component": "Section",
+        "props": {
+          "title": "Input",
+          "defaultOpen": true
+        },
+        "children": [
+          {
+            "component": "SessionComposer"
+          }
+        ]
+      }
+    ]
+  }
+}

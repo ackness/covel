@@ -50,6 +50,11 @@ import { X } from "lucide-react";
 import { PluginJsonRenderDevtools } from "./json-render-devtools.js";
 
 import { PluginWebview } from "./plugin-webview.js";
+import { pluginUiSpecIssues } from "@covel/shared";
+import {
+  PluginViewSessionContext,
+  type PluginViewSession,
+} from "./plugin-view-session-context.js";
 
 export type PluginPanelStateCache = Map<string, StateStore>;
 
@@ -75,6 +80,8 @@ export interface PluginPanelProps {
     handlers?: Readonly<Record<string, PluginBridgeHandler>>;
     isCurrent?: () => boolean;
   };
+  /** Supplied only by the live declarative view host, never by a spec. */
+  liveSession?: PluginViewSession;
   onRenderError?: () => void;
   onRetry?: () => void;
 }
@@ -88,10 +95,22 @@ const EMPTY_JOBS: ReturnType<typeof usePluginJobs> = [];
 
 export function PluginPanel(props: PluginPanelProps) {
   if (props.spec.bridge === "session") return <SessionPluginPanel {...props} />;
-  return props.stateOverride !== undefined ? (
-    <SnapshotPluginPanel {...props} />
-  ) : (
-    <LivePluginPanel {...props} />
+  const live =
+    props.liveSession &&
+    props.fill &&
+    !props.spec.webview &&
+    props.stateOverride === undefined &&
+    !props.enableDevtools;
+  if (live && pluginUiSpecIssues(props.spec, props.pluginId, "view").length)
+    throw new Error("Invalid live declarative view");
+  return (
+    <PluginViewSessionContext.Provider value={live ? props.liveSession! : null}>
+      {props.stateOverride !== undefined ? (
+        <SnapshotPluginPanel {...props} />
+      ) : (
+        <LivePluginPanel {...props} />
+      )}
+    </PluginViewSessionContext.Provider>
   );
 }
 

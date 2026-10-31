@@ -826,7 +826,17 @@ Write source text in English and translations under `messages` in `locales/<loca
 - `surfaces`, `group`, `groupLabel`, `groupOrder`, `shortLabel` and `navTarget` are not allowed here; they route panels and stage surfaces.
 - The mode is `plugin:<pluginId>:<viewId>`, for example `plugin:session-view-probe:story`. World and pack `defaultViewMode` accept this format, `parsed` and `stage`. Authors can select `detailed` and `raw` manually only.
 - While views load, the host view is shown. Missing views, disabled plugins, request failures and render errors fall back to it. The host default is `stage` only when the world’s default is exactly `stage`, otherwise `parsed`. A plugin view is never a fallback target. The player’s selection survives a transient request failure and can recover on a later successful load. Render errors select the host default and show a toast.
-- The choice lasts for the current mount and is not saved per session. Plugin views do not use stage immersion and do not show the host composer.
+- The choice lasts for the current mount and is not saved per session. Plugin views do not use stage immersion. The host adds no outer composer; a declarative page can explicitly compose `SessionComposer`.
+
+### Live session components
+
+An ordinary declarative `ui.view` can compose `SessionMessages` and `SessionComposer` for the host's public story, pending interactions and current role's input. Community and bundled packages use the same API. Exact props, counts and placement limits are in [Live session view components](./ui-components.md#live-session-view-components).
+
+The host supplies render slots for the current session only. Messages, settings, credentials and action callbacks are never added to `/data`, `/sources`, JSON state or browser messages. Story uses public parsed rendering and the existing stream, without execution detail or reasoning. Pending is determined against complete history and submitted identities before filtering: unanswered forms, choices and confirmations that no later player message has superseded. Suggestions are optional. Interactions retain real validation and rejection feedback.
+
+Input shares the session's single controller: changing views preserves text, mode, fields, queued choices and restored stopped input; busy refusal retains drafts. An unavailable catalogue or identity, ended session, blocked opening or mandatory interaction cannot send a fallback Say. Direct and textless Advance retain existing player-action validation and persist only through normal commit. Opening a view changes no role, narrator perspective or policy.
+
+Host Back, Stop, Begin and recovery remain outside plugin layout. A view error does not own story execution. Messages and blocks mask live context to prevent recursive feeds or composers; snapshots and debug panels have no such capability. Webviews receive no live context; their consent, content hashes and bridge capabilities remain separate.
 
 ### Multi-file pages
 

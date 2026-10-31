@@ -700,3 +700,32 @@ For story-driven backdrops or music, use a [presentation selector](./advanced.md
 ## Request player actions from a session page
 
 See the two ordinary views and shared page in [sandbox-surface-probe](../../../tests/third-party/sandbox-surface-probe/README.md). It reads public story and input context, answers interactions using handles, and saves dataset records through its own manual function runtime. Adding `capabilities` to the spec gives the player individual capability descriptions; server-code approval and page consent do not replace each other. Clear the action draft only for an accepted outcome, preserving it on refusal. Ordinary view layout is unchanged; main/composer replacement and heartbeat recovery are unavailable. See [page requests](../reference/ui-panels.md#page-requests-and-safe-outcomes) for the full contract.
+
+## Declarative session console
+
+Create `session-desk/PLUGIN.md` in the user plugin directory, add a description and the declaration below, then create `ui/desk.json` with the JSON example. No entry, runtime, hard dependency or browser bridge is needed. Put Chinese translations of English labels in `messages` in `locales/zh.yaml`.
+
+```yaml
+contributes:
+  ui:
+    view: [./ui/desk.json]
+```
+
+```json
+{
+  "id": "desk",
+  "label": "Session desk",
+  "alwaysRender": true,
+  "view": {
+    "component": "Stack",
+    "children": [
+      { "component": "SceneCastList" },
+      { "component": "SessionMessages", "props": { "content": "pending" } },
+      { "component": "SessionMessages" },
+      { "component": "SessionComposer" }
+    ]
+  }
+}
+```
+
+Enable this community package and choose Session desk from Plugin views. It uses the host's real current-role input and public rendering; actions remain available without a cast provider. See the [component contract](../reference/ui-components.md#live-session-view-components) for props, singleton limits, repeat diagnostics and unavailable placements. Validate with `pnpm validate:plugin <plugin-dir>`; do not place these widgets in `ui.message` or row templates.

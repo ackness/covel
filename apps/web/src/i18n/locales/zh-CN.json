@@ -17,6 +17,9 @@
     "primary": "主导航"
   },
   "session": {
+    "liveViewUnavailable": "会话控件仅在当前实时插件视图中可用。",
+    "noPendingInteractions": "当前没有待处理的交互。",
+    "actionsLoading": "正在加载可用行动…",
     "unavailableWorldPacks": "世界推荐的玩法包不可用。可以选择其他玩法包，或按当前选择开局。",
     "worldSelectionTags": "世界标签：{{tags}}",
     "operationFailedNotice": "本回合有 {{count}} 个操作没有生效。",

@@ -145,6 +145,8 @@ Shows the rules that hold for the whole world over time: customs, taboos, laws, 
 
 ## Codex (`codex`)
 
+The Codex page (`library`) in Plugin views and the original right panel share committed entries. Search covers titles, content and tags, retaining category counts, expandable full content, tags/rarity, empty and no-match states. Page filters are independent of the panel; ordinary hydration updates both without model calls when opening. Back to default view returns to ordinary play.
+
 When a named place, person, item, skill, legend or monster first appears in the story, it is recorded in the codex automatically, and you can look it up any time. If the same name appears again, it only adds to the existing entry. It does not create a duplicate.
 
 **What you will see**: the "Codex" tab on the right. You can search it, and filter entries by Characters, Locations, Items, Skills, Lore and Monsters. At the bottom it shows "N entries collected". Below each turn there is also a "Found this turn" card. Entry badges and category tabs show the same names in the interface language. The codex panel defines the colors used to highlight rarity.
@@ -158,6 +160,8 @@ When a named place, person, item, skill, legend or monster first appears in the 
 - Each time it sorts entries, it makes one more model call.
 
 ## Relationship Graph (`npc-graph`)
+
+The Relationship Graph page (`relationships`) in Plugin views keeps the original right panel and reads the same nodes and edges. The larger graph supports pan, zoom, fit, accessible character lists and node details; superseded relationships stay hidden. Empty data still has a selectable page. Narrow screens can scroll through controls and details, while host Back/Stop remain outside. Hydration updates both surfaces; opening does not trigger extraction. Disabling the provider removes only its entries and falls back without deleting graph data.
 
 A development save with duplicate open versions of one relation is refused instead of repaired during play. Recreate the affected graph data or start a new session. Current relations without `invalidAt` remain valid open versions.
 
