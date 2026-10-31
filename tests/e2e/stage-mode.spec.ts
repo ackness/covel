@@ -358,39 +358,48 @@ test.describe("Stage view mode", () => {
           },
         }),
       );
+      const recommendationRow = {
+        namespace: "recommendations",
+        key: "current",
+        updatedAt: "2026-01-01T00:00:00Z",
+        value: {
+          turnId: "demo-turn",
+          status: "ready",
+          model: "fixture/jev",
+          selectedId: "prompt:2",
+          options: [
+            {
+              id: "prompt:1",
+              text: "Ask about the library",
+              probability: 0.25,
+            },
+            {
+              id: "prompt:2",
+              text: "Explore the classroom",
+              probability: 0.75,
+            },
+          ],
+        },
+      };
       await page.route(
         `${mask}/plugin-data/stage-evaluation-fixture{,/**}`,
-        (route) =>
-          route.fulfill({
-            json: {
-              items: [
-                {
-                  namespace: "recommendations",
-                  key: "current",
-                  updatedAt: "2026-01-01T00:00:00Z",
-                  value: {
-                    turnId: "demo-turn",
-                    status: "ready",
-                    model: "fixture/jev",
-                    selectedId: "prompt:2",
-                    options: [
-                      {
-                        id: "prompt:1",
-                        text: "Ask about the library",
-                        probability: 0.25,
-                      },
-                      {
-                        id: "prompt:2",
-                        text: "Explore the classroom",
-                        probability: 0.75,
-                      },
-                    ],
-                  },
-                },
-              ],
-            },
-          }),
+        (route) => route.fulfill({ json: { items: [recommendationRow] } }),
       );
+      // Subscription recovery reads every plugin's data. Include the same row
+      // there so a later snapshot cannot erase the fixture's recommendations.
+      await page.route(`${mask}/plugin-data`, async (route) => {
+        const response = await route.fetch();
+        const { items } = (await response.json()) as { items: unknown[] };
+        await route.fulfill({
+          response,
+          json: {
+            items: [
+              ...items,
+              { pluginId: "stage-evaluation-fixture", ...recommendationRow },
+            ],
+          },
+        });
+      });
       await page.reload();
       const host = page.getByTestId("stage-plugin-panels");
       await expect(host).toBeVisible();
