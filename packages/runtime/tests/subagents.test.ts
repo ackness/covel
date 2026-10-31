@@ -1001,8 +1001,11 @@ describe("sub-agent caps and tool filter", () => {
       tools: {
         builtin: ["delegate", "plugin-data-get", "plugin-data-set", "suspend"],
         plugin: ["peek", "poke", "unknown"],
-        services: [{ contract: "inventory.items@1", name: "inventory-items" }],
-        defer: ["peek", "poke", "inventory-items"],
+        services: [
+          { contract: "inventory.items@1", name: "inventory-items" },
+          { contract: "bank.pay@1", name: "bank-pay" },
+        ],
+        defer: ["peek", "poke", "inventory-items", "bank-pay"],
       },
     });
     const at = (depth: number) =>
@@ -1011,12 +1014,16 @@ describe("sub-agent caps and tool filter", () => {
         sessionId: "s",
         turnId: "t",
       });
-    // Imported services are read-only: the sub-agent keeps them.
+    // Imported services stay as declared, write services included: the
+    // sub-agent resolves them as itself.
     expect(at(1)).toEqual({
       builtin: ["plugin-data-get"],
       plugin: ["peek", "unknown"],
-      services: [{ contract: "inventory.items@1", name: "inventory-items" }],
-      defer: ["peek", "inventory-items"],
+      services: [
+        { contract: "inventory.items@1", name: "inventory-items" },
+        { contract: "bank.pay@1", name: "bank-pay" },
+      ],
+      defer: ["peek", "inventory-items", "bank-pay"],
     });
     expect(at(0)?.builtin).toEqual(["delegate", "plugin-data-get"]);
   });

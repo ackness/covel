@@ -316,7 +316,7 @@ describe("a service failure inside a tool", () => {
       output: z.unknown(),
       handler: () => null,
       ...definition,
-    });
+    } as Parameters<PluginServiceRegistry["register"]>[1]);
   const ask = caller((_params, ctx) =>
     ctx.services!.call({ ...READ, input: { key: "sword" } }),
   );

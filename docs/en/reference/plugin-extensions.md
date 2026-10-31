@@ -27,7 +27,7 @@ Start by finding your need in the table and reading the matching interface:
 
 The details that do not fit in the table come next.
 
-A function runtime that changes its own data can submit a list of operations instead of a computed whole value: `ctx.pluginData.update(namespace, key, ops)` produces `plugin.data.update`, which applies to the latest value at commit (see [Transactions · Operation-based writes](./transactions.md#operation-based-writes-plugindataupdate)). This belongs only to the runtime write boundary: `ctx.pluginData` is read-only in both extension and service handlers.
+A function runtime that changes its own data can submit a list of operations instead of a computed whole value: `ctx.pluginData.update(namespace, key, ops)` produces `plugin.data.update`, which applies to the latest value at commit (see [Transactions · Operation-based writes](./transactions.md#operation-based-writes-plugindataupdate)). This belongs only to the runtime write boundary: `ctx.pluginData` is read-only in extension handlers and read services. Another plugin that needs to change this plugin's data calls one of its [write services](#write-services).
 
 `ctx.recursiveCall` is for [nested calls within one package](./plugins.md#nested-calls-ctxrecursivecall). Use a service to request a result from another package, or an event to trigger its follow-up work.
 
@@ -39,7 +39,7 @@ The session's seats (who is playing and which characters they control) belong to
 
 - Function runtime handlers and agent guards use `ctx.services`.
 - Plugin tools use `context.services`, with the same rules as a function runtime: the caller is the tool's plugin and runtime, a call inherits the tool's deadline and cancellation, and its reads use the same scope and read dependencies as the tool's own `context.store` reads. Calls still running when the tool returns are cancelled. A failed service call rejects with the service's error; a tool that lets it through answers the model by the error mapping of [Imported service tools](./tools.md#imported-service-tools), the service call trace still names the provider, and the failure does not count as the caller's fault.
-- An agent can import **model-facing** services in `agent.tools.services`. Each import becomes a read-only tool; see [Model-facing services](#model-facing-services) below. The framework does not hand every service to every agent.
+- An agent can import **model-facing** services in `agent.tools.services`. Each import becomes a tool: a read service's tool is read-only, and a write service's tool stages writes; see [Model-facing services](#model-facing-services) and [Write services](#write-services) below. The framework does not hand every service to every agent.
 
 Services called from a tool or an import get no `gateway` or `utils`: model work belongs to the caller.
 
@@ -256,7 +256,7 @@ A service is registered while the `entry` factory runs. It is published together
 - A service name must be unique within its plugin.
 - `contract` is the public contract ID that the plugin author defines, shaped `<name>@<major>`: it starts with a lowercase letter and has only lowercase letters, digits, `.` and `-`, such as `my-plugin.rank@1`.
 - Make an incompatible change with a new contract. Do not write a migration for development data.
-- Declare every registered service in `contributes.services` of `PLUGIN.md` by its contract ID; write a model-facing one as `{ contract, modelFacing: true }`. When the declaration and the registration disagree, the whole registration batch fails.
+- Declare every registered service in `contributes.services` of `PLUGIN.md` by its contract ID; write a model-facing one as `{ contract, modelFacing: true }` and a [write service](#write-services) as `{ contract, access: write }`. When the declaration and the registration disagree, the whole registration batch fails.
 
 ```js
 export default function (covel) {
@@ -321,6 +321,8 @@ Before each call, the framework checks again: that the caller and the provider a
 
 ### What a service can and cannot access
 
+A service has one of two access levels: a **read service** (`access: read`, the default) only reads, and a **write service** (`access: write`) can change its provider's own data. The table below is a read service's context; the differences for a write service are in [What a write service can access](#what-a-write-service-can-access).
+
 <!-- prettier-ignore -->
 | Field | Meaning |
 | --- | --- |
@@ -337,7 +339,7 @@ Before each call, the framework checks again: that the caller and the provider a
 
 - Input and output are checked against their schemas and copied. You cannot change the other side's state through an object reference.
 - Each data read returns a separate copy. The context has no caller store, tools, settings, or write buffer.
-- Services have no write methods and cannot produce proposals. The calling runtime decides how to persist the result; write services will come later.
+- Read services have no write methods and cannot produce proposals. The calling runtime decides how to persist the result; to change the provider's own data, use a [write service](#write-services).
 - A chain of service calls cannot loop, and it can go at most eight levels deep. It inherits the runtime's deadline and its capability revocation.
 - A service must pass `signal` to asynchronous work. It must not leave tasks running in the background after the call.
 - Ordinary JavaScript on the server still follows the authorization model for community code. This is not a process-level sandbox.
@@ -347,6 +349,85 @@ When called through a runtime's client, `pluginData` overlays committed data wit
 A read that sees an uncommitted upstream write records a read dependency on the calling runtime's result. Nested services read each provider's own data and keep recording on the original runtime. If a producer is dropped at commit, an auxiliary caller is dropped with it; a story caller still commits and the trace records the dependency (see [Transactions](./transactions.md)). Calling a read service creates no new scheduling dependency; a story runtime can call it as needed and handle missing or failed services.
 
 Calls from tools and imports read the same data: the tools of a top-level agent overlay upstream writes and record read dependencies like a function runtime. When a resumed runtime or a sub-agent calls a service from a tool, it reads committed data only and records no read dependencies, the same as its own tool reads.
+
+A read service also sees what the same caller staged for its provider through earlier write-service calls (below), and records no read dependency for it.
+
+### Write services
+
+A write service changes **its provider's own** data for the caller: a shop plugin calls an inventory plugin's `inventory.change@1` to take coins and add an item, for example. Both the declaration and the registration say `access: write`; when they disagree the whole registration batch fails:
+
+```yaml
+# PLUGIN.md
+contributes:
+  services:
+    - { contract: inventory.change@1, access: write, modelFacing: true }
+```
+
+```js
+covel.registerService({
+  name: "change",
+  contract: "inventory.change@1",
+  access: "write",
+  modelFacing: true,
+  description: "Pay coins and add an item to the player's bag.",
+  input: z.object({ item: z.string(), cost: z.number().int().min(0) }),
+  output: z.object({ coins: z.number() }),
+  async handler({ item, cost }, ctx) {
+    await ctx.pluginData.set("items", item, { owned: true });
+    await ctx.pluginData.update("purse", "coins", [
+      { op: "inc", path: "/amount", by: -cost, min: 0 },
+    ]);
+    const purse = await ctx.pluginData.get("purse", "coins");
+    return { coins: purse.amount };
+  },
+});
+```
+
+The capability snapshot records a write service as `"<contract> (write)"`: a package that adds a write service or turns a service into one asks again, even from a trusted source (see [Plugin installation](./plugin-installation.md)). An extension provider cannot be a write service.
+
+#### What a write service can access
+
+A write service's context is a read service's context without `gateway` and `utils`, plus three fields:
+
+<!-- prettier-ignore -->
+| Field | Meaning |
+| --- | --- |
+| `pluginData` | Reads and writes the provider's own data: `get`, `list`, `set`, `delete`, `update`. Reads see committed data with the provider's upstream writes in this execution, the writes the same caller's earlier calls staged, and this call's own writes. |
+| `random` | Deterministic randomness on the stream `service:<service name>`. |
+| `turnId` | The caller's turn. |
+
+- A write service gets no model or HTTP access, even when its caller has it: a write service should be short and deterministic.
+- It cannot write any namespace that starts with `_`, the provider's own `_hidden.*` included; such a write throws `invalid-input`.
+- An `update` that does not fit the value it sees throws a `ToolError` with the code `conflict`.
+- It can call read services, but not another write service (`unavailable`). A read service cannot call a write service either.
+- A write after the call ended throws and is not staged.
+
+#### Staging: one call is one operation
+
+A write service's writes do not land right away. A successful call stages all its writes as one **operation** on the calling runtime's result, which commits with the caller's commit unit (see [Transactions · Write-service operations](./transactions.md#write-service-operations)):
+
+- The writes commit with the provider's identity (`source.pluginId` is the provider and `runtimeId` is `service:<service name>`); PreStateCommit, dataset rules and fault counting all see the provider.
+- A handler that throws, times out, is cancelled or returns invalid output stages nothing. A call that wrote nothing leaves no operation.
+- An operation counts only when the code that asked for it succeeds: when a tool call, a sub-agent or a function handler fails, the operations it staged are taken back (`discarded`), even though the write service already answered the model with success.
+- Calls of one caller to one provider run one after the other, parallel tool calls and parallel sub-agents included; each call sees what the calls before it staged.
+- Each operation leaves an [operation record](./transactions.md#operation-records) that says, after the commit, whether it committed, failed or was taken back.
+
+#### Where write services cannot be called
+
+A call from these places answers `unavailable` ("Write services cannot be called here.") and stages nothing:
+
+- detached runtimes and `background` executions;
+- resumed executions (`resume`) and retries that only repair content (a manual retry with a source turn): they would settle one trade twice;
+- agent guards, hooks, RPC handlers and extension providers;
+- an agent that can suspend (`suspend` in `tools.builtin`): its write-service imports are absent with the reason `not-allowed`.
+
+A function runtime that staged operations and then returns `suspended` fails ("<runtime> cannot suspend after changing another plugin's data through a write service"), and its operations are taken back.
+
+A plugin cannot call its own write services (`refused`): it writes its own data directly, and those writes already commit with its runtime. A sub-agent cannot call the write services of the plugin that delegated to it either.
+
+#### What the model sees
+
+An imported write service's tool carries write annotations (`readOnly: false`, `stagesWrites: true`, `idempotent: false`, `concurrencySafe: false`). A successful call answers `{ data, staged: { count, kinds, notice } }`, where `notice` says the writes take effect when the turn ends and may still be rejected. A `conflict` the provider throws reaches the model as is, marked `refused`. See [Imported service tools](./tools.md#imported-service-tools).
 
 ### Model-facing services
 

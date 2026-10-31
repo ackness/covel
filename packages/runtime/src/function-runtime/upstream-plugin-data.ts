@@ -44,7 +44,10 @@ import { createReadRecorder, type ReadRecorder } from "../read-dependencies.js";
 
 /** One plugin-data proposal of an upstream result, as it would commit. */
 export interface UpstreamPluginDataWrite {
-  /** The producing result's `runId`: the producer id of a read dependency. */
+  /**
+   * The producer id of a read dependency: the producing result's `runId`,
+   * or the id of the write-service operation that staged the write.
+   */
   readonly runId: string;
   readonly runtimeId: string;
   readonly proposal: Proposal;
@@ -87,10 +90,41 @@ function committedPluginData(
 }
 
 /**
+ * The writes of a result's write-service operations into `pluginId`'s data,
+ * in call order, each with its operation's id as producer. The writes
+ * already carry the provider's identity.
+ */
+function operationPluginData(
+  result: RuntimeResult,
+  pluginId: string,
+): UpstreamPluginDataWrite[] {
+  const writes = result.operationWrites;
+  if (!writes || commitEligibility(result) === "none") return [];
+  if (malformedDomainEffect(result.effects)) return [];
+  return [...(result.operations ?? [])]
+    .filter(
+      (operation) =>
+        operation.providerPluginId === pluginId &&
+        Object.hasOwn(writes, operation.id),
+    )
+    .sort((a, b) => a.seq - b.seq)
+    .flatMap((operation) =>
+      (writes[operation.id] ?? [])
+        .filter((proposal) => PLUGIN_DATA_PROPOSALS.has(proposal.type))
+        .map((proposal) => ({
+          runId: operation.id,
+          runtimeId: proposal.source.runtimeId,
+          proposal,
+        })),
+    );
+}
+
+/**
  * The plugin-data writes of `pluginId` that the completed, commit-eligible
- * results would commit, in commit order. `seeds` are results seeded from
- * another execution; they and everything nested under them are skipped.
- * Returns an owned copy.
+ * results would commit, in commit order: each result's own writes, then the
+ * writes its write-service operations staged into `pluginId`'s data. `seeds`
+ * are results seeded from another execution; they and everything nested
+ * under them are skipped. Returns an owned copy.
  */
 export function collectUpstreamPluginDataWrites(
   results: ReadonlyMap<string, RuntimeResult>,
@@ -100,15 +134,16 @@ export function collectUpstreamPluginDataWrites(
 ): readonly UpstreamPluginDataWrite[] {
   const own = [...results.values()].filter((result) => !seeds?.has(result));
   return structuredClone(
-    inCommitOrder(own).flatMap((result) =>
-      result.pluginId === pluginId
+    inCommitOrder(own).flatMap((result) => [
+      ...(result.pluginId === pluginId
         ? committedPluginData(result, sessionId).map((proposal) => ({
             runId: result.runId,
             runtimeId: result.runtimeId,
             proposal,
           }))
-        : [],
-    ),
+        : []),
+      ...operationPluginData(result, pluginId),
+    ]),
   );
 }
 
@@ -165,7 +200,24 @@ export function createPluginDataVisibility(options: {
   };
 }
 
-/** A service reads its provider's data but records on the calling invocation. */
+/**
+ * The caller's visibility as a service of `pluginId` reads with it: the
+ * provider's own upstream writes, recorded on the caller's recorder.
+ */
+export function providerVisibility(
+  visibility: PluginDataVisibility | undefined,
+  pluginId: string,
+): PluginDataVisibility | undefined {
+  return visibility
+    ? { ...visibility, writes: visibility.upstreamOf?.(pluginId) ?? [] }
+    : undefined;
+}
+
+/**
+ * A service reads its provider's data but records on the calling invocation.
+ * `staged` are the writes the caller's write-service calls staged for the
+ * provider; they apply after upstream writes and record nothing.
+ */
 export function readProviderData(options: {
   readonly sessionId: string;
   readonly pluginId: string;
@@ -173,15 +225,18 @@ export function readProviderData(options: {
   readonly store?: Pick<DataStore, "getPluginData" | "listPluginData">;
   readonly visibility?: PluginDataVisibility;
   readonly writeBuffer?: readonly Proposal[];
+  readonly staged?: () => readonly Proposal[];
 }): PluginServiceContext["pluginData"] {
   const { sessionId, pluginId, signal, store, visibility } = options;
-  const provider = visibility
-    ? { ...visibility, writes: visibility.upstreamOf?.(pluginId) ?? [] }
-    : undefined;
+  const provider = providerVisibility(visibility, pluginId);
   // The read scope survives nested calls; the immediate service caller is
-  // not necessarily the runtime that owns this buffer.
-  const buffer =
+  // not necessarily the runtime that owns this buffer. A caller never
+  // stages operations for its own plugin, so the two never meet.
+  const own =
     visibility?.pluginId === pluginId ? (options.writeBuffer ?? []) : [];
+  const staged = options.staged;
+  const overlay = (): readonly Proposal[] =>
+    staged ? [...staged(), ...own] : own;
   return {
     async get(namespace, key) {
       signal.throwIfAborted();
@@ -196,6 +251,7 @@ export function readProviderData(options: {
       const base: DataOpsCurrent = row
         ? { exists: true, value: row.value as JsonValue }
         : { exists: false };
+      const buffer = overlay();
       const { current, producers } = readPluginDataKey(
         provider,
         buffer,
@@ -231,6 +287,7 @@ export function readProviderData(options: {
       const rows =
         (await store?.listPluginData(sessionId, pluginId, namespace)) ?? [];
       signal.throwIfAborted();
+      const buffer = overlay();
       const merged = mergePluginDataRows(
         rows,
         buffer,

@@ -27,10 +27,12 @@
 | Execution | 执行 | 一次调度及其提交计划；玩家回合、手动调用和后台作业都可以发起执行。 |
 | Fault latch | 熔断 | 辅助插件在同一会话连续因自身故障失败后暂停，可由玩家重新启用；只在进程内存中保存。见[协议](./protocol.md#插件故障熔断)。 |
 | Finalizer step | 收尾步骤 | agent 用完步数后关掉工具、要求直接给出答案的那一次请求。 |
-| Imported tool | 导入工具 | agent 用 `agent.tools.services` 从别的插件导入、给模型用的服务生成的只读工具。 |
+| Imported tool | 导入工具 | agent 用 `agent.tools.services` 从别的插件导入、给模型用的服务生成的工具；读服务的导入只读，写服务的导入暂存写入。 |
 | Kernel | 内核 | 负责调度、上下文、工具调用、提案校验和提交的框架核心。 |
 | Local model relay | 本地模型中继 | 共享形态的服务端经玩家浏览器访问玩家电脑或局域网上的模型。见[安全边界](../internals/security.md#local-model-relay)。 |
 | Official web app | 官方网页版 | 尚未支持的官方托管产品；已有的 browser-private 基础设施不等于完整产品。 |
+| Operation | 操作 | 一次成功的写服务调用暂存下来的全部写入，随调用方的提交单元一起提交或丢弃。不同于数据操作列表里的单个 `op`。见[写服务的操作](./transactions.md#写服务的操作)。 |
+| Operation record | 操作记录 | 一个操作留在调用方结果上的记录（`runtimeResults[].operations`），提交后写明它最终的状态和原因。 |
 | Operation-based write | 操作式写入 | 交一串操作（`plugin.data.update`），不交算好的整个值。 |
 | Pack | 玩法包 | 供玩家选择的一组已安装插件，不负责安装包。 |
 | Perspective | 视角 | 叙事从谁的角度讲：以角色为中心的第一、第二、第三人称，全知旁白，或主持人。 |
@@ -49,6 +51,7 @@
 | Session | 会话 | 用某个世界进行的一局游戏，拥有独立的角色、插件数据和进度。 |
 | Slot | 槽位 | 设置界面里叫“模型用途”。 |
 | Stop reason | 结束原因 | agent 工具循环怎样结束（`RuntimeResult.stop.reason`）。 |
+| Story-attached operation | 故事附带的操作 | 故事或 setup 所在提交单元里的操作：各自一个 savepoint，失败只丢它自己，故事照常提交。 |
 | Story segment | 故事段落 | 故事输出里的一段：旁白、对白或动作。上下文清楚时简称“段落”。 |
 | Sub-agent | 子 agent | 另一个 runtime 在自己的执行里运行、只交回输出的 agent runtime。 |
 | Tool result | 工具结果 | 代码读取的内容与模型看到的反馈是两种形状；工具成功不代表已保存。 |
@@ -56,6 +59,7 @@
 | Trusted source | 可信来源 | 实例所有者或运营者选定的 GitHub 来源，只减少审批提示。 |
 | Turn | 回合 | “This turn” 是“本回合”。 |
 | World | 世界 | 世界的安装包叫“世界包”。 |
+| Write service | 写服务 | `access: write` 的服务，替调用方改提供者自己的数据；写入暂存为一个**操作**。见[写服务](./plugin-extensions.md#写服务)。 |
 
 ## Prompt vocabulary
 

@@ -21,6 +21,7 @@ const outcome = {
   status: "committed" as const,
   events: [],
   failedProposals: [],
+  operations: [],
 };
 const record = (
   latch: ReturnType<typeof createPluginFaultLatch>,

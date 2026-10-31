@@ -240,8 +240,24 @@ export type {
   CommitIsolation,
   FinalizeExecutionArgs,
   FinalizeExecutionOutcome,
+  FinalizedOperation,
   IsolatedRuntime,
 } from "./commit/finalize-execution.js";
+export {
+  createOperationExecutionScope,
+  createRootOperationStage,
+  type LoadPluginDatasets,
+  type OperationCaller,
+  type OperationExecutionScope,
+  type OperationStage,
+  type ProviderDatasets,
+  type RootOperationStage,
+  type StagedOperation,
+} from "./operations/operation-stage.js";
+export {
+  buildOperationRecord,
+  operationRecordsOf,
+} from "./operations/operation-records.js";
 
 // ── Snapshot Builder ────────────────────────────────────────────
 export { buildSessionSnapshot } from "./snapshot/snapshot-builder.js";

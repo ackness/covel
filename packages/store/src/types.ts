@@ -13,7 +13,11 @@
 // ── Record type re-exports (by domain) ───────────────────────────
 
 export type { CharacterSchemaRecord, LorebookOwner } from "@covel/shared";
-import type { CharacterSchemaRecord, LorebookOwner } from "@covel/shared";
+import type {
+  CharacterSchemaRecord,
+  LorebookOwner,
+  OperationSettlement,
+} from "@covel/shared";
 
 export type { WorldRecord } from "./records/world-records.js";
 export { normalizeWorldRecord } from "./records/world-records.js";
@@ -218,12 +222,16 @@ export interface RuntimeRecordStore {
    * `failedRuntimes` settles those entries of `runtimeResults` as `failed`
    * with their `error`: a committed execution may still drop an optional
    * runtime's writes, and its recorded result must not read as success.
+   *
+   * `settledOperations` gives write-service operation records their final
+   * status, by record id, on every row of the turn.
    */
   setTurnResultCommitStatus(
     sessionId: string,
     turnId: string,
     status: TurnResultRecord["commitStatus"],
     failedRuntimes?: readonly FailedRuntimeResult[],
+    settledOperations?: readonly OperationSettlement[],
   ): Promise<void>;
 
   // ── Tool Calls ──

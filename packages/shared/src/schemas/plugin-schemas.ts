@@ -469,7 +469,7 @@ export const agentToolsConfigSchema = toolsConfigSchema
     services: z
       .array(serviceImportSchema)
       .describe(
-        "Services the agent imports as read-only tools. Each names a contract; the one active provider that offers it to models answers the call. Without one the tool is left out for the run.",
+        "Services the agent imports as tools. Each names a contract; the one active provider that offers it to models answers the call. Without one the tool is left out for the run. A write service's tool stages the provider's writes, which commit with this runtime's work; it is left out of a run that cannot change data there.",
       )
       .optional(),
   })

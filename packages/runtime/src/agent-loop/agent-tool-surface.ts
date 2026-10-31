@@ -13,6 +13,7 @@ import type { RuntimeManifest, TurnInput } from "@covel/shared";
 import type { ToolModule } from "@covel/tools";
 import type { TurnExecutorDeps } from "../turn-executor/turn-executor-types.js";
 import type { PluginServiceRegistry } from "../plugin-services.js";
+import type { OperationStage } from "../operations/operation-stage.js";
 import type { ToolCallContext, ToolExecutor } from "./tool-executor.js";
 import {
   absentImportTool,
@@ -38,11 +39,16 @@ const EMPTY_SURFACE: AgentToolSurface = {
   absent: new Map(),
 };
 
-/** Resolve a runtime's generated tools for one run, as that runtime. */
+/**
+ * Resolve a runtime's generated tools for one run, as that runtime. A write
+ * service's import is absent (`not-allowed`) unless `canWrite`: the run has
+ * an operation stage.
+ */
 export async function prepareAgentToolSurface(args: {
   readonly manifest: RuntimeManifest;
   readonly input: Pick<TurnInput, "sessionId">;
   readonly deps: Pick<TurnExecutorDeps, "services">;
+  readonly canWrite?: boolean;
 }): Promise<AgentToolSurface> {
   const { manifest, input, deps } = args;
   const imports =
@@ -66,6 +72,19 @@ export async function prepareAgentToolSurface(args: {
         error,
       );
       resolution = { status: "missing" };
+    }
+    if (resolution.status === "ready" && resolution.access === "write") {
+      if (!args.canWrite) {
+        const notAllowed = {
+          status: "not-allowed",
+          pluginId: resolution.pluginId,
+        } as const;
+        absent.set(name, absentImportTool(name, contract, notAllowed));
+        console.info(
+          `[service-imports] runtime "${manifest.name}" in session ${input.sessionId}: imported tool "${name}" (${contract}) is absent: ${absentReason(notAllowed)}`,
+        );
+        continue;
+      }
     }
     if (resolution.status === "ready") {
       available.set(name, importedServiceTool(name, resolution));
@@ -91,20 +110,29 @@ function absentReason(absent: AbsentImport): string {
       return `more than one provider offers it to models (${absent.providers.join(", ")})`;
     case "paused":
       return `its provider ${absent.pluginId} is paused after repeated errors`;
+    case "not-allowed":
+      return `it is a write service of ${absent.pluginId}, and this run cannot change data (it can suspend, or runs detached, in the background, in a retry or a resume)`;
   }
 }
 
 /**
- * Hand every call the generated tools and the service registry, then
- * forward. Absent tools are left out of `getToolInfo` (so neither the
- * advertisement nor a tool search offers them) but answer `execute`.
+ * Hand every call the generated tools, the service registry and the run's
+ * operation stage, then forward. Absent tools are left out of `getToolInfo`
+ * (so neither the advertisement nor a tool search offers them) but answer
+ * `execute`.
  */
 export function withAgentToolSurface(
   inner: ToolExecutor,
   surface: AgentToolSurface,
   services: PluginServiceRegistry | undefined,
+  operations?: OperationStage,
 ): ToolExecutor {
-  if (!services && surface.available.size === 0 && surface.absent.size === 0)
+  if (
+    !services &&
+    !operations &&
+    surface.available.size === 0 &&
+    surface.absent.size === 0
+  )
     return inner;
   const callable: ReadonlyMap<string, ToolModule> = new Map([
     ...surface.absent,
@@ -116,6 +144,7 @@ export function withAgentToolSurface(
   ): ToolCallContext => ({
     ...context,
     ...(services ? { services } : {}),
+    ...(operations ? { operations } : {}),
     ...(generatedTools.size > 0 ? { generatedTools } : {}),
   });
   return {

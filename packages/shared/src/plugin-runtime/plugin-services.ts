@@ -25,7 +25,10 @@ export interface PluginServiceClient {
   ): Promise<unknown>;
 }
 
-/** Services compute values; the calling runtime owns persistent effects. */
+/**
+ * What a read service's handler receives. A read service computes values;
+ * the calling runtime owns persistent effects.
+ */
 export interface PluginServiceContext {
   readonly callerPluginId: string;
   readonly sessionId: string;
@@ -40,7 +43,27 @@ export interface PluginServiceContext {
   readonly services: PluginServiceClient;
 }
 
-export interface PluginServiceDefinition<Input, Output> {
+/**
+ * What a write service's handler receives: no model or HTTP access, and a
+ * writer for the provider's own data. Its writes are staged for the caller
+ * and commit with the caller's work. Nested `services` calls reach read
+ * services only.
+ */
+export interface PluginWriteServiceContext extends Omit<
+  PluginServiceContext,
+  "pluginData" | "gateway" | "utils"
+> {
+  /**
+   * The provider's own data. Reads see what earlier calls of this caller
+   * staged and this call's own writes; `_` namespaces are refused.
+   */
+  readonly pluginData: import("./handler.js").PluginDataWriter;
+  readonly random: import("./handler.js").PluginRandom;
+  /** The calling execution's turn. */
+  readonly turnId: string;
+}
+
+interface PluginServiceDefinitionFields<Input, Output> {
   readonly name: string;
   readonly contract: string;
   /** Required for a model-facing service: the imported tool's description. */
@@ -60,8 +83,32 @@ export interface PluginServiceDefinition<Input, Output> {
   /** Structural parser interface; Zod schemas work without a host dependency. */
   readonly input: { parse(value: unknown): Input };
   readonly output: { parse(value: unknown): Output };
+}
+
+/** A service that reads; `access` must match the `contributes.services` entry. */
+export interface PluginReadServiceDefinition<
+  Input,
+  Output,
+> extends PluginServiceDefinitionFields<Input, Output> {
+  readonly access?: "read";
   readonly handler: (
     input: Input,
     context: PluginServiceContext,
   ) => Promise<Output> | Output;
 }
+
+/** A service that changes its provider's own data for the caller. */
+export interface PluginWriteServiceDefinition<
+  Input,
+  Output,
+> extends PluginServiceDefinitionFields<Input, Output> {
+  readonly access: "write";
+  readonly handler: (
+    input: Input,
+    context: PluginWriteServiceContext,
+  ) => Promise<Output> | Output;
+}
+
+export type PluginServiceDefinition<Input, Output> =
+  | PluginReadServiceDefinition<Input, Output>
+  | PluginWriteServiceDefinition<Input, Output>;

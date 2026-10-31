@@ -348,6 +348,55 @@ export async function prepareRuntimeProposals(
   return { proposals, failedProposals };
 }
 
+/**
+ * Everything before persistence for the writes of one write-service
+ * operation: they already carry the provider's identity, so only retry
+ * anchoring, the proposal guard and PreStateCommit (with the provider and
+ * `service:<name>` as subject) apply. Any refusal rejects the whole
+ * operation: its writes commit together or not at all.
+ */
+export async function prepareOperationProposals(
+  writes: readonly Proposal[],
+  opts?: RuntimeCommitOptions,
+): Promise<PreparedRuntimeProposals> {
+  const screened = screenProposals(writes, opts);
+  if (screened.failedProposals.length > 0 || !opts?.hookPipeline)
+    return screened;
+  const proposals: Proposal[] = [];
+  const failedProposals: FailedProposal[] = [];
+  for (const proposal of screened.proposals) {
+    const hooked = await runPreStateCommitHook(opts.hookPipeline, proposal, {
+      ...(opts.signal ? { signal: opts.signal } : {}),
+      ...(opts.eventBus ? { eventBus: opts.eventBus } : {}),
+      ...(opts.emitter ? { emitter: opts.emitter } : {}),
+    });
+    if ("error" in hooked) {
+      failedProposals.push({
+        proposal,
+        error: hooked.error,
+        ...(hooked.code ? { code: hooked.code } : {}),
+      });
+      continue;
+    }
+    // A hook may replace the payload, never the provider's identity.
+    const replaced = {
+      ...hooked.proposal,
+      sessionId: proposal.sessionId,
+      turnId: proposal.turnId,
+      source: proposal.source,
+    } as Proposal;
+    const error = opts.proposalGuard?.(replaced);
+    if (error) {
+      failedProposals.push({ proposal, error });
+      continue;
+    }
+    proposals.push(replaced);
+  }
+  return failedProposals.length > 0
+    ? { proposals: [], failedProposals }
+    : { proposals, failedProposals };
+}
+
 /** Persist proposals produced by {@link prepareRuntimeProposals}. */
 export function commitPreparedProposals(
   proposals: readonly Proposal[],

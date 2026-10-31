@@ -39,7 +39,11 @@ describe("package capability snapshots", () => {
       contributes: {
         tools: ["z", "a"],
         actions: ["act"],
-        services: ["probe@1", { contract: "probe.read@1", modelFacing: true }],
+        services: [
+          "probe@1",
+          { contract: "probe.read@1", modelFacing: true },
+          { contract: "probe.write@1", access: "write", modelFacing: true },
+        ],
         wires: ["wire"],
         forms: ["form"],
         extensions: ["prompt.segment@1/probe"],
@@ -84,8 +88,9 @@ describe("package capability snapshots", () => {
       ],
       tools: ["a", "read", "z"],
       actions: ["act"],
-      // A service offered to models is still recorded by its contract.
-      services: ["probe.read@1", "probe@1"],
+      // A service offered to models is still recorded by its contract; a
+      // write service is marked, so gaining write access asks again.
+      services: ["probe.read@1", "probe.write@1 (write)", "probe@1"],
       wires: ["wire"],
       extensions: ["prompt.segment@1/probe"],
       forms: ["form"],

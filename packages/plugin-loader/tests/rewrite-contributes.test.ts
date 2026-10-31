@@ -267,6 +267,39 @@ contributes:
     });
   });
 
+  it("writes a write service with its access, and reports a change of access as drift", () => {
+    const original = `---
+contributes:
+  services:
+    - bank.pay@1
+---
+`;
+    const extracted = {
+      ...empty,
+      services: [
+        {
+          contract: "bank.pay@1",
+          access: "write" as const,
+          modelFacing: true as const,
+        },
+      ],
+    };
+    const result = rewriteContributes(original, extracted);
+    expect(result.drift).toEqual([
+      {
+        key: "services",
+        added: ["bank.pay@1 (model-facing, write)"],
+        removed: ["bank.pay@1"],
+      },
+    ]);
+    expect(readPlainYamlFrontmatter(result.text).data.contributes).toEqual({
+      services: [
+        { contract: "bank.pay@1", access: "write", modelFacing: true },
+      ],
+    });
+    expect(rewriteContributes(result.text, extracted).drift).toEqual([]);
+  });
+
   it("leaves extension and command metadata untouched", () => {
     const original =
       "---\ncontributes:\n  extensions: [ui.slot@1/summary]\n  commands: [{name: open, action: open}]\n---\n";

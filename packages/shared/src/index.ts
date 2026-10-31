@@ -633,6 +633,7 @@ export {
 export {
   authoringSourceKind,
   isModelFacingServiceContribution,
+  serviceContributionAccess,
   pluginIdSchema,
   pluginManifestSchema,
   serviceContributionContract,

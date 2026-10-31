@@ -53,6 +53,7 @@ import {
   hasPendingSibling,
 } from "./resume/suspension-settlement.js";
 import { suspensionProgressScopeId } from "./resume/suspension-progress-scope.js";
+import { createOperationExecutionScope } from "./operations/operation-stage.js";
 
 type Schema = Readonly<Record<string, unknown>>;
 
@@ -79,6 +80,7 @@ export interface ExecutionCommitPlan extends Pick<
   | "setupRan"
   | "abortReason"
   | "datasetSchemas"
+  | "providerDatasets"
   | "readDependencies"
   | "progressScopeId"
 > {
@@ -130,7 +132,11 @@ function captureSchemas(deps: ExecutionDeps) {
 }
 
 function publicRuntimeResult(result: RuntimeResult): RuntimeResult {
-  const { pendingProposals: _pendingProposals, ...visible } = result;
+  const {
+    pendingProposals: _pendingProposals,
+    operationWrites: _operationWrites,
+    ...visible
+  } = result;
   return structuredClone(visible);
 }
 
@@ -204,6 +210,10 @@ export async function executeTurn(
       onSettled: (event) => subagentRuns.push(event),
     });
   const captured = captureSchemas(deps);
+  // Shared by every run of this execution and its nested executions.
+  const operationScope =
+    deps.operationScope ??
+    createOperationExecutionScope(deps.loadPluginDatasets);
   const userSettings = snapshotUserSettings(input.userSettings);
   const hookScope = {
     logicalKey: input.logicalTurnId ?? input.turnId,
@@ -221,7 +231,7 @@ export async function executeTurn(
   const turn = await runTurnPipeline(
     { ...input, userSettings },
     runtimes,
-    { ...captured.deps, hookScope, subagents },
+    { ...captured.deps, hookScope, subagents, operationScope },
     options,
   );
   // Each top-level result commits as one unit with everything nested under
@@ -346,6 +356,9 @@ export async function executeTurn(
       }),
       outputSchemas: captured.outputSchemas,
       datasetSchemas: captured.datasetSchemas,
+      // Datasets of the providers of write services this execution called,
+      // so their writes are checked even when no runtime of theirs ran.
+      providerDatasets: operationScope.providerDatasets(),
       hookSettings: hookScope.settings,
       hookLocale: hookScope.locale,
     },

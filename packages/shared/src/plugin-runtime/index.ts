@@ -10,6 +10,9 @@ export type {
   PluginServiceContext,
   PluginServiceDefinition,
   PluginServiceDescriptor,
+  PluginReadServiceDefinition,
+  PluginWriteServiceContext,
+  PluginWriteServiceDefinition,
 } from "./plugin-services.js";
 
 /** Execution contracts only; no discovery, filesystem or provider implementation. */

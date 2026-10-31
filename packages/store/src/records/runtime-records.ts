@@ -1,6 +1,6 @@
 /** Turn / runtime execution record types (translation layer included). */
 
-import type { ExecutionOrigin } from "@covel/shared";
+import type { ExecutionOrigin, OperationSettlement } from "@covel/shared";
 
 /** A runtime whose recorded result is settled as failed at commit. */
 export interface FailedRuntimeResult {
@@ -37,6 +37,46 @@ export function settleFailedRuntimeResults(
     return error !== undefined
       ? { ...(entry as object), status: "failed", error }
       : entry;
+  });
+}
+
+/**
+ * `runtimeResults` with each listed operation record settled, by record id.
+ * Every result entry's `operations` list is searched; entries without one
+ * are returned unchanged.
+ */
+export function settleOperationRecords(
+  runtimeResults: unknown,
+  settled: readonly OperationSettlement[],
+): unknown {
+  if (settled.length === 0 || !Array.isArray(runtimeResults))
+    return runtimeResults;
+  const byId = new Map(settled.map((item) => [item.id, item]));
+  return runtimeResults.map((entry: unknown) => {
+    const operations =
+      entry && typeof entry === "object"
+        ? (entry as { operations?: unknown }).operations
+        : undefined;
+    if (!Array.isArray(operations)) return entry;
+    let changed = false;
+    const next = operations.map((record: unknown) => {
+      const id =
+        record && typeof record === "object"
+          ? (record as { id?: unknown }).id
+          : undefined;
+      const settlement = typeof id === "string" ? byId.get(id) : undefined;
+      if (!settlement) return record;
+      changed = true;
+      const { reason: _reason, ...rest } = record as Record<string, unknown>;
+      return {
+        ...rest,
+        status: settlement.status,
+        ...(settlement.reason !== undefined
+          ? { reason: settlement.reason }
+          : {}),
+      };
+    });
+    return changed ? { ...(entry as object), operations: next } : entry;
   });
 }
 

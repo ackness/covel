@@ -17,6 +17,7 @@ import type { ExecutionWriteBuffer } from "./execution-write-buffer.js";
 import type { HandlerHelperContext } from "./plugin-handler-helpers.js";
 import type { PluginDataVisibility } from "./upstream-plugin-data.js";
 import { tagServiceFailure } from "../plugin-services.js";
+import type { OperationStage } from "../operations/operation-stage.js";
 
 /** A hook may rewrite the arguments into text that is not JSON. */
 function parseArguments(text: string): unknown {
@@ -46,6 +47,8 @@ export function createRuntimeTools(options: {
   inputs?: Readonly<Record<string, InputSlot>>;
   signal: AbortSignal;
   assertLive: () => void;
+  /** The run's operation stage, for tools that call write services. */
+  operations?: OperationStage;
 }) {
   const { manifest, context, deps, buffer, signal, assertLive } = options;
   const authorizedToolNames = new Set(declaredToolNames(manifest));
@@ -130,6 +133,7 @@ export function createRuntimeTools(options: {
             emittedEventTopics: events.map((event) => event.topic),
             emitter: deps.emitter,
             ...(deps.services ? { services: deps.services } : {}),
+            ...(options.operations ? { operations: options.operations } : {}),
           },
         );
         assertLive();

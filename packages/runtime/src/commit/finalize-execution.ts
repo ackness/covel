@@ -20,6 +20,15 @@
  * whose hard upstream was dropped rolls back everything; one that read data
  * of a dropped runtime commits, and the trace records it. A thrown store
  * error always rolls back everything.
+ *
+ * Write-service operations ride on the results of the runs that called them
+ * and commit with those runs' unit, after all of the unit's own writes, in
+ * call order, each in its own savepoint. In an optional unit next to a story
+ * a rejected operation drops the unit; in a story or setup unit next to a
+ * story it drops only itself (the story stands); without a story it rolls
+ * back the execution. Readers of a dropped operation's writes follow the
+ * read-dependency rule above, with the operation as producer. Each
+ * operation's record is settled with the `turn_results` rows.
  * `commit_status` for the execution's `turn_results` rows is settled inside
  * that same transaction on success, and best-effort to `failed` outside it on
  * rollback.
@@ -39,6 +48,10 @@ import type { EventBus } from "@covel/events";
 import type {
   DeferredRuntimeJob,
   ExecutionContext,
+  OperationFailureReason,
+  OperationRecord,
+  OperationSettlement,
+  OperationStatus,
   Proposal,
   RuntimeManifest,
   RuntimeResult,
@@ -63,12 +76,16 @@ import { buildHookSettings } from "../hooks/hook-settings.js";
 import { runWithHookScope, type HookScope } from "../hooks/hook-scope.js";
 import type { TurnEmitter } from "../trace/turn-emitter.js";
 import {
+  commitEligibility,
   commitPreparedProposals,
+  prepareOperationProposals,
   prepareRuntimeProposals,
   type CommittableRuntimeResult,
   type FailedProposal,
   type PreparedRuntimeProposals,
 } from "../session/session-runtime-result.js";
+import { malformedDomainEffect } from "./session-output-normalizer.js";
+import type { ProviderDatasets } from "../operations/operation-stage.js";
 import {
   applySessionClockTx,
   needsSessionClockWrite,
@@ -116,7 +133,7 @@ type FinalizeManifest = RuntimeManifest;
 
 /** Commit results retain the execution identity and status of a runtime result. */
 type FinalizableResult = CommittableRuntimeResult &
-  Pick<RuntimeResult, "runId" | "status">;
+  Pick<RuntimeResult, "runId" | "status" | "operations" | "operationWrites">;
 
 export interface FinalizeExecutionArgs {
   /** Execution-level veto/cancellation forbids all domain writes and success fan-out. */
@@ -272,14 +289,29 @@ export interface FinalizeExecutionArgs {
    */
   readonly datasetSchemas?: DatasetSchemas;
   /**
+   * Declared datasets and compiled schemas of the providers of write
+   * services the execution called, by plugin id. Their operations' writes
+   * are checked against them, also when no runtime of the provider ran.
+   */
+  readonly providerDatasets?: Readonly<Record<string, ProviderDatasets>>;
+  /**
    * Plugin-data read dependencies by reader `runId`: the producer ids whose
-   * uncommitted writes the reader's reads saw (`read-dependencies.ts`). Every
-   * producer id is a `runId` of `results` today. An auxiliary unit with a
-   * member that read a dropped producer outside the unit is dropped too; a
-   * story or setup unit commits, with one `read-dependency.kept` trace row
-   * per dropped producer.
+   * uncommitted writes the reader's reads saw (`read-dependencies.ts`). A
+   * producer id is the `runId` of a result, or the id of a write-service
+   * operation on one. An auxiliary unit with a member that read a dropped
+   * producer outside the unit is dropped too; a story or setup unit commits,
+   * with one `read-dependency.kept` trace row per dropped producer.
    */
   readonly readDependencies?: Readonly<Record<string, readonly string[]>>;
+}
+
+/** How one write-service operation ended. */
+export interface FinalizedOperation {
+  readonly id: string;
+  readonly status: OperationStatus;
+  readonly reason?: OperationFailureReason;
+  readonly contract: string;
+  readonly invokedBy: OperationRecord["invokedBy"];
 }
 
 export interface FinalizeExecutionOutcome {
@@ -312,6 +344,12 @@ export interface FinalizeExecutionOutcome {
    * session's subscribers were reset to re-read it.
    */
   readonly fanOutFailed?: boolean;
+  /**
+   * Every write-service operation of the execution and how it ended, as
+   * saved with the `turn_results` rows. Its rejected writes are in
+   * `failedProposals`.
+   */
+  readonly operations: readonly FinalizedOperation[];
 }
 
 export interface IsolatedRuntime {
@@ -377,6 +415,50 @@ interface CommitUnit {
   readonly members: readonly FinalizableResult[];
 }
 
+/** One write-service operation and the run that called it. */
+interface OperationEntry {
+  readonly record: OperationRecord;
+  /** Its staged writes, carrying the provider's identity. */
+  readonly writes: readonly Proposal[];
+  readonly member: FinalizableResult;
+}
+
+/** What a dropped producer a reader depended on was. */
+type LostRead =
+  | { readonly reader: FinalizableResult; readonly producer: FinalizableResult }
+  | { readonly reader: FinalizableResult; readonly operation: OperationEntry };
+
+function lostProducerName(lost: LostRead): string {
+  return "operation" in lost
+    ? lost.operation.record.contract
+    : lost.producer.runtimeId;
+}
+
+/** The failure reason of an operation whose writes were refused. */
+function operationFailureReason(
+  failed: readonly FailedProposal[],
+): OperationFailureReason {
+  return failed.some((item) => item.code === "conflict")
+    ? "conflict"
+    : "rejected";
+}
+
+/**
+ * An operation's `update` that the commit could not apply passed the same
+ * check when it was staged: the value moved since. That is a conflict, not a
+ * faulty write of the provider.
+ */
+function asOperationFailures(
+  failed: readonly FailedProposal[],
+): FailedProposal[] {
+  return failed.map((item) =>
+    item.code === "data-op-rejected" &&
+    item.proposal.type === "plugin.data.update"
+      ? { ...item, code: "conflict" }
+      : item,
+  );
+}
+
 function commitUnitsOf(
   results: readonly FinalizableResult[],
   sizes: readonly number[] | undefined,
@@ -424,10 +506,17 @@ async function settleTurnResults(
   sessionId: string,
   turnIds: readonly string[],
   status: "committed" | "failed",
+  settledOperations: readonly OperationSettlement[] = [],
 ): Promise<void> {
   for (const turnId of turnIds) {
     try {
-      await store.setTurnResultCommitStatus(sessionId, turnId, status);
+      await store.setTurnResultCommitStatus(
+        sessionId,
+        turnId,
+        status,
+        [],
+        settledOperations,
+      );
     } catch (err) {
       console.warn(
         `[finalize-execution] failed to settle commitStatus (${status}) for turn ${turnId}:`,
@@ -784,7 +873,24 @@ export async function finalizeExecution(
     }
   };
 
-  const datasetPolicy = datasetPolicyResolver(runtimes, args.datasetSchemas);
+  // Providers of write services are checked like packages that ran, also
+  // when none of their runtimes did.
+  const providerDatasets = Object.entries(args.providerDatasets ?? {});
+  const datasetPolicy = datasetPolicyResolver(
+    [
+      ...runtimes,
+      ...providerDatasets.map(([pluginId, { datasets }]) => ({
+        pluginId,
+        datasets,
+      })),
+    ],
+    {
+      ...Object.fromEntries(
+        providerDatasets.map(([pluginId, { schemas }]) => [pluginId, schemas]),
+      ),
+      ...args.datasetSchemas,
+    },
+  );
   const commitOpts = (
     result: FinalizableResult,
     deferPostCommit?: (fn: () => Promise<void>) => void,
@@ -813,6 +919,93 @@ export async function finalizeExecution(
   const kindOf = (result: FinalizableResult): string =>
     outputKindByRuntime.get(result.runtimeId) ?? "system";
 
+  // Write-service operations, with the run that called them. Only a staged
+  // operation of a result whose own writes may commit can commit.
+  const operations: OperationEntry[] = results.flatMap((member) =>
+    (member.operations ?? []).map((record) => ({
+      record,
+      writes: member.operationWrites?.[record.id] ?? [],
+      member,
+    })),
+  );
+  const operationById = new Map(
+    operations.map((entry) => [entry.record.id, entry]),
+  );
+  const operationState = new Map<
+    string,
+    { status: OperationStatus; reason?: OperationFailureReason }
+  >();
+  const settleOperation = (
+    entry: OperationEntry,
+    status: OperationStatus,
+    reason?: OperationFailureReason,
+  ) =>
+    operationState.set(entry.record.id, {
+      status,
+      ...(reason !== undefined ? { reason } : {}),
+    });
+  for (const entry of operations) {
+    const committable =
+      entry.record.status === "staged" &&
+      entry.writes.length > 0 &&
+      commitEligibility(entry.member) !== "none" &&
+      !malformedDomainEffect(entry.member.effects);
+    if (committable) settleOperation(entry, "staged");
+    else
+      settleOperation(
+        entry,
+        "discarded",
+        entry.record.reason ?? "caller-dropped",
+      );
+  }
+  const operationDropped = (entry: OperationEntry): boolean => {
+    const status = operationState.get(entry.record.id)?.status;
+    return status === "failed" || status === "discarded";
+  };
+  /** Operations of `members` that can still commit, in call order. */
+  const stagedOperationsOf = (
+    members: readonly FinalizableResult[],
+  ): OperationEntry[] => {
+    const set = new Set(members);
+    return operations
+      .filter(
+        (entry) =>
+          set.has(entry.member) &&
+          operationState.get(entry.record.id)?.status === "staged",
+      )
+      .sort((a, b) => a.record.seq - b.record.seq);
+  };
+  const finalizedOperations = (
+    override?: Pick<FinalizedOperation, "status" | "reason">,
+  ): FinalizedOperation[] =>
+    [...operations]
+      .sort((a, b) => a.record.seq - b.record.seq)
+      .map((entry) => {
+        const state = override ?? operationState.get(entry.record.id)!;
+        return {
+          id: entry.record.id,
+          status: state.status,
+          ...(state.reason !== undefined ? { reason: state.reason } : {}),
+          contract: entry.record.contract,
+          invokedBy: entry.record.invokedBy,
+        };
+      });
+  const settlementsOf = (
+    finalized: readonly FinalizedOperation[],
+  ): OperationSettlement[] =>
+    finalized.map(({ id, status, reason }) => ({
+      id,
+      status,
+      ...(reason !== undefined ? { reason } : {}),
+    }));
+  const operationCommitOpts = (
+    entry: OperationEntry,
+    deferPostCommit?: (fn: () => Promise<void>) => void,
+  ) => ({
+    ...commitOpts(entry.member, deferPostCommit),
+    enforceImageFlow: false,
+  });
+
   // A committed story must not be lost to an optional runtime's rejected
   // write. When the execution produced a story, every other non-setup unit
   // commits in its own savepoint: a rejection rolls back that unit alone.
@@ -840,6 +1033,21 @@ export async function finalizeExecution(
   const conclude = async (
     outcome: FinalizeExecutionOutcome,
   ): Promise<FinalizeExecutionOutcome> => {
+    if (outcome.status === "failed") {
+      // Nothing of the execution landed, its operations included.
+      const operations = finalizedOperations({
+        status: "discarded",
+        reason: "execution-failed",
+      });
+      await settleTurnResults(
+        store,
+        sessionId,
+        turnIds,
+        "failed",
+        settlementsOf(operations),
+      );
+      outcome = { ...outcome, operations };
+    }
     await terminalizeExecutionJobs(args, outcome);
     if (args.setupRan && args.setupRan.length > 0) {
       try {
@@ -885,6 +1093,10 @@ export async function finalizeExecution(
       CommitUnit,
       { error: string; cause: IsolatedRuntime["cause"] }
     >();
+    const preparedOperations = new Map<
+      OperationEntry,
+      PreparedRuntimeProposals
+    >();
     // Top-level runtime ids are unique within an execution, so dependency
     // checks, which only cross units at top level, can key on them.
     const droppedRootIds = (): Set<string> =>
@@ -922,10 +1134,13 @@ export async function finalizeExecution(
       results.map((result) => [result.runId, result]),
     );
     const positionOf = new Map(results.map((result, index) => [result, index]));
+    // An operation commits at the end of its caller's unit.
+    const unitRootOf = (member: FinalizableResult): FinalizableResult =>
+      units.find((unit) => unit.members.includes(member))?.root ?? member;
     const lostReadsOf = (
       unit: CommitUnit,
       prepared: ReadonlyMap<FinalizableResult, PreparedRuntimeProposals>,
-    ): { reader: FinalizableResult; producer: FinalizableResult }[] => {
+    ): LostRead[] => {
       const edges = args.readDependencies;
       if (
         !edges ||
@@ -939,13 +1154,27 @@ export async function finalizeExecution(
         return [];
       const members = new Set(unit.members);
       const dropped = droppedRuns();
-      const lost = new Map<
-        FinalizableResult,
-        { reader: FinalizableResult; producer: FinalizableResult }
-      >();
+      const lost = new Map<FinalizableResult | OperationEntry, LostRead>();
       for (const reader of unit.members) {
         for (const producerId of edges[reader.runId] ?? []) {
-          // Only runs produce today; an unknown id has nothing to drop.
+          // A producer is a run or a write-service operation; an unknown id
+          // has nothing to drop.
+          const operation = operationById.get(producerId);
+          if (!resultByRun.has(producerId) && operation) {
+            if (members.has(operation.member)) continue;
+            if (
+              positionOf.get(unitRootOf(operation.member))! >
+              positionOf.get(reader)!
+            ) {
+              console.warn(
+                `[finalize-execution] ${reader.runtimeId} read data written through ${operation.record.contract}, which commits after it; the dependency is ignored`,
+              );
+              continue;
+            }
+            if (operationDropped(operation) && !lost.has(operation))
+              lost.set(operation, { reader, operation });
+            continue;
+          }
           const producer = resultByRun.get(producerId);
           if (!producer || members.has(producer)) continue;
           if (positionOf.get(producer)! > positionOf.get(reader)!) {
@@ -981,6 +1210,17 @@ export async function finalizeExecution(
             commitOpts(result),
           ),
         );
+        // A run's operations are prepared after its own writes.
+        for (const entry of stagedOperationsOf([result])) {
+          args.signal?.throwIfAborted();
+          preparedOperations.set(
+            entry,
+            await prepareOperationProposals(
+              entry.writes,
+              operationCommitOpts(entry),
+            ),
+          );
+        }
       }
       committedEvents = await store.withTransaction(async (tx) => {
         args.signal?.throwIfAborted();
@@ -1115,6 +1355,49 @@ export async function finalizeExecution(
           }
           return committed;
         };
+        // One operation's writes, after its unit's own writes. Any refusal
+        // fails the whole operation; an `update` that no longer applies is
+        // a conflict.
+        const commitOperation = async (
+          entry: OperationEntry,
+          sink: StoreTransaction,
+          defer: (fn: () => Promise<void>) => void,
+        ): Promise<readonly SessionEvent[]> => {
+          const { proposals, failedProposals } = preparedOperations.get(entry)!;
+          if (failedProposals.length > 0)
+            throw new ProposalCommitFailure(failedProposals);
+          const out = await commitPreparedProposals(
+            proposals,
+            sink,
+            sessionId,
+            {
+              runtimeId: `service:${entry.record.service}`,
+              turnId: entry.member.turnId,
+            },
+            operationCommitOpts(entry, defer),
+          );
+          if (out.failedProposals.length > 0)
+            throw new ProposalCommitFailure(
+              asOperationFailures(out.failedProposals),
+            );
+          return out.events;
+        };
+        // A story-attached operation that did not land: only it is dropped.
+        const failOperation = (
+          entry: OperationEntry,
+          failed: readonly FailedProposal[],
+        ) => {
+          isolatedFailures.push(...failed);
+          settleOperation(entry, "failed", operationFailureReason(failed));
+          console.warn(
+            `[finalize-execution] ${entry.record.contract} called by ${entry.member.runtimeId} did not commit for session ${sessionId}: ` +
+              failed.map((fp) => fp.error).join("; "),
+          );
+        };
+        const dropUnitOperations = (unit: CommitUnit) => {
+          for (const entry of stagedOperationsOf(unit.members))
+            settleOperation(entry, "discarded", "caller-dropped");
+        };
         for (const unit of units) {
           args.signal?.throwIfAborted();
           const { root } = unit;
@@ -1126,6 +1409,7 @@ export async function finalizeExecution(
               throw new Error(`${root.runtimeId}: ${error}`);
             }
             isolated.set(unit, { error, cause: "upstream" });
+            dropUnitOperations(unit);
             console.warn(
               `[finalize-execution] dropped writes of ${root.runtimeId} for session ${sessionId}: ${error}`,
             );
@@ -1133,8 +1417,9 @@ export async function finalizeExecution(
           }
           const lostReads = lostReadsOf(unit, prepared);
           if (lostReads.length > 0 && isolates(unit)) {
-            const error = `read data of ${lostReads[0]!.producer.runtimeId} that did not commit`;
+            const error = `read data of ${lostProducerName(lostReads[0]!)} that did not commit`;
             isolated.set(unit, { error, cause: "read" });
+            dropUnitOperations(unit);
             console.warn(
               `[finalize-execution] dropped writes of ${root.runtimeId} for session ${sessionId}: ${error}`,
             );
@@ -1142,7 +1427,8 @@ export async function finalizeExecution(
           }
           // A story or setup unit never drops for what it read: it
           // commits, and the trace says what it stood on.
-          for (const { reader, producer } of lostReads) {
+          for (const lostRead of lostReads) {
+            const { reader } = lostRead;
             await tx.addTraceEvent({
               id: crypto.randomUUID(),
               sessionId,
@@ -1152,29 +1438,97 @@ export async function finalizeExecution(
               payload: {
                 runtimeId: reader.runtimeId,
                 runId: reader.runId,
-                producerRuntimeId: producer.runtimeId,
-                producerRunId: producer.runId,
-                reason: `read data of ${producer.runtimeId} that did not commit`,
+                ...("operation" in lostRead
+                  ? {
+                      producerOperationId: lostRead.operation.record.id,
+                      producerContract: lostRead.operation.record.contract,
+                    }
+                  : {
+                      producerRuntimeId: lostRead.producer.runtimeId,
+                      producerRunId: lostRead.producer.runId,
+                    }),
+                reason: `read data of ${lostProducerName(lostRead)} that did not commit`,
               },
               createdAt: new Date().toISOString(),
             });
           }
+          const unitOperations = stagedOperationsOf(unit.members);
           // A unit with a story or setup run stays all-or-nothing with the
           // execution; any other unit gets one savepoint next to a story.
           if (!isolates(unit) || !tx.savepoint) {
             events.push(
               ...(await commitUnit(unit, tx, (fn) => postCommit.push(fn))),
             );
+            // Story-attached operations: each one stands or drops alone,
+            // and the story stands either way.
+            const alone = hasStory && unit.members.some(protects);
+            for (const entry of unitOperations) {
+              args.signal?.throwIfAborted();
+              if (!alone) {
+                // Without a story the execution is all-or-nothing.
+                events.push(
+                  ...(await commitOperation(entry, tx, (fn) =>
+                    postCommit.push(fn),
+                  )),
+                );
+                settleOperation(entry, "committed");
+                continue;
+              }
+              const preparedOperation = preparedOperations.get(entry)!;
+              if (preparedOperation.failedProposals.length > 0) {
+                failOperation(entry, preparedOperation.failedProposals);
+                continue;
+              }
+              if (!tx.savepoint) {
+                settleOperation(entry, "failed", "store-unsupported");
+                console.warn(
+                  `[finalize-execution] ${entry.record.contract} called by ${entry.member.runtimeId} was not committed: the store cannot isolate it next to the story`,
+                );
+                continue;
+              }
+              const buffered: Array<() => Promise<void>> = [];
+              try {
+                events.push(
+                  ...(await tx.savepoint((sp) =>
+                    commitOperation(entry, sp, (fn) => buffered.push(fn)),
+                  )),
+                );
+                postCommit.push(...buffered);
+                settleOperation(entry, "committed");
+              } catch (err) {
+                if (!(err instanceof ProposalCommitFailure)) throw err;
+                failOperation(entry, err.failedProposals);
+              }
+            }
             continue;
           }
           const buffered: Array<() => Promise<void>> = [];
+          // The operation that dropped the unit, when one did.
+          let rejected: OperationEntry | undefined;
           try {
             events.push(
-              ...(await tx.savepoint((sp) =>
-                commitUnit(unit, sp, (fn) => buffered.push(fn)),
-              )),
+              ...(await tx.savepoint(async (sp) => {
+                const committed = [
+                  ...(await commitUnit(unit, sp, (fn) => buffered.push(fn))),
+                ];
+                for (const entry of unitOperations) {
+                  args.signal?.throwIfAborted();
+                  rejected = entry;
+                  const commit = (sink: StoreTransaction) =>
+                    commitOperation(entry, sink, (fn) => buffered.push(fn));
+                  committed.push(
+                    ...(await (sp.savepoint
+                      ? sp.savepoint(commit)
+                      : commit(sp))),
+                  );
+                  rejected = undefined;
+                }
+                return committed;
+              })),
             );
             postCommit.push(...buffered);
+            for (const entry of unitOperations)
+              settleOperation(entry, "committed");
           } catch (err) {
             if (!(err instanceof ProposalCommitFailure)) throw err;
             isolatedFailures.push(...err.failedProposals);
@@ -1184,6 +1538,13 @@ export async function finalizeExecution(
                 err.failedProposals.map((fp) => fp.error).join("; ") ||
                 "proposal rejected",
             });
+            dropUnitOperations(unit);
+            if (rejected)
+              settleOperation(
+                rejected,
+                "failed",
+                operationFailureReason(err.failedProposals),
+              );
             console.warn(
               `[finalize-execution] dropped writes of ${root.runtimeId} for session ${sessionId}: ` +
                 err.failedProposals.map((fp) => fp.error).join("; "),
@@ -1265,12 +1626,14 @@ export async function finalizeExecution(
         // Persisted results were written before commit; settle dropped ones
         // as failed so history, retries and reloads match what was saved.
         const failedRuntimes = isolatedRuntimesOf(isolated);
+        const settledOperations = settlementsOf(finalizedOperations());
         for (const turnId of turnIds) {
           await tx.setTurnResultCommitStatus(
             sessionId,
             turnId,
             "committed",
             failedRuntimes,
+            settledOperations,
           );
         }
         args.signal?.throwIfAborted();
@@ -1278,12 +1641,12 @@ export async function finalizeExecution(
       });
     } catch (err) {
       postCommit.length = 0;
-      await settleTurnResults(store, sessionId, turnIds, "failed");
       if (err instanceof ProposalCommitFailure) {
         return conclude({
           status: "failed",
           events: [],
           failedProposals: err.failedProposals,
+          operations: [],
         });
       }
       console.warn(
@@ -1294,6 +1657,7 @@ export async function finalizeExecution(
         status: "failed",
         events: [],
         failedProposals: [],
+        operations: [],
         error: errorMessage(err),
         ...(err instanceof SuspensionDataChangedError
           ? { code: err.code }
@@ -1311,6 +1675,7 @@ export async function finalizeExecution(
       status: "committed",
       events: committedEvents,
       failedProposals: isolatedFailures,
+      operations: finalizedOperations(),
       ...(fanOutFailed ? { fanOutFailed } : {}),
       ...(isolated.size > 0
         ? { isolatedRuntimes: isolatedRuntimesOf(isolated) }

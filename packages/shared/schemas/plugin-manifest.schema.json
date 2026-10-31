@@ -516,6 +516,11 @@
                     "pattern": "^[a-z][a-z0-9.-]*@[1-9][0-9]*$",
                     "description": "The contract ID the service is registered under."
                   },
+                  "access": {
+                    "type": "string",
+                    "enum": ["read", "write"],
+                    "description": "`write` lets the service change its own plugin's data for the caller: its writes commit with the caller's work. `read` (the default) only reads. The registration must say the same."
+                  },
                   "modelFacing": {
                     "type": "boolean",
                     "description": "`true` lets agents import the service as a tool with `agent.tools.services`. The registration must say the same and give a description and an input that exports JSON Schema."
@@ -526,7 +531,7 @@
               }
             ]
           },
-          "description": "Services the entry registers with `registerService`: a contract ID, or `{ contract, modelFacing: true }` for one that agents may import as a tool."
+          "description": "Services the entry registers with `registerService`: a contract ID, or `{ contract, access, modelFacing }` for one that changes its plugin's data (`access: write`) or that agents may import as a tool (`modelFacing: true`)."
         },
         "extensions": {
           "type": "array",
@@ -1720,7 +1725,7 @@
                       }
                     ]
                   },
-                  "description": "Services the agent imports as read-only tools. Each names a contract; the one active provider that offers it to models answers the call. Without one the tool is left out for the run."
+                  "description": "Services the agent imports as tools. Each names a contract; the one active provider that offers it to models answers the call. Without one the tool is left out for the run. A write service's tool stages the provider's writes, which commit with this runtime's work; it is left out of a run that cannot change data there."
                 }
               },
               "additionalProperties": false,

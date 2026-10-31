@@ -49,6 +49,11 @@ import {
   resolveRuntimeTimeoutMs,
 } from "./runtime-scaffold.js";
 import { isScopedRuntimeRecovery } from "./scheduling.js";
+import {
+  createOperationExecutionScope,
+  createRootOperationStage,
+  type RootOperationStage,
+} from "../operations/operation-stage.js";
 
 export type ExecuteTurnFn = (
   input: TurnInput,
@@ -146,8 +151,54 @@ export interface RuntimeInvocation {
   readonly setupRuntimeDone: (runtimeId: string) => boolean;
 }
 
+/** Executions whose runs can call write services. */
+const OPERATION_ORIGINS: ReadonlySet<ExecutionContext["origin"]> = new Set([
+  "player",
+  "continuation",
+  "manual",
+  "recursive",
+]);
+
+/**
+ * Whether a run can call write services, and so gets an operation stage.
+ * Not when its operations could settle twice or have nowhere to wait: a
+ * detached or background run, a retry of committed work, a resume (which
+ * never comes through here), a nested run of a run that could not, and an
+ * agent that can suspend.
+ */
+export function canStageOperations(
+  manifest: RuntimeManifest,
+  input: TurnInput,
+  executionContext: ExecutionContext,
+  activation: { readonly detached: boolean },
+): boolean {
+  if ((input as RecursiveTurnInput).withoutOperations) return false;
+  if (input.detachedStage !== undefined || activation.detached) return false;
+  if (!OPERATION_ORIGINS.has(executionContext.origin)) return false;
+  if (
+    executionContext.sourceTurnId !== undefined ||
+    isScopedRuntimeRecovery(input)
+  )
+    return false;
+  return !(
+    manifest.runtimeType !== "function" &&
+    (manifest.tools?.builtin ?? []).includes("suspend")
+  );
+}
+
 export async function executeOneRuntime(
   inv: RuntimeInvocation,
+): Promise<RuntimeResult> {
+  const stage: { current?: RootOperationStage } = {};
+  const result = await executeRuntime(inv, stage);
+  // A run that did not succeed keeps its records, taken back.
+  stage.current?.attachTo(result, false);
+  return result;
+}
+
+async function executeRuntime(
+  inv: RuntimeInvocation,
+  stage: { current?: RootOperationStage },
 ): Promise<RuntimeResult> {
   const {
     manifest,
@@ -234,6 +285,7 @@ export async function executeOneRuntime(
         // and parent so it is excluded from player-turn accounting.
         origin: "recursive",
         parentTurnId: input.turnId,
+        ...(stage.current ? {} : { withoutOperations: true as const }),
       };
 
       const tracePayload = {
@@ -671,6 +723,20 @@ export async function executeOneRuntime(
       }
       return writes;
     };
+    if (canStageOperations(manifest, input, executionContext, activation))
+      stage.current = createRootOperationStage({
+        caller: {
+          pluginId: manifest.pluginId,
+          runtimeId: manifest.name,
+          runId,
+        },
+        sessionId: input.sessionId,
+        turnId: input.turnId,
+        scope:
+          deps.operationScope ??
+          createOperationExecutionScope(deps.loadPluginDatasets),
+      });
+    const operations = stage.current;
     if (manifest.runtimeType === "function") {
       return await executeFunctionRuntime({
         upstreamPluginData,
@@ -696,6 +762,7 @@ export async function executeOneRuntime(
         timeoutMs,
         executionId: progressScopeId,
         upstreamOf,
+        ...(operations ? { operations } : {}),
       });
     }
 
@@ -756,6 +823,7 @@ export async function executeOneRuntime(
       ...(progressScopeId !== undefined ? { progressScopeId } : {}),
       startTime,
       runId,
+      ...(operations ? { operations } : {}),
     });
   } catch (error: unknown) {
     return finalizeThrownRuntime(

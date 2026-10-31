@@ -1,6 +1,7 @@
 import {
   DATA_OP_KINDS,
   pluginCapabilitiesSchema,
+  serviceContributionAccess,
   serviceContributionContract,
   type PluginCapabilities,
 } from "@covel/shared";
@@ -47,8 +48,14 @@ export function computePluginCapabilities({
       ...runtimes.flatMap(({ manifest }) => manifest.tools?.builtin ?? []),
     ],
     actions: contributes?.actions ?? [],
-    // Offering a service to models gives its code no new power.
-    services: (contributes?.services ?? []).map(serviceContributionContract),
+    // Offering a service to models gives its code no new power; changing
+    // its data for other plugins' callers does, so a write service is listed
+    // as such and a change of access asks again.
+    services: (contributes?.services ?? []).map((service) =>
+      serviceContributionAccess(service) === "write"
+        ? `${serviceContributionContract(service)} (write)`
+        : serviceContributionContract(service),
+    ),
     wires: contributes?.wires ?? [],
     forms: contributes?.forms ?? [],
     extensions: (contributes?.extensions ?? []).map(

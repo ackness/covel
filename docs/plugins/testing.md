@@ -167,6 +167,50 @@ it("rejects an empty id", async () => {
 - 它不包含服务端接口、授权和事件目录。那些边界由服务端的测试和真实模型验证覆盖。
 - 工具要调用别的插件的服务时，用 `makeTestServiceRegistry({ activePluginIds, services })` 造一个真的服务注册表，作为 `services` 放进传给 `executeToolAndCommit` 的上下文，工具就有了 `context.services`。`services` 按提供方插件 ID 列出要注册的服务；`pausedPluginIds` 模拟因故障暂停的提供方。
 
+### 测一个写服务
+
+[写服务](../reference/plugin-extensions.md#写服务)不用起一个回合就能测。把它放进 `makeTestServiceRegistry`（写上 `access: "write"`），再用 `callTestService` 以另一个插件的身份调用它：
+
+```js
+import { expect, it } from "vitest";
+import {
+  callTestService,
+  createPluginTestStore,
+  makeTestServiceRegistry,
+} from "@covel/plugin-test-utils";
+
+it("takes the coins and adds the item", async () => {
+  const store = await createPluginTestStore({
+    sessionId: "s",
+    pluginId: "my-inventory",
+  });
+  const registry = makeTestServiceRegistry({
+    activePluginIds: ["shop"],
+    services: { "my-inventory": [changeService] },
+  });
+  const { output, operations } = await callTestService({
+    registry,
+    caller: { pluginId: "shop", sessionId: "s" },
+    request: {
+      pluginId: "my-inventory",
+      name: "change",
+      contract: "my-inventory.change@1",
+      input: { item: "sword", cost: 3 },
+    },
+    store,
+  });
+  expect(output).toEqual({ ok: true });
+  expect(operations[0].writes.map((write) => write.type)).toEqual([
+    "plugin.data",
+    "plugin.data.update",
+  ]);
+});
+```
+
+- `store` 里是提供方已经提交的数据；写服务读到的是它加上这次调用自己的写入。
+- 结果的 `operations` 是这次调用暂存的操作：`record` 是[操作记录](../reference/transactions.md#操作记录)，`writes` 是带提供方身份的写入。什么都不会保存。
+- handler 抛错或输出不合规时，`callTestService` 抛出这个错误，什么都不暂存；什么都没写时，`operations` 是空的。
+
 ### 测一个函数
 
 `makeManualFunctionContext` 造出一个函数需要的 `ctx`。你只需要提供这个测试会用到的部分：
@@ -217,6 +261,7 @@ it("writes one note", async () => {
 | `makeRandom(seed?)`                                                    | 测试用的 `ctx.random`。手写 `ctx` 的测试自己放进去                         |
 | `makeScriptedAgents(results)` | 测试用的 `ctx.agents`：按脚本回答 `ctx.agents.run`，并记下每次请求 |
 | `makeTestServiceRegistry(options)` | 测试用的服务注册表：列出的插件都算活跃且已获准，给工具的 `context.services` 用 |
+| `callTestService(options)` | 不起回合调用一个服务，返回输出和写服务暂存的操作 |
 | `loadPluginMessages(pluginRoot, locale)`                               | 读取插件 `locales/` 里的译文，得到 `ctx.messages`。要断言中文输出时用它    |
 | `createPluginTestStore` / `executeToolAndCommit` / `commitToolResults` | 让工具走真实的执行和保存流程                                               |
 | `MockLLM`                                                              | 假模型。记录每次调用；支持一个默认回复和一串按顺序使用的回复               |

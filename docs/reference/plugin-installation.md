@@ -30,10 +30,10 @@ GitHub 插件预览始终包含 `capabilities` 和 `trustedSource`。确认安�
 - `http`：根清单及每个 runtime 声明的来源与方法并集，省略方法表示 `GET`。
 - `hooks`：事件与 `enforce`（默认 `normal`）的组合。
 - `tools`：贡献的工具名与 runtime 的 `tools.builtin`。
-- `actions`、`services`（契约 ID）、`wires`、`extensions`（`<point>/<id>`）、`forms`。
+- `actions`、`services`（契约 ID；[写服务](./plugin-extensions.md#写服务)记成 `<契约> (write)`）、`wires`、`extensions`（`<point>/<id>`）、`forms`。
 - `datasets`：`contributes.datasets` 的命名空间与允许的写操作，不是安装用的合集。
 
-所有列表排序去重。当前能力必须是快照的子集：HTTP 方法、数据集写操作也要逐项包含，钩子换阶段算新增能力。更新可信来源的插件时，原快照原样带到新记录；原记录没有快照就仍然没有。因此更新不能默默扩大批准范围。非可信来源不写入新快照，世界包不写快照。
+所有列表排序去重。当前能力必须是快照的子集：HTTP 方法、数据集写操作也要逐项包含，钩子换阶段算新增能力，服务改成写服务（`access: write`）也算：它能改调用方回合里提供者自己的数据，所以要重新确认。给模型用（`modelFacing`）不进快照。更新可信来源的插件时，原快照原样带到新记录；原记录没有快照就仍然没有。因此更新不能默默扩大批准范围。非可信来源不写入新快照，世界包不写快照。
 
 ### 文件验证与自动授权
 

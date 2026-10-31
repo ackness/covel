@@ -400,6 +400,8 @@ Who calls it:
 | The hard upstream of a story or setup runtime                                            | The whole turn is rolled back                              |
 | Read its uncommitted plugin data (auxiliary unit)                                        | The downstream runtime is dropped too                      |
 | Read its uncommitted plugin data (story or setup unit)                                   | Commits as usual; the trace records `read-dependency.kept` |
+| Read a write-service operation that did not commit (auxiliary unit)                      | The downstream runtime is dropped too                      |
+| Read a write-service operation that did not commit (story or setup unit)                 | Commits as usual; the trace records `read-dependency.kept` |
 
 **Read dependencies.** Within one execution, a runtime that reads its own plugin's data sees the uncommitted writes of upstream runtimes of the same plugin (see [In-execution plugin-data visibility](./plugins.md#in-execution-plugin-data-visibility)). Each read records which upstream writes it actually saw (`read-dependencies.ts`), and the execution carries these dependencies into its commit plan.
 
@@ -409,6 +411,35 @@ Who calls it:
 - It shares one dropped set with hard dependencies: its hard dependents, the runtimes that read its writes, `extraInTx` and the jobs a suspension holds back all treat it as dropped.
 - A story or setup unit is never dropped for a read dependency. For each dropped upstream it writes one `read-dependency.kept` trace row in the same transaction, with the payload `runtimeId`, `runId`, `producerRuntimeId`, `producerRunId` and `reason`.
 - A producer always precedes its reader. A dependency on a run later in commit order is a kernel bug; it is logged as a warning and ignored.
+- Write-service operations are producers too: when a provider's runtime reads writes an operation staged, the dependency names the operation's ID. An operation takes its caller unit's position, and counts as not committed when it failed, was taken back or its caller's unit was dropped. An auxiliary reader is dropped with it, with the error `read data of <contract> that did not commit`; a story or setup reader commits, and its `read-dependency.kept` payload carries `producerOperationId` and `producerContract` instead of the two run fields.
+
+#### Write-service operations
+
+A successful call of a [write service](./plugin-extensions.md#write-services) is staged as one **operation** on the calling run's result, apart from the caller's own proposals. Its writes carry the provider's identity (`runtimeId: "service:<service name>"`) and are prepared outside the transaction like any other proposal: the proposal guard, then PreStateCommit for each proposal. When any of them is refused, the whole operation is rejected.
+
+At commit, a unit's operations commit **after all its members' own writes**, in call order (`seq`):
+
+| Unit                                                     | How its operations commit                                          | When one operation is rejected                                                                                                              |
+| -------------------------------------------------------- | ------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| Holds a story or setup run, in an execution with a story | Each operation in its own savepoint directly under the transaction | Only that operation is dropped (`failed`, reason `rejected` or `conflict`); the unit's own writes and the story commit                      |
+| An auxiliary unit next to a story                        | Inside the unit's savepoint, each operation in a nested savepoint  | The whole unit is dropped, its writes and all its operations; the rejected operation is `failed`, the others `discarded` / `caller-dropped` |
+| An execution without a story                             | Directly in the execution's transaction                            | The whole execution rolls back                                                                                                              |
+
+- A rejection while preparing (a PreStateCommit veto, the proposal guard) takes the same branch, before the transaction starts.
+- The writes of one operation stand or fall together: an operation that adds an item and then takes the coins leaves no item when the payment fails.
+- Without savepoint support, the operations of the story's unit are not attempted and end `failed` / `store-unsupported`; the story still commits.
+- The proposals of a rejected operation are listed in `failedProposals`, as for a dropped unit.
+- A provider's datasets are loaded at call time through `TurnExecutorDeps.loadPluginDatasets` and reach the commit in the commit plan (`providerDatasets`), so they are checked even when none of the provider's runtimes ran. When they cannot be loaded, the call fails `unavailable` before the handler runs.
+
+#### Operation records
+
+Each operation leaves one `OperationRecord` on the calling run's result (`runtimeResults[].operations`), saved with `turn_results` without a schema change:
+
+- `id`, `contract`, `providerPluginId`, `service`, `invokedBy` (the calling plugin and runtime), `toolCallId` (for a call made from a tool) and `seq`.
+- `status`: `staged`, `committed`, `failed` or `discarded`; when not `committed`, `reason` is `rejected`, `conflict`, `caller-dropped`, `execution-failed` or `store-unsupported`.
+- `request` and `result`: the call's input and output through `modelFacingJson`; each is left out above 4 KB of JSON and marked `truncated: true`. `summary` is their first 300 characters. None of the three holds IDs or times.
+
+When `commit_status` is settled, the fifth argument of `setTurnResultCommitStatus` writes each operation's final status by ID into every row of the turn, inside the commit transaction. When the whole execution rolls back, the `failed` settlement outside the transaction records every operation as `discarded` / `execution-failed`. `FinalizeExecutionOutcome.operations` lists the same result (`id`, `status`, `reason`, `contract`, `invokedBy`).
 
 The second argument of `extraInTx` gives the dropped runtimes. The main turn uses it so it does not queue detached jobs and background event followers that depend on them. A detached job that is still queued records the dropped runtimes as `failed` in the frozen turn digest and in the upstream results.
 
@@ -436,6 +467,7 @@ The second argument of `extraInTx` gives the dropped runtimes. The main turn use
 - On success, `turn_results.commit_status` is settled to `committed` in the same transaction. On rollback, it is settled to `failed` outside the transaction, and idempotently.
 - Nested recursiveCall results reuse the top-level `turnId`. So one settlement of the top-level `[turnId]` covers all the nested rows.
 - The `committed` settlement also changes the records of dropped runtimes in `runtimeResults` to `failed`, and writes the reason. History, retries, and refreshes all see the results that were actually stored. Any job they reported is also closed as `failed`.
+- The same settlement writes the final status of each write-service operation by ID (see [Operation records](#operation-records)).
 - As with other failed runtimes, a dropped runtime writes nothing to the conversation log (text, interactions, and UI cards), and it is not counted in the trigger ledger (`maxTriggerCount` / `cooldownTurns`).
 
 **The completion barrier is still held.** If anything fails, `turn.completed`, the post-turn memory ingestion, and the auto-snapshot do not fire. Each failed proposal emits one `proposal.failed` event. To the client, the turn shows as visibly unfinished, not as "succeeded but with missing state".
@@ -544,6 +576,9 @@ A plugin can submit a list of operations against one plugin-data key instead of 
 | `data-op-rejected`                                                    | An operation fails against the current value, for example an `inc` past its `min`                                                                                                    | `plugin.data.update: inc result is outside the allowed range (op 0, out-of-bounds)`, with a path as `(op 1 at /gold, …)` |
 | `dataset-violation`                                                   | The write breaks a declared dataset: an operation kind that is not allowed, a result that does not match the record schema, or a schema document that is missing or does not compile | `plugin.data.update: dataset inventory: operation kind append is not allowed`                                            |
 | `media-not-found` / `media-ownership-invalid` / `media-mime-mismatch` | A `MediaRef` in the result names an asset that does not exist, that the session does not reference, or whose MIME type differs                                                       | `plugin.data.update: session … has no reference to media …`                                                              |
+| `conflict`                                                            | An update in a write-service operation fails against the current value: it held against the value its caller saw when it was staged, so another commit changed the value since       | As for `data-op-rejected`                                                                                                |
+
+A write-service operation's `plugin.data.update` that fails here reports `conflict` instead of `data-op-rejected`: it already passed the same check when it was staged. A runtime's own update still reports `data-op-rejected`.
 
 A missing namespace or key, and an empty or invalid operation list, are rejected by the payload check before the handler runs, with `code` `proposal-invalid`. Rejections for a reserved namespace and the size limit happen in the handler and carry `error` without a `code`.
 
@@ -560,7 +595,7 @@ A missing namespace or key, and an empty or invalid operation list, are rejected
 
 `isolatedRuntimes[].cause` is the structured drop reason: `rejected` (a proposal in this unit was rejected), `upstream` (a hard dependency did not commit), `read` (a producer it read did not commit), or `nested` (dropped with the parent unit). Existing `error` text stays; fault attribution never matches that text. Rejected proposals belong to `proposal.source.pluginId`, not every plugin in the dropped unit.
 
-`FailedProposal.code: "hook-failed"` means `PreStateCommit` failed because a handler threw, timed out or returned an invalid result, rather than deliberately vetoing. Only the Hook owner's fault counts; the proposal owner is not blamed for a deliberate rejection. `dimension-version-conflict` and `suspension-data-changed` also do not count toward the [latch](./protocol.md#plugin-fault-latch).
+`FailedProposal.code: "hook-failed"` means `PreStateCommit` failed because a handler threw, timed out or returned an invalid result, rather than deliberately vetoing. Only the Hook owner's fault counts; the proposal owner is not blamed for a deliberate rejection. `dimension-version-conflict`, `conflict` and `suspension-data-changed` also do not count toward the [latch](./protocol.md#plugin-fault-latch).
 
 ## World Data import
 
