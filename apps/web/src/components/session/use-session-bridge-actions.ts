@@ -59,7 +59,8 @@ export function useSessionBridgeActions(
             current.current.submitComposerAction(...args),
           submitInteraction: (...args) =>
             current.current.submitInteraction(...args),
-          abortActiveTurn: () => current.current.abortActiveTurn(),
+          abortActiveTurn: (...args) =>
+            current.current.abortActiveTurn(...args),
         },
         ownPanels: async () => {
           const result = await fetchUiSpecs(sessionId);

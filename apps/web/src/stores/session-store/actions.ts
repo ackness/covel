@@ -425,7 +425,10 @@ export function useBuildSessionActions({
         void (async () => {
           try {
             // Abort is outside the browser workspace FIFO held by the old stream.
-            await api.abortTurn(sessionId);
+            await api.abortTurn(
+              sessionId,
+              () => isCurrent() && (currentOwner?.() ?? true),
+            );
             await workspace.settle?.(sessionId);
             const seats = await settleSeatSwitches();
             if (isCurrent() && (currentOwner?.() ?? true))
@@ -569,11 +572,14 @@ export function useBuildSessionActions({
     [dispatch, stateRef, sessionIdRef, sessionGenerationRef],
   );
 
-  const abortActiveTurn = useCallback(async (): Promise<void> => {
-    const state = stateRef.current;
-    const sid = state.session?.id ?? state.executionRecovery?.sessionId;
-    if (sid) await api.abortTurn(sid);
-  }, [stateRef]);
+  const abortActiveTurn = useCallback(
+    async (options?: { isCurrent?: () => boolean }): Promise<void> => {
+      const state = stateRef.current;
+      const sid = state.session?.id ?? state.executionRecovery?.sessionId;
+      if (sid) await api.abortTurn(sid, options?.isCurrent);
+    },
+    [stateRef],
+  );
 
   const loadOlderMessages = useCallback(async () => {
     const sid = sessionIdRef.current;

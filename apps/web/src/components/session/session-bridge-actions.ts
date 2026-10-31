@@ -201,7 +201,7 @@ export function createSessionBridgeActions(deps: Dependencies) {
         }
         case "abortExecution":
           if (!active()) return unavailable();
-          await deps.actions.abortActiveTurn();
+          await deps.actions.abortActiveTurn({ isCurrent: active });
           return active() ? { status: "accepted" } : unavailable();
         case "openPanel": {
           const { panelId } = sessionBridgeRequests.openPanel.parse(params);

@@ -51,6 +51,7 @@ export function sendAction(
           signal: controller.signal,
           sessionId: req.sessionId,
           operatorAuth: true,
+          canDispatch,
         });
       };
       let res = await send();
@@ -152,11 +153,14 @@ export async function steerTurn(
  * Abort the session's in-flight turn. Cuts the LLM stream server-side and
  * discards uncommitted proposals. Resolves false when no turn is active.
  */
-export async function abortTurn(sessionId: string): Promise<boolean> {
+export async function abortTurn(
+  sessionId: string,
+  canDispatch?: () => boolean,
+): Promise<boolean> {
   try {
     await request<{ ok: true; turnId: string }>(
       `/api/sessions/${encodeURIComponent(sessionId)}/abort`,
-      { method: "POST", silentStatuses: [409] },
+      { method: "POST", silentStatuses: [409], canDispatch },
     );
     return true;
   } catch (error) {

@@ -130,6 +130,34 @@ test("session pages commit actions, interactions and own runtime writes with con
   let sessionId: string | undefined;
   let scriptChanged = false;
   try {
+    await page.addInitScript(() => {
+      const captured: unknown[] = [];
+      Reflect.set(window, "__bridgeMessages", captured);
+      const post = MessagePort.prototype.postMessage;
+      MessagePort.prototype.postMessage = function (
+        message: unknown,
+        options?: Transferable[] | StructuredSerializeOptions,
+      ) {
+        if (
+          message &&
+          typeof message === "object" &&
+          "type" in message &&
+          [
+            "state",
+            "stream",
+            "result",
+            "closed",
+            "ping",
+            "ready",
+            "pong",
+            "action",
+            "page-error",
+          ].includes(String(message.type))
+        )
+          captured.push(structuredClone(message));
+        Reflect.apply(post, this, [message, options]);
+      };
+    });
     await seedBrowserSettings(page, {
       "ui.onboardedVersion": ONBOARDING_VERSION,
       "ui.locale": "en-US",
@@ -317,6 +345,36 @@ test("session pages commit actions, interactions and own runtime writes with con
     expect(state.storage).toBe(false);
     expect(state.ipc).toBe("undefined");
     expect(state.node).toBe("undefined");
+    const refused = await frame!.evaluate(async () => {
+      const host = window as unknown as {
+        covel: { invoke(method: string, params: unknown): Promise<unknown> };
+      };
+      return host.covel.invoke("invokeRuntime", {
+        runtimeId: "sandbox-surface-probe/write",
+        payload: { text: "x".repeat(2001) },
+      });
+    });
+    expect(refused).toMatchObject({ status: "rejected" });
+    const portMessages = [
+      ...(await page.evaluate(
+        () => Reflect.get(window, "__bridgeMessages") as unknown[],
+      )),
+      ...(await frame!.evaluate(
+        () => Reflect.get(window, "__bridgeMessages") as unknown[],
+      )),
+    ];
+    expect(portMessages).toContainEqual(
+      expect.objectContaining({ type: "state" }),
+    );
+    expect(portMessages).toContainEqual(
+      expect.objectContaining({
+        type: "result",
+        value: { status: "committed" },
+      }),
+    );
+    expect(portMessages).toContainEqual(
+      expect.objectContaining({ type: "result", value: refused }),
+    );
     for (const sentinel of [
       "bridge-private-result",
       "providerContinuation",
@@ -324,7 +382,9 @@ test("session pages commit actions, interactions and own runtime writes with con
       "jobs",
       "_hidden",
     ])
-      expect(JSON.stringify(state.state)).not.toContain(sentinel);
+      expect(
+        JSON.stringify({ state: state.state, portMessages }),
+      ).not.toContain(sentinel);
     await page.reload();
     await choose();
     await expect(
@@ -741,6 +801,58 @@ for (const width of [1280, 360]) {
         .click();
       await expect(input).toHaveCount(0);
       await expect(mainPage.locator("#draft")).toBeVisible();
+
+      // HTML and the injected bridge load, but the required application script fails.
+      await mainPage.locator("#draft").fill("Keep the healthy main draft");
+      const failedScript = "**/plugin-assets/**/app.js";
+      await page.route(failedScript, (route) =>
+        route.fulfill({
+          status: 404,
+          contentType: "application/javascript",
+          body: "",
+        }),
+      );
+      try {
+        const html = page.waitForResponse(
+          (response) =>
+            response.url().includes("/plugin-assets/") &&
+            response.url().endsWith("/index.html"),
+        );
+        const bridge = page.waitForResponse((response) =>
+          /\/__covel__\/bridge-[a-f0-9]{8}\.js$/.test(response.url()),
+        );
+        const app = page.waitForResponse(
+          (response) =>
+            response.url().includes("/plugin-assets/") &&
+            response.url().endsWith("/app.js"),
+        );
+        await controls
+          .getByRole("button", { name: "Retry", exact: true })
+          .click();
+        const [htmlResponse, bridgeResponse, appResponse] = await Promise.all([
+          html,
+          bridge,
+          app,
+        ]);
+        expect(htmlResponse.status()).toBe(200);
+        expect(await htmlResponse.text()).toContain("__covel__/bridge-");
+        expect(bridgeResponse.status()).toBe(200);
+        expect(await bridgeResponse.text()).toContain("window.covel");
+        expect(appResponse.status()).toBe(404);
+        await expect(input).toHaveCount(0);
+        await expect(controls.getByRole("status")).toContainText(
+          "Bridge input",
+        );
+        await expect(main.locator("[data-page-status]")).toHaveAttribute(
+          "data-page-status",
+          "ready",
+        );
+        await expect(mainPage.locator("#draft")).toHaveValue(
+          "Keep the healthy main draft",
+        );
+      } finally {
+        await page.unroute(failedScript);
+      }
 
       let releasePage!: () => void;
       const pageGate = new Promise<void>((resolve) => {

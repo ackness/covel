@@ -8,7 +8,7 @@
 
 ### Changed
 
-- **Digest asset URLs verify actual bytes before success.** Same-size changes are refused before GET, HEAD or conditional cache responses. Session ports have bounded replay tracking and retire on navigation, content changes and revocation; late approvals and replies cannot authorize a new visit.
+- **Digest asset URLs verify actual bytes before success.** Same-size changes are refused before GET, HEAD or conditional cache responses. Session ports have bounded replay tracking and retire on navigation, content changes and revocation; mutations and approval grants recheck the lease after credential lookup, so late approvals and replies cannot authorize a new visit. Already dispatched work can still settle.
 
 ### Upgrade notes
 

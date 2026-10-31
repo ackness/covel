@@ -157,7 +157,11 @@ export async function postPluginRpcWithApproval(params: {
             : params.request;
         if (params.isCurrent && !params.isCurrent())
           throw new Error("RPC owner retired");
-        return requestPluginRpc(params.sessionId, request);
+        return requestPluginRpc(
+          params.sessionId,
+          request,
+          ...(params.isCurrent ? [params.isCurrent] : []),
+        );
       },
       { isCurrent: params.isCurrent },
     );
@@ -223,6 +227,8 @@ export async function resolvePluginRpcApprovalResponse(params: {
         proceed ? "allow" : "deny",
         "session",
         params.sessionId,
+        // A stale caller may still deny for cleanup, but cannot grant access.
+        ...(proceed && params.isCurrent ? [params.isCurrent] : []),
       );
     } catch (err) {
       emitToast(

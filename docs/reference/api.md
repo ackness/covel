@@ -6811,7 +6811,7 @@ Stop 作用于整个请求，包含两轮之间的等待。未开始的自动轮
 
 `POST /api/sessions` 接受可选的 `seatRole: player | host | spectator`，可与 autoAdvanceLimit 一起提交。省略保持原玩家座位；另两种身份从空角色绑定开始。未知值、非字符串和 null 返回 400，不创建会话。仍先经过 session.create 的 host-profile 授权以及世界/内容语言校验。此字段只影响新会话的游戏动作，不授予 owner/operator 权限，不接受任意 seats 数组或 system 来源。主持人和观众通过动作 API 提交时，须带创建响应中返回的座位 ID；省略 seatId 仍只查找人类玩家主座位。普通客户端会自动携带。
 
-会话页面的 `capabilities` 原样保留在 `/api/ui-specs` 的 `view` 中，并沿用当前会话的可运行插件过滤。资源在返回 GET、HEAD 或 304 前核对索引长度和 SHA-256，使用同一次有界读取的已验证缓冲区响应。页面请求由认证宿主调用已有行动、交互、runtime RPC 和停止入口；不新增 iframe HTTP 权限或发现端点。参数、租约、准入与安全结果见[页面请求与安全结果](./ui-panels.md#页面请求与安全结果)。
+会话页面的 `capabilities` 原样保留在 `/api/ui-specs` 的 `view` 中，并沿用当前会话的可运行插件过滤。资源在返回 GET、HEAD 或 304 前核对索引长度和 SHA-256，使用同一次有界读取的已验证缓冲区响应。页面请求由认证宿主调用已有行动、交互、runtime RPC 和停止入口；修改和审批授权在凭据读取后、HTTP 派发前核对当前租约。不新增 iframe HTTP 权限或发现端点。参数、租约、准入与安全结果见[页面请求与安全结果](./ui-panels.md#页面请求与安全结果)。
 
 ## 沙箱区域声明与宿主转发
 

@@ -70,7 +70,11 @@ export const PLUGIN_BRIDGE_SCRIPT = `
     failed = true;
     if (port && !closed) port.postMessage({ type: "page-error" });
   };
-  addEventListener("error", pageError);
+  addEventListener("error", event => {
+    // Resource errors do not bubble. Only scripts are required for the app.
+    if (event.target && event.target !== window && event.target.tagName !== "SCRIPT") return;
+    pageError();
+  }, true);
   addEventListener("unhandledrejection", pageError);
   // The host's style scheme, as --covel-* custom properties on the document.
   const applyTheme = theme => {
