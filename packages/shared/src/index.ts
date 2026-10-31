@@ -272,6 +272,7 @@ export {
   KERNEL_PLUGIN_DATA_OWNER_PREFIX,
   hiddenPluginDataNamespace,
   isControlPlanePluginDataNamespace,
+  PRESENTATION_BUDGET_NAMESPACE,
   isHiddenPluginDataNamespace,
   pluginDataEntry,
   isKernelPluginDataOwner,
@@ -755,3 +756,21 @@ export type {
   CharacterHistory,
 } from "@covel/plugin-handlers-utils";
 export * from "./schemas/orchestration.js";
+
+export * from "./schemas/presentation.js";
+export {
+  PRESENTATION_REASONS,
+  PresentationBudgetExhausted,
+} from "@covel/plugin-handlers-utils";
+export type {
+  PresentationBudget,
+  PresentationDeclaration,
+  PresentationStory,
+  PresentationCharacter,
+  PresentationContext,
+  PresentationReason,
+} from "@covel/plugin-handlers-utils";
+export {
+  presentationNamespace,
+  presentationRuleIssues,
+} from "./schemas/presentation-rules.js";

@@ -576,6 +576,10 @@ export type CovelEvent =
   // packages/runtime/src/function-runtime/gateway-trace.ts + turn-function-runtime.ts.
   | { readonly type: "function.executing"; readonly payload: CovelEventPayload }
   | { readonly type: "function.completed"; readonly payload: CovelEventPayload }
+  | {
+      readonly type: "presentation.completed";
+      readonly payload: PresentationCompletedPayload;
+    }
   | { readonly type: "gateway.calling"; readonly payload: CovelEventPayload }
   | { readonly type: "gateway.responded"; readonly payload: CovelEventPayload }
   | { readonly type: "gateway.failed"; readonly payload: CovelEventPayload }
@@ -656,6 +660,11 @@ export interface CovelEventMeta {
    */
   readonly forwardToActionStream: boolean;
 }
+
+/** Settled presentation diagnostics, validated by the shared public schema. */
+export type PresentationCompletedPayload =
+  import("../schemas/presentation.js").PresentationCompletion &
+    CovelEventPayload;
 
 /**
  * Per-event metadata, keyed by event name. The `satisfies Record<...>` clause
@@ -741,6 +750,7 @@ export const COVEL_EVENT_META = {
   // the action stream for agent/function parity with llm.calling/responded.
   "function.executing": { forwardToActionStream: false },
   "function.completed": { forwardToActionStream: false },
+  "presentation.completed": { forwardToActionStream: false },
   "gateway.calling": { forwardToActionStream: true },
   "gateway.responded": { forwardToActionStream: true },
   "gateway.failed": { forwardToActionStream: true },

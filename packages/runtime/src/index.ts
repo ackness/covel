@@ -359,3 +359,8 @@ export {
   type DatasetPolicyResolver,
   type DatasetSchemas,
 } from "./plugin-data-validation.js";
+
+export {
+  finalizePresentationJobs,
+  unavailablePresentationJob,
+} from "./presentation/jobs.js";

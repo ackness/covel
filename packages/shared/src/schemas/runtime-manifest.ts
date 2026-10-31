@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { presentationSchema } from "./presentation.js";
 import {
   AUTHORING_RULE_FIELD_PATHS,
   RUNTIME_DISABLING_ISSUE_PARAMS,
@@ -116,6 +117,7 @@ const needsSchema = z.union([
 ]);
 export const runtimeAuthoringManifestSchema = z
   .strictObject({
+    presentation: presentationSchema.optional(),
     description: textSchema
       .describe(
         "What the runtime does. Plain string; translations go in locale files.",
@@ -566,6 +568,14 @@ export const runtimeAuthoringManifestSchema = z
     const inputs = Object.entries(value.io?.inputs ?? {});
     for (const issue of runtimeRuleIssues(
       {
+        presentation: value.presentation,
+        presentationInputs: value.io?.inputs,
+        effects: value.effects,
+        concealed: value.io?.concealed,
+        advertiseEvents: value.agent?.advertiseEvents,
+        injectedInput: Boolean(
+          value.io?.selfData?.length || value.io?.payloadSchema,
+        ),
         runtimeType,
         handler: value.function
           ? (value.function.handler ?? DEFAULT_FUNCTION_HANDLER)

@@ -1432,3 +1432,61 @@ const reply = await ctx.agents.run({
 ## 可选规划器与故事导出
 
 内置对话叙事示范同包组合：`plan` 是 pre-turn 函数，选取安全名字并调用策略一次；`narrate` 是唯一 story agent，读取可选的同包 plan 输入并拥有所有角色委托。故事以 `recordAs: latest-story` 导出完整公开输出，规划器通过同包 `scope: committed` 输入读取上一份，不对本次 narrative 阶段建立反向依赖。策略与角色均可替换或缺失，不放进故事的 requires 或契约 needs。角色声明使用上文的框架规范 schema，不在包内复制一份。
+
+<a id="presentation-runtimes"></a>
+
+## 呈现 runtime
+
+`presentation` 是 function runtime 的受限执行策略，用于按公开故事选择背景、在场角色或配乐。它要求 `schedule.stage: post-turn`、有效的 `io.visibility: system` 和 staged auto 激活。agent、guard、sub-agent、manual、event、background、concealed、挂起和 `recordAs` 都不能使用它。无效声明只停用对应 runtime；校验和安装仍会报告字段路径。
+
+```yaml
+---
+id: gallery-display
+description: Selects art from public story cues.
+contributes:
+  data:
+    art: { schema: ./art.schema.json }
+runtime:
+  schedule: { stage: post-turn }
+  presentation: {}
+  io:
+    inputs:
+      story:
+        from: { contract: narrative-engine@2 }
+        required: false
+  function: {}
+  effects:
+    reads: [plugin-data:self:art, plugin-data:self:display]
+    writes: [plugin-data:self:display]
+---
+```
+
+示例包里的 `art.schema.json` 定义自己的素材格式；`handler.js` 与内联清单同目录。完整 handler 和后台生成例子见[进阶指南](../plugins/advanced.md#呈现选择器)。不要为了可选的故事输入在包里 `requires: [narrative-engine@2]`。
+
+### 输入与写入
+
+只可绑定 `required: false`、本回合、无 `select` / 格式变换的 `narrative-engine@2` 输入。缺少或有多个公开故事提供方时，输入缺席。只复制通过校验的 `segments` 和 `cues`，不复制业务附加字段、concealed / 非故事 / 失败结果、工具、意图、推理、续接、操作或摘要。
+
+零预算函数在故事提交前读取公开候选；候选故事未提交时，其呈现写入也不会保留。detached 呈现读取 `PreStateCommit` 改写之后实际保存的故事，以及该次提交接受的本插件数据。作业只保存这一份版本化快照，不附带原始上游结果、玩家消息、行动或表单。快照总计最多 256 KiB，每个 namespace 最多 50 行，角色身份最多 100 个；超限整份拒绝，内联读取也一样。
+
+`ctx.presentation` 提供只读 `characters: {id, name, aliases?}[]`、可选 `viewpointCharacterId` 和 `note(reason)`。身份仅取故事里名字的精确匹配，保留歧义；没有角色描述、私有字段或座位列表。ID 只用于索引展示状态，发给模型的内容仍使用名字。`ctx.world`、历史、exports、services、tools、递归和 agents 不可用；玩家消息、行动和激活 payload 不提供额外内容。普通上下文不会先构造再遮住。能力在结束、取消或超时后失效。
+
+`effects` 必须明确列出自己的非保留 namespace。可读取本包 `contributes.data` 声明且来源非 hidden 的公开素材，或同时列在 writes 中的展示状态；不能使用 `plugin-data:self:*`、`_`、其他插件数据、历史或内核输入。`pluginData.get/list` 及 store 别名执行同一范围检查，不能省略 namespace。
+
+只有声明的本插件 `plugin.data`、update、batch、delete 可以提交。数据集 schema、操作权限、大小、前置条件和媒体引用检查继续生效，Hook 改写后再检查。任一非法 proposal 会丢弃整个呈现单元；旁边的故事和独立辅助单元按原有规则提交。没有故事的执行仍整体成败。不允许故事、角色、维度、lorebook、交互、UI、事件、completion、`asset.generate`、跨插件写服务或嵌套执行。
+
+### 调用预算与后台生成
+
+`presentation: {budget: {calls, generations}}` 的两个整数默认都是 0。`calls` 范围 0–16，统计获准的 gateway 派发；`generations` 范围 0–4，另外统计图片、音乐、语音的输出份数。请求 `n` 张图片必须一次获得 `n` 份额度。文本和对象生成也消耗 calls；缓存命中和可用性探测不消耗。evaluation、转录和任意 HTTP 不开放。
+
+任一正数要求 `schedule.detached: true`，不能 `settle: true`。失去安全叶节点资格、版本变化、快照不可用时只跳过呈现，绝不退回前台生成。故事与下一条玩家输入都不等待生成。普通 pre-turn cast 选择与显式事件覆盖不属于这个策略。
+
+额度按会话代次、真实来源 turn ID 和 runtime 共享。开场、首条玩家消息、每个自动回合各有自己的来源，即使 logicalTurn 相同。来源重试、新作业 ID、关机重排、取消、提供方失败和提交失败都不会补回额度。当前配置只能缩小捕获的上限。内核在外部调用前用持久 CAS 扣除；没有账本时不能付费调用。停滞包装器重新派发会再扣一次；单次逻辑请求内部的 transport attempts 仍由独立 `LLMRequestBudget` 限制，额度不保证精确账单。
+
+`assets:*` / `media:*` 仅开放受限媒体 helper。`ctx.media` 只可读取快照中允许的自有素材 / 展示状态可达的引用，以及本次 helper 生成的引用；仅属于本会话仍不足以读取。没有 `put` / `ingestUrl` 权限。helper 的内部 writer 继续处理 MIME、HTTP / DNS 校验、批次 pin、claim 和补偿。失败或过时结果没有新展示绑定；已发生的外部费用、字节和既有生成缓存不能回滚。提交事务按源快照的写入基线检查目标，较新的显式覆盖或来源结果优先。
+
+### 无产出与信任
+
+调用 `ctx.presentation.note(reason)` 记录固定代码：`no-story`、`no-scene-change`、`asset-missing`、`budget-exhausted`、`unavailable`、`superseded`、`no-output`、`failed`。不能传自由文本。没有展示写入且没有 note 时推导 `no-output`；业务返回值本身不算可见产出。预算拒绝是正常 no-op，可以捕获后继续使用已有素材；未捕获则丢弃未完成写入，不归为插件故障。自身异常、无效输出和超时保持原有故障归属。
+
+每次结算通过 [`presentation.completed`](./protocol.md#presentation-completed) 留下状态、来源关联和额度计数。它不增加每回合玩家通知。呈现 function 仍是已批准的非沙箱服务端 JS；这个 API 策略不替代[代码审批](./plugin-installation.md)，也不限制代码直接使用 Node 的权限。

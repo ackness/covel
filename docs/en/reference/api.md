@@ -3978,6 +3978,7 @@ Field notes:
 - `languages.text`: the languages the plugin has text in. This covers labels, interface text, text in code, and translations in the translation catalog. `languages.instructions`: the languages it has instructions (prompt body) in. Both always include at least `en`.
 - `author.about` and the `label` of links can be maps split by language.
 - Each runtime summary includes `id`, `runtimeType`, `trigger`, `execution`, the effective `turnCompletion`, `outputKind`, and optionally `outputContract`. `tags` belongs to the package summary; runtime summaries do not repeat it.
+- Presentation runtimes also include `presentation: { budget: { calls, generations } }`, with omitted counters returned as zero. These are declared limits; the summary excludes session usage, remaining allowances, source snapshots and compiler namespace metadata. Runtimes without a presentation declaration omit the field. See [presentation runtimes](./plugins.md#presentation-runtimes).
 
 `hostState` says whether the server has loaded this plugin. It does not say whether a session has enabled it. These are two different states, and the list does not show the first as a session's active state.
 

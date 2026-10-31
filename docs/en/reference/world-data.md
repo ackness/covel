@@ -1725,3 +1725,7 @@ Related pages:
 
 - **World time** is not part of dimensions. It is plugin data. Its contract is `world.time-definition@1`, the record is written as `{ id: world, definition }`, and it is placed in `data/time.yaml`. AI-generated records of this kind keep the same contract in files, in server storage and in browser-local worlds. A world without a folder requires the record's `key` to equal `value.id`. For fields, backward time and random rules, see [World time](./world-time.md).
 - For the world package directory on GitHub, choosing several worlds at once, proxy downloads and the update process, see [world catalog and installation](./world-installation.md).
+
+## Public assets and display state
+
+Presentation reads only declared own public asset namespaces and its explicit display read/write state. Hidden sources and `_hidden.*` never enter the projection: owning data does not make it presentation-readable. Import contracts and file layout are unchanged; see [presentation runtimes](./plugins.md#presentation-runtimes).

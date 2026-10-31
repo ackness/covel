@@ -94,3 +94,5 @@ and [execution limits](../../../../docs/reference/plugins.md#character-orchestra
 rather than copying their rules into a plugin. Keep actor intent out of stories.
 
 A top-level `narrative-engine@2` story may return `yield: continue` to request bounded host advancement after commit. Functions see one system `advance` in `ctx.playerActions` and the input digest; the root logical turn remains frozen. Nested output does not control advancement. Keep story service imports optional when their absence should not stop play. See [the story contract](../../../../docs/reference/plugins.md#故事请求自动推进) and [session settings](../../../../docs/reference/api.md#auto-advance).
+
+Presentation functions use the restricted public-story context and durable dispatch allowance in [the presentation contract](../../../../docs/reference/plugins.md#presentation-runtimes). Use the [selector and detached generator examples](../../../../docs/plugins/advanced.md#呈现选择器), and test real manifest admission, forbidden capabilities, commit isolation, cache charging and supersession. Agents cannot declare presentation; a function still follows normal server-code approval.

@@ -25,8 +25,18 @@ function uniqueSorted(values: Iterable<string>): string[] {
 }
 
 function runtimeSummary(manifest: RuntimeManifest): PluginRuntimeSummary {
-  const stage = getRuntimeSpec(manifest).stage;
+  const { stage, presentation } = getRuntimeSpec(manifest);
   return {
+    ...(presentation
+      ? {
+          presentation: {
+            budget: {
+              calls: presentation.budget.calls,
+              generations: presentation.budget.generations,
+            },
+          },
+        }
+      : {}),
     id: manifest.name,
     runtimeType: manifest.runtimeType ?? "agent",
     ...(stage !== undefined ? { stage } : {}),

@@ -412,7 +412,9 @@ function resolveTarget(
     ...pausedRuntimes.map((provider) => ({ provider, paused: true })),
   ].filter(
     ({ provider }) =>
-      provider.subagentOnly && provider.runtimeType !== "function",
+      provider.subagentOnly &&
+      provider.runtimeType !== "function" &&
+      provider.presentation === undefined,
   );
   const resolved = ({ provider, paused }: (typeof providers)[number]) =>
     paused

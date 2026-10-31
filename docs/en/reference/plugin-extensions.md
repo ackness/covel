@@ -867,3 +867,7 @@ See [character delegation](./plugins.md#character-orchestration) and the [compos
 ## Bundled policy and optional story composition
 
 The bundled provider exposes one code-only read service named turn-policy, with five algorithms chosen by its own getOwnSettings().strategy. Alone it needs no session selection; additional providers require an exact choice. The dialogue function calls once by contract so director can borrow a gateway; the story agent does not import/call policy again. Plans project names before reaching models; canonical requests and character IDs remain in code. Custom packages with several services on a contract still need one matching declaration per registration, without deduplication by contract.
+
+## Presentation and communication
+
+Presentation functions read projected public story and explicit own asset / display namespaces. Service, tool, recursion and sub-agent calls are refused at entry, including read services. UI-slot providers render committed own display state; presentation grants no private-data authority. See [presentation runtimes](./plugins.md#presentation-runtimes).

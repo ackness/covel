@@ -27,6 +27,8 @@ export function reservedPluginDataNamespaceError(
  * the story develops; the REST API and the LLM plugin-data tools cannot.
  */
 export const HIDDEN_PLUGIN_DATA_NAMESPACE_PREFIX = "_hidden.";
+/** Source-runtime dispatch spend belongs to the live session incarnation. */
+export const PRESENTATION_BUDGET_NAMESPACE = "_presentation_budget";
 
 export function hiddenPluginDataNamespace(namespace: string): string {
   return `${HIDDEN_PLUGIN_DATA_NAMESPACE_PREFIX}${namespace}`;
@@ -52,13 +54,15 @@ export function pluginCodeNamespaceWriteError(
  * Framework bookkeeping that never travels with a snapshot or into a fork:
  * job rows are incarnation-bound execution state (copying them would let a
  * second worker see already-paid provider work as its own), and `_logs` is a
- * bounded diagnostic ring, not game state. `_jobs` names the retired
+ * bounded diagnostic ring, not game state. `_presentation_budget` retains paid
+ * dispatch reservations independently of jobs and belongs to one incarnation. `_jobs` names the retired
  * in-process queue's rows, which older databases and snapshots may still hold.
  */
 const CONTROL_PLANE_NAMESPACES: ReadonlySet<string> = new Set([
   "_jobs",
   "_runtime_jobs",
   "_runtime_job_control",
+  PRESENTATION_BUDGET_NAMESPACE,
   "_logs",
 ]);
 

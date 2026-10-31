@@ -1432,3 +1432,61 @@ Each new round uses normal scheduling, tools, proposal validation and commit; in
 ## Optional planning and committed story exports
 
 The bundled dialogue example composes a pre-turn function, plan, with one story agent, narrate. The function projects names and calls a policy once; the story consumes its optional same-package input and owns actor delegation. The complete public story exports as recordAs: latest-story; the planner reads the prior committed value through a same-package scope: committed input, without a dependency back to the current narrative stage. Policies and actors remain replaceable and optional, outside story requires or contract needs. Actor declarations use the framework schema above rather than copying it into a package.
+
+<a id="presentation-runtimes"></a>
+
+## Presentation runtimes
+
+`presentation` restricts a function runtime that selects backdrops, cast or music from public story content. It requires `schedule.stage: post-turn`, effective `io.visibility: system` and staged auto activation. Agents, guards, sub-agents, manual, event, background, concealed, suspension and `recordAs` are unavailable. An invalid declaration disables only that runtime; validation and installation still report the authored field path.
+
+```yaml
+---
+id: gallery-display
+description: Selects art from public story cues.
+contributes:
+  data:
+    art: { schema: ./art.schema.json }
+runtime:
+  schedule: { stage: post-turn }
+  presentation: {}
+  io:
+    inputs:
+      story:
+        from: { contract: narrative-engine@2 }
+        required: false
+  function: {}
+  effects:
+    reads: [plugin-data:self:art, plugin-data:self:display]
+    writes: [plugin-data:self:display]
+---
+```
+
+The example package's `art.schema.json` defines its asset format; `handler.js` sits beside the inline manifest. See the [advanced guide](../plugins/advanced.md#presentation-selectors) for a complete handler and detached generator. Do not add `requires: [narrative-engine@2]` for this optional story input.
+
+### Inputs and writes
+
+Only an optional (`required: false`), untransformed, turn-scoped `narrative-engine@2` input is permitted. Missing or ambiguous public story providers leave the input absent. The host copies validated `segments` and `cues` only, excluding business extras, concealed / non-story / failed results, tools, intent, reasoning, continuations, operations and summaries.
+
+Zero-budget functions read a public candidate before story commit; their writes cannot survive rejection of that story. Detached presentation reads the actual story saved after `PreStateCommit` rewrites and accepted owning-plugin data from that commit. Its versioned snapshot contains no raw upstream result, player message, action or form. Snapshots are limited to 256 KiB total, 50 rows per namespace and 100 character identities; exceeding a bound refuses the whole snapshot, including inline materialization.
+
+`ctx.presentation` supplies read-only `characters: {id, name, aliases?}[]`, optional `viewpointCharacterId` and `note(reason)`. Identities come only from exact matches to story names, preserving ambiguity; profiles, private fields and seat lists are absent. Use IDs only to index display state; model input keeps names. `ctx.world`, history, exports, services, tools, recursion and agents are unavailable; player messages, actions and activation payload supply no extra content. The host does not construct a broad context first. Capabilities expire on completion, cancellation or deadline.
+
+Explicit `effects` identify owning, non-reserved namespaces. Reads may cover public assets declared in the package's `contributes.data` with a non-hidden source, or display namespaces also listed in writes. Wildcard `plugin-data:self:*`, `_` namespaces, foreign data, history and kernel inputs are forbidden. `pluginData.get/list` and store aliases enforce the same scope; namespace-less listing is refused.
+
+Only declared own `plugin.data`, update, batch and delete proposals may commit. Dataset schemas, allowed operations, size, preconditions and media validation still apply, including after hook rewrites. Any forbidden proposal discards the whole presentation unit; the story and independent auxiliaries retain normal commit isolation. Executions without a story remain atomic. Story, character, dimension, lorebook, interaction, UI, event, completion and `asset.generate` writes, foreign write services and nested execution are unavailable.
+
+### Dispatch budgets and background generation
+
+Both integers in `presentation: {budget: {calls, generations}}` default to zero. `calls` allows 0–16 admitted gateway dispatches; `generations` allows 0–4 additional image, music or speech output units. A request for `n` images reserves all `n` units together. Text and object generation consume calls too; cache hits and availability probes cost nothing. Evaluation, transcription and arbitrary HTTP are unavailable.
+
+Either positive counter requires `schedule.detached: true` and forbids `settle: true`. An unsafe graph, changed version or unavailable snapshot skips presentation without foreground fallback. Neither the story nor the next player input waits for generation. Ordinary pre-turn cast selection and explicit event overrides remain outside this policy.
+
+The allowance is shared by session incarnation, actual source turn ID and runtime. Opening, first player input and each automatic round have distinct sources even when logicalTurn matches. Source retries, new job IDs, shutdown requeue, cancellation, provider failures and rejected commits never replenish it. Current configuration can only narrow captured limits. A durable kernel CAS reservation precedes external dispatch; paid work is unavailable without that ledger. A stalled wrapper's new dispatch spends another call. Internal transport attempts remain governed by the separate `LLMRequestBudget`; these counters do not promise an exact bill.
+
+`assets:*` / `media:*` permits scoped media helpers only. `ctx.media` can read refs reachable from allowed snapshot assets / display state or produced by this invocation's helpers; session ownership alone is insufficient. Raw `put` / `ingestUrl` is unavailable. Helpers retain the standard private writer, MIME, HTTP / DNS, batch pin, claim and compensation rules. Failed or superseded output publishes no new display binding; external charges, bytes and reusable generation caches cannot be rolled back. The commit transaction checks destination baselines from the snapshot, so newer overrides or source results win.
+
+### No output and trust
+
+`ctx.presentation.note(reason)` accepts fixed codes: `no-story`, `no-scene-change`, `asset-missing`, `budget-exhausted`, `unavailable`, `superseded`, `no-output`, `failed`. Free text is refused. Without a display write or note, the host infers `no-output`; a business return value alone is not visible output. Budget refusal is a normal no-op and can be caught to use existing assets. Uncaught refusal discards incomplete writes without a plugin fault. Own exceptions, invalid output and deadlines retain normal fault provenance.
+
+Each settled invocation records [`presentation.completed`](./protocol.md#presentation-completed), with status, source correlation and counters. It adds no per-turn player notification. A presentation function remains approved, unsandboxed server JS: the API policy does not replace [code approval](./plugin-installation.md) or restrict direct Node access.

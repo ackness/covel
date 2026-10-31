@@ -9,9 +9,13 @@ const POSITIONS = ["left", "center-left", "center", "center-right", "right"];
 
 /** Resolve presence exactly; continuing actors keep their position and visual. */
 export function castFromPresence(ctx, previous, present, segments) {
-  const characters = ctx.world?.characters ?? [];
-  const seats = ctx.world?.seats ?? [];
-  const viewpoint = currentCharacterOf(primarySeat(seats), characters, seats);
+  const characters = ctx.presentation
+    ? ctx.presentation.characters
+    : (ctx.world?.characters ?? []);
+  const seats = ctx.presentation ? [] : (ctx.world?.seats ?? []);
+  const viewpointId = ctx.presentation
+    ? ctx.presentation.viewpointCharacterId
+    : currentCharacterOf(primarySeat(seats), characters, seats)?.id;
   const resolved = new Map();
   const diagnostics = [];
   for (const name of present) {
@@ -21,7 +25,7 @@ export function castFromPresence(ctx, previous, present, segments) {
       diagnostics.push(`unresolved character: ${name}`);
       continue;
     }
-    if (match.character.id !== viewpoint?.id)
+    if (match.character.id !== viewpointId)
       resolved.set(match.character.id, match.character);
   }
   const selected = [...resolved.values()].slice(0, MAX_SPRITE_SLOTS);

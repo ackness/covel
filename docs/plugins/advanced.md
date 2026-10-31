@@ -742,3 +742,73 @@ Keep intent private. If a policy or actor is unavailable, continue with a valid 
 对话叙事采用上面的公开契约，但把只读策略调用放在 pre-turn 函数，把 delegate 保留在唯一故事 agent 的工具循环中。函数读取 ctx.world 的当前角色/座位，输出安全名字；故事消费可选的同包输入。director 只有函数调用路径能借到 gateway；模型导入不能绕过代码专用设置。演员/策略都可缺失或由社区包替换。完整玩家行为见[群像对话](../builtin/story.md#群像对话与角色演员)。
 
 历史段落只供策略选人，不自动加入共享演员简报；运行器按角色提供亲历历史。`scene-cast@1` 的结构化名单供规划器读取，`activeCastContext` 则作为可选输入供故事 agent 使用。
+
+## 呈现选择器
+
+在 `~/.covel/plugins/gallery-display/` 建包，使用[呈现 runtime 示例清单](../reference/plugins.md#presentation-runtimes)。给 `art.schema.json` 写入 `{"type":"object"}`，将公开素材按场景名作为 key 导入 `art`。同目录的 `handler.js` 如下。缺少故事或素材时保留已有展示：
+
+```js
+export default async function handler(ctx) {
+  const slot = ctx.inputs?.story;
+  const story = slot?.cardinality === "one" ? slot.value : undefined;
+  if (!story) {
+    ctx.presentation.note("no-story");
+    return { outcome: "success", value: {} };
+  }
+  const scene = story.cues?.scene;
+  const art = scene ? await ctx.pluginData.get("art", scene) : null;
+  if (!art) {
+    ctx.presentation.note("asset-missing");
+    return { outcome: "success", value: {} };
+  }
+  const previous = await ctx.pluginData.get("display", "current");
+  if (previous?.scene === scene) {
+    ctx.presentation.note("no-scene-change");
+    return { outcome: "success", value: {} };
+  }
+  await ctx.pluginData.set("display", "current", { scene, art });
+  return { outcome: "success", value: { selected: true } };
+}
+```
+
+需要生成时，另建 `gallery-generator` 包，根 `PLUGIN.md` 只写 `id: gallery-generator` 和 `description: Generates public story art.`。下面分别是 `runtimes/render/RUNTIME.md` 和同目录的 `handler.js`。选择 image 用途的模型在会话模型设置完成；包不指定服务商。
+
+```yaml
+---
+schedule: { stage: post-turn, detached: true }
+presentation: { budget: { calls: 1, generations: 1 } }
+io:
+  inputs:
+    story:
+      from: { contract: narrative-engine@2 }
+      required: false
+function: { model: image }
+effects:
+  reads: [plugin-data:self:display]
+  writes: [plugin-data:self:display, media:*]
+---
+```
+
+```js
+export default async function handler(ctx) {
+  const slot = ctx.inputs?.story;
+  const story = slot?.cardinality === "one" ? slot.value : undefined;
+  if (!story) {
+    ctx.presentation.note("no-story");
+    return { outcome: "success", value: {} };
+  }
+  if (!ctx.images?.isAvailable()) {
+    ctx.presentation.note("unavailable");
+    return { outcome: "success", value: {} };
+  }
+  const { refs } = await ctx.images.generate({
+    prompt: JSON.stringify(story.segments),
+    n: 1,
+  });
+  if (refs[0]) await ctx.pluginData.set("display", "current", { art: refs[0] });
+  else ctx.presentation.note("asset-missing");
+  return { outcome: "success", value: {} };
+}
+```
+
+用 `pnpm validate:plugin ~/.covel/plugins/gallery-display` 和 `pnpm validate:plugin ~/.covel/plugins/gallery-generator` 检查自己的文件。成功表示静态契约通过，不会生成媒体。通过真实队列的假 gateway 测试确认故事先提交、后续输入不等待，以及旧结果不能覆盖新状态，见[插件测试](./testing.md#验证呈现的拒绝路径)。排查时查 `presentation.completed` 的固定 reason 与 budget；没有每回合玩家弹窗。完整限制集中在[呈现 runtime](../reference/plugins.md#presentation-runtimes)。

@@ -268,3 +268,7 @@ The manifest has only two slots, "day" and "night" for now. A world like this ca
 - **Add portraits to characters.** See [Add portraits to characters](./portraits.md).
 - **Set the art direction for the whole world, and learn what to check before release.** See [World art direction](./art-direction.md).
 - **Add background music to the world.** See [Background Music in the world data reference](../reference/world-data.md#background-music).
+
+## Asset selection from story
+
+Story cues select public scene assets through a restricted, zero-budget [presentation function](../reference/plugins.md#presentation-runtimes), without spontaneous paid generation. Scene generation commands and file formats stay unchanged; missing new art follows [stage fallback behavior](../builtin/stage.md).

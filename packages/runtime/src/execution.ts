@@ -1,3 +1,4 @@
+import { presentationState } from "./presentation/state.js";
 import {
   captureSuspensionClaim,
   latestDelegationSnapshot,
@@ -90,6 +91,7 @@ export interface ExecutionCommitPlan extends Pick<
   | "providerDatasets"
   | "operationRecords"
   | "readDependencies"
+  | "presentationStates"
   | "progressScopeId"
 > {
   readonly outputSchemas: Readonly<Record<string, Schema>>;
@@ -339,6 +341,12 @@ export async function executeTurn(
         : {}),
     },
     commit: {
+      presentationStates: new Map(
+        results.flatMap((result) => {
+          const state = presentationState(result);
+          return state ? [[result.runId, state] as const] : [];
+        }),
+      ),
       ...structuredClone({
         sessionId: turn.sessionId,
         executionContext: suspended
@@ -419,6 +427,8 @@ export async function resumeSuspendedRuntime(
   deps: ExecutionDeps,
   options?: ResumeSuspendedRuntimeOptions,
 ): Promise<ExecutedRuntime> {
+  if (manifest.presentation !== undefined)
+    throw new Error("Presentation runtimes cannot resume a continuation");
   if (deps.pluginFaults?.isLatched(suspension.sessionId, manifest.pluginId))
     throw new Error("Plugin is unavailable in this session");
   suspension = {
@@ -610,6 +620,12 @@ export async function resumeSuspendedRuntime(
   return {
     result: publicRuntimeResult(result),
     commit: {
+      presentationStates: new Map(
+        results.flatMap((result) => {
+          const state = presentationState(result);
+          return state ? [[result.runId, state] as const] : [];
+        }),
+      ),
       ...structuredClone({
         sessionId: suspension.sessionId,
         executionContext: {

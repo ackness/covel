@@ -853,6 +853,7 @@ data: {
 | ---------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `hook.rewrote`                                                         | Hook 改写了内容                                                                                                                                                                                                                                                                                                                                            |
 | `function.executing` / `function.completed`                            | function-runtime 的 handler 开始和结束（TurnEmitter），和 `recursive.*` 同类                                                                                                                                                                                                                                                                               |
+| `presentation.completed`                                               | 呈现结算状态、固定原因、来源和预算；不包含故事内容，见下文。                                                                                                                                                                                                                                                                                               |
 | `utils.fetch.calling` / `utils.fetch.responded` / `utils.fetch.failed` | 插件自带 wire 的 provider HTTP 调用（`ctx.utils.fetchWithRetry`，图像生成插件走的路径；由 `withUtilsTrace` 在 function-runtime / agent-guard 注入的地方包起来）。轮询可能很频繁，所以不进 action 流。负载只有 host / method / status / durationMs，**绝不包含完整 URL、query 或 api key**                                                                  |
 | `context.pruned`                                                       | 提示词组装、`PostContextAssembly` 之后，或循环请求重放或新增裁剪决定时发出。负载为 `{ runtimeId, pluginId, prunedMessageCount }`；循环请求还带 `truncatedToolResultCount`、`truncatedSummaryCount`、`elidedToolResultCount`、`collapsedStepCount`。后两项是本次请求应用的累计账本计数，包含重放；任一计数非零就发事件。只进 trace，同一 runtime 可多次发出 |
 | `context.compaction.failed`                                            | 历史压缩尝试失败时发出，负载是 `{ pluginId, extensionId, reason, consecutiveFailures }`                                                                                                                                                                                                                                                                    |
@@ -1512,3 +1513,26 @@ runtime 的终态：
 ## 创建身份与现有动作协议
 
 创建请求的可选 seatRole 只决定新的人类座位；字段、默认与拒绝规则见[创建接口](./api.md#创建身份)。主持人允许导演指示/旁白/推进，旁观者只有推进。后续动作仍由服务端填写 source，沿用现有 execution.round.completed、execution.advance 和单一 execution.completed 生命周期；此选择不引入新事件或新调度器。
+
+<a id="presentation-completed"></a>
+
+## `presentation.completed`
+
+呈现每次结算记录一条 trace 终态，不转发到 `/api/actions`，不生成玩家无产出通知。负载的宿主身份是 `pluginId`、`runtimeId`、可选 `runId` / `turnId` / `jobId`，来源是 `sourceTurnId` 和 `sourceExecutionId`；`status` 为 `updated`、`no-op` 或 `failed`。无产出总有固定 `reason`，代码见[呈现 runtime](./plugins.md#presentation-runtimes)。
+
+```json
+{
+  "pluginId": "gallery-display",
+  "runtimeId": "gallery-display/render",
+  "sourceTurnId": "source",
+  "sourceExecutionId": "execution",
+  "status": "no-op",
+  "reason": "budget-exhausted",
+  "budget": {
+    "calls": { "limit": 2, "used": 2 },
+    "generations": { "limit": 1, "used": 1 }
+  }
+}
+```
+
+事件不含原始输入、自由原因、素材路径、回复或凭证。派发与缓存命中沿用 `gateway.calling` / `gateway.responded`，只记录方法和命中标志；提供方错误不进入呈现诊断。

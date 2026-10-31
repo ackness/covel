@@ -2078,3 +2078,7 @@ payload 是 `{entries:[{id,keys,content,strategy,position?,insertionOrder?,enabl
 ## 故事内的演员委托
 
 故事 agent 可调用 `delegate`，传 `target: {contract: "character-actor@1"}`、`character: "Mara"`、简短的 `brief` 和可选 `instruction`；不传 characterId 或 data。名字解析、档案与亲历历史由框架负责。内置对话叙事按计划顺序逐个调用，只组合成功的公开段落，丢弃 intent；失败演员的暂存操作不提交。操作在最终提交被拒时，按现有规则只损失该操作并显示固定通知。
+
+## 呈现函数的调用边界
+
+带 `presentation` 的函数没有工具、服务或委派入口，也不能发事件、挂起或发布 UI / completion。gateway 与媒体 helper 共享来源回合的持久额度；零额度在派发前拒绝，额度耗尽是正常 no-op。普通 runtime 的工具清单不变，见[呈现 runtime](./plugins.md#presentation-runtimes)。

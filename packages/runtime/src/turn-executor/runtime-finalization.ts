@@ -231,6 +231,25 @@ export async function finalizeRuntimeResult(
         error: `output-schema-invalid: ${error}`,
       };
   }
+  if (manifest.presentation) {
+    const forbiddenResult = (value: RuntimeResult) =>
+      value.status === "suspended" ||
+      value.completion !== undefined ||
+      (value.effects &&
+        Object.keys(value.effects).some((key) => key !== "pluginData"));
+    const forbidden = forbiddenResult(result) || forbiddenResult(finalized);
+    if (forbidden)
+      finalized = {
+        ...finalized,
+        status: "failed",
+        output: null,
+        pendingProposals: [],
+        effects: undefined,
+        completion: undefined,
+        error:
+          "Presentation cannot emit events, interactions, UI or completion",
+      };
+  }
   const guardProvided = isGuardProvided(finalized);
   if (
     manifest.outputContract &&
@@ -299,6 +318,8 @@ export async function finalizeRuntimeResult(
     };
   }
   finalized = withAgentFailureTarget(finalized, options.lastTarget);
+  if (manifest.presentation && finalized.status === "failed")
+    finalized = { ...finalized, error: "Presentation runtime failed" };
   if (manifest.outputKind === "story" && finalized.status === "success") {
     const output = finalized.output as Record<string, unknown>;
     const content =

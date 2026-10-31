@@ -250,6 +250,9 @@ export function createRuntimeJobExecutor(deps: {
         !target ||
         target.pluginId !== job.pluginId ||
         target.version !== payload.descriptor.pluginVersion ||
+        (target.presentation !== undefined) !==
+          (payload.descriptor.presentation !== undefined) ||
+        (target.presentation && !payload.descriptor.presentation?.committed) ||
         !planTurnDetachment(activeRuntimes).eligibleRuntimeIds.has(
           job.runtimeId,
         )
@@ -280,7 +283,10 @@ export function createRuntimeJobExecutor(deps: {
           const runtimeResult = turnResult.runtimeResults.find(
             (result) => result.runtimeId === job.runtimeId,
           );
-          if (runtimeResult?.status !== "success") {
+          if (
+            runtimeResult?.status !== "success" &&
+            !(target.presentation && runtimeResult?.status === "skipped")
+          ) {
             throw new Error(
               runtimeResult?.error ??
                 `detached runtime ended with ${runtimeResult?.status ?? "no result"}`,
@@ -288,8 +294,9 @@ export function createRuntimeJobExecutor(deps: {
           }
           const runtimeOutput = runtimeResult.output;
           if (
-            runtimeOutput?.status === "failed" ||
-            (typeof runtimeOutput?.error === "string" && runtimeOutput.error)
+            !target.presentation &&
+            (runtimeOutput?.status === "failed" ||
+              (typeof runtimeOutput?.error === "string" && runtimeOutput.error))
           ) {
             throw new Error(
               typeof runtimeOutput.error === "string"

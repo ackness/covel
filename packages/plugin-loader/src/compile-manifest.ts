@@ -212,6 +212,22 @@ export function compileRuntimeManifest(
   const contract = runtime.io?.output?.contract;
   const output = runtime.io?.output;
   const parsed = runtimeManifestInputSchema.parse({
+    ...(runtime.presentation
+      ? {
+          presentation: {
+            ...runtime.presentation,
+            publicAssetNamespaces: Object.entries(
+              plugin.contributes?.data ?? {},
+            )
+              .filter(
+                ([namespace, decl]) =>
+                  !namespace.startsWith("_") &&
+                  decl.authoring?.source?.visibility !== "hidden",
+              )
+              .map(([namespace]) => namespace),
+          },
+        }
+      : {}),
     name: runtimeId,
     version: plugin.version,
     description: runtime.description ?? plugin.description,

@@ -121,3 +121,7 @@ The story interface also provides the host’s [advancement and Stop controls](.
 Ensemble actors respond from their own witnessed history; the shared brief does not automatically tell newcomers about private exchanges from the previous scene. See [ensemble dialogue](./story.md#ensemble-dialogue-and-character-actors).
 
 New compositions remain plugin lists plus a world-generation default view. They do not select a role, perspective or strategy. For DM Mode, set Narrator Perspective to Game master. Ensemble works with the default Player role and mention strategy. To play a human DM, turn off character creation and select Game master in preparation. For Spectator, choose that role at creation, then list, random or director and Advance. Choose Game master instead to direct/narrate the same NPC composition. World allowed-pack lists remain authoritative and saved views are not overwritten. Recommendations stay optional; missing actors/policies preserve narrator-only play.
+
+## Story-driven presentation
+
+Scene Stage and Soundtrack story-cue selectors adopt zero-budget [presentation functions](../reference/plugins.md#presentation-runtimes). They add no generation charges; absent plugins or assets degrade only their display. See [stage and sound](./stage.md).

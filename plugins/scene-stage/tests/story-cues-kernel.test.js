@@ -4,9 +4,14 @@ import {
   discoverPlugins,
   loadPluginManifest,
   loadRuntime,
+  getRuntimeSpec,
 } from "@covel/plugin-loader";
 import { createPluginTestStore } from "@covel/plugin-test-utils";
-import { commitExecution, executeTurn } from "@covel/runtime";
+import {
+  commitExecution,
+  executeTurn,
+  createTurnEmitter,
+} from "@covel/runtime";
 
 const now = "2026-10-30T00:00:00Z";
 const story = {
@@ -53,6 +58,7 @@ async function fixture({
   events = [],
   withStory = true,
   withStage = true,
+  withAssets = true,
 } = {}) {
   const store = await createPluginTestStore({
     sessionId: "s",
@@ -97,12 +103,13 @@ async function fixture({
       createdAt: now,
       updatedAt: now,
     });
-  await seed("scene-stage", "scenes", "scene-registry", {
-    scenes: [
-      { sceneId: "library", name: "图书馆" },
-      { sceneId: "classroom", name: "教室" },
-    ],
-  });
+  if (withAssets)
+    await seed("scene-stage", "scenes", "scene-registry", {
+      scenes: [
+        { sceneId: "library", name: "图书馆" },
+        { sceneId: "classroom", name: "教室" },
+      ],
+    });
   await seed("scene-stage", "stage", "current", {
     sceneId: "classroom",
     name: "教室",
@@ -115,9 +122,10 @@ async function fixture({
     actors: [{ characterId: "lin", displayName: "林月", active: true }],
     turnId: "old",
   });
-  await seed("soundtrack", "tracks", "music-registry", {
-    tracks: [{ id: "battle", file: "battle.mp3", moods: ["tense"] }],
-  });
+  if (withAssets)
+    await seed("soundtrack", "tracks", "music-registry", {
+      tracks: [{ id: "battle", file: "battle.mp3", moods: ["tense"] }],
+    });
   await seed("soundtrack", "state", "mood", { mood: "calm", turnId: "old" });
   await seed("soundtrack", "state", "scene", { name: "教室", turnId: "old" });
 
@@ -161,18 +169,52 @@ async function fixture({
     commitExecution({
       store,
       execution,
+      emitter: createTurnEmitter({ store, sessionId: "s", turnId: "new" }),
       completion: { kind: "turn", turnId: "new", durationMs: 1 },
       extraInTx,
     });
-  return { execution, read, commit };
+  return { execution, read, commit, traces: () => store.listTraceEvents("s") };
 }
 
 describe("story cues committed by presentation plugins", () => {
+  it("preserves previous backdrop and music when their public assets are missing", async () => {
+    const { read, commit, traces } = await fixture({
+      withAssets: false,
+      output: {
+        segments: [{ kind: "narration", text: "The library is quiet." }],
+        cues: { scene: "图书馆", mood: "Tense" },
+      },
+    });
+    expect((await commit()).status).toBe("committed");
+    expect(await read("scene-stage", "stage", "current")).toMatchObject({
+      sceneId: "classroom",
+      variant: "night",
+    });
+    expect(await read("soundtrack", "state", "mood")).toMatchObject({
+      mood: "calm",
+    });
+    const terminal = (await traces()).filter(
+      ({ type }) => type === "presentation.completed",
+    );
+    expect(terminal).toHaveLength(2);
+    for (const trace of terminal)
+      expect(trace.payload).toMatchObject({
+        status: "no-op",
+        reason: "asset-missing",
+      });
+  });
   it("commits the story's scene, presence, focus and music together", async () => {
-    const { execution, read, commit } = await fixture();
+    const { execution, read, commit, traces } = await fixture();
     expect(
       manifests.filter(({ name }) => name.endsWith("/story-cues")),
     ).toHaveLength(2);
+    for (const manifest of manifests.filter(({ name }) =>
+      name.endsWith("/story-cues"),
+    ))
+      expect(getRuntimeSpec(manifest).presentation?.budget).toEqual({
+        calls: 0,
+        generations: 0,
+      });
     expect(
       execution.result.runtimeResults.every(
         ({ status }) => status === "success",
@@ -185,6 +227,18 @@ describe("story cues committed by presentation plugins", () => {
       mood: "calm",
     });
     expect((await commit()).status).toBe("committed");
+    const completed = (await traces()).filter(
+      ({ type }) => type === "presentation.completed",
+    );
+    expect(completed).toHaveLength(2);
+    for (const trace of completed)
+      expect(trace.payload).toMatchObject({
+        status: "updated",
+        budget: {
+          calls: { limit: 0, used: 0 },
+          generations: { limit: 0, used: 0 },
+        },
+      });
     expect(await read("scene-stage", "stage", "current")).toMatchObject({
       sceneId: "library",
       variant: "night",
@@ -265,7 +319,7 @@ describe("story cues committed by presentation plugins", () => {
   it.each([{ withStory: false }, { output: { narrativeOutput: "雨停了。" } }])(
     "succeeds without changing presentation when the story has no cues: %j",
     async (options) => {
-      const { execution, read, commit } = await fixture(options);
+      const { execution, read, commit, traces } = await fixture(options);
       const results = execution.result.runtimeResults.filter(({ runtimeId }) =>
         runtimeId.endsWith("/story-cues"),
       );
@@ -276,6 +330,13 @@ describe("story cues committed by presentation plugins", () => {
           output: { skipped: true, reason: expect.any(String) },
         });
       expect((await commit()).status).toBe("committed");
+      for (const trace of (await traces()).filter(
+        ({ type }) => type === "presentation.completed",
+      ))
+        expect(trace.payload).toMatchObject({
+          status: "no-op",
+          reason: expect.stringMatching(/^(no-story|no-output)$/),
+        });
       expect(await read("scene-stage", "stage", "current")).toMatchObject({
         sceneId: "classroom",
         turnId: "old",

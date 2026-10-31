@@ -346,6 +346,8 @@ export interface ProgressReporter {
  * gateway when a model is configured, `inputs` when the runtime binds any).
  */
 export interface PluginFunctionContext {
+  /** Present only for restricted public-story presentation invocations. */
+  readonly presentation?: import("./presentation.js").PresentationContext;
   /** Bounded committed stories witnessed by a character in this world view. */
   readonly historyFor: (
     characterId: string,

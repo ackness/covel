@@ -109,7 +109,7 @@ export function buildFrameworkCapabilities(
       },
       pluginData: {
         scope: "(sessionId, pluginId, namespace, key)",
-        reservedNamespaces: ["_runtime_jobs", "_logs"],
+        reservedNamespaces: ["_runtime_jobs", "_presentation_budget", "_logs"],
         writePaths: [
           "dataset-tool:<dataset>-upsert",
           "dataset-tool:<dataset>-update",

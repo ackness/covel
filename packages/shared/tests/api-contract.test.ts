@@ -43,7 +43,62 @@ const plugin = {
   languages: { text: ["en"], instructions: ["en"] },
 };
 
+function presentationPlugin(presentation: unknown) {
+  return {
+    ...plugin,
+    runtimes: [
+      {
+        ...plugin.runtimes[0],
+        runtimeType: "function",
+        stage: "post-turn",
+        turnCompletion: { mode: "detached" },
+        presentation,
+      },
+    ],
+  };
+}
+
 describe("shared API contracts", () => {
+  it.each([
+    { calls: 0, generations: 0 },
+    { calls: 2, generations: 1 },
+    { calls: 16, generations: 4 },
+  ])("accepts normalized presentation limits in discovery: %j", (budget) => {
+    const response = { items: [presentationPlugin({ budget })] };
+    expect(apiListResponseSchema(pluginSummarySchema).parse(response)).toEqual(
+      response,
+    );
+  });
+
+  it.each([
+    null,
+    false,
+    {},
+    { budget: { calls: 1 } },
+    { budget: { generations: 1 } },
+    { budget: { calls: -1, generations: 0 } },
+    { budget: { calls: 0.5, generations: 0 } },
+    { budget: { calls: 17, generations: 0 } },
+    { budget: { calls: 1, generations: 5 } },
+    { budget: { calls: 1, generations: 0, used: 1 } },
+    {
+      budget: { calls: 1, generations: 0 },
+      used: { calls: 1, generations: 0 },
+    },
+    { budget: { calls: 1, generations: 0 }, publicAssetNamespaces: ["art"] },
+    {
+      budget: { calls: 1, generations: 0 },
+      ledger: { sourceTurnId: "private" },
+    },
+  ])(
+    "rejects malformed or private presentation discovery fields: %j",
+    (presentation) => {
+      expect(
+        pluginSummarySchema.safeParse(presentationPlugin(presentation)).success,
+      ).toBe(false);
+    },
+  );
+
   it.each([
     {
       type: "submit_actions",

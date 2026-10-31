@@ -471,8 +471,13 @@ export async function loadPluginDefinition(
         disabledRuntimes.push(error.disabled);
       }
   } else {
-    const runtime = compileInlineRuntime(parsedPackage);
-    if (runtime) manifests.push(runtime);
+    try {
+      const runtime = compileInlineRuntime(parsedPackage);
+      if (runtime) manifests.push(runtime);
+    } catch (error) {
+      if (!(error instanceof RuntimeDisabledError)) throw error;
+      disabledRuntimes.push(error.disabled);
+    }
   }
   const exists = packageFileExists(discovery.rootPath);
   for (const parsed of [...manifests]) {

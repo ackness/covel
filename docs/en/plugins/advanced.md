@@ -742,3 +742,73 @@ Use the commands in [plugin testing](./testing.md). Framework regressions extrac
 Dialogue uses the public contracts above with a read-only policy call in a pre-turn function and delegate retained inside the sole story agent's tool loop. The function reads current characters/seats through ctx.world and projects names to an optional same-package input. Director borrows a gateway only through a function caller; a model import cannot bypass code-only visibility. Either provider can be absent or replaced by a community package. See [ensemble behaviour](../builtin/story.md#ensemble-dialogue-and-character-actors).
 
 Historical segments inform policy selection without automatically entering the shared actor brief; the runner supplies witnessed history per character. The planner reads the structured cast from `scene-cast@1`, while the story agent receives its optional `activeCastContext` input.
+
+## Presentation selectors
+
+Create `~/.covel/plugins/gallery-display/` with the [presentation example manifest](../reference/plugins.md#presentation-runtimes). Write `{"type":"object"}` to `art.schema.json` and import public assets into `art`, keyed by scene name. Place this `handler.js` beside the manifest. Missing story or art preserves existing display:
+
+```js
+export default async function handler(ctx) {
+  const slot = ctx.inputs?.story;
+  const story = slot?.cardinality === "one" ? slot.value : undefined;
+  if (!story) {
+    ctx.presentation.note("no-story");
+    return { outcome: "success", value: {} };
+  }
+  const scene = story.cues?.scene;
+  const art = scene ? await ctx.pluginData.get("art", scene) : null;
+  if (!art) {
+    ctx.presentation.note("asset-missing");
+    return { outcome: "success", value: {} };
+  }
+  const previous = await ctx.pluginData.get("display", "current");
+  if (previous?.scene === scene) {
+    ctx.presentation.note("no-scene-change");
+    return { outcome: "success", value: {} };
+  }
+  await ctx.pluginData.set("display", "current", { scene, art });
+  return { outcome: "success", value: { selected: true } };
+}
+```
+
+For generation, create a separate `gallery-generator` package whose root `PLUGIN.md` contains only `id: gallery-generator` and `description: Generates public story art.`. These are `runtimes/render/RUNTIME.md` and its neighboring `handler.js`. Configure the image role through session model settings; the package names no provider.
+
+```yaml
+---
+schedule: { stage: post-turn, detached: true }
+presentation: { budget: { calls: 1, generations: 1 } }
+io:
+  inputs:
+    story:
+      from: { contract: narrative-engine@2 }
+      required: false
+function: { model: image }
+effects:
+  reads: [plugin-data:self:display]
+  writes: [plugin-data:self:display, media:*]
+---
+```
+
+```js
+export default async function handler(ctx) {
+  const slot = ctx.inputs?.story;
+  const story = slot?.cardinality === "one" ? slot.value : undefined;
+  if (!story) {
+    ctx.presentation.note("no-story");
+    return { outcome: "success", value: {} };
+  }
+  if (!ctx.images?.isAvailable()) {
+    ctx.presentation.note("unavailable");
+    return { outcome: "success", value: {} };
+  }
+  const { refs } = await ctx.images.generate({
+    prompt: JSON.stringify(story.segments),
+    n: 1,
+  });
+  if (refs[0]) await ctx.pluginData.set("display", "current", { art: refs[0] });
+  else ctx.presentation.note("asset-missing");
+  return { outcome: "success", value: {} };
+}
+```
+
+Validate your files with `pnpm validate:plugin ~/.covel/plugins/gallery-display` and `pnpm validate:plugin ~/.covel/plugins/gallery-generator`. Success confirms the static contract without generating media. Exercise the real queue with fake gateways to establish that story commits first, subsequent input does not wait and older results cannot replace newer display; see [plugin testing](./testing.md#testing-presentation-refusals). Inspect the fixed reason and budget on `presentation.completed`; no per-turn player toast is added. The [presentation contract](../reference/plugins.md#presentation-runtimes) defines the complete restrictions.

@@ -6,6 +6,7 @@
 
 import { DATA_OP_KINDS } from "@covel/plugin-handlers-utils";
 import { z } from "zod";
+import { compiledPresentationSchema } from "./presentation.js";
 import { DATASET_TOOL_KINDS, datasetToolsIssues } from "./dataset-tools.js";
 
 /** A versioned extension point or UI slot name, such as `prompt.segment@1`. */
@@ -1102,6 +1103,11 @@ export const permissionsDeclSchema = z
 
 /** Fields of the flat IR shape that the shared runtime rules read. */
 interface ManifestCrossFieldView {
+  readonly presentation?: z.infer<typeof compiledPresentationSchema>;
+  readonly effects?: z.infer<typeof effectsDeclSchema>;
+  readonly inputs?: z.infer<typeof inputsBindingMapSchema>;
+  readonly concealed?: boolean;
+  readonly advertiseEvents?: boolean;
   readonly input?: z.infer<typeof inputConfigSchema>;
   readonly outputContract?: string;
   readonly defaultProvider?: boolean;
@@ -1158,6 +1164,8 @@ function addIrRuleIssues(
   for (const issue of runtimeRuleIssues(
     {
       ...rest,
+      presentationInputs: m.inputs,
+      injectedInput: Boolean(m.input?.inject?.length || m.input?.schema),
       ...(loopProfile
         ? {
             loop: {
@@ -1258,6 +1266,7 @@ export const pluginCommandsSchema = z
  */
 export const runtimeManifestInputSchema = z
   .strictObject({
+    presentation: compiledPresentationSchema.optional(),
     name: z
       .string()
       .min(1)

@@ -239,3 +239,7 @@ Hook 的返回规则见 [Hooks](./hooks.md#how-an-event-runs)：不返回值表�
 ## 角色编排示例
 
 `turn-policy@1` 和 `character-actor@1` 是可选的服务/runtime 契约，不是内核扩展点。内置对话叙事的只读规划器与故事 agent 通过[普通通信接口](./plugin-extensions.md#orchestration-contracts)组合它们。
+
+## 呈现状态与界面槽位
+
+呈现函数不是新的扩展点。它用受限输入更新自己的展示数据；`ui.slot@1` 提供方按原有接口消费这些数据。缺少素材或呈现无产出只降级对应位置。槽位本身的普通上下文不被扩展，见[呈现 runtime](./plugins.md#presentation-runtimes)。

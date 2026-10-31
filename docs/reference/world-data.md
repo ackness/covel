@@ -1725,3 +1725,7 @@ pnpm validate:world --strict --plugins ~/.covel/plugins ~/.covel/worlds/my-world
 
 - **世界时间**不属于维度。它是插件数据，契约是 `world.time-definition@1`，记录写成 `{ id: world, definition }`，放在 `data/time.yaml`。AI 生成的这类记录在文件、服务端存储和浏览器本地的世界里保持同样的契约；不带文件夹的世界要求记录的 `key` 等于 `value.id`。字段、倒流和随机规则见 [World time](./world-time.md)。
 - GitHub 世界包目录、一次选择多个世界、代理下载和更新流程见[世界目录与安装](./world-installation.md)。
+
+## 公开素材与呈现状态
+
+呈现函数只可读取本包声明的公开素材 namespace，以及自己明确声明读写的展示状态；来源为 hidden 的数据与 `_hidden.*` 不进入投影。“本插件拥有”不等于“呈现可读”。导入契约和文件布局不变，见[呈现 runtime](./plugins.md#presentation-runtimes)。

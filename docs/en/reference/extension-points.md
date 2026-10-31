@@ -239,3 +239,7 @@ For the return rules of hooks, see [Hooks](./hooks.md#how-an-event-runs). No ret
 ## Character composition example
 
 turn-policy@1 and character-actor@1 are optional service/runtime contracts, not kernel extension points. The bundled dialogue planner and story agent compose them through [ordinary communication APIs](./plugin-extensions.md#orchestration-contracts).
+
+## Presentation state and UI slots
+
+Presentation adds no extension point. Restricted functions update owned display data; `ui.slot@1` providers consume it through their existing interface. Missing assets or no output degrade only that position. The policy does not expand a slot provider’s ordinary context; see [presentation runtimes](./plugins.md#presentation-runtimes).

@@ -8,7 +8,7 @@
 - `server/index.js`：`stage.music@1` 的提供者。每次投影时用「情绪 + 场景 + 曲目表」算出曲目，再按文件名从 `assets` 里取出音频的 `MediaRef`。同一个文件还提供 `prompt.segment@1`：把这个世界有哪些音乐情绪、各在什么时候适用告诉叙事。
 - `runtimes/cue/`：事件触发函数 runtime（消费 `music.cue`），只把情绪写入 `state/mood`。
 - `runtimes/scene/`：事件触发函数 runtime（消费 `scene.set`），只把场景名写入 `state/scene`。
-- `runtimes/story-cues/`：`post-turn` 函数 runtime，可选读取 `narrative-engine@2` 完整故事的 `ctx.inputs.story.value`；把已知 `cues.mood` 和去掉首尾空白的 `cues.scene` 写入各自的 `state` key，不强制启用叙事插件。
+- `runtimes/story-cues/`：`post-turn` 函数 runtime，可选读取 `narrative-engine@2` 公开段落与提示投影的 `ctx.inputs.story.value`；把已知 `cues.mood` 和去掉首尾空白的 `cues.scene` 写入各自的 `state` key，不强制启用叙事插件。
 - `lib/soundtrack.js`：namespace / key 常量和唯一的选曲规则 `selectTrack`。
 - `schemas/`：`music.cue` 载荷、曲目表和音乐文件索引的校验。
 
@@ -97,3 +97,5 @@ moods:
 ```bash
 pnpm --filter @covel/plugin-soundtrack test
 ```
+
+`story-cues` 声明 `presentation: {}`，只读取明确允许的自有素材和展示 namespace，不读取私有角色档案、历史或服务，也不调用模型。无产出原因通过 `presentation.completed` 的固定代码记录；普通 cast 与事件覆盖保持原有行为。见[呈现 runtime](../../docs/reference/plugins.md#presentation-runtimes)。

@@ -1,3 +1,4 @@
+import { finalizePresentationJobs } from "@covel/runtime";
 import type { JobStatusRecord } from "@covel/shared";
 import {
   assertJsonValue,
@@ -58,7 +59,13 @@ export async function enqueueDeferredRuntimeJobs(
   },
 ): Promise<readonly QueuedRuntimeJob[]> {
   const queued: QueuedRuntimeJob[] = [];
-  for (const descriptor of args.descriptors) {
+  for (const descriptor of await finalizePresentationJobs(
+    tx,
+    args.sessionId,
+    args.descriptors,
+    args.activeRuntimes,
+    true,
+  )) {
     const target = args.activeRuntimes.find(
       (runtime) => runtime.name === descriptor.runtimeId,
     );
@@ -68,6 +75,7 @@ export async function enqueueDeferredRuntimeJobs(
         `detached runtime ${descriptor.runtimeId} left the active graph before enqueue`,
       );
     }
+    if (target.presentation && !descriptor.presentation?.committed) continue;
     const policy = getRuntimeSpec(target).turnCompletionPolicy;
     const jobPayload: StagedRuntimeJobPayload = {
       schemaVersion: 1,

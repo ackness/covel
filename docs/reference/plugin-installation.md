@@ -377,3 +377,7 @@ ZIP 校验使用[安装时的插件 ID 规则](#安装器做什么不做什么)�
 报告包含 `kind`、可用时的 `id`、`ok`、`counts.errors`、`counts.warnings` 和 `issues`。每个问题有 `severity`、`code`、`message`，以及可用时的包内相对路径 `file`、字段路径或 JSON pointer `field`、修复提示 `hint`。摘要可含版本和语言。消息最多 2000 字符；保留前 200 个问题，超限时另加 `issues-truncated` 警告及省略数量。界面标题和已知代码按界面语言显示，其余消息保留英文；可以复制纯文本报告。
 
 权限与安装相同，使用 `host.files`：托管实例需要运营者 Bearer 令牌；个人实例沿用安装接口的桌面令牌或显式启用规则。路径必须是对应插件或世界允许根目录内的真实目录，拒绝目录根的符号链接。报告把包内路径转为相对路径，把其他主机路径替换为 `<path>`，不返回 CLI 专用的原始文本。请求格式见 [API](./api.md#应用内校验)。
+
+## 呈现函数仍需代码批准
+
+`presentation` 限制宿主提供的 API，不改变包的代码分类、可信来源或审批。社区 function 仍是非沙箱服务端代码，按原有政策获得批准；它不因此成为免审批的声明式插件。见[呈现 runtime](./plugins.md#presentation-runtimes)。
