@@ -33,7 +33,7 @@ flowchart LR
 
 **World and stage**
 
-- A world package's `pluginPolicy` only says which plugins a session selects by default (`preset`, `plus`) and which contracts the world cannot do without (`requires`). The plugins that finally run are decided by the contracts the plugins declare and by the session's authorization.
+- World `plugins` uses pack/plugin/contract prefixes for default gameplay and capability requests. The resolver still applies authorization and player exclusions.
 - The stage reads backdrops and actors through [kernel UI slots](./ui-panels.md#kernel-ui-slots). A narrator may also read optional cast context from `scene-cast@1`. Without these providers, players can still read the story and submit actions; no image-generation plugin is required.
 - Prepared material is imported through the data contracts that the enabled plugins expose. Existing images can be shown without a generation model being configured.
 - `character-blueprint` saves and displays character media. It does not generate images.

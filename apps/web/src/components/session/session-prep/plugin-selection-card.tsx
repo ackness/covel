@@ -60,7 +60,7 @@ function PluginPackSelector({
   activePluginPack: PluginPack | null;
   onApplyPack: (packId: string) => void;
 }) {
-  const { i18n } = useTranslation();
+  const { i18n, t } = useTranslation();
 
   if (pluginPacks.length === 0) return null;
 
@@ -94,6 +94,16 @@ function PluginPackSelector({
             {pack.description && (
               <p className="mt-1 text-xs text-muted-foreground line-clamp-2">
                 {textValue(pack.description, i18n.language)}
+              </p>
+            )}
+            {(pack.reason ||
+              (pack.source === "world" && pack.tags.length > 0)) && (
+              <p className="mt-1 text-xs text-muted-foreground">
+                {pack.reason
+                  ? textValue(pack.reason, i18n.language)
+                  : t("session.worldSelectionTags", {
+                      tags: pack.tags.join(", "),
+                    })}
               </p>
             )}
           </button>

@@ -91,7 +91,7 @@ plugins/npc-graph/
 
 ```text
 worlds/my-world/
-├── world.yaml                        # identity, pluginPolicy, pluginSettings
+├── world.yaml                        # identity, plugins, pluginPitch, pluginSettings
 ├── WORLD.md                          # canonical setting and opening premise
 ├── data/
 │   ├── world.data.yaml               # ordered source → schema → target imports
@@ -104,7 +104,7 @@ worlds/my-world/
     └── presence and scene indexes
 ```
 
-`pluginPolicy` 用 `preset` 选一个内置玩法包，用 `plus` 加上世界还要的插件；版本化契约负责解析依赖，玩家开局前仍可改选。`requires` 列出世界声明需要的契约（如 `action-check@1`），可由任何实现该契约的插件满足。缺少可启用的提供者时，准备页提示缺少的功能，仍可继续开局。`pluginSettings` 提供低于玩家覆盖优先级的世界默认值。通过 WorldData 导入 `memory.blocks@1`，可以加入线索、嫌疑人、信号日志、倒计时等题材记忆定义，无需修改 memory 插件。
+`plugins` 列出带 `pack:`、`plugin:`、`contract:` 前缀的引用；版本化契约负责解析依赖，玩家开局前仍可改选。`contract:action-check@1` 这样的引用声明世界请求的能力，可由任何实现该契约的插件满足。缺少可启用的提供者时，准备页提示缺少的功能，仍可继续开局。`pluginSettings` 提供低于玩家覆盖优先级的世界默认值。通过 WorldData 导入 `memory.blocks@1`，可以加入线索、嫌疑人、信号日志、倒计时等题材记忆定义，无需修改 memory 插件。
 
 `WorldData` 是统一导入协议，不是第二种世界格式。source 可以是 YAML、JSON、Markdown、文本或媒体，目标可以是通用角色/资料库，也可以是明确接受 WorldData 的插件 namespace。应用内 AI 构筑器生成的也是同一套标准包：它会根据结构化创作简报生成 manifest、世界观、维度、主要角色、资料库和规则。文件型世界包可以携带完整媒体；浏览器或 store 中的 AI 世界保留可移植文本回退，媒体仍由文件或资源存储承载。
 

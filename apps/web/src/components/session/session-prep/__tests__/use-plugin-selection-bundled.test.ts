@@ -3,7 +3,12 @@ import path from "node:path";
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { parse } from "yaml";
-import type { PluginPack, PluginSummary, WorldPluginPlan } from "@covel/shared";
+import {
+  resolveWorldPluginSelection,
+  type PluginPack,
+  PluginSummary,
+  WorldPluginPlan,
+} from "@covel/shared";
 import { usePluginSelection } from "../use-plugin-selection.js";
 import * as api from "@/services/api.js";
 
@@ -18,7 +23,7 @@ vi.mock("@/services/api.js", () => ({
 }));
 
 // The bundled catalogue itself: synthetic plugins cannot show that a world's
-// `plus` and its default pack leave one narrative engine after a pack switch.
+// independent requests and its default pack leave one narrative engine after a pack switch.
 const ROOT = path.resolve(import.meta.dirname, "../../../../../../..");
 const bundled = (dir: string): string[] =>
   readdirSync(path.join(ROOT, dir), { withFileTypes: true })
@@ -84,33 +89,16 @@ const BUILTIN_PACKS = list<PluginPack>(readYaml("packs", "builtin.yaml"));
 
 /** The plan `GET /api/worlds/:id/plugin-plan` returns for a bundled world. */
 function bundledPlan(worldId: string): WorldPluginPlan {
-  const raw = (readYaml("worlds", worldId, "world.yaml").pluginPolicy ??
-    {}) as Record<string, unknown>;
-  const named = list(raw.packs);
-  const offered = named.length
-    ? BUILTIN_PACKS.filter((pack) => named.includes(pack.id))
-    : BUILTIN_PACKS;
-  const presetPack = BUILTIN_PACKS.find((pack) => pack.id === raw.preset);
-  const packs = presetPack
-    ? [
-        { ...presetPack, source: "world" as const },
-        ...offered.filter((pack) => pack.id !== presetPack.id),
-      ]
-    : offered;
-  const policy = {
-    ...(presetPack ? { preset: presetPack.id } : {}),
-    plus: list(raw.plus),
-    requires: list(raw.requires),
-  };
+  const resolved = resolveWorldPluginSelection(
+    readYaml("worlds", worldId, "world.yaml").plugins,
+    BUILTIN_PACKS,
+  );
   return {
     worldId,
-    packs,
-    policy,
-    ...(presetPack ? { selectedPackId: presetPack.id } : {}),
+    ...resolved,
     defaultPluginIds: [
-      ...new Set([...(presetPack?.requested ?? []), ...policy.plus]),
+      ...new Set(resolved.requests.map((ref) => ref.pluginId)),
     ],
-    missing: [],
   };
 }
 

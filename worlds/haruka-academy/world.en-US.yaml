@@ -1,16 +1,14 @@
 # en-US text for world.yaml. Only translated text; structure and ids come from world.yaml.
 name: Harukaze Academy · Spring Mint
 summary: Transfer to a private high school by the sea. With twenty-one days until the school festival, choose a club, keep your promises, and answer the feelings left unspoken.
-pluginPolicy:
-  pitch:
-    label: Campus Romance · Visual Novel
-    description: A full-screen stage with character portraits and day and night
-      backdrops, several replies to choose from, and affection, heart routes,
-      promises, rumors and festival prep that shift as you talk.
-    reason:
-      Over the twenty-one-day festival countdown, every promise you keep or
-      break and every rumor stays on the panels, and the five heart routes move
-      forward only on things that actually happen.
+pluginPitch:
+  label: Campus Romance · Visual Novel
+  description: A full-screen stage with character portraits and day and night
+    backdrops, several replies to choose from, and affection, heart routes,
+    promises, rumors and festival prep that shift as you talk.
+  reason: Over the twenty-one-day festival countdown, every promise you keep or
+    break and every rumor stays on the panels, and the five heart routes move
+    forward only on things that actually happen.
 characterSchema:
   attributes:
     - id: persona

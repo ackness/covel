@@ -11,7 +11,8 @@ import { pluginManifestSchema } from "./plugin-manifest.js";
 import {
   worldManifestSchema,
   worldDimensionsSchema,
-  worldPluginPolicySchema,
+  worldPluginsSchema,
+  pluginPitchSchema,
 } from "./world.js";
 import {
   dimensionIdSchema,
@@ -26,12 +27,12 @@ export interface ManifestValidationResult<T = unknown> {
   readonly errors?: readonly ManifestValidationError[];
   /**
    * Unknown fields left out by tolerant world-package loading: top-level
-   * ones, and those inside `pluginPolicy` (`pluginPolicy.presetId`).
+   * ones.
    */
   readonly ignoredFields?: readonly string[];
   /**
    * Problems of a section that tolerant loading left out because it does not
-   * validate (`pluginPolicy`): the world loads without it.
+   * validate: the world loads without it.
    */
   readonly droppedSections?: readonly ManifestValidationError[];
 }
@@ -81,11 +82,9 @@ export function validatePluginManifest(
 /**
  * Validate a world.yaml manifest object.
  *
- * `ignoreUnknownRootFields` is how a world package is loaded: an unknown
- * top-level field, or an unknown field inside `pluginPolicy`, is left out
- * and listed in `ignoredFields`; a `pluginPolicy` that still does not
- * validate is left out and its problems listed in `droppedSections`. The
- * world then loads with the plugins every session has.
+ * Tolerant player loading omits unknown root fields and invalid optional
+ * selection/presentation sections with diagnostics. Strict author validation
+ * rejects them. The rest of the world remains usable.
  */
 export function validateWorldManifest(
   data: unknown,
@@ -97,29 +96,19 @@ export function validateWorldManifest(
     (key) => !Object.hasOwn(worldManifestSchema.shape, key),
   );
   const droppedSections: ManifestValidationError[] = [];
-  let manifest = data;
-  if (data.pluginPolicy !== undefined) {
-    const { pluginPolicy: written, ...rest } = data;
-    const known = isRecord(written)
-      ? Object.fromEntries(
-          Object.entries(written).filter(([key]) => {
-            if (Object.hasOwn(worldPluginPolicySchema.shape, key)) return true;
-            ignoredFields.push(`pluginPolicy.${key}`);
-            return false;
-          }),
-        )
-      : written;
-    const policy = worldPluginPolicySchema.safeParse(known);
-    if (policy.success) manifest = { ...rest, pluginPolicy: known };
-    else {
-      manifest = rest;
+  const manifest = { ...data };
+  for (const [key, schema] of [
+    ["plugins", worldPluginsSchema],
+    ["pluginPitch", pluginPitchSchema],
+  ] as const) {
+    if (data[key] === undefined) continue;
+    const section = schema.safeParse(data[key]);
+    if (!section.success) {
+      delete manifest[key];
       droppedSections.push(
-        ...formatZodErrors(policy.error).map((issue) => ({
+        ...formatZodErrors(section.error).map((issue) => ({
           ...issue,
-          path:
-            issue.path === "(root)"
-              ? "pluginPolicy"
-              : `pluginPolicy.${issue.path}`,
+          path: issue.path === "(root)" ? key : `${key}.${issue.path}`,
         })),
       );
     }

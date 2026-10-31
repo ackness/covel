@@ -1,3 +1,4 @@
+import { worldManifestSchema } from "@covel/shared";
 import {
   access,
   mkdir,
@@ -529,7 +530,7 @@ describe("createWorld", () => {
         { id: "courier", name: "Courier", type: "npc" },
       ]);
       expect(result.manifest).toMatchObject({
-        pluginPolicy: { plus: ["character-blueprint"] },
+        plugins: ["plugin:character-blueprint"],
       });
 
       // One character file; no file of the plugin's and no descriptor.
@@ -1184,10 +1185,14 @@ contractData:
       path.join(tmp, "test-world", "data/lorebook.yaml"),
       "utf8",
     );
-    expect(manifest).toContain("preset: dialogue-mode");
+    expect(manifest).not.toContain("pluginPolicy");
+    expect(worldManifestSchema.parse(parseYaml(manifest)).plugins).toContain(
+      "pack:dialogue-mode",
+    );
+    expect(manifest).toContain("pack:dialogue-mode");
     expect(manifest).toContain("defaultViewMode: stage");
     expect(manifest).not.toContain("memoryBlocks:");
-    expect(manifest).toMatch(/plus:[\s\S]*- memory/);
+    expect(manifest).toMatch(/plugin:memory/);
     expect(descriptor).toContain("to: contract:memory.blocks@1");
     expect(descriptor).not.toContain("schemaVersion:");
     expect(
@@ -1217,7 +1222,7 @@ describe("createWorld plugin pack", () => {
       llm: new FixedLlm(
         `===WORLD_YAML===\n${WORLD_YAML.replace(
           "tags: [test]",
-          "tags: [test]\npluginPolicy:\n  preset: traditional-story",
+          "tags: [test]\nplugins:\n  - pack:traditional-story",
         )}defaultViewMode: stage\n===WORLD_MD===\n${WORLD_LORE}\n===END===`,
       ),
       concept: "Clockwork city",
@@ -1230,7 +1235,7 @@ describe("createWorld plugin pack", () => {
     const stage = await generate({ pack: "dialogue-mode" });
     if (!stage.success) throw new Error(stage.errors.join("; "));
     expect(stage.manifest).toMatchObject({
-      pluginPolicy: { preset: "dialogue-mode" },
+      plugins: ["pack:dialogue-mode"],
       defaultViewMode: "stage",
     });
 
@@ -1238,15 +1243,13 @@ describe("createWorld plugin pack", () => {
     // leaves the world without one.
     const plain = await generate({ pack: "tea-house" });
     if (!plain.success) throw new Error(plain.errors.join("; "));
-    expect(plain.manifest.pluginPolicy).toMatchObject({
-      preset: "tea-house",
-    });
+    expect(plain.manifest.plugins).toContain("pack:tea-house");
     expect(plain.manifest).not.toHaveProperty("defaultViewMode");
 
     // Without a pack the world names none.
     const none = await generate({ content: [] });
     if (!none.success) throw new Error(none.errors.join("; "));
-    expect(none.manifest).not.toHaveProperty("pluginPolicy");
+    expect(none.manifest.plugins).toEqual([]);
     expect(none.manifest).not.toHaveProperty("defaultViewMode");
   });
 
@@ -1307,7 +1310,7 @@ describe("buildWorldPrompt", () => {
     );
     // The pack as the catalogue describes it, in the world's language.
     expect(prompt).toContain(
-      "Plugin pack: 对话模式 (preset dialogue-mode). 对话优先叙事。",
+      "Plugin pack: 对话模式 (pack:dialogue-mode). 对话优先叙事。",
     );
     expect(prompt).toContain("CREATE: 3-5 interconnected main character");
     expect(prompt).toContain("OMIT: 4-8 focused setting entries");

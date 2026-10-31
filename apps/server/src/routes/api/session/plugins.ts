@@ -1,3 +1,4 @@
+import { resolveWorldPluginSelection } from "@covel/shared";
 import {
   getPluginTrustInfo,
   type PluginRegistry,
@@ -23,7 +24,7 @@ import { hasServerCodeGrant } from "../approval-verdict.js";
 
 /**
  * A session's stored plugin selection. `requiredContracts` is the world's
- * `pluginPolicy.requires` as of session creation, kept with the session so
+ * explicit contract references as of session creation, kept with the session so
  * every later resolution treats the world as a requirer without reloading it.
  */
 export interface SessionPluginSelection {
@@ -166,18 +167,14 @@ export function sessionPluginIds(
 ): string[] {
   return runnablePluginIds(session.activePlugins ?? [], registry);
 }
-/** A world record's `pluginPolicy.requires`: contracts it needs a provider for. */
+/** Explicit world contracts, frozen into the session on creation. */
 export function worldRequiredContracts(
   world: { metadata?: Readonly<Record<string, unknown>> } | null | undefined,
 ): string[] {
-  const policy = world?.metadata?.pluginPolicy;
-  const requires =
-    policy && typeof policy === "object" && !Array.isArray(policy)
-      ? (policy as Record<string, unknown>).requires
-      : undefined;
-  return Array.isArray(requires)
-    ? requires.filter((item): item is string => typeof item === "string")
-    : [];
+  return [
+    ...resolveWorldPluginSelection(world?.metadata?.plugins, []).selection
+      .requiredContracts,
+  ];
 }
 
 export function unmetRequirementMessage(item: UnmetWorldRequirement): string {

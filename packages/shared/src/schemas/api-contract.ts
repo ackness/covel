@@ -348,23 +348,32 @@ export const worldPluginPlanSchema: z.ZodType<WorldPluginPlan> = z
   .object({
     worldId: z.string().min(1),
     packs: z.array(pluginPackSchema),
-    policy: z
+    selection: z
       .object({
-        preset: z.string().optional(),
-        plus: z.array(z.string()),
-        requires: z.array(z.string()),
+        requestedPluginIds: z.array(z.string()),
+        requiredContracts: z.array(z.string()),
       })
       .strict(),
     selectedPackId: z.string().optional(),
     defaultPluginIds: z.array(z.string()),
-    missing: z.array(
-      z
-        .object({
-          pluginId: z.string().min(1),
-          packId: z.string().min(1).optional(),
-        })
-        .strict(),
-    ),
+    diagnostics: z
+      .array(
+        z
+          .object({
+            code: z.enum([
+              "invalid-reference",
+              "redundant-reference",
+              "unknown-pack",
+              "missing-plugin",
+            ]),
+            path: z.string().max(512),
+            reference: z.string().max(256).optional(),
+            pluginId: z.string().max(256).optional(),
+            packId: z.string().max(256).optional(),
+          })
+          .strict(),
+      )
+      .max(256),
   })
   .strict();
 

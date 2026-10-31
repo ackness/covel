@@ -1573,11 +1573,10 @@ In the table below, "hosted deployment" means `DEPLOYMENT_TIER` is `demo` or `co
 Notes on each endpoint:
 
 - `GET /api/plugins`: the data comes from a snapshot of the registry. Plugins that failed to load are also returned, as an item with `status: "error"`. In that `error` text the server's absolute plugin-directory path is written as `<plugin>` (for example `<plugin>/PLUGIN.md: …`); the full original message goes only to the server log.
-- `GET /api/worlds/:id/plugin-plan`: the server resolves the world's plugin policy, the packs, and the default selection.
-  - `policy` is `{ preset?, plus, requires }`. `packs` lists the `preset` pack first; when the world writes a `pitch`, that pack's `label`, `description` and `reason` are the world's words and its `source` is `"world"`. Then come the packs in the world's `pluginPolicy.packs`, or every built-in pack when it is not written. `selectedPackId` is `preset`.
-  - `defaultPluginIds` is the `preset` pack's `requested` plus `plus`.
-  - Each `requested`, `plus` and `defaultPluginIds` list contains only installed plugins.
-  - A plugin the world requests but the host does not have is listed in `missing: [{ pluginId, packId? }]`.
+- `GET /api/worlds/:id/plugin-plan`: returns `selection: { requestedPluginIds, requiredContracts }`, all `packs` in world preference order, optional `selectedPackId`, `defaultPluginIds` and up to 256 `diagnostics`.
+  - Only the first pack reference selects the initial pack. An unknown first pack reports `unknown-pack` and selects none. Alternatives do not expand into the defaults.
+  - Independent plugin requests and the selected pack's requests form `defaultPluginIds`. Every submitted ID is installed; `diagnostics` reports `missing-plugin` with `pluginId`, `path` and optional `packId`. Other codes are `invalid-reference`, `redundant-reference` and `unknown-pack`, with optional `reference`.
+  - The initial pack uses the world's public name, summary and tags, with independent `pluginPitch` overrides. Derived presentation is never persisted; see [plugin selection](./world-data.md#plugin-selection-pluginpolicy).
 - `GET /api/ui-specs`: with `sessionId`, it returns only the plugins active in that session. Without it, it returns all plugins. See [below](#get-apiui-specs) for details.
 - `GET /api/llm-config`: if parsing `llm.toml` fails, it falls back to the default config and adds an `error` field.
 - `POST /api/llm-config/reload`: applies the change in place to the running gateway, and returns `{ ok, slots, error? }`.
@@ -1823,7 +1822,7 @@ What the summary has and does not have:
 - Optional top-level `updateAvailable` compares package files with the digest saved when the record was imported: `true` means different, `false` means identical. It is omitted when there is no package, no saved digest, or the package cannot currently be read. Each read checks again without writing the world record or querying GitHub.
 - `metadata` keeps only these keys: `source`, `storage`, `packageManaged`, `generated`, `cover`, `accentColor`, `supportedLocales`, `packageInfo`, `defaultViewMode`, `pluginSettings`, plus `name` / `description` inside `localizedText`.
 - The setting text for each language, `localizedText.lore`, is not in the summary.
-- For the other keys (`dimensions`, `embeddedCharacters`, `embeddedLorebook`, `characterSchema`, `pluginPolicy`, `worldData`, and so on), read the full record with `GET /api/worlds/:id`.
+- For the other keys (`dimensions`, `embeddedCharacters`, `embeddedLorebook`, `characterSchema`, `plugins`, `worldData`, and so on), read the full record with `GET /api/worlds/:id`.
 - For the result of resolving a world's plugin policy, see `GET /api/worlds/:id/plugin-plan`.
 
 The list for the four built-in worlds is about 3.9 KB.
@@ -1881,10 +1880,11 @@ Reads the **full record** of one world: `lore`, `dimensions`, and all of `metada
   "metadata": {
     "source": "file",
     "dimensions": {},
-    "pluginPolicy": {
-      "preset": "traditional-story",
-      "plus": ["character-blueprint", "story-events"]
-    },
+    "plugins": [
+      "pack:traditional-story",
+      "plugin:character-blueprint",
+      "plugin:story-events"
+    ],
     "worldData": {
       "schemaVersion": 1,
       "sources": [
@@ -2458,8 +2458,8 @@ Creates a new game session.
 
 | Field                         | Effect                                                                                                                                                                                      |
 | ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `metadata.pluginPolicy`       | The plugin set policy for the setup screen. Its fields are `preset` / `plus` / `pitch` / `packs` / `requires`; see [plugin selection](./world-data.md#plugin-selection-pluginpolicy)        |
-| `pluginPolicy.requires`       | Contract IDs the world requires. See the notes below                                                                                                                                        |
+| `metadata.plugins`            | Ordered prefixed pack/plugin/contract references; see [plugin selection](./world-data.md#plugin-selection-pluginpolicy)                                                                     |
+| `metadata.pluginPitch`        | Optional authored label/description/reason overrides; derived values are not stored                                                                                                         |
 | `metadata.packageInfo`        | The world package's `version` and [author information](./plugins.md#author-information) (`author`, `license`, `homepage`). Used only to show on the world card. It does not go into prompts |
 | `metadata.characterSchema`    | When the session is created, the character schema (`types` / `attributes`) is written. The kernel manages its version                                                                       |
 | `metadata.embeddedCharacters` | When there are no file-based worldData, generic `{id,name,aliases?,type,description?,fields?}` records are imported into the session's `characters`                                         |
@@ -2467,8 +2467,8 @@ Creates a new game session.
 
 Notes:
 
-- `metadata.pluginPolicy`: the resolver combines the contract dependencies the plugin packages declare with their authorization state to work out the active set. It does not force core plugins to stay on.
-- `pluginPolicy.requires`:
+- `metadata.plugins`: the resolver combines the contract dependencies the plugin packages declare with their authorization state to work out the active set. It does not force core plugins to stay on.
+- `contract:` references:
   - When the session is created, the world takes part in resolution as a dependent. If a contract has only one provider, that provider is added automatically.
   - These requirements are saved with the session in `metadata.pluginSelection.requiredContracts`. Later starts, stops, and reloads use this list and do not read the world again.
   - When a requirement is not met, the session is still created: no provider is installed, there are several providers and the request does not pick one, the player turned a provider off on purpose, or the provider is a community plugin that is still waiting for approval. The response lists each one in `unmetRequirements` as `{ contract, code, candidates? }`, where `code` is `missing-provider`, `ambiguous-provider`, `excluded`, or `approval-required`. The first two also write a warning to the server log.
@@ -3779,7 +3779,7 @@ Other rules:
 Returns the list of what can go into a world, for the world creation screen and for development agents. It reflects the plugins the server has loaded right now.
 
 - All of the content comes from the `contributes.data.*.authoring` declarations in plugin manifests. There is no hard-coded plugin list.
-- `packs` lists every gameplay pack of the server's pack catalogue (`packs/builtin.yaml`): `id`, `label`, `description`, `tags`, `requested`, `recommended`, and `defaultViewMode` when the pack has one. A world writes one of these `id`s in `pluginPolicy.preset`; AI world creation offers them as choices.
+- `packs` lists every gameplay pack of the server's pack catalogue (`packs/builtin.yaml`): `id`, `label`, `description`, `tags`, `requested`, `recommended`, and `defaultViewMode` when the pack has one. A world writes a `pack:<id>` reference in `plugins`; AI world creation offers them as choices.
 - `pnpm describe:authoring` prints the same data.
 - An unreadable or non-JSON example, or a missing, invalid, or conflicting schema for generatable content, skips only that contract. The optional `diagnostics` array returns `{ pluginId, namespace, message }` for each problem, also logged by the server; other contracts and plugins remain available.
 - The `locale` query parameter sets the language of display text such as `title`. If it is omitted, the server's default language is used.
@@ -3870,7 +3870,7 @@ Returns the list of what can go into a world, for the world creation screen and 
 | `contracts`    | Each data contract that a plugin receives: the receiving plugin, the title, writing hints, the entries that can go directly into `world.data.yaml`, and an example |
 | `generate`     | Appears only when the in-app generator can produce this content: `offer` lists it as an option, and `default` lists it and selects it by default                   |
 | `plugins`      | The plugin catalog: ID, name, description, the contracts it provides and requires, and the settings that can be preset with `pluginSettings`                       |
-| `packs`        | The gameplay pack catalogue: the packs a world can write in `pluginPolicy.preset`, and `defaultViewMode` when the pack has one                                     |
+| `packs`        | The gameplay pack catalogue: the packs a world can write in `plugins`, and `defaultViewMode` when the pack has one                                                 |
 
 #### `GET /api/framework/capabilities`
 
@@ -5536,12 +5536,12 @@ If `idleTimeoutMs` is out of range, the server returns `400`. The app's own sett
 
 Fields of `brief`:
 
-| Field                    | Type     | Description                                                                                                                                                                                                                                                                                                                                   |
-| ------------------------ | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `pack`                   | string   | The gameplay pack the world is made for: an ID of the server's pack catalogue (`packs/builtin.yaml`); the choices are `packs` in [`GET /api/framework/authoring`](#get-apiframeworkauthoring). It is written into the world's `pluginPolicy.preset`; when the pack has `defaultViewMode`, the world gets it too. Leave it out to name no pack |
-| `content`                | string[] | Kernel content. Allowed values: `characters`, `lorebook`, `rules`, `opening-kit`                                                                                                                                                                                                                                                              |
-| `contracts`              | string[] | Plugin content. Contains data contract IDs                                                                                                                                                                                                                                                                                                    |
-| `additionalInstructions` | string   | Extra requirements for the world package (up to 2000 characters), such as character relationships, taboos, pacing, or content to avoid                                                                                                                                                                                                        |
+| Field                    | Type     | Description                                                                                                                                                                                                                                                                                                                                                |
+| ------------------------ | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `pack`                   | string   | The gameplay pack the world is made for: an ID of the server's pack catalogue (`packs/builtin.yaml`); the choices are `packs` in [`GET /api/framework/authoring`](#get-apiframeworkauthoring). It is written as a `pack:<id>` reference in the world's `plugins`; when the pack has `defaultViewMode`, the world gets it too. Leave it out to name no pack |
+| `content`                | string[] | Kernel content. Allowed values: `characters`, `lorebook`, `rules`, `opening-kit`                                                                                                                                                                                                                                                                           |
+| `contracts`              | string[] | Plugin content. Contains data contract IDs                                                                                                                                                                                                                                                                                                                 |
+| `additionalInstructions` | string   | Extra requirements for the world package (up to 2000 characters), such as character relationships, taboos, pacing, or content to avoid                                                                                                                                                                                                                     |
 
 A `pack` that is not in the catalogue returns `400`. The allowed values for `contracts` come from the contracts marked with `generate` in `GET /api/framework/authoring`. Any other value returns `400`. Contracts that fail preparation are absent from the choices; generation and revision continue with the remaining content, and `done.warnings` identifies the skipped plugin, namespace, and contract.
 

@@ -5,7 +5,7 @@ import { WORLD_LOCALIZED_TEXT_KEY } from "@covel/plugin-handlers-utils";
  * The `metadata` keys a world summary keeps: what the world list, a world
  * card, the session-prep header and the plugin-settings pane read. Every
  * other key (dimensions, embedded characters and lorebook, character schema,
- * world data, plugin policy) belongs to the full record.
+ * world data) belongs to the full record.
  */
 export const WORLD_SUMMARY_METADATA_KEYS = [
   "source",
@@ -18,6 +18,8 @@ export const WORLD_SUMMARY_METADATA_KEYS = [
   "packageInfo",
   "defaultViewMode",
   "pluginSettings",
+  "plugins",
+  "pluginPitch",
 ] as const;
 
 /** Translated texts a summary keeps; the lore translations stay out. */

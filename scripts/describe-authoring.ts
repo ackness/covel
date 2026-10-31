@@ -132,7 +132,7 @@ function render(surface: AuthoringSurface): string {
   lines.push(
     "## Plugin packs",
     "",
-    "A world names one in `pluginPolicy.preset`: it seeds the plugins a new session starts with, and `pluginPolicy.plus` adds the world's own.",
+    "A world lists `pack:<id>` in `plugins` to select its initial pack, and independent `plugin:<id>` references for additional requests.",
     "",
   );
   for (const pack of surface.packs)

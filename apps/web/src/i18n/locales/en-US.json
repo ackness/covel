@@ -17,6 +17,8 @@
     "primary": "Primary"
   },
   "session": {
+    "unavailableWorldPacks": "The world recommends an unavailable pack. Choose another pack or start with the current selection.",
+    "worldSelectionTags": "World tags: {{tags}}",
     "operationFailedNotice": "{{count}} actions from this turn did not take effect.",
     "operationFailedNotice_one": "{{count}} action from this turn did not take effect.",
     "operationFailedNotice_other": "{{count}} actions from this turn did not take effect.",

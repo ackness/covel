@@ -30,7 +30,7 @@ Rules:
 - A normal install does not overwrite anything. If an ID conflicts with an existing folder or a world in the database, the install is refused.
 - Only the world folders you selected are installed. No scripts are run, and no plugin is authorized for you.
 - Plugins under the same link are listed together with the world, and you can install them in one confirmation. The installer does not tick plugins for you, and it does not look for the plugins a world needs somewhere else. The exception is when the repository lists them in a [collection manifest](../ship/collections.md).
-- A world author should state the plugins it needs in `pluginPolicy`. Before a game starts, players check the content, the plugins needed, and their permissions.
+- A world author should state the plugins it needs in `plugins`. Before a game starts, players check the content, the plugins needed, and their permissions.
 
 **Download and safety limits** are the same as for plugin installs. See [Plugin install](./plugin-installation.md) for details:
 

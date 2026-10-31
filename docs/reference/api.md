@@ -1573,11 +1573,10 @@ fork 和社区插件的授权：
 各端点的补充说明：
 
 - `GET /api/plugins`：数据来自 registry 快照。加载失败的插件也会返回，是一条 `status: "error"` 的 item。它的 `error` 文字里，插件目录的服务器绝对路径写成 `<plugin>`（例如 `<plugin>/PLUGIN.md: …`）；完整原文只写进服务器日志。
-- `GET /api/worlds/:id/plugin-plan`：服务端解析世界的插件策略、玩法包和默认选择。
-  - `policy` 是 `{ preset?, plus, requires }`。`packs` 先列 `preset` 的玩法包，世界写了 `pitch` 时它的 `label`、`description`、`reason` 换成世界的说法，`source` 是 `"world"`；再列世界 `pluginPolicy.packs` 里的玩法包，没写时列全部内置玩法包。`selectedPackId` 是 `preset`。
-  - `defaultPluginIds` 是 `preset` 玩法包的 `requested` 加上 `plus`。
-  - 各个 `requested`、`plus` 和 `defaultPluginIds` 只含已安装的插件。
-  - 世界请求了、但宿主没装的插件列在 `missing: [{ pluginId, packId? }]`。
+- `GET /api/worlds/:id/plugin-plan`：返回 `selection: { requestedPluginIds, requiredContracts }`、按世界偏好排序的全部 `packs`、可选 `selectedPackId`、`defaultPluginIds` 和最多 256 条 `diagnostics`。
+  - 只有第一个玩法包引用决定初始包。未知首包报告 `unknown-pack`，不自动选别的包；备选包不展开为默认请求。
+  - 独立插件请求与选中包的请求构成 `defaultPluginIds`。提交的 ID 都已安装；`missing-plugin` 诊断带 `pluginId`、`path` 和可选 `packId`。其他诊断码为 `invalid-reference`、`redundant-reference`、`unknown-pack`，可带 `reference`。
+  - 初始包使用公开世界名称、简介与标签，`pluginPitch` 逐字段覆盖；派生介绍不保存，见[插件选择](./world-data.md#插件选择pluginpolicy)。
 - `GET /api/ui-specs`：带 `sessionId` 时只返回该会话已激活的插件；不带则返回全部插件。详见[下文](#get-apiui-specs)。
 - `GET /api/llm-config`：`llm.toml` 解析失败时回退到默认配置，并附带 `error` 字段。
 - `POST /api/llm-config/reload`：原地应用到运行中的 gateway，返回 `{ ok, slots, error? }`。
@@ -1823,7 +1822,7 @@ SSE。先发一个 `ready` 事件，之后每 15 秒发一行注释保持连接�
 - 顶层可选的 `updateAvailable` 比较包文件与记录导入时保存的摘要：不同为 `true`，相同为 `false`。没有包、没有已保存摘要，或包当前不可读时省略。每次读取重新检查，不写世界记录，也不查询 GitHub。
 - `metadata` 只保留这些键：`source`、`storage`、`packageManaged`、`generated`、`cover`、`accentColor`、`supportedLocales`、`packageInfo`、`defaultViewMode`、`pluginSettings`，以及 `localizedText` 里的 `name` / `description`。
 - 各语言的设定正文 `localizedText.lore` 不在摘要里。
-- 其余键（`dimensions`、`embeddedCharacters`、`embeddedLorebook`、`characterSchema`、`pluginPolicy`、`worldData` 等）要用 `GET /api/worlds/:id` 读完整记录。
+- 其余键（`dimensions`、`embeddedCharacters`、`embeddedLorebook`、`characterSchema`、`plugins`、`worldData` 等）要用 `GET /api/worlds/:id` 读完整记录。
 - 世界的插件策略解析结果见 `GET /api/worlds/:id/plugin-plan`。
 
 内置四个世界的列表约 3.9 KB。
@@ -1881,10 +1880,11 @@ SSE。先发一个 `ready` 事件，之后每 15 秒发一行注释保持连接�
   "metadata": {
     "source": "file",
     "dimensions": {},
-    "pluginPolicy": {
-      "preset": "traditional-story",
-      "plus": ["character-blueprint", "story-events"]
-    },
+    "plugins": [
+      "pack:traditional-story",
+      "plugin:character-blueprint",
+      "plugin:story-events"
+    ],
     "worldData": {
       "schemaVersion": 1,
       "sources": [
@@ -2456,19 +2456,19 @@ SSE。先发一个 `ready` 事件，之后每 15 秒发一行注释保持连接�
 
 **世界包里影响创建的字段:**
 
-| 字段                          | 作用                                                                                                                                |
-| ----------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
-| `metadata.pluginPolicy`       | 准备页的插件组合策略，字段为 `preset` / `plus` / `pitch` / `packs` / `requires`，见[插件选择](./world-data.md#插件选择pluginpolicy) |
-| `pluginPolicy.requires`       | 世界必需的契约 ID。见下方说明                                                                                                       |
-| `metadata.packageInfo`        | 世界包的 `version` 和[作者信息](./plugins.md#作者信息)（`author`、`license`、`homepage`）。只用于世界卡片展示，不进入提示词         |
-| `metadata.characterSchema`    | 创建会话时写入角色 schema（`types` / `attributes`），版本由内核管理                                                                 |
-| `metadata.embeddedCharacters` | 没有文件型 worldData 时，把通用的 `{id,name,aliases?,type,description?,fields?}` 记录导入会话的 `characters`                        |
-| `metadata.embeddedLorebook`   | 没有文件型 worldData 时，导入归世界所有的会话 lorebook                                                                              |
+| 字段                          | 作用                                                                                                                        |
+| ----------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| `metadata.plugins`            | 有序的 pack/plugin/contract 引用，见[插件选择](./world-data.md#插件选择pluginpolicy)                                        |
+| `metadata.pluginPitch`        | 可选的 label/description/reason 覆盖；派生值不保存                                                                          |
+| `metadata.packageInfo`        | 世界包的 `version` 和[作者信息](./plugins.md#作者信息)（`author`、`license`、`homepage`）。只用于世界卡片展示，不进入提示词 |
+| `metadata.characterSchema`    | 创建会话时写入角色 schema（`types` / `attributes`），版本由内核管理                                                         |
+| `metadata.embeddedCharacters` | 没有文件型 worldData 时，把通用的 `{id,name,aliases?,type,description?,fields?}` 记录导入会话的 `characters`                |
+| `metadata.embeddedLorebook`   | 没有文件型 worldData 时，导入归世界所有的会话 lorebook                                                                      |
 
 补充说明：
 
-- `metadata.pluginPolicy`：解析器结合插件包声明的契约依赖和授权状态，算出激活集。它不强制锁定 core 插件。
-- `pluginPolicy.requires`：
+- `metadata.plugins`：解析器结合插件包声明的契约依赖和授权状态，算出激活集。它不强制锁定 core 插件。
+- `contract:` 引用：
   - 创建时，世界作为一个依赖方参与解析。某个契约只有一个提供者时，它会被自动加入。
   - 这些需求随会话保存在 `metadata.pluginSelection.requiredContracts`。之后的启停与重载沿用它，不再读取世界。
   - 有需求没满足时会话照常创建：没有已安装的提供者，有多个提供者而请求里没有指定，玩家显式停用了提供者，或提供者是还在等授权的社区插件。响应在 `unmetRequirements` 里列出每一项 `{ contract, code, candidates? }`，`code` 是 `missing-provider`、`ambiguous-provider`、`excluded` 或 `approval-required`。前两种还会在服务端日志里记一条 warning。
@@ -3779,7 +3779,7 @@ runtime 报告失败时，它的原始错误保留在 `result.runtimeResults` �
 返回“写一个世界可以填哪些内容”的清单，供世界创建界面和开发 Agent 使用。它反映服务端当前已加载的插件。
 
 - 内容全部来自插件清单的 `contributes.data.*.authoring` 声明，没有写死的插件列表。
-- `packs` 列出服务端玩法包目录（`packs/builtin.yaml`）里的全部玩法包：`id`、`label`、`description`、`tags`、`requested`、`recommended`，以及包写了的 `defaultViewMode`。世界在 `pluginPolicy.preset` 里写其中一个 `id`；AI 创建世界把它们作为选项。
+- `packs` 列出服务端玩法包目录（`packs/builtin.yaml`）里的全部玩法包：`id`、`label`、`description`、`tags`、`requested`、`recommended`，以及包写了的 `defaultViewMode`。世界在 `plugins` 中写 `pack:<id>`；AI 创建世界把它们作为选项。
 - `pnpm describe:authoring` 输出的是同一份数据。
 - 示例无法读取、不是 JSON，或可生成契约的 schema 缺失、无效或冲突时，只略过对应契约。可选的 `diagnostics` 数组逐项返回 `{ pluginId, namespace, message }`，服务端也记录警告；其他契约和插件仍可用。
 - 查询参数 `locale` 决定 `title` 等展示文本的语言，省略时用服务端默认语言。
@@ -3870,7 +3870,7 @@ runtime 报告失败时，它的原始错误保留在 `result.runtimeResults` �
 | `contracts`    | 每个有插件接收的数据契约：接收插件、标题、写作提示、可直接写进 `world.data.yaml` 的条目、示例 |
 | `generate`     | 只在应用内生成器能生成这份内容时出现：`offer` 表示列为可选项，`default` 表示列出并默认选中    |
 | `plugins`      | 插件目录：ID、名称、简介、提供和依赖的契约、可以用 `pluginSettings` 预置的设置项              |
-| `packs`        | 玩法包目录：世界可以在 `pluginPolicy.preset` 里写的玩法包，以及包写了的 `defaultViewMode`     |
+| `packs`        | 玩法包目录：世界可以在 `plugins` 里写的玩法包，以及包写了的 `defaultViewMode`                 |
 
 #### `GET /api/framework/capabilities`
 
@@ -5224,8 +5224,8 @@ id: example-epoch:2
 - 插件集合由创建会话时的 `plugins` 数组决定。`start_session` 只负责启用这份已保存的集合。
 - 空集合不会变成“启用全部已加载的插件”。那样会把玩家从没选过的社区插件和互相冲突的叙事引擎一起拉进会话，并一直留到会话结束。
 - Web 的准备页先读 `GET /api/worlds/:id/plugin-plan` 得到服务端算好的默认集合，再把玩家的最终选择传给创建接口。
-- `plugin-plan.defaultPluginIds` 的计算规则与会话相同：`requires`、`conflicts`，以及用可信内置核心插件替换的规则。准备页照这个结果显示，不会把已经被替换掉的核心插件重新锁定。
-- 创建会话的接口不再读世界的插件策略。它只补上内置核心插件和 `requires` 关系，并处理 `conflicts`。
+- `plugin-plan.defaultPluginIds` 是初始包展开与世界独立请求。准备页再经解析器处理依赖、授权、冲突与玩家排除，不会锁定已被替换的 core。
+- 创建会话的接口不再读世界的插件策略。它处理 core 默认、插件依赖、服务端读取的世界契约与冲突。
 
 ##### `submit_actions`
 
@@ -5534,12 +5534,12 @@ interface SseEnvelope {
 
 `brief` 的字段：
 
-| 字段                     | 类型     | 说明                                                                                                                                                                                                                                                           |
-| ------------------------ | -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `pack`                   | string   | 世界为哪个玩法包而做：服务端玩法包目录（`packs/builtin.yaml`）里的 ID，可选值见 [`GET /api/framework/authoring`](#get-apiframeworkauthoring) 的 `packs`。它写进世界的 `pluginPolicy.preset`；玩法包写了 `defaultViewMode` 时，世界也带上它。不写就不指定玩法包 |
-| `content`                | string[] | 内核内容：可选 `characters`、`lorebook`、`rules`、`opening-kit`                                                                                                                                                                                                |
-| `contracts`              | string[] | 插件内容，写数据契约 ID                                                                                                                                                                                                                                        |
-| `additionalInstructions` | string   | 对世界包的补充要求（最多 2000 字符），如角色关系、禁忌、节奏或要避开的内容                                                                                                                                                                                     |
+| 字段                     | 类型     | 说明                                                                                                                                                                                                                                                                  |
+| ------------------------ | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `pack`                   | string   | 世界为哪个玩法包而做：服务端玩法包目录（`packs/builtin.yaml`）里的 ID，可选值见 [`GET /api/framework/authoring`](#get-apiframeworkauthoring) 的 `packs`。它以 `pack:<id>` 引用写进世界的 `plugins`；玩法包写了 `defaultViewMode` 时，世界也带上它。不写就不指定玩法包 |
+| `content`                | string[] | 内核内容：可选 `characters`、`lorebook`、`rules`、`opening-kit`                                                                                                                                                                                                       |
+| `contracts`              | string[] | 插件内容，写数据契约 ID                                                                                                                                                                                                                                               |
+| `additionalInstructions` | string   | 对世界包的补充要求（最多 2000 字符），如角色关系、禁忌、节奏或要避开的内容                                                                                                                                                                                            |
 
 `pack` 不在目录里返回 `400`。`contracts` 的可选值来自 `GET /api/framework/authoring` 里带 `generate` 的契约，传其他值返回 `400`。准备失败的契约不会出现在可选列表里；生成和修订继续处理其余内容，`done.warnings` 说明略过了哪个插件、namespace 和契约。
 

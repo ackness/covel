@@ -66,7 +66,6 @@ export type {
 export type {
   PluginDataSchemaContract,
   PluginDetail,
-  MissingWorldPlugin,
   PluginLoadError,
   PluginLoadDiagnostics,
   PluginPack,
@@ -79,7 +78,8 @@ export type {
   PluginSummary,
   PluginToolSummary,
   RuntimePluginContract,
-  ResolvedWorldPluginPolicy,
+  WorldPluginSelection,
+  WorldPluginSelectionDiagnostic,
   SessionPlugin,
   SessionPluginsResponse,
   WorldPluginPlan,

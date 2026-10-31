@@ -115,7 +115,8 @@ function manifestOf(record: WorldRecord): Entry {
     summary: record.description,
     defaultLocale: locale,
     ...(record.tags?.length ? { tags: record.tags } : {}),
-    ...keep("pluginPolicy"),
+    ...keep("plugins"),
+    ...keep("pluginPitch"),
     ...keep("pluginSettings"),
     ...keep("characterSchema"),
     ...keep("defaultViewMode"),
@@ -156,12 +157,21 @@ async function manifestOfPackage(
   const {
     worldData: _worldData,
     dimensions: _dimensions,
+    plugins: _plugins,
+    pluginPitch: _pluginPitch,
     ...manifest
   } = validation.data as Entry;
   return {
     // A package that writes no `id` is named by its directory.
     id: record.id,
     ...manifest,
+    // Selection is editable record data, including an author's removal.
+    ...(fromRecord.plugins !== undefined
+      ? { plugins: fromRecord.plugins }
+      : {}),
+    ...(fromRecord.pluginPitch !== undefined
+      ? { pluginPitch: fromRecord.pluginPitch }
+      : {}),
     ...(fromRecord.dimensions ? { dimensions: fromRecord.dimensions } : {}),
   };
 }

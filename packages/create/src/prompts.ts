@@ -58,12 +58,12 @@ export async function buildWorldPrompt(
 /** The plugin pack the world is made for, as the catalogue describes it. */
 function formatPackBrief(pack: PluginPack | undefined, locale: string): string {
   if (!pack)
-    return "Plugin pack: none chosen. Omit pluginPolicy and defaultViewMode.";
+    return "Plugin pack: none chosen. Omit pack references and defaultViewMode.";
   const label = resolveI18nText(pack.label, locale) ?? pack.id;
   const description = pack.description
     ? resolveI18nText(pack.description, locale)
     : undefined;
-  return `Plugin pack: ${label} (preset ${pack.id}).${description ? ` ${description}` : ""} Design the world for this way of playing.`;
+  return `Plugin pack: ${label} (pack:${pack.id}).${description ? ` ${description}` : ""} Design the world for this way of playing.`;
 }
 
 export async function buildWorldLoreRepairPrompt(

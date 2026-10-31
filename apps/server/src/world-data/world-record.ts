@@ -46,7 +46,8 @@ export function worldRecordFromManifest(
     metadata: {
       dimensions:
         dimensions && Object.keys(dimensions).length ? dimensions : undefined,
-      pluginPolicy: manifest.pluginPolicy,
+      plugins: manifest.plugins,
+      pluginPitch: manifest.pluginPitch,
       pluginSettings: manifest.pluginSettings,
       worldDataPath: manifest.worldData,
       characterSchema: manifest.characterSchema,

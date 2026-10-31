@@ -210,7 +210,7 @@ Rules when a picture is missing:
 > [!NOTE]
 > When the world's `data/world.data.yaml` names `media/scenes.registry.json`, the file must exist, or the world fails validation. If the pictures are not ready yet, run `node scripts/emit-scenes.mjs <world ID>` once first. It writes an empty placeholder manifest with no scenes. After you make the pictures, run it again.
 
-**This session needs the plugin that manages scenes turned on.** The built-in one is "Scene Stage" (`scene-stage`). It is included in the "Dialogue Mode" (`dialogue-mode`) pack, and not in "Traditional Story". Change `pluginPolicy.preset` in `world.yaml` to `dialogue-mode`, or add `scene-stage` to `pluginPolicy.plus`. Or, on the session-prep screen, open "Customize plugins and advanced settings" and select it there.
+**This session needs the plugin that manages scenes turned on.** The built-in one is "Scene Stage" (`scene-stage`). It is included in the "Dialogue Mode" (`dialogue-mode`) pack, and not in "Traditional Story". Change `plugins` in `world.yaml` to `dialogue-mode`, or add `scene-stage` to `plugins`. Or, on the session-prep screen, open "Customize plugins and advanced settings" and select it there.
 
 To have players start in stage view as soon as they enter the game, add this line to `world.yaml`:
 

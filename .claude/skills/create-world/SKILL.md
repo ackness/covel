@@ -35,9 +35,10 @@ pnpm describe:authoring
 
 ### 3. 选玩法和内容
 
-- 按玩法选一个内置玩法包写进 `pluginPolicy.preset`：传统叙事 `traditional-story`，对话/校园/群像 `dialogue-mode`，省 token `low-cost`。世界不能自己定义玩法包。
-- 从第 2 步的内容列表里挑与概念相符的。要预置某种内容，接收它的插件不在所选玩法包里时，把它写进 `pluginPolicy.plus`；`kind: core` 的插件不写。
-- 想让准备页用这个世界自己的说法介绍玩法，写 `pluginPolicy.pitch`（`label`、`description`、`reason`）。字段见 `docs/reference/world-data.md` 的“插件选择”。
+- 按玩法选一个内置玩法包写进 `plugins` 的 `pack:<id>` 引用：传统叙事 `traditional-story`，对话/校园/群像 `dialogue-mode`，省 token `low-cost`。世界不能自己定义玩法包。
+- 从第 2 步的内容列表里挑与概念相符的。要预置某种内容，接收它的插件不在所选玩法包里时，把它写进 `plugins` 的 `plugin:<id>` 引用；`kind: core` 的插件不写。
+- 准备页默认使用公开名称、简介和标签介绍玩法，不读取私有设定或调用模型。需要覆盖时才写 `pluginPitch`（`label`、`description`、`reason`），每项独立可省略。字段见 `docs/reference/world-data.md` 的“插件选择”。
+- 第一个 `pack:` 引用决定初始包，后续引用只排列备选；未知首包给提示但不改选其他包。省略 `plugins` 或写 `[]` 都保留通常的 core 默认。用 `contract:name@version` 声明非数据能力请求；缺提供者只减少该功能，不阻止开局。
 - 视觉小说世界再声明 `defaultViewMode: stage`。立绘和场景图是渐进增强，没有也能运行。
 - `world.yaml` 不写 `id`：世界的 ID 就是 `worlds/` 下的文件夹名。`characterSchema.types` 和默认的 `[npc, companion]` 相同时不写。
 - 世界自带封面图时，才在 `world.yaml` 写 `cover: media/<目录>/<文件>`（图片必须存在，校验会查）和 `accentColor`；没有图就两项都不写，界面会用默认背景和按世界 ID 派生的颜色。

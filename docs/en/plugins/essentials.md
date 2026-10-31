@@ -241,6 +241,8 @@ A session may have several `type: player` characters, and the session's seats de
 
 Declare `version`, `schema` and `accepts` for a data namespace in `contributes.data`. Then a world package can import content into it. Adding `authoring` lets world authors and authoring tools know how to write the content. For how to do this, see [advanced · data contracts and world import](./advanced.md#data-contracts-and-world-import) and the [world data reference](../reference/world-data.md).
 
+A world independently requests the receiver with `plugins: [plugin:my-plugin]`, or requests a capability with `contract:my-capability@1`. A missing provider only reduces that content. See [plugin selection](../reference/world-data.md#plugin-selection-pluginpolicy) for pack selection and derived presentation.
+
 If an imported record contains a nested list, and the list items are told apart by a field other than `id` (for example `label`), declare `authoring.source.localeArrayKeys: [label]`. Then, after the author changes the order of the list in the main file, the translation still matches the same record.
 
 When a record references a dimension and compares its value, declare paths and candidate values with [`authoring.references` fields `within` and `values`](../reference/plugins.md), so world validation and import catch mistakes before writing records.

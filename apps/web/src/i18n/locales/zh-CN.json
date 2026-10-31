@@ -17,6 +17,8 @@
     "primary": "主导航"
   },
   "session": {
+    "unavailableWorldPacks": "世界推荐的玩法包不可用。可以选择其他玩法包，或按当前选择开局。",
+    "worldSelectionTags": "世界标签：{{tags}}",
     "operationFailedNotice": "本回合有 {{count}} 个操作没有生效。",
     "operationFailedNotice_one": "本回合有 {{count}} 个操作没有生效。",
     "operationFailedNotice_other": "本回合有 {{count}} 个操作没有生效。",

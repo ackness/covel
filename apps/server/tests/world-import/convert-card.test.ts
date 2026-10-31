@@ -1,6 +1,6 @@
 import { expect, it } from "vitest";
 import { parse } from "yaml";
-import { ST_IMPORT_CODES } from "@covel/shared";
+import { worldManifestSchema, ST_IMPORT_CODES } from "@covel/shared";
 import { convertStImport } from "../../src/world-import/st/convert.js";
 import { stripPngTextChunks } from "../../src/world-import/st/png-chunks.js";
 import {
@@ -31,7 +31,7 @@ it("maps V2 text, metadata, notes and examples into a valid world bundle", async
       group_only_greetings: ["GROUP SECRET"],
     }),
   ]);
-  const manifest = parse(file(result, "world.yaml"));
+  const manifest = worldManifestSchema.parse(parse(file(result, "world.yaml")));
   expect(manifest).toMatchObject({
     id: "mira",
     name: "Mira",
@@ -39,7 +39,7 @@ it("maps V2 text, metadata, notes and examples into a valid world bundle", async
     defaultLocale: "en-US",
     author: { name: "Covel contributors" },
     tags: ["island", "quiet-adventure"],
-    pluginPolicy: { preset: "dialogue-mode" },
+    plugins: ["pack:dialogue-mode"],
   });
   expect(manifest.license).toBeUndefined();
   expect(manifest.characterSchema).toBeUndefined();

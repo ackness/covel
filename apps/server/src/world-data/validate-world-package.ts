@@ -20,7 +20,7 @@ import {
   validateWorldManifest,
   type NarratorOnlyLoreIssue,
   type WorldDimensions,
-  type WorldPluginPolicy,
+  resolveWorldPluginSelection,
   parseWorldDataTarget,
 } from "@covel/shared";
 import { readFile, readdir, realpath } from "node:fs/promises";
@@ -80,10 +80,9 @@ export interface WorldPackageDiagnostic {
     | "unknown-plugin"
     | "unknown-setting"
     | "invalid-setting"
-    | "unknown-preset"
     | "unknown-pack"
-    | "preset-not-offered"
-    | "pitch-without-preset"
+    | "invalid-reference"
+    | "redundant-reference"
     | "default-value"
     | "unprovided-contract"
     | "unresolved-contract"
@@ -105,7 +104,7 @@ export interface WorldPackageDiagnostic {
     | "locale-file-name";
   /** Path relative to the world directory. */
   readonly file?: string;
-  /** Location inside `file`, such as `pluginPolicy.plus[1]`. */
+  /** Location inside `file`, such as `plugins[1]`. */
   readonly pointer?: string;
   readonly sourceId?: string;
   readonly locales?: readonly string[];
@@ -147,7 +146,7 @@ interface WorldManifestView {
   readonly characterSchema?: {
     readonly attributes: readonly ReferencedAttribute[];
   };
-  readonly pluginPolicy?: WorldPluginPolicy;
+  readonly plugins?: readonly string[];
   readonly pluginSettings?: Readonly<Record<string, Record<string, unknown>>>;
 }
 
@@ -416,63 +415,40 @@ function checkPluginReferences(
 ): WorldPackageDiagnostic[] {
   const diagnostics: WorldPackageDiagnostic[] = [];
   const known = [...catalogue.getAll().keys()];
-  const policy = manifest.pluginPolicy;
-  const packIds = BUILTIN_PLUGIN_PACKS.map((pack) => pack.id);
-  const preset = policy?.preset;
-  if (preset && !packIds.includes(preset))
+  const selection = resolveWorldPluginSelection(
+    manifest.plugins,
+    BUILTIN_PLUGIN_PACKS,
+  );
+  for (const diagnostic of selection.diagnostics)
     diagnostics.push({
-      level: "error",
-      code: "unknown-preset",
+      level: diagnostic.code === "invalid-reference" ? "error" : "warning",
+      code:
+        diagnostic.code === "missing-plugin"
+          ? "unknown-plugin"
+          : diagnostic.code,
       file: "world.yaml",
-      pointer: "pluginPolicy.preset",
-      message: `Unknown plugin pack "${preset}"`,
-      hint: `Choose a built-in pack: ${packIds.join(", ")}.`,
+      pointer: diagnostic.path,
+      message: `${diagnostic.code}: ${diagnostic.reference ?? diagnostic.path}; unavailable features are omitted from play`,
     });
-  policy?.packs?.forEach((id, index) => {
-    if (packIds.includes(id)) return;
-    diagnostics.push({
-      level: "error",
-      code: "unknown-pack",
-      file: "world.yaml",
-      pointer: `pluginPolicy.packs[${index}]`,
-      message: `Unknown plugin pack "${id}"`,
-      hint: `Choose a built-in pack: ${packIds.join(", ")}.`,
-    });
-  });
-  if (preset && policy?.packs && !policy.packs.includes(preset))
-    diagnostics.push({
-      level: "error",
-      code: "preset-not-offered",
-      file: "world.yaml",
-      pointer: "pluginPolicy.preset",
-      message: `the preset "${preset}" is not one of the packs \`packs\` offers`,
-      hint: "Add the preset to `packs`, or remove `packs` to offer every built-in pack.",
-    });
-  if (policy?.pitch && !preset)
-    diagnostics.push({
-      level: "warning",
-      code: "pitch-without-preset",
-      file: "world.yaml",
-      pointer: "pluginPolicy.pitch",
-      message: "`pitch` presents the preset pack, and this world names none",
-      hint: "Add `preset`, or remove `pitch`.",
-    });
-  policy?.plus?.forEach((id, index) => {
-    const entry = catalogue.get(id);
-    if (entry?.packageManifest?.plugin?.kind !== "core") return;
+  const references = selection.requests.map((ref) => ({
+    id: ref.pluginId,
+    pointer: ref.path,
+  }));
+  for (const ref of selection.requests) {
+    if (
+      ref.packId ||
+      catalogue.get(ref.pluginId)?.packageManifest?.plugin?.kind !== "core"
+    )
+      continue;
     diagnostics.push({
       level: "warning",
       code: "default-value",
       file: "world.yaml",
-      pointer: `pluginPolicy.plus[${index}]`,
-      message: `"${id}" is a \`kind: core\` plugin, which every session has already`,
-      hint: "Remove it from `plus`.",
+      pointer: ref.path,
+      message: `"${ref.pluginId}" is a core plugin enabled by default`,
+      hint: "Remove the redundant plugin reference.",
     });
-  });
-  const references: { id: string; pointer: string }[] = [];
-  policy?.plus?.forEach((id, index) =>
-    references.push({ id, pointer: `pluginPolicy.plus[${index}]` }),
-  );
+  }
   for (const id of Object.keys(manifest.pluginSettings ?? {}))
     references.push({ id, pointer: `pluginSettings.${id}` });
 
@@ -537,15 +513,15 @@ function checkPluginReferences(
       provided.add(
         typeof provision === "string" ? provision : provision.contract,
       );
-  manifest.pluginPolicy?.requires?.forEach((contract, index) => {
+  selection.selection.requiredContracts.forEach((contract) => {
     if (provided.has(contract)) return;
     const suggestion = closestName(contract, provided);
     diagnostics.push({
       level: suggestion || strict ? "error" : "warning",
       code: "unprovided-contract",
       file: "world.yaml",
-      pointer: `pluginPolicy.requires[${index}]`,
-      message: `no scanned plugin provides contract "${contract}"; session creation fails without a provider`,
+      pointer: `plugins[${manifest.plugins?.indexOf(`contract:${contract}`)}]`,
+      message: `no scanned plugin provides contract "${contract}"; play continues without this feature`,
       hint: suggestion ? `Did you mean "${suggestion}"?` : undefined,
     });
   });
@@ -914,15 +890,19 @@ function defaultSessionPlugins(
 ): readonly string[] {
   const entries = [...catalogue.getAll().values()];
   const plan = worldPluginPlan(
-    manifest.id,
-    { pluginPolicy: manifest.pluginPolicy },
+    {
+      id: manifest.id,
+      name: "",
+      description: "",
+      metadata: { plugins: manifest.plugins },
+    },
     entries.map((entry) => buildPluginSummary(entry)),
   );
   return resolveSessionPluginPlan(plan.defaultPluginIds, catalogue, {
     excluded: plan.packs.find((pack) => pack.id === plan.selectedPackId)
       ?.excluded,
     authorized: entries.map((entry) => entry.id),
-    requiredContracts: manifest.pluginPolicy?.requires ?? [],
+    requiredContracts: plan.selection.requiredContracts,
   }).active;
 }
 
@@ -1115,7 +1095,7 @@ async function checkWorldData(
         file: fileOf.get(source.id) ?? descriptorFile,
         sourceId: source.id,
         message: `a new session of this world starts without a plugin that accepts data contract "${target.contract}" (${listSome(receivers)}); the source is imported only after the player turns one on`,
-        hint: "Add the plugin to `pluginPolicy.plus`, or choose a `pluginPolicy.preset` whose pack has it.",
+        hint: "Add a plugin: reference or a pack: reference whose pack requests it to `plugins`.",
       });
     }
   }
@@ -1146,7 +1126,7 @@ async function checkWorldData(
         file: fileOf.get(source.id) ?? source.descriptor.path,
         sourceId: source.id,
         message: `a new session of this world starts without a plugin that accepts data contract "${route.contract}" (${listSome(receivers)}); the "${route.field}" field of its characters is imported only after the player turns one on`,
-        hint: "Add the plugin to `pluginPolicy.plus`, or choose a `pluginPolicy.preset` whose pack has it.",
+        hint: "Add a plugin: reference or a pack: reference whose pack requests it to `plugins`.",
       });
     }
   }
@@ -1319,7 +1299,7 @@ export async function validateWorldPackage(
     worldId: manifest.id,
     diagnostics: [
       ...(validation.ignoredFields ?? []).map((field) => ({
-        level: "warning" as const,
+        level: options.strict ? ("error" as const) : ("warning" as const),
         code: "manifest-unknown-field" as const,
         file: "world.yaml",
         pointer: field,
@@ -1331,8 +1311,8 @@ export async function validateWorldPackage(
         code: "manifest-invalid" as const,
         file: "world.yaml",
         pointer: issue.path,
-        message: `${issue.message}; the world loads without its pluginPolicy`,
-        hint: "Write `pluginPolicy` as `preset`, `plus`, `pitch`, `packs` and `requires`.",
+        message: `${issue.message}; the world loads without the invalid optional feature`,
+        hint: "Write `plugins` as prefixed pack:, plugin: and contract: references; write presentation overrides in `pluginPitch`.",
       })),
       ...checkDefaultValues(source.base),
       ...inlineLocaleMapDiagnostics(

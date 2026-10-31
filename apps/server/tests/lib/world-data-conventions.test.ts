@@ -470,7 +470,7 @@ describe("world data conventions", () => {
     expect(await codes(manifest)).toEqual([
       ["warning", "unrequested-receiver", "data/quests.yaml"],
     ]);
-    const requested = `${manifest}pluginPolicy:\n  plus:\n    - core-quest\n`;
+    const requested = `${manifest}plugins:\n  - plugin:core-quest\n`;
     expect(await codes(requested)).toEqual([]);
 
     // A scanned plugin names the same file.
@@ -487,11 +487,11 @@ describe("world data conventions", () => {
     ]);
     // A new session starts with both, and reads the file for neither.
     expect(
-      await codes(`${requested}    - rival-log\n`, [rivalDir, PLUGINS]),
+      await codes(`${requested}  - plugin:rival-log\n`, [rivalDir, PLUGINS]),
     ).toEqual([["error", "convention-collision", "data/quests.yaml"]]);
     // A descriptor that says which contract the file is for settles it.
     const settled = await world({
-      "world.yaml": `${requested}    - rival-log\nworldData: data/world.data.yaml\n`,
+      "world.yaml": `${requested}  - plugin:rival-log\nworldData: data/world.data.yaml\n`,
       "data/world.data.yaml":
         "sources:\n  quests:\n    kind: yaml\n    path: data/quests.yaml\n    to: contract:quests@1\n    key: id\n",
       "data/quests.yaml": quests,

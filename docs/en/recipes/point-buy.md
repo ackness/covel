@@ -54,14 +54,13 @@ Make the `description` clear about what the attribute covers. The model uses it 
 
 ## 2. Turn on the two plugins
 
-Add them to `pluginPolicy.plus`:
+Add them to `plugins`:
 
 ```yaml
-pluginPolicy:
-  preset: traditional-story
-  plus:
-    - tabletop-rules
-    - dice-check
+plugins:
+  - pack:traditional-story
+  - plugin:tabletop-rules
+  - plugin:dice-check
 ```
 
 At this point you can already play. If you do not write a rules file, `tabletop-rules` uses all the attributes that qualify for point buy, and gives 4 extra points.

@@ -69,7 +69,7 @@ what you want, and confirm once.
 - \`plugins/<id>/\` holds each plugin: a \`PLUGIN.md\`, and a \`package.json\` only when the plugin needs one.
 - \`worlds/<id>/\` holds each world (\`world.yaml\` and \`WORLD.md\`).
 
-A world states the capabilities it needs in \`pluginPolicy.requires\`, as
+A world states the capabilities it needs in \`plugins\`, as
 contract IDs such as \`action-check@1\`. Ship a plugin that provides each one,
 or rely on a plugin bundled with Covel.
 

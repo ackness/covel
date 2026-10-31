@@ -28,8 +28,8 @@ version: "0.1.0"
 summary: 一座靠回收潮汐灯火维生的港城，灯火正在一盏盏熄灭。
 defaultLocale: "zh-CN"
 tags: [mystery, harbor]
-pluginPolicy:
-  preset: traditional-story
+plugins:
+  - pack:traditional-story
 dimensions:
   setting:
     name: 港城概况
@@ -180,7 +180,6 @@ async function startGeneration(page: Page, holdHealthUntilStart = false) {
   releaseHealth();
   return dialog;
 }
-
 
 test.describe("AI world generation with a fake provider", () => {
   // The route admits one generation at a time.

@@ -23,6 +23,10 @@ beforeEach(async () => {
   });
   await vault.upsertWorld({
     id: "world-a",
+    metadata: {
+      plugins: ["pack:example", "contract:check@1", "plugin:missing"],
+      pluginPitch: { label: "Watch" },
+    },
     name: "World A",
     description: "",
     createdAt: "2026-01-01",
@@ -58,7 +62,17 @@ it("keeps edited worlds through later local checkpoint writes and a fresh servic
   await service.updateSession("session-a", { status: "paused" });
   const reloaded = new LocalDataService(vault);
   expect((await reloaded.getWorld("world-a"))?.name).toBe("Edited");
+  expect((await reloaded.getWorld("world-a"))?.metadata).toEqual({
+    plugins: ["pack:example", "contract:check@1", "plugin:missing"],
+    pluginPitch: { label: "Watch" },
+  });
   expect((await vault.getCheckpoint("session-a"))?.world?.name).toBe("Edited");
+  expect(
+    (await vault.getCheckpoint("session-a"))?.world?.metadata,
+  ).toMatchObject({
+    plugins: ["pack:example", "contract:check@1", "plugin:missing"],
+    pluginPitch: { label: "Watch" },
+  });
 });
 
 it("atomically deletes a world and its local sessions without deleting shared server worlds", async () => {

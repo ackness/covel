@@ -19,15 +19,14 @@
 
 ## 1. 启用插件
 
-打开 `world.yaml`，在 `pluginPolicy` 下面加上 `plus`：
+打开 `world.yaml`，在 `plugins` 下面加上 `plus`：
 
 ```yaml
-pluginPolicy:
-  preset: traditional-story
-  plus:
-    - core-quest
-    - inventory
-    - affinity
+plugins:
+  - pack:traditional-story
+  - plugin:core-quest
+  - plugin:inventory
+  - plugin:affinity
 ```
 
 `preset` 选的是一组基础插件（一个内置玩法包），`plus` 是在它之上再加的。玩家换玩法包时，`plus` 里的插件保留。

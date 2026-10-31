@@ -93,7 +93,7 @@ A world pack is the portable content layer. `world.yaml` describes identity, loc
 
 ```text
 worlds/my-world/
-├── world.yaml                        # identity, pluginPolicy, pluginSettings
+├── world.yaml                        # identity, plugins, pluginPitch, pluginSettings
 ├── WORLD.md                          # canonical setting and opening premise
 ├── data/
 │   ├── world.data.yaml               # ordered source → schema → target imports
@@ -106,7 +106,7 @@ worlds/my-world/
     └── presence and scene indexes
 ```
 
-`pluginPolicy` picks a built-in pack with `preset` and adds the plugins the world also wants with `plus`; versioned contracts resolve their dependencies, and the player can still change the selection before the game starts. `requires` names contracts the world requests, such as `action-check@1`. Any eligible plugin that implements the contract can satisfy it. If no provider can be enabled, the prep screen explains which features are missing and the session can still start. `pluginSettings` supplies world defaults below player overrides. WorldData imports to `memory.blocks@1` add genre-specific memory definitions such as clues, suspects, signal logs, or countdowns without modifying the memory plugin.
+`plugins` lists prefixed `pack:`, `plugin:` and `contract:` references; versioned contracts resolve their dependencies, and the player can still change the selection before the game starts. A `contract:action-check@1` reference requests a versioned capability. Any eligible plugin that implements the contract can satisfy it. If no provider can be enabled, the prep screen explains which features are missing and the session can still start. `pluginSettings` supplies world defaults below player overrides. WorldData imports to `memory.blocks@1` add genre-specific memory definitions such as clues, suspects, signal logs, or countdowns without modifying the memory plugin.
 
 `WorldData` is the shared import protocol, not a second world format. Its sources can be YAML, JSON, Markdown, text, or media and can target canonical characters/lorebook data or a plugin namespace that explicitly accepts world data. The in-app AI builder produces the same standard package: it can generate the manifest, lore, dimensions, main cast, lorebook, and rules from a structured creative brief. File-backed packs can include full media; browser/store-backed generated worlds retain a portable text fallback while media remains file- or asset-backed.
 

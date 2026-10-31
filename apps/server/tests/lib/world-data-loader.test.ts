@@ -122,7 +122,7 @@ defaultLocale: x/../../../docs/reference/i18n
     expect(record).toBeNull();
   });
 
-  it("passes pluginPolicy from world.yaml into world metadata", async () => {
+  it("preserves plugin selection and authored pitch in world metadata", async () => {
     const root = await makeTempWorld();
     await writeFile(
       path.join(root, "world.yaml"),
@@ -130,23 +130,22 @@ defaultLocale: x/../../../docs/reference/i18n
 name: Policy World
 summary: World with plugin policy
 defaultLocale: zh-CN
-pluginPolicy:
-  preset: dialogue-mode
-  plus:
-    - affinity
-  pitch:
-    label: 校园恋爱
+plugins:
+  - pack:dialogue-mode
+  - plugin:affinity
+pluginPitch:
+  label: 校园恋爱
 `,
     );
     await writeFile(path.join(root, "WORLD.md"), "# Policy World");
 
     const record = await loadSingleWorld(root);
 
-    expect(record?.metadata?.pluginPolicy).toEqual({
-      preset: "dialogue-mode",
-      plus: ["affinity"],
-      pitch: { label: "校园恋爱" },
-    });
+    expect(record?.metadata?.plugins).toEqual([
+      "pack:dialogue-mode",
+      "plugin:affinity",
+    ]);
+    expect(record?.metadata?.pluginPitch).toEqual({ label: "校园恋爱" });
   });
 
   it("loads an old pluginPolicy without it, and the rest of the world", async () => {
@@ -172,6 +171,7 @@ pluginPolicy:
     const record = await loadSingleWorld(root);
 
     expect(record?.id).toBe("old-policy-world");
+    expect(record?.lore).toBe("# Old Policy World");
     expect(record?.metadata?.pluginPolicy).toBeUndefined();
   });
 

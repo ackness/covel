@@ -1,3 +1,4 @@
+import { loadSingleWorld } from "../../src/world-seed-loader.js";
 import * as conventions from "../../src/world-data/conventions.js";
 // @vitest-environment node
 import { cp, mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
@@ -273,18 +274,18 @@ describe("validateWorldPackage", () => {
     ).toBe(true);
   });
 
-  it("rejects unknown presets and invalid values of declared settings", async () => {
+  it("reports unknown packs and invalid values of declared settings", async () => {
     const worldDir = await makeWorld(
       {},
-      `${MANIFEST}pluginPolicy:\n  preset: missing-pack\npluginSettings:\n  story-events:\n    planner: "yes"\n`,
+      `${MANIFEST}plugins:\n  - pack:missing-pack\npluginSettings:\n  story-events:\n    planner: "yes"\n`,
     );
     const diagnostics = await validate(worldDir);
     expect(diagnostics).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          level: "error",
-          code: "unknown-preset",
-          pointer: "pluginPolicy.preset",
+          level: "warning",
+          code: "unknown-pack",
+          pointer: "plugins[0]",
         }),
         expect.objectContaining({
           level: "error",
@@ -315,34 +316,19 @@ describe("validateWorldPackage", () => {
     );
   });
 
-  it("checks the packs a world offers against its preset and the built-in packs", async () => {
-    const policy = async (lines: string) =>
-      validate(await makeWorld({}, `${MANIFEST}pluginPolicy:\n${lines}`));
+  it("reports unavailable packs without disabling other host packs", async () => {
     expect(
-      await policy(
-        "  preset: dialogue-mode\n  packs: [dialogue-mode, low-cost]\n",
-      ),
-    ).toEqual([]);
-    expect(
-      await policy(
-        "  preset: dialogue-mode\n  packs: [low-cost, no-such-pack]\n",
+      await validate(
+        await makeWorld(
+          {},
+          `${MANIFEST}plugins: [pack:dialogue-mode, pack:missing]\n`,
+        ),
       ),
     ).toEqual([
       expect.objectContaining({
-        level: "error",
-        code: "unknown-pack",
-        pointer: "pluginPolicy.packs[1]",
-      }),
-      expect.objectContaining({
-        level: "error",
-        code: "preset-not-offered",
-        pointer: "pluginPolicy.preset",
-      }),
-    ]);
-    expect(await policy("  pitch:\n    label: Mine\n")).toEqual([
-      expect.objectContaining({
         level: "warning",
-        code: "pitch-without-preset",
+        code: "unknown-pack",
+        pointer: "plugins[1]",
       }),
     ]);
   });
@@ -351,7 +337,7 @@ describe("validateWorldPackage", () => {
     const diagnostics = await validate(
       await makeWorld(
         {},
-        `${MANIFEST}pluginPolicy:\n  plus: [narrator]\ncharacterSchema:\n  types: [companion, npc]\n  attributes: []\n`,
+        `${MANIFEST}plugins: [plugin:narrator]\ncharacterSchema:\n  types: [companion, npc]\n  attributes: []\n`,
       ),
     );
     expect(diagnostics).toEqual([
@@ -363,36 +349,25 @@ describe("validateWorldPackage", () => {
       expect.objectContaining({
         level: "warning",
         code: "default-value",
-        pointer: "pluginPolicy.plus[0]",
+        pointer: "plugins[0]",
       }),
     ]);
   });
 
-  it("loads a world with an old pluginPolicy without it and reports each old field", async () => {
+  it("omits obsolete selection for players and reports its root field", async () => {
     const worldDir = await makeWorld(
       {},
-      `${MANIFEST}pluginPolicy:\n  presetId: traditional-story\n  requested: [dice-check]\n  packs:\n    - id: mine\n      requested: [dice-check]\n`,
+      `${MANIFEST}pluginPolicy:\n  preset: traditional-story\n`,
     );
-    const diagnostics = await validate(worldDir);
-    expect(diagnostics).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          level: "warning",
-          code: "manifest-unknown-field",
-          pointer: "pluginPolicy.presetId",
-        }),
-        expect.objectContaining({
-          level: "warning",
-          code: "manifest-unknown-field",
-          pointer: "pluginPolicy.requested",
-        }),
-        expect.objectContaining({
-          level: "error",
-          code: "manifest-invalid",
-          pointer: expect.stringMatching(/^pluginPolicy\.packs/),
-        }),
-      ]),
+    expect(await validate(worldDir)).toContainEqual(
+      expect.objectContaining({
+        code: "manifest-unknown-field",
+        pointer: "pluginPolicy",
+      }),
     );
+    const world = await loadSingleWorld(worldDir);
+    expect(world?.name).toBeDefined();
+    expect(world?.metadata).not.toHaveProperty("pluginPolicy");
   });
 
   it("finds unclaimed files recursively in all data directories", async () => {
@@ -450,14 +425,14 @@ describe("validateWorldPackage", () => {
   it("treats a near-miss plugin ID as a typo and suggests the real one", async () => {
     const worldDir = await makeWorld(
       {},
-      `${MANIFEST}pluginPolicy:\n  plus: [inventory, dice-chek]\n`,
+      `${MANIFEST}plugins: [plugin:inventory, plugin:dice-chek]\n`,
     );
     const diagnostics = await validate(worldDir);
     expect(diagnostics).toEqual([
       expect.objectContaining({
         level: "error",
         code: "unknown-plugin",
-        pointer: "pluginPolicy.plus[1]",
+        pointer: "plugins[1]",
         hint: 'Did you mean "dice-check"?',
       }),
     ]);
@@ -466,7 +441,7 @@ describe("validateWorldPackage", () => {
   it("only warns about an unrelated unknown plugin unless strict", async () => {
     const worldDir = await makeWorld(
       {},
-      `${MANIFEST}pluginPolicy:\n  plus: [some-community-plugin]\n`,
+      `${MANIFEST}plugins: [plugin:some-community-plugin]\n`,
     );
     expect(await validate(worldDir)).toEqual([
       expect.objectContaining({ level: "warning", code: "unknown-plugin" }),
@@ -683,7 +658,7 @@ describe("validateWorldPackage", () => {
         await validate(
           await makeWorld(
             files,
-            `${MANIFEST}pluginPolicy:\n  plus: [character-blueprint]\n`,
+            `${MANIFEST}plugins: [plugin:character-blueprint]\n`,
           ),
         ),
       ),

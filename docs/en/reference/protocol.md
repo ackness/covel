@@ -1,5 +1,7 @@
 # SSE protocol
 
+World preparation reads `plugins` references through the public plan's `selection`. Creation submits explicit plugin IDs and exclusions; the server freezes world `contract:` references independently. Missing features produce notices and do not block play.
+
 This page explains how a client and the Covel server talk to each other: what requests the client sends, what events the server pushes, what data each event carries, and how a client recovers after a dropped connection.
 
 It is for three kinds of readers: people who write their own client, people who embed the Covel runtime in their own host, and people who change the bundled web app or the server. If you only write plugins, you rarely need this page. The events a plugin can emit are in the [tools reference](./tools.md). The full HTTP API is in [api.md](./api.md).

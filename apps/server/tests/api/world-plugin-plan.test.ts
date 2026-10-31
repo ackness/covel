@@ -1,3 +1,7 @@
+import { mkdtemp, writeFile, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { stringify } from "yaml";
+import { loadSingleWorld } from "../../src/world-seed-loader.js";
 import { beforeEach, describe, expect, it } from "vitest";
 import { Hono } from "hono";
 import path from "node:path";
@@ -14,6 +18,8 @@ import { type DataStore } from "@covel/store";
 import { createMemoryStore } from "@covel/store/memory";
 import {
   resolveSessionPlugins,
+  resolveI18nText,
+  worldPluginPlanSchema,
   type PluginManifest,
   type WorldPluginPlan,
 } from "@covel/shared";
@@ -73,7 +79,7 @@ describe("real bundled compositions", () => {
             name: pack.id,
             description: "",
             metadata: {
-              pluginPolicy: { preset: pack.id, plus: ["visiting-policy"] },
+              plugins: [`pack:${pack.id}`, "plugin:visiting-policy"],
             },
             createdAt: "2026-10-31",
           });
@@ -83,7 +89,7 @@ describe("real bundled compositions", () => {
           expect(response.status).toBe(200);
           const plan = (await response.json()) as WorldPluginPlan;
           const selection = resolveSessionPluginPlan(
-            [...plan.defaultPluginIds, ...plan.policy.plus],
+            [...plan.defaultPluginIds, ...plan.selection.requestedPluginIds],
             registry,
             { excluded: plan.packs[0]?.excluded },
           );
@@ -168,109 +174,168 @@ describe("GET /api/worlds/:id/plugin-plan", () => {
     app.route("/api/worlds", worldPluginPlanRoutes);
   });
   async function plan(
-    policy: Record<string, unknown>,
+    plugins: string[],
+    pluginPitch?: Record<string, unknown>,
+    overlay?: Record<string, unknown>,
   ): Promise<WorldPluginPlan> {
-    await store.createWorld({
-      id: "world",
-      name: "World",
-      description: "",
-      metadata: { pluginPolicy: policy },
-      createdAt: new Date().toISOString(),
-    });
+    const dir = await mkdtemp(path.join(tmpdir(), "world-plan-"));
+    try {
+      await writeFile(
+        path.join(dir, "world.yaml"),
+        stringify({
+          id: "world",
+          name: "The long watch",
+          summary: "Keep the relay alive.",
+          defaultLocale: "en-US",
+          tags: ["frontier", "mystery"],
+          plugins,
+          ...(pluginPitch ? { pluginPitch } : {}),
+        }),
+      );
+      await writeFile(
+        path.join(dir, "WORLD.md"),
+        "# Watch\nPublic lore.\n<!-- narrator-only -->\nSECRET_NARRATOR_SENTINEL\n<!-- /narrator-only -->\n",
+      );
+      if (overlay) {
+        await writeFile(path.join(dir, "world.zh-CN.yaml"), stringify(overlay));
+        await writeFile(path.join(dir, "WORLD.zh-CN.md"), "# 守夜\n公开设定。");
+      }
+      const world = await loadSingleWorld(dir);
+      expect(world).not.toBeNull();
+      expect(world?.lore).toContain("SECRET_NARRATOR_SENTINEL");
+      await store.upsertWorld({
+        ...world!,
+        metadata: {
+          ...world!.metadata,
+          hiddenContent: { secret: "SECRET_HIDDEN_SENTINEL" },
+        },
+      });
+      return await fetchPlan();
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  }
+  async function fetchPlan(): Promise<WorldPluginPlan> {
     const response = await app.request("/api/worlds/world/plugin-plan");
     expect(response.status).toBe(200);
-    return response.json();
+    return worldPluginPlanSchema.parse(await response.json());
   }
-  it("starts from the preset pack, presented with the world's pitch, and adds plus", async () => {
+  it("loads prefixed YAML and derives pitch only from translated public metadata", async () => {
     registry.register(entry("chat-mode-narrator"));
-    const result = await plan({
-      preset: "dialogue-mode",
-      plus: ["traditional"],
-      pitch: { label: { "zh-CN": "自定义", invalid: 42 }, reason: "Because" },
+    const result = await plan(
+      ["pack:dialogue-mode", "plugin:traditional"],
+      undefined,
+      {
+        name: "漫长守夜",
+        summary: "守住中继站。",
+      },
+    );
+    expect(result.selection).toEqual({
+      requestedPluginIds: ["traditional"],
+      requiredContracts: [],
     });
     expect(result.selectedPackId).toBe("dialogue-mode");
-    expect(result.policy).toEqual({
-      preset: "dialogue-mode",
-      plus: ["traditional"],
-      requires: [],
-    });
-    expect(result.packs[0]).toMatchObject({
-      id: "dialogue-mode",
-      label: { "zh-CN": "自定义" },
-      reason: "Because",
-      source: "world",
-      requested: ["chat-mode-narrator"],
-    });
+    const pack = result.packs[0]!;
+    expect(resolveI18nText(pack.label, "en-US")).toBe("The long watch");
+    expect(resolveI18nText(pack.label, "zh-CN")).toBe("漫长守夜");
+    expect(resolveI18nText(pack.description!, "zh-CN")).toBe("守住中继站。");
+    expect(pack.tags).toEqual(["frontier", "mystery"]);
+    expect(pack.reason).toBeUndefined();
     expect(result.defaultPluginIds).toEqual([
       "chat-mode-narrator",
       "traditional",
     ]);
-    // Core plugins join at session creation; the plan does not list them.
-    expect(
-      resolveSessionPluginPlan(result.defaultPluginIds, registry).active,
-    ).toEqual(["chat-mode-narrator", "traditional", "core"]);
-  });
-  it("offers the built-in packs that packs names, the preset first", async () => {
-    const result = await plan({
-      preset: "low-cost",
-      packs: ["dialogue-mode", "low-cost"],
+    expect(JSON.stringify(result)).not.toContain("SENTINEL");
+    const world = (await store.getWorld("world"))!;
+    expect(world.metadata?.pluginPitch).toBeUndefined();
+    await store.upsertWorld({
+      ...world,
+      description: "A new public summary",
+      tags: ["rescue"],
+      metadata: world.metadata,
     });
-    expect(result.packs.map((pack) => pack.id)).toEqual([
+    const fresh = await fetchPlan();
+    expect(resolveI18nText(fresh.packs[0]!.description!, "en-US")).toBe(
+      "A new public summary",
+    );
+    expect(fresh.packs[0]?.tags).toEqual(["rescue"]);
+  });
+  it("defaults each omitted pitch field independently and preserves explicit translations", async () => {
+    const result = await plan(
+      ["pack:dialogue-mode"],
+      { label: "Watch" },
+      { pluginPitch: { label: "守夜" } },
+    );
+    expect(resolveI18nText(result.packs[0]!.label, "zh-CN")).toBe("守夜");
+    expect(resolveI18nText(result.packs[0]!.label, "fr-FR")).toBe("Watch");
+    expect(result.packs[0]?.description).toBe("Keep the relay alive.");
+  });
+  it("orders named alternatives and retains every host pack", async () => {
+    const result = await plan(["pack:low-cost", "pack:dialogue-mode"]);
+    expect(result.packs.slice(0, 2).map(({ id }) => id)).toEqual([
       "low-cost",
       "dialogue-mode",
     ]);
-    expect(result.packs[0]?.source).toBe("builtin");
+    expect(result.packs).toHaveLength(BUILTIN_PLUGIN_PACKS.length);
+    expect(result.packs[0]?.source).toBe("world");
   });
-  it("offers every built-in pack and selects none without a preset", async () => {
-    const result = await plan({ plus: ["dialogue"] });
+  it.each([[[]], [["plugin:dialogue"]]])(
+    "selects no pack without a pack reference: %j",
+    async (plugins) => {
+      const result = await plan(plugins);
+      expect(result.selectedPackId).toBeUndefined();
+      expect(result.packs.map(({ id }) => id)).toEqual(
+        BUILTIN_PLUGIN_PACKS.map(({ id }) => id),
+      );
+      expect(result.defaultPluginIds).toEqual(
+        plugins.length ? ["dialogue"] : [],
+      );
+    },
+  );
+  it("reports an unknown first pack without selecting the second", async () => {
+    const result = await plan([
+      "pack:custom",
+      "pack:dialogue-mode",
+      "plugin:dialogue",
+    ]);
     expect(result.selectedPackId).toBeUndefined();
-    expect(result.packs.map((pack) => pack.id)).toEqual(
-      BUILTIN_PLUGIN_PACKS.map((pack) => pack.id),
-    );
     expect(result.defaultPluginIds).toEqual(["dialogue"]);
-  });
-  it("ignores a preset that is not a built-in pack", async () => {
-    const result = await plan({ preset: "custom", plus: ["dialogue"] });
-    expect(result.selectedPackId).toBeUndefined();
-    expect(result.policy.preset).toBeUndefined();
-    expect(result.defaultPluginIds).toEqual(["dialogue"]);
-  });
-  it("reports plugins the registry lacks instead of passing them on", async () => {
-    const result = await plan({
-      preset: "dialogue-mode",
-      plus: ["dialogue", "absent-from-policy"],
+    expect(result.diagnostics).toContainEqual({
+      code: "unknown-pack",
+      path: "plugins[0]",
+      reference: "pack:custom",
+      packId: "custom",
     });
-    expect(result.policy.plus).toEqual(["dialogue"]);
+  });
+  it("reports missing independent and pack requests without submitting unknown IDs", async () => {
+    const result = await plan([
+      "pack:dialogue-mode",
+      "plugin:dialogue",
+      "plugin:absent",
+    ]);
+    expect(result.selection.requestedPluginIds).toEqual(["dialogue"]);
     expect(result.packs[0]?.requested).toEqual([]);
-    expect(result.defaultPluginIds).toEqual(["dialogue"]);
-    expect(result.missing).toContainEqual({ pluginId: "absent-from-policy" });
-    expect(result.missing).toContainEqual({
-      pluginId: "chat-mode-narrator",
-      packId: "dialogue-mode",
-    });
-    // What the plan hands out is accepted by session creation as it is.
-    expect(
-      unknownPluginIds(
-        [...result.defaultPluginIds, ...result.policy.plus],
-        registry,
-      ),
-    ).toEqual([]);
+    expect(result.diagnostics).toEqual(
+      expect.arrayContaining([
+        { code: "missing-plugin", path: "plugins[2]", pluginId: "absent" },
+        {
+          code: "missing-plugin",
+          path: "plugins[0]",
+          pluginId: "chat-mode-narrator",
+          packId: "dialogue-mode",
+        },
+      ]),
+    );
+    expect(unknownPluginIds(result.defaultPluginIds, registry)).toEqual([]);
   });
-
-  it("offers only the narrator and excludes installed world-init in Narrative Only", async () => {
+  it("keeps the selected pack's exclusions", async () => {
     registry.register(entry("narrator", { kind: "core" }));
     registry.register(
       entry("world-init", { kind: "core", provides: ["world.dimensions@1"] }),
     );
-    const result = await plan({ preset: "narrative-only" });
-    const pack = result.packs.find((item) => item.id === "narrative-only");
-    expect(result.defaultPluginIds).toEqual(["narrator"]);
-    expect(pack?.requested).toEqual(["narrator"]);
-    // Turning off a plugin this host lacks changes nothing, so it is no miss.
+    const result = await plan(["pack:narrative-only"]);
+    const pack = result.packs.find(({ id }) => id === "narrative-only");
     expect(pack?.excluded).toEqual(["world-init"]);
-    expect(
-      result.missing.filter((item) => item.packId === "narrative-only"),
-    ).toEqual([]);
     expect(
       resolveSessionPluginPlan(result.defaultPluginIds, registry, {
         excluded: pack?.excluded,
@@ -325,7 +390,7 @@ describe("GET /api/worlds/:id/plugin-plan", () => {
         ),
       );
       registry.register(entry("dependency", { provides: ["helper@1"] }));
-      const result = await plan({ plus: ["replacement"] });
+      const result = await plan(["plugin:replacement"]);
       expect(result.defaultPluginIds).toEqual(["replacement"]);
       const resolved = resolveSessionPluginPlan(
         result.defaultPluginIds,

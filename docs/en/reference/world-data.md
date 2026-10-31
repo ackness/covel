@@ -69,15 +69,14 @@ worlds/my-world/
 name: 我的世界
 summary: 一个示例世界。
 defaultLocale: zh-CN
-pluginPolicy:
-  preset: traditional-story
-  plus:
-    - affinity
+plugins:
+  - pack:traditional-story
+  - plugin:affinity
 defaultViewMode: stage
 ```
 
 - `id` can be left out; the folder's name is used then. Write it only when it must differ from the folder: lowercase letters, digits and `-`, starting with a letter.
-- `pluginPolicy` chooses the plugins of this world. See [plugin selection](#plugin-selection-pluginpolicy).
+- `plugins` chooses the plugins of this world. See [plugin selection](#plugin-selection-pluginpolicy).
 - `worldData` is the path to the descriptor, relative to the world package root. Write it only when the world package has a descriptor.
 - For all the fields of `world.yaml`, see the generated [World manifest field table](./schema/world-manifest.md). For dimensions in a separate file, see [World dimensions field table](./schema/world-dimensions.md).
 - The manifest reads the current fields. Unknown top-level fields are ignored, with warnings from the loader and `pnpm validate:world`. Unknown fields inside known declarations remain errors.
@@ -331,7 +330,7 @@ The "AI create world" feature in the app and a world package written by hand use
 
 **Plugin content** is specified by the `contracts` in the creation brief:
 
-- The generator makes records only for the data contracts that are chosen. The schema, the writing prompt and the example of each contract come from the `authoring` declaration of the receiving plugin (it must declare `generate`). When the receiving plugin is not in the chosen pack, it is added to `pluginPolicy.plus`; a `kind: core` plugin is not added.
+- The generator makes records only for the data contracts that are chosen. The schema, the writing prompt and the example of each contract come from the `authoring` declaration of the receiving plugin (it must declare `generate`). When the receiving plugin is not in the chosen pack, it is added to `plugins`; a `kind: core` plugin is not added.
 - A contract that is not chosen does not go into the prompt. If the model outputs records for a contract that was not chosen, or leaves out a contract that was chosen, that attempt counts as a failure and is retried.
 - The records of a contract are written to the file that the receiving plugin declares (the `path` and `kind` of `authoring.source`, for example `data/memory-blocks.json` or `data/time.yaml`). One record is the file content. Several records are written as an array.
 - In the two cases below, the records are rewritten to `data/contract-<n>.json`, and the descriptor `data/world.data.yaml` adds these files as sources. Every other file is at a convention path and is not in the descriptor:
@@ -383,61 +382,41 @@ These fields change only how the world is shown. You can leave all of them out.
 - `version`, `author`, `license`, `homepage`: the version and author information of the world package. The fields, limits and translation rules are the same as for plugins. See [author information](./plugins.md#author-information). They show only on the world card. They do not go into session data or the prompt.
 - `cover`, `accentColor`, `themeMusic`: the cover, the accent color, and the music on the world list. See the end of the [Background Music](#background-music) section.
 
-### Plugin selection (`pluginPolicy`)
+<a id="plugin-selection-pluginpolicy"></a>
 
-`pluginPolicy` says which plugins this world would like to use. It does not lock in any plugin. Which ones are finally on is worked out by Covel, from the capabilities and dependencies each plugin declares, the player's authorization, and the player's own checkboxes.
+### Plugin selection (`plugins`)
 
-You write it as "one built-in pack, plus a few plugins":
-
-```yaml
-pluginPolicy:
-  preset: traditional-story # a new session starts from this pack
-  plus: # the plugins this world also wants
-    - dice-check
-    - core-quest
-  pitch: # optional: how this world presents the pack on the session-prep screen
-    label: 古冢探险
-    description: 跑团式的地城探索，带掷骰判定和任务。
-    reason: 每一步都要检定，灯油和名望都会记在面板上。
-```
-
-| Field      | Description                                                                                                                                                                  |
-| ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `preset`   | The built-in pack a new session starts from, for example `traditional-story` or `dialogue-mode`. The packs are listed in [`packs/builtin.yaml`](../../../packs/builtin.yaml) |
-| `plus`     | Plugin IDs this world also wants. They stay when the player switches packs. Do not list `kind: core` plugins; every session has them anyway                                  |
-| `pitch`    | How the session-prep screen presents the `preset` pack: `label`, `description` and `reason`, in place of the pack's own text. All three can be translated                    |
-| `packs`    | IDs of the built-in packs the player can choose from, listed in this order. When it is left out, every built-in pack is listed. When it is written, `preset` must be in it   |
-| `requires` | Contract IDs the world needs (such as `action-check@1`). Any installed plugin that provides the contract can satisfy it.                                                     |
-
-The plugins a new session enables by default are the `requested` list of the `preset` pack, plus `plus`, the core plugins and the dependencies that `requires` brings in.
-
-- `preset` can only be a built-in pack. A world cannot define its own pack; for a different set of plugins, choose the closest pack and add what is missing with `plus`.
-- The session-prep screen lists the `preset` pack first (in the world's words when there is a `pitch`), then the other packs in `packs`.
-- `pnpm validate:world` checks these names: a `preset` that is not a built-in pack is reported as `unknown-preset`, an unknown ID in `packs` as `unknown-pack`, and a `preset` that is not in `packs` as `preset-not-offered`.
-
-`requires` says "what capability this world cannot do without". Write a contract here (a capability name plus a version), not a plugin:
+A world selects gameplay in one ordered list. No reference locks a plugin on:
 
 ```yaml
-pluginPolicy:
-  requires:
-    - action-check@1 # action checks; the built-in dice-check provides it, and you can use another check plugin
-  plus:
-    - dice-check # optional: turns it on by default, and chooses which provider to use when there are several
+name: A small frontier world
+summary: Keep the relay alive through one long night.
+defaultLocale: en-US
+tags: [frontier, mystery]
+plugins:
+  - pack:traditional-story
+  - plugin:dice-check
+  - contract:action-check@1
+# Optional; public name, summary and tags supply omitted presentation.
+pluginPitch:
+  label: The long watch
 ```
 
-- When only one installed plugin provides it, that plugin is turned on automatically.
-- When there is no provider, or there are several and neither the world nor the player has chosen one, the session-prep screen says what is missing. The session starts as usual, only without this part of the gameplay. The response that creates the session lists them in `unmetRequirements`.
-- The player can still turn off a provider. That is the player's choice. The session starts as usual, and the session-prep screen shows a notice.
-- `requires` accepts only contract IDs in the form `name@version`. A plugin ID written here causes an error when the world loads.
+- `pack:<id>`: the first reference selects the initial pack; later references order alternatives. All remaining host packs stay available. Only the selected pack expands. An unavailable first pack produces a located diagnostic and never selects the second instead.
+- `plugin:<id>`: an independent request. It stays after switching packs even if the initial pack also requests it. Switching replaces only the previous pack's requests and exclusions, preserving manual choices. Manual exclusions always win.
+- `contract:<name>@<version>`: a versioned capability request, such as `contract:action-check@1`. A unique available provider joins automatically without another selection or save click. Players choose when several providers qualify. Missing, unapproved or excluded providers reduce the corresponding gameplay; prep and `unmetRequirements` explain why, and session creation still succeeds.
+- Omitted `plugins` and `[]` both add no world requests and select no initial pack. Normal core defaults still apply. Players can explicitly exclude plugins or reset to the smallest narrative set.
+- Prefixes are mandatory. Packs and plugins with the same slug are distinct. Bare IDs, unknown prefixes, invalid versions and duplicates report the field index in author validation. Duplicates never cause duplicate effects.
 
-`plus` holds plugin IDs. The plugin may not be installed on the player's computer:
+Each `pluginPitch` field is optional: `label`, `description` and `reason` default independently to the public world name, summary and tags. Tags use the fixed translated UI label “World tags”; no tags means no derived reason. Authored fields and their translations win, using `resolveI18nText` at display time and its shared fallback for unsupported UI languages. Presentation never reads lore, hidden events or model prompts, never calls a model, and is never written back as derived YAML or metadata. Locale overlay paths are `pluginPitch.label`, `pluginPitch.description` and `pluginPitch.reason`.
 
-- `GET /api/worlds/:id/plugin-plan` removes the IDs that are not installed from the world policy and from each pack's `requested`. They are listed in `missing` instead (for packs, with a `packId`).
-- The session-prep screen uses this to show which plugins are missing. The session can still be created, but the gameplay those plugins provide will not work.
+`GET /api/worlds/:id/plugin-plan` returns `selection: { requestedPluginIds, requiredContracts }`, ordered `packs`, optional `selectedPackId`, `defaultPluginIds` and bounded `diagnostics`. Missing plugin IDs stay out of requests submitted to creation; `missing-plugin` diagnostics retain `pluginId`, field `path` and optional `packId`. `unknown-pack` also retains the reference location. Session creation takes the player's explicit requests and exclusions without selecting a pack for direct callers. The server independently reads and freezes world contracts into the session; resolving its fixed set never adds a newly installed plugin.
 
-Fields of `pluginPolicy` that Covel does not know (for example `presetId`, `requested`, `recommended` and `preferredTags` of the earlier form) are ignored when the world loads, with a `manifest-unknown-field` warning. `packs` written as objects (packs the world defined itself, as the earlier form allowed) make the whole `pluginPolicy` invalid: the world loads as usual, only without a plugin selection, and `pnpm validate:world` reports `manifest-invalid`.
+The former `pluginPolicy` and its `preset`, `plus`, `packs` and `requires` fields are removed, with no compatibility reads. Strict author validation rejects them. Player loading reports and ignores unknown root fields; an invalid optional selection or pitch is omitted while the rest of the world and lore remain usable. Recreate development worlds and sessions.
 
 ### World records and world packages
+
+Revisions preserve the record's edited `plugins` and explicit `pluginPitch`, including removal of either field. Restoring a package deliberately reloads its authored values. Derived pitch never enters either transport.
 
 Covel plays the **world record** in the database. The files of a world package are only the format for installing, importing and exporting a world:
 
@@ -540,7 +519,7 @@ For installing and updating from GitHub, see [world catalog and installation](./
 
 ### Default plugin settings (`pluginSettings`)
 
-At the top level of `world.yaml` (at the same level as `pluginPolicy`), you can write `pluginSettings` to preset **this world's default values** for plugin settings. The format is `plugin ID → setting → value`:
+At the top level of `world.yaml` (at the same level as `plugins`), you can write `pluginSettings` to preset **this world's default values** for plugin settings. The format is `plugin ID → setting → value`:
 
 ```yaml
 pluginSettings:
@@ -558,7 +537,7 @@ The value of a setting is decided in this order. The earlier item wins:
 
 - The player can still override every value.
 - A setting that the plugin does not declare does not cause an error. It just has no effect. `pnpm validate:world` gives an `unknown-setting` reminder. A value with the wrong type, range or options gives an `invalid-setting` error.
-- `pluginSettings` sets only default values. It does not decide which plugins are turned on. That is decided by [`pluginPolicy`](#plugin-selection-pluginpolicy).
+- `pluginSettings` sets only default values. It does not decide which plugins are turned on. That is decided by [`plugins`](#plugin-selection-pluginpolicy).
 
 For plugin authors: after loading, the value is stored in `WorldRecord.metadata.pluginSettings`. At the start of each turn, it is merged with the player's values (the request header `X-Plugin-User-Settings`) and put into `TurnInput.userSettings`. The agent's `{{ userSettings.* }}`, the guards and the hooks all read the same data.
 
@@ -1244,7 +1223,7 @@ sources:
 - A single media file can be at most 20 MB. The total of one source's directory can be at most 100 MB.
 - The extensions that can be imported are `.png`, `.jpg`, `.jpeg`, `.webp`, `.mp3`, `.wav` and `.mp4`.
 - The preflight check requires that the schema of the matching contract and the receiving declaration are registered. The `assets` and `presence` of `character-blueprint` receive `character.portrait-assets@1` and `character.portraits@1` respectively.
-- When the receiving plugin is not in the `preset` pack, put it in `pluginPolicy.plus`, and a new session turns it on. When it is not enabled, its data and media index are skipped, and a warning is given; when it is enabled later in the game, its data is imported once.
+- When the receiving plugin is not in the initially selected pack, put it in `plugins`, and a new session turns it on. When it is not enabled, its data and media index are skipped, and a warning is given; when it is enabled later in the game, its data is imported once.
 
 For real examples, see `media/` of `worlds/mistport` and `worlds/haruka-academy`.
 
@@ -1354,7 +1333,7 @@ moods:
 The mood comes from the `music.cue` event that the narrative sends. The scene comes from the `scene.set` event (sent by the plugin that tracks the scene). If you want only one theme that runs through the whole game, put one track with `theme: true` in the list. It does not depend on any event.
 
 > [!NOTE]
-> Put `soundtrack` in the world's `pluginPolicy`. These data are imported and played only after the player turns the plugin on.
+> Put `soundtrack` in the world's `plugins`. These data are imported and played only after the player turns the plugin on.
 
 **How to declare it.** Put the files at the two convention paths above. For other paths, write two sources in the descriptor. `registryId: music-registry` is a fixed value in the track list, and it also serves as the `key`:
 
@@ -1586,12 +1565,12 @@ my-covel-pack/
             └── social/links.yaml
 ```
 
-`world.yaml` turns on its plugin with `pluginPolicy`:
+`world.yaml` turns on its plugin with `plugins`:
 
 ```yaml
-pluginPolicy:
-  preset: dialogue-mode
-  plus: [social-sim]
+plugins:
+  - pack:dialogue-mode
+  - plugin:social-sim
 ```
 
 When `social-sim` declares `authoring.source`, `data/social/links.yaml` is imported from the path it declares; otherwise add a source to `data/world.data.yaml` and write `worldData` in `world.yaml`.
@@ -1657,18 +1636,15 @@ Output when it passes:
 | --- | --- | --- |
 | `manifest-invalid` | error | `world.yaml` cannot be parsed or does not match the schema |
 | `manifest-unknown-field` | warning | `world.yaml` has an unknown top-level field, which loading ignores |
-| `default-value` | warning | A value that need not be written and can be deleted: `characterSchema.types` is the default `[npc, companion]`, or `pluginPolicy.plus` lists a `kind: core` plugin |
+| `default-value` | warning | A value that need not be written and can be deleted: `characterSchema.types` is the default `[npc, companion]`, or `plugins` lists a `kind: core` plugin |
 | `lore-missing` | error | One of the world's editions has no lore file |
 | `lore-fallback-missing` | warning | There is no `WORLD.md`, so a session in an undeclared language gets empty lore |
 | `lore-narrator-only` | warning | The [narrator-only marker](#narrator-only-lore-narrator-only) is missing its end, missing its start, nested or written wrong. The lore after it is hidden from the player. |
-| `unknown-plugin` | error or warning | A plugin ID referenced by `pluginPolicy` / `pluginSettings` is not in the scanned directories |
-| `unknown-preset` | error | `pluginPolicy.preset` is not a built-in pack |
-| `unknown-pack` | error | `pluginPolicy.packs` has an ID that is not a built-in pack |
-| `preset-not-offered` | error | `pluginPolicy.packs` is written, but `preset` is not in it |
-| `pitch-without-preset` | warning | `pluginPolicy.pitch` is written without a `preset`, so the text is never shown |
+| `unknown-plugin` | error or warning | A plugin ID referenced by `plugins` / `pluginSettings` is not in the scanned directories |
+| `unknown-pack` | warning | An unavailable pack reference, located by index; an unknown first pack selects none |
 | `unknown-setting` | warning | A key in `pluginSettings` is not a setting the plugin declares, so the value is ignored |
 | `invalid-setting` | error | A value in `pluginSettings` does not match the type, range or options the setting declares |
-| `unprovided-contract` | error or warning | A contract in `pluginPolicy.requires` has no provider |
+| `unprovided-contract` | error or warning | A contract in `contract:` references has no provider |
 | `unresolved-contract` | error or warning | A data contract used by a source has no receiving plugin among the scanned plugins |
 | `unrequested-receiver` | warning | No plugin a new session enables by default receives this source. The source is not imported until the player turns a receiving plugin on. |
 | `convention-collision` | error or warning | More than one plugin declares the path of one of the world's files, and the descriptor does not say which one it is for. A session that enables those plugins together does not import it. |
@@ -1689,7 +1665,7 @@ Output when it passes:
 
 For `unknown-plugin`, `unprovided-contract` and `unresolved-contract`: a spelling close to a known ID is an error, and it suggests "Did you mean". Otherwise the default is a warning, because the provider may be a community plugin that was not scanned. With `--strict`, all of them are errors. `pnpm release:preflight` uses `--strict` for the built-in worlds.
 
-**The plugins a new session enables by default** are the ones the session preparation screen ticks by default: the `requested` list of the `preset` pack and `pluginPolicy.plus`, plus the core plugins and the dependencies that `requires` brings in. Scanned community plugins count as approved. `unrequested-receiver` and `convention-collision` are judged against this set: `convention-collision` is an error when two of its declarers are in the set, and a warning otherwise. Records are still checked against the schemas of every scanned plugin, so the data of a plugin the player turns on by hand is checked too.
+**The plugins a new session enables by default** are the ones the session preparation screen ticks by default: the `requested` list of the initially selected pack and `plugins`, plus the core plugins and providers of explicit world contract references. Scanned community plugins count as approved. `unrequested-receiver` and `convention-collision` are judged against this set: `convention-collision` is an error when two of its declarers are in the set, and a warning otherwise. Records are still checked against the schemas of every scanned plugin, so the data of a plugin the player turns on by hand is checked too.
 
 **The three cases of `prompt-size`.** None of them stops the world from being used:
 
