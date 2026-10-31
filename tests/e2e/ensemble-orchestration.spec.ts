@@ -148,7 +148,7 @@ async function prepare(
       },
     }),
   );
-  const worldId = `ensemble-${Date.now()}-${role}`;
+  const worldId = `ensemble-${crypto.randomUUID()}-${role}`;
   const name = `Ensemble hall ${worldId}`;
   const world = await page.request.post("/api/worlds", {
     data: {
