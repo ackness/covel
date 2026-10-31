@@ -6,3 +6,8 @@
 ### Changed
 
 - **Service provider faults count toward pausing a plugin.** Provider crashes, invalid output and kernel import timeouts count; deliberate refusals and caller-chosen timeouts remain neutral. A clean call clears the streak only when its execution commits. Calls a setup runtime makes, directly or through a sub-agent, neither count nor clear.
+
+### Fixed
+
+- **Recovery inputs retain committed source operations.** `operations@1` includes committed operations from retry seeds as read-only context, without replaying their writes or adding commit dependencies.
+- **Service handlers receive their provider's message catalog.** Read and write services can use the same translation and multilingual label helpers as function runtimes.

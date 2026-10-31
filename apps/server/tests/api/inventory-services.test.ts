@@ -3,7 +3,13 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createSqliteStore } from "@covel/store/sqlite";
-import type { LLMAdapter, LLMMessage, LLMResponse } from "@covel/shared";
+import type {
+  ActionRequest,
+  LLMAdapter,
+  LLMMessage,
+  LLMResponse,
+  Proposal,
+} from "@covel/shared";
 import {
   bootstrapApi,
   type ApiBootstrapResult,
@@ -63,6 +69,8 @@ describe("bundled inventory services through the action API", () => {
   let narratorStep: number;
   let purchase: boolean;
   let refused: boolean;
+  let foundTorch: boolean;
+  let rejectLedger: boolean;
   let beforeProse: (() => Promise<void>) | undefined;
   const requests = new Map<string, Parameters<LLMAdapter["generate"]>[0][]>();
   const generate: LLMAdapter["generate"] = async (request) => {
@@ -93,6 +101,9 @@ describe("bundled inventory services through the action API", () => {
           entities: [
             { id: "gold", type: "item", name: "Gold coin" },
             { id: "sword", type: "item", name: "Sword" },
+            ...(foundTorch
+              ? [{ id: "torch", type: "item", name: "Torch" }]
+              : []),
           ],
           relations: [],
           statements: [],
@@ -117,6 +128,20 @@ describe("bundled inventory services through the action API", () => {
                 quantity: 1,
               },
             },
+            ...(foundTorch
+              ? [
+                  {
+                    id: "find-torch",
+                    type: "inventory_change",
+                    attributes: {
+                      item: "torch",
+                      holder,
+                      operation: "gain",
+                      quantity: 1,
+                    },
+                  },
+                ]
+              : []),
           ],
         });
       }
@@ -173,7 +198,7 @@ describe("bundled inventory services through the action API", () => {
             text: purchase
               ? refused
                 ? "You cannot afford the Sword. The merchant keeps it and waits."
-                : "You pay 10 Gold coin and receive a Sword. The merchant waits."
+                : `You pay 10 Gold coin and receive a Sword. ${foundTorch ? "You also find a Torch. " : ""}The merchant waits.`
               : "You look around the quiet shop. The merchant waits.",
           },
         ],
@@ -203,6 +228,8 @@ describe("bundled inventory services through the action API", () => {
     narratorStep = 0;
     purchase = true;
     refused = false;
+    foundTorch = false;
+    rejectLedger = false;
     beforeProse = undefined;
     store = createSqliteStore(path.join(root, "session.sqlite"));
     const now = new Date().toISOString();
@@ -242,12 +269,37 @@ describe("bundled inventory services through the action API", () => {
       updatedAt: now,
     });
     await seedGold(12);
+    let guardRegistered = false;
     boot = await bootstrapApi({
       pluginsDir: builtin,
       pluginsDirs: [builtin, user],
       store,
       storeBackend: "sqlite",
       llmAdapter: { generate },
+      perRequestMiddleware: [
+        async (c, next) => {
+          if (!guardRegistered) {
+            const hooks = c.get("hookPipeline");
+            if (!hooks) throw new Error("Missing hook pipeline");
+            hooks.register<{ proposal: Proposal }>({
+              id: "check-ledger",
+              pluginId: "inventory",
+              event: "PreStateCommit",
+              handler: async (_ctx, { proposal }) =>
+                rejectLedger &&
+                proposal.source.runtimeId === "inventory/ledger" &&
+                proposal.type === "plugin.data.update"
+                  ? {
+                      action: "abort",
+                      reason: "The Torch change needs correction.",
+                    }
+                  : { action: "continue" },
+            });
+            guardRegistered = true;
+          }
+          await next();
+        },
+      ],
     });
   });
   afterEach(async () => {
@@ -276,24 +328,27 @@ describe("bundled inventory services through the action API", () => {
       updatedAt: now,
     });
   }
-  async function act() {
+  async function act(
+    action: Pick<ActionRequest, "type" | "payload"> = {
+      type: "submit_actions",
+      payload: {
+        actions: [
+          {
+            kind: "say",
+            text: purchase ? "Buy the Sword for 10 Gold coin." : "Look around.",
+          },
+        ],
+      },
+    },
+    failedRuntimeIds: readonly string[] = [],
+  ) {
     const response = await boot!.app.request("/api/actions", {
       method: "POST",
       headers,
       body: JSON.stringify({
         requestId: crypto.randomUUID(),
         sessionId,
-        type: "submit_actions",
-        payload: {
-          actions: [
-            {
-              kind: "say",
-              text: purchase
-                ? "Buy the Sword for 10 Gold coin."
-                : "Look around.",
-            },
-          ],
-        },
+        ...action,
       }),
     });
     const body = await response.text();
@@ -314,9 +369,11 @@ describe("bundled inventory services through the action API", () => {
     expect(last.commitStatus, body).toBe("committed");
     const results = runtimeResultsOf(last);
     expect(
-      results.filter(({ status }) => status === "failed"),
+      results
+        .filter(({ status }) => status === "failed")
+        .map(({ runtimeId }) => runtimeId),
       body,
-    ).toEqual([]);
+    ).toEqual(failedRuntimeIds);
     return {
       events,
       row: last,
@@ -365,10 +422,82 @@ describe("bundled inventory services through the action API", () => {
       [],
     );
   });
+  it.each(["retry_runtime", "retry_failed_runtimes"] as const)(
+    "%s applies only the outstanding ledger change after a committed purchase",
+    async (type) => {
+      foundTorch = true;
+      rejectLedger = true;
+      const source = await act(undefined, ["inventory/ledger"]);
+      expect(source.operations).toEqual([
+        expect.objectContaining({ status: "committed" }),
+      ]);
+      expect(await items()).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ name: "Gold coin", quantity: 2 }),
+          expect.objectContaining({ name: "Sword", quantity: 1 }),
+        ]),
+      );
+      expect((await items()).some(({ name }) => name === "Torch")).toBe(false);
+      rejectLedger = false;
+      requests.clear();
+      const retry = await act({
+        type,
+        payload: {
+          retryFromTurnId: source.row.turnId,
+          ...(type === "retry_runtime"
+            ? { runtimeId: "inventory/ledger" }
+            : { runtimeIds: ["inventory/ledger"] }),
+        },
+      });
+      expect(retry.results).toEqual([
+        expect.objectContaining({
+          runtimeId: "inventory/ledger",
+          status: "success",
+          output: expect.objectContaining({ alreadyApplied: 2, applied: 1 }),
+        }),
+      ]);
+      expect(await items()).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ name: "Gold coin", quantity: 2 }),
+          expect.objectContaining({ name: "Sword", quantity: 1 }),
+          expect.objectContaining({ name: "Torch", quantity: 1 }),
+        ]),
+      );
+      expect(await items()).toHaveLength(3);
+      expect(retry.operations).toEqual([]);
+      expect(requests.size).toBe(0);
+      expect((await store.getSession(sessionId))?.completedPlayerTurns).toBe(1);
+    },
+  );
+  it.each(["en-US", "zh-CN"])(
+    "persists service badges in both languages for a %s session",
+    async (locale) => {
+      await store.updateSession(sessionId, { locale });
+      const { row } = await act();
+      expect(
+        (
+          await store.getPluginData(
+            sessionId,
+            "inventory",
+            "message",
+            row.turnId,
+          )
+        )?.value,
+      ).toMatchObject({
+        changes: [
+          { badge: { en: "Lost", zh: "失去" } },
+          { badge: { en: "Gained", zh: "获得" } },
+        ],
+      });
+    },
+  );
   it("keeps the story after a concurrent stock conflict and tells the next turn what was not applied", async () => {
     // Panel actions share the execution lock; interleave a store write here.
     beforeProse = () => seedGold(0);
-    const { operations, events, row } = await act();
+    const { operations, events, row } = await act(undefined, [
+      "world-ir",
+      "inventory/ledger",
+    ]);
     expect(operations).toEqual([
       expect.objectContaining({ status: "failed", reason: "conflict" }),
     ]);

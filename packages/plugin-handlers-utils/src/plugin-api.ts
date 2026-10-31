@@ -311,6 +311,8 @@ export interface PluginServiceContext {
   readonly callerPluginId: string;
   readonly sessionId: string;
   readonly locale?: string;
+  /** The provider's session translations and labels in every shipped language. */
+  readonly messages?: PluginMessages;
   readonly pluginData: PluginDataReader;
   readonly world: ExtensionWorldModel;
   readonly getOwnSettings: () => Readonly<Record<string, unknown>>;

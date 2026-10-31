@@ -33,6 +33,8 @@ export interface PluginServiceContext {
   readonly callerPluginId: string;
   readonly sessionId: string;
   readonly locale?: string;
+  /** The provider's session translations and labels in every shipped language. */
+  readonly messages?: import("@covel/plugin-handlers-utils").PluginMessages;
   /** Detached, read-only access to the provider's own non-hidden data. */
   readonly pluginData: import("@covel/plugin-handlers-utils").PluginDataReader;
   readonly world: import("../proposals/world-model.js").WorldModelView;

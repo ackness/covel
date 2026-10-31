@@ -6,3 +6,8 @@
 ### Changed
 
 - **Bag tool changes are counted once.** Fact extraction reuses the tool request's names and quantities for exchanges shown in the story, and the inventory ledger skips changes already handled through the service.
+
+### Fixed
+
+- **Retrying the inventory ledger keeps a committed purchase counted once.** Recovery applies only the outstanding changes, without paying again or adding the purchased item twice.
+- **Service-created inventory badges retain their translations.** Newly stored badges carry English and Chinese labels and follow the player's UI language.

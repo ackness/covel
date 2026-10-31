@@ -86,7 +86,7 @@ export default function (covel) {
 - 不能通过这里读其他插件的私有 namespace。
 - 社区提供者的 `ctx.utils` 和它的 `covel.http` 一样，只能访问它自己包的 `permissions.http` 列出的源（见[插件参考](./plugins.md#runtime-分组字段)）。
 
-服务与扩展上下文共用 `sessionId`、`locale`、只读 `pluginData`、`world` 和 `getOwnSettings()`；服务的执行内可见规则见[服务上下文](./plugin-extensions.md#服务能拿到什么不能拿到什么)，扩展仍读取自己的执行快照。
+服务与扩展上下文共用 `sessionId`、`locale`、提供者自己的 `messages`、只读 `pluginData`、`world` 和 `getOwnSettings()`；服务的执行内可见规则见[服务上下文](./plugin-extensions.md#服务能拿到什么不能拿到什么)，扩展仍读取自己的执行快照。
 
 `ctx.pluginData` 的读取方法在四个地方形状相同：函数 runtime 的 handler、runtime 的 guard、扩展点的 handler、服务的 handler。代码可以在它们之间直接搬用。
 
