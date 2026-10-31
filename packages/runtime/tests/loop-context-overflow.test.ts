@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { LLMAdapter } from "@covel/shared";
+import type { LLMAdapter, LLMMessage } from "@covel/shared";
 import { tool } from "@covel/tools";
 import { z } from "zod";
 import { ContextOverflowError } from "../src/agent-loop/request-context-budget.js";
@@ -49,6 +49,120 @@ function identity(llm: LLMAdapter): LLMAdapter {
 afterEach(() => vi.restoreAllMocks());
 
 describe("context overflow in the agent loop", () => {
+  it("keeps the latest tool result for a fitting step-limit finalizer", async () => {
+    const data = { destination: "north gate", password: "silver leaf" };
+    const read = tool({
+      name: "read",
+      description: "Read directions",
+      parameters: z.object({}),
+      execute: async () => data,
+    });
+    const llm = queuedLLM([toolCall("read", {}), prose("Take the north gate")]);
+    const emitter = makeEmitterSpy();
+    const messages: LLMMessage[] = [
+      { role: "system", content: "sys" },
+      { role: "user", content: "go" },
+    ];
+    const loop = await runLoop({
+      llm,
+      manifest: manifest({ tools: { plugin: ["read"] } }),
+      maxSteps: 1,
+      messages,
+      deps: { emitter, toolExecutor: makeExecutor([read]) },
+      estimator: small.estimator,
+      contextBudget: { maxInputTokens: 6_000, reservedForResponse: 100 },
+    });
+    expect(loop.stop).toEqual({ reason: "max-steps", finalizer: true });
+    expect(llm.requests).toHaveLength(2);
+    expect(llm.requests[1]?.tools).toBeUndefined();
+    const result = llm.requests[1]?.messages.find(
+      (message) => message.role === "tool",
+    );
+    expect(result).toEqual(messages.find((message) => message.role === "tool"));
+    expect(JSON.parse(String(result?.content)).data).toEqual(data);
+    expect(
+      emitter.events.filter((event) => event.type === "context.pruned"),
+    ).toHaveLength(0);
+  });
+
+  it("keeps each result with its call when a hook removes an earlier reused ID", async () => {
+    const read = tool({
+      name: "read",
+      description: "Read data",
+      parameters: z.object({ page: z.number() }),
+      execute: async ({ page }) => ({ page, body: "r".repeat(1_200) }),
+    });
+    const messages: LLMMessage[] = [
+      { role: "system", content: "sys" },
+      { role: "user", content: "go" },
+      ...Array.from({ length: 4 }, (_, page): LLMMessage[] => [
+        {
+          role: "assistant",
+          content: "",
+          toolCalls: [
+            { id: "reused", name: "read", arguments: JSON.stringify({ page }) },
+          ],
+        },
+        {
+          role: "tool",
+          toolCallId: "reused",
+          content: JSON.stringify({
+            summary: `page ${page}`,
+            data: { page, body: "r".repeat(1_200) },
+          }),
+        },
+      ]).flat(),
+    ];
+    const hookPipeline = createHookPipeline();
+    let calls = 0;
+    hookPipeline.register<PreLLMCallRequest>({
+      id: "filter-earlier-call",
+      event: "PreLLMCall",
+      handler: async (_ctx, payload) =>
+        ++calls === 1
+          ? { action: "continue" }
+          : {
+              action: "continue",
+              replace: {
+                messages: structuredClone([
+                  ...payload.messages.slice(0, 2),
+                  ...payload.messages.slice(4),
+                ]),
+              },
+            },
+    });
+    const llm = queuedLLM([
+      toolCall("read", { page: 4 }, "reused"),
+      prose("done"),
+    ]);
+    const loop = await runLoop({
+      llm,
+      messages,
+      hookPipeline,
+      manifest: manifest({ tools: { plugin: ["read"] } }),
+      deps: { toolExecutor: makeExecutor([read]) },
+      estimator: small.estimator,
+      contextBudget: { maxInputTokens: 5_000, reservedForResponse: 100 },
+    });
+    expect(loop.stop).toEqual({ reason: "completed" });
+    expect(llm.requests).toHaveLength(2);
+    const firstResults = llm.requests[0]!.messages.filter(
+      (message) => message.role === "tool",
+    );
+    expect(JSON.parse(String(firstResults[0]?.content))).toMatchObject({
+      summary: "page 0",
+      data: "[older tool output omitted]",
+    });
+    const laterResults = llm.requests[1]!.messages.filter(
+      (message) => message.role === "tool",
+    );
+    expect(laterResults.slice(0, 3)).toEqual(firstResults.slice(1));
+    expect(JSON.parse(String(laterResults[3]?.content)).data).toEqual({
+      page: 4,
+      body: "r".repeat(1_200),
+    });
+  });
+
   it("condenses a long tool conversation while preserving full runtime tool results and the canonical transcript", async () => {
     const read = tool({
       name: "read",

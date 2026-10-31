@@ -43,6 +43,20 @@ function group(index: number, size = 1_200, args = "{}"): LLMMessage[] {
 const transcript = (count: number, size = 1_200, args = "{}") =>
   Array.from({ length: count }, (_, index) => group(index, size, args)).flat();
 
+const repeatedIds = (messages: readonly LLMMessage[]) =>
+  messages.map((message) => ({
+    ...message,
+    ...(message.toolCalls
+      ? {
+          toolCalls: message.toolCalls.map((call) => ({
+            ...call,
+            id: "reused",
+          })),
+        }
+      : {}),
+    ...(message.toolCallId ? { toolCallId: "reused" } : {}),
+  }));
+
 function fit(
   policy: ReturnType<typeof createLoopContextPolicy>,
   messages: readonly LLMMessage[],
@@ -55,18 +69,23 @@ function fit(
 }
 
 describe("loop context policy", () => {
-  it("leaves a request under the limit unchanged and does not retain its objects", () => {
-    const messages = transcript(3);
-    const policy = createLoopContextPolicy({});
-    const result = fit(policy, messages, 20_000);
-    expect(result).toEqual({
-      messages,
-      elidedToolResultCount: 0,
-      collapsedStepCount: 0,
-    });
-    expect(result.messages).not.toBe(messages);
-    expect(fit(policy, structuredClone(messages), 20_000)).toEqual(result);
-  });
+  it.each(["normal", "emergency"] as const)(
+    "leaves a fitting request unchanged in %s mode and does not retain its objects",
+    (mode) => {
+      const messages = transcript(3);
+      const policy = createLoopContextPolicy({});
+      const result = fit(policy, messages, tokens(messages), mode);
+      expect(result).toEqual({
+        messages,
+        elidedToolResultCount: 0,
+        collapsedStepCount: 0,
+      });
+      expect(result.messages).not.toBe(messages);
+      expect(fit(policy, structuredClone(messages), 20_000, mode)).toEqual(
+        result,
+      );
+    },
+  );
 
   it.each([
     ["en-US", "[older tool output omitted]"],
@@ -146,27 +165,57 @@ describe("loop context policy", () => {
       ...messages[1]!,
       content: JSON.stringify({ summary: `call-0 ${uuid} ${date}` }),
     };
-    const result = fit(createLoopContextPolicy({}), messages, 500, "emergency");
+    const result = fit(createLoopContextPolicy({}), messages, 1, "emergency");
+    expect(result.collapsedStepCount).toBe(1);
     const digest = String(result.messages[0]!.content);
     expect(digest).not.toContain("call-0");
     expect(digest).not.toMatch(/[0-9a-f]{8}-[0-9a-f-]{27}|\d{4}-\d{2}-\d{2}T/);
   });
 
-  it("targets seventy percent and replays byte-identical prefixes between triggers", () => {
-    const messages = transcript(5);
-    const limit = tokens(messages) - 1;
-    const policy = createLoopContextPolicy({});
-    const first = fit(policy, messages, limit);
-    expect(tokens(first.messages)).toBeLessThanOrEqual(Math.floor(0.7 * limit));
-    const next = fit(
-      policy,
-      [...structuredClone(messages), { role: "user", content: "more" }],
-      limit,
-    );
-    expect(next.messages.slice(0, -1)).toEqual(first.messages);
-    expect(next.elidedToolResultCount).toBe(first.elidedToolResultCount);
-    expect(next.collapsedStepCount).toBe(first.collapsedStepCount);
-  });
+  it.each(["normal", "emergency"] as const)(
+    "stops eliding at seventy percent and replays byte-identical prefixes in %s mode",
+    (mode) => {
+      const messages = transcript(5);
+      const limit = tokens(messages) - 1;
+      const policy = createLoopContextPolicy({});
+      const first = fit(policy, messages, limit, mode);
+      expect(tokens(first.messages)).toBeLessThanOrEqual(
+        Math.floor(0.7 * limit),
+      );
+      expect(first.elidedToolResultCount).toBe(2);
+      expect(first.collapsedStepCount).toBe(0);
+      expect(first.messages.slice(4)).toEqual(messages.slice(4));
+      const next = fit(
+        policy,
+        [...structuredClone(messages), { role: "user", content: "more" }],
+        limit,
+        mode,
+      );
+      expect(next.messages.slice(0, -1)).toEqual(first.messages);
+      expect(next.elidedToolResultCount).toBe(first.elidedToolResultCount);
+      expect(next.collapsedStepCount).toBe(first.collapsedStepCount);
+    },
+  );
+
+  it.each(["normal", "emergency"] as const)(
+    "stops collapsing at seventy percent in %s mode",
+    (mode) => {
+      const messages = transcript(
+        4,
+        10,
+        JSON.stringify({ query: "q".repeat(800) }),
+      );
+      const limit = tokens(messages) - 1;
+      const result = fit(createLoopContextPolicy({}), messages, limit, mode);
+      expect(tokens(result.messages)).toBeLessThanOrEqual(
+        Math.floor(0.7 * limit),
+      );
+      expect(result.collapsedStepCount).toBe(2);
+      expect(
+        result.messages.filter((message) => message.role === "assistant"),
+      ).toEqual([messages[4], messages[6]]);
+    },
+  );
 
   it("keeps collapse events separate and monotonically replays them after hook rewrites", () => {
     const messages = transcript(
@@ -193,19 +242,6 @@ describe("loop context policy", () => {
   });
 
   it("keeps newest results and frozen prefixes when a provider reuses call IDs", () => {
-    const repeatedIds = (messages: readonly LLMMessage[]) =>
-      messages.map((message) => ({
-        ...message,
-        ...(message.toolCalls
-          ? {
-              toolCalls: message.toolCalls.map((call) => ({
-                ...call,
-                id: "reused",
-              })),
-            }
-          : {}),
-        ...(message.toolCallId ? { toolCallId: "reused" } : {}),
-      }));
     const messages = repeatedIds(transcript(4));
     const policy = createLoopContextPolicy({});
     const limit = tokens(messages) - 1;
@@ -227,6 +263,70 @@ describe("loop context policy", () => {
     expect(replay.collapsedStepCount).toBeGreaterThan(0);
     expect(replay.messages.slice(-2)).toEqual(largeArguments.slice(-2));
   });
+
+  it.each(["elision", "collapse"] as const)(
+    "skips a missing or ambiguous %s when a hook filters reused call IDs",
+    (stage) => {
+      const firstGroup = group(
+        0,
+        stage === "elision" ? 5_000 : 10,
+        stage === "collapse"
+          ? JSON.stringify({ query: "q".repeat(5_000) })
+          : "{}",
+      );
+      const messages = repeatedIds([
+        ...firstGroup,
+        ...group(1, 10),
+        ...group(2, 10),
+        ...group(3, 10),
+      ]);
+      const policy = createLoopContextPolicy({});
+      const first = fit(policy, messages, 2_000);
+      expect(first.elidedToolResultCount).toBeGreaterThan(0);
+      expect(first.collapsedStepCount).toBe(stage === "collapse" ? 1 : 0);
+      expect(first.messages.slice(-4)).toEqual(messages.slice(-4));
+
+      const rewritten = structuredClone(messages.slice(2));
+      const replay = fit(policy, rewritten, 20_000);
+      expect(replay.collapsedStepCount).toBe(0);
+      expect(replay.elidedToolResultCount).toBe(
+        first.elidedToolResultCount - 1,
+      );
+      expect(replay.messages).toEqual(
+        first.messages.slice(stage === "collapse" ? 1 : 2),
+      );
+
+      const ambiguous = structuredClone([...messages.slice(0, 2), ...messages]);
+      const skipped = fit(policy, ambiguous, 20_000);
+      expect(skipped.collapsedStepCount).toBe(0);
+      expect(skipped.elidedToolResultCount).toBe(
+        first.elidedToolResultCount - 1,
+      );
+      expect(skipped.messages.slice(0, 4)).toEqual(ambiguous.slice(0, 4));
+    },
+  );
+
+  it.each(["name", "arguments"] as const)(
+    "does not replay elision when a hook changes the call's %s",
+    (field) => {
+      const messages = transcript(4);
+      const policy = createLoopContextPolicy({});
+      expect(
+        fit(policy, messages, tokens(messages) - 1).elidedToolResultCount,
+      ).toBe(2);
+      const rewritten = structuredClone(messages);
+      rewritten[0] = {
+        ...rewritten[0]!,
+        toolCalls: rewritten[0]!.toolCalls!.map((call) => ({
+          ...call,
+          [field]: field === "name" ? "lookup" : '{"page":2}',
+        })),
+      };
+      const replay = fit(policy, rewritten, 20_000);
+      expect(replay.elidedToolResultCount).toBe(1);
+      expect(replay.messages[1]).toEqual(rewritten[1]);
+    },
+  );
 
   it("silently skips a frozen event when a hook removed only part of its groups", () => {
     const messages = transcript(
@@ -272,12 +372,16 @@ describe("loop context policy", () => {
     }
   });
 
-  it("collapses every group in emergency mode even when already under the limit", () => {
-    const messages = transcript(3);
+  it("can collapse every group in emergency mode when needed to reach the target", () => {
+    const messages = transcript(
+      3,
+      10,
+      JSON.stringify({ query: "q".repeat(800) }),
+    );
     const result = fit(
       createLoopContextPolicy({ locale: "zh-CN" }),
       messages,
-      20_000,
+      500,
       "emergency",
     );
     expect(result.collapsedStepCount).toBe(3);
@@ -311,10 +415,15 @@ describe("loop context policy", () => {
       ...messages[5]!,
       content: [{ type: "text", text: "parts" }],
     };
-    const result = fit(createLoopContextPolicy({}), messages, 7_000);
+    const result = fit(createLoopContextPolicy({}), messages, 5_000);
     expect(result.messages[1]?.content).toBe("[older tool output omitted]");
     expect(result.messages[3]?.content).toBe("[older tool output omitted]");
     expect(result.messages[5]).toEqual(messages[5]);
-    expect(result.elidedToolResultCount).toBe(2);
+    expect(JSON.parse(String(result.messages[7]?.content)).data).toBe(
+      "[older tool output omitted]",
+    );
+    expect(result.messages.slice(-4)).toEqual(messages.slice(-4));
+    expect(result.elidedToolResultCount).toBe(3);
+    expect(result.collapsedStepCount).toBe(0);
   });
 });
