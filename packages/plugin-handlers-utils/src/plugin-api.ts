@@ -114,6 +114,8 @@ export interface PluginProposalPayloads {
   "character.upsert": {
     readonly id: string;
     readonly name: string;
+    readonly aliases?: readonly string[];
+    readonly removeAliases?: readonly string[];
     readonly type?: string;
     readonly description?: string;
     readonly fields?: unknown;

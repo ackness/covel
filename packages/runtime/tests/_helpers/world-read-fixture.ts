@@ -104,9 +104,15 @@ export const refuseProducer = (p: Proposal) =>
 export const stageCharacter = tool({
   name: "stage-character",
   description: "Stage a character description",
-  parameters: z.object({ id: z.string(), description: z.string() }),
-  execute: async ({ id, description }) =>
-    withPendingProposals({ staged: true }, [character(id, description)]),
+  parameters: z.object({
+    id: z.string(),
+    description: z.string(),
+    expectedVersion: z.number().int().optional(),
+  }),
+  execute: async ({ id, description, expectedVersion }) =>
+    withPendingProposals({ staged: true }, [
+      character(id, description, expectedVersion),
+    ]),
 });
 const stores: DataStore[] = [];
 afterEach(async () => {

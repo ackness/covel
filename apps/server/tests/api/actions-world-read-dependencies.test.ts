@@ -8,7 +8,8 @@ import {
   type PluginRegistryEntry,
 } from "@covel/plugin-loader";
 import type { LLMAdapter, RuntimeManifest, RuntimeResult } from "@covel/shared";
-import { withPendingProposals } from "@covel/tools";
+import { createDefaultToolRegistry, withPendingProposals } from "@covel/tools";
+import { createToolExecutor } from "@covel/runtime";
 import { actionRoutes } from "../../src/routes/api/actions.js";
 import { sessionTurnRoutes } from "../../src/routes/api/session-turns.js";
 import { createInProcessSessionLock } from "../../src/lib/session-lock.js";
@@ -42,6 +43,14 @@ describe("action streams for rejected world producers", () => {
       const pluginRegistry = createPluginRegistry();
       const producer = manifest("producer", { stage: "pre-turn", concealed });
       const reader = manifest("reader", { concealed });
+      const child = manifest("child", {
+        runtimeType: "agent",
+        handler: undefined,
+        subagentOnly: true,
+        trigger: { type: "manual" },
+        tools: { builtin: ["get-character"] },
+        concealed,
+      });
       const story = manifest("story", {
         stage: "narrative",
         outputKind: "story",
@@ -88,11 +97,12 @@ describe("action streams for rejected world producers", () => {
             manifest: reader,
             promptTemplate: concealed ? SECRET : "",
             handler: async (ctx) => {
-              const description = ctx.world!.characters.find(
-                (c) => c.id === "visitor",
-              )?.description;
-              expect(description).toBe(SECRET);
-              await ctx.pluginData!.set("notes", "derived", description!);
+              const childResult = await ctx.agents!.run({
+                target: { runtimeId: child.name },
+                brief: "A constant safe brief",
+              });
+              expect(childResult.ok).toBe(true);
+              await ctx.pluginData!.set("notes", "derived", true);
               return { outcome: "success", value: { private: SECRET } };
             },
           },
@@ -103,8 +113,14 @@ describe("action streams for rejected world producers", () => {
             manifest: story,
             promptTemplate: "",
             handler: async (ctx) => {
-              void ctx.world!.characters;
-              void ctx.world!.characters;
+              expect(
+                (
+                  await ctx.agents!.run({
+                    target: { runtimeId: child.name },
+                    brief: "A constant safe brief",
+                  })
+                ).ok,
+              ).toBe(true);
               return {
                 outcome: "success",
                 value: { narrativeOutput: "The story continues." },
@@ -113,6 +129,10 @@ describe("action streams for rejected world producers", () => {
           },
         ],
       ]);
+      loaded.set(child.name, {
+        manifest: child,
+        promptTemplate: "Read the current character",
+      });
       pluginRegistry.register({
         id: PLUGIN,
         summary: {
@@ -120,9 +140,9 @@ describe("action streams for rejected world producers", () => {
           name: PLUGIN,
           description: "",
           kind: "plugin",
-          runtimeCount: 3,
+          runtimeCount: 4,
         },
-        manifests: [producer, story, reader].map((m) => ({
+        manifests: [producer, story, reader, child].map((m) => ({
           runtime: { function: {} },
           manifest: m,
           promptTemplate: "",
@@ -133,11 +153,44 @@ describe("action streams for rejected world producers", () => {
         source: "builtin",
       } as PluginRegistryEntry);
       const loadRuntimeFn = async (m: RuntimeManifest) => loaded.get(m.name);
+      let childCalls = 0;
       const llm: LLMAdapter = {
-        generate: async () => {
-          throw new Error("Functions do not use a model");
+        generate: async ({ messages }) => {
+          if (childCalls++ % 2 === 0)
+            return {
+              content: null,
+              toolCalls: [
+                {
+                  id: crypto.randomUUID(),
+                  name: "get-character",
+                  arguments: JSON.stringify({ id: "visitor" }),
+                },
+              ],
+              finishReason: "tool_calls",
+              usage: { inputTokens: 1, outputTokens: 1 },
+            };
+          expect(
+            JSON.stringify(messages.filter((m) => m.role === "tool")),
+          ).toContain(SECRET);
+          return {
+            content: "Complete",
+            toolCalls: [],
+            finishReason: "stop",
+            usage: { inputTokens: 1, outputTokens: 1 },
+          };
         },
       };
+      const tools = createDefaultToolRegistry({
+        store,
+        eventDirectory: {
+          listTopics: async () => [],
+          validate: async () => ({ ok: true }),
+        },
+      });
+      const toolExecutor = createToolExecutor({
+        store,
+        findTool: (name, ctx) => tools.find(name, ctx.pluginId),
+      });
       const runtimeJobWorker = createTestRuntimeJobWorker({
         store,
         eventBus,
@@ -146,6 +199,7 @@ describe("action streams for rejected world producers", () => {
         deps: {
           loadRuntime: loadRuntimeFn,
           llm,
+          toolExecutor,
           resolveModel: () => undefined,
         },
       });
@@ -155,6 +209,7 @@ describe("action streams for rejected world producers", () => {
         c.set("store", store);
         c.set("pluginRegistry", pluginRegistry);
         c.set("llmAdapter", llm);
+        c.set("toolExecutor", toolExecutor);
         c.set("loadRuntimeFn", loadRuntimeFn);
         c.set("resolveModel", () => undefined);
         c.set("eventBus", eventBus);
@@ -220,6 +275,8 @@ describe("action streams for rejected world producers", () => {
         const readerResult = persisted.find(
           (r) => r.runtimeId === reader.name,
         )!;
+        expect(childCalls).toBe(4);
+        expect(persisted.some((r) => r.runtimeId === child.name)).toBe(false);
         expect(readerResult.status).toBe("failed");
         const correction = events.findIndex(
           (e) =>

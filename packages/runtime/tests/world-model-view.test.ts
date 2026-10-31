@@ -13,6 +13,7 @@ import {
   snapshotWorldModelView,
   memoizeWorldModelReads,
   overlayWorldModelView,
+  forkWorldModelView,
 } from "../src/function-runtime/world-model-view.js";
 import { collectUpstreamWorldWrites } from "../src/function-runtime/upstream-world-model.js";
 import { attachNestedResults } from "../src/turn-executor/nested-results.js";
@@ -59,6 +60,121 @@ const character = () =>
   });
 
 describe("execution World Model", () => {
+  it("forks owned values and speculative property reads without borrowing the parent lifetime", async () => {
+    const store = createMemoryStore();
+    const upstream = [
+      { runId: "schema-producer", runtimeId: "schema", proposal: schema() },
+      {
+        runId: "character-producer",
+        runtimeId: "character",
+        proposal: character(),
+      },
+    ];
+    const recorder = new Set(["existing-parent-read"]);
+    const pending: Proposal[] = [];
+    const parentAbort = new AbortController();
+    const parent = await createWorldModelView(
+      store,
+      sessionId,
+      upstream.map((w) => w.proposal),
+      pending,
+      () => parentAbort.signal.throwIfAborted(),
+      undefined,
+      { upstream, recorder },
+    );
+    const child = forkWorldModelView(parent);
+    const discarded = forkWorldModelView(parent);
+    for (const view of [child.world, discarded.world]) {
+      void view.dimensions;
+      void view.seats;
+      void view.worldRecord;
+      void view.dimensionProviderPluginId;
+    }
+    expect([...recorder]).toEqual(["existing-parent-read"]);
+    expect(child.world.characters[0]?.fields).toEqual({ hp: 5 });
+    void discarded.world.characterSchema;
+    (discarded.world.characters[0]!.fields as { hp: number }).hp = 6;
+    expect(child.world.characters[0]?.fields).toEqual({ hp: 5 });
+    discarded.discard();
+    discarded.accept();
+    expect([...recorder]).toEqual(["existing-parent-read"]);
+    pending.push(
+      proposal("character.upsert", {
+        ...character().payload,
+        fields: { hp: 8 },
+      }),
+    );
+    expect(parent.characters[0]?.fields).toEqual({ hp: 8 });
+    recorder.delete("character-producer");
+    pending.splice(
+      0,
+      1,
+      proposal("character.upsert", {
+        ...character().payload,
+        fields: { hp: 9 },
+      }),
+    );
+    expect(child.world.characters[0]?.fields).toEqual({ hp: 5 });
+    parentAbort.abort();
+    const toolCopy = snapshotWorldModelView(child.world);
+    const overlay = overlayWorldModelView(child.world, sessionId);
+    expect(toolCopy.characters[0]?.fields).toEqual({ hp: 5 });
+    child.accept();
+    child.accept();
+    child.discard();
+    expect([...recorder]).toEqual([
+      "existing-parent-read",
+      "character-producer",
+    ]);
+    for (const view of [child.world, toolCopy, overlay, discarded.world])
+      expect(() => view.characters).toThrow("completed");
+    await store.close();
+  });
+
+  it("unions successful sibling reads and refuses cancelled forks without clearing parent reads", async () => {
+    const store = createMemoryStore();
+    const upstream = [
+      { runId: "schema-producer", runtimeId: "schema", proposal: schema() },
+      {
+        runId: "character-producer",
+        runtimeId: "character",
+        proposal: character(),
+      },
+    ];
+    const recorder = new Set(["parent"]);
+    const parent = await createWorldModelView(
+      store,
+      sessionId,
+      upstream.map((w) => w.proposal),
+      [],
+      undefined,
+      undefined,
+      { upstream, recorder },
+    );
+    const characters = forkWorldModelView(parent);
+    const schemaChild = forkWorldModelView(parent);
+    const abort = new AbortController();
+    const cancelled = forkWorldModelView(parent, () =>
+      abort.signal.throwIfAborted(),
+    );
+    void characters.world.characters;
+    void schemaChild.world.characterSchema;
+    void cancelled.world.characters;
+    expect([...recorder]).toEqual(["parent"]);
+    schemaChild.accept();
+    abort.abort();
+    expect(() => cancelled.world.characterSchema).toThrow();
+    expect(() => cancelled.accept()).toThrow();
+    cancelled.discard();
+    characters.accept();
+    expect([...recorder]).toEqual([
+      "parent",
+      "schema-producer",
+      "character-producer",
+    ]);
+    await store.close();
+  });
+
   it("validates the same ordered schema and character proposals at read and commit", async () => {
     const store = createMemoryStore();
     const pending = [schema(), character()];

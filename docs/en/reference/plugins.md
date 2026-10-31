@@ -920,7 +920,7 @@ The character schema, the characters, and the world record belong to the kernel'
 - `ctx.world.dimensions` starts from the provider's frozen snapshot and overlays the valid dimension proposals visible to that view. See [Dynamic dimensions](#dynamic-dimensions) for the distinction between public reads and execution-local previews.
 - `ctx.world.seats` holds the session's seats, frozen as well. No proposal changes them; the player switches the current character through the [switch endpoint](./api.md#session-seats), and it applies from the next turn.
 
-Actual `characters` / `characterSchema` reads record upstream producers, using the same invocation recorder in tools and services. Auxiliary readers drop with rejected producers; story/setup readers survive with a trace. See [World Model](./world-model.md) for visibility, conservative granularity and seed exclusion. Recursive calls do not inherit parent upstream state, and sub-agents still read committed world data.
+Actual `characters` / `characterSchema` reads record upstream producers, using the same invocation recorder in tools and services. Auxiliary readers drop with rejected producers; story/setup readers survive with a trace. See [World Model](./world-model.md) for visibility, conservative granularity and seed exclusion. Sub-agents capture the world at admission; successful child property reads belong to the caller, while failed child reads are discarded. Plugin KV and recursive executions do not inherit parent upstream state.
 
 **Finding a character by name.** Besides `name`, a character can have `aliases` (other names for the same person).
 

@@ -15,9 +15,9 @@ import {
   type ModelProviderAdapter,
 } from "@covel/ai-provider";
 import { characterActorOutputJsonSchema } from "@covel/shared";
-import type { LLMAdapter, StorySegment } from "@covel/shared";
+import type { LLMAdapter, StorySegment, RuntimeManifest } from "@covel/shared";
 import { createMemoryStore } from "@covel/store/memory";
-import { delegateTool } from "@covel/tools";
+import { delegateTool, tool, z, withPendingProposals } from "@covel/tools";
 import { loadRuntimeBundle } from "../../test-runtime/src/runtime-loading.js";
 import {
   PluginServiceRegistry,
@@ -34,6 +34,8 @@ const root = path.resolve(import.meta.dirname, "../../../plugins");
 describe("bundled orchestration", () => {
   it.each([
     "success",
+    "inherited-world",
+    "inherited-world-failure",
     "concealed-actor",
     "director",
     "director-no-slot",
@@ -51,6 +53,7 @@ describe("bundled orchestration", () => {
     "commits the real dialogue pipeline with isolated contributions: %s",
     async (mode) => {
       const directorMode = mode.startsWith("director");
+      const inherited = mode.startsWith("inherited-world");
       const store = createMemoryStore();
       const active = [
         "chat-mode-narrator",
@@ -253,12 +256,54 @@ describe("bundled orchestration", () => {
           updatedAt: now,
         });
       }
+      const worldProducer: RuntimeManifest = {
+        pluginId: "world-updater",
+        name: "world-updater/stage",
+        description: "Stage a character",
+        runtimeType: "function",
+        stage: "pre-turn",
+        outputKind: "system",
+        trigger: { type: "auto" },
+      };
+      let actorWorldReads = 0;
+      const actorRead = tool({
+        name: "read-actor-world",
+        description: "Read a visible character",
+        annotations: { readOnly: true },
+        parameters: z.object({}),
+        execute: async (_args, ctx) => {
+          actorWorldReads++;
+          const description = ctx.world!.characters.find(
+            (c) => c.name === "Mara",
+          )?.description;
+          expect(description).toBe("staged profile");
+          return { description };
+        },
+      });
+      if (inherited) {
+        const index = manifests.findIndex(
+          (manifest) => manifest.outputContract === "character-actor@1",
+        );
+        manifests[index] = {
+          ...manifests[index]!,
+          pluginId: "replacement-actor",
+          name: "replacement-actor/play",
+          tools: { builtin: [actorRead.name] },
+        };
+        manifests.push(worldProducer);
+        active.push("replacement-actor", worldProducer.pluginId);
+        await store.updateSession("scene", {
+          activePlugins: active,
+          updatedAt: now,
+        });
+      }
       const delegates: string[] = [];
       const llm: LLMAdapter = {
         generate: async (request) => {
           const text = JSON.stringify(request.messages);
           if (text.includes("Play only the character assigned")) {
-            actorRequests.push(text);
+            if (!inherited || !request.messages.some((m) => m.role === "tool"))
+              actorRequests.push(text);
             const name =
               text.includes('"name":"Mara"') ||
               text.includes('\\"name\\":\\"Mara\\"')
@@ -276,7 +321,14 @@ describe("bundled orchestration", () => {
               expect(text).not.toContain("MARA-PRIVATE-EXCHANGE");
               expect(text).not.toContain("OMNISCIENT-SECRET");
             }
-            if (mode === "all-fail" || (mode === "one-fails" && name === "Ivo"))
+            if (inherited && !request.messages.some((m) => m.role === "tool"))
+              return toolCall(actorRead.name, {}, `read-${name}`);
+            if (inherited) expect(text).toContain("staged profile");
+            if (
+              mode === "all-fail" ||
+              (["one-fails", "inherited-world-failure"].includes(mode) &&
+                name === "Ivo")
+            )
               throw new Error("Actor model unavailable");
             return prose(
               JSON.stringify({
@@ -331,7 +383,7 @@ describe("bundled orchestration", () => {
               {
                 target: { contract: "character-actor@1" },
                 character: next.character,
-                brief: plan!.brief,
+                brief: inherited ? "A constant safe brief" : plan!.brief,
               },
               `actor-${next.character}`,
             );
@@ -430,9 +482,50 @@ describe("bundled orchestration", () => {
             toolExecutor: createToolExecutor({
               store,
               findTool: (name) =>
-                name === "delegate" ? delegateTool : undefined,
+                name === "delegate"
+                  ? delegateTool
+                  : name === actorRead.name
+                    ? actorRead
+                    : undefined,
             }),
             loadRuntime: async (manifest) => {
+              if (manifest === worldProducer)
+                return {
+                  manifest,
+                  promptTemplate: "",
+                  handler: async () =>
+                    withPendingProposals(
+                      { outcome: "success" as const, value: {} },
+                      [
+                        {
+                          id: crypto.randomUUID(),
+                          type: "character.upsert" as const,
+                          sessionId: "scene",
+                          turnId: "beat",
+                          timestamp: now,
+                          source: {
+                            pluginId: worldProducer.pluginId,
+                            runtimeId: worldProducer.name,
+                          },
+                          payload: {
+                            id: "private-a",
+                            name: "Mara",
+                            type: "npc",
+                            description: "staged profile",
+                            expectedVersion: 1,
+                          },
+                        },
+                      ],
+                    ),
+                };
+              if (manifest.pluginId === "replacement-actor")
+                return {
+                  manifest,
+                  promptTemplate: "Play only the character assigned",
+                  outputSchema: characterActorOutputJsonSchema(),
+                  outputContractSchema: characterActorOutputJsonSchema(),
+                };
+
               const loaded = bundle.loadedCache.get(manifest.name);
               return mode === "planner-failure" &&
                 manifest.name === "chat-mode-narrator/plan" &&
@@ -478,10 +571,19 @@ describe("bundled orchestration", () => {
         }
         if (
           directorMode ||
-          ["success", "concealed-actor", "one-fails"].includes(mode)
+          [
+            "success",
+            "concealed-actor",
+            "one-fails",
+            "inherited-world",
+            "inherited-world-failure",
+          ].includes(mode)
         )
           expect(content).toContain("Mara answers.");
-        if (directorMode || ["success", "concealed-actor"].includes(mode))
+        if (
+          directorMode ||
+          ["success", "concealed-actor", "inherited-world"].includes(mode)
+        )
           expect(content).toContain("Ivo answers.");
         else expect(content).not.toContain("Ivo answers.");
         if (
@@ -526,7 +628,13 @@ describe("bundled orchestration", () => {
         expect(JSON.stringify(trace)).not.toContain("PRIVATE-INTENT");
         if (
           directorMode ||
-          ["success", "concealed-actor", "one-fails"].includes(mode)
+          [
+            "success",
+            "concealed-actor",
+            "one-fails",
+            "inherited-world",
+            "inherited-world-failure",
+          ].includes(mode)
         )
           expect(
             parentRequests.some((request) =>
@@ -561,7 +669,15 @@ describe("bundled orchestration", () => {
             ],
           });
         }
-        if (mode === "one-fails")
+        if (inherited) {
+          expect(actorWorldReads).toBe(2);
+          expect(
+            execution.commit.results.some(
+              (r) => r.runtimeId === "replacement-actor/play",
+            ),
+          ).toBe(false);
+        }
+        if (["one-fails", "inherited-world-failure"].includes(mode))
           expect(trace.some((event) => event.type === "subagent.failed")).toBe(
             true,
           );

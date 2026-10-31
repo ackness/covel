@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
-import { tool, type PluginToolDefinition } from "../src/index.js";
+import {
+  tool,
+  withPendingProposals,
+  getPendingProposals,
+  type PluginToolDefinition,
+  type PluginProposalFor,
+} from "../src/index.js";
 
 const parameters = z.object({ value: z.string() });
 function define(
@@ -16,6 +22,27 @@ function define(
 }
 
 describe("tool annotations and timeout", () => {
+  it("accepts alias additions and removals in an author's character proposal", () => {
+    const proposal: PluginProposalFor<"character.upsert"> = {
+      id: "proposal",
+      type: "character.upsert",
+      sessionId: "session",
+      turnId: "turn",
+      source: { pluginId: "author", runtimeId: "author/characters" },
+      timestamp: "2026-10-31",
+      payload: {
+        id: "keeper",
+        name: "Keeper",
+        aliases: ["Captain"],
+        removeAliases: ["Stranger"],
+        expectedVersion: 1,
+      },
+    };
+    expect(getPendingProposals(withPendingProposals({}, [proposal]))).toEqual([
+      proposal,
+    ]);
+  });
+
   it("defaults to a write tool without concurrency safety or a timeout", () => {
     const module = define();
     expect(module.annotations).toEqual({

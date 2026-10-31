@@ -920,7 +920,7 @@ homepage: https://example.com/tidefall
 - `ctx.world.dimensions` 以提供者发布的冻结快照为底本，并叠加该视图可见的合法维度 proposal。公共读取与执行内预览的区别见下面的[动态维度](#动态维度)。
 - `ctx.world.seats` 是会话的座位，同样冻结。proposal 不改它，玩家用[切换接口](./api.md#会话座位)换当前角色，下一回合生效。
 
-实际读取 `characters` / `characterSchema` 会记录上游生产者，工具和服务共享该调用的读取记录器。辅助读者在生产者被丢弃时一起丢弃，story/setup 保留并记 trace。可见范围、保守粒度和种子排除见 [World Model](./world-model.md)。递归调用不继承父执行的上游，子 agent 仍读已提交世界。
+实际读取 `characters` / `characterSchema` 会记录上游生产者，工具和服务共享该调用的读取记录器。辅助读者在生产者被丢弃时一起丢弃，story/setup 保留并记 trace。可见范围、保守粒度和种子排除见 [World Model](./world-model.md)。子 agent 捕获调用准入时的世界快照，成功子 agent 的属性读取归调用方；失败子 agent 的读取丢弃。插件 KV 和递归执行不继承父方上游。
 
 **按名字找角色。** 角色除 `name` 外可以有 `aliases`（同一个人的其他叫法）。
 
