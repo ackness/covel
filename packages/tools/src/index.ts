@@ -94,6 +94,7 @@ export type { MemoryToolDeps } from "./builtin/memory-tools.js";
 export {
   createEmitEventTool,
   buildSessionEmitEventTool,
+  schemaHasReferences,
 } from "./builtin/emit-event.js";
 export type { EventDirectoryLike } from "./builtin/emit-event.js";
 export { createDefaultToolRegistry } from "./builtin/default-tools.js";

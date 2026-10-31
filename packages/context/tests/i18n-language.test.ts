@@ -78,7 +78,10 @@ describe("prompt locale normalization", () => {
     for (const locale of ["en-US", "zh-CN"]) {
       const story = buildFrameworkPreamble(locale, { completion: "story" });
       expect(story).not.toContain("runtime-done");
-      expect(story).toMatch(/story text of your reply|故事正文/);
+      expect(story).toMatch(
+        /output format the instructions below require|下面的指令要求的输出格式/,
+      );
+      expect(story).toMatch(/story in your reply|回复里的故事/);
       // Every other runtime that has the tool is still told to call it.
       expect(buildFrameworkPreamble(locale)).toContain("`runtime-done`");
     }

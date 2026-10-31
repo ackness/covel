@@ -128,6 +128,8 @@ This file exports one function. Covel passes a set of helpers to it:
 | `ToolError`            | Throw a coded failure with an optional hint                                                             |
 | `shortId`              | Generates a short ID. Pass `context.random` as the fourth argument                                      |
 
+The bundled `initialize-world` also uses a summary view while keeping its contract content; `dimension-rule-get` declares read-only annotations. See the [tool reference](../reference/tools.md#initialize-world).
+
 The model reads the [unified tool envelope](../reference/tools.md#unified-result-format-and-error-codes). This example sends only a summary plus the automatic staged notice; code still reads `{id}`. Use `new ToolError("not-found", "The requested note was not found.", { hint: "Check the name." })` for a coded failure. `ctx.tools.call` returns full content on success and rejects with `ToolError` on failure; its message is plain text, and `code` and `hint` are separate fields.
 
 The tool does not write to the save directly. It returns a **write request** (a proposal). Its type is `plugin.data`, and its content means "write this one record into `notes`". Covel checks these requests when the execution commits. If this runtime fails or its commit is rejected, this write is not saved.

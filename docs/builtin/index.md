@@ -4,6 +4,8 @@ Covel 装好之后就带着一组插件和四个世界。这一章告诉你它�
 
 内置的插件和世界只是示范，不是必须用的。
 
+叙事的地点和氛围提示随变化填写，供舞台和配乐读取，见[叙事与记忆](./story.md)。
+
 维度工具把不符合 schema 的值报告为可修正的输入错误，见 [update-dimensions](../reference/tools.md#update-dimensions)。
 
 开场角色模板须包含每个收集字段的占位符。模板和默认值错误属于可修正的 `invalid-input`，见[角色工具](../reference/tools.md#开场角色表单)。

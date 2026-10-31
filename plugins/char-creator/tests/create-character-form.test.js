@@ -1,5 +1,6 @@
 import {
   fillNarrativeTemplate,
+  ToolError,
   getToolContent,
   getModelView,
 } from "@covel/plugin-handlers-utils";
@@ -675,3 +676,46 @@ it("includes another player character's name in the form validator", async () =>
     ),
   ).toBeUndefined();
 });
+
+it.each([
+  [
+    "uncollectable field",
+    [{ name: "duty", type: "text", label: "Duty" }],
+    "The form cannot collect: duty (not an attribute of this world). The form may hold characterName and these attributes of the world: motive (string), occupation (enum: engineer | medic). Remove every other field, and its placeholder in narrativeTemplate.",
+  ],
+  [
+    "numeric input for a string",
+    [{ name: "motive", type: "number", label: "Motive" }],
+    "Field motive requires a string-valued input.",
+  ],
+  [
+    "invented enum option",
+    [
+      {
+        name: "occupation",
+        type: "select",
+        label: "Occupation",
+        options: ["pilot"],
+      },
+    ],
+    "Field occupation must use the world's exact enum options.",
+  ],
+  [
+    "missing name",
+    [{ name: "motive", type: "text", label: "Motive" }],
+    "Include a required characterName text field.",
+  ],
+])(
+  "returns invalid-input for %s with the complete correction",
+  async (name, fields, message) => {
+    const request = {
+      ...params,
+      fields: name === "missing name" ? fields : [...params.fields, ...fields],
+    };
+    const error = await createCharacterForm
+      .execute(request, context)
+      .catch((error) => error);
+    expect(error).toBeInstanceOf(ToolError);
+    expect(error).toMatchObject({ code: "invalid-input", message });
+  },
+);

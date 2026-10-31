@@ -43,13 +43,13 @@
 | create-character-form | local | char-creator | auto-allow | 创建开场角色表单：只收集角色名与声明过的字符串/枚举属性，数值与复合属性保留默认值 | 默认 |
 | update-affinity | local | affinity | auto-allow | 批量应用本回合玩家对 NPC 的好感度变化；未知名字按 0 分新建，分数跨回合累计并限制在 [-100, 100] | 默认 |
 | advance-world-time | local | world-time | auto-allow | 结算本回合世界时间：提交已抵达的目标时间或时长，工具计算历法差值；随机模式只交原因，随故事提交 | 默认 |
-| dimension-rule-get | local | world-init | auto-allow | 维护时分页读取私有规则或值 schema | 默认 |
-| update-dimensions | local | world-init | auto-allow | 绑定本轮叙事，整批 CAS 更新或明确结算无变化 | 默认 |
-| submit-world-facts | local | world-ir | auto-allow | 以 Function Calling 参数提交并校验完整 `contract:world-ir@1` | 默认 |
+| dimension-rule-get | local | world-init | auto-allow | 维护时分页读取私有规则或值 schema | `readOnly`, `idempotent`, `concurrencySafe` |
+| update-dimensions | local | world-init | auto-allow | 绑定本轮叙事，整批 CAS 更新或明确结算无变化 | `idempotent` |
+| submit-world-facts | local | world-ir | auto-allow | 以 Function Calling 参数提交并校验完整 `contract:world-ir@1` | `stagesWrites: false`, `idempotent` |
 | sync-codex-entries | local | codex | auto-allow | 一次提交本轮图鉴变化，按标题新建或补充条目 | 默认 |
 | generate-guide | local | guide | auto-allow | 原子写入前情摘要、当前决策与玩家口吻快捷回复 | 默认 |
 | upsert-npc-graph | local | npc-graph | auto-allow | 批量写入 NPC 节点与关系边（按 name 引用，工具内部去重并分配短 ID） | 默认 |
-| plan-story-events | local | story-events | auto-allow | 校验剧情策划的后续隐藏事件（≤2/次，可撤回未发生的计划） | 默认 |
+| plan-story-events | local | story-events | auto-allow | 校验剧情策划的后续隐藏事件（≤2/次，可撤回未发生的计划） | `stagesWrites: false`, `idempotent` |
 | submit-dashscope-text-prompt | local | dashscope-image-gen | auto-allow | 提交文本画面提示并发射固定 DashScope 出图事件 | 默认 |
 | submit-dashscope-structured-prompt | local | dashscope-image-gen | auto-allow | 提交结构化画面提示并发射固定 DashScope 出图事件 | 默认 |
 | submit-openai-image-text-prompt | local | openai-image-gen | auto-allow | 提交文本画面提示并发射固定 OpenAI-compatible 出图事件 | 默认 |
@@ -723,7 +723,7 @@ agent 用它告诉框架“我做完了”。业务工具都调用完之后调�
 
 模型看到的 `topic` schema 是本会话公开 topic 的 enum。`data` 带上对应的 payload schema；多个 topic 时放在 `data.anyOf` 中，每支的 `title` 是 topic。只有一个 topic 时直接使用该 schema，省略 `$schema` / `$id`。包含 `$ref` / `$defs` 或无法读取的 schema 只展示普通对象。没有公开 topic 时使用通用定义。
 
-每回合准备工具时刷新这份定义，不要求会话有角色 schema。执行时仍接受字符串 topic，并由目录的 Ajv 校验 payload：未知 topic 仍是 `refused`，不会变成 `invalid-input`。提示词目录保持原样。
+每回合准备工具时刷新这份定义，不要求会话有角色 schema。执行时仍接受字符串 topic，并由目录的 Ajv 校验 payload：未知 topic 仍是 `refused`，不会变成 `invalid-input`。提示词目录保留 topic、描述和必填字段摘要；工具定义已包含的 payload schema 不再重复。schema 在任意深度含 `$ref` / `$defs` 时，目录仍显示完整 payload schema；读取失败时只标注 `(schema unavailable)`。事件发射说明指向工具定义中的 topic 和 payload 格式。
 
 #### 一次调用的四种结果
 
@@ -1050,7 +1050,7 @@ Character "苏婉" (npc) already exists as char-abc123. No new record created. U
 
 `char-creator/player-init` 用插件工具 `create-character-form` 包装通用的 `create-form`：
 
-`create-character-form` 的模板和默认值检查失败时返回 `invalid-input`，包括缺少 `{{characterName}}` 占位符。模型修正后才能发布交互；下游意外异常保留原分类。
+`create-character-form` 的字段、模板和默认值检查失败时都返回 `invalid-input`，包括不可收集的字段、字符串输入类型错误、非原有枚举选项、缺少必填姓名字段，以及缺少 `{{characterName}}` 占位符。模型修正后才能发布交互；下游意外异常保留原分类。
 
 - 只允许必填的 `characterName`，以及世界 schema 里的 string / enum 字段。enum 的提交值必须来自原来的 options。
 - 数字和复合属性保留默认值，不能改成叙事里的 select。
@@ -1209,6 +1209,16 @@ Attributes:
 - 持久化写入返回 `withPendingProposals(...)`，让提交流程负责落库。
 - 用 plugin 工具封装插件自己的数据 schema 和批量写入逻辑。
 
+### advance-world-time
+
+`advance-world-time` 缺少服务端提供的时钟或叙事输入时返回 `unavailable`。叙事开始后时钟变化报 `conflict`，应停止并等下一回合读取当前时钟；存储的 tick 损坏仍是内部异常。
+
+### plan-story-events
+
+**所属**: story-events (`plugins/story-events/tools/plan-story-events.js`)
+
+校验后续隐藏事件计划，返回确定性的计划内容，不产生 proposal，声明 `{stagesWrites:false, idempotent:true}`。缺少服务端提供的事件账本输入报 `unavailable`。参数语义校验失败报 `invalid-input`，消息按行保留去重后的问题列表；超过 1900 字符时截断并加省略号。模型据此修正计划后重交。
+
 <a id="set-world-schema"></a>
 <a id="set-world-dimensions"></a>
 
@@ -1240,7 +1250,7 @@ Attributes:
 | valueType    | enum           |      | `map` 的值类型（`string` / `number` / `boolean`）                     |
 | description  | I18nText       |      | 属性说明（字符串或 locale → string 记录）                             |
 
-**输出**: `{success, attributeCount, dimensionCount, worldSchema, preGameDone:true}`
+**正文输出**: `{success:true, attributeCount, dimensionCount, worldSchema, preGameDone:true}`。代码和 `world-data-provider@1` 继续读取这份完整内容。模型只看到 `summary`（例如 `World initialized: 15 attributes, 2 dimensions.`），没有 `data`；摘要按指令语言选择 English 或简体中文。暂存的改动仍附带 `staged` 提示。
 
 生成的 `defaultValue` 是每个新玩家和 NPC 的起始值，不是某个设定人物的示例。姓名、身份、背景等字段归入 `bio`，使用中性或空值。工具会把生成的 `bio` 字符串默认值清为空字符串，数组清为空数组，对象和 map 清为空对象，枚举则移除默认值；嵌套的个人信息采用同样的规则。数值和布尔默认值保留。世界作者提供的 schema 由 guard 原样采用，不经过这一步处理。
 
@@ -1271,6 +1281,8 @@ Attributes:
 | `offset` | integer           |      | 默认 0                                      |
 | `limit`  | integer           |      | 默认 6000，范围 1–6000，按 Unicode 字符分页 |
 
+声明 `{readOnly:true, idempotent:true, concurrencySafe:true}`，不产生 proposal。缺少叙事来源报 `unavailable`，未知维度报 `not-found`，版本变化报 `conflict`；此时停止，本回合不能重试，下一回合读取当前版本。
+
 返回 `{id,version,content,complete,nextOffset?}`。`complete:false` 时要继续取下一页，不能只凭被截断的规则预览就结算。
 
 ### update-dimensions
@@ -1281,7 +1293,11 @@ Attributes:
 
 参数：`{followsClock:[id], updates:[{id, value|changes, reason?}]}`
 
-返回 `{success,updateCount}` 和 `dimension.update` proposal。这个来源已经结算过时，返回 `{success,alreadySettled:true}`，不重复补算。
+返回 `{updateCount}` 和 `dimension.update` proposal。这个来源已经结算过时，返回 `{alreadySettled:true}`，不产生第二条 proposal。工具声明 `idempotent:true`。
+
+模型只看到摘要，没有 `data`：有更新时为 `Dimensions updated: N change(s).`，无变化为 `No change recorded.`，已结算为 `This turn's dimensions were already settled.`；简体中文指令下分别为「维度已更新：N 项改动。」「未记录改动。」「本回合的维度已结算。」。
+
+不安全路径、同时给出 `value` 和 `changes`、漏写随时钟变化的维度都报 `invalid-input`，并保留完整修正说明；时钟说明过长时截到 1900 字符后加省略号。未知维度报 `not-found` 并指出已知维度或条目所属的维度；缺少服务端提供的叙事输入报 `unavailable`。
 
 维度值校验失败（例如字符串超过声明的长度上限）在返回任何 proposal 之前报 `invalid-input`。版本冲突和意外异常不会被归类为输入错误。
 
@@ -1363,6 +1379,8 @@ schema 里带 `x-derive` 的字段由 `world-init/dimension-clock` 按时钟计�
 | `entities` / `relations` / `events` / `statements` | ✓    | 四类事实数组；无内容时传空数组，插件扩展字段放入各项 `attributes` |
 
 参数 schema 在 `worldIRV1Schema` 上增加工具专用评估字段，并在 Zod 的 `superRefine` 里执行 `validateWorldIRV1` 语义校验。所以全局 ID 重复、实体引用缺失、深度或节点数超预算这些错误，都报在具体的参数路径上，模型只需要修正对应的字段。
+
+工具声明 `{stagesWrites:false, idempotent:true}`。补全后的引用校验失败报 `invalid-input`，提示在 `entities` 中声明每个引用的 id 后重试。
 
 工具移除评估字段后返回补全并校验的事实，不产生持久化 proposal。`world-ir` 声明了 `completeAfterTools: [submit-world-facts]`：框架把成功的结果直接作为 runtime 的类型化输出，再用 `contract:world-ir@1` 的输出 schema 检查一次。
 

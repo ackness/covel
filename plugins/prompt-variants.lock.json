@@ -4,16 +4,16 @@
     "zh": "b9eb20b9afd19c94"
   },
   "plugins/char-creator/runtimes/character-tracker/RUNTIME.md": {
-    "en": "4570674ac3e29d89",
-    "zh": "036995df38c5b205"
+    "en": "bdb35e772bb5a1a6",
+    "zh": "d8c88c8248a68d75"
   },
   "plugins/char-creator/runtimes/player-init/RUNTIME.md": {
     "en": "1975873921722204",
     "zh": "1d28347857cc3160"
   },
   "plugins/chat-mode-narrator/PLUGIN.md": {
-    "en": "d7966c5402733a10",
-    "zh": "17fa200d87ebdfb6"
+    "en": "ef1619bb419ae072",
+    "zh": "ed8afebd5fc6fb3c"
   },
   "plugins/codex/PLUGIN.md": {
     "en": "2f5df09dfec2817d",
@@ -24,8 +24,8 @@
     "zh": "f3447fe23895c5e2"
   },
   "plugins/narrator/PLUGIN.md": {
-    "en": "2abb40393957a50a",
-    "zh": "e401ebd9e6e82054"
+    "en": "e112272259e2f74f",
+    "zh": "a824b747303bd358"
   },
   "plugins/npc-graph/runtimes/extractor/RUNTIME.md": {
     "en": "77e443f66fac166c",

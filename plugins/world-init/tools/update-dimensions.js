@@ -1,5 +1,7 @@
 import {
   makeProposal,
+  instructionLocaleFor,
+  withModelView,
   ToolError,
   withPendingProposals,
 } from "@covel/plugin-handlers-utils";
@@ -47,7 +49,7 @@ function setAtPath(base, path, value) {
   if (!segments.length) return structuredClone(value);
   // The path comes from model output: never let it walk into a prototype.
   if (segments.some((segment) => UNSAFE_SEGMENTS.has(segment)))
-    throw new Error(`Unsafe change path: ${path}`);
+    throw new ToolError("invalid-input", `Unsafe change path: ${path}`);
   const root = base && typeof base === "object" ? structuredClone(base) : {};
   let node = root;
   for (const [index, segment] of segments.entries()) {
@@ -175,10 +177,12 @@ function resolveUpdates(updates, dimensions) {
   );
   return changed.map(({ changes, ...update }) => {
     const current = dimensions[update.id];
-    if (!current) throw new Error(unknownDimension(update.id, dimensions));
+    if (!current)
+      throw new ToolError("not-found", unknownDimension(update.id, dimensions));
     const versioned = { ...update, expectedVersion: current.version };
     if (changes?.length && Object.hasOwn(update, "value"))
-      throw new Error(
+      throw new ToolError(
+        "invalid-input",
         `${update.id}: provide either value or changes, not both`,
       );
     const written = changes?.length
@@ -210,8 +214,10 @@ function requireClockFollowers(params, ctx) {
     (id) => Object.hasOwn(ctx.world.dimensions, id) && !settled.has(id),
   );
   if (!missing.length) return;
-  throw new Error(
-    `The world clock moved this turn: it is now ${clock.display}, ${clock.elapsedThisTurn} ${clock.unit} later than last turn and ${clock.elapsedSinceStart} ${clock.unit} after the start. followsClock lists ${missing.join(", ")} without an update. Add one entry for each: the value its rule gives for this clock, or only {id, reason} when the rule gives the value it already has.`,
+  const message = `The world clock moved this turn: it is now ${clock.display}, ${clock.elapsedThisTurn} ${clock.unit} later than last turn and ${clock.elapsedSinceStart} ${clock.unit} after the start. followsClock lists ${missing.join(", ")} without an update. Add one entry for each: the value its rule gives for this clock, or only {id, reason} when the rule gives the value it already has.`;
+  throw new ToolError(
+    "invalid-input",
+    message.length > 1900 ? message.slice(0, 1900) + "…" : message,
   );
 }
 
@@ -219,6 +225,7 @@ function requireClockFollowers(params, ctx) {
 export default function ({ tool, z }) {
   return tool({
     name: "update-dimensions",
+    annotations: { idempotent: true },
     description:
       'Settle this narrative\'s dimension rules once. Submit a batch of {id, changes | value, reason}. Prefer changes: [{path, value}] to set only the fields or entries that changed (dot path inside the dimension value, e.g. "torn-letter.status"; a new key adds an entry); use value only to replace the whole value. Submit updates: [] to explicitly settle no change. followsClock names every dimension whose rule depends on the world time or on how much time passed; in a turn in which the world clock moved, each of them needs an entry in updates. A field that is not in the schema you were given is computed by the world; do not write it. Results must match the declared schema. Never invent facts or copy character/inventory/time state.',
     parameters: z.preprocess(
@@ -254,11 +261,9 @@ export default function ({ tool, z }) {
       requireClockFollowers(params, ctx);
       const updates = resolveUpdates(params.updates, ctx.world.dimensions);
       const narrative = ctx.inputSlots?.narrative;
-      if (
-        narrative?.cardinality !== "one" ||
-        !Array.isArray(narrative.value)
-      )
-        throw new Error(
+      if (narrative?.cardinality !== "one" || !Array.isArray(narrative.value))
+        throw new ToolError(
+          "unavailable",
           "A successful authoritative narrative input is required",
         );
       const rows = await ctx.store.listPluginData(DIMENSION_DATA_NAMESPACE);
@@ -272,8 +277,16 @@ export default function ({ tool, z }) {
       const receipt = row
         ? dimensionSettlementReceiptSchema.parse(row.value)
         : undefined;
+      const isZh = instructionLocaleFor(ctx.locale) === "zh";
       if (receipt && receipt.status !== "pending-settlement")
-        return { success: true, alreadySettled: true };
+        return withModelView(
+          { alreadySettled: true },
+          {
+            summary: isZh
+              ? "本回合的维度已结算。"
+              : "This turn's dimensions were already settled.",
+          },
+        );
       const session = await ctx.store.getSession();
       const source = receipt?.source ?? {
         resultId: narrative.source.resultId,
@@ -304,9 +317,17 @@ export default function ({ tool, z }) {
           throw new ToolError("invalid-input", error.message);
         throw error;
       }
-      return withPendingProposals(
-        { success: true, updateCount: updates.length },
-        [proposal],
+      return withModelView(
+        withPendingProposals({ updateCount: updates.length }, [proposal]),
+        {
+          summary: updates.length
+            ? isZh
+              ? `维度已更新：${updates.length} 项改动。`
+              : `Dimensions updated: ${updates.length} change(s).`
+            : isZh
+              ? "未记录改动。"
+              : "No change recorded.",
+        },
       );
     },
   });

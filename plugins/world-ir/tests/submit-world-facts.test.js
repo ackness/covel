@@ -1,4 +1,9 @@
 import { describe, expect, it } from "vitest";
+import {
+  ToolError,
+  getPendingProposals,
+  getToolContent,
+} from "@covel/plugin-handlers-utils";
 import makeSubmitWorldFacts from "../tools/submit-world-facts.js";
 
 const VALID_FACTS = {
@@ -626,4 +631,58 @@ describe("submit-world-facts", () => {
     });
     expect(result.success).toBe(true);
   });
+});
+
+describe("fact submission correction errors and annotations", () => {
+  const instance = makeSubmitWorldFacts({ tool: (definition) => definition });
+  it("returns invalid-input and the existing reference correction as a hint", async () => {
+    const error = await instance
+      .execute(
+        {
+          ...VALID_FACTS,
+          relations: [
+            {
+              id: "located-in",
+              type: "LOCATED_IN",
+              from: "brass-key",
+              to: "missing-place",
+            },
+          ],
+        },
+        { world: { characters: [] } },
+      )
+      .catch((error) => error);
+    expect(error).toBeInstanceOf(ToolError);
+    expect(error).toMatchObject({
+      code: "invalid-input",
+      message:
+        'Invalid parameters for tool "submit-world-facts": relations.0.to: entity reference "missing-place" does not exist in entities. Declare every referenced id in entities and retry.',
+      hint: "Declare every referenced id in entities and retry.",
+    });
+  });
+
+  it.each([
+    {
+      plugin: "world-ir",
+      tool: "submit-world-facts",
+      annotations: { stagesWrites: false, idempotent: true },
+    },
+  ])(
+    "declares proven annotations for $plugin/$tool",
+    async ({ annotations }) => {
+      expect(instance.annotations).toEqual(annotations);
+      const params = instance.parameters.parse({
+        ...VALID_FACTS,
+        events: [{ type: "observation", description: "A key gleams." }],
+      });
+      const ctx = { world: { characters: [] } };
+      const original = structuredClone(params);
+      const first = await instance.execute(params, ctx);
+      const second = await instance.execute(params, ctx);
+      expect(getToolContent(first)).toEqual(getToolContent(second));
+      expect(getPendingProposals(first)).toEqual([]);
+      expect(getPendingProposals(second)).toEqual([]);
+      expect(params).toEqual(original);
+    },
+  );
 });

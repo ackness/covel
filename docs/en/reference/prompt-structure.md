@@ -267,11 +267,11 @@ api.provideExtension("prompt.segment@1", "status", {
 
 `PostContextAssembly` can rewrite the final `systemPrompt` / `messages`. But the framework preamble cannot be discarded. It has three blocks. All three are written in the session's [instruction language](./i18n.md). A Simplified Chinese session is entirely in Chinese:
 
-| Block          | Content                                                                                                                                                                                                                                          |
-| -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `[RUNTIME]`    | The runtime framework                                                                                                                                                                                                                            |
-| `[LANGUAGE]`   | The output language instruction                                                                                                                                                                                                                  |
-| `[COMPLETION]` | The completion convention. There are three forms depending on how the runtime ends: a runtime with an output schema ends with JSON or a completion tool; a story runtime ends with the story text in its reply; the rest end with `runtime-done` |
+| Block          | Content                                                                                                                                                                                                                                                                                                |
+| -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `[RUNTIME]`    | The runtime framework                                                                                                                                                                                                                                                                                  |
+| `[LANGUAGE]`   | The output language instruction                                                                                                                                                                                                                                                                        |
+| `[COMPLETION]` | The completion convention. There are three forms depending on how the runtime ends: a runtime with an output schema ends with JSON or a completion tool; a story runtime ends with the story in its reply, written in the output format required by the instructions; the rest end with `runtime-done` |
 
 - If the `systemPrompt` returned by a hook does not start with it, the framework puts it back at the very front. So a trimming hook that returns only its own body does not need to remove it, and it cannot remove it.
 - `frameworkHead` is an internal assembly field. It is not exposed in the Hook payload or accepted as a replacement.
@@ -518,7 +518,7 @@ The shared framework loader tries these in order: an exact locale match, the mai
 Apart from templates and bodies, the assembly code writes a few sentences of its own:
 
 - The title of the world rules
-- The event-emission notes for `<available-events>`
+- The event-emission notes for `<available-events>`: call `emit-event` once per event; the tool definition lists topics and payload shapes. The catalogue keeps descriptions and required-field summaries. It includes a complete payload schema only when references (`$ref` / `$defs`) force the tool definition to use a plain object; unreadable schemas only show an unavailable marker
 - The explanatory sentence after the history summary block
 - Markers for content that was trimmed or truncated
 - Retry hints

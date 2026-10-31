@@ -556,10 +556,10 @@ function completionInstruction(
   if (mode === "story") {
     return isZh
       ? [
-          "[COMPLETION] 本 runtime 的结果是你回复里的故事正文。工具按下面的指令使用；最后一次工具结果之后，把正文作为回复写出来。只有工具调用、没有正文的回复不算完成。",
+          "[COMPLETION] 本 runtime 的结果是你回复里的故事，按下面的指令要求的输出格式写出。工具按下面的指令使用；最后一次工具结果之后，把故事作为回复写出来。只有工具调用、没有故事的回复不算完成。",
         ]
       : [
-          "[COMPLETION] The result of this runtime is the story text of your reply. Use tools as the instructions below say; after the last tool result, write the story as your reply. A reply with a tool call and no story text does not finish this runtime.",
+          "[COMPLETION] The result of this runtime is the story in your reply, written in the output format the instructions below require. Use tools as the instructions below say; after the last tool result, write the story as your reply. A reply with a tool call and no story does not finish this runtime.",
         ];
   }
   if (mode === "completing-tool") {

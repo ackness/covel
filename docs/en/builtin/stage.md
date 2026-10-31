@@ -48,7 +48,7 @@ Lets the stage know where things are, whether it is day or night, and who is pre
 - Dialogue segments in chat gain a speaker nameplate and an avatar when one is available. Stories without segments still use the normal text view.
 - On the right there is a "Scene" tab. It contains a read-only "Scene" panel (the scene name, day or night, and where the background comes from) and a "Cast" panel. The "Cast" panel also says why each character was chosen, for example "Mentioned", "In scene", "Profile", or "Recent".
 - If the place cannot be found in the world's scene pictures, the background shows "No backdrop", and the stage uses the world's cover instead.
-- The story's `cues.scene` selects the location and non-empty `cues.present` selects who is on stage. Updates commit with the story. Continuing actors keep their position and visual; new actors fade into free positions from left to right, and absent actors leave the stage at once when the update commits, without a fade. At most four actors appear, with focus on the last resolved dialogue or action speaker on stage.
+- The story's `cues.scene`, written when the location changes, selects the location and non-empty `cues.present` selects who is on stage. Updates commit with the story. Continuing actors keep their position and visual; new actors fade into free positions from left to right, and absent actors leave the stage at once when the update commits, without a fade. At most four actors appear, with focus on the last resolved dialogue or action speaker on stage.
 - The current viewpoint character stays off stage; other characters bound to the same player seat can appear. A location change clears old actors before applying the new presence list. Day/night changes at the same location keep the actors. Without a presence list, existing actors remain unless the scene changes; cast selection applies until an actor record exists.
 
 ### When it is on
@@ -76,7 +76,7 @@ For how to do it, see [Add scene pictures to a world](../worlds/scenes.md). For 
 
 - At the start, if the story has not said where it is, the stage uses the first scene in the scene registry. So the screen is never blank at the beginning.
 - Places are matched by name. See [The name decides whether the background changes](../worlds/scenes.md#the-name-decides-whether-the-background-changes) for naming advice and examples. A location name that is too short cannot select one background when several scenes contain it. Use the full name.
-- `cues.scene` has no time of day, so scene changes keep the current day/night variant. Use `scene.set` for day/night changes and `stage.direction` for position, focus, and visual changes. Explicit events from the same turn run after story cues and override the corresponding results. Event previews remain available; story cues appear after commit.
+- `cues.scene` can be omitted while the location stays the same. It has no time of day, so scene changes keep the current day/night variant. Use `scene.set` for day/night changes and `stage.direction` for position, focus, and visual changes. Explicit events from the same turn run after story cues and override the corresponding results. Event previews remain available; story cues appear after commit.
 - Without a story or relevant `cues`, the plugin succeeds with a recorded skip reason. It does not require a narrator plugin to be enabled.
 
 ## Soundtrack (`soundtrack`)
@@ -107,7 +107,7 @@ The plugin itself has no settings. The music on/off switch and the volume are in
 | Music files | `media/music/`     | `.mp3` or `.wav`. Put only the files here.                                     |
 | Track list  | `media/music.yaml` | For each track, the file, the scene, the mood, and which one is the theme song |
 
-In the track list, you name the moods yourself. Use the top-level `moods` to say when each mood applies. The story writes its mood in `cues.mood`; Soundtrack matches the list ignoring case and whitespace, then records the listed spelling. An unknown mood keeps the current music and records a reason. Here is a minimal example:
+In the track list, you name the moods yourself. Use the top-level `moods` to say when each mood applies. The story writes its mood in `cues.mood` when the mood changes and omits it otherwise; Soundtrack matches the list ignoring case and whitespace, then records the listed spelling. An unknown mood keeps the current music and records a reason. Here is a minimal example:
 
 ```yaml
 schemaVersion: 1
@@ -133,7 +133,7 @@ A mood written as `silence` stops the music. If no track has a mood, the music f
 
 ### Works with
 
-Soundtrack reads the story's `cues.scene` and `cues.mood` directly, so it can follow locations without Scene Stage. Updates commit with the story. Without a story, relevant cues, a state change, or a world track list, it succeeds with a recorded skip reason.
+Soundtrack reads the story's `cues.scene` and `cues.mood` directly and keeps the current location or mood when its cue is omitted, so it can follow locations without Scene Stage. Updates commit with the story. Without a story, relevant cues, a state change, or a world track list, it succeeds with a recorded skip reason.
 
 Stories that do not answer in segments can still emit `music.cue`; worlds and plugins can still use `scene.set` to set the music scene. Explicit events from the same turn run after story cues and override the corresponding mood or scene. Story cues have no pre-commit preview; existing event previews remain available.
 
