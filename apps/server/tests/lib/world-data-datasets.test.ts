@@ -49,6 +49,115 @@ describe("world dataset destination enforcement", () => {
     },
   );
 
+  it.each([
+    ["memory", createMemoryStore],
+    ["sqlite", () => createSqliteStore(":memory:")],
+  ] as const)(
+    "treats lorebook target changes as set-only replacements on %s while refusing true removals",
+    async (_name, create) => {
+      const f = await datasetWriteFixture();
+      const store = create();
+      try {
+        f.policy(["set"]);
+        await writeFile(
+          path.join(f.worldRoot, "world.yaml"),
+          "id: dataset-world\nname: Dataset World\nsummary: Fixture\ndefaultLocale: en-US\nworldData: data/world.data.yaml\n",
+        );
+        const setTarget = (lorebook: boolean) =>
+          writeFile(
+            path.join(f.worldRoot, "data/world.data.yaml"),
+            `sources:\n  notes:\n    kind: json\n    path: data/notes.json\n    to: contract:probe.notes@1${lorebook ? "+lorebook" : ""}\n    key: id\n`,
+          );
+        await setTarget(false);
+        await f.create(store);
+        for (const lorebook of [true, false]) {
+          const beforeRows = await f.rows(store);
+          const beforeLedger = await store.listWorldDataImportLedger(
+            f.options.sessionId,
+          );
+          const beforeLorebook = await store.listSessionLorebookEntries(
+            f.options.sessionId,
+          );
+          await setTarget(lorebook);
+          for (const dryRun of [true, false]) {
+            const result = await f.sync(store, { dryRun });
+            expect(result).toMatchObject({
+              diagnostics: [],
+              conflicts: [],
+              upserted: lorebook ? 4 : 2,
+            });
+            if (dryRun) {
+              expect(await f.rows(store)).toEqual(beforeRows);
+              expect(
+                await store.listWorldDataImportLedger(f.options.sessionId),
+              ).toEqual(beforeLedger);
+              expect(
+                await store.listSessionLorebookEntries(f.options.sessionId),
+              ).toEqual(beforeLorebook);
+            }
+          }
+          expect((await f.rows(store)).map((row) => row.value)).toEqual(
+            beforeRows.map((row) => row.value),
+          );
+          const noteLedgers = (
+            await store.listWorldDataImportLedger(f.options.sessionId)
+          ).filter((ledger) => ledger.namespace === "notes");
+          expect(noteLedgers).toHaveLength(2);
+          expect(noteLedgers).toEqual(
+            expect.arrayContaining(
+              ["a", "b"].map((key) =>
+                expect.objectContaining({
+                  pluginId: "probe",
+                  key,
+                  target: `contract:probe.notes@1${lorebook ? "+lorebook" : ""}`,
+                }),
+              ),
+            ),
+          );
+          expect(
+            (
+              await store.listSessionLorebookEntries(f.options.sessionId)
+            ).filter((entry) => entry.id.startsWith("notes:")),
+          ).toHaveLength(lorebook ? 2 : 0);
+        }
+
+        const beforeRows = await f.rows(store);
+        const beforeLedger = await store.listWorldDataImportLedger(
+          f.options.sessionId,
+        );
+        const beforeLorebook = await store.listSessionLorebookEntries(
+          f.options.sessionId,
+        );
+        await setTarget(true);
+        await f.records([{ id: "a", text: "replacement" }]);
+        for (const force of [false, true]) {
+          for (const dryRun of [true, false]) {
+            const refused = await f.sync(store, { force, dryRun });
+            expect(refused).toMatchObject({ upserted: 0, deleted: 0 });
+            expect(refused.diagnostics).toEqual([
+              expect.objectContaining({
+                level: "error",
+                message: expect.stringContaining(
+                  "operation kind delete is not allowed",
+                ),
+              }),
+            ]);
+            expect(await f.rows(store)).toEqual(beforeRows);
+            expect(
+              await store.listWorldDataImportLedger(f.options.sessionId),
+            ).toEqual(beforeLedger);
+            expect(
+              await store.listSessionLorebookEntries(f.options.sessionId),
+            ).toEqual(beforeLorebook);
+          }
+        }
+      } finally {
+        await store.close();
+        await f.cleanup();
+      }
+    },
+  );
+
   it("rejects a canonical dataset violation through session creation without publishing any session data", async () => {
     const f = await datasetWriteFixture();
     const store = createMemoryStore();

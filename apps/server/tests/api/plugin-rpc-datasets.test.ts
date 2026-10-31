@@ -111,6 +111,7 @@ describe("action and command dataset admission", () => {
       vi.spyOn(console, "error").mockImplementation(() => {});
       const f = await setup(source);
       try {
+        let commandText: string | undefined;
         f.registry.registerPluginHandler(
           "probe",
           "write",
@@ -118,7 +119,10 @@ describe("action and command dataset admission", () => {
             await ctx.store.setPluginData!({
               namespace: "notes",
               key: "Exact Key",
-              value: payload,
+              value:
+                commandText === undefined
+                  ? payload
+                  : { id: "a", text: commandText },
             });
             return { saved: true };
           },
@@ -143,17 +147,28 @@ describe("action and command dataset admission", () => {
         expect(valid.status).toBe(200);
         expect((await f.rows(f.store))[0]?.key).toBe("Exact Key");
         // The package command resolves its handler through the same scoped view.
-        f.policy(["inc"]);
-        const command = await f.approvedRequest({
+        commandText = "command allowed";
+        const command = {
           kind: "command",
           commandId: "probe:write",
           input: "/write",
-        });
-        expect(command.status).toBe(500);
-        expect((await f.rows(f.store))[0]?.value).toEqual({
+        };
+        f.policy(["set"]);
+        expect((await f.approvedRequest(command)).status).toBe(200);
+        const saved = await f.rows(f.store);
+        expect(saved).toHaveLength(1);
+        expect(saved[0]?.value).toEqual({
           id: "a",
-          text: "valid",
+          text: "command allowed",
         });
+        commandText = "command refused";
+        f.policy(["inc"]);
+        const refusedCommand = await f.approvedRequest(command);
+        expect(refusedCommand.status).toBe(500);
+        expect(await refusedCommand.json()).toEqual({
+          error: "Internal server error",
+        });
+        expect(await f.rows(f.store)).toEqual(saved);
         expect(
           (await f.store.getSession(f.options.sessionId))?.completedPlayerTurns,
         ).toBe(0);
