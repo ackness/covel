@@ -61,6 +61,8 @@ Covel 的服务器对外只有一套 HTTP JSON 接口。网页和桌面应用用
 
 世界数据导入失败返回固定说明与 `world_data_import_failed`，开发模式也不返回作者诊断；详细原因只记服务端日志。
 
+世界 API 的 `dimensions` 与 `metadata.dimensions` 是解析后的记录投影，不是 `world.yaml` 字段；现有 metadata 规范化入口检查定义，顶层值优先，空表明确清空。生成器的可携带结果使用 `packageContent.dimensions`；生成／修订 API 的 `done.world` 继续返回解析后的世界记录。详见[生成与导出](./world-data.md#ai-生成结果与文件导出)。
+
 ## 声明式插件的 API 状态
 
 插件摘要（列表、详情和会话列表）必含 `executionMode: declarative | code | unknown`。`executionDiagnostics` 可选，只有包内文件、字段和原因；不公开宿主证明、绝对路径或提示词。GitHub 预览也带分类，`hasServerCode` 对 `code` 和 `unknown` 均为真。静态校验的 `summary` 带 `executionMode` 与 `executionDiagnostics`。
@@ -2022,7 +2024,7 @@ SSE。先发一个 `ready` 事件，之后每 15 秒发一行注释保持连接�
 
 行为：
 
-- 顶层 `dimensions` 会写入 `metadata.dimensions`。
+- 顶层 `dimensions` 会写入 `metadata.dimensions`。浏览器本地编辑同样更新这份规范字段与展示字段，空表在存档点上传／恢复后仍保持清空。
 - `metadata` 是合并写入：没提到的同级字段保留原样。
 - `dimensions` 与 `metadata.dimensions` 都会经过世界维度校验。
 - 新会话、预检和同步用这条记录里的维度和 `characterSchema`，不读世界包里的文件。

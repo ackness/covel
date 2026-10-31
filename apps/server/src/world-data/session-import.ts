@@ -533,7 +533,7 @@ export async function prepareWorldDataSyncForSession(
     ))
   )) {
     // There is no descriptor for other domains: do not treat their old ledger
-    // rows as removed merely because inline dimensions are now synchronizable.
+    // rows as removed when synchronizing resolved dimension definitions.
     return dimensionOnlyPlan(options, record, collisions);
   }
 

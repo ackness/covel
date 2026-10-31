@@ -12,7 +12,6 @@ import {
   validateDimensionData,
   validateDimensionValue,
   worldDimensionsSchema,
-  worldManifestSchema,
 } from "../src/index.js";
 import type {
   DimensionRecord,
@@ -28,19 +27,11 @@ const wall = {
 };
 
 describe("authored dimension definitions", () => {
-  it("accepts arbitrary IDs through the manifest and single-file validator", () => {
+  it("accepts arbitrary IDs through the external table and single-definition validator", () => {
     expect(worldDimensionsSchema.parse({ cityWall: wall })).toEqual({
       cityWall: wall,
     });
     expect(validateDimensionData("cityWall", wall).valid).toBe(true);
-    const manifest = worldManifestSchema.parse({
-      id: "wall",
-      name: "Wall",
-      summary: "Wall",
-      defaultLocale: "en-US",
-      dimensions: { cityWall: wall },
-    });
-    expect(manifest.dimensions?.cityWall?.initialValue).toBe(100);
   });
 
   it("rejects unsafe IDs, raw old values, unknown definition fields and bad initial values", () => {

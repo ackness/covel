@@ -38,7 +38,14 @@ const world: GeneratedWorld = {
   },
   locale: "en",
   lore: "replacement",
-  packageContent: { characters: [], lorebook: [], rules: [] },
+  packageContent: {
+    characters: [],
+    lorebook: [],
+    rules: [],
+    dimensions: {
+      alarm: { name: "Alarm", schema: { type: "integer" }, initialValue: 13 },
+    },
+  },
   warnings: [],
 };
 let directory: string | undefined;

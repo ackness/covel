@@ -6,6 +6,8 @@
 
 预置数据按[接收规则](../reference/world-data.md#data-receivers)自动选择唯一合格接收者。只有没有种子内容的玩法或有意消除歧义时才需要额外的 `plugin:` 引用。
 
+结构化维度只写在 `data/dimensions.yaml`，不要复制到 `world.yaml`。编辑器改的是世界记录，重新导出时才写入规范文件；详见[维度来源](../reference/world-data.md#维度来源)。
+
 ## 开始之前
 
 - 已经完成[第一局游戏](../start/first-session.md)，知道一局游戏是怎样进行的。

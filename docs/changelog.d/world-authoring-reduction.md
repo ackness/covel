@@ -1,5 +1,11 @@
 ### Changed
 
+- **Browser dimension edits keep the canonical record and its projection synchronized.** Edited initial values and explicit clears survive checkpoint upload, server hydration and session initialization without an older metadata copy restoring the previous definitions.
+
+- **Breaking: file worlds author dimensions only in `data/dimensions.yaml`.** Locale overlays stay beside it. Descriptors may change or disable that source but cannot add another dimension table. Strict validation rejects `world.yaml.dimensions`; tolerant loading diagnoses and omits it without conversion.
+- **Breaking: generated and revised portable results use `packageContent.dimensions`.** File export, server-store and browser-local records preserve the same validated definitions. Empty edits clear definitions, package reload preserves player edits until explicit restore, and public revision replacements are isolated from narrator-only lore.
+- Recreate old inline generated creation/revision payloads, persisted drafts and browser copies, inline-authored external fixtures, and affected development sessions, branches, snapshots and recordings. Reauthor the canonical file or regenerate, reimport and start new sessions. Resolved records require no database schema change or automatic migration.
+
 - **Pending data-receiver approvals stay separate from explicit plugin requests.** Inferring a receiver does not submit it as a player selection; world and player requests retain their existing approval flow.
 
 - **Live plugin changes preserve world provider choices.** Unrelated switches do not add new core defaults or replace an unavailable world provider. Presentation packages require a gameplay or player selection; seed assets alone do not enable them.

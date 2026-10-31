@@ -173,30 +173,29 @@ This section explains how to declare a dimension. For how a dimension is read an
 #### Declaration format
 
 ```yaml
-# world.yaml
-dimensions:
-  reputation:
-    name: 声望 # the translation goes in world.en-US.yaml at the same path
-    description: 主角在当地的公开声望。
-    schema:
-      type: integer
-      minimum: 0
-      maximum: 100
-    initialValue: 0
-    updateRule: 完成居民委托后增加 5；只计已完成的委托，不计承诺。
-  discoveries:
-    name: 已知地点
-    schema:
+# data/dimensions.yaml
+reputation:
+  name: 声望 # the translation goes in dimensions.en-US.yaml at the same path
+  description: 主角在当地的公开声望。
+  schema:
+    type: integer
+    minimum: 0
+    maximum: 100
+  initialValue: 0
+  updateRule: 完成居民委托后增加 5；只计已完成的委托，不计承诺。
+discoveries:
+  name: 已知地点
+  schema:
+    type: object
+    additionalProperties:
       type: object
-      additionalProperties:
-        type: object
-        properties:
-          description: { type: string }
-          visited: { type: boolean }
-        required: [description, visited]
-        additionalProperties: false
-    initialValue: {}
-    updateRule: 明确发现具名地点时增加条目，亲自抵达后将 visited 设为 true。
+      properties:
+        description: { type: string }
+        visited: { type: boolean }
+      required: [description, visited]
+      additionalProperties: false
+  initialValue: {}
+  updateRule: 明确发现具名地点时增加条目，亲自抵达后将 visited 设为 true。
 ```
 
 | Field          | Required | Description                                                                                                                                                  |
@@ -290,19 +289,15 @@ A dimension value that is read is always the raw value. Translation is applied o
 
 <a id="three-ways-for-authors-to-declare-dimensions"></a>
 
-#### Two ways for authors to declare dimensions
+<a id="two-ways-for-authors-to-declare-dimensions"></a>
 
-Both ways use the same declaration format. Pick one:
+#### Dimension sources
 
-1. Write `dimensions` directly in `world.yaml`.
-2. One dimension file, `data/dimensions.yaml`, that holds the **whole dimension table**. It is read by convention; you do not register it.
+A file package authors its whole table only in `data/dimensions.yaml`. Put translations beside it as `dimensions.<locale>.yaml`; they are overlays of that source, not additional sources. `world.yaml` has no `dimensions` field. Strict validation rejects it with a canonical-file hint; tolerant loading diagnoses and omits it without conversion.
 
-When both are used together:
+A descriptor may change or disable that canonical source. It may not define a second dimension table at another path or name the base source twice. A user override keeps its separate contained root and normal precedence, but uses the same relative path and existing source ID. Disabling the source removes both definitions and its inferred provider request. Invalid canonical data keeps the previous complete loaded world.
 
-- `data/dimensions.yaml` replaces the whole table in `world.yaml`. The two are not merged item by item.
-- Only the final declarations go into a session. The ones that were replaced are not each initialized once.
-- The dimension file can also have language files.
-- If any declaration fails to read or validate, this load is thrown away, and the previous complete world stays in use.
+Resolved store/browser records retain definitions and initial values. The editor saves that record through the world API and lifecycle lock; an empty table clears it. Browser saves update canonical `metadata.dimensions` and its top-level projection together before checkpoint export, so restoring the server mirror cannot reinstate an old initial value. These fields are not authored YAML alternatives, and editor saves do not mutate installed files. Package reload preserves player edits until explicit restore.
 
 #### Initialization, evolution and public reads
 
@@ -364,11 +359,13 @@ The "AI create world" feature in the app and a world package written by hand use
 
 **The `@covel/create` interface:**
 
-- `createWorld({ llm, concept, ... })` generates the content and validates it. On success it returns `id`, `manifest`, `lore`, `locale`, `packageContent` and `warnings`. On failure it returns `success: false` and `errors`. `warnings` include content below the brief's target count and invalid dimensions that were dropped.
+- `createWorld({ llm, concept, ... })` generates the content and validates it. On success it returns `id`, `manifest`, `lore`, `locale`, `packageContent` and `warnings`. On failure it returns `success: false` and `errors`. `warnings` include content below the brief's target count and optional supplements that could not be generated.
 - The returned `manifest` has already been validated against the schema and normalized. It includes the canonical form of the locale and defaults such as `characterSchema.types`. All three save targets use the same result.
-- Generation does not write files, and it does not accept `outputDir`. A generated manifest must put its data inside the manifest. It cannot refer to a `worldData` file that has not been generated.
+- Generation does not write files, and it does not accept `outputDir`. Dimensions belong only in `packageContent.dimensions`, validated by the full external dimension schema and its size limits. The strict `manifest` contains no dimensions. Invalid or obsolete inline answers use the normal correction/retry path and cannot be published unchanged. It cannot refer to a `worldData` file that has not been generated.
 - Generated plugin content goes in `packageContent.contractData` as `{contract,key,value}` records. For example, selecting `memory.blocks@1` can produce a record with the key `world`. File and non-file outputs use the same data; duplicate targets are rejected.
-- To get a package of files, call `await writeWorldPackage(outputDir, result, { dataContracts })` explicitly. It returns the relative paths that were written. It works on a separate copy, converting the data in the manifest into file references, and the original result does not change. An existing package with the same name is rejected. When two writes go to the same package at once, only one succeeds.
+- To get a package of files, call `await writeWorldPackage(outputDir, result, { dataContracts })` explicitly. It returns the relative paths that were written. It works on a separate copy, writing portable data to canonical files, and the original result does not change. An existing package with the same name is rejected. When two writes go to the same package at once, only one succeeds.
+
+Revisions reconstruct dimensions in the package-content section and preserve package version and credits. With narrator-only lore, public manifest and dimension replacements are regenerated from original public sources and the author request, independently of the secret-aware draft.
 
 **Worlds without a folder.** A world saved in the server database (`server-store`) or in the browser's local storage has no package folder that can be read later. In that case:
 
@@ -1650,7 +1647,7 @@ Output when it passes:
 - Error messages include the file, the record number and the key. When an error is found before import, the whole plan is rejected, and the other valid records are not written either.
 - An empty source gives a warning.
 - When a receiving plugin declares with [`authoring.references`](./plugins.md) that a value is the `id` of a character attribute, the value is checked against the world's `characterSchema`. A missing attribute, a wrong type or a number outside the attribute's range is an `attribute-reference` error. A world without a `characterSchema` is not checked.
-- When it declares that a value is the ID of a dimension, the value is checked against the dimensions the world declares (`dimensions` in `world.yaml`, or `data/dimensions.yaml`). A dimension that does not exist, or a path beside it that does not reach a place the dimension's `schema` allows, is a `dimension-reference` error. For example, an event condition that writes `barowAlarm` for `barrowAlarm` never fires. A world that declares no dimensions is not checked.
+- When it declares that a value is the ID of a dimension, the value is checked against the dimensions the world declares (`data/dimensions.yaml`). A dimension that does not exist, or a path beside it that does not reach a place the dimension's `schema` allows, is a `dimension-reference` error. For example, an event condition that writes `barowAlarm` for `barrowAlarm` never fires. A world that declares no dimensions is not checked.
 - Dimension references can also declare `values`, for example `values: [equals, "in[]"]`. Candidates must satisfy the dimension schema at the selected path, including types and enums; failures also report `dimension-reference`. If weather allows only `sun` / `rain`, `equals: snow` or `in: [rain, snow]` points out the invalid candidate. See [`authoring.references`](./plugins.md) for the declaration and conservative checking rules. Session import, preflight and sync also check active receivers' dimension references against the saved world record's dimensions; an error prevents every write in the import plan.
 - In a record or a character field, a field whose name ends in `At` or is `timestamp`, with an ISO time as its value, is treated as bookkeeping, and the model does not read it. Each such field gives a `model-hidden-field` warning. To let the model see a time of the story, use a different name (`date`, `diedOn`), or do not write it as an ISO time.
 - A field of a record whose name is `id` or ends in `Id` / `Ids`, with a UUID as its value, is also treated as bookkeeping. No model reads it, and it gets a `model-hidden-field` warning too. Use an ID a person can read, in lower-case words and hyphens, for example `npc-lin-yao`.

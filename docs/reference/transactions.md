@@ -16,6 +16,8 @@
 
 SillyTavern 内容导入复用 ZIP 世界激活：转换和预览只在内存中进行，随后在世界锁内原子落盘、读回预检并创建记录。失败时只清理本次新建的目录。见[世界安装](./world-installation.md)。
 
+维度来源只在作者文件与生成内容之间分开：规范文件为 `data/dimensions.yaml`，可携带生成结果为 `packageContent.dimensions`。记录编辑仍用原有世界生命周期锁；会话导入／同步仍与账本一起原子提交，保留提供者绑定、CAS 和玩家修改冲突规则。
+
 ## Contract
 
 ```ts

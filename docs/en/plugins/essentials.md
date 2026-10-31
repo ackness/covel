@@ -6,6 +6,8 @@ Before you read this page, finish [your first plugin](./first-plugin.md). That p
 
 When functions are unnecessary, combine [prompts, datasets and UI](./prompt-only.md) in a declarative package without an entry or extraction. Code approval depends on current files; see [installation](../reference/plugin-installation.md#declarative-plugins).
 
+For file references, follow [declaration files and resource paths](../reference/plugins.md#declaration-paths): root declarations and runtime-private files have explicit base directories.
+
 ## Where to read next
 
 | What you want to do                                         | Read this page                             |

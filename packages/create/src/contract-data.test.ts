@@ -247,7 +247,7 @@ it("still rejects a requested kind that is missing entirely", () => {
 });
 
 it("reports an opening kit with too few numeric resources as a warning", () => {
-  const manifest: Record<string, unknown> = {
+  const content = {
     dimensions: {
       coins: { name: "Coins", schema: { type: "integer" }, initialValue: 8 },
       opening: {
@@ -258,8 +258,8 @@ it("reports an opening kit with too few numeric resources as a warning", () => {
     },
   };
   expect(
-    applyCreationBriefToManifest(manifest, { content: ["opening-kit"] }),
-  ).toEqual({
+    normalizeGeneratedPackage(content, { content: ["opening-kit"] }),
+  ).toMatchObject({
     errors: [],
     warnings: [
       "opening kit has 1 numeric resource dimensions; the brief asks for 2",

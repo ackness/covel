@@ -182,20 +182,18 @@ name: 提灯古冢
 version: 0.1.0
 summary: 灯灭了。
 defaultLocale: zh-CN
-dimensions:
-  alarm:
-    name: 警戒
-    schema: { type: string, x-i18n: true }
-    initialValue: 平静
 `,
       "world.en-US.yaml": `
 name: Lantern Barrow
 summary: The lamp went out.
-dimensions:
-  alarm:
-    name: Alarm
-    initialValue: Calm
 `,
+      "data/dimensions.yaml": `alarm:
+  name: 警戒
+  schema: { type: string, x-i18n: true }
+  initialValue: 平静`,
+      "data/dimensions.en-US.yaml": `alarm:
+  name: Alarm
+  initialValue: Calm`,
       "WORLD.md": "# 提灯古冢\n",
     });
 

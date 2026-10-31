@@ -20,12 +20,12 @@ Keep two things in mind:
 - The author chooses the dimension ID. The nine common kinds of world material (geography, factions, and so on) are only templates in the editor. They are not a list of allowed IDs.
 
 ```yaml
-dimensions:
-  study:
-    name: 学习进度
-    schema: { type: integer, minimum: 0 }
-    initialValue: 0
-    updateRule: 本轮明确完成一次学习时加一；承诺、回忆和未完成的学习不计入。
+# data/dimensions.yaml
+study:
+  name: 学习进度
+  schema: { type: integer, minimum: 0 }
+  initialValue: 0
+  updateRule: 本轮明确完成一次学习时加一；承诺、回忆和未完成的学习不计入。
 ```
 
 ## Declaration and validation
@@ -61,10 +61,7 @@ A keyword the server does not recognize causes a clear error. It is never silent
 > [!NOTE]
 > A development session that stores a dimension value in the multi-language form must be created again.
 
-**Two ways to write it use the same declaration format**: in `world.yaml`, or in a whole-table dimension file, `data/dimensions.yaml` (`covel://world/dimensions → world:metadata.dimensions`).
-
-- The dimension file replaces the whole table in `world.yaml`.
-- The content of each item is one complete declaration, not a value.
+File packages use only the canonical dimension table `data/dimensions.yaml`; generated portable results use `packageContent.dimensions`. Store/browser records keep resolved definitions. See [dimension sources](./world-data.md#dimension-sources) for descriptor, override and editor rules.
 
 ## Fields derived from the clock
 
@@ -167,7 +164,7 @@ There is no expression language. A world file contains no code.
 - No matter which way a dimension is declared, the declaration is recorded in the import ledger.
 - If the author's declaration has not changed, this game's progress is kept.
 - Changing or deleting a dimension that has already evolved, was edited by hand, or still has turns waiting for settlement is reported as a conflict. Using `force` does not reset it.
-- `sync-dimensions` syncs only dimensions. It cannot change the lorebook, characters, or other plugin data. It syncs declarations written in `world.yaml` and in the dimension file alike.
+- `sync-dimensions` syncs only dimensions. It cannot change the lorebook, characters, or other plugin data. It syncs canonical-file and edited record definitions.
 
 For the full sync rules, see [Preflight and Sync](./world-data.md#preflight-and-sync).
 

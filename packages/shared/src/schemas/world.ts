@@ -9,7 +9,6 @@ import { viewModeSchema } from "./view-mode.js";
 import { z } from "zod";
 import { canonicalizeLocale } from "@covel/plugin-handlers-utils";
 import type { AttributeDefinition } from "@covel/plugin-handlers-utils";
-import { worldDimensionsSchema } from "@covel/plugin-handlers-utils/dimensions";
 import { packageCreditFields } from "./package-info.js";
 export { worldDimensionsSchema } from "@covel/plugin-handlers-utils/dimensions";
 
@@ -497,11 +496,6 @@ export const worldManifestSchema = z
       .lazy(() => characterSchemaSchema.omit({ version: true }))
       .describe(
         "Character types and attributes of this world. When present, sessions use it as written and no schema is generated.",
-      )
-      .optional(),
-    dimensions: worldDimensionsSchema
-      .describe(
-        "Dynamic world dimensions keyed by dimension ID. Each entry is one full definition.",
       )
       .optional(),
     /**

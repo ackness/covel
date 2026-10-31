@@ -12,6 +12,8 @@
 
 干净的声明式分发示例是 [`declarative-notebook`](../../tests/third-party/declarative-notebook/README.md)。其测试留在包外，覆盖真实社区发现、免代码审批、模型工具调用、提交、代码升级和独立的沙箱授权。校验输出报告分类；运行时测试还应断言存储的提交结果，而不只看模型说了什么。
 
+文件路径先看[声明文件与资源路径](../reference/plugins.md#declaration-paths)：根声明与 runtime 私有文件各有明确的基准目录。
+
 ## 选哪一种测试
 
 从上到下越来越慢，也越来越接近真实的游戏：

@@ -6,7 +6,10 @@ import { createRpcApprovalGate } from "@covel/approval";
 import { createMemoryMediaStore, createMemoryStore } from "@covel/store/memory";
 import { discoverPlugins, loadPluginDefinition } from "@covel/plugin-loader";
 import { createSqliteStore } from "@covel/store/sqlite";
-import { worldDataSelectionScenario } from "../helpers/world-data-selection-scenario.js";
+import {
+  worldDataSelectionScenario,
+  portableDimensionSelectionScenario,
+} from "../helpers/world-data-selection-scenario.js";
 import { datasetWriteFixture } from "../helpers/dataset-write-fixture.js";
 import { makeErrorHandler } from "../../src/api-error.js";
 import {
@@ -88,6 +91,20 @@ async function fixture() {
 }
 
 describe("inferred world data through host admission", () => {
+  it.each([
+    ["memory", createMemoryStore],
+    ["sqlite", () => createSqliteStore(":memory:")],
+  ] as const)(
+    "imports portable generated dimensions and synchronizes atomically on %s",
+    async (_name, create) => {
+      const store = create();
+      try {
+        await portableDimensionSelectionScenario(store);
+      } finally {
+        await store.close();
+      }
+    },
+  );
   it.each([
     ["memory", createMemoryStore, false],
     ["sqlite", () => createSqliteStore(":memory:"), false],

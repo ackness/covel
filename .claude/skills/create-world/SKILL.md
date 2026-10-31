@@ -70,6 +70,7 @@ worlds/<id>/
 要求：
 
 - `world.yaml` 第一行写 `# yaml-language-server: $schema=../../packages/shared/schemas/world-manifest.schema.json`，编辑器会给出补全和报错。
+- 维度只写 `data/dimensions.yaml`，不写在 `world.yaml`；可携带生成／修订结果用 `packageContent.dimensions`。Descriptor 只能在相同规范路径修改或关闭这份来源，不能定义第二张表。
 - `world.yaml` 和 descriptor 只写当前字段；按生成的字段表编写，不添加 `schemaVersion`。
 - 每个数据文件按第 2 步的写作提示和示例来写。
 - 多个文件提到同一个角色、物品或地点时，使用完全相同的 ID 和名字，并与 `WORLD.md` 一致。

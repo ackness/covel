@@ -19,6 +19,7 @@ export interface WorldDataDiagnostic {
   readonly code?:
     | "convention-collision"
     | "dimension-provider-missing"
+    | "dimension-source-invalid"
     | "dimension-reference"
     | "receiver-missing"
     | "unclaimed-data-source";

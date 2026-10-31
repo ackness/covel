@@ -72,6 +72,9 @@ async function readDescriptorFile(
       for (const issue of validation.error.issues) {
         diagnostics.push({
           level: "error",
+          ...(/dimensions/i.test(issue.message)
+            ? { code: "dimension-source-invalid" }
+            : {}),
           path: relativePath,
           sourceId:
             issue.path[0] === "sources" && typeof issue.path[1] === "string"
@@ -347,6 +350,13 @@ export async function loadWorldDataDescriptor(options: {
             level: "error",
             sourceId: id,
             path: "world.data.override.yaml",
+            ...(candidateDescriptor.to === "world:metadata.dimensions"
+              ? {
+                  code: "dimension-source-invalid" as const,
+                  hint: "Keep the canonical data/dimensions.yaml path and override the existing source ID.",
+                }
+              : {}),
+            pointer: `sources.${id}`,
             message: validation.error.issues
               .map(
                 (issue) =>
@@ -382,6 +392,22 @@ export async function loadWorldDataDescriptor(options: {
   const enabled = [...merged.values()]
     .filter((source) => source.descriptor.enabled !== false)
     .map(withDefaultSchema);
+  const dimensionSources = enabled.filter(
+    (source) => source.descriptor.to === "world:metadata.dimensions",
+  );
+  if (dimensionSources.length > 1)
+    for (const source of dimensionSources)
+      diagnostics.push({
+        level: "error",
+        code: "dimension-source-invalid",
+        sourceId: source.id,
+        path: source.overridden
+          ? "world.data.override.yaml"
+          : options.worldDataPath,
+        pointer: `sources.${source.id}`,
+        message:
+          "Multiple sources define dimensions; keep one data/dimensions.yaml source and override its existing source ID",
+      });
   const ordered = orderSources(enabled);
   return {
     disabledPaths: [

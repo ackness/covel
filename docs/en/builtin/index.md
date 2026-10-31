@@ -16,6 +16,8 @@ Dimension tools report schema-invalid values as correctable input errors; see [u
 
 Opening character templates must include a placeholder for every collected field. Template/default errors are correctable `invalid-input` failures; see [character tools](../reference/tools.md#opening-character-form).
 
+All four bundled worlds keep their complete dimension tables in `data/dimensions.yaml`; manifests carry no dimensions. See [dimension sources](../reference/world-data.md#dimension-sources) for the distinction between definitions and session values.
+
 ## What is in this chapter
 
 | Page                                   | What it covers                                                                                        |

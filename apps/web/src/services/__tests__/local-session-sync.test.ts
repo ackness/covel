@@ -10,6 +10,7 @@ import type {
 } from "@covel/store/browser-sync";
 import { createSessionWorkspace } from "../data-service/workspace.js";
 import { resolveSetupRuntime } from "../../stores/session-store/setup-recovery-actions.js";
+import { createMemoryStore } from "@covel/store/memory";
 
 const api = vi.hoisted(() => ({
   getWorld: vi.fn(),
@@ -108,6 +109,61 @@ afterEach(async () => {
 });
 
 describe("LocalDataService browser-authoritative sync", () => {
+  it.each([
+    { clear: false, metadata: false },
+    { clear: true, metadata: false },
+    { clear: false, metadata: true },
+    { clear: true, metadata: true },
+  ])(
+    "keeps edited dimension definitions through canonical store hydration (clear=$clear, metadata=$metadata)",
+    async ({ clear, metadata }) => {
+      const alarm = {
+        name: { en: "Alarm", ja: "警戒" },
+        schema: { type: "integer" as const, minimum: 0 },
+        initialValue: 17,
+      };
+      const service = await serviceWithWorld("world-1", {
+        dimensions: { alarm },
+        pluginPitch: { label: "Watch" },
+      });
+      const dimensions = clear ? {} : { alarm: { ...alarm, initialValue: 23 } };
+      await service.updateWorld(
+        "world-1",
+        metadata ? { metadata: { dimensions } } : { dimensions },
+      );
+      const reloaded = new LocalDataService(vault);
+      expect((await reloaded.getWorld("world-1"))?.dimensions).toEqual(
+        dimensions,
+      );
+      const mirror = createMemoryStore();
+      try {
+        // Restore the actual uploaded world through the store's canonical
+        // metadata normalization, as the browser checkpoint endpoint does.
+        api.uploadBrowserCheckpoint.mockImplementation(
+          async (_id: string, checkpoint: BrowserCheckpoint) => {
+            if (checkpoint.world) await mirror.upsertWorld(checkpoint.world);
+            return { ok: true, revision: checkpoint.revision };
+          },
+        );
+        await reloaded.createSession("world-1", "edited-session", [], "en-US");
+        await reloaded.syncToServer("edited-session");
+        const restored = await mirror.getWorld("world-1");
+        expect(restored?.dimensions).toEqual(dimensions);
+        expect(restored?.metadata?.dimensions).toEqual(dimensions);
+        expect(restored?.metadata?.pluginPitch).toEqual({ label: "Watch" });
+        expect(
+          (await vault.getLatestCheckpoint("edited-session"))?.world?.metadata
+            ?.dimensions,
+        ).toEqual(dimensions);
+        await reloaded.commitFromServer("edited-session", "opening");
+        expect(
+          (await new LocalDataService(vault).getWorld("world-1"))?.dimensions,
+        ).toEqual(dimensions);
+      } finally {
+        await mirror.close();
+      }
+    },
+  );
   it.each(["player", "host", "spectator"] as const)(
     "preserves an explicit %s role in the server mirror and browser checkpoint",
     async (seatRole) => {
@@ -514,6 +570,13 @@ describe("LocalDataService browser-authoritative sync", () => {
       metadata: {
         pluginPolicy: { requiredPluginIds: ["world-notes"] },
         source: "browser-indexeddb",
+        dimensions: {
+          history: {
+            name: "History",
+            schema: { type: "array" },
+            initialValue: [],
+          },
+        },
       },
       createdAt: expect.any(String),
     });

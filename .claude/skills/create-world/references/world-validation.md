@@ -22,7 +22,7 @@ pnpm validate:world worlds/<id>
 
 检查内容:
 
-- `world.yaml` 按生产 schema 校验。
+- `world.yaml` 按生产 schema 校验，不接受内联维度；维度整表只在 `data/dimensions.yaml`，descriptor 不得重复或更换维度来源的相对路径。
 - 世界的每个语言版本(`defaultLocale`,以及根目录每个 `world.<locale>.yaml` / `WORLD.<locale>.md` 的语言)都能解析到 lore 文件;缺 `WORLD.md` 兜底时给 warning。
 - `plugins` 与 `pluginSettings` 里的插件 ID 在已扫描的插件目录中存在;拼写接近已知 ID 时直接判为 error 并给出 "Did you mean"。`plugins` 只接受 pack/plugin/contract 前缀；未知玩法包给出带下标的提示，不自动换包。
 - `pluginSettings` 的 key 是该插件声明过的设置项。
@@ -55,16 +55,15 @@ pnpm validate:world worlds/<id>
 
 ## 引用检查 — 引用一致性(有 relations 就跑)
 
-如果 `factions` 维度的 `initialValue[].relations[]` 用到了 `targetId`,必须确保它指向真实存在的 faction id。框架不解析这类引用,但叙事会读到这份当前值,悬空 id 会让模型编出不存在的势力。维度可能内联在 `world.yaml`,也可能外置在 `data/dimensions.yaml`,下面的脚本两处都读。
+如果 `factions` 维度的 `initialValue[].relations[]` 用到了 `targetId`,必须确保它指向真实存在的 faction id。框架不解析这类引用,但叙事会读到这份当前值,悬空 id 会让模型编出不存在的势力。维度只在 `data/dimensions.yaml` 编写，下面的脚本读取这张表。
 
 ```bash
 node --input-type=module -e "
 import { parse } from 'yaml';
 import { readFileSync } from 'fs';
 import { existsSync } from 'fs';
-const y = parse(readFileSync('worlds/<id>/world.yaml','utf-8'));
 const ext = 'worlds/<id>/data/dimensions.yaml';
-const dims = { ...(y.dimensions ?? {}), ...(existsSync(ext) ? parse(readFileSync(ext,'utf-8')) : {}) };
+const dims = existsSync(ext) ? parse(readFileSync(ext,'utf-8')) : {};
 const factions = dims.factions?.initialValue ?? [];
 const ids = new Set(factions.map(f => f.id));
 const broken = [];
@@ -102,9 +101,8 @@ node --input-type=module -e "
 import { parse } from 'yaml';
 import { readFileSync } from 'fs';
 import { existsSync } from 'fs';
-const y = parse(readFileSync('worlds/<id>/world.yaml','utf-8'));
 const ext = 'worlds/<id>/data/dimensions.yaml';
-const dims = { ...(y.dimensions ?? {}), ...(existsSync(ext) ? parse(readFileSync(ext,'utf-8')) : {}) };
+const dims = existsSync(ext) ? parse(readFileSync(ext,'utf-8')) : {};
 const lore = readFileSync('worlds/<id>/WORLD.md','utf-8');
 const i18n = (v) => typeof v === 'string' ? v : (v?.['zh-CN'] ?? Object.values(v ?? {})[0] ?? '');
 const names = [

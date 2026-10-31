@@ -6,6 +6,8 @@ Before you read this page, read [Plugins with Local Code](./local-code.md). You 
 
 `authoring.source` and `accepts` let the host discover data requirements from actual world content. They provide no runtime or service capability and grant no code permission. Only equivalent declarations share a source path. See [receiver rules](../reference/world-data.md#data-receivers).
 
+For file references, follow [declaration files and resource paths](../reference/plugins.md#declaration-paths): root declarations and runtime-private files have explicit base directories.
+
 ## Layout for multiple runtimes
 
 When a plugin has several runtimes, each runtime lives in its own folder under `runtimes/`:

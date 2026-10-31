@@ -18,7 +18,6 @@ export function worldRecordFromManifest(
   now = new Date().toISOString(),
 ): WorldRecord {
   const locale = manifest.defaultLocale as string | undefined;
-  const dimensions = manifest.dimensions as Record<string, unknown> | undefined;
   // `name` and `description` below are one language, for stores and lists.
   // Keep the translations too: a session in another locale reads them.
   const isLocaleMap = (value: unknown) =>
@@ -44,8 +43,6 @@ export function worldRecordFromManifest(
     tags: manifest.tags as string[] | undefined,
     locale,
     metadata: {
-      dimensions:
-        dimensions && Object.keys(dimensions).length ? dimensions : undefined,
       plugins: manifest.plugins,
       pluginPitch: manifest.pluginPitch,
       pluginSettings: manifest.pluginSettings,

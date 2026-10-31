@@ -6,6 +6,8 @@ The rule behind the split is: **the model reads the text, and your code checks a
 
 Add code when [declarative tools and service imports](./prompt-only.md) cannot meet the need. This guide’s entry, tools and functions use the code approval path; earlier approval-free enablement does not authorize new code. Run extraction only on entries you trust.
 
+For file references, follow [declaration files and resource paths](../reference/plugins.md#declaration-paths): root declarations and runtime-private files have explicit base directories.
+
 ## Before you start
 
 - Finish the [first plugin](./first-plugin.md), and read [the rules you need to know to write a plugin](./essentials.md).

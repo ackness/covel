@@ -4,6 +4,8 @@ import { parse as parseYaml, stringify as stringifyYaml } from "yaml";
 import type { WorldSections } from "@covel/create";
 import {
   DEFAULT_LOCALE,
+  WORLD_PACKAGE_INFO_KEY,
+  packageInfoOf,
   resolveWorldDimensionsLocale,
   validateWorldManifest,
   type WorldDimensions,
@@ -18,7 +20,7 @@ import { readWorldDataSource } from "./source-reader.js";
  * A world as the three sections the world generator writes, so that a
  * revision can start from what the world is now.
  *
- * The manifest is rebuilt from the record with its data inline. The package
+ * The manifest is rebuilt independently of the portable data. The package
  * content comes from the package files when the world has a directory, and
  * from the record's metadata for a world that lives in a store or a browser.
  */
@@ -99,12 +101,14 @@ function contentFromRecord(record: WorldRecord): PackageContent {
   return content;
 }
 
-/** `world.yaml` of the record, with the dimensions inline and one language. */
+/** Strict `world.yaml` of the record, in one language. */
 function manifestOf(record: WorldRecord): Entry {
   const metadata = record.metadata ?? {};
   const locale = record.locale ?? DEFAULT_LOCALE;
-  const dimensions = (record.dimensions ?? metadata.dimensions) as
-    WorldDimensions | undefined;
+  const storedInfo = metadata[WORLD_PACKAGE_INFO_KEY];
+  const packageInfo = isEntry(storedInfo)
+    ? packageInfoOf(storedInfo)
+    : undefined;
   const keep = (key: string) =>
     metadata[key] === undefined || metadata[key] === null
       ? {}
@@ -114,6 +118,7 @@ function manifestOf(record: WorldRecord): Entry {
     name: record.name,
     summary: record.description,
     defaultLocale: locale,
+    ...packageInfo,
     ...(record.tags?.length ? { tags: record.tags } : {}),
     ...keep("plugins"),
     ...keep("pluginPitch"),
@@ -123,17 +128,13 @@ function manifestOf(record: WorldRecord): Entry {
     ...keep("themeMusic"),
     ...keep("cover"),
     ...keep("accentColor"),
-    ...(dimensions && Object.keys(dimensions).length
-      ? // A translated world holds every language; a revision works on one.
-        { dimensions: resolveWorldDimensionsLocale(dimensions, locale) }
-      : {}),
   };
 }
 
 /**
  * The manifest of a package: `world.yaml` as its author wrote it, so that
  * fields the record does not keep (`version`) survive a revision. The data
- * is put inline. A revision replaces the package, and its locale files with
+ * stays in the package section. A revision replaces the package, and its locale files with
  * it, so the revised world has its own language only.
  */
 async function manifestOfPackage(
@@ -156,7 +157,6 @@ async function manifestOfPackage(
   if (!validation.valid) return fromRecord;
   const {
     worldData: _worldData,
-    dimensions: _dimensions,
     plugins: _plugins,
     pluginPitch: _pluginPitch,
     ...manifest
@@ -172,7 +172,6 @@ async function manifestOfPackage(
     ...(fromRecord.pluginPitch !== undefined
       ? { pluginPitch: fromRecord.pluginPitch }
       : {}),
-    ...(fromRecord.dimensions ? { dimensions: fromRecord.dimensions } : {}),
   };
 }
 
@@ -201,6 +200,13 @@ export async function worldSectionsOf(
   const filled = Object.fromEntries(
     Object.entries(content).filter(([, items]) => items.length > 0),
   );
+  const dimensions = (record.dimensions ?? record.metadata?.dimensions) as
+    WorldDimensions | undefined;
+  if (dimensions !== undefined)
+    filled.dimensions = resolveWorldDimensionsLocale(
+      dimensions,
+      record.locale ?? DEFAULT_LOCALE,
+    );
   return {
     yaml: stringifyYaml(manifest, { lineWidth: 0 }),
     lore: record.lore ?? "",

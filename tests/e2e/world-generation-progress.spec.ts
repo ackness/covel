@@ -30,7 +30,8 @@ defaultLocale: "zh-CN"
 tags: [mystery, harbor]
 plugins:
   - pack:traditional-story
-dimensions:
+`;
+const WORLD_DIMENSIONS_YAML = `dimensions:
   setting:
     name: 港城概况
     schema: { type: string }
@@ -72,6 +73,7 @@ function worldAnswer(characters = CHARACTERS.length): string {
     "===WORLD_MD===",
     WORLD_MD.trim(),
     "===WORLD_PACKAGE_YAML===",
+    WORLD_DIMENSIONS_YAML,
     "characters:",
     ...CHARACTERS.slice(0, characters),
     "lorebook:",

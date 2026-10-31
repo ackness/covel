@@ -173,30 +173,29 @@ defaultViewMode: stage
 #### 声明格式
 
 ```yaml
-# world.yaml
-dimensions:
-  reputation:
-    name: 声望 # 译文写在 world.en-US.yaml 的同一路径下
-    description: 主角在当地的公开声望。
-    schema:
-      type: integer
-      minimum: 0
-      maximum: 100
-    initialValue: 0
-    updateRule: 完成居民委托后增加 5；只计已完成的委托，不计承诺。
-  discoveries:
-    name: 已知地点
-    schema:
+# data/dimensions.yaml
+reputation:
+  name: 声望 # 译文写在 dimensions.en-US.yaml 的同一路径下
+  description: 主角在当地的公开声望。
+  schema:
+    type: integer
+    minimum: 0
+    maximum: 100
+  initialValue: 0
+  updateRule: 完成居民委托后增加 5；只计已完成的委托，不计承诺。
+discoveries:
+  name: 已知地点
+  schema:
+    type: object
+    additionalProperties:
       type: object
-      additionalProperties:
-        type: object
-        properties:
-          description: { type: string }
-          visited: { type: boolean }
-        required: [description, visited]
-        additionalProperties: false
-    initialValue: {}
-    updateRule: 明确发现具名地点时增加条目，亲自抵达后将 visited 设为 true。
+      properties:
+        description: { type: string }
+        visited: { type: boolean }
+      required: [description, visited]
+      additionalProperties: false
+  initialValue: {}
+  updateRule: 明确发现具名地点时增加条目，亲自抵达后将 visited 设为 true。
 ```
 
 | 字段           | 必填 | 说明                                                                   |
@@ -290,25 +289,21 @@ schema:
 
 <a id="三种作者入口"></a>
 
-#### 两种作者入口
+<a id="两种作者入口"></a>
 
-两种写法使用相同的声明格式，选一种即可：
+#### 维度来源
 
-1. 在 `world.yaml` 里直接写 `dimensions`。
-2. 一份维度文件 `data/dimensions.yaml`，内容是**整张维度表**。它按约定读取，不用登记。
+文件包只在 `data/dimensions.yaml` 编写整张维度表。译文放在旁边的 `dimensions.<locale>.yaml`，是同一个 source 的覆盖文件，不另外登记。`world.yaml` 没有 `dimensions` 字段；严格校验会提示规范路径，宽容加载会报告并忽略，不转换旧数据。
 
-两种写法同时存在时：
+Descriptor 可以修改或关闭这个规范来源，不能在别的路径再定义一张维度表，也不能重复登记主文件。用户 override 保留独立的受限根目录和原有优先级，但使用相同的相对路径和已有 source ID。关闭来源后，定义和推导出的提供者需求都消失。规范文件无效时保留上一份完整的世界。
 
-- `data/dimensions.yaml` 替换 `world.yaml` 里的整张表，不逐项合并。
-- 只有最终生效的声明进入会话。被替换的那些不会各自初始化一遍。
-- 维度文件同样可以有语言文件。
-- 任何一份声明读取或校验失败，这次加载作废，继续使用上一份完整的世界。
+服务端和浏览器记录继续保存解析后的定义与初值。编辑器通过世界 API 和生命周期锁保存记录；空表表示清空。浏览器保存会同时更新规范的 `metadata.dimensions` 与顶层展示字段，再导出存档点；恢复到服务端时不会重新采用旧初值。这些记录字段不是 YAML 的另一种作者入口，保存也不会改动已安装文件。普通包重载保留玩家修改，只有明确恢复才重新采用包的内容。
 
 #### 初始化、演化与公共读取
 
 对世界作者来说，要知道的是这几点：
 
-- 创建会话时，最终生效的声明和初值被导入会话。不管声明来自哪种写法，也不管世界有没有 descriptor。
+- 创建会话时，最终生效的声明和初值被导入会话。无论世界使用规范文件还是解析后的记录，也无论有没有 descriptor。
 - 内置插件 `world-init` 负责初始化和每回合的维护。框架按能力 `world.dimensions@1` 找到负责的插件，不认插件 ID，所以换一个实现也可以。
 - 每回合开始，叙事读到的是上一回合结束时的值。叙事结束后，一个模型按 `updateRule` 和本回合正文更新值。没有任何更新规则时，不产生这次模型调用。
 - 规则由模型判断，结构和范围由代码校验。这不是按公式结算的引擎。
@@ -364,11 +359,13 @@ schema:
 
 **`@covel/create` 的接口：**
 
-- `createWorld({ llm, concept, ... })` 生成并校验内容。成功时返回 `id`、`manifest`、`lore`、`locale`、`packageContent` 与 `warnings`；失败时返回 `success: false` 和 `errors`。`warnings` 包括数量低于简报目标的内容和被丢弃的无效维度。
+- `createWorld({ llm, concept, ... })` 生成并校验内容。成功时返回 `id`、`manifest`、`lore`、`locale`、`packageContent` 与 `warnings`；失败时返回 `success: false` 和 `errors`。`warnings` 包括数量低于简报目标的内容，以及未能生成的可选补充内容。
 - 返回的 `manifest` 已经过 schema 校验并规范化，包含 locale 的规范写法和 `characterSchema.types` 等默认值。三种保存目标使用同一份结果。
-- 生成过程不写文件，也不接收 `outputDir`。生成的清单必须把数据写在清单里，不能引用还没生成的 `worldData` 文件。
+- 生成过程不写文件，也不接收 `outputDir`。维度只放在 `packageContent.dimensions`，按完整的外部维度 schema 和大小限制校验；严格的 `manifest` 不含维度。无效数据或旧的内联回答走正常纠正／重试，未经纠正不能发布。不能引用还没生成的 `worldData` 文件。
 - 生成的插件内容统一放在 `packageContent.contractData`，每条为 `{contract,key,value}`；例如所选的 `memory.blocks@1` 可以生成键为 `world` 的记录。写文件和不写文件两种模式用同一份数据，同一目标重复声明会被拒绝。
-- 需要文件包时显式调用 `await writeWorldPackage(outputDir, result, { dataContracts })`。它返回写出的相对路径，在一份独立的副本里把清单里的数据转换成文件引用，原生成结果不变。已有同名包会被拒绝；并发写同一个包只有一个成功。
+- 需要文件包时显式调用 `await writeWorldPackage(outputDir, result, { dataContracts })`。它返回写出的相对路径，在一份独立的副本里把可携带内容写到规范文件，原生成结果不变。已有同名包会被拒绝；并发写同一个包只有一个成功。
+
+修订把现有维度放进 package-content section，保留包版本与署名。含叙事者私密正文时，公开清单和维度的替换只从原始公开来源与作者请求重新生成，不采信读过隐藏上下文的草稿。
 
 **没有文件夹的世界。** 保存在服务端数据库（`server-store`）或浏览器本地的世界没有可以长期读取的包目录。这时：
 
@@ -1650,7 +1647,7 @@ pnpm validate:world --strict --plugins ~/.covel/plugins ~/.covel/worlds/my-world
 - 错误信息包含文件、记录序号和 key。导入之前发现错误就拒绝整个计划，其余合法的记录也不写。
 - 空的 source 给出 warning。
 - 接收插件用 [`authoring.references`](./plugins.md) 声明了“这个值是角色属性的 `id`”时，按世界的 `characterSchema` 检查这个值。属性不存在、类型不对或数值超出属性范围，报 `attribute-reference` 错误。世界没有写 `characterSchema` 时不检查。
-- 声明了“这个值是维度的 ID”时，按世界声明的维度（`world.yaml` 的 `dimensions` 或 `data/dimensions.yaml`）检查。维度不存在，或者旁边的路径走不到维度 `schema` 允许的位置，报 `dimension-reference` 错误。例如事件条件里把 `barrowAlarm` 写成 `barowAlarm`，这个事件永远不会触发。世界没有声明任何维度时不检查。
+- 声明了“这个值是维度的 ID”时，按世界声明的维度（`data/dimensions.yaml`）检查。维度不存在，或者旁边的路径走不到维度 `schema` 允许的位置，报 `dimension-reference` 错误。例如事件条件里把 `barrowAlarm` 写成 `barowAlarm`，这个事件永远不会触发。世界没有声明任何维度时不检查。
 - 维度引用还可以声明 `values`，例如 `values: [equals, "in[]"]`。这些候选值必须符合所指位置的维度 schema，包括类型和枚举；错误同样报 `dimension-reference`。例如天气只允许 `sun` / `rain` 时，`equals: snow` 或 `in: [rain, snow]` 会指出错误值的位置。完整声明和保守检查规则见 [`authoring.references`](./plugins.md)。会话导入、预检和同步也检查启用接收插件声明的维度引用，使用已保存世界记录里的维度；发现错误时整份导入计划都不写入。
 - 记录或角色字段里，名字以 `At` 结尾或叫 `timestamp`、取值是 ISO 时间的字段，会被当成记账信息，模型读不到。每个这样的字段给出一条 `model-hidden-field` 提醒。要让模型看到剧情里的时间，请换一个名字（`date`、`diedOn`），或者不写成 ISO 时间。
 - 记录里名字是 `id` 或以 `Id` / `Ids` 结尾、取值是 UUID 的字段，也会被当成记账信息，模型读不到，同样给出一条 `model-hidden-field` 提醒。请换成人能读懂的 ID，用小写单词加连字符，例如 `npc-lin-yao`。
