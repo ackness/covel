@@ -317,6 +317,8 @@ export interface FinalizedOperation {
 }
 
 export interface FinalizeExecutionOutcome {
+  /** Internal provenance receipt; only committed top-level narrative messages. */
+  readonly topLevelNarrativeMessageIds?: readonly string[];
   readonly status: "committed" | "failed";
   /** SessionEvents from committed proposals, flushed only on success. */
   readonly events: readonly SessionEvent[];
@@ -1080,6 +1082,7 @@ export async function finalizeExecution(
   // Commit (Pre/PostStateCommit) fires outside executeTurn's own hook scope, so
   // re-establish it here — session-scoped like every other commit site.
   const scope: HookScope = {
+    logicalTurn: executionContext.logicalTurn,
     activePluginIds,
     logicalKey:
       executionContext.logicalTurnId ??
@@ -1094,6 +1097,7 @@ export async function finalizeExecution(
     // flushed only after it commits. A rollback discards the buffer.
     const postCommit: Array<() => Promise<void>> = [];
     let committedEvents: readonly SessionEvent[] = [];
+    const topLevelNarrativeMessageIds = new Set<string>();
     const isolatedFailures: FailedProposal[] = [];
     // Each unit is a top-level result with the results nested under it; it
     // commits or drops as one. Dropped unit -> why its writes were dropped.
@@ -1260,6 +1264,7 @@ export async function finalizeExecution(
           if (error) throw new Error(error);
         }
         const dimensions = await bindDimensionProvider({
+          logicalTurn: executionContext.logicalTurn,
           tx,
           sessionId,
           runtimes,
@@ -1362,7 +1367,26 @@ export async function finalizeExecution(
           const committed: SessionEvent[] = [];
           for (const member of unit.members) {
             args.signal?.throwIfAborted();
-            committed.push(...(await commitResult(member, sink, defer)));
+            const memberEvents = await commitResult(member, sink, defer);
+            committed.push(...memberEvents);
+            if (
+              member === unit.root &&
+              runtimes.some(
+                (runtime) =>
+                  runtime.name === member.runtimeId &&
+                  runtime.pluginId === member.pluginId &&
+                  runtime.outputKind === "story" &&
+                  runtime.outputContract === "narrative-engine@2",
+              )
+            ) {
+              for (const event of memberEvents)
+                if (
+                  event.type === "narrative.completed" &&
+                  event.payload.kind === "story" &&
+                  typeof event.payload.messageId === "string"
+                )
+                  topLevelNarrativeMessageIds.add(event.payload.messageId);
+            }
           }
           return committed;
         };
@@ -1690,6 +1714,12 @@ export async function finalizeExecution(
     return conclude({
       status: "committed",
       events: committedEvents,
+      topLevelNarrativeMessageIds: committedEvents.flatMap((event) =>
+        typeof event.payload.messageId === "string" &&
+        topLevelNarrativeMessageIds.has(event.payload.messageId)
+          ? [event.payload.messageId]
+          : [],
+      ),
       failedProposals: isolatedFailures,
       operations: finalizedOperations(),
       ...(fanOutFailed ? { fanOutFailed } : {}),

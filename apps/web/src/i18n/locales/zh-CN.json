@@ -516,7 +516,12 @@
     "viewConsentTitle": "允许“{{label}}”读取此会话？",
     "viewConsentDescription": "{{plugin}} 请求读取故事消息、流式文本、待答交互、公开角色和可见界面槽位。授权只适用于本设备上的此版本视图，可在视图菜单中撤销。",
     "viewConsentDecline": "使用默认视图",
-    "viewConsentAllow": "允许读取会话"
+    "viewConsentAllow": "允许读取会话",
+    "autoAdvanceLimit": "自动推进轮数",
+    "autoAdvanceOff": "关闭",
+    "autoAdvanceNextInput": "从下一次输入开始生效",
+    "autoAdvanceProgress": "正在推进 {{round}} / {{limit}}",
+    "autoAdvanceStop": "停止推进"
   },
   "blocks": {
     "actionPlaceholder": "或输入自定义行动...",

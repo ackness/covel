@@ -116,6 +116,7 @@ const sessionRecord = (phase: "setup" | "playing"): SessionRecord => ({
   worldId: "world-1",
   status: "active",
   phase,
+  autoAdvanceLimit: 3,
   completedPlayerTurns: phase === "playing" ? 1 : 0,
   setupRuntimes: {},
   seats: [

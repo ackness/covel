@@ -287,6 +287,7 @@ async function executeRuntime(
       const { actions: _parentActions, ...parentInput } = input;
       const nestedInput: RecursiveTurnInput = {
         ...parentInput,
+        logicalTurn: executionContext.logicalTurn,
         ...(delta.manualTrigger ? { manualTrigger: delta.manualTrigger } : {}),
         sessionId: input.sessionId,
         turnId: input.turnId,

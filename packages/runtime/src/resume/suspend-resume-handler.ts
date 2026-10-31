@@ -131,6 +131,7 @@ export async function handleSuspension(
     ...(opts.inputSlots ? { inputSlots: opts.inputSlots } : {}),
     ...(emittedEvents.length > 0 ? { emittedEvents: [...emittedEvents] } : {}),
     executionContext,
+    ...(input.actions ? { actions: structuredClone(input.actions) } : {}),
     // A nested call reports progress under the root execution's scope.
     ...(opts.progressScopeId !== undefined &&
     opts.progressScopeId !== executionContext.executionId

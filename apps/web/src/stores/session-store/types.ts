@@ -3,6 +3,8 @@ import type {
   PageCursor,
   SnapshotCharacter,
   SessionExecutionStatus,
+  ExecutionAdvancePayload,
+  TurnActionRequest,
   Stage,
   StoryMessageSegment,
   TurnAction,
@@ -160,6 +162,7 @@ export interface AssetProgressEvent {
 }
 
 export interface SessionState {
+  advance: ExecutionAdvancePayload | null;
   // Boot data
   presets: api.PresetSummary[];
   plugins: api.PluginSummary[];
@@ -315,6 +318,12 @@ export interface ExecutionRecovery {
 }
 
 export type SessionAction =
+  | { type: "SET_ADVANCE"; advance: ExecutionAdvancePayload | null }
+  | {
+      type: "RESTORE_ACTION_DRAFT";
+      requestId: string;
+      actions: readonly TurnActionRequest[];
+    }
   | { type: "RESTORE_STOPPED_INPUT"; requestId: string }
   | { type: "CLEAR_RESTORED_INPUT"; requestId: string }
   | {
@@ -350,7 +359,7 @@ export type SessionAction =
       delta: string;
     }
   | { type: "SET_EXECUTING"; value: boolean }
-  | { type: "SET_EXECUTION_ERROR"; error: string | null }
+  | { type: "SET_EXECUTION_ERROR"; error: string | null; turnId?: string }
   | { type: "SET_EXECUTION_RECOVERY"; recovery: ExecutionRecovery | null }
   // What a status read saw. It never decides `hydrating`: the restore that
   // set it may have finished while the read was on its way.
@@ -397,7 +406,7 @@ export type SessionAction =
       abortReason?: string;
     }
   | { type: "LOAD_EXECUTION_STEPS"; steps: ExecutionStep[] }
-  | { type: "FINALIZE_HANGING_RUNTIMES"; reason: string }
+  | { type: "FINALIZE_HANGING_RUNTIMES"; reason: string; turnId?: string }
   | { type: "RESET_SESSION" }
   | { type: "SUBMIT_BLOCK"; blockId: string; values?: Record<string, unknown> }
   | { type: "RESET_TO_WORLD_SELECT" }

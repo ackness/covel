@@ -45,6 +45,8 @@ export interface SessionMemoryIndexStatus {
 }
 
 export interface Session {
+  /** Effective additional-round cap for the next submitted input. */
+  readonly autoAdvanceLimit: number;
   readonly id: string;
   /** Opaque API identity for one persisted incarnation; not an authorization token. */
   readonly incarnation: string;

@@ -260,6 +260,7 @@ export async function createSession(
   locale?: string,
   loreOverride?: string,
   excludedPlugins?: string[],
+  autoAdvanceLimit?: number,
 ): Promise<SessionRecord> {
   // Open credential storage before creating server state, and capture any
   // previous authority before the HTTP request can overlap another creation.
@@ -274,6 +275,7 @@ export async function createSession(
         ...(plugins ? { plugins } : {}),
         ...(excludedPlugins ? { excludedPlugins } : {}),
         ...(locale ? { locale } : {}),
+        ...(autoAdvanceLimit !== undefined ? { autoAdvanceLimit } : {}),
         ...(loreOverride !== undefined ? { loreOverride } : {}),
       }),
     });
@@ -310,6 +312,7 @@ export async function updateSession(
      *   entries: <= 64
      */
     runtimeModelOverrides?: Record<string, string>;
+    autoAdvanceLimit?: number;
   },
 ): Promise<SessionRecord> {
   return request<SessionRecord>(

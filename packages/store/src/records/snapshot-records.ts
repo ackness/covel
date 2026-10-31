@@ -12,6 +12,7 @@ import type {
 import type { PluginDataRecord } from "./plugin-records.js";
 import type { SessionRecord } from "./session-records.js";
 import type {
+  TurnAction,
   CharacterSchemaRecord,
   ExecutionContext,
   InputSlot,
@@ -116,6 +117,7 @@ export type SnapshotSessionState = Readonly<
     /** Captured metadata override. Empty means clear; absent keeps world fallback. */
     loreOverride?: string;
     readonly orchestration?: import("@covel/shared").OrchestrationSettings;
+    readonly autoAdvanceLimit?: number;
     /**
      * Bound dimension provider plugin id. Forks must restore it so the
      * child's settlement barrier resolves the same owner; without it the
@@ -340,6 +342,7 @@ export interface SuspensionRecord {
      */
     readonly locale?: string;
     readonly logicalTurn?: number;
+    readonly actions?: readonly TurnAction[];
     readonly turnNumber?: number;
     /**
      * User messages of the suspended turn in `messages`. The context budget

@@ -2427,13 +2427,14 @@ SSE。先发一个 `ready` 事件，之后每 15 秒发一行注释保持连接�
 }
 ```
 
-| 字段           | 类型     | 必填 | 说明                                                                                   |
-| -------------- | -------- | ---- | -------------------------------------------------------------------------------------- |
-| `worldId`      | string   | 否   | 已存在、且没有在删除中的世界 ID（校验：`/^[a-z0-9_-]{1,64}$/i`）。省略时创建无世界会话 |
-| `locale`       | string   | 否   | 玩家想用的内容语言，默认 `zh-CN`。见下方“内容语言”                                     |
-| `plugins`      | string[] | 否   | 要激活的插件 ID 列表                                                                   |
-| `id`           | string   | 否   | 客户端自定义的会话 ID。不提供时自动生成 `{worldId}-{uuid8}`                            |
-| `loreOverride` | string   | 否   | 本次会话使用的世界背景文本。见下方“世界背景”                                           |
+| 字段               | 类型     | 必填 | 说明                                                                                   |
+| ------------------ | -------- | ---- | -------------------------------------------------------------------------------------- |
+| `worldId`          | string   | 否   | 已存在、且没有在删除中的世界 ID（校验：`/^[a-z0-9_-]{1,64}$/i`）。省略时创建无世界会话 |
+| `locale`           | string   | 否   | 玩家想用的内容语言，默认 `zh-CN`。见下方“内容语言”                                     |
+| `plugins`          | string[] | 否   | 要激活的插件 ID 列表                                                                   |
+| `id`               | string   | 否   | 客户端自定义的会话 ID。不提供时自动生成 `{worldId}-{uuid8}`                            |
+| `loreOverride`     | string   | 否   | 本次会话使用的世界背景文本。见下方“世界背景”                                           |
+| `autoAdvanceLimit` | number   | 否   | 自动推进上限，见[会话推进设置](#auto-advance)                                          |
 
 **内容语言（`locale`）:**
 
@@ -2621,7 +2622,7 @@ SSE。先发一个 `ready` 事件，之后每 15 秒发一行注释保持连接�
 
 #### `PATCH /api/sessions/:id`
 
-更新会话字段。目前可以改 `status` 与 `runtimeModelOverrides`。
+更新会话字段。可以改 `status`、`runtimeModelOverrides` 与 [`autoAdvanceLimit`](#auto-advance)。
 
 **参数:**
 
@@ -2645,6 +2646,7 @@ SSE。先发一个 `ready` 事件，之后每 15 秒发一行注释保持连接�
 
 | 字段                    | 类型                              | 必填 | 说明                                              |
 | ----------------------- | --------------------------------- | ---- | ------------------------------------------------- |
+| `autoAdvanceLimit`      | number                            | 否   | 推进上限，见[会话自动推进设置](#auto-advance)     |
 | `status`                | `'active' \| 'paused' \| 'ended'` | 否   | 会话生命周期状态                                  |
 | `runtimeModelOverrides` | object                            | 否   | 给单个 runtime 指定模型槽位：`runtimeId → 槽位名` |
 
@@ -6743,6 +6745,22 @@ STORE_BACKEND=memory pnpm dev:server  # 临时 Memory 后端（重启即丢失�
 
 - 翻译嵌套的对象列表时，世界数据的语言覆盖遵守每个 source 的 `localeArrayKeys`。
 - preflight、导入、同步和翻译端点共用这套按 key 匹配的规则。主列表重新排序，不会把带 key 的翻译配给别的条目。
+
+<a id="auto-advance"></a>
+
+### 自动推进与会话设置
+
+`POST /api/sessions` 和 `PATCH /api/sessions/:id` 接受可选的 `autoAdvanceLimit`。GET、创建与 PATCH 响应都返回生效的数值。
+
+| 字段               | 默认值 | 可接受值                | 生效时机         |
+| ------------------ | ------ | ----------------------- | ---------------- |
+| `autoAdvanceLimit` | `3`    | 整数 `0`–`10`；`0` 关闭 | 下一次接受的输入 |
+
+负数、小数、超限值、字符串和 `null` 返回 400。值保存在会话 metadata；PATCH 只合并这项设置，保留身份、权限和其他设置。快照、分支与浏览器 checkpoint 保存它，不保存正在推进的次数或剩余额度。
+
+一次 `/actions` 输入可包含根执行和若干自动执行；开场也可以请求推进，setup 本身不能。每个执行独立提交。新的合法、已授权且通过批准预检的输入会撤销旧请求的后续推进资格；正在运行的普通根执行继续，正在等待或执行的自动轮会停止。自动轮遇到未回答的表单、选择、确认、挂起，或会话失效、权限/插件批准不足时交还玩家。
+
+Stop 作用于整个请求，包含两轮之间的等待。未开始的自动轮不产生失败回合；已经提交的故事保留。`GET /api/sessions/:id/execution` 在轮间等待仍返回 `running`，可带[协议中的 `advance`](./protocol.md#auto-advance-events)。刷新只观察，不根据历史 `continue` 重启。全轮重试、runtime 重试和挂起恢复只执行一次，保留系统动作、逻辑回合号和输入身份；它们没有新的自动预算。客户端仍不能提交 `source: system`。
 
 <a id="orchestration-settings"></a>
 

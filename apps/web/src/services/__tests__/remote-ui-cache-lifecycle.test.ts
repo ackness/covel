@@ -42,6 +42,7 @@ beforeEach(() => {
     incarnation: "a".repeat(64),
     status: "active",
     phase: "playing",
+    autoAdvanceLimit: 3,
     completedPlayerTurns: 0,
     setupRuntimes: {},
     seats: [

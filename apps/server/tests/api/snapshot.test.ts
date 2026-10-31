@@ -250,6 +250,7 @@ describe("Snapshot routes", () => {
       const payload = snapshot.payload as Record<string, unknown>;
       expect(payload.schemaVersion).toBe(3);
       expect(payload.session).toEqual({
+        autoAdvanceLimit: 3,
         status: "active",
         locale: "zh-CN",
         activePlugins: [],

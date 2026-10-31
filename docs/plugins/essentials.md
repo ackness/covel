@@ -366,3 +366,7 @@ pnpm validate:plugin ~/.covel/plugins/my-plugin
 - 发给别人：[验证与分发](../ship/index.md)
 
 只使用当前声明的输入和数据形状：投影后的叙事输入是字符串，骰子回执带 `checks` 数组，`pluginData.get()` 直接返回存储值。版本变更见[插件契约](../reference/plugins.md#契约版本策略)，不要为了保留开发数据再加包装或回退分支。
+
+### 让故事继续一轮
+
+实现 `narrative-engine@2` 的顶层故事可以返回 `yield: continue`。宿主提交故事后才决定是否再跑一轮；普通 post-turn 工作也随每轮运行。函数通过 `ctx.playerActions` 和输入 digest 区分系统推进与玩家输入，逻辑回合号保持不变。子 agent 的 yield 不控制宿主。完整规则和可选导入见[故事请求自动推进](../reference/plugins.md#故事请求自动推进)。

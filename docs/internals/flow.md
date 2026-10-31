@@ -179,14 +179,14 @@ stateDiagram-v2
 
 `completedPlayerTurns` 只统计已提交的玩家回合。每次执行都在 `turn_results` 里有自己的一行，`origin` 是下面之一：
 
-| `origin`       | 是什么                      | 计入回合数 |
-| -------------- | --------------------------- | ---------- |
-| `player`       | 玩家发消息触发的回合        | 是         |
-| `continuation` | 准备完成后的开场接力        | 否         |
-| `manual`       | 插件 RPC 点名运行的 runtime | 否         |
-| `background`   | 后台执行                    | 否         |
-| `recursive`    | 嵌套的 `recursiveCall`      | 否         |
-| `resume`       | 挂起后的恢复                | 否         |
+| `origin`       | 是什么                                         | 计入回合数 |
+| -------------- | ---------------------------------------------- | ---------- |
+| `player`       | 玩家发消息触发的回合                           | 是         |
+| `continuation` | 准备完成后的开场接力，或同一次输入内的自动推进 | 否         |
+| `manual`       | 插件 RPC 点名运行的 runtime                    | 否         |
+| `background`   | 后台执行                                       | 否         |
+| `recursive`    | 嵌套的 `recursiveCall`                         | 否         |
+| `resume`       | 挂起后的恢复                                   | 否         |
 
 多次执行共用一个逻辑回合时，只计一次。
 
@@ -1224,3 +1224,13 @@ sequenceDiagram
 settle 屏障后冻结策略绑定与执行预算。函数、agent、递归和直接 pipeline 入口共享一个根预算，原子准入在加载提供方前完成。display-message 的 presence 尾页按执行懒捕获；挂起保存前冻结该边界并等待子调用排空。恢复持有会话锁，在入口捕获当前 claim，从同根挂起项读取最新预算；结算时必须仍是该 claim。只有预算、私有调用来源或历史快照发生变化时才打开 continuation 事务，以条件更新同步尚未解决的兄弟，并保留原 claim。失败恢复同样记录已经消耗的次数，但没有变化的失败恢复不写 continuation、不提交领域写入，也不解决挂起项。完成或放弃不留下永久会话计数。
 
 `metadata.orchestration` 属于可分叉的会话设置，由 snapshot builder 显式捕获，BrowserVault/checkpoint 也保存。预算、私有调用来源和历史快照属于框架 continuation；分叉隔离 scopeId，保留消耗量。详见[执行名额](../reference/plugins.md#character-orchestration)。
+
+## 输入内的自动推进
+
+根输入冻结 `logicalTurnId`、`logicalTurn = completedPlayerTurns + 1` 和会话推进上限。每轮都有独立的执行、turn 和 run 身份；生成的轮使用 `origin: continuation`，不计玩家回合。开场推进保持回合号 1、计数 0；第一条正式玩家输入仍是回合号 1，但有新的输入身份。
+
+提交完成后，宿主根据[已提交故事](../reference/plugins.md#故事请求自动推进)决定是否推进。每轮重新取得 settled session lock，再读取会话、注册表、设置和当前权限；上一轮的 settle 任务先完成。锁外等待和发布期间仍保留请求的 Stop 控制，但事件转发仅在该轮持锁时启用。新的输入撤销旧请求的后续资格，生成轮在锁内再次检查。
+
+同一输入的函数、工具、Hook、递归调用、调度判断与维度结算读取冻结的逻辑号。每轮内联 post-turn 正常运行；detached 任务携带自己的来源执行、该轮动作和冻结逻辑号，即使之后才执行也不会采用新回合的输入。它们不加入前台故障组。前台故障立即累计，干净结果延迟到请求关闭；身份与修订检查保护较新的结果。
+
+每轮持久化一次完成状态；请求只发一个最终完成事件。重试/恢复是一次性执行，历史 yield 不创建任务队列。停止或进程结束后没有可恢复的自动循环。控制仍是当前宿主进程内的能力；断开 SSE 不取消已接受的工作，模型消耗由上限和显式 Stop 限制。

@@ -816,6 +816,8 @@ export function createPluginRpcRuntimeTurnRunner(
       locale: ctx.session.locale,
       origin: "background",
       parentTurnId: args.descriptor.sourceTurnId,
+      actions: args.descriptor.turnDigest.actions,
+      logicalTurn: args.descriptor.sourceLogicalTurn,
       detachedStage: {
         jobId: args.descriptor.jobId,
         runtimeId: args.descriptor.runtimeId,

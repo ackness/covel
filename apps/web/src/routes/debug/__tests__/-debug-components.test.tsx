@@ -92,6 +92,7 @@ describe("debug route components", () => {
             createdAt: "2026-05-11T00:00:00.000Z",
             updatedAt: "2026-05-11T00:00:00.000Z",
             phase: "playing",
+            autoAdvanceLimit: 3,
             completedPlayerTurns: 2,
             setupRuntimes: {},
             seats: [

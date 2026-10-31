@@ -1,3 +1,4 @@
+import { autoAdvanceLimitSchema } from "@covel/shared";
 import {
   DEFAULT_LOCALE,
   summarizeWorld,
@@ -397,6 +398,7 @@ export class LocalDataService implements DataService {
     locale?: string,
     loreOverride?: string,
     excludedPlugins?: string[],
+    autoAdvanceLimit?: number,
   ): Promise<SessionRecord> {
     worldWireRecordSchema.shape.lore.parse(loreOverride);
     const vault = await this.ready();
@@ -417,6 +419,9 @@ export class LocalDataService implements DataService {
             locale ?? DEFAULT_LOCALE,
             loreOverride,
             excludedPlugins ?? [],
+            ...(autoAdvanceLimit === undefined
+              ? ([] as const)
+              : ([autoAdvanceLimit] as const)),
           );
           const commit = await api.fetchBrowserCommit(
             sessionId,
@@ -467,6 +472,16 @@ export class LocalDataService implements DataService {
         session: {
           ...checkpoint.session,
           ...(updates.status !== undefined ? { status: nextStatus } : {}),
+          ...(updates.autoAdvanceLimit !== undefined
+            ? {
+                metadata: {
+                  ...checkpoint.session.metadata,
+                  autoAdvanceLimit: autoAdvanceLimitSchema.parse(
+                    updates.autoAdvanceLimit,
+                  ),
+                },
+              }
+            : {}),
           ...(updates.runtimeModelOverrides !== undefined
             ? { runtimeModelOverrides: updates.runtimeModelOverrides }
             : {}),

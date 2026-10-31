@@ -1,3 +1,4 @@
+export * from "./schemas/session-settings.js";
 export {
   playerInputSubmissionSchema,
   turnDigestSchema,

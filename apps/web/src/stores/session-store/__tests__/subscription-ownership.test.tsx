@@ -57,6 +57,7 @@ const session = {
   locale: "en-US",
   status: "active" as const,
   phase: "playing" as const,
+  autoAdvanceLimit: 3,
   completedPlayerTurns: 1,
   setupRuntimes: {},
   seats: [

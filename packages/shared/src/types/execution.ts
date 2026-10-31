@@ -280,6 +280,8 @@ export interface TurnInput {
    * executions leave it unset (they never complete a player turn).
    */
   readonly logicalTurnId?: string;
+  /** Kernel-owned logical number, frozen across an input and its continuations. */
+  readonly logicalTurn?: number;
   /** Parent turnId when this execution is a nested recursiveCall. */
   readonly parentTurnId?: string;
   /**

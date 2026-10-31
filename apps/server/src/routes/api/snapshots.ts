@@ -422,6 +422,9 @@ snapshotRoutes.post("/:id/fork", rateLimiter({ max: 10 }), async (c) => {
                 ...(snapshotSession.orchestration !== undefined
                   ? { orchestration: snapshotSession.orchestration }
                   : {}),
+                ...(snapshotSession.autoAdvanceLimit !== undefined
+                  ? { autoAdvanceLimit: snapshotSession.autoAdvanceLimit }
+                  : {}),
                 ...(snapshotSession.loreOverride !== undefined
                   ? { loreOverride: snapshotSession.loreOverride }
                   : {}),

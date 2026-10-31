@@ -684,6 +684,31 @@ describe("LocalDataService browser-authoritative sync", () => {
     expect((await vault.getLatestCheckpoint("sess-1"))?.revision).toBe(1);
   });
 
+  it.each([0, 7])(
+    "passes an explicitly chosen advancement limit (%s) to session creation",
+    async (autoAdvanceLimit) => {
+      const service = await serviceWithWorld();
+      await service.createSession(
+        "world-1",
+        "sess-1",
+        [],
+        "en-US",
+        undefined,
+        [],
+        autoAdvanceLimit,
+      );
+      expect(api.createSession).toHaveBeenCalledExactlyOnceWith(
+        "world-1",
+        "sess-1",
+        [],
+        "en-US",
+        undefined,
+        [],
+        autoAdvanceLimit,
+      );
+    },
+  );
+
   it("removes the server session when the first save cannot be stored", async () => {
     const service = await serviceWithWorld();
     const failure = new Error("connection reset");

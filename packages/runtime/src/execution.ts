@@ -250,6 +250,7 @@ export async function executeTurn(
   const userSettings = snapshotUserSettings(input.userSettings);
   const hookScope = {
     logicalKey: input.logicalTurnId ?? input.turnId,
+    logicalTurn: input.logicalTurn,
     activePluginIds: new Set(
       [
         ...(deps.hookScope?.activePluginIds ??
@@ -470,6 +471,7 @@ export async function resumeSuspendedRuntime(
   const captured = captureSchemas(deps);
   const userSettings = snapshotUserSettings(options?.userSettings);
   const hookScope = {
+    logicalTurn: suspension.pendingContinuation.logicalTurn,
     logicalKey:
       suspension.pendingContinuation.executionContext.logicalTurnId ??
       suspension.turnId,

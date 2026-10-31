@@ -89,6 +89,10 @@ export async function resumeRuntimePipeline(
     turnId: suspension.turnId,
     playerMessage: "",
     origin: "resume",
+    logicalTurnId:
+      suspension.pendingContinuation.executionContext.logicalTurnId,
+    logicalTurn: suspension.pendingContinuation.logicalTurn,
+    actions: suspension.pendingContinuation.actions,
     ...(locale !== undefined ? { locale } : {}),
     ...(options?.userSettings ? { userSettings: options.userSettings } : {}),
     ...(options?.runtimeModelOverrides

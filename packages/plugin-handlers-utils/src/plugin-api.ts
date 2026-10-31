@@ -41,6 +41,8 @@ export interface PluginHookContext {
   readonly turnId: string;
   /** The session's content locale; a session host always supplies it. */
   readonly locale?: string;
+  /** Frozen logical number of the originating input; absent outside execution. */
+  readonly logicalTurn?: number;
   /**
    * Plugin of the runtime the event is about, not the plugin that registered
    * the handler. Set together with `runtimeId` for every event that concerns

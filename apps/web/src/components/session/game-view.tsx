@@ -1,3 +1,4 @@
+import { AutoAdvanceControl } from "./auto-advance-control.js";
 import { parsePluginViewMode } from "@covel/shared";
 import { usePluginViews } from "./game-view/use-plugin-views.js";
 import { PluginViewHost } from "./plugin-view-host.js";
@@ -552,6 +553,8 @@ export function GameView({
             </div>
           )}
 
+          <AutoAdvanceControl key={`auto-advance:${session.id}`} />
+
           {sessionPlugins.some((plugin) => plugin.approvalRequired) && (
             <div
               role="status"
@@ -690,6 +693,7 @@ export function GameView({
             />
           ) : stageActive ? (
             <StageView
+              advancing={!!state.advance && state.advance.phase !== "stopped"}
               recoveryTurnId={recoveryTurnId}
               composerDraft={{ value: inputValue, onChange: setInputValue }}
               composerModes={composerModes}

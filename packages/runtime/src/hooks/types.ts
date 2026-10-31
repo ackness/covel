@@ -96,6 +96,8 @@ export interface HookContext {
    * hook scope; absent only for a direct `pipeline.run` with no scope.
    */
   readonly locale?: string;
+  /** Frozen logical number of the originating input, when run in an execution. */
+  readonly logicalTurn?: number;
   /**
    * Plugin of the runtime the event is about — not the plugin that
    * registered the handler. Set, with `runtimeId`, for every event that

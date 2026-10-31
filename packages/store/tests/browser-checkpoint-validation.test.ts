@@ -94,6 +94,32 @@ const checkpoint: BrowserCheckpoint = JSON.parse(
 ) as BrowserCheckpoint;
 
 describe("checkpoint record validation", () => {
+  it.each([-1, 11, 1.5, "3", null])(
+    "rejects invalid advancement limits at both checkpoint boundaries (%s)",
+    (autoAdvanceLimit) => {
+      expect(() =>
+        validateBrowserCheckpoint({
+          ...checkpoint,
+          session: { ...checkpoint.session, metadata: { autoAdvanceLimit } },
+        }),
+      ).toThrow(BrowserSyncValidationError);
+      const snapshot = checkpoint.snapshots[0]!;
+      expect(() =>
+        validateBrowserCheckpoint({
+          ...checkpoint,
+          snapshots: [
+            {
+              ...snapshot,
+              payload: {
+                ...snapshot.payload,
+                session: { ...snapshot.payload.session, autoAdvanceLimit },
+              },
+            },
+          ],
+        }),
+      ).toThrow(BrowserSyncValidationError);
+    },
+  );
   it("rejects duplicate message IDs at their exact path before any replacement side effect", async () => {
     const store = createMemoryStore();
     await store.createSession(checkpoint.session);

@@ -534,11 +534,11 @@ CLI 和安装器的静态校验对 `scope: turn` 和 `scope: committed` 的输�
 
 故事的形状由内核负责，对所有 `outputKind: story` 的 runtime（agent、function 和 guard 提前给出的故事）都一样。当前契约是 `narrative-engine@2`：
 
-| 字段       | 类型                                  | 含义                                                                  |
-| ---------- | ------------------------------------- | --------------------------------------------------------------------- |
-| `segments` | 段落数组，最多 60 段                  | 故事正文，按顺序排列                                                  |
-| `cues`     | `{ scene?, present?, mood? }`，可省略 | 场景名（≤200 字符）、在场人物的名字（≤32 个）、氛围（≤80 字符）       |
-| `yield`    | `user` 或 `continue`，默认 `user`     | 写完之后把回合交还玩家；`continue` 为后续使用保留，现在和 `user` 一样 |
+| 字段       | 类型                                  | 含义                                                                     |
+| ---------- | ------------------------------------- | ------------------------------------------------------------------------ |
+| `segments` | 段落数组，最多 60 段                  | 故事正文，按顺序排列                                                     |
+| `cues`     | `{ scene?, present?, mood? }`，可省略 | 场景名（≤200 字符）、在场人物的名字（≤32 个）、氛围（≤80 字符）          |
+| `yield`    | `user` 或 `continue`，默认 `user`     | `user` 把控制权交还玩家；`continue` 请求宿主在提交后继续推进，见下方规则 |
 
 每个段落是 `{ kind, speaker?, text }`：
 
@@ -1422,3 +1422,9 @@ const reply = await ctx.agents.run({
 函数、guard 的 `ctx.historyFor(characterId, {limit?})` 和插件工具的同名能力返回 `CharacterHistory`；会话绑定、取消和撤销规则与相邻读取 API 一致。设置在会话插件面板或[编排 API](./api.md#orchestration-settings)修改，下次执行生效。
 
 开发数据：丢弃在预算快照机制之前已经委托过子 agent 的未解决挂起项，以及包含它们的快照/checkpoint。普通会话和故事无需重建；不做旧计数推算或双格式兼容。
+
+## 故事请求自动推进
+
+宿主只读取已提交的顶层 `io.visibility: story`、`io.output.contract: narrative-engine@2` 故事。恰好一条这样的故事在提交 Hook 处理后仍为 `yield: continue`，才会请求下一轮。没有故事、多个故事或省略 `yield` 都会交还玩家；子 agent 和递归调用的输出不决定推进。附带操作失败不会撤销已保存的故事，也不会单独阻止推进。
+
+下一轮照常经过调度、工具、proposal 校验和提交，内联 post-turn 每轮运行。`ctx.playerActions` 是一个无文本的 `advance`，来源为 `system`；输入 digest 同样保留它。需要的故事导入仍可声明为可选，没有提供方时继续运行。玩家可停止推进；上限和阻止条件见[会话推进设置](./api.md#auto-advance)。

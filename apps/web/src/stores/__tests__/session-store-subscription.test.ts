@@ -57,6 +57,7 @@ const snapshot = {
     id: "s1",
     worldId: "w1",
     phase: "playing" as const,
+    autoAdvanceLimit: 3,
     completedPlayerTurns: 2,
     setupRuntimes: {},
     seats: [

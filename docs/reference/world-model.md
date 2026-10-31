@@ -344,6 +344,10 @@ type DimensionSnapshot = Readonly<Record<string, DimensionSnapshotEntry>>;
 > [!NOTE]
 > 只有 `plugin_id` 一列、没有所有者的旧资料库表不会自动升级。开发环境的处理办法见[迁移说明](./env-registry.md#plugin-extension-development-data)。
 
+### 自动推进的座位与结算
+
+内核生成的 `advance` 不经过人类动作种类的角色门槛，仍使用 `source: system` 和已有的人类座位：优先原输入座位，否则按持久化顺序选择第一个人类座位。它不指定角色、文本或字段；找不到人类座位就停止。公开请求不能伪造这个来源，人类角色表保持不变。维度结算上下文使用根输入冻结的逻辑回合号，每次实际执行仍独立记录结算义务。
+
 <a id="witnessed-history"></a>
 
 ## 角色亲历的故事

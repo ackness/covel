@@ -97,6 +97,7 @@ export async function bindDimensionProvider(args: {
   readonly tx: StoreTransaction;
   readonly sessionId: string;
   readonly runtimes: readonly DimensionRuntime[];
+  readonly logicalTurn?: number;
 }): Promise<DimensionSettlementScope | undefined> {
   const { tx, sessionId, runtimes } = args;
   const publishers = runtimes.filter(
@@ -123,7 +124,7 @@ export async function bindDimensionProvider(args: {
     provider,
     publisher: publishers[0]!.name,
     locale: session.locale,
-    turnNumber: session.completedPlayerTurns + 1,
+    turnNumber: args.logicalTurn ?? session.completedPlayerTurns + 1,
   };
 }
 

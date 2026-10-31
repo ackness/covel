@@ -135,3 +135,67 @@ describe("plugin fault latch", () => {
     expect(latch.latched("s")).toEqual([]);
   });
 });
+
+describe("foreground fault groups", () => {
+  const success = () => result({ status: "success", fault: undefined });
+  it("retains two prior faults through clean, faulty and clean rounds and latches once", () => {
+    const latch = createPluginFaultLatch();
+    record(latch, "first");
+    record(latch, "second");
+    const close = latch.beginGroup("s", "third");
+    expect(record(latch, "third", [success()])).toEqual([]);
+    expect(record(latch, "third").map((event) => event.type)).toEqual([
+      "plugin.fault.counted",
+      "plugin.fault.latched",
+    ]);
+    expect(latch.recordHookFault("s", "p", "third", "hook")).toEqual([]);
+    expect(record(latch, "third", [success()])).toEqual([]);
+    expect(close()).toEqual([]);
+    expect(close()).toEqual([]);
+    expect(latch.latched("s")[0]?.consecutiveFaults).toBe(3);
+  });
+  it("clears only participating clean providers when the group closes", () => {
+    const latch = createPluginFaultLatch();
+    record(latch, "first", [result(), result({ pluginId: "other" })]);
+    const close = latch.beginGroup("s", "next");
+    expect(record(latch, "next", [success()])).toEqual([]);
+    expect(latch.recordHookClean("s", "p", "next")).toEqual([]);
+    expect(close()).toEqual([
+      {
+        type: "plugin.fault.cleared",
+        payload: { sessionId: "s", pluginId: "p", by: "clean-run" },
+      },
+    ]);
+    record(latch, "second", [result({ pluginId: "other" })]);
+    record(latch, "third", [result({ pluginId: "other" })]);
+    expect(latch.isLatched("s", "other")).toBe(true);
+  });
+  it("does not let an old clean group erase a newer background fault", () => {
+    const latch = createPluginFaultLatch();
+    record(latch, "first");
+    const close = latch.beginGroup("s", "foreground");
+    record(latch, "foreground", [success()]);
+    record(latch, "background");
+    // Even a later clean member still belongs to the older foreground input.
+    record(latch, "foreground", [success()]);
+    expect(close()).toEqual([]);
+    record(latch, "next");
+    expect(latch.isLatched("s", "p")).toBe(true);
+  });
+  it("does not reset on cancellation or after session disposal", () => {
+    const latch = createPluginFaultLatch();
+    record(latch, "first");
+    const close = latch.beginGroup("s", "cancelled");
+    record(latch, "cancelled", [
+      result({
+        fault: undefined,
+        error: "aborted-by-player",
+      }),
+    ]);
+    expect(close()).toEqual([]);
+    const dispose = latch.beginGroup("s", "deleted");
+    record(latch, "deleted", [success()]);
+    latch.forgetSession("s");
+    expect(dispose()).toEqual([]);
+  });
+});

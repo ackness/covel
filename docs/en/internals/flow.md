@@ -178,14 +178,14 @@ Condition: `status === 'active' && phase === 'playing'`. Each `POST /api/actions
 
 `completedPlayerTurns` counts only committed player turns. Each execution has its own row in `turn_results`. Its `origin` is one of the following:
 
-| `origin`       | What it is                                    | Counted as a turn |
-| -------------- | --------------------------------------------- | ----------------- |
-| `player`       | A turn started by a player message            | Yes               |
-| `continuation` | The opening follow-up after setup is complete | No                |
-| `manual`       | A runtime run by name through a plugin RPC    | No                |
-| `background`   | Background execution                          | No                |
-| `recursive`    | A nested `recursiveCall`                      | No                |
-| `resume`       | Recovery after a suspension                   | No                |
+| `origin`       | What it is                                                         | Counted as a turn |
+| -------------- | ------------------------------------------------------------------ | ----------------- |
+| `player`       | A turn started by a player message                                 | Yes               |
+| `continuation` | The opening after setup, or automatic advancement within one input | No                |
+| `manual`       | A runtime run by name through a plugin RPC                         | No                |
+| `background`   | Background execution                                               | No                |
+| `recursive`    | A nested `recursiveCall`                                           | No                |
+| `resume`       | Recovery after a suspension                                        | No                |
 
 When several executions share one logical turn, it is counted only once.
 
@@ -1225,3 +1225,13 @@ One story runtime can ask a policy, delegate actors and commit one ordinary stor
 After the settle barrier, freeze policy binding and execution budget. Function, agent, recursive and direct pipeline entries share a root budget, with atomic admission before provider loading. A presence-bearing display-message tail is lazily captured per execution; suspension freezes that boundary and drains children before saving. Under the session lock, resume captures the live claim at entry and loads the newest budget for the root; settlement must still hold that exact claim. Only changed budget, private-call provenance or history state opens a continuation transaction, conditionally synchronizing unresolved siblings without releasing claims. Failed resumes retain spent calls; an unchanged failed resume writes no continuation, commits no domain writes and leaves the suspension unresolved. Completion and abandonment leave no permanent session counter.
 
 `metadata.orchestration` is forkable session preference state, explicitly captured by the snapshot builder and retained by BrowserVault/checkpoint. Budgets, private-call provenance and history snapshots belong to framework continuations. Forks isolate scopeId while keeping spent counts. See [execution allowances](../reference/plugins.md#character-orchestration).
+
+## Advancement within one input
+
+The root input freezes `logicalTurnId`, `logicalTurn = completedPlayerTurns + 1` and the session's advancement limit. Every round has distinct execution, turn and run identities. Generated rounds use `origin: continuation` and do not count as player turns. Opening advancement keeps logical number 1 and counter 0; the first ordinary player input also uses number 1, with a new input identity.
+
+After commit, the host decides whether to advance from the [committed story](../reference/plugins.md#stories-requesting-advancement). Every round reacquires the settled session lock and rereads session, registry, settings and authorization; previous settle jobs finish first. Request Stop control survives waiting and publication outside the lock, while event forwarding is enabled only during that round's lock ownership. A new input revokes the old request's future eligibility, checked again inside the generated round's lock.
+
+Functions, tools, Hooks, recursive calls, scheduling guards and dimension settlement use the frozen logical number. Inline post-turn work runs each round. Detached jobs retain their own source execution, that round's actions and frozen number even when executed later, and do not join the foreground fault group. Foreground faults count immediately; clean verdicts wait until request closure, with identity and revision checks protecting newer outcomes.
+
+Each round persists its outcome once; the request emits one final completion. Retry/resume is a single execution and historical yield creates no work queue. No automatic loop resumes after stopping or process exit. Control remains local to the current host process. Disconnecting SSE does not cancel accepted work; the cap and explicit Stop bound model usage.

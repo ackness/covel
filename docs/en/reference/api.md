@@ -632,7 +632,7 @@ Cascade delete is not one database transaction that covers all sessions:
 | GET    | `/api/sessions`                          | List all sessions (optional `?worldId=` filter)                                           |
 | POST   | `/api/sessions`                          | Create a new session                                                                      |
 | GET    | `/api/sessions/:id`                      | Get session information                                                                   |
-| PATCH  | `/api/sessions/:id`                      | Update session fields (`status` / `runtimeModelOverrides`)                                |
+| PATCH  | `/api/sessions/:id`                      | Update session fields (`status` / `runtimeModelOverrides` / `autoAdvanceLimit`)           |
 | DELETE | `/api/sessions/:id`                      | Delete a session                                                                          |
 | GET    | `/api/sessions/:id/memory-index`         | The vector model of the memory index, and whether it is still configured                  |
 | POST   | `/api/sessions/:id/memory-index/rebuild` | Rebuild the memory index with the configured vector model                                 |
@@ -2427,13 +2427,14 @@ Creates a new game session.
 }
 ```
 
-| Field          | Type     | Required | Description                                                                                                                                     |
-| -------------- | -------- | -------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
-| `worldId`      | string   | No       | The ID of a world that exists and is not being deleted (validated with `/^[a-z0-9_-]{1,64}$/i`). If omitted, a session with no world is created |
-| `locale`       | string   | No       | The content language the player wants. Default `zh-CN`. See "Content language" below                                                            |
-| `plugins`      | string[] | No       | A list of plugin IDs to activate                                                                                                                |
-| `id`           | string   | No       | A session ID chosen by the client. If not given, it is generated as `{worldId}-{uuid8}`                                                         |
-| `loreOverride` | string   | No       | The world background text used for this session. See "World background" below                                                                   |
+| Field              | Type     | Required | Description                                                                                                                                     |
+| ------------------ | -------- | -------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| `worldId`          | string   | No       | The ID of a world that exists and is not being deleted (validated with `/^[a-z0-9_-]{1,64}$/i`). If omitted, a session with no world is created |
+| `locale`           | string   | No       | The content language the player wants. Default `zh-CN`. See "Content language" below                                                            |
+| `plugins`          | string[] | No       | A list of plugin IDs to activate                                                                                                                |
+| `id`               | string   | No       | A session ID chosen by the client. If not given, it is generated as `{worldId}-{uuid8}`                                                         |
+| `loreOverride`     | string   | No       | The world background text used for this session. See "World background" below                                                                   |
+| `autoAdvanceLimit` | number   | No       | Advancement limit; see [session advancement settings](#auto-advance)                                                                            |
 
 **Content language (`locale`):**
 
@@ -2621,7 +2622,7 @@ Browser-private mode uses the same snapshot shape. It saves the current values, 
 
 #### `PATCH /api/sessions/:id`
 
-Updates session fields. Right now you can change `status` and `runtimeModelOverrides`.
+Updates session fields. You can change `status`, `runtimeModelOverrides`, and `autoAdvanceLimit`.
 
 **Parameters:**
 
@@ -2643,10 +2644,11 @@ Updates session fields. Right now you can change `status` and `runtimeModelOverr
 
 **Field notes:**
 
-| Field                   | Type                              | Required | Description                                                     |
-| ----------------------- | --------------------------------- | -------- | --------------------------------------------------------------- |
-| `status`                | `'active' \| 'paused' \| 'ended'` | No       | The session lifecycle status                                    |
-| `runtimeModelOverrides` | object                            | No       | Sets a model slot for a single runtime: `runtimeId → slot name` |
+| Field                   | Type                              | Required | Description                                                        |
+| ----------------------- | --------------------------------- | -------- | ------------------------------------------------------------------ |
+| `autoAdvanceLimit`      | number                            | No       | Advancement cap; see [session advancement settings](#auto-advance) |
+| `status`                | `'active' \| 'paused' \| 'ended'` | No       | The session lifecycle status                                       |
+| `runtimeModelOverrides` | object                            | No       | Sets a model slot for a single runtime: `runtimeId → slot name`    |
 
 `status`:
 
@@ -6745,6 +6747,22 @@ Each snapshot is `{ slot, key?, value, revision }`:
 
 - When translating nested object lists, the locale overrides of world data follow each source's `localeArrayKeys`.
 - The preflight, import, sync, and translation endpoints all share this key-matching rule. Reordering the main list does not give a keyed translation to a different entry.
+
+<a id="auto-advance"></a>
+
+### Automatic advancement and session settings
+
+`POST /api/sessions` and `PATCH /api/sessions/:id` accept optional `autoAdvanceLimit`. GET, creation and PATCH responses return its effective number.
+
+| Field              | Default | Accepted values                            | Takes effect        |
+| ------------------ | ------- | ------------------------------------------ | ------------------- |
+| `autoAdvanceLimit` | `3`     | Integer `0`–`10`; `0` disables advancement | Next accepted input |
+
+Negative, fractional, over-limit, string and `null` values return 400. The value lives in session metadata; PATCH merges this setting while preserving identity, authorization and other settings. Snapshots, forks and browser checkpoints retain it, without active round counts or unused budgets.
+
+One `/actions` input can contain a root execution and automatic executions; the opening can request advancement, but setup itself cannot. Each execution commits independently. New valid, authorized input that passes approval preflight revokes the older request's future advancement. An ordinary root already running continues; a waiting or running automatic round stops. Unanswered forms, choices, confirmations, suspensions, an unavailable session, or missing authorization/plugin approval return control to the player.
+
+Stop applies to the whole request, including waits between rounds. An automatic round that never started creates no failed turn; committed stories remain saved. `GET /api/sessions/:id/execution` still reports `running` between rounds and may include the protocol's [advance state](./protocol.md#auto-advance-events). Refresh observes without restarting from historical `continue`. Full retries, runtime retries and suspension resumes run once, retaining the system action, logical number and input identity; they receive no new automatic budget. Clients still cannot submit `source: system`.
 
 <a id="orchestration-settings"></a>
 

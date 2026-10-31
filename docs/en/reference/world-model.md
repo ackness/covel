@@ -344,6 +344,10 @@ For the management interface, see the [lorebook API](./api.md#lorebook). For imp
 > [!NOTE]
 > Old lorebook tables that have only a `plugin_id` column and no owner are not upgraded automatically. For how to handle this in a development environment, see the [migration notes](./env-registry.md#plugin-extension-development-data).
 
+### Seats and settlement during advancement
+
+A kernel-generated `advance` bypasses human kind eligibility while retaining `source: system` and an existing human seat: prefer the originating seat, otherwise the first human seat in persisted order. It names no actor, text or fields; no human seat means stop. Public requests cannot forge this source, and the human role table is unchanged. Dimension settlement uses the root input's frozen logical turn while recording separate obligations for each actual execution.
+
 <a id="witnessed-history"></a>
 
 ## Stories a character witnessed

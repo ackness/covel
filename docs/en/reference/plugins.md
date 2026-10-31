@@ -534,11 +534,11 @@ The output of an `outputKind: story` runtime is normalized as described in [Stor
 
 The kernel owns the shape of a story. It is the same for every `outputKind: story` runtime: agents, functions, and stories that a guard returns early. The current contract is `narrative-engine@2`:
 
-| Field      | Type                                    | Meaning                                                                                                |
-| ---------- | --------------------------------------- | ------------------------------------------------------------------------------------------------------ |
-| `segments` | Array of segments, at most 60           | The story text, in order                                                                               |
-| `cues`     | `{ scene?, present?, mood? }`, optional | Scene name (≤200 characters), names of the characters present (≤32), mood (≤80 characters)             |
-| `yield`    | `user` or `continue`, default `user`    | Hands the turn back to the player after the story; `continue` is reserved for later and acts as `user` |
+| Field      | Type                                    | Meaning                                                                                                           |
+| ---------- | --------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| `segments` | Array of segments, at most 60           | The story text, in order                                                                                          |
+| `cues`     | `{ scene?, present?, mood? }`, optional | Scene name (≤200 characters), names of the characters present (≤32), mood (≤80 characters)                        |
+| `yield`    | `user` or `continue`, default `user`    | `user` returns control to the player; `continue` requests another host execution after commit, as described below |
 
 Each segment is `{ kind, speaker?, text }`:
 
@@ -1422,3 +1422,9 @@ Zero disables the corresponding capability. Provider resolution, validation and 
 Functions and guards expose `ctx.historyFor(characterId, {limit?})`; plugin tools have the same capability returning `CharacterHistory`, with the session binding, cancellation and revocation of adjacent reads. Edit settings in the session plugin panel or [orchestration API](./api.md#orchestration-settings); they apply next execution.
 
 Development data: discard unresolved suspensions that already delegated before budget snapshots existed, and snapshots/checkpoints containing those continuations. Ordinary sessions and stories need no reset. There is no old-counter reconstruction or dual-format compatibility.
+
+## Stories requesting advancement
+
+The host reads only committed top-level stories with `io.visibility: story` and `io.output.contract: narrative-engine@2`. Exactly one such story must still have `yield: continue` after commit Hooks to request another round. No story, multiple stories or an omitted `yield` returns control to the player. Sub-agent and recursive outputs do not decide advancement. A failed attached operation does not undo the saved story or independently prevent advancement.
+
+Each new round uses normal scheduling, tools, proposal validation and commit; inline post-turn work runs each round. `ctx.playerActions` contains one textless `advance` with source `system`; the input digest retains it too. Story imports can remain optional and execution proceeds without a provider. Players can stop advancement; see [session advancement settings](./api.md#auto-advance) for limits and blocking conditions.
