@@ -1,9 +1,9 @@
-import { cp, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { listRuntimeJobs } from "../../src/routes/api/plugin-rpc/jobs.js";
 import { serve } from "@hono/node-server";
-import { createMemoryStore } from "@covel/store/memory";
+import { createMemoryStore, createMemoryMediaStore } from "@covel/store/memory";
 import { AiProviderError } from "@covel/ai-provider";
 import { bootstrapApi } from "../../src/routes/api/bootstrap.js";
 import { buildUiSpecsResponse } from "../../src/routes/misc-api/ui-specs.js";
@@ -12,6 +12,12 @@ import { closeTestApi } from "./close-api.js";
 /** The browser fixture's API, also exercised without sockets by its boot regression. */
 export async function createPresentationBrowserFixture(
   outcome: "updated" | "exhausted" | "failed" = "updated",
+  options: {
+    failInline?: boolean;
+    budgetCalls?: number;
+    yields?: readonly ("continue" | "user")[];
+    autoAdvanceLimit?: number;
+  } = {},
 ) {
   const root = await mkdtemp(join(tmpdir(), "covel-presentation-browser-"));
   const builtin = join(root, "plugins"),
@@ -41,6 +47,7 @@ Tell a public scene story.
   process.env.COVEL_USER_PLUGINS_DIR = user;
   delete process.env.COVEL_DESKTOP_REST_TOKEN;
   const store = createMemoryStore();
+  const mediaStore = createMemoryMediaStore();
   let calls = 0;
   const mediaCalls: string[] = [];
   const gate = Promise.withResolvers<void>();
@@ -50,15 +57,30 @@ Tell a public scene story.
       join(builtin, id),
       { recursive: true },
     );
+  if (options.failInline) {
+    for (const id of ["scene-stage", "soundtrack"]) {
+      const file = join(builtin, id, "runtimes/story-cues/handler.js");
+      await writeFile(
+        file,
+        (await readFile(file, "utf8")).replace(
+          "export default async function handler(ctx) {",
+          'let first = true;\nexport default async function handler(ctx) {\nif (first) { first = false; throw new Error("Selector unavailable"); }',
+        ),
+      );
+    }
+  }
   await mkdir(join(builtin, "presentation-probe"));
   await writeFile(
     join(builtin, "presentation-probe", "PLUGIN.md"),
     `---
 id: presentation-probe
 description: Generates owned display text from a public scene.
+contributes:
+  ui:
+    right: [./display.json]
 runtime:
   schedule: { stage: post-turn, detached: true }
-  presentation: { budget: { calls: 1 } }
+  presentation: { budget: { calls: ${options.budgetCalls ?? 1} } }
   io:
     inputs:
       story: { from: { contract: narrative-engine@2 }, required: false }
@@ -75,13 +97,37 @@ runtime:
     const story = ctx.inputs?.story?.value;
     if (!story) { ctx.presentation.note("no-story"); return { outcome: "success", value: {} }; }
     const generated = await ctx.gateway.generateText({ prompt: JSON.stringify(story) });
-    await ctx.pluginData.set("display", "current", { title: generated.text });
+    await ctx.pluginData.set("display", "current", { title: generated.text, source: "Source: " + story.segments[0].text });
     ${outcome === "exhausted" ? 'await ctx.gateway.generateText({ prompt: "Another public scene" });' : ""}
     return { outcome: "success", value: {} };
   }`,
   );
+  await writeFile(
+    join(builtin, "presentation-probe", "display.json"),
+    JSON.stringify({
+      id: "generated-display",
+      label: "Public story display",
+      surfaces: ["stage"],
+      dataSource: { namespace: "display" },
+      emptyState: { message: "No generated display" },
+      view: {
+        component: "Stack",
+        children: [
+          {
+            component: "Text",
+            props: { content: { $state: "/current/title" } },
+          },
+          {
+            component: "Text",
+            props: { content: { $state: "/current/source" } },
+          },
+        ],
+      },
+    }),
+  );
   const boot = await bootstrapApi({
     store,
+    mediaStore,
     storeBackend: "memory",
     pluginsDir: builtin,
     pluginsDirs: [builtin, user],
@@ -127,7 +173,7 @@ runtime:
               { kind: "narration", text: `Public library story ${index}.` },
             ],
             cues: { scene: "Library", mood: "Tense", present: ["Mira"] },
-            yield: "user",
+            yield: options.yields?.[index - 1] ?? "user",
           }),
           toolCalls: [],
           finishReason: "stop",
@@ -172,7 +218,7 @@ runtime:
         "soundtrack",
         "presentation-probe",
       ],
-      autoAdvanceLimit: 0,
+      autoAdvanceLimit: options.autoAdvanceLimit ?? 0,
       locale: "en-US",
     }),
   });
@@ -206,16 +252,51 @@ runtime:
     createdAt: at,
     updatedAt: at,
   });
+  const backdrop = await mediaStore.put(
+    Buffer.from(
+      "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+ip1sAAAAASUVORK5CYII=",
+      "base64",
+    ),
+    "image/png",
+  );
+  await mediaStore.recordOwnership(backdrop.id, session.id, "scene-stage");
+  await mediaStore.addRef(backdrop.id, session.id, "scene-stage");
+  const wave = Buffer.alloc(44 + 1600);
+  wave.write("RIFF", 0);
+  wave.writeUInt32LE(wave.length - 8, 4);
+  wave.write("WAVEfmt ", 8);
+  wave.writeUInt32LE(16, 16);
+  wave.writeUInt16LE(1, 20);
+  wave.writeUInt16LE(1, 22);
+  wave.writeUInt32LE(8000, 24);
+  wave.writeUInt32LE(16000, 28);
+  wave.writeUInt16LE(2, 32);
+  wave.writeUInt16LE(16, 34);
+  wave.write("data", 36);
+  wave.writeUInt32LE(1600, 40);
+  const music = await mediaStore.put(wave, "audio/wav");
+  await mediaStore.recordOwnership(music.id, session.id, "soundtrack");
+  await mediaStore.addRef(music.id, session.id, "soundtrack");
   await seed("scene-stage", "scenes", "scene-registry", {
     schemaVersion: 1,
     registryId: "fixture",
-    scenes: [{ sceneId: "library", name: "Library", day: null, night: null }],
+    scenes: [
+      { sceneId: "library", name: "Library", day: backdrop, night: null },
+    ],
   });
   await seed("soundtrack", "tracks", "music-registry", {
     schemaVersion: 1,
     registryId: "music-registry",
-    tracks: [{ id: "library", file: "library.mp3", moods: ["Tense"] }],
+    tracks: [
+      {
+        id: "library",
+        title: "Library tension",
+        file: "library.wav",
+        moods: ["Tense"],
+      },
+    ],
   });
+  await seed("soundtrack", "assets", "library.wav", { ref: music });
 
   return {
     app: boot.app,
@@ -223,6 +304,8 @@ runtime:
     store,
     calls: () => calls,
     mediaCalls,
+    backdrop,
+    music,
     jobs: () => listRuntimeJobs(store, { sessionId: session.id }),
     release() {
       gate.resolve();

@@ -939,6 +939,8 @@ It requires the session to already have a non-empty `activePlugins` (chosen when
 - An explicit `retryFromTurnId` must point to an original turn that is committed and still belongs to the current story. The target must still be in the failed state.
 - Without a source, it is handled as an ordinary manual call.
 
+Scoped selector retries use host-validated committed public sources; manual calls without a valid source are skipped. Existing paid presentation jobs retain their source and remaining allowance; see [presentation runtimes](./plugins.md#presentation-runtimes).
+
 **`retry_failed_runtimes`**
 
 - The `retryFromTurnId` of the original turn must be provided, along with 1–20 distinct `runtimeIds`.

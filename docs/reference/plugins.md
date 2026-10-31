@@ -1445,6 +1445,8 @@ const reply = await ctx.agents.run({
 
 `presentation` 是 function runtime 的受限执行策略，用于按公开故事选择背景、在场角色或配乐。它要求 `schedule.stage: post-turn`、有效的 `io.visibility: system` 和 staged auto 激活。agent、guard、sub-agent、manual、event、background、concealed、挂起和 `recordAs` 都不能使用它。无效声明只停用对应 runtime；校验和安装仍会报告字段路径。
 
+<!-- presentation-file:gallery-display/PLUGIN.md -->
+
 ```yaml
 ---
 id: gallery-display
@@ -1475,6 +1477,8 @@ runtime:
 
 零预算函数在故事提交前读取公开候选；候选故事未提交时，其呈现写入也不会保留。detached 呈现读取 `PreStateCommit` 改写之后实际保存的故事，以及该次提交接受的本插件数据。作业只保存这一份版本化快照，不附带原始上游结果、玩家消息、行动或表单。快照总计最多 256 KiB，每个 namespace 最多 50 行，角色身份最多 100 个；超限整份拒绝，内联读取也一样。
 
+失败的零预算选择器可通过限定 runtime 的重试恢复。宿主核对已提交的原始回合、失败记录和来源诊断，再从实际保存的公开故事与当前自有素材、展示状态构造有界快照；不会把历史原始结果作为呈现输入。来源记录缺失或故事已推进时拒绝恢复，普通手动调用仍不可用。
+
 `ctx.presentation` 提供只读 `characters: {id, name, aliases?}[]`、可选 `viewpointCharacterId` 和 `note(reason)`。身份仅取故事里名字的精确匹配，保留歧义；没有角色描述、私有字段或座位列表。ID 只用于索引展示状态，发给模型的内容仍使用名字。`ctx.world`、历史、exports、services、tools、递归和 agents 不可用；玩家消息、行动和激活 payload 不提供额外内容。普通上下文不会先构造再遮住。能力在结束、取消或超时后失效。
 
 `effects` 必须明确列出自己的非保留 namespace。可读取本包 `contributes.data` 声明且来源非 hidden 的公开素材，或同时列在 writes 中的展示状态；不能使用 `plugin-data:self:*`、`_`、其他插件数据、历史或内核输入。`pluginData.get/list` 及 store 别名执行同一范围检查，不能省略 namespace。
@@ -1486,6 +1490,8 @@ runtime:
 `presentation: {budget: {calls, generations}}` 的两个整数默认都是 0。`calls` 范围 0–16，统计获准的 gateway 派发；`generations` 范围 0–4，另外统计图片、音乐、语音的输出份数。请求 `n` 张图片必须一次获得 `n` 份额度。文本和对象生成也消耗 calls；缓存命中和可用性探测不消耗。evaluation、转录和任意 HTTP 不开放。
 
 任一正数要求 `schedule.detached: true`，不能 `settle: true`。失去安全叶节点资格、版本变化、快照不可用时只跳过呈现，绝不退回前台生成。故事与下一条玩家输入都不等待生成。普通 pre-turn cast 选择与显式事件覆盖不属于这个策略。
+
+呈现队列已满时仅跳过该次生成，并记录 `no-op / unavailable`；故事与独立辅助写入仍提交，尚未派发的调用不扣额度。
 
 额度按会话代次、真实来源 turn ID 和 runtime 共享。开场、首条玩家消息、每个自动回合各有自己的来源，即使 logicalTurn 相同。来源重试、新作业 ID、关机重排、取消、提供方失败和提交失败都不会补回额度。当前配置只能缩小捕获的上限。内核在外部调用前用持久 CAS 扣除；没有账本时不能付费调用。停滞包装器重新派发会再扣一次；单次逻辑请求内部的 transport attempts 仍由独立 `LLMRequestBudget` 限制，额度不保证精确账单。
 

@@ -59,6 +59,7 @@ async function fixture({
   withStory = true,
   withStage = true,
   withAssets = true,
+  unchanged = false,
 } = {}) {
   const store = await createPluginTestStore({
     sessionId: "s",
@@ -111,8 +112,8 @@ async function fixture({
       ],
     });
   await seed("scene-stage", "stage", "current", {
-    sceneId: "classroom",
-    name: "教室",
+    sceneId: unchanged ? "library" : "classroom",
+    name: unchanged ? "图书馆" : "教室",
     variant: "night",
     source: "world",
     turnId: "old",
@@ -126,8 +127,14 @@ async function fixture({
     await seed("soundtrack", "tracks", "music-registry", {
       tracks: [{ id: "battle", file: "battle.mp3", moods: ["tense"] }],
     });
-  await seed("soundtrack", "state", "mood", { mood: "calm", turnId: "old" });
-  await seed("soundtrack", "state", "scene", { name: "教室", turnId: "old" });
+  await seed("soundtrack", "state", "mood", {
+    mood: unchanged ? "tense" : "calm",
+    turnId: "old",
+  });
+  await seed("soundtrack", "state", "scene", {
+    name: unchanged ? "图书馆" : "教室",
+    turnId: "old",
+  });
 
   const selected = manifests.filter(
     ({ pluginId }) => withStage || pluginId !== "scene-stage",
@@ -330,12 +337,19 @@ describe("story cues committed by presentation plugins", () => {
           output: { skipped: true, reason: expect.any(String) },
         });
       expect((await commit()).status).toBe("committed");
-      for (const trace of (await traces()).filter(
+      const terminal = (await traces()).filter(
         ({ type }) => type === "presentation.completed",
-      ))
+      );
+      expect(terminal).toHaveLength(2);
+      expect(terminal.map(({ payload }) => payload.runtimeId).sort()).toEqual([
+        "scene-stage/story-cues",
+        "soundtrack/story-cues",
+      ]);
+      for (const trace of terminal)
         expect(trace.payload).toMatchObject({
+          pluginId: trace.payload.runtimeId.split("/")[0],
           status: "no-op",
-          reason: expect.stringMatching(/^(no-story|no-output)$/),
+          reason: options.withStory === false ? "no-story" : "no-output",
         });
       expect(await read("scene-stage", "stage", "current")).toMatchObject({
         sceneId: "classroom",
@@ -347,6 +361,49 @@ describe("story cues committed by presentation plugins", () => {
       });
     },
   );
+
+  it("settles unchanged public story cues once per selector without changing display records", async () => {
+    const { read, commit, traces } = await fixture({
+      unchanged: true,
+      output: {
+        segments: [{ kind: "narration", text: "The library stays quiet." }],
+        cues: { scene: "图书馆", mood: "Tense" },
+      },
+    });
+    expect((await commit()).status).toBe("committed");
+    const terminal = (await traces()).filter(
+      ({ type }) => type === "presentation.completed",
+    );
+    expect(terminal).toHaveLength(2);
+    for (const pluginId of ["scene-stage", "soundtrack"]) {
+      expect(
+        terminal.filter(
+          ({ payload }) => payload.runtimeId === `${pluginId}/story-cues`,
+        ),
+      ).toEqual([
+        expect.objectContaining({
+          payload: expect.objectContaining({
+            pluginId,
+            runtimeId: `${pluginId}/story-cues`,
+            status: "no-op",
+            reason: "no-scene-change",
+          }),
+        }),
+      ]);
+    }
+    expect(await read("scene-stage", "stage", "current")).toMatchObject({
+      sceneId: "library",
+      turnId: "old",
+    });
+    expect(await read("soundtrack", "state", "mood")).toEqual({
+      mood: "tense",
+      turnId: "old",
+    });
+    expect(await read("soundtrack", "state", "scene")).toEqual({
+      name: "图书馆",
+      turnId: "old",
+    });
+  });
 
   it("keeps cue updates out of storage when the commit fails", async () => {
     const { read, commit } = await fixture();

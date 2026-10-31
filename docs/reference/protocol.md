@@ -939,6 +939,8 @@ data: {
 - 明确给出的 `retryFromTurnId` 必须指向一个已提交、并且仍然属于当前故事的原回合，而且目标仍然处于失败状态。
 - 不带来源时，按普通的 manual 调用处理。
 
+呈现选择器的限定重试使用宿主核验的已提交公开来源；未提供有效来源的手动调用被跳过。已有付费呈现作业保留来源与剩余额度，见[呈现 runtime](./plugins.md#presentation-runtimes)。
+
 **`retry_failed_runtimes`**
 
 - 必须提供原回合的 `retryFromTurnId`，以及 1–20 个不重复的 `runtimeIds`。

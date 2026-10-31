@@ -261,6 +261,8 @@ export interface TurnInput {
     readonly retrySeedResults?: readonly RuntimeResult[];
     /** Host-validated original public sources for detached presentation retries. */
     readonly presentationJobs?: readonly DeferredRuntimeJob[];
+    /** Host-owned committed public sources for failed inline selectors only. */
+    readonly presentationSnapshots?: readonly import("../schemas/presentation.js").PresentationSnapshot[];
   };
   /**
    * Re-entry descriptor for a scheduler-deferred stage runtime. Unlike a

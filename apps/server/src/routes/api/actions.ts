@@ -1309,6 +1309,7 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
                       : {}),
                     retrySeedResults: retryPlan?.seedResults,
                     presentationJobs: retryPlan?.presentationJobs,
+                    presentationSnapshots: retryPlan?.presentationSnapshots,
                   },
                 }
               : {}),

@@ -3,6 +3,7 @@ import type { DataStore } from "@covel/store";
 import type { FunctionHandler } from "@covel/shared/plugin-runtime";
 import type {
   PresentationSnapshot,
+  PresentationStory,
   RuntimeManifest,
   TurnInput,
 } from "@covel/shared";
@@ -18,7 +19,7 @@ export const story = {
     { kind: "dialogue", speaker: "Mira", text: "The library is open." },
   ],
   cues: { scene: "Library", present: ["Mira"] },
-};
+} satisfies PresentationStory;
 export const narrator: RuntimeManifest = {
   name: "story",
   pluginId: "story",
