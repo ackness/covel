@@ -521,7 +521,11 @@
     "autoAdvanceOff": "关闭",
     "autoAdvanceNextInput": "从下一次输入开始生效",
     "autoAdvanceProgress": "正在推进 {{round}} / {{limit}}",
-    "autoAdvanceStop": "停止推进"
+    "autoAdvanceStop": "停止推进",
+    "playAs": "游玩身份",
+    "rolePlayer": "玩家",
+    "roleHost": "主持人",
+    "roleSpectator": "旁观者"
   },
   "blocks": {
     "actionPlaceholder": "或输入自定义行动...",
@@ -2683,6 +2687,12 @@
     "ambiguous": "请选择策略以消除歧义",
     "paused": "已暂停",
     "unavailable": "不可用",
-    "error": "无法读取或保存编排设置"
+    "error": "无法读取或保存编排设置",
+    "save": "保存",
+    "saving": "正在保存…",
+    "saveField": "保存{{field}}",
+    "fieldError": "此项未能保存，请检查数值后重试。",
+    "providerSettings": "{{provider}}的设置",
+    "capScope": "角色和子调用名额按单次执行计算，每个额外节拍重新获得名额；零关闭相应能力。"
   }
 }

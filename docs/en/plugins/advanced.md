@@ -736,3 +736,7 @@ Keep intent private. If a policy or actor is unavailable, continue with a valid 
 Choose a policy in the session's “Orchestration” controls. `Promise.all` preserves plan order even when actors finish in another order. Missing policy means narration; missing or failed actors contribute no reply, and total actor failure still returns a nonempty story. `yieldHint` is advice; this example always yields to the player. Both entry paths share limits and cancellation, and intent is never copied into the final story.
 
 Use the commands in [plugin testing](./testing.md). Framework regressions extract these declarations and code from this page and load them. See the authoritative [contracts, bounds and model name adapter](../reference/plugin-extensions.md#orchestration-contracts). A director can check `ctx.gateway` and throw `ToolError("unavailable", ...)` when it is absent; do not lend extra model credentials to tool paths.
+
+## Adopting the bundled composition
+
+Dialogue uses the public contracts above with a read-only policy call in a pre-turn function and delegate retained inside the sole story agent's tool loop. The function reads current characters/seats through ctx.world and projects names to an optional same-package input. Director borrows a gateway only through a function caller; a model import cannot bypass code-only visibility. Either provider can be absent or replaced by a community package. See [ensemble behaviour](../builtin/story.md#ensemble-dialogue-and-character-actors).

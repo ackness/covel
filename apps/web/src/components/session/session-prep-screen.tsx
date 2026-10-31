@@ -83,6 +83,9 @@ export function SessionPrepScreen({
   settingsInitialKey,
 }: SessionPrepScreenProps) {
   const { t, i18n } = useTranslation();
+  const [seatRole, setSeatRole] =
+    useState<import("@covel/shared").SeatRole>("player");
+  useEffect(() => setSeatRole("player"), [world.id]);
   const worldPluginSettings = worldPluginSettingsSchema.safeParse(
     world.metadata?.pluginSettings,
   );
@@ -383,6 +386,7 @@ export function SessionPrepScreen({
           startPluginsPayload(requestedPluginIds),
           lore.value === originalLore ? undefined : lore.value,
           excludedPluginIds,
+          seatRole,
         );
       } catch {
         // startGameSession stores the actionable message in session state; keep
@@ -400,6 +404,7 @@ export function SessionPrepScreen({
       originalLore,
       requestedPluginIds,
       excludedPluginIds,
+      seatRole,
       onStart,
       missingModelUses,
     ],
@@ -504,6 +509,30 @@ export function SessionPrepScreen({
               </div>
 
               <div className="max-w-2xl space-y-4">
+                <label className="flex items-center gap-3">
+                  {t("session.playAs")}
+                  <select
+                    aria-label={t("session.playAs")}
+                    value={seatRole}
+                    disabled={isStarting}
+                    onChange={(event) => {
+                      const role = event.target.value;
+                      if (
+                        role === "player" ||
+                        role === "host" ||
+                        role === "spectator"
+                      )
+                        setSeatRole(role);
+                    }}
+                    className="rounded border border-(--rule-color) bg-(--surface-page) px-3 py-2"
+                  >
+                    <option value="player">{t("session.rolePlayer")}</option>
+                    <option value="host">{t("session.roleHost")}</option>
+                    <option value="spectator">
+                      {t("session.roleSpectator")}
+                    </option>
+                  </select>
+                </label>
                 <SessionBreadcrumb
                   step="prep"
                   worldName={displayText.name ?? ""}

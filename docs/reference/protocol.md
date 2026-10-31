@@ -1508,3 +1508,7 @@ runtime 的终态：
 一旦执行中记录了私有委托，公开请求副本也会去掉各条消息的原生续接状态（`providerContinuation`）和推理（`reasoningContent`），防止其中重复的参数或私有结果外泄。上下文预算把工具步骤压缩成摘要时，内核保留每行的调用来源，公开副本只将私有调用对应的行替换为固定标记。模型收到的原生续接、推理和压缩摘要保持不变。
 
 角色失败或名额拒绝沿用 `subagent.failed`，不增加 actor 事件族，不为隔离失败发 `runtime.failed` 或执行错误。故事可以提交；独立操作被拒时仍只有既有的固定 `operation.failed` 提示。调用方故意把私密内容改写为正文不属于此结构化投影保证。
+
+## 创建身份与现有动作协议
+
+创建请求的可选 seatRole 只决定新的人类座位；字段、默认与拒绝规则见[创建接口](./api.md#创建身份)。主持人允许导演指示/旁白/推进，旁观者只有推进。后续动作仍由服务端填写 source，沿用现有 execution.round.completed、execution.advance 和单一 execution.completed 生命周期；此选择不引入新事件或新调度器。

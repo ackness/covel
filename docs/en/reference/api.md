@@ -2435,6 +2435,7 @@ Creates a new game session.
 | `id`               | string   | No       | A session ID chosen by the client. If not given, it is generated as `{worldId}-{uuid8}`                                                         |
 | `loreOverride`     | string   | No       | The world background text used for this session. See "World background" below                                                                   |
 | `autoAdvanceLimit` | number   | No       | Advancement limit; see [session advancement settings](#auto-advance)                                                                            |
+| `seatRole`         | string   | No       | New session's game role: `player` (default), `host` or `spectator`; the latter two start without character bindings                             |
 
 **Content language (`locale`):**
 
@@ -6781,3 +6782,7 @@ Both routes use existing host-profile/session-owner guards. PATCH uses the settl
   "maxSubagentCalls": 8
 }
 ```
+
+## Creation role
+
+`POST /api/sessions` accepts optional `seatRole: player | host | spectator` alongside autoAdvanceLimit. Omission keeps the existing player seat; other roles begin unbound. Unknown, non-string and null values return 400 without creating a session. Existing session.create host-profile authorization and world/content-locale validation apply. This creation-only game role grants no owner/operator privilege and accepts neither arbitrary seats nor system-source input. Host and spectator action API requests must include the seat ID returned at creation; omitting seatId still looks up the primary human player seat. The ordinary client includes it automatically.

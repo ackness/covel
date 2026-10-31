@@ -8,7 +8,9 @@
       "PLUGIN.md#contributes.settings[key=perspective].label": "e3ad1bcc2cbd8537",
       "PLUGIN.md#contributes.settings[key=proseLength].label": "195bbecaed5490c0",
       "PLUGIN.md#description": "aab0909bbfe4896e",
-      "PLUGIN.md#displayName": "7a96e2e10f385014"
+      "PLUGIN.md#displayName": "7a96e2e10f385014",
+      "runtimes/narrate/RUNTIME.md#description": "97949a8123a579cf",
+      "runtimes/plan/RUNTIME.md#description": "1016f2ed9966fd41"
     }
   }
 }

@@ -195,7 +195,12 @@ describe("session prep full record", () => {
       expect((openLore() as HTMLTextAreaElement).value).toBe("Original A"),
     );
     fireEvent.click(screen.getAllByRole("button", { name: "Start Game" })[0]!);
-    expect(onStart).toHaveBeenCalledWith(["fixture-plugin"], undefined, []);
+    expect(onStart).toHaveBeenCalledWith(
+      ["fixture-plugin"],
+      undefined,
+      [],
+      "player",
+    );
   });
 });
 
@@ -241,6 +246,7 @@ describe("session prep lore ownership", () => {
       ["fixture-plugin"],
       "Recovered draft",
       [],
+      "player",
     );
     expect(JSON.stringify(warn.mock.calls)).not.toContain("Sensitive");
     warn.mockRestore();
@@ -264,6 +270,7 @@ describe("session prep lore ownership", () => {
       ["fixture-plugin"],
       "Latest draft",
       [],
+      "player",
     );
     await act(async () =>
       fireEvent.click(screen.getByRole("button", { name: "Retry" })),
@@ -344,6 +351,7 @@ describe("session prep lore ownership", () => {
       ["fixture-plugin"],
       "Session-specific text",
       [],
+      "player",
     );
     await act(async () => write.resolve());
   });

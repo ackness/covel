@@ -64,6 +64,7 @@ export interface DataService {
     loreOverride?: string,
     excludedPlugins?: string[],
     autoAdvanceLimit?: number,
+    seatRole?: import("@covel/shared").SeatRole,
   ): Promise<SessionRecord>;
   updateSession(
     sessionId: string,

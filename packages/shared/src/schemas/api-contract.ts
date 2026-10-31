@@ -458,6 +458,7 @@ export const worldSummarySchema = worldWireRecordSchema.omit({
 /** Session creation preserves explicit opt-outs independently of resolved activation. */
 export const createSessionRequestSchema = z.strictObject({
   autoAdvanceLimit: autoAdvanceLimitSchema.optional(),
+  seatRole: z.enum(["player", "host", "spectator"]).optional(),
   id: z.string().optional(),
   worldId: z.string().optional(),
   plugins: z.array(z.string()).optional(),

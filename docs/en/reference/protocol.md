@@ -1508,3 +1508,7 @@ Actor `intent` stays in the orchestrator's live in-memory conversation. The kern
 Once an execution records private delegation, public request copies also omit each message's native continuation state (`providerContinuation`) and reasoning (`reasoningContent`), which can repeat arguments or private results. When the context budget condenses tool steps into a digest, the kernel retains each line's call provenance and replaces only private-call lines with a fixed marker in public copies. Native continuations, reasoning and condensed digests sent to the model remain unchanged.
 
 Actor failures and cap refusals use `subagent.failed`, without a new actor event family or `runtime.failed`/execution errors for isolated failures. The story may commit. Rejected independent operations still produce only the existing fixed `operation.failed` notice. Deliberately rewriting private data into story prose is outside this structured projection guarantee.
+
+## Creation role and existing actions
+
+Optional seatRole selects only the new human seat; see [creation API](./api.md#creation-role) for validation/defaults. Hosts can direct/narrate/advance; spectators can only advance. The server still assigns action source and uses the existing round settlement, advancement and single request-terminal events. This choice adds no event or scheduler.

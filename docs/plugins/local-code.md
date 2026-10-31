@@ -563,3 +563,7 @@ covel.registerFormValidator("point-buy", (values, data, context) => {
 - 多个 runtime 配合、让世界包提供数据、访问外部接口：[进阶](./advanced.md)
 - 加一块面板显示这些记录：[插件界面](./ui.md)
 - 可以参考的内置插件代码：[guide 的工具](../../plugins/guide/tools/generate-guide.js)、[world-time 的动作](../../plugins/world-time/rpc/time.js)
+
+## 只读规划与故事所有权
+
+编写组合时，让函数通过 `ctx.services.call({contract: "turn-policy@1", input: {actions: ctx.playerActions, present, recentSegments}})` 请求一次计划，present 必须来自当前场景而不是全世界名单；省略 limits 由宿主提供。用公开 validateTurnPolicyOutput({present}, value) 校验，并把演员 ID 投影为名字交给可选故事输入。规划器不调用演员、不写状态，演员工作在故事 agent 的 delegate 内执行。参见[完整组合](./advanced.md#采用内置组合)与[亲历历史](../reference/world-model.md#witnessed-history)。

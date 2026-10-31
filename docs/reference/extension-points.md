@@ -235,3 +235,7 @@ export default function (covel) {
 | 加载插件自己的提示词模板（Node）    | `@covel/plugin-handlers-utils/prompts` 的 `createPromptLoader(root)`，只读 English 的 `<name>.md` 和简体中文的 `<name>.zh.md`。这个子入口不进入浏览器用的根模块。 |
 
 Hook 的返回规则见 [Hooks](./hooks.md#how-an-event-runs)：不返回值表示继续；可以拦截的事件上 handler 出故障算作拒绝；其他事件上出故障的 handler 被跳过，之前成功的改写保留。
+
+## 角色编排示例
+
+`turn-policy@1` 和 `character-actor@1` 是可选的服务/runtime 契约，不是内核扩展点。内置对话叙事的只读规划器与故事 agent 通过[普通通信接口](./plugin-extensions.md#orchestration-contracts)组合它们。

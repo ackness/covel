@@ -356,7 +356,7 @@ personal 形态信任本机上的其他进程。回环监听、Host 和 Origin �
 `$COVEL_HOME/translations`（`COVEL_USER_TRANSLATIONS_DIR`）存放不是随插件一起来的插件翻译：用户自己拷进去的翻译包，以及在这台机器上做的机器翻译。加载器把它们当数据读：
 
 - 只读标签和 `messages`。提示词正文（`*.zh.md`）只从插件包里读，所以翻译改不了指令。
-- 标签段只保留标签字段（`displayName`、`description`、`label`、`title`、`summary`、`about`），其余内容丢弃。插件自己的 locale 文件也是这样处理的。
+- 标签段只保留标签字段（`displayName`、`description`、`label`、`title`、`summary`、`about`、`placeholder`），其余内容丢弃。插件自己的 locale 文件也是这样处理的。
 - 同一段文本两边都翻译了时，以作者的翻译为准。
 - 不跟随符号链接，只读普通文件。
 
@@ -524,3 +524,7 @@ SillyTavern 内容导入使用有上限的 PNG 块遍历（读数据前先检查
 亲历历史和按名字调用是受约束的上下文能力，不是对已批准服务端代码的安全隔离。角色只能通过此 helper 读取当前 world 中角色的已提交在场故事；工具与服务原有的批准和读取权限不变。调用方仍负责简报和 instruction 的内容。
 
 委托隐私使用内核记录的提供方和调用 ID，过滤实时流、持久 trace、父方工具记录及后续请求的 trace 副本；不信任插件自报的隐藏标志，也不按字段名全局删数据。实际父模型仍能使用 intent。设置接口继续使用 host-profile、会话 owner、settle 和锁；选服务不授予执行权。详见[协议](../reference/protocol.md#委托的私有投影)。
+
+## 游戏内主持人身份
+
+准备页的主持人选项只改变新座位允许的游戏动作。它不授予 owner/operator 身份，不绕过 session.create 的 host-profile 检查，也不允许请求伪造 system 来源。演员的亲历历史与提示词是视角辅助，不是对已批准服务端代码的安全沙箱。

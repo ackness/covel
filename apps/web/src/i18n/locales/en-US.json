@@ -567,7 +567,11 @@
     "autoAdvanceOff": "Off",
     "autoAdvanceNextInput": "Applies to your next input",
     "autoAdvanceProgress": "Advancing {{round}} / {{limit}}",
-    "autoAdvanceStop": "Stop advancement"
+    "autoAdvanceStop": "Stop advancement",
+    "playAs": "Play as",
+    "rolePlayer": "Player",
+    "roleHost": "Game master",
+    "roleSpectator": "Spectator"
   },
   "blocks": {
     "actionPlaceholder": "Or type your own action...",
@@ -2790,6 +2794,12 @@
     "ambiguous": "Choose a policy to resolve ambiguity",
     "paused": "Paused",
     "unavailable": "Unavailable",
-    "error": "Could not load or save orchestration settings"
+    "error": "Could not load or save orchestration settings",
+    "save": "Save",
+    "saving": "Saving…",
+    "saveField": "Save {{field}}",
+    "fieldError": "Could not save this field. Check its value and try again.",
+    "providerSettings": "Settings for {{provider}}",
+    "capScope": "Actor and sub-agent call caps apply per execution. Each additional round gets fresh caps; zero disables that capability."
   }
 }

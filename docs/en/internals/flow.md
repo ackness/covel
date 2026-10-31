@@ -1235,3 +1235,7 @@ After commit, the host decides whether to advance from the [committed story](../
 Functions, tools, Hooks, recursive calls, scheduling guards and dimension settlement use the frozen logical number. Inline post-turn work runs each round. Detached jobs retain their own source execution, that round's actions and frozen number even when executed later, and do not join the foreground fault group. Foreground faults count immediately; clean verdicts wait until request closure, with identity and revision checks protecting newer outcomes.
 
 Each round persists its outcome once; the request emits one final completion. Retry/resume is a single execution and historical yield creates no work queue. No automatic loop resumes after stopping or process exit. Control remains local to the current host process. Disconnecting SSE does not cancel accepted work; the cap and explicit Stop bound model usage.
+
+## Bundled dialogue composition
+
+Dialogue uses one read-only pre-turn policy call to prepare an optional name-only plan. The story agent delegates and composes inside its own tool loop. Planning writes no state and owns no actor operations; those settle with the story. Policy order and continuation advice are plugin behaviour, leaving kernel stages, barriers and advancement scheduling unchanged.

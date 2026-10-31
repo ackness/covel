@@ -22,14 +22,17 @@ Opening character templates must include a placeholder for every collected field
 
 ## Gameplay packs: pick a set of plugins at once
 
-When you start a game, you do not need to choose plugins one by one. A **gameplay pack** is a ready-made set of plugins. Pick one on the session-prep screen. There are four built in:
+When you start a game, you do not need to choose plugins one by one. A **gameplay pack** is a ready-made set of plugins. Pick one on the session-prep screen. There are seven built in:
 
-| Gameplay pack                         | Good for                                   | Plugins it includes                                                                                 |
-| ------------------------------------- | ------------------------------------------ | --------------------------------------------------------------------------------------------------- |
-| Traditional Story `traditional-story` | Long exploration, reading a story          | Narrator, Action Suggestions, Codex, Relationship Graph, World Rules                                |
-| Dialogue Mode `dialogue-mode`         | Character dialogue, visual novel           | Dialogue Narrator, Scene Stage, Action Suggestions, Character Profiles, World Rules, Reply Variants |
-| Low Cost `low-cost`                   | Keeping model costs down                   | Narrator, World Rules                                                                               |
-| Narrative Only `narrative-only`       | Just reading the story, at the lowest cost | Narrator                                                                                            |
+| Gameplay pack                         | Good for                                   | Plugins it includes                                                                                             |
+| ------------------------------------- | ------------------------------------------ | --------------------------------------------------------------------------------------------------------------- |
+| Traditional Story `traditional-story` | Long exploration, reading a story          | Narrator, Action Suggestions, Codex, Relationship Graph, World Rules                                            |
+| Dialogue Mode `dialogue-mode`         | Character dialogue, visual novel           | Dialogue Narrator, Scene Stage, Action Suggestions, Character Profiles, World Rules, Reply Variants             |
+| Low Cost `low-cost`                   | Keeping model costs down                   | Narrator, World Rules                                                                                           |
+| Narrative Only `narrative-only`       | Just reading the story, at the lowest cost | Narrator                                                                                                        |
+| DM Mode `dm-mode`                     | Game-master narration                      | Pregame, world initialization, Narrator; no character creation                                                  |
+| Ensemble Dialogue `ensemble-dialogue` | A cast performs together                   | Pregame, world initialization, character creation, Dialogue Narrator, Character Actor, Turn Policy, Scene Stage |
+| Spectator `spectator`                 | Observe advancing NPCs                     | The ensemble composition without player character creation                                                      |
 
 The first three packs also include Pre-Game Setup, World Dimensions and Character Creator, and they recommend turning on Story Memory. Narrative Only turns off the other plugins that are on by default: there is no opening form, character creation or world dimensions, and no world time, Story Memory or history compaction. The world's declared dimensions are not imported, and the session starts as usual.
 
@@ -47,6 +50,8 @@ Plugins marked "On by default" are added to every game automatically, and you ca
 | ----------------------------------------------------- | ------------------------------------------------------------------------------ | ------------- |
 | [Narrator](./story.md) `narrator`                     | Writes the story text for each turn                                            | Yes           |
 | [Dialogue Narrator](./story.md) `chat-mode-narrator`  | Tells the story as character dialogue; works alone, Scene Stage is optional    |               |
+| [Character Actor](./story.md) `character-agent`       | Plays the selected character's public speech/actions                           |               |
+| [Turn Policy](./story.md) `turn-policy`               | One service with five strategy settings                                        |               |
 | [Action Suggestions](./story.md) `guide`              | Gives a few actions you can tap below the story text                           |               |
 | [Reply Variants](./story.md) `branch-reply`           | Writes another version of the same turn                                        |               |
 | [Story Memory](./story.md) `memory`                   | Remembers the ongoing plot, the current scene and the player character's state | Yes           |
@@ -107,6 +112,8 @@ To build your own world based on these, the files are in the repository's [`worl
 
 Plugins such as image and voice generation are not built into Covel. You install them separately. See [Install plugins and world packages](../start/packages.md). To write your own, see [Develop plugins](../plugins/index.md).
 
-Generic policy selection and delegation caps are in [session orchestration settings](./features.md#session-orchestration-settings). These controls add no bundled policies or play packs; plugins provide the behavior.
+Generic policy selection and delegation caps are in [session orchestration settings](./features.md#session-orchestration-settings). The bundled policy resolves automatically as the sole service; choose explicitly only when another provider is active. Change the strategy in its own settings.
 
-The story interface also provides the host’s [advancement and Stop controls](../start/first-session.md#while-the-story-advances-automatically). The story provider decides whether to request another round; this does not mean bundled narrators now intentionally request advancement.
+The story interface also provides the host’s [advancement and Stop controls](../start/first-session.md#while-the-story-advances-automatically). The story provider decides whether to request another round. Ensemble dialogue can follow policy advice to continue and yields to the player when no actor contributes.
+
+New compositions remain plugin lists plus a world-generation default view. They do not select a role, perspective or strategy. For DM Mode, set Narrator Perspective to Game master. Ensemble works with the default Player role and mention strategy. To play a human DM, turn off character creation and select Game master in preparation. For Spectator, choose that role at creation, then list, random or director and Advance. Choose Game master instead to direct/narrate the same NPC composition. World allowed-pack lists remain authoritative and saved views are not overwritten. Recommendations stay optional; missing actors/policies preserve narrator-only play.

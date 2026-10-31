@@ -5,7 +5,7 @@
  */
 
 import { z } from "zod";
-import type { Seat } from "@covel/plugin-handlers-utils";
+import type { Seat, SeatRole } from "@covel/plugin-handlers-utils";
 
 const seatShape = z
   .object({
@@ -65,9 +65,14 @@ export const seatsSchema: z.ZodType<Seat[]> = z
     }
   });
 
-/** The seats of a new session: one human player who controls every player character. */
-export function defaultSessionSeats(): Seat[] {
+/** One human seat; a player binds player characters, other roles start unbound. */
+export function defaultSessionSeats(role: SeatRole = "player"): Seat[] {
   return [
-    { id: "main", controller: "human", role: "player", characters: "auto" },
+    {
+      id: "main",
+      controller: "human",
+      role,
+      characters: role === "player" ? "auto" : [],
+    },
   ];
 }

@@ -117,7 +117,7 @@ export type CharacterHistory = z.infer<typeof characterHistorySchema>;
 
 /** Contextual validation precedes budget clamping; invalid plans are never repaired. */
 export function validateTurnPolicyOutput(
-  input: TurnPolicyInput,
+  input: Pick<TurnPolicyInput, "present">,
   value: unknown,
 ): TurnPolicyOutput {
   const present = new Set(input.present.map((actor) => actor.characterId));

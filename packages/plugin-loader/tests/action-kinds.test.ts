@@ -7,6 +7,7 @@ import {
   discoverPluginAt,
   loadPluginDefinition,
   validatePluginFiles,
+  validatePluginPackage,
 } from "../src/index.js";
 import { authoringWarnings } from "../src/authoring-warnings.js";
 import { parsePluginMd } from "../src/parse-plugin-md.js";
@@ -70,6 +71,71 @@ const whisper = {
 };
 
 describe("contributes.actionKinds", () => {
+  async function translatedComposer() {
+    return plugin(
+      "conversation",
+      [
+        {
+          name: "choose-actors",
+          roles: ["player", "host"],
+          actor: false,
+          schema: "./schemas/choose-actors.json",
+          display: {
+            label: "Choose actors",
+            placeholder: "Give the selected characters a direction.",
+          },
+        },
+      ],
+      {
+        "schemas/choose-actors.json": {
+          type: "object",
+          properties: { actors: { type: "string", minLength: 1 } },
+          required: ["actors"],
+          additionalProperties: false,
+        },
+        "locales/zh.yaml": `PLUGIN.md:
+  contributes:
+    actionKinds:
+      - name: choose-actors
+        display:
+          label: 选择演员
+          placeholder: 给所选角色一段指示。
+`,
+      },
+    );
+  }
+
+  it("accepts translated action placeholders through static package validation", async () => {
+    const dir = await translatedComposer();
+    const report = await validatePluginPackage(dir);
+    expect(report.issues.filter((issue) => issue.severity === "error")).toEqual(
+      [],
+    );
+    expect(report.ok).toBe(true);
+  });
+
+  it("loads translated labels and placeholders into the public action catalog", async () => {
+    const definition = await load(await translatedComposer());
+    const action = definition.packageManifest.actionKinds?.[0];
+    expect(action).toMatchObject({
+      kind: "conversation/choose-actors",
+      roles: ["player", "host"],
+      actor: false,
+      fieldsSchema: {
+        properties: { actors: { type: "string", minLength: 1 } },
+      },
+    });
+    // The translated label proves the locale overlay reached the right action.
+    expect(action?.display.label).toEqual({
+      en: "Choose actors",
+      zh: "选择演员",
+    });
+    expect(action?.display.placeholder).toEqual({
+      en: "Give the selected characters a direction.",
+      zh: "给所选角色一段指示。",
+    });
+  });
+
   it("compiles each kind with its wire ID, defaults and parsed schema", async () => {
     const dir = await plugin("whisper-pack", [
       whisper,

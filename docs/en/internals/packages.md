@@ -189,3 +189,7 @@ Standalone `pnpm check:boundaries` also tests its parser. The complete `pnpm che
 `test-runtime` provides a CLI only, with no package import entry. Run runtime cases with `pnpm test:runtime`; `pnpm plugin:extract <dir>` executes the entry factory on the author's machine to record registrations and sync declarations, with pure text rewriting owned by `plugin-loader`.
 
 The web app reads theme and color scheme preferences from SettingsStore, resolves the displayed selection, and applies it through its appearance helpers. Display fallbacks leave saved preferences unchanged.
+
+## Optional ensemble providers
+
+plugins/character-agent supplies a reusable actor and plugins/turn-policy one optional policy read service. They compose with dialogue through public SDK contracts, without a framework dependency or privileged host path.

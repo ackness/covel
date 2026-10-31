@@ -1224,3 +1224,7 @@ Each card uses `reason` as its title, and it picks the answer control from `resu
 
 - When loading an earlier page while scrolling up fails, a translated failure message and a "Retry" button appear at the top of the message area. The message disappears after a successful load.
 - When the execution timeline meets a runtime status that the client does not recognize, it shows a neutral "Unknown status" label and logs it once to the console. It is never drawn as "completed".
+
+## Manual performers and orchestration location
+
+Turn Policy declares Choose actors through the generic action catalogue in both composers. Its strict flat fields object requires one multiline actors string, avoiding unsupported arrays. Players and hosts may use it; spectators retain Advance. The framework recognises no bundled wire ID. Orchestration under Loaded Plugins groups the provider and three limits, linking to the provider's own settings for algorithm-specific fields.

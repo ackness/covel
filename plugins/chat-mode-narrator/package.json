@@ -9,6 +9,8 @@
   "devDependencies": {
     "@covel/plugin-handlers-utils": "workspace:*",
     "@covel/plugin-loader": "workspace:*",
-    "vitest": "^5.0.5"
+    "@covel/plugin-test-utils": "workspace:*",
+    "vitest": "^5.0.5",
+    "zod": "^4.6.7"
   }
 }

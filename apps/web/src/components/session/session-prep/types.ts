@@ -13,6 +13,7 @@ export interface SessionPrepScreenProps {
     plugins?: string[],
     loreOverride?: string,
     excludedPlugins?: string[],
+    seatRole?: import("@covel/shared").SeatRole,
   ) => Promise<void> | void;
   onResume: (session: api.SessionRecord) => Promise<void> | void;
   onDeleteSession: (sessionId: string) => Promise<void>;

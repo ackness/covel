@@ -1205,7 +1205,7 @@ These checks do not run plugin code, and they cannot replace the registration co
 
 ### Text the player sees
 
-- Labels the player sees (`displayName`, `description`, `label`, `title`, `summary`, `about`) are written in English in the main manifest.
+- Labels the player sees (`displayName`, `description`, `label`, `title`, `summary`, `about`, `placeholder`) are written in English in the main manifest.
 - Translations go in `locales/<locale>.yaml` at the plugin root. They are organized by section of the manifest file, and they contain only the translated text. They can be in any language. The loader compiles them into a locale map.
 - A label file can translate only these fields. An entry written on a contract field or on prompt content is ignored, and `pnpm validate:plugin` reports it as an error. An inline locale map in the main manifest is also an error.
 - The `messages` section of the same file translates the text in the UI spec and in the code (from the English original to the translation). For the rules on interface text, see [UI panels](./ui-panels.md#plugin-ui-text-rules). The code reads them with `translate(ctx, …)` or `labelText(ctx, …)`.
@@ -1428,3 +1428,7 @@ Development data: discard unresolved suspensions that already delegated before b
 The host reads only committed top-level stories with `io.visibility: story` and `io.output.contract: narrative-engine@2`. Exactly one such story must still have `yield: continue` after commit Hooks to request another round. No story, multiple stories or an omitted `yield` returns control to the player. Sub-agent and recursive outputs do not decide advancement. A failed attached operation does not undo the saved story or independently prevent advancement.
 
 Each new round uses normal scheduling, tools, proposal validation and commit; inline post-turn work runs each round. `ctx.playerActions` contains one textless `advance` with source `system`; the input digest retains it too. Story imports can remain optional and execution proceeds without a provider. Players can stop advancement; see [session advancement settings](./api.md#auto-advance) for limits and blocking conditions.
+
+## Optional planning and committed story exports
+
+The bundled dialogue example composes a pre-turn function, plan, with one story agent, narrate. The function projects names and calls a policy once; the story consumes its optional same-package input and owns actor delegation. The complete public story exports as recordAs: latest-story; the planner reads the prior committed value through a same-package scope: committed input, without a dependency back to the current narrative stage. Policies and actors remain replaceable and optional, outside story requires or contract needs. Actor declarations use the framework schema above rather than copying it into a package.

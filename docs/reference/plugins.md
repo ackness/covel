@@ -1205,7 +1205,7 @@ namespace 声明 `search` 之后，它的记录进入框架的记忆检索（[`m
 
 ### 玩家看到的文字
 
-- 玩家可见的标签（`displayName`、`description`、`label`、`title`、`summary`、`about`）在主清单里写 English。
+- 玩家可见的标签（`displayName`、`description`、`label`、`title`、`summary`、`about`、`placeholder`）在主清单里写 English。
 - 译文放在插件根目录的 `locales/<locale>.yaml`，按清单文件分节，只写译文，可以是任意语言。加载器把它们编译成 locale map。
 - 标签文件只能翻译这些字段。写到契约字段或提示词内容上的条目会被忽略，`pnpm validate:plugin` 报为错误。主清单里的内联 locale map 同样报错。
 - 同一个文件的 `messages` 一节翻译 UI spec 和代码里的文字（English 原文 → 译文）。界面文字的规则见 [UI 面板](./ui-panels.md#插件-ui-文本规范)，代码用 `translate(ctx, …)` / `labelText(ctx, …)` 读取。
@@ -1428,3 +1428,7 @@ const reply = await ctx.agents.run({
 宿主只读取已提交的顶层 `io.visibility: story`、`io.output.contract: narrative-engine@2` 故事。恰好一条这样的故事在提交 Hook 处理后仍为 `yield: continue`，才会请求下一轮。没有故事、多个故事或省略 `yield` 都会交还玩家；子 agent 和递归调用的输出不决定推进。附带操作失败不会撤销已保存的故事，也不会单独阻止推进。
 
 下一轮照常经过调度、工具、proposal 校验和提交，内联 post-turn 每轮运行。`ctx.playerActions` 是一个无文本的 `advance`，来源为 `system`；输入 digest 同样保留它。需要的故事导入仍可声明为可选，没有提供方时继续运行。玩家可停止推进；上限和阻止条件见[会话推进设置](./api.md#auto-advance)。
+
+## 可选规划器与故事导出
+
+内置对话叙事示范同包组合：`plan` 是 pre-turn 函数，选取安全名字并调用策略一次；`narrate` 是唯一 story agent，读取可选的同包 plan 输入并拥有所有角色委托。故事以 `recordAs: latest-story` 导出完整公开输出，规划器通过同包 `scope: committed` 输入读取上一份，不对本次 narrative 阶段建立反向依赖。策略与角色均可替换或缺失，不放进故事的 requires 或契约 needs。角色声明使用上文的框架规范 schema，不在包内复制一份。

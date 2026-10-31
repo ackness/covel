@@ -557,3 +557,7 @@ pnpm test:plugin-lifecycle
 - [用真实模型验证](../ship/real-model.md)
 - [打包并试装](../ship/package.md)
 - 给 AI 助手用的测试模板：[`.claude/skills/create-plugin/references/plugin-testing.md`](../../.claude/skills/create-plugin/references/plugin-testing.md)
+
+## 确定性群像验证
+
+群像测试加载真实 manifest/entry，让脚本模型通过真实 delegate 工具返回一成功一失败的演员结果，再检查提交的有名段落、用户 yield、私有 intent 投影和完整事件顺序。为不同演员设置不同的亲历秘密，并检查父方后续模型请求的公开 trace；不能仅以最终故事不含秘密代替隐私检查。替代写服务演员仍需覆盖失败撤回、提交拒绝和下次通知。脚本模型只证明接口与结算，不能证明真实模型的文本质量。

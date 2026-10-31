@@ -1,0 +1,66 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "status",
+    "cast",
+    "actors",
+    "brief",
+    "order",
+    "narrator",
+    "yieldHint"
+  ],
+  "properties": {
+    "status": {
+      "enum": ["available", "unavailable", "invalid-selection"]
+    },
+    "cast": {
+      "type": "array",
+      "maxItems": 32,
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 80
+      }
+    },
+    "actors": {
+      "type": "array",
+      "maxItems": 32,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["character"],
+        "properties": {
+          "character": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80
+          },
+          "reason": {
+            "type": "string",
+            "maxLength": 500
+          },
+          "instruction": {
+            "type": "string",
+            "maxLength": 2000
+          }
+        }
+      }
+    },
+    "brief": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 6000
+    },
+    "order": {
+      "enum": ["sequential", "parallel"]
+    },
+    "narrator": {
+      "enum": ["before", "after", "none"]
+    },
+    "yieldHint": {
+      "enum": ["user", "continue"]
+    }
+  }
+}

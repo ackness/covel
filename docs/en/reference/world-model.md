@@ -359,3 +359,7 @@ An execution lazily freezes the newest 200 display messages; concurrent calls sh
 Filter first, take the newest matches, then return chronological order. Limit defaults to 20 and must be an integer from 1–50. Aggregate text is at most 16,000 characters, retaining recent whole messages/segments without clipping JSON or surrogate pairs. A full 200-row scan or omitted messages/text sets `truncated: true`. An ID outside the current World Model returns `not-found`; a known character with no matches usually gets an empty array.
 
 Resumes keep the source execution's history snapshot and exclude intervening scenes. New roots capture again. Forks see only messages copied through the snapshot boundary. This API defines the stored history supplied by the host; arbitrary briefs, fields and approved tools or services may reveal other knowledge.
+
+## Choosing a role at creation
+
+The optional create field seatRole chooses the role of the one human seat. Omitted/player keeps the existing auto binding; host/spectator have empty characters and no currentCharacterId. This applies only to new sessions. Snapshots, forks and checkpoints retain seats. An in-game host receives no server owner/operator privilege; the action permission table is unchanged.

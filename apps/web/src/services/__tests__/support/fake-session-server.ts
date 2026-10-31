@@ -1,5 +1,10 @@
 import { vi } from "vitest";
 import {
+  defaultSessionSeats,
+  resolveAutoAdvanceLimit,
+  type SeatRole,
+} from "@covel/shared";
+import {
   BROWSER_CHECKPOINT_SCHEMA_VERSION,
   type BrowserCheckpoint,
   type SessionCommit,
@@ -15,6 +20,8 @@ export interface ServerSessionSeed {
   readonly excludedPlugins?: string[];
   readonly locale?: string;
   readonly loreOverride?: string;
+  readonly seatRole?: SeatRole;
+  readonly autoAdvanceLimit?: number;
   readonly session?: Partial<BrowserCheckpoint["session"]>;
 }
 
@@ -35,12 +42,13 @@ export function serverInitialCheckpoint(
       phase: "playing",
       completedPlayerTurns: 0,
       setupRuntimes: {},
-      seats: [
-        { id: "main", controller: "human", role: "player", characters: "auto" },
-      ],
+      seats: defaultSessionSeats(seed.seatRole),
       locale: seed.locale ?? "en",
       activePlugins,
       metadata: {
+        ...(seed.autoAdvanceLimit === undefined
+          ? {}
+          : { autoAdvanceLimit: seed.autoAdvanceLimit }),
         ...(seed.loreOverride !== undefined
           ? { loreOverride: seed.loreOverride }
           : {}),
@@ -81,14 +89,9 @@ export function serverInitialCheckpoint(
   };
 }
 
-type CreateSessionArgs = [
-  worldId: string,
-  id?: string,
-  plugins?: string[],
-  locale?: string,
-  loreOverride?: string,
-  excludedPlugins?: string[],
-];
+type CreateSessionArgs = Parameters<
+  typeof import("../../api/sessions.js").createSession
+>;
 
 export interface FakeSessionServerOptions {
   /** The browser vault whose latest save later commits echo. */
@@ -128,6 +131,8 @@ export function fakeSessionServer(options: FakeSessionServerOptions = {}) {
           locale,
           loreOverride,
           excluded,
+          autoAdvanceLimit,
+          seatRole,
         ]: CreateSessionArgs
       ): Promise<SessionRecord> => {
         if (!id) throw new Error("the browser always names its session");
@@ -138,6 +143,8 @@ export function fakeSessionServer(options: FakeSessionServerOptions = {}) {
           excludedPlugins: excluded,
           locale,
           loreOverride,
+          autoAdvanceLimit,
+          seatRole,
         };
         const checkpoint = serverInitialCheckpoint({
           ...seed,
@@ -145,7 +152,13 @@ export function fakeSessionServer(options: FakeSessionServerOptions = {}) {
         });
         created.set(id, checkpoint);
         const { metadata: _metadata, ...session } = checkpoint.session;
-        return { ...session, worldId } as SessionRecord;
+        return {
+          ...session,
+          worldId,
+          autoAdvanceLimit: resolveAutoAdvanceLimit(
+            _metadata?.autoAdvanceLimit,
+          ),
+        } as SessionRecord;
       },
     ),
     fetchBrowserCommit: vi.fn(

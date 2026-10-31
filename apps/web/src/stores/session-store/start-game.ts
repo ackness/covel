@@ -22,6 +22,7 @@ interface StartGameOptions {
   plugins?: string[];
   loreOverride?: string;
   excludedPlugins?: string[];
+  seatRole?: import("@covel/shared").SeatRole;
 }
 
 async function hydrateInitialSnapshot(
@@ -72,6 +73,7 @@ export async function startGameSession({
   plugins,
   loreOverride,
   excludedPlugins,
+  seatRole,
 }: StartGameOptions): Promise<void> {
   const generation = ++sessionGenerationRef.current;
   const previousSessionId = sessionIdRef.current;
@@ -82,6 +84,10 @@ export async function startGameSession({
     sessionIdRef.current === (published ? createdSessionId : previousSessionId);
   dispatch({ type: "SET_EXECUTION_ERROR", error: null });
   try {
+    const creationOptions: [
+      autoAdvanceLimit?: number,
+      seatRole?: import("@covel/shared").SeatRole,
+    ] = seatRole === undefined ? [] : [undefined, seatRole];
     const session = await ds.createSession(
       world.id,
       undefined,
@@ -90,6 +96,7 @@ export async function startGameSession({
       worldPlayLocale(world, i18n.language) ?? i18n.language,
       loreOverride,
       excludedPlugins,
+      ...creationOptions,
     );
     createdSessionId = session.id;
     if (!isCurrent()) return;

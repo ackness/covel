@@ -102,3 +102,65 @@
     - memory
     - history-compaction
   recommended: []
+- id: dm-mode
+  tags: [mode:traditional-story]
+  label:
+    zh-CN: 主持人模式
+    en-US: DM Mode
+    ru-RU: Режим ведущего
+  description:
+    zh-CN: 使用现有叙事器的主持人口吻。在准备页自行选择玩家或主持人身份，再将叙事器的视角设为主持人；此组合不委托 NPC。
+    en-US: Use the narrator's game-master perspective. Choose Player or Game master at creation, then set narrator Perspective to Game master. This composition does not delegate NPCs.
+    ru-RU: Рассказчик в роли ведущего. Выберите роль при создании, затем перспективу ведущего в настройках рассказчика. Без делегирования NPC.
+  source: builtin
+  requested: [pregame, world-init, narrator]
+  excluded: [char-creator, chat-mode-narrator]
+  recommended: [guide, memory, codex]
+  defaultViewMode: parsed
+- id: ensemble-dialogue
+  tags: [mode:dialogue]
+  label:
+    zh-CN: 群像对话
+    en-US: Ensemble Dialogue
+    ru-RU: Ансамблевый диалог
+  description:
+    zh-CN: 角色演员共同演出，默认点名策略即可游玩。可在回合策略的设置中改策略；作为主持人游玩时，准备页关闭建角并选择主持人身份。
+    en-US: Character actors contribute together using the default mention strategy. Change strategy in Turn Policy settings. To play as Game master, disable character creation and choose that role during preparation.
+    ru-RU: Актёры играют вместе со стратегией упоминаний. Стратегия меняется в настройках политики. Для роли ведущего отключите создание персонажа и выберите роль при подготовке.
+  source: builtin
+  requested:
+    [
+      pregame,
+      world-init,
+      char-creator,
+      chat-mode-narrator,
+      character-agent,
+      turn-policy,
+      scene-stage,
+    ]
+  excluded: [narrator]
+  recommended: [guide, memory, character-blueprint]
+  defaultViewMode: stage
+- id: spectator
+  tags: [mode:dialogue]
+  label:
+    zh-CN: 旁观
+    en-US: Spectator
+    ru-RU: Наблюдатель
+  description:
+    zh-CN: 准备页选择旁观者身份；在回合策略设置中选固定顺序、随机或导演，然后推进。选择主持人身份可用导演指示和旁白控制同一组 NPC。
+    en-US: Choose Spectator at creation, then list, random or director in Turn Policy settings and Advance. Choose Game master instead to direct or narrate the same NPC cast.
+    ru-RU: Выберите роль наблюдателя, затем список, случайный выбор или режиссёра в настройках политики и продвигайте историю. Роль ведущего позволяет давать указания и писать повествование.
+  source: builtin
+  requested:
+    [
+      pregame,
+      world-init,
+      chat-mode-narrator,
+      character-agent,
+      turn-policy,
+      scene-stage,
+    ]
+  excluded: [narrator, char-creator]
+  recommended: [memory]
+  defaultViewMode: stage

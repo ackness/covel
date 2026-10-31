@@ -1,6 +1,10 @@
 import path from "node:path";
 import { describe, expect, it, vi } from "vitest";
-import { discoverPlugins, loadRuntime } from "@covel/plugin-loader";
+import {
+  discoverPlugins,
+  loadPluginDefinition,
+  loadRuntime,
+} from "@covel/plugin-loader";
 import { createMemoryStore } from "@covel/store/memory";
 import { createCharacterTools } from "@covel/tools";
 import { runTurnPipeline } from "../src/turn-executor/turn-executor.js";
@@ -16,7 +20,11 @@ describe.each(["narrator", "chat-mode-narrator"])(
       const discovery = (await discoverPlugins(plugins)).find(
         (entry) => entry.id === id,
       )!;
-      const loaded = await loadRuntime(discovery, id);
+      const definition = await loadPluginDefinition(discovery);
+      const runtime = definition.manifests.find(
+        ({ manifest }) => manifest.outputKind === "story",
+      )!.manifest;
+      const loaded = await loadRuntime(discovery, runtime.name);
       const store = createMemoryStore();
       const now = new Date().toISOString();
       for (const sessionId of ["story", "other"]) {

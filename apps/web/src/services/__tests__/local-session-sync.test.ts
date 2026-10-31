@@ -108,6 +108,37 @@ afterEach(async () => {
 });
 
 describe("LocalDataService browser-authoritative sync", () => {
+  it.each(["player", "host", "spectator"] as const)(
+    "preserves an explicit %s role in the server mirror and browser checkpoint",
+    async (seatRole) => {
+      const service = await serviceWithWorld();
+      const session = await service.createSession(
+        "world-1",
+        "role-session",
+        [],
+        "en-US",
+        undefined,
+        [],
+        0,
+        seatRole,
+      );
+      const seats = [
+        {
+          id: "main",
+          role: seatRole,
+          controller: "human",
+          characters: seatRole === "player" ? "auto" : [],
+        },
+      ];
+      expect(session.seats).toEqual(seats);
+      expect(session.autoAdvanceLimit).toBe(0);
+      expect(server.created.get(session.id)?.session.seats).toEqual(seats);
+      expect(
+        (await vault.getLatestCheckpoint(session.id))?.session.seats,
+      ).toEqual(seats);
+      expect((await service.getSession(session.id))?.seats).toEqual(seats);
+    },
+  );
   function serverMirror() {
     let checkpoint: BrowserCheckpoint;
     let revision = 0;

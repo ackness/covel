@@ -847,7 +847,7 @@ SDK 导出 `TURN_POLICY_CONTRACT`、`CHARACTER_ACTOR_CONTRACT`，以及 `turnPol
 | 角色输入 | `characterId`、1–20,000 字符的 `brief`、可选且最多 2,000 字符的 `instruction` |
 | 角色输出 | 1–8 个 `{kind: dialogue / action, text}`，每段 1–4,000 字符；可选 `intent` 最多 2,000。没有 speaker、叙述段或 effects |
 
-策略的角色必须是 `present` 中不重复的 ID；`validateTurnPolicyOutput(input, output)` 提供相同的上下文校验。宿主即使面对宽松的提供方 parser 也会校验规范输入输出，然后按提供方顺序收窄计划。已准入的角色再次发言只占调用次数；新角色名额用完时，跳过新角色但保留后面的已准入角色。计划不预占名额，真正委托时仍可能被拒绝。三个建议字段由编排插件解释，不会改变内核调度。
+策略的角色必须是 `present` 中不重复的 ID；`validateTurnPolicyOutput({present}, output)` 提供相同的上下文校验，调用方不必重建宿主名额。宿主即使面对宽松的提供方 parser 也会校验规范输入输出，然后按提供方顺序收窄计划。已准入的角色再次发言只占调用次数；新角色名额用完时，跳过新角色但保留后面的已准入角色。计划不预占名额，真正委托时仍可能被拒绝。三个建议字段由编排插件解释，不会改变内核调度。
 
 ```ts
 const plan = await ctx.services.call({
@@ -863,3 +863,7 @@ const plan = await ctx.services.call({
 读服务也有提供方作用域的 `ctx.random`，流名为 `service:<name>`，遵守现有种子规则。导演服务只能使用调用路径原本提供的 gateway：函数调用可借用，工具或 agent 导入不带 gateway/utils。没有 gateway 时，提供方返回不可用，编排插件继续写兜底故事。注册与声明仍须对应，策略不能注册成写服务、runtime 输出或扩展 handler。
 
 角色声明与执行边界见[角色委托](./plugins.md#character-orchestration)，完整组合示例见[进阶指南](../plugins/advanced.md#orchestration-example)。
+
+## 内置策略与可选故事组合
+
+内置回合策略提供一个名为 turn-policy 的代码专用读服务，通过提供方的 getOwnSettings().strategy 选择五种算法。只启用它时无需会话选择；同时启用其他提供方才需精确选择。对话叙事的函数通过契约调用一次，因此 director 可以借用 gateway；故事 agent 不再导入一次策略。规划结果在进入模型前投影为名字，原始规范请求和角色 ID 留在代码边界。若自定义包注册多个同契约服务，仍需每次注册各有一条属性匹配的声明，不能按契约去重。

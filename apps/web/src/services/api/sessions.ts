@@ -261,6 +261,7 @@ export async function createSession(
   loreOverride?: string,
   excludedPlugins?: string[],
   autoAdvanceLimit?: number,
+  seatRole?: import("@covel/shared").SeatRole,
 ): Promise<SessionRecord> {
   // Open credential storage before creating server state, and capture any
   // previous authority before the HTTP request can overlap another creation.
@@ -276,6 +277,7 @@ export async function createSession(
         ...(excludedPlugins ? { excludedPlugins } : {}),
         ...(locale ? { locale } : {}),
         ...(autoAdvanceLimit !== undefined ? { autoAdvanceLimit } : {}),
+        ...(seatRole !== undefined ? { seatRole } : {}),
         ...(loreOverride !== undefined ? { loreOverride } : {}),
       }),
     });

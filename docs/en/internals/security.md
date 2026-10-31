@@ -356,7 +356,7 @@ This is a second door, narrower than the few desktop-only endpoints. `/api/confi
 `$COVEL_HOME/translations` (`COVEL_USER_TRANSLATIONS_DIR`) holds plugin translations that do not come with a plugin: translation packs that the user copied in, and machine translations made on this machine. The loader reads them as data:
 
 - It reads only labels and `messages`. Prompt bodies (`*.zh.md`) are read only from the plugin package, so a translation cannot change the instructions.
-- A label section keeps only the label fields (`displayName`, `description`, `label`, `title`, `summary`, `about`), and the rest is discarded. A plugin's own locale files are handled the same way.
+- A label section keeps only the label fields (`displayName`, `description`, `label`, `title`, `summary`, `about`, `placeholder`), and the rest is discarded. A plugin's own locale files are handled the same way.
 - When the same text is translated on both sides, the author's translation wins.
 - Symbolic links are not followed, and only regular files are read.
 
@@ -524,3 +524,7 @@ SillyTavern content import uses bounded PNG chunk walking (including remaining-l
 Witnessed history and name-addressed calls are bounded context capabilities, not security isolation for approved server code. This helper reads committed presence-bearing stories only for characters in the current world. Existing tool/service approvals and read permissions remain unchanged. Callers remain responsible for their brief and instruction.
 
 Delegation privacy uses kernel-recorded provider and call identity to project streams, persisted traces, parent tool records and trace copies of later requests. It trusts neither plugin-supplied redaction flags nor global key-name deletion. The actual parent model still uses intent. Settings routes retain host-profile, session-owner, settle and lock checks; choosing a service grants no execution permission. See [protocol](../reference/protocol.md#private-delegation-projections).
+
+## In-game host role
+
+The preparation role changes only a new seat's permitted game actions. It grants no owner/operator identity, bypasses no session.create host-profile check and cannot authorise system-source requests. Actor history and prompts aid perspective; they are not a sandbox for approved server code.

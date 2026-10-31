@@ -96,6 +96,33 @@ beforeEach(() => {
 });
 
 describe("startGameSession bootstrap order", () => {
+  it.each(["player", "host", "spectator"] as const)(
+    "carries the explicit %s role before hydration",
+    async (seatRole) => {
+      const order: string[] = [];
+      const ds = makeDataService(order);
+      await startGameSession({
+        ds,
+        workspace: makeWorkspace(ds),
+        dispatch: vi.fn(),
+        sessionIdRef: { current: null },
+        sessionGenerationRef,
+        world: { ...world, locale: "en-US" },
+        seatRole,
+      });
+      expect(ds.createSession).toHaveBeenCalledWith(
+        world.id,
+        undefined,
+        undefined,
+        "en-US",
+        undefined,
+        undefined,
+        undefined,
+        seatRole,
+      );
+      expect(order.slice(0, 2)).toEqual(["create", "sync"]);
+    },
+  );
   it.each(["Current draft", ""])(
     "persists the selected lore with the session (%j)",
     async (loreOverride) => {

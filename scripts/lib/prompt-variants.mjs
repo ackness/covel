@@ -56,6 +56,10 @@ function parsePromptFile(file) {
   return readPlainYamlFrontmatter(text);
 }
 
+function readTemplateFile(file) {
+  return { body: readFileSync(file, "utf8") };
+}
+
 function digest(text) {
   // Reformatting must not look like a content change.
   return createHash("sha256")
@@ -72,7 +76,7 @@ function staticPrompts(data) {
     .join("\n");
 }
 
-/** Every prompt file pair of one plugin: the root file and each runtime. */
+/** Manifest prompts and existing translated template pairs share one lock. */
 function promptDirs(pluginRoot, problems) {
   const dirs = [{ dir: pluginRoot, stem: "PLUGIN" }];
   const runtimes = path.join(pluginRoot, "runtimes");
@@ -90,6 +94,24 @@ function promptDirs(pluginRoot, problems) {
         problems.push(diagnostic.error ?? diagnostic.warning);
       if (files.includes("RUNTIME.md")) dirs.push({ dir, stem: "RUNTIME" });
     }
+  const templates = path.join(pluginRoot, "prompts");
+  const walkTemplates = (dir) => {
+    for (const entry of readdirSync(dir, { withFileTypes: true }).sort((a, b) =>
+      a.name.localeCompare(b.name),
+    )) {
+      if (entry.isDirectory()) walkTemplates(path.join(dir, entry.name));
+      else if (
+        entry.isFile() &&
+        entry.name.endsWith(".md") &&
+        !entry.name.endsWith(".zh.md")
+      ) {
+        const stem = entry.name.slice(0, -3);
+        if (existsSync(path.join(dir, `${stem}.zh.md`)))
+          dirs.push({ dir, stem, template: true });
+      }
+    }
+  };
+  if (existsSync(templates)) walkTemplates(templates);
   return dirs.filter(({ dir, stem }) =>
     existsSync(path.join(dir, `${stem}.md`)),
   );
@@ -197,11 +219,13 @@ export function checkPromptVariants({
   // Tool names any bundled prompt may mention, plus the builtin completion tool.
   const knownTools = new Set(["runtime-done"]);
   for (const plugin of plugins)
-    for (const { dir, stem } of directories.get(plugin))
+    for (const { dir, stem, template } of directories.get(plugin)) {
+      if (template) continue;
       for (const name of toolNames(
         parsePromptFile(path.join(dir, `${stem}.md`)).data,
       ))
         knownTools.add(name);
+    }
 
   // Style of the English contract zone, and structure the two languages do
   // not share. They do not fail the check: see docs/plugins/prompt-style.md.
@@ -209,22 +233,29 @@ export function checkPromptVariants({
   const pairs = {};
 
   for (const plugin of plugins) {
-    for (const { dir, stem } of directories.get(plugin)) {
+    for (const { dir, stem, template } of directories.get(plugin)) {
       const canonicalPath = path.join(dir, `${stem}.md`);
       const label = path.relative(labelRoot, canonicalPath);
-      const canonical = parsePromptFile(canonicalPath);
+      const readPrompt = template ? readTemplateFile : parsePromptFile;
+      const canonical = readPrompt(canonicalPath);
+      const modelPrompt = template || isModelPrompt(canonical.data, stem);
 
-      if (isChinese(canonical.body) || isChinese(staticPrompts(canonical.data)))
+      if (
+        isChinese(canonical.body) ||
+        (!template && isChinese(staticPrompts(canonical.data)))
+      )
         problems.push(
           `${label}: the canonical prompt must be English. Move the Chinese text to ${stem}.zh.md.`,
         );
 
-      const variants = readdirSync(dir).filter(
-        (name) =>
-          name.startsWith(`${stem}.`) &&
-          name.endsWith(".md") &&
-          name !== `${stem}.md`,
-      );
+      const variants = template
+        ? []
+        : readdirSync(dir).filter(
+            (name) =>
+              name.startsWith(`${stem}.`) &&
+              name.endsWith(".md") &&
+              name !== `${stem}.md`,
+          );
       for (const name of variants) {
         const tag = name.slice(stem.length + 1, -3);
         if (!isSimplifiedChinese(tag))
@@ -233,7 +264,7 @@ export function checkPromptVariants({
           );
       }
 
-      if (isModelPrompt(canonical.data, stem))
+      if (modelPrompt)
         for (const finding of promptStyleFindings(canonical.body))
           warnings.push(
             `${label}:${finding.line}: [${finding.rule}] ${finding.message}`,
@@ -241,15 +272,19 @@ export function checkPromptVariants({
 
       const chinesePath = path.join(dir, `${stem}.zh.md`);
       if (!existsSync(chinesePath)) {
-        if (requireChinese && isModelPrompt(canonical.data, stem))
+        if (requireChinese && modelPrompt)
           problems.push(
             `${label}: a model reads this prompt, so a bundled plugin must also ship ${stem}.zh.md.`,
           );
         continue;
       }
-      const chinese = parsePromptFile(chinesePath);
-      const english = `${canonical.body}\n${staticPrompts(canonical.data)}`;
-      const translated = `${chinese.body}\n${staticPrompts(chinese.data)}`;
+      const chinese = readPrompt(chinesePath);
+      const english = template
+        ? canonical.body
+        : `${canonical.body}\n${staticPrompts(canonical.data)}`;
+      const translated = template
+        ? chinese.body
+        : `${chinese.body}\n${staticPrompts(chinese.data)}`;
 
       const tags = new Set([...blockTags(english), ...blockTags(translated)]);
       const inEnglish = identifiers(english, tags, knownTools);

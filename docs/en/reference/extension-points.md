@@ -235,3 +235,7 @@ Plugin code depends only on the SDK (`@covel/plugin-handlers-utils`). It does no
 | Load the plugin's own prompt templates (Node) | `createPromptLoader(root)` from `@covel/plugin-handlers-utils/prompts`, which reads only the English `<name>.md` and the Simplified Chinese `<name>.zh.md`. This sub-entry point is not part of the root module used in the browser. |
 
 For the return rules of hooks, see [Hooks](./hooks.md#how-an-event-runs). No return value means continue. On an event that can be intercepted, a handler that fails counts as a rejection. On other events, a handler that fails is skipped, and rewrites that succeeded before it are kept.
+
+## Character composition example
+
+turn-policy@1 and character-actor@1 are optional service/runtime contracts, not kernel extension points. The bundled dialogue planner and story agent compose them through [ordinary communication APIs](./plugin-extensions.md#orchestration-contracts).

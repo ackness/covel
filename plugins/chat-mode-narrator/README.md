@@ -4,8 +4,8 @@
 
 ## 运行时结构
 
-- `PLUGIN.md`：单 agent runtime 和玩家可调设置。
-- 不依赖任何其他插件：有 `scene-stage` 的 cast runtime（`scene-cast@1`）时读取当前在场角色上下文，没有时按世界、历史和玩家输入里在场的角色退化为纯对白叙事。
+- `PLUGIN.md`：包级设置与静态提示。`runtimes/plan` 是只读的回合前函数；`runtimes/narrate` 是唯一故事 agent。
+- 不依赖伴随插件。规划器只读 `scene-cast@1` 的结构化名字；没有舞台时从上一条完整提交的 `latest-story` 和当前点名推断候选，排除所有人类座位绑定的角色。显式空名单保持空，不把全世界角色当作在场。
 - 可读取 `npc-graph/rag-retriever` 提供的人物关系上下文。
 - 常驻 prompt 只使用世界名称、简介和标签；由世界上下文扩展提供世界条目。
 - 玩家角色卡（`<player-character>`）由 entry 注册的回合级提示段提供，排在历史之后；正文里只写块名，system prompt 不随角色卡变化。
@@ -17,7 +17,7 @@
 - 为对话模式世界生成 `outputKind: story` 的主叙事。
 - 说话者一变就另起一个段落，段落带说话者名字。
 - 通过 manifest relations 和默认 `narrator` 互斥。
-- 暴露对白占比、回复长度、活跃说话人数等玩家设置。
+- 暴露对白占比、回复长度和视角。舞台自己的活跃说话人数控制显著性；会话“编排”中的角色数和子调用数控制委托开销。
 
 ## 视角
 
@@ -44,3 +44,17 @@
 ## 行囊工具
 
 可选导入 `inventory.bag@1` 为 `check-bag`、`inventory.change@1` 为 `change-inventory`。行囊启用时，叙事可查询携带物品，并在本幕获得、支付、交出或用尽物品时先调用变更工具，再写正文，付款排在前面。调用被拒绝时叙述交易未发生；成功回答只代表暂存，提交失败仍保留故事并显示提示。未启用行囊时两个工具不出现，不增加必需插件或输入。
+
+## 群像组合
+
+可选的 `turn-policy@1` 服务由函数规划器通过契约调用一次，使用提供方自己的设置。只有内置回合策略时无需另选提供方；在它的设置里改 strategy。有其他提供方同时启用时，在“编排”中选择精确服务。director 借用规划器的 `plugin` 文本槽；没有 gateway 时内置策略按点名退化，有 gateway 但模型失败时独自叙事。
+
+故事 agent 保留剧情槽、模型覆盖、审查 Hook、检定、时间、事件、记忆和行囊工具，并按计划顺序逐个 `delegate` 到 `character-actor@1`。parallel 只是建议，本实现串行，演员越多耗时和费用越高。失败演员不贡献台词，其余演员与旁白照常组成一个故事；全部失败、没有演员或策略不可用时交回玩家。私下 intent 不保存。演员不继承叙事器的工具、隐藏事件或父对话。
+
+list/random 可在主持人指示和推进后建议继续，由宿主按已提交故事执行有界自动推进。普通言行与 mention/manual 交回玩家。舞台名牌仍来自公开段落及 cues，不从 intent 推断。角色工具和可选行囊写入保留原有提交边界。
+
+开发检查：`pnpm --filter @covel/plugin-chat-mode-narrator test`。
+
+## 开发存档
+
+runtime ID 变为 `chat-mode-narrator/plan` 与 `chat-mode-narrator/narrate`。重新选择指向原内联 runtime 的模型覆盖与准备绑定；丢弃针对原 runtime 的待恢复挂起项、重试任务及包含这些工作的 checkpoint，或重建受影响测试会话。旧故事仍可读，新的 latest-story 导出从下一次提交开始，不回填。普通叙事器会话和整个数据库无需重建；改变游玩身份要创建新会话。
