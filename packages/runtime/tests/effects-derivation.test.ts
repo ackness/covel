@@ -72,43 +72,6 @@ describe("deriveEffects — builtin tool mapping table", () => {
     expect(asSet(e.writes)).toEqual(["interaction:*", "ui:*"]);
   });
 
-  it("maps plugin-data-set to per-namespace self keys when dataSchemas are declared", () => {
-    const e = deriveEffects(
-      manifest({
-        tools: { builtin: ["plugin-data-set", "plugin-data-set-batch"] },
-        dataSchemas: {
-          inventory: {
-            namespace: "inventory",
-            schemaVersion: 1,
-            acceptsWorldData: false,
-            schema: "./s.json",
-          },
-          quests: {
-            namespace: "quests",
-            schemaVersion: 1,
-            acceptsWorldData: false,
-            schema: "./q.json",
-          },
-        },
-      }),
-    );
-    expect(asSet(e.writes)).toEqual([
-      "plugin-data:self:inventory",
-      "plugin-data:self:quests",
-    ]);
-  });
-
-  it("collapses plugin-data with no dataSchemas to the conservative unknown:*", () => {
-    const w = deriveEffects(
-      manifest({ tools: { builtin: ["plugin-data-set"] } }),
-    );
-    expect(asSet(w.writes)).toEqual(["unknown:*"]);
-    const r = deriveEffects(
-      manifest({ tools: { builtin: ["plugin-data-get"] } }),
-    );
-    expect(asSet(r.reads)).toEqual(["unknown:*"]);
-  });
-
   it("maps dataset tools to their dataset's self key: reads for get/list, writes for upsert/update", () => {
     const e = deriveEffects(
       manifest({

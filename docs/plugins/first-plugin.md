@@ -64,7 +64,7 @@ pnpm create-plugin tavern-rumors
 
 ```text
 tavern-rumors/
-├── PLUGIN.md                    包的版本和它贡献的面板
+├── PLUGIN.md                    包的版本、数据集和它贡献的面板
 ├── README.md
 ├── locales/
 │   └── zh.yaml                  名称和界面文字的中文译文
@@ -76,6 +76,8 @@ tavern-rumors/
 │       ├── handler.js           这个函数的代码
 │       └── ui/
 │           └── panel.json       侧栏面板
+├── schemas/
+│   └── note.schema.json         一条记录的格式
 └── tests/
     └── runtime-cases.json       离线运行用的测试用例
 ```
@@ -87,7 +89,7 @@ tavern-rumors/
 | `analyst` | agent    | 每个回合的叙事之后，自动   | 读这一回合的故事，有新内容就记一条 |
 | `note`    | function | 玩家点面板上的按钮时，手动 | 直接写入一条记录，不调用模型       |
 
-两者都把记录写进这个插件自己的 `notes` 数据空间，面板把这个空间里的内容显示出来。
+两者都把记录写进这个插件自己的 `notes` 数据集，面板把其中的内容显示出来。数据集在 `PLUGIN.md` 的 `contributes.datasets` 里声明，每条记录的格式写在 `schemas/note.schema.json`。
 
 没有 `package.json`：插件的 ID 是文件夹名，版本写在 `PLUGIN.md` 里，`handler.js` 由 Covel 当作 ES module 加载。
 
@@ -108,18 +110,19 @@ io:
       as: <existing-notes>
 agent:
   tools:
-    builtin:
-      - plugin-data-set
+    datasets:
+      - dataset: notes
+        tools: [upsert]
 ```
 
-| 这一段                                   | 意思                                                                                               |
-| ---------------------------------------- | -------------------------------------------------------------------------------------------------- |
-| 没有 `function` 块                       | 这是一个由模型驱动的 runtime，文件的正文就是给模型的提示词                                         |
-| `schedule.stage: post-turn`              | 在叙事之后运行                                                                                     |
-| `io.inputs.narrator-output`              | 读取本回合的故事正文。它来自“任何提供 `narrative-engine@2` 的插件”，而不是某个具体的插件           |
-| `io.selfData`                            | 把自己已有的记录放进提示词，模型据此避免重复记录                                                   |
-| 没写的字段                               | 用默认值：它用 `plugin` 这个模型用途，输出不是故事正文。见[默认值](../reference/plugins.md#默认值) |
-| `agent.tools.builtin: [plugin-data-set]` | 模型只能调用这一个工具：往自己的数据空间写一条记录                                                 |
+| 这一段                      | 意思                                                                                               |
+| --------------------------- | -------------------------------------------------------------------------------------------------- |
+| 没有 `function` 块          | 这是一个由模型驱动的 runtime，文件的正文就是给模型的提示词                                         |
+| `schedule.stage: post-turn` | 在叙事之后运行                                                                                     |
+| `io.inputs.narrator-output` | 读取本回合的故事正文。它来自“任何提供 `narrative-engine@2` 的插件”，而不是某个具体的插件           |
+| `io.selfData`               | 把自己已有的记录放进提示词，模型据此避免重复记录                                                   |
+| 没写的字段                  | 用默认值：它用 `plugin` 这个模型用途，输出不是故事正文。见[默认值](../reference/plugins.md#默认值) |
+| `agent.tools.datasets`      | 模型只能调用 `notes-upsert` 这一个工具：往自己的 `notes` 数据集写一条记录                          |
 
 模型只能使用这里列出的工具。它不能读写别的插件的数据，也不能绕过内核直接改存档。
 
@@ -169,7 +172,7 @@ pnpm test:runtime -- tavern-rumors --pretty
 两个用例都是 `"status": "passed"` 就说明：
 
 - `note` 函数被调用后，`notes` 里多了一条记录。
-- `analyst` 在模型调用 `plugin-data-set` 之后，记录被提交了。
+- `analyst` 在模型调用 `notes-upsert` 之后，记录被提交了。
 
 > [!TIP]
 > 这是开发时最快的反馈方式。每次改完清单或代码，先跑校验，再跑这一条，都通过了再进游戏。它不花模型费用。
@@ -248,8 +251,8 @@ pnpm dev
 | 两种 runtime | `analyst` 是 agent，`note` 是函数                      |
 | 阶段         | `analyst` 在 `post-turn` 自动运行                      |
 | 按能力找插件 | 通过 `narrative-engine@2` 读故事，不点名具体的叙事插件 |
-| 限定工具     | agent 只能调用 `plugin-data-set`                       |
-| 自己的数据   | 两个 runtime 都只写自己的 `notes` 空间                 |
+| 限定工具     | agent 只能调用 `notes-upsert`                          |
+| 自己的数据   | 两个 runtime 都只写自己声明的 `notes` 数据集           |
 | 界面         | 用 `panel.json` 描述面板长什么样，不需要写前端代码     |
 | 信任         | 社区插件的代码在玩家授权之后才执行                     |
 

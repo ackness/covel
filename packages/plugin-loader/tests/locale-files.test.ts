@@ -26,7 +26,7 @@ provides: [narrative-engine@2]
 runtime:
   schedule: {stage: narrative}
   io: {output: {contract: narrative-engine@2}}
-  agent: {tools: {builtin: [plugin-data-set]}}
+  agent: {tools: {builtin: [sync-characters]}}
 ---
 English prompt body.
 `;

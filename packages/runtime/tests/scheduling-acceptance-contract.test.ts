@@ -1935,13 +1935,11 @@ describe("effects hazard (same-layer W/W, W/R, R/W detection)", () => {
     expect(effectsHazard(safeWriterA, { ...reader, parallelSafe: true })).toBe(
       true,
     ); // W/R never exempt
-    const safeUnknown = deriveEffects(
-      rt("r/su", {
-        // undeclared plugin-data write → unknown:*, marked parallelSafe
-        tools: { builtin: ["plugin-data-set"] },
-        effects: { parallelSafe: true },
-      }),
-    );
+    // A conservative unknown:* write, marked parallelSafe.
+    const safeUnknown = {
+      ...safeWriterA,
+      writes: new Set(["unknown:*"] as const),
+    };
     expect(effectsHazard(safeUnknown, safeWriterA)).toBe(true); // unknown:* never exempt
 
     // Same input → stable output under both policies. Group has two conflicting

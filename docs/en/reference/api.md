@@ -1336,7 +1336,7 @@ The three kinds of list (session-level, per plugin, per namespace) follow the sa
 
 Namespaces that start with `_` are reserved for the kernel:
 
-- PUT / DELETE and the general plugin-data tool cannot change `_dimensions` and `_dimension-settlements`.
+- PUT / DELETE cannot change `_dimensions` and `_dimension-settlements`; dataset names start with a letter, so dataset tools never reach them either.
 - `_hidden.<namespace>` (world data with `visibility: hidden`) does not appear in lists, in `/state`, or in discovery. A single read returns 404.
 - A player changes dimensions through the [manual runtime RPC](#dimension-editing-and-recovery-of-pending-settlements). Public reads use the session view. They do not scan the provider's private rules.
 
@@ -3895,7 +3895,8 @@ Returns an index of the framework's capabilities. Third-party developers, extern
       "scope": "(sessionId, pluginId, namespace, key)",
       "reservedNamespaces": ["_runtime_jobs", "_logs"],
       "writePaths": [
-        "builtin-tool:plugin-data-set",
+        "dataset-tool:<dataset>-upsert",
+        "dataset-tool:<dataset>-update",
         "function-output:pluginData[]",
         "function-ctx.pluginData.update",
         "local-tool:withPendingProposals(plugin.data.update)",
@@ -6262,7 +6263,7 @@ For the full classification table, see [protocol.md § 1. Event types](./protoco
 | `world.dimensions.changed` | World | The author's dimension declaration changed (hot update); does not reset the session's current values |
 | `dimensions.changed` | State | A committed current value changed; the payload has the provider, the public snapshot subset, and an optional settlement summary |
 | `dimensions.settlement.changed` | State | A pending receipt or a receipt with no value change; the payload has no rules or initial values |
-| `plugin-data.changed` | Plugin data | Sent by every write path: `plugin-data-set`, DELETE, batch, and so on |
+| `plugin-data.changed` | Plugin data | Sent by every write path: dataset tool writes, DELETE, batch, and so on |
 | `turn.suspended` | Flow control | Sent after `finalizeExecution` successfully commits a suspension record |
 | `turn.resumed` | Flow control | Sent when `POST /api/sessions/:id/suspensions/:suspensionId/resume` restarts a runtime |
 | `proposal.failed` | Flow control | One proposal failed to submit. It is reported clearly and never dropped quietly; the submitter writes it straight to the action stream |

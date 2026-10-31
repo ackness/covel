@@ -20,13 +20,38 @@ describe("GET /api/framework/capabilities builtin tools", () => {
       const res = await api.app.request("/api/framework/capabilities");
       expect(res.status).toBe(200);
       const body = (await res.json()) as {
-        framework: { tools: { builtin: string[] } };
+        framework: {
+          tools: { builtin: string[] };
+          pluginData: { writePaths: string[]; readPaths: string[] };
+        };
       };
       const builtin = body.framework.tools.builtin;
       expect(builtin).toContain("emit-event");
-      expect(builtin).toContain("plugin-data-get");
+      expect(builtin).toContain("get-character");
       expect(builtin).not.toContain("get-world-dimensions");
+      expect(builtin.some((name) => name.startsWith("plugin-data"))).toBe(
+        false,
+      );
       expect(builtin).toEqual([...builtin].sort());
+      // Models reach plugin data through the dataset tools.
+      const { writePaths, readPaths } = body.framework.pluginData;
+      expect(writePaths).toEqual(
+        expect.arrayContaining([
+          "dataset-tool:<dataset>-upsert",
+          "dataset-tool:<dataset>-update",
+        ]),
+      );
+      expect(readPaths).toEqual(
+        expect.arrayContaining([
+          "dataset-tool:<dataset>-get",
+          "dataset-tool:<dataset>-list",
+        ]),
+      );
+      expect(
+        [...writePaths, ...readPaths].some((path) =>
+          path.startsWith("builtin-tool:"),
+        ),
+      ).toBe(false);
     } finally {
       await api.closePluginEntries();
       await api.closeTools();

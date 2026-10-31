@@ -7,8 +7,8 @@
 ## 包含什么
 
 - **`note` 函数 runtime**（`runtimes/note/`）—— 玩家点击侧栏按钮时写入一条 `notes` 记录；可替换为你的确定性副作用。
-- **`analyst` agent runtime**（`runtimes/analyst/`）—— 读取当前 narrator 输出和已有 notes，判断是否需要写入一条新的观察记录。
-- **包级声明**（根 `PLUGIN.md`）集中声明共享面板；公共设置、数据 schema 和命令也可放在这里。
+- **`analyst` agent runtime**（`runtimes/analyst/`）—— 读取当前 narrator 输出和已有 notes，判断是否需要用 `notes-upsert` 写入一条新的观察记录。`agent.tools.datasets` 只给它这一个工具，见[数据集工具](https://github.com/AcKnEsS/covel/blob/main/docs/reference/tools.md#数据集工具)。
+- **包级声明**（根 `PLUGIN.md`）集中声明 `notes` 数据集和共享面板；公共设置和命令也可放在这里。数据集的记录格式在 `schemas/note.schema.json`，提交时每条写入都按它校验。
 - **侧栏 Tab UI**（`runtimes/note/ui/panel.json`）—— 展示 `notes` namespace，提供手动记录和分析当前剧情两个动作。
 
 侧栏的“添加记录”按钮用 `invokeRuntime` 触发 manual function；`handler.js` 的 `ctx.pluginData.set` 在执行中暂存，成功后随 proposal 提交，不需要 LLM，也不会自动运行叙事 runtime。若一个操作要写入多条相互依赖的记录，在同一个 handler 中依次调用 `ctx.pluginData.set`，使它们一起提交；现成的双键写入范例见 [`plugins/tabletop-rules/runtimes/check/handler.js`](https://github.com/AcKnEsS/covel/blob/main/plugins/tabletop-rules/runtimes/check/handler.js)。`invokePluginAction` 的 RPC action 则即时写入，后续失败不回滚已成功的写入。
@@ -50,7 +50,7 @@ pnpm test:runtime -- {{pluginName}} --pretty
 
 ## 下一步
 
-- 改 `runtimes/note/handler.js`，把 `notes` 记录结构替换为你的插件状态。
+- 改 `schemas/note.schema.json` 和 `runtimes/note/handler.js`，把 `notes` 记录结构替换为你的插件状态，两处保持一致。
 - 改 `runtimes/analyst/RUNTIME.md`，把“观察剧情并记录 actionable note”替换为你的实际任务。
 - 改 `runtimes/note/ui/panel.json`，调整面板布局或加入更多组件（参考 `docs/reference/ui-components.md`）。
 - 加新 runtime：在 `runtimes/` 下新建子目录，里面放 `RUNTIME.md`（agent 模式），或写了 `function: {}` 的 `RUNTIME.md` 加 `handler.js`（function 模式）。

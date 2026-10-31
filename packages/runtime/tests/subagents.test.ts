@@ -18,12 +18,7 @@ import type {
   TurnInput,
 } from "@covel/shared";
 import type { LoadedRuntime } from "@covel/shared/plugin-runtime";
-import {
-  createPluginDataTools,
-  delegateTool,
-  tool,
-  ToolRegistry,
-} from "@covel/tools";
+import { delegateTool, tool, ToolRegistry } from "@covel/tools";
 import { runTurnPipeline } from "../src/turn-executor/turn-executor.js";
 import type { TurnExecutorDeps } from "../src/turn-executor/turn-executor-types.js";
 import { createToolExecutor } from "../src/agent-loop/tool-executor.js";
@@ -217,10 +212,8 @@ const writeTool = (name: string) =>
 function makeRegistry(): ToolRegistry {
   const registry = new ToolRegistry();
   registry.registerBuiltin(delegateTool);
-  for (const module of createPluginDataTools(
-    {} as Parameters<typeof createPluginDataTools>[0],
-  ))
-    registry.registerBuiltin(module);
+  registry.registerBuiltin(readTool("get-character"));
+  registry.registerBuiltin(writeTool("sync-characters"));
   registry.registerPlugin("actor-pkg", readTool("peek"));
   registry.registerPlugin("actor-pkg", writeTool("poke"));
   registry.registerPlugin("director", readTool("glance"));
@@ -383,7 +376,7 @@ describe("ctx.agents.run", () => {
   it("offers the sub-agent only read-only tools and refuses a write tool its model calls anyway", async () => {
     const provider = actor(undefined, {
       tools: {
-        builtin: ["plugin-data-set", "plugin-data-get", "suspend"],
+        builtin: ["sync-characters", "get-character", "suspend"],
         plugin: ["peek", "poke"],
       },
     });
@@ -409,8 +402,8 @@ describe("ctx.agents.run", () => {
     );
 
     expect(requests[0]?.tools?.map((t) => t.name).sort()).toEqual([
+      "get-character",
       "peek",
-      "plugin-data-get",
     ]);
     const refusal = eventsOf(emitter, "tool.failed").find(
       (e) => e.payload.toolName === "poke",
@@ -999,7 +992,7 @@ describe("sub-agent caps and tool filter", () => {
     });
     const provider = actor(undefined, {
       tools: {
-        builtin: ["delegate", "plugin-data-get", "plugin-data-set", "suspend"],
+        builtin: ["delegate", "get-character", "sync-characters", "suspend"],
         plugin: ["peek", "poke", "unknown"],
         services: [{ contract: "inventory.items@1", name: "inventory-items" }],
         datasets: [
@@ -1018,13 +1011,13 @@ describe("sub-agent caps and tool filter", () => {
     // Imported services are read-only: the sub-agent keeps them. Dataset
     // tools keep their reads; a dataset with only writes is dropped.
     expect(at(1)).toEqual({
-      builtin: ["plugin-data-get"],
+      builtin: ["get-character"],
       plugin: ["peek", "unknown"],
       services: [{ contract: "inventory.items@1", name: "inventory-items" }],
       datasets: [{ dataset: "npcs", tools: ["get", "list"] }],
       defer: ["peek", "inventory-items"],
     });
-    expect(at(0)?.builtin).toEqual(["delegate", "plugin-data-get"]);
+    expect(at(0)?.builtin).toEqual(["delegate", "get-character"]);
   });
 });
 

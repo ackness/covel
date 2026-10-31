@@ -73,12 +73,6 @@ const inputs: Record<string, Record<string, unknown>> = {
     fields: [{ type: "text", name: "answer", label: "Answer" }],
   },
   "runtime-done": { reason: "Finished" },
-  "plugin-data-set": { namespace: "facts", key: "gate", value },
-  "plugin-data-set-batch": {
-    items: [{ namespace: "facts", key: "gate", value }],
-  },
-  "plugin-data-get": { namespace: "facts", key: "gate" },
-  "plugin-data-list": { namespace: "facts" },
   "emit-event": { topic: "gate.opened", data: value },
   "sync-characters": {
     creates: [{ name: "Mira", type: "npc" }],
@@ -127,13 +121,6 @@ describe("builtin model-facing results", () => {
     });
     await store.upsertCharacterSchema(schema);
     await store.upsertCharacter(character);
-    await store.setPluginData({
-      ...bookkeeping,
-      pluginId: "journal",
-      namespace: "facts",
-      key: "gate",
-      value,
-    });
     const registry = createDefaultToolRegistry({
       store,
       eventDirectory: {

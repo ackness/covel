@@ -1336,7 +1336,7 @@ GitHub 插件安装和更新预览始终返回 `capabilities` 与 `trustedSource
 
 以 `_` 开头的 namespace 保留给内核：
 
-- PUT / DELETE 和通用的 plugin-data 工具不能修改 `_dimensions` 和 `_dimension-settlements`。
+- PUT / DELETE 不能修改 `_dimensions` 和 `_dimension-settlements`；数据集名以字母开头，数据集工具也到不了它们。
 - `_hidden.<namespace>`（`visibility: hidden` 的世界数据）不出现在列表、`/state` 和 discovery 里。单条读取返回 404。
 - 玩家修改维度走 [manual runtime RPC](#维度编辑与待结算恢复)。公共读取用 session view，不去扫描提供者的私有规则。
 
@@ -3895,7 +3895,8 @@ runtime 报告失败时，它的原始错误保留在 `result.runtimeResults` �
       "scope": "(sessionId, pluginId, namespace, key)",
       "reservedNamespaces": ["_runtime_jobs", "_logs"],
       "writePaths": [
-        "builtin-tool:plugin-data-set",
+        "dataset-tool:<dataset>-upsert",
+        "dataset-tool:<dataset>-update",
         "function-output:pluginData[]",
         "function-ctx.pluginData.update",
         "local-tool:withPendingProposals(plugin.data.update)",
@@ -6260,7 +6261,7 @@ SSE 是服务器向客户端持续推送事件的方式。Covel 有两条独立�
 | `world.dimensions.changed` | 世界 | 作者的维度声明变了（热更新），不重置会话的当前值 |
 | `dimensions.changed` | 状态 | 已提交的当前值变了；payload 含提供者、公共 snapshot 子集和可选的 settlement 摘要 |
 | `dimensions.settlement.changed` | 状态 | pending 或没有数值变化的回执变更；payload 不含规则和初值 |
-| `plugin-data.changed` | 插件数据 | 所有写路径都会发出：`plugin-data-set`、DELETE、batch 等 |
+| `plugin-data.changed` | 插件数据 | 所有写路径都会发出：数据集工具的写入、DELETE、batch 等 |
 | `turn.suspended` | 流程控制 | `finalizeExecution` 成功提交挂起记录后发出 |
 | `turn.resumed` | 流程控制 | `POST /api/sessions/:id/suspensions/:suspensionId/resume` 重启 runtime 时发出 |
 | `proposal.failed` | 流程控制 | 单条 proposal 提交失败。明确上报，不悄悄丢弃；由提交方直接写入 action stream |

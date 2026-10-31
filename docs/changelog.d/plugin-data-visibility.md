@@ -1,6 +1,6 @@
 ### Changed
 
-- **Plugin-data reads include completed upstream runtimes of the same plugin.** Within one execution, `ctx.pluginData.get/list`, `ctx.store.getPluginData/listPluginData`, tool `context.store` reads and the builtin `plugin-data-get/list` now apply the uncommitted writes of earlier, commit-eligible runtimes of the reader's own plugin, in commit order, before the reader's own buffered writes; `ctx.pluginData.update` checks its operations against that view. Other plugins, siblings of the same DAG level, retry and detached seeds and a parent's upstream inside a nested execution stay invisible. Rule: `docs/reference/plugins.md` (in-execution plugin-data visibility).
+- **Plugin-data reads include completed upstream runtimes of the same plugin.** Within one execution, `ctx.pluginData.get/list`, `ctx.store.getPluginData/listPluginData` and tool `context.store` reads now apply the uncommitted writes of earlier, commit-eligible runtimes of the reader's own plugin, in commit order, before the reader's own buffered writes; `ctx.pluginData.update` checks its operations against that view. Other plugins, siblings of the same DAG level, retry and detached seeds and a parent's upstream inside a nested execution stay invisible. Rule: `docs/reference/plugins.md` (in-execution plugin-data visibility).
 
 ### Added
 

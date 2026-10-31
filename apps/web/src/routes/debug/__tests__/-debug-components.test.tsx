@@ -158,7 +158,7 @@ describe("debug route components", () => {
       framework: {
         pluginManifest: { triggerTypes: ["auto"], outputKinds: ["story"] },
         pluginData: { scope: "session", writePaths: ["plugin.data"] },
-        tools: { builtin: ["plugin-data-set"] },
+        tools: { builtin: ["get-character"] },
         worldData: { sourceKinds: ["json"], mergeModes: ["replace"] },
       },
       plugins: [

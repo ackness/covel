@@ -36,8 +36,8 @@
           "toolCalls": [
             {
               "id": "tc-record-analysis",
-              "name": "plugin-data-set",
-              "arguments": "{\"namespace\":\"notes\",\"key\":\"analysis-test\",\"value\":{\"kind\":\"analysis\",\"title\":\"Gatekeeper promise\",\"text\":\"The player promised the gatekeeper to return before dawn.\",\"tags\":[\"promise\"]}}"
+              "name": "notes-upsert",
+              "arguments": "{\"record\":{\"id\":\"analysis-test\",\"kind\":\"analysis\",\"title\":\"Gatekeeper promise\",\"text\":\"The player promised the gatekeeper to return before dawn.\",\"tags\":[\"promise\"]}}"
             },
             {
               "id": "tc-runtime-done",

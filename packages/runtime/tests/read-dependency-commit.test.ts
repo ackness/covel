@@ -12,7 +12,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { DataStore } from "@covel/store";
 import { createMemoryStore } from "@covel/store/memory";
 import { createSqliteStore } from "@covel/store/sqlite";
-import { createPluginDataTools } from "@covel/tools";
+import { tool, z } from "@covel/tools";
 import type {
   DeferredRuntimeJob,
   HandlerResult,
@@ -82,6 +82,21 @@ const readThenWrite =
     return ok();
   };
 
+/** A plugin tool that lists the plugin's data of every namespace. */
+const listAllTool = tool({
+  name: "list-all",
+  description: "List every note.",
+  annotations: { readOnly: true, idempotent: true, concurrencySafe: true },
+  parameters: z.object({}),
+  execute: async (_args, context) => {
+    // The store lists every namespace when none is given.
+    const rows = await context.store!.listPluginData(
+      undefined as unknown as string,
+    );
+    return { count: rows.length };
+  },
+});
+
 /** The commit refuses plugin-data writes of the listed keys. */
 const refuse =
   (...keys: string[]) =>
@@ -112,7 +127,7 @@ interface RunOptions {
   }[];
   /** Runs between the execution and its commit, like a concurrent commit. */
   readonly beforeCommit?: (store: DataStore) => Promise<void>;
-  /** Wire the builtin plugin-data tools into `ctx.tools`. */
+  /** Wire the `list-all` tool into `ctx.tools`. */
   readonly tools?: boolean;
 }
 
@@ -158,7 +173,7 @@ async function run(
     updatedAt: timestamp,
   });
   for (const row of options.stored ?? []) await storeRow(store, row, timestamp);
-  const tools = createPluginDataTools(store);
+  const tools = [listAllTool];
   const execution = await executeTurn(input, runtimes, {
     store,
     llm: { generate: vi.fn() } as never,
@@ -482,9 +497,7 @@ describe("read dependencies of lists", () => {
   // Lists only: these readers never get a key.
   const listsNotes = fn("lists-notes");
   const listsElsewhere = fn("lists-elsewhere");
-  const listsAll = fn("lists-all", {
-    tools: { builtin: ["plugin-data-list"] },
-  });
+  const listsAll = fn("lists-all", { tools: { plugin: ["list-all"] } });
   const outsider = fn("outsider", { stage: "pre-turn" }, "outsider");
 
   const listThenWrite =
@@ -521,8 +534,8 @@ describe("read dependencies of lists", () => {
         [listsNotes.name]: listThenWrite("notes", "lists-notes"),
         [listsElsewhere.name]: listThenWrite("elsewhere", "lists-elsewhere"),
         [listsAll.name]: async (ctx) => {
-          // The builtin list without a namespace.
-          await ctx.tools!.call("plugin-data-list", {});
+          // A tool's store list without a namespace.
+          await ctx.tools!.call("list-all", {});
           await write(ctx, "lists-all");
           return ok();
         },

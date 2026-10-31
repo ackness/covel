@@ -2,7 +2,7 @@
  * Effects read/write-set derivation and same-layer hazard policy (01 §7).
  *
  * A runtime's read/write sets are derived from its declared surfaces — builtin
- * tools, dataset tools, `dataSchemas` namespaces, `outputKind` — and
+ * tools, dataset tools, `outputKind` — and
  * optionally supplemented by an explicit `effects` declaration. Two runtimes
  * scheduled in the SAME level (parallel group) are checked pairwise: a
  * read/write conflict with no ordering edge between them is a hazard. The
@@ -72,26 +72,6 @@ export function deriveEffects(manifest: RuntimeManifest): RuntimeEffects {
     if (w) writes.add(w);
     const r = BUILTIN_READ[t];
     if (r) reads.add(r);
-  }
-
-  // plugin-data: declared dataSchemas namespaces → per-ns self keys; an
-  // undeclared namespace collapses to the conservative `unknown:*` global write.
-  const dataNamespaces = Object.keys(manifest.dataSchemas ?? {});
-  const pluginDataKeys: readonly EffectResource[] =
-    dataNamespaces.length > 0
-      ? dataNamespaces.map((ns) => `plugin-data:self:${ns}` as EffectResource)
-      : ["unknown:*"];
-  if (
-    builtinTools.includes("plugin-data-set") ||
-    builtinTools.includes("plugin-data-set-batch")
-  ) {
-    for (const k of pluginDataKeys) writes.add(k);
-  }
-  if (
-    builtinTools.includes("plugin-data-get") ||
-    builtinTools.includes("plugin-data-list")
-  ) {
-    for (const k of pluginDataKeys) reads.add(k);
   }
 
   // Dataset tools read and write exactly their dataset's namespace.

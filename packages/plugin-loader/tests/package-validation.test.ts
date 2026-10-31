@@ -315,6 +315,20 @@ describe("static package validation", () => {
     expect((await parity(root)).ok).toBe(true);
     await expect(access(sentinel)).rejects.toThrow();
   });
+  it("names a removed builtin as an unknown tool", async () => {
+    const result = await parity(
+      await fixture({
+        runtime: {
+          schedule: { stage: "narrative" },
+          agent: { tools: { builtin: ["plugin-data-set"] } },
+        },
+      }),
+    );
+    expect(result.ok).toBe(false);
+    expect(result.cliFailure).toContain(
+      "unknown tool plugin-data-set; use a documented framework tool name",
+    );
+  });
   it("reports not-found without throwing", async () =>
     expect((await parity("/missing/covel/plugin")).ok).toBe(false));
 });

@@ -111,8 +111,8 @@ export function buildFrameworkCapabilities(
         scope: "(sessionId, pluginId, namespace, key)",
         reservedNamespaces: ["_runtime_jobs", "_logs"],
         writePaths: [
-          "builtin-tool:plugin-data-set",
-          "builtin-tool:plugin-data-set-batch",
+          "dataset-tool:<dataset>-upsert",
+          "dataset-tool:<dataset>-update",
           "function-output:pluginData[]",
           "function-ctx.pluginData.update",
           "local-tool:withPendingProposals(plugin.data)",
@@ -122,8 +122,8 @@ export function buildFrameworkCapabilities(
           "management-api:PUT /api/sessions/:id/plugin-data/:pluginId/:namespace/:key",
         ],
         readPaths: [
-          "builtin-tool:plugin-data-get",
-          "builtin-tool:plugin-data-list",
+          "dataset-tool:<dataset>-get",
+          "dataset-tool:<dataset>-list",
           "input.inject:plugin-data",
           "function-ctx.store.getPluginData",
           "function-ctx.store.listPluginData",

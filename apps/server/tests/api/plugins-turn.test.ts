@@ -71,7 +71,7 @@ function makeParsedManifest(
 // Stands in for the registry's builtin names that bootstrap sets on every
 // request. Deliberately not the old hand-written list (F-110): the route must
 // advertise whatever the registry holds, nothing else.
-const BUILTIN_TOOLS = ["search-tools", "plugin-data-get", "render-ui"];
+const BUILTIN_TOOLS = ["search-tools", "get-character", "render-ui"];
 
 type AppVariables = {
   pluginRegistry: PluginRegistry;
@@ -182,7 +182,7 @@ describe("Plugin Routes", () => {
         runtimeType: "function",
         execution: "background",
         tools: {
-          builtin: ["plugin-data-get"],
+          builtin: ["get-character"],
           plugin: ["save-image"],
         },
         input: {
@@ -292,7 +292,7 @@ describe("Plugin Routes", () => {
         readablePluginDataNamespaces: ["images"],
         writablePluginDataNamespaces: ["images"],
         effects: {
-          reads: ["plugin-data:self:images"],
+          reads: ["characters:*"],
           // A package's static panels are not a per-turn write.
           writes: [],
           parallelSafe: false,

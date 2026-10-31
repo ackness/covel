@@ -24,6 +24,8 @@ observation/
 ├── PLUGIN.md          config and prompt
 ├── PLUGIN.zh.md       optional: the Simplified Chinese version of the prompt
 ├── README.md          optional: notes for the people who maintain it
+├── schemas/
+│   └── observation.schema.json  optional: the record format
 └── locales/
     └── zh.yaml        optional: Chinese for the name and settings
 ```
@@ -194,39 +196,66 @@ Play one turn. On the debug page <http://localhost:5173/debug>, find the `observ
 
 ## Let it remember things
 
-Give the agent the built-in tool `plugin-data-set`, and it can write observations into the plugin's own data. Then use `io.selfData` to put the existing records back into the prompt, so it does not record the same thing twice.
+To save data, the model needs a write tool. Without code, the way to get one is to declare a **dataset**: a block of the plugin's own data whose records all satisfy one JSON Schema. Covel generates tools from the declaration, and the model writes a record by calling `observations-upsert`. Then use `io.selfData` to put the existing records back into the prompt, so it does not record the same thing twice.
 
-Change these two parts under `runtime`:
+First write the record format and save it as `schemas/observation.schema.json`:
 
-```yaml
-io:
-  selfData:
-    - namespace: observations
-      as: <known-observations>
-      maxEntries: 20
-agent:
-  tools:
-    builtin: [plugin-data-set]
+```json
+{
+  "type": "object",
+  "required": ["id", "text"],
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "A short stable name for the detail."
+    },
+    "text": { "type": "string", "description": "The observation." }
+  }
+}
 ```
 
-| Field                 | What it means                                                                      |
-| --------------------- | ---------------------------------------------------------------------------------- |
-| `namespace`           | Which block of its own data to read. You choose the name                           |
-| `as`                  | The tag for this content in the prompt. The prompt refers to it with the same tag  |
-| `maxEntries`          | The most entries to put in. The default is 50                                      |
-| `agent.tools.builtin` | Built-in Covel tools the model can call. A tool not listed here is invisible to it |
+Then declare the dataset under `contributes`, and add two parts under `runtime`:
+
+```yaml
+contributes:
+  datasets:
+    observations:
+      schema: ./schemas/observation.schema.json
+      key: id
+      description: Details the player has observed.
+runtime:
+  io:
+    selfData:
+      - namespace: observations
+        as: <known-observations>
+        maxEntries: 20
+  agent:
+    tools:
+      datasets: [{ dataset: observations, tools: [upsert] }]
+```
+
+| Field                               | What it means                                                                                                                                                                |
+| ----------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `contributes.datasets.observations` | Declares a dataset named `observations`. The name is also this data's namespace                                                                                              |
+| `schema`                            | The format of each record, as a path relative to the plugin folder                                                                                                           |
+| `key`                               | The field of a record that is its key. Writing the same `id` again replaces the earlier record                                                                               |
+| `description`                       | Tells the model what is kept here; it is added to the tool descriptions                                                                                                      |
+| `namespace` in `io.selfData`        | Which block of its own data to read; here, the dataset's name                                                                                                                |
+| `as`                                | The tag for this content in the prompt. The prompt refers to it with the same tag                                                                                            |
+| `maxEntries`                        | The most entries to put in. The default is 50                                                                                                                                |
+| `agent.tools.datasets`              | Which of the dataset's tools the model can use. Here only `observations-upsert`; writing just `observations` gives every tool the dataset offers (read, list, write, change) |
 
 Then tell the model how to use them in the prompt:
 
 ```markdown
 `<known-observations>` lists the observations on record.
 
-If the detail is new, call `plugin-data-set` one time with `namespace` set to `observations`, a short stable `key`, and `value` set to `{ "text": "<the observation>" }`. Then call `runtime-done`.
+If the detail is new, call `observations-upsert` one time with a `record` that has a short stable `id` and the observation as `text`. Then call `runtime-done`.
 
 If the detail is on record, call `runtime-done`.
 ```
 
-A data space that has never been written to is empty. That is normal.
+A dataset that has never been written to is empty. That is normal. For the tool arguments, the key rule and the error answers, see [Dataset tools](../reference/tools.md#dataset-tools).
 
 To show these records to the player, add a panel. See [Plugin UI](./ui.md). The example that [your first plugin](./first-plugin.md) generates already includes one.
 
@@ -271,7 +300,7 @@ Add tool names to `agent.tools.builtin`. For example, to let the model look up c
 ```yaml
 agent:
   tools:
-    builtin: [plugin-data-set, get-character, list-characters]
+    builtin: [get-character, list-characters]
   loop:
     timeoutMs: 180000
 ```
@@ -303,7 +332,7 @@ This section belongs to the whole plugin. When a plugin has several runtimes, a 
 | It is not in the plugin list                         | It is not in the user plugins directory, or validation did not pass. Restart the backend after validating                           |
 | Selected but did not run                             | Not authorized. Handle the "Authorize plugin action" prompt                                                                         |
 | The `plugin` role is reported as unavailable         | In **Settings → LLM → Model Roles**, choose a model for it                                                                          |
-| The model says "Saved", but there is no record       | It did not call a tool. Add `plugin-data-set` to `agent.tools.builtin`, and state in the prompt when to call it                     |
+| The model says "Saved", but there is no record       | It did not call a tool. List the dataset in `agent.tools.datasets`, and state in the prompt when to call `<dataset>-upsert`         |
 | In a Chinese game, changing the prompt has no effect | You changed `PLUGIN.md`, but a Chinese game reads `PLUGIN.zh.md`                                                                    |
 | A setting shows in English in the interface          | There is no entry for it in `locales/zh.yaml`, or its `key` does not match                                                          |
 

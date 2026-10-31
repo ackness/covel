@@ -126,13 +126,14 @@ There are two lists, with different jobs:
 | `contributes.tools` | `PLUGIN.md`                | The tools this plugin registers |
 | `agent.tools`       | The agent runtime's config | The tools this agent can call   |
 
-`agent.tools` has two groups: `builtin` holds the tools that Covel provides, and `plugin` holds your own tools.
+`agent.tools` has three common groups: `builtin` holds the tools that Covel provides, `plugin` holds your own tools, and `datasets` holds the read and write tools that Covel generates for the datasets you declare in `contributes.datasets` (for example `notes-get` and `notes-upsert`).
 
 ```yaml
 agent:
   tools:
-    builtin: [plugin-data-set]
+    builtin: [get-character]
     plugin: [save-note]
+    datasets: [notes]
 ```
 
 Rules:
@@ -142,6 +143,7 @@ Rules:
 - When you write `plugin`, what you write is what counts. `plugin: []` means no tools of its own are given.
 - In a plugin with several runtimes, each runtime lists the tools it uses. Keep internal helpers that no runtime calls out of the tool registry and `contributes.tools`.
 - A tool name is unique only within its own plugin. One plugin cannot call another plugin's tool. Use a service instead. See [plugin extensions and communication](../reference/plugin-extensions.md).
+- Dataset tools appear only in a runtime that writes `datasets`, and they write only the plugin's own datasets. A dataset name gives every tool the dataset offers; `{ dataset: notes, tools: [upsert] }` gives some of them. See [Dataset tools](../reference/tools.md#dataset-tools).
 
 For the list of built-in tools, see the [tools reference](../reference/tools.md).
 
