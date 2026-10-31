@@ -276,7 +276,8 @@ describe("bundled inventory services through the action API", () => {
       updatedAt: now,
     });
   }
-  async function act() {
+  /** `dropped`: runtimes expected to fail, with the reason each one fails. */
+  async function act(dropped: Readonly<Record<string, string>> = {}) {
     const response = await boot!.app.request("/api/actions", {
       method: "POST",
       headers,
@@ -314,9 +315,13 @@ describe("bundled inventory services through the action API", () => {
     expect(last.commitStatus, body).toBe("committed");
     const results = runtimeResultsOf(last);
     expect(
-      results.filter(({ status }) => status === "failed"),
+      Object.fromEntries(
+        results
+          .filter(({ status }) => status === "failed")
+          .map(({ runtimeId, error }) => [runtimeId, error]),
+      ),
       body,
-    ).toEqual([]);
+    ).toEqual(dropped);
     return {
       events,
       row: last,
@@ -368,7 +373,12 @@ describe("bundled inventory services through the action API", () => {
   it("keeps the story after a concurrent stock conflict and tells the next turn what was not applied", async () => {
     // Panel actions share the execution lock; interleave a store write here.
     beforeProse = () => seedGold(0);
-    const { operations, events, row } = await act();
+    // The extractor read the operation that then failed, so it and the ledger
+    // that reads the extractor are dropped; the story still commits.
+    const { operations, events, row } = await act({
+      "world-ir": "read data of inventory.change@1 that did not commit",
+      "inventory/ledger": "upstream world-ir did not commit",
+    });
     expect(operations).toEqual([
       expect.objectContaining({ status: "failed", reason: "conflict" }),
     ]);

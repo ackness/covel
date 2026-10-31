@@ -44,12 +44,12 @@ describe("framework tool names", () => {
       ...registry.builtinTools.values(),
       ...createMemoryTools({ search: async () => [] }),
     ]) {
-      // A sub-agent run writes nothing, but two runs are neither the same
-      // answer nor safe to run side by side in one batch.
+      // A sub-agent can stage operations through write services, and two
+      // runs are neither the same answer nor safe side by side in one batch.
       if (module.name === "delegate") {
         expect(module.annotations).toEqual({
-          readOnly: true,
-          stagesWrites: false,
+          readOnly: false,
+          stagesWrites: true,
           concurrencySafe: false,
           idempotent: false,
         });
