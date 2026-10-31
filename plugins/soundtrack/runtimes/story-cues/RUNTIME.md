@@ -8,7 +8,11 @@ io:
       from:
         contract: narrative-engine@2
       required: false
+presentation: {}
 function: {}
+effects:
+  reads: [plugin-data:self:tracks, plugin-data:self:state]
+  writes: [plugin-data:self:state]
 ---
 
 Reads the current story's optional `cues` in the story's execution. A known

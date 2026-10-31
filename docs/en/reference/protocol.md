@@ -859,6 +859,7 @@ These are written only to `trace_events`, and are delivered through the subscrip
 | ---------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `hook.rewrote`                                                         | A hook rewrote the content                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
 | `function.executing` / `function.completed`                            | The start and end of a function-runtime handler (TurnEmitter). Same kind as `recursive.*`                                                                                                                                                                                                                                                                                                                                                                                                        |
+| `presentation.completed`                                               | Presentation terminal status, fixed reason, source and budget; no story content. See below.                                                                                                                                                                                                                                                                                                                                                                                                      |
 | `utils.fetch.calling` / `utils.fetch.responded` / `utils.fetch.failed` | HTTP calls to a provider made through a plugin's own wire (`ctx.utils.fetchWithRetry`, the path an image generation plugin takes. Wrapped by `withUtilsTrace` where function-runtime / agent-guard injects it). Polling can be very frequent, so these do not go into the action stream. The payload has only host / method / status / durationMs, and **never contains a full URL, query, or API key**                                                                                          |
 | `context.pruned`                                                       | Emitted during prompt assembly, after `PostContextAssembly`, or when a loop request replays or adds trimming decisions. Payload: `{ runtimeId, pluginId, prunedMessageCount }`; loop requests also include `truncatedToolResultCount`, `truncatedSummaryCount`, `elidedToolResultCount`, `collapsedStepCount`. The last two count cumulative ledger decisions applied to this request, including replay. Any non-zero count emits the event. Trace only; the same runtime may emit it repeatedly |
 | `context.compaction.failed`                                            | Emitted when a history compaction attempt fails. The payload is `{ pluginId, extensionId, reason, consecutiveFailures }`                                                                                                                                                                                                                                                                                                                                                                         |
@@ -1518,3 +1519,26 @@ Actor failures and cap refusals use `subagent.failed`, without a new actor event
 ## Creation role and existing actions
 
 Optional seatRole selects only the new human seat; see [creation API](./api.md#creation-role) for validation/defaults. Hosts can direct/narrate/advance; spectators can only advance. The server still assigns action source and uses the existing round settlement, advancement and single request-terminal events. This choice adds no event or scheduler.
+
+<a id="presentation-completed"></a>
+
+## `presentation.completed`
+
+Each settled presentation records one trace terminal, without forwarding to `/api/actions` or adding a player no-output notification. Host identity is `pluginId`, `runtimeId`, optional `runId` / `turnId` / `jobId`; source correlation is `sourceTurnId` and `sourceExecutionId`. `status` is `updated`, `no-op` or `failed`. No output always includes a fixed `reason`; codes are defined by the [presentation contract](./plugins.md#presentation-runtimes).
+
+```json
+{
+  "pluginId": "gallery-display",
+  "runtimeId": "gallery-display/render",
+  "sourceTurnId": "source",
+  "sourceExecutionId": "execution",
+  "status": "no-op",
+  "reason": "budget-exhausted",
+  "budget": {
+    "calls": { "limit": 2, "used": 2 },
+    "generations": { "limit": 1, "used": 1 }
+  }
+}
+```
+
+The event contains no raw input, free-text reason, asset path, reply or credential. Dispatch and cache hits use existing `gateway.calling` / `gateway.responded`, recording method and cache status only; provider error text stays outside presentation diagnostics.

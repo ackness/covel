@@ -688,3 +688,7 @@ messages:
 ```
 
 `root` is relative to the package, while `entry` is relative to `root`. Use external classic scripts: inline scripts and modules do not run. The host injects `window.covel`; remove `bridge` when the page needs no session data. A session-reading page is mounted only after player consent. The player keeps the host back button and can retry a failed page. See [multi-file pages](../reference/ui-panels.md#multi-file-pages) for the file rules, limits, CSP and cache contract. Keep private files out of the published root. For custom fonts, use an embedded `data:font/woff2;base64,...` (or WOFF) in CSS `@font-face`. Even a relative font URL under the published root fails because the sandboxed document has an opaque origin and the route supplies no CORS allow headers.
+
+## Updating display state with presentation
+
+For story-driven backdrops or music, use a [presentation selector](./advanced.md#presentation-selectors) to update owned display namespaces for existing UI slots. Presentation cannot read the full World Model or call slot services to bypass its scope; failure leaves story and next input available. See the [contract](../reference/plugins.md#presentation-runtimes).

@@ -8,6 +8,28 @@ import {
 } from "../../store/src/contract/test-fixtures.js";
 import { buildSnapshotPayload } from "../src/snapshot/snapshot-payload-builder.js";
 
+it("excludes presentation dispatch bookkeeping while retaining owned display state", async () => {
+  const store = createMemoryStore();
+  await store.createSession(makeSession({ id: "sess-1" }));
+  try {
+    for (const namespace of ["display", "_presentation_budget"])
+      await store.setPluginData({
+        id: namespace,
+        sessionId: "sess-1",
+        pluginId: namespace === "display" ? "fixture" : "__kernel:presentation",
+        namespace,
+        key: "current",
+        value: { title: "Public display" },
+        createdAt: "2026-10-31T00:00:00Z",
+        updatedAt: "2026-10-31T00:00:00Z",
+      });
+    const payload = await buildSnapshotPayload(store, "sess-1", "turn");
+    expect(payload.pluginData.map((row) => row.namespace)).toEqual(["display"]);
+  } finally {
+    await store.close();
+  }
+});
+
 it("captures JSON-serialized plugin state without changing the live record", async () => {
   const store = createMemoryStore();
   await store.createSession(makeSession({ id: "sess-1" }));

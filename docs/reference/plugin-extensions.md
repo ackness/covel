@@ -871,3 +871,7 @@ const plan = await ctx.services.call({
 ## 内置策略与可选故事组合
 
 内置回合策略提供一个名为 turn-policy 的代码专用读服务，通过提供方的 getOwnSettings().strategy 选择五种算法。只启用它时无需会话选择；同时启用其他提供方才需精确选择。对话叙事的函数通过契约调用一次，因此 director 可以借用 gateway；故事 agent 不再导入一次策略。规划结果在进入模型前投影为名字，原始规范请求和角色 ID 留在代码边界。若自定义包注册多个同契约服务，仍需每次注册各有一条属性匹配的声明，不能按契约去重。
+
+## 呈现与通信
+
+呈现函数只从公开故事投影和自己的明确素材 / 展示 namespace 取输入；services、tools、递归和子 agent 在入口拒绝，包括读服务。界面槽位提供方继续从已提交的自有展示状态绘制，不因为呈现策略获得私有数据权限。完整规则见[呈现 runtime](./plugins.md#presentation-runtimes)。

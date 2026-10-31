@@ -111,7 +111,7 @@ export const KERNEL_TABLE_OWNERSHIP: Readonly<
     snapshot: "captured",
     checkpoint: "exported",
     fork: "copied",
-    note: "Rows are owned by plugin_id; _ namespaces and __kernel: owners (KERNEL_PLUGIN_DATA_OWNER_PREFIX) are kernel partitions. Control-plane namespaces are excluded from snapshots and forks.",
+    note: "Rows are owned by plugin_id; _ namespaces and __kernel: owners (KERNEL_PLUGIN_DATA_OWNER_PREFIX) are kernel partitions. Control-plane namespaces are excluded from snapshots and forks. _presentation_budget retains source-runtime dispatch spend until session deletion; restore changes incarnation without refunding prior spend.",
   },
   world_data_import_ledger: {
     owner: "kernel",

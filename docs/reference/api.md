@@ -3986,6 +3986,7 @@ runtime 报告失败时，它的原始错误保留在 `result.runtimeResults` �
 - `languages.text`：插件有文字的语言，包括标签、界面文字、代码里的文字，以及翻译目录里的译文。`languages.instructions`：有指令（prompt 正文）的语言。两者都至少包含 `en`。
 - `author.about` 和链接的 `label` 可能是按语言分的 map。
 - 每个 runtime 摘要包含 `id`、`runtimeType`、`trigger`、`execution`、生效的 `turnCompletion`、`outputKind`、可选的 `outputContract` 等字段。 `tags` 属于包摘要，runtime 摘要不重复提供。
+- 呈现 runtime 还带 `presentation: { budget: { calls, generations } }`，省略的计数按 0 返回。这是声明的额度上限，不含会话用量、剩余额度、源快照或编译期 namespace 元数据。没有声明呈现策略的 runtime 省略这个字段。规则见[呈现 runtime](./plugins.md#presentation-runtimes)。
 
 `hostState` 说的是服务端有没有加载这个插件，不是某个会话有没有启用它。这是两种状态，列表不会把前者写成某个会话的 active。
 

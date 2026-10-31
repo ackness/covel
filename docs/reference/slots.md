@@ -1106,3 +1106,7 @@ assertLlmRequestBudget(config.requestBudget, {
 **服务商的错误码**
 
 HTTP 错误整理之后，服务商原始的 `code` 和 `type` 保留在 `details.providerCode` / `details.providerType`。向量摄入利用明确的“输入被拒”错误码，把失败的一批对半拆开，只跳过出问题的那一条输入。认证、配置和临时故障不移动游标。
+
+## 呈现生成的模型选择
+
+呈现函数仍只声明用途，不声明服务商或地址。可用性探测与生成使用同一有效 slot，包括请求级绑定；公开探测不返回凭证。付费工作必须转入持久后台队列，领取时继续检查请求凭证就绪；没有新增 slot、tag 或默认模型。额度与 transport 重试的区别见[呈现 runtime](./plugins.md#presentation-runtimes)。

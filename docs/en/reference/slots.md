@@ -1106,3 +1106,7 @@ A model's pricing can include `cacheReadPerMToken` and `cacheWritePerMToken` (th
 **Provider error codes**
 
 After HTTP errors are organized, the provider's original `code` and `type` are kept in `details.providerCode` / `details.providerType`. Vector ingestion uses the explicit "input rejected" error code to split a failed batch in half, so that only the problem input is skipped. Authentication, config, and temporary failures do not move the cursor.
+
+## Model selection for presentation
+
+Presentation still declares roles rather than providers or endpoints. Probes and dispatch use the same effective slot, including request-scoped bindings; public probes omit credentials. Paid work uses the durable queue with credential readiness checked before claim. No new slot, tag or model default is introduced. See [presentation runtimes](./plugins.md#presentation-runtimes) for dispatch versus transport budgets.

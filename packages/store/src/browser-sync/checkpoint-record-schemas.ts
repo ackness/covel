@@ -1,5 +1,6 @@
 import {
   isJsonValue,
+  PRESENTATION_BUDGET_NAMESPACE,
   lorebookOwnerSchema,
   type JsonValue,
 } from "@covel/shared";
@@ -43,7 +44,12 @@ export const characters = createdRow.extend({
 });
 export const pluginData = createdRow.extend({
   pluginId: z.string(),
-  namespace: z.string(),
+  namespace: z
+    .string()
+    .refine((namespace) => namespace !== PRESENTATION_BUDGET_NAMESPACE, {
+      message:
+        "Presentation spend is live kernel bookkeeping and cannot be hydrated from a checkpoint",
+    }),
   key: z.string(),
   value: jsonValue,
   updatedAt: timestamp,

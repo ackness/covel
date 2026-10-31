@@ -392,3 +392,7 @@ Validation reads manifests and referenced files, checking fields, files, languag
 Reports contain `kind`, `id` when available, `ok`, `counts.errors`, `counts.warnings` and `issues`. Each issue has `severity`, `code`, `message`, and, when known, a package-relative `file`, manifest field path or JSON pointer `field`, and repair `hint`. The summary may include version and languages. Messages are limited to 2000 characters; the first 200 issues are retained, with an additional `issues-truncated` warning and omitted count when necessary. Headings and known codes use the UI language; other messages stay in English. Reports can be copied as plain text.
 
 Access uses the same `host.files` rules as installation: hosted instances require the operator Bearer token; personal instances retain the install API’s desktop token or explicit enablement rules. Paths must resolve to directories within the corresponding plugin or world roots, and symlinked package roots are rejected. Reports make package paths relative and replace other host paths with `<path>`; CLI-only raw text is never returned. See [API](./api.md#in-app-validation) for requests.
+
+## Presentation functions still require code approval
+
+`presentation` restricts host APIs without changing code classification, trusted sources or approvals. Community functions remain unsandboxed server code under the existing policy; the label does not make them approval-free declarative plugins. See [presentation runtimes](./plugins.md#presentation-runtimes).

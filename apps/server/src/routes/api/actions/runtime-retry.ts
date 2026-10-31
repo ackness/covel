@@ -1,3 +1,5 @@
+import { listRuntimeJobs } from "../plugin-rpc/jobs.js";
+import { parseStagedRuntimeJobPayload } from "../plugin-rpc/runtime-job-worker.js";
 import type {
   ActionRequest,
   RuntimeManifest,
@@ -15,6 +17,7 @@ type RuntimeRetryAction = Extract<
 >;
 
 export interface RuntimeRetryPlan {
+  readonly presentationJobs?: readonly import("@covel/shared").DeferredRuntimeJob[];
   readonly scope?: RuntimeRetryScope;
   readonly seedResults: readonly RuntimeResult[];
   readonly sourceRuntimeIds: readonly string[];
@@ -122,9 +125,38 @@ export async function prepareRuntimeRetry(
       }
     }
   }
+  const latestPresentationJobs = new Map<
+    string,
+    Awaited<ReturnType<typeof listRuntimeJobs>>[number]
+  >();
+  for (const job of await listRuntimeJobs(store, { sessionId })) {
+    if (
+      runtimeIds.includes(job.runtimeId) &&
+      job.origin.sourceTurnId === source.turnId
+    )
+      latestPresentationJobs.set(job.runtimeId, job);
+  }
+  const presentationJobs = [...latestPresentationJobs.values()]
+    .filter(
+      (job) =>
+        ["failed", "timed_out", "cancelled", "orphaned"].includes(job.status) &&
+        activeRuntimes.some(
+          (runtime) => runtime.name === job.runtimeId && runtime.presentation,
+        ),
+    )
+    .flatMap((job) => {
+      const payload = parseStagedRuntimeJobPayload(job.payload);
+      return payload?.descriptor.presentation?.committed
+        ? [payload.descriptor]
+        : [];
+    });
   if (
     requestedSource &&
-    runtimeIds.some((id) => results.get(id)?.status !== "failed")
+    runtimeIds.some(
+      (id) =>
+        results.get(id)?.status !== "failed" &&
+        !presentationJobs.some((job) => job.runtimeId === id),
+    )
   ) {
     throw new ActionRejectedError(
       "A retry target is no longer failed. Refresh the task statuses before retrying.",
@@ -132,15 +164,25 @@ export async function prepareRuntimeRetry(
     );
   }
   return {
-    sourceRuntimeIds: [...results.keys()],
+    presentationJobs,
+    sourceRuntimeIds: [
+      ...new Set([
+        ...results.keys(),
+        ...presentationJobs.map((job) => job.runtimeId),
+      ]),
+    ],
     scope: {
       sourceTurnId: source.turnId,
       runtimeIds,
       sourceCommitted: true,
-      sourceFailedRuntimeIds: [...results.values()]
-        .filter((result) => result.status === "failed")
-        .map((result) => result.runtimeId)
-        .sort(),
+      sourceFailedRuntimeIds: [
+        ...new Set(
+          [...results.values()]
+            .filter((result) => result.status === "failed")
+            .map((result) => result.runtimeId)
+            .concat(presentationJobs.map((job) => job.runtimeId)),
+        ),
+      ].sort(),
     },
     seedResults: [...results.values()].filter(
       (result) =>

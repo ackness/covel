@@ -47,7 +47,7 @@ Lets the stage know where things are, whether it is day or night, and who is pre
 - The background and portraits on the stage come from this plugin. Speaker name tags come from the narrator's story segments and do not need it.
 - Dialogue segments in chat gain a speaker nameplate and an avatar when one is available. Stories without segments still use the normal text view.
 - On the right there is a "Scene" tab. It contains a read-only "Scene" panel (the scene name, day or night, and where the background comes from) and a "Cast" panel. The "Cast" panel also says why each character was chosen, for example "Mentioned", "In scene", "Profile", or "Recent".
-- If the place cannot be found in the world's scene pictures, the background shows "No backdrop", and the stage uses the world's cover instead.
+- An absent scene asset registry preserves the existing backdrop. When a registry exists but does not list the location, the backdrop is empty and the stage falls back to the world cover.
 - The story's `cues.scene`, written when the location changes, selects the location and non-empty `cues.present` selects who is on stage. Updates commit with the story. Continuing actors keep their position and visual; new actors fade into free positions from left to right, and absent actors leave the stage at once when the update commits, without a fade. At most four actors appear, with focus on the last resolved dialogue or action speaker on stage.
 - The current viewpoint character stays off stage; other characters bound to the same player seat can appear. A location change clears old actors before applying the new presence list. Day/night changes at the same location keep the actors. Without a presence list, existing actors remain unless the scene changes; cast selection applies until an actor record exists.
 
@@ -146,3 +146,7 @@ Stories that do not answer in segments can still emit `music.cue`; worlds and pl
 ## Ensemble nameplates and presence
 
 The story attaches canonical names to actor speech/actions; the stage still consumes public segments and cues for nameplates. A silent or failed actor can remain present. Stage salience settings are separate from execution caps in [Orchestration](./features.md#session-orchestration-settings). Delegation also works without the stage, using the dialogue planner's candidate heuristic.
+
+## Restricted story-cue selectors
+
+Scene Stage and Soundtrack `story-cues` use zero-budget presentation functions, reading public story and declared own assets / display state without model charges or new settings. Ordinary pre-turn cast and explicit scene / direction / music events retain their existing contexts and overrides. Fixed trace codes explain no change, missing assets or no story without per-turn notifications. Departures remain immediate; the paragraph-template `CharacterAvatar` limitation is unchanged. See [presentation runtimes](../reference/plugins.md#presentation-runtimes).

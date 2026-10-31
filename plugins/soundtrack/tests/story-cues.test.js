@@ -2,7 +2,7 @@ import {
   getPendingProposals,
   getToolContent,
 } from "@covel/plugin-handlers-utils";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import handler from "../runtimes/story-cues/handler.js";
 
 const registry = {
@@ -15,6 +15,7 @@ function context(story, state = {}, tracks = registry) {
     runtimeId: "soundtrack/story-cues",
     sessionId: "s",
     turnId: "turn-1",
+    presentation: { characters: [], note: vi.fn() },
     inputs: story
       ? {
           story: {
@@ -38,6 +39,25 @@ const written = (result) =>
   getPendingProposals(result).map(({ payload }) => payload);
 
 describe("soundtrack story cues", () => {
+  it.each([
+    [undefined, {}, registry, "no-story"],
+    [{ cues: { mood: "Tense" } }, {}, null, "asset-missing"],
+    [
+      { cues: { mood: "Tense" } },
+      { mood: { mood: "tense" } },
+      registry,
+      "no-scene-change",
+    ],
+    [{ cues: { mood: "Unknown" } }, {}, registry, "asset-missing"],
+    [{ segments: [] }, {}, registry, "no-output"],
+  ])(
+    "reports a fixed no-output diagnostic for %j",
+    async (story, state, tracks, reason) => {
+      const ctx = context(story, state, tracks);
+      expect(written(await handler(ctx))).toEqual([]);
+      expect(ctx.presentation.note).toHaveBeenCalledExactlyOnceWith(reason);
+    },
+  );
   it.each([
     [" Tense ", "tense"],
     ["lowlamps", "Low Lamps"],

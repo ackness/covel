@@ -2086,3 +2086,7 @@ Actor output contains dialogue/action segments without a speaker, plus optional 
 ## Delegating actors inside a story
 
 A story agent calls delegate with target: {contract: "character-actor@1"}, character: "Mara", a short brief and optional instruction, without characterId or data. The host resolves names and supplies profile/history. The bundled narrator calls once per actor in plan order, combines successful public segments and discards intent. Failed actors lose staged operations. An operation rejected at final commit loses only that operation with the existing fixed notice.
+
+## Presentation call boundaries
+
+Functions with `presentation` have no tool, service or delegation entry, and cannot emit events, suspend or publish UI / completion. Gateway and media helpers share a durable source-turn allowance. Zero or exhausted allowance refuses dispatch as a normal no-op. Ordinary runtime tool lists are unchanged; see [presentation runtimes](./plugins.md#presentation-runtimes).

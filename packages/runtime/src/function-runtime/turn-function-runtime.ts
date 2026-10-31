@@ -1,3 +1,6 @@
+import { PresentationBudgetExhausted } from "@covel/shared";
+import { PresentationUnavailable } from "../presentation/projection.js";
+import { attachPresentationState } from "../presentation/state.js";
 import type { UpstreamWorldWrite } from "./upstream-world-model.js";
 import { toJsonValueOrDiagnostic } from "@covel/shared";
 import { reportRuntimeStarted } from "../trace/runtime-telemetry.js";
@@ -48,6 +51,7 @@ import {
 } from "./upstream-plugin-data.js";
 
 export interface ExecuteFunctionRuntimeOptions {
+  readonly presentationSnapshot?: import("@covel/shared").PresentationSnapshot;
   readonly lastPlayerInput?:
     import("@covel/shared").PlayerInputSubmission | null;
   /** The scheduler's logical turn for this execution. */
@@ -118,6 +122,7 @@ export interface ExecuteFunctionRuntimeOptions {
 }
 
 export async function executeFunctionRuntime({
+  presentationSnapshot,
   lastPlayerInput = null,
   logicalTurn,
   upstreamProposals = [],
@@ -185,6 +190,7 @@ export async function executeFunctionRuntime({
     );
   }
   const runtimeContext = await createPluginRuntimeContext({
+    ...(presentationSnapshot ? { presentationSnapshot } : {}),
     manifest,
     input,
     loaded,
@@ -232,6 +238,7 @@ export async function executeFunctionRuntime({
   // (ctx.signal) lets a cooperative handler cancel its own in-flight provider
   // work; a non-cooperative one is detached with its capabilities revoked.
   const handler = loaded.handler;
+  let presentationFailure: unknown;
   const output = await runLeasedInvocation(
     runtimeContext,
     () => handler.call(loaded, runtimeContext.context),
@@ -243,6 +250,7 @@ export async function executeFunctionRuntime({
       // Function-layer terminal marker; the error is rethrown so the dispatch
       // catch emits the single runtime.failed (avoids a double terminal event).
       onFailure: async (err) => {
+        if (manifest.presentation) return;
         await deps.emitter?.emit("function.completed", {
           ...helperCtx,
           status: "failed",
@@ -251,7 +259,26 @@ export async function executeFunctionRuntime({
         });
       },
     },
-  );
+  ).catch((error: unknown) => {
+    if (!runtimeContext.presentation) throw error;
+    if (
+      error instanceof PresentationBudgetExhausted ||
+      error instanceof PresentationUnavailable
+    ) {
+      runtimeContext.presentation.reason =
+        error instanceof PresentationBudgetExhausted
+          ? "budget-exhausted"
+          : "unavailable";
+      return { outcome: "skipped" as const };
+    }
+    presentationFailure = error;
+    runtimeContext.presentation.reason = "failed";
+    console.warn("[runtime] presentation handler failed", {
+      runtimeId: manifest.name,
+      error,
+    });
+    return { outcome: "failed" as const, error: "Presentation handler failed" };
+  });
 
   const { outcome: handlerOutcome, diagnostics } = normalizeHandlerResult(
     getToolContent(output),
@@ -272,6 +299,21 @@ export async function executeFunctionRuntime({
   // ── Suspend detection for function runtimes ────────────
   // A resumed handler may suspend again; the commit resolves the old record
   // and saves this one in one transaction.
+  if (
+    manifest.presentation &&
+    (handlerOutcome.outcome === "suspended" ||
+      (handlerOutcome.outcome === "success" &&
+        handlerOutcome.completion !== undefined))
+  ) {
+    const failed = await finalizeRuntimeFailure(
+      { ...deps, hookPipeline },
+      run,
+      "Presentation cannot suspend or publish completion",
+    );
+    if (runtimeContext.presentation)
+      attachPresentationState(failed, runtimeContext.presentation);
+    return failed;
+  }
   if (handlerOutcome.outcome === "suspended") {
     // A suspension keeps writes for a resume, which never stages operations;
     // a write-service operation cannot wait in it.
@@ -434,6 +476,9 @@ export async function executeFunctionRuntime({
     input,
     rawResult,
     {
+      ...(presentationFailure !== undefined
+        ? { cause: presentationFailure }
+        : {}),
       outputContractSchema: loaded.outputContractSchema,
       outputSchema: loaded.outputSchema,
     },
@@ -468,7 +513,10 @@ export async function executeFunctionRuntime({
   const finalOutput = (completedResult.output ??
     getToolContent(output)) as Record<string, unknown>;
 
-  if (deps.store)
+  if (runtimeContext.presentation)
+    attachPresentationState(completedResult, runtimeContext.presentation);
+
+  if (deps.store && !manifest.presentation)
     attachRuntimeJournal(completedResult, input, manifest, finalOutput);
 
   return completedResult;

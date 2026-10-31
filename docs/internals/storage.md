@@ -648,3 +648,7 @@ MemoryStore、SQLite、PostgreSQL 和浏览器检查点都保持这些身份。�
 - `getLatestPlayerInput(sessionId)` 按 `createdAt` 降序、ID 字节序选出一条表单提交，所以执行准入不用加载整个输入日志。
 - `getPluginDataPromptWindow(sessionId, pluginId, namespace, maxEntries)` 返回 `{ entries, total }`。条数不超过上限时按创建顺序返回；超过上限时，取最早的一半，加上最近更新的其余部分，并去掉重复的锚点。
 - SQL 后端计数时不加载 JSON，并在解码记录之前就应用条数限制。MemoryStore 实现相同的选择规则和归属契约。
+
+## 呈现调用的控制面
+
+`_presentation_budget` 是按来源回合 / runtime 保存的内核 CAS 计数，不存提示词、回复、凭证或媒体。它不进入 snapshot、fork 或浏览器 checkpoint，也不能从 checkpoint 注入。向相同活跃代次上传 checkpoint 时，宿主保留本地账本；restore / reset 的新代次不能使用旧快照。会话删除会清除账本，作业终态清理不会补回额度。见[呈现 runtime](../reference/plugins.md#presentation-runtimes)。

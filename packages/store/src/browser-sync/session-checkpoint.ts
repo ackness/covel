@@ -4,6 +4,7 @@ import {
   type BrowserCheckpoint,
   type PersistenceProfile,
 } from "./browser-sync.js";
+import { PRESENTATION_BUDGET_NAMESPACE } from "@covel/shared";
 import type {
   DataStore,
   RuntimeExportRecord,
@@ -165,7 +166,9 @@ export async function exportSessionCheckpoint(
     traceEvents,
     characters,
     characterSchema,
-    pluginData,
+    pluginData: pluginData.filter(
+      (row) => row.namespace !== PRESENTATION_BUDGET_NAMESPACE,
+    ),
     lorebookEntries,
     sessionSummaries,
     playerInputs,
@@ -198,10 +201,23 @@ async function writeCheckpoint(
     throw new Error("Replacement session id must match the checkpoint");
   }
 
+  // Browser uploads do not own the dispatch ledger. Keep the live ledger
+  // when hydrating the same incarnation, without putting it on the wire.
+  const previous = await store.getSession(checkpoint.sessionId);
+  const nonce = previous?.metadata?.sessionIncarnationNonce;
+  const spend =
+    typeof nonce === "string" &&
+    nonce === session.metadata?.sessionIncarnationNonce
+      ? (await store.listPluginDataSessionScope(checkpoint.sessionId)).filter(
+          (row) => row.namespace === PRESENTATION_BUDGET_NAMESPACE,
+        )
+      : [];
+
   await store.deleteSession(checkpoint.sessionId);
   if (options.writeWorld && checkpoint.world)
     await store.upsertWorld(checkpoint.world);
   await store.createSession(session);
+  if (spend.length) await store.setPluginDataBatch(spend);
 
   for (const record of checkpoint.turnResults)
     await store.saveTurnResult(record);

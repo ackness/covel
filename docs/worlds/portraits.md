@@ -326,3 +326,7 @@ pnpm validate:world worlds/tidelamp
 - **给地点配背景图。** 见[给世界配场景图](./scenes.md)。
 - **定下整个世界的画风，知道交付前检查什么。** 见[世界美术方向](./art-direction.md)。
 - **让图片出现在世界列表和世界详情里，并配上介绍。** 见[画廊资料](./art-direction.md#画廊资料与前端使用)。
+
+## 在场角色的公开身份
+
+故事提示选择器用名字、别名和视角角色 ID 排除当前扮演者，不读取角色私有档案；绘制立绘的槽位仍使用现有公开素材。见[呈现 runtime](../reference/plugins.md#presentation-runtimes)。立绘生成流程与文件不变。

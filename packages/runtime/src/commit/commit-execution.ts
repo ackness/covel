@@ -1,4 +1,5 @@
 import type { ExecutionCommitPlan, PreparedExecution } from "../execution.js";
+import { unavailablePresentationJob } from "../presentation/jobs.js";
 import { currentTraceRetention } from "@covel/shared";
 import {
   deleteExpiredTraceEvents,
@@ -99,6 +100,16 @@ export async function commitExecution(
     console.warn("[commit-execution] outcome delivery failed:", error);
   }
   if (outcome.status !== "committed") {
+    const result = args.execution.result;
+    if ("runtimeResults" in result) {
+      for (const job of [
+        ...(result.deferredRuntimeJobs ?? []),
+        ...(result.withheldRuntimeJobs ?? []),
+      ]) {
+        if (job.presentation)
+          await unavailablePresentationJob(args.store, plan.sessionId, job);
+      }
+    }
     return { ...outcome, snapshotFailed: false };
   }
 

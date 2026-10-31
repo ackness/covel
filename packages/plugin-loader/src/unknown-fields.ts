@@ -27,6 +27,7 @@ interface UnknownKeyIssue {
 
 /** Runtime fields that limit what a runtime does or when it runs. */
 const GUARDED_RUNTIME_FIELDS = [
+  "presentation",
   "guard",
   "permissions",
   "effects",

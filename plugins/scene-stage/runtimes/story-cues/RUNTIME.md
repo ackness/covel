@@ -8,7 +8,16 @@ io:
       from:
         contract: narrative-engine@2
       required: false
+presentation: {}
 function: {}
+effects:
+  reads:
+    [
+      plugin-data:self:scenes,
+      plugin-data:self:stage,
+      plugin-data:self:direction,
+    ]
+  writes: [plugin-data:self:stage, plugin-data:self:direction]
 ---
 
 Reads the current story's optional `cues` in the story's execution. A scene

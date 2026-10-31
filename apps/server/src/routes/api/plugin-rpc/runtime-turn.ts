@@ -813,12 +813,15 @@ export function createPluginRpcRuntimeTurnRunner(
       sessionId: ctx.sessionId,
       turnId: args.backgroundTurnId,
       playerMessage: "",
-      locale: ctx.session.locale,
+      locale: args.descriptor.presentation?.locale ?? ctx.session.locale,
       origin: "background",
       parentTurnId: args.descriptor.sourceTurnId,
       actions: args.descriptor.turnDigest.actions,
       logicalTurn: args.descriptor.sourceLogicalTurn,
       detachedStage: {
+        ...(args.descriptor.presentation
+          ? { presentation: args.descriptor.presentation }
+          : {}),
         jobId: args.descriptor.jobId,
         runtimeId: args.descriptor.runtimeId,
         sourceTurnId: args.descriptor.sourceTurnId,

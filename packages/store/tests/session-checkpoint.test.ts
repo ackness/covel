@@ -6,6 +6,7 @@ import {
   type PluginDataRecord,
 } from "../src/index.js";
 import { createMemoryStore } from "../src/memory-entry.js";
+import { createSqliteStore } from "../src/sqlite-entry.js";
 
 import {
   makeCharacter,
@@ -24,6 +25,87 @@ import {
 } from "../src/contract/test-fixtures.js";
 
 describe("session checkpoint transfer", () => {
+  it.each(["memory", "sqlite"])(
+    "keeps presentation spend off the wire and preserves live hydration spend on %s",
+    async (backend) => {
+      const store =
+        backend === "memory"
+          ? createMemoryStore()
+          : createSqliteStore(":memory:");
+      const session = makeSession({
+        metadata: { sessionIncarnationNonce: "live-incarnation" },
+      });
+      try {
+        await store.createSession(session);
+        const row: PluginDataRecord = {
+          id: "spend",
+          sessionId: session.id,
+          pluginId: "__kernel:presentation",
+          namespace: "_presentation_budget",
+          key: "source-runtime",
+          value: {
+            version: 1,
+            limits: { calls: 2, generations: 0 },
+            used: { calls: 1, generations: 0 },
+          },
+          createdAt: session.createdAt,
+          updatedAt: session.updatedAt,
+        };
+        await store.setPluginData(row);
+        const checkpoint = await exportSessionCheckpoint(store, session.id, {
+          revision: 1,
+          actionId: "export",
+        });
+        expect(checkpoint.pluginData).toEqual([]);
+        await replaceSessionFromCheckpoint(store, checkpoint);
+        expect(
+          await store.getPluginData(
+            session.id,
+            row.pluginId,
+            row.namespace,
+            row.key,
+          ),
+        ).toEqual(row);
+        await expect(
+          replaceSessionFromCheckpoint(store, {
+            ...checkpoint,
+            pluginData: [row],
+          }),
+        ).rejects.toThrow(/kernel bookkeeping/);
+        const snapshot = makeSnapshot({ sessionId: session.id });
+        await expect(
+          replaceSessionFromCheckpoint(store, {
+            ...checkpoint,
+            snapshots: [
+              {
+                ...snapshot,
+                payload: { ...snapshot.payload, pluginData: [row] },
+              },
+            ],
+          }),
+        ).rejects.toThrow(/kernel bookkeeping/);
+        await replaceSessionFromCheckpoint(store, checkpoint, {
+          session: {
+            ...session,
+            metadata: { sessionIncarnationNonce: "reset-incarnation" },
+          },
+        });
+        expect(
+          await store.getPluginData(
+            session.id,
+            row.pluginId,
+            row.namespace,
+            row.key,
+          ),
+        ).toBeNull();
+        await store.setPluginData(row);
+        await store.deleteSession(session.id);
+        expect(await store.listPluginDataSessionScope(session.id)).toEqual([]);
+      } finally {
+        await store.close();
+      }
+    },
+  );
   it("keeps recovery records without copying model diagnostics into a private checkpoint", async () => {
     const store = createMemoryStore();
     const session = makeSession({

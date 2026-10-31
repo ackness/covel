@@ -128,15 +128,49 @@ export class RuntimeDisabledError extends Error {
 function runtimeOnlyIssues(
   issues: readonly ManifestIssue[],
   prefix: readonly string[] = [],
+  presentation = false,
 ): readonly ManifestIssue[] | undefined {
   return issues.length > 0 &&
     issues.every(
       (issue) =>
-        isRuntimeDisablingIssue(issue) &&
+        (isRuntimeDisablingIssue(issue) ||
+          (presentation && issue.path[prefix.length] === "presentation")) &&
         prefix.every((segment, index) => issue.path[index] === segment),
     )
     ? issues
     : undefined;
+}
+
+function compileDeclaredRuntime(
+  plugin: PluginManifest,
+  runtime: import("@covel/shared").RuntimeAuthoringManifest,
+  runtimeId: string,
+  filePath: string,
+) {
+  try {
+    if (runtime.presentation && plugin.requires?.includes("narrative-engine@2"))
+      throw Object.assign(new Error("invalid presentation requirement"), {
+        issues: [
+          {
+            path: ["requires"],
+            message:
+              "presentation story inputs must remain optional; remove narrative-engine@2 from package requires",
+          },
+        ],
+      });
+    return compileRuntimeManifest(plugin, runtime, runtimeId);
+  } catch (error) {
+    if (
+      runtime.presentation &&
+      error instanceof Error &&
+      "issues" in error &&
+      Array.isArray(error.issues)
+    )
+      throw new RuntimeDisabledError(
+        disabledRuntime(filePath, error.issues as ManifestIssue[], runtime),
+      );
+    throw error;
+  }
 }
 
 function disabledRuntime(
@@ -181,7 +215,15 @@ export function parsePluginMd(
     let disabled: DisabledRuntime | undefined;
     if (!parsed.success) {
       // An inline runtime that can never run leaves the rest of the package.
-      const issues = runtimeOnlyIssues(parsed.error.issues, ["runtime"]);
+      const issues = runtimeOnlyIssues(
+        parsed.error.issues,
+        ["runtime"],
+        Boolean(
+          lenient.data.runtime &&
+          typeof lenient.data.runtime === "object" &&
+          Object.hasOwn(lenient.data.runtime, "presentation"),
+        ),
+      );
       if (!issues) throw manifestError("plugin", parsed.error.issues);
       disabled = disabledRuntime(filePath, issues, lenient.data.runtime);
       const { runtime: _runtime, ...rest } = lenient.data;
@@ -223,7 +265,11 @@ export function parseRuntimeMd(
     );
     const result = lenient.result;
     if (!result.success) {
-      const issues = runtimeOnlyIssues(result.error.issues);
+      const issues = runtimeOnlyIssues(
+        result.error.issues,
+        [],
+        Object.hasOwn(lenient.data, "presentation"),
+      );
       if (issues)
         throw new RuntimeDisabledError(
           disabledRuntime(filePath, issues, lenient.data),
@@ -238,10 +284,11 @@ export function parseRuntimeMd(
     return {
       sourcePath: filePath,
       runtime,
-      manifest: compileRuntimeManifest(
+      manifest: compileDeclaredRuntime(
         plugin,
         runtime,
         `${plugin.id}/${localId}`,
+        filePath,
       ),
       promptTemplate: body,
       rawFrontmatter: data,
@@ -376,10 +423,11 @@ export function compileInlineRuntime(
     return {
       sourcePath: parsed.sourcePath,
       runtime,
-      manifest: compileRuntimeManifest(
+      manifest: compileDeclaredRuntime(
         parsed.plugin,
         runtime,
         parsed.plugin.id,
+        parsed.sourcePath ?? "PLUGIN.md",
       ),
       promptTemplate: parsed.promptTemplate,
       rawFrontmatter: parsed.rawFrontmatter,

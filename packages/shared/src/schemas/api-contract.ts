@@ -23,6 +23,7 @@ import { i18nTextSchema, worldDimensionsSchema } from "./world.js";
 import { packageCreditFields } from "./package-info.js";
 import { turnActionRequestsSchema } from "./action.js";
 import { pluginSourceTrustSchema } from "./trusted-sources.js";
+import { presentationBudgetSchema } from "./presentation.js";
 
 export { MAX_PLAYER_MESSAGE_CHARS } from "./action.js";
 
@@ -227,6 +228,9 @@ const effectiveTurnCompletionSchema = z.discriminatedUnion("mode", [
 
 const pluginRuntimeSummarySchema: z.ZodType<PluginRuntimeSummary> = z
   .object({
+    presentation: z
+      .strictObject({ budget: presentationBudgetSchema.required() })
+      .optional(),
     id: z.string().min(1),
     runtimeType: z.enum(["agent", "function"]),
     stage: stageSchema.optional(),

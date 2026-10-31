@@ -1,3 +1,5 @@
+import { createPresentationProposalGuard } from "../presentation/policy.js";
+import { presentationPolicyError } from "../presentation/policy.js";
 import {
   getRuntimeSpec,
   isTurnDetachedRuntime,
@@ -42,6 +44,8 @@ export function createDetachedProposalGuard(
   manifest: RuntimeManifest,
 ): (proposal: Proposal) => string | undefined {
   return (proposal) => {
+    if (manifest.presentation !== undefined)
+      return createPresentationProposalGuard(manifest)(proposal);
     if (proposal.type === "asset.generate") {
       return declaredWriteAllows(manifest, "assets:*") ||
         declaredWriteAllows(manifest, "media:*")
@@ -148,6 +152,8 @@ function consumerDependsOn(
 }
 
 function intrinsicIneligibility(manifest: RuntimeManifest): string | undefined {
+  if (manifest.presentation !== undefined)
+    return presentationPolicyError(manifest);
   const settling = getRuntimeSpec(manifest).turnCompletionPolicy.settle;
   if (
     settling &&

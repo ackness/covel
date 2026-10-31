@@ -97,6 +97,18 @@ export function normalizeRuntimeManifest(
     manifest.inputs ?? {};
 
   return {
+    ...(manifest.presentation
+      ? {
+          presentation: {
+            budget: {
+              calls: manifest.presentation.budget?.calls ?? 0,
+              generations: manifest.presentation.budget?.generations ?? 0,
+            },
+            publicAssetNamespaces:
+              manifest.presentation.publicAssetNamespaces ?? [],
+          },
+        }
+      : {}),
     id: manifest.name,
     pluginId: manifest.pluginId,
     declaredTrigger: trigger,

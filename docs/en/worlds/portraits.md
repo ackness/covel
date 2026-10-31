@@ -326,3 +326,7 @@ For what each world should convey, and what must not be drawn wrong, see [world 
 - **Add background pictures to places.** See [add scene pictures to your world](./scenes.md).
 - **Set the art style for the whole world, and know what to check before delivery.** See [world art direction](./art-direction.md).
 - **Show the pictures in the world list and world details, with an introduction.** See [gallery information](./art-direction.md#gallery-data-and-front-end-use).
+
+## Public identity for present characters
+
+Story-cue selectors use names, aliases and viewpoint identity to exclude the current character without reading private profiles. Portrait slots still consume existing public assets. See [presentation runtimes](../reference/plugins.md#presentation-runtimes); portrait generation commands and files are unchanged.

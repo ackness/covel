@@ -268,3 +268,7 @@ pnpm validate:world worlds/tidelamp
 - **给角色配立绘。** 见[给角色配立绘](./portraits.md)。
 - **定下整个世界的画风，知道交付前检查什么。** 见[世界美术方向](./art-direction.md)。
 - **给世界配背景音乐。** 见[世界数据参考的 Background Music](../reference/world-data.md#background-music)。
+
+## 故事中的素材选择
+
+故事提示经受限的零预算[呈现函数](../reference/plugins.md#presentation-runtimes)选择公开场景素材；不会临时付费出图。现有场景生成命令与文件格式不变，未找到新图时沿用[舞台的降级行为](../builtin/stage.md)。

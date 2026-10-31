@@ -2,7 +2,7 @@ import {
   getPendingProposals,
   getToolContent,
 } from "@covel/plugin-handlers-utils";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import handler from "../runtimes/story-cues/handler.js";
 
 const day = { id: "a".repeat(64), mime: "image/png", size: 10 };
@@ -58,6 +58,19 @@ const directionOf = (result) =>
   written(result).find(({ namespace }) => namespace === "direction")?.value;
 
 describe("scene-stage story cues", () => {
+  it("keeps existing display state when the asset registry is absent", async () => {
+    const ctx = context(
+      { cues: { scene: "图书馆" } },
+      {
+        "scenes/scene-registry": null,
+        "stage/current": { sceneId: "classroom", variant: "night" },
+        "direction/current": { actors: [aya] },
+      },
+    );
+    ctx.presentation = { characters: [], note: vi.fn() };
+    expect(written(await handler(ctx))).toEqual([]);
+    expect(ctx.presentation.note).toHaveBeenCalledWith("asset-missing");
+  });
   it("matches a scene, keeps night, and resets its previous actors", async () => {
     const result = await handler(
       context(

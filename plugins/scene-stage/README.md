@@ -5,7 +5,7 @@
 ## 运行时结构
 
 - `PLUGIN.md`：插件级元信息（名称/描述/关联），本身不是可执行 runtime——`runtimes/` 下才是实际发现、调度的五个 runtime。
-- `runtimes/story-cues/RUNTIME.md` + `handler.js`：`post-turn` 函数 runtime，可选读取 `narrative-engine@2` 的完整故事，通过 `ctx.inputs.story.value` 取得 `cues` 与 `segments`；不强制启用叙事插件。在故事的同一次执行中提交场景和演员更新。
+- `runtimes/story-cues/RUNTIME.md` + `handler.js`：`post-turn` 函数 runtime，可选读取 `narrative-engine@2` 的公开段落与提示投影，通过 `ctx.inputs.story.value` 取得 `cues` 与 `segments`；不强制启用叙事插件。在故事的同一次执行中提交场景和演员更新。
 - `runtimes/cast/RUNTIME.md` + `handler.js` + `ui/scene-cast-panel.json`：`pre-turn` 定时函数 runtime，按玩家消息与近期正文给当前视角之外的角色打分，选出至多 `activeSpeakerCount` 名当前说话人，输出 `scene-cast@1` 供 `chat-mode-narrator` 注入，并写入 `active-cast/current`；声明右侧在场角色面板。
 - `runtimes/resolver/RUNTIME.md` + `handler.js` + `ui/scene-stage-panel.json`：事件触发函数 runtime（消费 `scene.set`），场景匹配与舞台状态写入，声明右侧只读场景面板。
 - `runtimes/direction/RUNTIME.md` + `handler.js`：消费 `stage.direction`，持久化角色登退场、站位、焦点及视觉变体请求到 `direction/current`；动作流预览为退场与清场播放指定 transition，持久状态只保留仍在场角色。
@@ -45,3 +45,5 @@
 ## 开发
 
 修改场景匹配、说话人选择逻辑或面板数据路径后，运行本插件测试。
+
+`story-cues` 声明 `presentation: {}`，只读取明确允许的自有素材和展示 namespace，不读取私有角色档案、历史或服务，也不调用模型。无产出原因通过 `presentation.completed` 的固定代码记录；普通 cast 与事件覆盖保持原有行为。见[呈现 runtime](../../docs/reference/plugins.md#presentation-runtimes)。

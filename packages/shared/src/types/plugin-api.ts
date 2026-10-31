@@ -10,6 +10,7 @@ import type {
 import type { PluginUserSettingSpec, SessionSlashCommand } from "./plugin.js";
 import type { I18nText } from "./world.js";
 import type { PackageAuthor } from "../schemas/package-info.js";
+import type { PresentationBudget } from "@covel/plugin-handlers-utils";
 
 export type PluginSource = "builtin" | "community";
 
@@ -26,6 +27,8 @@ export interface PluginRuntimeTrigger {
 }
 
 export interface PluginRuntimeSummary {
+  /** Configured source-turn limits, with omitted counters normalized to zero. */
+  readonly presentation?: { readonly budget: PresentationBudget };
   readonly id: string;
   readonly runtimeType: "agent" | "function";
   readonly stage?: Stage;

@@ -754,3 +754,7 @@ Per backend: PostgreSQL holds the parent session row with `FOR KEY SHARE`. SQLit
 ### Commit boundaries during advancement
 
 One input can produce multiple independent executions, each using proposal validation and a transaction. Cancellation, failure or stopping in a later round never undoes earlier committed stories and state. Attached operations retain their isolation; an operation failure alone does not veto the story's `yield: continue`. The next round reads prior committed state and operation notices, never tentative future results. Failed post-commit publication requires client resynchronization without changing the durable commit verdict.
+
+## Presentation commits and allowance
+
+Zero-budget presentation shares execution with the story candidate, retaining only valid owned display writes beside a committed story. Generators freeze a public snapshot after final story writes; source suspension retains it with existing withheld jobs until settlement. The commit transaction checks source destination baselines so newer overrides win without rolling back the story. `_presentation_budget` is debited by CAS before dispatch, outside result rollback; failures, shutdown requeue and replacement jobs do not refund it. External charges and bytes cannot be semantically rolled back. See [presentation runtimes](./plugins.md#presentation-runtimes).

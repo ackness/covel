@@ -538,3 +538,7 @@ Delegation privacy uses kernel-recorded provider and call identity to project st
 ## In-game host role
 
 The preparation role changes only a new seat's permitted game actions. It grants no owner/operator identity, bypasses no session.create host-profile check and cannot authorise system-source requests. Actor history and prompts aid perspective; they are not a sandbox for approved server code.
+
+## Presentation projection and kernel bookkeeping
+
+Presentation uses a separate context builder, copying only public `segments` / `cues`, minimal identity and explicitly allowed own data. Concealed / failed / non-story results, hidden namespaces, raw digests and services are absent. `_presentation_budget`, owned by `__kernel:presentation`, is control-plane source/counter bookkeeping: plugin, RPC, data-tool and portable projections cannot expose it; snapshots, forks and browser checkpoints exclude it. Spend remains until session deletion; restore / reset changes incarnation so old jobs cannot attach. Function JS remains unsandboxed under existing code approval. See [presentation runtimes](../reference/plugins.md#presentation-runtimes).

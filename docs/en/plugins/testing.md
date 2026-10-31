@@ -563,3 +563,7 @@ When you change a character tool, check it against the real character field defi
 ## Deterministic ensemble verification
 
 Load real manifests/entries and script the model through actual delegate calls, with one actor succeeding and another failing. Check committed named segments, user yield, private-intent projections and the full event order. Give actors disjoint witnessed secrets and inspect public traces of the parent's later requests; the final story alone cannot prove privacy. Replacement write-service actors still need failed-child rollback, commit rejection and next-invocation notices. Scripted models establish interfaces and settlement, not real-model prose quality.
+
+## Testing presentation refusals
+
+Load real manifests, execute handlers through restricted contexts, and inspect committed rows plus `presentation.completed`, rather than testing only selection helpers. Prove an allowed write through the same entry before checking absent / ambiguous story, hidden inputs, forbidden writes, hook rewrites, zero allowance, cache hits, retry persistence and commit-time supersession. Use fake gateways and exact dispatch counts, without paid models. See the [advanced guide](./advanced.md#presentation-selectors) and [contract](../reference/plugins.md#presentation-runtimes).

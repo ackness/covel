@@ -1234,3 +1234,7 @@ Each card uses `reason` as its title, and it picks the answer control from `resu
 ## Manual performers and orchestration location
 
 Turn Policy declares Choose actors through the generic action catalogue in both composers. Its strict flat fields object requires one multiline actors string, avoiding unsupported arrays. Players and hosts may use it; spectators retain Advance. The framework recognises no bundled wire ID. Orchestration under Loaded Plugins groups the provider and three limits, linking to the provider's own settings for algorithm-specific fields. See [session orchestration settings](../builtin/features.md#session-orchestration-settings) for automatic resolution with one provider, selection with multiple providers, and clearing stale selections.
+
+## Presentation data and slot degradation
+
+UI slots consume committed owned presentation state. Missing public story, assets or allowance, and generation failures leave story and composer usable, degrading only the display. Presentation cannot publish UI proposals and adds no components or provider-selection controls. See [presentation runtimes](./plugins.md#presentation-runtimes).

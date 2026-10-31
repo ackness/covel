@@ -413,3 +413,7 @@ When a scan is incomplete: a session has more rows than the limit (for the media
 ## Tests
 
 The shared contract tests are in `packages/store/src/contract/media-store-contract.ts`. Current coverage: Memory, SQLite/local-fs, and PostgreSQL when `DATABASE_URL` points to a database that can be reached (`packages/store/tests/media-store.test.ts`).
+
+## Presentation media
+
+The presentation media facade reads reachable refs and refuses direct `put` / `ingestUrl`. Generation helpers retain the standard private writer, pins, claims and failure compensation; cache hits spend no dispatch allowance. Cached refs must also be publicly reachable in the source snapshot or generated during this invocation; a matching prompt cannot read the package's hidden cache. Stale or rejected results cannot publish display bindings; generated caches can remain reusable within this scope, and charges or bytes are not rolled back. See [presentation runtimes](./plugins.md#presentation-runtimes).
