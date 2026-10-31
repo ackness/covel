@@ -1483,3 +1483,9 @@ runtime 的终态：
 ## 插件视图的只读端口
 
 插件视图复用沙箱的 MessagePort：完整 `{ type: "state", value }` 在 `value.session` 中带会话投影，流式消息是 `{ type: "stream", seq, append }`。这不是新的 HTTP 或 SSE 端点。读取能力在首次挂载前取得玩家授权，绑定插件 ID 与 spec + HTML 内容哈希；撤销后关闭页面。既有页面 action handler 不变。投影、节流与授权规则统一见[插件视图](./ui-panels.md#插件视图)。
+
+## 委托的私有投影
+
+角色 `intent` 只留在编排方的实时内存对话里。内核按已解析提供方与工具调用 ID 记录来源，过滤子模型 trace、父方 delegate 参数/结果、持久工具记录和父方后续 `llm.request` 的对话副本；`/turns`、动作流及 trace API 读取过滤后的值。concealed 提供方的完整委托内容也如此。实时模型对话仍保留一一配对的工具调用和结果。完成工具直接转成输出时，普通角色只交付公开 segments，concealed 委托不交付内容。不会按任意业务 JSON 里的 `intent` 键猜测来源。
+
+角色失败或名额拒绝沿用 `subagent.failed`，不增加 actor 事件族，不为隔离失败发 `runtime.failed` 或执行错误。故事可以提交；独立操作被拒时仍只有既有的固定 `operation.failed` 提示。调用方故意把私密内容改写为正文不属于此结构化投影保证。

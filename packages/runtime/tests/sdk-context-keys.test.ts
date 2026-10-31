@@ -16,6 +16,7 @@ import type { TurnExecutorDeps } from "../src/turn-executor/turn-executor.js";
 // `satisfies` fails to compile when the SDK gains or loses a field.
 const SDK_CONTEXT_KEYS = {
   sessionId: "required",
+  historyFor: "required",
   turnId: "required",
   pluginId: "required",
   runtimeId: "required",

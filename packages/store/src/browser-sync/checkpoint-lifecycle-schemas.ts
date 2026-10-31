@@ -1,3 +1,7 @@
+import {
+  orchestrationSettingsSchema,
+  delegationSnapshotSchema,
+} from "@covel/shared";
 import { z } from "zod";
 import { characterSchemaRecordSchema, seatsSchema } from "@covel/shared";
 import {
@@ -68,13 +72,24 @@ const sessionState = z.looseObject({
 });
 const snapshotSession = sessionState.extend({
   loreOverride: z.string().optional(),
+  orchestration: orchestrationSettingsSchema.optional(),
 });
 export const session = sessionState.extend({
   id: nonEmptyString,
   worldId: z.string().optional(),
   createdAt: timestamp,
   updatedAt: timestamp,
-  metadata: jsonObject.optional(),
+  metadata: jsonObject
+    .superRefine((metadata, ctx) => {
+      if (metadata.orchestration === undefined) return;
+      const parsed = orchestrationSettingsSchema.safeParse(
+        metadata.orchestration,
+      );
+      if (!parsed.success)
+        for (const issue of parsed.error.issues)
+          ctx.addIssue({ ...issue, path: ["orchestration", ...issue.path] });
+    })
+    .optional(),
   embeddingModelId: z.number().nullable().optional(),
   embeddingLockedAt: timestamp.nullable().optional(),
 });
@@ -132,6 +147,7 @@ const suspensions = createdRow.extend({
   reason: z.string(),
   resumeSchema: jsonValue,
   pendingContinuation: z.looseObject({
+    delegation: delegationSnapshotSchema.optional(),
     messages: z.array(jsonValue),
     partialContent: z.string().optional(),
     toolCallsSoFar: z.array(jsonValue),

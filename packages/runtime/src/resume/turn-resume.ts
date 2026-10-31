@@ -1,3 +1,4 @@
+import { createDelegationBudget } from "../orchestration/delegation-budget.js";
 import { settleAgentLoop } from "../agent-loop/settle-agent-loop.js";
 import { loadLastPlayerInput } from "../turn-executor/session-state.js";
 import { reportRuntimeStarted } from "../trace/runtime-telemetry.js";
@@ -95,12 +96,29 @@ export async function resumeRuntimePipeline(
       : {}),
   };
 
+  const delegation =
+    deps.delegation ??
+    (await createDelegationBudget(
+      suspension.sessionId,
+      deps.store,
+      suspension.pendingContinuation.delegation,
+    ));
+  deps = {
+    ...deps,
+    delegation,
+    emitter: delegation.privacy.emitter(
+      deps.emitter,
+      options?.activeRuntimes ?? [manifest],
+    ),
+  };
+
   // A resumed runtime runs outside `runTurnPipeline`; it gets its own
   // sub-agent runner over the session's runtimes.
   if (!deps.subagents && options?.activeRuntimes)
     deps = {
       ...deps,
       subagents: createSubagentRunner({
+        delegation,
         activeRuntimes: options.activeRuntimes,
       }),
     };

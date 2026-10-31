@@ -721,3 +721,172 @@ describe("a plugin tool that calls a write service", () => {
     }
   });
 });
+
+describe("character actor operation ownership", () => {
+  it.each([
+    "success",
+    "invalid-output",
+    "provider-failure",
+    "parent-failure",
+    "commit-rejection",
+  ])("settles staged actor writes with the story: %s", async (mode) => {
+    const { services, deps, toolExecutor, store, coins } = await fixture();
+    services.register("bank", payService());
+    await store.upsertCharacter({
+      id: "mara",
+      name: "Mara",
+      sessionId: SESSION,
+      type: "npc",
+      version: 1,
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    });
+    const actor: RuntimeManifest = {
+      name: "helper/actor",
+      pluginId: "helper",
+      description: "Character",
+      runtimeType: "agent",
+      outputKind: "system",
+      subagentOnly: true,
+      outputContract: "character-actor@1",
+      trigger: { type: "manual" },
+      tools: { services: [{ contract: CONTRACT, name: "bank-pay" }] },
+      maxRetries: 0,
+    };
+    const main: RuntimeManifest = {
+      name: "caller/story",
+      pluginId: "caller",
+      description: "Story",
+      runtimeType: "function",
+      outputKind: "story",
+      stage: "narrative",
+      maxRetries: 0,
+    };
+    const { llm } = scripted({
+      [HELPER_MARK]: (index) => {
+        if (index === 0 || (mode === "commit-rejection" && index === 2))
+          return call(
+            "bank-pay",
+            { amount: index === 0 ? 4 : 2 },
+            `pay-${index}`,
+          );
+        if (mode === "provider-failure")
+          throw new Error("Actor failed after staging");
+        return text(
+          JSON.stringify(
+            mode === "invalid-output"
+              ? {
+                  segments: [
+                    {
+                      kind: "narration",
+                      speaker: "Someone else",
+                      text: "Invalid.",
+                    },
+                  ],
+                }
+              : {
+                  segments: [{ kind: "dialogue", text: "Paid." }],
+                  intent: "PRIVATE-ACTOR-OPERATION",
+                },
+          ),
+        );
+      },
+    });
+    try {
+      const execution = await executeTurn(input, [main, actor], {
+        ...deps(llm),
+        loadRuntime: async (manifest) =>
+          manifest === actor
+            ? { manifest, promptTemplate: HELPER_MARK }
+            : {
+                manifest,
+                promptTemplate: "",
+                handler: async (ctx) => {
+                  const child = await ctx.agents!.run({
+                    target: { contract: "character-actor@1" },
+                    characterId: "mara",
+                    brief: "Pay four coins.",
+                  });
+                  expect(child.ok).toBe(
+                    mode !== "invalid-output" && mode !== "provider-failure",
+                  );
+                  expect(JSON.stringify(child)).not.toContain(
+                    "operationWrites",
+                  );
+                  if (mode === "invalid-output")
+                    expect(child).toMatchObject({
+                      stopReason: "invalid-output",
+                    });
+                  if (mode === "commit-rejection")
+                    expect(
+                      (
+                        await ctx.agents!.run({
+                          target: { contract: "character-actor@1" },
+                          characterId: "mara",
+                          brief: "Pay two coins independently.",
+                        })
+                      ).ok,
+                    ).toBe(true);
+                  if (mode === "parent-failure")
+                    throw new Error("Parent failed after actor succeeded");
+                  return {
+                    outcome: "success",
+                    value: { narrativeOutput: "The shop remains open." },
+                  };
+                },
+              },
+      });
+      const outcome = await commitExecution({
+        store,
+        execution,
+        completion: { kind: "turn", turnId: input.turnId, durationMs: 0 },
+        ...(mode === "commit-rejection"
+          ? {
+              proposalGuard: (proposal) =>
+                proposal.type === "plugin.data.update" &&
+                proposal.payload.ops.some(
+                  (op) => op.op === "inc" && op.by === -4,
+                )
+                  ? "Payment declined"
+                  : undefined,
+            }
+          : {}),
+      });
+      const operations = outcome.operations;
+      expect(operations).toHaveLength(mode === "commit-rejection" ? 2 : 1);
+      if (mode === "commit-rejection")
+        expect(operations[1]?.status).toBe("committed");
+      expect(operations[0]?.status).toBe(
+        mode === "success"
+          ? "committed"
+          : mode === "commit-rejection"
+            ? "failed"
+            : "discarded",
+      );
+      expect(await coins()).toBe(
+        mode === "success" ? 6 : mode === "commit-rejection" ? 8 : 10,
+      );
+      if (mode !== "parent-failure") {
+        expect(outcome.status).toBe("committed");
+        expect(
+          (await store.listMessages(SESSION)).some(
+            (message) => message.content === "The shop remains open.",
+          ),
+        ).toBe(true);
+      }
+      const saved = await store.listTurnResults(SESSION);
+      expect(JSON.stringify(saved)).not.toContain("PRIVATE-ACTOR-OPERATION");
+      expect(
+        saved
+          .flatMap((turn) =>
+            (turn.runtimeResults as RuntimeResult[]).flatMap(
+              (result) => result.operations ?? [],
+            ),
+          )
+          .some((op) => op.status === "staged"),
+      ).toBe(false);
+    } finally {
+      await toolExecutor.close();
+    }
+  });
+});

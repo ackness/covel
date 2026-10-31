@@ -1,3 +1,8 @@
+import {
+  frameworkContractSchemas,
+  CHARACTER_ACTOR_CONTRACT,
+} from "@covel/shared";
+import { isDeepStrictEqual } from "node:util";
 import { datasetKeyIssue, datasetSchemaIssues } from "./dataset-rules.js";
 import {
   actionKindDeclarationIssues,
@@ -356,10 +361,22 @@ export async function loadPluginDefinition(
       schemaPath,
       "Contract schema path traversal rejected",
     );
-    contractSchemas[contract] = await readSchemaFile(
+    const declaredSchema = await readSchemaFile(
       schemaPath,
       `contracts.${contract}.schema`,
     );
+    const canonical = frameworkContractSchemas[contract];
+    const { $id: _id, title: _title, ...body } = declaredSchema;
+    const {
+      $id: _canonicalId,
+      title: _canonicalTitle,
+      ...canonicalBody
+    } = canonical ?? {};
+    if (canonical && !isDeepStrictEqual(body, canonicalBody))
+      throw new Error(
+        `Contract ${contract} is framework-owned and cannot be shadowed`,
+      );
+    contractSchemas[contract] = canonical ?? declaredSchema;
   }
   for (const [namespace, declaration] of Object.entries(
     parsedPackage.plugin.contributes?.data ?? {},
@@ -747,6 +764,7 @@ export async function loadRuntime(
   const contracts = {
     ...resolvedContracts,
     ...snapshot.packageManifest?.contractSchemas,
+    ...frameworkContractSchemas,
   };
   const parsed = snapshot.manifests.find(
     (record) => record.manifest.name === runtimeName,
@@ -764,7 +782,10 @@ export async function loadRuntime(
   const outputSchema = await loadOutputSchema(
     runtimeDir,
     discovery.rootPath,
-    parsed.manifest.output?.schema,
+    parsed.manifest.output?.schema ??
+      (parsed.manifest.outputContract === CHARACTER_ACTOR_CONTRACT
+        ? `contract:${CHARACTER_ACTOR_CONTRACT}`
+        : undefined),
     contracts,
   );
   const outputContractSchema = parsed.manifest.outputContract

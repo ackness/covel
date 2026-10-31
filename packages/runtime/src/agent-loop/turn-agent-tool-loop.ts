@@ -408,7 +408,11 @@ async function runAgentToolLoopWithinBudget(
     eventBus: deps.eventBus,
     emitter: deps.emitter,
   };
+  const projectToolRecord = (record: import("@covel/shared").ToolCallRecord) =>
+    deps.delegation?.privacy.record(record) ?? record;
   const toolCallContext = (): ToolCallContext => ({
+    delegation: deps.delegation,
+    playerActions: input.actions ?? [],
     sessionId: input.sessionId,
     turnId: input.turnId,
     pluginId: manifest.pluginId,
@@ -967,23 +971,28 @@ async function runAgentToolLoopWithinBudget(
                 success: true,
               });
               stepEvents.toolCall(effectiveTc.name, true);
-              collectedToolCalls.push({
-                toolCallId: effectiveTc.id,
-                toolName: effectiveTc.name,
-                pluginId: manifest.pluginId,
-                runtimeId: manifest.name,
-                turnId: input.turnId,
-                input: {
-                  query: toJsonValueOrDiagnostic(
-                    search.parsedResult.query,
-                    "input.query",
+              collectedToolCalls.push(
+                projectToolRecord({
+                  toolCallId: effectiveTc.id,
+                  toolName: effectiveTc.name,
+                  pluginId: manifest.pluginId,
+                  runtimeId: manifest.name,
+                  turnId: input.turnId,
+                  input: {
+                    query: toJsonValueOrDiagnostic(
+                      search.parsedResult.query,
+                      "input.query",
+                    ),
+                  },
+                  output: toJsonValueOrDiagnostic(
+                    search.parsedResult,
+                    "output",
                   ),
-                },
-                output: toJsonValueOrDiagnostic(search.parsedResult, "output"),
-                durationMs: Date.now() - tcStart,
-                approvalStatus: "auto-allowed",
-                timestamp: new Date().toISOString(),
-              });
+                  durationMs: Date.now() - tcStart,
+                  approvalStatus: "auto-allowed",
+                  timestamp: new Date().toISOString(),
+                }),
+              );
               continue;
             }
 
@@ -1100,9 +1109,11 @@ async function runAgentToolLoopWithinBudget(
                 if (completeAfterTools.has(effectiveTc.name)) {
                   successfulCompletingToolsInResponse++;
                   if (isRecord(toolResult.parsedResult)) {
-                    completingToolOutputInResponse = {
-                      ...toolResult.parsedResult,
-                    };
+                    completingToolOutputInResponse =
+                      deps.delegation?.privacy.completion(
+                        effectiveTc.id,
+                        toolResult.parsedResult,
+                      ) ?? { ...toolResult.parsedResult };
                   }
                 }
               } else if (!toolResult.refused) failedBusinessToolsInResponse++;
@@ -1118,21 +1129,23 @@ async function runAgentToolLoopWithinBudget(
             } catch {
               /* keep empty */
             }
-            collectedToolCalls.push({
-              toolCallId: effectiveTc.id,
-              toolName: effectiveTc.name,
-              pluginId: manifest.pluginId,
-              runtimeId: manifest.name,
-              turnId: input.turnId,
-              input: toJsonValueOrDiagnostic(parsedInput, "input"),
-              output: toJsonValueOrDiagnostic(
-                toolResult.parsedResult,
-                "output",
-              ),
-              durationMs,
-              approvalStatus: toolResult.approvalStatus ?? "auto-allowed",
-              timestamp: new Date().toISOString(),
-            });
+            collectedToolCalls.push(
+              projectToolRecord({
+                toolCallId: effectiveTc.id,
+                toolName: effectiveTc.name,
+                pluginId: manifest.pluginId,
+                runtimeId: manifest.name,
+                turnId: input.turnId,
+                input: toJsonValueOrDiagnostic(parsedInput, "input"),
+                output: toJsonValueOrDiagnostic(
+                  toolResult.parsedResult,
+                  "output",
+                ),
+                durationMs,
+                approvalStatus: toolResult.approvalStatus ?? "auto-allowed",
+                timestamp: new Date().toISOString(),
+              }),
+            );
 
             messages.push(
               buildToolResultMessage({
@@ -1197,7 +1210,7 @@ async function runAgentToolLoopWithinBudget(
           (c) => c.toolName !== "runtime-done",
         );
         collectedToolCalls.length = 0;
-        collectedToolCalls.push(...businessCalls);
+        collectedToolCalls.push(...businessCalls.map(projectToolRecord));
         // The predicate is the story output contract; the correction is the
         // profile's fallback.
         if (

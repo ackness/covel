@@ -1049,7 +1049,11 @@ describe("delegate result envelopes", () => {
       const { llm } = routedLLM({});
       const executor = withSubagentDelegate(
         inner,
-        { inFlight: 0, run: async () => answer },
+        {
+          inFlight: 0,
+          privateTargetKind: () => undefined,
+          run: async () => answer,
+        },
         {
           caller: {
             pluginId: "director",

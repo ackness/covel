@@ -343,3 +343,15 @@ type DimensionSnapshot = Readonly<Record<string, DimensionSnapshotEntry>>;
 
 > [!NOTE]
 > 只有 `plugin_id` 一列、没有所有者的旧资料库表不会自动升级。开发环境的处理办法见[迁移说明](./env-registry.md#plugin-extension-development-data)。
+
+<a id="witnessed-history"></a>
+
+## 角色亲历的故事
+
+`await ctx.historyFor(characterId, {limit: 20})` 返回 `{messages: [{role: "assistant", content, segments}], truncated}`。函数、guard 和插件工具都可读取；角色委托自动使用它。`segments` 只有 `{kind, speaker?, text}`，content 用同一故事文本渲染器生成，没有存储 ID、时间戳、附件或原始 metadata。
+
+一次执行懒加载并冻结最近 200 条 display messages，并发调用共享一次读取。只匹配已提交的 assistant story，且 metadata 的 `presentCharacterIds` 合法并精确包含角色 ID。一个消息匹配后保留该消息所有段落；不按发言者再删段。缺失、空、错误的 presence 不推断；未知或歧义的原始名字也不会凭空增加 ID。玩家行动、direct/system/tool 消息、压缩摘要、重写后的历史和当前未提交故事都不在来源里。规范历史压缩不删除 display-message 来源。
+
+先匹配再取最近的消息，按时间顺序返回。limit 默认 20，必须是 1–50 的整数；总文本最多 16,000 字符，只保留最近的完整消息/段落，不切 JSON 或代理对。扫描满 200 条、消息数或文本被裁减时 `truncated: true`。不存在于当前 World Model 的 ID 返回 `not-found`；已知角色但没有记录通常得到空数组。
+
+恢复沿用源执行的历史快照，不看到期间提交的新场景；新的根执行重新捕获。分叉只包含快照边界以前复制的消息。这个 API 只规定宿主提供哪段历史，不能保证任意简报、字段、已批准工具或服务不会透露其他知识。

@@ -1,0 +1,43 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "properties": {
+    "actors": {
+      "maxItems": 32,
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "characterId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "reason": {
+            "type": "string",
+            "maxLength": 500
+          },
+          "instruction": {
+            "type": "string",
+            "maxLength": 2000
+          }
+        },
+        "required": ["characterId"],
+        "additionalProperties": false
+      }
+    },
+    "order": {
+      "type": "string",
+      "enum": ["sequential", "parallel"]
+    },
+    "narrator": {
+      "type": "string",
+      "enum": ["before", "after", "none"]
+    },
+    "yieldHint": {
+      "type": "string",
+      "enum": ["user", "continue"]
+    }
+  },
+  "required": ["actors", "order", "narrator", "yieldHint"],
+  "additionalProperties": false
+}

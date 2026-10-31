@@ -331,6 +331,7 @@ A service has one of two access levels: a **read service** (`access: read`, the 
 | `gateway` | Optional model access without the caller's key material. |
 | `utils` | Optional HTTP helpers that inherit this call's signal. |
 | `services` | Discover and call other public services. |
+| `random` | Provider-scoped deterministic randomness, stream `service:<name>`. |
 | `sessionId` | The current session. |
 | `locale` | The session content language; optional when the host supplies none. |
 | `messages` | The provider's own message catalog, as in a function runtime; absent when it has none. `translate(ctx, text)` selects the session content language; `labelText(ctx, text)` retains all languages for the UI to choose. Nested services use their own provider's catalog. |
@@ -390,7 +391,7 @@ The capability snapshot records a write service as `"<contract> (write)"`: a pac
 
 #### What a write service can access
 
-A write service's context is a read service's context without `gateway` and `utils`, plus three fields:
+A write service inherits the read service's `random`, removes `gateway` and `utils`, replaces `pluginData` with a writer, and adds `turnId`:
 
 <!-- prettier-ignore -->
 | Field | Meaning |
@@ -828,3 +829,37 @@ A host caller can pass `onProviderError` in the scope of `createExecution`. When
 - A provider that is not activated or not approved is excluded during discovery, so it does not count as a failed call.
 - A call that fails admission after it was sent keeps its failure event.
 - These statistics only describe the current window. They change as old records are removed. They are not cumulative usage.
+
+<a id="orchestration-contracts"></a>
+
+## Turn policy and character actor contracts
+
+The framework owns the schemas; plugins supply behavior. `turn-policy@1` is a read service and `character-actor@1` is a delegated agent runtime. Neither is a kernel extension point. Stories remain runnable without either provider: do not put them in a story package's `requires`, required contract inputs or `needs`.
+
+The SDK exports `TURN_POLICY_CONTRACT`, `CHARACTER_ACTOR_CONTRACT`, and `turnPolicyRequestSchema`, `turnPolicyInputSchema`, `turnPolicyOutputSchema`, `characterActorInputSchema`, `characterActorOutputSchema`. Matching `…JsonSchema()` functions export draft-7 JSON Schema. The types are `TurnPolicyRequest`, `TurnPolicyInput`, `TurnPolicyOutput`, `CharacterActorInput`, `CharacterActorOutput`. `@covel/shared` re-exports the same schemas. Objects are strict and reject extra fields.
+
+<!-- prettier-ignore -->
+| Contract value | Fields and bounds |
+| --- | --- |
+| Policy request | `actions: TurnAction[]` uses resolved-action validation and submission bounds; `present: {characterId, name}[]` has at most 32 entries with names up to 80 characters; `recentSegments: StorySegment[]` has at most 60 segments, without `speakerId`; optional `limits` |
+| Policy handler input | The request with required `limits: {maxActors, maxSubagentCalls}`. The host supplies remaining new-character slots and invocations; callers can only narrow them |
+| Policy output | `actors: {characterId, reason?, instruction?}[]` has at most 32 entries and may be empty; `reason` up to 500 characters, `instruction` up to 2,000; required `order: sequential / parallel`, `narrator: before / after / none`, `yieldHint: user / continue` |
+| Actor input | `characterId`, `brief` of 1–20,000 characters, optional `instruction` up to 2,000 characters |
+| Actor output | 1–8 `{kind: dialogue / action, text}` segments, each 1–4,000 characters; optional `intent` up to 2,000. No speaker, narration or effects |
+
+Actors must be unique IDs from `present`; `validateTurnPolicyOutput(input, output)` supplies the same contextual validation. The host enforces canonical input/output even with permissive provider parsers, then clamps a valid plan in provider order. An admitted character speaking again consumes only a call. With no new-character slots, new characters are skipped while later admitted characters remain eligible. Planning reserves nothing; actual delegation may still be refused. The three advice fields are interpreted by the orchestrator, not by kernel scheduling.
+
+```ts
+const plan = await ctx.services.call({
+  contract: "turn-policy@1",
+  input: { actions: ctx.playerActions, present, recentSegments: [] },
+});
+```
+
+`services.call` accepts the complete `{pluginId, name, contract, input}` tuple or `{contract, input}`, never a partial target. Zero or multiple candidates return `unavailable`, with an ambiguity explanation for multiple candidates. The policy contract also honors the session's exact `{pluginId, name}` choice. Two services in one package need a choice too. A missing, disabled, revoked or fault-paused selection never switches to an alternate; `discover` still returns a list. Selection and registrations freeze at execution admission; invocation still checks live authorization. Nested services inherit the binding, and edits apply to the next execution.
+
+Model imports accept only `{present: string[], recentSegments}`. The host resolves names or aliases, adds the execution's actions and remaining allowances, and returns `actors[].character` names. Neither model arguments nor results carry canonical character IDs. Unknown or ambiguous names fail before calling the service; raw IDs are not accepted as names. Session choice precedes `modelFacing`: selecting a code-only service leaves the import absent instead of switching. Policy tool annotations are `readOnly: true`, `stagesWrites: false`, `idempotent: false`, `concurrencySafe: false`.
+
+Read services also receive provider-scoped `ctx.random`, with stream `service:<name>` and the existing seed rules. A director can use only the gateway already lent by its caller path: function calls may lend one; tools and agent imports receive no gateway/utils. Without it the service returns unavailable and the orchestrator writes its fallback. Registration and declarations must still agree; a policy cannot be a write service, runtime output or extension handler.
+
+See [character delegation](./plugins.md#character-orchestration) and the [composition guide](../plugins/advanced.md#orchestration-example).

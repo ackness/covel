@@ -6,7 +6,9 @@ This page explains how to declare and register a provider, how the kernel combin
 
 For requests or follow-up work between packages, choose a service or event from the [communication guide](./plugin-extensions.md#choose-a-way-to-communicate); [nested calls with `ctx.recursiveCall`](./plugins.md#nested-calls-ctxrecursivecall) stay within one package. Function runtimes and tools call services, and an agent can import a model-facing service as a tool; see [How tools and agents use services](./plugin-extensions.md#how-tools-and-agents-use-services).
 
-To have another agent answer a brief, no extension point is needed: the provider is an agent runtime that declares `schedule.subagentOnly` and `io.output.contract`, and the caller runs it as a [sub-agent](./plugins.md#sub-agents) with `ctx.agents.run` or the `delegate` tool. A sub-agent runs inside the caller's execution, can be found by contract in another package, and returns output only, with no writes.
+To have another agent answer a brief, no extension point is needed: the provider is an agent runtime that declares `schedule.subagentOnly` and `io.output.contract`, and the caller runs it as a [sub-agent](./plugins.md#sub-agents) with `ctx.agents.run` or the `delegate` tool. A sub-agent runs inside the caller's execution, can be found by contract in another package, and returns output; when allowed, it can stage write-service operations that commit with the caller.
+
+Framework schema ownership does not imply a kernel extension point. [`turn-policy@1` and `character-actor@1`](./plugin-extensions.md#orchestration-contracts) are optional service/runtime contracts, without the extension-point exemption for story dependencies.
 
 ## Declaring and registering
 

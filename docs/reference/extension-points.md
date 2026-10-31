@@ -6,7 +6,9 @@
 
 包与包之间需要请求结果或触发工作时，按[通信方式](./plugin-extensions.md#选择通信方式)选择服务或事件；`ctx.recursiveCall` 的[嵌套调用](./plugins.md#嵌套调用ctxrecursivecall)留在本包内。服务可以由函数 runtime、工具调用，标记为给模型用的服务还能被 agent 导入成工具，见[工具和 agent 怎样用服务](./plugin-extensions.md#工具和-agent-怎样用服务)。
 
-要让另一个 agent 回答一段简报时，不需要扩展点：提供方是声明了 `schedule.subagentOnly` 和 `io.output.contract` 的 agent runtime，调用方用 `ctx.agents.run` 或 `delegate` 工具把它作为[子 agent](./plugins.md#子-agent) 运行。子 agent 在调用方的执行里运行，按契约可以找到其他包的提供方，只交回输出，不写入。
+要让另一个 agent 回答一段简报时，不需要扩展点：提供方是声明了 `schedule.subagentOnly` 和 `io.output.contract` 的 agent runtime，调用方用 `ctx.agents.run` 或 `delegate` 工具把它作为[子 agent](./plugins.md#子-agent) 运行。子 agent 在调用方的执行里运行，按契约可以找到其他包的提供方，交回输出；允许时可通过写服务暂存操作，随调用方一起提交。
+
+框架拥有 schema 不代表内核扩展点：[`turn-policy@1` 与 `character-actor@1`](./plugin-extensions.md#orchestration-contracts) 是可选的服务/runtime 契约，不享有故事依赖的扩展点豁免。
 
 ## 声明与注册
 

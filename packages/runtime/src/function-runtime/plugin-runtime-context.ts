@@ -1,4 +1,5 @@
 import type { UpstreamWorldWrite } from "./upstream-world-model.js";
+import { CharacterHistoryReader } from "../orchestration/character-history.js";
 /**
  * The context a function handler and an agent guard receive. Both get the
  * same fields under the same rules, whatever the plugin's source: a bundled
@@ -476,6 +477,7 @@ export async function createPluginRuntimeContext({
                 depth: 0,
               },
               request,
+              world,
               input,
               deps,
               hookPipeline,
@@ -549,6 +551,7 @@ export async function createPluginRuntimeContext({
       : undefined,
   };
   const serviceClient = deps.services?.createClient({
+    delegation: deps.delegation,
     onSettled: deps.serviceOutcomes,
     emitter: deps.emitter,
     sessionId: input.sessionId,
@@ -575,7 +578,18 @@ export async function createPluginRuntimeContext({
   // deadline signal threaded into every primitive (or worker isolation) —
   // upgrade path if late in-flight writes show up in practice.
 
+  const history =
+    deps.delegation?.history ??
+    new CharacterHistoryReader(deps.store, input.sessionId);
   const context: FunctionHandlerContext = {
+    historyFor: async (characterId, options) => {
+      handlerAbort.signal.throwIfAborted();
+      if (isRevoked()) throw new Error("history capability is revoked");
+      const result = await history.read(characterId, world, options);
+      handlerAbort.signal.throwIfAborted();
+      if (isRevoked()) throw new Error("history capability is revoked");
+      return result;
+    },
     sessionId: input.sessionId,
     turnId: input.turnId,
     pluginId: manifest.pluginId,

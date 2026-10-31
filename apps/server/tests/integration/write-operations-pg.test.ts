@@ -27,6 +27,9 @@ import {
   commitExecution,
   executeTurn,
   PluginServiceRegistry,
+  createToolExecutor,
+  resumeSuspendedRuntime,
+  type ExecutionDeps,
 } from "@covel/runtime";
 import {
   createIsolatedPgDatabase,
@@ -374,5 +377,246 @@ describe.skipIf(!isolatedUrl)("write-service operations on real PG", () => {
       "discarded",
       "failed",
     ]);
+  });
+  async function actorSession(id: string) {
+    await store.createSession({
+      id,
+      status: "active",
+      phase: "playing",
+      locale: "en-US",
+      activePlugins: PLUGINS,
+      setupRuntimes: {},
+      seats: [],
+      completedPlayerTurns: 0,
+      metadata: { orchestration: { maxSubagentCalls: 2 } },
+      createdAt: AT,
+      updatedAt: AT,
+    });
+    await store.upsertCharacter({
+      id: `${id}-mara`,
+      name: "Mara",
+      sessionId: id,
+      type: "npc",
+      version: 1,
+      createdAt: AT,
+      updatedAt: AT,
+    });
+  }
+  const actor: RuntimeManifest = {
+    name: "shop/actor",
+    pluginId: "shop",
+    description: "Character",
+    runtimeType: "agent",
+    outputKind: "system",
+    trigger: { type: "manual" },
+    subagentOnly: true,
+    outputContract: "character-actor@1",
+  };
+  const actorAnswer = () => ({
+    content: JSON.stringify({
+      segments: [{ kind: "dialogue", text: "I will pay." }],
+      intent: "PRIVATE-ACTOR-INTENT",
+    }),
+    toolCalls: [],
+    finishReason: "stop" as const,
+    usage: { inputTokens: 1, outputTokens: 1 },
+  });
+
+  it("settles a rejected character operation independently of its committed story", async () => {
+    const session = "actor-operation";
+    await actorSession(session);
+    await setGold(session, 10);
+    const services = bankServices();
+    services.register("bank", {
+      name: "pay",
+      contract: "actor.pay@1",
+      access: "write",
+      modelFacing: true,
+      description: "Pay four coins",
+      input: z.object({}),
+      output: z.unknown(),
+      handler: async (_input, ctx) => {
+        await ctx.pluginData.update("wallet", "gold", [
+          { op: "inc", path: "/amount", by: -4, min: 0 },
+        ]);
+        return { paid: 4 };
+      },
+    });
+    const provider = {
+      ...actor,
+      tools: { services: [{ contract: "actor.pay@1", name: "pay" }] },
+    };
+    const main = fn("narrator", "story", {
+      stage: "narrative",
+      outputKind: "story",
+    });
+    let calls = 0;
+    const toolExecutor = createToolExecutor({
+      store,
+      findTool: () => undefined,
+    });
+    try {
+      const execution = await executeTurn(
+        {
+          sessionId: session,
+          turnId: `${session}-turn`,
+          playerMessage: "Pay",
+          origin: "player",
+        },
+        [main, provider],
+        {
+          store,
+          services,
+          toolExecutor,
+          llm: {
+            generate: async () =>
+              calls++ === 0
+                ? {
+                    content: null,
+                    toolCalls: [
+                      { id: "payment", name: "pay", arguments: "{}" },
+                    ],
+                    finishReason: "tool_calls",
+                    usage: { inputTokens: 1, outputTokens: 1 },
+                  }
+                : actorAnswer(),
+          },
+          loadRuntime: async (manifest) => ({
+            manifest,
+            promptTemplate: "Act",
+            ...(manifest === main
+              ? {
+                  handler: async (ctx) => {
+                    expect(
+                      (
+                        await ctx.agents!.run({
+                          target: { contract: "character-actor@1" },
+                          characterId: `${session}-mara`,
+                          brief: "Pay four coins",
+                        })
+                      ).ok,
+                    ).toBe(true);
+                    return {
+                      outcome: "success" as const,
+                      value: { narrativeOutput: "The shop remains open." },
+                    };
+                  },
+                }
+              : {}),
+          }),
+        },
+      );
+      await setGold(session, 2);
+      const outcome = await commitExecution({
+        store,
+        execution,
+        completion: { kind: "turn", turnId: `${session}-turn`, durationMs: 0 },
+      });
+      expect(outcome.status).toBe("committed");
+      expect(outcome.operations).toMatchObject([{ status: "failed" }]);
+      expect(
+        (await store.getPluginData(session, "bank", "wallet", "gold"))?.value,
+      ).toEqual({ amount: 2 });
+      expect((await store.listMessages(session))[0]?.content).toBe(
+        "The shop remains open.",
+      );
+      expect(
+        JSON.stringify(await store.listTurnResults(session)),
+      ).not.toContain("PRIVATE-ACTOR-INTENT");
+    } finally {
+      await toolExecutor.close();
+    }
+  });
+
+  it("retains consumed delegation JSON across claimed resume and resuspension", async () => {
+    const session = "actor-continuation";
+    await actorSession(session);
+    const main = fn("shop", "ask", { stage: "narrative" });
+    let finish = false;
+    let starts = 0;
+    const accepted: boolean[] = [];
+    const deps = (): ExecutionDeps => ({
+      store,
+      llm: {
+        generate: async () => {
+          starts++;
+          return actorAnswer();
+        },
+      },
+      loadRuntime: async (manifest) => ({
+        manifest,
+        promptTemplate: "Act",
+        ...(manifest === main
+          ? {
+              handler: async (ctx) => {
+                accepted.push(
+                  (
+                    await ctx.agents!.run({
+                      target: { contract: "character-actor@1" },
+                      characterId: `${session}-mara`,
+                      brief: "Respond",
+                    })
+                  ).ok,
+                );
+                return finish
+                  ? { outcome: "success" as const, value: {} }
+                  : {
+                      outcome: "suspended" as const,
+                      reason: "Continue later",
+                      resumeSchema: { type: "object" },
+                    };
+              },
+            }
+          : {}),
+      }),
+    });
+    const first = await executeTurn(
+      {
+        sessionId: session,
+        turnId: `${session}-turn`,
+        playerMessage: "Ask",
+        origin: "player",
+      },
+      [main, actor],
+      deps(),
+    );
+    await commitExecution({
+      store,
+      execution: first,
+      completion: { kind: "turn", turnId: `${session}-turn`, durationMs: 0 },
+    });
+    for (const final of [false, true]) {
+      finish = final;
+      const row = (await store.listSuspensions(session)).find(
+        (record) => !record.resolvedAt,
+      )!;
+      expect(row.pendingContinuation.delegation?.calls).toBe(final ? 2 : 1);
+      const claim = (await store.claimSuspension(row.id))!;
+      const resumed = await resumeSuspendedRuntime(
+        { ...row, resolvedAt: claim },
+        {},
+        main,
+        deps(),
+        { activeRuntimes: [main, actor] },
+      );
+      expect((await store.getSuspension(row.id))?.resolvedAt).toBe(claim);
+      expect(
+        (await store.getSuspension(row.id))?.pendingContinuation.delegation
+          ?.calls,
+      ).toBe(2);
+      await commitExecution({
+        store,
+        execution: resumed,
+        completion: {
+          kind: "resume",
+          turnId: row.turnId,
+          suspensionId: row.id,
+          pluginId: main.pluginId,
+          runtimeId: main.name,
+        },
+      });
+    }
+    expect(accepted).toEqual([true, true, false]);
+    expect(starts).toBe(2);
   });
 });

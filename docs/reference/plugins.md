@@ -672,11 +672,11 @@ const result = await ctx.agents?.run({
 
 运行时的规则：
 
-- **独立的对话**：子 agent 的提示词是提供方自己的正文，加上框架的完成说明，再加简报。看不到会话历史，也看不到调用方的对话。
+- **独立的对话**：子 agent 的提示词是提供方自己的正文，加上框架的完成说明，再加简报。看不到调用方的对话；通用子 agent 没有会话历史，角色契约由框架加入亲历历史（见[角色委托](#character-orchestration)）。
 - **只读工具**：提供方 `agent.tools` 里没有 `readOnly` 注解的工具（插件工具、数据集的 `-upsert` / `-update` 这类写入工具）、`suspend` 和 `delegate` 都被拿掉。声明了却没注册的插件工具仍按原规则让这次运行失败。数据集工具只保留 `-get` / `-list`。导入的服务工具保留，写服务的导入也保留：子 agent 以自己的身份调用，暂存的操作挂在委托它的 run 上，子 agent 失败时撤回。
 - **循环 profile**：没写 `agent.loop.profile` 时用 `actor`，不流式显示，也不读玩家插话。
 - **模型**：用提供方自己声明的模型用途。会话的 `runtimeModelOverrides` 按提供方的 runtimeId 生效，挂起后恢复的运行里也一样；调用方的覆盖和请求里的故事模型覆盖都不生效。
-- **上限**：一次执行最多同时运行 8 个子 agent，嵌套执行也算在内；子 agent 不能再调用子 agent（深度上限 1）。超过上限的调用立刻得到 `unavailable`，不排队。
+- **上限**：一次执行最多同时运行 8 个子 agent，嵌套执行也算在内；子 agent 不能再调用子 agent（深度上限 1）。另有会话设置的累计角色与调用上限，见[执行名额](#character-orchestration)。超过上限的调用立刻得到 `unavailable`，不排队。
 - **取消**：调用方被取消、超时或运行结束，子 agent 跟着停下，结果是 `cancelled`。handler 没有等待的子 agent，runtime 收尾前会等它结束。
 - **只交回输出**：输出按提供方的 `io.output.schema` 和契约 schema 检查，没通过算 `internal`。Hook 中的 `PreRuntime`、`PostRuntime` 和 `PostContextAssembly` 不为子 agent 触发；循环里的 `PreLLMCall`、`PreStep`、`PreToolUse` 和 `PostToolUse` 照常触发，`ctx.runtimeId` 是子 agent 的。
 - **trace**：子 agent 的每个事件都带 `subagentCallId`、`parentCallId` 和 `parentRuntimeId`，另有 `subagent.started` / `completed` / `failed`（见[协议](./protocol.md#子-agent-事件)）。`io.concealed` 的提供方和顶层运行一样隐去内容。
@@ -1375,3 +1375,50 @@ contributes:
 - `__kernel:<subsystem>` 是另一种 owner 分区，插件绑定的读取接口访问不到它。
 
 完整清单和读取权限见[存储架构](../internals/storage.md#plugin-data-ownership-and-reserved-names)。
+
+<a id="character-orchestration"></a>
+
+## 角色委托与执行名额
+
+一个角色提供方的 `RUNTIME.md` 可以只写：
+
+```yaml
+---
+schedule:
+  subagentOnly: true
+io:
+  output:
+    contract: character-actor@1
+---
+Play the selected character using the supplied profile and witnessed history.
+```
+
+省略 `function` 表示 agent；`subagentOnly` 推导 manual 触发，默认 system 可见性。省略输出 schema 时，加载器使用框架 schema；显式 `schema: contract:character-actor@1` 也可以。文件 schema 可以收窄输出，但不能绕过规范校验。包不能发布不同的同名契约 schema。
+
+```ts
+const reply = await ctx.agents.run({
+  target: { contract: "character-actor@1" },
+  characterId: selected.id,
+  brief: "Respond to the visitor at the gate.",
+  instruction: "Keep the reply short.",
+});
+```
+
+`characterId` 只供代码路由，`instruction` 是可选的补充简报。按同包 `runtimeId` 找到角色提供方也执行相同校验。角色请求拒绝 `data`，其他契约拒绝这两个角色专用字段。角色必须存在于调用方当前的 `ctx.world`；错误请求不消耗调用名额。
+
+子模型只收到所选角色的 name/aliases/description/fields、[亲历故事](./world-model.md#witnessed-history)、调用方简报和 instruction，另有提供方提示词和框架完成契约。组装后的简报最多 40,000 字符，先减少最旧历史，必要时省略过大的档案字段；原始简报超限直接拒绝。会话内容语言与提供方自己的模型覆盖不变。已声明的读取工具和写服务仍保留，可能提供额外知识；这不是服务端代码沙箱。
+
+角色输出走普通校验和修复流程。修复后仍不合法时返回 `internal` / `stopReason: invalid-output`，丢弃子调用暂存操作。成功结果只回到编排方，不产生独立故事提交单元。编排方按策略顺序组合成功片段、补上 speaker 名字；`intent` 仅供本次编排使用，不自动进入故事或记忆。缺策略、缺角色、角色失败或名额不足时，插件应继续返回有效的叙述兜底。玩家停止仍取消整个执行。
+
+<!-- prettier-ignore -->
+| 名额 | 默认 | 范围 |
+| --- | --- | --- |
+| `maxActors` | 4 | 整数 0–16；一个根执行准入的不同角色 ID |
+| `maxSubagentCalls` | 16 | 整数 0–64；所有准入的子 agent 调用 |
+| 并发 / 深度 | 8 / 1 | 固定；超限立即 `unavailable`，不排队 |
+
+零关闭对应能力。准入前先解析提供方、校验请求和查角色，再同步占名额；失败或取消不退还已准入次数，同一角色再次调用不多占角色名额。递归调用共用根预算。挂起保存 `{scopeId, limits, calls, actorIds, historySnapshot?}` 及私有调用来源；恢复和再次挂起沿用，兄弟挂起项共享最新值。失败恢复释放 claim 后仍保留已消耗次数。分叉保留次数但隔离根标识；新提交、新的独立重试和续行执行各自新建预算。计数不写成会话偏好，也不从 trace 推算。
+
+函数、guard 的 `ctx.historyFor(characterId, {limit?})` 和插件工具的同名能力返回 `CharacterHistory`；会话绑定、取消和撤销规则与相邻读取 API 一致。设置在会话插件面板或[编排 API](./api.md#orchestration-settings)修改，下次执行生效。
+
+开发数据：丢弃在预算快照机制之前已经委托过子 agent 的未解决挂起项，以及包含它们的快照/checkpoint。普通会话和故事无需重建；不做旧计数推算或双格式兼容。

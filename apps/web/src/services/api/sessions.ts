@@ -511,3 +511,24 @@ export function resumeSessionPluginFault(
     { method: "POST" },
   );
 }
+
+export async function getOrchestration(
+  sessionId: string,
+): Promise<import("@covel/shared").OrchestrationResponse> {
+  return request(
+    `/api/sessions/${encodeURIComponent(sessionId)}/orchestration`,
+  );
+}
+export async function patchOrchestration(
+  sessionId: string,
+  patch: {
+    turnPolicy?: { pluginId: string; name: string } | null;
+    maxActors?: number;
+    maxSubagentCalls?: number;
+  },
+): Promise<import("@covel/shared").OrchestrationResponse> {
+  return request(
+    `/api/sessions/${encodeURIComponent(sessionId)}/orchestration`,
+    { method: "PATCH", body: JSON.stringify(patch) },
+  );
+}

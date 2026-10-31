@@ -527,3 +527,72 @@ describe("checkpoint record validation", () => {
     ]);
   });
 });
+
+describe("orchestration checkpoint boundaries", () => {
+  it("keeps settings and consumed delegation state and rejects invalid limits", () => {
+    const delegation = {
+      scopeId: "root",
+      limits: { maxActors: 1, maxSubagentCalls: 2 },
+      calls: 1,
+      actorIds: ["mara"],
+      historySnapshot: {
+        messages: [
+          {
+            presentCharacterIds: ["mara"],
+            segments: [{ kind: "narration", text: "Witnessed." }],
+          },
+        ],
+        truncated: false,
+      },
+    };
+    const value = {
+      ...checkpoint,
+      session: {
+        ...checkpoint.session,
+        metadata: {
+          ...checkpoint.session.metadata,
+          orchestration: {
+            turnPolicy: { pluginId: "removed", name: "draw" },
+            maxActors: 0,
+          },
+        },
+      },
+      suspensions: [
+        {
+          ...checkpoint.suspensions[0]!,
+          pendingContinuation: {
+            ...checkpoint.suspensions[0]!.pendingContinuation,
+            delegation,
+          },
+        },
+      ],
+    };
+    expect(
+      validateBrowserCheckpoint(value).suspensions[0]?.pendingContinuation
+        .delegation,
+    ).toEqual(delegation);
+    expect(() =>
+      validateBrowserCheckpoint({
+        ...value,
+        session: {
+          ...value.session,
+          metadata: { orchestration: { maxActors: 17 } },
+        },
+      }),
+    ).toThrow();
+    expect(() =>
+      validateBrowserCheckpoint({
+        ...value,
+        suspensions: [
+          {
+            ...value.suspensions[0],
+            pendingContinuation: {
+              ...value.suspensions[0]!.pendingContinuation,
+              delegation: { ...delegation, calls: 3 },
+            },
+          },
+        ],
+      }),
+    ).toThrow();
+  });
+});

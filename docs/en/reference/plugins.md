@@ -672,11 +672,11 @@ The provider is an agent runtime that names the contract it provides in `io.outp
 
 Rules at run time:
 
-- **Own transcript**: the sub-agent's prompt is the provider's own body, the framework's completion instructions, then the brief. It sees neither the session history nor the caller's conversation.
+- **Own transcript**: the sub-agent's prompt is the provider's own body, the framework's completion instructions, then the brief. It does not see the caller's conversation. Generic sub-agents have no session history; the actor contract adds framework-filtered witnessed history (see [character delegation](#character-orchestration)).
 - **Read-only tools**: tools in the provider's `agent.tools` without the `readOnly` annotation (plugin tools, write tools such as a dataset's `-upsert` / `-update`), `suspend` and `delegate` are taken away. A declared plugin tool that is not registered still fails the run as it always does. Of the dataset tools, only `-get` / `-list` stay. Imported service tools stay, write-service imports included: the sub-agent calls as itself, and the operations it stages ride on the run that delegated to it and are taken back when the sub-agent fails.
 - **Loop profile**: without `agent.loop.profile` it runs `actor`: no streaming, no player interjections.
 - **Model**: it uses the model role the provider declares. The session's `runtimeModelOverrides` apply by the provider's runtimeId, also in a run resumed after suspension; the caller's override and the request's story model override do not.
-- **Caps**: one execution runs at most 8 sub-agents at a time, nested executions included, and a sub-agent cannot call another one (depth cap 1). A call over a cap gets `unavailable` at once; nothing queues.
+- **Caps**: one execution runs at most 8 sub-agents at a time, nested executions included, and a sub-agent cannot call another one (depth cap 1). Session settings also bound cumulative actors and calls; see [execution allowances](#character-orchestration). A call over a cap gets `unavailable` at once; nothing queues.
 - **Cancellation**: when the caller is cancelled, times out or ends, the sub-agent stops with it, with `cancelled`. A sub-agent the handler did not await is waited for before the runtime finishes.
 - **Output only**: the output is checked against the provider's `io.output.schema` and contract schema; a failure is `internal`. The `PreRuntime`, `PostRuntime` and `PostContextAssembly` hooks do not fire for a sub-agent; the in-loop `PreLLMCall`, `PreStep`, `PreToolUse` and `PostToolUse` fire as usual, with the sub-agent's `ctx.runtimeId`.
 - **Trace**: every event of the sub-agent carries `subagentCallId`, `parentCallId` and `parentRuntimeId`, plus `subagent.started` / `completed` / `failed` (see [protocol](./protocol.md#sub-agent-events)). An `io.concealed` provider has its content hidden as a top-level run does.
@@ -1375,3 +1375,50 @@ Every namespace that starts with `_` is reserved for the kernel.
 - `__kernel:<subsystem>` is another owner partition. A plugin's bound read interface cannot reach it.
 
 For the full list and the read permissions, see [Storage architecture](../internals/storage.md#plugin-data-ownership-and-reserved-names).
+
+<a id="character-orchestration"></a>
+
+## Character delegation and execution allowances
+
+A character provider's `RUNTIME.md` can be as small as:
+
+```yaml
+---
+schedule:
+  subagentOnly: true
+io:
+  output:
+    contract: character-actor@1
+---
+Play the selected character using the supplied profile and witnessed history.
+```
+
+Omitting `function` selects an agent; `subagentOnly` derives manual triggering and visibility defaults to system. Omit the output schema to use the framework schema, or explicitly write `schema: contract:character-actor@1`. A file schema can narrow output but cannot bypass canonical validation. Packages cannot publish a different schema under the reserved ID.
+
+```ts
+const reply = await ctx.agents.run({
+  target: { contract: "character-actor@1" },
+  characterId: selected.id,
+  brief: "Respond to the visitor at the gate.",
+  instruction: "Keep the reply short.",
+});
+```
+
+`characterId` is private code routing; `instruction` is optional additional briefing. Resolving the actor through a same-package `runtimeId` applies identical checks. Actor requests reject `data`; other contracts reject these two actor-only fields. The character must exist in the caller's current `ctx.world`. Bad requests consume no admission.
+
+The child model receives only the chosen character's name/aliases/description/fields, [witnessed stories](./world-model.md#witnessed-history), caller brief and instruction, plus the provider prompt and framework completion contract. The assembled brief is bounded to 40,000 characters, removing oldest history first and oversized profile fields if necessary. An oversized caller brief is rejected. Session content locale and the provider's own model override remain in force. Declared read tools and write services remain available and may supply additional knowledge; this is not a server-code sandbox.
+
+Actor output uses the normal validation and repair loop. Invalid output after repair returns `internal` / `stopReason: invalid-output` and discards child operations. Success returns to the orchestrator without an independent story commit unit. The orchestrator combines successful segments in policy order and supplies speaker names; `intent` is private to the current orchestration and is not automatically stored in story or memory. Missing policies, missing actors, failures and exhausted allowances require a valid narrator fallback in the plugin. A player stop still cancels the whole execution.
+
+<!-- prettier-ignore -->
+| Allowance | Default | Range |
+| --- | --- | --- |
+| `maxActors` | 4 | Integer 0–16; distinct character IDs admitted by one root execution |
+| `maxSubagentCalls` | 16 | Integer 0–64; all admitted sub-agent invocations |
+| Concurrency / depth | 8 / 1 | Fixed; excess calls immediately return `unavailable`, without queuing |
+
+Zero disables the corresponding capability. Provider resolution, validation and character lookup precede synchronous admission. Failure or cancellation does not refund admitted calls; repeating a character consumes no additional actor slot. Recursive calls share the root budget. Suspension saves `{scopeId, limits, calls, actorIds, historySnapshot?}` and private-call provenance. Resumed and re-suspended legs keep it; sibling suspensions receive the latest state. A failed resume retains spent calls after its claim is released. A fork retains counts under an isolated root identity. New submissions, fresh scoped retries and advance executions get new budgets. Counters are neither session preferences nor trace-derived.
+
+Functions and guards expose `ctx.historyFor(characterId, {limit?})`; plugin tools have the same capability returning `CharacterHistory`, with the session binding, cancellation and revocation of adjacent reads. Edit settings in the session plugin panel or [orchestration API](./api.md#orchestration-settings); they apply next execution.
+
+Development data: discard unresolved suspensions that already delegated before budget snapshots existed, and snapshots/checkpoints containing those continuations. Ordinary sessions and stories need no reset. There is no old-counter reconstruction or dual-format compatibility.

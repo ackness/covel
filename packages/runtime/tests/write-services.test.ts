@@ -139,7 +139,7 @@ describe("write-service context", () => {
     });
   });
 
-  it("keeps a read handler's context unchanged", async () => {
+  it("gives a read handler provider randomness while keeping plugin data read-only", async () => {
     const { registry, client } = fixture();
     let context: PluginServiceContext | undefined;
     registry.register("bank", {
@@ -159,7 +159,7 @@ describe("write-service context", () => {
       input: {},
     });
     expect(context?.gateway).toBeDefined();
-    expect("random" in context!).toBe(false);
+    expect(typeof context?.random.int).toBe("function");
     expect(typeof (context!.pluginData as { set?: unknown }).set).toBe(
       "undefined",
     );

@@ -33,6 +33,8 @@ import type { MediaStoreLike } from "../function-runtime/runtime-media-context.j
  * still assignable wherever `AgentLoopDeps` is expected.
  */
 export interface AgentLoopDeps {
+  /** Host-owned delegation capabilities carried to tool invocations. */
+  readonly delegation?: import("../orchestration/delegation-budget.js").DelegationBudget;
   /** LLM adapter for making model calls. */
   readonly llm: LLMAdapter;
   /** Optional tool executor for handling LLM tool calls. */

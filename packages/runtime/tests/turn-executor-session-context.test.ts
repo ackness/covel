@@ -15,6 +15,7 @@ import type { RuntimeManifest, TurnInput } from "@covel/shared";
 import type { LoadedRuntime } from "@covel/plugin-loader";
 import { createMemoryStore } from "@covel/store/memory";
 import type { DataStore } from "@covel/store";
+import { executeTurn } from "../src/execution.js";
 import { runTurnPipeline } from "../src/turn-executor/turn-executor.js";
 import type { TurnExecutorDeps } from "../src/turn-executor/turn-executor.js";
 import { finalizeExecution } from "../src/commit/finalize-execution.js";
@@ -156,68 +157,76 @@ describe("turn-executor → SessionContextSnapshot wiring", () => {
     vi.restoreAllMocks();
   });
 
-  it("reuses admitted rows and scans compacted recent messages for lore activation", async () => {
-    const store = createMemoryStore();
-    const sessionId = "scan-compacted";
-    await seedWorld(store, "scan-world", sessionId);
-    await store.appendTurnMessage({
-      id: "prior",
-      sessionId,
-      turnId: "prior",
-      sourceType: "player",
-      role: "user",
-      content: "Visit the observatory",
-      order: 0,
-      createdAt: ts(),
-      compactedAtTurnId: "summary",
-    });
-    await store.saveSessionSummary({
-      id: "summary",
-      sessionId,
-      turnRangeStart: "prior",
-      turnRangeEnd: "prior",
-      content: "A prior journey",
-      focusSections: [],
-      createdAt: ts(),
-    });
-    await store.upsertLorebookEntries([
-      {
-        id: "lore",
+  it.each(["executeTurn", "pipeline"])(
+    "reuses admitted rows and scans compacted recent messages for lore activation through %s",
+    async (entry) => {
+      const store = createMemoryStore();
+      const sessionId = "scan-compacted";
+      await seedWorld(store, "scan-world", sessionId);
+      await store.appendTurnMessage({
+        id: "prior",
         sessionId,
-        owner: { kind: "world" },
-        keys: ["observatory"],
-        content: "The observatory carries an ancient telescope",
-        strategy: "selective",
-        position: "before_plugin",
-        insertionOrder: 0,
-        enabled: true,
-        extra: { scanDepth: 20 },
+        turnId: "prior",
+        sourceType: "player",
+        role: "user",
+        content: "Visit the observatory",
+        order: 0,
         createdAt: ts(),
-        updatedAt: ts(),
-      },
-    ]);
-    const getSession = vi.spyOn(store, "getSession");
-    const characters = vi.spyOn(store, "listCharacters");
-    const newest = vi.spyOn(store, "getLatestPlayerInput");
-    const listInputs = vi
-      .spyOn(store, "listPlayerInputs")
-      .mockRejectedValue(new Error("Full input log read"));
-    const llm = makeCapturingLLM();
-    const manifest = makeManifest();
-    const result = await runTurnPipeline(makeTurnInput(sessionId), [manifest], {
-      store,
-      llm,
-      loadRuntime: async () => makeLoaded(manifest),
-    });
-    expect(result.runtimeResults[0]?.status).toBe("success");
-    expect(llm.captured.systemPrompts[0]).toContain("ancient telescope");
-    // The runtime world view reuses the session read at admission.
-    expect(getSession).toHaveBeenCalledTimes(1);
-    // Admission and the runtime world view each read characters once.
-    expect(characters).toHaveBeenCalledTimes(2);
-    expect(newest).toHaveBeenCalledTimes(1);
-    expect(listInputs).not.toHaveBeenCalled();
-  });
+        compactedAtTurnId: "summary",
+      });
+      await store.saveSessionSummary({
+        id: "summary",
+        sessionId,
+        turnRangeStart: "prior",
+        turnRangeEnd: "prior",
+        content: "A prior journey",
+        focusSections: [],
+        createdAt: ts(),
+      });
+      await store.upsertLorebookEntries([
+        {
+          id: "lore",
+          sessionId,
+          owner: { kind: "world" },
+          keys: ["observatory"],
+          content: "The observatory carries an ancient telescope",
+          strategy: "selective",
+          position: "before_plugin",
+          insertionOrder: 0,
+          enabled: true,
+          extra: { scanDepth: 20 },
+          createdAt: ts(),
+          updatedAt: ts(),
+        },
+      ]);
+      const getSession = vi.spyOn(store, "getSession");
+      const characters = vi.spyOn(store, "listCharacters");
+      const newest = vi.spyOn(store, "getLatestPlayerInput");
+      const listInputs = vi
+        .spyOn(store, "listPlayerInputs")
+        .mockRejectedValue(new Error("Full input log read"));
+      const llm = makeCapturingLLM();
+      const manifest = makeManifest();
+      const deps = {
+        store,
+        llm,
+        loadRuntime: async () => makeLoaded(manifest),
+      };
+      const result =
+        entry === "executeTurn"
+          ? (await executeTurn(makeTurnInput(sessionId), [manifest], deps))
+              .result
+          : await runTurnPipeline(makeTurnInput(sessionId), [manifest], deps);
+      expect(result.runtimeResults[0]?.status).toBe("success");
+      expect(llm.captured.systemPrompts[0]).toContain("ancient telescope");
+      // The runtime world view reuses the session read at admission.
+      expect(getSession).toHaveBeenCalledTimes(1);
+      // Admission and the runtime world view each read characters once.
+      expect(characters).toHaveBeenCalledTimes(2);
+      expect(newest).toHaveBeenCalledTimes(1);
+      expect(listInputs).not.toHaveBeenCalled();
+    },
+  );
 
   it("snapshot world view populates prompt", async () => {
     const store = createMemoryStore();

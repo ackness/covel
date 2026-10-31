@@ -87,6 +87,8 @@ export interface ToolCall {
 }
 
 export interface ToolCallContext {
+  readonly delegation?: import("../orchestration/delegation-budget.js").DelegationBudget;
+  readonly playerActions?: readonly import("@covel/shared").TurnAction[];
   readonly world?: import("@covel/shared").WorldModelView;
   readonly upstreamProposals?: readonly Proposal[];
   readonly signal?: AbortSignal;

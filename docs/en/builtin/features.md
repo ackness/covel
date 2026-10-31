@@ -93,3 +93,9 @@ When importing, choose the file first. In the preview, tick the items you want t
 
 - [Stage and Sound](./stage.md)
 - [Built-in Plugins and Features](./index.md)
+
+## Session orchestration settings
+
+In the game's left-hand “Loaded Plugins” panel, open “Orchestration”. “Turn policy” offers “Automatic” or an authorized policy for this session. Multiple policies prompt a choice. A paused or unavailable choice remains visible and never switches automatically. “Distinct actors (0–16)” and “Subagent calls (0–64)” bound delegation per execution, defaulting to 4 and 16; zero disables the corresponding capability. Changes start next execution and survive reloads and forks.
+
+These generic controls install no new policy, character plugin or play pack. Plugins use them only when they offer the corresponding capabilities. Authors can read the [orchestration contracts](../reference/plugin-extensions.md#orchestration-contracts).

@@ -298,6 +298,7 @@ describe("ctx.progress full chain", () => {
     };
 
     const ctx = {
+      historyFor: async () => ({ messages: [], truncated: false }),
       sessionId: SESSION,
       turnId: "turn-1",
       pluginId: PLUGIN,

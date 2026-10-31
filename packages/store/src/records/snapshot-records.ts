@@ -115,6 +115,7 @@ export type SnapshotSessionState = Readonly<
   > & {
     /** Captured metadata override. Empty means clear; absent keeps world fallback. */
     loreOverride?: string;
+    readonly orchestration?: import("@covel/shared").OrchestrationSettings;
     /**
      * Bound dimension provider plugin id. Forks must restore it so the
      * child's settlement barrier resolves the same owner; without it the
@@ -285,6 +286,7 @@ export interface SuspensionRecord {
    * {@link settledSuspensionContinuation} keeps.
    */
   readonly pendingContinuation: {
+    readonly delegation?: import("@covel/shared").DelegationSnapshot;
     /** Full LLMMessage[] up to the suspend point. */
     readonly messages: readonly unknown[];
     /** If the LLM produced narrative text alongside the suspend tool call. */

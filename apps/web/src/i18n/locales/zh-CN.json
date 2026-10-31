@@ -2665,5 +2665,19 @@
     "localRelay": "这个地址在你的电脑或局域网上，模型请求会由你的浏览器转发：游玩时请保持页面打开，并让模型服务允许 {{origin}} 跨域访问（例如 Ollama 设置 OLLAMA_ORIGINS={{origin}}）。浏览器可能会询问是否允许这个网站访问本机或局域网。",
     "localHttp": "浏览器不允许这个 HTTPS 页面访问局域网里的普通 http 地址。请给局域网里的模型服务配上 HTTPS，或者在这台电脑上用 127.0.0.1 / localhost 转发它。",
     "keyAdvice": "请专门为体验创建一个临时 API 密钥，最好设好消费上限。我们已尽力保护你的数据，但仍建议体验结束后到服务商后台删除或轮换这个密钥。"
+  },
+  "orchestration": {
+    "title": "编排",
+    "policy": "回合策略",
+    "automatic": "自动选择",
+    "maxActors": "不同角色数（0–16）",
+    "maxSubagentCalls": "子调用数（0–64）",
+    "selected": "已选择策略",
+    "unique": "只有一个可用策略",
+    "missing": "没有可用策略",
+    "ambiguous": "请选择策略以消除歧义",
+    "paused": "已暂停",
+    "unavailable": "不可用",
+    "error": "无法读取或保存编排设置"
   }
 }

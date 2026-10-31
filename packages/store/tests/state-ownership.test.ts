@@ -104,6 +104,7 @@ const SNAPSHOT_SESSION_FIELDS = {
   activePlugins: "activePlugins",
   runtimeModelOverrides: "runtimeModelOverrides",
   loreOverride: null,
+  orchestration: null,
   dimensionProviderPluginId: null,
 } satisfies Record<keyof SnapshotSessionState, keyof SessionRecord | null>;
 
