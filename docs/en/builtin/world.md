@@ -23,6 +23,8 @@ Character tracking, fact extraction, and dimension updates read the attribution 
 > [!NOTE]
 > None of the plugins on this page has settings for you to adjust, so there is no "What you can change" section below. Plugins that are on by default (`kind: core`) can be turned off on the session-prep screen. Other plugins are chosen by the world or the gameplay pack. For how to install and manage them, see [Install and manage](../start/packages.md).
 
+If a concurrent change makes an affinity or clock calculation stale, that derived update is skipped while an independent successful story survives. A later explicit retry reads and recalculates it; see [read-baseline conflicts](../reference/transactions.md#read-baselines).
+
 ## Pre-Game Setup (`pregame`)
 
 Reads the world material before the game starts, prepares the first part of the adventure, and shows a welcome notice. It does not call a model, so it finishes almost at once.

@@ -20,6 +20,7 @@ const resumeParityFields = {
   promptSegments: [{ pluginId: "rules", id: "house-rules" }],
   nestedResults: [
     {
+      readScopes: [],
       result: {
         pluginId: "probe",
         runtimeId: "probe/child",
@@ -137,6 +138,7 @@ export function registerPersistenceStoreSuites(
       expect(result!.resumeSchema).toEqual(suspension.resumeSchema);
       // The identity of the execution stays; what the resume consumed goes.
       expect(result!.pendingContinuation).toEqual({
+        readScopes: [],
         messages: [],
         toolCallsSoFar: [],
         pendingProposals: [],

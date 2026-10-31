@@ -666,7 +666,7 @@ Gemini 原生的思考强度、`providerOptions.google.thinkingConfig`、`cached
 | `operation.failed`              | 已提交回合有操作未生效 | `{sessionId,turnId,count}`                                                                                                              |
 | `context.compacted`             | 压缩摘要保存           | `{summaryId,summaryIds,messagesCompacted,tokenSavings,focusSections,summariesMerged,summaryTokens,totalSummaryTokens,summaryTruncated}` |
 
-提交失败会扣住“执行完成”这一步，客户端把错误显示成执行失败。故事附带的写服务操作只因自身写入被拒而丢弃时不算执行失败：action 流不发它的 `proposal.failed`，只发一次 `operation.failed`，回合照常提交。后台的结果不能重新打开已经结束的 action 流，重连时用保存下来的会话状态恢复。
+提交失败会扣住“执行完成”这一步，客户端把错误显示成执行失败。故事附带的写服务操作只因自身写入被拒而丢弃时不算执行失败：action 流不发它的 `proposal.failed`，只发一次 `operation.failed`，回合照常提交。后台的结果不能重新打开已经结束的 action 流，重连时用保存下来的会话状态恢复。 读取基线的 `conflict` 沿用这些提案和操作边界，不新增事件或客户端指纹参数，见[事务](./transactions.md#read-baselines)。
 
 ### SSE 帧格式按通道区分
 

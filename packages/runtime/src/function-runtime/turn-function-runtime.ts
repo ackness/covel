@@ -17,7 +17,12 @@ import type {
 import { attachRuntimeJournal } from "../execution-journal.js";
 import type { LoadedRuntime } from "@covel/shared/plugin-runtime";
 import type { SuspensionRecord } from "@covel/store";
-import { validateOutput, getToolContent } from "@covel/tools";
+import {
+  validateOutput,
+  getToolContent,
+  getPendingProposals,
+} from "@covel/tools";
+import { ownScopeProposals } from "../read-baselines.js";
 import { createExecutionWriteBuffer } from "./execution-write-buffer.js";
 import { normalizeHandlerResult } from "../commit/normalize-handler-result.js";
 import { materializeHandlerSuccess } from "../commit/materialize-handler-output.js";
@@ -217,6 +222,7 @@ export async function executeFunctionRuntime({
     writeBuffer,
     ...(operations ? { operations } : {}),
     pluginDataVisibility: createPluginDataVisibility({
+      basisWrites: () => pendingProposals,
       pluginId: manifest.pluginId,
       runtimeId: manifest.name,
       runId,
@@ -356,9 +362,13 @@ export async function executeFunctionRuntime({
       reason: handlerOutcome.reason,
       resumeSchema: handlerOutcome.resumeSchema ?? {},
       pendingContinuation: {
+        readScopes: [],
         messages: [],
         toolCallsSoFar: [],
-        pendingProposals: structuredClone(writeBuffer),
+        pendingProposals: [
+          ...ownScopeProposals(getPendingProposals(output), writeBuffer),
+          ...structuredClone(writeBuffer),
+        ],
         ...(inputs ? { inputSlots: structuredClone(inputs) } : {}),
         ...(exportSlots ? { exportSlots: structuredClone(exportSlots) } : {}),
         ...(activation ? { activation: structuredClone(activation) } : {}),
@@ -404,7 +414,7 @@ export async function executeFunctionRuntime({
 
   const materialized: Pick<RuntimeResult, "output" | "effects" | "completion"> =
     !envelopeSchemaError && handlerOutcome.outcome === "success"
-      ? materializeHandlerSuccess(handlerOutcome, output)
+      ? materializeHandlerSuccess(handlerOutcome, output, writeBuffer)
       : {
           output: getToolContent(output) as unknown as Record<string, unknown>,
           ...(!envelopeSchemaError &&

@@ -1,3 +1,10 @@
+import {
+  hasGuardedReadTarget,
+  orderReadScopeProposals,
+  stampReadPreconditions,
+  readScopesOf,
+  withoutReadPreconditions,
+} from "../read-baselines.js";
 /**
  * Runtime result processing
  *
@@ -64,6 +71,7 @@ export interface CommittableRuntimeResult {
 }
 
 export interface RuntimeCommitOptions {
+  readonly readScopes?: readonly import("@covel/shared").ProposalReadScope[];
   readonly signal?: AbortSignal;
   readonly hookPipeline?: HookPipeline;
   readonly eventBus?: EventBus;
@@ -146,7 +154,7 @@ async function collectRuntimeProposals(
   const pendingProposals = (result.pendingProposals ?? []).map(
     (proposal) =>
       ({
-        ...proposal,
+        ...withoutReadPreconditions(proposal),
         sessionId,
         turnId: result.turnId,
         source,
@@ -191,7 +199,7 @@ async function collectRuntimeProposals(
     return { proposals: pendingProposals, failures: [], commit: true };
   }
 
-  const proposals = normalizeOutput(
+  const normalized = normalizeOutput(
     result.output ?? {},
     source,
     result.turnId,
@@ -199,7 +207,10 @@ async function collectRuntimeProposals(
     outputKind,
     result.effects,
   );
-  proposals.push(...pendingProposals);
+  const proposals = orderReadScopeProposals(
+    [...normalized, ...pendingProposals],
+    opts?.readScopes ?? readScopesOf(result),
+  );
 
   const failures: FailedProposal[] = [];
   const missingAssetFailure = await enforceImageAssetOutput(
@@ -262,34 +273,31 @@ export async function processRuntimeResult(
   outputKind?: string,
   opts?: RuntimeCommitOptions,
 ): Promise<ProcessRuntimeResultOutput> {
-  const collected = await collectRuntimeProposals(
+  const prepared = await prepareRuntimeProposals(
     result,
     store,
     sessionId,
     outputKind,
     opts,
   );
-  if (!collected.commit) {
-    return { events: [], failedProposals: collected.failures };
-  }
-  const screened = screenProposals(collected.proposals, opts);
-  if (screened.failedProposals.length > 0) {
-    return {
-      events: [],
-      failedProposals: [...collected.failures, ...screened.failedProposals],
-    };
-  }
-  const committed = await persistProposals(
-    screened.proposals,
+  const committed = await commitPreparedProposals(
+    prepared.proposals,
     store,
     sessionId,
     result,
     opts,
-    false,
   );
   return {
     events: committed.events,
-    failedProposals: [...collected.failures, ...committed.failedProposals],
+    failedProposals: [
+      ...prepared.failedProposals.map((failure) => ({
+        ...failure,
+        proposal: withoutReadPreconditions(
+          failure.proposal,
+        ) as typeof failure.proposal,
+      })),
+      ...committed.failedProposals,
+    ],
   };
 }
 
@@ -316,7 +324,11 @@ export async function prepareRuntimeProposals(
   if (!collected.commit) {
     return { proposals: [], failedProposals: collected.failures };
   }
-  const screened = screenProposals(collected.proposals, opts);
+  const scopes = opts?.readScopes ?? readScopesOf(result);
+  const screened = screenProposals(
+    stampReadPreconditions(collected.proposals, scopes),
+    opts,
+  );
   if (screened.failedProposals.length > 0) {
     return {
       proposals: [],
@@ -333,6 +345,7 @@ export async function prepareRuntimeProposals(
   const failedProposals: FailedProposal[] = [...collected.failures];
   for (const proposal of screened.proposals) {
     const hooked = await runPreStateCommitHook(opts.hookPipeline, proposal, {
+      pinReadTargets: hasGuardedReadTarget(proposal, screened.proposals),
       ...(opts.signal ? { signal: opts.signal } : {}),
       ...(opts.eventBus ? { eventBus: opts.eventBus } : {}),
       ...(opts.emitter ? { emitter: opts.emitter } : {}),
@@ -350,7 +363,10 @@ export async function prepareRuntimeProposals(
     if (error) return { proposals: [], failedProposals: [{ proposal, error }] };
     proposals.push(hooked.proposal);
   }
-  return { proposals, failedProposals };
+  return {
+    proposals: stampReadPreconditions(proposals, scopes, screened.proposals),
+    failedProposals,
+  };
 }
 
 /**
@@ -364,13 +380,18 @@ export async function prepareOperationProposals(
   writes: readonly Proposal[],
   opts?: RuntimeCommitOptions,
 ): Promise<PreparedRuntimeProposals> {
-  const screened = screenProposals(writes, opts);
+  const scopes = opts?.readScopes ?? [];
+  const screened = screenProposals(
+    stampReadPreconditions(writes, scopes),
+    opts,
+  );
   if (screened.failedProposals.length > 0 || !opts?.hookPipeline)
     return screened;
   const proposals: Proposal[] = [];
   const failedProposals: FailedProposal[] = [];
   for (const proposal of screened.proposals) {
     const hooked = await runPreStateCommitHook(opts.hookPipeline, proposal, {
+      pinReadTargets: hasGuardedReadTarget(proposal, screened.proposals),
       ...(opts.signal ? { signal: opts.signal } : {}),
       ...(opts.eventBus ? { eventBus: opts.eventBus } : {}),
       ...(opts.emitter ? { emitter: opts.emitter } : {}),
@@ -399,7 +420,14 @@ export async function prepareOperationProposals(
   }
   return failedProposals.length > 0
     ? { proposals: [], failedProposals }
-    : { proposals, failedProposals };
+    : {
+        proposals: stampReadPreconditions(
+          proposals,
+          scopes,
+          screened.proposals,
+        ),
+        failedProposals,
+      };
 }
 
 /** Persist proposals produced by {@link prepareRuntimeProposals}. */
@@ -453,7 +481,7 @@ async function persistProposals(
       events.push(cr.event);
     } else if (!cr.committed) {
       failedProposals.push({
-        proposal: proposals[i]!,
+        proposal: withoutReadPreconditions(proposals[i]!) as Proposal,
         error: cr.error ?? "unknown commit failure",
         ...(cr.code ? { code: cr.code } : {}),
       });

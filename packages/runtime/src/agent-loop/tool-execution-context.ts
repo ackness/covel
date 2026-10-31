@@ -1,4 +1,9 @@
-import { snapshotWorldModelView } from "../function-runtime/world-model-view.js";
+import type { PluginDataVisibility } from "../function-runtime/upstream-plugin-data.js";
+import { baselinesFor, createReadBaselineRecorder } from "../read-baselines.js";
+import {
+  acceptWorldModelReadBaselines,
+  snapshotWorldModelView,
+} from "../function-runtime/world-model-view.js";
 import { CharacterHistoryReader } from "../orchestration/character-history.js";
 import type { DataStore } from "@covel/store";
 import type { ToolExecutionContext } from "@covel/tools";
@@ -13,12 +18,22 @@ export function createToolExecutionContext(
   caller: ToolCallContext,
   store: DataStore | undefined,
   toolCallId?: string,
+  baselineReads?: PluginDataVisibility["baselineReads"],
 ): {
   context: ToolExecutionContext;
   assertLive(): void;
   close(): void;
   drain(): Promise<void>;
+  acceptReads(keys?: ReadonlySet<string>): void;
 } {
+  const baselines = createReadBaselineRecorder();
+  const visibility = caller.pluginDataVisibility
+    ? {
+        ...caller.pluginDataVisibility,
+        baselines,
+        ...(baselineReads ? { baselineReads } : {}),
+      }
+    : undefined;
   let closed = false;
   const pendingReads = new Set<Promise<unknown>>();
   const signal = caller.signal;
@@ -61,12 +76,7 @@ export function createToolExecutionContext(
   if (store) {
     // Keep the overlay separate from the copy exposed to plugin code. Reads
     // include the caller plugin's upstream writes and record what they saw.
-    const reads = createFunctionStoreView(
-      store,
-      identity,
-      pending,
-      caller.pluginDataVisibility,
-    );
+    const reads = createFunctionStoreView(store, identity, pending, visibility);
     view = Object.freeze({
       getPluginData: (namespace: string, key: string) =>
         read(() => reads.getPluginData(namespace, key)),
@@ -82,7 +92,7 @@ export function createToolExecutionContext(
     });
   }
   const worldSnapshot = caller.world
-    ? snapshotWorldModelView(caller.world, assertLive)
+    ? snapshotWorldModelView(caller.world, assertLive, baselines)
     : undefined;
   let services: ToolExecutionContext["services"];
   if (caller.services) {
@@ -102,9 +112,7 @@ export function createToolExecutionContext(
         ...(caller.locale !== undefined ? { locale: caller.locale } : {}),
         ...(worldSnapshot ? { world: worldSnapshot } : {}),
         ...(store ? { store } : {}),
-        ...(caller.pluginDataVisibility
-          ? { visibility: caller.pluginDataVisibility }
-          : {}),
+        ...(visibility ? { visibility } : {}),
         writeBuffer: pending,
       },
     });
@@ -160,6 +168,21 @@ export function createToolExecutionContext(
   return {
     context,
     assertLive,
+    acceptReads(keys) {
+      const reads = baselines.snapshot();
+      if (caller.world && keys === undefined)
+        acceptWorldModelReadBaselines(caller.world, reads);
+      if (!caller.pluginDataVisibility) return;
+      const parent =
+        caller.pluginDataVisibility.baselines ??
+        baselinesFor(caller.pluginDataVisibility.recorder);
+      for (const read of reads)
+        if (
+          keys === undefined ||
+          (read.kind === "plugin-data" && keys.has(read.key))
+        )
+          parent.observe(read);
+    },
     close() {
       closed = true;
       invocation.abort(new Error("Tool invocation has completed"));

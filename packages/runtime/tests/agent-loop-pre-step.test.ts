@@ -383,6 +383,7 @@ describe("PreStep", () => {
         resumeSchema: {},
         createdAt: new Date().toISOString(),
         pendingContinuation: {
+          readScopes: [],
           takenUnder: { playerTurns: 0, pluginVersion: "1.0.0", writes: [] },
           executionContext: {
             executionId: "prior-run",

@@ -1,10 +1,17 @@
 import {
+  baselinesFor,
+  characterBasisOf,
+  createReadBaselineRecorder,
+  type ReadBaselineRecorder,
+} from "../read-baselines.js";
+import {
   materializeWorldModel,
   DIMENSION_DATA_NAMESPACE,
   dimensionRecordSchema,
   dimensionSnapshotFromRecords,
   localizedWorldText,
   type Proposal,
+  type ProposalReadPrecondition,
   type RuntimeResult,
   type WorldModelView,
 } from "@covel/shared";
@@ -31,6 +38,8 @@ type ObservedProperty = "characters" | "characterSchema";
 interface WorldReadTracking {
   readonly producers: Readonly<Record<ObservedProperty, readonly string[]>>;
   readonly recorder: ReadRecorder;
+  readonly baselines?: ReadBaselineRecorder;
+  readonly characterBaselines: readonly ProposalReadPrecondition[];
 }
 
 // Only the host can snapshot a facade without observing its properties. Neither
@@ -49,6 +58,9 @@ function noteWorldRead(
   key: keyof WorldModelView,
 ) {
   if (!tracking || (key !== "characters" && key !== "characterSchema")) return;
+  if (key === "characters")
+    for (const baseline of tracking.characterBaselines)
+      (tracking.baselines ?? baselinesFor(tracking.recorder)).observe(baseline);
   for (const producer of tracking.producers[key])
     tracking.recorder.add(producer);
 }
@@ -61,10 +73,15 @@ function ownedSnapshot(view: WorldModelView): WorldModelView {
 export function snapshotWorldModelView(
   view: WorldModelView,
   assertLive: () => void = () => {},
+  baselines?: ReadBaselineRecorder,
 ): WorldModelView {
   assertLive();
   const snapshot = ownedSnapshot(view);
-  const tracking = views.get(view)?.tracking;
+  const sourceTracking = views.get(view)?.tracking;
+  const tracking =
+    sourceTracking && baselines
+      ? { ...sourceTracking, baselines }
+      : sourceTracking;
   const sourceLive = views.get(view)?.assertLive;
   return snapshotFacade(snapshot, tracking, () => {
     sourceLive?.();
@@ -118,6 +135,7 @@ export function forkWorldModelView(
   const snapshot = ownedSnapshot(parent);
   const source = views.get(parent)?.tracking;
   const recorder: ReadRecorder = new Set();
+  const baselines = createReadBaselineRecorder();
   let closed = false;
   const live = () => {
     assertLive();
@@ -128,6 +146,8 @@ export function forkWorldModelView(
     source
       ? {
           recorder,
+          baselines,
+          characterBaselines: structuredClone(source.characterBaselines),
           producers: {
             characters: [...source.producers.characters],
             characterSchema: [...source.producers.characterSchema],
@@ -141,6 +161,7 @@ export function forkWorldModelView(
     accept() {
       if (closed) return;
       live();
+      acceptWorldModelReadBaselines(parent, baselines.snapshot());
       for (const producer of recorder) source?.recorder.add(producer);
       closed = true;
     },
@@ -148,6 +169,18 @@ export function forkWorldModelView(
       closed = true;
     },
   };
+}
+
+/** Accept a successful tool's character observations into its owning world scope. */
+export function acceptWorldModelReadBaselines(
+  world: WorldModelView,
+  reads: readonly ProposalReadPrecondition[],
+): void {
+  const tracking = views.get(world)?.tracking;
+  if (!tracking) return;
+  const baselines = tracking.baselines ?? baselinesFor(tracking.recorder);
+  for (const read of reads)
+    if (read.kind === "character") baselines.observe(read);
 }
 
 export type WorldModelReadStore = Pick<
@@ -303,6 +336,21 @@ export async function createWorldModelView(
     reads
       ? {
           recorder: reads.recorder,
+          characterBaselines: [
+            ...new Set(
+              reads.upstream.flatMap(({ proposal }) =>
+                proposal.type === "character.upsert"
+                  ? [proposal.payload.id]
+                  : [],
+              ),
+            ),
+          ].map((id) => ({
+            kind: "character" as const,
+            id,
+            basis: characterBasisOf(
+              base.characters.find((character) => character.id === id),
+            ),
+          })),
           producers: {
             characters: [
               ...new Set(

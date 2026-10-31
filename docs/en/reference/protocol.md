@@ -666,7 +666,7 @@ A committed `interaction.requested` and `ui.rendered` are also pushed through th
 | `operation.failed`              | Operations did not take effect in a committed turn | `{sessionId,turnId,count}`                                                                                                              |
 | `context.compacted`             | Compaction summary saved                           | `{summaryId,summaryIds,messagesCompacted,tokenSavings,focusSections,summariesMerged,summaryTokens,totalSummaryTokens,summaryTruncated}` |
 
-A failed commit holds back the "execution completed" step, and the client shows the error as an execution failure. A story-attached write-service operation dropped only because its own writes were rejected is not an execution failure: the action stream sends no `proposal.failed` for it, only one `operation.failed`, and the turn commits. A background result cannot reopen an action stream that has already ended. On reconnect, the client restores from the saved session state.
+A failed commit holds back the "execution completed" step, and the client shows the error as an execution failure. A story-attached write-service operation dropped only because its own writes were rejected is not an execution failure: the action stream sends no `proposal.failed` for it, only one `operation.failed`, and the turn commits. A background result cannot reopen an action stream that has already ended. On reconnect, the client restores from the saved session state. Read-baseline `conflict` uses these same proposal and operation boundaries, with no new event or client fingerprint argument; see [Transactions](./transactions.md#read-baselines).
 
 ### SSE frame format by channel
 

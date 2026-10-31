@@ -1,3 +1,4 @@
+import { proposalReadScopesSchema } from "@covel/shared";
 import {
   orchestrationSettingsSchema,
   delegationSnapshotSchema,
@@ -136,6 +137,10 @@ const suspendedLoopState = z.strictObject({
   completingToolOutput: jsonObject.optional(),
 });
 const suspendedNestedResult = z.strictObject({
+  readScopes: proposalReadScopesSchema,
+  operationReadScopes: z
+    .record(z.string(), proposalReadScopesSchema)
+    .optional(),
   result: z.looseObject({
     pluginId: nonEmptyString,
     runtimeId: nonEmptyString,
@@ -168,6 +173,7 @@ const suspensions = createdRow.extend({
       )
       .optional(),
     pendingProposals: z.array(jsonValue),
+    readScopes: proposalReadScopesSchema,
     inputSlots: inputSlots.optional(),
     exportSlots: inputSlots.optional(),
     activation: z

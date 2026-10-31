@@ -282,6 +282,7 @@ export function makeSuspension(
       required: ["answer"],
     },
     pendingContinuation: {
+      readScopes: [],
       messages: [{ role: "system", content: "You are a test assistant." }],
       partialContent: undefined,
       toolCallsSoFar: [],

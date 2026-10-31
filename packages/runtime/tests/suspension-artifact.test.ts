@@ -30,6 +30,7 @@ function suspension(id: string, runtimeId: string): SuspensionRecord {
     reason: "wait",
     resumeSchema: {},
     pendingContinuation: {
+      readScopes: [],
       takenUnder: { playerTurns: 0, pluginVersion: "1.0.0", writes: [] },
       executionContext: {
         executionId: crypto.randomUUID(),

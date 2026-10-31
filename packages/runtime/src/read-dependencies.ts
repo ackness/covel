@@ -24,6 +24,7 @@
  * {@link collectExecutionReadDependencies}; finalize never reads the symbol.
  */
 
+import { attachRecordedBaselines } from "./read-baselines.js";
 import type { RuntimeResult, TurnResult } from "@covel/shared";
 
 const READ_DEPENDENCIES = Symbol.for("@covel/runtime/read-dependencies");
@@ -54,6 +55,7 @@ export function attachReadDependencies(
   result: RuntimeResult,
   producerIds: Iterable<string>,
 ): RuntimeResult {
+  if (producerIds instanceof Set) attachRecordedBaselines(result, producerIds);
   const merged = new Set([...readDependenciesOf(result), ...producerIds]);
   if (merged.size === 0) return result;
   Object.defineProperty(result, READ_DEPENDENCIES, {

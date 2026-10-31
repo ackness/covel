@@ -1,3 +1,4 @@
+import { attachOperationBaselines } from "../read-baselines.js";
 /**
  * The operation stage: where write-service calls keep their writes until the
  * caller's commit.
@@ -49,6 +50,7 @@ export interface StagedOperation {
   readonly toolCallId?: string;
   /** The provider's writes, already carrying the provider's identity. */
   readonly writes: readonly Proposal[];
+  readonly readScopes?: readonly import("@covel/shared").ProposalReadScope[];
   /** The call's validated input and output. */
   readonly request: unknown;
   readonly result: unknown;
@@ -312,6 +314,10 @@ export function createRootOperationStage(args: {
       if (ledger.entries.length === 0) return result;
       const records: OperationRecord[] = [];
       const writes: Record<string, readonly Proposal[]> = {};
+      const readScopes: Record<
+        string,
+        readonly import("@covel/shared").ProposalReadScope[]
+      > = {};
       for (const entry of [...ledger.entries].sort(
         (a, b) => a.operation.seq - b.operation.seq,
       )) {
@@ -325,9 +331,12 @@ export function createRootOperationStage(args: {
               : { status: "discarded", reason: "caller-dropped" },
           ),
         );
-        if (kept)
+        if (kept) {
           writes[entry.operation.id] = structuredClone(entry.operation.writes);
+          readScopes[entry.operation.id] = entry.operation.readScopes ?? [];
+        }
       }
+      attachOperationBaselines(result, readScopes);
       const target = result as {
         operations?: readonly OperationRecord[];
         operationWrites?: Readonly<Record<string, readonly Proposal[]>>;

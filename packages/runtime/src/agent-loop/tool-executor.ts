@@ -1,3 +1,5 @@
+import { datasetReadKeys, datasetReadPolicy } from "./dataset-tools.js";
+import { ownScopeProposals } from "../read-baselines.js";
 /**
  * ToolExecutor — resolves, validates, and executes tool calls from LLM responses.
  *
@@ -597,6 +599,7 @@ export function createToolExecutor(
           },
           config.store,
           call.toolCallId,
+          datasetReadPolicy(tool, params),
         );
         // Capture authority before any asynchronous trace work.
         await emitToolCalling(context, call, toolSource, approvalStatus);
@@ -630,8 +633,9 @@ export function createToolExecutor(
                     return {
                       model: structuredClone(getModelView(rawResult)),
                       parsedResult: structuredClone(getToolContent(rawResult)),
-                      pendingProposals: structuredClone(
+                      pendingProposals: ownScopeProposals(
                         getPendingProposals(rawResult),
+                        context.pendingProposals,
                       ),
                       emittedEvents: structuredClone(
                         getEmittedEvents(rawResult),
@@ -724,6 +728,7 @@ export function createToolExecutor(
             }
           }
         }
+        invocation.acceptReads(datasetReadKeys(tool, parsedResult));
         return {
           toolCallId: call.toolCallId,
           name: call.name,

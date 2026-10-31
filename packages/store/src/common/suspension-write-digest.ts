@@ -12,6 +12,7 @@
  */
 
 import { createHash } from "node:crypto";
+import { canonicalJson } from "@covel/shared";
 import type { DataStore } from "../types.js";
 import type { SuspensionWriteTarget } from "../records/snapshot-records.js";
 
@@ -20,20 +21,6 @@ export type SuspensionWriteReader = Pick<
   DataStore,
   "getPluginData" | "getCharacter" | "getCharacterSchema" | "getLorebookEntry"
 >;
-
-function canonicalJson(value: unknown): string {
-  if (value === undefined) return "null";
-  if (value === null || typeof value !== "object") {
-    return JSON.stringify(value) ?? "null";
-  }
-  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(",")}]`;
-  const record = value as Record<string, unknown>;
-  return `{${Object.keys(record)
-    .filter((key) => record[key] !== undefined)
-    .sort()
-    .map((key) => `${JSON.stringify(key)}:${canonicalJson(record[key])}`)
-    .join(",")}}`;
-}
 
 function withoutBookkeeping(
   record: object & {

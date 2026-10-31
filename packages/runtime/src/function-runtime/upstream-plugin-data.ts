@@ -41,6 +41,11 @@ import {
   pluginDataProposalsFromEffects,
 } from "../commit/session-output-normalizer.js";
 import { createReadRecorder, type ReadRecorder } from "../read-dependencies.js";
+import {
+  baselinesFor,
+  contentBasisOf,
+  type ReadBaselineRecorder,
+} from "../read-baselines.js";
 
 /** One plugin-data proposal of an upstream result, as it would commit. */
 export interface UpstreamPluginDataWrite {
@@ -189,6 +194,24 @@ export interface PluginDataVisibility {
   ) => readonly UpstreamPluginDataWrite[];
   /** Shared by every read of the invocation: handler, store, tools. */
   readonly recorder: ReadRecorder;
+  readonly baselines?: ReadBaselineRecorder;
+  /** Generated dataset tools observe only explicit reads and returned pages. */
+  readonly baselineReads?: {
+    readonly get: boolean;
+    readonly list: (
+      rows: readonly {
+        readonly namespace: string;
+        readonly key: string;
+        readonly value: unknown;
+      }[],
+    ) => readonly {
+      readonly namespace: string;
+      readonly key: string;
+      readonly value: unknown;
+    }[];
+  };
+  /** Earlier accepted operations are external to this call. */
+  readonly basisWrites?: () => readonly Proposal[];
   readonly probe?: PluginDataReadProbe;
 }
 
@@ -198,6 +221,7 @@ export function createPluginDataVisibility(options: {
   readonly runtimeId: string;
   readonly runId?: string;
   readonly writes?: readonly UpstreamPluginDataWrite[];
+  readonly basisWrites?: PluginDataVisibility["basisWrites"];
   readonly upstreamOf?: PluginDataVisibility["upstreamOf"];
   readonly probe?: PluginDataReadProbe;
 }): PluginDataVisibility {
@@ -206,6 +230,7 @@ export function createPluginDataVisibility(options: {
     runtimeId: options.runtimeId,
     runId: options.runId,
     writes: options.writes ?? [],
+    ...(options.basisWrites ? { basisWrites: options.basisWrites } : {}),
     ...(options.upstreamOf ? { upstreamOf: options.upstreamOf } : {}),
     recorder: createReadRecorder(),
     ...(options.probe ? { probe: options.probe } : {}),
@@ -264,7 +289,7 @@ export function readProviderData(options: {
         ? { exists: true, value: row.value as JsonValue }
         : { exists: false };
       const buffer = overlay();
-      const { current, producers } = readPluginDataKey(
+      const { current, external, producers } = readPluginDataKey(
         provider,
         buffer,
         pluginId,
@@ -278,6 +303,7 @@ export function readProviderData(options: {
         namespace,
         key,
         visible,
+        bases: [{ pluginId, namespace, key, current: external }],
         producers,
         withoutUpstream: () => {
           const own = readPluginDataKey(
@@ -312,6 +338,7 @@ export function readProviderData(options: {
         kind: "list",
         namespace,
         visible: observedRows(merged),
+        bases: pluginDataListBases(provider, pluginId, rows, merged),
         producers: listPluginDataProducers(provider, namespace),
         withoutUpstream: () =>
           observedRows(
@@ -341,6 +368,7 @@ export function readPluginDataKey(
 ): {
   readonly hit: boolean;
   readonly current: DataOpsCurrent;
+  readonly external: DataOpsCurrent;
   readonly producers: readonly string[];
 } {
   let state = base;
@@ -373,8 +401,18 @@ export function readPluginDataKey(
   };
   for (const write of visibility?.writes ?? [])
     apply(write.proposal, write.runId);
+  const externalOverlay = overlayPluginDataValue(
+    visibility?.basisWrites?.() ?? [],
+    pluginId,
+    namespace,
+    key,
+    state,
+  );
+  const external: DataOpsCurrent = externalOverlay.exists
+    ? { exists: true, value: externalOverlay.value }
+    : { exists: false };
   for (const proposal of buffer) apply(proposal, undefined);
-  return { hit, current: state, producers: [...producers] };
+  return { hit, current: state, external, producers: [...producers] };
 }
 
 function writtenNamespaces(proposal: Proposal): readonly string[] {
@@ -451,11 +489,23 @@ export function noteRead(
     readonly namespace?: string;
     readonly key?: string;
     readonly visible: unknown;
+    readonly bases: readonly PluginDataReadBasis[];
     readonly withoutUpstream: () => unknown;
     readonly producers: readonly string[];
   },
 ): void {
   if (!visibility) return;
+  for (const basis of read.kind === "get" &&
+  visibility.baselineReads?.get === false
+    ? []
+    : read.bases)
+    (visibility.baselines ?? baselinesFor(visibility.recorder)).observe({
+      kind: "plugin-data",
+      pluginId: basis.pluginId,
+      namespace: basis.namespace,
+      key: basis.key,
+      basis: contentBasisOf(basis.current),
+    });
   for (const producer of read.producers) visibility.recorder.add(producer);
   const probe = visibility.probe;
   if (!probe) return;
@@ -477,4 +527,52 @@ export function noteRead(
       error,
     );
   }
+}
+
+interface PluginDataReadBasis {
+  readonly pluginId: string;
+  readonly namespace: string;
+  readonly key: string;
+  readonly current: DataOpsCurrent;
+}
+
+/** Lists observe returned keys only, including absence beneath own writes. */
+export function pluginDataListBases(
+  visibility: PluginDataVisibility | undefined,
+  pluginId: string,
+  stored: readonly {
+    readonly namespace: string;
+    readonly key: string;
+    readonly value: unknown;
+  }[],
+  visible: readonly {
+    readonly namespace: string;
+    readonly key: string;
+    readonly value: unknown;
+  }[],
+): PluginDataReadBasis[] {
+  const rows = new Map(
+    stored.map((row) => [JSON.stringify([row.namespace, row.key]), row]),
+  );
+  const selected = visibility?.baselineReads
+    ? visibility.baselineReads.list(visible)
+    : visible;
+  return selected.map(({ namespace, key }) => {
+    const row = rows.get(JSON.stringify([namespace, key]));
+    return {
+      pluginId,
+      namespace,
+      key,
+      current: readPluginDataKey(
+        visibility,
+        [],
+        pluginId,
+        namespace,
+        key,
+        row
+          ? { exists: true, value: row.value as JsonValue }
+          : { exists: false },
+      ).external,
+    };
+  });
 }

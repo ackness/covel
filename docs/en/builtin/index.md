@@ -14,6 +14,8 @@ Dimension tools report schema-invalid values as correctable input errors; see [u
 
 Opening character templates must include a placeholder for every collected field. Template/default errors are correctable `invalid-input` failures; see [character tools](../reference/tools.md#opening-character-form).
 
+If a concurrent change makes an affinity or clock calculation stale, that derived update is skipped while an independent successful story survives. A later explicit retry reads and recalculates it; see [read-baseline conflicts](../reference/transactions.md#read-baselines).
+
 ## What is in this chapter
 
 | Page                                   | What it covers                                                                                        |

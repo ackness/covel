@@ -218,6 +218,7 @@ describe("ordinary and resumed private schema parity", () => {
         resumeSchema: {},
         createdAt: "2026-01-01T00:00:00Z",
         pendingContinuation: {
+          readScopes: [],
           takenUnder: { playerTurns: 0, pluginVersion: "1.0.0", writes: [] },
           messages: [],
           toolCallsSoFar: [],
@@ -290,6 +291,7 @@ describe("ordinary and resumed private schema parity", () => {
         resumeSchema: {},
         createdAt: new Date().toISOString(),
         pendingContinuation: {
+          readScopes: [],
           takenUnder: { playerTurns: 0, pluginVersion: "1.0.0", writes: [] },
           messages: [],
           toolCallsSoFar: [],
@@ -356,6 +358,7 @@ describe("ordinary and resumed private schema parity", () => {
         resumeSchema: {},
         createdAt: "2026-01-01T00:00:00Z",
         pendingContinuation: {
+          readScopes: [],
           takenUnder: { playerTurns: 0, pluginVersion: "1.0.0", writes: [] },
           messages: [],
           toolCallsSoFar: [],
@@ -441,6 +444,7 @@ describe("ordinary and resumed private schema parity", () => {
           resumeSchema: {},
           createdAt: "2026-01-01T00:00:00Z",
           pendingContinuation: {
+            readScopes: [],
             takenUnder: { playerTurns: 0, pluginVersion: "1.0.0", writes: [] },
             messages: [],
             toolCallsSoFar: [],

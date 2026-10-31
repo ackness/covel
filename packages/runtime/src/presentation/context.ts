@@ -487,8 +487,8 @@ export async function createPresentationContext(
     nestedResults: [],
     readDependencies: () =>
       options.pluginDataVisibility
-        ? [...options.pluginDataVisibility.recorder]
-        : [],
+        ? options.pluginDataVisibility.recorder
+        : new Set(),
     revoke: () => {
       revoked = true;
     },

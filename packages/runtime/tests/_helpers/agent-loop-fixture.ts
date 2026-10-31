@@ -1,3 +1,4 @@
+import { makeProposal } from "@covel/plugin-handlers-utils";
 /**
  * Minimal fixture for the agent tool loop: a scripted model, one recording
  * tool, and two ways to run — the loop alone (`runLoop`) or a whole runtime
@@ -54,13 +55,14 @@ export const markTool = tool({
   name: "mark",
   description: "records a marker",
   parameters: z.object({ note: z.string() }),
-  async execute(args: { note: string }) {
+  async execute(args: { note: string }, context) {
     return withPendingProposals({ _text: `marked:${args.note}` }, [
-      {
-        type: "plugin.data",
-        payload: { namespace: "loop", key: "mark", value: args.note },
-      },
-    ] as never);
+      makeProposal(context, "2026-10-31T00:00:00.000Z", "plugin.data", {
+        namespace: "loop",
+        key: "mark",
+        value: args.note,
+      }),
+    ]);
   },
 });
 

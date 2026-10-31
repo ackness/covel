@@ -4555,6 +4555,8 @@ Rules for `data-changed`:
 
 A runtime has only one suspended item waiting to resume at a time. When it suspends again in another execution, the older item is voided the way abandoning does, in the transaction that saves the new one, and no separate event is sent. When the web client receives the new `turn.suspended`, it drops the older item of the same runtime.
 
+Pending read-derived writes also retain their original private [read baselines](./transactions.md#read-baselines). Changes caught by the existing write-target digest keep the `suspension_outdated` response above; a read-baseline mismatch alone is a normal commit `conflict`. A fresh read or repeated suspension cannot refresh the old calculation. The client sends no fingerprint token.
+
 ##### Suspending again
 
 A resumed runtime can suspend again: an agent calls `suspend` once more, or a function handler returns a suspension once more. The resume commits as usual and answers `200` with `result.status` `suspended`.

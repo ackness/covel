@@ -974,6 +974,8 @@ homepage: https://example.com/tidefall
 
 提交规则见[回合级单事务](./transactions.md#回合级单事务)。
 
+**读后计算的替换。** 显式读取同一个键后，后续替换自动受保护，包括带派生值的 `inc` + `merge` 列表。盲写和纯相对操作保持原有语义。放行 agent 的 guard 不把自己的读取作用域交给 agent。见[读取基线前提条件](./transactions.md#read-baselines)。
+
 ### 动态维度
 
 `world.dimensions@1` 发布 `{id: {name, description?, schema, value, version}}`。

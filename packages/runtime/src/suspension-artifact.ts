@@ -1,3 +1,10 @@
+import {
+  readScopesOf,
+  saveReadScopes,
+  withoutReadPreconditions,
+  orderReadScopeProposals,
+} from "./read-baselines.js";
+import type { Proposal } from "@covel/shared";
 /**
  * Execution-local suspension continuations.
  *
@@ -68,10 +75,46 @@ export function collectExecutionSuspensions(
       artifactsOf(result),
     ),
   ];
+  const sources = new Map(
+    [
+      ...turnResult.runtimeResults,
+      ...(turnResult.nestedRuntimeResults ?? []),
+    ].flatMap((result) =>
+      artifactsOf(result).map(({ record }) => [record.id, result] as const),
+    ),
+  );
   const seen = new Set<string>();
   return all.flatMap(({ record }) => {
     if (seen.has(record.id)) return [];
     seen.add(record.id);
-    return [record];
+    const source = sources.get(record.id);
+    const owned = (
+      record.pendingContinuation.pendingProposals as readonly Proposal[]
+    ).map(
+      (proposal) =>
+        ({
+          ...withoutReadPreconditions(proposal),
+          sessionId: record.sessionId,
+          turnId: record.turnId,
+          source: { pluginId: record.pluginId, runtimeId: record.runtimeId },
+        }) as Proposal,
+    );
+    const pending = orderReadScopeProposals(
+      owned,
+      source ? readScopesOf(source) : [],
+    );
+    return [
+      {
+        ...record,
+        pendingContinuation: {
+          ...record.pendingContinuation,
+          pendingProposals: pending,
+          readScopes: saveReadScopes(
+            pending,
+            source ? readScopesOf(source) : [],
+          ),
+        },
+      },
+    ];
   });
 }

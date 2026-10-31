@@ -779,3 +779,9 @@ export {
 export { resolveWorldPluginSelection } from "./world-plugin-selection.js";
 
 export * from "./schemas/session-bridge.js";
+
+export { canonicalJson } from "./utils/canonical-json.js";
+export {
+  proposalReadPreconditionSchema,
+  proposalReadScopesSchema,
+} from "./schemas/proposal-read-scopes.js";

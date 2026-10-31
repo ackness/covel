@@ -442,6 +442,7 @@ describe("host plugin fault boundary", () => {
       resumeSchema: { type: "object" },
       createdAt: timestamp,
       pendingContinuation: {
+        readScopes: [],
         takenUnder: {
           playerTurns: (await f.store.getTurnMessageStats("s"))
             .playerMessageCount,

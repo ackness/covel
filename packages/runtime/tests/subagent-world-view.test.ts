@@ -1,13 +1,14 @@
 import { describe, expect, it, vi } from "vitest";
 import { createMemoryStore } from "@covel/store/memory";
 import { createSqliteStore } from "@covel/store/sqlite";
-import type { LLMAdapter, WorldModelView } from "@covel/shared";
+import type { LLMAdapter, Proposal, WorldModelView } from "@covel/shared";
 import { tool, z } from "@covel/tools";
 import { createWorldModelView } from "../src/function-runtime/world-model-view.js";
 import { createSubagentRunner } from "../src/agent-loop/subagent-runner.js";
 import { createToolExecutor } from "../src/agent-loop/tool-executor.js";
 import { createExecutionContext } from "../src/turn-executor/execution-context.js";
 import { PluginServiceRegistry } from "../src/plugin-services.js";
+import { createHookPipeline } from "../src/hooks/pipeline.js";
 import { prose, toolCall, latch } from "./_helpers/agent-loop-fixture.js";
 import {
   fixture,
@@ -56,6 +57,119 @@ function viewValue(world: WorldModelView) {
 }
 
 describe("sub-agent world snapshots", () => {
+  it.each(
+    (["run", "delegate"] as const).flatMap((route) =>
+      (["success", "failure", "idle"] as const).flatMap((childOutcome) =>
+        [false, true].map((changed) => ({ route, childOutcome, changed })),
+      ),
+    ),
+  )(
+    "guards accepted inherited character reads via $route (child=$childOutcome, changed=$changed)",
+    async ({ route, childOutcome, changed }) => {
+      const hookPipeline = createHookPipeline();
+      hookPipeline.register<{ proposal: Proposal }>({
+        id: "rewrite-producer",
+        pluginId: producer.pluginId,
+        event: "PreStateCommit",
+        handler: async (_ctx, { proposal }) => ({
+          action: "continue",
+          replace: {
+            proposal:
+              changed &&
+              proposal.type === "character.upsert" &&
+              proposal.source.runtimeId === producer.name
+                ? {
+                    ...proposal,
+                    payload: { ...proposal.payload, description: "rewritten" },
+                  }
+                : proposal,
+          },
+        }),
+      });
+      let childCalls = 0;
+      let parentCalls = 0;
+      let childEvidence = "";
+      const llm: LLMAdapter = {
+        generate: async (request) => {
+          if (request.tools?.some((t) => t.name === "delegate")) {
+            switch (parentCalls++) {
+              case 0:
+                return toolCall("delegate", {
+                  target,
+                  brief: "A constant brief",
+                });
+              case 1:
+                return toolCall("stage-character", {
+                  id: "source",
+                  description: "consumer",
+                  expectedVersion: 2,
+                });
+              default:
+                return prose("Parent complete");
+            }
+          }
+          if (childOutcome === "idle") return prose("Child complete");
+          if (childCalls++ === 0)
+            return toolCall("get-character", { id: "source" });
+          childEvidence = JSON.stringify(
+            request.messages.filter((m) => m.role === "tool"),
+          );
+          if (childOutcome === "failure")
+            throw new Error("child failed after reading");
+          return prose("Child complete");
+        },
+      };
+      const actor = {
+        ...child,
+        outputContract: target.contract,
+        tools: { builtin: ["get-character"] },
+      };
+      const reader = fn(
+        "read",
+        route === "delegate"
+          ? {
+              runtimeType: "agent",
+              tools: { builtin: ["delegate", "stage-character"] },
+            }
+          : {},
+      );
+      const f = await fixture({ deps: { llm, hookPipeline } });
+      const r = await f.execute([producer, story, reader, actor], {
+        [producer.name]: async () => writes(character("source", "staged", 1)),
+        [story.name]: tell,
+        [reader.name]: async (ctx) => {
+          const result = await ctx.agents!.run({
+            target,
+            brief: "A constant brief",
+          });
+          expect(result.ok).toBe(childOutcome !== "failure");
+          return writes(character("source", "consumer", 2));
+        },
+      });
+      expect(r.resultOf(reader).status).toBe("success");
+      if (childOutcome !== "idle") expect(childEvidence).toContain("staged");
+      expect(r.edges(reader)).toEqual(
+        childOutcome === "success" ? [r.resultOf(producer).runId] : [],
+      );
+      const outcome = await r.commit();
+      const conflicts = childOutcome === "success" && changed;
+      expect(outcome.status).toBe("committed");
+      expect(outcome.failedProposals.map((failure) => failure.code)).toEqual(
+        conflicts ? ["conflict"] : [],
+      );
+      expect(await f.store.getCharacter(SESSION, "source")).toMatchObject({
+        description: conflicts ? "rewritten" : "consumer",
+        version: conflicts ? 2 : 3,
+      });
+      expect(
+        (await f.store.listMessages(SESSION)).map((m) => m.content),
+      ).toContain("The story continues.");
+      expect(JSON.stringify(r.execution.result)).not.toMatch(
+        /preconditions|fingerprint|readBaselines/,
+      );
+    },
+  );
+
   it.each([
     "get-character",
     "list-characters",
