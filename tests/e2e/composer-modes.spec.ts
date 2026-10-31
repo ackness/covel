@@ -70,7 +70,7 @@ test("a second character acts in act mode and the bubble says who and how, also 
 }) => {
   const provider = await startFakeLlmProvider();
   provider.reply = () => ({ text: "夜雾漫过码头，阿波的手按在剑柄上。" });
-  const worldId = `e2e-duo-${Date.now()}`;
+  const worldId = `e2e-duo-${crypto.randomUUID()}`;
   let sessionId: string | undefined;
   try {
     await seedAppSettings(page);
@@ -78,7 +78,7 @@ test("a second character acts in act mode and the bubble says who and how, also 
     await useFakeModel(page, provider);
 
     const world = await page.request.post("/api/worlds", {
-      data: { id: worldId, name: "Duo world", locale: "zh-CN" },
+      data: { id: worldId, name: `Duo world ${worldId}`, locale: "zh-CN" },
     });
     expect(world.ok(), await world.text()).toBeTruthy();
     const created = await page.request.post("/api/sessions", {
