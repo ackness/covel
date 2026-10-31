@@ -4,19 +4,32 @@ import { join, resolve } from "node:path";
 import { serve } from "@hono/node-server";
 import { createMemoryMediaStore, createMemoryStore } from "@covel/store/memory";
 import type { StageCastModel } from "@covel/shared";
+import { createPluginAssetRoutes } from "../../src/routes/plugin-assets.js";
 import { bootstrapApi } from "../../src/routes/api/bootstrap.js";
 import { buildUiSpecsResponse } from "../../src/routes/misc-api/ui-specs.js";
 import { publicSessionIncarnation } from "../../src/routes/api/session/session-guard.js";
 import { closeTestApi } from "./close-api.js";
 
+interface StageRenderFixtureOptions {
+  narration?: string;
+  plugins?: readonly string[];
+  beforeGenerate?: (call: number) => Promise<void>;
+}
+
 /** Real bundled projections and template loading, with deterministic story output. */
-export async function createStageRenderFixture() {
+export async function createStageRenderFixture(
+  options: StageRenderFixtureOptions = {},
+) {
   const root = await mkdtemp(join(tmpdir(), "covel-stage-render-"));
   const builtin = join(root, "plugins"),
     user = join(root, "user");
   await mkdir(join(builtin, "story-probe"), { recursive: true });
   await mkdir(user);
-  for (const id of ["scene-stage", "character-blueprint"]) {
+  for (const id of [
+    "scene-stage",
+    "character-blueprint",
+    ...(options.plugins ?? []),
+  ]) {
     await cp(
       resolve(import.meta.dirname, "../../../../plugins", id),
       join(builtin, id),
@@ -48,55 +61,64 @@ Tell the public scene story.
   const store = createMemoryStore();
   const mediaStore = createMemoryMediaStore();
   let calls = 0;
-  const boot = await bootstrapApi({
-    store,
-    mediaStore,
-    storeBackend: "memory",
-    pluginsDir: builtin,
-    pluginsDirs: [builtin, user],
-    llmAdapter: {
-      generate: async () => {
-        const index = ++calls;
-        return {
-          content: JSON.stringify({
-            segments: [
-              {
-                kind: "dialogue",
-                speaker: "Mira",
-                text: `Public dialogue ${index}.`,
+  const start = async () => {
+    const boot = await bootstrapApi({
+      store,
+      mediaStore,
+      storeBackend: "memory",
+      pluginsDir: builtin,
+      pluginsDirs: [builtin, user],
+      llmAdapter: {
+        generate: async () => {
+          const index = ++calls;
+          await options.beforeGenerate?.(index);
+          return {
+            content: JSON.stringify({
+              segments: [
+                ...(options.narration
+                  ? [{ kind: "narration", text: options.narration }]
+                  : []),
+                {
+                  kind: "dialogue",
+                  speaker: "Mira",
+                  text: `Public dialogue ${index}.`,
+                },
+                {
+                  kind: "dialogue",
+                  speaker: "Unknown visitor",
+                  text: "A readable line without a portrait.",
+                },
+              ],
+              cues: {
+                scene: "Library",
+                present: index === 1 ? ["Mira", "Theo"] : ["Mira"],
               },
-              {
-                kind: "dialogue",
-                speaker: "Unknown visitor",
-                text: "A readable line without a portrait.",
-              },
-            ],
-            cues: {
-              scene: "Library",
-              present: index === 1 ? ["Mira", "Theo"] : ["Mira"],
-            },
-            yield: "user",
-          }),
-          toolCalls: [],
-          finishReason: "stop",
-          usage: { inputTokens: 1, outputTokens: 1 },
-        };
+              yield: "user",
+            }),
+            toolCalls: [],
+            finishReason: "stop",
+            usage: { inputTokens: 1, outputTokens: 1 },
+          };
+        },
       },
-    },
-  });
-  boot.app.get("/api/presets", (c) => c.json({ items: [] }));
-  boot.app.get("/api/llm-config", (c) =>
-    c.json({ configured: false, slots: {}, providers: [] }),
-  );
-  boot.app.get("/api/ui-specs", async (c) =>
-    c.json(
-      await buildUiSpecsResponse({
-        registry: boot.registry,
-        store: boot.store,
-        sessionId: c.req.query("sessionId"),
-      }),
-    ),
-  );
+    });
+    boot.app.route("/", createPluginAssetRoutes(boot.registry));
+    boot.app.get("/api/presets", (c) => c.json({ items: [] }));
+    boot.app.get("/api/llm-config", (c) =>
+      c.json({ configured: false, slots: {}, providers: [] }),
+    );
+    boot.app.get("/api/ui-specs", async (c) =>
+      c.json(
+        await buildUiSpecsResponse({
+          registry: boot.registry,
+          store: boot.store,
+          sessionId: c.req.query("sessionId"),
+        }),
+      ),
+    );
+    return boot;
+  };
+  let boot = await start();
   const world = await boot.app.request("/api/worlds", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -112,7 +134,12 @@ Tell the public scene story.
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       worldId: "stage-world",
-      plugins: ["story-probe", "scene-stage", "character-blueprint"],
+      plugins: [
+        "story-probe",
+        "scene-stage",
+        "character-blueprint",
+        ...(options.plugins ?? []),
+      ],
       autoAdvanceLimit: 0,
       locale: "en-US",
     }),
@@ -169,7 +196,13 @@ Tell the public scene story.
   });
   let revision = 0;
   return {
-    app: boot.app,
+    get app() {
+      return boot.app;
+    },
+    async restart() {
+      await closeTestApi(boot);
+      boot = await start();
+    },
     avatar,
     sessionId,
     store,
@@ -205,10 +238,12 @@ Tell the public scene story.
 }
 
 /** Bind the same fixture used by the browser to an isolated loopback host. */
-export async function startStageRenderHost() {
-  const fixture = await createStageRenderFixture();
+export async function startStageRenderHost(
+  options: StageRenderFixtureOptions = {},
+) {
+  const fixture = await createStageRenderFixture(options);
   const server = serve({
-    fetch: fixture.app.fetch,
+    fetch: (request) => fixture.app.fetch(request),
     port: 0,
     hostname: "127.0.0.1",
   });
@@ -223,6 +258,9 @@ export async function startStageRenderHost() {
       throw new Error("Missing test host address");
     return {
       ...fixture,
+      get app() {
+        return fixture.app;
+      },
       baseUrl: `http://127.0.0.1:${address.port}`,
       async close() {
         await fixture.close();

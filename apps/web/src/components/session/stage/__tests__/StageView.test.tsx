@@ -95,6 +95,20 @@ function fixture(): StageViewProps {
 }
 
 describe("stage decision lifecycle", () => {
+  it("keeps choices and free input ready while rereading a story from another view", () => {
+    const props = { ...fixture(), replayStoryOnEnter: true };
+    const { rerender } = render(<StageView {...props} />);
+    expect(screen.getByTestId("stage-dialog")).toBeDefined();
+    expect(screen.getByTestId("stage-choices")).toBeDefined();
+    const input = screen.getByTestId("stage-decision-input");
+    expect((input as HTMLTextAreaElement).disabled).toBe(false);
+    fireEvent.change(input, { target: { value: "Continue the tour" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(props.onSendMessage).toHaveBeenCalledWith("Continue the tour");
+    rerender(<StageView {...props} executing />);
+    expect(screen.queryByTestId("stage-dialog")).toBeNull();
+    expect(screen.queryByTestId("stage-choices")).toBeNull();
+  });
   it.each([undefined, { choices: [] }, { recap: "", choices: [] }] satisfies (
     StageChoicesModel | undefined
   )[])(

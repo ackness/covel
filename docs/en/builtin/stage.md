@@ -26,6 +26,8 @@ The name of the current scene is shown on the screen. A row of small buttons let
 
 At the top of the game screen there are two buttons side by side: "Text" and "Stage". Click "Stage" to enter stage mode, and "Text" to go back to the text view. Switching does not affect your save, and you can switch back and forth at any time.
 
+Choosing Stage offers the current story for rereading in the response panel, using the selected session theme. Choices and input remain available throughout; rereading never delays the next action. Reopening a session still takes already-read stories straight to the response panel.
+
 ### What the world needs to provide
 
 Stage mode needs no extra setup on its own, but how complete the picture is depends on what the world includes:
@@ -150,3 +152,7 @@ The story attaches canonical names to actor speech/actions; the stage still cons
 ## Restricted story-cue selectors
 
 Scene Stage and Soundtrack `story-cues` use zero-budget presentation functions, reading public story and declared own assets / display state without model charges or new settings. Ordinary pre-turn cast and explicit scene / direction / music events retain their existing contexts and overrides. Fixed trace codes explain no change, missing assets or no story without per-turn notifications. Departures leave the current cast immediately, with brief fading only in the renderer. Explicit exits retain their transition; `none` and reduced motion cut immediately. Session switches and missing slots discard the old lineup. Template `CharacterAvatar` displays only the resolved speaker’s public portrait with local enlargement. See [UI slots](../reference/ui-panels.md#stagecast1). See [presentation runtimes](../reference/plugins.md#presentation-runtimes).
+
+### Optional reading appearance
+
+Scene Stage offers **Stage reading**. Enable the plugin, open **Session theme** in the session toolbar, choose it and click **Apply**. It starts off and changes only narrative/dialogue colors, typography and session layout options, without starting a story or selecting stage/plugin views. Immersive stage keeps the host **Use default appearance** button. Settings, approvals and host bars keep their appearance; player colors and narrative typography adjustments win. See [plugin themes](../reference/theme-packages.md#selecting-in-a-session).

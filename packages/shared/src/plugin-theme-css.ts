@@ -259,11 +259,13 @@ function compile(
   css: string,
   context: PluginThemeCssContext,
   resolved: boolean,
+  outputScope = context.scope,
 ): PluginThemeCssResult {
   try {
     if (
       !/^[a-z][a-z0-9-]*$/.test(context.pluginId) ||
       !/^[a-f0-9]{64}$/.test(context.scope) ||
+      !/^[a-f0-9]{64}$/.test(outputScope) ||
       (context.assets &&
         !pluginThemeAssetsSchema.safeParse(context.assets).success)
     )
@@ -342,7 +344,7 @@ function compile(
         values.push(`${property}:${canonical[0]!}`);
       }
       output.push(
-        `${targets.map((part) => scopeSelector(context.scope, part)).join(",")}{${values.join(";")}}`,
+        `${targets.map((part) => scopeSelector(outputScope, part)).join(",")}{${values.join(";")}}`,
       );
     }
     // Generate from freshly constructed, validated selectors and values only.
@@ -395,4 +397,13 @@ export function validateCompiledPluginThemeCss(
   context: PluginThemeCssContext,
 ): PluginThemeCssResult {
   return compile(css, context, true);
+}
+
+/** Revalidate before binding a published stylesheet to one host mount. */
+export function scopeCompiledPluginThemeCss(
+  css: string,
+  context: PluginThemeCssContext,
+  mountScope: string,
+): PluginThemeCssResult {
+  return compile(css, context, true, mountScope);
 }

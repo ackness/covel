@@ -122,7 +122,11 @@ it("loads a localized zero-runtime package through real static manifests and com
   expect(loaded.themes[0]?.contentHash).toMatch(/^[0-9a-f]{64}$/);
   expect(loaded.assets[0]).toMatchObject({ purpose: "theme" });
   expect(loaded.assets[0]?.entry).toBeUndefined();
-  expect((await validatePluginPackage(root)).issues).toEqual([]);
+  const report = await validatePluginPackage(root);
+  expect(report.ok).toBe(true);
+  expect(report.issues).toEqual([
+    expect.objectContaining({ severity: "warning", field: "id" }),
+  ]);
 });
 it("uses the same byte compiler for disk, archive adapters and static validation", async () => {
   const root = await setup();
@@ -452,4 +456,23 @@ it("rejects duplicate manifest theme IDs statically while discovery keeps the fi
     }),
   );
   expect((await archive(root)).validate).toThrow("duplicate theme id");
+});
+
+it("loads the bundled optional reading pack through the same manifest and CSS policy as community themes", async () => {
+  const root = path.resolve(
+    import.meta.dirname,
+    "../../../plugins/scene-stage",
+  );
+  const loaded = await load(root);
+  expect(loaded.diagnostics.filter((item) => item.slot === "theme")).toEqual(
+    [],
+  );
+  const theme = loaded.themes.find((item) => item.id === "reading");
+  expect(theme?.pluginId).toBe("scene-stage");
+  expect(theme?.label).toEqual({ en: "Stage reading", zh: "舞台阅读" });
+  expect(theme?.layout).toEqual({ preset: "book" });
+  expect(theme?.cssText).toContain('[data-covel-theme-part="dialogue"]');
+  expect(theme?.cssText).not.toContain(".dialogue");
+  expect(theme?.contentHash).toMatch(/^[a-f0-9]{64}$/);
+  expect((await validatePluginPackage(root)).issues).toEqual([]);
 });

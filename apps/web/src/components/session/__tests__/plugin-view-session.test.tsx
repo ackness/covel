@@ -49,7 +49,10 @@ vi.mock("../game-view/use-plugin-views.js", () => ({
 vi.mock("../use-session-bridge.js", () => ({
   useSessionBridge: () => ({ projection: null }),
 }));
-vi.mock("@/settings/use-settings.js", () => ({ useSetting: () => [false] }));
+vi.mock("@/settings/use-settings.js", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/settings/use-settings.js")>()),
+  useSetting: () => [false],
+}));
 vi.mock("@/hooks/use-auto-scroll.js", () => ({
   useAutoScroll: () => ({ scrollRef: () => {}, showJumpButton: false }),
 }));

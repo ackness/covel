@@ -25,6 +25,7 @@ import {
 const FRAME_URL = `${import.meta.env.BASE_URL.replace(/\/$/, "")}${PLUGIN_FRAME_PATH}`;
 
 export function PluginWebview(props: {
+  themeSessionId?: string;
   title: string;
   html?: string;
   src?: string;
@@ -59,7 +60,7 @@ export function PluginWebview(props: {
   const bridge = useRef<PluginBridge | null>(null);
   // The widget cannot see the host's stylesheet, so the active style scheme
   // travels with its state and follows theme changes.
-  const theme = useThemeSnapshot();
+  const theme = useThemeSnapshot(props.themeSessionId);
   const state = useMemo<Readonly<Record<string, unknown>>>(
     () => ({ ...props.state, theme }),
     [props.state, theme],

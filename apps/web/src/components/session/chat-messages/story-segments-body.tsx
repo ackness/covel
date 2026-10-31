@@ -61,6 +61,7 @@ export function StoryMessageBody({
   if (!segments || !plan)
     return (
       <NarrativeMessageBody
+        themeSessionId={sessionId}
         isUser={false}
         isHiddenAssistantKind={false}
         content={message.content}
@@ -105,7 +106,9 @@ const TemplatedStory = memo(function TemplatedStory({
     >
       {segments.map((segment, index) => {
         const template = plan[index];
-        const fallback = <Markdown>{segment.text}</Markdown>;
+        const fallback = (
+          <Markdown themeSessionId={sessionId}>{segment.text}</Markdown>
+        );
         if (!template) return <div key={index}>{fallback}</div>;
         return (
           <div key={index} data-segment-template={template.pluginId}>

@@ -615,7 +615,7 @@ You can use the built-in themes as real references:
 
 ## Restricted themes supplied by plugins
 
-`contributes.ui.theme` publishes static theme JSON, separately from the app-wide imported themes above. Author validation, compilation, resource publication and API discovery are available; the client does not yet offer session selection or mount plugin themes. A declaration does not enable its plugin, grant server code, session reads or bridge capabilities, or add a story dependency.
+`contributes.ui.theme` publishes static theme JSON, separately from the app-wide imported themes above. Author validation, compilation, resource publication and explicit per-session selection are available. A declaration does not enable its plugin, grant server code, session reads or bridge capabilities, or add a story dependency.
 
 ```yaml
 contributes:
@@ -643,6 +643,20 @@ All objects reject unknown fields. Omitted `specVersion` means the current versi
 
 At least one of `tokens`, `layout`, or `css` must contribute; `assets` alone is not a theme. Each scheme's tokens are a nonempty partial map; missing schemes or colors inherit base appearance. `layout` accepts only `{ preset: "classic" | "book" | "stage" | "panel" }`, without option overrides. Consumers may take only the preset's `panelTabs`, `backdrop`, and `turnNotes`, retaining the player's `nav` and `worldList`; omission retains the full base layout. Consumers must preserve the global scheme, `ui.appearance` and SettingsStore authority, without a separate ThemeProvider.
 
+### Selecting in a session
+
+Enable the plugin that provides the pack, open **Session theme** in the session toolbar, choose a theme with its owner name, then click **Apply**. A sole theme still needs an explicit choice. Scene Stage offers **Stage reading**; the community example is [Reading theme probe](../../../tests/third-party/theme-pack-probe/README.md).
+
+Each device and session can use one plugin theme, initially off. The toolbar reports the active theme. Changed content, an unavailable owner, a failed read or failed bitmap check leaves it inactive with a reason, while play continues. The old choice may remain stored; updated content requires explicit reselection. Identical available content can restore its original selection.
+
+**Use default appearance** stays in a separate host recovery bar in text, immersive stage and plugin views. It closes only the plugin appearance, without changing the view, revoking page permissions or editing the base theme and player adjustments. New selections take effect after settings persistence succeeds; failed saves retain the draft and last confirmed safe appearance. Switching off takes effect immediately. If that save fails, it stays off for this visit and warns that the old choice may return after restart. A deliberate new selection can retry.
+
+Precedence is the base builtin/imported theme, the selected restricted plugin palette/CSS, then player colors for the current scheme and narrative typography adjustments. Global `ui.appearance`, `ui.scheme`, theme library and override buckets remain unchanged. Layout overlays only `panelTabs`, `backdrop`, `turnNotes`, preserving base `nav` and `worldList`. Switching off or leaving resolves the latest base appearance immediately.
+
+Only text leaves in host Markdown get story markers; image consent, source, generation and retry buttons remain outside them. Stage marks only its narrative paragraph, beside the advance button. The decorative plane is clipped inside the story content box and receives no pointer events. Plugin json-render components, including `Prose` and segment templates, cannot assign theme markers; iframes remain separate documents. Settings, approvals, composer, Stop, navigation and recovery bars never inherit plugin colors.
+
+The device SettingsStore saves `{ pluginId, themeId, contentHash }` at `ui.sessionTheme.<sessionId>`, without CSS, URLs, assets or grants. Sessions, branches and snapshots do not carry it; a new session/branch ID starts off. Only explicit device-settings export/import transfers it as an ordinary entry. Validation, read-only and conflict rules are in [SettingsStore](./settings-store.md).
+
 ### Plugin palette
 
 Only opaque `#rgb` / `#rrggbb` colors are accepted and expanded to lowercase six-digit colors. The only allowed variables are:
@@ -661,7 +675,7 @@ The full appearance-studio token list, alpha colors, `var()`, expressions and CS
 
 ### Plugin CSS language
 
-Only `.story`, `.dialogue`, and `.surface` are accepted; every member of a comma list must be one complete target. The host compiles them to two attributes on the same element, for example `[data-covel-theme-scope="<contentHash>"][data-covel-theme-part="story"]`, without appending author selectors. Repeated valid targets collapse to bound generated scope expansion. Combinators, additional classes, types, IDs, attributes, universal selectors, pseudo-classes/elements, selector functions and nesting are rejected.
+Only `.story`, `.dialogue`, and `.surface` are accepted; every member of a comma list must be one complete target. The host compiles them to two attributes on the same element, for example `[data-covel-theme-scope="<contentHash>"][data-covel-theme-part="story"]`, without appending author selectors. The client revalidates with the same AST policy and binds it to a separate scope for the current host mount; old-session nodes cannot match a new mount. Repeated valid targets collapse to bound generated scope expansion. Combinators, additional classes, types, IDs, attributes, universal selectors, pseudo-classes/elements, selector functions and nesting are rejected.
 
 <!-- prettier-ignore -->
 | Target | Properties | Only accepted values |

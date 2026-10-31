@@ -31,6 +31,7 @@ it.each([viewEntry, pageViewEntry])(
     const spec = { ...entry.spec };
     const onRetry = vi.fn();
     const values = {
+      themeSessionId: "host-known-session",
       pluginId: "p",
       onRetry,
       spec,
@@ -41,6 +42,7 @@ it.each([viewEntry, pageViewEntry])(
       handlers: { invokePluginAction: vi.fn() },
     };
     const view = render(<PluginPanel {...values} />);
+    expect(captured.props?.themeSessionId).toBe("host-known-session");
     expect(captured.props?.state.session).toEqual(projection);
     expect(Object.keys(captured.props!.state).sort()).toEqual([
       "locale",

@@ -1,8 +1,14 @@
-import { useMemo } from "react";
+import { useMemo, useCallback, useSyncExternalStore } from "react";
 import { useSetting, useSettingsStore } from "@/settings/use-settings.js";
 import type { ResolvedThemeLayout } from "./layout.js";
 import { getThemeLayout } from "./registry.js";
 import { CUSTOM_THEMES_KEY } from "./storage.js";
+
+import {
+  pluginThemeRevision,
+  subscribePluginThemes,
+  resolveSessionThemeLayout,
+} from "./plugin-themes.js";
 
 /** The active theme package's resolved layout, tracking theme switches. */
 export function useThemeLayout(): ResolvedThemeLayout {
@@ -10,8 +16,14 @@ export function useThemeLayout(): ResolvedThemeLayout {
   const [appearance] = useSetting<string>("ui.appearance");
   // Re-resolve when a custom package is imported, edited or removed.
   const [customThemes] = useSetting<unknown>(CUSTOM_THEMES_KEY);
+  const subscribe = useCallback(
+    (listener: () => void) => subscribePluginThemes(store, listener),
+    [store],
+  );
+  const current = useCallback(() => pluginThemeRevision(store), [store]);
+  const revision = useSyncExternalStore(subscribe, current, current);
   return useMemo(
-    () => getThemeLayout(store, appearance),
-    [store, appearance, customThemes],
+    () => resolveSessionThemeLayout(store, getThemeLayout(store, appearance)),
+    [store, appearance, customThemes, revision],
   );
 }

@@ -1552,3 +1552,7 @@ runtime 的终态：
 ## 沙箱会话页面协议
 
 普通会话 webview 使用单一 MessagePort，公开投影升级到版本 2；`pending[].interaction` 和当前 frame 的不透明句柄替代原始 block，`input` 提供人类座位和当前可用行动。逐能力授权后，页面可请求玩家行动、交互回答、所属插件的手动 runtime、停止和所属面板导航。回复仅含固定安全结果，不传递执行内部对象。协议、上限、重放限制与失效规则的唯一字段表见[会话界面桥](./ui-panels.md#sessionprojection版本-2)。正常 HTTP/SSE 协议和服务端鉴权、提案提交保持原边界。
+
+### 会话主题快照
+
+`GET /api/ui-specs` 的只读 `theme` 数组提供已校验的静态外观。玩家选择使用设备 SettingsStore，不新增主题 action、RPC、SSE 或能力授权；现有页面写协议和内容授权保持独立。已有沙箱 `theme` 快照可携带对应会话的有效安全配色、明暗模式和包内容身份，以及宿主字体/圆角；不发送 CSS、资源清单、设置条目、宿主标记或会话 ID。无会话调用仍使用基础外观。详见[主题契约](./theme-packages.md#在会话中选择)。

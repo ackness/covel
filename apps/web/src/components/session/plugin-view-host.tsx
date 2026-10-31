@@ -146,6 +146,7 @@ export function PluginViewHost({
               />
             ) : (
               <PluginPanel
+                themeSessionId={sessionId}
                 pluginId={entry.pluginId}
                 panelId={entry.viewId}
                 spec={{ ...entry.spec }}
@@ -198,6 +199,7 @@ function ConsentedView({
         </Button>
       )}
       <PluginPanel
+        themeSessionId={sessionId}
         pluginId={entry.pluginId}
         panelId={entry.viewId}
         spec={{ ...entry.spec }}

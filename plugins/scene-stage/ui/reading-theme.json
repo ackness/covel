@@ -1,0 +1,19 @@
+{
+  "id": "reading",
+  "label": "Stage reading",
+  "description": "Warm story colors and quiet dialogue typography.",
+  "tokens": {
+    "light": {
+      "--story-color": "#302818",
+      "--surface-story": "#fff5dd",
+      "--accent-primary": "#805428"
+    },
+    "dark": {
+      "--story-color": "#f5ead2",
+      "--surface-story": "#24201a",
+      "--accent-primary": "#d5aa78"
+    }
+  },
+  "layout": { "preset": "book" },
+  "css": "./ui/reading-theme.css"
+}

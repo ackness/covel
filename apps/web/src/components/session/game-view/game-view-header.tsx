@@ -41,6 +41,7 @@ export type GameViewMode =
   "parsed" | "detailed" | "raw" | "stage" | PluginViewMode;
 
 interface GameViewHeaderProps {
+  themeSettings?: ReactNode;
   t: TFunction;
   sessionId: string;
   sessionPhase: SessionRecord["phase"];
@@ -74,6 +75,7 @@ interface GameViewHeaderProps {
  * the bar.
  */
 export function GameViewHeader({
+  themeSettings,
   t,
   sessionId,
   sessionPhase,
@@ -266,6 +268,8 @@ export function GameViewHeader({
             <span className="text-[11px] tabular-nums">{suspensionsCount}</span>
           </Button>
         )}
+
+        {themeSettings}
 
         <MusicToggle sessionId={sessionId} t={t} />
 

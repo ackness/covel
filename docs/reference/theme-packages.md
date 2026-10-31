@@ -614,7 +614,7 @@ html[data-theme="my-theme"][data-turn="executing"] .ui-composer-input {
 
 ## 插件提供的受限主题
 
-`contributes.ui.theme` 发布静态主题 JSON，与本页前面的应用级导入主题不同。目前支持作者校验、编译、资源发布和 API 发现；客户端尚未提供按会话选择或挂载插件主题。此声明不启用插件，不授予服务器代码、会话读取或桥接能力，也不增加故事依赖。
+`contributes.ui.theme` 发布静态主题 JSON，与本页前面的应用级导入主题不同。支持作者校验、编译、资源发布和按会话选择。此声明不启用插件，不授予服务器代码、会话读取或桥接能力，也不增加故事依赖。
 
 ```yaml
 contributes:
@@ -642,6 +642,20 @@ contributes:
 
 `tokens`、`layout`、`css` 至少提供一项；只有 `assets` 不算主题。各模式的 token 是非空部分映射，缺少的模式或颜色继承基础外观。`layout` 只接受 `{ preset: "classic" | "book" | "stage" | "panel" }`，不接受单项覆盖。消费方只能采用预设的 `panelTabs`、`backdrop`、`turnNotes`，保留玩家的 `nav`、`worldList`；省略时保留全部基础布局。不得修改全局 scheme 或 `ui.appearance`，不得替换 SettingsStore 或增加 ThemeProvider。
 
+### 在会话中选择
+
+启用提供主题的插件后，打开会话工具栏的“会话主题”，选择带所属插件名称的主题，再点“应用”。即使只有一个主题，也不会自动选择。场景舞台提供可选的“舞台阅读”；社区例子见 [Reading theme probe](../../tests/third-party/theme-pack-probe/README.md)。
+
+每个设备、每个会话最多启用一个插件主题，默认关闭。工具栏显示当前生效的主题；内容变化、所属插件不可用、读取或位图检查失败时，主题不生效，并显示原因，游戏继续。旧选择可以保留，但更新后的内容需要明确重新选择。恢复同一份可用内容时，原选择可恢复。
+
+“使用默认外观”在独立的宿主恢复栏中，文字、沉浸舞台和插件视图都能使用。它只关闭插件外观，不切换视图，不撤销页面权限，也不修改基础主题或玩家微调。新选择等设置保存成功后生效；保存失败保留草稿和上次确认的安全外观。关闭立即生效；关闭保存失败时，本次访问保持关闭并提示重启后可能恢复旧选择。可再次明确选择以重试。
+
+外观依次采用基础内置/导入主题、所选插件的受限配色/CSS、当前明暗模式下的玩家颜色和正文排版微调。全局 `ui.appearance`、`ui.scheme`、主题库及覆盖桶都不改写。布局只覆盖 `panelTabs`、`backdrop`、`turnNotes`，保留基础 `nav`、`worldList`；关闭或离开会话立即按最新基础外观重新解析。
+
+正文只给宿主 Markdown 的文字叶节点标记；图片授权、来源、生图和重试按钮不在标记节点内。舞台只标记正文段落，继续按钮是兄弟节点。装饰平面位于正文内容框内，裁剪绘制且不接收点击。插件 json-render 组件，包括 `Prose` 和段落模板，不能自行指定主题标记；iframe 是独立文档。设置、审批、输入框、停止、导航和恢复栏都不继承插件配色。
+
+选择以 `{ pluginId, themeId, contentHash }` 保存到设备 SettingsStore 的 `ui.sessionTheme.<sessionId>`，不保存 CSS、URL、素材或授权。会话、分支、快照不携带它；新会话/分支 ID 默认关闭。仅明确导出/导入设备设置时，它作为普通设置条目传递。校验、只读与冲突规则见 [SettingsStore](./settings-store.md)。
+
 ### 插件调色板
 
 只接受不透明 `#rgb` / `#rrggbb`，统一展开为小写六位颜色。允许的变量只有：
@@ -660,7 +674,7 @@ contributes:
 
 ### 插件 CSS 语言
 
-只接受 `.story`、`.dialogue`、`.surface`，逗号列表中每一项都必须是其中一个完整选择器。宿主把它们编译为同一元素上的两个属性，例如 `[data-covel-theme-scope="<contentHash>"][data-covel-theme-part="story"]`，不拼接作者选择器。重复的合法目标会合并，避免扩大生成样式。任何组合器、额外 class、类型、ID、属性、通配符、伪类、伪元素、选择器函数或嵌套均拒绝。
+只接受 `.story`、`.dialogue`、`.surface`，逗号列表中每一项都必须是其中一个完整选择器。宿主把它们编译为同一元素上的两个属性，例如 `[data-covel-theme-scope="<contentHash>"][data-covel-theme-part="story"]`，不拼接作者选择器。客户端通过同一 AST 策略重新校验，并绑定到当前宿主挂载的独立 scope；旧会话节点不能匹配新挂载。重复的合法目标会合并，避免扩大生成样式。任何组合器、额外 class、类型、ID、属性、通配符、伪类、伪元素、选择器函数或嵌套均拒绝。
 
 <!-- prettier-ignore -->
 | 目标 | 属性 | 唯一允许的值 |

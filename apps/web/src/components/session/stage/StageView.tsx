@@ -81,6 +81,8 @@ export interface StageViewProps {
   readonly advancing?: boolean;
   /** The session is being restored: a story that arrives now is history. */
   readonly restoring?: boolean;
+  /** Offer optional rereading without delaying an already-read story's input. */
+  readonly replayStoryOnEnter?: boolean;
   readonly executionError: string | null;
   readonly executionSteps: ExecutionStep[];
   readonly recoveryTurnId?: string;
@@ -133,6 +135,7 @@ export function StageView(props: StageViewProps): ReactElement {
     executing,
     advancing = false,
     restoring = false,
+    replayStoryOnEnter = false,
     sessionPlugins,
     submittedBlockIds,
     submittedBlockValues,
@@ -201,12 +204,12 @@ export function StageView(props: StageViewProps): ReactElement {
 
   // ── Cross-layer state ─────────────────────────────────────────
   const [autoPlay, setAutoPlay] = useState(false);
-  // A story already present when Stage mounts has been read in another view or
-  // before a restore. Mark it read instead of replaying old text from scratch.
-  // New story keys naturally fall back to the narrative dialog until it calls
-  // `onAllRead`.
+  // A committed story read elsewhere must never gate the player's next action.
   const [readStoryKey, setReadStoryKey] = useState<string | undefined>(() =>
     initialStageReadStoryKey(storyMsg),
+  );
+  const [reviewStoryKey, setReviewStoryKey] = useState<string | undefined>(
+    () => (replayStoryOnEnter ? initialStageReadStoryKey(storyMsg) : undefined),
   );
   // Stage can also mount before a restore delivers the history. The first
   // story it then receives has been read as well, unless a turn running in
@@ -215,8 +218,11 @@ export function StageView(props: StageViewProps): ReactElement {
   const [awaitingHistory, setAwaitingHistory] = useState(!storyMsg);
   if (awaitingHistory && storyMsg) {
     setAwaitingHistory(false);
-    if (!executing || restoring)
+    if (!executing || restoring) {
       setReadStoryKey(initialStageReadStoryKey(storyMsg));
+      if (replayStoryOnEnter)
+        setReviewStoryKey(initialStageReadStoryKey(storyMsg));
+    }
   }
   const [historyOpen, setHistoryOpen] = useState(false);
   const [dismissedFormIds, setDismissedFormIds] = useState<ReadonlySet<string>>(
@@ -295,6 +301,7 @@ export function StageView(props: StageViewProps): ReactElement {
         onExit={() => onViewModeChange("parsed")}
       />
       <LiveStageDialog
+        sessionId={session.id}
         message={storyMsg}
         allRead={allRead}
         executing={executing}
@@ -306,6 +313,23 @@ export function StageView(props: StageViewProps): ReactElement {
         onAllRead={() => setReadStoryKey(storyKey)}
       />
       <StageChoices
+        storyReview={
+          allRead && !executing && storyKey === reviewStoryKey ? (
+            <LiveStageDialog
+              inline
+              sessionId={session.id}
+              message={storyMsg}
+              allRead={false}
+              executing={false}
+              turnId={storyTurnId}
+              streamEnded
+              segmentSpeakers={segmentSpeakers}
+              autoPlay={autoPlay}
+              reducedMotion={reducedMotion}
+              onAllRead={() => setReviewStoryKey(undefined)}
+            />
+          ) : undefined
+        }
         composerDraft={props.composerDraft}
         composerModes={props.composerModes}
         extensions={(choices, onDraftMessage) => (

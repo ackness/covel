@@ -1691,7 +1691,7 @@ fork 和社区插件的授权：
 
 `segment` 始终为数组（可以为空），项为 `{ pluginId, specs }`，是 `contributes.ui.segment` 的段落模板，按与 `message` 相同的会话筛选，插件的顺序就是模板同级时的先后。缺少 `match`、写了 `webview` / `dataSource` 等面板字段或带 `on` / `watch` 的模板报 `slot: "segment"` 诊断，同一插件的其他模板照常返回。见[段落模板](./ui-panels.md#段落模板)。合法的说话人头像模板 `CharacterAvatar` 走相同校验、逐项诊断与正文回退路径，响应字段不变。
 
-`theme` 必须为 `{ pluginId, specs: ResolvedPluginTheme[] }` 数组，与视图使用相同的会话 owner 门禁和可运行插件筛选。返回完整本地化文本映射、校验后的 tokens/layout、生成的 `cssText`、完整 SHA-256 `contentHash` 和可选 `assets: { digest, files: [{ path, mime, size }] }`；不暴露源 CSS、磁盘根目录、会话数据或能力。诊断使用 `slot: "theme"`，CSS 问题可含包内 `file`。位图通过既有无凭据 `/plugin-assets/<pluginId>/<digest>/<path>` 路由提供 GET/HEAD、ETag、不可变缓存和 `nosniff`，没有 HTML 入口或 bridge。过期、未列出或被替换文件统一 404，页面规则不变。编译和身份规则以[插件主题](./theme-packages.md#插件提供的受限主题)为准；此 API 支持尚不提供玩家启用入口。
+`theme` 必须为 `{ pluginId, specs: ResolvedPluginTheme[] }` 数组，与视图使用相同的会话 owner 门禁和可运行插件筛选。返回完整本地化文本映射、校验后的 tokens/layout、生成的 `cssText`、完整 SHA-256 `contentHash` 和可选 `assets: { digest, files: [{ path, mime, size }] }`；不暴露源 CSS、磁盘根目录、会话数据或能力。诊断使用 `slot: "theme"`，CSS 问题可含包内 `file`。位图通过既有无凭据 `/plugin-assets/<pluginId>/<digest>/<path>` 路由提供 GET/HEAD、ETag、不可变缓存和 `nosniff`，没有 HTML 入口或 bridge。过期、未列出或被替换文件统一 404，页面规则不变。编译和身份规则以[插件主题](./theme-packages.md#插件提供的受限主题)为准；玩家通过设备 SettingsStore 选择；主题没有新增 action、RPC、SSE 或能力授权。现有页面主题快照只投影当前会话的安全配色和身份，详见[主题契约](./theme-packages.md#在会话中选择)。
 
 **开发热重载**：`POST /api/plugins/:id/reload` 重新加载一个社区插件。
 

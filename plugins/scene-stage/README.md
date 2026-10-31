@@ -47,3 +47,13 @@
 修改场景匹配、说话人选择逻辑或面板数据路径后，运行本插件测试。
 
 `story-cues` 声明 `presentation: {}`，只读取明确允许的自有素材和展示 namespace，不读取私有角色档案、历史或服务，也不调用模型。无产出原因通过 `presentation.completed` 的固定代码记录；普通 cast 与事件覆盖保持原有行为。见[呈现 runtime](../../docs/reference/plugins.md#presentation-runtimes)。
+
+## Optional reading appearance
+
+The **Stage reading** pack adds warm light/dark story colors and the existing
+reading layout for session panels and turn notes. Enable Scene Stage, then choose
+it explicitly in **Session theme**. It starts off and does not select a view or
+start any runtime. **Use default appearance** stays in host controls, including
+immersive stage mode, and preserves the player's base theme and overrides.
+Settings, approvals and page bars keep their host appearance. See the
+[theme contract](../../docs/en/reference/theme-packages.md#restricted-themes-supplied-by-plugins).

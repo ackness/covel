@@ -155,6 +155,9 @@ export const ChatMessageRenderer = memo(function ChatMessageRenderer({
         <StoryMessageBody message={msg} sessionId={sessionId} />
       ) : (
         <NarrativeMessageBody
+          themeSessionId={
+            isAssistant && msg.kind === "story" ? sessionId : undefined
+          }
           isUser={isUser}
           isHiddenAssistantKind={Boolean(isHiddenAssistantKind)}
           content={msg.content}

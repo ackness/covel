@@ -1552,3 +1552,7 @@ The event contains no raw input, free-text reason, asset path, reply or credenti
 ## Sandbox session page protocol
 
 Ordinary session webviews use one MessagePort and public projection version 2. `pending[].interaction` and opaque per-frame handles replace raw blocks; `input` exposes human seats and currently permitted actions. Independently consented methods request player actions, interaction answers, own manual runtimes, abort and own-panel navigation. Replies contain only fixed safe outcomes, without execution internals. The authoritative field tables, limits, replay budget and retirement rules are in the [session bridge](./ui-panels.md#sessionprojection-version-2). Normal HTTP/SSE authorization and proposal commit retain their existing boundaries.
+
+### Session theme snapshots
+
+The read-only `theme` array from `GET /api/ui-specs` supplies validated static appearance. Player selection uses the device SettingsStore, adding no theme action, RPC, SSE or capability grant; existing page writes and content consent remain independent. Existing sandbox `theme` snapshots may carry the relevant session’s effective safe palette, scheme and package content identity plus host fonts/radii, without CSS, resource listings, setting entries, host markers or session IDs. Calls without a session retain base appearance. See the [theme contract](./theme-packages.md#selecting-in-a-session).

@@ -1,8 +1,18 @@
-import type { I18nText } from "@covel/shared";
+import type { I18nText, ResolvedPluginTheme } from "@covel/shared";
 import type { ThemeLayoutSpec } from "./layout.js";
 
 export type ThemeScheme = "light" | "dark";
-export type ThemeSource = "builtin" | "custom";
+export type ThemeSource = "builtin" | "custom" | "plugin";
+
+/** Session sources never enter the global appearance library. */
+export interface PluginThemeSource {
+  readonly source: "plugin";
+  readonly pluginId: string;
+  readonly themeId: string;
+  readonly contentHash: string;
+  readonly theme: ResolvedPluginTheme;
+  readonly owner: string;
+}
 
 export interface ThemeManifest {
   id: string;

@@ -347,3 +347,7 @@ This section explains how list components (`EntryList`, `MediaGallery`, `JobList
 ```
 
 The host compares a job's `itemField` value with each media record's `matchField`. An empty value does not count as a match. This way a job row can show its related preview, and the component does not need to know the prompt field or read a second plugin namespace.
+
+## Session theme markers
+
+Restricted plugin themes affect only text leaves in host narrative Markdown, stage narrative paragraphs and a separate noninteractive decorative plane. `Prose`, segment templates and other plugin components do not become targets just because they display text. Catalog renderers forward only declared props, without spreading arbitrary DOM attributes, so a spec cannot assign reserved `data-covel-theme-scope` / `data-covel-theme-part`. Host action buttons and image-consent controls stay outside palette nodes. See [plugin themes](./theme-packages.md#selecting-in-a-session) for the boundary.
