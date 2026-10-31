@@ -2,6 +2,10 @@ import { createHash } from "node:crypto";
 import { estimateMessageTokens, type TokenEstimator } from "@covel/context";
 import { instructionLocaleFor, type LLMMessage } from "@covel/shared";
 import { z } from "zod";
+import {
+  loopStepDigestMessage,
+  type LoopStepDigest,
+} from "./loop-step-digest.js";
 
 interface StepGroup {
   readonly start: number;
@@ -77,7 +81,7 @@ function preview(text: string, limit: number): string {
 
 interface CollapseEntry {
   readonly groups: readonly string[];
-  readonly content: string;
+  readonly digest: LoopStepDigest;
 }
 
 export interface LoopContextPolicy {
@@ -125,7 +129,7 @@ export function createLoopContextPolicy(options: {
           resultKeys.set(group.start + 1 + index, `${group.key}:${index}`);
       }
       const applied = new Set<StepGroup>();
-      const replacements = new Map<number, string>();
+      const replacements = new Map<number, LoopStepDigest>();
       const removed = new Set<number>();
       let collapsedStepCount = 0;
       const applyEntry = (entry: CollapseEntry) => {
@@ -136,7 +140,7 @@ export function createLoopContextPolicy(options: {
         )
           return;
         const selected = matches.map((found) => found[0]!);
-        replacements.set(selected[0]!.start, entry.content);
+        replacements.set(selected[0]!.start, entry.digest);
         for (const group of selected) {
           applied.add(group);
           for (let index = group.start; index < group.end; index += 1)
@@ -148,7 +152,7 @@ export function createLoopContextPolicy(options: {
 
       const render = (pending?: {
         groups: readonly StepGroup[];
-        content: string;
+        digest: LoopStepDigest;
       }): LLMMessage[] => {
         const pendingRemoved = new Set<number>();
         for (const group of pending?.groups ?? []) {
@@ -157,10 +161,10 @@ export function createLoopContextPolicy(options: {
         }
         const output: LLMMessage[] = [];
         for (const [index, message] of messages.entries()) {
-          const content = replacements.get(index);
-          if (content !== undefined) output.push({ role: "system", content });
+          const digest = replacements.get(index);
+          if (digest !== undefined) output.push(loopStepDigestMessage(digest));
           if (index === pending?.groups[0]?.start)
-            output.push({ role: "system", content: pending.content });
+            output.push(loopStepDigestMessage(pending.digest));
           if (removed.has(index) || pendingRemoved.has(index)) continue;
           const key = resultKeys.get(index);
           const body =
@@ -209,7 +213,7 @@ export function createLoopContextPolicy(options: {
 
         const collapsible = emergency ? available : available.slice(0, -1);
         const selected: StepGroup[] = [];
-        const lines: string[] = [];
+        const steps: LoopStepDigest["steps"][number][] = [];
         // Do not let identifiers from arguments or summaries leak into the digest.
         const ids = groups.flatMap((group) => group.ids);
         const clean = (text: string) => {
@@ -240,19 +244,20 @@ export function createLoopContextPolicy(options: {
                 : typeof envelope?.summary === "string"
                   ? `ok: ${preview(clean(envelope.summary), 80)}`
                   : "ok";
-            lines.push(
-              `- ${clean(call.name)}(${preview(clean(JSON.stringify(call.arguments)), 120)}) -> ${outcome}`,
-            );
+            steps.push({
+              callId: call.id,
+              text: `- ${clean(call.name)}(${preview(clean(JSON.stringify(call.arguments)), 120)}) -> ${outcome}`,
+            });
           }
           request = render({
             groups: selected,
-            content: [header, ...lines].join("\n"),
+            digest: { header, steps: [...steps] },
           });
         }
         if (selected.length > 0) {
           collapsed.push({
             groups: selected.map((group) => group.key),
-            content: [header, ...lines].join("\n"),
+            digest: { header, steps: [...steps] },
           });
           collapsedStepCount += selected.length;
         }
