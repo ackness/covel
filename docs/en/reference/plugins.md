@@ -833,7 +833,7 @@ When only one thing differs from the profile, write only that key; the rest keep
 | `steering` | Merge the player's queued interjections into the conversation before each step and after the story text is written |
 | `truncation` | `accept`: story text cut off at the output limit is kept; `reject`: it fails |
 | `fallback` | When the model keeps calling the same tool: `answer-without-tools` turns the tools off and asks for the answer; `fail` fails with `loop-detected` |
-| `finalizer.maxSteps` | At the step limit or when the request no longer fits the model context, turn tools off and ask once for the final answer, subject to the finalizer conditions. Overflow rescue requires a complete tool step and condenses all tool groups. `false` disables both rescues |
+| `finalizer.maxSteps` | At the step limit or when the request no longer fits the model context, turn tools off and ask once for the final answer, subject to the finalizer conditions. Overflow rescue requires a complete tool step and trims tool groups as needed under [prompt budgeting](./prompt-structure.md#budget). `false` disables both rescues |
 | `finalizer.deadlineReserveMs` | With this many milliseconds left before the time limit, start no new step and ask for the final answer with tools off. `0` turns it off |
 | `corrections.toolUse` | Corrections for missing required tool work or explicit completion. Integer 0–3, default 1 |
 | `corrections.review` | Corrections after `PostLLMResponse` rejects a draft. Integer 0–5, default 2 |

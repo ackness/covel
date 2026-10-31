@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { estimateMessageTokens, type TokenEstimator } from "@covel/context";
 import { instructionLocaleFor, type LLMMessage } from "@covel/shared";
 import { z } from "zod";
@@ -8,27 +9,11 @@ interface StepGroup {
   readonly assistant: LLMMessage;
   readonly results: readonly LLMMessage[];
   readonly ids: readonly string[];
-  readonly keys: readonly string[];
-}
-
-/** Providers can reuse call IDs across steps; their result occurrence disambiguates them. */
-function toolResultKeys(messages: readonly LLMMessage[]): Map<number, string> {
-  const occurrences = new Map<string, number>();
-  const keys = new Map<number, string>();
-  for (const [index, message] of messages.entries()) {
-    if (message.role !== "tool" || message.toolCallId === undefined) continue;
-    const occurrence = occurrences.get(message.toolCallId) ?? 0;
-    occurrences.set(message.toolCallId, occurrence + 1);
-    keys.set(index, JSON.stringify([message.toolCallId, occurrence]));
-  }
-  return keys;
+  readonly key: string;
 }
 
 /** Only complete, contiguous call/result groups in provider order are eligible. */
-function stepGroups(
-  messages: readonly LLMMessage[],
-  resultKeys = toolResultKeys(messages),
-): StepGroup[] {
+function stepGroups(messages: readonly LLMMessage[]): StepGroup[] {
   const groups: StepGroup[] = [];
   for (let start = 0; start < messages.length; start += 1) {
     const assistant = messages[start]!;
@@ -53,7 +38,16 @@ function stepGroups(
       assistant,
       results,
       ids,
-      keys: results.map((_result, index) => resultKeys.get(start + 1 + index)!),
+      // Filtering can renumber reused IDs. Verify call metadata and result
+      // content instead, without retaining full tool data in the ledger.
+      key: createHash("sha256")
+        .update(
+          JSON.stringify([
+            calls.map((call) => [call.id, call.name, call.arguments]),
+            results.map((result) => [result.name, result.content]),
+          ]),
+        )
+        .digest("hex"),
     });
     start += calls.length;
   }
@@ -82,7 +76,7 @@ function preview(text: string, limit: number): string {
 }
 
 interface CollapseEntry {
-  readonly groups: readonly (readonly string[])[];
+  readonly groups: readonly string[];
   readonly content: string;
 }
 
@@ -102,7 +96,7 @@ export interface LoopContextPolicy {
   };
 }
 
-/** A request-only, append-only ledger. It retains strings and IDs, never messages. */
+/** A request-only, append-only ledger. It retains strings and hashes, never messages. */
 export function createLoopContextPolicy(options: {
   locale?: string;
 }): LoopContextPolicy {
@@ -116,20 +110,26 @@ export function createLoopContextPolicy(options: {
 
   return {
     fit(messages, ctx) {
-      const resultKeys = toolResultKeys(messages);
-      const groups = stepGroups(messages, resultKeys);
+      const groups = stepGroups(messages);
+      const groupsByKey = new Map<string, StepGroup[]>();
+      for (const group of groups) {
+        const matches = groupsByKey.get(group.key) ?? [];
+        matches.push(group);
+        groupsByKey.set(group.key, matches);
+      }
+      const resultKeys = new Map<number, string>();
+      for (const group of groups) {
+        // Identical groups cannot be distinguished after a hook filters them.
+        if (groupsByKey.get(group.key)!.length !== 1) continue;
+        for (const index of group.results.keys())
+          resultKeys.set(group.start + 1 + index, `${group.key}:${index}`);
+      }
       const applied = new Set<StepGroup>();
       const replacements = new Map<number, string>();
       const removed = new Set<number>();
       let collapsedStepCount = 0;
       const applyEntry = (entry: CollapseEntry) => {
-        const matches = entry.groups.map((keys) =>
-          groups.filter(
-            (group) =>
-              group.keys.length === keys.length &&
-              group.keys.every((key, index) => key === keys[index]),
-          ),
-        );
+        const matches = entry.groups.map((key) => groupsByKey.get(key) ?? []);
         // A hook may remove or reshape a group; skip an incomplete frozen event.
         if (
           matches.some((found) => found.length !== 1 || applied.has(found[0]!))
@@ -181,15 +181,20 @@ export function createLoopContextPolicy(options: {
         );
       let request = render();
       const emergency = ctx.mode === "emergency";
-      if (emergency || total(request) > ctx.inputLimit) {
+      if (total(request) > ctx.inputLimit) {
         const target = Math.floor(0.7 * ctx.inputLimit);
         const available = groups.filter((group) => !applied.has(group));
         const elidable = emergency ? available : available.slice(0, -2);
         for (const group of elidable) {
-          if (!emergency && total(request) <= target) break;
+          if (total(request) <= target) break;
           for (const [index, result] of group.results.entries()) {
-            const key = group.keys[index]!;
-            if (typeof result.content !== "string" || elided.has(key)) continue;
+            const key = resultKeys.get(group.start + 1 + index);
+            if (
+              key === undefined ||
+              typeof result.content !== "string" ||
+              elided.has(key)
+            )
+              continue;
             const envelope = parseObject(result.content);
             const content =
               result.content === marker || envelope?.data === marker
@@ -223,7 +228,8 @@ export function createLoopContextPolicy(options: {
             .replace(/[\r\n]+/g, " ");
         };
         for (const group of collapsible) {
-          if (!emergency && total(request) <= target) break;
+          if (total(request) <= target) break;
+          if (groupsByKey.get(group.key)!.length !== 1) continue;
           selected.push(group);
           for (const [index, call] of group.assistant.toolCalls!.entries()) {
             const envelope = parseObject(group.results[index]!.content);
@@ -245,7 +251,7 @@ export function createLoopContextPolicy(options: {
         }
         if (selected.length > 0) {
           collapsed.push({
-            groups: selected.map((group) => [...group.keys]),
+            groups: selected.map((group) => group.key),
             content: [header, ...lines].join("\n"),
           });
           collapsedStepCount += selected.length;

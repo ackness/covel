@@ -595,7 +595,7 @@ deciding → finalizing → stopped        running-tools → suspended
 
 **步数上限不算成功。** 用完步数时，模型在工具调用旁边写的文字只是草稿。只要输出不是由完成工具交出、`requireToolUse` 和 `requireExplicitCompletion` 已满足或没开、离截止时间还有至少 3 秒，内核再发一次关掉工具的收尾请求，要求直接给出最终答案。故事的输出 schema 要求 `segments` 时，收尾、仅读取工具后的续写以及循环检测后的续写都要求按 JSON 对象输出，将段落放入 `segments` 数组，标明 narration、dialogue 或 action，且对话带 speaker。收尾写出文字时 runtime 成功，结果标明 `stop.finalizer: true`；否则以 `max-steps` 失败，暂存的写入不提交。profile 的 `finalizer.maxSteps: false` 关掉这次收尾。超时是失败，不尝试收尾；例外是 profile 写了 `finalizer.deadlineReserveMs`：剩余时间不足预留、而且上面的收尾条件满足时，循环不再开始新的一步，先并入排队的玩家插话（profile 开了 `steering` 时），再发收尾请求，写出答案时以 `{ reason: "deadline", finalizer: true }` 成功。
 
-**上下文超限也可收尾。** `finalizer.maxSteps` 开启时，已有完整工具步骤、且通常的收尾条件满足，超限出口会尝试一次关闭工具的请求。该请求压缩所有工具步骤。救回的答案以 `{ reason: "context-overflow", finalizer: true }` 成功，仍可修复输出；否则结算保留最初的超限失败文字。账本不持久保存：恢复挂起时确定性地重新计算决定，因此请求前缀可能变化一次。
+**上下文超限也可收尾。** `finalizer.maxSteps` 开启时，已有完整工具步骤、且通常的收尾条件满足，超限出口会尝试一次关闭工具的请求。该请求按[提示词预算](../reference/prompt-structure.md#预算)按需裁剪工具步骤，最新一组也可处理。救回的答案以 `{ reason: "context-overflow", finalizer: true }` 成功，仍可修复输出；否则结算保留最初的超限失败文字。账本不持久保存：恢复挂起时确定性地重新计算决定，因此请求前缀可能变化一次。
 
 ## 四、插件设计
 
