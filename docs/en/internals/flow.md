@@ -218,6 +218,8 @@ Details to remember:
 - `execution.completed.committed` is the final signal to the client. The frontend uses it to confirm or take back what it showed first.
 - Event publishing after a commit runs one event at a time, and one failure does not roll back data that was already written. On failure, the host records a `commit.fanout.failed` trace. The session's subscribed stream receives `system.reset` (`reason: "publish-failed"`) and reads everything again. The `execution.completed` event carries `resync: true`.
 
+Successful results, guards skipped after writes, and actual suspensions carry read dependencies under a private kernel symbol. Execution collects them before cloning the commit plan; public results and continuations store no graph. Commit also checks continuation-owning units with no domain proposals, discarding auxiliary continuations that depend on dropped producers through existing job and clock settlement. Resume reads current committed world data and its own saved buffer; its source producers have settled, so the resume plan has no historical producer IDs.
+
 #### Sending events to the client does not hold up the turn
 
 Sending events to the client does not decide whether the work is done:
@@ -670,6 +672,8 @@ io:
 - An optional input must say `required: false` explicitly. This way a provider that is temporarily absent does not become a required dependency.
 
 **When the data a runtime reads was taken.**
+
+Each invocation takes its visible world proposals between DAG levels, copying them in recursive child-before-parent commit order and rebinding identity. Only committable results contribute; malformed effects and entire retry/detached seed subtrees are excluded. Character/schema reads add the real producer run IDs to the shared invocation recorder. Host construction, materialization and isolation copies are inert; actual tool and service property reads record observations. Extension providers keep their frozen views. See [World Model](../reference/world-model.md).
 
 - The domain read view has three parts: the committed CharacterSchema and Characters, the validated upstream proposals, and the writes this runtime is about to commit. So if a tool writes something and reads it right after, it gets what was just written.
 - Plugin data works the same way: a runtime that reads its own plugin's data reads the committed value, plus the writes that completed upstream runtimes of the same plugin will commit (in commit order), plus its own buffer. The visible writes are taken when the runtime starts, so siblings of one level do not see each other; upstream results brought by a retry or a background job do not count. A runtime that read an upstream write depends on it: when the upstream is dropped at commit, an auxiliary runtime is dropped with it, while a story or setup runtime commits and the trace records it. Rules: [In-execution plugin-data visibility](../reference/plugins.md#in-execution-plugin-data-visibility).

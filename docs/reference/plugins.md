@@ -630,6 +630,8 @@ Agent 的副作用只来自工具：模型能写什么，以 `agent.tools` 白�
 - 子调用用 `ctx.progress` 上报的进度作业，和父调用在同一个进度范围里，随父执行的提交一起收尾，同一个 runtime 的多次调用（例如父调用多次触发同一个子调用）共用这个范围；作业在完整身份键（`pluginId`、`runtimeId` 等）内按 `jobId` 和序号去重，所以父子或兄弟 runtime 的作业不会互相冲突；同一个 runtime 的多次调用共用一个身份键，要用不同的 `jobId`。子调用保留自己的执行身份，只是在根执行的进度范围里上报。父 handler 成功时，它们按各自的结果结束；父 handler 失败时，以 `cancelled` 结束；父 handler 挂起时，它们和父调用的作业一起停在 `waiting-input`，恢复成功后以保存时的结果结束，挂起项被放弃、过期、作废时以 `cancelled` 结束。
 - agent 的 guard 里发起的子调用，只在 guard 返回 `{ skip: true }`、结果仍是跳过时提交；guard 放行、agent 照常运行时丢弃。
 
+挂起的辅助读者仍受源执行的读取依赖检查：它读过的生产者被丢弃时，挂起项和其中缓冲的子调用一起丢弃，即使读者没有暂存写入。详见[事务](./transactions.md)。
+
 提交时，顶层 runtime 和它下面所有层的嵌套调用是一个整体，要么全部提交，要么全部丢弃：
 
 - 有故事的执行里，非故事 runtime 的这个整体在一个 savepoint 里提交。其中任何一条写入被拒，整体一起丢弃，故事照常保存。依赖这个顶层 runtime 的下游按[提交规则](./transactions.md#回合级单事务)跟着丢弃。
@@ -911,6 +913,8 @@ homepage: https://example.com/tidefall
 - 写入通过 proposals，在提交时统一校验。
 - `ctx.world.dimensions` 以提供者发布的冻结快照为底本，并叠加该视图可见的合法维度 proposal。公共读取与执行内预览的区别见下面的[动态维度](#动态维度)。
 - `ctx.world.seats` 是会话的座位，同样冻结。proposal 不改它，玩家用[切换接口](./api.md#会话座位)换当前角色，下一回合生效。
+
+实际读取 `characters` / `characterSchema` 会记录上游生产者，工具和服务共享该调用的读取记录器。辅助读者在生产者被丢弃时一起丢弃，story/setup 保留并记 trace。可见范围、保守粒度和种子排除见 [World Model](./world-model.md)。递归调用不继承父执行的上游，子 agent 仍读已提交世界。
 
 **按名字找角色。** 角色除 `name` 外可以有 `aliases`（同一个人的其他叫法）。
 

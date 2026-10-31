@@ -769,6 +769,47 @@ describe("finalizeExecution read dependencies", () => {
     ]);
   });
 
+  it.each(["story", "setup"] as const)(
+    "protects a unit containing a nested %s reader and deduplicates its kept trace",
+    async (protection) => {
+      const producer = fn("producer");
+      const child = fn(
+        "child",
+        protection === "story" ? { outputKind: "story" } : { stage: "setup" },
+      );
+      const parent = fn("parent");
+      const { outcome, kept } = await finalize(
+        [narrator, producer, child, parent],
+        [
+          storyResult,
+          result(producer, "p"),
+          result(
+            child,
+            "child",
+            protection === "story"
+              ? {
+                  narrativeOutput: "The nested story continues.",
+                }
+              : {},
+          ),
+          result(parent, "parent"),
+        ],
+        {
+          [`${child.name}-run`]: [`${producer.name}-run`],
+          [`${parent.name}-run`]: [`${producer.name}-run`],
+        },
+        refuse("p"),
+        [1, 1, 2],
+      );
+      expect(outcome.status).toBe("committed");
+      expect(outcome.isolatedRuntimes?.map((item) => item.runtimeId)).toEqual([
+        producer.name,
+      ]);
+      expect(kept).toHaveLength(1);
+      expect(kept[0]).toMatchObject({ producerRunId: `${producer.name}-run` });
+    },
+  );
+
   it("ignores an edge inside one unit", async () => {
     const child = fn("child");
     const parent = fn("parent");

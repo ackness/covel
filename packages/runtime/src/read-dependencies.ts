@@ -3,6 +3,8 @@
  *
  * A runtime reads its own plugin's data with the writes of completed upstream
  * runtimes of that plugin applied (`function-runtime/upstream-plugin-data.ts`).
+ * World Model character/schema property reads share that recorder across
+ * handlers, guards, tools and services, including cross-package producers.
  * Those writes are not committed yet. When one is dropped at commit, what a
  * reader built on it is stale, so the reader records which producer's writes
  * each read actually saw, and `finalizeExecution` drops an auxiliary reader
@@ -44,7 +46,9 @@ export function readDependenciesOf(result: RuntimeResult): readonly string[] {
 
 /**
  * Record that `result` read writes of `producerIds`. Call only for a result
- * that can commit; existing entries are kept.
+ * that can commit or owns a continuation; existing entries are kept. A
+ * suspension is checked at its source commit before it can be saved. Its
+ * producer graph is never stored in the continuation or replayed on resume.
  */
 export function attachReadDependencies(
   result: RuntimeResult,

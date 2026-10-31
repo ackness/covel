@@ -913,6 +913,8 @@ Plugins can use the same rules: `mergeSchemaDefaults` and `assertCharacterFields
 
 Default value filling and character write validation all read the session's World Model. This view merges three things in execution order: the committed records, the domain proposals of upstream runtimes that succeeded, and the pending proposals of this runtime. An invalid schema or an invalid character write does not enter this view. Character records are not mirrored into plugin private data.
 
+Runtime character tools read characters and schema through the tracked `context.world`. Plugin tools, function `ctx.tools.call` and service imports retain the same invocation recorder. Host copying for tool isolation does not count as a read; actual property access does. See [World Model](./world-model.md). Public dimension tools keep reading the frozen snapshot without these dependencies. Auxiliary runs that suspend after reading are checked at source commit; see [Transactions](./transactions.md).
+
 When reading, updates are applied in proposal order, using `materializeCharacterUpsert`, the same function the commit uses:
 
 | Write                               | Effect                                                                                                                                                                                                                         |

@@ -12,7 +12,15 @@
  * `COVEL_REQUIRE_PG_TESTS=1` (`pnpm test:pg`).
  */
 
-import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import {
+  afterAll,
+  afterEach,
+  beforeAll,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vitest";
 import type {
   HandlerResult,
   JsonValue,
@@ -22,7 +30,13 @@ import type {
 import type { FunctionHandler } from "@covel/shared/plugin-runtime";
 import type { DataStore } from "@covel/store";
 import { createPgStore } from "@covel/store/postgres";
-import { commitExecution, executeTurn } from "@covel/runtime";
+import {
+  classifyExecutionFaults,
+  commitExecution,
+  executeTurn,
+} from "@covel/runtime";
+import { createEventBus } from "@covel/events";
+import { withPendingProposals } from "@covel/tools";
 import {
   createIsolatedPgDatabase,
   type IsolatedPgDatabase,
@@ -100,119 +114,195 @@ describe.skipIf(!isolatedUrl)("read dependencies on real PG", () => {
     await isolatedDatabase?.cleanup();
   }, 90_000);
 
-  it("rolls a refused producer back whole, drops its reader and keeps the story", async () => {
-    vi.spyOn(console, "warn").mockImplementation(() => {});
-    await store.createSession({
-      id: SESSION,
-      locale: "en-US",
-      status: "active",
-      phase: "playing",
-      setupRuntimes: {},
-      seats: [
-        { id: "main", controller: "human", role: "player", characters: "auto" },
-      ],
-      activePlugins: [PLUGIN],
-      completedPlayerTurns: 1,
-      metadata: {
-        approvalScopeNonce: globalThis.crypto.randomUUID(),
-        sessionIncarnationNonce: globalThis.crypto.randomUUID(),
-      },
-      createdAt: AT,
-      updatedAt: AT,
-    });
-    await storeGold(store, 5);
-
-    const story = fn("story", { stage: "narrative", outputKind: "story" });
-    const producer = fn("producer", { stage: "pre-turn" });
-    const reader = fn("reader");
-    const handlers: Record<string, FunctionHandler> = {
-      [story.name]: async (ctx) => {
-        await ctx.pluginData!.set("notes", "told", "told");
-        return ok({ narrativeOutput: "The story goes on." });
-      },
-      [producer.name]: async (ctx) => {
-        // Readable data first, then a list that passes against 5 gold.
-        await ctx.pluginData!.set("notes", "ready", "ready");
-        await ctx.pluginData!.update("notes", "gold", [
-          { op: "inc", by: -5, min: 0 },
-        ]);
-        return ok();
-      },
-      [reader.name]: async (ctx) => {
-        const seen = await ctx.pluginData!.get("notes", "ready");
-        await ctx.pluginData!.set("notes", "reader", String(seen));
-        return ok();
-      },
-    };
-    const execution = await executeTurn(
-      {
-        sessionId: SESSION,
-        turnId: "turn",
-        logicalTurnId: "logical-turn",
-        playerMessage: "Continue",
-        origin: "player",
-      },
-      [story, producer, reader],
-      {
-        store,
-        llm: { generate: vi.fn() } as never,
-        loadRuntime: async (runtime) => ({
-          manifest: runtime,
-          promptTemplate: "",
-          handler: handlers[runtime.name],
-        }),
-      },
-    );
-    const runOf = (runtimeId: string) =>
-      execution.commit.results.find((result) => result.runtimeId === runtimeId)!
-        .runId;
-    expect(execution.commit.readDependencies).toEqual({
-      [runOf(reader.name)]: [runOf(producer.name)],
-    });
-
-    // A concurrent commit spends gold, so the list goes out of bounds.
-    await storeGold(store, 3);
-    const outcome = await commitExecution({
-      store,
-      execution,
-      completion: { kind: "turn", turnId: "turn", durationMs: 0 },
-    });
-
-    expect(outcome.status).toBe("committed");
-    expect(outcome.isolatedRuntimes).toEqual([
-      {
-        runtimeId: producer.name,
-        runId: runOf(producer.name),
-        cause: "rejected",
-        error: expect.stringMatching(
-          /^plugin\.data\.update: .*\(op 0, out-of-bounds\)$/,
-        ),
-      },
-      {
-        runtimeId: reader.name,
-        runId: runOf(reader.name),
-        cause: "read",
-        error: `read data of ${producer.name} that did not commit`,
-      },
-    ]);
-    const rows = Object.fromEntries(
-      (await store.listPluginData(SESSION, PLUGIN, "notes")).map((row) => [
-        row.key,
-        row.value,
-      ]),
-    );
-    expect(rows).toEqual({ gold: 3, told: "told" });
-    expect(
-      (await store.listMessages(SESSION)).map((message) => message.content),
-    ).toContain("The story goes on.");
-    const persisted = (await store.listTurnResults(SESSION)).flatMap(
-      (row) => row.runtimeResults as RuntimeResult[],
-    );
-    expect(
-      persisted.find((result) => result.runId === runOf(reader.name)),
-    ).toMatchObject({
-      status: "failed",
-      error: `read data of ${producer.name} that did not commit`,
-    });
+  afterEach(async () => {
+    vi.restoreAllMocks();
+    await store?.deleteSession(SESSION);
   });
+
+  it.each(["plugin-data", "world", "world-suspension"] as const)(
+    "rolls back a refused producer and its %s reader while keeping the story",
+    async (readMode) => {
+      vi.spyOn(console, "warn").mockImplementation(() => {});
+      await store.createSession({
+        id: SESSION,
+        locale: "en-US",
+        status: "active",
+        phase: "playing",
+        setupRuntimes: {},
+        seats: [
+          {
+            id: "main",
+            controller: "human",
+            role: "player",
+            characters: "auto",
+          },
+        ],
+        activePlugins: [PLUGIN, "pg-world-reader"],
+        completedPlayerTurns: 1,
+        metadata: {
+          approvalScopeNonce: globalThis.crypto.randomUUID(),
+          sessionIncarnationNonce: globalThis.crypto.randomUUID(),
+        },
+        createdAt: AT,
+        updatedAt: AT,
+      });
+      await storeGold(store, 5);
+
+      const story = fn("story", { stage: "narrative", outputKind: "story" });
+      const producer = fn("producer", { stage: "pre-turn" });
+      const reader = fn(
+        "reader",
+        readMode === "plugin-data"
+          ? {}
+          : { pluginId: "pg-world-reader", name: "pg-world-reader/read" },
+      );
+      const eventBus = createEventBus(store);
+      const suspendedEvents: unknown[] = [];
+      eventBus.onEmit((event) => {
+        if (event.type === "turn.suspended") suspendedEvents.push(event);
+      });
+      const handlers: Record<string, FunctionHandler> = {
+        [story.name]: async (ctx) => {
+          await ctx.pluginData!.set("notes", "told", "told");
+          return ok({ narrativeOutput: "The story goes on." });
+        },
+        [producer.name]: async (ctx) => {
+          // Readable data first, then a list that passes against 5 gold.
+          await ctx.pluginData!.set("notes", "ready", "ready");
+          await ctx.pluginData!.update("notes", "gold", [
+            { op: "inc", by: -5, min: 0 },
+          ]);
+          return readMode === "plugin-data"
+            ? ok()
+            : withPendingProposals(ok(), [
+                {
+                  id: crypto.randomUUID(),
+                  type: "character.upsert",
+                  sessionId: SESSION,
+                  turnId: ctx.turnId,
+                  source: { pluginId: PLUGIN, runtimeId: producer.name },
+                  timestamp: AT,
+                  payload: {
+                    id: "staged-character",
+                    name: "Visitor",
+                    type: "npc",
+                    description: "staged description",
+                  },
+                },
+              ]);
+        },
+        [reader.name]: async (ctx) => {
+          const seen =
+            readMode === "plugin-data"
+              ? await ctx.pluginData!.get("notes", "ready")
+              : ctx.world!.characters.find(
+                  (character) => character.id === "staged-character",
+                )?.description;
+          expect(seen).toBe(
+            readMode === "plugin-data" ? "ready" : "staged description",
+          );
+          await ctx.pluginData!.set("notes", "reader", String(seen));
+          return readMode === "world-suspension"
+            ? {
+                outcome: "suspended",
+                reason: "Need input",
+                resumeSchema: { type: "object" },
+              }
+            : ok();
+        },
+      };
+      const execution = await executeTurn(
+        {
+          sessionId: SESSION,
+          turnId: "turn",
+          logicalTurnId: "logical-turn",
+          playerMessage: "Continue",
+          origin: "player",
+        },
+        [story, producer, reader],
+        {
+          store,
+          eventBus,
+          llm: {
+            generate: async () => {
+              throw new Error("Functions do not use a model");
+            },
+          },
+          loadRuntime: async (runtime) => ({
+            manifest: runtime,
+            promptTemplate: "",
+            handler: handlers[runtime.name],
+          }),
+        },
+      );
+      const runOf = (runtimeId: string) =>
+        execution.commit.results.find(
+          (result) => result.runtimeId === runtimeId,
+        )!.runId;
+      expect(execution.commit.readDependencies).toEqual({
+        [runOf(reader.name)]: [runOf(producer.name)],
+      });
+
+      if (readMode === "world-suspension")
+        expect(execution.commit.suspensions).toHaveLength(1);
+      // A concurrent commit spends gold, so the list goes out of bounds.
+      await storeGold(store, 3);
+      const outcome = await commitExecution({
+        store,
+        eventBus,
+        execution,
+        completion: { kind: "turn", turnId: "turn", durationMs: 0 },
+      });
+
+      expect(outcome.status).toBe("committed");
+      expect(outcome.isolatedRuntimes).toEqual([
+        {
+          runtimeId: producer.name,
+          runId: runOf(producer.name),
+          cause: "rejected",
+          error: expect.stringMatching(
+            /^plugin\.data\.update: .*\(op 0, out-of-bounds\)$/,
+          ),
+        },
+        {
+          runtimeId: reader.name,
+          runId: runOf(reader.name),
+          cause: "read",
+          error: `read data of ${producer.name} that did not commit`,
+        },
+      ]);
+      const rows = Object.fromEntries(
+        (await store.listPluginData(SESSION, PLUGIN, "notes")).map((row) => [
+          row.key,
+          row.value,
+        ]),
+      );
+      expect(rows).toEqual({ gold: 3, told: "told" });
+      expect(await store.listCharacters(SESSION)).toEqual([]);
+      expect(await store.listSuspensions(SESSION)).toEqual([]);
+      expect(suspendedEvents).toEqual([]);
+      if (readMode !== "plugin-data") {
+        expect(
+          classifyExecutionFaults(execution.commit.results, outcome).get(
+            reader.pluginId,
+          ),
+        ).toEqual({ kind: "neutral" });
+        expect(
+          await store.listPluginData(SESSION, reader.pluginId, "notes"),
+        ).toEqual([]);
+      }
+      expect(
+        (await store.listMessages(SESSION)).map((message) => message.content),
+      ).toContain("The story goes on.");
+      const persisted = (await store.listTurnResults(SESSION)).flatMap(
+        (row) => row.runtimeResults as RuntimeResult[],
+      );
+      expect(
+        persisted.find((result) => result.runId === runOf(reader.name)),
+      ).toMatchObject({
+        status: "failed",
+        error: `read data of ${producer.name} that did not commit`,
+      });
+    },
+  );
 });

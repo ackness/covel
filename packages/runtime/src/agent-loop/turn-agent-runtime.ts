@@ -1,3 +1,4 @@
+import type { UpstreamWorldWrite } from "../function-runtime/upstream-world-model.js";
 import { settleAgentLoop } from "./settle-agent-loop.js";
 import { createWorldModelView } from "../function-runtime/world-model-view.js";
 import { reportRuntimeStarted } from "../trace/runtime-telemetry.js";
@@ -49,6 +50,7 @@ export interface AgentCompactionRefresh {
 }
 
 export interface ExecuteAgentRuntimeOptions {
+  readonly upstreamWorld?: readonly UpstreamWorldWrite[];
   readonly upstreamProposals?: readonly import("@covel/shared").Proposal[];
   /** Writes of completed upstream runtimes of this plugin that tool reads include. */
   readonly upstreamPluginData?: readonly UpstreamPluginDataWrite[];
@@ -115,6 +117,7 @@ export interface ExecuteAgentRuntimeOptions {
 
 export async function executeAgentRuntime({
   upstreamProposals = [],
+  upstreamWorld = [],
   upstreamPluginData = [],
   upstreamOf,
   manifest,
@@ -311,16 +314,6 @@ export async function executeAgentRuntime({
     ...shapedContext.messages,
   ];
 
-  const worldBase = deps.store
-    ? await createWorldModelView(
-        deps.worldModelReads ?? deps.store,
-        input.sessionId,
-        upstreamProposals,
-        [],
-        () => {},
-        deps.dimensionContext,
-      )
-    : undefined;
   // The agent's own recorder; a guard that let it run kept none.
   const pluginDataVisibility = createPluginDataVisibility({
     pluginId: manifest.pluginId,
@@ -330,6 +323,17 @@ export async function executeAgentRuntime({
     ...(upstreamOf ? { upstreamOf } : {}),
     ...(deps.pluginDataReadProbe ? { probe: deps.pluginDataReadProbe } : {}),
   });
+  const worldBase = deps.store
+    ? await createWorldModelView(
+        deps.worldModelReads ?? deps.store,
+        input.sessionId,
+        upstreamProposals,
+        [],
+        () => {},
+        deps.dimensionContext,
+        { upstream: upstreamWorld, recorder: pluginDataVisibility.recorder },
+      )
+    : undefined;
   // A story answered in JSON streams only its segment text.
   const onDelta =
     deps.onDelta && manifest.outputKind === "story" && loaded.outputSchema
@@ -401,7 +405,11 @@ export async function executeAgentRuntime({
     executionContext,
     ...(progressScopeId !== undefined ? { progressScopeId } : {}),
   });
-  if ("status" in toolLoop) return toolLoop;
+  if ("status" in toolLoop) {
+    if (toolLoop.status === "suspended")
+      attachReadDependencies(toolLoop, pluginDataVisibility.recorder);
+    return toolLoop;
+  }
 
   const settled = settleAgentLoop({
     manifest,

@@ -1,3 +1,4 @@
+import { snapshotWorldModelView } from "./function-runtime/world-model-view.js";
 import {
   compareText,
   pluginMessagesFor,
@@ -975,15 +976,18 @@ export class PluginServiceRegistry {
                 : undefined;
               errorCode = "invocation-error";
               let providerWorld: PluginServiceContext["world"] | undefined;
-              const world = () =>
-                (providerWorld ??= structuredClone(
+              const world = () => {
+                signal.throwIfAborted();
+                return (providerWorld ??= snapshotWorldModelView(
                   caller.reads?.world ?? {
                     characterSchema: null,
                     characters: [],
                     dimensions: {},
                     seats: [],
                   },
+                  () => signal.throwIfAborted(),
                 ));
+              };
               const stagedWrites = stage
                 ? () => stage.stagedWrites(entry.pluginId)
                 : undefined;

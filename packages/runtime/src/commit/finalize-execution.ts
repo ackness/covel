@@ -1146,6 +1146,7 @@ export async function finalizeExecution(
     // An operation commits at the end of its caller's unit.
     const unitRootOf = (member: FinalizableResult): FinalizableResult =>
       units.find((unit) => unit.members.includes(member))?.root ?? member;
+    const continuationRuns = new Set(Object.values(args.suspensionRuns ?? {}));
     const lostReadsOf = (
       unit: CommitUnit,
       prepared: ReadonlyMap<FinalizableResult, PreparedRuntimeProposals>,
@@ -1155,6 +1156,7 @@ export async function finalizeExecution(
         !edges ||
         !(
           unit.root.status === "success" ||
+          unit.members.some((member) => continuationRuns.has(member.runId)) ||
           unit.members.some(
             (member) => prepared.get(member)!.proposals.length > 0,
           )
