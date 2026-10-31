@@ -192,7 +192,8 @@ export function settleExecutionAttempt(
   abortReason?: string,
 ): ExecutionStep[] {
   return steps.map((step) =>
-    step.turnId === turnId
+    step.turnId === turnId &&
+    !(step.attemptStatus === "committed" && status !== "committed")
       ? {
           ...step,
           attemptStatus:

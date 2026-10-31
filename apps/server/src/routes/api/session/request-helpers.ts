@@ -1,6 +1,7 @@
 import type { SessionRecord } from "@covel/store";
 import type { SessionStatus } from "@covel/shared";
 import {
+  autoAdvanceLimitSchema,
   worldWireRecordSchema,
   createSessionRequestSchema,
 } from "@covel/shared";
@@ -27,6 +28,7 @@ type ParsedCreateSessionBody =
       requestedPlugins: string[];
       excludedPlugins: string[];
       loreOverride: string | undefined;
+      autoAdvanceLimit: number | undefined;
     }
   | { ok: false; error: string };
 
@@ -83,6 +85,7 @@ export function parseCreateSessionBody(
     id: rawId,
     requestedPlugins,
     loreOverride: loreOverride.data,
+    autoAdvanceLimit: request.data.autoAdvanceLimit,
   };
 }
 
@@ -90,7 +93,10 @@ type Writable<T> = { -readonly [K in keyof T]: T[K] };
 
 type SessionPatchUpdates = Partial<
   Writable<
-    Pick<SessionRecord, "status" | "updatedAt" | "runtimeModelOverrides">
+    Pick<
+      SessionRecord,
+      "status" | "updatedAt" | "runtimeModelOverrides" | "metadata"
+    >
   >
 >;
 
@@ -108,6 +114,11 @@ export function buildSessionPatchUpdates(
         "Use the session plugin enable/disable routes to change plugin selection",
     };
   const updates: SessionPatchUpdates = { updatedAt: now };
+  if (body.autoAdvanceLimit !== undefined) {
+    const limit = autoAdvanceLimitSchema.safeParse(body.autoAdvanceLimit);
+    if (!limit.success) return { ok: false, error: limit.error.message };
+    updates.metadata = { autoAdvanceLimit: limit.data };
+  }
 
   // Validate status against the SessionStatus union. Pre-existing code
   // previously accepted phase strings; the turn-band refactor replaced

@@ -9,6 +9,7 @@ const baseSession: SessionRecord = {
   worldId: "world-1",
   status: "active",
   phase: "playing",
+  autoAdvanceLimit: 3,
   completedPlayerTurns: 1,
   setupRuntimes: {},
   seats: [
@@ -44,6 +45,7 @@ function stateFor(
     initialEventCursor: null,
     worldSessions: [],
     executing: false,
+    advance: null,
     executionError: null,
     executionSteps: [],
     suspensions: [],

@@ -36,6 +36,7 @@ const session: SessionRecord = {
   worldId: world.id,
   status: "active",
   phase: "setup",
+  autoAdvanceLimit: 3,
   completedPlayerTurns: 0,
   setupRuntimes: {},
   seats: [

@@ -10,6 +10,7 @@
  * ever needs cross-pod turn control.
  */
 
+import type { ExecutionAdvancePayload } from "@covel/shared";
 import type { TurnControl } from "@covel/runtime";
 
 interface ActionEntry {
@@ -28,6 +29,10 @@ interface ActionEntry {
   steeringOpen: boolean;
   /** No further turn of the request will start: a stop has nothing to stop. */
   finished: boolean;
+  advanceAllowed: boolean;
+  advance?: ExecutionAdvancePayload;
+  state: "ordinary" | "waiting-auto" | "running-auto";
+  stopReason?: "new-input" | "player-stop";
 }
 
 /** Saved user rows of a turn, excluded from the player-turn count. */
@@ -51,6 +56,9 @@ export type SteerRefusal = "no_active_turn" | "steering_closed";
 export interface ActionRequestControl {
   /** Aborted when the player stops this request, before or during a turn. */
   readonly signal: AbortSignal;
+  readonly canAdvance: boolean;
+  readonly stopReason: "new-input" | "player-stop" | undefined;
+  setAdvance(progress: ExecutionAdvancePayload): void;
   /**
    * Under the session lock: make this request the session's active turn.
    * Interjections not committed yet carry over from the previous turn.
@@ -75,7 +83,20 @@ export function registerActionRequest(
   sessionId: string,
   turnId: string,
   requestId?: string,
+  supersedes = false,
 ): ActionRequestControl {
+  if (supersedes) {
+    const older = new Set([
+      ...(waitingRequests.get(sessionId) ?? []),
+      activeTurns.get(sessionId),
+    ]);
+    for (const previous of older) {
+      if (!previous || previous.finished) continue;
+      previous.advanceAllowed = false;
+      previous.stopReason = "new-input";
+      if (previous.state !== "ordinary") previous.controller.abort();
+    }
+  }
   const entry: ActionEntry = {
     turnId,
     requestId,
@@ -86,6 +107,8 @@ export function registerActionRequest(
     read: 0,
     steeringOpen: true,
     finished: false,
+    advanceAllowed: true,
+    state: "ordinary",
   };
   const waiting = waitingRequests.get(sessionId) ?? new Set<ActionEntry>();
   waiting.add(entry);
@@ -97,10 +120,28 @@ export function registerActionRequest(
   };
   return {
     signal: entry.controller.signal,
+    get canAdvance() {
+      return (
+        entry.advanceAllowed &&
+        !entry.finished &&
+        !entry.controller.signal.aborted
+      );
+    },
+    get stopReason() {
+      return entry.stopReason;
+    },
+    setAdvance(progress) {
+      entry.advance = progress;
+      if (progress.phase !== "stopped") {
+        entry.state =
+          progress.phase === "waiting" ? "waiting-auto" : "running-auto";
+        entry.steeringOpen = false;
+      }
+    },
     beginTurn: (nextTurnId) => {
       leaveWaiting();
       entry.turnId = nextTurnId;
-      entry.steeringOpen = true;
+      entry.steeringOpen = entry.state === "ordinary";
       // A newer registration replaces a stale one (a crashed stream that
       // never released).
       activeTurns.set(sessionId, entry);
@@ -168,11 +209,15 @@ export function steerActiveTurn(
 export function abortActiveTurn(sessionId: string): { turnId: string } | null {
   const active = activeTurns.get(sessionId);
   if (active && !active.finished) {
+    active.stopReason ??= "player-stop";
     active.controller.abort();
     return { turnId: active.turnId };
   }
   const waiting = [...(waitingRequests.get(sessionId) ?? [])];
-  for (const entry of waiting) entry.controller.abort();
+  for (const entry of waiting) {
+    entry.stopReason ??= "player-stop";
+    entry.controller.abort();
+  }
   const first = waiting[0];
   return first ? { turnId: first.turnId } : null;
 }
@@ -187,13 +232,15 @@ export function getActiveTurn(sessionId: string): {
   turnId: string;
   requestId?: string;
   startedAt: string;
+  advance?: ExecutionAdvancePayload;
 } | null {
   const entry = activeTurns.get(sessionId);
-  return entry
+  return entry && !entry.finished
     ? {
         turnId: entry.turnId,
         requestId: entry.requestId,
         startedAt: entry.startedAt,
+        ...(entry.advance ? { advance: entry.advance } : {}),
       }
     : null;
 }

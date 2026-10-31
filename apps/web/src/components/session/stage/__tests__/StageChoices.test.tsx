@@ -363,6 +363,33 @@ describe("StageChoices composer modes", () => {
     expect(modes.submit).toHaveBeenCalledExactlyOnceWith("");
   });
 
+  it.each([actMode, advanceMode])(
+    "allows $kind input while automatic advancement is running",
+    (mode) => {
+      const modes = controller(mode);
+      render(
+        <StageChoices
+          {...baseProps}
+          executing
+          advancing
+          composerModes={modes}
+          composerDraft={{ value: "Change course", onChange: vi.fn() }}
+        />,
+      );
+      if (mode.text === "none") {
+        fireEvent.click(screen.getByRole("button", { name: "Advance" }));
+        expect(modes.submit).toHaveBeenCalledExactlyOnceWith("Change course");
+      } else {
+        const input = screen.getByTestId(
+          "stage-decision-input",
+        ) as HTMLTextAreaElement;
+        expect(input.disabled).toBe(false);
+        fireEvent.keyDown(input, { key: "Enter" });
+        expect(modes.submit).toHaveBeenCalledExactlyOnceWith("Change course");
+      }
+    },
+  );
+
   it("shows the character switcher", () => {
     const modes = controller(sayMode, {
       switcher: {

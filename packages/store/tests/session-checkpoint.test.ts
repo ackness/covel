@@ -26,7 +26,9 @@ import {
 describe("session checkpoint transfer", () => {
   it("keeps recovery records without copying model diagnostics into a private checkpoint", async () => {
     const store = createMemoryStore();
-    const session = makeSession();
+    const session = makeSession({
+      metadata: { autoAdvanceLimit: 7, retained: true },
+    });
     await store.createSession(session);
     const payload = {
       request: { messages: [{ content: "x".repeat(1_000_000) }] },
@@ -53,6 +55,10 @@ describe("session checkpoint transfer", () => {
       "recovery",
     ]);
     expect(checkpoint.events).toEqual([]);
+    expect(checkpoint.session.metadata).toMatchObject({
+      autoAdvanceLimit: 7,
+      retained: true,
+    });
     expect(JSON.stringify(checkpoint).length).toBeLessThan(10_000);
     expect(await store.listTraceEvents(session.id)).toHaveLength(2);
   });

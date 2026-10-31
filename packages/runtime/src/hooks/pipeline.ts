@@ -25,6 +25,7 @@ import { GUARD_HOOK_EVENTS, HOOK_SEMANTICS } from "./types.js";
 import {
   currentActivePluginIds,
   currentHookLocale,
+  currentHookLogicalTurn,
   currentHookLogicalKey,
   currentOwnSettings,
   isHookInScope,
@@ -357,6 +358,7 @@ export class HookPipeline {
     const ctxForHandler: HookContext = {
       ...ctx,
       ...(locale === undefined ? {} : { locale }),
+      logicalTurn: currentHookLogicalTurn() ?? ctx.logicalTurn,
       // A supplied activation set needs isolation even without an ambient scope.
       ...(ctx.activePluginIds
         ? { activePluginIds: new Set(ctx.activePluginIds) }

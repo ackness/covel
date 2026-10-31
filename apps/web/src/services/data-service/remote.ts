@@ -188,6 +188,7 @@ export class RemoteDataService implements DataService {
     locale?: string,
     loreOverride?: string,
     excludedPlugins?: string[],
+    autoAdvanceLimit?: number,
   ) {
     return api.createSession(
       worldId,
@@ -196,6 +197,9 @@ export class RemoteDataService implements DataService {
       locale,
       loreOverride,
       excludedPlugins,
+      ...(autoAdvanceLimit === undefined
+        ? ([] as const)
+        : ([autoAdvanceLimit] as const)),
     );
   }
   async updateSession(sessionId: string, updates: SessionPatch) {

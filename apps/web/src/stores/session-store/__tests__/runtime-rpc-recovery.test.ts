@@ -378,9 +378,11 @@ it("does not assign a rejected echo to a subsequent action without an echo", asy
   onEvent(envelope("execution.completed", { committed: true }));
   onDone();
   await next;
-  expect(state.messages).toHaveLength(1);
-  expect(state.messages[0]?.turnId).toBeUndefined();
-  expect(state.messages[0]?.requestId).toBe("rejected-request");
+  expect(state.messages).toEqual([]);
+  expect(state.restoredInput).toMatchObject({
+    requestId: "rejected-request",
+    content: "Rejected input",
+  });
 });
 
 describe("stop before turn start", () => {

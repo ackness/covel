@@ -127,6 +127,9 @@ export function useGameViewComposer({
     setCommandQueued(false);
   }, []);
 
+  const autoAdvancing =
+    !!sessionState.advance && sessionState.advance.phase !== "stopped";
+  const steering = executing && !autoAdvancing;
   const pendingDrafts = sessionState.pendingInteractionDrafts;
   const suspensions = sessionState.suspensions;
   const hasActiveInteractionBlock = useMemo(
@@ -308,7 +311,7 @@ export function useGameViewComposer({
     const val = inputValue.trim();
     if (composerDisabled || commandExecuting) return;
     if (!val) {
-      if (executing) return;
+      if (steering) return;
       if (pendingDrafts.length > 0) commitDrafts();
       else if (
         composerModes.mode.kind !== "say" &&
@@ -340,13 +343,13 @@ export function useGameViewComposer({
     // A note about an earlier submission does not describe this one.
     setCommandFeedback(null);
     // Queued selections ride along with the typed line as a single turn.
-    if (!executing && pendingDrafts.length > 0) {
+    if (!steering && pendingDrafts.length > 0) {
       if (commitDrafts(val)) setInputValue("");
       return;
     }
     // Steering takes text only, so the other modes wait for the turn to end.
-    if (executing && composerModes.mode.kind !== "say") return;
-    if (executing) {
+    if (steering && composerModes.mode.kind !== "say") return;
+    if (steering) {
       // Steer the in-flight turn. The turn may not take the text (409): it
       // ended first, or its story is written and only bookkeeping is left.
       // Then the text was never sent, so restore it to the composer and say
@@ -384,6 +387,7 @@ export function useGameViewComposer({
     applyCommandCompletion,
     runSlashCommand,
     executing,
+    steering,
     pendingDrafts.length,
     commitDrafts,
     steerMessage,
@@ -450,9 +454,9 @@ export function useGameViewComposer({
     commandQuery !== null && selectedCommand !== undefined;
   const canSubmit =
     composerModes.mode.kind === "say"
-      ? inputValue.trim().length > 0 || (!executing && pendingDrafts.length > 0)
+      ? inputValue.trim().length > 0 || (!steering && pendingDrafts.length > 0)
       : composerModes.acceptsInput(inputValue) &&
-        (!executing || commandRunnable);
+        (!steering || commandRunnable);
 
   return {
     inputValue,

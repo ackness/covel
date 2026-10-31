@@ -318,6 +318,7 @@ export async function executeFunctionRuntime({
         ...(activation ? { activation: structuredClone(activation) } : {}),
         emittedEvents: [],
         executionContext,
+        ...(input.actions ? { actions: structuredClone(input.actions) } : {}),
         // A nested call reports progress under the root execution's scope.
         ...(executionId !== undefined &&
         executionId !== executionContext.executionId

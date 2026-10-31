@@ -157,6 +157,7 @@ export const initialState: SessionState = {
   executionError: null,
   executionSteps: [],
   executionRecovery: null,
+  advance: null,
   actionGeneration: 0,
   gameState: {},
   pluginMessageData: {},
@@ -194,6 +195,7 @@ const SESSION_RESET: Partial<SessionState> = {
   executionError: null,
   executionSteps: [],
   executionRecovery: null,
+  advance: null,
   actionGeneration: 0,
   submittedBlockIds: new Set<string>(),
   submittedBlockValues: {},
@@ -227,10 +229,43 @@ export function reducer(
   action: SessionAction,
 ): SessionState {
   switch (action.type) {
+    case "SET_ADVANCE": {
+      const previous = state.advance,
+        next = action.advance;
+      if (next && next.phase !== "stopped" && !state.executing) return state;
+      if (
+        previous &&
+        next &&
+        previous.requestId === next.requestId &&
+        (previous.phase === "stopped" ||
+          previous.round > next.round ||
+          (previous.round === next.round &&
+            previous.phase === "running" &&
+            next.phase === "waiting"))
+      )
+        return state;
+      return { ...state, advance: next };
+    }
+    case "RESTORE_ACTION_DRAFT": {
+      if (state.restoredInput?.requestId === action.requestId) return state;
+      const { text, ...rest } = stoppedSubmissionOf(action.actions);
+      return {
+        ...state,
+        restoredInput: { requestId: action.requestId, content: text, ...rest },
+      };
+    }
     case "SET_EXECUTION_RECOVERY":
       return {
         ...state,
         executionRecovery: action.recovery,
+        ...(action.recovery?.status
+          ? {
+              advance:
+                action.recovery.status.state === "unknown"
+                  ? state.advance
+                  : (action.recovery.status.advance ?? null),
+            }
+          : {}),
         ...(action.recovery
           ? {
               executing:
@@ -256,6 +291,14 @@ export function reducer(
       return {
         ...state,
         executionRecovery: recovery,
+        ...(action.status
+          ? {
+              advance:
+                action.status.state === "unknown"
+                  ? state.advance
+                  : (action.status.advance ?? null),
+            }
+          : {}),
         executing:
           recovery.hydrating ||
           recovery.checking ||
@@ -453,6 +496,14 @@ export function reducer(
       };
     }
     case "SET_EXECUTION_ERROR":
+      if (
+        action.turnId &&
+        state.executionSteps.some(
+          (step) =>
+            step.turnId === action.turnId && step.attemptStatus === "committed",
+        )
+      )
+        return state;
       return { ...state, executionError: action.error };
     case "MERGE_RECOVERED_MESSAGES": {
       const drafts =
@@ -596,6 +647,7 @@ export function reducer(
       // pretending work is in progress.
       const anyRunning = state.executionSteps.some(
         (s) =>
+          (!action.turnId || s.turnId === action.turnId) &&
           !s.detached &&
           (s.status === "running" || s.status === "llm" || s.status === "tool"),
       );
@@ -603,6 +655,7 @@ export function reducer(
       return {
         ...state,
         executionSteps: state.executionSteps.map((s) =>
+          (!action.turnId || s.turnId === action.turnId) &&
           !s.detached &&
           (s.status === "running" || s.status === "llm" || s.status === "tool")
             ? { ...s, status: "failed", detail: s.detail ?? action.reason }
@@ -735,6 +788,13 @@ export function reducer(
       };
     }
     case "REMOVE_MESSAGES_FROM_TURN": {
+      if (
+        state.executionSteps.some(
+          (step) =>
+            step.turnId === action.turnId && step.attemptStatus === "committed",
+        )
+      )
+        return state;
       const filtered = state.messages.filter(
         (m) => m.turnId !== action.turnId || m.role !== "assistant",
       );

@@ -196,6 +196,7 @@ describe("runtime RPC — originating session", () => {
         worldId: "world-a",
         status: "active" as const,
         phase: "setup" as const,
+        autoAdvanceLimit: 3,
         completedPlayerTurns: 0,
         setupRuntimes: {},
         seats: [

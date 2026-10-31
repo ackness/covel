@@ -1,3 +1,4 @@
+import { resolveAutoAdvanceLimit } from "@covel/shared";
 import type { I18nText } from "@covel/shared";
 import type {
   MessageRecord as StoreMessageRecord,
@@ -25,6 +26,7 @@ export function toFrontendWorld(w: StoreWorldRecord): WorldRecord {
 export function toFrontendSession(s: StoreSessionRecord): SessionRecord {
   return {
     id: s.id,
+    autoAdvanceLimit: resolveAutoAdvanceLimit(s.metadata?.autoAdvanceLimit),
     worldId: s.worldId ?? "",
     status: s.status,
     locale: s.locale,

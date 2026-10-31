@@ -103,6 +103,7 @@ const SNAPSHOT_SESSION_FIELDS = {
   locale: "locale",
   activePlugins: "activePlugins",
   runtimeModelOverrides: "runtimeModelOverrides",
+  autoAdvanceLimit: null,
   loreOverride: null,
   dimensionProviderPluginId: null,
 } satisfies Record<keyof SnapshotSessionState, keyof SessionRecord | null>;

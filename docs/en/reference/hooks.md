@@ -316,3 +316,5 @@ Payload: `{ sessionId, reason }`, where `reason` is `ended` or `deleted`.
 - For a runtime that declares `io.concealed`, the prompt and the reply do not appear in the trace or the live stream. However, the hooks of enabled plugins still receive them in the payload. A community plugin's hooks run only after the player has approved its server code.
 
 - A plugin paused by faults runs no Hooks from the next execution; the current execution keeps its frozen admission set.
+
+Foreground turn Hooks expose optional `logicalTurn`, the logical number frozen by the root input. Setup, opening and automatic rounds for that input share it; lifecycle events without an execution context may omit it.

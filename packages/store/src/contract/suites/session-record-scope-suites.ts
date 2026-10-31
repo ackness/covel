@@ -98,6 +98,46 @@ function registerRecordScopeSuite<T extends { id: string; sessionId: string }>(
 export function registerSessionRecordScopeSuites(
   getStore: () => DataStore,
 ): void {
+  it("round-trips the session advancement cap and snapshot while preserving unrelated metadata", async () => {
+    const store = getStore();
+    await store.createSession(
+      makeSession({
+        id: "advancement-setting",
+        metadata: { autoAdvanceLimit: 7, retained: "value" },
+      }),
+    );
+    await store.updateSession("advancement-setting", {
+      metadata: { another: true },
+    });
+    expect((await store.getSession("advancement-setting"))?.metadata).toEqual({
+      autoAdvanceLimit: 7,
+      retained: "value",
+      another: true,
+    });
+    const snapshot = makeSnapshot({
+      id: "advancement-snapshot",
+      sessionId: "advancement-setting",
+    });
+    await store.saveSnapshot({
+      ...snapshot,
+      payload: {
+        ...snapshot.payload,
+        session: {
+          status: "active",
+          locale: "en-US",
+          activePlugins: [],
+          phase: "playing",
+          completedPlayerTurns: 0,
+          setupRuntimes: {},
+          seats: makeSession().seats,
+          autoAdvanceLimit: 7,
+        },
+      },
+    });
+    expect(
+      (await store.getSnapshot(snapshot.id))?.payload.session?.autoAdvanceLimit,
+    ).toBe(7);
+  });
   registerRecordScopeSuite(
     "snapshot",
     getStore,

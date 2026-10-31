@@ -38,6 +38,7 @@ export interface StageChoicesProps {
   readonly composerModes?: ComposerModes;
   readonly visible: boolean;
   readonly executing: boolean;
+  readonly advancing?: boolean;
   readonly interactionChoices: readonly StageInteractionChoice[];
   readonly suggestions?: StageChoicesModel;
   readonly locale: string;
@@ -64,6 +65,7 @@ export function StageChoices({
   composerModes,
   visible,
   executing,
+  advancing = false,
   interactionChoices,
   suggestions,
   locale,
@@ -85,8 +87,9 @@ export function StageChoices({
   if (!visible) return null;
 
   const textless = composerModes?.mode.text === "none";
+  const inputBusy = executing && !advancing;
   const canSend =
-    !executing &&
+    !inputBusy &&
     (composerModes
       ? composerModes.acceptsInput(draft)
       : draft.trim().length > 0);
@@ -290,7 +293,7 @@ export function StageChoices({
             <textarea
               rows={1}
               value={draft}
-              disabled={executing}
+              disabled={inputBusy}
               onChange={(event) => setDraft(event.target.value)}
               onKeyDown={handleTextareaKeyDown}
               placeholder={
@@ -312,7 +315,7 @@ export function StageChoices({
             }
             className="flex h-11 w-11 shrink-0 items-center justify-center rounded-(--radius-control) bg-(--accent-primary) text-black transition-opacity disabled:cursor-not-allowed disabled:opacity-40"
           >
-            {executing ? (
+            {inputBusy ? (
               <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
             ) : (
               <Send className="h-4 w-4" aria-hidden="true" />

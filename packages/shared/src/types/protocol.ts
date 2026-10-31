@@ -147,6 +147,41 @@ export interface ExecutionCompletedPayload {
   readonly abortReason?: string;
 }
 
+export type ExecutionAdvanceStopReason =
+  | "yielded-to-player"
+  | "no-eligible-story"
+  | "ambiguous-story"
+  | "limit"
+  | "disabled"
+  | "player-stop"
+  | "new-input"
+  | "pending-input"
+  | "session-unavailable"
+  | "execution-failed"
+  | "prerequisite-unavailable";
+
+/** Safe process-local progress; it is never a queue to restart. */
+export type ExecutionAdvancePayload = {
+  readonly requestId: string;
+  readonly rootId: string;
+  readonly round: number;
+  readonly limit: number;
+  readonly turnId?: string;
+} & (
+  | { readonly phase: "waiting" | "running" }
+  | { readonly phase: "stopped"; readonly reason: ExecutionAdvanceStopReason }
+);
+
+export interface ExecutionRoundCompletedPayload extends ExecutionCompletedPayload {
+  readonly requestId: string;
+  readonly rootId: string;
+  readonly turnId: string;
+  /** Zero for the root and opening; positive for additional executions. */
+  readonly round: number;
+  readonly limit: number;
+  readonly resyncRequired?: boolean;
+}
+
 export interface RuntimeStartedPayload {
   readonly runtimeId: string;
   readonly pluginId: string;
@@ -397,6 +432,14 @@ export type CovelEvent =
       readonly type: "execution.completed";
       readonly payload: ExecutionCompletedPayload;
     }
+  | {
+      readonly type: "execution.round.completed";
+      readonly payload: ExecutionRoundCompletedPayload;
+    }
+  | {
+      readonly type: "execution.advance";
+      readonly payload: ExecutionAdvancePayload;
+    }
   // Asset lifecycle
   | { readonly type: "asset.progress"; readonly payload: AssetProgressPayload }
   | {
@@ -639,6 +682,8 @@ export const COVEL_EVENT_META = {
   "runtime.failed": { forwardToActionStream: false },
   "runtime.skipped": { forwardToActionStream: false },
   "execution.completed": { forwardToActionStream: false },
+  "execution.round.completed": { forwardToActionStream: false },
+  "execution.advance": { forwardToActionStream: false },
   "asset.progress": { forwardToActionStream: true },
   "asset.generated": { forwardToActionStream: false },
   "event.emitted": { forwardToActionStream: false },
@@ -766,6 +811,7 @@ export interface CursorPage<T> {
 
 /** Read-only recovery state for the latest foreground action. */
 export interface SessionExecutionStatus {
+  readonly advance?: ExecutionAdvancePayload;
   /**
    * `unknown`: the server could not check (its lock pool had no connection
    * free). A turn may be running; the client checks again later and neither

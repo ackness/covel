@@ -53,6 +53,7 @@ const session = {
   id: "s",
   worldId: "w",
   phase: "playing" as const,
+  autoAdvanceLimit: 3,
   completedPlayerTurns: 2,
   status: "active" as const,
   activePlugins: [],

@@ -419,6 +419,9 @@ snapshotRoutes.post("/:id/fork", rateLimiter({ max: 10 }), async (c) => {
               activePlugins: childActivePlugins,
               runtimeModelOverrides: snapshotSession.runtimeModelOverrides,
               metadata: {
+                ...(snapshotSession.autoAdvanceLimit !== undefined
+                  ? { autoAdvanceLimit: snapshotSession.autoAdvanceLimit }
+                  : {}),
                 ...(snapshotSession.loreOverride !== undefined
                   ? { loreOverride: snapshotSession.loreOverride }
                   : {}),

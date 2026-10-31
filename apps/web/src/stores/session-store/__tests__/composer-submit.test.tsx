@@ -16,6 +16,7 @@ const session: api.SessionRecord = {
   worldId: "world-1",
   status: "active",
   phase: "playing",
+  autoAdvanceLimit: 3,
   completedPlayerTurns: 1,
   setupRuntimes: {},
   seats: [

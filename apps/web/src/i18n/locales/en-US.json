@@ -562,7 +562,12 @@
     "viewConsentTitle": "Allow “{{label}}” to read this session?",
     "viewConsentDescription": "{{plugin}} requests access to story messages, streaming text, pending interactions, public characters and visible UI slots. Approval applies to this view content on this device. You can revoke it from the view menu.",
     "viewConsentDecline": "Use default view",
-    "viewConsentAllow": "Allow session reading"
+    "viewConsentAllow": "Allow session reading",
+    "autoAdvanceLimit": "Automatic rounds",
+    "autoAdvanceOff": "Off",
+    "autoAdvanceNextInput": "Applies to your next input",
+    "autoAdvanceProgress": "Advancing {{round}} / {{limit}}",
+    "autoAdvanceStop": "Stop advancement"
   },
   "blocks": {
     "actionPlaceholder": "Or type your own action...",

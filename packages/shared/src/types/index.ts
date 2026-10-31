@@ -270,6 +270,9 @@ export type {
 } from "./protocol.js";
 
 export type {
+  ExecutionAdvancePayload,
+  ExecutionAdvanceStopReason,
+  ExecutionRoundCompletedPayload,
   CovelEvent,
   CovelEventType,
   CovelEventMeta,

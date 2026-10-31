@@ -178,14 +178,14 @@ Condition: `status === 'active' && phase === 'playing'`. Each `POST /api/actions
 
 `completedPlayerTurns` counts only committed player turns. Each execution has its own row in `turn_results`. Its `origin` is one of the following:
 
-| `origin`       | What it is                                    | Counted as a turn |
-| -------------- | --------------------------------------------- | ----------------- |
-| `player`       | A turn started by a player message            | Yes               |
-| `continuation` | The opening follow-up after setup is complete | No                |
-| `manual`       | A runtime run by name through a plugin RPC    | No                |
-| `background`   | Background execution                          | No                |
-| `recursive`    | A nested `recursiveCall`                      | No                |
-| `resume`       | Recovery after a suspension                   | No                |
+| `origin`       | What it is                                                         | Counted as a turn |
+| -------------- | ------------------------------------------------------------------ | ----------------- |
+| `player`       | A turn started by a player message                                 | Yes               |
+| `continuation` | The opening after setup, or automatic advancement within one input | No                |
+| `manual`       | A runtime run by name through a plugin RPC                         | No                |
+| `background`   | Background execution                                               | No                |
+| `recursive`    | A nested `recursiveCall`                                           | No                |
+| `resume`       | Recovery after a suspension                                        | No                |
 
 When several executions share one logical turn, it is counted only once.
 
@@ -1213,3 +1213,13 @@ For why it is designed this way, see [design principles](./design-principles.md)
 The host's shared `recordExecutionFaults` helper attributes faults and publishes latch events. `commitExecution` calls it after player, manual, resumed and background commits. When a resumed runtime fails before commit, the resume route also calls it before returning the error, without committing buffered writes or resolving the suspension. Settled sub-agent outcomes travel in the commit plan’s `subagentRuns` to `recordExecutionFaults` for attribution alongside top-level results; settling a runner does not mutate the latch. The Hook pipeline separately reports handler outcomes against the registering plugin. The in-memory latch counts per session and plugin, deduping one input by `logicalTurnId ?? turnId`. See the [protocol](../reference/protocol.md#plugin-fault-latch) for counting, exemptions and events.
 
 `executeTurn` filters paused plugins' runtimes and Hook admission sets at entry; resume and service admission also check pauses. A running registry snapshot stays unchanged; services capture the same execution's pause set. Restart, session end and deletion clear memory without writing domain data or snapshots.
+
+## Advancement within one input
+
+The root input freezes `logicalTurnId`, `logicalTurn = completedPlayerTurns + 1` and the session's advancement limit. Every round has distinct execution, turn and run identities. Generated rounds use `origin: continuation` and do not count as player turns. Opening advancement keeps logical number 1 and counter 0; the first ordinary player input also uses number 1, with a new input identity.
+
+After commit, the host decides whether to advance from the [committed story](../reference/plugins.md#stories-requesting-advancement). Every round reacquires the settled session lock and rereads session, registry, settings and authorization; previous settle jobs finish first. Request Stop control survives waiting and publication outside the lock, while event forwarding is enabled only during that round's lock ownership. A new input revokes the old request's future eligibility, checked again inside the generated round's lock.
+
+Functions, tools, Hooks, recursive calls, scheduling guards and dimension settlement use the frozen logical number. Inline post-turn work runs each round. Detached jobs retain their own source execution, that round's actions and frozen number even when executed later, and do not join the foreground fault group. Foreground faults count immediately; clean verdicts wait until request closure, with identity and revision checks protecting newer outcomes.
+
+Each round persists its outcome once; the request emits one final completion. Retry/resume is a single execution and historical yield creates no work queue. No automatic loop resumes after stopping or process exit. Control remains local to the current host process. Disconnecting SSE does not cancel accepted work; the cap and explicit Stop bound model usage.

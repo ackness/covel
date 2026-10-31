@@ -9,6 +9,7 @@ import type {
 
 export interface SessionActions {
   boot: () => Promise<void>;
+  setAutoAdvanceLimit: (limit: number) => Promise<void>;
   selectWorld: (worldId: string) => void;
   startGame: (
     plugins?: string[],

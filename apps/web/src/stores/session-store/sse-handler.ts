@@ -10,6 +10,7 @@ import {
   stageSchema,
   storyMessageSegmentSchema,
   type CovelEventType,
+  type ExecutionAdvancePayload,
 } from "@covel/shared";
 import * as api from "@/services/api";
 import type { DataService } from "@/services/data-service.js";
@@ -87,7 +88,14 @@ export type SseEventHandler = (envelope: api.SseEnvelope) => void;
 export function clearNarrativeDeltaBuffer(
   deltaBufferRef: DeltaBufferRef,
   deltaRafRef: DeltaRafRef,
+  turnId?: string,
 ): void {
+  if (turnId) {
+    for (const [key, entry] of deltaBufferRef.current) {
+      if (entry.turnId === turnId) deltaBufferRef.current.delete(key);
+    }
+    return;
+  }
   if (deltaRafRef.current !== null) {
     cancelAnimationFrame(deltaRafRef.current);
     deltaRafRef.current = null;
@@ -495,6 +503,14 @@ export function createSseEventHandler(
         });
         break;
       }
+      case "execution.advance": {
+        deps.dispatch({
+          type: "SET_ADVANCE",
+          advance: payload as unknown as ExecutionAdvancePayload,
+        });
+        break;
+      }
+      case "execution.round.completed":
       case "execution.completed": {
         // committed is a required boolean on the wire; treat missing/other
         // values as uncommitted so optimistic output doesn't linger silently.
@@ -520,7 +536,11 @@ export function createSseEventHandler(
         // placeholder instead of showing ghost text + a red retry affordance.
         const abortReason = payload.abortReason as string | undefined;
         if (!committed && abortReason !== PLAYER_ABORT_REASON) {
-          clearNarrativeDeltaBuffer(deps.deltaBufferRef, deps.deltaRafRef);
+          clearNarrativeDeltaBuffer(
+            deps.deltaBufferRef,
+            deps.deltaRafRef,
+            turnId,
+          );
           if (turnId) clearStreamingTextsForTurn(turnId);
           deps.dispatch({
             type: "DISCARD_TURN_STREAMS",
@@ -528,6 +548,7 @@ export function createSseEventHandler(
           });
           deps.dispatch({
             type: "SET_EXECUTION_ERROR",
+            ...(turnId ? { turnId } : {}),
             error:
               (payload.error as string | undefined) ??
               "__i18n:session.reasonExecutionCommitFailed__",
@@ -537,7 +558,11 @@ export function createSseEventHandler(
           // otherwise a fast abort (last narrative.delta + execution.completed
           // in one network flush) lets the queued rAF fire AFTER the discard
           // and re-`APPEND_DELTA` the ghost placeholder back into view.
-          clearNarrativeDeltaBuffer(deps.deltaBufferRef, deps.deltaRafRef);
+          clearNarrativeDeltaBuffer(
+            deps.deltaBufferRef,
+            deps.deltaRafRef,
+            turnId,
+          );
           if (turnId) clearStreamingTextsForTurn(turnId);
           deps.dispatch({
             type: "DISCARD_TURN_STREAMS",
@@ -546,9 +571,24 @@ export function createSseEventHandler(
         } else if (abortReason) {
           deps.dispatch({ type: "SET_EXECUTION_ERROR", error: abortReason });
         }
-        deps.dispatch({ type: "SET_EXECUTING", value: false });
+        // Any remaining draft belongs to an uncommitted runtime result,
+        // even when the enclosing execution committed other work.
+        if (turnId) {
+          clearNarrativeDeltaBuffer(
+            deps.deltaBufferRef,
+            deps.deltaRafRef,
+            turnId,
+          );
+          clearStreamingTextsForTurn(turnId);
+          deps.dispatch({ type: "DISCARD_TURN_STREAMS", turnId });
+        }
+        if (envelope.type === "execution.completed") {
+          deps.dispatch({ type: "SET_EXECUTING", value: false });
+          deps.dispatch({ type: "SET_ADVANCE", advance: null });
+        }
         deps.dispatch({
           type: "FINALIZE_HANGING_RUNTIMES",
+          ...(turnId ? { turnId } : {}),
           reason: "__i18n:session.reasonConnectionClosed__",
         });
         break;
@@ -659,9 +699,22 @@ export function createSseEventHandler(
             : ((payload.message as string) ??
               "__i18n:session.reasonExecutionFailed__"),
         });
+        // Any remaining draft belongs to an uncommitted runtime result,
+        // even when the enclosing execution committed other work.
+        if (turnId) {
+          clearNarrativeDeltaBuffer(
+            deps.deltaBufferRef,
+            deps.deltaRafRef,
+            turnId,
+          );
+          clearStreamingTextsForTurn(turnId);
+          deps.dispatch({ type: "DISCARD_TURN_STREAMS", turnId });
+        }
         deps.dispatch({ type: "SET_EXECUTING", value: false });
+        deps.dispatch({ type: "SET_ADVANCE", advance: null });
         deps.dispatch({
           type: "FINALIZE_HANGING_RUNTIMES",
+          ...(turnId ? { turnId } : {}),
           reason: "__i18n:session.reasonConnectionClosed__",
         });
         break;

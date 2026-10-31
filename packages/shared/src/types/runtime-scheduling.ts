@@ -241,6 +241,8 @@ export interface ExecutionContext {
   readonly executionId: string;
   readonly origin: ExecutionOrigin;
   readonly logicalTurnId?: string;
+  /** Kernel-owned logical number, frozen across an input and its continuations. */
+  readonly logicalTurn?: number;
   /** Committed content source for a scoped retry; never changes execution identity. */
   readonly sourceTurnId?: string;
   readonly countPolicy: CountPolicy;

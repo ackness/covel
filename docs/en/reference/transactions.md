@@ -741,3 +741,7 @@ Per backend: PostgreSQL holds the parent session row with `FOR KEY SHARE`. SQLit
 - An older scan cannot overwrite vectors that are owned by a newer progress value.
 - An optional cross-process ingestion lock can reduce duplicate embedding work, but correctness does not depend on it.
 - Calls to the embedding provider never run inside the index commit transaction, and never inside the business-data transaction.
+
+### Commit boundaries during advancement
+
+One input can produce multiple independent executions, each using proposal validation and a transaction. Cancellation, failure or stopping in a later round never undoes earlier committed stories and state. Attached operations retain their isolation; an operation failure alone does not veto the story's `yield: continue`. The next round reads prior committed state and operation notices, never tentative future results. Failed post-commit publication requires client resynchronization without changing the durable commit verdict.

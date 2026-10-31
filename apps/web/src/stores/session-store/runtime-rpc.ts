@@ -288,11 +288,23 @@ export function runActionStream(
           // Typed input only: an interaction answer has no echo to restore.
           request.type === "submit_actions" &&
           !request.payload.actions.some((action) => action.interaction);
-        if (stoppedBeforeStart) {
+        if (
+          stoppedBeforeStart ||
+          (envelope.type === "error.occurred" &&
+            !executionStarted &&
+            request.type === "submit_actions" &&
+            !request.payload.actions.some((action) => action.interaction))
+        ) {
           dispatch({
             type: "RESTORE_STOPPED_INPUT",
             requestId: request.requestId,
           });
+          if (request.type === "submit_actions")
+            dispatch({
+              type: "RESTORE_ACTION_DRAFT",
+              requestId: request.requestId,
+              actions: request.payload.actions,
+            });
         }
         if (!stoppedBeforeStart && !claimedTurn && envelope.turnId) {
           claimedTurn = true;
@@ -310,7 +322,8 @@ export function runActionStream(
           terminalReceived = true;
           recoveryRequired =
             envelope.type === "execution.completed"
-              ? envelope.payload.committed === false && !stoppedBeforeStart
+              ? envelope.payload.resync === true ||
+                (envelope.payload.committed === false && !stoppedBeforeStart)
               : executionStarted;
         }
         handleSseEvent(envelope);
@@ -425,6 +438,7 @@ export async function runSingleSessionAction({
     }
   }
   if (!owner.isCurrent()) return;
+  let started = false;
   try {
     await workspace.run(
       session.id,
@@ -446,16 +460,34 @@ export async function runSingleSessionAction({
             ...(inputMessageId ? { inputMessageId } : {}),
           },
         };
-        return runActionStream(action, handleSseEvent, dispatch, {
-          toastOnError: true,
-          sessionIdRef,
-          isCurrentAction: owner.isCurrent,
-        });
+        return runActionStream(
+          action,
+          (event) => {
+            if (event.type === "execution.started") started = true;
+            handleSseEvent(event);
+          },
+          dispatch,
+          {
+            toastOnError: true,
+            sessionIdRef,
+            isCurrentAction: owner.isCurrent,
+          },
+        );
       },
       { input, isCurrent: owner.isCurrent },
     );
   } catch (error) {
-    if (owner.isCurrent()) reportWorkspaceSyncError(error, dispatch);
+    if (owner.isCurrent()) {
+      reportWorkspaceSyncError(error, dispatch);
+      if (!started) {
+        dispatch({ type: "RESTORE_STOPPED_INPUT", requestId: owner.requestId });
+        dispatch({
+          type: "RESTORE_ACTION_DRAFT",
+          requestId: owner.requestId,
+          actions,
+        });
+      }
+    }
   }
 }
 

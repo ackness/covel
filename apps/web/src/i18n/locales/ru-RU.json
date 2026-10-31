@@ -612,7 +612,12 @@
     "viewConsentTitle": "Разрешить «{{label}}» читать сеанс?",
     "viewConsentDescription": "{{plugin}} запрашивает доступ к сообщениям, потоковому тексту, ожидающим взаимодействиям, открытым данным персонажей и видимым слотам интерфейса. Разрешение действует для этой версии вида на этом устройстве. Его можно отозвать в меню вида.",
     "viewConsentDecline": "Обычный вид",
-    "viewConsentAllow": "Разрешить чтение сеанса"
+    "viewConsentAllow": "Разрешить чтение сеанса",
+    "autoAdvanceLimit": "Автоматические раунды",
+    "autoAdvanceOff": "Выкл.",
+    "autoAdvanceNextInput": "Для следующего ввода",
+    "autoAdvanceProgress": "Продолжение {{round}} / {{limit}}",
+    "autoAdvanceStop": "Остановить продолжение"
   },
   "blocks": {
     "actionPlaceholder": "Или введите собственное действие...",

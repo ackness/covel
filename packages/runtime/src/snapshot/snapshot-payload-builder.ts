@@ -19,6 +19,7 @@
  * to travel with the snapshot.
  */
 
+import { resolveAutoAdvanceLimit } from "@covel/shared";
 import type {
   DataStore,
   SnapshotPayload,
@@ -130,6 +131,9 @@ export async function buildSnapshotPayload(
     turnId,
     session: {
       status: session.status,
+      autoAdvanceLimit: resolveAutoAdvanceLimit(
+        session.metadata?.autoAdvanceLimit,
+      ),
       locale: session.locale,
       activePlugins: session.activePlugins,
       runtimeModelOverrides: session.runtimeModelOverrides,

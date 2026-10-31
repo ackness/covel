@@ -78,6 +78,7 @@ export interface StageViewProps {
   readonly world: WorldRecord | null;
   readonly messages: StreamMessage[];
   readonly executing: boolean;
+  readonly advancing?: boolean;
   /** The session is being restored: a story that arrives now is history. */
   readonly restoring?: boolean;
   readonly executionError: string | null;
@@ -130,6 +131,7 @@ export function StageView(props: StageViewProps): ReactElement {
     world,
     messages,
     executing,
+    advancing = false,
     restoring = false,
     sessionPlugins,
     submittedBlockIds,
@@ -260,7 +262,7 @@ export function StageView(props: StageViewProps): ReactElement {
   const allRead = Boolean(storyKey && readStoryKey === storyKey);
   // Hide the previous decision, including plugin surfaces, as soon as a turn
   // starts. Keep already-read narration hidden while waiting for the new story.
-  const choicesVisible = !executing && allRead;
+  const choicesVisible = advancing || (!executing && allRead);
 
   return (
     <div
@@ -317,6 +319,7 @@ export function StageView(props: StageViewProps): ReactElement {
           />
         )}
         visible={choicesVisible}
+        advancing={advancing}
         executing={executing}
         interactionChoices={interactionChoices}
         suggestions={freshPrompts}

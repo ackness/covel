@@ -78,3 +78,9 @@ To see what each plugin did in a turn, expand the turn's execution details. The 
 - To get more worlds and play styles: [install plugins and world packages](./packages.md)
 - To learn where saves are kept and how to back them up: [data, backup, and upgrade](./data-and-upgrade.md)
 - To make your own world: [your first world](../worlds/first-world.md)
+
+### While the story advances automatically
+
+When a story requests another round, both chat and stage show “Advancing” with the current round and limit. Choose “Stop advancement” to stop further rounds; previously saved stories remain. You can also send new speech, a host action or a spectator advance: it stops the old advancement and then submits a new input. During an ordinary turn, speech still interjects into that turn.
+
+“Automatic rounds” includes “Off”. “Applies to your next input” means saving a setting does not change the current advancement. See [session settings](../reference/api.md#auto-advance) for the range. Each round can call a model; closing the page or disconnecting does not stop server advancement, so use Stop. Refresh restores current progress without restarting a finished chain.

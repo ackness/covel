@@ -182,3 +182,5 @@ It is a core plugin (`kind: core`). No gameplay pack needs to list it. Compactio
 - Change the model for a task: [Connect a model](../start/models.md)
 - Preset data for a world: [Starting content](../recipes/starting-content.md)
 - Back to the overview: [Built-in Plugins and Features](./index.md)
+
+The story interface also provides the host’s [advancement and Stop controls](../start/first-session.md#while-the-story-advances-automatically). The story provider decides whether to request another round; this does not mean bundled narrators now intentionally request advancement.

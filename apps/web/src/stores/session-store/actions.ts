@@ -91,6 +91,11 @@ export function useBuildSessionActions({
 }: UseSessionActionsOptions): SessionActions {
   const { sessionIdRef, sessionGenerationRef, stateRef } = refs;
   const activeActionRef = useRef<symbol | null>(null);
+  const pendingAdvanceInput = useRef<{
+    sessionId: string;
+    generation: number;
+    token: symbol;
+  } | null>(null);
   // The character switch under way, which a submission waits for.
   const pendingSeatSwitch = useRef<Promise<readonly Seat[] | undefined> | null>(
     null,
@@ -111,6 +116,21 @@ export function useBuildSessionActions({
         sessionGenerationRef,
       ),
     [sessionIdRef, sessionGenerationRef],
+  );
+
+  const setAutoAdvanceLimit = useCallback(
+    async (autoAdvanceLimit: number) => {
+      const sid = sessionIdRef.current;
+      const generation = sessionGenerationRef.current;
+      if (!sid) return;
+      const updated = await ds.updateSession(sid, { autoAdvanceLimit });
+      if (
+        sessionIdRef.current === sid &&
+        sessionGenerationRef.current === generation
+      )
+        dispatch({ type: "SET_SESSION", session: updated });
+    },
+    [ds, dispatch, sessionIdRef, sessionGenerationRef],
   );
 
   const boot = useCallback(async () => {
@@ -310,11 +330,21 @@ export function useBuildSessionActions({
   );
 
   const startActions = useCallback(
-    (actions: readonly TurnActionRequest[], seats?: readonly Seat[]) => {
+    (
+      actions: readonly TurnActionRequest[],
+      seats?: readonly Seat[],
+      afterAdvance = false,
+    ) => {
       const state = stateRef.current;
-      if (!canRunSessionAction(state) || !state.session) return;
+      if (
+        !state.session ||
+        state.session.status !== "active" ||
+        (!afterAdvance && !canRunSessionAction(state))
+      )
+        return;
       const owner = claimAction(state.session.id);
 
+      dispatch({ type: "SET_ADVANCE", advance: null });
       dispatch({ type: "SET_EXECUTING", value: true });
       dispatch({ type: "SET_EXECUTION_ERROR", error: null });
 
@@ -347,6 +377,51 @@ export function useBuildSessionActions({
   // old one while the bubble named the new one (or the reverse).
   const sendActions = useCallback(
     (actions: readonly TurnActionRequest[]) => {
+      const state = stateRef.current;
+      const advance = state.advance;
+      if (
+        advance &&
+        advance.phase !== "stopped" &&
+        state.session?.status === "active"
+      ) {
+        const sessionId = state.session.id;
+        const generation = sessionGenerationRef.current;
+        if (
+          pendingAdvanceInput.current?.sessionId === sessionId &&
+          pendingAdvanceInput.current.generation === generation
+        )
+          return;
+        const token = Symbol("advance-input");
+        pendingAdvanceInput.current = { sessionId, generation, token };
+        const isCurrent = () =>
+          sessionIdRef.current === sessionId &&
+          sessionGenerationRef.current === generation;
+        void (async () => {
+          try {
+            // Abort is outside the browser workspace FIFO held by the old stream.
+            await api.abortTurn(sessionId);
+            await workspace.settle?.(sessionId);
+            const seats = await settleSeatSwitches();
+            if (isCurrent()) startActions(actions, seats, true);
+          } catch (error) {
+            if (isCurrent()) {
+              dispatch({
+                type: "RESTORE_ACTION_DRAFT",
+                requestId: crypto.randomUUID(),
+                actions,
+              });
+              dispatch({
+                type: "SET_EXECUTION_ERROR",
+                error: error instanceof Error ? error.message : String(error),
+              });
+            }
+          } finally {
+            if (pendingAdvanceInput.current?.token === token)
+              pendingAdvanceInput.current = null;
+          }
+        })();
+        return;
+      }
       if (!pendingSeatSwitch.current) return startActions(actions);
       const sid = sessionIdRef.current;
       const generation = sessionGenerationRef.current;
@@ -358,7 +433,15 @@ export function useBuildSessionActions({
           startActions(actions, seats);
       });
     },
-    [startActions, sessionIdRef, sessionGenerationRef],
+    [
+      startActions,
+      sessionIdRef,
+      sessionGenerationRef,
+      stateRef,
+      workspace,
+      dispatch,
+      settleSeatSwitches,
+    ],
   );
 
   const sendMessage = useCallback(
@@ -1043,6 +1126,7 @@ export function useBuildSessionActions({
   return useMemo(
     () => ({
       boot,
+      setAutoAdvanceLimit,
       selectWorld,
       startGame,
       beginAdventure,
@@ -1081,6 +1165,7 @@ export function useBuildSessionActions({
     }),
     [
       boot,
+      setAutoAdvanceLimit,
       selectWorld,
       startGame,
       beginAdventure,
