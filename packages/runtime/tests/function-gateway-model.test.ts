@@ -62,6 +62,9 @@ it.each(["fast", undefined])(
           await bound.composeMusic!({ prompt: "music", presetId });
           await bound.evaluate!({ state: {}, questions: {}, presetId });
           bound.resolveSlot({ presetId });
+          bound.resolveSlot({ presetId, fallbackTag: "text" });
+          bound.resolveSlot({ presetId, fallbackTag: "image" });
+          bound.resolveSlot({ presetId, fallbackTag: "evaluation" });
         }
         return { outcome: "success", value: {} };
       },
@@ -94,7 +97,15 @@ it.each(["fast", undefined])(
         "explicit",
       ]);
     }
-    for (const call of Object.values(otherCalls)) {
+    const { resolveSlot, ...nonTextCalls } = otherCalls;
+    expect(resolveSlot.mock.calls.map(([input]) => input.presetId)).toEqual([
+      model,
+      model,
+      undefined,
+      undefined,
+      ...Array(4).fill("explicit"),
+    ]);
+    for (const call of Object.values(nonTextCalls)) {
       expect(call.mock.calls.map(([input]) => input.presetId)).toEqual([
         undefined,
         "explicit",

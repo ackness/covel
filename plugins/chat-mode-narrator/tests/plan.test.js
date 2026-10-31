@@ -33,6 +33,37 @@ const advice = {
   yieldHint: "continue",
 };
 describe("dialogue policy preparation", () => {
+  it("keeps private history and omniscient narration in policy context, outside the shared actor brief", async () => {
+    const previous = {
+      segments: [
+        { kind: "dialogue", speaker: "Mara", text: "MARA-PRIVATE-EXCHANGE" },
+        { kind: "narration", text: "OMNISCIENT-SECRET" },
+      ],
+      cues: { present: ["Mara"] },
+    };
+    const call = vi.fn(async ({ input }) => ({
+      ...advice,
+      actors: input.present.map(({ characterId }) => ({ characterId })),
+    }));
+    const result = await handler(
+      context({
+        exports: { previous: slot(previous) },
+        services: { call },
+        playerActions: [
+          { kind: "narrate", text: "Ivo enters as the bell rings." },
+          { kind: "direct", text: "PRIVATE-HOST-DIRECTION" },
+        ],
+      }),
+    );
+    expect(result.value.actors.map(({ character }) => character)).toEqual([
+      "Mara",
+      "Ivo",
+    ]);
+    expect(result.value.brief).toBe("Ivo enters as the bell rings.");
+    expect(call.mock.calls[0][0].input.recentSegments).toEqual(
+      previous.segments,
+    );
+  });
   it("calls the contract once with structured stage presence and excludes all human bindings", async () => {
     const call = vi.fn(async ({ input }) => ({
       ...advice,

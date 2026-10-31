@@ -4,6 +4,26 @@ import { chooseActors } from "../lib/policies.js";
 import { context, input } from "./fixture.js";
 const advice = { order: "sequential", narrator: "after", yieldHint: "user" };
 describe("director projection", () => {
+  it("propagates model failure after a usable slot is found", async () => {
+    const error = new Error("Model request failed");
+    await expect(
+      chooseActors(
+        input(),
+        context(
+          { strategy: "director" },
+          {
+            gateway: {
+              resolveSlot: () => ({ presetId: "plugin" }),
+              generateObject: async () => {
+                throw error;
+              },
+            },
+          },
+        ),
+        "turn-policy",
+      ),
+    ).rejects.toBe(error);
+  });
   it("does not publish a model answer that arrives after cancellation", async () => {
     const controller = new AbortController();
     let finish;
@@ -117,6 +137,31 @@ describe("director projection", () => {
       ),
     ).rejects.toMatchObject({ code: "unavailable" });
     expect(generateObject).not.toHaveBeenCalled();
+    for (const resolveSlot of [
+      () => null,
+      () => {
+        throw new Error("No default preset");
+      },
+    ]) {
+      expect(
+        await chooseActors(
+          input({ actions: [{ text: "Mara" }] }),
+          context(
+            { strategy: "director" },
+            { gateway: { resolveSlot, generateObject } },
+          ),
+          "turn-policy",
+        ),
+      ).toMatchObject({
+        actors: [
+          {
+            characterId: "mara",
+            reason: "Director unavailable; mention strategy used.",
+          },
+        ],
+        yieldHint: "user",
+      });
+    }
     expect(
       (
         await chooseActors(

@@ -19,7 +19,7 @@ export default async function handler(ctx) {
     status: "unavailable",
     cast: present.map(({ name }) => name),
     actors: [],
-    brief: observableBrief(previous, ctx.playerActions, ctx.locale),
+    brief: observableBrief(ctx.playerActions, ctx.locale),
     order: "sequential",
     narrator: "after",
     yieldHint: "user",

@@ -351,6 +351,8 @@ Both appear together so you can see "which role is used" and "which model is fin
 
 A function runtime does not read `runtimeModelOverrides`. Calls to `ctx.gateway.generateText` and `generateObject` without a `presetId` use `function.model`; an explicit handler `presetId` takes priority. This default does not affect image, speech, music, or evaluation calls.
 
+`ctx.gateway.resolveSlot({})` and `resolveSlot({ fallbackTag: "text" })` use the same default text slot and current request bindings. Other capability tags do not inherit the text default. `generateObject` converts the plugin's JSON Schema to a Zod schema for gateway generation and output validation by default; hosts need not configure a converter.
+
 The prep screen and session plugin list show the role declared by `function.model` and its resolved "provider · model" as read-only text, without a selector. They show the fallback target when the role is not configured, or an unavailable notice when it is configured but unusable. Functions without `function.model` show no model entry. A handler call that explicitly chooses another role still uses that choice.
 
 Image and speech function plugins usually choose a role for their capability through their own `userSettings.modelPresetId`. The session-prep screen shows it as a separate option and writes it to the device setting `plugin.<pluginId>.modelPresetId`. Do not mix the session override of an agent runtime with this setting of a function runtime.

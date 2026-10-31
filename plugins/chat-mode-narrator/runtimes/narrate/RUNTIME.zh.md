@@ -35,6 +35,7 @@
 - 对话占比：{{ userSettings.dialogueRatio }}%
 - 回复长度：{{ userSettings.proseLength }}
 - 使用 `runtime-inputs.plan.value.cast` 中的安全角色名字。场景显著性和委托名额分别控制。可选计划缺失时独自以对白为主叙事。
+- 如有 `runtime-inputs.active-cast.value`，用它了解场景显著性与角色档案。这是叙事器上下文，不要复制到演员简报里。
 
 ## 已结算的跑团检定
 

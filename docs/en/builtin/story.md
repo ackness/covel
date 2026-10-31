@@ -191,17 +191,19 @@ Dialogue Narrator remains playable alone. With optional Character Actor (`charac
 
 Turn Policy offers one service; choose the algorithm in its own Strategy setting. It resolves automatically when it is the only provider. With other providers, choose a service in [Orchestration](./features.md#session-orchestration-settings).
 
-| Strategy | Behaviour                                                                                                                                                                         |
-| -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| mention  | Present characters named in current actions or the last segment, in presence order; yields user.                                                                                  |
-| list     | Configured newline-separated names/aliases first, skipping known absent characters, then remaining names in stable order; empty configuration preserves presence order.           |
-| random   | Samples present characters without replacement, excluding current action actors; previous segment speakers remain eligible.                                                       |
-| manual   | In Choose actors, enter one exact name/alias per line in actors, at most 32 submitted names in total; deduplicates in submission order, with optional direction in action text.   |
-| director | Borrows the function's text slot for one structured plan; without a gateway, uses mention with a reason; a missing slot or failed model with a gateway yields narrator-only play. |
+| Strategy | Behaviour                                                                                                                                                                                                  |
+| -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| mention  | Present characters named in current actions or the last segment, in presence order; yields user.                                                                                                           |
+| list     | Configured newline-separated names/aliases first, skipping known absent characters, then remaining names in stable order; empty configuration preserves presence order.                                    |
+| random   | Samples present characters without replacement, excluding current action actors; previous segment speakers remain eligible.                                                                                |
+| manual   | In Choose actors, enter one exact name/alias per line in actors, at most 32 submitted names in total; deduplicates in submission order, with optional direction in action text.                            |
+| director | Borrows the planner's text slot, including browser request bindings, for one structured plan; without a gateway or usable slot, uses mention with a reason; a failed model call yields narrator-only play. |
 
 List/random may continue after a host direction or host/spectator/system advance. Ordinary player speech/actions yield user. Manual never replays an earlier selection. Unknown, ambiguous, raw-ID or absent names invalidate the whole batch; narration asks for corrected names and yields. Spectators cannot choose actors. Limits are in [settings](./features.md#session-orchestration-settings).
 
 Actors receive only the selected public profile, bounded witnessed stories and deliberately supplied current observations. Missing history does not license invented conversations. Intent stays out of story, exports and cues. Silence or failure is not departure. The bundled actor has no inventory tool; replacement actors retain [staged-operation semantics](../reference/tools.md#delegate).
+
+The shared brief contains only current speech/actions and deliberately established scene narration. It does not replay a previous scene's private exchanges or omniscient narration. Policy selection keeps history; the runner supplies each actor's witnessed history separately. Stage presence informs both the planner's selection and the narrator's descriptions without being copied into actor briefs.
 
 The existing Narrator already supports the game-master perspective. In a world file:
 

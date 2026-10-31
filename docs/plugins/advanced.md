@@ -740,3 +740,5 @@ Keep intent private. If a policy or actor is unavailable, continue with a valid 
 ## 采用内置组合
 
 对话叙事采用上面的公开契约，但把只读策略调用放在 pre-turn 函数，把 delegate 保留在唯一故事 agent 的工具循环中。函数读取 ctx.world 的当前角色/座位，输出安全名字；故事消费可选的同包输入。director 只有函数调用路径能借到 gateway；模型导入不能绕过代码专用设置。演员/策略都可缺失或由社区包替换。完整玩家行为见[群像对话](../builtin/story.md#群像对话与角色演员)。
+
+历史段落只供策略选人，不自动加入共享演员简报；运行器按角色提供亲历历史。`scene-cast@1` 的结构化名单供规划器读取，`activeCastContext` 则作为可选输入供故事 agent 使用。
