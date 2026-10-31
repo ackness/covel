@@ -2,6 +2,7 @@ import { act, renderHook, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   resolveSessionPlugins,
+  resolveWorldPluginSelection,
   type PluginSummary,
   type PluginPack,
   type WorldPluginPlan,
@@ -62,18 +63,18 @@ const prepareWorldForServer = async () => {};
 const PLAN: WorldPluginPlan = {
   worldId: "world-1",
   packs: [],
-  policy: {
-    plus: ["world-required"],
-    requires: [],
+  selection: {
+    requestedPluginIds: ["world-required"],
+    requiredContracts: [],
   },
   defaultPluginIds: ["core", "world-required"],
-  missing: [],
+  diagnostics: [],
 };
 
 function selectionPlan(defaultPluginIds: string[]): WorldPluginPlan {
   return {
     ...PLAN,
-    policy: { ...PLAN.policy, plus: [] },
+    selection: { ...PLAN.selection, requestedPluginIds: [] },
     defaultPluginIds,
   };
 }
@@ -142,7 +143,10 @@ describe("usePluginSelection", () => {
   it("separates the initial pack from world defaults and preserves explicitly excluded world requests", async () => {
     vi.mocked(api.getWorldPluginPlan).mockResolvedValue({
       ...selectionPlan(["alternative", "world", "preferred"]),
-      policy: { ...PLAN.policy, plus: ["world", "preferred"] },
+      selection: {
+        ...PLAN.selection,
+        requestedPluginIds: ["world", "preferred"],
+      },
       packs: PACKS,
       selectedPackId: "alternative",
     });
@@ -277,7 +281,7 @@ describe("usePluginSelection", () => {
   it("lists only requested community packages, including world requests outside the defaults", async () => {
     vi.mocked(api.getWorldPluginPlan).mockResolvedValue({
       ...selectionPlan([]),
-      policy: { ...PLAN.policy, plus: ["community"] },
+      selection: { ...PLAN.selection, requestedPluginIds: ["community"] },
     });
     const plugins = [
       CORE_PLUGIN,
@@ -565,11 +569,26 @@ describe("usePluginSelection", () => {
     vi.mocked(api.getWorldPluginPlan).mockResolvedValue({
       ...selectionPlan(["core"]),
       packs: [pack],
-      missing: [
-        { pluginId: "world-dice" },
-        { pluginId: "pack-map", packId: pack.id },
-        { pluginId: "world-dice", packId: pack.id },
-        { pluginId: "other-pack-only", packId: "other" },
+      diagnostics: [
+        { code: "missing-plugin", path: "plugins", pluginId: "world-dice" },
+        {
+          code: "missing-plugin",
+          path: "plugins",
+          pluginId: "pack-map",
+          packId: pack.id,
+        },
+        {
+          code: "missing-plugin",
+          path: "plugins",
+          pluginId: "world-dice",
+          packId: pack.id,
+        },
+        {
+          code: "missing-plugin",
+          path: "plugins",
+          pluginId: "other-pack-only",
+          packId: "other",
+        },
       ],
     });
     const { result } = renderHook(() =>
@@ -585,7 +604,11 @@ describe("usePluginSelection", () => {
   it("adds the provider of a world-required contract and reports turning it off", async () => {
     vi.mocked(api.getWorldPluginPlan).mockResolvedValue({
       ...selectionPlan(["core"]),
-      policy: { ...PLAN.policy, plus: [], requires: ["dependency@1"] },
+      selection: {
+        ...PLAN.selection,
+        requestedPluginIds: [],
+        requiredContracts: ["dependency@1"],
+      },
     });
     const { result } = renderHook(() =>
       usePluginSelection(PLAN.worldId, PLUGINS, prepareWorldForServer),
@@ -740,10 +763,10 @@ describe("usePluginSelection", () => {
       ];
       vi.mocked(api.getWorldPluginPlan).mockResolvedValue({
         ...PLAN,
-        policy: {
-          ...PLAN.policy,
-          plus: ["world-pick"],
-          requires: ["need@1"],
+        selection: {
+          ...PLAN.selection,
+          requestedPluginIds: ["world-pick"],
+          requiredContracts: ["need@1"],
         },
         defaultPluginIds: ["world-pick", "extra", "dims"],
         packs: [
@@ -804,9 +827,9 @@ describe("usePluginSelection", () => {
       ];
       vi.mocked(api.getWorldPluginPlan).mockResolvedValue({
         ...selectionPlan([]),
-        policy: {
-          ...selectionPlan([]).policy,
-          requires: requirer === "world" ? [contract] : [],
+        selection: {
+          ...selectionPlan([]).selection,
+          requiredContracts: requirer === "world" ? [contract] : [],
         },
       });
       const { result } = renderHook(() =>
@@ -870,4 +893,118 @@ it("admits a selected declarative community package without selecting unrelated 
   expect(result.current.enabledPluginIds).toEqual(["notes"]);
   expect(result.current.pendingApproval).toEqual([]);
   expect(result.current.selectedPluginIdSet.has("other")).toBe(false);
+});
+
+describe("reference-derived preparation intent", () => {
+  function derived(worldId: string, references: string[]): WorldPluginPlan {
+    const resolved = resolveWorldPluginSelection(references, PACKS);
+    return {
+      worldId,
+      ...resolved,
+      defaultPluginIds: [
+        ...new Set(resolved.requests.map((ref) => ref.pluginId)),
+      ],
+    };
+  }
+  it("retains an independent request that overlaps the initial pack after switching packs", async () => {
+    vi.mocked(api.getWorldPluginPlan).mockResolvedValue(
+      derived("overlap", ["pack:full", "plugin:extra"]),
+    );
+    const { result } = renderHook(() =>
+      usePluginSelection("overlap", PACK_PLUGINS, prepareWorldForServer),
+    );
+    await waitFor(() => expect(result.current.pluginPlanLoading).toBe(false));
+    act(() => result.current.applyPack("small"));
+    expect(result.current.requestedPluginIds).toContain("extra");
+    act(() => result.current.togglePlugin("extra"));
+    act(() => result.current.applyPack("full"));
+    expect(result.current.requestedPluginIds).not.toContain("extra");
+    expect(result.current.excludedPluginIds).toContain("extra");
+    const confirmed = resolveSessionPlugins({
+      requested: result.current.requestedPluginIds,
+      excluded: result.current.excludedPluginIds,
+      plugins: PACK_PLUGINS.map((plugin) => ({ ...plugin, authorized: true })),
+    });
+    expect(confirmed.active).toEqual(result.current.enabledPluginIds);
+  });
+  it("never submits an unavailable world request from an older catalogue", async () => {
+    vi.mocked(api.getWorldPluginPlan).mockResolvedValue(
+      derived("missing", ["plugin:absent", "plugin:core"]),
+    );
+    const { result } = renderHook(() =>
+      usePluginSelection("missing", PACK_PLUGINS, prepareWorldForServer),
+    );
+    await waitFor(() => expect(result.current.pluginPlanLoading).toBe(false));
+    expect(result.current.requestedPluginIds).toEqual(["core"]);
+  });
+  it("ignores the old world's response when two plan promises finish out of order", async () => {
+    let first!: (plan: WorldPluginPlan) => void;
+    let second!: (plan: WorldPluginPlan) => void;
+    vi.mocked(api.getWorldPluginPlan)
+      .mockReturnValueOnce(
+        new Promise((resolve) => {
+          first = resolve;
+        }),
+      )
+      .mockReturnValueOnce(
+        new Promise((resolve) => {
+          second = resolve;
+        }),
+      );
+    const { result, rerender } = renderHook(
+      ({ worldId }) =>
+        usePluginSelection(worldId, PACK_PLUGINS, prepareWorldForServer),
+      { initialProps: { worldId: "first" } },
+    );
+    await waitFor(() =>
+      expect(api.getWorldPluginPlan).toHaveBeenCalledWith(
+        "first",
+        expect.anything(),
+      ),
+    );
+    rerender({ worldId: "second" });
+    await waitFor(() =>
+      expect(api.getWorldPluginPlan).toHaveBeenCalledWith(
+        "second",
+        expect.anything(),
+      ),
+    );
+    await act(async () => second(derived("second", ["pack:small"])));
+    expect(result.current.pluginPlan?.worldId).toBe("second");
+    await act(async () => first(derived("first", ["pack:full"])));
+    expect(result.current.pluginPlan?.worldId).toBe("second");
+    expect(result.current.requestedPluginIds).toEqual(["core"]);
+  });
+  it("refreshes labels and plugin summaries without erasing an unsaved manual exclusion", async () => {
+    const initial = derived("refresh", ["pack:full"]);
+    vi.mocked(api.getWorldPluginPlan).mockResolvedValue(initial);
+    const { result, rerender } = renderHook(
+      ({ plugins, prepare }) => usePluginSelection("refresh", plugins, prepare),
+      {
+        initialProps: { plugins: PACK_PLUGINS, prepare: prepareWorldForServer },
+      },
+    );
+    await waitFor(() => expect(result.current.pluginPlanLoading).toBe(false));
+    act(() => result.current.togglePlugin("extra"));
+    const refreshed = {
+      ...initial,
+      packs: initial.packs.map((pack) => ({ ...pack, label: "Fresh label" })),
+    };
+    vi.mocked(api.getWorldPluginPlan).mockResolvedValue(refreshed);
+    rerender({
+      plugins: PACK_PLUGINS.map((plugin) => ({
+        ...plugin,
+        displayName: "Fresh name",
+      })),
+      prepare: async () => {},
+    });
+    await waitFor(() =>
+      expect(result.current.pluginPlan?.packs[0]?.label).toBe("Fresh label"),
+    );
+    expect(result.current.excludedPluginIds).toContain("extra");
+    expect(result.current.requestedPluginIds).not.toContain("extra");
+    expect(result.current.enabledPluginSummaries[0]?.displayName).toBe(
+      "Fresh name",
+    );
+  });
 });

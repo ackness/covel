@@ -53,7 +53,11 @@ describe("e2e plugin verification CLI HTTP contract", () => {
               worldId: "contract-world",
               selectedPackId: "contract-pack",
               defaultPluginIds: ["narrator", "contract-plugin"],
-              policy: { requested: ["contract-plugin", "contract-rules"] },
+              selection: {
+                requestedPluginIds: ["contract-plugin", "contract-rules"],
+                requiredContracts: [],
+              },
+              diagnostics: [],
               packs: [],
             });
           case "POST /api/sessions":

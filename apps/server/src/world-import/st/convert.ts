@@ -487,7 +487,7 @@ export async function convertStImport(input: {
       tags: [...tags].slice(0, 12),
       ...(author ? { author: { name: author } } : {}),
       ...(cover ? { cover: "media/gallery/cover.png" } : {}),
-      pluginPolicy: { preset: "dialogue-mode" },
+      plugins: ["pack:dialogue-mode"],
     }),
   );
   add("WORLD.md", sections.join("\n\n") + "\n");

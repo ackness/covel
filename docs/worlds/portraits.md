@@ -257,7 +257,7 @@ wrote worlds/tidelamp/media/presence.json with 1 presence record(s)
 
 **这一局要启用显示立绘的插件。** 内置的是“角色资料”（`character-blueprint`）。它包含在“对话模式”（`dialogue-mode`）这个玩法包里；“传统故事模式”（`traditional-story`）里没有它。两种办法任选：
 
-- 在 `world.yaml` 的 `pluginPolicy.plus` 里加上 `character-blueprint`，或者把 `pluginPolicy.preset` 改成 `dialogue-mode`。
+- 在 `world.yaml` 的 `plugins` 里加上 `character-blueprint`，或者把 `plugins` 改成 `dialogue-mode`。
 - 或者在开局的准备页展开“自定义插件与高级设置”，选中“角色资料”。
 
 没有启用时，图片和对应清单会被跳过，开局时给出一条提醒。

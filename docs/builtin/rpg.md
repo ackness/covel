@@ -71,7 +71,7 @@ d20 加上属性修正，达到目标值就成功。自然 20 是大成功，自
 | `lantern-barrow` | “经典跑团”玩法包，默认启用         |
 | `emberback`      | “Emberback Rescue”玩法包，默认启用 |
 
-其他世界可以在会话准备页手动勾选，或者由世界作者写进 `pluginPolicy`，见[开局配点和掷骰判定](../recipes/point-buy.md)。
+其他世界可以在会话准备页手动勾选，或者由世界作者写进 `plugins`，见[开局配点和掷骰判定](../recipes/point-buy.md)。
 
 没有可调的设置。
 

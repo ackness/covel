@@ -105,17 +105,18 @@ export function describeWorldChange(
 
   if (
     !same(
-      [oldMeta.pluginPolicy, oldMeta.pluginSettings],
-      [newMeta.pluginPolicy, newMeta.pluginSettings],
+      [oldMeta.plugins, oldMeta.pluginPitch, oldMeta.pluginSettings],
+      [newMeta.plugins, newMeta.pluginPitch, newMeta.pluginSettings],
     )
   )
-    areas.push("plugin policy and settings");
+    areas.push("plugin selection and settings");
 
   const handled = new Set([
     // Package bookkeeping changes with every edited file, not with settings.
     "packageDigest",
     "dimensions",
-    "pluginPolicy",
+    "plugins",
+    "pluginPitch",
     "pluginSettings",
     WORLD_LOCALIZED_TEXT_KEY,
   ]);

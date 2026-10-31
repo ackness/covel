@@ -81,12 +81,12 @@ beforeEach(() => {
   vi.mocked(api.getWorldPluginPlan).mockResolvedValue({
     worldId: world.id,
     packs: [],
-    policy: {
-      plus: ["community"],
-      requires: [],
+    selection: {
+      requestedPluginIds: ["community"],
+      requiredContracts: [],
     },
     defaultPluginIds: ["builtin", "community"],
-    missing: [],
+    diagnostics: [],
   });
   vi.mocked(api.preflightWorldData).mockResolvedValue({
     imported: true,
@@ -130,9 +130,9 @@ describe("session prep approval preflight", () => {
     resolvePlan({
       worldId: world.id,
       packs: [],
-      policy: { plus: [], requires: [] },
+      selection: { requestedPluginIds: [], requiredContracts: [] },
       defaultPluginIds: catalogue.map((plugin) => plugin.id),
-      missing: [],
+      diagnostics: [],
     });
     await waitFor(() => expect(toggle.matches(":disabled")).toBe(false));
     fireEvent.click(toggle);

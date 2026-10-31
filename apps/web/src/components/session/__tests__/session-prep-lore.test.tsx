@@ -13,6 +13,7 @@ import {
   primeWorldRecord,
 } from "@/services/world-records.js";
 import { SessionPrepScreen } from "../session-prep-screen.js";
+import { worldPluginPlanFixture } from "./session-prep-fixtures.js";
 import type { SessionPrepScreenProps } from "../session-prep/types.js";
 
 vi.mock("@/services/api.js", () => ({
@@ -32,13 +33,16 @@ vi.mock("@/hooks/use-slot-config.js", () => ({
   useSlotConfig: () => ({ resolvedSlots: [], refresh: vi.fn() }),
 }));
 vi.mock("../session-prep/use-plugin-selection.js", () => ({
-  usePluginSelection: () => ({
+  usePluginSelection: (worldId: string) => ({
     enabledPluginIds: ["fixture-plugin"],
     requestedPluginIds: ["fixture-plugin"],
     excludedPluginIds: [],
     enabledPluginSummaries: [],
     selectedPluginIdSet: new Set(),
-    pluginPlan: {},
+    pluginPlan: worldPluginPlanFixture(worldId, {
+      requestedPluginIds: ["fixture-plugin"],
+      requiredContracts: [],
+    }),
     pluginPlanLoading: false,
     pluginPlanError: null,
     missingPluginIds: [],

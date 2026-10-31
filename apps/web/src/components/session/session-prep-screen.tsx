@@ -186,6 +186,9 @@ export function SessionPrepScreen({
 
   const pluginPlanUnavailable =
     pluginPlanLoading || pluginPlanError !== null || pluginPlan === null;
+  const unavailablePacks =
+    pluginPlan?.diagnostics?.filter((item) => item.code === "unknown-pack") ??
+    [];
   // Nothing the world relies on stops the game: the session starts without
   // it. The notice says what will be missing and how to add it back.
   const dimensionsLeftOut = worldDataPreflight?.diagnostics.some(
@@ -598,6 +601,17 @@ export function SessionPrepScreen({
               >
                 {t("common.retry", "Retry")}
               </Button>
+            </div>
+          )}
+
+          {unavailablePacks.length > 0 && (
+            <div
+              role="status"
+              data-testid="unavailable-world-packs"
+              className="mb-5 text-sm text-muted-foreground"
+            >
+              {t("session.unavailableWorldPacks")}{" "}
+              {unavailablePacks.map((item) => item.packId).join(", ")}
             </div>
           )}
 

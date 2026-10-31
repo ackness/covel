@@ -71,7 +71,7 @@ Optional. No built-in gameplay pack includes it, so a world has to include it.
 | `lantern-barrow` | "Classic Tabletop" gameplay pack, on by default |
 | `emberback`      | "Emberback Rescue" gameplay pack, on by default |
 
-For other worlds, you can tick it on the session-prep screen, or the world author can add it to `pluginPolicy`. See [Point buy and dice checks](../recipes/point-buy.md).
+For other worlds, you can tick it on the session-prep screen, or the world author can add it to `plugins`. See [Point buy and dice checks](../recipes/point-buy.md).
 
 It has no settings you can change.
 

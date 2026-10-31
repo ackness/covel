@@ -160,102 +160,73 @@
       "description": "Page of the package itself, such as its repository or documentation. `https` only.",
       "examples": ["https://example.com/my-package"]
     },
-    "pluginPolicy": {
+    "plugins": {
+      "maxItems": 256,
+      "type": "array",
+      "items": {
+        "type": "string",
+        "maxLength": 256,
+        "pattern": "^(?:(?:pack|plugin):[a-z][a-z0-9-]*|contract:[a-z][a-z0-9.-]*@[1-9][0-9]*)$"
+      },
+      "description": "Ordered pack, plugin and contract references. The first pack is the initial selection; other packs remain alternatives. Redundant duplicate references are rejected. Nothing is locked on."
+    },
+    "pluginPitch": {
       "type": "object",
       "properties": {
-        "preset": {
-          "type": "string",
-          "minLength": 1,
-          "pattern": "^[a-z][a-z0-9-]*$",
-          "description": "ID of the built-in pack a new session starts from, such as `traditional-story` or `dialogue-mode` (`packs/builtin.yaml`)."
-        },
-        "plus": {
-          "type": "array",
-          "items": {
-            "type": "string",
-            "minLength": 1
-          },
-          "description": "Plugin IDs this world adds to whichever pack the player picks. Never list a `kind: core` plugin: every session has those already."
-        },
-        "pitch": {
-          "type": "object",
-          "properties": {
-            "label": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "object",
-                  "propertyNames": {
-                    "type": "string"
-                  },
-                  "additionalProperties": {
-                    "type": "string"
-                  }
-                }
-              ],
-              "description": "Name of this world's selection, shown on the pack card."
+        "label": {
+          "anyOf": [
+            {
+              "type": "string"
             },
-            "description": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "object",
-                  "propertyNames": {
-                    "type": "string"
-                  },
-                  "additionalProperties": {
-                    "type": "string"
-                  }
-                }
-              ],
-              "description": "What the selection offers. Shown to the player."
-            },
-            "reason": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "object",
-                  "propertyNames": {
-                    "type": "string"
-                  },
-                  "additionalProperties": {
-                    "type": "string"
-                  }
-                }
-              ],
-              "description": "Why the selection suits the world. Shown to the player."
+            {
+              "type": "object",
+              "propertyNames": {
+                "type": "string"
+              },
+              "additionalProperties": {
+                "type": "string"
+              }
             }
-          },
-          "additionalProperties": false,
-          "description": "How the session preparation screen presents `preset` for this world: its own label, description and reason in place of the pack's."
+          ],
+          "description": "Label of this world's initial plugin selection. Defaults to the world name."
         },
-        "packs": {
-          "minItems": 1,
-          "type": "array",
-          "items": {
-            "type": "string",
-            "minLength": 1,
-            "pattern": "^[a-z][a-z0-9-]*$"
-          },
-          "description": "IDs of the built-in packs the player may choose from, in this order. Without it every built-in pack is offered. `preset` must be one of them."
+        "description": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "object",
+              "propertyNames": {
+                "type": "string"
+              },
+              "additionalProperties": {
+                "type": "string"
+              }
+            }
+          ],
+          "description": "Public description of the selection. Defaults to the world summary."
         },
-        "requires": {
-          "type": "array",
-          "items": {
-            "type": "string",
-            "pattern": "^[a-z][a-z0-9.-]*@[1-9][0-9]*$"
-          },
-          "description": "Contract IDs the world needs, such as `action-check@1`. Any installed provider satisfies one. Without one, a session starts without that part of the world and tells the player."
+        "reason": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "object",
+              "propertyNames": {
+                "type": "string"
+              },
+              "additionalProperties": {
+                "type": "string"
+              }
+            }
+          ],
+          "description": "Why the selection suits this world. Defaults to the world tags; omitted when there are none."
         }
       },
       "additionalProperties": false,
-      "description": "Which plugins a session of this world starts with. It states intent and locks nothing; the player can change the selection."
+      "description": "Optional public presentation overrides; absent fields use the world name, summary and tags."
     },
     "worldData": {
       "type": "string",

@@ -92,6 +92,8 @@ export const collectionProblemSchema = z
     message: z.string(),
     /** The world or plugin the problem is about, when it concerns one. */
     packageId: z.string().optional(),
+    path: z.string().max(512).optional(),
+    packId: z.string().max(256).optional(),
   })
   .strict();
 export type CollectionProblem = z.infer<typeof collectionProblemSchema>;

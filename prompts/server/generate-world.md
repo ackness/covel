@@ -44,9 +44,9 @@ summary: <1-2 sentence summary>
 # interpolator can no longer expand.
 defaultLocale: "{{ locale }}"
 tags: [<you decide genre tags>]
-# Omit pluginPolicy when the Creation Brief chooses no plugin pack.
-pluginPolicy:
-  preset: <the preset of the Creation Brief's plugin pack>
+# Omit pack references when the Creation Brief chooses no plugin pack.
+plugins:
+  - pack:<the ID of the Creation Brief's plugin pack>
 
 # Omit defaultViewMode: the plugin pack decides it. A revision keeps the value
 # the current world.yaml has.

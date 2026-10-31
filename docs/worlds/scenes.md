@@ -210,7 +210,7 @@ wrote worlds/tidelamp/media/scenes.registry.json with 1 scene(s)
 > [!NOTE]
 > 世界的 `data/world.data.yaml` 里写了 `media/scenes.registry.json` 时，这个文件必须存在，否则世界通不过校验。图还没做的时候，先运行一次 `node scripts/emit-scenes.mjs <世界ID>`：它会写出一份没有场景的空清单占位。出图后再运行一次即可。
 
-**这一局要启用管理场景的插件。** 内置的是“场景舞台”（`scene-stage`），它包含在“对话模式”（`dialogue-mode`）玩法包里，“传统故事模式”里没有。把 `world.yaml` 的 `pluginPolicy.preset` 改成 `dialogue-mode`，或者在 `pluginPolicy.plus` 里加上 `scene-stage`，或者在开局的准备页展开“自定义插件与高级设置”选中它。
+**这一局要启用管理场景的插件。** 内置的是“场景舞台”（`scene-stage`），它包含在“对话模式”（`dialogue-mode`）玩法包里，“传统故事模式”里没有。把 `world.yaml` 的 `plugins` 改成 `dialogue-mode`，或者在 `plugins` 里加上 `scene-stage`，或者在开局的准备页展开“自定义插件与高级设置”选中它。
 
 想让玩家一进游戏就是舞台视图，在 `world.yaml` 里加一行：
 

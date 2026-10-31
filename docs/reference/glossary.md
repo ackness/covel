@@ -235,7 +235,7 @@ agent runtime 在 `agent.tools.services` 里导入另一个插件给模型用的
 
 一组起了名字的插件（`requested` 和 `recommended` 两个集合，加上标签），合起来构成一种玩法，例如 `traditional-story`、`dialogue-mode`。
 
-玩家在开局准备页选一个玩法包，就一步换掉上一个玩法包带来的插件；世界自己要求的插件和玩家手动选的插件保持不变。世界用 `pluginPolicy.preset` 指定默认的玩法包，用 `pluginPolicy.plus` 加上自己要的插件。玩法包只有内置的那些（`packs/builtin.yaml`），世界不定义自己的玩法包。
+玩家在开局准备页选一个玩法包，就一步换掉上一个玩法包带来的插件；世界自己要求的插件和玩家手动选的插件保持不变。世界用 `plugins` 指定默认的玩法包，用 `plugins` 加上自己要的插件。玩法包只有内置的那些（`packs/builtin.yaml`），世界不定义自己的玩法包。
 
 它和 **Preset** 不同：Preset 打包的是模型的选择，不是插件。
 

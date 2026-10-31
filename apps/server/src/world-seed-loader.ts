@@ -147,7 +147,7 @@ export async function loadSingleWorld(
     );
   if (validation.droppedSections?.length)
     console.warn(
-      `[world-seed] ${path.basename(worldDir)}: world.yaml: pluginPolicy ignored; sessions start with the plugins every session has:\n${formatValidationErrors(validation.droppedSections)}`,
+      `[world-seed] ${path.basename(worldDir)}: world.yaml: invalid optional selection or presentation omitted:\n${formatValidationErrors(validation.droppedSections)}`,
     );
   if (!validation.valid) {
     const dirName = path.basename(worldDir);

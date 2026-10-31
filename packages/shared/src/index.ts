@@ -420,7 +420,9 @@ export {
   characterSchemaSchema,
   worldManifestSchema,
   worldIdSchema,
-  worldPluginPolicySchema,
+  worldPluginReferenceSchema,
+  worldPluginsSchema,
+  pluginPitchSchema,
   WORLD_ACCENT_PATTERN,
   worldAccentColorSchema,
   worldDimensionsSchema,
@@ -435,11 +437,7 @@ export {
   worldStartingConditionsSchema,
 } from "./schemas/world.js";
 
-export type {
-  WorldManifestInput,
-  WorldManifest,
-  WorldPluginPolicy,
-} from "./schemas/world.js";
+export type { WorldManifestInput, WorldManifest } from "./schemas/world.js";
 export type {
   DimensionValueType,
   DimensionValueSchema,
@@ -778,3 +776,4 @@ export {
   presentationNamespace,
   presentationRuleIssues,
 } from "./schemas/presentation-rules.js";
+export { resolveWorldPluginSelection } from "./world-plugin-selection.js";

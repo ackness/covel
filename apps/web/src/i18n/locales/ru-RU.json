@@ -17,6 +17,8 @@
     "primary": "Основное"
   },
   "session": {
+    "worldSelectionTags": "Теги мира: {{tags}}",
+    "unavailableWorldPacks": "Мир рекомендует недоступный набор. Выберите другой или начните с текущим выбором.",
     "operationFailedNotice": "{{count}} действия из этого хода не вступило в силу.",
     "operationFailedNotice_one": "{{count}} действие из этого хода не вступило в силу.",
     "operationFailedNotice_few": "{{count}} действия из этого хода не вступили в силу.",

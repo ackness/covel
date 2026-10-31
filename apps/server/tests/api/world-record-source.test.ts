@@ -1,3 +1,5 @@
+import { parse } from "yaml";
+import { worldSectionsOf } from "../../src/world-data/world-sections.js";
 /**
  * The world record is the world; a package's files are only what it was
  * installed from (F-003, F-007). An edit in the app reaches new sessions and
@@ -370,6 +372,59 @@ describe("the world record is the source of truth", () => {
       });
     },
   );
+
+  it("preserves edited selection and explicit pitch through revisions and restores authored package values", async () => {
+    const original = {
+      plugins: ["pack:example", "plugin:missing"],
+      pluginPitch: { label: "Original" },
+    };
+    await writeFile(
+      path.join(root, "pkg", "world.yaml"),
+      JSON.stringify({
+        ...JSON.parse(manifest("Pkg", 1)),
+        ...original,
+      }),
+    );
+    await seedWorlds(store, root, sessionLock);
+    const edited = {
+      plugins: ["pack:other", "contract:check@1", "plugin:missing"],
+      pluginPitch: { label: "Edited" },
+    };
+    const response = await app.request("/api/worlds/pkg", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        dimensions: { stamina: stamina(5) },
+        metadata: edited,
+      }),
+    });
+    expect(response.status, await response.clone().text()).toBe(200);
+    const world = (await store.getWorld("pkg"))!;
+    expect(world.metadata).toMatchObject(edited);
+    for (const directory of [undefined, path.join(root, "pkg")]) {
+      const sections = await worldSectionsOf(world, directory);
+      expect(parse(sections.yaml)).toMatchObject(edited);
+      expect(parse(sections.yaml).pluginPitch).toEqual({ label: "Edited" });
+    }
+    const removed = await app.request("/api/worlds/pkg", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ metadata: { plugins: null, pluginPitch: null } }),
+    });
+    expect(removed.status).toBe(200);
+    const withoutSelection = (await store.getWorld("pkg"))!;
+    const revision = parse(
+      (await worldSectionsOf(withoutSelection, path.join(root, "pkg"))).yaml,
+    );
+    expect(revision).not.toHaveProperty("plugins");
+    expect(revision).not.toHaveProperty("pluginPitch");
+    const restored = await app.request(
+      "/api/worlds/pkg/restore-package",
+      json({}),
+    );
+    expect(restored.status).toBe(200);
+    expect((await store.getWorld("pkg"))?.metadata).toMatchObject(original);
+  });
 
   it("goes back to the package version only when the player restores it", async () => {
     await editDimensions(5);

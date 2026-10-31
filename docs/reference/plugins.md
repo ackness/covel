@@ -1129,11 +1129,11 @@ namespace 声明 `search` 之后，它的记录进入框架的记忆检索（[`m
 - 准备页在开局前列出会因此停用的插件、它缺的契约和能提供它的已安装插件，并给出“打开”按钮。游戏界面对 `unavailable` 做同样的提示。
 - 开启的插件里没有叙事 runtime（`io.visibility: story`）时，回合不会产生故事。准备页和游戏界面都会说明这一点，列出可以打开的叙事插件；一个都没有安装时，提示去“设置 → 安装与管理”安装。
 - `requested` 和计算出的 `active` 分开保存。自动依赖不会变成玩家的显式选择。
-- 世界的 `pluginPolicy.requires` 作为 `requiredContracts` 传入。世界和插件一样是依赖方：唯一的提供者自动加入，而且不会被当作没人需要的依赖移除。无法满足的需求在 `unmet` 里返回，原因是 `missing-provider`、`ambiguous-provider`、`approval-required` 或 `excluded`。四种都不阻止创建会话：会话少了这部分照常开始，准备页和创建会话的响应（`unmetRequirements`）告诉玩家缺了什么。前两种是安装问题，后两种是玩家的选择。
+- 世界的 `contract:` 引用 作为 `requiredContracts` 传入。世界和插件一样是依赖方：唯一的提供者自动加入，而且不会被当作没人需要的依赖移除。无法满足的需求在 `unmet` 里返回，原因是 `missing-provider`、`ambiguous-provider`、`approval-required` 或 `excluded`。四种都不阻止创建会话：会话少了这部分照常开始，准备页和创建会话的响应（`unmetRequirements`）告诉玩家缺了什么。前两种是安装问题，后两种是玩家的选择。
 
 **世界和玩法包怎样给出初始请求。**
 
-- 世界的 `pluginPolicy` 用 `preset` 选一个内置玩法包，用 `plus` 加上自己要的插件，见[插件选择](./world-data.md#插件选择pluginpolicy)。玩法包使用 `requested/recommended`。初始的显式请求是 `preset` 玩法包的 `requested` 加上 `plus`。
+- 世界在 `plugins` 中列出 `pack:`、`plugin:` 和 `contract:` 引用，见[插件选择](./world-data.md#插件选择pluginpolicy)。只有初始包展开到默认请求，独立插件请求同时保留。
 - 内置玩法包（`packs/builtin.yaml`）还可以写 `defaultViewMode`（`stage`、`parsed` 或 `plugin:<pluginId>:<viewId>`；桥接视图先请求玩家授权）。AI 创建世界时选了这个玩法包，生成的世界就带上这个 `defaultViewMode`。框架不按玩法包的 ID 做判断：AI 创建世界的选项就是这份目录里的全部玩法包，见 [`GET /api/framework/authoring`](./api.md#get-apiframeworkauthoring) 的 `packs`。
 - 推荐项不自动启用，也不会覆盖玩家的显式排除。
 - `GET /api/worlds/:id/plugin-plan` 的 `defaultPluginIds` 是初始的显式请求。准备页和创建端再用同一个解析器计算活动集合。
@@ -1144,11 +1144,11 @@ namespace 声明 `search` 之后，它的记录进入框架的记忆检索（[`m
 - 切换玩法包不会改变视图模式。玩法包的 `defaultViewMode` 只在 AI 生成世界时写进世界。
 - 切换会替换上一个包贡献的请求，包括世界初始选中的包。
 - 初始默认请求里被初始包请求的插件归该包所有。切换后只有新包也请求它才保留，所以新包的叙事引擎能替换旧包的引擎。
-- 世界的 `plus` 和玩家手动添加的请求保留。显式排除继续优先。
+- 世界的独立插件引用 和玩家手动添加的请求保留。显式排除继续优先。
 - 手动修改会清除包卡片的高亮，但旧包的来源仍然记着，下一次切换不会把旧包累加进来。手动重新启用的包内插件作为手选保留。
-- 世界的 `requires` 仍由解析器独立校验。不能把 `plus` 当作不可取消的必需项。
+- 世界的契约引用 仍由解析器独立校验。不能把独立插件引用当作不可取消的必需项。
 - 玩法包可以带 `excluded`：选中这个包时关掉其中的插件，`kind: core` 的也一样，玩家可以再打开。切换到下一个包时只撤销上一个包加的排除，玩家自己的排除保留。世界初始选中的包，它的排除从一开始就生效。没有安装的插件不出现在 `excluded` 里。
-- “回到最小集合”按钮只留叙事插件（已选的；一个都没选时用 core 里的），以及它们和世界的 `requires` 拉进来的插件。不会额外要求 `world.dimensions@1` 的提供者；其余的 core 插件和世界 `plus` 的插件都被排除，玩法包的高亮清除。
+- “回到最小集合”按钮只留叙事插件（已选的；一个都没选时用 core 里的），以及它们和世界的契约引用 拉进来的插件。不会额外要求 `world.dimensions@1` 的提供者；其余的 core 插件和世界独立请求的插件都被排除，玩法包的高亮清除。
 
 **存档固定玩家确认的那一组。**
 

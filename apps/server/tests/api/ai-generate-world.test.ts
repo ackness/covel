@@ -1458,11 +1458,11 @@ protocol = "openai-chat-v1"
 
     // `low-cost` was not a choice when the two choices were fixed.
     const lowCost = await generate("low-cost");
-    expect(lowCost.pluginPolicy).toMatchObject({ preset: "low-cost" });
+    expect(lowCost.plugins).toContain("pack:low-cost");
     expect(lowCost.defaultViewMode).toBeUndefined();
     // The stage view is the data of the dialogue pack.
     const dialogue = await generate("dialogue-mode");
-    expect(dialogue.pluginPolicy).toMatchObject({ preset: "dialogue-mode" });
+    expect(dialogue.plugins).toContain("pack:dialogue-mode");
     expect(dialogue.defaultViewMode).toBe("stage");
   });
 

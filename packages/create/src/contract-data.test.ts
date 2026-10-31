@@ -56,16 +56,14 @@ it("accepts records only for contracts the brief requests, and requires each req
 
 it("adds the receiving plugin of every selected contract", () => {
   const manifest: Record<string, unknown> = {
-    pluginPolicy: { plus: ["narrator"] },
+    plugins: ["plugin:narrator"],
   };
   expect(
     applyCreationBriefToManifest(manifest, brief, [
       { ...contract, pluginId: "custom-plugin" },
     ]),
   ).toEqual({ errors: [], warnings: [] });
-  expect(manifest.pluginPolicy).toEqual({
-    plus: ["narrator", "custom-plugin"],
-  });
+  expect(manifest.plugins).toEqual(["plugin:narrator", "plugin:custom-plugin"]);
 });
 
 it("writes portable contract records as validated contract-targeted world sources", async () => {

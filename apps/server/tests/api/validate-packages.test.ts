@@ -394,7 +394,7 @@ describe("package validation endpoints", () => {
       "private/validation-secret/cover.png",
     );
     await files(dir, {
-      "world.yaml": `${world}cover: ${JSON.stringify(hostPath)}\npluginPolicy:\n  plus: [probe]\n  requires: [probe-state@1]\npluginSettings:\n  probe:\n    enabled: wrong\n    ${JSON.stringify(hostPath)}: true\n`,
+      "world.yaml": `${world}cover: ${JSON.stringify(hostPath)}\nplugins: [plugin:probe, contract:probe-state@1]\npluginSettings:\n  probe:\n    enabled: wrong\n    ${JSON.stringify(hostPath)}: true\n`,
       "WORLD.md": "<!-- narrator-only -->\nUnclosed lore.",
     });
     const response = await post("world", { kind: "installed", id: "sample" });

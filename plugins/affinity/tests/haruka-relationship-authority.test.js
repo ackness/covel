@@ -1,3 +1,4 @@
+import { resolveWorldPluginSelection } from "@covel/shared";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -95,15 +96,20 @@ async function fixture(worldId, locale) {
     includeWorldDataOverrides: false,
   });
   expect(world).toBeTruthy();
-  const policy = world.metadata.pluginPolicy;
-  const pack = BUILTIN_PLUGIN_PACKS.find((item) => item.id === policy.preset);
+  const selection = resolveWorldPluginSelection(
+    world.metadata.plugins,
+    BUILTIN_PLUGIN_PACKS,
+  );
+  const pack = selection.packs.find(
+    (item) => item.id === selection.selectedPackId,
+  );
   const plan = resolveSessionPluginPlan(
-    [...pack.requested, ...(policy.plus ?? [])],
+    [...new Set(selection.requests.map((ref) => ref.pluginId))],
     registry,
     {
-      excluded: policy.minus ?? pack.excluded,
+      excluded: pack?.excluded,
       authorized: [...registry.getAll().keys()],
-      requiredContracts: policy.requires,
+      requiredContracts: selection.selection.requiredContracts,
     },
   );
   expect(

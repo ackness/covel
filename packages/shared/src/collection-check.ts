@@ -1,4 +1,8 @@
-import { isRecord } from "./utils/is-record.js";
+import { resolveWorldPluginSelection } from "./world-plugin-selection.js";
+import type {
+  PluginPack,
+  WorldPluginSelectionDiagnostic,
+} from "./types/plugin-api.js";
 import { providedContracts } from "./plugin-selection.js";
 import type { CollectionProblem } from "./schemas/collection.js";
 import { satisfiesHostVersionRange } from "./utils/host-version-range.js";
@@ -13,18 +17,18 @@ export interface CollectionPluginFacts {
   readonly hostRange?: string;
 }
 
-/** What a world asks of the plugins around it, read from `pluginPolicy`. */
+/** Static world requests, including only the initial pack's members. */
 export interface CollectionWorldFacts {
   readonly id: string;
   readonly requires: readonly string[];
-  /** Plugin IDs the world adds to its pack (`pluginPolicy.plus`). */
   readonly requested: readonly string[];
+  readonly requests?: readonly {
+    pluginId: string;
+    path: string;
+    packId?: string;
+  }[];
+  readonly diagnostics?: readonly WorldPluginSelectionDiagnostic[];
 }
-
-const strings = (value: unknown): string[] =>
-  Array.isArray(value)
-    ? value.filter((item): item is string => typeof item === "string")
-    : [];
 
 /**
  * Facts from a loaded root manifest. Its `id` and `provides` are the ones the
@@ -48,20 +52,19 @@ export function collectionPluginFacts(
   };
 }
 
-/**
- * Facts from a world.yaml that is already parsed as data. `directoryName`
- * is the world's ID when the manifest writes none. The built-in packs it
- * names come with every host, so only its `plus` plugins are requests.
- */
+/** Parse references with the same host catalogue used by preparation. */
 export function collectionWorldFacts(
   manifest: Readonly<Record<string, unknown>>,
+  packs: readonly PluginPack[],
   directoryName?: string,
 ): CollectionWorldFacts {
-  const policy = isRecord(manifest.pluginPolicy) ? manifest.pluginPolicy : {};
+  const resolved = resolveWorldPluginSelection(manifest.plugins, packs);
   return {
     id: typeof manifest.id === "string" ? manifest.id : String(directoryName),
-    requires: strings(policy.requires),
-    requested: strings(policy.plus),
+    requires: resolved.selection.requiredContracts,
+    requested: [...new Set(resolved.requests.map((ref) => ref.pluginId))],
+    requests: resolved.requests,
+    diagnostics: resolved.diagnostics,
   };
 }
 
@@ -82,7 +85,13 @@ export function checkCollection(args: {
   readonly collectionRange?: string;
 }): CollectionProblem[] {
   const problems: CollectionProblem[] = [];
-  const everyPlugin = [...args.available, ...args.plugins];
+  // A member being installed replaces the host's earlier manifest facts.
+  // Duplicate members still receive their own diagnostic below.
+  const everyPlugin = [
+    ...new Map(
+      [...args.available, ...args.plugins].map((plugin) => [plugin.id, plugin]),
+    ).values(),
+  ];
   const known = new Set(everyPlugin.map((plugin) => plugin.id));
 
   const outsideRange = (range: string | undefined) =>
@@ -131,15 +140,31 @@ export function checkCollection(args: {
   }
 
   for (const world of args.worlds) {
+    for (const diagnostic of world.diagnostics ?? [])
+      problems.push({
+        level:
+          diagnostic.code === "unknown-pack" ||
+          diagnostic.code === "redundant-reference"
+            ? "warning"
+            : "error",
+        packageId: world.id,
+        path: diagnostic.path,
+        ...(diagnostic.packId ? { packId: diagnostic.packId } : {}),
+        message: `World ${world.id}: ${diagnostic.code} at ${diagnostic.path}${diagnostic.reference ? ` (${diagnostic.reference})` : ""}.`,
+      });
     for (const contract of world.requires) {
-      const providers = everyPlugin
-        .filter((plugin) => plugin.contracts.includes(contract))
-        .map((plugin) => plugin.id);
+      const providers = [
+        ...new Set(
+          everyPlugin
+            .filter((plugin) => plugin.contracts.includes(contract))
+            .map((plugin) => plugin.id),
+        ),
+      ];
       if (providers.length === 0)
         problems.push({
-          level: "error",
+          level: "warning",
           packageId: world.id,
-          message: `World ${world.id} requires ${contract}, and no installed or included plugin provides it.`,
+          message: `World ${world.id} requests ${contract}, and no installed or included plugin provides it; play continues without that feature.`,
         });
       else if (
         providers.length > 1 &&
@@ -148,16 +173,23 @@ export function checkCollection(args: {
         problems.push({
           level: "warning",
           packageId: world.id,
-          message: `World ${world.id} requires ${contract}, which ${providers.join(", ")} all provide. Add one of them to the world's pluginPolicy.plus, or players must choose.`,
+          message: `World ${world.id} requires ${contract}, which ${providers.join(", ")} all provide. Add a plugin: reference to the world's plugins, or players must choose.`,
         });
     }
-    for (const pluginId of new Set(world.requested))
-      if (!known.has(pluginId))
-        problems.push({
-          level: "warning",
-          packageId: world.id,
-          message: `World ${world.id} requests plugin ${pluginId}, which is neither installed nor included.`,
-        });
+    const requests =
+      world.requests ?? world.requested.map((pluginId) => ({ pluginId }));
+    for (const request of requests) {
+      if (known.has(request.pluginId)) continue;
+      problems.push({
+        level: "warning",
+        packageId: world.id,
+        ...("path" in request ? { path: request.path } : {}),
+        ...("packId" in request && request.packId
+          ? { packId: request.packId }
+          : {}),
+        message: `World ${world.id} requests plugin ${request.pluginId}, which is neither installed nor included; play continues without that feature.`,
+      });
+    }
   }
   return problems;
 }

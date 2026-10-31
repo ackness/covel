@@ -83,7 +83,7 @@ export interface AuthoringPlugin {
 
 /**
  * A plugin pack of the server's catalogue. A world names one in
- * `pluginPolicy.preset`; the world generator offers them as choices.
+ * a `pack:` reference in `plugins`; the world generator offers them as choices.
  */
 export interface AuthoringPack {
   readonly id: string;

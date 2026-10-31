@@ -1,4 +1,5 @@
 #!/usr/bin/env tsx
+import { BUILTIN_PLUGIN_PACKS } from "../apps/server/src/config/plugin-packs.js";
 
 /**
  * Static check of a collection directory: `pnpm validate:collection <dir>`.
@@ -21,6 +22,7 @@ import {
   collectionPluginFacts,
   collectionWorldFacts,
   validateWorldManifest,
+  formatValidationErrors,
   type CollectionPluginFacts,
   type CollectionProblem,
   type CollectionWorldFacts,
@@ -122,12 +124,15 @@ for (const member of manifest.worlds) {
     ) as Record<string, unknown>;
     const validation = validateWorldManifest(world);
     if (!validation.valid) {
-      fail(`${member.path}/world.yaml does not match the world schema`);
+      fail(
+        `${member.path}/world.yaml does not match the world schema:\n${formatValidationErrors(validation.errors ?? [])}`,
+      );
       continue;
     }
     worlds.push(
       collectionWorldFacts(
         world,
+        BUILTIN_PLUGIN_PACKS,
         path.basename(path.resolve(directory, member.path)),
       ),
     );

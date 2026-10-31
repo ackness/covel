@@ -433,27 +433,26 @@ export function applyCreationBriefToManifest(
   if (!brief) return { errors: [], warnings: [] };
   const errors: string[] = [];
   const warnings: string[] = [];
-  const policy = isRecord(manifest.pluginPolicy)
-    ? manifest.pluginPolicy
-    : (manifest.pluginPolicy = {});
-  // The pack is data of the catalogue: its ID seeds the world's plugin
-  // selection, and the view it asks for is the world's.
+  const references = (strings(manifest.plugins) ?? []).filter(
+    (ref) => !ref.startsWith("pack:"),
+  );
+  // The host catalogue determines the requested pack and its view.
   const pack = selectedPack(brief, packs);
   if (brief.pack !== undefined && !pack)
     errors.push(`brief names an unknown plugin pack: ${brief.pack}`);
-  if (pack) policy.preset = pack.id;
-  else delete policy.preset;
-  // Requested content is only used when its receiving plugin is active: the
-  // world adds the receivers its pack does not have.
   const receivers = selectedDataContracts(brief, dataContracts)
     .map((item) => item.pluginId)
     .filter(
       (id): id is string =>
         typeof id === "string" && !pack?.requested.includes(id),
     );
-  if (receivers.length > 0)
-    policy.plus = [...new Set([...(strings(policy.plus) ?? []), ...receivers])];
-  if (Object.keys(policy).length === 0) delete manifest.pluginPolicy;
+  manifest.plugins = [
+    ...new Set([
+      ...(pack ? [`pack:${pack.id}`] : []),
+      ...references,
+      ...receivers.map((id) => `plugin:${id}`),
+    ]),
+  ];
   if (pack?.defaultViewMode) manifest.defaultViewMode = pack.defaultViewMode;
   else delete manifest.defaultViewMode;
 

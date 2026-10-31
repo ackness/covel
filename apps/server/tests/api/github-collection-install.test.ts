@@ -49,10 +49,7 @@ function worldFiles(id = "barrow") {
       name: { "en-US": "Barrow", "zh-CN": "古冢" },
       summary: "A tabletop world",
       defaultLocale: "en-US",
-      pluginPolicy: {
-        requires: ["action-check@1"],
-        plus: ["barrow-dice"],
-      },
+      plugins: ["plugin:barrow-dice", "contract:action-check@1"],
     }),
     [`worlds/${id}/WORLD.md`]: "A lantern has gone out.",
   };
@@ -504,6 +501,52 @@ describe("collection manifests", () => {
     expect(result.problems).toEqual([]);
   });
 
+  it("previews only initial-pack members with provenance and never executes entries", async () => {
+    const files = worldFiles();
+    const manifest = JSON.parse(files["worlds/barrow/world.yaml"]!);
+    manifest.plugins = [
+      "pack:dialogue-mode",
+      "pack:traditional-story",
+      "plugin:barrow-dice",
+      "contract:action-check@1",
+    ];
+    const plugin = pluginFiles("barrow-dice");
+    plugin["plugins/barrow-dice/PLUGIN.md"] = plugin[
+      "plugins/barrow-dice/PLUGIN.md"
+    ]!.replace("kind: plugin", "kind: plugin\nentry: ./index.js");
+    archives[`example/pack@${sha}`] = await zip(
+      {
+        ...collection({
+          worlds: [{ path: "worlds/barrow" }],
+          plugins: [{ path: "plugins/barrow-dice" }],
+        }),
+        ...files,
+        ...plugin,
+        "worlds/barrow/world.yaml": JSON.stringify(manifest),
+        "plugins/barrow-dice/index.js":
+          'throw new Error("Preview must never execute this entry");',
+      },
+      "pack-commit",
+    );
+    const result = await preview();
+    expect(result.problems).toContainEqual(
+      expect.objectContaining({
+        level: "warning",
+        path: "plugins[0]",
+        packId: "dialogue-mode",
+        message: expect.stringContaining("chat-mode-narrator"),
+      }),
+    );
+    expect(
+      result.problems.some((problem) => problem.packId === "traditional-story"),
+    ).toBe(false);
+    expect(
+      result.problems.some((problem) =>
+        problem.message.includes("no installed or included plugin provides"),
+      ),
+    ).toBe(false);
+  });
+
   it("says up front when the set is incomplete or written for another host version", async () => {
     archives[`example/pack@${sha}`] = await zip(
       {
@@ -520,7 +563,7 @@ describe("collection manifests", () => {
 
     expect(problems.map((item) => item.level)).toEqual([
       "error",
-      "error",
+      "warning",
       "warning",
     ]);
     expect(problems[0]!.message).toContain(">=99.0.0");
@@ -630,16 +673,18 @@ describe("collection ZIP import", () => {
     expect(await store.getWorld("barrow")).toMatchObject({ id: "barrow" });
   });
 
-  it("writes nothing when the packed set is incomplete", async () => {
+  it("installs a world with unavailable optional gameplay", async () => {
     const response = await upload({
       ...collection({ worlds: [{ path: "worlds/barrow" }] }),
       ...worldFiles(),
     });
 
-    expect(response.status).toBe(400);
-    expect(await response.text()).toContain("requires action-check@1");
-    expect(await exists(path.join(worldRoot, "barrow"))).toBe(false);
-    expect(await store.getWorld("barrow")).toBeFalsy();
+    expect(response.status).toBe(201);
+    expect(await exists(path.join(worldRoot, "barrow"))).toBe(true);
+    expect((await store.getWorld("barrow"))?.metadata?.plugins).toEqual([
+      "plugin:barrow-dice",
+      "contract:action-check@1",
+    ]);
   });
 });
 

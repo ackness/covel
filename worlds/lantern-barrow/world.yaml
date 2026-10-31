@@ -1,7 +1,7 @@
 # yaml-language-server: $schema=../../packages/shared/schemas/world-manifest.schema.json
 id: lantern-barrow
 name: 提灯古冢・初次远征
-version: 0.1.1
+version: 0.1.2
 summary: 守了百年的古冢之灯熄灭，守灯人失踪，青铜墓门洞开。在灰苇村的酒馆里组队、分配点数、掷骰下墓——经典跑团，从第一次远征开始。
 defaultLocale: zh-CN
 tags:
@@ -16,22 +16,20 @@ author:
 license: MIT
 cover: media/gallery/lantern-barrow-hero.webp
 accentColor: "oklch(72% 0.12 75)"
-pluginPolicy:
-  preset: traditional-story
-  plus:
-    - tabletop-rules
-    - dice-check
-    - core-quest
-    - inventory
-    - affinity
-    - character-blueprint
-    - story-events
-  pitch:
-    label: 经典跑团
-    description: 开局配点、表单检定与骰池判定、任务与背包、队友好感，以及地城探索、警戒与名望面板。
-    reason: 跑团的乐趣在于规则可见：属性是你分的，骰子是真掷的，每个房间、每次惊动墓穴的响动都会记在面板上。
-  requires:
-    - action-check@1
+plugins:
+  - pack:traditional-story
+  - plugin:tabletop-rules
+  - plugin:dice-check
+  - plugin:core-quest
+  - plugin:inventory
+  - plugin:affinity
+  - plugin:character-blueprint
+  - plugin:story-events
+  - contract:action-check@1
+pluginPitch:
+  label: 经典跑团
+  description: 开局配点、表单检定与骰池判定、任务与背包、队友好感，以及地城探索、警戒与名望面板。
+  reason: 跑团的乐趣在于规则可见：属性是你分的，骰子是真掷的，每个房间、每次惊动墓穴的响动都会记在面板上。
 pluginSettings:
   story-events:
     planner: true

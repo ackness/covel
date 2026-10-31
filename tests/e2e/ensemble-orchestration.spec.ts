@@ -155,7 +155,7 @@ async function prepare(
       id: worldId,
       name,
       locale: "en-US",
-      metadata: { pluginPolicy: { preset: "spectator", packs: ["spectator"] } },
+      metadata: { plugins: ["pack:spectator"] },
     },
   });
   expect(world.ok(), await world.text()).toBe(true);

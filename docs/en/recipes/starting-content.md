@@ -19,15 +19,14 @@ Each of quests, items, and affinity is handled by one plugin. You need to do two
 
 ## 1. Enable the plugins
 
-Open `world.yaml`, and add `plus` under `pluginPolicy`:
+Open `world.yaml`, and add `plus` under `plugins`:
 
 ```yaml
-pluginPolicy:
-  preset: traditional-story
-  plus:
-    - core-quest
-    - inventory
-    - affinity
+plugins:
+  - pack:traditional-story
+  - plugin:core-quest
+  - plugin:inventory
+  - plugin:affinity
 ```
 
 `preset` chooses a base set of plugins (a built-in pack), and `plus` adds to it. When the player switches packs, the plugins in `plus` stay.

@@ -87,14 +87,15 @@ The import entry in the desktop app's menu opens the same package management pag
 
 The preview also shows the result of the integrity checks. The checks only read the manifests. They do not run any plugin code.
 
-| Case                                                                                                                                                     | Level   | Result                                                       |
-| -------------------------------------------------------------------------------------------------------------------------------------------------------- | ------- | ------------------------------------------------------------ |
-| A contract that the root `requires` of a plugin, or a world's `pluginPolicy.requires`, needs has no provider among the "installed plus selected" plugins | Error   | The package cannot be installed while it is selected         |
-| The host version is outside the range the package declares                                                                                               | Error   | The package cannot be installed while it is selected         |
-| A plugin the world requests does not exist                                                                                                               | Warning | Can be installed                                             |
-| A contract has several providers, and the world does not say which to use                                                                                | Warning | Can be installed                                             |
-| While scanning a directory, a package cannot be read (invalid manifest, identity conflict, and so on)                                                    | Warning | This package is skipped, and the rest can still be installed |
-| A member named in a collection manifest cannot be read                                                                                                   | Error   | The whole preview fails                                      |
+| Case                                                                                                  | Level   | Result                                                       |
+| ----------------------------------------------------------------------------------------------------- | ------- | ------------------------------------------------------------ |
+| A plugin root `requires` contract has no installed or selected provider                               | Error   | The affected selected package cannot be installed            |
+| A world `plugins` contract, plugin or initial-pack member is unavailable                              | Notice  | Content is reduced; installation and play can continue       |
+| The host version is outside the range the package declares                                            | Error   | The package cannot be installed while it is selected         |
+| A plugin the world requests does not exist                                                            | Warning | Can be installed                                             |
+| A contract has several providers, and the world does not say which to use                             | Warning | Can be installed                                             |
+| While scanning a directory, a package cannot be read (invalid manifest, identity conflict, and so on) | Warning | This package is skipped, and the rest can still be installed |
+| A member named in a collection manifest cannot be read                                                | Error   | The whole preview fails                                      |
 
 ### Languages
 

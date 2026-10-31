@@ -1,3 +1,4 @@
+import { BUILTIN_PLUGIN_PACKS } from "../../../config/plugin-packs.js";
 /**
  * One preview and one batch install for everything under a GitHub URL.
  *
@@ -118,6 +119,7 @@ const worldFacts = (entries: readonly ExtractedEntry[], packageName: string) =>
         .find((entry) => entry.relativePath === "world.yaml")!
         .content.toString("utf8"),
     ) as Record<string, unknown>,
+    BUILTIN_PLUGIN_PACKS,
     packageName,
   );
 

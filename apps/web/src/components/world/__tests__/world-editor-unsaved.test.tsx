@@ -31,6 +31,10 @@ vi.mock("@/lib/confirm-channel.js", () => ({
 
 const world: WorldRecord = {
   id: "draft-world",
+  metadata: {
+    plugins: ["pack:example", "plugin:missing"],
+    pluginPitch: { label: "Watch" },
+  },
   name: "Draft world",
   description: "An editor test",
   createdAt: "2026-10-14",
@@ -115,6 +119,23 @@ afterEach(() => {
 });
 
 describe("WorldEditor unsaved changes", () => {
+  it("saves a dimension patch while preserving authored selection and pitch", async () => {
+    const { onSave } = openEditor();
+    mocks.updateWorld.mockImplementation(
+      async (_id: string, patch: Partial<WorldRecord>) => ({
+        ...world,
+        ...patch,
+      }),
+    );
+    changeOpening("At the harbor");
+    fireEvent.click(
+      screen.getByRole("button", { name: i18n.t("common.save") }),
+    );
+    await waitFor(() => expect(onSave).toHaveBeenCalledOnce());
+    expect(mocks.updateWorld.mock.calls[0]?.[1]).not.toHaveProperty("metadata");
+    expect(onSave.mock.calls[0]?.[0].metadata).toEqual(world.metadata);
+  });
+
   it("cancels immediately and permits reload when untouched", () => {
     const { onCancel } = openEditor();
     expect(unload()).toBe(false);

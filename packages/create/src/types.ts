@@ -35,7 +35,7 @@ export interface CreateWorldOptions {
   readonly dataContracts?: readonly WorldGenerationDataContract[];
   /**
    * The plugin packs a brief may name (`brief.pack`): the server's catalogue.
-   * The chosen one becomes the world's `pluginPolicy.preset`, and its
+   * The chosen one becomes a `pack:` reference in the world's `plugins`, and its
    * `defaultViewMode` the world's.
    */
   readonly packs?: readonly PluginPack[];
@@ -162,7 +162,7 @@ export interface WorldGenerationDataContract {
   readonly example?: unknown;
   /**
    * Plugin that receives the data, unless every session has it already
-   * (`kind: core`); the generated world adds it to `pluginPolicy.plus`.
+   * (`kind: core`); the generated world adds it as a `plugin:` reference in `plugins`.
    */
   readonly pluginId?: string;
   /** The receiver also wants each record projected into the lorebook. */

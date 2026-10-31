@@ -15,7 +15,7 @@
 | -------------------------------- | ------------------------------------------------------------------------- | ------------------------------------------ |
 | 设定、角色、资源和开局数据       | [世界数据](./reference/world-data.md)                                     | 独立世界包                                 |
 | 可复用玩法、叙事、工具或界面     | [插件作者指南](./plugins/essentials.md)                                   | 独立插件包                                 |
-| 调整插件在某个世界的组合或默认值 | [世界数据](./reference/world-data.md)、[插件契约](./reference/plugins.md) | 世界的 `pluginPolicy` / `pluginSettings`   |
+| 调整插件在某个世界的组合或默认值 | [世界数据](./reference/world-data.md)、[插件契约](./reference/plugins.md) | 世界的 `plugins` / `pluginSettings`        |
 | 现有接口不能表达的通用能力       | [设计原则](./internals/design-principles.md)、对应 reference              | 先说明缺少的公共契约，再修改框架和回归测试 |
 
 不必通读仓库。先按任务读取教程和对应字段参考；发生矛盾时查

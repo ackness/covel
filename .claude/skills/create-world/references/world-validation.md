@@ -4,13 +4,13 @@
 
 | 层 | 检查什么 | 怎么跑 | 必做? |
 |---|---|---|---|
-| **L1 静态校验** | `world.yaml`(Zod strict)、lore 文件、插件 ID 与契约、worldData descriptor、**每条种子记录**(按接收插件的契约 schema)、各语言变体 | `pnpm validate:world worlds/<id>` | ✓ 必须 |
-| **L2 引用一致性** | faction.relations.targetId 指向的 id 真实存在 | 一行 node 脚本 | 当 factions 含 relations 时必须 |
-| **L3 内容完整度** | WORLD.md 是否引用了 yaml 里的关键 region/faction/事件 | 人工肉眼或 grep | 准备发布时建议 |
+| **静态校验** | `world.yaml`(Zod strict)、lore 文件、插件 ID 与契约、worldData descriptor、**每条种子记录**(按接收插件的契约 schema)、各语言变体 | `pnpm validate:world worlds/<id>` | ✓ 必须 |
+| **引用一致性** | faction.relations.targetId 指向的 id 真实存在 | 一行 node 脚本 | 当 factions 含 relations 时必须 |
+| **内容完整度** | WORLD.md 是否引用了 yaml 里的关键 region/faction/事件 | 人工肉眼或 grep | 准备发布时建议 |
 
 ---
 
-## L1 — 静态校验(必做)
+## 静态检查 — 静态校验(必做)
 
 在仓库根目录执行:
 
@@ -24,9 +24,9 @@ pnpm validate:world worlds/<id>
 
 - `world.yaml` 按生产 schema 校验。
 - 世界的每个语言版本(`defaultLocale`,以及根目录每个 `world.<locale>.yaml` / `WORLD.<locale>.md` 的语言)都能解析到 lore 文件;缺 `WORLD.md` 兜底时给 warning。
-- `pluginPolicy` 与 `pluginSettings` 里的插件 ID 在已扫描的插件目录中存在;拼写接近已知 ID 时直接判为 error 并给出 "Did you mean"。`pluginPolicy.preset` 和 `packs` 必须是内置玩法包。
+- `plugins` 与 `pluginSettings` 里的插件 ID 在已扫描的插件目录中存在;拼写接近已知 ID 时直接判为 error 并给出 "Did you mean"。`plugins` 只接受 pack/plugin/contract 前缀；未知玩法包给出带下标的提示，不自动换包。
 - `pluginSettings` 的 key 是该插件声明过的设置项。
-- `pluginPolicy.requires` 的契约有提供者。
+- `contract:` 引用的契约有提供者；缺少时作者可修复，玩家仍能开局。
 - descriptor、source 顺序(`after` 指向不存在的 source 会报错)、文件读取。
 - 每个 `contract:` source 的每条记录,按接收插件公开的 schema 校验;每个语言版本各校验一遍,因为不同语言会选到不同的变体文件。
 - 语言变体文件与默认文件的 `key` 集合一致,缺记录或多记录给 warning。
@@ -40,7 +40,7 @@ pnpm validate:world worlds/<id>
 
 ```
 ✗ worlds/<id>/world.yaml
-  error   world.yaml · pluginPolicy.plus[1]
+  error   world.yaml · plugins[1]
           plugin "dice-chek" is not in the scanned plugin directories
           Did you mean "dice-check"?
   error   data/memory-blocks.json · source "memory"
@@ -53,7 +53,7 @@ pnpm validate:world worlds/<id>
 
 ---
 
-## L2 — 引用一致性(有 relations 就跑)
+## 引用检查 — 引用一致性(有 relations 就跑)
 
 如果 `factions` 维度的 `initialValue[].relations[]` 用到了 `targetId`,必须确保它指向真实存在的 faction id。框架不解析这类引用,但叙事会读到这份当前值,悬空 id 会让模型编出不存在的势力。维度可能内联在 `world.yaml`,也可能外置在 `data/dimensions.yaml`,下面的脚本两处都读。
 
@@ -85,7 +85,7 @@ console.log('refs OK');
 
 ---
 
-## L3 — Lore 完整度(可选)
+## 内容检查 — Lore 完整度(可选)
 
 `WORLD.md` 提供叙事设定；`world.yaml` 提供世界元数据，维度和其他数据按当前启用插件的公开契约导入。两者**应该**互相覆盖以下"关键名词":
 
@@ -124,7 +124,7 @@ if (missing.length){
 
 ---
 
-## L4 — 真实游戏验证(发布前可选)
+## 游戏检查 — 真实游戏验证(发布前可选)
 
 把世界包扔进 `worlds/`,启动 `pnpm dev`,在 UI 选这个世界跑 1-2 个 turn,看:
 
@@ -141,11 +141,11 @@ if (missing.length){
 
 ```
 写完 world.yaml + WORLD.md
-└─ L1 pnpm validate:world(必做,含 worldData 与种子记录)
-   ├─ factions 有 relations? → L2 引用检查
+└─ pnpm validate:world(必做,含 worldData 与种子记录)
+   ├─ factions 有 relations? → 引用检查
    └─ 准备发布?
-      ├─ 是 → L3 lore 覆盖度 grep + L4 真实游戏跑一回合
-      └─ 否(本地测试用) → 跳过 L3/L4
+      ├─ 是 → lore 覆盖度 grep + 真实游戏跑一回合
+      └─ 否(本地测试用) → 跳过内容和游戏检查
 ```
 
 角色导入还需确认角色类型和字段符合 `characterSchema`。会话可以有多个 `type: player` 的角色，绑定和当前扮演角色由座位决定，见 `docs/reference/world-model.md` 的“座位”；不要以插件私有 namespace 代替角色领域。

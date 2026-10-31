@@ -212,13 +212,20 @@ describe("shared API contracts", () => {
       worldPluginPlanSchema.safeParse({
         worldId: "world-1",
         packs: [],
-        policy: {
-          preset: "traditional-story",
-          plus: ["dice-check"],
-          requires: ["action-check@1"],
+        selection: {
+          requestedPluginIds: ["dice-check"],
+          requiredContracts: ["action-check@1"],
         },
         defaultPluginIds: ["memory"],
-        missing: [{ pluginId: "absent" }, { pluginId: "absent", packId: "p" }],
+        diagnostics: [
+          { code: "missing-plugin", path: "plugins[0]", pluginId: "absent" },
+          {
+            code: "missing-plugin",
+            path: "packs",
+            pluginId: "absent",
+            packId: "p",
+          },
+        ],
       }).success,
     ).toBe(true);
   });

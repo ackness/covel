@@ -50,12 +50,12 @@ const plugins: PluginSummary[] = ["core", "guide"].map((id) => ({
 const plan: WorldPluginPlan = {
   worldId: "world-1",
   packs: [],
-  policy: {
-    plus: [],
-    requires: [],
+  selection: {
+    requestedPluginIds: [],
+    requiredContracts: [],
   },
   defaultPluginIds: ["core", "guide"],
-  missing: [],
+  diagnostics: [],
 };
 
 const slots: ResolvedSlot[] = ["text", "custom"].map((slotId) => ({

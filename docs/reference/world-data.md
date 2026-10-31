@@ -73,15 +73,14 @@ worlds/my-world/
 name: 我的世界
 summary: 一个示例世界。
 defaultLocale: zh-CN
-pluginPolicy:
-  preset: traditional-story
-  plus:
-    - affinity
+plugins:
+  - pack:traditional-story
+  - plugin:affinity
 defaultViewMode: stage
 ```
 
 - `id` 可以省略，这时用文件夹的名字。要和文件夹不同时才写它：小写字母、数字和 `-`，以字母开头。
-- `pluginPolicy` 选这个世界的插件，见[插件选择](#插件选择pluginpolicy)。
+- `plugins` 选这个世界的插件，见[插件选择](#插件选择pluginpolicy)。
 - `worldData` 是 descriptor 的路径，相对世界包根目录。只有世界包带 descriptor 时才写它。
 - `world.yaml` 的全部字段见生成的 [World manifest 字段表](./schema/world-manifest.md)，外置维度文件见 [World dimensions 字段表](./schema/world-dimensions.md)。
 - 清单按当前字段读取。不认识的顶层字段会被忽略，加载器和 `pnpm validate:world` 会给出警告；已知字段内部的未知字段仍然报错。
@@ -335,7 +334,7 @@ schema:
 
 **插件内容**由创作简报的 `contracts` 指定：
 
-- 生成器只为被选中的数据契约生成记录。每个契约的 schema、写作提示和示例取自接收插件的 `authoring` 声明（需声明 `generate`）。接收插件不在所选玩法包里时，加入 `pluginPolicy.plus`；`kind: core` 的插件不加。
+- 生成器只为被选中的数据契约生成记录。每个契约的 schema、写作提示和示例取自接收插件的 `authoring` 声明（需声明 `generate`）。接收插件不在所选玩法包里时，加入 `plugins`；`kind: core` 的插件不加。
 - 未选中的契约不会进入提示词。模型为未选中的契约输出了记录，或漏掉了被选中的契约，这次尝试都算失败并重试。
 - 一个契约的记录写进接收插件声明的文件（`authoring.source` 的 `path` 与 `kind`，例如 `data/memory-blocks.json`、`data/time.yaml`）。一条记录就是文件内容，多条写成数组。
 - 下面两种情况，记录改写成 `data/contract-<n>.json`，由 descriptor `data/world.data.yaml` 把这些文件加为 source。其他文件都在约定路径上，descriptor 里没有它们：
@@ -387,61 +386,41 @@ schema:
 - `version`、`author`、`license`、`homepage`：世界包的版本和作者信息。字段、限制和翻译规则与插件相同，见[作者信息](./plugins.md#作者信息)。它们只显示在世界卡片上，不进入会话数据和提示词。
 - `cover`、`accentColor`、`themeMusic`：封面、强调色和世界列表上的音乐，见 [Background Music](#background-music) 一节末尾。
 
-### 插件选择（`pluginPolicy`）
+<a id="插件选择pluginpolicy"></a>
 
-`pluginPolicy` 说的是“这个世界希望用哪些插件”。它不会锁死任何插件：最终启用哪些，由 Covel 根据每个插件声明的能力和依赖、玩家的授权以及玩家自己的勾选算出来。
+### 插件选择（`plugins`）
 
-写法是“一个内置玩法包，再加几个插件”：
-
-```yaml
-pluginPolicy:
-  preset: traditional-story # 新会话从这个玩法包开始
-  plus: # 这个世界另外要的插件
-    - dice-check
-    - core-quest
-  pitch: # 可选：准备页上这个世界自己的说法
-    label: 古冢探险
-    description: 跑团式的地城探索，带掷骰判定和任务。
-    reason: 每一步都要检定，灯油和名望都会记在面板上。
-```
-
-| 字段       | 说明                                                                                                                               |
-| ---------- | ---------------------------------------------------------------------------------------------------------------------------------- |
-| `preset`   | 新会话从哪个内置玩法包开始，例如 `traditional-story`、`dialogue-mode`。玩法包列在 [`packs/builtin.yaml`](../../packs/builtin.yaml) |
-| `plus`     | 这个世界另外要的插件 ID。玩家换玩法包时，它们仍然保留。不要写 `kind: core` 的插件，每个会话本来就有                                |
-| `pitch`    | 准备页怎样介绍 `preset` 这个玩法包：`label`、`description`、`reason`，代替玩法包自己的说明。三项都可以翻译                         |
-| `packs`    | 玩家可以选的内置玩法包 ID，按这个顺序列出。不写时列出全部内置玩法包。写了时 `preset` 必须在其中                                    |
-| `requires` | 世界必需的契约 ID（如 `action-check@1`），任何提供该契约的已安装插件都能满足                                                       |
-
-新会话默认启用的插件是：`preset` 玩法包的 `requested`，加上 `plus`、core 插件和 `requires` 自动带上的依赖。
-
-- `preset` 只能是内置玩法包。世界不能自己定义玩法包；要一组不同的插件，就选最接近的玩法包，用 `plus` 补上差的。
-- 准备页先列 `preset` 的玩法包（带 `pitch` 时用世界的说法），再列 `packs` 里的其他玩法包。
-- `pnpm validate:world` 检查这些名字：`preset` 不是内置玩法包报 `unknown-preset`，`packs` 里的未知 ID 报 `unknown-pack`，`preset` 不在 `packs` 里报 `preset-not-offered`。
-
-`requires` 表达“这个世界离不开什么能力”。这里写契约（一种能力的名字加版本），不写插件：
+世界在一个有序列表中选择玩法，不锁定任何插件：
 
 ```yaml
-pluginPolicy:
-  requires:
-    - action-check@1 # 行动判定；内置的 dice-check 提供它，换一个判定插件也可以
-  plus:
-    - dice-check # 可选：默认启用它，同时在有多个提供者时指定用哪一个
+name: A small frontier world
+summary: Keep the relay alive through one long night.
+defaultLocale: en-US
+tags: [frontier, mystery]
+plugins:
+  - pack:traditional-story
+  - plugin:dice-check
+  - contract:action-check@1
+# Optional; public name, summary and tags supply omitted presentation.
+pluginPitch:
+  label: The long watch
 ```
 
-- 只有一个已安装的插件提供它时，这个插件自动启用。
-- 没有提供者，或者有多个而世界与玩家都没有选定：准备页说明缺了什么，会话照常开始，只是少了这部分玩法。创建会话的响应在 `unmetRequirements` 里列出它们。
-- 玩家仍然可以主动关掉提供者。这是玩家的选择，会话照常开始，准备页给出提示。
-- `requires` 只接受 `名字@版本` 形式的契约 ID。写成插件 ID 会在加载世界时报错。
+- `pack:<id>`：第一个引用决定初始玩法包，后面的引用排列备选项；其余宿主玩法包仍可选择。只展开当前选中的包。第一个包不存在时给出位置诊断，不改选第二个包。
+- `plugin:<id>`：独立请求插件。即使初始包也包含它，换包后仍保留。换包只替换上个包带来的请求和排除，保留玩家手动选择；手动排除始终优先。
+- `contract:<name>@<version>`：请求版本化能力，例如 `contract:action-check@1`。唯一可用提供者自动加入，无需再点一次选择或保存；多个提供者时由玩家选择。缺少、未授权或被排除的提供者只减少对应玩法，准备页和 `unmetRequirements` 说明原因，不阻止创建会话。
+- 省略 `plugins` 或写 `[]` 都不添加世界请求，也不选初始玩法包；通常的 core 默认仍适用。玩家可明确排除插件，也可重置到最小叙事组合。
+- 必须写前缀。包和插件即使同名也不同；裸 ID、未知前缀、无效版本和重复项会在作者校验中报出字段下标，重复项不产生重复效果。
 
-`plus` 写的是插件 ID，玩家的电脑上不一定装了它：
+`pluginPitch` 的 `label`、`description`、`reason` 分别可省略。默认显示世界公开名称、公开简介和标签；标签前使用固定的界面译文“世界标签”，无标签时省略原因。作者写的字段和对应语言覆盖优先，显示时通过 `resolveI18nText` 解析；未支持的界面语言按共享规则回退。介绍不读取设定正文、隐藏事件或模型提示，也不调用模型，不将派生文案保存回 YAML 或 metadata。翻译文件中的路径为 `pluginPitch.label`、`pluginPitch.description`、`pluginPitch.reason`。
 
-- `GET /api/worlds/:id/plugin-plan` 会把没安装的 ID 从世界策略和各玩法包的 `requested` 中去掉，改列在 `missing`（来自玩法包的带 `packId`）。
-- 准备页据此提示缺少哪些插件。会话仍然可以创建，只是这些插件提供的玩法不会生效。
+`GET /api/worlds/:id/plugin-plan` 返回 `selection: { requestedPluginIds, requiredContracts }`、有序 `packs`、可选 `selectedPackId`、`defaultPluginIds` 和有上限的 `diagnostics`。无法安装的插件不进入提交给创建接口的 ID；`missing-plugin` 诊断保留 `pluginId`、字段 `path` 和可选 `packId`。`unknown-pack` 也保留包引用的位置。会话创建接口只接收玩家明确的插件请求与排除，不替调用方选择玩法包；世界契约由服务端独立读取并冻结在会话中，后续固定集合解析不会自行加入新安装的插件。
 
-`pluginPolicy` 里不认识的字段（例如旧写法的 `presetId`、`requested`、`recommended`、`preferredTags`）在加载时被忽略，并给出 `manifest-unknown-field` 警告。旧写法里那种由世界自己定义的 `packs`（每项是一个对象）让整个 `pluginPolicy` 无效：世界照常加载，只是没有插件选择，`pnpm validate:world` 报 `manifest-invalid`。
+旧的 `pluginPolicy` 及其 `preset`、`plus`、`packs`、`requires` 字段已移除，没有兼容读取。严格作者校验拒绝它们。玩家加载忽略未知根字段并报告；无效的可选选择或介绍单独省略，其余世界和设定仍可使用。开发世界和会话需要重新创建。
 
 ### 世界记录和世界包
+
+修订保留世界记录中编辑后的 `plugins` 与显式 `pluginPitch`，也保留作者移除字段的结果。恢复包版本时重新加载包里的作者值。派生介绍不进入这两种传输。
 
 Covel 玩的是数据库里的**世界记录**。世界包的文件只是安装、导入和导出用的格式：
 
@@ -544,7 +523,7 @@ seed 可以重复执行：每个世界包对应一条世界记录，有就更新
 
 ### 插件配置默认值（`pluginSettings`）
 
-`world.yaml` 顶层（与 `pluginPolicy` 平级）可以写 `pluginSettings`，为插件的设置项预置**这个世界的默认值**。写法是 `插件 ID → 设置项 → 值`：
+`world.yaml` 顶层（与 `plugins` 平级）可以写 `pluginSettings`，为插件的设置项预置**这个世界的默认值**。写法是 `插件 ID → 设置项 → 值`：
 
 ```yaml
 pluginSettings:
@@ -562,7 +541,7 @@ pluginSettings:
 
 - 玩家仍然可以覆盖每个值。
 - 写了插件没有声明的设置项不会出错，只是没有作用；`pnpm validate:world` 会给出 `unknown-setting` 提醒。值的类型、范围或选项不对时报 `invalid-setting` 错误。
-- `pluginSettings` 只设默认值，不决定启用哪些插件。启用哪些由 [`pluginPolicy`](#插件选择pluginpolicy) 决定。
+- `pluginSettings` 只设默认值，不决定启用哪些插件。启用哪些由 [`plugins`](#插件选择pluginpolicy) 决定。
 
 给插件作者：加载后它保存在 `WorldRecord.metadata.pluginSettings`。每个回合开始时，它与玩家的值（请求头 `X-Plugin-User-Settings`）合并，放进 `TurnInput.userSettings`，agent 的 `{{ userSettings.* }}`、guard 和 hook 读到的是同一份。
 
@@ -1248,7 +1227,7 @@ sources:
 - 媒体单个文件最大 20 MB，一个 source 的目录合计最大 100 MB。
 - 可以导入的扩展名：`.png`、`.jpg`、`.jpeg`、`.webp`、`.mp3`、`.wav`、`.mp4`。
 - 预检要求对应契约的 schema 和接收声明已经注册。`character-blueprint` 的 `assets` 和 `presence` 分别接收 `character.portrait-assets@1` 与 `character.portraits@1`。
-- 接收插件不在 `preset` 的玩法包里时，把它放进 `pluginPolicy.plus`，新会话就会启用它。没有启用时，跳过它的数据和媒体索引，并给出 warning；之后在游戏里启用它，数据补导入一次。
+- 接收插件不在初始玩法包里时，把它放进 `plugins`，新会话就会启用它。没有启用时，跳过它的数据和媒体索引，并给出 warning；之后在游戏里启用它，数据补导入一次。
 
 实际例子见 `worlds/mistport` 与 `worlds/haruka-academy` 的 `media/`。
 
@@ -1358,7 +1337,7 @@ moods:
 情绪来自叙事发出的 `music.cue` 事件，场景来自 `scene.set` 事件（由跟踪场景的插件发出）。只想要一首贯穿全局的主题曲时，曲目表里放一首 `theme: true` 的曲目即可，不依赖任何事件。
 
 > [!NOTE]
-> 把 `soundtrack` 放进世界的 `pluginPolicy`，玩家启用它之后，这些数据才会导入并播放。
+> 把 `soundtrack` 放进世界的 `plugins`，玩家启用它之后，这些数据才会导入并播放。
 
 **怎样声明。** 把文件放在上面两个约定路径即可。放在别处时在 descriptor 里写两条 source。`registryId: music-registry` 是曲目表里的固定值，同时充当 `key`：
 
@@ -1590,12 +1569,12 @@ my-covel-pack/
             └── social/links.yaml
 ```
 
-`world.yaml` 用 `pluginPolicy` 启用自己的插件：
+`world.yaml` 用 `plugins` 启用自己的插件：
 
 ```yaml
-pluginPolicy:
-  preset: dialogue-mode
-  plus: [social-sim]
+plugins:
+  - pack:dialogue-mode
+  - plugin:social-sim
 ```
 
 `social-sim` 声明了 `authoring.source` 时，`data/social/links.yaml` 放在它声明的路径上就能导入；否则在 `data/world.data.yaml` 里加一个 source，并在 `world.yaml` 写 `worldData`。
@@ -1661,18 +1640,15 @@ pnpm validate:world --strict --plugins ~/.covel/plugins ~/.covel/worlds/my-world
 | --- | --- | --- |
 | `manifest-invalid` | error | `world.yaml` 无法解析或不符合 schema |
 | `manifest-unknown-field` | warning | `world.yaml` 有不认识的顶层字段，加载时忽略 |
-| `default-value` | warning | 写了不用写的值，可以删掉：`characterSchema.types` 就是默认的 `[npc, companion]`，或者 `pluginPolicy.plus` 里有 `kind: core` 的插件 |
+| `default-value` | warning | 写了不用写的值，可以删掉：`characterSchema.types` 就是默认的 `[npc, companion]`，或者 `plugins` 里有 `kind: core` 的插件 |
 | `lore-missing` | error | 世界的某个语言版本找不到正文文件 |
 | `lore-fallback-missing` | warning | 没有 `WORLD.md`，未声明语言的会话会拿到空的正文 |
 | `lore-narrator-only` | warning | [narrator-only 标记](#只给叙事者的正文narrator-only)没有结束、没有开始、嵌套或写错；后面的正文会对玩家隐藏 |
-| `unknown-plugin` | error 或 warning | `pluginPolicy` / `pluginSettings` 引用的插件 ID 不在已扫描目录中 |
-| `unknown-preset` | error | `pluginPolicy.preset` 不是内置玩法包 |
-| `unknown-pack` | error | `pluginPolicy.packs` 里有不是内置玩法包的 ID |
-| `preset-not-offered` | error | 写了 `pluginPolicy.packs`，但 `preset` 不在其中 |
-| `pitch-without-preset` | warning | 写了 `pluginPolicy.pitch`，但没有 `preset`，这段说明不会显示 |
+| `unknown-plugin` | error 或 warning | `plugins` / `pluginSettings` 引用的插件 ID 不在已扫描目录中 |
+| `unknown-pack` | warning | 玩法包引用不可用，带字段下标；未知首包不选其他包 |
 | `unknown-setting` | warning | `pluginSettings` 的 key 不是该插件声明的设置项，值会被忽略 |
 | `invalid-setting` | error | `pluginSettings` 的值不符合该设置项声明的类型、范围或选项 |
-| `unprovided-contract` | error 或 warning | `pluginPolicy.requires` 的契约没有提供者 |
+| `unprovided-contract` | error 或 warning | `contract:` 引用 的契约没有提供者 |
 | `unresolved-contract` | error 或 warning | source 使用的数据契约没有任何已扫描插件接收 |
 | `unrequested-receiver` | warning | 新开会话默认启用的插件里没有这个 source 的接收方；玩家手动开启接收插件之前，这个 source 不导入 |
 | `convention-collision` | error 或 warning | 某个文件所在的路径有不止一个插件声明，descriptor 也没有说明给谁；同时启用这些插件的会话不导入它 |
@@ -1693,7 +1669,7 @@ pnpm validate:world --strict --plugins ~/.covel/plugins ~/.covel/worlds/my-world
 
 `unknown-plugin`、`unprovided-contract`、`unresolved-contract` 三项：拼写接近某个已知 ID 时是 error，并提示 “Did you mean”。否则默认是 warning，因为提供者可能是没被扫描的社区插件。加 `--strict` 后一律是 error。`pnpm release:preflight` 对内置世界使用 `--strict`。
 
-**新开会话默认启用的插件**，就是开局准备页默认勾选的插件：`preset` 玩法包里的 `requested` 和 `pluginPolicy.plus`，再加上 core 插件和 `requires` 自动带上的依赖。已扫描的社区插件当作已经同意。`unrequested-receiver` 和 `convention-collision` 按这个集合判断：`convention-collision` 的声明者里有两个在这个集合里时是 error，否则是 warning。记录仍然按所有已扫描插件的 schema 校验，所以玩家手动开启的插件，它的数据也会检查。
+**新开会话默认启用的插件**，就是开局准备页默认勾选的插件：初始玩法包里的 `requested` 和 `plugins`，再加上 core 插件和 显式世界契约带上的提供者。已扫描的社区插件当作已经同意。`unrequested-receiver` 和 `convention-collision` 按这个集合判断：`convention-collision` 的声明者里有两个在这个集合里时是 error，否则是 warning。记录仍然按所有已扫描插件的 schema 校验，所以玩家手动开启的插件，它的数据也会检查。
 
 **`prompt-size` 的三种情况**，都不阻止使用：
 
