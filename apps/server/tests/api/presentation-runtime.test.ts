@@ -15,8 +15,332 @@ import { enqueueDeferredRuntimeJobs } from "../../src/routes/api/plugin-rpc/runt
 import { createPresentationBrowserFixture } from "../helpers/presentation-browser.js";
 import { parseStagedRuntimeJobPayload } from "../../src/routes/api/plugin-rpc/runtime-job-worker.js";
 import { publicRuntimeJob } from "../../src/routes/api/plugin-rpc/runtime-job-public.js";
+import { createRuntimeJob } from "../../src/routes/api/plugin-rpc/jobs.js";
+
+async function action(
+  f: Awaited<ReturnType<typeof createPresentationBrowserFixture>>,
+  type = "submit_actions",
+  payload: Record<string, unknown> = {
+    actions: [{ kind: "say", text: "Visit the library" }],
+  },
+) {
+  const response = await f.app.request("/api/actions", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      requestId: crypto.randomUUID(),
+      sessionId: f.sessionId,
+      type,
+      payload,
+    }),
+  });
+  expect(response.ok, await response.clone().text()).toBe(true);
+  return response.text();
+}
 
 describe("durable public presentation", () => {
+  it("preserves story and independent auxiliary writes when the presentation queue is full", async () => {
+    const f = await presentationFixture({
+      ready: () => false,
+      auxiliaryHandler: async (ctx) => {
+        await ctx.pluginData!.set("state", "current", { saved: true });
+        return { outcome: "success", value: {} };
+      },
+    });
+    try {
+      f.manifests.push({
+        ...f.story,
+        name: "auxiliary",
+        pluginId: "auxiliary",
+        outputKind: "system",
+        outputContract: undefined,
+        effects: { writes: ["plugin-data:self:state"] },
+      });
+      await f.store.withTransaction(async (tx) => {
+        for (let i = 0; i < 256; i++)
+          await createRuntimeJob(tx, {
+            sessionId: f.sessionId,
+            jobId: `queued-${i}`,
+            pluginId: "waiting",
+            runtimeId: "waiting/render",
+            origin: { activation: "stage", sourceTurnId: `waiting-${i}` },
+            payload: {},
+          });
+      });
+      expect((await f.source()).outcome.status).toBe("committed");
+      expect(await f.store.listMessages(f.sessionId)).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ content: "Public library story" }),
+        ]),
+      );
+      expect(await f.jobs()).toHaveLength(256);
+      expect(
+        (
+          await f.store.getPluginData(
+            f.sessionId,
+            "auxiliary",
+            "state",
+            "current",
+          )
+        )?.value,
+      ).toEqual({ saved: true });
+      const terminal = (await f.store.listTraceEvents(f.sessionId)).filter(
+        (event) => event.type === "presentation.completed",
+      );
+      expect(terminal).toHaveLength(1);
+      expect(terminal[0]?.payload).toMatchObject({
+        runtimeId: f.presentation.name,
+        status: "no-op",
+        reason: "unavailable",
+        budget: { calls: { used: 0 } },
+      });
+    } finally {
+      await f.close();
+    }
+  });
+
+  it.each(["scene-stage", "soundtrack"])(
+    "recovers a failed inline %s selector through the action endpoint",
+    async (pluginId) => {
+      const f = await createPresentationBrowserFixture("updated", {
+        failInline: true,
+      });
+      try {
+        expect(await action(f)).toContain('"committed":true');
+        const [source] = await f.store.queryTurnResults(f.sessionId, {
+          origins: ["player"],
+          commitStatus: "committed",
+        });
+        expect(source).toBeDefined();
+        expect(source!.runtimeResults).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({
+              runtimeId: `${pluginId}/story-cues`,
+              status: "failed",
+            }),
+          ]),
+        );
+        expect(
+          (await f.store.listTraceEvents(f.sessionId))
+            .filter((event) => event.type === "presentation.completed")
+            .map((event) => event.payload),
+        ).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({
+              runtimeId: `${pluginId}/story-cues`,
+              runId: expect.any(String),
+            }),
+          ]),
+        );
+        expect(
+          await action(f, "retry_runtime", {
+            runtimeId: `${pluginId}/story-cues`,
+            retryFromTurnId: source!.turnId,
+          }),
+        ).toContain('"committed":true');
+        const attempts = await f.store.queryTurnResults(f.sessionId, {
+          origins: ["manual"],
+          commitStatus: "committed",
+        });
+        expect(attempts).toHaveLength(1);
+        expect(attempts[0]?.runtimeResults).toEqual([
+          expect.objectContaining({
+            runtimeId: `${pluginId}/story-cues`,
+            status: "success",
+          }),
+        ]);
+        expect(
+          (await f.store.getSession(f.sessionId))?.completedPlayerTurns,
+        ).toBe(1);
+        const completion = (await f.store.listTraceEvents(f.sessionId)).find(
+          (event) =>
+            event.type === "turn.completed" &&
+            event.turnId === attempts[0]!.turnId,
+        );
+        expect(completion?.payload).toMatchObject({
+          sourceTurnId: source!.turnId,
+          sourceFailedRuntimeIds: [
+            `${pluginId === "scene-stage" ? "soundtrack" : "scene-stage"}/story-cues`,
+          ],
+        });
+        expect(
+          (
+            await f.store.getPluginData(
+              f.sessionId,
+              pluginId,
+              pluginId === "scene-stage" ? "stage" : "state",
+              pluginId === "scene-stage" ? "current" : "mood",
+            )
+          )?.value,
+        ).toMatchObject(
+          pluginId === "scene-stage"
+            ? { sceneId: "library" }
+            : { mood: "Tense" },
+        );
+        const terminal = (await f.store.listTraceEvents(f.sessionId)).filter(
+          (event) =>
+            event.type === "presentation.completed" &&
+            (event.payload as { runtimeId: string }).runtimeId ===
+              `${pluginId}/story-cues`,
+        );
+        expect(terminal).toHaveLength(2);
+        expect(terminal[1]?.payload).toMatchObject({
+          sourceTurnId: source!.turnId,
+          status: "updated",
+        });
+      } finally {
+        await f.close();
+      }
+    },
+  );
+
+  it("assigns separate allowances to the opening, auto-advance rounds and first player input", async () => {
+    const f = await createPresentationBrowserFixture("updated", {
+      yields: ["continue", "continue", "user", "user"],
+      autoAdvanceLimit: 2,
+    });
+    try {
+      await f.store.updateSession(f.sessionId, {
+        phase: "setup",
+        completedPlayerTurns: 0,
+      });
+      expect(await action(f, "start_session", {})).toContain(
+        '"committed":true',
+      );
+      expect(
+        (await f.store.getSession(f.sessionId))?.completedPlayerTurns,
+      ).toBe(0);
+      const openingJobs = await f.jobs();
+      expect(openingJobs).toHaveLength(3);
+      const sources = openingJobs.map(
+        (job) => parseStagedRuntimeJobPayload(job.payload)!.descriptor,
+      );
+      expect(sources.every((source) => source.sourceLogicalTurn === 1)).toBe(
+        true,
+      );
+      expect(
+        new Set(sources.map((source) => source.sourceLogicalTurnId)).size,
+      ).toBe(1);
+      expect(new Set(sources.map((source) => source.sourceTurnId)).size).toBe(
+        3,
+      );
+      expect(await action(f)).toContain('"committed":true');
+      expect(
+        (await f.store.getSession(f.sessionId))?.completedPlayerTurns,
+      ).toBe(1);
+      const jobs = await f.jobs();
+      expect(jobs).toHaveLength(4);
+      const player = parseStagedRuntimeJobPayload(
+        jobs.at(-1)!.payload,
+      )!.descriptor;
+      expect(player.sourceLogicalTurn).toBe(1);
+      expect(player.sourceLogicalTurnId).not.toBe(
+        sources[0]!.sourceLogicalTurnId,
+      );
+      f.release();
+      await vi.waitFor(async () =>
+        expect(
+          (await f.jobs()).every((job) => job.status === "succeeded"),
+        ).toBe(true),
+      );
+      expect(f.mediaCalls).toHaveLength(4);
+      const allowances = await f.store.listPluginData(
+        f.sessionId,
+        "__kernel:presentation",
+        "_presentation_budget",
+      );
+      expect(allowances).toHaveLength(4);
+      for (const row of allowances)
+        expect(row.value).toMatchObject({ used: { calls: 1, generations: 0 } });
+    } finally {
+      await f.close();
+    }
+  });
+
+  it("shares the remaining allowance across scoped paid retry and explicit job retry endpoints", async () => {
+    const f = await createPresentationBrowserFixture("failed", {
+      budgetCalls: 2,
+    });
+    try {
+      await action(f);
+      f.release();
+      await vi.waitFor(async () =>
+        expect((await f.jobs())[0]?.status).toBe("failed"),
+      );
+      const original = (await f.jobs())[0]!;
+      const baseline = parseStagedRuntimeJobPayload(
+        original.payload,
+      )!.descriptor;
+      expect(f.mediaCalls).toHaveLength(1);
+      await action(f, "retry_runtime", {
+        runtimeId: original.runtimeId,
+        retryFromTurnId: baseline.sourceTurnId,
+      });
+      await vi.waitFor(async () =>
+        expect((await f.jobs()).at(-1)?.status).toBe("failed"),
+      );
+      expect(f.mediaCalls).toHaveLength(2);
+      const second = (await f.jobs()).at(-1)!;
+      const response = await f.app.request(
+        `/api/sessions/${f.sessionId}/runtime-jobs/${second.jobId}/retry`,
+        { method: "POST" },
+      );
+      expect(response.ok, await response.clone().text()).toBe(true);
+      await vi.waitFor(async () =>
+        expect((await f.jobs()).at(-1)?.status).toBe("succeeded"),
+      );
+      expect(f.mediaCalls).toHaveLength(2);
+      const jobs = await f.jobs();
+      expect(jobs).toHaveLength(3);
+      for (const job of jobs) {
+        const descriptor = parseStagedRuntimeJobPayload(
+          job.payload,
+        )!.descriptor;
+        expect(descriptor.sourceTurnId).toBe(baseline.sourceTurnId);
+        expect(descriptor.sourceExecutionId).toBe(baseline.sourceExecutionId);
+        expect(descriptor.presentation).toEqual(baseline.presentation);
+      }
+      const allowances = await f.store.listPluginData(
+        f.sessionId,
+        "__kernel:presentation",
+        "_presentation_budget",
+      );
+      expect(allowances).toHaveLength(1);
+      expect(allowances[0]?.value).toMatchObject({
+        used: { calls: 2, generations: 0 },
+      });
+      const terminal = (await f.store.listTraceEvents(f.sessionId)).filter(
+        (event) =>
+          event.type === "presentation.completed" &&
+          (event.payload as { runtimeId: string }).runtimeId ===
+            original.runtimeId,
+      );
+      expect(terminal.map((event) => event.payload)).toEqual([
+        expect.objectContaining({
+          budget: {
+            calls: { limit: 2, used: 1 },
+            generations: { limit: 0, used: 0 },
+          },
+        }),
+        expect.objectContaining({
+          budget: {
+            calls: { limit: 2, used: 2 },
+            generations: { limit: 0, used: 0 },
+          },
+        }),
+        expect.objectContaining({
+          status: "no-op",
+          reason: "budget-exhausted",
+          budget: {
+            calls: { limit: 2, used: 2 },
+            generations: { limit: 0, used: 0 },
+          },
+        }),
+      ]);
+    } finally {
+      await f.close();
+    }
+  });
   it("parses real presentation descriptors through the strict public discovery contract", async () => {
     const f = await createPresentationBrowserFixture();
     try {

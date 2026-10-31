@@ -363,4 +363,5 @@ export {
 export {
   finalizePresentationJobs,
   unavailablePresentationJob,
+  capturePresentationRecovery,
 } from "./presentation/jobs.js";

@@ -749,6 +749,14 @@ Historical segments inform policy selection without automatically entering the s
 
 Create `~/.covel/plugins/gallery-display/` with the [presentation example manifest](../reference/plugins.md#presentation-runtimes). Write `{"type":"object"}` to `art.schema.json` and import public assets into `art`, keyed by scene name. Place this `handler.js` beside the manifest. Missing story or art preserves existing display:
 
+<!-- presentation-file:gallery-display/art.schema.json -->
+
+```json
+{ "type": "object" }
+```
+
+<!-- presentation-file:gallery-display/handler.js -->
+
 ```js
 export default async function handler(ctx) {
   const slot = ctx.inputs?.story;
@@ -775,6 +783,17 @@ export default async function handler(ctx) {
 
 For generation, create a separate `gallery-generator` package whose root `PLUGIN.md` contains only `id: gallery-generator` and `description: Generates public story art.`. These are `runtimes/render/RUNTIME.md` and its neighboring `handler.js`. Configure the image role through session model settings; the package names no provider.
 
+<!-- presentation-file:gallery-generator/PLUGIN.md -->
+
+```yaml
+---
+id: gallery-generator
+description: Generates public story art.
+---
+```
+
+<!-- presentation-file:gallery-generator/runtimes/render/RUNTIME.md -->
+
 ```yaml
 ---
 schedule: { stage: post-turn, detached: true }
@@ -790,6 +809,8 @@ effects:
   writes: [plugin-data:self:display, media:*]
 ---
 ```
+
+<!-- presentation-file:gallery-generator/runtimes/render/handler.js -->
 
 ```js
 export default async function handler(ctx) {

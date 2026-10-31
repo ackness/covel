@@ -48,6 +48,38 @@ async function openPresentationSession(page: Page, host: PresentationHost) {
   await expect(page.getByTestId("no-story-plugin")).toBeHidden();
 }
 
+async function showStage(page: Page) {
+  await page.getByRole("button", { name: "舞台视图", exact: true }).click();
+  await expect(page.getByTestId("stage-view")).toBeVisible();
+  await expect(page.getByTestId("stage-choices")).toBeVisible();
+}
+
+async function expectPresentation(page: Page) {
+  const backdrop = page.getByTestId("stage-backdrop").locator("img").last();
+  await expect(backdrop).toBeVisible();
+  await expect
+    .poll(() =>
+      backdrop.evaluate(
+        (node: HTMLImageElement) => node.complete && node.naturalWidth > 0,
+      ),
+    )
+    .toBe(true);
+  await expect(page.getByTestId("stage-hud")).toContainText("Library");
+  await expect(page.getByTestId("stage-hud")).toContainText("世界背景");
+  await expect(
+    page.getByTestId("stage-sprites").getByLabel("Mira", { exact: true }),
+  ).toBeVisible();
+  const music = page.getByRole("button", { name: "关闭背景音乐", exact: true });
+  await expect(music).toHaveAttribute("title", /Library tension/);
+  await expect(music).toHaveAttribute("aria-pressed", "true");
+}
+
+async function expectDisplay(page: Page, title: string, source: string) {
+  const panel = page.getByTestId("stage-plugin-panels");
+  await expect(panel.getByText(title, { exact: true })).toBeVisible();
+  await expect(panel.getByText(source, { exact: true })).toBeVisible();
+}
+
 test("story and both selectors remain usable while generated display waits and becomes superseded", async ({
   page,
 }) => {
@@ -61,46 +93,12 @@ test("story and both selectors remain usable while generated display waits and b
       "Public library story 1.",
     ]);
     await expect.poll(() => host.mediaCalls.length).toBe(1);
-    expect(
-      (
-        await host.store.getPluginData(
-          host.sessionId,
-          "scene-stage",
-          "stage",
-          "current",
-        )
-      )?.value,
-    ).toMatchObject({ sceneId: "library" });
-    expect(
-      (
-        await host.store.getPluginData(
-          host.sessionId,
-          "scene-stage",
-          "direction",
-          "current",
-        )
-      )?.value,
-    ).toMatchObject({
-      actors: [expect.objectContaining({ characterId: "mira", active: true })],
-    });
-    expect(
-      (
-        await host.store.getPluginData(
-          host.sessionId,
-          "soundtrack",
-          "state",
-          "mood",
-        )
-      )?.value,
-    ).toMatchObject({ mood: "Tense" });
-    expect(
-      await host.store.getPluginData(
-        host.sessionId,
-        "presentation-probe",
-        "display",
-        "current",
-      ),
-    ).toBeNull();
+    await showStage(page);
+    await expectPresentation(page);
+    await expect(page.getByTestId("stage-plugin-panels")).toContainText(
+      "No generated display",
+    );
+    await page.getByRole("button", { name: "解析视图", exact: true }).click();
     await composerInput(page).fill("Read the next shelf");
     await composerInput(page).press("Enter");
     await waitForTurnIdle(page);
@@ -113,10 +111,23 @@ test("story and both selectors remain usable while generated display waits and b
       {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ value: { title: "Explicit newer display" } }),
+        body: JSON.stringify({
+          value: {
+            title: "Explicit newer display",
+            source: "Source: player override",
+          },
+        }),
       },
     );
     expect(override.ok, await override.text()).toBe(true);
+    await page.reload();
+    await showStage(page);
+    await expectDisplay(
+      page,
+      "Explicit newer display",
+      "Source: player override",
+    );
+    await page.getByRole("button", { name: "解析视图", exact: true }).click();
     host.release();
     await expect
       .poll(
@@ -126,24 +137,41 @@ test("story and both selectors remain usable while generated display waits and b
       )
       .toBe(2);
     expect(
-      (
-        await host.store.getPluginData(
-          host.sessionId,
-          "presentation-probe",
-          "display",
-          "current",
-        )
-      )?.value,
-    ).toEqual({ title: "Explicit newer display" });
-    expect(
       (await host.store.listTraceEvents(host.sessionId)).filter(
         (trace) =>
           trace.type === "presentation.completed" &&
           (trace.payload as { reason?: string }).reason === "superseded",
       ),
     ).toHaveLength(2);
-    await page.getByRole("button", { name: "舞台视图", exact: true }).click();
-    await expect(page.getByTestId("stage-view")).toBeVisible();
+    for (const job of await host.jobs()) {
+      expect(
+        (await host.store.listTraceEvents(host.sessionId)).filter(
+          (trace) =>
+            trace.type === "presentation.completed" &&
+            (trace.payload as { jobId?: string }).jobId === job.jobId,
+        ),
+      ).toEqual([
+        expect.objectContaining({
+          payload: expect.objectContaining({
+            runtimeId: job.runtimeId,
+            sourceTurnId: job.origin.sourceTurnId,
+            sourceExecutionId: job.origin.sourceExecutionId,
+            status: "no-op",
+            reason: "superseded",
+          }),
+        }),
+      ]);
+    }
+    await showStage(page);
+    await expectPresentation(page);
+    await expectDisplay(
+      page,
+      "Explicit newer display",
+      "Source: player override",
+    );
+    await expect(page.getByTestId("stage-plugin-panels")).not.toContainText(
+      "Generated display",
+    );
     // Stage treats a story already shown in another view as read and
     // opens the decision panel instead of replaying it.
     await expect(page.getByTestId("stage-choices")).toBeVisible();
@@ -151,6 +179,12 @@ test("story and both selectors remain usable while generated display waits and b
     // The view mode is not kept across a reload; reopen the stage.
     await page.getByRole("button", { name: "舞台视图", exact: true }).click();
     await expect(page.getByTestId("stage-choices")).toBeVisible();
+    await expectPresentation(page);
+    await expectDisplay(
+      page,
+      "Explicit newer display",
+      "Source: player override",
+    );
     await page.getByRole("button", { name: "解析视图", exact: true }).click();
     await expect(composer(page)).toHaveAttribute("data-executing", "false");
     await expect(composerInput(page)).toBeEnabled();
@@ -185,29 +219,26 @@ for (const outcome of ["updated", "exhausted", "failed"] as const) {
       await expect(page.locator(".ui-narrative")).toContainText(
         "Public library story 1.",
       );
-      expect(
-        await host.store.getPluginData(
-          host.sessionId,
-          "presentation-probe",
-          "display",
-          "current",
-        ),
-      ).toBeNull();
+      await showStage(page);
+      await expectPresentation(page);
+      await expect(page.getByTestId("stage-plugin-panels")).toContainText(
+        "No generated display",
+      );
       host.release();
       await expect
         .poll(async () => (await host.jobs())[0]?.status)
         .toBe(outcome === "failed" ? "failed" : "succeeded");
       expect(host.mediaCalls).toHaveLength(1);
-      expect(
-        (
-          await host.store.getPluginData(
-            host.sessionId,
-            "presentation-probe",
-            "display",
-            "current",
-          )
-        )?.value ?? null,
-      ).toEqual(outcome === "updated" ? { title: "Generated display" } : null);
+      if (outcome === "updated")
+        await expectDisplay(
+          page,
+          "Generated display",
+          "Source: Public library story 1.",
+        );
+      else
+        await expect(page.getByTestId("stage-plugin-panels")).toContainText(
+          "No generated display",
+        );
       expect(
         (await host.store.listTraceEvents(host.sessionId)).find(
           (trace) =>
@@ -229,7 +260,6 @@ for (const outcome of ["updated", "exhausted", "failed"] as const) {
             }),
         budget: { calls: { used: 1, limit: 1 } },
       });
-      await page.getByRole("button", { name: "舞台视图", exact: true }).click();
       // Stage treats a story already shown in another view as read and
       // opens the decision panel instead of replaying it.
       await expect(page.getByTestId("stage-choices")).toBeVisible();
@@ -245,6 +275,17 @@ for (const outcome of ["updated", "exhausted", "failed"] as const) {
       await page.getByRole("button", { name: "舞台视图", exact: true }).click();
       await expect(page.getByTestId("stage-choices")).toBeVisible();
       await expect(page.getByTestId("stage-error")).toBeHidden();
+      await expectPresentation(page);
+      if (outcome === "updated")
+        await expectDisplay(
+          page,
+          "Generated display",
+          "Source: Public library story 1.",
+        );
+      else
+        await expect(page.getByTestId("stage-plugin-panels")).toContainText(
+          "No generated display",
+        );
       await page.getByRole("button", { name: "解析视图", exact: true }).click();
       await expect(composer(page)).toHaveAttribute("data-executing", "false");
       await expect(composerInput(page)).toBeEnabled();

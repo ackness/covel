@@ -5183,9 +5183,11 @@ Extra notes for each type:
 - Uses only the **successful, non-target** results from the original turn and related committed retries as context. These results are not committed again, and their events are not sent again.
 - Keeps normal input validation, dependency order, and parallel running of independent tasks across the targets.
 - Does not mark tasks that were skipped because a dependency failed as "fixed".
-- Runs in the foreground. Neither a batch recovery nor a single-task recovery with a clear source turn expands its scope through event subscriptions, recursive calls, or background dispatch.
+- Ordinary targets run in the foreground; existing presentation jobs recover from the restricted source described below. Neither a batch recovery nor a single-task recovery with a clear source turn expands its scope through event subscriptions, recursive calls, or background dispatch.
 
 A single-task retry with a source turn also checks the source and the latest failure status. An ordinary manual call without a source turn, and a plugin RPC call, keep their existing event chain, recursion, and dispatch behavior.
+
+The host supplies committed public sources for scoped selector recovery; requests cannot carry snapshots. Recovery of an existing paid presentation job retains detached execution and remaining allowance. See [presentation runtimes](./plugins.md#presentation-runtimes) for the boundaries.
 
 ##### Retry events and state
 

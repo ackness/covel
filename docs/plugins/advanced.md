@@ -749,6 +749,14 @@ Keep intent private. If a policy or actor is unavailable, continue with a valid 
 
 在 `~/.covel/plugins/gallery-display/` 建包，使用[呈现 runtime 示例清单](../reference/plugins.md#presentation-runtimes)。给 `art.schema.json` 写入 `{"type":"object"}`，将公开素材按场景名作为 key 导入 `art`。同目录的 `handler.js` 如下。缺少故事或素材时保留已有展示：
 
+<!-- presentation-file:gallery-display/art.schema.json -->
+
+```json
+{ "type": "object" }
+```
+
+<!-- presentation-file:gallery-display/handler.js -->
+
 ```js
 export default async function handler(ctx) {
   const slot = ctx.inputs?.story;
@@ -775,6 +783,17 @@ export default async function handler(ctx) {
 
 需要生成时，另建 `gallery-generator` 包，根 `PLUGIN.md` 只写 `id: gallery-generator` 和 `description: Generates public story art.`。下面分别是 `runtimes/render/RUNTIME.md` 和同目录的 `handler.js`。选择 image 用途的模型在会话模型设置完成；包不指定服务商。
 
+<!-- presentation-file:gallery-generator/PLUGIN.md -->
+
+```yaml
+---
+id: gallery-generator
+description: Generates public story art.
+---
+```
+
+<!-- presentation-file:gallery-generator/runtimes/render/RUNTIME.md -->
+
 ```yaml
 ---
 schedule: { stage: post-turn, detached: true }
@@ -790,6 +809,8 @@ effects:
   writes: [plugin-data:self:display, media:*]
 ---
 ```
+
+<!-- presentation-file:gallery-generator/runtimes/render/handler.js -->
 
 ```js
 export default async function handler(ctx) {

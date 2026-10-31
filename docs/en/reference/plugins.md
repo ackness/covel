@@ -1447,6 +1447,8 @@ The bundled dialogue example composes a pre-turn function, plan, with one story 
 
 `presentation` restricts a function runtime that selects backdrops, cast or music from public story content. It requires `schedule.stage: post-turn`, effective `io.visibility: system` and staged auto activation. Agents, guards, sub-agents, manual, event, background, concealed, suspension and `recordAs` are unavailable. An invalid declaration disables only that runtime; validation and installation still report the authored field path.
 
+<!-- presentation-file:gallery-display/PLUGIN.md -->
+
 ```yaml
 ---
 id: gallery-display
@@ -1477,6 +1479,8 @@ Only an optional (`required: false`), untransformed, turn-scoped `narrative-engi
 
 Zero-budget functions read a public candidate before story commit; their writes cannot survive rejection of that story. Detached presentation reads the actual story saved after `PreStateCommit` rewrites and accepted owning-plugin data from that commit. Its versioned snapshot contains no raw upstream result, player message, action or form. Snapshots are limited to 256 KiB total, 50 rows per namespace and 100 character identities; exceeding a bound refuses the whole snapshot, including inline materialization.
 
+A failed zero-budget selector can recover through a scoped runtime retry. The host checks the original committed turn, failure record and source diagnostic, then builds a bounded snapshot from the saved public story and current own assets and display state. Raw historical results never become presentation input. Missing source records or an advanced story refuse recovery; ordinary manual calls remain unavailable.
+
 `ctx.presentation` supplies read-only `characters: {id, name, aliases?}[]`, optional `viewpointCharacterId` and `note(reason)`. Identities come only from exact matches to story names, preserving ambiguity; profiles, private fields and seat lists are absent. Use IDs only to index display state; model input keeps names. `ctx.world`, history, exports, services, tools, recursion and agents are unavailable; player messages, actions and activation payload supply no extra content. The host does not construct a broad context first. Capabilities expire on completion, cancellation or deadline.
 
 Explicit `effects` identify owning, non-reserved namespaces. Reads may cover public assets declared in the package's `contributes.data` with a non-hidden source, or display namespaces also listed in writes. Wildcard `plugin-data:self:*`, `_` namespaces, foreign data, history and kernel inputs are forbidden. `pluginData.get/list` and store aliases enforce the same scope; namespace-less listing is refused.
@@ -1490,6 +1494,8 @@ Both integers in `presentation: {budget: {calls, generations}}` default to zero.
 Either positive counter requires `schedule.detached: true` and forbids `settle: true`. An unsafe graph, changed version or unavailable snapshot skips presentation without foreground fallback. Neither the story nor the next player input waits for generation. Ordinary pre-turn cast selection and explicit event overrides remain outside this policy.
 
 The allowance is shared by session incarnation, actual source turn ID and runtime. Opening, first player input and each automatic round have distinct sources even when logicalTurn matches. Source retries, new job IDs, shutdown requeue, cancellation, provider failures and rejected commits never replenish it. Current configuration can only narrow captured limits. A durable kernel CAS reservation precedes external dispatch; paid work is unavailable without that ledger. A stalled wrapper's new dispatch spends another call. Internal transport attempts remain governed by the separate `LLMRequestBudget`; these counters do not promise an exact bill.
+
+A full presentation queue skips only that generation and records `no-op / unavailable`. The story and independent auxiliary writes still commit, and undispatched calls consume no allowance.
 
 `assets:*` / `media:*` permits scoped media helpers only. `ctx.media` can read refs reachable from allowed snapshot assets / display state or produced by this invocation's helpers; session ownership alone is insufficient. Raw `put` / `ingestUrl` is unavailable. Helpers retain the standard private writer, MIME, HTTP / DNS, batch pin, claim and compensation rules. Failed or superseded output publishes no new display binding; external charges, bytes and reusable generation caches cannot be rolled back. The commit transaction checks destination baselines from the snapshot, so newer overrides or source results win.
 
