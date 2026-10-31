@@ -1,3 +1,4 @@
+import type { UpstreamWorldWrite } from "../function-runtime/upstream-world-model.js";
 import type {
   ExecutionContext,
   InputSlot,
@@ -35,6 +36,7 @@ export interface ExecuteAgentGuardOptions {
   readonly lastPlayerInput?:
     import("@covel/shared").PlayerInputSubmission | null;
   readonly logicalTurn?: number;
+  readonly upstreamWorld?: readonly UpstreamWorldWrite[];
   readonly upstreamProposals?: readonly import("@covel/shared").Proposal[];
   /** Writes of completed upstream runtimes of this plugin that reads include. */
   readonly upstreamPluginData?: readonly UpstreamPluginDataWrite[];
@@ -82,6 +84,7 @@ export async function executeAgentGuard({
   lastPlayerInput = null,
   logicalTurn,
   upstreamProposals = [],
+  upstreamWorld = [],
   upstreamPluginData = [],
   upstreamOf,
   manifest,
@@ -115,6 +118,7 @@ export async function executeAgentGuard({
       lastPlayerInput,
       ...(logicalTurn !== undefined ? { logicalTurn } : {}),
       upstreamProposals,
+      upstreamWorld,
       // Own frozen copies: the agent reads the same bindings after the guard.
       ...(activation
         ? { activation: deepFreeze(structuredClone(activation)) }

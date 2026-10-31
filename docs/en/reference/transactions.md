@@ -390,20 +390,23 @@ Who calls it:
 
 **Downstream commits only if upstream really commits.** Commit units are committed in execution order. The hard dependents of a dropped runtime are dropped with it (`commit/commit-dependencies.ts`). Dependencies are checked only between top-level runtimes: a nested result depends only on results of its own nested execution, which sit in the same unit and commit or drop with it.
 
-| Relationship                                                                             | When the upstream is dropped                               |
-| ---------------------------------------------------------------------------------------- | ---------------------------------------------------------- |
-| The target of a turn-scoped `needs`                                                      | Downstream is dropped with it                              |
-| The source of a required `inputs`                                                        | Downstream is dropped with it                              |
-| An event subscriber, when all emitters of the event that triggered it are dropped        | The subscriber is dropped with it                          |
-| `after`, and inputs with `required: false`                                               | No cascade. They only express order or a best-effort read  |
-| A `cardinality: one` capability dependency, when another provider committed successfully | Still satisfied                                            |
-| The hard upstream of a story or setup runtime                                            | The whole turn is rolled back                              |
-| Read its uncommitted plugin data (auxiliary unit)                                        | The downstream runtime is dropped too                      |
-| Read its uncommitted plugin data (story or setup unit)                                   | Commits as usual; the trace records `read-dependency.kept` |
-| Read a write-service operation that did not commit (auxiliary unit)                      | The downstream runtime is dropped too                      |
-| Read a write-service operation that did not commit (story or setup unit)                 | Commits as usual; the trace records `read-dependency.kept` |
+<!-- prettier-ignore -->
+| Relationship | When the upstream is dropped |
+| --- | --- |
+| The target of a turn-scoped `needs` | Downstream is dropped with it |
+| The source of a required `inputs` | Downstream is dropped with it |
+| An event subscriber, when all emitters of the event that triggered it are dropped | The subscriber is dropped with it |
+| `after`, and inputs with `required: false` | No cascade. They only express order or a best-effort read |
+| A `cardinality: one` capability dependency, when another provider committed successfully | Still satisfied |
+| The hard upstream of a story or setup runtime | The whole turn is rolled back |
+| Read its uncommitted plugin data, characters or character schema (auxiliary unit) | The downstream runtime is dropped too |
+| Read its uncommitted plugin data, characters or character schema (story or setup unit) | Commits as usual; the trace records `read-dependency.kept` |
+| Read a write-service operation that did not commit (auxiliary unit) | The downstream runtime is dropped too |
+| Read a write-service operation that did not commit (story or setup unit) | Commits as usual; the trace records `read-dependency.kept` |
 
 **Read dependencies.** Within one execution, a runtime that reads its own plugin's data sees the uncommitted writes of upstream runtimes of the same plugin (see [In-execution plugin-data visibility](./plugins.md#in-execution-plugin-data-visibility)). Each read records which upstream writes it actually saw (`read-dependencies.ts`), and the execution carries these dependencies into its commit plan.
+
+Character and character-schema property reads use the same recorder, retaining producers across plugins. Tool and service reads belong to the calling runtime; host copying does not count. See [World Model](./world-model.md) for granularity. The recorder travels only in the kernel's execution commit plan, never in public results or suspension payloads.
 
 - `get` depends only on the upstream writes that still shape the returned value. When the runtime first wrote the whole key itself (`set`, a delete, or an operation list containing either) and then read it, there is no dependency.
 - `list` depends on every upstream that wrote that namespace. A list without a namespace depends on every upstream that wrote plugin data.
@@ -412,6 +415,8 @@ Who calls it:
 - A story or setup unit is never dropped for a read dependency. For each dropped upstream it writes one `read-dependency.kept` trace row in the same transaction, with the payload `runtimeId`, `runId`, `producerRuntimeId`, `producerRunId` and `reason`.
 - A producer always precedes its reader. A dependency on a run later in commit order is a kernel bug; it is logged as a warning and ignored.
 - Write-service operations are producers too: when a provider's runtime reads writes an operation staged, or any runtime reads an operation through the kernel input `operations@1`, the dependency names the operation's ID. An operation takes its caller unit's position, and counts as not committed when it failed, was taken back or its caller's unit was dropped. An auxiliary reader is dropped with it, with the error `read data of <contract> that did not commit`; a story or setup reader commits, and its `read-dependency.kept` payload carries `producerOperationId` and `producerContract` instead of the two run fields.
+
+Suspensions are checked for read dependencies at their source execution's commit, even without domain writes. When a producer drops, an auxiliary reader's continuation is neither saved nor emitted as a resumable `turn.suspended`; its buffered and nested writes cannot survive for resume. Progress jobs, held detached jobs and turn counting use the existing discard settlement. Story/setup protection and kept traces still apply. A saved continuation carries no dependency graph: its source producers have already settled by resume.
 
 #### Write-service operations
 

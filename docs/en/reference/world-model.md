@@ -22,6 +22,25 @@ These entry points are read-only. To write, use a proposal (a request that says 
 
 For which fields exist and who manages each part, see [plugin contracts](./plugins.md#world-model-and-data-boundaries).
 
+**Reads and commit.** Each runtime invocation fixes its visible upstream set when it starts; parallel siblings cannot see each other. Characters and their schema are shared domain data, with no plugin filter. Upstream writes apply in commit order, recursive children before parents, retaining each invocation's identity. Only committable results contribute: success with output, or a skipped guard with buffered writes. Failed, suspended, successful-but-outputless results and malformed effects contribute no writes. Retry and detached seeds, including their descendants, are not replayed: their source execution already committed or dropped them.
+
+Only successful property access records a read dependency. Acquiring `ctx.world` alone does not count; neither do host construction, validation, copying or caching. An author's spread, serialization or use of the platform's structured clone of `ctx.world` accesses its enumerable properties.
+
+<!-- prettier-ignore -->
+| Read | Upstream producers recorded |
+| --- | --- |
+| `characters` (including `find`, filtering and empty-result decisions) | Every `character.upsert` producer in the view |
+| `characterSchema` | Every `character.schema.set` producer in the view |
+| `dimensions`, `worldRecord`, `seats`, `dimensionProviderPluginId` | No read dependencies |
+
+Dependencies conservatively cover the whole property. Later overwrites retain earlier producers; own writes cannot erase an observation. Reading characters does not implicitly record schema producers, or vice versa. Committed data and own buffered writes add no cross-run edges, and repeated reads deduplicate.
+
+Functions, guards that skip model work, agent tools, and direct, imported and nested services share the invocation's recorder with plugin-data and operation-input dependencies. A passing guard does not lend its dependencies to the agent. Function views stay frozen; tools and services receive independent snapshots, so local mutations cannot affect their caller or another invocation. Views reject reads after completion or cancellation.
+
+At commit, losing a producer discards the auxiliary reader's whole unit, including writes, operations and any continuation awaiting persistence. A story or setup unit, including one containing a nested story/setup run, survives with one `read-dependency.kept` trace per lost producer. Rejection of its own proposal still fails under the existing rules; see [Transactions](./transactions.md#turn-level-single-transaction). This mechanism tracks drops, not value equivalence after Hook rewrites or read baselines against external executions.
+
+Nested executions still see only their own upstream set; sub-agents still read committed world data. A parent that reads characters to build a sub-agent brief records that read itself. Resume starts with current committed world data and its own saved buffer, without historical producer identities. Database and session formats are unchanged. Abandon and recreate old pending suspensions when testing this guarantee: their read provenance is not retroactively added.
+
 ## Characters and the character schema
 
 A world package can declare a `characterSchema` in `world.yaml`. When a session is created, it is copied into the session.

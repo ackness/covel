@@ -630,6 +630,8 @@ The nested call's writes follow the parent handler:
 - Progress tasks that a nested call reports with `ctx.progress` share the parent's progress scope and end with the parent execution's commit. Several calls of the same runtime (for example a parent that triggers the same child more than once) share that scope. Tasks are deduplicated by `jobId` and sequence within the full identity key (`pluginId`, `runtimeId`, and so on), so the jobs of a parent, its child or sibling runtimes never collide with each other; repeated calls of one runtime share one identity key, so they need different `jobId`s. A nested child keeps its own execution identity and only reports under the root execution's progress scope. When the parent handler succeeds, each task ends with its own runtime's result. When the parent fails, the nested tasks end as `cancelled`. When the parent suspends, they wait for input (`waiting-input`) together with the parent's tasks; a successful resume ends them with the result they were saved with, and an abandoned, expired or voided item ends them as `cancelled`.
 - A nested call made from an agent's guard commits only when the guard returns `{ skip: true }` and the result is still skipped; it is discarded when the guard lets the agent run.
 
+A suspended auxiliary reader is still checked for read dependencies at the source commit. If a producer it observed is dropped, its continuation and buffered child calls are discarded, even when the reader staged no writes. See [Transactions](./transactions.md).
+
 At commit, a top-level runtime and the nested calls at every level below it are one unit: they all commit, or they are all discarded.
 
 - In an execution with a story, the unit of a non-story runtime commits in one savepoint. When any of its writes is rejected, the whole unit is discarded and the story is still saved. Runtimes that depend on that top-level runtime are discarded with it under the [commit rules](./transactions.md#turn-level-single-transaction).
@@ -911,6 +913,8 @@ The character schema, the characters, and the world record belong to the kernel'
 - Writes go through proposals, and they are validated together at commit time.
 - `ctx.world.dimensions` starts from the provider's frozen snapshot and overlays the valid dimension proposals visible to that view. See [Dynamic dimensions](#dynamic-dimensions) for the distinction between public reads and execution-local previews.
 - `ctx.world.seats` holds the session's seats, frozen as well. No proposal changes them; the player switches the current character through the [switch endpoint](./api.md#session-seats), and it applies from the next turn.
+
+Actual `characters` / `characterSchema` reads record upstream producers, using the same invocation recorder in tools and services. Auxiliary readers drop with rejected producers; story/setup readers survive with a trace. See [World Model](./world-model.md) for visibility, conservative granularity and seed exclusion. Recursive calls do not inherit parent upstream state, and sub-agents still read committed world data.
 
 **Finding a character by name.** Besides `name`, a character can have `aliases` (other names for the same person).
 

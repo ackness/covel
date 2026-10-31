@@ -11,32 +11,84 @@ import {
 import type { DataStore } from "@covel/store";
 import { deepFreeze } from "../hooks/hook-settings.js";
 
-/** Match commit eligibility, including completed guards that skipped model work. */
+import type { ReadRecorder } from "../read-dependencies.js";
+import {
+  collectUpstreamWorldWrites,
+  type UpstreamWorldWrite,
+} from "./upstream-world-model.js";
+
+/** The same canonical snapshot for callers that only need proposals. */
 export function collectUpstreamWorldProposals(
   results: ReadonlyMap<string, RuntimeResult>,
   sessionId: string,
 ): readonly Proposal[] {
-  return [...results.values()].flatMap((result) =>
-    result.status === "success" || result.status === "skipped"
-      ? (result.pendingProposals ?? [])
-          .filter(
-            (proposal) =>
-              proposal.type === "character.upsert" ||
-              proposal.type === "character.schema.set" ||
-              proposal.type === "dimension.initialize" ||
-              proposal.type === "dimension.update",
-          )
-          .map((proposal) => ({
-            ...proposal,
-            sessionId,
-            turnId: result.turnId,
-            source: {
-              pluginId: result.pluginId,
-              runtimeId: result.runtimeId,
-            },
-          }))
-      : [],
+  return collectUpstreamWorldWrites(results, sessionId).map(
+    (write) => write.proposal,
   );
+}
+
+type ObservedProperty = "characters" | "characterSchema";
+interface WorldReadTracking {
+  readonly producers: Readonly<Record<ObservedProperty, readonly string[]>>;
+  readonly recorder: ReadRecorder;
+}
+
+// Only the host can snapshot a facade without observing its properties. Neither
+// the recorder nor producer identities are attached to author-visible objects.
+const views = new WeakMap<
+  WorldModelView,
+  {
+    snapshot(): WorldModelView;
+    tracking?: WorldReadTracking;
+  }
+>();
+
+function noteWorldRead(
+  tracking: WorldReadTracking | undefined,
+  key: keyof WorldModelView,
+) {
+  if (!tracking || (key !== "characters" && key !== "characterSchema")) return;
+  for (const producer of tracking.producers[key])
+    tracking.recorder.add(producer);
+}
+
+function ownedSnapshot(view: WorldModelView): WorldModelView {
+  return structuredClone(views.get(view)?.snapshot() ?? view);
+}
+
+/** Detached, locally mutable values with the original invocation's recorder. */
+export function snapshotWorldModelView(
+  view: WorldModelView,
+  assertLive: () => void = () => {},
+): WorldModelView {
+  assertLive();
+  const snapshot = ownedSnapshot(view);
+  const tracking = views.get(view)?.tracking;
+  const copy = Object.defineProperties(
+    {},
+    Object.fromEntries(
+      (Object.keys(snapshot) as (keyof WorldModelView)[]).map((key) => [
+        key,
+        {
+          enumerable: true,
+          get() {
+            assertLive();
+            const value = snapshot[key];
+            noteWorldRead(tracking, key);
+            return value;
+          },
+        },
+      ]),
+    ),
+  ) as WorldModelView;
+  views.set(copy, {
+    snapshot: () => {
+      assertLive();
+      return snapshot;
+    },
+    tracking,
+  });
+  return copy;
 }
 
 export type WorldModelReadStore = Pick<
@@ -129,6 +181,10 @@ export async function createWorldModelView(
     WorldModelView,
     "dimensions" | "dimensionProviderPluginId"
   >,
+  reads?: {
+    readonly upstream: readonly UpstreamWorldWrite[];
+    readonly recorder: ReadRecorder;
+  },
 ): Promise<WorldModelView> {
   assertLive();
   const [characters, characterSchema, session] = await Promise.all([
@@ -185,6 +241,29 @@ export async function createWorldModelView(
     pending,
     assertLive,
     session?.locale,
+    reads
+      ? {
+          recorder: reads.recorder,
+          producers: {
+            characters: [
+              ...new Set(
+                reads.upstream
+                  .filter((write) => write.proposal.type === "character.upsert")
+                  .map((write) => write.runId),
+              ),
+            ],
+            characterSchema: [
+              ...new Set(
+                reads.upstream
+                  .filter(
+                    (write) => write.proposal.type === "character.schema.set",
+                  )
+                  .map((write) => write.runId),
+              ),
+            ],
+          },
+        }
+      : undefined,
   );
 }
 
@@ -197,11 +276,12 @@ export function overlayWorldModelView(
   locale?: string,
 ): WorldModelView {
   return overlayOwnedWorldModelView(
-    structuredClone(base),
+    ownedSnapshot(base),
     sessionId,
     pending,
     assertLive,
     locale,
+    views.get(base)?.tracking,
   );
 }
 
@@ -212,6 +292,7 @@ function overlayOwnedWorldModelView(
   pending: readonly Proposal[],
   assertLive: () => void,
   locale?: string,
+  tracking?: WorldReadTracking,
 ): WorldModelView {
   // No proposal writes the world record, and it holds the whole setting text:
   // it is frozen once and every read returns that object.
@@ -258,9 +339,10 @@ function overlayOwnedWorldModelView(
       frozen = {};
     }
     if (!(key in frozen)) frozen[key] = deepFreeze(structuredClone(model[key]));
+    noteWorldRead(tracking, key);
     return frozen[key] as WorldModelView[K];
   };
-  return Object.freeze({
+  const view = Object.freeze({
     get characters() {
       return read("characters");
     },
@@ -282,4 +364,9 @@ function overlayOwnedWorldModelView(
       return read("seats");
     },
   });
+  views.set(view, {
+    snapshot: () => ({ ...current(), worldRecord }),
+    tracking,
+  });
+  return view;
 }

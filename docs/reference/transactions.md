@@ -390,20 +390,23 @@ SqliteStore、MemoryStore 和 PgStore（都在 Node 上）用同一种办法：
 
 **只有上游真正提交，下游才提交。** 提交单元按执行顺序提交。被丢弃 runtime 的硬依赖方一起丢弃（`commit/commit-dependencies.ts`）。依赖只在顶层 runtime 之间检查：嵌套结果只依赖同一次嵌套执行里的结果，它们在同一个单元里，随单元一起提交或丢弃。
 
-| 关系                                              | 上游被丢弃时                              |
-| ------------------------------------------------- | ----------------------------------------- |
-| turn 作用域的 `needs` 目标                        | 下游一起丢弃                              |
-| 必填 `inputs` 的来源                              | 下游一起丢弃                              |
-| 事件订阅者，触发它的事件的全部发出者都被丢弃      | 订阅者一起丢弃                            |
-| `after`、`required: false` 的输入                 | 不级联，它们只表达顺序或尽力读取          |
-| `cardinality: one` 的能力依赖，另有提供者提交成功 | 仍然满足                                  |
-| story 或 setup runtime 的硬上游                   | 整回合回滚                                |
-| 读取了它未提交的插件数据（辅助单元）              | 下游一起丢弃                              |
-| 读取了它未提交的插件数据（story 或 setup 单元）   | 照常提交，trace 记 `read-dependency.kept` |
-| 读取了没有提交的写服务操作（辅助单元）            | 下游一起丢弃                              |
+<!-- prettier-ignore -->
+| 关系 | 上游被丢弃时 |
+| --- | --- |
+| turn 作用域的 `needs` 目标 | 下游一起丢弃 |
+| 必填 `inputs` 的来源 | 下游一起丢弃 |
+| 事件订阅者，触发它的事件的全部发出者都被丢弃 | 订阅者一起丢弃 |
+| `after`、`required: false` 的输入 | 不级联，它们只表达顺序或尽力读取 |
+| `cardinality: one` 的能力依赖，另有提供者提交成功 | 仍然满足 |
+| story 或 setup runtime 的硬上游 | 整回合回滚 |
+| 读取了它未提交的插件数据、角色或角色 schema（辅助单元） | 下游一起丢弃 |
+| 读取了它未提交的插件数据、角色或角色 schema（story 或 setup 单元） | 照常提交，trace 记 `read-dependency.kept` |
+| 读取了没有提交的写服务操作（辅助单元） | 下游一起丢弃 |
 | 读取了没有提交的写服务操作（story 或 setup 单元） | 照常提交，trace 记 `read-dependency.kept` |
 
 **读取依赖。** 同一次执行里，runtime 读自己插件的数据时能看到同插件上游 runtime 还没提交的写入（见[执行内的插件数据可见性](./plugins.md#执行内的插件数据可见性)）。每次读取记下它实际看到了哪些上游的写入（`read-dependencies.ts`），执行把这些依赖带进提交计划。
+
+角色和角色 schema 的属性读取也使用同一个记录器，跨插件保留生产者身份。工具和服务的读取归调用 runtime；宿主复制不算读取。粒度见 [World Model](./world-model.md)。记录器只在内核的执行提交计划中传递，不写进公开结果或挂起载荷。
 
 - `get` 只依赖还影响返回值的上游。runtime 自己先整体写了这个键（`set`、删除，或含有其中之一的操作列表）再读，就没有依赖。
 - `list` 依赖写过这个 namespace 的全部上游。不带 namespace 的列表依赖写过插件数据的全部上游。
@@ -412,6 +415,8 @@ SqliteStore、MemoryStore 和 PgStore（都在 Node 上）用同一种办法：
 - story 或 setup 单元不因读取依赖丢弃。每个被丢弃的上游在同一个事务里写一条 `read-dependency.kept` trace，载荷是 `runtimeId`、`runId`、`producerRuntimeId`、`producerRunId` 和 `reason`。
 - 生产者总是排在读者前面。依赖指向提交顺序更靠后的 run 是内核错误，只记警告并忽略。
 - 写服务的操作也是生产者：提供者的 runtime 读到某个操作暂存的写入时，或任何 runtime 通过内核输入 `operations@1` 读到某个操作时，依赖记的是操作的 ID。操作排在它的调用方单元的位置；它失败、被撤回或调用方单元被丢弃时算作没有提交。辅助读者一起丢弃，错误是 `read data of <契约> that did not commit`；story 或 setup 读者照常提交，`read-dependency.kept` 的载荷用 `producerOperationId` 和 `producerContract` 代替 run 的两个字段。
+
+挂起也在源执行的提交时检查读取依赖，即使没有领域写入。生产者被丢弃时，辅助读者的 continuation 不保存、不发出可恢复的 `turn.suspended`；缓冲和嵌套写入不能留待恢复。它的进度作业、扣住的 detached 作业和回合计数走已有的丢弃结算。story/setup 的保护与 trace 规则照常适用。保存下来的 continuation 不带依赖图，恢复时源生产者已经结算。
 
 #### 写服务的操作
 

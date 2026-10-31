@@ -349,6 +349,8 @@ When called through a runtime's client, `pluginData` overlays committed data wit
 
 A read that sees an uncommitted upstream write records a read dependency on the calling runtime's result. Nested services read each provider's own data and keep recording on the original runtime. If a producer is dropped at commit, an auxiliary caller is dropped with it; a story caller still commits and the trace records the dependency (see [Transactions](./transactions.md)). Calling a read service creates no new scheduling dependency; a story runtime can call it as needed and handle missing or failed services.
 
+Actual service reads of `ctx.world.characters` or `characterSchema` also charge the original calling runtime under the [World Model](./world-model.md) rules. This includes read services, reads inside write services, tool imports and nested calls. First acquiring `world` creates a detached snapshot without observing its properties; dimension-only reads add no character/schema dependency. The view rejects reads after completion, cancellation or timeout. Calls outside executions with no runtime commit owner add no commit dependencies. Provider write ownership and nested read-only restrictions are unchanged.
+
 Calls from tools and imports read the same data: the tools of a top-level agent overlay upstream writes and record read dependencies like a function runtime. When a resumed runtime or a sub-agent calls a service from a tool, it reads committed data only and records no read dependencies, the same as its own tool reads.
 
 A read service also sees what the same caller staged for its provider through earlier write-service calls (below), and records no read dependency for it.

@@ -911,6 +911,8 @@ Character "苏婉" (npc) already exists as char-abc123. No new record created. U
 
 默认值填充和角色写入校验都读会话的 World Model。这份视图按执行顺序合并三样东西：已提交的记录、成功的上游 runtime 的领域 proposal、本 runtime 待提交的 proposal。无效的 schema 或角色写入不会进入这份视图。角色记录不镜像到插件私有数据。
 
+运行时角色工具通过带读取记录的 `context.world` 访问角色和 schema；插件工具、函数 `ctx.tools.call` 和服务导入也保留同一调用的记录器。宿主为隔离工具而复制快照不算读取；工具实际访问属性才记录，详见 [World Model](./world-model.md)。公共维度工具仍读冻结快照，不产生这类依赖。读后挂起的辅助运行会在源提交检查依赖，见[事务](./transactions.md)。
+
 读取时按 proposal 的顺序应用更新，用的是和提交相同的 `materializeCharacterUpsert`：
 
 | 写入                             | 效果                                                                                                     |

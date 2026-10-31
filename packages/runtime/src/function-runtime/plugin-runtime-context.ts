@@ -1,3 +1,4 @@
+import type { UpstreamWorldWrite } from "./upstream-world-model.js";
 /**
  * The context a function handler and an agent guard receive. Both get the
  * same fields under the same rules, whatever the plugin's source: a bundled
@@ -84,6 +85,7 @@ export interface PluginRuntimeContextOptions {
     | undefined;
   readonly lastPlayerInput: PlayerInputSubmission | null;
   readonly logicalTurn?: number;
+  readonly upstreamWorld?: readonly UpstreamWorldWrite[];
   readonly upstreamProposals: readonly Proposal[];
   /** Frozen activation, inputs and exports of this run. */
   readonly activation?: RuntimeActivation;
@@ -160,6 +162,7 @@ export async function createPluginRuntimeContext({
   lastPlayerInput,
   logicalTurn,
   upstreamProposals,
+  upstreamWorld = [],
   activation,
   inputs,
   exports: exportSlots,
@@ -351,6 +354,9 @@ export async function createPluginRuntimeContext({
         writeBuffer,
         () => handlerAbort.signal.throwIfAborted(),
         deps.dimensionContext,
+        pluginDataVisibility
+          ? { upstream: upstreamWorld, recorder: pluginDataVisibility.recorder }
+          : undefined,
       )
     : undefined;
   const handlerStore = deps.store

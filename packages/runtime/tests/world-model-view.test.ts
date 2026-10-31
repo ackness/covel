@@ -10,10 +10,12 @@ import {
 import { withPendingProposals } from "@covel/tools";
 import {
   createWorldModelView,
-  collectUpstreamWorldProposals,
+  snapshotWorldModelView,
   memoizeWorldModelReads,
   overlayWorldModelView,
 } from "../src/function-runtime/world-model-view.js";
+import { collectUpstreamWorldWrites } from "../src/function-runtime/upstream-world-model.js";
+import { attachNestedResults } from "../src/turn-executor/nested-results.js";
 import { createCommitPipeline } from "../src/session/session-kernel.js";
 import { runTurnPipeline } from "../src/turn-executor/turn-executor.js";
 
@@ -334,7 +336,7 @@ describe("execution World Model", () => {
       timestamp: "2026-01-01T00:00:00.000Z",
       pendingProposals: [{ ...schema(), sessionId: "forged" }],
     });
-    const collected = collectUpstreamWorldProposals(
+    const collected = collectUpstreamWorldWrites(
       new Map([
         ["failed", result("failed")],
         ["success", result("success")],
@@ -343,7 +345,7 @@ describe("execution World Model", () => {
       sessionId,
     );
     expect(collected).toHaveLength(2);
-    expect(collected[0]).toMatchObject({
+    expect(collected[0]?.proposal).toMatchObject({
       sessionId,
       turnId: "actual-turn",
       source: { pluginId: "actual", runtimeId: "actual/run" },
@@ -552,5 +554,225 @@ describe("a clock-derived dimension in the execution view", () => {
       sessionId,
     );
     expect(view.dimensions.storm).toMatchObject({ value: 150, version: 3 });
+  });
+});
+
+describe("world property observations", () => {
+  const result = (
+    runId: string,
+    pendingProposals: Proposal[],
+    extra: Partial<RuntimeResult> = {},
+  ): RuntimeResult => ({
+    pluginId: "producer",
+    runtimeId: "producer/run",
+    runId,
+    turnId: "turn",
+    status: "success",
+    output: {},
+    pendingProposals,
+    toolCalls: [],
+    durationMs: 0,
+    timestamp,
+    ...extra,
+  });
+  it("keeps host copies inert, records only successful property reads and revokes detached views", async () => {
+    const store = createMemoryStore();
+    const upstream = collectUpstreamWorldWrites(
+      new Map([
+        ["schema", result("schema-run", [schema()])],
+        ["character", result("character-run", [character()])],
+        [
+          "dimension",
+          result("dimension-run", [
+            proposal("dimension.update", {
+              updates: [{ id: "storm", expectedVersion: 1, value: 2 }],
+            }),
+          ]),
+        ],
+      ]),
+      sessionId,
+    );
+    const recorder = new Set<string>();
+    const pending: Proposal[] = [];
+    const view = await createWorldModelView(
+      store,
+      sessionId,
+      upstream.map((w) => w.proposal),
+      pending,
+      undefined,
+      {
+        dimensions: {
+          storm: {
+            name: "Storm",
+            schema: { type: "integer" },
+            value: 1,
+            version: 1,
+          },
+        },
+        dimensionProviderPluginId: "producer",
+      },
+      { upstream, recorder },
+    );
+    const overlay = overlayWorldModelView(view, sessionId);
+    const abort = new AbortController();
+    const copy = snapshotWorldModelView(overlay, () =>
+      abort.signal.throwIfAborted(),
+    );
+    expect(recorder.size).toBe(0);
+    for (const facade of [view, overlay, copy]) {
+      expect(facade.dimensions.storm).toMatchObject({ value: 2, version: 2 });
+      void facade.worldRecord;
+      void facade.seats;
+      void facade.dimensionProviderPluginId;
+    }
+    expect(recorder.size).toBe(0);
+    expect(copy.characters[0]?.fields).toEqual({ hp: 5 });
+    expect([...recorder]).toEqual(["character-run"]);
+    expect(copy.characters).toBe(copy.characters);
+    expect(copy.characterSchema).toBe(copy.characterSchema);
+    expect([...recorder]).toEqual(["character-run", "schema-run"]);
+    (copy.characters[0]!.fields as { hp: number }).hp = 9;
+    expect(view.characters[0]?.fields).toEqual({ hp: 5 });
+    expect(snapshotWorldModelView(view).characters[0]?.fields).toEqual({
+      hp: 5,
+    });
+    recorder.clear();
+    abort.abort();
+    expect(() => copy.characters).toThrow();
+    expect(recorder.size).toBe(0);
+    pending.push(
+      proposal("character.upsert", { id: "bad", name: "Bad", type: "unknown" }),
+    );
+    expect(() => view.characters).toThrow();
+    expect(recorder.size).toBe(0);
+    pending.pop();
+    // Deliberate author serialization observes every enumerable property.
+    structuredClone(view);
+    expect([...recorder].sort()).toEqual(["character-run", "schema-run"]);
+    await store.close();
+  });
+
+  it("retains all overwritten producers, with no edges for committed or own-only writes", async () => {
+    const store = createMemoryStore();
+    const upstream = collectUpstreamWorldWrites(
+      new Map([
+        ["first", result("first", [schema(), character()])],
+        [
+          "second",
+          result("second", [
+            schema(),
+            proposal("character.upsert", {
+              ...character().payload,
+              fields: { hp: 6 },
+              expectedVersion: 1,
+            }),
+          ]),
+        ],
+      ]),
+      sessionId,
+    );
+    const recorder = new Set<string>();
+    const pending = [
+      proposal("character.upsert", {
+        ...character().payload,
+        fields: { hp: 7 },
+        expectedVersion: 2,
+      }),
+      schema(),
+    ];
+    const view = await createWorldModelView(
+      store,
+      sessionId,
+      upstream.map((w) => w.proposal),
+      pending,
+      undefined,
+      undefined,
+      { upstream, recorder },
+    );
+    expect(view.characters[0]?.fields).toEqual({ hp: 7 });
+    expect([...recorder]).toEqual(["first", "second"]);
+    void view.characterSchema;
+    pending.push(
+      proposal("character.upsert", {
+        ...character().payload,
+        expectedVersion: 3,
+      }),
+    );
+    expect(view.characters[0]?.version).toBe(4);
+    expect(view.characters[0]?.version).toBe(4);
+    expect([...recorder]).toEqual(["first", "second"]);
+    const ownRecorder = new Set<string>();
+    const own = await createWorldModelView(
+      store,
+      sessionId,
+      [],
+      [schema(), character()],
+      undefined,
+      undefined,
+      { upstream: [], recorder: ownRecorder },
+    );
+    void own.characters;
+    void own.characterSchema;
+    await createCommitPipeline(store).commitAll([schema(), character()]);
+    const committed = await createWorldModelView(
+      store,
+      sessionId,
+      [],
+      [],
+      undefined,
+      undefined,
+      { upstream: [], recorder: ownRecorder },
+    );
+    void committed.characters;
+    void committed.characterSchema;
+    expect(ownRecorder.size).toBe(0);
+    await store.close();
+  });
+
+  it("uses commit eligibility, owned identities, recursive ordering and whole seed exclusion", () => {
+    const grandchild = result("grandchild", [schema()]);
+    const child = attachNestedResults(result("child", [character()]), [
+      grandchild,
+    ]);
+    const parent = attachNestedResults(result("parent", [character()]), [
+      child,
+    ]);
+    const seed = attachNestedResults(result("seed", [character()]), [
+      result("seed-child", [character()]),
+    ]);
+    const malformed = result("malformed", [character()], {
+      effects: { interactions: [null] } as unknown as RuntimeResult["effects"],
+    });
+    const all = [
+      parent,
+      seed,
+      result("skipped", [character()], { status: "skipped" }),
+      result("failed", [character()], { status: "failed" }),
+      result("suspended", [character()], { status: "suspended" }),
+      result("empty", [character()], { output: undefined }),
+      malformed,
+    ];
+    const writes = collectUpstreamWorldWrites(
+      new Map(all.map((r) => [r.runId, r])),
+      sessionId,
+      new Set([seed]),
+    );
+    expect(writes.map((w) => w.runId)).toEqual([
+      "grandchild",
+      "child",
+      "parent",
+      "skipped",
+    ]);
+    for (const write of writes)
+      expect(write.proposal).toMatchObject({
+        sessionId,
+        turnId: "turn",
+        source: { pluginId: "producer", runtimeId: "producer/run" },
+      });
+    const original = grandchild.pendingProposals![0]!;
+    if (original.type !== "character.schema.set")
+      throw new Error("expected schema");
+    (original.payload.types as string[]).push("later");
+    expect(writes[0]?.proposal.payload).toMatchObject({ types: ["merchant"] });
   });
 });

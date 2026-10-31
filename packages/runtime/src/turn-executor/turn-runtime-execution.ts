@@ -3,7 +3,7 @@ import { attachReadDependencies } from "../read-dependencies.js";
 import { commitEligibility } from "../session/session-runtime-result.js";
 import { buildTurnDigest, freezeSnapshot } from "./turn-digest.js";
 import { projectExecutionStory } from "./session-state.js";
-import { collectUpstreamWorldProposals } from "../function-runtime/world-model-view.js";
+import { collectUpstreamWorldWrites } from "../function-runtime/upstream-world-model.js";
 import { collectUpstreamPluginDataWrites } from "../function-runtime/upstream-plugin-data.js";
 import type {
   ExecutionContext,
@@ -728,10 +728,12 @@ async function executeRuntime(
     );
     if (preRuntime) return preRuntime;
 
-    const upstreamProposals = collectUpstreamWorldProposals(
+    const upstreamWorld = collectUpstreamWorldWrites(
       completedResults,
       input.sessionId,
+      inv.seedResults,
     );
+    const upstreamProposals = upstreamWorld.map((write) => write.proposal);
     // Taken once per invocation: siblings of this DAG level never see each
     // other, since completedResults changes only between levels.
     const upstreamPluginData = collectUpstreamPluginDataWrites(
@@ -776,6 +778,7 @@ async function executeRuntime(
           ? { logicalTurn: sessionMeta.logicalTurn }
           : {}),
         upstreamProposals,
+        upstreamWorld,
         manifest,
         input,
         loaded,
@@ -804,6 +807,7 @@ async function executeRuntime(
         ? { logicalTurn: sessionMeta.logicalTurn }
         : {}),
       upstreamProposals,
+      upstreamWorld,
       manifest,
       input,
       loaded,
@@ -826,6 +830,7 @@ async function executeRuntime(
 
     return await executeAgentRuntime({
       upstreamProposals,
+      upstreamWorld,
       upstreamPluginData,
       upstreamOf,
       manifest,
