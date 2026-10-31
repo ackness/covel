@@ -16,6 +16,8 @@ The **official catalog** is [covel-worlds](https://github.com/covel-ai/covel-wor
 > [!WARNING]
 > Being listed in the catalog does not mean a world passed a security review. Before you use a third-party world, read its prompts, settings, and media yourself.
 
+Dimensions come only from canonical `data/dimensions.yaml` and its adjacent locale overlays. Installation preview rejects inline manifest dimensions, noncanonical dimension paths and duplicate descriptor sources; see [dimension sources](./world-data.md#dimension-sources).
+
 ## Steps in the settings page
 
 1. Open **Settings → Install & manage**.

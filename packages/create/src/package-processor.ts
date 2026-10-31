@@ -2,6 +2,7 @@ import { isRecord } from "./validation-helpers.js";
 import {
   characterSchemaSetPayloadSchema,
   validateWorldModel,
+  worldDimensionsSchema,
 } from "@covel/shared";
 import type {
   PluginPack,
@@ -243,6 +244,20 @@ export function normalizeGeneratedPackage(
       );
   };
   const root = isRecord(value) ? value : {};
+  const dimensions = worldDimensionsSchema.safeParse(
+    root.dimensions === undefined ? {} : root.dimensions,
+  );
+  if (!dimensions.success)
+    errors.push(`packageContent.dimensions: ${dimensions.error.message}`);
+  if (requested.has("opening-kit") && dimensions.success) {
+    const resources = Object.values(dimensions.data).filter(
+      (definition) => typeof definition.initialValue === "number",
+    ).length;
+    if (resources < 2)
+      warnings.push(
+        `opening kit has ${resources} numeric resource dimensions; the brief asks for 2`,
+      );
+  }
 
   const contractData: GeneratedContractData[] = [];
   // Records of a contract that lives in character records, by character id.
@@ -385,7 +400,15 @@ export function normalizeGeneratedPackage(
   }
 
   return {
-    content: { characters, lorebook, rules, contractData },
+    content: {
+      characters,
+      lorebook,
+      rules,
+      contractData,
+      ...(dimensions.success && root.dimensions !== undefined
+        ? { dimensions: dimensions.data }
+        : {}),
+    },
     errors,
     warnings,
   };
@@ -444,24 +467,6 @@ export function applyCreationBriefToManifest(
   ];
   if (pack?.defaultViewMode) manifest.defaultViewMode = pack.defaultViewMode;
   else delete manifest.defaultViewMode;
-
-  const requested = requestedKinds(brief);
-  if (requested.has("opening-kit")) {
-    const dimensions = isRecord(manifest.dimensions)
-      ? manifest.dimensions
-      : undefined;
-    const numericResources = Object.values(dimensions ?? {}).filter(
-      (definition) =>
-        isRecord(definition) &&
-        typeof definition.initialValue === "number" &&
-        Number.isFinite(definition.initialValue),
-    );
-    if (numericResources.length < 2) {
-      warnings.push(
-        `opening kit has ${numericResources.length} numeric resource dimensions; the brief asks for 2`,
-      );
-    }
-  }
 
   return { errors, warnings };
 }

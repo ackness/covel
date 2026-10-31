@@ -28,7 +28,9 @@ The package has three sections with these delimiters:
 <portable text package data>
 ===END===
 
-Each request names what to write: one section, one list of a section, or all
+Dimensions belong only in WORLD_PACKAGE_YAML, never in world.yaml.
+The manifest request also writes that package section with its dimensions.
+Each request names what to write: sections, one list of a section, or all
 three sections. Return only what the request names, under its delimiter, and
 finish the answer with ===END===.
 
@@ -50,7 +52,39 @@ plugins:
 
 # Omit defaultViewMode: the plugin pack decides it. A revision keeps the value
 # the current world.yaml has.
+```
 
+## WORLD.md
+
+Write 180-350 words of focused lore.
+Start with exactly one H1: "# <world name>".
+Include setting overview, factions, power system, daily life, and 3 numbered adventure hooks. Put each hook on its own line, starting with `1. `, `2. `, and `3. ` respectively.
+Anchor the lore around one core anomaly or pressure mechanism that makes this world distinctive.
+
+The player reads WORLD.md too. The narrator reads all of it.
+Write what the player must not know yet in a narrator-only block: hidden plotlines, the truth behind a mystery, and how to run the story.
+A narrator-only block starts with the line `<!-- narrator-only -->` and ends with the line `<!-- /narrator-only -->`.
+Each of the two lines must have nothing else on it.
+Keep the H1, the setting overview and the adventure hooks outside the block.
+
+## WORLD_PACKAGE_YAML
+
+This section carries dimensions and optional text content that ships with the world package.
+For a new world, when the request asks for the whole section, include the three
+content arrays below and use `[]` when the Creation Brief says OMIT. When the
+request asks for one list, write that list alone. For a revision, write only
+changed items or UNCHANGED; omitted items and lists are preserved.
+
+When the Creation Brief lists plugin data contracts, also include
+`contractData: [{ contract, key, value }]`. Write one item for each record.
+Each `value` must satisfy the record schema of its contract, and `value.id`
+must equal `key`, unless the contract says that its `key` is a character's
+`id`. Follow the guidance and the example given for the contract.
+Create records only for the listed contracts. Do not put plugin-owned data in
+`dimensions`. For new creation, omit `contractData` when the brief lists no contract.
+During revision, keep existing records unless the author requests a change.
+
+```yaml
 # Each key under `dimensions` is an ID that you choose for this world: English
 # words that say what the dimension holds. A key in angle brackets is a
 # placeholder for your ID. The entries show the kinds of definition.
@@ -86,39 +120,7 @@ dimensions:
         additionalProperties: false
     initialValue: {}
     updateRule: <optional rule for adding named places from completed narrative>
-```
 
-## WORLD.md
-
-Write 180-350 words of focused lore.
-Start with exactly one H1: "# <world name>".
-Include setting overview, factions, power system, daily life, and 3 numbered adventure hooks. Put each hook on its own line, starting with `1. `, `2. `, and `3. ` respectively.
-Anchor the lore around one core anomaly or pressure mechanism that makes this world distinctive.
-
-The player reads WORLD.md too. The narrator reads all of it.
-Write what the player must not know yet in a narrator-only block: hidden plotlines, the truth behind a mystery, and how to run the story.
-A narrator-only block starts with the line `<!-- narrator-only -->` and ends with the line `<!-- /narrator-only -->`.
-Each of the two lines must have nothing else on it.
-Keep the H1, the setting overview and the adventure hooks outside the block.
-
-## WORLD_PACKAGE_YAML
-
-This section carries optional text content that ships with the world package.
-For a new world, when the request asks for the whole section, include the three
-content arrays below and use `[]` when the Creation Brief says OMIT. When the
-request asks for one list, write that list alone. For a revision, write only
-changed items or UNCHANGED; omitted items and lists are preserved.
-
-When the Creation Brief lists plugin data contracts, also include
-`contractData: [{ contract, key, value }]`. Write one item for each record.
-Each `value` must satisfy the record schema of its contract, and `value.id`
-must equal `key`, unless the contract says that its `key` is a character's
-`id`. Follow the guidance and the example given for the contract.
-Create records only for the listed contracts. Do not put plugin-owned data in
-`dimensions`. For new creation, omit `contractData` when the brief lists no contract.
-During revision, keep existing records unless the author requests a change.
-
-```yaml
 contractData:
   - contract: <contract ID from the Creation Brief>
     key: <stable ASCII id, equal to value.id>

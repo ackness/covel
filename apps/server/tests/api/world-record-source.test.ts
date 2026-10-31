@@ -1,5 +1,11 @@
 import { parse } from "yaml";
 import { worldSectionsOf } from "../../src/world-data/world-sections.js";
+import {
+  createWorld,
+  writeWorldPackage,
+  type GeneratedWorld,
+} from "@covel/create";
+import { loadSingleWorld } from "../../src/world-seed-loader.js";
 /**
  * The world record is the world; a package's files are only what it was
  * installed from (F-003, F-007). An edit in the app reaches new sessions and
@@ -45,18 +51,112 @@ vi.mock("node:fs/promises", async (importOriginal) => {
 
 const stamina = (initialValue: number) => ({
   name: "Stamina",
-  schema: { type: "integer", minimum: 0 },
+  schema: { type: "integer" as const, minimum: 0 },
   initialValue,
 });
 
-function manifest(name: string, initialValue: number) {
+it.each([false, true])(
+  "preserves edited portable dimensions and package credits through revision publication (file-associated=%s)",
+  async (fileAssociated) => {
+    const generated: GeneratedWorld = {
+      id: "revision-world",
+      locale: "en-US",
+      lore: "# Harbor\n1. Guard.\n2. Watch.\n3. Wait.",
+      warnings: [],
+      manifest: {
+        id: "revision-world",
+        name: "Harbor",
+        summary: "Guard the harbor.",
+        version: "2.3.4",
+        defaultLocale: "en-US",
+        author: { name: "Harbor Author" },
+        license: "MIT",
+        plugins: ["plugin:missing"],
+      },
+      packageContent: {
+        dimensions: { stamina: stamina(17) },
+        characters: [],
+        lorebook: [],
+        rules: [],
+      },
+    };
+    await writeWorldPackage(root, generated);
+    const directory = path.join(root, generated.id);
+    await store.upsertWorld((await loadSingleWorld(directory))!);
+    const patched = await app.request(`/api/worlds/${generated.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ dimensions: { stamina: stamina(23) } }),
+    });
+    expect(patched.status).toBe(200);
+    const current = await worldSectionsOf(
+      (await store.getWorld(generated.id))!,
+      fileAssociated ? directory : undefined,
+    );
+    expect(parse(current.yaml)).not.toHaveProperty("dimensions");
+    expect(parse(current.packageYaml!).dimensions).toEqual({
+      stamina: stamina(23),
+    });
+    const revised = await createWorld({
+      concept: "Harbor",
+      locale: "en-US",
+      revision: { current, instruction: "Keep the world." },
+      llm: {
+        async generate() {
+          return {
+            content:
+              "===WORLD_YAML===\nUNCHANGED\n===WORLD_MD===\nUNCHANGED\n===WORLD_PACKAGE_YAML===\nUNCHANGED\n===END===",
+            toolCalls: [],
+            finishReason: "stop",
+            usage: { inputTokens: 0, outputTokens: 0 },
+          };
+        },
+      },
+    });
+    if (!revised.success) throw new Error(revised.errors.join("; "));
+    expect(revised.manifest).toMatchObject({
+      version: "2.3.4",
+      author: { name: "Harbor Author" },
+      license: "MIT",
+      plugins: ["plugin:missing"],
+    });
+    await writeWorldPackage(root, revised, { replace: true });
+    expect((await loadSingleWorld(directory))?.metadata?.dimensions).toEqual({
+      stamina: stamina(23),
+    });
+    await writeWorldPackage(
+      root,
+      {
+        ...revised,
+        packageContent: { ...revised.packageContent, dimensions: {} },
+      },
+      { replace: true },
+    );
+    expect(
+      (await loadSingleWorld(directory))?.metadata?.dimensions,
+    ).toBeUndefined();
+    expect(generated.packageContent.dimensions).toEqual({
+      stamina: stamina(17),
+    });
+  },
+);
+
+function manifest(name: string) {
   return JSON.stringify({
     id: "pkg",
     name,
     summary: "A package world.",
     defaultLocale: "en-US",
-    dimensions: { stamina: stamina(initialValue) },
   });
+}
+
+async function writePackage(name: string, value: number) {
+  await mkdir(path.join(root, "pkg", "data"), { recursive: true });
+  await writeFile(path.join(root, "pkg", "world.yaml"), manifest(name));
+  await writeFile(
+    path.join(root, "pkg", "data/dimensions.yaml"),
+    JSON.stringify({ stamina: stamina(value) }),
+  );
 }
 
 let root: string;
@@ -68,7 +168,7 @@ let app: Hono;
 beforeEach(async () => {
   root = await mkdtemp(path.join(tmpdir(), "covel-world-record-"));
   await mkdir(path.join(root, "pkg"));
-  await writeFile(path.join(root, "pkg", "world.yaml"), manifest("Pkg", 1));
+  await writePackage("Pkg", 1);
   store = createMemoryStore();
   registry = createPluginRegistry();
   await registerDimensionProvider(registry);
@@ -149,7 +249,7 @@ describe("the world record is the source of truth", () => {
       vi.mocked(open).mockClear();
       for (const world of await Promise.all([list(), list()]))
         expect(world).toMatchObject({ updateAvailable: false });
-      expect(open).toHaveBeenCalledTimes(2); // Manifest + media, not host receipts.
+      expect(open).toHaveBeenCalledTimes(3); // Manifest, dimensions + media, not host receipts.
       vi.mocked(open).mockClear();
       expect(await list()).toMatchObject({ updateAvailable: false });
       const detail = await app.request("/api/worlds/pkg");
@@ -166,7 +266,7 @@ describe("the world record is the source of truth", () => {
         changedStat === "mtime" ? new Date(initial.mtimeMs + 4000) : touched,
       );
       expect(await list()).toMatchObject({ updateAvailable: true });
-      expect(open).toHaveBeenCalledTimes(2);
+      expect(open).toHaveBeenCalledTimes(3);
       expect((await store.getWorld("pkg"))?.metadata?.packageDigest).toBe(
         imported,
       );
@@ -195,7 +295,7 @@ describe("the world record is the source of truth", () => {
       await editDimensions(5);
       expect(await listed()).toMatchObject({ updateAvailable: false });
 
-      await writeFile(path.join(root, "pkg", "world.yaml"), manifest("New", 3));
+      await writePackage("New", 3);
       await seedWorlds(store, root, sessionLock);
       expect(await listed()).toMatchObject({
         name: "Pkg",
@@ -303,7 +403,7 @@ describe("the world record is the source of truth", () => {
   it("starts a new session with the dimensions saved in the app, not the package's", async () => {
     await editDimensions(5);
     // The files change too, but nothing loaded them into the record.
-    await writeFile(path.join(root, "pkg", "world.yaml"), manifest("Pkg", 7));
+    await writePackage("Pkg", 7);
 
     await startSession("s1");
     expect(await staminaOf("s1")).toMatchObject({
@@ -361,7 +461,7 @@ describe("the world record is the source of truth", () => {
       });
       expect(response.status).toBe(200);
 
-      await writeFile(path.join(root, "pkg", "world.yaml"), manifest("New", 2));
+      await writePackage("New", 2);
       await seedWorlds(store, root, sessionLock);
 
       const world = (await store.getWorld("pkg"))!;
@@ -381,7 +481,7 @@ describe("the world record is the source of truth", () => {
     await writeFile(
       path.join(root, "pkg", "world.yaml"),
       JSON.stringify({
-        ...JSON.parse(manifest("Pkg", 1)),
+        ...JSON.parse(manifest("Pkg")),
         ...original,
       }),
     );
@@ -403,6 +503,10 @@ describe("the world record is the source of truth", () => {
     expect(world.metadata).toMatchObject(edited);
     for (const directory of [undefined, path.join(root, "pkg")]) {
       const sections = await worldSectionsOf(world, directory);
+      expect(parse(sections.yaml)).not.toHaveProperty("dimensions");
+      expect(parse(sections.packageYaml!).dimensions).toEqual({
+        stamina: stamina(5),
+      });
       expect(parse(sections.yaml)).toMatchObject(edited);
       expect(parse(sections.yaml).pluginPitch).toEqual({ label: "Edited" });
     }
@@ -426,9 +530,42 @@ describe("the world record is the source of truth", () => {
     expect((await store.getWorld("pkg"))?.metadata).toMatchObject(original);
   });
 
+  it.each([false, true])(
+    "clears resolved dimensions without resurrecting metadata or package values (directory-free=%s)",
+    async (directoryFree) => {
+      if (directoryFree) {
+        const existing = (await store.getWorld("pkg"))!;
+        await store.upsertWorld({
+          ...existing,
+          metadata: { ...existing.metadata, source: "generated" },
+        });
+        await rm(path.join(root, "pkg"), { recursive: true });
+      }
+      const patch = await app.request("/api/worlds/pkg", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ dimensions: {} }),
+      });
+      expect(patch.status).toBe(200);
+      await seedWorlds(store, root, sessionLock);
+      const world = await (await app.request("/api/worlds/pkg")).json();
+      expect(world.metadata.dimensions).toEqual({});
+      const sections = await worldSectionsOf(
+        world,
+        directoryFree ? undefined : path.join(root, "pkg"),
+      );
+      expect(parse(sections.yaml)).not.toHaveProperty("dimensions");
+      expect(parse(sections.packageYaml!).dimensions).toEqual({});
+      await startSession("cleared");
+      expect(
+        await store.listPluginData("cleared", "world-init", "_dimensions"),
+      ).toEqual([]);
+    },
+  );
+
   it("goes back to the package version only when the player restores it", async () => {
     await editDimensions(5);
-    await writeFile(path.join(root, "pkg", "world.yaml"), manifest("New", 3));
+    await writePackage("New", 3);
 
     const response = await app.request(
       "/api/worlds/pkg/restore-package",
@@ -443,7 +580,7 @@ describe("the world record is the source of truth", () => {
     expect((await staminaOf("s1")).value).toBe(3);
 
     // The record follows its files again.
-    await writeFile(path.join(root, "pkg", "world.yaml"), manifest("Newer", 4));
+    await writePackage("Newer", 4);
     await seedWorlds(store, root, sessionLock);
     expect((await store.getWorld("pkg"))!.name).toBe("Newer");
   });

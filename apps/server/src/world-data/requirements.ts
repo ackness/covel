@@ -174,6 +174,7 @@ export async function unclaimedStructuredData(
 
 export async function inventoryWorldData(options: {
   readonly world?: {
+    readonly dimensions?: unknown;
     readonly id?: string;
     readonly metadata?: Readonly<Record<string, unknown>>;
   } | null;
@@ -213,7 +214,7 @@ export async function inventoryWorldData(options: {
       ? await resolveWorldRoot(options.worldId, options.worldsDirs)
       : null);
   const metadata = options.world?.metadata;
-  let dimensions = metadata?.dimensions;
+  const dimensions = options.world?.dimensions ?? metadata?.dimensions;
   const overrideRoot = options.covelHome
     ? path.join(options.covelHome, "world-overrides", options.worldId)
     : undefined;
@@ -226,7 +227,6 @@ export async function inventoryWorldData(options: {
   let deferredSourceIds: readonly string[] = [];
   if (worldRoot) {
     const manifest = await readWorldManifest(worldRoot);
-    if (!options.world) dimensions = manifest.dimensions;
     descriptor = await loadWorldDataDescriptor({
       worldRoot,
       worldId: options.worldId,

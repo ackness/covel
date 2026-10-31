@@ -8,17 +8,83 @@
  */
 
 import path from "node:path";
+import { mkdtemp, mkdir, writeFile, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { describe, expect, it } from "vitest";
 import {
   createPluginRegistry,
   discoverPlugins,
   loadPluginDefinition,
   loadPluginSummary,
+  loadRuntime,
 } from "@covel/plugin-loader";
 import { createEventDirectory } from "../../src/routes/api/bootstrap/event-directory.js";
 
 const PLUGINS_DIR = path.resolve(import.meta.dirname, "../../../../plugins");
 const SESSION_ID = "sess-real-manifest";
+
+it("resolves root events and runtime-private output schemas at their different declaration directories", async () => {
+  const parent = await mkdtemp(path.join(tmpdir(), "covel-event-paths-"));
+  const root = path.join(parent, "probe");
+  const runtime = path.join(root, "runtimes/work");
+  try {
+    await mkdir(runtime, { recursive: true });
+    await writeFile(
+      path.join(root, "PLUGIN.md"),
+      "---\nid: probe\nkind: plugin\ndescription: Path fixture\ncontributes:\n  events:\n    - topic: probe.changed\n      schema: ./schema.json\n      description: A root event.\n---\n",
+    );
+    await writeFile(
+      path.join(runtime, "RUNTIME.md"),
+      "---\nschedule: {trigger: {type: manual}}\nio: {output: {schema: ./schema.json}}\n---\nReturn the private output.\n",
+    );
+    const schema = (kind: string) => ({
+      type: "object",
+      properties: { kind: { const: kind } },
+      required: ["kind"],
+      additionalProperties: false,
+    });
+    await writeFile(
+      path.join(root, "schema.json"),
+      JSON.stringify(schema("root")),
+    );
+    await writeFile(
+      path.join(runtime, "schema.json"),
+      JSON.stringify(schema("runtime")),
+    );
+    const discovery = (await discoverPlugins(parent))[0]!;
+    const definition = await loadPluginDefinition(discovery);
+    const registry = createPluginRegistry();
+    registry.register({
+      id: discovery.id,
+      summary: await loadPluginSummary(discovery, undefined, definition),
+      rootPath: root,
+      ...definition,
+      loadedRuntimes: new Map(),
+      status: "registered",
+    });
+    registry.syncSessionActivations(SESSION_ID, [discovery.id]);
+    const directory = createEventDirectory({
+      registry,
+      resolvePluginDir: () => root,
+    });
+    expect(
+      await directory.validate(SESSION_ID, "probe.changed", { kind: "root" }),
+    ).toEqual({ ok: true });
+    expect(
+      (
+        await directory.validate(SESSION_ID, "probe.changed", {
+          kind: "runtime",
+        })
+      ).ok,
+    ).toBe(false);
+    expect(
+      (await loadRuntime(discovery, "probe/work", "en-US", definition))
+        .outputSchema,
+    ).toEqual(schema("runtime"));
+  } finally {
+    await rm(parent, { recursive: true, force: true });
+  }
+});
 
 async function setupSceneStageDirectory() {
   const discoveries = await discoverPlugins(PLUGINS_DIR);

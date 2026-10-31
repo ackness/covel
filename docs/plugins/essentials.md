@@ -6,6 +6,8 @@
 
 不需要函数时，用[提示词、数据集与 UI](./prompt-only.md)组合成声明式包，不必生成入口或执行提取。代码审批取决于当前文件，规则见[安装参考](../reference/plugin-installation.md#声明式插件)。
 
+文件路径先看[声明文件与资源路径](../reference/plugins.md#declaration-paths)：根声明与 runtime 私有文件各有明确的基准目录。
+
 ## 接下来读哪一页
 
 | 你要做的事                             | 读这一页                             |

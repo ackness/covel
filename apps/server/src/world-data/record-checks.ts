@@ -278,7 +278,7 @@ function checkDimensionReference(
         message: `"${id}" is not a dimension this world declares; plugin "${pluginId}" finds nothing under that name in a session`,
         hint: declared.length
           ? `Use the ID of a dimension the world declares: ${declared.join(", ")}.`
-          : "Declare the dimension in data/dimensions.yaml or under `dimensions` in world.yaml.",
+          : "Declare the dimension in data/dimensions.yaml.",
       },
     ];
   const findings: Finding[] = [];

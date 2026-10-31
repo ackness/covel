@@ -15,6 +15,14 @@ The source of the built-in plugins is in [plugins/](../../../plugins/). Optional
 > [!IMPORTANT]
 > Covel supports only the format described on this page. A flat old-style manifest, a `PLUGIN.md` in a subdirectory, role mirrors, and old checkpoint development data cannot be read. You must regenerate them. There is no migration read path and no dual write.
 
+<a id="declaration-paths"></a>
+
+## Declaration files and resource paths
+
+File references in root `PLUGIN.md` resolve at the package root. A `RUNTIME.md` handler, guard and private input/output schemas resolve at that manifest's directory; inline runtimes resolve at root. `../../` is allowed only while the resolved path remains inside the package. Real-path and symlink checks also cover conventional `output.schema.json`; no schema is inherited from a parent repository.
+
+Package UI and events are root declarations. Contract URIs are identifiers, not paths. `authoring.source.path` is relative to the consuming world package; descriptors use their world or separate override roots; `webview.entry` is relative to its declared webview root. JS imports and JSON Schema `$ref` retain their own document-relative rules. Credits and licenses remain explicit per independently distributed package, with no parent-directory defaults.
+
 ## Declarative package fields
 
 For features that need no server functions, start with [declarative plugins](./plugin-installation.md#declarative-plugins): combine agent prompts, own datasets/generated tools, settings/data receivers, static prompts, UI and service imports. An output contract describes an agent result; `contributes.services`, executable extensions and registrations are server code. There is no authored `executionMode` field.

@@ -15,6 +15,14 @@
 > [!IMPORTANT]
 > Covel 只支持本页描述的格式。平铺的旧清单、放在子目录里的 `PLUGIN.md`、角色镜像和旧 checkpoint 开发数据都读不了，需要重新生成；没有迁移读取，也没有双写。
 
+<a id="declaration-paths"></a>
+
+## 声明文件与资源路径
+
+根 `PLUGIN.md` 的文件引用相对包根目录；`RUNTIME.md` 的 handler、guard、私有输入／输出 schema 相对该清单所在目录。内联 runtime 相对根目录。`../../` 仅可在解析后仍位于包内时使用；真实路径与符号链接检查继续生效，约定的 `output.schema.json` 同样受限，不会从父仓库继承。
+
+包 UI 和事件只在根清单声明。契约 URI 是标识符，不是文件路径。`authoring.source.path` 相对消费它的世界包；descriptor 使用世界或 override 的独立根；`webview.entry` 相对声明的 webview root。JS import 和 JSON Schema `$ref` 使用各自的文档相对规则。署名和许可证仍由每个独立分发的包明确提供，没有父目录默认值。
+
 ## 声明式包的字段边界
 
 不需要服务器函数的功能，先用[声明式插件](./plugin-installation.md#声明式插件)：agent 提示词、自己的数据集与生成工具、设置/数据接收、静态提示段、界面和服务导入可以组合使用。输出契约只描述 agent 的结果；`contributes.services`、可执行扩展和注册项属于服务器代码。没有可填写的 `executionMode` 字段。

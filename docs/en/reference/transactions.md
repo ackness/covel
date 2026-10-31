@@ -16,6 +16,8 @@ World package files are outside the database transaction. Generation, revision, 
 
 SillyTavern content import reuses ZIP world activation: conversion and preview stay in memory, then the world lock protects atomic materialization, read-back preflight and record creation. Failure removes only the newly created directory. See [world installation](./world-installation.md).
 
+Dimension sources are separated only at authoring and generation boundaries: canonical `data/dimensions.yaml` for files and `packageContent.dimensions` for portable results. Record edits keep the existing world lifecycle lock; session import/sync still commits atomically with the ledger, preserving provider binding, CAS and player-edit conflicts.
+
 ## Contract
 
 ```ts

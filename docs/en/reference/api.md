@@ -61,6 +61,8 @@ Plugin summaries expose `acceptsWorldData`; world plans add `selection.requiredD
 
 World-data import failures return fixed text and `world_data_import_failed`, including in development. Author diagnostics remain in server logs.
 
+World API `dimensions` and `metadata.dimensions` are resolved record projections, not `world.yaml` fields. The existing metadata normalizer validates definitions, gives the top-level value precedence, and treats an empty table as an explicit clear. Portable generator results use `packageContent.dimensions`; generation/revision API `done.world` still returns the resolved world record. See [generation and export](./world-data.md#ai-generated-results-and-file-export).
+
 ## Declarative plugin API state
 
 Plugin summaries in lists, details and session lists require `executionMode: declarative | code | unknown`. Optional `executionDiagnostics` contains only package-relative files, fields and reasons, never host proof, absolute paths or prompts. GitHub previews also carry the mode; `hasServerCode` is true for both `code` and `unknown`. Static validation includes `executionMode` and `executionDiagnostics` in `summary`.
@@ -2022,7 +2024,7 @@ Partly updates a world. You can update the basic fields, or submit the top-level
 
 Behavior:
 
-- The top-level `dimensions` are written to `metadata.dimensions`.
+- The top-level `dimensions` are written to `metadata.dimensions`. Browser-local edits update the canonical field and its projection together; an empty table stays empty after checkpoint upload and restoration.
 - `metadata` is merged on write. Sibling fields that are not mentioned are kept as they are.
 - Both `dimensions` and `metadata.dimensions` go through world dimension validation.
 - New sessions, preflight and sync use the dimensions and the `characterSchema` of this record. They do not read the world package's files.

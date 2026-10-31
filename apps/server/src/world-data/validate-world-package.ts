@@ -140,7 +140,6 @@ interface WorldManifestView {
   /** The world's editions, from its locale files; the default locale first. */
   readonly editions: readonly string[];
   readonly worldData?: string;
-  readonly dimensions?: unknown;
   readonly themeMusic?: string;
   readonly cover?: string;
   readonly characterSchema?: {
@@ -920,7 +919,7 @@ async function checkWorldData(
       diagnostics.push({
         level: "warning",
         code: "prompt-size",
-        file: "world.yaml",
+        file: "data/dimensions.yaml",
         pointer: "dimensions",
         message: `Initial dimension values occupy about ${size} tokens in the prompt projection.`,
         hint: "Keep live state compact; move descriptive archives to selective lorebook entries or plugin data.",
@@ -932,7 +931,7 @@ async function checkWorldData(
       file: "world.yaml",
       pointer: "dimensions",
       message: error instanceof Error ? error.message : String(error),
-      hint: "Check each dimension definition in `data/dimensions.yaml` or under `dimensions` in world.yaml.",
+      hint: "Check each dimension definition in data/dimensions.yaml; world.yaml does not accept inline dimensions.",
     });
   }
   const collisions = await collisionDiagnostics(

@@ -6,6 +6,8 @@
 
 `authoring.source` 与 `accepts` 让宿主从实际存在的世界内容发现数据需求；它不提供 runtime 或服务能力，也不授予代码权限。相同路径只合并等效声明。详见[接收规则](../reference/world-data.md#data-receivers)。
 
+文件路径先看[声明文件与资源路径](../reference/plugins.md#declaration-paths)：根声明与 runtime 私有文件各有明确的基准目录。
+
 ## 多个 runtime 的布局
 
 一个插件有多个 runtime 时，每个 runtime 住在 `runtimes/` 下自己的文件夹里：

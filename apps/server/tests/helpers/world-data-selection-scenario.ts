@@ -10,6 +10,103 @@ import { sessionRoutes } from "../../src/routes/api/session.js";
 import { worldPluginPlanRoutes } from "../../src/routes/api/worlds/plugin-plan.js";
 import { worldDataSyncRoutes } from "../../src/routes/api/worlds/data-sync.js";
 import { datasetWriteFixture } from "./dataset-write-fixture.js";
+import { createWorld } from "@covel/create";
+import { createPluginRegistry } from "@covel/plugin-loader";
+import { registerDimensionProvider } from "./dimension-provider.js";
+import { worldRecordFromManifest } from "../../src/world-data/world-record.js";
+import { worldCrudRoutes } from "../../src/routes/api/worlds/crud.js";
+
+/** Portable generation uses the same validated definitions on every backend. */
+export async function portableDimensionSelectionScenario(store: DataStore) {
+  const definition = (initialValue: number) => ({
+    name: "Alarm",
+    schema: { type: "integer" as const },
+    initialValue,
+  });
+  const generated = await createWorld({
+    concept: "Harbor",
+    locale: "en-US",
+    llm: {
+      async generate() {
+        return {
+          content: `===WORLD_YAML===\nid: portable-dimensions\nname: Harbor\nsummary: Guard the harbor.\ndefaultLocale: en-US\n===WORLD_MD===\n# Harbor\n1. Guard.\n2. Watch.\n3. Wait.\n===WORLD_PACKAGE_YAML===\n${JSON.stringify({ dimensions: { alarm: definition(17) } })}\n===END===`,
+          toolCalls: [],
+          finishReason: "stop",
+          usage: { inputTokens: 0, outputTokens: 0 },
+        };
+      },
+    },
+  });
+  if (!generated.success) throw new Error(generated.errors.join("; "));
+  expect(generated.manifest).not.toHaveProperty("dimensions");
+  await store.upsertWorld(
+    worldRecordFromManifest(generated.manifest, generated.lore, {
+      dimensions: generated.packageContent.dimensions,
+    }),
+  );
+  const registry = createPluginRegistry();
+  await registerDimensionProvider(registry, "builtin");
+  const app = new Hono();
+  const lock = createInProcessSessionLock();
+  const gate = createRpcApprovalGate();
+  app.use("*", async (c, next) => {
+    c.set("store", store);
+    c.set("pluginRegistry", registry);
+    c.set("sessionLock", lock);
+    c.set("rpcApprovalGate", gate);
+    c.set("activatePluginServerCode", async () => {});
+    await next();
+  });
+  app.route("/api/worlds", worldCrudRoutes);
+  app.route("/api/worlds", worldDataSyncRoutes);
+  app.route("/api/sessions", sessionRoutes);
+  const post = (url: string, body: unknown, method = "POST") =>
+    app.request(url, {
+      method,
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+  const created = await post("/api/sessions", {
+    id: "portable-dimension-session",
+    worldId: generated.id,
+    plugins: ["world-init"],
+  });
+  expect(created.status, await created.clone().text()).toBe(201);
+  const rows = () =>
+    store.listPluginData(
+      "portable-dimension-session",
+      "world-init",
+      "_dimensions",
+    );
+  expect(await rows()).toMatchObject([
+    { key: "alarm", value: { value: 17, version: 1 } },
+  ]);
+  const beforeLedger = await store.listWorldDataImportLedger(
+    "portable-dimension-session",
+  );
+  expect(beforeLedger).toHaveLength(1);
+  expect(
+    (
+      await post(
+        `/api/worlds/${generated.id}`,
+        { dimensions: { alarm: definition(23) } },
+        "PATCH",
+      )
+    ).status,
+  ).toBe(200);
+  const sync = (dryRun: boolean) =>
+    post(`/api/worlds/${generated.id}/sync-data`, {
+      sessionId: "portable-dimension-session",
+      dryRun,
+    });
+  expect((await sync(true)).status).toBe(200);
+  expect(await rows()).toMatchObject([{ value: { value: 17 } }]);
+  expect(
+    await store.listWorldDataImportLedger("portable-dimension-session"),
+  ).toEqual(beforeLedger);
+  expect((await sync(false)).status).toBe(200);
+  expect(await rows()).toMatchObject([{ value: { value: 23 } }]);
+}
 
 /** The same route/transaction expectations for every supported store. */
 export async function worldDataSelectionScenario(

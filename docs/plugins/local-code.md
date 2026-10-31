@@ -6,6 +6,8 @@
 
 先确认[声明式工具与服务导入](./prompt-only.md)不能满足需求，再添加代码。本页的 entry、工具和函数使包进入代码审批路径；以前免审批的启用不授权新代码。只对自己信任的入口运行提取。
 
+文件路径先看[声明文件与资源路径](../reference/plugins.md#declaration-paths)：根声明与 runtime 私有文件各有明确的基准目录。
+
 ## 开始之前
 
 - 做完了[第一个插件](./first-plugin.md)，读过[写插件要知道的规则](./essentials.md)。

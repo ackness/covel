@@ -21,7 +21,7 @@ const definition = (value: number) => ({
   schema: { type: "integer", minimum: 0 },
   initialValue: value,
 });
-// What `world.yaml` needs besides its dimensions to load as a world.
+// The file manifest contains metadata only.
 const manifest = {
   id: "world",
   name: "World",
@@ -90,24 +90,30 @@ describe("dynamic dimension author import and sync", () => {
     const root = await mkdtemp(path.join(tmpdir(), "covel-dimension-locale-"));
     roots.push(root);
     const world = path.join(root, "world");
-    await mkdir(world, { recursive: true });
+    await mkdir(path.join(world, "data"), { recursive: true });
+    await writeFile(path.join(world, "world.yaml"), JSON.stringify(manifest));
     await writeFile(
-      path.join(world, "world.yaml"),
+      path.join(world, "data/dimensions.yaml"),
       JSON.stringify({
-        ...manifest,
-        dimensions: {
-          mood: {
-            name: { "zh-CN": "气氛", "en-US": "Mood" },
-            schema: {
-              type: "object",
-              properties: { note: { type: "string", "x-i18n": true } },
-            },
-            initialValue: { note: { "zh-CN": "平静", "en-US": "Calm" } },
-            updateRule: {
-              "zh-CN": "气氛变化时更新。",
-              "en-US": "Update when the mood changes.",
-            },
+        mood: {
+          name: "Mood",
+          schema: {
+            type: "object",
+            properties: { note: { type: "string", "x-i18n": true } },
           },
+          initialValue: { note: "Calm" },
+          updateRule: "Update when the mood changes.",
+        },
+      }),
+    );
+    await writeFile(path.join(world, "world.zh-CN.yaml"), "name: 世界\n");
+    await writeFile(
+      path.join(world, "data/dimensions.zh-CN.yaml"),
+      JSON.stringify({
+        mood: {
+          name: "气氛",
+          initialValue: { note: "平静" },
+          updateRule: "气氛变化时更新。",
         },
       }),
     );
@@ -136,19 +142,13 @@ describe("dynamic dimension author import and sync", () => {
     ).toEqual([]);
   });
 
-  it("takes data/dimensions.yaml over inline dimensions, then protects progress even with force", async () => {
+  it("imports the canonical table once, then protects progress even with force", async () => {
     const args = await fixture();
     const root = await mkdtemp(path.join(tmpdir(), "covel-dimension-import-"));
     roots.push(root);
     const world = path.join(root, "world");
     await mkdir(path.join(world, "data"), { recursive: true });
-    await writeFile(
-      path.join(world, "world.yaml"),
-      JSON.stringify({
-        ...manifest,
-        dimensions: { stamina: definition(1), replaced: definition(1) },
-      }),
-    );
+    await writeFile(path.join(world, "world.yaml"), JSON.stringify(manifest));
     await writeFile(
       path.join(world, "data/dimensions.yaml"),
       JSON.stringify({ stamina: definition(3) }),
@@ -337,19 +337,19 @@ describe("dynamic dimension author import and sync", () => {
     });
     await args.store.close();
   });
-  it("imports and syncs a world's inline dimensions with no worldData descriptor", async () => {
+  it("imports and syncs canonical dimensions without a descriptor", async () => {
     const args = await fixture();
-    const root = await mkdtemp(path.join(tmpdir(), "covel-dimension-inline-"));
+    const root = await mkdtemp(
+      path.join(tmpdir(), "covel-dimension-canonical-"),
+    );
     roots.push(root);
     const world = path.join(root, "world");
-    await mkdir(world);
+    await mkdir(path.join(world, "data"), { recursive: true });
+    await writeFile(path.join(world, "world.yaml"), JSON.stringify(manifest));
     const writeManifest = (version: number) =>
       writeFile(
-        path.join(world, "world.yaml"),
-        JSON.stringify({
-          ...manifest,
-          dimensions: { stamina: definition(version) },
-        }),
+        path.join(world, "data/dimensions.yaml"),
+        JSON.stringify({ stamina: definition(version) }),
       );
     await writeManifest(1);
     const options = { ...args, worldsDirs: [root] };

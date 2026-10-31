@@ -62,7 +62,6 @@ export async function readWorldManifest(worldRoot: string): Promise<{
   /** The written `id`, else the name of the world's directory. */
   id?: string;
   worldData?: string;
-  dimensions?: unknown;
   characterSchema?: unknown;
   defaultLocale?: string;
   /** The world's editions, from its locale files (`worldEditionLocales`). */
@@ -75,7 +74,6 @@ export async function readWorldManifest(worldRoot: string): Promise<{
   return isRecord(raw)
     ? {
         id: typeof raw.id === "string" ? raw.id : undefined,
-        dimensions: raw.dimensions,
         characterSchema: raw.characterSchema,
         defaultLocale:
           typeof raw.defaultLocale === "string" ? raw.defaultLocale : undefined,

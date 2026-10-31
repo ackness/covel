@@ -8,11 +8,14 @@ import {
   createIsolatedPgDatabase,
   type IsolatedPgDatabase,
 } from "./pg-test-db.js";
-import { worldDataSelectionScenario } from "../helpers/world-data-selection-scenario.js";
 import {
   COLLISION_CASES,
   worldDataCollisionScenario,
 } from "../helpers/world-data-collision-scenario.js";
+import {
+  worldDataSelectionScenario,
+  portableDimensionSelectionScenario,
+} from "../helpers/world-data-selection-scenario.js";
 
 let database: IsolatedPgDatabase | undefined;
 try {
@@ -52,6 +55,14 @@ describe.skipIf(!database)("inferred world data on PostgreSQL", () => {
       }
     },
   );
+  it("imports and synchronizes portable generated dimensions with its ledger", async () => {
+    const store = await createPgStore(database!.url, { freshSchema: true });
+    try {
+      await portableDimensionSelectionScenario(store);
+    } finally {
+      await store.close();
+    }
+  });
   it.each([false, true])(
     "preserves activation, deferral, retry and transactions for portable content: %s",
     async (portable) => {

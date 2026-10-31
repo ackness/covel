@@ -15,6 +15,8 @@ Related material is on other pages:
 
 Below, the "deployment tier" (`DEPLOYMENT_TIER`) comes up many times. `self` is the default. It means the desktop app, and instances that a person deploys for their own use. `demo` is the tier for public web instances, meant for the official web app, which is not supported yet. `commercial` is the strictest tier, reserved for a possible future commercial edition. There are no accounts, tenant isolation, or quotas, and this repository does not maintain it. `demo` and `commercial` both require tokens. Together they are called the hosted tiers.
 
+Plugin file references follow the [declaration-directory rules](../reference/plugins.md#declaration-paths) and must remain inside the package after real-path resolution. Conventional `output.schema.json` cannot escape through a symlink or be inherited from a parent repository.
+
 ## Declarative execution boundary
 
 [Declarative classification](../reference/plugin-installation.md#declarative-plugins) requires a complete, bounded inventory that does not follow links and a content digest matching the loaded definition. Changed before/after signatures, registry replacement and failed reads cannot retain an old positive proof. Authorization reads live publication; execution snapshots freeze artifacts, not authority. Code-era runtime, tool and service snapshots cannot borrow a newer declarative exemption; cached code runtimes and actual module imports still require real code/runtime grants.
