@@ -372,3 +372,52 @@ describe("multi-file view authoring", () => {
     });
   });
 });
+
+describe("session page capability declarations", () => {
+  const page = {
+    id: "reader",
+    label: "Reader",
+    bridge: "session",
+    webview: { entry: "./page.html" },
+    capabilities: [
+      "submitAction",
+      "submitInteraction",
+      "invokeRuntime",
+      "abortExecution",
+      "openPanel",
+    ],
+  };
+  it("accepts ordinary session pages and keeps the capabilities", () => {
+    expect(pluginUiSpecIssues(page, "owner", "view")).toEqual([]);
+    expect(pluginUiSpecSchema.parse(page).capabilities).toEqual(
+      page.capabilities,
+    );
+  });
+  it.each(["right", "message", "segment"] as const)(
+    "refuses capabilities in %s",
+    (slot) => {
+      expect(
+        pluginUiSpecIssues(page, "owner", slot).map((issue) => issue.path),
+      ).toContain("capabilities");
+    },
+  );
+  it.each([
+    { capabilities: ["session"] },
+    { capabilities: ["invokeCommand"] },
+    { capabilities: ["submitAction", "submitAction"] },
+    { capabilities: "submitAction" },
+    { bridge: undefined },
+    { webview: undefined, view: { component: "Text" } },
+  ])("refuses malformed or misplaced capabilities %j", (change) => {
+    expect(
+      pluginUiSpecIssues({ ...page, ...change }, "owner", "view").some(
+        (issue) => issue.path.startsWith("capabilities"),
+      ),
+    ).toBe(true);
+  });
+  it("reports unsupported surface declarations instead of silently accepting them", () => {
+    expect(
+      pluginUiSpecIssues({ ...page, surface: "main" }, "owner", "view"),
+    ).toContainEqual({ path: "surface", message: "unknown UI spec field" });
+  });
+});

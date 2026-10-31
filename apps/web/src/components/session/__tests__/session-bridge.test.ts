@@ -43,7 +43,7 @@ const input = (
   slots: [],
   ...extra,
 });
-describe("read-only session projection", () => {
+describe("public session projection", () => {
   it("includes only player-visible story and user messages, without store metadata", () => {
     const result = buildSessionProjection(
       input({
@@ -202,7 +202,14 @@ describe("read-only session projection", () => {
               _hidden: "private",
               data: {
                 hidden: "private",
-                fields: [{ name: "public", runtimeId: "private" }],
+                fields: [
+                  {
+                    name: "public",
+                    label: "Public",
+                    type: "text",
+                    runtimeId: "private",
+                  },
+                ],
               },
             },
           }),
@@ -217,9 +224,9 @@ describe("read-only session projection", () => {
     expect(result.pending).toEqual([
       {
         seq: 3,
-        block: {
-          type: "interactive_form",
-          data: { fields: [{ name: "public" }] },
+        interaction: {
+          type: "form",
+          fields: [{ name: "public", label: "Public", type: "text" }],
         },
       },
     ]);
@@ -236,7 +243,8 @@ describe("read-only session projection", () => {
       }),
     );
     expect(result.pending).toHaveLength(8);
-    expect(result.pending[0]?.block).toEqual({ truncated: true });
+    expect(result.pending[0]?.interaction).toEqual({ type: "unavailable" });
+    expect(result.pending[0]).not.toHaveProperty("handle");
   });
   it("removes all reserved keys recursively and cuts values beyond depth 8", () => {
     expect(
@@ -285,7 +293,10 @@ describe("read-only session projection", () => {
         slots: [
           {
             slot: "stage.backdrop@1",
-            value: { ref: { type: "media", id: "opaque" }, _hidden: "private" },
+            value: {
+              ref: { id: "a".repeat(64), mime: "image/png", size: 1 },
+              _hidden: "private",
+            },
           },
         ],
       }),
@@ -297,12 +308,11 @@ describe("read-only session projection", () => {
       type: "npc",
       aliases: ["Alias"],
       description: "Known",
-      fields: { visible: 3 },
     });
     expect(result.slots).toEqual([
       {
         slot: "stage.backdrop@1",
-        value: { ref: { type: "media", id: "opaque" } },
+        value: { ref: { id: "a".repeat(64), mime: "image/png", size: 1 } },
       },
     ]);
     expect(sessionProjectionSchema.safeParse(result).success).toBe(true);

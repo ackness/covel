@@ -476,3 +476,93 @@ describe("switchSeatCharacter", () => {
     expect(result.current.state.session?.seats).toEqual(session.seats);
   });
 });
+
+it.each([false, true])(
+  "rechecks the calling page after a pending seat switch (retired: %s)",
+  async (retired) => {
+    let finish!: (value: { seats: Seat[] }) => void;
+    vi.spyOn(api, "setSeatCurrentCharacter").mockReturnValue(
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+    );
+    const send = vi
+      .spyOn(api, "sendAction")
+      .mockImplementation(() => new AbortController());
+    const { result } = renderActions(passthrough);
+    let active = true;
+    let switching!: Promise<void>;
+    act(() => {
+      switching = result.current.actions.switchSeatCharacter("main", "bo");
+    });
+    act(() => {
+      expect(
+        result.current.actions.submitComposerAction(
+          { kind: "say", text: "Hello" },
+          { isCurrent: () => active },
+        ),
+      ).toBe(true);
+    });
+    expect(send).not.toHaveBeenCalled();
+    active = !retired;
+    await act(async () => {
+      finish({ seats: [{ ...session.seats[0]!, currentCharacterId: "bo" }] });
+      await switching;
+    });
+    expect(send).toHaveBeenCalledTimes(retired ? 0 : 1);
+  },
+);
+
+it("refuses a retired page at the workspace dispatch boundary", async () => {
+  let active = true;
+  let dispatchQueued!: () => Promise<void>;
+  const send = vi
+    .spyOn(api, "sendAction")
+    .mockImplementation(() => new AbortController());
+  const { result } = renderActions({
+    ...passthrough,
+    run: (_id, _request, mutate) =>
+      new Promise((resolve, reject) => {
+        dispatchQueued = async () => {
+          try {
+            resolve(await mutate());
+          } catch (error) {
+            reject(error);
+          }
+        };
+      }),
+  });
+  act(() => {
+    expect(
+      result.current.actions.submitComposerAction(
+        { kind: "say", text: "Hello" },
+        { isCurrent: () => active },
+      ),
+    ).toBe(true);
+  });
+  active = false;
+  await act(() => dispatchQueued());
+  expect(send).not.toHaveBeenCalled();
+});
+
+it("refuses a second synchronous submission before the executing render", async () => {
+  const send = vi
+    .spyOn(api, "sendAction")
+    .mockImplementation(() => new AbortController());
+  const { result } = renderActions(passthrough);
+  act(() => {
+    expect(
+      result.current.actions.submitComposerAction({
+        kind: "say",
+        text: "First",
+      }),
+    ).toBe(true);
+    expect(
+      result.current.actions.submitComposerAction({
+        kind: "say",
+        text: "Keep this draft",
+      }),
+    ).toBe(false);
+  });
+  expect(send).toHaveBeenCalledOnce();
+});

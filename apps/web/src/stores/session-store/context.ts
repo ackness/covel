@@ -30,7 +30,7 @@ export interface SessionActions {
    */
   submitComposerAction: (
     submission: ComposerSubmission,
-    opts?: { drafts?: string },
+    opts?: { drafts?: string; isCurrent?: () => boolean },
   ) => boolean;
   /**
    * Switch the character a seat acts as. Rejects with the server's refusal;
@@ -57,6 +57,7 @@ export interface SessionActions {
     interactionId: string,
     type: "form" | "choice" | "confirmation",
     values: Record<string, unknown>,
+    options?: { isCurrent?: () => boolean },
   ) => Promise<InteractionSubmitResult>;
   executeCommand: (command: string) => void;
   retryRuntime: (

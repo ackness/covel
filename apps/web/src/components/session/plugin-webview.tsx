@@ -4,7 +4,7 @@ import {
   SESSION_BRIDGE_STREAM_INTERVAL_MS,
   type StreamFeed,
 } from "./session-bridge-stream.js";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button.js";
 import { PLUGIN_FRAME_PATH, PLUGIN_PAGE_READY_TIMEOUT_MS } from "@covel/shared";
@@ -36,6 +36,8 @@ export function PluginWebview(props: {
   stream?: StreamFeed;
   state: Readonly<Record<string, unknown>>;
   locked: boolean;
+  sessionPage?: boolean;
+  isCurrent?: () => boolean;
   handlers: Readonly<Record<string, PluginBridgeHandler>>;
 }) {
   const { t } = useTranslation();
@@ -72,6 +74,10 @@ export function PluginWebview(props: {
   const warned = useRef(false);
   const sessionSent = useRef(false);
   const activeFeed = useRef<StreamFeed | undefined>(undefined);
+  const fullTimer = useRef<ReturnType<typeof setTimeout> | undefined>(
+    undefined,
+  );
+  const isCurrent = () => current.current.isCurrent?.() ?? true;
   const fullState = () => {
     const snapshot = current.current.state;
     const feed = current.current.stream;
@@ -102,7 +108,7 @@ export function PluginWebview(props: {
     );
   };
   const pushFullState = () => {
-    if (!bridge.current) return;
+    if (!bridge.current || !isCurrent()) return;
     const snapshot = fullState();
     bridge.current.pushState(snapshot);
     sessionSent.current = Boolean(snapshot.session);
@@ -125,7 +131,8 @@ export function PluginWebview(props: {
       read: feed.read,
       send: ({ seq, append }) => {
         // A feed cannot send on the append lane without validated session state.
-        if (sessionSent.current) bridge.current?.pushStream(seq, append);
+        if (isCurrent() && sessionSent.current)
+          bridge.current?.pushStream(seq, append);
       },
       resync: pushFullState,
       intervalMs: SESSION_BRIDGE_STREAM_INTERVAL_MS,
@@ -139,11 +146,28 @@ export function PluginWebview(props: {
   };
   useEffect(() => {
     bindStream();
-    if (current.current.stream?.read() === null) pump.current?.flush();
-    pushFullState();
+    if (!bridge.current) return;
+    if (!isCurrent()) {
+      stopStream();
+      bridge.current?.close();
+      return;
+    }
+    if (!current.current.stream?.read()) {
+      clearTimeout(fullTimer.current);
+      fullTimer.current = undefined;
+      pump.current?.flush();
+      pushFullState();
+    } else if (fullTimer.current === undefined) {
+      fullTimer.current = setTimeout(() => {
+        fullTimer.current = undefined;
+        pushFullState();
+      }, SESSION_BRIDGE_STREAM_INTERVAL_MS);
+    }
   }, [state, props.stream]);
-  useEffect(
+  useLayoutEffect(
     () => () => {
+      clearTimeout(fullTimer.current);
+      fullTimer.current = undefined;
       stopStream();
       bridge.current?.close();
       bridge.current = null;
@@ -188,7 +212,7 @@ export function PluginWebview(props: {
   const connect = () => {
     const element = frame.current;
     const target = element?.contentWindow;
-    if (!target || connectedFrame.current === element) return;
+    if (!isCurrent() || !target || connectedFrame.current === element) return;
     connectedFrame.current = element;
     bridge.current?.close();
     const initialState = fullState();
@@ -198,6 +222,7 @@ export function PluginWebview(props: {
       () => ({
         ...current.current,
         state: initialState,
+        isCurrent,
       }),
       {
         onReady: () => {

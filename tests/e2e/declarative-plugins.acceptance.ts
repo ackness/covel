@@ -162,7 +162,10 @@ test("a declarative community notebook commits without grants, retains content c
     ).toBeVisible();
     await openView();
     await page
-      .getByRole("button", { name: "Allow session reading", exact: true })
+      .getByRole("button", {
+        name: "Allow requested capabilities",
+        exact: true,
+      })
       .click();
     const view = page
       .getByTestId("plugin-view-container")
@@ -178,12 +181,15 @@ test("a declarative community notebook commits without grants, retains content c
       .getByRole("button", { name: "View permissions", exact: true })
       .click();
     await page
-      .getByRole("button", { name: "Revoke story access", exact: true })
+      .getByRole("button", { name: "Revoke all page permissions", exact: true })
       .click();
     await expect(page.getByTestId("plugin-view-container")).toHaveCount(0);
     await openView();
     await page
-      .getByRole("button", { name: "Allow session reading", exact: true })
+      .getByRole("button", {
+        name: "Allow requested capabilities",
+        exact: true,
+      })
       .click();
     await expect(view.locator("#script-status")).toHaveText(
       "Notebook browser script loaded",
@@ -210,7 +216,10 @@ test("a declarative community notebook commits without grants, retains content c
       page.getByTestId("plugin-view-container").locator("iframe"),
     ).toHaveCount(0);
     await page
-      .getByRole("button", { name: "Allow session reading", exact: true })
+      .getByRole("button", {
+        name: "Allow requested capabilities",
+        exact: true,
+      })
       .click();
     await expect(view.locator("#script-status")).toHaveText(
       "Notebook browser script updated",

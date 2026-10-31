@@ -777,3 +777,5 @@ export {
   presentationRuleIssues,
 } from "./schemas/presentation-rules.js";
 export { resolveWorldPluginSelection } from "./world-plugin-selection.js";
+
+export * from "./schemas/session-bridge.js";

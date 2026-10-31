@@ -34,6 +34,7 @@ export function sendAction(
   onError?: (err: Error) => void,
   onDone?: () => void,
   onApproval?: (approval: ActionApproval) => Promise<boolean>,
+  canDispatch?: () => boolean,
 ): AbortController {
   const controller = new AbortController();
   const resumeSubscriptions = pauseSessionSubscriptions(req.sessionId);
@@ -41,14 +42,17 @@ export function sendAction(
   (async () => {
     try {
       const body = actionRequestSchema.parse(req);
-      const send = () =>
-        requestResponse("/api/actions", {
+      const send = () => {
+        if (canDispatch && !canDispatch())
+          throw new Error("Action is no longer current");
+        return requestResponse("/api/actions", {
           method: "POST",
           body: JSON.stringify(body),
           signal: controller.signal,
           sessionId: req.sessionId,
           operatorAuth: true,
         });
+      };
       let res = await send();
       const requested = new Set<string>();
       while (res.status === 202) {

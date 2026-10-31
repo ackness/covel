@@ -26,11 +26,19 @@ cpSync(
   join(plugins, "declarative-notebook"),
   { recursive: true },
 );
+cpSync(
+  resolve(import.meta.dirname, "../third-party/sandbox-surface-probe"),
+  join(plugins, "sandbox-surface-probe"),
+  { recursive: true },
+);
 // `home` is always a new mkdtemp-owned directory, never a user profile.
 process.once("exit", () => rmSync(home, { recursive: true, force: true }));
 
 export default defineConfig({
-  metadata: { declarativeNotebookRoot: join(plugins, "declarative-notebook") },
+  metadata: {
+    declarativeNotebookRoot: join(plugins, "declarative-notebook"),
+    sandboxProbeRoot: join(plugins, "sandbox-surface-probe"),
+  },
   testDir: import.meta.dirname,
   testMatch: "**/*.acceptance.ts",
   outputDir: resolve(import.meta.dirname, "artifacts/extensions"),

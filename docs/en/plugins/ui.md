@@ -696,3 +696,7 @@ messages:
 ## Updating display state with presentation
 
 For story-driven backdrops or music, use a [presentation selector](./advanced.md#presentation-selectors) to update owned display namespaces for existing UI slots. Presentation cannot read the full World Model or call slot services to bypass its scope; failure leaves story and next input available. See the [contract](../reference/plugins.md#presentation-runtimes).
+
+## Request player actions from a session page
+
+See the two ordinary views and shared page in [sandbox-surface-probe](../../../tests/third-party/sandbox-surface-probe/README.md). It reads public story and input context, answers interactions using handles, and saves dataset records through its own manual function runtime. Adding `capabilities` to the spec gives the player individual capability descriptions; server-code approval and page consent do not replace each other. Clear the action draft only for an accepted outcome, preserving it on refusal. Ordinary view layout is unchanged; main/composer replacement and heartbeat recovery are unavailable. See [page requests](../reference/ui-panels.md#page-requests-and-safe-outcomes) for the full contract.

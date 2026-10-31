@@ -12,7 +12,7 @@
 
 ## 无服务器代码的界面
 
-JSON 面板、模板、视图和输入模式可随[声明式包](./plugin-installation.md#声明式插件)发布。有效 webview 资源清单内的经典 `.js` 只在浏览器沙箱中运行；不授予服务器代码权限。`bridge: session` 仍要求对当前 spec、HTML 和多文件资源摘要的独立读取授权，拒绝或撤销后普通游戏界面仍可用。改脚本需要对新内容重新授权。宿主的返回/默认界面控件留在 iframe 外；现有 CSP、消息来源和逐 action 限制不变，没有桥接写入或整页替换能力。
+JSON 面板、模板、视图和输入模式可随[声明式包](./plugin-installation.md#声明式插件)发布。有效 webview 资源清单内的经典 `.js` 只在浏览器沙箱中运行；不授予服务器代码权限。`bridge: session` 仍要求对当前 spec、HTML 和多文件资源摘要的独立读取授权，拒绝或撤销后普通游戏界面仍可用。改脚本需要对新内容重新授权。宿主的返回/默认界面控件留在 iframe 外；现有 CSP、消息来源和逐 action 限制不变；页面写入另需逐能力授权，整页替换尚不支持。
 
 准备页和会话插件行在启用前显示 agent 的模型使用及实际触发时机；纯界面包没有模型提示。该提示不授予任何沙箱能力。
 
@@ -877,51 +877,81 @@ contributes:
 
 宿主在入口 `<head>` 后注入经典桥接脚本 `__covel__/bridge-<hash8>.js`。没有 `<head>` 时依次放在 `<html>`、doctype 后，或文档开头；嵌套入口自动添加 `../`。作者不用复制桥接代码。收到端口后脚本回报 `ready`，URL 页面等待 8 秒；超时在 iframe 上方显示失败和“重试”。宿主用不带凭据的 HEAD 探测：404 显示“此页面已更新，请重新加载。”，其他失败显示“页面加载失败。”。迟到的 `ready` 会清除错误。重试重新获取 spec 并重建 iframe；宿主的返回按钮始终可用。
 
-摘要是按相对路径排序的 `[relativePath, size, sha256(content)]` JSON 行的 SHA-256 前 32 位小写十六进制。注册表首次投影时计算，重新注册插件时重算；生产文件应只在重启时改变，不保留旧文件副本。重新注册后旧摘要 URL 返回 404，新 URL 可加载。入口 HTML 使用 `Cache-Control: no-cache`，每次重用都须重新验证；其 ETag 包含桥接脚本摘要。因此插件文件和 URL 未变时，宿主升级也会返回引用新版桥的 HTML。其余资源（包括带哈希文件名的桥接脚本）仍使用一年不可变缓存。
+摘要是按相对路径排序的 `[relativePath, size, sha256(content)]` JSON 行的 SHA-256 前 32 位小写十六进制。注册表首次投影时计算，重新注册插件时重算；生产文件应只在重启时改变，不保留旧文件副本。重新注册后旧摘要 URL 返回 404，新 URL 可加载。每次读取通过同一个有界 O_NOFOLLOW 句柄核对长度和 SHA-256，再使用该缓冲区响应；同长度改动也会在 GET、HEAD 或 304 之前返回 no-store 404。入口 HTML 使用 `Cache-Control: no-cache`，每次重用都须重新验证；其 ETag 包含桥接脚本摘要。因此插件文件和 URL 未变时，宿主升级也会返回引用新版桥的 HTML。其余资源（包括带哈希文件名的桥接脚本）仍使用一年不可变缓存。
 
-`bridge: "session"` 的逐能力授权不变。整份 spec 的授权哈希包含 URL，而 URL 的摘要覆盖所有发布文件；任一文件变化都会使旧授权失效。没有桥接授权就不挂载读取会话的页面。没有新增任何会话写操作，也不保存每会话的视图选择。开发模式未获服务端代码批准的插件可能要重启才能重算摘要。
+`bridge: "session"` 的逐能力授权不变。整份 spec 的授权哈希包含 URL，而 URL 的摘要覆盖所有发布文件；任一文件变化都会使旧授权失效。没有桥接授权就不挂载读取会话的页面。页面写能力见下文；不保存每会话的视图选择。开发模式未获服务端代码批准的插件可能要重启才能重算摘要。
 
 ### 读取会话前的授权
 
-只有 `contributes.ui.view` 中的 `webview` 可以声明 `bridge: "session"`。玩家同意前不挂载这个页面，也不发送任何会话投影。世界默认选择了它时同样先弹出授权提示，并在下面显示 `parsed` / `stage`。
+只有 `contributes.ui.view` 中的 `webview` 可以声明 `bridge: "session"`，可选 `capabilities` 列出额外能力。列表最多 5 项，不得重复；未知能力、其他 placement、json-render 视图或缺少 `bridge: "session"` 都产生字段诊断，只移除对应功能。`session` 由 bridge 推导，不写进列表。`surface` 尚不支持；现有复数 `surfaces` 仍表示面板/舞台路由。
 
-授权能力为“读取会话”，绑定插件 ID 和整份已加载 spec（含内联 HTML）的 SHA-256 内容哈希。记录通过 SettingsStore 保存在本设备，键为 `ui.pluginViewConsent.<pluginId>.<hash>.session`。spec 或 HTML 改变后重新请求授权；在视图栏的“视图权限”菜单里点“撤销故事读取授权”可以撤销，并返回默认视图。授权独立于服务端代码审批，适用于所有来源的插件。
+玩家同意全部请求能力并成功保存之前，不挂载页面、不发送投影，也不允许调用。世界默认视图同样先显示授权提示，下面保留 `parsed` / `stage`。对话框列出插件、页面和每项能力的含义。内置来源、可信来源、声明式分类和服务端代码批准都不能替代页面授权。
 
-### SessionProjection（版本 1）
+<!-- prettier-ignore -->
+| 能力 | 含义 |
+| --- | --- |
+| `session` | 读取公开故事与输入信息，自动请求 |
+| `submitAction` | 提交玩家行动 |
+| `submitInteraction` | 回答当前待处理交互 |
+| `invokeRuntime` | 运行所属插件的手动 runtime |
+| `abortExecution` | 停止当前会话的执行 |
+| `openPanel` | 打开所属插件已声明的面板 |
 
-授权后的页面从 `window.covel` 的状态对象读取 `session` 字段，也可用 `window.covel.subscribe` 订阅变化。下表是该字段的内容。它不重复顶层的 `locale` 和 `theme`。
+记录通过 SettingsStore 保存在本设备，键为 `ui.pluginViewConsent.<pluginId>.<hash>.<capability>`；读取键的 `.session` 后缀保留。`hash` 是整份已解析 spec 的规范 JSON 的 SHA-256，包含能力列表、内联 HTML 或覆盖所有资源的摘要 URL。内容改变后重新询问；旧读取授权不授予额外能力。所有写入完成持久化后才生效，保存期间的乐观通知不算同意。视图栏的“视图权限”可单独撤销能力或撤销全部；撤销立即停止投影和调用并返回默认视图，即使保存失败也不会继续授权。其他窗口的设置刷新也能撤销访问。
+
+<a id="sessionprojection版本-1"></a>
+
+### SessionProjection（版本 2）
+
+页面读取 `window.covel` 暴露的状态对象的 `session` 字段，或通过 `window.covel.subscribe` 订阅投影。顶层只提供 `session`、`locale` 和宿主 `theme`；不再提供普通面板的 `data`、`sources`、`jobs`、`context` 或自己的 KV。
 
 <!-- prettier-ignore -->
 | 字段 | 内容 |
 | --- | --- |
-| `version` | 固定为 `1` |
-| `phase` | `setup` 或 `playing` |
-| `turn` | 已提交的玩家回合数 `completedPlayerTurns` |
-| `executing` | 是否正在执行 |
-| `messages[]` | `{ seq, role, text, truncated? }`。仅包含 `kind === "story"` 的 assistant 消息和不带 block 的 user 消息。`seq` 是首次观测时分配的稳定正整数，宿主淘汰旧消息或补载历史时不重新编号 |
-| `streaming` | `{ seq, text }` 或 `null`。`stream_` 占位消息只在这里出现，不进入 `messages`；最终故事消息沿用占位消息的序号 |
-| `pending[]` | `{ seq, block }`。宿主仍等待玩家回答的交互；`seq` 是同一消息的稳定序号，block 去掉隐藏字段 |
-| `characters[]` | 公开角色的 `id`、`name`、`type`，可选 `aliases`、`description`、`fields`；其余角色字段不传 |
-| `slots[]` | `{ slot, key?, value }`，宿主已经显示的内核 UI 槽位值；媒体引用保持不透明对象 |
+| `version` | 固定为 `2` |
+| `phase` / `turn` / `executing` | `setup` 或 `playing`、已提交玩家回合数、执行状态 |
+| `messages[]` | `{seq, role, text, truncated?}`，仅公开 story 和无 block 的玩家消息 |
+| `streaming` | `{seq, text}` 或 `null`；最终故事继承占位消息的序号 |
+| `pending[]` | `{seq, interaction, handle?}`，公开交互和当前 frame 的不透明回答句柄 |
+| `input.seats[]` | 人类座位的 `{id, role, characterIds, currentCharacterId?, allowed}`；只有公开关联标识，不含用户或账户身份 |
+| `input.kinds[]` | 当前座位可用行动的 `{kind, label, text, actor, fields?}`；字段只含公开 JSON Schema 显示词汇，不发送可执行验证器 |
+| `characters[]` | `id`、`name`、`type`，可选 `aliases`、`description`；不包含任意 `fields` 或私人知识 |
+| `slots[]` | `{slot, key?, value}`，经过内核槽位 schema 校验；媒体只保留 `{id,mime,size}` 的不透明引用 |
 
-序号只在当前会话桥接实例中有效，按首次观测分配，不复用。补载的旧历史会获得新的序号；页面按数组顺序显示消息，不能按 `seq` 排序。
+`interaction` 的类型为 `form`、`choice`、`confirmation` 或 `unavailable`。表单公开标题、提交标签和字段的名称、类型、标签、占位符、必填、默认值、数值限制与选项。选项公开 `choices[].{id,label,description?}`；确认公开提示和确认/取消标签。内部 block/turn/interaction 引用、`meta`、动作映射和服务端验证器均留在宿主。句柄只在当前页面尝试和当前交互有效；回答、替换、淘汰或离开后失效。自定义 JSON UI 和不支持/过大的交互只显示 `unavailable`，没有句柄，宿主提供打开默认交互界面的按钮。可选建议仍由宿主管理。
 
-投影不包含消息 `id`、`turnId`、`requestId`、`runtimeId`、时间戳、非故事的内部消息、推理、执行步骤、插件数据行、设置、供应商密钥或会话令牌。投影构造不读 `plugin_data`。角色的公开 `id` 是角色关联标识，不是消息元数据。
-
-嵌套值递归移除所有 `_` 开头的键，以及 `hidden`、`concealed`、`turnId`、`requestId`、`runtimeId`、`sessionId`、`timestamp`、`createdAt`、`updatedAt`、`uuid`；超过 8 层的值变成 `null`。投影在宿主校验，失败时不发送并只记录一次警告。
+`seq` 在当前会话桥实例中按首次观测分配，不复用。补载历史可能得到较大的序号，页面按数组顺序显示，不能按序号排序。投影不读取插件数据、结果、操作记录、推理、步骤、原生供应商续接或压缩摘要。上游 concealed 私有来源仍由正常执行投影控制，不能靠删除某个键把任意文本变成公开内容。投影校验失败时不发送 session 或流，不回退到原始对象。
 
 <!-- prettier-ignore -->
 | 内容 | 上限与处理 |
 | --- | --- |
-| 消息窗口 | 最近 200 条，消息文本合计最多 256 KiB，先移除最旧的消息 |
-| 单条消息文本 | 32 KiB，截断后带 `truncated: true` |
+| 消息 | 最近 200 条，文本合计 256 KiB；单条 32 KiB，截断带 `truncated: true` |
 | 流式文本 | 64 KiB |
-| 角色 | 最多 100 个，每个序列化后最多 8 KiB，超过时跳过 |
-| 待答交互 | 最多 8 个，每个 block 序列化后最多 16 KiB，过大的替换为 `{ truncated: true }` |
+| 角色 | 最多 100 个，每个序列化后 8 KiB；超过时跳过 |
+| 待答交互 | 最多 8 个，每个 16 KiB；超过时改为 `unavailable` 且没有句柄 |
 
-KiB 按 UTF-8 字节计算。状态变化推送完整投影；流式文本用 `{ type: "stream", seq, append }` 合并推送，间隔 100 ms，结束时立即补齐尾部。完整推送也带当时的流式全文，供页面重新同步。叙事重置会使旧追加基线失效，下一次推送用完整文本替换旧草稿；即使替换文本在 100 ms 内超过旧文本长度，也不会拼接旧前缀。正常完成仍会补齐最后一段文本。
+KiB 按 UTF-8 计算。流式追加每 100 ms 合并一次；有流时的完整状态推送也合并，其他状态变化不会绕过节流。完整状态包含当前流全文并建立追加基线。完成立即补齐尾部；重置、缩短或重试用完整状态替换草稿，即使新文本在计时器触发前已经超过旧文本。断开会取消订阅与排队计时器。
 
-**此版本的会话桥只读。** 不新增 `submitAction`、表单提交、中止或打开面板能力。原有 `invokeRuntime`、`invokePluginAction`、`invokeCommand`、`emitEvent`、`setUiState` 保持原样。图片只传引用，不传字节或 blob URL，因此示例页不显示图片；也不提供输入框。单文件页面没有握手超时提示；多文件页面的超时和重试见[多文件页面](#多文件页面)。宿主返回按钮一直可用。
+### 页面请求与安全结果
+
+仍使用一个 MessagePort 和 `window.covel.invoke(method, params)`。参数 schema 严格拒绝未声明字段；页面不能指定 actor、source、会话/回合引用、插件身份、HTTP 路径、令牌、proposal 或模型/供应商覆盖。
+
+<!-- prettier-ignore -->
+| 方法 | 参数与行为 |
+| --- | --- |
+| `submitAction` | `{kind,text?,fields?,seatId?}`；走普通输入准入、座位切换等待、workspace 和 SSE。服务端推导 actor 与 `source: player`。斜杠文本仍作为玩家行动；不走输入框的 command RPC 快捷方式。普通执行忙碌时拒绝，自动推进时走已有的中断并提交；必答交互或 setup 门禁时不可用 |
+| `submitInteraction` | `{handle,values}`；宿主解析当前句柄和内部引用，调用正常交互提交，在同一流保存回答并开始后续回合。字段拒绝保留可编辑状态；重复或过期句柄不可提交，不使用本地 `submitBlock` 代替持久化 |
+| `invokeRuntime` | `{runtimeId,payload?}`；仅限当前启用、所属插件的手动 runtime，不允许 subagent-only。使用正常 RPC 审批、workspace、提案校验、hook 和提交，不开放 action/command/event RPC |
+| `abortExecution` | `{}`；停止当前租约会话的执行，执行中仍可调用；不撤销已提交回合。宿主 Stop 不依赖此授权 |
+| `openPanel` | `{panelId}`；仅打开当前声明的所属插件面板，不授予额外数据或写入权限 |
+
+成功结果只有 `{status,code?,issues?}`。`status` 为 `accepted`、`committed`、`rejected` 或 `unavailable`。`accepted` 表示正常通道已接纳，后台作业也是接纳；不表示存档已经改变。同步 runtime 的正常响应确认提交且目标成功时才返回 `committed`。`code` 为固定枚举 `invalid-request`、`permission-denied`、`busy`、`stale`、`already-answered`、`field-invalid`、`runtime-refused`、`failed`；字段问题为 `{field?,code:"invalid"}`，最多 32 项。不返回原始 RPC、输出/effects、提案、作业 ID、审批内容、路径或错误文本。当前接口不提供 `setUiState`；页面可用内存保留自己的草稿，离开页面后销毁。
+
+每条连接最多 8 个进行中的调用，序列化请求最多 128 KiB。已见请求 ID 不可重复执行；连接最多记住 4096 个 ID，用完后拒绝新请求直到显式重建 frame，不淘汰旧 ID。关闭时拒绝可送达的页面 promise，丢弃迟到回复；页面超时不自动重发修改。这不是跨重载的 exactly-once 保证。
+
+会话导航、插件停用、内容替换、撤权、返回或卸载都会使当前租约失效。宿主在异步等待后及审批重试前再次核对归属。正常输入也会在等待座位切换、自动推进停止和 workspace 后核对调用方；已经被服务端接纳的操作可以正常结算，但不回复已关闭的页面。
+
+仍是普通视图布局，不提供主区域/输入框替换或心跳恢复。单文件页没有握手超时提示，多文件页保留已有的 8 秒覆盖层和 Retry；图片不提供字节或 blob 通道。宿主返回控件始终可用。
 
 ## 组件 Catalog
 

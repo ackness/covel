@@ -412,3 +412,45 @@ it.skipIf(process.platform === "win32")(
     await missing("app.js");
   },
 );
+
+it.each([
+  "index.html",
+  "app.js",
+  "style.css",
+  "icon.svg",
+  "img/logo.png",
+  "font.woff2",
+])(
+  "refuses same-size changes to %s before GET, HEAD or conditional success",
+  async (file) => {
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const before = await request(file);
+    expect(before.status).toBe(200);
+    const etag = before.headers.get("etag")!;
+    const { readFile } = await import("node:fs/promises");
+    const bytes = await readFile(path.join(root, "p/ui/app", file));
+    const changed = Buffer.alloc(bytes.length, "x");
+    expect(changed.equals(bytes)).toBe(false);
+    await put(`ui/app/${file}`, changed);
+    for (const init of [
+      {},
+      { method: "HEAD" },
+      { headers: { "If-None-Match": etag } },
+    ]) {
+      const result = await request(file, init);
+      expect(result.status).toBe(404);
+      expect(result.headers.get("cache-control")).toBe("no-store");
+      expect(result.headers.get("etag")).toBeNull();
+      expect(await result.text()).not.toContain(changed.toString());
+    }
+    const old = prefix;
+    await register();
+    const next = await index();
+    expect(next).not.toBe(old);
+    await missing(file);
+    prefix = next;
+    const fresh = await request(file);
+    expect(fresh.status).toBe(200);
+    expect(await fresh.text()).toContain(changed.toString());
+  },
+);

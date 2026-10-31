@@ -322,3 +322,43 @@ it("ignores an authored classification claim when executable files exist", () =>
     ).mode,
   ).toBe("code");
 });
+
+it("validates the bridge adopter without executing handlers and keeps a UI-only distribution declarative", async () => {
+  const root = path.join(await temp(), "sandbox-surface-probe");
+  await cp(
+    path.resolve(
+      import.meta.dirname,
+      "../../../tests/third-party/sandbox-surface-probe",
+    ),
+    root,
+    { recursive: true },
+  );
+  const handler = path.join(root, "runtimes/write/handler.js");
+  await writeFile(
+    handler,
+    'throw new Error("Metadata discovery executed server code"); export default async function () {}',
+  );
+  const discovery = await discoverPluginAt(root);
+  const definition = await loadPluginDefinition(discovery!);
+  expect(definition.executionAssessment?.mode).toBe("code");
+  const report = await validatePluginPackage(root);
+  expect(report.ok, JSON.stringify(report.issues)).toBe(true);
+  const ui = await loadPluginUiSpecs(
+    root,
+    "sandbox-surface-probe",
+    definition.packageManifest.manifest.ui,
+  );
+  expect(ui.diagnostics).toEqual([]);
+  expect(ui.slots.view).toHaveLength(2);
+  expect(ui.slots.view?.[0]?.capabilities).toEqual([
+    "submitAction",
+    "submitInteraction",
+    "invokeRuntime",
+    "abortExecution",
+    "openPanel",
+  ]);
+  await rm(path.join(root, "runtimes"), { recursive: true });
+  const clean = await loadPluginDefinition((await discoverPluginAt(root))!);
+  expect(clean.executionAssessment?.mode).toBe("declarative");
+  expect((await validatePluginPackage(root)).ok).toBe(true);
+});

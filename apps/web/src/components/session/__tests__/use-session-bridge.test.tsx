@@ -241,3 +241,46 @@ it("uses the same stable ordinal for the projection and feed across eviction and
     result.current.projection?.messages.map((message) => message.seq),
   ).toEqual([3, 1]);
 });
+
+it("builds version two from public lanes while unrelated private state changes", () => {
+  const publicStory: StreamMessage = {
+    id: "public",
+    role: "assistant",
+    kind: "story",
+    content: "A public story",
+    timestamp: "internal",
+  };
+  const next = {
+    ...mocks.state,
+    messages: [
+      publicStory,
+      {
+        ...publicStory,
+        id: "private",
+        kind: "plugin",
+        content: "credential-sentinel",
+      },
+    ],
+    runtimeResults: [
+      {
+        providerContinuation: "credential-sentinel",
+        reasoningContent: "credential-sentinel",
+      },
+    ],
+    jobs: { private: "credential-sentinel" },
+    context: { private: "credential-sentinel" },
+  };
+  mocks.state = next;
+  const { result, rerender } = renderHook(() => useSessionBridge("s"));
+  expect(result.current.projection).toMatchObject({
+    version: 2,
+    messages: [{ text: "A public story" }],
+    input: { seats: [], kinds: [] },
+  });
+  mocks.state = { ...next, executing: false };
+  rerender();
+  expect(JSON.stringify(result.current.projection)).not.toContain(
+    "credential-sentinel",
+  );
+  expect(result.current.projection?.messages).toHaveLength(1);
+});

@@ -1546,3 +1546,7 @@ runtime 的终态：
 ```
 
 事件不含原始输入、自由原因、素材路径、回复或凭证。派发与缓存命中沿用 `gateway.calling` / `gateway.responded`，只记录方法和命中标志；提供方错误不进入呈现诊断。
+
+## 沙箱会话页面协议
+
+普通会话 webview 使用单一 MessagePort，公开投影升级到版本 2；`pending[].interaction` 和当前 frame 的不透明句柄替代原始 block，`input` 提供人类座位和当前可用行动。逐能力授权后，页面可请求玩家行动、交互回答、所属插件的手动 runtime、停止和所属面板导航。回复仅含固定安全结果，不传递执行内部对象。协议、上限、重放限制与失效规则的唯一字段表见[会话界面桥](./ui-panels.md#sessionprojection版本-2)。正常 HTTP/SSE 协议和服务端鉴权、提案提交保持原边界。

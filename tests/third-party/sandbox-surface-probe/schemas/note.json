@@ -1,0 +1,9 @@
+{
+  "type": "object",
+  "properties": {
+    "id": { "type": "string" },
+    "text": { "type": "string", "maxLength": 2000 }
+  },
+  "required": ["id", "text"],
+  "additionalProperties": false
+}

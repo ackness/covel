@@ -2,7 +2,10 @@ import { AutoAdvanceControl } from "./auto-advance-control.js";
 import { parsePluginViewMode } from "@covel/shared";
 import { usePluginViews } from "./game-view/use-plugin-views.js";
 import { PluginViewHost } from "./plugin-view-host.js";
-import { usePluginViewConsent } from "./plugin-view-consent.js";
+import {
+  requestedViewGrants,
+  usePluginViewConsent,
+} from "./plugin-view-consent.js";
 import { Button } from "@/components/ui/button.js";
 import { emitToast } from "@/lib/toast-channel.js";
 import { SessionDimensionsPanel } from "./session-dimensions-panel.js";
@@ -154,7 +157,7 @@ export function GameView({
   );
 
   const pluginViews = usePluginViews(session.id, sessionPlugins, i18n.language);
-  const viewConsent = usePluginViewConsent(pluginViews.views);
+  const viewConsent = usePluginViewConsent(pluginViews.views, session.id);
   const [viewMode, setViewMode, viewInfo] = useGameViewMode(
     world,
     pluginViews,
@@ -164,6 +167,8 @@ export function GameView({
     (entry) => entry.mode === viewMode,
   );
   const consentEntry = viewInfo.consentView;
+  const consentDialog = useRef(consentEntry);
+  consentDialog.current = consentEntry;
   const [savingViewConsent, setSavingViewConsent] = useState(false);
   // Full-screen stage: collapse both studio rails + hide the session header so
   // the stage fills the viewport. Session-memory only (no persistence).
@@ -651,6 +656,13 @@ export function GameView({
                     })}
                   </DialogDescription>
                 </DialogHeader>
+                <ul className="list-disc pl-5">
+                  {requestedViewGrants(consentEntry).map((capability) => (
+                    <li key={capability}>
+                      {t(`session.viewCapability.${capability}`)}
+                    </li>
+                  ))}
+                </ul>
                 <div className="flex justify-end gap-2">
                   <Button
                     variant="outline"
@@ -663,7 +675,10 @@ export function GameView({
                     onClick={() => {
                       setSavingViewConsent(true);
                       void viewConsent
-                        .grant(consentEntry)
+                        .grant(
+                          consentEntry,
+                          () => consentDialog.current === consentEntry,
+                        )
                         .catch(() =>
                           emitToast("error", t("settings.saveFailed")),
                         )
@@ -679,15 +694,16 @@ export function GameView({
           {activePluginView && parsePluginViewMode(viewMode) ? (
             <PluginViewHost
               onRetry={pluginViews.reload}
-              key={activePluginView.mode}
+              key={JSON.stringify([session.id, activePluginView.mode])}
               entry={activePluginView}
               sessionId={session.id}
               sessionBridgeAllowed={viewConsent.isAllowed(activePluginView)}
+              isCurrent={viewConsent.isCurrent(activePluginView)}
               onFallback={() => handleViewModeChange(viewInfo.hostDefault)}
-              onRevoke={() => {
+              onRevoke={(capability) => {
                 handleViewModeChange(viewInfo.hostDefault);
                 void viewConsent
-                  .revoke(activePluginView)
+                  .revoke(activePluginView, capability)
                   .catch(() => emitToast("error", t("settings.saveFailed")));
               }}
             />

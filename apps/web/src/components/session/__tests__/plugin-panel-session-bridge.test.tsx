@@ -36,10 +36,20 @@ it.each([viewEntry, pageViewEntry])(
       spec,
       fill: true,
       sessionBridge: { projection, stream },
-      stateOverride: {},
+      stateOverride: { private: "credential-sentinel" },
+      surfaceContext: { secret: "credential-sentinel" },
+      handlers: { invokePluginAction: vi.fn() },
     };
     const view = render(<PluginPanel {...values} />);
     expect(captured.props?.state.session).toEqual(projection);
+    expect(Object.keys(captured.props!.state).sort()).toEqual([
+      "locale",
+      "session",
+    ]);
+    expect(captured.props?.handlers).toEqual({});
+    expect(JSON.stringify(captured.props?.state)).not.toContain(
+      "credential-sentinel",
+    );
     expect(captured.props?.stream).toBe(stream);
     expect(captured.props?.fill).toBe(true);
     expect(captured.props?.src).toBe(spec.webview?.url);

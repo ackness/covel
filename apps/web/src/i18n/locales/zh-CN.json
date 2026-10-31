@@ -514,11 +514,11 @@
     "pageRetry": "重试",
     "viewFailed": "“{{label}}”无法渲染，已返回默认视图。",
     "viewPermissions": "视图权限",
-    "revokeViewConsent": "撤销故事读取授权",
+    "revokeViewConsent": "撤销此页面的全部权限",
     "viewConsentTitle": "允许“{{label}}”读取此会话？",
-    "viewConsentDescription": "{{plugin}} 请求读取故事消息、流式文本、待答交互、公开角色和可见界面槽位。授权只适用于本设备上的此版本视图，可在视图菜单中撤销。",
+    "viewConsentDescription": "{{plugin}} 请求为此页面启用以下能力。授权保存在本设备，页面内容变化后会重新询问。",
     "viewConsentDecline": "使用默认视图",
-    "viewConsentAllow": "允许读取会话",
+    "viewConsentAllow": "允许所请求的能力",
     "autoAdvanceLimit": "自动推进轮数",
     "autoAdvanceOff": "关闭",
     "autoAdvanceNextInput": "从下一次输入开始生效",
@@ -527,7 +527,17 @@
     "playAs": "游玩身份",
     "rolePlayer": "玩家",
     "roleHost": "主持人",
-    "roleSpectator": "旁观者"
+    "roleSpectator": "旁观者",
+    "viewCapability": {
+      "session": "读取公开故事与输入信息",
+      "submitAction": "提交玩家行动",
+      "submitInteraction": "回答待处理交互",
+      "invokeRuntime": "运行此插件的手动运行时",
+      "abortExecution": "停止当前执行",
+      "openPanel": "打开此插件的面板"
+    },
+    "revokeViewCapability": "撤销：{{capability}}",
+    "viewOpenInteraction": "在默认界面中打开交互"
   },
   "blocks": {
     "actionPlaceholder": "或输入自定义行动...",

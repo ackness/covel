@@ -320,3 +320,44 @@ it("localizes failures without server details instead of showing a runtime ident
   });
   expect(emitToast).toHaveBeenLastCalledWith("error", "Translated failure");
 });
+
+it("denies a pending approval when the caller retires and never retries the mutation", async () => {
+  let active = true;
+  let decide!: (value: boolean) => void;
+  const confirmation = new Promise<boolean>((resolve) => {
+    decide = resolve;
+  });
+  const submitApproval = vi.fn(async () => ({ ok: true }) as never);
+  const retry = vi.fn(async (): Promise<PluginRpcResponse> => ({
+    status: "ok",
+  }));
+  const pending = resolvePluginRpcApprovalResponse({
+    response: {
+      status: "approval-required",
+      approvalId: "pending",
+      pending: {
+        sessionId: "one",
+        pluginId: "owner",
+        action: "runtime:owner/write",
+      },
+    },
+    sessionId: "one",
+    pluginId: "owner",
+    actionLabel: "write",
+    t,
+    confirm: () => confirmation,
+    submitApproval,
+    retry,
+    isCurrent: () => active,
+  });
+  active = false;
+  decide(true);
+  expect(await pending).toBeNull();
+  expect(submitApproval).toHaveBeenCalledWith(
+    "pending",
+    "deny",
+    "session",
+    "one",
+  );
+  expect(retry).not.toHaveBeenCalled();
+});

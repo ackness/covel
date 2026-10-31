@@ -71,6 +71,9 @@ it("baselines every full push with the current stream, flushes the tail and clea
   view.rerender(
     <PluginWebview {...props} state={{ ...props.state, locale: "en" }} />,
   );
+  act(() => {
+    vi.advanceTimersByTime(100);
+  });
   expect(mocks.push.mock.lastCall?.[0]).toMatchObject({
     session: { streaming: { seq: 2, text: "abc" } },
   });
@@ -189,4 +192,71 @@ it("forwards reset notifications into the append pump before longer replacement 
   expect(mocks.push.mock.lastCall?.[0]).toMatchObject({
     session: { streaming: { seq: 2, text: "long replacement" } },
   });
+});
+
+it("coalesces fifty unrelated renders while streaming and drops queued sends on retirement", () => {
+  let text = "";
+  let active = true;
+  const listeners = new Set<() => void>();
+  const stream = {
+    read: () => ({ seq: 1, text }),
+    subscribe: (listener: () => void) => {
+      listeners.add(listener);
+      return () => {
+        listeners.delete(listener);
+      };
+    },
+  };
+  const props = {
+    title: "Bounded stream",
+    html: "page",
+    locked: false,
+    handlers: {},
+    stream,
+    isCurrent: () => active,
+  };
+  const view = render(
+    <PluginWebview
+      {...props}
+      state={{ session: { ...projection, streaming: { seq: 1, text: "" } } }}
+    />,
+  );
+  fireEvent.load(screen.getByTitle("Bounded stream"));
+  for (let index = 0; index < 50; index++) {
+    text += "字🙂";
+    act(() => {
+      for (const listener of listeners) listener();
+    });
+    view.rerender(
+      <PluginWebview
+        {...props}
+        state={{
+          locale: String(index),
+          session: { ...projection, streaming: { seq: 1, text: "" } },
+        }}
+      />,
+    );
+  }
+  expect(mocks.push).not.toHaveBeenCalled();
+  expect(mocks.append).not.toHaveBeenCalled();
+  act(() => {
+    vi.advanceTimersByTime(100);
+  });
+  expect(mocks.push).toHaveBeenCalledTimes(1);
+  expect(mocks.push.mock.lastCall?.[0]).toMatchObject({
+    session: { streaming: { text } },
+  });
+  const sent = mocks.push.mock.calls.length;
+  text += "late";
+  act(() => {
+    for (const listener of listeners) listener();
+  });
+  active = false;
+  act(() => {
+    vi.advanceTimersByTime(100);
+  });
+  expect(mocks.push).toHaveBeenCalledTimes(sent);
+  expect(mocks.append.mock.calls.flat()).not.toContain("late");
+  view.unmount();
+  expect(listeners.size).toBe(0);
 });

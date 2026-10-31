@@ -12,7 +12,7 @@ The basic idea has one rule. A plugin describes its UI in a JSON document (calle
 
 ## UI without server code
 
-JSON panels, templates, views and composer modes can ship in a [declarative package](./plugin-installation.md#declarative-plugins). Classic `.js` files in a valid webview asset plan run only in the browser sandbox and grant no server-code permission. `bridge: session` still needs independent read consent for the current spec, HTML and multi-file asset digest. Denial or revocation leaves the ordinary game UI usable; script changes require consent for new content. Host back/default controls stay outside the iframe. CSP, message-source validation and per-action restrictions remain; no bridge writes or whole-surface replacement are added.
+JSON panels, templates, views and composer modes can ship in a [declarative package](./plugin-installation.md#declarative-plugins). Classic `.js` files in a valid webview asset plan run only in the browser sandbox and grant no server-code permission. `bridge: session` still needs independent read consent for the current spec, HTML and multi-file asset digest. Denial or revocation leaves the ordinary game UI usable; script changes require consent for new content. Host back/default controls stay outside the iframe. CSP, message-source validation and per-action restrictions remain; page writes require separate capability consent; whole-surface replacement is not available.
 
 Preparation and session plugin rows disclose model use and actual agent triggers before enable. UI-only packages have no model notice. The notice grants no sandbox capability.
 
@@ -879,51 +879,81 @@ Use classic external scripts such as `<script src="app.js"></script>`, without m
 
 The host injects the classic bridge script `__covel__/bridge-<hash8>.js` after the entry's `<head>`. With no `<head>`, it uses `<html>`, then the doctype, then the start of the document. Nested entries get the required `../` prefix. Authors do not copy bridge code. The script acknowledges its port with `ready`; URL pages wait 8 seconds, then show a failure overlay with Retry over the iframe. A credential-free HEAD probe distinguishes 404 ("This page was updated; reload it.") from other failures ("This page could not be loaded."). A late `ready` clears the error. Retry fetches the spec again and remounts the iframe; host back controls stay available.
 
-The digest is the first 32 lowercase hexadecimal characters of SHA-256 over JSON lines of `[relativePath, size, sha256(content)]`, sorted by relative path. It is computed on the first registry projection and recomputed on re-registration. Production files should change only on restart; old file copies are not retained. After re-registration old digest URLs return 404 and the new URL works. Entry HTML uses `Cache-Control: no-cache` and must revalidate on every reuse; its ETag includes the bridge script hash. A host upgrade therefore returns HTML referencing the new bridge even when plugin files and the URL are unchanged. Other assets, including the bridge script with its hashed filename, keep a one-year immutable cache.
+The digest is the first 32 lowercase hexadecimal characters of SHA-256 over JSON lines of `[relativePath, size, sha256(content)]`, sorted by relative path. It is computed on the first registry projection and recomputed on re-registration. Production files should change only on restart; old file copies are not retained. After re-registration old digest URLs return 404 and the new URL works. Every read verifies length and SHA-256 through the same bounded O_NOFOLLOW handle, then serves that buffer; same-length edits receive a no-store 404 before GET, HEAD or 304 success. Entry HTML uses `Cache-Control: no-cache` and must revalidate on every reuse; its ETag includes the bridge script hash. A host upgrade therefore returns HTML referencing the new bridge even when plugin files and the URL are unchanged. Other assets, including the bridge script with its hashed filename, keep a one-year immutable cache.
 
-Per-capability consent for `bridge: "session"` is unchanged. The whole-spec consent hash includes the URL, whose digest covers every published file; any file change invalidates old consent. A session-reading page is not mounted before consent. No session write operation or per-session view persistence is added. In development, an unapproved server-code plugin may need a restart to recompute its digest.
+Per-capability consent for `bridge: "session"` is unchanged. The whole-spec consent hash includes the URL, whose digest covers every published file; any file change invalidates old consent. A session-reading page is not mounted before consent. Page writes are described below; view selection remains mount-local. In development, an unapproved server-code plugin may need a restart to recompute its digest.
 
 ### Consent before reading a session
 
-Only a `webview` in `contributes.ui.view` can declare `bridge: "session"`. Until the player consents, the page is not mounted and no session projection is sent. A world default naming it also opens the consent prompt while showing `parsed` / `stage` underneath.
+Only a `webview` in `contributes.ui.view` can declare `bridge: "session"`. Optional `capabilities` lists at most five distinct additional capabilities. Unknown capabilities, other placements, JSON views and a missing session bridge produce field diagnostics and remove only that feature. `session` is inferred from the bridge and is not written in the list. `surface` is unsupported; plural `surfaces` still routes panels and stage content.
 
-The capability is session reading, bound to the plugin ID and a SHA-256 hash of the entire loaded spec, including inlined HTML. SettingsStore persists the record on this device at `ui.pluginViewConsent.<pluginId>.<hash>.session`. Changing the spec or HTML asks again. Choose “Revoke story access” in the view bar’s “View permissions” menu to revoke and return to the host default. This consent is independent of server-code approval and applies to every plugin source.
+Until every requested grant has persisted, the page is not mounted, receives no projection and cannot invoke methods. A world default opens the same dialog with `parsed` / `stage` underneath. The dialog names the plugin, page and each capability. Builtin or trusted source, declarative classification and server-code approval never replace page consent.
 
-### SessionProjection (version 1)
+<!-- prettier-ignore -->
+| Capability | Meaning |
+| --- | --- |
+| `session` | Read public story and input context; inferred |
+| `submitAction` | Submit player actions |
+| `submitInteraction` | Answer current pending interactions |
+| `invokeRuntime` | Run the owning plugin's manual runtimes |
+| `abortExecution` | Stop execution in the current session |
+| `openPanel` | Open the owning plugin's declared panels |
 
-After consent, the page reads the `session` field of the `window.covel` state object, and can also use `window.covel.subscribe` to follow changes. The table below describes that field. The projection does not repeat top-level `locale` and `theme`.
+SettingsStore saves device-local records at `ui.pluginViewConsent.<pluginId>.<hash>.<capability>`, retaining the `.session` read suffix. The hash is SHA-256 of canonical JSON for the entire resolved spec, including capabilities, inline HTML or a URL digest covering every resource. Changed content asks again; an old reading grant adds no capabilities. Pending optimistic notifications do not grant access. “View permissions” can revoke one capability or all permissions, immediately stopping delivery and dispatch and returning to the default even if persistence fails. Refresh from another window can revoke access too.
+
+<a id="sessionprojection-version-1"></a>
+
+### SessionProjection (version 2)
+
+Read the `session` field of the state object exposed on `window.covel`, or subscribe with `window.covel.subscribe`. Top-level state contains only `session`, `locale` and host `theme`, without ordinary panel `data`, `sources`, `jobs`, `context` or own-plugin KV.
 
 <!-- prettier-ignore -->
 | Field | Content |
 | --- | --- |
-| `version` | Always `1` |
-| `phase` | `setup` or `playing` |
-| `turn` | Committed player turns, `completedPlayerTurns` |
-| `executing` | Whether execution is in progress |
-| `messages[]` | `{ seq, role, text, truncated? }`. Only assistant messages with `kind === "story"` and user messages without a block. `seq` is a stable positive ordinal allocated on first observation; host eviction and history loading do not renumber it |
-| `streaming` | `{ seq, text }` or `null`. A `stream_` placeholder appears only here, never in `messages`; the final story message retains its ordinal |
-| `pending[]` | `{ seq, block }`. Interactions the host still expects the player to answer. `seq` is the stable ordinal of the same message; hidden block fields are removed |
-| `characters[]` | Public `id`, `name`, `type`, with optional `aliases`, `description`, `fields`. Other character fields are excluded |
-| `slots[]` | `{ slot, key?, value }` for kernel UI slots the host already shows; media references stay opaque objects |
+| `version` | Always `2` |
+| `phase` / `turn` / `executing` | `setup` or `playing`, committed player-turn count, execution state |
+| `messages[]` | `{seq, role, text, truncated?}`, public stories and player messages without blocks |
+| `streaming` | `{seq,text}` or `null`; the final story inherits its placeholder ordinal |
+| `pending[]` | `{seq,interaction,handle?}`, public display and an opaque answer handle for this frame |
+| `input.seats[]` | Human seats' `{id,role,characterIds,currentCharacterId?,allowed}`; public associations only, without user/account identity |
+| `input.kinds[]` | Currently permitted `{kind,label,text,actor,fields?}`; fields contain public JSON Schema display vocabulary, without executable validators |
+| `characters[]` | `id`, `name`, `type`, optional `aliases`, `description`; no arbitrary `fields` or private knowledge |
+| `slots[]` | `{slot,key?,value}`, validated against kernel slot schemas; media retains only opaque `{id,mime,size}` references |
 
-Ordinals last for the current session bridge instance and are never reused. Newly loaded older history receives new ordinals. Render messages in array order; do not sort by `seq`.
+An `interaction` is `form`, `choice`, `confirmation` or `unavailable`. Forms expose title, submit label and field names, types, labels, placeholders, required flags, defaults, numeric bounds and options. Choices expose `choices[].{id,label,description?}`; confirmations expose prompt and confirm/cancel labels. Internal block/turn/interaction references, `meta`, action maps and server validators remain with the host. Handles belong to the current frame attempt and interaction, expiring on answer, replacement, eviction or departure. Custom JSON UI and unsupported/oversized interactions expose `unavailable` without a handle; a host button opens the ordinary interaction interface. Optional suggestions remain with the host.
 
-The projection excludes message `id`, `turnId`, `requestId`, `runtimeId`, timestamps, internal non-story messages, reasoning, execution steps, plugin data rows, settings, provider keys and session tokens. Building it never reads `plugin_data`. A public character `id` identifies a character; it is not message metadata.
-
-Nested values recursively drop every key starting with `_`, plus `hidden`, `concealed`, `turnId`, `requestId`, `runtimeId`, `sessionId`, `timestamp`, `createdAt`, `updatedAt` and `uuid`. Values beyond depth 8 become `null`. The host validates the projection; invalid projections are withheld with one warning.
+Ordinals are allocated on first observation and never reused within a bridge instance. Older loaded history may receive larger ordinals; render array order rather than sorting by `seq`. The projection does not read plugin data, results, operations, reasoning, steps, native provider continuations or compacted summaries. Upstream concealed provenance remains authoritative; deleting keys cannot make arbitrary text public. Invalid projection withholds session and stream, without a raw fallback.
 
 <!-- prettier-ignore -->
 | Content | Limit and handling |
 | --- | --- |
-| Message window | Last 200 messages, at most 256 KiB of message text total; oldest messages drop first |
-| Single message text | 32 KiB, with `truncated: true` when cut |
+| Messages | Last 200, 256 KiB total text; 32 KiB each with `truncated:true` when cut |
 | Streaming text | 64 KiB |
-| Characters | At most 100, each at most 8 KiB serialized; oversized records are skipped |
-| Pending interactions | At most 8; each block at most 16 KiB serialized; oversized blocks become `{ truncated: true }` |
+| Characters | At most 100, each 8 KiB serialized; oversized entries skipped |
+| Pending interactions | At most 8, each 16 KiB; oversized display becomes `unavailable` without a handle |
 
-KiB counts UTF-8 bytes. State changes push a full projection. Streaming uses coalesced `{ type: "stream", seq, append }` messages at 100 ms intervals, with an immediate tail flush at completion. Every full push includes the current streaming text for resynchronization. A narrative reset invalidates the old append baseline: the next push replaces the discarded draft with the full current text, even when replacement text outgrows it within 100 ms. Normal completion still flushes the final tail.
+KiB counts UTF-8 bytes. Appends coalesce every 100 ms; full pushes while streaming coalesce too, so unrelated state changes cannot bypass throttling. Full state includes current stream text and establishes the append baseline. Completion flushes the tail immediately; reset, shrink and retry replace drafts even if replacement text outgrows the previous text before the timer fires. Retirement cancels subscriptions and queued timers.
 
-**The session bridge is read-only in this version.** It adds no `submitAction`, form submission, abort or open-panel capability. Existing `invokeRuntime`, `invokePluginAction`, `invokeCommand`, `emitEvent` and `setUiState` handlers are unchanged. Images travel only as references, without bytes or blob URLs, so the sample page shows no art. There is no composer. Single-file pages have no handshake timeout notice; see [multi-file pages](#multi-file-pages) for timeout and Retry behaviour. Host back controls remain available.
+### Page requests and safe outcomes
+
+Use the existing MessagePort and `window.covel.invoke(method, params)`. Strict schemas reject undeclared fields. Pages cannot select actors, source, session/turn references, plugin identity, HTTP paths, tokens, proposals or model/provider overrides.
+
+<!-- prettier-ignore -->
+| Method | Parameters and behaviour |
+| --- | --- |
+| `submitAction` | `{kind,text?,fields?,seatId?}` uses normal input admission, seat-switch waits, workspace and SSE. The server derives actor and `source:player`. Slash text remains a player action, without the composer's command-RPC shortcut. Normal running turns return busy; automatic advancement uses interrupt-and-submit. Required interactions and setup gates refuse input |
+| `submitInteraction` | `{handle,values}` resolves current host references and uses normal interaction submission to save the answer and start its follow-up on one stream. Field refusal preserves editing. Duplicate/stale handles cannot submit; local `submitBlock` never substitutes for persistence |
+| `invokeRuntime` | `{runtimeId,payload?}` targets only a currently active own manual runtime, excluding subagent-only targets. Uses ordinary RPC approvals, workspace, proposal validation, hooks and commit. No action/command/event RPC |
+| `abortExecution` | `{}` stops execution in the leased session, including while busy; it does not undo committed rounds. Host Stop needs no page grant |
+| `openPanel` | `{panelId}` opens only a currently declared own-plugin panel, without extra read/write authority |
+
+Outcomes contain only `{status,code?,issues?}`. Status is `accepted`, `committed`, `rejected` or `unavailable`. Accepted means normal admission, including background admission, and does not establish saved gameplay. A sync runtime returns committed only after the normal response establishes commit and target success. Fixed codes are `invalid-request`, `permission-denied`, `busy`, `stale`, `already-answered`, `field-invalid`, `runtime-refused`, `failed`. At most 32 field issues contain `{field?,code:"invalid"}`. Raw RPC, outputs/effects, proposals, job IDs, approval data, paths and exception strings never cross the port. This interface does not offer `setUiState`; pages may retain drafts in memory for their own lifetime.
+
+Each connection allows eight calls in flight and 128 KiB serialized request bytes. Seen IDs cannot execute again. A connection remembers at most 4096 IDs, then refuses new calls until explicit frame reconstruction instead of evicting old IDs. Closing rejects deliverable page promises and drops late replies. Timeouts never automatically resend mutations. This is not exactly-once across reloads.
+
+Session navigation, plugin disable, content replacement, revocation, return and unmount retire the lease. The host rechecks ownership after awaits and before approval retries. Normal input also rechecks the caller after seat-switch, automatic-stop and workspace waits. Server-admitted work may settle normally, without replying to the retired frame.
+
+This remains an ordinary view layout, without main/composer replacement or heartbeat recovery. Single-file pages have no ready timeout notice; multi-file pages retain the existing eight-second overlay and Retry. There is no media-byte/blob channel. Host back controls remain available.
 
 ## Component Catalogue
 
