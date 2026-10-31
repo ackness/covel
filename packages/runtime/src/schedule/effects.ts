@@ -2,7 +2,7 @@
  * Effects read/write-set derivation and same-layer hazard policy (01 §7).
  *
  * A runtime's read/write sets are derived from its declared surfaces — builtin
- * tools, `dataSchemas` namespaces, `outputKind` — and
+ * tools, dataset tools, `dataSchemas` namespaces, `outputKind` — and
  * optionally supplemented by an explicit `effects` declaration. Two runtimes
  * scheduled in the SAME level (parallel group) are checked pairwise: a
  * read/write conflict with no ordering edge between them is a hazard. The
@@ -92,6 +92,13 @@ export function deriveEffects(manifest: RuntimeManifest): RuntimeEffects {
     builtinTools.includes("plugin-data-list")
   ) {
     for (const k of pluginDataKeys) reads.add(k);
+  }
+
+  // Dataset tools read and write exactly their dataset's namespace.
+  for (const { dataset, tools } of manifest.tools?.datasets ?? []) {
+    const key = `plugin-data:self:${dataset}` as EffectResource;
+    if (tools.includes("get") || tools.includes("list")) reads.add(key);
+    if (tools.includes("upsert") || tools.includes("update")) writes.add(key);
   }
 
   // emit-event: the tool can emit any topic the package declares, so it

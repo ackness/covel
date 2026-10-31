@@ -3,6 +3,7 @@ import {
   DEFAULT_RUNTIME_VISIBILITY,
   defaultAgentLoop,
   defaultAgentModel,
+  datasetToolKinds,
   runtimeManifestInputSchema,
   resolveI18nText,
   serviceImportName,
@@ -113,7 +114,11 @@ export function compileRuntimeManifest(
   // `plugin: []` still means none. A runtime of a multi-runtime package
   // names its tools: each of them gets a different part.
   const contributed = plugin.contributes?.tools;
-  const { services: imports, ...authoredTools } = a?.tools ?? {};
+  const {
+    services: imports,
+    datasets: datasetReferences,
+    ...authoredTools
+  } = a?.tools ?? {};
   const contributedTools =
     runtimeType === "agent" &&
     runtimeId === plugin.id &&
@@ -134,6 +139,25 @@ export function compileRuntimeManifest(
                   contract: typeof entry === "string" ? entry : entry.contract,
                   name: serviceImportName(entry),
                 })),
+              }
+            : {}),
+          // A dataset named alone gives every tool it offers. An unknown
+          // dataset gets none here; the package rules report it.
+          ...(datasetReferences
+            ? {
+                datasets: datasetReferences.map((entry) => {
+                  if (typeof entry !== "string")
+                    return { dataset: entry.dataset, tools: [...entry.tools] };
+                  const declared = plugin.contributes?.datasets;
+                  const decl =
+                    declared && Object.hasOwn(declared, entry)
+                      ? declared[entry]
+                      : undefined;
+                  return {
+                    dataset: entry,
+                    tools: decl ? datasetToolKinds(decl) : [],
+                  };
+                }),
               }
             : {}),
         }

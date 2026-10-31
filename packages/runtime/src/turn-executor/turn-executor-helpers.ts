@@ -97,7 +97,7 @@ export function buildToolDefinitions(
   ])
     if (generated.has(name))
       throw new Error(
-        `runtime "${manifest.name}" imports a service as tool "${name}", a name it also declares`,
+        `runtime "${manifest.name}" generates tool "${name}", a name it also declares`,
       );
   // Deferred tools (tools.defer) are registered and authorized but withheld
   // from the initial advertisement — the LLM discovers them through the

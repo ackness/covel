@@ -1,6 +1,7 @@
 /**
  * The tools the kernel generates for one agent run, beside the ones it
- * declares: today, imported services (`agent.tools.services`).
+ * declares: imported services (`agent.tools.services`) and the tools of the
+ * package's own datasets (`agent.tools.datasets`).
  *
  * Each agent entry (a top-level run, a resumed run, a sub-agent) resolves
  * them at start and wraps its raw tool executor, so the loop advertises,
@@ -14,6 +15,7 @@ import type { ToolModule } from "@covel/tools";
 import type { TurnExecutorDeps } from "../turn-executor/turn-executor-types.js";
 import type { PluginServiceRegistry } from "../plugin-services.js";
 import type { ToolCallContext, ToolExecutor } from "./tool-executor.js";
+import { createDatasetTools, datasetToolNames } from "./dataset-tools.js";
 import {
   absentImportTool,
   importedServiceTool,
@@ -23,7 +25,10 @@ import {
 /** The names of a runtime's generated tools, resolved or not. */
 export function generatedToolNames(manifest: RuntimeManifest): string[] {
   if (manifest.runtimeType === "function") return [];
-  return (manifest.tools?.services ?? []).map((entry) => entry.name);
+  return [
+    ...(manifest.tools?.services ?? []).map((entry) => entry.name),
+    ...datasetToolNames(manifest),
+  ];
 }
 
 export interface AgentToolSurface {
@@ -38,18 +43,40 @@ const EMPTY_SURFACE: AgentToolSurface = {
   absent: new Map(),
 };
 
-/** Resolve a runtime's generated tools for one run, as that runtime. */
+/**
+ * Resolve a runtime's generated tools for one run, as that runtime. Throws
+ * when a dataset the runtime selected has no loaded declaration or schema:
+ * unlike an import, the dataset is the package's own, so the manifest is
+ * wrong and the runtime fails at start.
+ */
 export async function prepareAgentToolSurface(args: {
   readonly manifest: RuntimeManifest;
-  readonly input: Pick<TurnInput, "sessionId">;
-  readonly deps: Pick<TurnExecutorDeps, "services">;
+  readonly input: Pick<TurnInput, "sessionId"> &
+    Partial<Pick<TurnInput, "locale">>;
+  readonly deps: Pick<TurnExecutorDeps, "services"> &
+    Partial<Pick<TurnExecutorDeps, "loadRuntime">>;
 }): Promise<AgentToolSurface> {
   const { manifest, input, deps } = args;
   const imports =
     manifest.runtimeType === "function" ? [] : (manifest.tools?.services ?? []);
-  if (imports.length === 0) return EMPTY_SURFACE;
+  const datasetNames = datasetToolNames(manifest);
+  if (imports.length === 0 && datasetNames.length === 0) return EMPTY_SURFACE;
   const available = new Map<string, ToolModule>();
   const absent = new Map<string, ToolModule>();
+  if (datasetNames.length > 0) {
+    // The loader caches per registry generation, so this is the loaded
+    // runtime the entry already has, and the schemas the commit checks.
+    const loaded = await deps.loadRuntime?.(
+      manifest,
+      input.locale,
+      input.sessionId,
+    );
+    for (const [name, module] of createDatasetTools(
+      manifest,
+      loaded?.datasetSchemas,
+    ))
+      available.set(name, module);
+  }
   for (const { contract, name } of imports) {
     let resolution: Awaited<ReturnType<PluginServiceRegistry["resolveImport"]>>;
     try {

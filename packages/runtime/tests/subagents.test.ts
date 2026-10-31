@@ -1002,6 +1002,10 @@ describe("sub-agent caps and tool filter", () => {
         builtin: ["delegate", "plugin-data-get", "plugin-data-set", "suspend"],
         plugin: ["peek", "poke", "unknown"],
         services: [{ contract: "inventory.items@1", name: "inventory-items" }],
+        datasets: [
+          { dataset: "npcs", tools: ["get", "list", "upsert", "update"] },
+          { dataset: "log", tools: ["upsert"] },
+        ],
         defer: ["peek", "poke", "inventory-items"],
       },
     });
@@ -1011,11 +1015,13 @@ describe("sub-agent caps and tool filter", () => {
         sessionId: "s",
         turnId: "t",
       });
-    // Imported services are read-only: the sub-agent keeps them.
+    // Imported services are read-only: the sub-agent keeps them. Dataset
+    // tools keep their reads; a dataset with only writes is dropped.
     expect(at(1)).toEqual({
       builtin: ["plugin-data-get"],
       plugin: ["peek", "unknown"],
       services: [{ contract: "inventory.items@1", name: "inventory-items" }],
+      datasets: [{ dataset: "npcs", tools: ["get", "list"] }],
       defer: ["peek", "inventory-items"],
     });
     expect(at(0)?.builtin).toEqual(["delegate", "plugin-data-get"]);

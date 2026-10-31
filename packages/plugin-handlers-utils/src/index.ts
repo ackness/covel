@@ -521,5 +521,6 @@ export {
   type DataOpsCurrent,
   type DataOpsResult,
 } from "./data-ops.js";
+export { datasetKey } from "./dataset-key.js";
 export type { SimpleCompletionAdapter } from "./completion-adapter.js";
 export type TokenEstimator = (text: string) => number;

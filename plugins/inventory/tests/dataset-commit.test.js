@@ -272,6 +272,7 @@ describe("inventory dataset schema", () => {
       schema: "./schemas/items.schema.json",
       key: "id",
       ops: ["set", "merge", "inc"],
+      tools: ["get", "list", "upsert", "update"],
     });
     expect(loaded.datasetSchemas.items).toEqual(schema);
   });

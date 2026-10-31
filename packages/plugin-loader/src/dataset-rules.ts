@@ -1,4 +1,11 @@
-import type { PluginManifest } from "@covel/shared";
+import {
+  datasetToolKinds,
+  datasetToolName,
+  FRAMEWORK_TOOL_NAMES,
+  SERVICE_IMPORT_NAME_PATTERN,
+  type PluginManifest,
+  type RuntimeManifest,
+} from "@covel/shared";
 import path from "node:path";
 
 /**
@@ -54,6 +61,84 @@ export function datasetSchemaIssues(
       issues.push(
         `${source}: data namespace ${name} and dataset ${name} must use the same schema`,
       );
+  }
+  return issues;
+}
+
+/**
+ * `agent.tools.datasets` names datasets of the runtime's own package, selects
+ * only tools the dataset offers, and generates tool names that fit the tool
+ * name rule and collide with no other tool of the runtime.
+ */
+export function datasetReferenceIssues(
+  plugin: PluginManifest,
+  runtimes: readonly {
+    readonly sourcePath?: string;
+    readonly manifest: RuntimeManifest;
+  }[],
+): string[] {
+  const issues: string[] = [];
+  const declared = plugin.contributes?.datasets ?? {};
+  const contributed = new Set(plugin.contributes?.tools ?? []);
+  const framework = new Set<string>(FRAMEWORK_TOOL_NAMES);
+  for (const { sourcePath, manifest } of runtimes) {
+    const references = manifest.tools?.datasets ?? [];
+    if (references.length === 0) continue;
+    const declaredNames = new Set([
+      ...(manifest.tools?.builtin ?? []),
+      ...(manifest.tools?.plugin ?? []),
+    ]);
+    const imports = new Set(
+      (manifest.tools?.services ?? []).map((entry) => entry.name),
+    );
+    const seen = new Set<string>();
+    for (const [i, { dataset, tools }] of references.entries()) {
+      const field = `${sourcePath}: agent.tools.datasets.${i}`;
+      if (seen.has(dataset)) {
+        issues.push(
+          `${field}: dataset ${dataset} is listed more than once; list it once`,
+        );
+        continue;
+      }
+      seen.add(dataset);
+      const decl = Object.hasOwn(declared, dataset)
+        ? declared[dataset]
+        : undefined;
+      if (!decl) {
+        issues.push(
+          `${field}: dataset ${dataset} is not declared in contributes.datasets`,
+        );
+        continue;
+      }
+      const offered = datasetToolKinds(decl);
+      for (const [j, kind] of tools.entries())
+        if (!offered.includes(kind))
+          issues.push(
+            `${field}.tools.${j}: dataset ${dataset} does not offer the ${kind} tool; it offers ${offered.join(", ")}`,
+          );
+      for (const kind of tools) {
+        const name = datasetToolName(dataset, kind);
+        if (!SERVICE_IMPORT_NAME_PATTERN.test(name)) {
+          issues.push(
+            `${field}: the tool name ${name} is longer than 64 characters; use a shorter dataset name`,
+          );
+          break;
+        }
+        const clash = framework.has(name)
+          ? "a framework tool"
+          : declaredNames.has(name)
+            ? "a tool the runtime declares"
+            : contributed.has(name)
+              ? "a tool in contributes.tools"
+              : imports.has(name)
+                ? "an imported service tool of the runtime"
+                : undefined;
+        if (clash)
+          issues.push(
+            `${field}: the dataset tool ${name} has the name of ${clash}; rename the dataset or the other tool`,
+          );
+      }
+    }
   }
   return issues;
 }

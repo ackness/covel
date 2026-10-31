@@ -1421,6 +1421,7 @@ describe("finalizeExecution — plugin.data.update", () => {
                 namespace: "wallet",
                 ops: ["inc", "set"],
                 schema: "schemas/wallet.json",
+                tools: ["get", "list", "upsert", "update"],
               },
             },
           },
@@ -1538,6 +1539,7 @@ describe("finalizeExecution — plugin.data.update", () => {
             namespace: "wallet",
             schema: "./wallet.json",
             ops: ["set", "inc"],
+            tools: ["get", "list", "upsert", "update"],
           },
         },
       });

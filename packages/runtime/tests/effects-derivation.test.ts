@@ -109,6 +109,35 @@ describe("deriveEffects — builtin tool mapping table", () => {
     expect(asSet(r.reads)).toEqual(["unknown:*"]);
   });
 
+  it("maps dataset tools to their dataset's self key: reads for get/list, writes for upsert/update", () => {
+    const e = deriveEffects(
+      manifest({
+        tools: {
+          datasets: [
+            { dataset: "npcs", tools: ["get", "list", "upsert", "update"] },
+            { dataset: "clock", tools: ["get"] },
+            { dataset: "log", tools: ["upsert"] },
+          ],
+        },
+      }),
+    );
+    expect(asSet(e.reads)).toEqual([
+      "plugin-data:self:clock",
+      "plugin-data:self:npcs",
+    ]);
+    expect(asSet(e.writes)).toEqual([
+      "plugin-data:self:log",
+      "plugin-data:self:npcs",
+    ]);
+    const update = deriveEffects(
+      manifest({
+        tools: { datasets: [{ dataset: "npcs", tools: ["update"] }] },
+      }),
+    );
+    expect(asSet(update.reads)).toEqual([]);
+    expect(asSet(update.writes)).toEqual(["plugin-data:self:npcs"]);
+  });
+
   it("maps emit-event to event:*; effects.writes adds exact topics", () => {
     const emitter = deriveEffects(
       manifest({ tools: { builtin: ["emit-event"] } }),
