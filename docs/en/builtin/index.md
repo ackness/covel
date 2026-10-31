@@ -2,6 +2,8 @@
 
 Bundled worlds use the same prefixed `plugins` selection as community worlds. All host packs remain available; unavailable content produces notices and play can start.
 
+See [world data receivers](../reference/world-data.md#data-receivers) for static discovery, inferred selection and omission notices. Data acceptance does not satisfy service or runtime capability dependencies.
+
 Covel comes with a set of plugins and four worlds. This chapter tells you what each one is, what you will see in the game, and what you can adjust. To find out which plugin gives you a certain panel, or whether a feature can be turned off, look here.
 
 The built-in plugins and worlds are only demos, and you do not have to use them.

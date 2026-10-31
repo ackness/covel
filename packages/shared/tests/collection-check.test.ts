@@ -188,3 +188,114 @@ describe("world collection selection", () => {
     );
   });
 });
+
+describe("collection data receivers", () => {
+  const world = {
+    id: "world",
+    requires: [],
+    requested: [],
+    requiredDataContracts: ["notes@1"],
+  };
+  const receiver = {
+    id: "receiver",
+    contracts: [],
+    acceptsWorldData: ["notes@1"],
+  };
+  it("accepts a declared receiver and disregards a publisher-only decoy", () => {
+    expect(
+      checkCollection({
+        worlds: [world],
+        plugins: [receiver, { id: "publisher", contracts: ["notes@1"] }],
+        available: [],
+      }),
+    ).toEqual([]);
+    expect(
+      checkCollection({
+        worlds: [world],
+        plugins: [{ id: "publisher", contracts: ["notes@1"] }],
+        available: [],
+      }),
+    ).toEqual([
+      expect.objectContaining({
+        level: "warning",
+        message: expect.stringContaining("no eligible receiver"),
+      }),
+    ]);
+  });
+  it("keeps ambiguity and exclusions visible without inventing missing content", () => {
+    const plugins = [receiver, { ...receiver, id: "other" }];
+    expect(
+      checkCollection({ worlds: [world], plugins, available: [] }),
+    ).toEqual([
+      expect.objectContaining({
+        message: expect.stringContaining("several receivers"),
+      }),
+    ]);
+    expect(
+      checkCollection({
+        worlds: [{ ...world, requested: ["receiver"] }],
+        plugins,
+        available: [],
+      }),
+    ).toEqual([]);
+    expect(
+      checkCollection({
+        worlds: [{ ...world, excluded: ["receiver", "other"] }],
+        plugins,
+        available: [],
+      }),
+    ).toEqual([
+      expect.objectContaining({ message: expect.stringContaining("excluded") }),
+    ]);
+    expect(
+      checkCollection({
+        worlds: [{ ...world, requiredDataContracts: [] }],
+        plugins: [],
+        available: [],
+      }),
+    ).toEqual([]);
+  });
+  it("checks ordinary receiver dependencies before considering data received", () => {
+    expect(
+      checkCollection({
+        worlds: [world],
+        plugins: [],
+        available: [{ ...receiver, requires: ["storage@1"] }],
+      }),
+    ).toEqual([
+      expect.objectContaining({
+        message: expect.stringContaining("no eligible receiver"),
+      }),
+    ]);
+  });
+});
+
+it("requires an explicit collection selection for a presentation data receiver", () => {
+  const world = {
+    id: "world",
+    requires: [],
+    requested: [],
+    requiredDataContracts: ["images@1"],
+  };
+  const receiver = {
+    id: "display",
+    contracts: [],
+    acceptsWorldData: ["images@1"],
+    runtimes: [{ presentation: { budget: { calls: 0, generations: 0 } } }],
+  };
+  expect(
+    checkCollection({ worlds: [world], plugins: [receiver], available: [] }),
+  ).toEqual([
+    expect.objectContaining({
+      level: "warning",
+      message: expect.stringContaining("no eligible receiver"),
+    }),
+  ]);
+  expect(
+    checkCollection({
+      worlds: [{ ...world, requested: ["display"] }],
+      plugins: [receiver],
+      available: [],
+    }),
+  ).toEqual([]);
+});

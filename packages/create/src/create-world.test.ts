@@ -530,7 +530,7 @@ describe("createWorld", () => {
         { id: "courier", name: "Courier", type: "npc" },
       ]);
       expect(result.manifest).toMatchObject({
-        plugins: ["plugin:character-blueprint"],
+        plugins: [],
       });
 
       // One character file; no file of the plugin's and no descriptor.
@@ -1192,7 +1192,7 @@ contractData:
     expect(manifest).toContain("pack:dialogue-mode");
     expect(manifest).toContain("defaultViewMode: stage");
     expect(manifest).not.toContain("memoryBlocks:");
-    expect(manifest).toMatch(/plugin:memory/);
+    expect(manifest).not.toMatch(/plugin:memory/);
     expect(descriptor).toContain("to: contract:memory.blocks@1");
     expect(descriptor).not.toContain("schemaVersion:");
     expect(

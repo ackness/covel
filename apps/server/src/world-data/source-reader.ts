@@ -91,6 +91,23 @@ function parseSource(source: OrderedWorldDataSource, text: string): unknown {
   return source.descriptor.kind === "json" ? JSON.parse(text) : parseYaml(text);
 }
 
+/** Resolve existence with the same base/locale fallback as the actual reader. */
+export async function resolveWorldDataSourcePath(
+  source: OrderedWorldDataSource,
+  locale?: string,
+): Promise<string | null> {
+  // Structured overlays merge into a base file; without a base the selected
+  // locale file can stand alone. Prose and media prefer the locale variant.
+  const mainPath = isStructured(source)
+    ? await resolveContainedPath(
+        source.pathOrigin.descriptorRoot,
+        source.descriptor.path,
+        { rejectSymlinks: true },
+      )
+    : null;
+  return mainPath ?? resolveSourcePath(source, locale);
+}
+
 export async function readWorldDataSource(
   source: OrderedWorldDataSource,
   locale?: string,
@@ -104,14 +121,13 @@ export async function readWorldDataSource(
 }> {
   const diagnostics: WorldDataDiagnostic[] = [];
   const root = source.pathOrigin.descriptorRoot;
-  // A structured source is read from its main file and merged with overlays.
-  // Without a main file, a locale file still stands in for it.
   const mainPath = isStructured(source)
     ? await resolveContainedPath(root, source.descriptor.path, {
         rejectSymlinks: true,
       })
     : null;
-  const resolved = mainPath ?? (await resolveSourcePath(source, locale));
+  const resolved =
+    mainPath ?? (await resolveWorldDataSourcePath(source, locale));
   if (!resolved) {
     const declared = source.descriptor.path;
     const reason = await explainUnresolvedPath(root, declared);

@@ -47,8 +47,8 @@ export function WorldDataNotices({
 }
 
 /**
- * A notice in the interface language. The importer's own message is English
- * and meant for the world's author, so it stays folded under "Details".
+ * Known omission reasons use the interface language. Generic import failures
+ * retain the host's fixed safe message under "Details".
  */
 export function WorldDataNoticeText({
   notice,
@@ -60,6 +60,12 @@ export function WorldDataNoticeText({
   switch (notice.code) {
     case "dimension-provider-missing":
       return <>{t("session.worldDataNotices.dimensionsMissing")}</>;
+    case "receiver-ambiguous":
+      return <>{t("session.worldDataNotices.receiverAmbiguous")}</>;
+    case "receiver-excluded":
+      return <>{t("session.worldDataNotices.receiverExcluded")}</>;
+    case "receiver-approval-required":
+      return <>{t("session.worldDataNotices.receiverApprovalRequired")}</>;
     case "receiver-missing":
       return <>{t("session.worldDataNotices.receiverMissing", { source })}</>;
     default:

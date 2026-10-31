@@ -161,8 +161,8 @@ export interface WorldGenerationDataContract {
   readonly hint?: string;
   readonly example?: unknown;
   /**
-   * Plugin that receives the data, unless every session has it already
-   * (`kind: core`); the generated world adds it as a `plugin:` reference in `plugins`.
+   * Declaring plugin for authoring context. Session receivers are inferred
+   * from destinations of actual generated content.
    */
   readonly pluginId?: string;
   /** The receiver also wants each record projected into the lorebook. */

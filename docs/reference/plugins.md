@@ -2,6 +2,8 @@
 
 这一页列出插件包能写的全部声明：根 `PLUGIN.md` 的字段、runtime 的字段、输入输出的规则，以及随 Covel 内置的插件清单。写插件、改插件或审查插件时来这里查。第一次写插件请先读[第一个插件](../plugins/first-plugin.md)和[插件要点](../plugins/essentials.md)。
 
+世界数据的静态发现、接收者推导与缺失提示见[接收规则](./world-data.md#data-receivers)。接收声明不满足服务或 runtime 能力依赖。
+
 一个插件包做三件事：
 
 - 在根 `PLUGIN.md` 里说明自己是谁、提供和需要哪些契约、贡献了什么（工具、数据、界面等）。

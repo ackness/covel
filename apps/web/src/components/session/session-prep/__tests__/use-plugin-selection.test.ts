@@ -1008,3 +1008,77 @@ describe("reference-derived preparation intent", () => {
     );
   });
 });
+
+describe("data receiver preparation", () => {
+  const receiver = plugin("receiver", { acceptsWorldData: ["notes@1"] });
+  beforeEach(() => {
+    vi.mocked(api.getWorldPluginPlan).mockResolvedValue({
+      ...selectionPlan([]),
+      selection: {
+        requestedPluginIds: [],
+        requiredContracts: [],
+        requiredDataContracts: ["notes@1"],
+      },
+    });
+  });
+  it("selects a sole receiver immediately and retains a manual exclusion across refresh", async () => {
+    const { result, rerender } = renderHook(
+      ({ plugins }) =>
+        usePluginSelection(PLAN.worldId, plugins, prepareWorldForServer),
+      { initialProps: { plugins: [receiver] } },
+    );
+    await waitFor(() => expect(result.current.pluginPlanLoading).toBe(false));
+    expect(result.current.enabledPluginIds).toEqual(["receiver"]);
+    expect(result.current.requestedPluginIds).toEqual([]);
+    act(() => result.current.togglePlugin("receiver"));
+    expect(result.current.enabledPluginIds).toEqual([]);
+    act(() => result.current.retryPluginPlan());
+    rerender({ plugins: [{ ...receiver, displayName: "Refreshed receiver" }] });
+    await waitFor(() => expect(result.current.pluginPlanLoading).toBe(false));
+    expect(result.current.excludedPluginIds).toEqual(["receiver"]);
+    expect(result.current.enabledPluginIds).toEqual([]);
+  });
+  it("waits for an explicit choice among receivers and preserves intentional fanout", async () => {
+    const { result } = renderHook(() =>
+      usePluginSelection(
+        PLAN.worldId,
+        [receiver, { ...receiver, id: "other" }],
+        prepareWorldForServer,
+      ),
+    );
+    await waitFor(() => expect(result.current.pluginPlanLoading).toBe(false));
+    expect(result.current.enabledPluginIds).toEqual([]);
+    act(() => result.current.togglePlugin("receiver"));
+    expect(result.current.enabledPluginIds).toEqual(["receiver"]);
+    act(() => result.current.togglePlugin("other"));
+    expect(new Set(result.current.enabledPluginIds)).toEqual(
+      new Set(["receiver", "other"]),
+    );
+  });
+  it("offers consent for a unique code receiver without counting it as enabled", async () => {
+    const { result } = renderHook(() =>
+      usePluginSelection(
+        PLAN.worldId,
+        [{ ...receiver, source: "community" }],
+        prepareWorldForServer,
+      ),
+    );
+    await waitFor(() => expect(result.current.pluginPlanLoading).toBe(false));
+    expect(result.current.enabledPluginIds).toEqual([]);
+    expect(result.current.pendingApproval).toEqual([
+      expect.objectContaining({
+        pluginId: "receiver",
+        code: "approval-required",
+      }),
+    ]);
+    expect(result.current.selectedPluginIdSet.has("receiver")).toBe(true);
+    expect(result.current.requestedPluginIds).toEqual([]);
+    act(() => result.current.togglePlugin("receiver"));
+    expect(result.current.pendingApproval).toEqual([]);
+    expect(result.current.excludedPluginIds).toEqual(["receiver"]);
+    act(() => result.current.togglePlugin("receiver"));
+    expect(result.current.pendingApproval).toHaveLength(1);
+    expect(result.current.requestedPluginIds).toEqual(["receiver"]);
+    expect(result.current.enabledPluginIds).toEqual([]);
+  });
+});

@@ -38,6 +38,19 @@ async function entry(
       path.join(rootPath, "schemas", `${namespace}.schema.json`),
       JSON.stringify({ type: "object" }),
     );
+  const packageManifest = makePackageManifest(
+    id,
+    namespaces,
+    rootPath,
+    CONTRACT,
+  );
+  for (const declaration of Object.values(
+    packageManifest.plugin.contributes?.data ?? {},
+  ))
+    declaration.authoring = {
+      title: "Facts",
+      source: { path: "facts.json", key: "id" },
+    };
   return {
     id,
     rootPath,
@@ -49,7 +62,7 @@ async function entry(
       kind: "plugin",
       runtimeCount: 0,
     },
-    packageManifest: makePackageManifest(id, namespaces, rootPath, CONTRACT),
+    packageManifest,
     dataSchemas: Object.fromEntries(
       namespaces.map((namespace) => [
         namespace,
@@ -79,7 +92,7 @@ describe("world data of a community receiver approved after creation", () => {
     await mkdir(worldRoot, { recursive: true });
     await writeFile(
       path.join(worldRoot, "world.yaml"),
-      "id: notes-world\nname: Notes\nsummary: Notes\ndefaultLocale: en-US\nworldData: world.data.yaml\n",
+      "id: notes-world\nname: Notes\nsummary: Notes\ndefaultLocale: en-US\n",
     );
     await writeFile(
       path.join(worldRoot, "world.data.yaml"),
@@ -160,7 +173,7 @@ describe("world data of a community receiver approved after creation", () => {
       body: JSON.stringify({
         id: "s1",
         worldId: "notes-world",
-        plugins: [NOTES],
+        plugins: [],
       }),
     });
     expect(created.status, await created.clone().text()).toBe(201);
@@ -175,9 +188,8 @@ describe("world data of a community receiver approved after creation", () => {
     expect(body.worldDataNotices).toContainEqual(
       expect.objectContaining({
         level: "warning",
-        sourceId: "facts",
-        code: "receiver-missing",
-        message: expect.stringContaining(CONTRACT),
+        code: "receiver-approval-required",
+        message: expect.stringContaining("needs approval"),
       }),
     );
     expect(await facts()).toEqual([]);
@@ -230,7 +242,12 @@ describe("world data of a community receiver approved after creation", () => {
     const created = await app.request("/api/sessions", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id: "s1", worldId: "notes-world", plugins: [] }),
+      body: JSON.stringify({
+        id: "s1",
+        worldId: "notes-world",
+        plugins: [],
+        excludedPlugins: ["support"],
+      }),
     });
     expect(created.status, await created.clone().text()).toBe(201);
     const session = (await store.getSession("s1"))!;

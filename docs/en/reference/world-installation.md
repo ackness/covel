@@ -2,6 +2,8 @@
 
 This page explains how to install a world someone else made from GitHub, how to update it, and which data is left alone during an update. Players and world authors should read the first half and the last section. People who build tool integrations should read the API section.
 
+See [world data receivers](./world-data.md#data-receivers) for static discovery, inferred selection and omission notices. Data acceptance does not satisfy service or runtime capability dependencies.
+
 To make your own world, see [Your first world](../worlds/first-world.md). To publish a world together with the plugins it needs, see [Collections](../ship/collections.md).
 
 The **official catalog** is [covel-worlds](https://github.com/covel-ai/covel-worlds).

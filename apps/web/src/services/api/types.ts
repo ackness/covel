@@ -133,7 +133,11 @@ export interface WorldDataPreflightDiagnostic {
     | "convention-collision"
     | "dimension-provider-missing"
     | "dimension-reference"
-    | "receiver-missing";
+    | "receiver-missing"
+    | "receiver-ambiguous"
+    | "receiver-excluded"
+    | "receiver-approval-required"
+    | "unclaimed-data-source";
 }
 
 export interface WorldDataPreflightTarget {

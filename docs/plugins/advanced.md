@@ -4,6 +4,8 @@
 
 读这一页之前，先读完[带本地代码的插件](./local-code.md)。每一节可以单独读，用到哪节读哪节。
 
+`authoring.source` 与 `accepts` 让宿主从实际存在的世界内容发现数据需求；它不提供 runtime 或服务能力，也不授予代码权限。相同路径只合并等效声明。详见[接收规则](../reference/world-data.md#data-receivers)。
+
 ## 多个 runtime 的布局
 
 一个插件有多个 runtime 时，每个 runtime 住在 `runtimes/` 下自己的文件夹里：
@@ -165,9 +167,9 @@ PLUGIN.md:
           title: 已知事实
 ```
 
-世界包把文件放在 `source.path` 写的位置，它就会被导入，不需要再写别的配置。同一个会话启用的两个插件声明了同一个 `path` 时，这个路径不再算约定位置，所以选一个别的插件不会用的路径。内核和世界包自己的路径（如 `data/dimensions.yaml`、`world.yaml`）不能声明，列表见[世界数据](../reference/world-data.md)。
+世界包把文件放在 `source.path` 写的位置，它就会被导入，不需要再写别的配置。同一路径的声明不兼容时，需要显式 descriptor 指明目标，与会话启用集合无关。内核和世界包自己的路径（如 `data/dimensions.yaml`、`world.yaml`）不能声明，列表见[世界数据](../reference/world-data.md)。
 
-`generate` 有两个取值：`offer` 把这类内容列为创作界面里的可选项，`default` 列出并默认选中。它要求有 `example`，并且 `source` 是公开的、不是媒体、以 `id` 为 `key`。玩家选中后，生成器会把 schema、提示和示例写进它的提示词，并把这个插件加进世界要启用的插件里。只给在真实模型上验证过生成质量的内容声明它。
+`generate` 有两个取值：`offer` 把这类内容列为创作界面里的可选项，`default` 列出并默认选中。它要求有 `example`，并且 `source` 是公开的、不是媒体、以 `id` 为 `key`。玩家选中后，生成器会把 schema、提示和示例写进它的提示词，生成的实际内容再参与接收者推导。只给在真实模型上验证过生成质量的内容声明它。
 
 ### 检查声明
 

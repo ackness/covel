@@ -733,3 +733,63 @@ it("judges each collection member by its own repository, including pinned member
   );
   expect(remote).not.toHaveProperty("capabilities");
 });
+
+it.each([true, false])(
+  "checks actual collection content against receivers rather than publishers, file present: %s",
+  async (present) => {
+    const declaration = {
+      schema: "./schemas/notes.json",
+      accepts: ["notes@1"],
+      authoring: { title: "Notes", source: { path: "data/notes.json" } },
+    };
+    archives[`example/pack@${sha}`] = await zip(
+      {
+        ...worldFiles(),
+        ...pluginFiles("barrow-dice"),
+        ...pluginFiles("receiver"),
+        "plugins/receiver/PLUGIN.md": `---\n${JSON.stringify({ id: "receiver", description: "Receiver", contributes: { data: { notes: declaration } } })}\n---\n`,
+        "plugins/receiver/schemas/notes.json": JSON.stringify({
+          type: "object",
+        }),
+        ...pluginFiles("publisher"),
+        "plugins/publisher/PLUGIN.md":
+          "---\nid: publisher\ndescription: Schema publisher\nprovides: [notes@1]\n---\n",
+        ...(present ? { "worlds/barrow/data/notes.json": "[]" } : {}),
+      },
+      "pack-commit",
+    );
+    const result = await preview();
+    expect(
+      result.problems.filter((problem) =>
+        /data contract/.test(problem.message),
+      ),
+    ).toEqual([]);
+    if (!present) return;
+    archives[`example/pack@${sha}`] = await zip(
+      {
+        ...worldFiles(),
+        ...pluginFiles("barrow-dice"),
+        "worlds/barrow/world.yaml": JSON.stringify({
+          id: "barrow",
+          name: "Barrow",
+          summary: "A world",
+          defaultLocale: "en-US",
+          worldData: "descriptor.yaml",
+        }),
+        "worlds/barrow/descriptor.yaml":
+          "sources:\n  notes:\n    kind: json\n    path: data/notes.json\n    to: contract:notes@1\n",
+        "worlds/barrow/data/notes.json": "[]",
+        ...pluginFiles("publisher"),
+        "plugins/publisher/PLUGIN.md":
+          "---\nid: publisher\ndescription: Schema publisher\nprovides: [notes@1]\n---\n",
+      },
+      "pack-commit",
+    );
+    expect((await preview()).problems).toContainEqual(
+      expect.objectContaining({
+        level: "warning",
+        message: expect.stringContaining("no eligible receiver"),
+      }),
+    );
+  },
+);

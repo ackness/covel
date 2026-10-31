@@ -127,7 +127,8 @@ export async function findWorldPackageRoots(
     if (!manifestPath) continue;
     try {
       const manifest = await readWorldManifest(path.dirname(manifestPath));
-      if (manifest.id === worldId) matches.push(path.dirname(manifestPath));
+      if ((manifest.id ?? entry.name) === worldId)
+        matches.push(path.dirname(manifestPath));
     } catch (error) {
       // One malformed neighboring package must not disable healthy worlds.
       console.warn(

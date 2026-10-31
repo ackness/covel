@@ -2,6 +2,10 @@
 
 A collection is a list that says "these worlds and plugins should be installed together". The player pastes one link, ticks the items, confirms once, and everything is installed.
 
+See [world data receivers](../reference/world-data.md#data-receivers) for static discovery, inferred selection and omission notices. Data acceptance does not satisfy service or runtime capability dependencies.
+
+Collection checks infer data requirements from each included world's actual enabled sources, combine included and installed static declarations, and check receivers with the same selector. Schema and output publishers cannot satisfy data requirements; absent sources create none. This read-only check executes no entry or projection and grants no code permission.
+
 When to use it:
 
 - You made a world, and you also wrote a few plugins for it.

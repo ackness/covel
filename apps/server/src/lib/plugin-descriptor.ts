@@ -110,6 +110,14 @@ export function pluginContractFacts(entry: PluginRegistryEntry) {
     source: getPluginTrustInfo(entry.id, entry.source).source,
     provides: plugin?.provides ?? [],
     requires,
+    runtimes: pluginRuntimeManifests(entry).map(({ manifest }) =>
+      runtimeSummary(manifest),
+    ),
+    acceptsWorldData: uniqueSorted(
+      Object.values(plugin?.contributes?.data ?? {}).flatMap(
+        (data) => data.accepts ?? [],
+      ),
+    ),
     optional: optionalContracts(
       pluginRuntimeManifests(entry).map(({ manifest }) => manifest),
       requires,
@@ -193,6 +201,7 @@ export function buildPluginSummary(
     provides: facts.provides,
     requires: facts.requires,
     optional: facts.optional,
+    acceptsWorldData: facts.acceptsWorldData,
     conflicts: facts.conflicts,
     extensions: facts.extensions,
     eventTopics: facts.eventTopics,

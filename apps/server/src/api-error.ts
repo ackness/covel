@@ -7,6 +7,7 @@ import type {
 } from "@covel/shared";
 import { SessionLockTimeoutError } from "./lib/session-lock.js";
 import { DimensionProviderConflictError } from "./world-data/dimension-provider-conflict.js";
+import { WorldDataImportError } from "./world-data/types.js";
 
 export type { ApiErrorResponse } from "@covel/shared";
 
@@ -188,6 +189,15 @@ export function classifyApiError(
   err: unknown,
   isDev: boolean,
 ): { body: ApiErrorResponse; status: 409 | 500 | 503 } {
+  if (err instanceof WorldDataImportError) {
+    return {
+      body: errorBody(
+        "World data could not be imported. Ask the world author to check the package.",
+        { code: err.code },
+      ),
+      status: 500,
+    };
+  }
   if (err instanceof SessionLockTimeoutError) {
     return {
       body: errorBody(SESSION_BUSY_MESSAGE, { code: SESSION_BUSY_CODE }),

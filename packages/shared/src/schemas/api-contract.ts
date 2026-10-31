@@ -308,6 +308,7 @@ export const pluginSummarySchema: z.ZodType<PluginSummary> = z
       ]),
     ),
     requires: z.array(z.string()),
+    acceptsWorldData: z.array(z.string()).optional(),
     optional: z.array(z.string()),
     conflicts: z.array(z.string()),
     extensions: z.array(
@@ -368,10 +369,23 @@ export const worldPluginPlanSchema: z.ZodType<WorldPluginPlan> = z
       .object({
         requestedPluginIds: z.array(z.string()),
         requiredContracts: z.array(z.string()),
+        requiredDataContracts: z.array(z.string()).optional(),
       })
       .strict(),
     selectedPackId: z.string().optional(),
     defaultPluginIds: z.array(z.string()),
+    dataNotices: z
+      .array(
+        z
+          .object({
+            level: z.enum(["warning", "error"]),
+            sourceId: z.string().optional(),
+            code: z.string().optional(),
+            message: z.string(),
+          })
+          .strict(),
+      )
+      .optional(),
     diagnostics: z
       .array(
         z

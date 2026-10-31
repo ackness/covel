@@ -16,8 +16,6 @@ cover: media/gallery/world-cover.webp
 accentColor: "oklch(72% 0.1 185)"
 plugins:
   - pack:traditional-story
-  - plugin:character-blueprint
-  - plugin:story-events
 pluginPitch:
   label: 雾港调查剧
   description: 以传统叙事推进齐老失踪案，带有线索记忆、关系图谱、世界规则、预设角色与立绘。

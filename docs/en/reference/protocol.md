@@ -1,5 +1,7 @@
 # SSE protocol
 
+Preparation freezes distinct capability `requiredContracts` and data `requiredDataContracts` in session metadata. Safe `dataNotices` / `worldDataNotices` report omissions. See [receiver rules](./world-data.md#data-receivers).
+
 World preparation reads `plugins` references through the public plan's `selection`. Creation submits explicit plugin IDs and exclusions; the server freezes world `contract:` references independently. Missing features produce notices and do not block play.
 
 This page explains how a client and the Covel server talk to each other: what requests the client sends, what events the server pushes, what data each event carries, and how a client recovers after a dropped connection.

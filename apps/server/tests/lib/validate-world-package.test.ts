@@ -370,7 +370,7 @@ describe("validateWorldPackage", () => {
     expect(world?.metadata).not.toHaveProperty("pluginPolicy");
   });
 
-  it("finds unclaimed files recursively in all data directories", async () => {
+  it("finds unclaimed structured content without warning about arbitrary assets", async () => {
     const files = {
       "data/nested/forgotten.json": "[]",
       "characters/custom.json": "[]",
@@ -379,10 +379,10 @@ describe("validateWorldPackage", () => {
     const diagnostics = await validate(await makeWorld(files));
     expect(
       diagnostics
-        .filter((item) => item.code === "data-file-unused")
+        .filter((item) => item.code === "unclaimed-data-source")
         .map((item) => item.file)
         .sort(),
-    ).toEqual(Object.keys(files).sort());
+    ).toEqual(["data/nested/forgotten.json"]);
   });
 
   it("finds undeclared files beside an explicit descriptor without flagging its sources", async () => {
@@ -396,17 +396,16 @@ describe("validateWorldPackage", () => {
         "data/known.zh-CN.json": JSON.stringify([
           { id: "known", content: "已知设定。" },
         ]),
-        "data/nested/forgotten.md": "An unclaimed story fragment.",
+        "data/nested/forgotten.json": "[]",
         "characters/custom.json": "[]",
       },
       `${MANIFEST}worldData: data/world.data.yaml\n`,
     );
     const unused = (await validate(worldDir)).filter(
-      (item) => item.code === "data-file-unused",
+      (item) => item.code === "unclaimed-data-source",
     );
     expect(unused.map((item) => item.file).sort()).toEqual([
-      "characters/custom.json",
-      "data/nested/forgotten.md",
+      "data/nested/forgotten.json",
     ]);
   });
 
@@ -574,7 +573,7 @@ describe("validateWorldPackage", () => {
         expect.objectContaining({
           level: "error",
           code: "unknown-plugin",
-          message: expect.stringContaining('"story-events"'),
+          message: expect.stringContaining('"pregame"'),
         }),
       );
       // Without its plugin, the roleplay notes in the character records are
@@ -643,16 +642,10 @@ describe("validateWorldPackage", () => {
         pointer: "[id=mara].blueprint.persona.voice",
       }),
     );
-    // A new session has no plugin for the notes unless the world asks for it.
+    // A unique accepting receiver is selected from actual character content.
     const unrequested = (items: readonly WorldPackageDiagnostic[]) =>
       items.filter((item) => item.code === "unrequested-receiver");
-    expect(unrequested(diagnostics)).toEqual([
-      expect.objectContaining({
-        level: "warning",
-        file: "characters/characters.json",
-        message: expect.stringContaining('the "blueprint" field'),
-      }),
-    ]);
+    expect(unrequested(diagnostics)).toEqual([]);
     expect(
       unrequested(
         await validate(
@@ -1188,7 +1181,7 @@ describe("world validation catalogue ownership", () => {
     try {
       const catalogue = await loadPluginCatalogue(pluginsDirs);
       const cli = await validateWorldPackage({ worldDir, pluginsDirs });
-      expect(spy).toHaveBeenCalledTimes(1);
+      expect(spy).not.toHaveBeenCalled();
       spy.mockClear();
       const app = await validateWorldPackage({ worldDir, catalogue });
       expect(spy).not.toHaveBeenCalled();

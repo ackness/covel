@@ -1,3 +1,11 @@
+import { DEFAULT_LOCALE } from "@covel/shared";
+import {
+  inventoryWorldData,
+  worldDataRequirementNotices,
+  type WorldDataRequirements,
+} from "../../../world-data/requirements.js";
+import { resolveSessionPlugins } from "@covel/shared";
+import { sessionContentLocale } from "@covel/shared";
 import { Hono } from "hono";
 import {
   WORLD_LOCALIZED_TEXT_KEY,
@@ -21,6 +29,7 @@ export function worldPluginPlan(
     "id" | "name" | "description" | "tags" | "metadata" | "locale"
   >,
   plugins: readonly PluginSummary[],
+  inventory?: WorldDataRequirements,
 ): WorldPluginPlan {
   const resolved = resolveWorldPluginSelection(
     world.metadata?.plugins,
@@ -89,11 +98,17 @@ export function worldPluginPlan(
     };
   });
   const selected = packs.find((pack) => pack.id === resolved.selectedPackId);
-  return {
+  const plan: WorldPluginPlan = {
     worldId: world.id,
     selection: {
       requestedPluginIds,
-      requiredContracts: resolved.selection.requiredContracts,
+      requiredContracts: [
+        ...new Set([
+          ...resolved.selection.requiredContracts,
+          ...(inventory?.requiredContracts ?? []),
+        ]),
+      ],
+      requiredDataContracts: inventory?.requiredDataContracts ?? [],
     },
     packs,
     ...(selected ? { selectedPackId: selected.id } : {}),
@@ -106,6 +121,27 @@ export function worldPluginPlan(
     ],
     diagnostics,
   };
+  const resolution = resolveSessionPlugins({
+    requested: plan.defaultPluginIds,
+    requiredContracts: plan.selection.requiredContracts,
+    requiredDataContracts: plan.selection.requiredDataContracts,
+    excluded: selected?.excluded,
+    plugins: plugins
+      .filter((p) => p.hostState !== "error")
+      .map((p) => ({
+        ...p,
+        authorized:
+          p.source === "builtin" ||
+          p.executionMode === "declarative" ||
+          p.trust?.autoApproved === true,
+      })),
+  });
+  return {
+    ...plan,
+    dataNotices: inventory
+      ? worldDataRequirementNotices(inventory, resolution.unmetData)
+      : [],
+  };
 }
 
 export const worldPluginPlanRoutes = new Hono<WorldEnv>();
@@ -117,7 +153,19 @@ worldPluginPlanRoutes.get("/:id/plugin-plan", async (c) => {
       404,
     );
   const plugins = [...c.get("pluginRegistry").getAll().values()].map((entry) =>
-    buildPluginSummary(entry, c.get("isPluginEntryPublished")),
+    buildPluginSummary(
+      entry,
+      c.get("isPluginEntryPublished"),
+      c.get("trustedSources"),
+    ),
   );
-  return c.json(worldPluginPlan(world, plugins));
+  const inventory = await inventoryWorldData({
+    world,
+    worldId: world.id,
+    worldsDirs: c.get("worldsDirs"),
+    covelHome: c.get("covelHome"),
+    registry: c.get("pluginRegistry"),
+    locale: sessionContentLocale(world, world.locale ?? DEFAULT_LOCALE).locale,
+  });
+  return c.json(worldPluginPlan(world, plugins, inventory));
 });

@@ -2,6 +2,8 @@
 
 这一页说明插件怎样从 GitHub 或 ZIP 装进 Covel：玩家看到的流程、能粘贴哪些链接、安装和更新的 HTTP 接口，以及各项限制。给玩家的分步说明见[安装插件与世界包](../start/packages.md)，给作者的发布说明见[发布](../ship/publish.md)。部署、排查安装问题或对接安装接口时读这一页。
 
+世界数据的静态发现、接收者推导与缺失提示见[接收规则](./world-data.md#data-receivers)。接收声明不满足服务或 runtime 能力依赖。
+
 官方目录是 [covel-ai/covel-plugins](https://github.com/covel-ai/covel-plugins)。目录里每个插件是一个 JSON 条目，README 的表格由这些条目生成。第三方插件的源码留在作者自己的仓库；官方扩展和示例可以放在目录仓库的独立子目录里。
 
 ## 声明式插件

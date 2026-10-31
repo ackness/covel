@@ -11,6 +11,7 @@ import {
   readJsonBody,
   redactSensitiveQueryParamsInText,
 } from "../../src/api-error.js";
+import { WorldDataImportError } from "../../src/world-data/types.js";
 import { SessionLockTimeoutError } from "../../src/lib/session-lock.js";
 
 function fakeContext(url: string): Context {
@@ -177,3 +178,22 @@ describe("readJsonBody", () => {
     },
   );
 });
+
+it.each([false, true])(
+  "keeps world-data author diagnostics private even in development: %s",
+  (isDev) => {
+    const log = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      const response = makeErrorHandler("test", isDev)(
+        new WorldDataImportError("SECRET_FILENAME: SECRET_VALUE"),
+        fakeContext("http://localhost/api/sessions"),
+      ) as unknown as { body: { error: string; code: string }; status: number };
+      expect(response.status).toBe(500);
+      expect(response.body.code).toBe("world_data_import_failed");
+      expect(JSON.stringify(response.body)).not.toContain("SECRET");
+      expect(log.mock.calls.flat().join(" ")).toContain("SECRET_FILENAME");
+    } finally {
+      log.mockRestore();
+    }
+  },
+);

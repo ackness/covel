@@ -13,6 +13,26 @@
 
 SillyTavern 角色卡和世界书可以[转换成同样的普通世界包](../worlds/import-sillytavern.md)。转换会报告无法映射的字段，只生成固定的内容文件，不执行扩展或脚本。
 
+<a id="data-receivers"></a>
+
+## 从实际内容选择接收插件
+
+世界只在 `plugins` 里选择玩法。宿主先用全部有效静态声明合并约定、descriptor 和用户覆盖，再从实际存在且启用的来源推导接收需求；这一步不导入插件代码、不执行投影、不读取图片内容，也不授予权限。结构化文件即使为空也保留接收需求，以便同步删除旧记录；不存在的文件、空通配目录、停用来源和没有出现的角色扩展字段不产生需求。媒体使用 `indexTo`，角色扩展使用声明的 `characterField`，便携世界使用 `metadata.contractData` 和 `embeddedCharacters`。
+
+能力需求和数据需求分开：`contract:` 玩法引用以及实际维度内容使用 `requiredContracts`；数据目标 `to` / `indexTo` 使用 `requiredDataContracts`，只由 `contributes.data.*.accepts` 满足。发布 schema、输出或服务契约不能代替接收声明；单独的 `schema: contract:…` 只做校验。普通角色和资料库不需要插件，维度需要 `world.dimensions@1`。
+
+已经选中的合格接收插件优先，玩家明确选中多个时仍向它们分发。尚未选中时，只有唯一合格接收者会自动加入；多个接收者需要玩家选择，不能用能力的 `default` 标志代选。没有 runtime 的数据包也可以接收。排除、依赖、冲突、审批和故障仍由会话准入决定；推导不会自动安装或批准代码，也不会仅因来源存在而启用可选投影。需要审批的唯一接收者走现有同意流程。带呈现 runtime 的包必须由玩法包或玩家显式选择，种子数据和素材本身不能启用它；选中后仍接收匹配的数据。
+
+同一路径的多个声明只有目标、类型、键、可见性、locale 数组键、资料库和媒体索引行为一致时才合并。不同契约或隐藏/公开分歧保持冲突，由显式 descriptor 指明目标；开关插件不能改变已识别来源的含义和身份。
+
+没有声明的 `data/` 结构化文件产生非致命的 `unclaimed-data-source` 警告。扫描有数量和深度上限，不跟随符号链接，不猜文件名对应哪个契约；已识别译文、停用来源、引用的 schema 和已知基础文件不重复提示。作者应安装声明该来源的插件来校验，或添加带明确目标的 descriptor。任意内容区以外的资源不触发这个警告。
+
+准备、创建和会话提示共用安全投影，区分缺失、歧义、停用和待批准。所有玩家提示均使用固定说明，不返回原始 source ID、文件名、记录键或异常详情；同一缺失原因合并显示。作者校验保留包内相对位置及修复建议。缺数据不阻止开局或叙事。
+
+创建会话时，服务端重新计算并冻结两类需求，客户端旧计划仅供参考；文件、世界记录、目录代次或授权在准备期间变化时拒绝过期创建。冻结后的会话不会因为安装新接收者而自动加入插件。checkpoint、分叉和恢复保留会话 metadata；显式开关保留原来的推导接收者，不悄悄换用新插件。新安装的 core 默认项或世界能力提供者也不会因无关开关而加入；玩家显式选择的插件仍可解析其普通依赖。缺少接收者的常规来源仍进入导入规划，同步把它视为暂缓，保留旧行、账本和媒体引用，不能把它当成空文件删除。重新启用只补导入未接收的数据；正常同步继续遵守数据集 schema、操作权限、最终值校验与事务规则。
+
+开发时应重建依赖推导集合的新会话和相关录制，重新导入修改过的世界副本。无需重置数据库结构，不自动改写旧会话或删除玩家数据。
+
 ## 声明式数据接收方
 
 活动的[声明式插件](./plugin-installation.md#声明式插件)可以通过 `contributes.data` 接收契约匹配的世界数据，无须代码授权，也不执行导入 handler。数据仍归接收包所有；声明的数据集 schema、键和 `ops` 对 runtime 写入及正式导入/同步保持有效，不允许借导入删除超出权限的数据。声明 `worldProjections` 会使包属于代码，投影仍需独立的服务器执行授权。接收方选择与契约匹配规则不因声明式状态而改变。
@@ -334,7 +354,7 @@ schema:
 
 **插件内容**由创作简报的 `contracts` 指定：
 
-- 生成器只为被选中的数据契约生成记录。每个契约的 schema、写作提示和示例取自接收插件的 `authoring` 声明（需声明 `generate`）。接收插件不在所选玩法包里时，加入 `plugins`；`kind: core` 的插件不加。
+- 生成器只为被选中的数据契约生成记录。每个契约的 schema、写作提示和示例取自接收插件的 `authoring` 声明（需声明 `generate`）。接收者由实际生成内容推导，不为数据重复写入 `plugins`。
 - 未选中的契约不会进入提示词。模型为未选中的契约输出了记录，或漏掉了被选中的契约，这次尝试都算失败并重试。
 - 一个契约的记录写进接收插件声明的文件（`authoring.source` 的 `path` 与 `kind`，例如 `data/memory-blocks.json`、`data/time.yaml`）。一条记录就是文件内容，多条写成数组。
 - 下面两种情况，记录改写成 `data/contract-<n>.json`，由 descriptor `data/world.data.yaml` 把这些文件加为 source。其他文件都在约定路径上，descriptor 里没有它们：
@@ -414,7 +434,7 @@ pluginPitch:
 
 `pluginPitch` 的 `label`、`description`、`reason` 分别可省略。默认显示世界公开名称、公开简介和标签；标签前使用固定的界面译文“世界标签”，无标签时省略原因。作者写的字段和对应语言覆盖优先，显示时通过 `resolveI18nText` 解析；未支持的界面语言按共享规则回退。介绍不读取设定正文、隐藏事件或模型提示，也不调用模型，不将派生文案保存回 YAML 或 metadata。翻译文件中的路径为 `pluginPitch.label`、`pluginPitch.description`、`pluginPitch.reason`。
 
-`GET /api/worlds/:id/plugin-plan` 返回 `selection: { requestedPluginIds, requiredContracts }`、有序 `packs`、可选 `selectedPackId`、`defaultPluginIds` 和有上限的 `diagnostics`。无法安装的插件不进入提交给创建接口的 ID；`missing-plugin` 诊断保留 `pluginId`、字段 `path` 和可选 `packId`。`unknown-pack` 也保留包引用的位置。会话创建接口只接收玩家明确的插件请求与排除，不替调用方选择玩法包；世界契约由服务端独立读取并冻结在会话中，后续固定集合解析不会自行加入新安装的插件。
+`GET /api/worlds/:id/plugin-plan` 返回 `selection: { requestedPluginIds, requiredContracts, requiredDataContracts }`、有序 `packs`、可选 `selectedPackId`、`defaultPluginIds` 和有上限的 `diagnostics`。无法安装的插件不进入提交给创建接口的 ID；`missing-plugin` 诊断保留 `pluginId`、字段 `path` 和可选 `packId`。`unknown-pack` 也保留包引用的位置。会话创建接口只接收玩家明确的插件请求与排除，不替调用方选择玩法包；世界契约由服务端独立读取并冻结在会话中，后续固定集合解析不会自行加入新安装的插件。
 
 旧的 `pluginPolicy` 及其 `preset`、`plus`、`packs`、`requires` 字段已移除，没有兼容读取。严格作者校验拒绝它们。玩家加载忽略未知根字段并报告；无效的可选选择或介绍单独省略，其余世界和设定仍可使用。开发世界和会话需要重新创建。
 
@@ -620,9 +640,9 @@ Put the file at `data/quests.yaml`: it is imported without a descriptor. The sam
 
 - 导入顺序是：维度，然后媒体，然后其余契约数据，最后是 `characters`。
 - 四个内置世界都这样读：它们没有 descriptor，所有 source 都来自约定路径。
-- 按这个会话**启用**的插件的约定读取。没启用的插件和加载失败的插件不影响读取。
+- 发现来源时使用全部有效静态声明，接收与执行再按会话准入筛选，见[接收规则](#data-receivers)。暂时未启用的插件不改变来源身份。
 - 每个约定 source 有一个 ID，descriptor 的 `after` 和 override 用它指代这个 source：内核的是 `dimensions`、`lorebook`、`characters`；插件的是它的 namespace，两个插件的 namespace 相同时是 `<插件 ID>-<namespace>`；目录里的文件是 `<约定 ID>-<文件名>`，例如 `data/rules/tide-mystery.yaml` 是 `rules-tide-mystery`。
-- 同一个会话启用的两个契约声明了同一个路径时，这个路径不算约定，这个文件不导入，世界包要用 descriptor 说明给谁。会话照常开始。服务端日志记一条 `[sessions]` 警告，世界数据预检返回一条 `convention-collision` 警告，`pnpm validate:world` 也会报出来（见[静态校验](#静态校验pnpm-validateworld)）。
+- 同一路径的声明不兼容时，这个路径不算约定，这个文件不导入，世界包要用 descriptor 说明给谁。相同声明只发现一次；不能通过停用一个声明者改变来源的可见性。会话照常开始。服务端日志记一条 `[sessions]` 警告，世界数据预检返回一条 `convention-collision` 警告，`pnpm validate:world` 也会报出来（见[静态校验](#静态校验pnpm-validateworld)）。
 
 给插件作者：`path` 是相对世界包根目录的路径，只能由 ASCII 字母、数字和 `_`、`.`、`/`、`-` 组成，不能以 `/` 开头，也不能含 `..`。最后一段可以写成 `*.<扩展名>`，表示目录里这一类的每个文件（媒体 source 不行，它本来就是目录）。它也不能是内核或世界包自己的路径：`world.yaml`、`WORLD.md`、`data/world.data.yaml`、`data/dimensions.yaml`、`data/lorebook.yaml`、`characters/characters.json`、`media/gallery.json`、`media/portraits.json`、`media/scenes.json`、`media/gallery/` 目录，以及它们的语言版本（如 `world.zh-CN.yaml`），比较时不分大小写。语言版本只认两个字母的语言代码（`.fr`、`.zh-CN`），或带地区的三个字母代码（`.yue-HK`）；`.bak`、`.min` 这样的后缀属于文件名，`characters/characters.bak.json` 可以用。不符合的插件清单在加载时校验失败。
 
@@ -633,7 +653,7 @@ Put the file at `data/quests.yaml`: it is imported without a descriptor. The sam
 - 需要用 `after` 指定顺序；
 - 要关掉某个约定 source，或者改它的某个字段（例如 `visibility`、`merge`）。
 
-**没被用到的文件。** `pnpm validate:world` 会检查 `data/`、`characters/`、`media/`（包括子目录）里有没有哪个文件没被任何 source 或框架功能用到，有就给出 `data-file-unused` 提醒。两种导入方式都检查。已有 source 的语言文件、本地 schema、维度文件、主题音乐和画廊图片不会被误报；README 是作者说明，也不参与检查。
+**没被用到的文件。** `pnpm validate:world` 和准备计划共用[接收规则](#data-receivers)里的有界扫描，只提醒 `data/` 下未认领的 YAML / JSON。任意图片、媒体目录和作者说明不在这个扫描范围内。
 
 ## Descriptor
 
@@ -860,6 +880,8 @@ characterSchema:
 ### 开局后加入的接收插件
 
 准备页把已选择、非声明式且尚未批准服务端代码的社区插件单独列在“需要批准”下。它们保持勾选，但不计入已启用插件数、运行任务数、叙事检查或世界数据预检的接收方。玩家仍可直接开局；批准并启用后，这些插件接收的世界数据才会导入。
+
+仅由数据推导出的待批准接收者保留在待批准列表，不因此成为显式插件请求；世界和玩家已选中的插件仍沿用现有审批流程。创建会话时，服务端独立推导接收需求。
 
 创建会话时没有启用的插件收不到世界数据，例如开局后才批准的社区插件。在游戏里启用插件（`PUT /api/sessions/:id/plugins/:pluginId`）时，Covel 为这次新加入的插件补跑一次导入：
 
@@ -1497,8 +1519,8 @@ sources:
 POST /api/worlds/<world-id>/world-data/preflight
 ```
 
-- 传 `plugins` 时，按这份插件选择预检。
-- 传 `sessionId` 时，按已有会话启用的插件预检。
+- 传 `plugins` 时，把它作为新会话请求，与 `excludedPlugins` 和实际数据需求一起解析。可传 `locale` 预览世界支持的内容版本。
+- 传 `sessionId` 时，只按已有会话已准入、已授权且未熔断的固定集合及会话内容语言预检；请求不能替换它们。
 - 内置的界面在开始游戏前会自动调用它，展示计划写入的内容、目标摘要和诊断。
 
 **同步（sync）**：作者和工具用的 HTTP 接口，把世界包后来的数据改动应用到一个指定的已有会话。应用目前没有供玩家操作的同步入口。
@@ -1616,7 +1638,7 @@ pnpm validate:world --strict --plugins ~/.covel/plugins ~/.covel/worlds/my-world
 ```
 
 - 校验器不创建会话，不执行插件代码。
-- 它复用创建会话时的世界数据预检。所以这里通过的数据，创建会话时不会再因为记录内容而失败。
+- 它复用创建会话时的世界数据预检；创建仍会核对当前文件、目录和授权，拒绝过期计划。
 - 插件从仓库的 `plugins/` 加上每个 `--plugins <dir>` 里找。
 - 世界有几种语言的版本，预检就各跑一遍，因为[语言文件](#语言文件namelocaleext)会让不同语言读到不同的文本。主文件旁边的每个语言文件都会检查，不限于世界的版本。
 
@@ -1650,8 +1672,8 @@ pnpm validate:world --strict --plugins ~/.covel/plugins ~/.covel/worlds/my-world
 | `invalid-setting` | error | `pluginSettings` 的值不符合该设置项声明的类型、范围或选项 |
 | `unprovided-contract` | error 或 warning | `contract:` 引用 的契约没有提供者 |
 | `unresolved-contract` | error 或 warning | source 使用的数据契约没有任何已扫描插件接收 |
-| `unrequested-receiver` | warning | 新开会话默认启用的插件里没有这个 source 的接收方；玩家手动开启接收插件之前，这个 source 不导入 |
-| `convention-collision` | error 或 warning | 某个文件所在的路径有不止一个插件声明，descriptor 也没有说明给谁；同时启用这些插件的会话不导入它 |
+| `unrequested-receiver` | warning | 接收者有歧义或不能激活；作者可明确选择，玩家仍可开局 |
+| `convention-collision` | error 或 warning | 某个文件的路径有不兼容声明，descriptor 也没有说明给谁；会话不导入它 |
 | `world-data` | 与预检一致 | descriptor、source 顺序、文件读取、target、隐藏数据规则，以及按契约 schema 逐条校验的记录 |
 | `locale-file-name` | error | 语言文件的文件名只写了语言（`.en.`），没有写成世界版本的 locale（`.en-US.`）；这个文件不会被读取 |
 | `locale-overlay` | warning | 语言文件里有一条译文无处安放（主文件没有这个 key 或 id，或它改了非文本的值），这条被忽略 |
@@ -1659,7 +1681,7 @@ pnpm validate:world --strict --plugins ~/.covel/plugins ~/.covel/worlds/my-world
 | `locale-script` | warning | 非中日韩语言的语言文件里留有中日韩文字：没翻译的文本，或从主文件照抄的触发词 |
 | `edition-incomplete` | warning | 世界有某种语言的版本，但它缺少若干条译文；用这种语言开的会话会读到世界默认语言的原文 |
 | `inline-locale-map` | error | 主文件里把文本写成了多语言对照；主文件只写一种语言，译文放进语言文件 |
-| `data-file-unused` | warning | `data/`、`characters/` 或 `media/` 中的文件未被 source 或框架功能使用 |
+| `unclaimed-data-source` | warning | `data/` 下的结构化文件没有声明其来源；安装声明插件或添加明确目标的 descriptor |
 | `attribute-reference` | error | 记录里指向角色属性的值（由接收插件的 `authoring.references` 声明）在世界的 `characterSchema` 里不存在、类型不对或超出范围 |
 | `dimension-reference` | error | 记录里声明的维度引用不存在、旁边的路径不是维度 `schema` 允许的位置，或 `values` 声明的候选值不符合该位置的 schema |
 | `model-hidden-field` | warning | 记录里有模型读不到的字段：名字以 `At` 结尾或叫 `timestamp`、取值是 ISO 时间；或者名字是 `id` / 以 `Id`、`Ids` 结尾、取值是 UUID |
@@ -1669,7 +1691,7 @@ pnpm validate:world --strict --plugins ~/.covel/plugins ~/.covel/worlds/my-world
 
 `unknown-plugin`、`unprovided-contract`、`unresolved-contract` 三项：拼写接近某个已知 ID 时是 error，并提示 “Did you mean”。否则默认是 warning，因为提供者可能是没被扫描的社区插件。加 `--strict` 后一律是 error。`pnpm release:preflight` 对内置世界使用 `--strict`。
 
-**新开会话默认启用的插件**，就是开局准备页默认勾选的插件：初始玩法包里的 `requested` 和 `plugins`，再加上 core 插件和 显式世界契约带上的提供者。已扫描的社区插件当作已经同意。`unrequested-receiver` 和 `convention-collision` 按这个集合判断：`convention-collision` 的声明者里有两个在这个集合里时是 error，否则是 warning。记录仍然按所有已扫描插件的 schema 校验，所以玩家手动开启的插件，它的数据也会检查。
+**新开会话默认启用的插件**，就是开局准备页默认勾选的插件：初始玩法包里的 `requested` 和 `plugins`，再加上 core 插件、能力提供者和实际数据的唯一合格接收者。已扫描的社区插件当作已经同意。`unrequested-receiver` 和 `convention-collision` 按这个集合判断：`convention-collision` 的声明者里有两个在这个集合里时是 error，否则是 warning。记录仍然按所有已扫描插件的 schema 校验，所以玩家手动开启的插件，它的数据也会检查。
 
 **`prompt-size` 的三种情况**，都不阻止使用：
 

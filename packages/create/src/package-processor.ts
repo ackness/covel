@@ -427,7 +427,6 @@ export function briefOfPackage(value: unknown): WorldCreationBrief {
 export function applyCreationBriefToManifest(
   manifest: Record<string, unknown>,
   brief: WorldCreationBrief | undefined,
-  dataContracts: readonly WorldGenerationDataContract[] = [],
   packs: readonly PluginPack[] = [],
 ): { errors: string[]; warnings: string[] } {
   if (!brief) return { errors: [], warnings: [] };
@@ -440,18 +439,8 @@ export function applyCreationBriefToManifest(
   const pack = selectedPack(brief, packs);
   if (brief.pack !== undefined && !pack)
     errors.push(`brief names an unknown plugin pack: ${brief.pack}`);
-  const receivers = selectedDataContracts(brief, dataContracts)
-    .map((item) => item.pluginId)
-    .filter(
-      (id): id is string =>
-        typeof id === "string" && !pack?.requested.includes(id),
-    );
   manifest.plugins = [
-    ...new Set([
-      ...(pack ? [`pack:${pack.id}`] : []),
-      ...references,
-      ...receivers.map((id) => `plugin:${id}`),
-    ]),
+    ...new Set([...(pack ? [`pack:${pack.id}`] : []), ...references]),
   ];
   if (pack?.defaultViewMode) manifest.defaultViewMode = pack.defaultViewMode;
   else delete manifest.defaultViewMode;
