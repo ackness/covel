@@ -760,18 +760,18 @@ async function runProvider({
       { role: "system", content: assembled.systemPrompt },
       ...assembled.messages,
     ];
-    const worldBase =
-      args.world ??
-      (deps.store
-        ? await createWorldModelView(
-            deps.worldModelReads ?? deps.store,
-            input.sessionId,
-            [],
-            [],
-            () => {},
-            deps.dimensionContext,
-          )
-        : undefined);
+    // The caller's world only resolves the actor's profile and brief; the
+    // sub-agent's own reads stay on committed data, like every child run.
+    const worldBase = deps.store
+      ? await createWorldModelView(
+          deps.worldModelReads ?? deps.store,
+          input.sessionId,
+          [],
+          [],
+          () => {},
+          deps.dimensionContext,
+        )
+      : undefined;
 
     const toolLoop = await runAgentToolLoop({
       worldBase,
