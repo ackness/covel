@@ -49,7 +49,7 @@ export interface ComposerModes {
 
 /**
  * Mode state for one composer surface. Which kinds the seat may submit comes
- * from the session's action-kind catalogue; until it is read, `say` only.
+ * from the session's action-kind catalogue. Submission waits for that catalogue.
  */
 export function useComposerModes({
   session,
@@ -59,7 +59,7 @@ export function useComposerModes({
   session: SessionRecord;
   executing: boolean;
   onSendMessage: (content: string) => boolean;
-}): ComposerModes {
+}): ComposerModes & { readonly ready: boolean } {
   const { t, i18n } = useTranslation();
   const {
     state: sessionState,
@@ -69,6 +69,12 @@ export function useComposerModes({
   const catalogue = sessionState.sessionActionKinds ?? null;
   const gameState = sessionState.gameState;
   const seats = session.seats;
+  const seat = composerSeat(seats);
+  const ready =
+    !!catalogue &&
+    !!seat &&
+    seat.controller === "human" &&
+    !!catalogue.seats.find((entry) => entry.seatId === seat.id)?.allowed.length;
   const language = i18n.language;
   const [selected, setSelected] = useState<{
     kind: string;
@@ -175,12 +181,21 @@ export function useComposerModes({
   );
 
   const acceptsInput = useCallback(
-    (text: string) => modeAcceptsInput(mode, text),
-    [mode],
+    (text: string) => ready && modeAcceptsInput(mode, text),
+    [mode, ready],
   );
 
   const submit = useCallback(
     (text: string, queued?: string): boolean => {
+      if (
+        !ready ||
+        !catalogue?.seats
+          .find((entry) => entry.seatId === seat?.id)
+          ?.allowed.includes(text.startsWith("/") ? "command" : mode.kind)
+      ) {
+        emitToast("info", t("session.actionsLoading"));
+        return false;
+      }
       const admitted = (result: boolean) => {
         if (result !== false) return true;
         emitToast(
@@ -200,7 +215,6 @@ export function useComposerModes({
         // The default player's text request names no seat, as it never has.
         // A seat the server cannot default to (a host-only session) rides
         // along, or the line is refused for lack of a player seat.
-        const seat = composerSeat(seats);
         const sent =
           seat && seat !== primarySeat(seats)
             ? submitComposerAction({
@@ -237,7 +251,6 @@ export function useComposerModes({
         );
         return false;
       }
-      const seat = composerSeat(seats);
       const fields = mode.fields.flatMap((field) => {
         const value = fieldValues[field.name];
         if (
@@ -278,11 +291,15 @@ export function useComposerModes({
       seats,
       submitComposerAction,
       t,
+      ready,
+      catalogue,
+      seat,
     ],
   );
 
   return useMemo(
     () => ({
+      ready,
       modes,
       mode,
       selectKind,
@@ -296,6 +313,7 @@ export function useComposerModes({
       submit,
     }),
     [
+      ready,
       modes,
       mode,
       selectKind,

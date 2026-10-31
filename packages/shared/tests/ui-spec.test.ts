@@ -372,3 +372,129 @@ describe("multi-file view authoring", () => {
     });
   });
 });
+
+describe("live session view widgets", () => {
+  const view = (node: unknown) => ({
+    id: "console",
+    label: "Console",
+    view: node,
+  });
+  const widget = (component: string, props?: Record<string, unknown>) => ({
+    component,
+    ...(props ? { props } : {}),
+  });
+  it("accepts one of each region and composer, including type aliases and slots", () => {
+    expect(
+      pluginUiSpecIssues(
+        view({
+          type: "Stack",
+          slots: {
+            body: [
+              widget("SessionMessages"),
+              widget("SessionMessages", { content: "pending" }),
+              { type: "SessionComposer", props: {} },
+            ],
+          },
+        }),
+        "community",
+        "view",
+      ),
+    ).toEqual([]);
+  });
+  it.each([
+    ["SessionMessages", { content: "raw" }, "view.props.content"],
+    ["SessionMessages", { sessionId: "other" }, "view.props"],
+    [
+      "SessionMessages",
+      { content: { $state: "/secret" } },
+      "view.props.content",
+    ],
+    ["SessionComposer", { seatId: "host" }, "view.props"],
+    ["SessionComposer", { action: "direct" }, "view.props"],
+  ])("rejects author-selected props for %s", (name, props, path) => {
+    const issues = pluginUiSpecIssues(
+      view(widget(name as string, props as Record<string, unknown>)),
+      "community",
+      "view",
+    );
+    expect(issues.map((issue) => issue.path)).toEqual([path]);
+  });
+  it.each(["right", "message", "segment"] as const)(
+    "rejects session widgets in %s",
+    (slot) => {
+      const issues = pluginUiSpecIssues(
+        { ...view(widget("SessionComposer")), match: { kind: "narration" } },
+        "community",
+        slot,
+      );
+      expect(issues).toContainEqual({
+        path: "view.component",
+        message:
+          "SessionComposer is only available in a live declarative contributes.ui.view",
+      });
+    },
+  );
+  it.each([
+    [
+      { ...widget("SessionComposer"), repeat: { statePath: "/entries" } },
+      "view.component",
+    ],
+    [
+      {
+        component: "Stack",
+        repeat: { statePath: "/entries" },
+        slots: { body: [{ type: "SessionMessages" }] },
+      },
+      "view.slots.body[0].type",
+    ],
+    [
+      {
+        component: "FilterContainer",
+        props: {
+          items: { $state: "/entries" },
+          itemTemplate: {
+            component: "Stack",
+            children: [widget("SessionComposer")],
+          },
+        },
+      },
+      "view.props.itemTemplate.children[0].component",
+    ],
+  ])(
+    "rejects multiplied live controls with the exact node path",
+    (node, path) => {
+      expect(pluginUiSpecIssues(view(node), "community", "view")).toEqual([
+        { path, message: expect.stringContaining("cannot be repeated") },
+      ]);
+    },
+  );
+  it.each([
+    [widget("SessionComposer"), { type: "SessionComposer" }, "SessionComposer"],
+    [
+      widget("SessionMessages"),
+      widget("SessionMessages", { content: "story" }),
+      "SessionMessages:story",
+    ],
+    [
+      widget("SessionMessages", { content: "pending" }),
+      widget("SessionMessages", { content: "pending" }),
+      "SessionMessages:pending",
+    ],
+  ])("rejects duplicate live regions", (first, second, name) => {
+    expect(
+      pluginUiSpecIssues(
+        view({ component: "Stack", children: [first, second] }),
+        "community",
+        "view",
+      ),
+    ).toEqual([
+      {
+        path: "view.children[1].component".replace(
+          "component",
+          "type" in second ? "type" : "component",
+        ),
+        message: `only one ${name} is allowed in a view`,
+      },
+    ]);
+  });
+});

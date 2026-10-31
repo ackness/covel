@@ -1496,3 +1496,7 @@ runtime:
 调用 `ctx.presentation.note(reason)` 记录固定代码：`no-story`、`no-scene-change`、`asset-missing`、`budget-exhausted`、`unavailable`、`superseded`、`no-output`、`failed`。不能传自由文本。没有展示写入且没有 note 时推导 `no-output`；业务返回值本身不算可见产出。预算拒绝是正常 no-op，可以捕获后继续使用已有素材；未捕获则丢弃未完成写入，不归为插件故障。自身异常、无效输出和超时保持原有故障归属。
 
 每次结算通过 [`presentation.completed`](./protocol.md#presentation-completed) 留下状态、来源关联和额度计数。它不增加每回合玩家通知。呈现 function 仍是已批准的非沙箱服务端 JS；这个 API 策略不替代[代码审批](./plugin-installation.md)，也不限制代码直接使用 Node 的权限。
+
+## 仅提供会话视图的包
+
+包可以只有 `contributes.ui.view`，不声明 `entry` 或 runtime。这样的声明式包不调用模型，也不因提供视图而增加权限。内置 `dm-console` 就是这种包；社区包可组合相同的 [SessionMessages / SessionComposer](./ui-components.md#实时会话视图组件)。图鉴和关系图谱也可同时声明右侧面板与独立页面，两者读取同一份自有已提交数据。普通声明式加载诊断只移除无效 spec，不影响其他面板和运行时。示例见[插件界面](../plugins/ui.md#声明式会话控制台)。

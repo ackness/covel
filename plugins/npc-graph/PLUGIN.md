@@ -1,5 +1,5 @@
 ---
-version: 0.0.39
+version: 0.0.40
 displayName: Relationship Graph
 description: >-
   Tracks relationships between characters so the story stays consistent when
@@ -17,6 +17,8 @@ contracts:
     schema: ./schemas/graph-rag.schema.json
 contributes:
   ui:
+    view:
+      - ./ui/relationships-view.json
     right:
       - ./runtimes/extractor/ui/npc-graph-panel.json
   tools:

@@ -17,6 +17,9 @@
     "primary": "Основное"
   },
   "session": {
+    "liveViewUnavailable": "Элементы сеанса доступны только в текущем представлении плагина.",
+    "noPendingInteractions": "Нет ожидающих взаимодействий.",
+    "actionsLoading": "Загрузка доступных действий…",
     "worldSelectionTags": "Теги мира: {{tags}}",
     "unavailableWorldPacks": "Мир рекомендует недоступный набор. Выберите другой или начните с текущим выбором.",
     "operationFailedNotice": "{{count}} действия из этого хода не вступило в силу.",

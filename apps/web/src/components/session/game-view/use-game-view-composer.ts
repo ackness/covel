@@ -153,7 +153,11 @@ export function useGameViewComposer({
     isPreGameSession(session) && messages.length === 0 && !executing;
   // While a turn is executing the composer stays usable — submitting
   // steers the in-flight turn instead of starting a new one.
-  const composerDisabled = composerBlocked || awaitingBegin;
+  const composerDisabled =
+    composerBlocked ||
+    awaitingBegin ||
+    session.status === "ended" ||
+    !composerModes.ready;
 
   /**
    * Send the queued selections, and the typed line with them, as one
@@ -472,7 +476,11 @@ export function useGameViewComposer({
     commandMenuOpen,
     selectedCommandIndex,
     commandExecuting,
-    commandFeedback,
+    commandFeedback:
+      commandFeedback ??
+      (!composerModes.ready
+        ? { tone: "info" as const, message: t("session.actionsLoading") }
+        : null),
     applyCommandCompletion,
     handleConfirmDrafts: handleSubmit,
     handleSubmit,

@@ -1491,6 +1491,8 @@ How snapshots are saved:
 
 ## Plugin view read-only port
 
+Declarative [SessionMessages / SessionComposer](./ui-components.md#live-session-view-components) render directly through the host, without this port. Input reuses player-source `submit_actions` and existing interaction responses. Refusal or busy admission retains drafts; UI callbacks are not plugin RPC and do not imply persistence.
+
 Plugin views reuse the sandbox MessagePort. Full `{ type: "state", value }` messages carry the projection in `value.session`; streaming messages are `{ type: "stream", seq, append }`. This adds no HTTP or SSE endpoint. Reading requires player consent before mounting, bound to the plugin ID and the content hash of the spec plus HTML. Revocation closes the page. Existing page action handlers are unchanged. See [Plugin views](./ui-panels.md#plugin-views) for projection, throttling and consent rules.
 
 <a id="auto-advance-events"></a>

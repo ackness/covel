@@ -1,5 +1,5 @@
 ---
-version: 0.0.40
+version: 0.0.41
 displayName: Codex
 description: >-
   Automatically collects newly discovered places, people, items, and rumors for
@@ -14,6 +14,8 @@ requires:
   - world-ir-provider@1
 contributes:
   ui:
+    view:
+      - ./ui/library-view.json
     right:
       - ./ui/codex-panel.json
   prompt:

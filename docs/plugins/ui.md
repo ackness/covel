@@ -692,3 +692,32 @@ messages:
 ## 用呈现函数更新展示状态
 
 需要跟随故事的背景或配乐时，用[呈现选择器](./advanced.md#呈现选择器)更新自有展示 namespace，再让原有界面槽位读取它。呈现不能读取完整 World Model 或调用槽位服务来绕开限制；它失败时不挡故事和下一次输入。规范见[呈现 runtime](../reference/plugins.md#presentation-runtimes)。
+
+## 声明式会话控制台
+
+在用户插件目录建立 `session-desk/PLUGIN.md`，填写描述并加入下面的声明；创建 `ui/desk.json`，使用后面的 JSON。不需要入口、runtime、硬依赖或浏览器桥。英文标签的中文译文放在 `locales/zh.yaml` 的 `messages` 中。
+
+```yaml
+contributes:
+  ui:
+    view: [./ui/desk.json]
+```
+
+```json
+{
+  "id": "desk",
+  "label": "Session desk",
+  "alwaysRender": true,
+  "view": {
+    "component": "Stack",
+    "children": [
+      { "component": "SceneCastList" },
+      { "component": "SessionMessages", "props": { "content": "pending" } },
+      { "component": "SessionMessages" },
+      { "component": "SessionComposer" }
+    ]
+  }
+}
+```
+
+启用此社区包后，从“插件视图”选择 Session desk。它使用宿主当前身份的真实输入框和公开渲染；没有在场角色提供方也可以继续行动。组件属性、唯一性、重复节点诊断和不可用位置见[组件契约](../reference/ui-components.md#实时会话视图组件)。验证用 `pnpm validate:plugin <plugin-dir>`；不要把这些组件放进 `ui.message` 或行模板。

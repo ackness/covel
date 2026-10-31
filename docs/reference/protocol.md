@@ -1491,6 +1491,8 @@ runtime 的终态：
 
 ## 插件视图的只读端口
 
+声明式 [SessionMessages / SessionComposer](./ui-components.md#实时会话视图组件) 由宿主直接渲染，不使用此端口。输入复用 `submit_actions` 的玩家来源行动和现有交互协议，拒绝或忙碌时保留草稿；UI 回调不是插件 RPC，也不代表已经提交。
+
 插件视图复用沙箱的 MessagePort：完整 `{ type: "state", value }` 在 `value.session` 中带会话投影，流式消息是 `{ type: "stream", seq, append }`。这不是新的 HTTP 或 SSE 端点。读取能力在首次挂载前取得玩家授权，绑定插件 ID 与 spec + HTML 内容哈希；撤销后关闭页面。既有页面 action handler 不变。投影、节流与授权规则统一见[插件视图](./ui-panels.md#插件视图)。
 
 <a id="auto-advance-events"></a>

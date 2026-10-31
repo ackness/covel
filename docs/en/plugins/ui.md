@@ -692,3 +692,32 @@ messages:
 ## Updating display state with presentation
 
 For story-driven backdrops or music, use a [presentation selector](./advanced.md#presentation-selectors) to update owned display namespaces for existing UI slots. Presentation cannot read the full World Model or call slot services to bypass its scope; failure leaves story and next input available. See the [contract](../reference/plugins.md#presentation-runtimes).
+
+## Declarative session console
+
+Create `session-desk/PLUGIN.md` in the user plugin directory, add a description and the declaration below, then create `ui/desk.json` with the JSON example. No entry, runtime, hard dependency or browser bridge is needed. Put Chinese translations of English labels in `messages` in `locales/zh.yaml`.
+
+```yaml
+contributes:
+  ui:
+    view: [./ui/desk.json]
+```
+
+```json
+{
+  "id": "desk",
+  "label": "Session desk",
+  "alwaysRender": true,
+  "view": {
+    "component": "Stack",
+    "children": [
+      { "component": "SceneCastList" },
+      { "component": "SessionMessages", "props": { "content": "pending" } },
+      { "component": "SessionMessages" },
+      { "component": "SessionComposer" }
+    ]
+  }
+}
+```
+
+Enable this community package and choose Session desk from Plugin views. It uses the host's real current-role input and public rendering; actions remain available without a cast provider. See the [component contract](../reference/ui-components.md#live-session-view-components) for props, singleton limits, repeat diagnostics and unavailable placements. Validate with `pnpm validate:plugin <plugin-dir>`; do not place these widgets in `ui.message` or row templates.

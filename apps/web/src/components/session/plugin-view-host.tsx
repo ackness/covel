@@ -8,6 +8,7 @@ import { HeaderMenu, MenuItem } from "./game-view/game-view-header.js";
 import type { PluginViewEntry } from "./game-view/use-plugin-views.js";
 import { PluginPanel } from "./plugin-panel.js";
 import { useSessionBridge } from "./use-session-bridge.js";
+import type { PluginViewSession } from "./plugin-view-session-context.js";
 
 export function PluginViewHost({
   entry,
@@ -16,6 +17,11 @@ export function PluginViewHost({
   sessionBridgeAllowed = false,
   onRevoke,
   onRetry,
+  liveSession,
+  executing,
+  onStop,
+  awaitingBegin,
+  onBegin,
 }: {
   entry: PluginViewEntry;
   sessionId: string;
@@ -24,6 +30,11 @@ export function PluginViewHost({
   sessionBridgeAllowed?: boolean;
   onRevoke?: () => void;
   onRetry?: () => void;
+  liveSession?: PluginViewSession;
+  executing?: boolean;
+  onStop?: () => void;
+  awaitingBegin?: boolean;
+  onBegin?: () => void;
 }) {
   const { t } = useTranslation();
   const bridge = useSessionBridge(sessionId);
@@ -46,6 +57,16 @@ export function PluginViewHost({
           {entry.pluginName}
         </span>
         {readsSession && <span>{t("session.viewReadsStory")}</span>}
+        {awaitingBegin && onBegin && (
+          <Button size="sm" onClick={onBegin}>
+            {t("session.beginAdventure")}
+          </Button>
+        )}
+        {executing && onStop && (
+          <Button variant="outline" size="sm" onClick={onStop}>
+            {t("session.abortTurn")}
+          </Button>
+        )}
         <Button
           variant="ghost"
           size="sm"
@@ -81,6 +102,11 @@ export function PluginViewHost({
               spec={{ ...entry.spec }}
               expanded
               fill
+              liveSession={
+                !entry.spec.webview && liveSession?.sessionId === sessionId
+                  ? liveSession
+                  : undefined
+              }
               onRenderError={failed}
               onRetry={onRetry}
               sessionBridge={

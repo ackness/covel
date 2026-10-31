@@ -7,7 +7,7 @@ A plugin's UI is a JSON document (a UI spec), and it can only be built from the 
 ## Authoring tip
 
 - **Where the components come from.** `apps/web/src/lib/catalog.tsx` exports `covelRegistry`. Each renderer lives under `apps/web/src/lib/catalog/`, grouped by responsibility. A plugin can only use components registered here. The framework sets the vocabulary, and plugins combine it.
-- **Referencing them in a plugin.** In `ui/*.json`, write `"component": "<Name>"`, with the name exactly as below. Spec files are discovered through `contributes.ui.right` / `ui.message` in `PLUGIN.md`.
+- **Referencing them in a plugin.** In `ui/*.json`, write `"component": "<Name>"`, with the name exactly as below. Spec files are discovered through `contributes.ui.right` / `ui.message` / `ui.view` in `PLUGIN.md`.
 - **Text and validation.** Write the spec in English, and put translations in the `messages` section of `locales/<locale>.yaml` (see [ui-panels.md](./ui-panels.md#plugin-ui-text-rules)). Run `pnpm check:i18n`. It includes `check-plugin-i18n`, which rejects Chinese in a spec, and requires every interface text of a built-in plugin to have a Chinese translation.
 - **Finding components this page does not cover yet.** The full list can be searched at any time:
 
@@ -227,6 +227,20 @@ See [form tools](./tools.md#create-form) and [plugin testing](../plugins/testing
 | `PlayerMessage` | A player's chat bubble, aligned to the right (the Paper theme has a different style). | `content` (string)                                                                               |
 | `Alert`         | An info / success / warning / error notice.                                           | `level` (`info` / `success` / `warning` / `error`), `title` _(I18nText)_, `message` _(I18nText)_ |
 
+### Live session view components
+
+<!-- prettier-ignore -->
+| Component | Props | Content |
+| --- | --- | --- |
+| `SessionMessages` | Only optional literal `content: "story" \| "pending"`, default `"story"` | Public story/player messages and current story stream, or pending public interactions with an empty state |
+| `SessionComposer` | Empty object `{}`; `props` may be omitted | The current session's shared mode bar, fields, input, queued drafts and feedback |
+
+These components are valid only in live declarative `contributes.ui.view`. Each view allows at most one story region, one pending region and one composer. They cannot use `repeat`, have a repeated ancestor, or occur inside `FilterContainer.props.itemTemplate`. Both `component` and `type` are checked, including named slots and row templates, with exact diagnostic paths. Other props, including session, seat, actor, source and action parameters, are rejected. Expressions cannot select `content`. This control value is never translated; translate region headings through ordinary text components.
+
+Right, message and segment placements reject them. Webviews, snapshots, debug panels and nested messages have no live host context. Runtime checks also reject invalid props and show a bounded unavailable notice. Pending means already public unanswered, non-stale forms, choices and confirmations, determined using complete history. Pending blocks are not duplicated in story; suggestions do not lock input. Unrevealed plot queues, conditions and counts are excluded. See [Live session components](./ui-panels.md#live-session-components) for host and action rules.
+
+`SceneCastList` still reads only public `stage.cast@1`, with an empty state when no provider or actor exists. It is not all known characters, kernel witnessed history or actor eligibility.
+
 ### Visualization
 
 | Component         | Use                                                                                                                                                                                                                                                                                                                                                                    | Main properties                                           |
@@ -273,7 +287,7 @@ Existing `WorldDimensions` tables, host Markdown tables, component loading anima
 
 ## Summary
 
-There are 50 components in total. The authoritative list is `covelRegistry`, exported from `apps/web/src/lib/catalog.tsx`. The renderer implementations are under `apps/web/src/lib/catalog/`.
+There are 52 components in total. The authoritative list is `covelRegistry`, exported from `apps/web/src/lib/catalog.tsx`. The renderer implementations are under `apps/web/src/lib/catalog/`.
 
 When you add a new component:
 

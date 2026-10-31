@@ -113,7 +113,7 @@
     en-US: Use the narrator's game-master perspective. Choose Player or Game master at creation, then set narrator Perspective to Game master. This composition does not delegate NPCs.
     ru-RU: Рассказчик в роли ведущего. Выберите роль при создании, затем перспективу ведущего в настройках рассказчика. Без делегирования NPC.
   source: builtin
-  requested: [pregame, world-init, narrator]
+  requested: [pregame, world-init, narrator, dm-console]
   excluded: [char-creator, chat-mode-narrator]
   recommended: [guide, memory, codex]
   defaultViewMode: parsed
@@ -139,7 +139,7 @@
       scene-stage,
     ]
   excluded: [narrator]
-  recommended: [guide, memory, character-blueprint]
+  recommended: [guide, memory, character-blueprint, dm-console]
   defaultViewMode: stage
 - id: spectator
   tags: [mode:dialogue]
@@ -160,6 +160,7 @@
       character-agent,
       turn-policy,
       scene-stage,
+      dm-console,
     ]
   excluded: [narrator, char-creator]
   recommended: [memory]

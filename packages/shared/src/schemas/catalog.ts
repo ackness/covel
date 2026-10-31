@@ -1,6 +1,12 @@
 import { z } from "zod";
 import { i18nTextSchema } from "./world.js";
 
+/** Live declarative views use host rendering, never author-selected session data. */
+export const sessionMessagesPropsSchema = z.strictObject({
+  content: z.enum(["story", "pending"]).default("story"),
+});
+export const sessionComposerPropsSchema = z.strictObject({});
+
 /** Values in action payloads may select from the row, component props or uploaded media. */
 export const catalogActionSchema = z.strictObject({
   pluginId: z.string().min(1),

@@ -17,6 +17,9 @@
     "primary": "Primary"
   },
   "session": {
+    "liveViewUnavailable": "Session controls are available only in the current live plugin view.",
+    "noPendingInteractions": "No pending interactions.",
+    "actionsLoading": "Loading available actions…",
     "unavailableWorldPacks": "The world recommends an unavailable pack. Choose another pack or start with the current selection.",
     "worldSelectionTags": "World tags: {{tags}}",
     "operationFailedNotice": "{{count}} actions from this turn did not take effect.",
