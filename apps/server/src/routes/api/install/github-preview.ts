@@ -97,8 +97,14 @@ export function inspectBundle(
   /** Name of the directory that holds the package; see `packageDirectoryName`. */
   directory?: string,
 ) {
-  const { pluginId, manifest, version, hasServerCode, capabilities } =
-    validatePluginBundle(entries, reserved, directory);
+  const {
+    pluginId,
+    manifest,
+    version,
+    executionMode,
+    hasServerCode,
+    capabilities,
+  } = validatePluginBundle(entries, reserved, directory);
   const labels = entries
     .filter((entry) => /^locales\/[^/]+\.ya?ml$/.test(entry.relativePath))
     .sort((a, b) => a.relativePath.localeCompare(b.relativePath))
@@ -125,6 +131,7 @@ export function inspectBundle(
             ]),
           ),
     author: manifest.plugin.author?.name ?? null,
+    executionMode,
     hasServerCode,
     capabilities,
   };

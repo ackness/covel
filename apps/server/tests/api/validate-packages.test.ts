@@ -139,6 +139,8 @@ describe("package validation endpoints", () => {
         validationReport("plugin", dir, core.issues, "probe", {
           version: core.version,
           languages: core.languages,
+          executionMode: core.execution.mode,
+          executionDiagnostics: [...core.execution.diagnostics],
         }),
       );
     },

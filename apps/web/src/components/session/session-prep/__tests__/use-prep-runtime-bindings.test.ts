@@ -24,6 +24,7 @@ const plugins: PluginSummary[] = ["core", "guide"].map((id) => ({
   description: "",
   kind: id === "core" ? "core" : "plugin",
   source: "builtin",
+  executionMode: "code" as const,
   hostState: "loaded",
   runtimeCount: 1,
   provides: [],

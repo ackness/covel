@@ -681,7 +681,11 @@ export {
   validateRandomIntRange,
 } from "@covel/plugin-handlers-utils";
 
-export { FRAMEWORK_TOOL_NAMES } from "@covel/plugin-handlers-utils";
+export {
+  FRAMEWORK_TOOL_NAMES,
+  FRAMEWORK_TOOL_CAPABILITIES,
+  isDeclarativeFrameworkTool,
+} from "@covel/plugin-handlers-utils";
 
 export { isValidPluginSetting } from "./plugin-settings.js";
 

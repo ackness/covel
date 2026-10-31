@@ -105,6 +105,18 @@ export function validationReport(
     ...(summary
       ? {
           summary: {
+            ...(summary.executionMode
+              ? {
+                  executionMode: summary.executionMode,
+                  executionDiagnostics: summary.executionDiagnostics
+                    ?.slice(0, 200)
+                    .map((issue) => ({
+                      file: redact(issue.file),
+                      ...(issue.field ? { field: redact(issue.field) } : {}),
+                      message: redact(issue.message).slice(0, 2000),
+                    })),
+                }
+              : {}),
             ...(summary.version ? { version: redact(summary.version) } : {}),
             ...(summary.languages
               ? { languages: redact(summary.languages) }
@@ -129,7 +141,12 @@ for (const kind of ["plugin", "world"] as const) {
             dir,
             [...sourceIssues, ...result.issues],
             id === null ? undefined : (id ?? result.id),
-            { version: result.version, languages: result.languages },
+            {
+              version: result.version,
+              languages: result.languages,
+              executionMode: result.execution.mode,
+              executionDiagnostics: [...result.execution.diagnostics],
+            },
           );
         }
         const catalogue = c.get("pluginRegistry") ?? (await bundledCatalogue());

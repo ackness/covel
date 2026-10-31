@@ -16,6 +16,12 @@
 > [!NOTE]
 > 表里的 DashScope / OpenAI 生图工具由[官方社区插件仓库](https://github.com/covel-ai/covel-plugins)提供。安装并在会话里授权之后，对应的工具和界面才会注册。
 
+## 声明式 runtime 的工具
+
+[声明式插件](./plugin-installation.md#声明式插件)可以使用声明的读取工具、界面工具和完成/控制工具，也可以用 `sync-characters` 提交经过验证的角色记录。中央能力表位于 `packages/plugin-handlers-utils/src/framework-tool-names.ts`；新增框架工具必须明确评审其能力，不能因其名字或前缀自动放行。
+
+数据集工具只写调用包声明的数据集；参数严格匹配工具 schema，额外的 `pluginId` 或 `namespace` 会报错，不会改变归属。生成工具与服务导入使用精确工具名，最终执行器在 hook 改名之后检查 `authorizedToolNames`。其他插件的数据只能由其独立准入的写服务修改。代码/runtime 免审批不会替代逐工具审批、提案校验或提交，也不会放宽子 agent、恢复与重试的写入限制。
+
 ## 概览
 
 <!-- prettier-ignore -->

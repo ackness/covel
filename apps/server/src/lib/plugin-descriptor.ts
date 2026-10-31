@@ -146,6 +146,14 @@ export function buildPluginSummary(
 
   return {
     id: entry.id,
+    executionMode:
+      source === "builtin"
+        ? (entry.executionAssessment?.mode ?? "unknown")
+        : (trustedSources?.executionMode(entry.id) ?? "unknown"),
+    executionDiagnostics:
+      source === "builtin"
+        ? entry.executionAssessment?.diagnostics
+        : trustedSources?.executionDiagnostics(entry.id),
     displayName: entry.summary.displayName ?? entry.summary.name ?? entry.id,
     description: entry.summary.description,
     kind: facts.kind,

@@ -174,7 +174,10 @@ export function usePluginSelection(
     () =>
       plugins.map((plugin) => ({
         ...plugin,
-        authorized: plugin.source === "builtin",
+        authorized:
+          plugin.source === "builtin" ||
+          plugin.executionMode === "declarative" ||
+          plugin.trust?.autoApproved === true,
       })),
     [plugins],
   );

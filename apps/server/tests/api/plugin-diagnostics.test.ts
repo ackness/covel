@@ -265,11 +265,13 @@ describe("recent plugin service calls", () => {
     registerPlugin("community", { source: "community" });
     approved.add("first/community");
     expect(diagnostics.snapshot(session("first")).plugins[0]).toMatchObject({
+      executionMode: "unknown" as const,
       hostState: "loaded",
       sessionState: "active",
       serverCodeApproved: true,
     });
     expect(diagnostics.snapshot(session("second")).plugins[0]).toMatchObject({
+      executionMode: "unknown" as const,
       hostState: "loaded",
       sessionState: "approval-required",
       serverCodeApproved: false,
@@ -277,6 +279,7 @@ describe("recent plugin service calls", () => {
     });
     approved.clear();
     expect(diagnostics.snapshot(session("first")).plugins[0]).toMatchObject({
+      executionMode: "unknown" as const,
       hostState: "loaded",
       sessionState: "approval-required",
       serverCodeApproved: false,
@@ -408,6 +411,7 @@ describe("plugin diagnostics snapshots", () => {
     });
     const [snapshot] = diagnostics.snapshot(session()).plugins;
     expect(snapshot).toMatchObject({
+      executionMode: "unknown" as const,
       hostState: "loaded",
       sessionState: "active",
       serverCodeApproved: true,
@@ -491,6 +495,7 @@ describe("plugin diagnostics snapshots", () => {
     approved.add("community");
     expect(diagnostics.snapshot(session(), "community").plugins).toEqual([
       expect.objectContaining({
+        executionMode: "unknown" as const,
         hostState: "loaded",
         sessionState: "active",
         serverCodeApproved: true,

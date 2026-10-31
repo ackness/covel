@@ -1,8 +1,15 @@
+import {
+  unknownExecutionAssessment,
+  type PluginExecutionAssessment,
+} from "./execution-assessment.js";
 /** Static package validation shared by the CLI and the host. Never imports entries. */
 import { readFileSync, realpathSync } from "node:fs";
 import fs from "node:fs/promises";
 import path from "node:path";
-import type { PackageValidationIssue } from "@covel/shared";
+import {
+  isDeclarativeFrameworkTool,
+  type PackageValidationIssue,
+} from "@covel/shared";
 import { discoverPluginAt } from "./discover.js";
 import { loadPluginDefinition } from "./load.js";
 import {
@@ -16,6 +23,7 @@ import { isPathInside } from "./path-containment.js";
 import { listPluginAssetFiles } from "./ui-assets.js";
 
 export interface PluginPackageValidation {
+  readonly execution: PluginExecutionAssessment;
   readonly ok: boolean;
   readonly issues: PackageValidationIssue[];
   readonly id?: string;
@@ -139,6 +147,7 @@ export async function validatePluginPackage(
   let id: string | undefined;
   let version: string | undefined;
   let languages: string | undefined;
+  let execution = unknownExecutionAssessment();
   function fail(code: string, error: unknown, cliText?: string) {
     const message = error instanceof Error ? error.message : String(error);
     cliFailure ??= cliText ?? message;
@@ -152,6 +161,7 @@ export async function validatePluginPackage(
   const result = (): PluginPackageValidation => ({
     ok: !issues.some((issue) => issue.severity === "error"),
     issues,
+    execution,
     rootPath,
     id,
     version,
@@ -189,9 +199,18 @@ export async function validatePluginPackage(
     fail("plugin-load", error);
     return result();
   }
+  execution = definition.executionAssessment ?? unknownExecutionAssessment();
   id = definition.packageManifest.plugin.id;
   version = definition.packageManifest.plugin.version;
   languages = describePluginLanguages(definition.languages);
+  if (execution.mode === "declarative")
+    for (const parsed of definition.manifests)
+      for (const name of parsed.manifest.tools?.builtin ?? [])
+        if (!isDeclarativeFrameworkTool(name))
+          fail(
+            "declarative-tool",
+            `${parsed.sourcePath}: agent.tools.builtin: ${name} is not a reviewed declarative framework tool`,
+          );
   if (definition.disabledRuntimes.length) {
     cliFailure ??= definition.disabledRuntimes
       .map(({ message }) => message)

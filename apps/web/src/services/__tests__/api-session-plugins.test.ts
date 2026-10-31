@@ -56,6 +56,7 @@ function plugin(overrides: Partial<PluginSummary> = {}): PluginSummary {
     description: "Memory plugin",
     kind: "plugin",
     source: "builtin",
+    executionMode: "code" as const,
     hostState: "loaded",
     runtimeCount: 1,
     provides: ["memory-panel"],
@@ -92,6 +93,7 @@ describe("session plugin API", () => {
         {
           pluginId: "community",
           source: "community",
+          executionMode: "code" as const,
           hostState: "loaded",
           sessionState: "approval-required",
           serverCodeApproved: false,

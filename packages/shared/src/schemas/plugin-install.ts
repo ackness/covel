@@ -62,6 +62,7 @@ export const githubPluginPreviewSchema = z
     description: i18nTextSchema,
     /** Author name from the package manifest; null when it declares none. */
     author: z.string().nullable(),
+    executionMode: z.enum(["declarative", "code", "unknown"]),
     hasServerCode: z.boolean(),
     capabilities: pluginCapabilitiesSchema,
     trustedSource: z.boolean(),

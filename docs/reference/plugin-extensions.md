@@ -9,6 +9,10 @@
 - [Lifecycle Probe](../../tests/third-party/lifecycle-probe/README.md) 和 [Service Provider Probe](../../tests/third-party/service-provider-probe/README.md)：两个可以独立安装的插件，一起覆盖命令、面板、手动函数、数据提交和服务协作。
 - [Jev 选项推荐 Demo](https://github.com/covel-ai/covel-plugins/tree/main/examples/jev-choice-demo)。
 
+## 声明式消费者
+
+[声明式插件](./plugin-installation.md#声明式插件)可以通过版本化契约导入读/写服务，但不能注册可执行服务或扩展提供者。静态提示段和 UI 由宿主读取。服务解析仍要求唯一、活动且独立获准的提供者；缺失、暂停和歧义保持原有语义，不猜第一个提供者。导入默认可选，不会使一个无关插件自动启用。写服务保持提供者身份与既有提交规则，调用方的免代码审批不能授权提供者的服务器代码。
+
 ## 选择通信方式
 
 先按需求在表里找接口：

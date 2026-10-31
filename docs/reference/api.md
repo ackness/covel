@@ -57,6 +57,14 @@ Covel 的服务器对外只有一套 HTTP JSON 接口。网页和桌面应用用
 - 审批决定先检查 `decision` 和 `scope` 是不是合法取值，通过了才会消耗那条待决审批。
 - 事件注入先检查各个标识符是字符串、`payload` 是对象，然后才发布。
 
+## 声明式插件的 API 状态
+
+插件摘要（列表、详情和会话列表）必含 `executionMode: declarative | code | unknown`。`executionDiagnostics` 可选，只有包内文件、字段和原因；不公开宿主证明、绝对路径或提示词。GitHub 预览也带分类，`hasServerCode` 对 `code` 和 `unknown` 均为真。静态校验的 `summary` 带 `executionMode` 与 `executionDiagnostics`。
+
+新鲜的 `declarative` 包可在创建、启用、普通/手动/事件执行、恢复和委托时跳过代码与 runtime 授权；托管会话仍检查 owner，但不要求专用于执行社区代码的 operator 权限。`approvalRequired: false` 只说明没有阻止当前选择的代码审批。`serverCodeApproved` 仅指真实显式或来源授权，绝不由声明式状态置真；没有真实授权就不返回 `serverCodeApprovedBy`。action/event 的独立审批保持不变。
+
+文件变成代码或无法检查时立即失去豁免；没有独立有效授权则恢复 `202 approval-required` 或相应的拒绝。开发重载保留安装权限检查，可以不导入代码而发布待批准元数据。过期的代码/runtime 审批在包已变成声明式时返回 `409 approval_obsolete`，消耗待决项但不写 grant；刷新后重试操作。无需数据库迁移或删除会话数据，当前客户端和录制的摘要必须补上新字段。详细分类规则见[安装参考](./plugin-installation.md#声明式插件)。
+
 ## 概览
 
 - **基础 URL**：`http://localhost:3001/api/`
@@ -285,7 +293,7 @@ community 插件的 ESM 代码会在服务器进程里注册全局能力，所�
 | **代码加载 / 能力注册**                             | 进程级，一次性，不能撤销。任何一个会话批准就完成 |
 | **调用（RPC dispatch / runtime 加载 / hook 执行）** | 每次仍然按发起请求的会话检查 grant               |
 
-没有批准的会话，过不了 `covel:plugin-server-code` 和 `runtime:<name>` 的检查，hook 也会被跳过（返回 `continue`）。
+非声明式包在没有批准的会话里，过不了 `covel:plugin-server-code` 和 `runtime:<name>` 的检查，hook 也会被跳过（返回 `continue`）。
 
 **revoke 边界**
 
@@ -1436,11 +1444,11 @@ GitHub 插件安装和更新预览始终返回 `capabilities` 与 `trustedSource
 
 fork 和社区插件的授权：
 
-- fork 不继承社区插件的服务端代码授权（community server-code grant）。child 里对应的插件保持未激活，需要运维方在新会话里重新启用并批准。
+- fork 不继承社区插件的服务端代码授权（community server-code grant）。代码包在 child 里保持未激活，需要在新会话里重新启用并批准。当前文件仍被验证为声明式的包保留启用与数据，无须继承或生成授权。
 - 快照绑定的维度 provider 是社区插件时，child 在创建时无法启用它：
   - 快照里有该 provider 的维度数据或结算回执：fork 返回 `409 { "code": "dimension_provider_required" }`，不创建子会话。
   - 快照里没有维度数据：子会话正常创建，但不带这个绑定。
-- 进程重启后，易失的授权同样不会恢复。`GET /api/sessions/:id/plugins` 把缺少当前授权的社区插件显示为未激活（`approvalRequired: true`），但保留会话里保存的插件选择，方便之后重新授权。
+- 进程重启后，易失的授权同样不会恢复。`GET /api/sessions/:id/plugins` 把缺少当前授权的非声明式社区插件显示为未激活（`approvalRequired: true`），但保留会话里保存的插件选择，方便之后重新授权。
 
 ### 角色数据
 
@@ -1685,7 +1693,7 @@ fork 和社区插件的授权：
 
 - 请求 body：`{ "sessionId"?: string }`。
 - 响应：`{ "ok": true, "pluginId": string, "generation": string }`。
-- 只在开发环境、只对社区插件可用。需要通过安装 API 的鉴权，并且该会话当前持有服务端代码授权。
+- 只在开发环境、只对社区插件可用。需要通过安装 API 的鉴权，代码导入还要求该会话当前持有服务端代码授权；未授权时仅发布元数据。
 - 重载失败返回 `409 plugin_reload_failed`，旧的一代继续生效。
 - 功能关闭时返回 `403 plugin_reload_disabled`。
 - 已经开始的执行继续用旧一代的能力、handler 和 guard；之后的执行用新一代。
@@ -3199,7 +3207,7 @@ action 与插件支持的 command 的 scoped store 按[数据集规则](./plugin
 - 校验和审批通过后，会话里所有订阅该 topic 的 runtime（`trigger: { type: event, topic }`，可以属于任何已启用的插件）在同一个事务里排成事件任务：`_runtime_jobs`，`origin.activation: "event"`，`origin.sourceTurnId` 是本次发射的 `eventId`。后台 worker 带着 `ctx.triggerEvent` 执行它们，各自提交。
 - 请求本身不执行 runtime。它返回 `200 { status: "ok", eventId, topic, deferredJobs: [{ jobId, runtimeId }] }`。没有订阅者时 `deferredJobs` 为空数组。
 - 和手动运行 runtime 一样，点击就是触发决定。订阅者的 `startTurn`、`maxTriggerCount`、`cooldownTurns` 不参与判断。
-- 社区插件按 `event:<topic>` 走审批。订阅者里的社区 runtime 还各需要与手动运行相同的两项授权：服务端代码和 `runtime:<name>`，否则 runtime 加载器会拒绝执行。请求每次只返回缺少的第一项（`202 approval-required`）。客户端批准后重试，直到全部具备才排入任务。
+- 社区插件按 `event:<topic>` 走审批。订阅者里的非声明式社区 runtime 还各需要与手动运行相同的两项授权：服务端代码和 `runtime:<name>`，否则 runtime 加载器会拒绝执行。请求每次只返回缺少的第一项（`202 approval-required`）。客户端批准后重试，直到全部具备才排入任务。
 - 后台任务只在会话有可用模型凭据时执行（与其他后台任务相同），否则保持 `queued`。
 
 ##### 写入什么时候生效

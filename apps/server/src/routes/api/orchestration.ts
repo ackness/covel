@@ -21,7 +21,12 @@ import type { SessionRouteEnv } from "./session/route-env.js";
 function view(c: Context, session: SessionRecord): OrchestrationResponse {
   const registry = c.get("pluginRegistry");
   const admitted = new Set(
-    authorizedSessionPluginIds(registry, c.get("rpcApprovalGate"), session),
+    authorizedSessionPluginIds(
+      registry,
+      c.get("rpcApprovalGate"),
+      session,
+      c.get("trustedSources"),
+    ),
   );
   const active = new Set(runnablePluginIds(session.activePlugins, registry));
   const settings = normalizeOrchestrationSettings(

@@ -4,6 +4,11 @@ Use maintained packages rather than copied historic manifests.
 
 Main checkout:
 
+- `tests/third-party/declarative-notebook`: clean declarative community distribution;
+  own dataset tools, settings/world-data acceptance, JSON panel, browser page and
+  optional service import. Test runners stay outside the package. The exact files
+  are in `docs/plugins/prompt-only.md`; start here when no server code is needed.
+
 - `templates/plugin-with-tools`: inline grouped agent runtime and a declared entry tool.
 - `templates/plugin-multi-runtime`: root contributions plus child `RUNTIME.md` files, own data, and a post-turn analyst with a narrative input binding.
 - `plugins/memory`: detached `turn-digest@1`, `prompt.segment@1`, and public block-definition services.

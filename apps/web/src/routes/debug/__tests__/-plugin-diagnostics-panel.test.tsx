@@ -36,6 +36,7 @@ function snapshot(
       {
         pluginId,
         source: "community",
+        executionMode: "code" as const,
         hostState: "loaded",
         sessionState: "active",
         serverCodeApproved: true,

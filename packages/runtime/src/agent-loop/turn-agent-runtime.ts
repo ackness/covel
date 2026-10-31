@@ -349,6 +349,7 @@ export async function executeAgentRuntime({
           manifest,
           input,
           deps,
+          loaded,
           canWrite: operations !== undefined,
         }),
         deps.services,

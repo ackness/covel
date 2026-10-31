@@ -2149,7 +2149,19 @@
     "faultPaused": "Paused",
     "resumeFault": "Resume",
     "faultPausedNotice": "{{plugin}} is paused in this session after repeated errors.",
-    "resumeFaultFailed": "Could not resume the plugin. Try again."
+    "resumeFaultFailed": "Could not resume the plugin. Try again.",
+    "declarative": "No plugin server code · no code or runtime approval needed",
+    "modelUse": {
+      "notice": "Uses your configured model; charges may apply.",
+      "delegated": "Runs when another runtime delegates work.",
+      "manual": "Runs when explicitly invoked.",
+      "event": "Runs when a matching event arrives.",
+      "setup": "Runs during session setup.",
+      "scheduled": "Runs on scheduled turns (every {{count}} turns).",
+      "start": "Starts at turn {{count}}.",
+      "cooldown": "Waits at least {{count}} turns between scheduled runs.",
+      "limit": "At most {{count}} scheduled runs per session."
+    }
   },
   "pluginJob": {
     "runtimesNotLoaded": "{{plugin}} was approved, but {{count}} of its tasks cannot be loaded and will not run.",

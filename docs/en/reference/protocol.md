@@ -6,6 +6,12 @@ It is for three kinds of readers: people who write their own client, people who 
 
 The type definitions are in `packages/shared/src/types/protocol.ts`.
 
+## Declarative approval semantics
+
+Plugin summaries require host-derived `executionMode`. Fresh `declarative` status skips code/runtime prompts during creation, enable and runtime calls without recording grants. `serverCodeApproved` still reports real grants; `approvalRequired` no longer marks these packages as pending. `code` and `unknown` use normal admission. Obsolete approvals return `409 approval_obsolete`; the browser treats it as consumed without a grant, and callers allowing the operation retry enable/run under current policy with their session navigation checks intact. See [API state](./api.md#declarative-plugin-api-state) for field definitions.
+
+There is no new SSE event or wildcard RPC grant. Per-action, tool, provider and content-bound sandbox session-read authorization remain independent. Model-use messaging is information before enable, not runtime permission or cost consent.
+
 ## Architecture overview
 
 All communication falls into three groups:

@@ -222,7 +222,7 @@ A few rules:
 - `invokeRuntime`, `invokePluginAction`, `invokeCommand`, and `emitEvent` can point only at your own plugin. They cannot write to another plugin.
 - `invokeRuntime` names one runtime, waits for it to finish, and gets its result. `emitEvent` only says that something happened. The click returns at once, and you do not get the subscribers' results. Use the first one when you need to see the result right away.
 - The event name in `emitEvent` must be listed in `contributes.events` of your own `PLUGIN.md`. An event meant only for the interface can be written with `advertise: false`, so that the model that writes the story does not see it.
-- The first time a community plugin emits an event, the player must authorize two things: emitting that event, and running the community runtime that subscribes to it.
+- A community emitter still needs approval for the event. A freshly verified declarative subscriber needs neither code nor runtime approval; other community subscribers need their own applicable grants.
 - A runtime that subscribes to an event is a background job. It does not run when there is no usable model key for the session.
 
 To make "go to the docks" a player action that the story then picks up, use `draftMessage` or `sendMessage`. To change data directly, use `invokeRuntime` or `invokePluginAction`.

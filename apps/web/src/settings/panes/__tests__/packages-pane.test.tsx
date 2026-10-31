@@ -50,6 +50,7 @@ const brokenPlugin: PluginSummary = {
   description: "",
   source: "community",
   kind: "plugin",
+  executionMode: "code" as const,
   hostState: "error",
   error: "Invalid manifest",
   runtimeCount: 0,
@@ -296,6 +297,7 @@ describe("PackagesPane installed plugin management", () => {
                 ...brokenPlugin,
                 id: "partial",
                 displayName: "Partial plugin",
+                executionMode: "code" as const,
                 hostState: "installed",
                 error: undefined,
                 disabledRuntimes: [

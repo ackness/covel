@@ -364,7 +364,7 @@ function getTool(spec: DatasetSpec): ToolModule {
   const module = tool({
     name,
     description: describe(spec, `Read one ${spec.dataset} record by its key.`),
-    parameters: z.object({ key: z.string() }),
+    parameters: z.object({ key: z.string() }).strict(),
     annotations: READ_ANNOTATIONS,
     async execute({ key: raw }, context) {
       const { key, row } = await findRow(spec, context, raw);
@@ -392,11 +392,13 @@ function listTool(spec: DatasetSpec): ToolModule {
       spec,
       `List ${spec.dataset} records, sorted by key, ${LIST_DEFAULT_LIMIT} at a time. When the result has nextOffset, call again with that offset for more.`,
     ),
-    parameters: z.object({
-      where: z.record(z.string(), whereValue).optional(),
-      offset: z.number().int().min(0).optional(),
-      limit: z.number().int().min(1).max(LIST_MAX_LIMIT).optional(),
-    }),
+    parameters: z
+      .object({
+        where: z.record(z.string(), whereValue).optional(),
+        offset: z.number().int().min(0).optional(),
+        limit: z.number().int().min(1).max(LIST_MAX_LIMIT).optional(),
+      })
+      .strict(),
     annotations: READ_ANNOTATIONS,
     async execute({ where, offset = 0, limit = LIST_DEFAULT_LIMIT }, context) {
       const rows = await storeOf(spec, context).listPluginData(spec.dataset);
@@ -566,8 +568,8 @@ function upsertTool(spec: DatasetSpec): ToolModule {
     name,
     description: describe(spec, description),
     parameters: field
-      ? z.object({ record })
-      : z.object({ key: z.string(), record }),
+      ? z.object({ record }).strict()
+      : z.object({ key: z.string(), record }).strict(),
     annotations: UPSERT_ANNOTATIONS,
     async execute(params, context) {
       const value = params.record as JsonValue;
@@ -637,10 +639,12 @@ function updateTool(spec: DatasetSpec): ToolModule {
       spec,
       `Change an existing ${spec.dataset} record with operations (${kinds.join(", ")}), applied in order; all apply or none.${upsertHint}`,
     ),
-    parameters: z.object({
-      key: z.string(),
-      ops: z.array(op).min(1).max(64),
-    }),
+    parameters: z
+      .object({
+        key: z.string(),
+        ops: z.array(op).min(1).max(64),
+      })
+      .strict(),
     annotations: UPDATE_ANNOTATIONS,
     async execute(params, context) {
       const ops = params.ops as DataOp[];

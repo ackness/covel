@@ -1,3 +1,4 @@
+import { authorizedSessionPluginIds } from "./session/plugins.js";
 import { registerOrchestrationRoutes } from "./orchestration.js";
 import { resolveAutoAdvanceLimit } from "@covel/shared";
 import { readLockedSession } from "./session/locked-mutation.js";
@@ -305,10 +306,20 @@ sessionRoutes.post("/", async (c) => {
   // The world is a requirer too. Its contracts are read once here and kept
   // with the session, so later resolutions need no world lookup.
   const requiredContracts = rawWorldId ? worldRequiredContracts(world) : [];
+  await c.get("trustedSources")?.verifyAll();
   const selection = resolveSessionPluginPlan(
     parsedCreate.requestedPlugins,
     pluginRegistry,
-    { excluded: parsedCreate.excludedPlugins, requiredContracts },
+    {
+      excluded: parsedCreate.excludedPlugins,
+      requiredContracts,
+      authorized: authorizedSessionPluginIds(
+        pluginRegistry,
+        undefined,
+        undefined,
+        c.get("trustedSources"),
+      ),
+    },
   );
   // A plugin whose dependency is missing is turned off, not a reason to
   // refuse the session: it is confirmed with the rest, stays off, and the

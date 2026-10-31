@@ -32,6 +32,7 @@ const preview: GithubPluginUpdatePreview = {
   version: "1.1.0",
   description: "Updated note",
   author: null,
+  executionMode: "code" as const,
   hasServerCode: true,
   trustedSource: false,
   capabilities: {

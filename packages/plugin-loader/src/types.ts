@@ -211,6 +211,8 @@ export type PluginEntryStatus =
   "discovered" | "registered" | "active" | "disabled" | "error";
 
 export interface PluginRegistryEntry {
+  /** Static, host-owned evidence; never accepted from a manifest or client. */
+  readonly executionAssessment?: import("./execution-assessment.js").PluginExecutionProof;
   /** Root package declaration, independent of the executable runtime list. */
   readonly packageManifest?: ParsedPluginMd;
   readonly id: string;

@@ -4,6 +4,21 @@ This page explains how plugins get into Covel from GitHub or a ZIP file: the flo
 
 The official catalogue is [covel-ai/covel-plugins](https://github.com/covel-ai/covel-plugins). Each plugin in the catalogue is one JSON entry, and the table in the README is generated from these entries. A third-party plugin's source stays in its author's own repository. Official extensions and examples can live in separate subdirectories of the catalogue repository.
 
+## Declarative plugins
+
+A community package containing prompts, data declarations and declarative UI can be enabled without server-code or runtime approval. Preparation and session plugin rows disclose model use before enable: automatic agents can call the configured model on scheduled turns; manual, event, setup and delegated agents describe their actual trigger. An execution may call the model several times. The notice promises no fixed price and adds no cost-consent dialog. UI-only packages show no model notice.
+
+The host derives the required `executionMode` from actual files and declarations: `declarative`, `code` or `unknown`. Authors cannot set a mode flag. Static validation, archive previews, discovery and execution checks share the assessment. Incomplete reads, links and changing inventories yield `unknown`, which receives no exemption. CLI and API diagnostics report package-relative files, fields and reasons.
+
+- Agents, own datasets, settings, data receivers, static prompt segments, JSON UI, templates, views, composer modes and optional read/write service imports are allowed. Publishing an output contract does not register an executable service.
+- `entry` (including derived `server/index.js`), `function`, guards, nonempty HTTP permissions or executable hooks/tools/wires/services/actions/forms/extensions/worldProjections declarations make a package `code`. Raw declarations in disabled, invalid and localized runtimes still count.
+- A `.js` file counts as a browser asset only when the exact path appears in a valid declared webview asset plan. A directory named `ui` is insufficient. Hidden/ignored files, tests/build scripts and unlisted JS/TS/JSX, native modules and Wasm remain code. Server references take precedence: naming the same file as an entry or guard removes the exception. Ship a clean distribution and keep tests outside it.
+- Declarative runtimes write only their own datasets and validated character records. Built-in `sync-characters` still passes proposal validation and commit. Other plugins' data can change only through their independently admitted write services. Tool allowlists, read-only sub-agents, resume/retry restrictions and commit boundaries remain enforced.
+
+Classification is independent of provenance. A ZIP or hand-copied package may simultaneously have `source: community`, `integrity: no-receipt` and `executionMode: declarative`, without a manufactured receipt or grant. Fresh declarative proof skips code/runtime prompts and the hosted operator restriction specific to community code. Session ownership, installation permissions, provider admission, per-action approval and content-bound sandbox session-read consent remain separate.
+
+Proof binds content to the current registered definition and is refreshed for enable, preflight, loading and asynchronous publication. Adding code immediately restores normal approval; reload may publish pending metadata but cannot import modules before authorization. Earlier declarative enablement is not a grant. Independent explicit or trusted-source grants retain their normal conditions. Removing code and freshly loading the package restores declarative eligibility. Browser script edits change the asset digest and require current session-read consent.
+
 ## Categories and trust
 
 - Built-in plugins ship with Covel. Official extensions and community plugins are installed when needed.
@@ -44,7 +59,7 @@ Boot verifies the receipt and content digest of every registered community packa
 | --- | --- |
 | `verified` | The digest matches the receipt; current policy and capabilities still need checking. |
 | `modified` | Edited, added or deleted files, links or special files; show a warning and use normal approval. |
-| `no-receipt` | No receipt, such as ZIP imports or hand-copied directories; no warning, normal approval. |
+| `no-receipt` | No receipt, such as ZIP imports or hand-copied directories; no warning. Declarative eligibility is assessed separately. |
 | `unreadable` | Damaged or unknown receipt fields, or another read failure; log, warn and use normal approval. |
 
 A community package implicitly receives `covel:plugin-server-code` and its `runtime:*` grants only when its source is trusted **now**, integrity is `verified`, a snapshot exists, and current capabilities stay within it. Any missing condition, stale registration or read error uses the normal prompt. Removing a source immediately stops implicit grants; existing explicit session grants keep their normal meaning. The shared host's operator check still runs first and is never replaced by source policy.
@@ -64,7 +79,7 @@ Open **Settings → Install & manage**:
 1. Browse the community catalogue, or paste a public GitHub repository link, or a `/tree/<ref>/<path>` link.
 2. The link is resolved. The plugins and world packs in that directory are listed together. When the directory has a `covel-collection.yaml`, only the members named in the [collection](../ship/collections.md) manifest are listed, including packages pinned in other repositories.
 3. Tick what you want to install, check the ID, version, source, commit, and code risk, and confirm once. Plugins are installed before worlds. A failure rolls back this batch’s writes, except that a world already used to create a session, or a package that cannot be deleted, is retained and reported. See [batch rollback results](#multi-package-preview-and-batch-install).
-4. After installing a plugin, restart the backend once. Then enable the plugin in a session, and allow it to run through the approval flow. A world is usable right away.
+4. After installing a plugin, restart the backend once. Then enable the plugin in a session, and follow approval prompts for code packages; declarative packages need no code/runtime approval. A world is usable right away.
 
 The import entry in the desktop app's menu opens the same package management page. The server runs a static check on a ZIP and shows the result.
 

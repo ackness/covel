@@ -57,6 +57,7 @@ const plugin: SessionPlugin = {
   description: "",
   kind: "plugin",
   source: "community",
+  executionMode: "code" as const,
   hostState: "loaded",
   runtimeCount: 0,
   provides: [],
@@ -628,3 +629,60 @@ it.each(["GET", "reconnect"])(
     );
   },
 );
+
+it("skips entry prompting and enables declarative content without fabricating an approval", async () => {
+  const { result } = setup();
+  await act(async () =>
+    result.current.dispatch({
+      type: "LOAD_SESSION_PLUGINS",
+      plugins: [
+        {
+          ...plugin,
+          executionMode: "declarative",
+          active: false,
+          serverCodeApproved: false,
+          approvalRequired: false,
+        },
+      ],
+    }),
+  );
+  expect(confirmation.requestChoices).not.toHaveBeenCalled();
+  await act(async () =>
+    result.current.actions.toggleSessionPlugin(plugin.id, true),
+  );
+  expect(api.enableSessionPlugin).toHaveBeenCalledWith(session.id, plugin.id);
+  expect(confirmation.requestConfirm).not.toHaveBeenCalled();
+  expect(api.resolveApproval).not.toHaveBeenCalled();
+  expect(result.current.state.sessionPlugins[0]?.active).toBe(true);
+});
+it("honors a current server approval requirement after a displayed declarative package gains code", async () => {
+  const { result } = setup();
+  await act(async () =>
+    result.current.dispatch({
+      type: "LOAD_SESSION_PLUGINS",
+      plugins: [
+        {
+          ...plugin,
+          executionMode: "declarative",
+          active: false,
+          serverCodeApproved: false,
+          approvalRequired: false,
+        },
+      ],
+    }),
+  );
+  api.enableSessionPlugin
+    .mockResolvedValueOnce(approval)
+    .mockResolvedValueOnce(enabled);
+  await act(async () =>
+    result.current.actions.toggleSessionPlugin(plugin.id, true),
+  );
+  expect(confirmation.requestConfirm).toHaveBeenCalledOnce();
+  expect(api.resolveApproval).toHaveBeenCalledWith(
+    approval.approvalId,
+    "allow",
+    "session",
+    session.id,
+  );
+  expect(result.current.state.sessionPlugins[0]?.active).toBe(true);
+});

@@ -9,6 +9,7 @@ const snapshotSchema = z.object({
     z.object({
       pluginId: z.string(),
       source: z.enum(["builtin", "community"]),
+      executionMode: z.enum(["declarative", "code", "unknown"]),
       hostState: z.enum(["discovered", "installed", "loaded", "error"]),
       sessionState: z.enum([
         "active",

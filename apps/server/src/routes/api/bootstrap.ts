@@ -61,6 +61,7 @@ import {
 import { estimateTokens } from "@covel/context";
 import type { CompactorRunner } from "@covel/context";
 import { COMMUNITY_SERVER_CODE_ACTION } from "@covel/approval";
+import { refreshDeclarativeEligibility } from "../../trust/plugin-admission.js";
 import {
   createInProcessSessionLock,
   type SessionLock,
@@ -440,6 +441,8 @@ async function assembleApi(
     manifestCache,
     store,
     getApprovalGate: () => rpcApprovalGate,
+    refreshDeclarativeEligibility: (pluginId) =>
+      refreshDeclarativeEligibility(trustedSources, pluginId),
   });
   const loadRuntimeFn = runtimeLoader.loadRuntimeFn;
 
@@ -549,6 +552,8 @@ async function assembleApi(
       hookPipeline,
       rpcRegistry,
       isCommunityServerCodeApproved,
+      isDeclarativePackage: (pluginId) =>
+        refreshDeclarativeEligibility(trustedSources, pluginId),
       isCommunityHookApproved,
       runtimeLoader,
       prepareDeclarations: prepareEventDeclarations,
@@ -589,6 +594,7 @@ async function assembleApi(
   };
   pluginEntries.watch();
   const pluginDiagnostics = createPluginDiagnostics({
+    getTrustedSources: () => trustedSources,
     registry,
     tools,
     hooks: hookPipeline,

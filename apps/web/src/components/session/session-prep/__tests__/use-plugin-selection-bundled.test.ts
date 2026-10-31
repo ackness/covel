@@ -63,6 +63,7 @@ const PLUGINS = bundled("plugins").map((id) => {
     description: "",
     kind: manifest.kind ?? "plugin",
     source: "builtin",
+    executionMode: "code" as const,
     hostState: "loaded",
     runtimeCount: 0,
     tags: list(manifest.tags),

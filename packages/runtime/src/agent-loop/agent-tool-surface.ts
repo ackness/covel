@@ -11,6 +11,8 @@
  */
 
 import type { RuntimeManifest, TurnInput } from "@covel/shared";
+import type { LoadedRuntime } from "@covel/shared/plugin-runtime";
+import { isDeclarativeFrameworkTool } from "@covel/shared";
 import type { ToolModule } from "@covel/tools";
 import type { TurnExecutorDeps } from "../turn-executor/turn-executor-types.js";
 import type { PluginServiceRegistry } from "../plugin-services.js";
@@ -33,6 +35,7 @@ export function generatedToolNames(manifest: RuntimeManifest): string[] {
 }
 
 export interface AgentToolSurface {
+  readonly declarative?: boolean;
   /** Generated tools that resolved: advertised and callable. */
   readonly available: ReadonlyMap<string, ToolModule>;
   /** Generated tools that did not: callable only to answer `unavailable`. */
@@ -58,22 +61,23 @@ export async function prepareAgentToolSurface(args: {
   readonly deps: Pick<TurnExecutorDeps, "services" | "delegation"> &
     Partial<Pick<TurnExecutorDeps, "loadRuntime">>;
   readonly canWrite?: boolean;
+  /** Reuse the host artifact already admitted for this run. */
+  readonly loaded?: LoadedRuntime;
 }): Promise<AgentToolSurface> {
   const { manifest, input, deps } = args;
   const imports =
     manifest.runtimeType === "function" ? [] : (manifest.tools?.services ?? []);
   const datasetNames = datasetToolNames(manifest);
-  if (imports.length === 0 && datasetNames.length === 0) return EMPTY_SURFACE;
+  const loaded =
+    args.loaded ??
+    (await deps.loadRuntime?.(manifest, input.locale, input.sessionId));
+  const declarative = loaded?.executionMode === "declarative";
+  if (!declarative && imports.length === 0 && datasetNames.length === 0)
+    return EMPTY_SURFACE;
   const available = new Map<string, ToolModule>();
   const absent = new Map<string, ToolModule>();
   if (datasetNames.length > 0) {
-    // The loader caches per registry generation, so this is the loaded
-    // runtime the entry already has, and the schemas the commit checks.
-    const loaded = await deps.loadRuntime?.(
-      manifest,
-      input.locale,
-      input.sessionId,
-    );
+    // Use this run's admitted schemas, which the commit also checks.
     for (const [name, module] of createDatasetTools(
       manifest,
       loaded?.datasetSchemas,
@@ -125,7 +129,7 @@ export async function prepareAgentToolSurface(args: {
       `[service-imports] runtime "${manifest.name}" in session ${input.sessionId}: imported tool "${name}" (${contract}) is absent: ${absentReason(resolution)}`,
     );
   }
-  return { available, absent };
+  return { available, absent, declarative };
 }
 
 function absentReason(absent: AbsentImport): string {
@@ -157,6 +161,7 @@ export function withAgentToolSurface(
 ): ToolExecutor {
   if (
     !services &&
+    !surface.declarative &&
     !operations &&
     surface.available.size === 0 &&
     surface.absent.size === 0
@@ -171,13 +176,26 @@ export function withAgentToolSurface(
     generatedTools: ReadonlyMap<string, ToolModule>,
   ): ToolCallContext => ({
     ...context,
+    ...(surface.declarative
+      ? {
+          authorizedToolNames: new Set(
+            [...(context.authorizedToolNames ?? [])].filter(
+              (name) => isDeclarativeFrameworkTool(name) || callable.has(name),
+            ),
+          ),
+        }
+      : {}),
     ...(services ? { services } : {}),
     ...(operations ? { operations } : {}),
     ...(generatedTools.size > 0 ? { generatedTools } : {}),
   });
   return {
     getToolInfo: (name, context) =>
-      inner.getToolInfo(name, scope(context, surface.available)),
+      surface.declarative &&
+      !isDeclarativeFrameworkTool(name) &&
+      !surface.available.has(name)
+        ? undefined
+        : inner.getToolInfo(name, scope(context, surface.available)),
     execute: (call, context) => inner.execute(call, scope(context, callable)),
   };
 }

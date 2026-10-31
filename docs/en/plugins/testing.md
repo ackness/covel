@@ -10,6 +10,8 @@ Test both an overlong dimension value and its corrected retry. Verify that no pr
 
 For form tools, assert the error code and that failed validation publishes no interaction; then retry with corrected input.
 
+The clean declarative distribution example is [`declarative-notebook`](../../../tests/third-party/declarative-notebook/README.md). Tests stay outside the package and exercise real community discovery, code-free admission, model tool calls, commit, code upgrades and independent sandbox consent. Validation reports classification; runtime tests should assert stored commit outcomes, not just model text.
+
 ## Choose a kind of test
 
 From top to bottom, the tests get slower and closer to the real game:

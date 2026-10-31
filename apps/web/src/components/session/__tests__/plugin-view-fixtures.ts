@@ -31,6 +31,7 @@ export const sessionPlugin: SessionPlugin = {
   description: "Probe",
   kind: "plugin",
   source: "community",
+  executionMode: "code",
   hostState: "installed",
   runtimeCount: 0,
   provides: [],

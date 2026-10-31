@@ -87,6 +87,7 @@ export async function inspectWorldBundle(
       version: manifest.version ?? null,
       description: localized.data?.description ?? record.description ?? "",
       author: manifest.author?.name ?? null,
+      executionMode: "declarative" as const,
       hasServerCode: false,
       capabilities: pluginCapabilitiesSchema.parse({
         serverCode: false,

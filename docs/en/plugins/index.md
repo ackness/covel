@@ -4,6 +4,8 @@ A plugin adds behavior to the game: a way of telling the story, a set of check r
 
 A plugin is a folder. The simplest plugin has just one Markdown file with its configuration and prompt. It needs no code.
 
+For prompts, own data and UI, start with [prompt-only plugins](./prompt-only.md). Community packages verified as declarative can be enabled directly; model use and sandbox read consent remain separately explained.
+
 ## What is inside a plugin
 
 ```text

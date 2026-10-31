@@ -1,3 +1,4 @@
+import { refreshDeclarativeEligibility } from "../../../trust/plugin-admission.js";
 import { approvalVerdictResponse } from "../approval-verdict.js";
 import {
   pluginRuntimeManifests,
@@ -99,6 +100,13 @@ async function preflightApprovals(
       registry.get(manifest.pluginId)?.source,
     );
     if (trust.autoLoad) continue;
+    if (
+      await refreshDeclarativeEligibility(
+        c.get("trustedSources"),
+        manifest.pluginId,
+      )
+    )
+      continue;
     const denied = requireAccess(c, "plugin.community");
     if (denied) return denied;
     if (!refreshed.has(manifest.pluginId)) {

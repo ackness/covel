@@ -19,6 +19,7 @@ import type { DataStore } from "@covel/store";
 import type { LoadPluginDatasets } from "@covel/runtime";
 import { runnablePluginIds } from "../session/plugins.js";
 import { sessionApprovalScope } from "../session/session-guard.js";
+import { hasFreshDeclarativeProof } from "../../../trust/plugin-admission.js";
 
 /**
  * A write-service provider's datasets and their schemas, read from its
@@ -50,6 +51,9 @@ export interface RuntimeLoaderParams {
   readonly manifestCache: ReadonlyMap<string, readonly ParsedRuntimeMd[]>;
   readonly store: DataStore;
   readonly getApprovalGate: () => RpcApprovalGate;
+  readonly refreshDeclarativeEligibility?: (
+    pluginId: string,
+  ) => Promise<boolean>;
 }
 export interface RuntimeArtifactSnapshot {
   run<T>(fn: () => T): T;
@@ -117,6 +121,7 @@ export function createRuntimeLoader(
     if (getPluginTrustInfo(pluginId, discovery.source).autoLoad) return true;
     const session = sessionId ? await store.getSession(sessionId) : undefined;
     if (!sessionId || !session) return false;
+    if (await params.refreshDeclarativeEligibility?.(pluginId)) return true;
     const scope = sessionApprovalScope(session, pluginId);
     const gate = getApprovalGate();
     return (
@@ -157,6 +162,13 @@ export function createRuntimeLoader(
             : `Runtime ${manifest.name} was not admitted in this execution snapshot`,
         );
       }
+      if (
+        loaded.executionMode !== "declarative" &&
+        !(await codeAuthorized(pluginId, manifest.name, sessionId))
+      )
+        throw new Error(
+          "Cached server code requires current code and runtime grants",
+        );
       return {
         ...loaded,
         promptTemplate: resolveRuntimePrompt(
@@ -167,9 +179,18 @@ export function createRuntimeLoader(
     }
     // No runtime module may be imported before entry authorization succeeds.
     await boundEnsurePluginEntry(pluginId, sessionId);
+    if (!(await authorized(pluginId, manifest.name, sessionId)))
+      throw new Error("Runtime authorization changed during entry activation");
     const entry = params.pluginRegistry?.get(pluginId);
     if (!entry?.packageManifest?.plugin)
       throw new Error(`Missing plugin definition: ${pluginId}`);
+    if (
+      discoveryMap.get(pluginId) !== discovery ||
+      manifestCache.get(pluginId) !== manifests
+    )
+      throw new Error(
+        "Plugin definition changed during runtime admission; retry with the current registry",
+      );
     const generation = generations.get(pluginId) ?? "initial";
     const key = JSON.stringify([
       pluginId,
@@ -185,6 +206,7 @@ export function createRuntimeLoader(
         locale,
         {
           packageManifest: entry.packageManifest,
+          executionAssessment: entry.executionAssessment,
           manifests: manifests ?? [],
           messages: entry.messages ?? [],
           languages: entry.languages ?? {
@@ -200,13 +222,54 @@ export function createRuntimeLoader(
           ),
         ),
         generation,
+        () => codeAuthorized(pluginId, manifest.name, sessionId),
       );
       artifacts.set(key, pending);
       void pending.catch(() => {
         if (artifacts.get(key) === pending) artifacts.delete(key);
       });
     }
-    return pending;
+    const loaded = await pending;
+    if (!(await authorized(pluginId, manifest.name, sessionId)))
+      throw new Error("Runtime authorization changed during loading");
+    if (
+      loaded.executionMode !== "declarative" &&
+      !(await codeAuthorized(pluginId, manifest.name, sessionId))
+    )
+      throw new Error(
+        "Cached server code requires current code and runtime grants",
+      );
+    if (params.pluginRegistry?.get(pluginId) !== entry)
+      throw new Error("Plugin definition changed during runtime loading");
+    return loaded;
+  };
+
+  const codeAuthorized = async (
+    pluginId: string,
+    runtimeName: string,
+    sessionId?: string,
+  ): Promise<boolean> => {
+    const discovery = discoveryMap.get(pluginId);
+    if (!discovery) return false;
+    if (getPluginTrustInfo(pluginId, discovery.source).autoLoad) return true;
+    await params.refreshDeclarativeEligibility?.(pluginId);
+    const session = sessionId ? await store.getSession(sessionId) : undefined;
+    if (!sessionId || !session) return false;
+    const scope = sessionApprovalScope(session, pluginId);
+    return (
+      getApprovalGate().hasGrant(
+        sessionId,
+        pluginId,
+        COMMUNITY_SERVER_CODE_ACTION,
+        scope,
+      ) &&
+      getApprovalGate().hasGrant(
+        sessionId,
+        pluginId,
+        `runtime:${runtimeName}`,
+        scope,
+      )
+    );
   };
 
   return {
@@ -231,7 +294,15 @@ export function createRuntimeLoader(
         if (!session) continue;
         for (const parsed of definition.manifests) {
           if (
-            !(await authorized(discovery.id, parsed.manifest.name, sessionId))
+            !(await hasFreshDeclarativeProof(
+              discovery.rootPath,
+              definition.executionAssessment,
+            )) &&
+            !(await codeAuthorized(
+              discovery.id,
+              parsed.manifest.name,
+              sessionId,
+            ))
           )
             continue;
           const key = JSON.stringify([
@@ -248,6 +319,7 @@ export function createRuntimeLoader(
             definition,
             contracts,
             generation,
+            () => codeAuthorized(discovery.id, parsed.manifest.name, sessionId),
           );
           staged.set(key, pending);
           await pending;

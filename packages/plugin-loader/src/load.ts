@@ -12,6 +12,15 @@ import {
 } from "./action-kinds.js";
 import { assertInsideRoot } from "./path-containment.js";
 import { fileExists } from "./file-system.js";
+import {
+  packageFileSignature,
+  readPackageInventory,
+} from "./package-inventory.js";
+import {
+  assessPluginExecution,
+  unknownExecutionAssessment,
+  type PluginExecutionProof,
+} from "./execution-assessment.js";
 import { provideHostModules } from "./host-modules.js";
 import {
   pluginImportReferences,
@@ -278,6 +287,7 @@ export async function loadPluginSummary(
  * @param locale - Optional locale for loading localized PLUGIN.md
  */
 export interface PluginDefinition {
+  readonly executionAssessment?: PluginExecutionProof;
   readonly packageManifest: ParsedPluginMd;
   readonly manifests: readonly ParsedRuntimeMd[];
   /** The `messages` section of each `locales/<locale>.yaml`. */
@@ -344,6 +354,9 @@ export async function loadPluginDefinition(
   locale?: string,
 ): Promise<PluginDefinition> {
   if (discovery.layoutError) throw new Error(discovery.layoutError);
+  const inventory = await readPackageInventory(discovery.rootPath).catch(
+    () => undefined,
+  );
   for (const warning of discovery.layoutWarnings ?? [])
     console.warn(`[plugin-loader] ${warning}`);
   const rootPath = path.join(discovery.rootPath, "PLUGIN.md");
@@ -519,7 +532,25 @@ export async function loadPluginDefinition(
     ignoredFields,
   };
   validatePluginDeclarations(packageManifest);
-  return definition;
+  const stable =
+    inventory &&
+    inventory.signature ===
+      (await packageFileSignature(discovery.rootPath).catch(() => undefined));
+  return {
+    ...definition,
+    executionAssessment: stable
+      ? {
+          ...assessPluginExecution({
+            files: inventory.files,
+            directories: inventory.directories,
+            root: packageManifest,
+            runtimes: manifests,
+          }),
+          signature: inventory.signature,
+          digest: inventory.digest,
+        }
+      : unknownExecutionAssessment(),
+  };
 }
 
 export async function loadPluginManifest(
@@ -757,6 +788,7 @@ export async function loadRuntime(
   definition?: PluginDefinition,
   resolvedContracts: ContractSchemas = {},
   generation?: string,
+  authorizeCode?: () => Promise<boolean>,
 ): Promise<LoadedRuntime> {
   const snapshot =
     definition ?? (await loadPluginDefinition(discovery, locale));
@@ -846,6 +878,10 @@ export async function loadRuntime(
       handlerPath,
       "Handler path traversal rejected",
     );
+    if (authorizeCode && !(await authorizeCode()))
+      throw new Error(
+        "Runtime handler requires server-code and runtime authorization",
+      );
     provideHostModules(discovery.rootPath);
     const url = pathToFileURL(handlerPath);
     if (generation) url.searchParams.set("generation", generation);
@@ -867,6 +903,10 @@ export async function loadRuntime(
       guardPath,
       "Guard path traversal rejected",
     );
+    if (authorizeCode && !(await authorizeCode()))
+      throw new Error(
+        "Runtime guard requires server-code and runtime authorization",
+      );
     provideHostModules(discovery.rootPath);
     const url = pathToFileURL(guardPath);
     if (generation) url.searchParams.set("generation", generation);
@@ -883,6 +923,7 @@ export async function loadRuntime(
 
   return {
     manifest: resolvePluginRuntimeManifest(snapshot, parsed.manifest),
+    executionMode: snapshot.executionAssessment?.mode ?? "unknown",
     promptTemplate: resolveRuntimePrompt(parsed, locale),
     outputSchema,
     ...(outputContractSchema ? { outputContractSchema } : {}),

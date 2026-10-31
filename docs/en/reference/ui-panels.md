@@ -10,6 +10,12 @@ The basic idea has one rule. A plugin describes its UI in a JSON document (calle
 > [!NOTE]
 > The DashScope / OpenAI image generation and MiMo TTS described here come from the [official community plugin repository](https://github.com/covel-ai/covel-plugins). They show up, with their tools and UI, after you install them and authorize them in a session.
 
+## UI without server code
+
+JSON panels, templates, views and composer modes can ship in a [declarative package](./plugin-installation.md#declarative-plugins). Classic `.js` files in a valid webview asset plan run only in the browser sandbox and grant no server-code permission. `bridge: session` still needs independent read consent for the current spec, HTML and multi-file asset digest. Denial or revocation leaves the ordinary game UI usable; script changes require consent for new content. Host back/default controls stay outside the iframe. CSP, message-source validation and per-action restrictions remain; no bridge writes or whole-surface replacement are added.
+
+Preparation and session plugin rows disclose model use and actual agent triggers before enable. UI-only packages have no model notice. The notice grants no sandbox capability.
+
 ## Architecture Overview
 
 ```

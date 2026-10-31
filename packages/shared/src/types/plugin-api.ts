@@ -61,6 +61,13 @@ export interface PluginLoadDiagnostics {
 
 /** Registry-level plugin view used by lists, settings, and session prep. */
 export interface PluginSummary extends PluginLoadDiagnostics {
+  /** Derived by the host from declarations and a complete package inspection. */
+  readonly executionMode: "declarative" | "code" | "unknown";
+  readonly executionDiagnostics?: readonly {
+    readonly file: string;
+    readonly field?: string;
+    readonly message: string;
+  }[];
   readonly trust?: import("../schemas/trusted-sources.js").PluginSourceTrust;
   readonly id: string;
   readonly displayName: I18nText;

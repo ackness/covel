@@ -13,6 +13,10 @@ Some terms used throughout this page:
 
 SillyTavern character cards and lorebooks can be [converted into this same ordinary package](../worlds/import-sillytavern.md). Conversion reports unmappable fields and creates only fixed content files, without executing extensions or scripts.
 
+## Declarative data receivers
+
+An active [declarative plugin](./plugin-installation.md#declarative-plugins) can receive contract-matched world data through `contributes.data` without code approval or import handlers. Data remains owned by the receiver. Declared dataset schemas, keys and `ops` still apply to runtime writes and formal import/sync; import cannot remove data beyond those permissions. Declaring `worldProjections` makes the package code, and projections still need independent server execution authorization. Classification does not change receiver selection or contract matching.
+
 ## World Package
 
 **The smallest world package** has two files:
@@ -876,7 +880,7 @@ For plugin authors: the merge rule is `applyLocaleOverlay` in `@covel/shared`. P
 
 ### Receivers that join after the game starts
 
-The prep screen lists selected community plugins whose server code is not yet approved under “Needs approval.” They stay checked, but do not count toward enabled plugins, runtimes, narrative checks or receivers in the world-data preflight. Players can still start the game. The world data those plugins receive is imported after approval and enablement.
+The prep screen lists selected non-declarative community plugins whose server code is not yet approved under “Needs approval.” They stay checked, but do not count toward enabled plugins, runtimes, narrative checks or receivers in the world-data preflight. Players can still start the game. The world data those plugins receive is imported after approval and enablement.
 
 A plugin that is not enabled when the session is created gets no world data, for example a community plugin approved after the game starts. When a plugin is enabled in the game (`PUT /api/sessions/:id/plugins/:pluginId`), Covel imports once for the plugins that just joined:
 

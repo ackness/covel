@@ -2083,7 +2083,19 @@
     "faultPaused": "已暂停",
     "resumeFault": "重新启用",
     "faultPausedNotice": "{{plugin}} 因反复出错已在本会话中暂停。",
-    "resumeFaultFailed": "无法重新启用插件，请重试。"
+    "resumeFaultFailed": "无法重新启用插件，请重试。",
+    "declarative": "不执行插件服务端代码 · 无需代码或运行时审批",
+    "modelUse": {
+      "notice": "使用你配置的模型，可能产生费用。",
+      "delegated": "其他运行时委托任务时运行。",
+      "manual": "明确调用时运行。",
+      "event": "收到匹配的事件时运行。",
+      "setup": "会话准备期间运行。",
+      "scheduled": "按计划运行（每 {{count}} 回合）。",
+      "start": "从第 {{count}} 回合开始。",
+      "cooldown": "两次计划运行至少间隔 {{count}} 回合。",
+      "limit": "每局最多计划运行 {{count}} 次。"
+    }
   },
   "pluginJob": {
     "runtimesNotLoaded": "{{plugin}} 已授权，但它有 {{count}} 个任务无法加载，不会运行。",

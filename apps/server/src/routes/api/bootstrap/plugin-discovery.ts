@@ -138,6 +138,7 @@ export async function discoverAndRegisterPlugins(
         ),
 
         packageManifest,
+        executionAssessment: definition.executionAssessment,
         manifests,
         messages: definition.messages,
         languages: definition.languages,

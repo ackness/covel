@@ -34,6 +34,7 @@ function plugin(
     description: "",
     kind: "plugin",
     source: "builtin",
+    executionMode: "code" as const,
     hostState: "loaded",
     runtimeCount: 0,
     tags: [],
@@ -850,4 +851,23 @@ describe("usePluginSelection", () => {
     expect(result.current.activePluginPack).toEqual(pack);
     expect(result.current.lockedPluginIds.has("core")).toBe(false);
   });
+});
+
+it("admits a selected declarative community package without selecting unrelated content", async () => {
+  vi.mocked(api.getWorldPluginPlan).mockResolvedValue(selectionPlan(["notes"]));
+  const notes = plugin("notes", {
+    source: "community",
+    executionMode: "declarative",
+  });
+  const other = plugin("other", {
+    source: "community",
+    executionMode: "declarative",
+  });
+  const { result } = renderHook(() =>
+    usePluginSelection(PLAN.worldId, [notes, other], prepareWorldForServer),
+  );
+  await waitFor(() => expect(result.current.pluginPlanLoading).toBe(false));
+  expect(result.current.enabledPluginIds).toEqual(["notes"]);
+  expect(result.current.pendingApproval).toEqual([]);
+  expect(result.current.selectedPluginIdSet.has("other")).toBe(false);
 });

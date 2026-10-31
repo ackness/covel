@@ -1,9 +1,11 @@
 import {
   mkdtemp,
+  mkdir,
   readFile,
   readdir,
   rename,
   rm,
+  symlink,
   writeFile,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -255,4 +257,197 @@ it("logs and ignores an invalid environment policy as a whole", async () => {
     expect.stringContaining("Invalid COVEL_TRUSTED_SOURCES"),
   );
   expect(trust.policy()).toEqual(["example/plugins"]);
+});
+
+it("derives no-receipt eligibility independently of trusted-source policy and invalidates edited content", async () => {
+  const { directory, receiptPath, trust, registry, entry, settings } =
+    await build();
+  await rm(receiptPath);
+  await settings.write({ "trust.sources": [] });
+  await trust.ensureFresh(id);
+  expect(trust.executionMode(id)).toBe("declarative");
+  expect(trust.summary(id)).toEqual({
+    source: null,
+    trustedSource: false,
+    integrity: "no-receipt",
+    autoApproved: false,
+  });
+  await writeFile(
+    path.join(directory, "extra.js"),
+    "throw new Error('not imported');",
+  );
+  await trust.ensureFresh(id);
+  expect(trust.executionMode(id)).toBe("code");
+  await rm(path.join(directory, "extra.js"));
+  await trust.ensureFresh(id);
+  expect(trust.executionMode(id)).toBe("declarative");
+  await writeFile(path.join(directory, "README.md"), "New content");
+  await trust.ensureFresh(id);
+  expect(trust.executionMode(id)).toBe("unknown");
+  const { discoverPluginAt, loadPluginDefinition } =
+    await import("@covel/plugin-loader");
+  const discovery = await discoverPluginAt(directory);
+  const definition = await loadPluginDefinition(discovery!);
+  registry.register({ ...entry, ...definition });
+  await trust.ensureFresh(id);
+  expect(trust.executionMode(id)).toBe("declarative");
+});
+it("coalesces inspections without retaining positive evidence across registry replacement", async () => {
+  const { trust, registry, entry, receiptPath } = await build();
+  await rm(receiptPath);
+  const arrived = Promise.withResolvers<void>();
+  const release = Promise.withResolvers<void>();
+  const original = files.checkPackageIntegrity;
+  const scan = vi
+    .spyOn(files, "checkPackageIntegrity")
+    .mockImplementationOnce(async (...args) => {
+      arrived.resolve();
+      await release.promise;
+      return original(...args);
+    });
+  const first = trust.ensureFresh(id);
+  await arrived.promise;
+  const concurrent = trust.ensureFresh(id);
+  registry.register({ ...entry, executionAssessment: undefined });
+  expect(trust.executionMode(id)).toBe("unknown");
+  release.resolve();
+  await Promise.all([first, concurrent]);
+  expect(trust.executionMode(id)).toBe("unknown");
+  expect(scan).toHaveBeenCalledTimes(2);
+  registry.register(entry);
+  await trust.ensureFresh(id);
+  expect(trust.executionMode(id)).toBe("declarative");
+});
+it("checks live publication even from an older execution registry snapshot", async () => {
+  const { trust, registry, entry } = await build();
+  expect(trust.executionMode(id)).toBe("declarative");
+  await registry.withSnapshot(async () => {
+    registry.register({ ...entry, executionAssessment: undefined });
+    expect(registry.get(id)?.executionAssessment).toBeDefined();
+    await trust.ensureFresh(id);
+    expect(trust.executionMode(id)).toBe("unknown");
+  });
+  registry.register(entry);
+  await trust.ensureFresh(id);
+  expect(trust.executionMode(id)).toBe("declarative");
+});
+it("never publishes a proof assembled during mutation or after the root disappears", async () => {
+  const { trust, directory, receiptPath } = await build();
+  await rm(receiptPath);
+  const original = files.checkPackageIntegrity;
+  vi.spyOn(files, "checkPackageIntegrity").mockImplementationOnce(
+    async (...args) => {
+      const inspected = await original(...args);
+      await writeFile(path.join(directory, "later.txt"), "later");
+      return inspected;
+    },
+  );
+  await trust.ensureFresh(id);
+  expect(trust.executionMode(id)).toBe("unknown");
+  await rm(directory, { recursive: true });
+  await trust.ensureFresh(id);
+  expect(trust.executionMode(id)).toBe("unknown");
+});
+
+it("refreshes an earlier package republished while a later package is being inspected", async () => {
+  const { trust, registry, entry } = await build();
+  const directory = path.join(root, "second-probe");
+  await mkdir(directory);
+  await writeFile(
+    path.join(directory, "PLUGIN.md"),
+    "---\ndescription: Second package\n---\n",
+  );
+  const { discoverPluginAt, loadPluginDefinition } =
+    await import("@covel/plugin-loader");
+  const discovery = (await discoverPluginAt(directory))!;
+  const definition = await loadPluginDefinition(discovery);
+  registry.register({
+    ...definition,
+    id: discovery.id,
+    rootPath: directory,
+    summary: {
+      id: discovery.id,
+      name: discovery.id,
+      description: definition.packageManifest.plugin.description,
+      kind: definition.packageManifest.plugin.kind,
+      runtimeCount: definition.manifests.length,
+    },
+    source: "community",
+    status: "registered",
+    loadedRuntimes: new Map(),
+  });
+  const original = files.checkPackageIntegrity;
+  vi.spyOn(files, "checkPackageIntegrity").mockImplementation(
+    async (...args) => {
+      const result = await original(...args);
+      if (args[0] === directory) registry.register(entry);
+      return result;
+    },
+  );
+  await trust.verifyAll();
+  expect(trust.executionMode(id)).toBe("declarative");
+  expect(trust.executionMode(discovery.id)).toBe("declarative");
+});
+
+it("does not authorize a frozen code-era registry using a newer declarative proof", async () => {
+  const { directory, trust, registry, entry } = await build({
+    files: { "old-entry.js": "export default () => {};" },
+  });
+  expect(trust.executionMode(id)).toBe("code");
+  const { discoverPluginAt, loadPluginDefinition } =
+    await import("@covel/plugin-loader");
+  await registry.withSnapshot(async () => {
+    await rm(path.join(directory, "old-entry.js"));
+    const definition = await loadPluginDefinition(
+      (await discoverPluginAt(directory))!,
+    );
+    registry.register({ ...entry, ...definition });
+    await trust.ensureFresh(id);
+    expect(trust.executionMode(id)).toBe("declarative");
+    expect(trust.isDeclarative(id)).toBe(false);
+  });
+  expect(trust.isDeclarative(id)).toBe(true);
+});
+
+it("reports linked content as modified without retaining declarative or source authorization", async () => {
+  const { trust, directory } = await build();
+  expect(trust.isDeclarative(id)).toBe(true);
+  expect(trust.implicitGrant({ pluginId: id })).toBe(true);
+  const link = path.join(directory, "linked-content");
+  await symlink("PLUGIN.md", link);
+  await trust.ensureFresh(id);
+  expect(trust.summary(id)).toMatchObject({
+    integrity: "modified",
+    autoApproved: false,
+  });
+  expect(trust.isDeclarative(id)).toBe(false);
+  expect(trust.executionMode(id)).toBe("unknown");
+  await rm(link);
+  await trust.ensureFresh(id);
+  expect(trust.isDeclarative(id)).toBe(true);
+  expect(trust.summary(id)).toMatchObject({
+    integrity: "verified",
+    autoApproved: true,
+  });
+});
+
+it("retries an incomplete inventory even when receipt verification succeeds without disk changes", async () => {
+  const { trust, registry, entry } = await build();
+  const loader = await import("@covel/plugin-loader");
+  vi.spyOn(loader, "readPackageInventory").mockRejectedValueOnce(
+    new Error("Temporary inventory read failure"),
+  );
+  registry.register(entry);
+  await trust.ensureFresh(id);
+  expect(trust.summary(id)).toMatchObject({
+    integrity: "verified",
+    autoApproved: false,
+  });
+  expect(trust.executionMode(id)).toBe("unknown");
+  await trust.ensureFresh(id);
+  expect(trust.isDeclarative(id)).toBe(true);
+  expect(trust.summary(id)).toMatchObject({
+    integrity: "verified",
+    autoApproved: true,
+  });
 });

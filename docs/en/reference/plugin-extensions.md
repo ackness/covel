@@ -9,6 +9,10 @@ Examples you can install and look at:
 - [Lifecycle Probe](../../../tests/third-party/lifecycle-probe/README.md) and [Service Provider Probe](../../../tests/third-party/service-provider-probe/README.md): two plugins you can install on their own. Together they cover commands, panels, manual functions, data submission, and service collaboration.
 - [Jev choice recommendation demo](https://github.com/covel-ai/covel-plugins/tree/main/examples/jev-choice-demo).
 
+## Declarative consumers
+
+[Declarative plugins](./plugin-installation.md#declarative-plugins) can import read/write services through versioned contracts but cannot register executable service or extension providers. The host reads static prompt segments and UI. Resolution still requires one active, independently admitted provider. Missing, paused and ambiguous providers retain existing outcomes; there is no first-provider guess. Imports are optional by default and do not automatically enable unrelated packages. Write services retain provider identity and commit rules; the caller's exemption cannot authorize provider server code.
+
 ## Choose a way to communicate
 
 Start by finding your need in the table and reading the matching interface:

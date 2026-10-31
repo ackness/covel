@@ -19,6 +19,7 @@ function sessionPlugin(
     description: `${id} plugin`,
     kind: locked ? "core" : "plugin",
     source: "builtin",
+    executionMode: "code" as const,
     hostState: "loaded",
     runtimeCount: 0,
     provides: [],

@@ -10,6 +10,10 @@ To have another agent answer a brief, no extension point is needed: the provider
 
 Framework schema ownership does not imply a kernel extension point. [`turn-policy@1` and `character-actor@1`](./plugin-extensions.md#orchestration-contracts) are optional service/runtime contracts, without the extension-point exemption for story dependencies.
 
+## Declarative consumers
+
+[Declarative plugins](./plugin-installation.md#declarative-plugins) can import read/write services through versioned contracts but cannot register executable service or extension providers. The host reads static prompt segments and UI. Resolution still requires one active, independently admitted provider. Missing, paused and ambiguous providers retain existing outcomes; there is no first-provider guess. Imports are optional by default and do not automatically enable unrelated packages. Write services retain provider identity and commit rules; the caller's exemption cannot authorize provider server code.
+
 ## Declaring and registering
 
 There are two steps, just as with tools and hooks:

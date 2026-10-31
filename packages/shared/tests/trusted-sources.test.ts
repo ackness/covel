@@ -189,6 +189,7 @@ it("requires capabilities and source trust in previews, integrity in installatio
     version: null,
     description: "",
     author: null,
+    executionMode: "declarative",
     hasServerCode: false,
     source,
     token: "token",
@@ -197,6 +198,12 @@ it("requires capabilities and source trust in previews, integrity in installatio
     trustedSource: false,
   };
   expect(githubPluginPreviewSchema.safeParse(preview).success).toBe(true);
+  expect(
+    githubPluginPreviewSchema.safeParse({
+      ...preview,
+      executionMode: undefined,
+    }).success,
+  ).toBe(false);
   expect(
     githubPluginPreviewSchema.safeParse({ ...preview, capabilities: undefined })
       .success,
