@@ -356,7 +356,7 @@ A read that sees an uncommitted upstream write records a read dependency on the 
 
 Actual service reads of `ctx.world.characters` or `characterSchema` also charge the original calling runtime under the [World Model](./world-model.md) rules. This includes read services, reads inside write services, tool imports and nested calls. First acquiring `world` creates a detached snapshot without observing its properties; dimension-only reads add no character/schema dependency. The view rejects reads after completion, cancellation or timeout. Calls outside executions with no runtime commit owner add no commit dependencies. Provider write ownership and nested read-only restrictions are unchanged.
 
-Calls from tools and imports read the same data: the tools of a top-level agent overlay upstream writes and record read dependencies like a function runtime. When a resumed runtime or a sub-agent calls a service from a tool, it reads committed data only and records no read dependencies, the same as its own tool reads.
+Calls from tools and imports read the same data: the tools of a top-level agent overlay upstream writes and record read dependencies like a function runtime. Resumed plugin-data reads start from current committed values and the saved own buffer. Child plugin KV retains its provider/own-package committed-data and operation-overlay rules without inheriting parent KV. World reads separately use the child's admission snapshot through tools, imports and nested services; observations join the original caller only when the child succeeds. See [World Model](./world-model.md).
 
 A read service also sees what the same caller staged for its provider through earlier write-service calls (below), and records no read dependency for it.
 

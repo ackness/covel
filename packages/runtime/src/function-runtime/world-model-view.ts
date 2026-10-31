@@ -39,6 +39,7 @@ const views = new WeakMap<
   WorldModelView,
   {
     snapshot(): WorldModelView;
+    assertLive(): void;
     tracking?: WorldReadTracking;
   }
 >();
@@ -64,6 +65,18 @@ export function snapshotWorldModelView(
   assertLive();
   const snapshot = ownedSnapshot(view);
   const tracking = views.get(view)?.tracking;
+  const sourceLive = views.get(view)?.assertLive;
+  return snapshotFacade(snapshot, tracking, () => {
+    sourceLive?.();
+    assertLive();
+  });
+}
+
+function snapshotFacade(
+  snapshot: WorldModelView,
+  tracking: WorldReadTracking | undefined,
+  assertLive: () => void,
+): WorldModelView {
   const copy = Object.defineProperties(
     {},
     Object.fromEntries(
@@ -82,6 +95,7 @@ export function snapshotWorldModelView(
     ),
   ) as WorldModelView;
   views.set(copy, {
+    assertLive,
     snapshot: () => {
       assertLive();
       return snapshot;
@@ -89,6 +103,51 @@ export function snapshotWorldModelView(
     tracking,
   });
   return copy;
+}
+
+/**
+ * Host-only speculative child scope. Capture without observing getters or
+ * retaining the parent's capability lifetime. Only accepted child reads join
+ * the caller's invocation; ordinary tool/service snapshots still share theirs.
+ */
+export function forkWorldModelView(
+  parent: WorldModelView,
+  assertLive: () => void = () => {},
+): { readonly world: WorldModelView; accept(): void; discard(): void } {
+  assertLive();
+  const snapshot = ownedSnapshot(parent);
+  const source = views.get(parent)?.tracking;
+  const recorder: ReadRecorder = new Set();
+  let closed = false;
+  const live = () => {
+    assertLive();
+    if (closed) throw new Error("Child world view has completed");
+  };
+  const world = snapshotFacade(
+    snapshot,
+    source
+      ? {
+          recorder,
+          producers: {
+            characters: [...source.producers.characters],
+            characterSchema: [...source.producers.characterSchema],
+          },
+        }
+      : undefined,
+    live,
+  );
+  return {
+    world,
+    accept() {
+      if (closed) return;
+      live();
+      for (const producer of recorder) source?.recorder.add(producer);
+      closed = true;
+    },
+    discard() {
+      closed = true;
+    },
+  };
 }
 
 export type WorldModelReadStore = Pick<
@@ -275,11 +334,15 @@ export function overlayWorldModelView(
   /** The session's content locale. */
   locale?: string,
 ): WorldModelView {
+  const sourceLive = views.get(base)?.assertLive;
   return overlayOwnedWorldModelView(
     ownedSnapshot(base),
     sessionId,
     pending,
-    assertLive,
+    () => {
+      sourceLive?.();
+      assertLive();
+    },
     locale,
     views.get(base)?.tracking,
   );
@@ -365,6 +428,7 @@ function overlayOwnedWorldModelView(
     },
   });
   views.set(view, {
+    assertLive,
     snapshot: () => ({ ...current(), worldRecord }),
     tracking,
   });

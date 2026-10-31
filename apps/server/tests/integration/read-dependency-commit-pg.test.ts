@@ -34,9 +34,11 @@ import {
   classifyExecutionFaults,
   commitExecution,
   executeTurn,
+  createToolExecutor,
+  PluginServiceRegistry,
 } from "@covel/runtime";
 import { createEventBus } from "@covel/events";
-import { withPendingProposals } from "@covel/tools";
+import { withPendingProposals, z } from "@covel/tools";
 import {
   createIsolatedPgDatabase,
   type IsolatedPgDatabase,
@@ -119,7 +121,7 @@ describe.skipIf(!isolatedUrl)("read dependencies on real PG", () => {
     await store?.deleteSession(SESSION);
   });
 
-  it.each(["plugin-data", "world", "world-suspension"] as const)(
+  it.each(["plugin-data", "world", "world-suspension", "world-child"] as const)(
     "rolls back a refused producer and its %s reader while keeping the story",
     async (readMode) => {
       vi.spyOn(console, "warn").mockImplementation(() => {});
@@ -156,6 +158,39 @@ describe.skipIf(!isolatedUrl)("read dependencies on real PG", () => {
           ? {}
           : { pluginId: "pg-world-reader", name: "pg-world-reader/read" },
       );
+      const child = fn("child", {
+        pluginId: reader.pluginId,
+        name: `${reader.pluginId}/child`,
+        runtimeType: "agent",
+        subagentOnly: true,
+        trigger: { type: "manual" },
+        tools: {
+          services: [{ contract: "test.record-world@1", name: "record-world" }],
+        },
+      });
+      const services = new PluginServiceRegistry({
+        list: async () => [PLUGIN, reader.pluginId],
+        ensure: async () => {},
+      });
+      let serviceCalls = 0;
+      services.register(PLUGIN, {
+        name: "record",
+        contract: "test.record-world@1",
+        access: "write",
+        modelFacing: true,
+        description: "Record the child world read",
+        input: z.object({}),
+        output: z.object({ description: z.string() }),
+        handler: async (_args, ctx) => {
+          serviceCalls++;
+          const description = ctx.world.characters.find(
+            (c) => c.id === "staged-character",
+          )?.description;
+          expect(description).toBe("staged description");
+          await ctx.pluginData.set("notes", "child-service", description!);
+          return { description: description! };
+        },
+      });
       const eventBus = createEventBus(store);
       const suspendedEvents: unknown[] = [];
       eventBus.onEmit((event) => {
@@ -193,11 +228,20 @@ describe.skipIf(!isolatedUrl)("read dependencies on real PG", () => {
         },
         [reader.name]: async (ctx) => {
           const seen =
-            readMode === "plugin-data"
-              ? await ctx.pluginData!.get("notes", "ready")
-              : ctx.world!.characters.find(
-                  (character) => character.id === "staged-character",
-                )?.description;
+            readMode === "world-child"
+              ? (
+                  await ctx.agents!.run({
+                    target: { runtimeId: child.name },
+                    brief: "A constant safe brief",
+                  })
+                ).ok
+                ? "staged description"
+                : "failed child"
+              : readMode === "plugin-data"
+                ? await ctx.pluginData!.get("notes", "ready")
+                : ctx.world!.characters.find(
+                    (character) => character.id === "staged-character",
+                  )?.description;
           expect(seen).toBe(
             readMode === "plugin-data" ? "ready" : "staged description",
           );
@@ -211,6 +255,7 @@ describe.skipIf(!isolatedUrl)("read dependencies on real PG", () => {
             : ok();
         },
       };
+      let childCalls = 0;
       const execution = await executeTurn(
         {
           sessionId: SESSION,
@@ -219,14 +264,41 @@ describe.skipIf(!isolatedUrl)("read dependencies on real PG", () => {
           playerMessage: "Continue",
           origin: "player",
         },
-        [story, producer, reader],
+        [
+          story,
+          producer,
+          reader,
+          ...(readMode === "world-child" ? [child] : []),
+        ],
         {
           store,
           eventBus,
+          services,
+          toolExecutor: createToolExecutor({
+            store,
+            findTool: () => undefined,
+          }),
           llm: {
-            generate: async () => {
-              throw new Error("Functions do not use a model");
-            },
+            generate: async () =>
+              childCalls++ === 0
+                ? {
+                    content: null,
+                    toolCalls: [
+                      {
+                        id: "child-read",
+                        name: "record-world",
+                        arguments: "{}",
+                      },
+                    ],
+                    finishReason: "tool_calls",
+                    usage: { inputTokens: 1, outputTokens: 1 },
+                  }
+                : {
+                    content: "Complete",
+                    toolCalls: [],
+                    finishReason: "stop",
+                    usage: { inputTokens: 1, outputTokens: 1 },
+                  },
           },
           loadRuntime: async (runtime) => ({
             manifest: runtime,
@@ -243,6 +315,17 @@ describe.skipIf(!isolatedUrl)("read dependencies on real PG", () => {
         [runOf(reader.name)]: [runOf(producer.name)],
       });
 
+      if (readMode === "world-child") {
+        expect(childCalls).toBe(2);
+        expect(serviceCalls).toBe(1);
+        expect(
+          execution.commit.results.some((r) => r.runtimeId === child.name),
+        ).toBe(false);
+        expect(
+          execution.commit.results.find((r) => r.runtimeId === reader.name)
+            ?.operations,
+        ).toHaveLength(1);
+      }
       if (readMode === "world-suspension")
         expect(execution.commit.suspensions).toHaveLength(1);
       // A concurrent commit spends gold, so the list goes out of bounds.

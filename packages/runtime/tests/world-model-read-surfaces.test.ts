@@ -429,12 +429,19 @@ describe("world read surfaces", () => {
   it.each(
     (["run", "delegate"] as const).flatMap((route) =>
       [false, true].flatMap((fail) =>
-        [false, true].map((brief) => ({ route, fail, brief })),
+        [false, true].flatMap((brief) =>
+          [false, true].map((crossPackage) => ({
+            route,
+            fail,
+            brief,
+            crossPackage,
+          })),
+        ),
       ),
     ),
   )(
-    "keeps $route children committed-only, child failure: $fail, parent world brief: $brief",
-    async ({ route, fail, brief }) => {
+    "inherits $route child world, failure: $fail, parent brief: $brief, cross package: $crossPackage",
+    async ({ route, fail, brief, crossPackage }) => {
       let childSaw: unknown;
       let parentBrief = "A constant brief";
       let answer: SubagentResult | undefined;
@@ -452,7 +459,7 @@ describe("world read surfaces", () => {
       });
       const childTool = tool({
         name: "child-world",
-        description: "Read committed world",
+        description: "Read the inherited world",
         annotations: { readOnly: true },
         parameters: z.object({}),
         execute: async (_args, ctx) => {
@@ -471,7 +478,9 @@ describe("world read surfaces", () => {
             if (brief && call === 0) return toolCall("parent-brief", {});
             if (call === (brief ? 1 : 0))
               return toolCall("delegate", {
-                target: { contract: "test.actor@1" },
+                target: crossPackage
+                  ? { contract: "test.actor@1" }
+                  : { runtimeId: "observer/child" },
                 brief: parentBrief,
               });
             return prose("Parent complete");
@@ -491,7 +500,7 @@ describe("world read surfaces", () => {
           outputContract: "test.actor@1",
           tools: { builtin: ["child-world"] },
         },
-        "actor",
+        crossPackage ? "actor" : "observer",
       );
       const reader = fn(
         "read",
@@ -508,7 +517,9 @@ describe("world read surfaces", () => {
         [story.name]: tell,
         [reader.name]: async (ctx) => {
           answer = await ctx.agents!.run({
-            target: { contract: "test.actor@1" },
+            target: crossPackage
+              ? { contract: "test.actor@1" }
+              : { runtimeId: actor.name },
             brief: brief
               ? (ctx.world!.characters.find((c) => c.id === "source")
                   ?.description ?? "")
@@ -517,29 +528,34 @@ describe("world read surfaces", () => {
           return ok();
         },
       });
-      expect(childSaw).toBe("original");
+      expect(childCalls).toBeGreaterThanOrEqual(2);
+      expect(childSaw).toBe("staged");
       if (route === "run") expect(answer?.ok).toBe(!fail);
       else {
         const delegated = r
           .resultOf(reader)
           .toolCalls.find((t) => t.toolName === "delegate");
         if (fail) expect(delegated?.output).toMatchObject({ ok: false });
-        else expect(delegated?.output).toEqual({ description: "original" });
+        else expect(delegated?.output).toEqual({ description: "staged" });
       }
       expect(r.resultOf(reader).status, r.resultOf(reader).error).toBe(
         "success",
       );
       expect(r.edges(reader)).toEqual(
-        brief ? [r.resultOf(producer).runId] : [],
+        brief || !fail ? [r.resultOf(producer).runId] : [],
       );
       expect(Object.keys(r.execution.commit.readDependencies ?? {})).toEqual([
-        ...(brief ? [r.resultOf(reader).runId] : []),
+        ...(brief || !fail ? [r.resultOf(reader).runId] : []),
       ]);
       expect(
         ((await r.commit(refuseProducer)).isolatedRuntimes ?? []).some(
           (r) => r.runtimeId === reader.name && r.cause === "read",
         ),
-      ).toBe(brief);
+      ).toBe(brief || !fail);
+      expect(
+        (await f.store.listCharacters(SESSION)).find((c) => c.id === "source")
+          ?.description,
+      ).toBe("original");
     },
   );
 });

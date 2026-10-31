@@ -531,7 +531,7 @@ SillyTavern content import uses bounded PNG chunk walking (including remaining-l
 
 ## Character perspective and private delegation
 
-Witnessed history and name-addressed calls are bounded context capabilities, not security isolation for approved server code. This helper reads committed presence-bearing stories only for characters in the current world. Existing tool/service approvals and read permissions remain unchanged. Callers remain responsible for their brief and instruction.
+Witnessed history and name-addressed calls are bounded context capabilities, not security isolation for approved server code. This helper reads committed presence-bearing stories only for characters in the current world. Existing tool/service approvals and read permissions remain unchanged. Callers remain responsible for their brief and instruction. Sub-agents inherit the already authorized server-side world snapshot at admission, without inheriting parent KV, history or transcript, adding browser capabilities or granting server-code exemptions. This does not filter visibility by seat. World provenance and recorders stay in host memory; see [World Model](../reference/world-model.md).
 
 Delegation privacy uses kernel-recorded provider and call identity to project streams, persisted traces, parent tool records and trace copies of later requests. It trusts neither plugin-supplied redaction flags nor global key-name deletion. The actual parent model still uses intent. Settings routes retain host-profile, session-owner, settle and lock checks; choosing a service grants no execution permission. See [protocol](../reference/protocol.md#private-delegation-projections).
 
