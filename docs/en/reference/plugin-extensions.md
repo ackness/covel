@@ -55,13 +55,13 @@ When `needs` points to a contract that has only one provider, a result that the 
 
 ### Writes triggered by the interface: how the three actions differ
 
-| Action               | What it does                                            | Writes                                                                                                                    |
-| -------------------- | ------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
-| `invokePluginAction` | Calls the plugin's RPC action                           | Takes effect right away. If the handler fails later, the writes made before that point are not rolled back automatically. |
-| `invokeRuntime`      | Triggers a function runtime with `trigger.type: manual` | The `ctx.pluginData` writes and the domain effects go into the same proposal commit, so they succeed or fail together.    |
-| `invokeCommand`      | Runs a player command that the manifest declares        | Goes through the command's validation and audit. Do not use `invokePluginAction` to bypass it.                            |
+| Action               | What it does                                            | Writes                                                                                                                             |
+| -------------------- | ------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| `invokePluginAction` | Calls the plugin's RPC action                           | Valid records take effect right away. A refused record stays unchanged; earlier successful writes survive a later handler failure. |
+| `invokeRuntime`      | Triggers a function runtime with `trigger.type: manual` | The `ctx.pluginData` writes and the domain effects go into the same proposal commit, so they succeed or fail together.             |
+| `invokeCommand`      | Runs a player command that the manifest declares        | Goes through the command's validation and audit. Do not use `invokePluginAction` to bypass it.                                     |
 
-When several records must succeed or fail together, use `invokeRuntime`. This function handler does not need a model. A manual trigger does not run a narrative runtime by itself. Any event downstream that the runtime declares still runs under the scheduling rules.
+The RPC scoped store checks `set` and the record schema under the [dataset rules](./plugins.md#datasets-contributesdatasets), without creating a turn or operation record. When several records must succeed or fail together, use `invokeRuntime`. This function handler does not need a model. A manual trigger does not run a narrative runtime by itself. Any event downstream that the runtime declares still runs under the scheduling rules.
 
 An RPC action handler receives `ctx.signal`, which aborts at its time limit. The RPC channel below defines when store calls close and already-started writes settle.
 
@@ -331,6 +331,7 @@ A service has one of two access levels: a **read service** (`access: read`, the 
 | `gateway` | Optional model access without the caller's key material. |
 | `utils` | Optional HTTP helpers that inherit this call's signal. |
 | `services` | Discover and call other public services. |
+| `random` | Provider-scoped deterministic randomness, stream `service:<name>`. |
 | `sessionId` | The current session. |
 | `locale` | The session content language; optional when the host supplies none. |
 | `messages` | The provider's own message catalog, as in a function runtime; absent when it has none. `translate(ctx, text)` selects the session content language; `labelText(ctx, text)` retains all languages for the UI to choose. Nested services use their own provider's catalog. |
@@ -348,6 +349,8 @@ A service has one of two access levels: a **read service** (`access: read`, the 
 When called through a runtime's client, `pluginData` overlays committed data with the provider plugin's completed, commit-eligible upstream writes in this execution, in commit order. Retry or background seed results are not applied again. Parallel runtimes in the same level cannot see each other's writes. The original runtime's own write buffer is applied last only when the provider belongs to that runtime's plugin. Lists remove deleted keys and append new keys in write order. Clients outside an execution read committed data only and record no read dependencies.
 
 A read that sees an uncommitted upstream write records a read dependency on the calling runtime's result. Nested services read each provider's own data and keep recording on the original runtime. If a producer is dropped at commit, an auxiliary caller is dropped with it; a story caller still commits and the trace records the dependency (see [Transactions](./transactions.md)). Calling a read service creates no new scheduling dependency; a story runtime can call it as needed and handle missing or failed services.
+
+Actual service reads of `ctx.world.characters` or `characterSchema` also charge the original calling runtime under the [World Model](./world-model.md) rules. This includes read services, reads inside write services, tool imports and nested calls. First acquiring `world` creates a detached snapshot without observing its properties; dimension-only reads add no character/schema dependency. The view rejects reads after completion, cancellation or timeout. Calls outside executions with no runtime commit owner add no commit dependencies. Provider write ownership and nested read-only restrictions are unchanged.
 
 Calls from tools and imports read the same data: the tools of a top-level agent overlay upstream writes and record read dependencies like a function runtime. When a resumed runtime or a sub-agent calls a service from a tool, it reads committed data only and records no read dependencies, the same as its own tool reads.
 
@@ -388,7 +391,7 @@ The capability snapshot records a write service as `"<contract> (write)"`: a pac
 
 #### What a write service can access
 
-A write service's context is a read service's context without `gateway` and `utils`, plus three fields:
+A write service inherits the read service's `random`, removes `gateway` and `utils`, replaces `pluginData` with a writer, and adds `turnId`:
 
 <!-- prettier-ignore -->
 | Field | Meaning |
@@ -826,3 +829,41 @@ A host caller can pass `onProviderError` in the scope of `createExecution`. When
 - A provider that is not activated or not approved is excluded during discovery, so it does not count as a failed call.
 - A call that fails admission after it was sent keeps its failure event.
 - These statistics only describe the current window. They change as old records are removed. They are not cumulative usage.
+
+<a id="orchestration-contracts"></a>
+
+## Turn policy and character actor contracts
+
+The framework owns the schemas; plugins supply behavior. `turn-policy@1` is a read service and `character-actor@1` is a delegated agent runtime. Neither is a kernel extension point. Stories remain runnable without either provider: do not put them in a story package's `requires`, required contract inputs or `needs`.
+
+The SDK exports `TURN_POLICY_CONTRACT`, `CHARACTER_ACTOR_CONTRACT`, and `turnPolicyRequestSchema`, `turnPolicyInputSchema`, `turnPolicyOutputSchema`, `characterActorInputSchema`, `characterActorOutputSchema`. Matching `…JsonSchema()` functions export draft-7 JSON Schema. The types are `TurnPolicyRequest`, `TurnPolicyInput`, `TurnPolicyOutput`, `CharacterActorInput`, `CharacterActorOutput`. `@covel/shared` re-exports the same schemas. Objects are strict and reject extra fields.
+
+<!-- prettier-ignore -->
+| Contract value | Fields and bounds |
+| --- | --- |
+| Policy request | `actions: TurnAction[]` uses resolved-action validation and submission bounds; `present: {characterId, name}[]` has at most 32 entries with names up to 80 characters; `recentSegments: StorySegment[]` has at most 60 segments, without `speakerId`; optional `limits` |
+| Policy handler input | The request with required `limits: {maxActors, maxSubagentCalls}`. The host supplies remaining new-character slots and invocations; callers can only narrow them |
+| Policy output | `actors: {characterId, reason?, instruction?}[]` has at most 32 entries and may be empty; `reason` up to 500 characters, `instruction` up to 2,000; required `order: sequential / parallel`, `narrator: before / after / none`, `yieldHint: user / continue` |
+| Actor input | `characterId`, `brief` of 1–20,000 characters, optional `instruction` up to 2,000 characters |
+| Actor output | 1–8 `{kind: dialogue / action, text}` segments, each 1–4,000 characters; optional `intent` up to 2,000. No speaker, narration or effects |
+
+Actors must be unique IDs from `present`; `validateTurnPolicyOutput({present}, output)` supplies the same contextual validation without reconstructing host-owned admission limits. The host enforces canonical input/output even with permissive provider parsers, then clamps a valid plan in provider order. An admitted character speaking again consumes only a call. With no new-character slots, new characters are skipped while later admitted characters remain eligible. Planning reserves nothing; actual delegation may still be refused. The three advice fields are interpreted by the orchestrator, not by kernel scheduling.
+
+```ts
+const plan = await ctx.services.call({
+  contract: "turn-policy@1",
+  input: { actions: ctx.playerActions, present, recentSegments: [] },
+});
+```
+
+`services.call` accepts the complete `{pluginId, name, contract, input}` tuple or `{contract, input}`, never a partial target. Zero or multiple candidates return `unavailable`, with an ambiguity explanation for multiple candidates. The policy contract also honors the session's exact `{pluginId, name}` choice. Two services in one package need a choice too. A missing, disabled, revoked or fault-paused selection never switches to an alternate; `discover` still returns a list. Selection and registrations freeze at execution admission; invocation still checks live authorization. Nested services inherit the binding, and edits apply to the next execution.
+
+Model imports accept only `{present: string[], recentSegments}`. The host resolves names or aliases, adds the execution's actions and remaining allowances, and returns `actors[].character` names. Neither model arguments nor results carry canonical character IDs. Unknown or ambiguous names fail before calling the service; raw IDs are not accepted as names. Session choice precedes `modelFacing`: selecting a code-only service leaves the import absent instead of switching. Policy tool annotations are `readOnly: true`, `stagesWrites: false`, `idempotent: false`, `concurrencySafe: false`.
+
+Read services also receive provider-scoped `ctx.random`, with stream `service:<name>` and the existing seed rules. A director can use only the gateway already lent by its caller path: function calls may lend one; tools and agent imports receive no gateway/utils. Without it the service returns unavailable and the orchestrator writes its fallback. Registration and declarations must still agree; a policy cannot be a write service, runtime output or extension handler.
+
+See [character delegation](./plugins.md#character-orchestration) and the [composition guide](../plugins/advanced.md#orchestration-example).
+
+## Bundled policy and optional story composition
+
+The bundled provider exposes one code-only read service named turn-policy, with five algorithms chosen by its own getOwnSettings().strategy. Alone it needs no session selection; additional providers require an exact choice. The dialogue function calls once by contract so director can borrow a gateway; the story agent does not import/call policy again. Plans project names before reaching models; canonical requests and character IDs remain in code. Custom packages with several services on a contract still need one matching declaration per registration, without deduplication by contract.

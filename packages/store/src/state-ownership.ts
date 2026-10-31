@@ -57,7 +57,7 @@ export const KERNEL_TABLE_OWNERSHIP: Readonly<
     snapshot: "captured",
     checkpoint: "exported",
     fork: "rebuilt",
-    note: "Parent row; snapshot captures only SnapshotSessionState fields.",
+    note: "Parent row; snapshot captures only SnapshotSessionState fields, including metadata.orchestration (policy selection and delegation caps). Admission counters belong to pending continuations, never session preferences.",
   },
   turn_results: {
     owner: "kernel",

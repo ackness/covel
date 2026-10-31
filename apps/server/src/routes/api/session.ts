@@ -1,3 +1,5 @@
+import { registerOrchestrationRoutes } from "./orchestration.js";
+import { resolveAutoAdvanceLimit } from "@covel/shared";
 import { readLockedSession } from "./session/locked-mutation.js";
 import {
   invalidateSessionEvents,
@@ -174,6 +176,7 @@ registerSessionViewRoute(sessionRoutes);
 registerSessionDeleteRoute(sessionRoutes);
 registerSessionMemoryIndexRoutes(sessionRoutes);
 registerSessionSeatRoutes(sessionRoutes);
+registerOrchestrationRoutes(sessionRoutes);
 registerSessionActionKindRoutes(sessionRoutes);
 
 /**
@@ -204,10 +207,13 @@ function sessionHasSetupRuntime(
  */
 function sanitizeSessionForResponse<T extends SessionRecord>(
   session: T,
-): T & { readonly incarnation: string } {
+): T & { readonly incarnation: string; readonly autoAdvanceLimit: number } {
   return {
     ...session,
     incarnation: publicSessionIncarnation(session),
+    autoAdvanceLimit: resolveAutoAdvanceLimit(
+      session.metadata?.autoAdvanceLimit,
+    ),
     metadata: publicSessionMetadata(session.metadata),
   };
 }
@@ -380,12 +386,15 @@ sessionRoutes.post("/", async (c) => {
     phase,
     completedPlayerTurns: 0,
     setupRuntimes: {},
-    seats: defaultSessionSeats(),
+    seats: defaultSessionSeats(parsedCreate.seatRole),
     // Persist selection; execution and lifecycle hooks use only live grants.
     activePlugins: plugins,
     createdAt: now,
     updatedAt: now,
     metadata: {
+      ...(parsedCreate.autoAdvanceLimit !== undefined
+        ? { autoAdvanceLimit: parsedCreate.autoAdvanceLimit }
+        : {}),
       pluginSelection: storedPluginSelection({
         requested: parsedCreate.requestedPlugins,
         excluded: parsedCreate.excludedPlugins,
@@ -735,6 +744,7 @@ sessionRoutes.patch("/:id", async (c) => {
           ...updates,
           metadata: {
             ...withoutLifecyclePending(session.metadata),
+            ...updates.metadata,
             [SESSION_LIFECYCLE_PENDING_KEY]: endLifecycle,
           },
         }
@@ -753,7 +763,11 @@ sessionRoutes.patch("/:id", async (c) => {
 
     return {
       session,
-      merged: { ...session, ...persistedUpdates },
+      merged: {
+        ...session,
+        ...persistedUpdates,
+        metadata: { ...session.metadata, ...persistedUpdates.metadata },
+      },
       fireEnd,
       endLifecycle,
       hookScope,

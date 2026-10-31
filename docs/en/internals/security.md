@@ -302,6 +302,7 @@ A plugin's server-side JavaScript (`entry`, handler, guard, hook, wire) runs in 
 - A media wire a plugin registers carries that plugin, like a text wire: in a session it can be chosen only when the plugin is enabled there; a request that belongs to no session can choose only a builtin plugin's wire, and on the `self` tier a community plugin's as well.
 - `framework` is a reserved ID that no package can take. A request with `pluginId: "framework"` runs only a framework default action, so the route's trust decision and the handler that runs are the same one.
 - The bound session store view, the lookup of tools by plugin, and the proposal pipeline are also permission boundaries of the plugin API, and they have the same limit.
+- Action / command RPC scoped stores and world data imports check captured dataset declarations from registered packages, including packages with no runtimes, rather than inferring policy from loaded runtimes. Approval and trust do not relax schema, operation or size rules. Management plugin-data PUT / DELETE retain operator override behavior and existing authorization. This does not sandbox approved server JavaScript.
 - A read service's `ctx.pluginData` is bound to the session and provider plugin, filters `_hidden.*`, and returns separate copies. `world` copies the caller's view, and `getOwnSettings()` reads only provider settings. Services receive no write methods or proposal channel; see the [service context](../reference/plugin-extensions.md#what-a-service-can-and-cannot-access).
 
 `ctx.gateway.resolveSlot()` is the same kind of boundary.
@@ -355,7 +356,7 @@ This is a second door, narrower than the few desktop-only endpoints. `/api/confi
 `$COVEL_HOME/translations` (`COVEL_USER_TRANSLATIONS_DIR`) holds plugin translations that do not come with a plugin: translation packs that the user copied in, and machine translations made on this machine. The loader reads them as data:
 
 - It reads only labels and `messages`. Prompt bodies (`*.zh.md`) are read only from the plugin package, so a translation cannot change the instructions.
-- A label section keeps only the label fields (`displayName`, `description`, `label`, `title`, `summary`, `about`), and the rest is discarded. A plugin's own locale files are handled the same way.
+- A label section keeps only the label fields (`displayName`, `description`, `label`, `title`, `summary`, `about`, `placeholder`), and the rest is discarded. A plugin's own locale files are handled the same way.
 - When the same text is translated on both sides, the author's translation wins.
 - Symbolic links are not followed, and only regular files are read.
 
@@ -517,3 +518,13 @@ A `bridge: session` view in `contributes.ui.view` can additionally read a valida
 ## Importing third-party content: data conversion only
 
 SillyTavern content import uses bounded PNG chunk walking (including remaining-length checks before reading data), bounded JSON with Zod validation, fixed output paths, text sanitizing and fixed macro substitutions. PNG cover files have text and other metadata removed. No extension, script, card regex or executable macro runs. Unsupported fields and conversion losses are reported. Preview writes nothing; import uses the ZIP world's existing validation and activation under the world lock, guarded by `host.files` and `world.write`. Sanitizing does not make prompts trustworthy: lore and narration notes enter model context at the same trust level as other third-party world packages. See [the import guide](../worlds/import-sillytavern.md).
+
+## Character perspective and private delegation
+
+Witnessed history and name-addressed calls are bounded context capabilities, not security isolation for approved server code. This helper reads committed presence-bearing stories only for characters in the current world. Existing tool/service approvals and read permissions remain unchanged. Callers remain responsible for their brief and instruction.
+
+Delegation privacy uses kernel-recorded provider and call identity to project streams, persisted traces, parent tool records and trace copies of later requests. It trusts neither plugin-supplied redaction flags nor global key-name deletion. The actual parent model still uses intent. Settings routes retain host-profile, session-owner, settle and lock checks; choosing a service grants no execution permission. See [protocol](../reference/protocol.md#private-delegation-projections).
+
+## In-game host role
+
+The preparation role changes only a new seat's permitted game actions. It grants no owner/operator identity, bypasses no session.create host-profile check and cannot authorise system-source requests. Actor history and prompts aid perspective; they are not a sandbox for approved server code.

@@ -78,3 +78,29 @@ To see what each plugin did in a turn, expand the turn's execution details. The 
 - To get more worlds and play styles: [install plugins and world packages](./packages.md)
 - To learn where saves are kept and how to back them up: [data, backup, and upgrade](./data-and-upgrade.md)
 - To make your own world: [your first world](../worlds/first-world.md)
+
+### While the story advances automatically
+
+When a story requests another round, both chat and stage show “Advancing” with the current round and limit. Choose “Stop advancement” to stop further rounds; previously saved stories remain. You can also send new speech, a host action or a spectator advance: it stops the old advancement and then submits a new input. During an ordinary turn, speech still interjects into that turn.
+
+Set “Automatic rounds” to 0 in Orchestration and save to turn it off. “Applies to your next input” means saving a setting does not change the current advancement. See [session settings](../reference/api.md#auto-advance) for the range. Each round can call a model; closing the page or disconnecting does not stop server advancement, so use Stop. Refresh restores current progress without restarting a finished chain.
+
+## Try an ensemble or spectator session
+
+When the world allows it, choose Ensemble Dialogue or Spectator during preparation. Configure story and plugin text [model roles](./models.md) first.
+
+1. Ensemble can keep Play as: Player. For a human DM, disable character creation and choose Game master. Choose Spectator for observation. Roles are creation-only.
+2. For DM narration, select Game master in the narrator's Perspective setting. This changes voice rather than seat role.
+3. After starting, open Orchestration under Loaded Plugins. The sole bundled provider resolves automatically; no initial provider-selection step is needed. Open its settings to choose mention, list, random, manual or director. Explicitly choose a service only when several providers are active.
+4. Save actor, call and automatic-round limits independently. Failed drafts remain editable while successful fields stay saved.
+5. As host, submit a Direct action naming two present NPCs; list/random can request further beats. With manual strategy, select Choose actors and enter names or aliases in “Actors, one name per line”, then send. Spectators use Advance.
+6. Use Stop advancement or fresh input to end the old chain. Earlier committed stories remain. Reload preserves role and saved limits without replaying old continuation advice.
+
+| What you see                       | What to do                                                                                                           |
+| ---------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
+| Missing, ambiguous or stale policy | Narrator-only play continues; enable a provider or select/clear one in Orchestration.                                |
+| Missing or failed actor            | That actor contributes nothing; other segments commit, or all failures yield user.                                   |
+| Invalid manual names               | Correct exact present names/aliases and resubmit; no partial dispatch occurs.                                        |
+| Unavailable director               | Without a gateway it uses mention; slot/model failure uses narrator-only play. Check model roles or change strategy. |
+
+Compositions select plugins and a world-generation default view. They do not overwrite saved views or choose roles, perspectives or algorithms.

@@ -168,7 +168,7 @@ return { result: execution.result, committed: outcome.status === "committed" };
 | `runtime.deferred`      | S→C  | staged runtime 已随原始回合提交并转入后台                                             | `{ runtimeId, pluginId, jobId, sourceTurnId }`                                                                          |
 | `runtime.completed`     | S→C  | 单个 runtime 完成                                                                     | `{ runtimeId, pluginId, turnId, runId, status, durationMs, stopReason? }`                                               |
 | `runtime.failed`        | S→C  | 单个 runtime 失败                                                                     | `{ runtimeId, pluginId, turnId, runId, status, durationMs, error, errorKind?, failureTarget?, stopReason? }`            |
-| `execution.completed`   | S→C  | 回合执行终态                                                                          | `{ runtimeCount, resultCount, durationMs, committed, error?, abortReason?, resync? }`，各字段见下                       |
+| `execution.completed`   | S→C  | 请求执行终态                                                                          | `{ runtimeCount, resultCount, durationMs, committed, error?, abortReason?, resync? }`，各字段见下                       |
 
 `runtime.started.resumed` 只在从挂起中恢复的运行上出现，值为 `true`。同一个逻辑 runtime 每次运行都有自己的 `runtime.started` 和终态事件，挂起的那次以 `status: "suspended"` 结束。
 
@@ -176,15 +176,15 @@ return { result: execution.result, committed: outcome.status === "committed" };
 
 `execution.completed` 的字段：
 
-| 字段          | 含义                                                                                                                                                                                               |
-| ------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `committed`   | `true`：proposal、execution journal 和会话时钟都已经保存。`false`：没有保存，客户端撤掉这一回合先行显示的流式内容                                                                                  |
-| `error`       | `committed: false` 时带上 proposal 错误或通用的事务错误                                                                                                                                            |
-| `abortReason` | 只在回合被中止时出现。玩家主动停止时，值是 `"aborted-by-player"`                                                                                                                                   |
-| `resync`      | 只在 `committed: true`、并且这一回合提交之后有一部分事件没发出去时为 `true`。数据已经保存，客户端应该去读已保存的状态，不要等那些事件。订阅流同时会收到 `system.reset`，`reason: "publish-failed"` |
+| 字段          | 含义                                                                                                                                                                       |
+| ------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `committed`   | 描述最后一个实际执行：`true` 表示它的 proposal、journal 和时钟已保存；`false` 只撤掉该执行未提交的流式内容，之前已提交的轮次仍然保留                                       |
+| `error`       | `committed: false` 时带上 proposal 错误或通用的事务错误                                                                                                                    |
+| `abortReason` | 只在回合被中止时出现。玩家主动停止时，值是 `"aborted-by-player"`                                                                                                           |
+| `resync`      | 请求中任意一轮提交后有一部分事件没发出去时为 `true`。数据已经保存，客户端应该去读已保存的状态，不要等那些事件。订阅流同时会收到 `system.reset`，`reason: "publish-failed"` |
 
 > [!NOTE]
-> **开场接力。** 一次玩家动作完成了最后一个 setup runtime 时，`POST /api/actions` 的同一条 SSE 流会自动接着跑一个主循环回合（见 [api.md § POST /api/actions](./api.md)）。这时流里会出现**两轮** `execution.started` 和 runtime 生命周期事件，它们外层的 `turnId` 不同（setup 回合和接力回合）。但只有**一个** `execution.completed` 收尾。前端靠它结束“执行中”的状态，并按 `committed` 处理先行显示的内容。setup 提交失败时不会启动接力，直接以 `committed: false` 结束。玩家在接力开始前停止时，接力不再开始，`execution.completed` 带接力回合的 `turnId` 和 `abortReason: "aborted-by-player"`。
+> **开场接力。** 一次玩家动作完成了最后一个 setup runtime 时，`POST /api/actions` 的同一条 SSE 流会自动接着跑一个主循环回合（见 [api.md § POST /api/actions](./api.md)）。这时流里至少会出现**两轮** `execution.started` 和 runtime 生命周期事件，它们外层的 `turnId` 不同（setup 回合和接力回合）。但只有**一个** `execution.completed` 收尾。前端靠它结束“执行中”的状态，并按 `committed` 处理先行显示的内容。setup 提交失败时不会启动接力，直接以 `committed: false` 结束。玩家在接力开始前停止时，接力不再开始，`execution.completed` 带接力回合的 `turnId` 和 `abortReason: "aborted-by-player"`。
 
 `runtime.failed.errorKind` 是可选的模型失败类别，取值见 [模型失败分类](./slots.md#连接测试与失败原因)。`missing_key` 表示内置远程服务商在发请求前就发现缺少密钥。回合失败提示复用连接测试的处理建议，服务商的原话保留在可展开的详情里。无法分类的异常用 `unknown`；没有模型异常的失败可以不带此字段。`io.concealed` 仍用固定文本替换错误详情，但保留类别，因为类别不含隐藏内容。
 
@@ -1010,6 +1010,8 @@ data: {
 
 ### 插件 RPC
 
+action 和插件 command 的 scoped store 写入复用[数据集规则](./plugins.md#数据集contributesdatasets)：每条记录在落库前检查，被拒记录保持原样，先前成功的调用保留。未捕获的拒绝沿用已有 `handler-threw` 与生产安全的 `500` 响应；不增加事件或状态形状，不产生玩家回合或故事附带操作通知。原有隔离操作失败的固定提示与隐藏错误规则不变。
+
 这是给插件发“结构化指令”的统一通道。它同时承载三种调用：action 级、runtime 级和命令级。
 
 - action 级和 command 级返回一次 JSON。
@@ -1481,3 +1483,32 @@ runtime 的终态：
 ## 插件视图的只读端口
 
 插件视图复用沙箱的 MessagePort：完整 `{ type: "state", value }` 在 `value.session` 中带会话投影，流式消息是 `{ type: "stream", seq, append }`。这不是新的 HTTP 或 SSE 端点。读取能力在首次挂载前取得玩家授权，绑定插件 ID 与 spec + HTML 内容哈希；撤销后关闭页面。既有页面 action handler 不变。投影、节流与授权规则统一见[插件视图](./ui-panels.md#插件视图)。
+
+<a id="auto-advance-events"></a>
+
+### 自动推进事件
+
+网页端提交新输入时，先停止旧请求并等浏览器 checkpoint 完成，再发送已接收的输入。等待期间再次提交会显示会话忙碌提示，保留新的文字、字段和排队选择。提交调用返回未接收时，输入框不能清空草稿。
+
+| 事件                        | 载荷                                                                                                                                                                  | 客户端处理                                     |
+| --------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------- |
+| `execution.round.completed` | `requestId`, `rootId`, `turnId`, `round`, `limit`，以及完成载荷 `runtimeCount`, `resultCount`, `durationMs`, `committed`, `error?`, `abortReason?`, `resyncRequired?` | 只结算指定执行的消息、步骤和增量；保持请求运行 |
+| `execution.advance`         | `requestId`, `rootId`, `phase: waiting \| running \| stopped`, `round`, `limit`, `turnId?`；停止时还有 `reason`                                                       | 显示或清除推进进度；不生成故事文字             |
+
+根执行和 setup/开场也各发出一条 round 完成事件，自动轮从 `round: 1` 开始。顺序为：根执行 started → round completed → advance waiting → 下一轮 started → advance running → runtime/故事事件 → round completed；可重复下一轮，最后 advance stopped → 唯一一条请求终态 `execution.completed`。开场接力仍保留原来的未开始即停止标记。基础设施错误保留 `error.occurred` 路径；已开始请求仍收尾。没有开始执行的拒绝不产生 round 事件。
+
+停止原因是有限枚举：`yielded-to-player`、`no-eligible-story`、`ambiguous-story`、`limit`、`disabled`、`player-stop`、`new-input`、`pending-input`、`session-unavailable`、`execution-failed`、`prerequisite-unavailable`。原因不携带模型内容。到达上限或交还玩家是正常结束。后续失败只丢弃该轮未提交内容；终态 `resync: true` 汇总任意一轮的提交后发布失败。
+
+恢复状态的可选 `advance` 使用同一载荷；`unknown` 不证明完成。客户端按请求所有权处理事件，忽略旧请求收尾和倒退的进度。新事件不包含提示词、工具参数、操作摘要或 concealed 内容。前台所有轮共用一个故障计数身份：故障立即去重计数，干净结果等组关闭才清零；较新的后台结果不会被旧组清零。setup 不参与，后台任务继续独立计数。
+
+## 委托的私有投影
+
+角色 `intent` 只留在编排方的实时内存对话里。内核按已解析提供方与工具调用 ID 记录来源，过滤子模型 trace、父方 delegate 参数/结果、持久工具记录和父方后续 `llm.calling` 的对话副本；`/turns`、动作流及 trace API 读取过滤后的值。concealed 提供方的完整委托内容也如此。实时模型对话仍保留一一配对的工具调用和结果。完成工具直接转成输出时，普通角色只交付公开 segments，concealed 委托不交付内容。不会按任意业务 JSON 里的 `intent` 键猜测来源。
+
+一旦执行中记录了私有委托，公开请求副本也会去掉各条消息的原生续接状态（`providerContinuation`）和推理（`reasoningContent`），防止其中重复的参数或私有结果外泄。上下文预算把工具步骤压缩成摘要时，内核保留每行的调用来源，公开副本只将私有调用对应的行替换为固定标记。模型收到的原生续接、推理和压缩摘要保持不变。
+
+角色失败或名额拒绝沿用 `subagent.failed`，不增加 actor 事件族，不为隔离失败发 `runtime.failed` 或执行错误。故事可以提交；独立操作被拒时仍只有既有的固定 `operation.failed` 提示。调用方故意把私密内容改写为正文不属于此结构化投影保证。
+
+## 创建身份与现有动作协议
+
+创建请求的可选 seatRole 只决定新的人类座位；字段、默认与拒绝规则见[创建接口](./api.md#创建身份)。主持人允许导演指示/旁白/推进，旁观者只有推进。后续动作仍由服务端填写 source，沿用现有 execution.round.completed、execution.advance 和单一 execution.completed 生命周期；此选择不引入新事件或新调度器。

@@ -8,6 +8,9 @@ export function createExecutionContext(input: TurnInput): ExecutionContext {
   return {
     executionId: crypto.randomUUID(),
     origin: input.origin,
+    ...(input.logicalTurn !== undefined
+      ? { logicalTurn: input.logicalTurn }
+      : {}),
     countPolicy: "none",
     ...(input.logicalTurnId ? { logicalTurnId: input.logicalTurnId } : {}),
     ...(input.manualTrigger?.sourceTurnId

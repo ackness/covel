@@ -534,11 +534,11 @@ CLI 和安装器的静态校验对 `scope: turn` 和 `scope: committed` 的输�
 
 故事的形状由内核负责，对所有 `outputKind: story` 的 runtime（agent、function 和 guard 提前给出的故事）都一样。当前契约是 `narrative-engine@2`：
 
-| 字段       | 类型                                  | 含义                                                                  |
-| ---------- | ------------------------------------- | --------------------------------------------------------------------- |
-| `segments` | 段落数组，最多 60 段                  | 故事正文，按顺序排列                                                  |
-| `cues`     | `{ scene?, present?, mood? }`，可省略 | 场景名（≤200 字符）、在场人物的名字（≤32 个）、氛围（≤80 字符）       |
-| `yield`    | `user` 或 `continue`，默认 `user`     | 写完之后把回合交还玩家；`continue` 为后续使用保留，现在和 `user` 一样 |
+| 字段       | 类型                                  | 含义                                                                     |
+| ---------- | ------------------------------------- | ------------------------------------------------------------------------ |
+| `segments` | 段落数组，最多 60 段                  | 故事正文，按顺序排列                                                     |
+| `cues`     | `{ scene?, present?, mood? }`，可省略 | 场景名（≤200 字符）、在场人物的名字（≤32 个）、氛围（≤80 字符）          |
+| `yield`    | `user` 或 `continue`，默认 `user`     | `user` 把控制权交还玩家；`continue` 请求宿主在提交后继续推进，见下方规则 |
 
 每个段落是 `{ kind, speaker?, text }`：
 
@@ -630,6 +630,8 @@ Agent 的副作用只来自工具：模型能写什么，以 `agent.tools` 白�
 - 子调用用 `ctx.progress` 上报的进度作业，和父调用在同一个进度范围里，随父执行的提交一起收尾，同一个 runtime 的多次调用（例如父调用多次触发同一个子调用）共用这个范围；作业在完整身份键（`pluginId`、`runtimeId` 等）内按 `jobId` 和序号去重，所以父子或兄弟 runtime 的作业不会互相冲突；同一个 runtime 的多次调用共用一个身份键，要用不同的 `jobId`。子调用保留自己的执行身份，只是在根执行的进度范围里上报。父 handler 成功时，它们按各自的结果结束；父 handler 失败时，以 `cancelled` 结束；父 handler 挂起时，它们和父调用的作业一起停在 `waiting-input`，恢复成功后以保存时的结果结束，挂起项被放弃、过期、作废时以 `cancelled` 结束。
 - agent 的 guard 里发起的子调用，只在 guard 返回 `{ skip: true }`、结果仍是跳过时提交；guard 放行、agent 照常运行时丢弃。
 
+挂起的辅助读者仍受源执行的读取依赖检查：它读过的生产者被丢弃时，挂起项和其中缓冲的子调用一起丢弃，即使读者没有暂存写入。详见[事务](./transactions.md)。
+
 提交时，顶层 runtime 和它下面所有层的嵌套调用是一个整体，要么全部提交，要么全部丢弃：
 
 - 有故事的执行里，非故事 runtime 的这个整体在一个 savepoint 里提交。其中任何一条写入被拒，整体一起丢弃，故事照常保存。依赖这个顶层 runtime 的下游按[提交规则](./transactions.md#回合级单事务)跟着丢弃。
@@ -670,11 +672,11 @@ const result = await ctx.agents?.run({
 
 运行时的规则：
 
-- **独立的对话**：子 agent 的提示词是提供方自己的正文，加上框架的完成说明，再加简报。看不到会话历史，也看不到调用方的对话。
+- **独立的对话**：子 agent 的提示词是提供方自己的正文，加上框架的完成说明，再加简报。看不到调用方的对话；通用子 agent 没有会话历史，角色契约由框架加入亲历历史（见[角色委托](#character-orchestration)）。
 - **只读工具**：提供方 `agent.tools` 里没有 `readOnly` 注解的工具（插件工具、数据集的 `-upsert` / `-update` 这类写入工具）、`suspend` 和 `delegate` 都被拿掉。声明了却没注册的插件工具仍按原规则让这次运行失败。数据集工具只保留 `-get` / `-list`。导入的服务工具保留，写服务的导入也保留：子 agent 以自己的身份调用，暂存的操作挂在委托它的 run 上，子 agent 失败时撤回。
 - **循环 profile**：没写 `agent.loop.profile` 时用 `actor`，不流式显示，也不读玩家插话。
 - **模型**：用提供方自己声明的模型用途。会话的 `runtimeModelOverrides` 按提供方的 runtimeId 生效，挂起后恢复的运行里也一样；调用方的覆盖和请求里的故事模型覆盖都不生效。
-- **上限**：一次执行最多同时运行 8 个子 agent，嵌套执行也算在内；子 agent 不能再调用子 agent（深度上限 1）。超过上限的调用立刻得到 `unavailable`，不排队。
+- **上限**：一次执行最多同时运行 8 个子 agent，嵌套执行也算在内；子 agent 不能再调用子 agent（深度上限 1）。另有会话设置的累计角色与调用上限，见[执行名额](#character-orchestration)。超过上限的调用立刻得到 `unavailable`，不排队。
 - **取消**：调用方被取消、超时或运行结束，子 agent 跟着停下，结果是 `cancelled`。handler 没有等待的子 agent，runtime 收尾前会等它结束。
 - **只交回输出**：输出按提供方的 `io.output.schema` 和契约 schema 检查，没通过算 `internal`。Hook 中的 `PreRuntime`、`PostRuntime` 和 `PostContextAssembly` 不为子 agent 触发；循环里的 `PreLLMCall`、`PreStep`、`PreToolUse` 和 `PostToolUse` 照常触发，`ctx.runtimeId` 是子 agent 的。
 - **trace**：子 agent 的每个事件都带 `subagentCallId`、`parentCallId` 和 `parentRuntimeId`，另有 `subagent.started` / `completed` / `failed`（见[协议](./protocol.md#子-agent-事件)）。`io.concealed` 的提供方和顶层运行一样隐去内容。
@@ -911,6 +913,8 @@ homepage: https://example.com/tidefall
 - 写入通过 proposals，在提交时统一校验。
 - `ctx.world.dimensions` 以提供者发布的冻结快照为底本，并叠加该视图可见的合法维度 proposal。公共读取与执行内预览的区别见下面的[动态维度](#动态维度)。
 - `ctx.world.seats` 是会话的座位，同样冻结。proposal 不改它，玩家用[切换接口](./api.md#会话座位)换当前角色，下一回合生效。
+
+实际读取 `characters` / `characterSchema` 会记录上游生产者，工具和服务共享该调用的读取记录器。辅助读者在生产者被丢弃时一起丢弃，story/setup 保留并记 trace。可见范围、保守粒度和种子排除见 [World Model](./world-model.md)。递归调用不继承父执行的上游，子 agent 仍读已提交世界。
 
 **按名字找角色。** 角色除 `name` 外可以有 `aliases`（同一个人的其他叫法）。
 
@@ -1201,7 +1205,7 @@ namespace 声明 `search` 之后，它的记录进入框架的记忆检索（[`m
 
 ### 玩家看到的文字
 
-- 玩家可见的标签（`displayName`、`description`、`label`、`title`、`summary`、`about`）在主清单里写 English。
+- 玩家可见的标签（`displayName`、`description`、`label`、`title`、`summary`、`about`、`placeholder`）在主清单里写 English。
 - 译文放在插件根目录的 `locales/<locale>.yaml`，按清单文件分节，只写译文，可以是任意语言。加载器把它们编译成 locale map。
 - 标签文件只能翻译这些字段。写到契约字段或提示词内容上的条目会被忽略，`pnpm validate:plugin` 报为错误。主清单里的内联 locale map 同样报错。
 - 同一个文件的 `messages` 一节翻译 UI spec 和代码里的文字（English 原文 → 译文）。界面文字的规则见 [UI 面板](./ui-panels.md#插件-ui-文本规范)，代码用 `translate(ctx, …)` / `labelText(ctx, …)` 读取。
@@ -1250,7 +1254,7 @@ pnpm lint
 | [branch-reply](../../plugins/branch-reply/README.md) | 回复变体 | `plugin` | `branch-reply@1` | 内联 | 提供多条可切换的回复 |
 | [char-creator](../../plugins/char-creator/README.md) | 角色创建 | `core` | `character-creation@1`（默认提供者） | `player-init`、`character-tracker` | 创建主角并逐项回填表单答案，记录故事中的角色变化 |
 | [character-blueprint](../../plugins/character-blueprint/README.md) | 角色资料 | `plugin` | `character-blueprint@1`、`character-presence@1` | `presence` | 保存世界预设的人物资料，以及头像、立绘和声音 |
-| [chat-mode-narrator](../../plugins/chat-mode-narrator/README.md) | 对话叙事 | `plugin` | `narrative-engine@2` | 内联 | 让故事更像角色对话 |
+| [chat-mode-narrator](../../plugins/chat-mode-narrator/README.md) | 对话叙事 | `plugin` | `narrative-engine@2` | `plan` / `narrate` | 让故事更像角色对话；舞台在场输入同时供规划和叙事使用 |
 | [codex](../../plugins/codex/README.md) | 设定图鉴 | `plugin` | 无 | 内联 | 整理新发现的地点、人物、物品和传闻 |
 | [core-quest](../../plugins/core-quest/README.md) | 任务日志 | `plugin` | `world-ir.vocabulary@1` | `log`、`vocabulary` | 从叙事中登记和推进任务 |
 | [dice-check](../../plugins/dice-check/README.md) | 骰子判定 | `plugin` | `action-check@1` | `roller`、`recorder` | 为有失败风险的行动做骰子判定 |
@@ -1327,7 +1331,10 @@ contributes:
 - **记录 schema。** 写入后的值（对 `plugin.data.update` 是应用操作之后的结果）必须满足 `schema`。
 - 违反任何一条，这条 proposal 以 `code: "dataset-violation"` 被拒，按提交单元规则处理。宿主没有拿到 schema 文档时，写入一律被拒，不会放过。
 - `key` 在提交时不检查。数据集工具按[数据集键规则](./tools.md#键的规则与查找) `datasetKey(...)`（SDK 导出）规范化键，查找时先找原样的键，再找规范化的键。插件代码写同一个数据集时，用 `datasetKey(...)` 生成键，才能落在工具找得到的行上。
-- 不经过提交流水线的写入不做这些检查：世界数据的导入和同步（按 source 的 `schema` 校验，见 [World Data · 配套插件数据](./world-data.md#配套插件数据)）、plugin action RPC 的 `context.store.setPluginData`，以及管理 API 的 `PUT`。
+- plugin action / command RPC 的 `context.store.setPluginData`、世界数据导入和同步也使用同一套数据集规则。整条记录的预置、替换和投影输出都算 `set`；同步真正移除托管记录时需要 `delete`，替换过程中的内部删除不另需 `delete`。`force` 不绕过这些规则。
+- 策略来自注册包的声明和捕获的 schema，不依赖 runtime 是否存在，也不因信任或审批而放宽。schema 缺失、无法编译或使用 `$async` 时拒绝写入；记录错误最多报告 3 条。
+- 按实际存储的命名空间查策略：`_hidden.notes` 不继承 `notes` 的数据集规则。RPC 和导入保留原样的 key，不重写键，也不检查它与记录字段相等。
+- 管理 API 的 `PUT` / `DELETE` 保留为运维覆盖，不检查数据集 schema 或 `ops`；已有的授权、启用状态、保留命名空间和大小限制仍适用。
 
 详见[事务 · 操作式写入](./transactions.md#操作式写入plugindataupdate)。
 
@@ -1368,3 +1375,60 @@ contributes:
 - `__kernel:<subsystem>` 是另一种 owner 分区，插件绑定的读取接口访问不到它。
 
 完整清单和读取权限见[存储架构](../internals/storage.md#plugin-data-ownership-and-reserved-names)。
+
+<a id="character-orchestration"></a>
+
+## 角色委托与执行名额
+
+一个角色提供方的 `RUNTIME.md` 可以只写：
+
+```yaml
+---
+schedule:
+  subagentOnly: true
+io:
+  output:
+    contract: character-actor@1
+---
+Play the selected character using the supplied profile and witnessed history.
+```
+
+省略 `function` 表示 agent；`subagentOnly` 推导 manual 触发，默认 system 可见性。省略输出 schema 时，加载器使用框架 schema；显式 `schema: contract:character-actor@1` 也可以。文件 schema 可以收窄输出，但不能绕过规范校验。包不能发布不同的同名契约 schema。
+
+```ts
+const reply = await ctx.agents.run({
+  target: { contract: "character-actor@1" },
+  characterId: selected.id,
+  brief: "Respond to the visitor at the gate.",
+  instruction: "Keep the reply short.",
+});
+```
+
+`characterId` 只供代码路由，`instruction` 是可选的补充简报。按同包 `runtimeId` 找到角色提供方也执行相同校验。角色请求拒绝 `data`，其他契约拒绝这两个角色专用字段。角色必须存在于调用方当前的 `ctx.world`；错误请求不消耗调用名额。
+
+子模型只收到所选角色的 name/aliases/description/fields、[亲历故事](./world-model.md#witnessed-history)、调用方简报和 instruction，另有提供方提示词和框架完成契约。组装后的简报最多 40,000 字符，先减少最旧历史，必要时省略过大的档案字段；原始简报超限直接拒绝。会话内容语言与提供方自己的模型覆盖不变。已声明的读取工具和写服务仍保留，可能提供额外知识；这不是服务端代码沙箱。
+
+角色输出走普通校验和修复流程。修复后仍不合法时返回 `internal` / `stopReason: invalid-output`，丢弃子调用暂存操作。成功结果只回到编排方，不产生独立故事提交单元。编排方按策略顺序组合成功片段、补上 speaker 名字；`intent` 仅供本次编排使用，不自动进入故事或记忆。缺策略、缺角色、角色失败或名额不足时，插件应继续返回有效的叙述兜底。玩家停止仍取消整个执行。
+
+<!-- prettier-ignore -->
+| 名额 | 默认 | 范围 |
+| --- | --- | --- |
+| `maxActors` | 4 | 整数 0–16；一个根执行准入的不同角色 ID |
+| `maxSubagentCalls` | 16 | 整数 0–64；所有准入的子 agent 调用 |
+| 并发 / 深度 | 8 / 1 | 固定；超限立即 `unavailable`，不排队 |
+
+零关闭对应能力。准入前先解析提供方、校验请求和查角色，再同步占名额；失败或取消不退还已准入次数，同一角色再次调用不多占角色名额。递归调用共用根预算。挂起保存 `{scopeId, limits, calls, actorIds, historySnapshot?}` 及私有调用来源；恢复和再次挂起沿用，兄弟挂起项共享最新值。失败恢复释放 claim 后仍保留已消耗次数。分叉保留次数但隔离根标识；新提交、新的独立重试和续行执行各自新建预算。计数不写成会话偏好，也不从 trace 推算。
+
+函数、guard 的 `ctx.historyFor(characterId, {limit?})` 和插件工具的同名能力返回 `CharacterHistory`；会话绑定、取消和撤销规则与相邻读取 API 一致。设置在会话插件面板或[编排 API](./api.md#orchestration-settings)修改，下次执行生效。
+
+开发数据：丢弃在预算快照机制之前已经委托过子 agent 的未解决挂起项，以及包含它们的快照/checkpoint。普通会话和故事无需重建；不做旧计数推算或双格式兼容。
+
+## 故事请求自动推进
+
+宿主只读取已提交的顶层 `io.visibility: story`、`io.output.contract: narrative-engine@2` 故事。恰好一条这样的故事在提交 Hook 处理后仍为 `yield: continue`，才会请求下一轮。没有故事、多个故事或省略 `yield` 都会交还玩家；子 agent 和递归调用的输出不决定推进。附带操作失败不会撤销已保存的故事，也不会单独阻止推进。
+
+下一轮照常经过调度、工具、proposal 校验和提交，内联 post-turn 每轮运行。`ctx.playerActions` 是一个无文本的 `advance`，来源为 `system`；输入 digest 同样保留它。需要的故事导入仍可声明为可选，没有提供方时继续运行。玩家可停止推进；上限和阻止条件见[会话推进设置](./api.md#auto-advance)。
+
+## 可选规划器与故事导出
+
+内置对话叙事示范同包组合：`plan` 是 pre-turn 函数，选取安全名字并调用策略一次；`narrate` 是唯一 story agent，读取可选的同包 plan 输入并拥有所有角色委托。故事以 `recordAs: latest-story` 导出完整公开输出，规划器通过同包 `scope: committed` 输入读取上一份，不对本次 narrative 阶段建立反向依赖。策略与角色均可替换或缺失，不放进故事的 requires 或契约 needs。角色声明使用上文的框架规范 schema，不在包内复制一份。

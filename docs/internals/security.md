@@ -302,6 +302,7 @@ Web 客户端只发送它的请求用得到的供应商的密钥：
 - 插件注册的媒体 wire 和文本 wire 一样带着提供它的插件：会话里只有启用了该插件才能选用；不属于任何会话的请求，只能选用内置插件的 wire，`self` 形态下也能选用社区插件的。
 - `framework` 是保留的 ID，没有包能用它。请求里写 `pluginId: "framework"` 只会执行框架默认动作，路由的信任判断和实际执行的处理函数是同一个。
 - 绑定会话的存储视图、按插件查找工具、proposal 管线，都是插件 API 的权限边界，也有同样的局限。
+- action / command RPC 的 scoped store 与世界数据导入按注册包捕获的数据集声明检查写入，不从已加载 runtime 推断策略，零 runtime 的包也适用。审批与信任不放宽 schema、操作种类或大小限制。管理 plugin-data PUT / DELETE 保留运维覆盖和已有授权限制；这不构成对获准服务端 JavaScript 的沙箱。
 - 读服务的 `ctx.pluginData` 绑定会话和提供方插件，过滤 `_hidden.*`，每次返回独立副本；`world` 复制调用方视图，`getOwnSettings()` 只读提供方设置。服务拿不到写入方法或 proposal 通道，见[服务上下文](../reference/plugin-extensions.md#服务能拿到什么不能拿到什么)。
 
 `ctx.gateway.resolveSlot()` 是同一类边界。
@@ -355,7 +356,7 @@ personal 形态信任本机上的其他进程。回环监听、Host 和 Origin �
 `$COVEL_HOME/translations`（`COVEL_USER_TRANSLATIONS_DIR`）存放不是随插件一起来的插件翻译：用户自己拷进去的翻译包，以及在这台机器上做的机器翻译。加载器把它们当数据读：
 
 - 只读标签和 `messages`。提示词正文（`*.zh.md`）只从插件包里读，所以翻译改不了指令。
-- 标签段只保留标签字段（`displayName`、`description`、`label`、`title`、`summary`、`about`），其余内容丢弃。插件自己的 locale 文件也是这样处理的。
+- 标签段只保留标签字段（`displayName`、`description`、`label`、`title`、`summary`、`about`、`placeholder`），其余内容丢弃。插件自己的 locale 文件也是这样处理的。
 - 同一段文本两边都翻译了时，以作者的翻译为准。
 - 不跟随符号链接，只读普通文件。
 
@@ -517,3 +518,13 @@ default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-sr
 ## 导入第三方内容：只做数据转换
 
 SillyTavern 内容导入使用有上限的 PNG 块遍历（读数据前先检查剩余长度）、有上限并经 Zod 校验的 JSON、固定输出路径、文本清理和固定宏替换。PNG 封面会移除文本及其他元数据。不执行扩展、脚本、卡片正则或可执行宏，不能映射的字段和转换损失都会报告。预览不写入；导入由 `host.files` 与 `world.write` 保护，复用 ZIP 世界的校验及世界锁内的激活流程。清理不代表提示词可信：资料和叙事备注仍进入模型上下文，信任程度与其他第三方世界包相同。见[导入指南](../worlds/import-sillytavern.md)。
+
+## 角色视角与私有委托
+
+亲历历史和按名字调用是受约束的上下文能力，不是对已批准服务端代码的安全隔离。角色只能通过此 helper 读取当前 world 中角色的已提交在场故事；工具与服务原有的批准和读取权限不变。调用方仍负责简报和 instruction 的内容。
+
+委托隐私使用内核记录的提供方和调用 ID，过滤实时流、持久 trace、父方工具记录及后续请求的 trace 副本；不信任插件自报的隐藏标志，也不按字段名全局删数据。实际父模型仍能使用 intent。设置接口继续使用 host-profile、会话 owner、settle 和锁；选服务不授予执行权。详见[协议](../reference/protocol.md#委托的私有投影)。
+
+## 游戏内主持人身份
+
+准备页的主持人选项只改变新座位允许的游戏动作。它不授予 owner/operator 身份，不绕过 session.create 的 host-profile 检查，也不允许请求伪造 system 来源。演员的亲历历史与提示词是视角辅助，不是对已批准服务端代码的安全沙箱。

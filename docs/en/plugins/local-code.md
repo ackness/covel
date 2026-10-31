@@ -563,3 +563,7 @@ A form can be answered only once. Submitting it again gives `code: "interaction_
 - Several runtimes working together, world packages supplying data, and calling external APIs: [Advanced](./advanced.md)
 - Add a panel that shows these records: [Plugin UI](./ui.md)
 - Built-in plugin code you can look at: [the guide's tool](../../../plugins/guide/tools/generate-guide.js) and [world-time's action](../../../plugins/world-time/rpc/time.js)
+
+## Read-only planning and story ownership
+
+A composition function calls ctx.services.call({contract: "turn-policy@1", input: {actions: ctx.playerActions, present, recentSegments}}) once. Present comes from the current scene rather than every world character; omit limits so the host supplies them. Validate with public validateTurnPolicyOutput({present}, value), then project IDs to names for an optional story input. The planner neither delegates nor writes state; actors run through the story agent's delegate. See the [composition](./advanced.md#adopting-the-bundled-composition) and [witnessed history](../reference/world-model.md#witnessed-history).

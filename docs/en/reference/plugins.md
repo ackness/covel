@@ -534,11 +534,11 @@ The output of an `outputKind: story` runtime is normalized as described in [Stor
 
 The kernel owns the shape of a story. It is the same for every `outputKind: story` runtime: agents, functions, and stories that a guard returns early. The current contract is `narrative-engine@2`:
 
-| Field      | Type                                    | Meaning                                                                                                |
-| ---------- | --------------------------------------- | ------------------------------------------------------------------------------------------------------ |
-| `segments` | Array of segments, at most 60           | The story text, in order                                                                               |
-| `cues`     | `{ scene?, present?, mood? }`, optional | Scene name (≤200 characters), names of the characters present (≤32), mood (≤80 characters)             |
-| `yield`    | `user` or `continue`, default `user`    | Hands the turn back to the player after the story; `continue` is reserved for later and acts as `user` |
+| Field      | Type                                    | Meaning                                                                                                           |
+| ---------- | --------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| `segments` | Array of segments, at most 60           | The story text, in order                                                                                          |
+| `cues`     | `{ scene?, present?, mood? }`, optional | Scene name (≤200 characters), names of the characters present (≤32), mood (≤80 characters)                        |
+| `yield`    | `user` or `continue`, default `user`    | `user` returns control to the player; `continue` requests another host execution after commit, as described below |
 
 Each segment is `{ kind, speaker?, text }`:
 
@@ -630,6 +630,8 @@ The nested call's writes follow the parent handler:
 - Progress tasks that a nested call reports with `ctx.progress` share the parent's progress scope and end with the parent execution's commit. Several calls of the same runtime (for example a parent that triggers the same child more than once) share that scope. Tasks are deduplicated by `jobId` and sequence within the full identity key (`pluginId`, `runtimeId`, and so on), so the jobs of a parent, its child or sibling runtimes never collide with each other; repeated calls of one runtime share one identity key, so they need different `jobId`s. A nested child keeps its own execution identity and only reports under the root execution's progress scope. When the parent handler succeeds, each task ends with its own runtime's result. When the parent fails, the nested tasks end as `cancelled`. When the parent suspends, they wait for input (`waiting-input`) together with the parent's tasks; a successful resume ends them with the result they were saved with, and an abandoned, expired or voided item ends them as `cancelled`.
 - A nested call made from an agent's guard commits only when the guard returns `{ skip: true }` and the result is still skipped; it is discarded when the guard lets the agent run.
 
+A suspended auxiliary reader is still checked for read dependencies at the source commit. If a producer it observed is dropped, its continuation and buffered child calls are discarded, even when the reader staged no writes. See [Transactions](./transactions.md).
+
 At commit, a top-level runtime and the nested calls at every level below it are one unit: they all commit, or they are all discarded.
 
 - In an execution with a story, the unit of a non-story runtime commits in one savepoint. When any of its writes is rejected, the whole unit is discarded and the story is still saved. Runtimes that depend on that top-level runtime are discarded with it under the [commit rules](./transactions.md#turn-level-single-transaction).
@@ -670,11 +672,11 @@ The provider is an agent runtime that names the contract it provides in `io.outp
 
 Rules at run time:
 
-- **Own transcript**: the sub-agent's prompt is the provider's own body, the framework's completion instructions, then the brief. It sees neither the session history nor the caller's conversation.
+- **Own transcript**: the sub-agent's prompt is the provider's own body, the framework's completion instructions, then the brief. It does not see the caller's conversation. Generic sub-agents have no session history; the actor contract adds framework-filtered witnessed history (see [character delegation](#character-orchestration)).
 - **Read-only tools**: tools in the provider's `agent.tools` without the `readOnly` annotation (plugin tools, write tools such as a dataset's `-upsert` / `-update`), `suspend` and `delegate` are taken away. A declared plugin tool that is not registered still fails the run as it always does. Of the dataset tools, only `-get` / `-list` stay. Imported service tools stay, write-service imports included: the sub-agent calls as itself, and the operations it stages ride on the run that delegated to it and are taken back when the sub-agent fails.
 - **Loop profile**: without `agent.loop.profile` it runs `actor`: no streaming, no player interjections.
 - **Model**: it uses the model role the provider declares. The session's `runtimeModelOverrides` apply by the provider's runtimeId, also in a run resumed after suspension; the caller's override and the request's story model override do not.
-- **Caps**: one execution runs at most 8 sub-agents at a time, nested executions included, and a sub-agent cannot call another one (depth cap 1). A call over a cap gets `unavailable` at once; nothing queues.
+- **Caps**: one execution runs at most 8 sub-agents at a time, nested executions included, and a sub-agent cannot call another one (depth cap 1). Session settings also bound cumulative actors and calls; see [execution allowances](#character-orchestration). A call over a cap gets `unavailable` at once; nothing queues.
 - **Cancellation**: when the caller is cancelled, times out or ends, the sub-agent stops with it, with `cancelled`. A sub-agent the handler did not await is waited for before the runtime finishes.
 - **Output only**: the output is checked against the provider's `io.output.schema` and contract schema; a failure is `internal`. The `PreRuntime`, `PostRuntime` and `PostContextAssembly` hooks do not fire for a sub-agent; the in-loop `PreLLMCall`, `PreStep`, `PreToolUse` and `PostToolUse` fire as usual, with the sub-agent's `ctx.runtimeId`.
 - **Trace**: every event of the sub-agent carries `subagentCallId`, `parentCallId` and `parentRuntimeId`, plus `subagent.started` / `completed` / `failed` (see [protocol](./protocol.md#sub-agent-events)). An `io.concealed` provider has its content hidden as a top-level run does.
@@ -911,6 +913,8 @@ The character schema, the characters, and the world record belong to the kernel'
 - Writes go through proposals, and they are validated together at commit time.
 - `ctx.world.dimensions` starts from the provider's frozen snapshot and overlays the valid dimension proposals visible to that view. See [Dynamic dimensions](#dynamic-dimensions) for the distinction between public reads and execution-local previews.
 - `ctx.world.seats` holds the session's seats, frozen as well. No proposal changes them; the player switches the current character through the [switch endpoint](./api.md#session-seats), and it applies from the next turn.
+
+Actual `characters` / `characterSchema` reads record upstream producers, using the same invocation recorder in tools and services. Auxiliary readers drop with rejected producers; story/setup readers survive with a trace. See [World Model](./world-model.md) for visibility, conservative granularity and seed exclusion. Recursive calls do not inherit parent upstream state, and sub-agents still read committed world data.
 
 **Finding a character by name.** Besides `name`, a character can have `aliases` (other names for the same person).
 
@@ -1201,7 +1205,7 @@ These checks do not run plugin code, and they cannot replace the registration co
 
 ### Text the player sees
 
-- Labels the player sees (`displayName`, `description`, `label`, `title`, `summary`, `about`) are written in English in the main manifest.
+- Labels the player sees (`displayName`, `description`, `label`, `title`, `summary`, `about`, `placeholder`) are written in English in the main manifest.
 - Translations go in `locales/<locale>.yaml` at the plugin root. They are organized by section of the manifest file, and they contain only the translated text. They can be in any language. The loader compiles them into a locale map.
 - A label file can translate only these fields. An entry written on a contract field or on prompt content is ignored, and `pnpm validate:plugin` reports it as an error. An inline locale map in the main manifest is also an error.
 - The `messages` section of the same file translates the text in the UI spec and in the code (from the English original to the translation). For the rules on interface text, see [UI panels](./ui-panels.md#plugin-ui-text-rules). The code reads them with `translate(ctx, …)` or `labelText(ctx, …)`.
@@ -1250,7 +1254,7 @@ Below are all the plugins that ship with Covel from [plugins/](../../../plugins/
 | [branch-reply](../../../plugins/branch-reply/README.md) | Reply Variants | `plugin` | `branch-reply@1` | inline | Offers several replies the player can switch between. |
 | [char-creator](../../../plugins/char-creator/README.md) | Character Creator | `core` | `character-creation@1` (default provider) | `player-init`, `character-tracker` | Creates the protagonist with echoed form answers and records character changes. |
 | [character-blueprint](../../../plugins/character-blueprint/README.md) | Character Profiles | `plugin` | `character-blueprint@1`, `character-presence@1` | `presence` | Stores the character profiles a world presets, along with avatars, portraits, and voices. |
-| [chat-mode-narrator](../../../plugins/chat-mode-narrator/README.md) | Dialogue Narrator | `plugin` | `narrative-engine@2` | inline | Makes the story read more like a conversation between characters. |
+| [chat-mode-narrator](../../../plugins/chat-mode-narrator/README.md) | Dialogue Narrator | `plugin` | `narrative-engine@2` | `plan` / `narrate` | Makes the story read like a conversation; stage presence informs both planning and narration. |
 | [codex](../../../plugins/codex/README.md) | Codex | `plugin` | none | inline | Organizes newly found places, people, items, and rumors. |
 | [core-quest](../../../plugins/core-quest/README.md) | Quest Log | `plugin` | `world-ir.vocabulary@1` | `log`, `vocabulary` | Registers quests from the narrative and moves them forward. |
 | [dice-check](../../../plugins/dice-check/README.md) | Dice Check | `plugin` | `action-check@1` | `roller`, `recorder` | Rolls dice for actions that carry a risk of failure. |
@@ -1327,7 +1331,10 @@ At commit, every proposal a plugin writes into a dataset namespace it declares i
 - **Record schema.** The written value (for `plugin.data.update`, the result after the operations) must satisfy `schema`.
 - A violation rejects the proposal with `code: "dataset-violation"`, under the commit-unit rules. When the host did not capture the schema document, every write is refused instead of let through.
 - `key` is not checked at commit. Dataset tools normalize keys with the [dataset key rule](./tools.md#the-key-rule-and-lookup) `datasetKey(...)` (exported by the SDK), and look up the key as written first, then the normalized key. Plugin code that writes the same dataset should build its keys with `datasetKey(...)` so they land on the rows the tools find.
-- Writes outside the commit pipeline skip these checks: world data import and sync (validated against the source's `schema`, see [World Data · Companion plugin data](./world-data.md#companion-plugin-data)), `context.store.setPluginData` in a plugin action RPC, and the management API `PUT`.
+- Plugin action / command RPC `context.store.setPluginData`, world data import and sync use the same dataset rules. Whole-record seeding, replacement and projection output all count as `set`; a true sync removal of a managed record requires `delete`. An internal replacement delete does not require `delete` separately. `force` does not bypass these rules.
+- Policies come from registered package declarations and captured schemas, including packages with no runtimes. Trust and approval do not relax them. Missing, uncompilable or `$async` schemas refuse writes; record failures report at most 3 errors.
+- Policies use the physical stored namespace: `_hidden.notes` does not inherit the dataset rules of `notes`. RPC and import preserve exact keys without rewriting them or checking equality with a record field.
+- Management API `PUT` / `DELETE` remain operator overrides without dataset schema or `ops` checks. Existing authorization, activation, reserved-namespace and size limits still apply.
 
 See [Transactions · Operation-based writes](./transactions.md#operation-based-writes-plugindataupdate).
 
@@ -1368,3 +1375,60 @@ Every namespace that starts with `_` is reserved for the kernel.
 - `__kernel:<subsystem>` is another owner partition. A plugin's bound read interface cannot reach it.
 
 For the full list and the read permissions, see [Storage architecture](../internals/storage.md#plugin-data-ownership-and-reserved-names).
+
+<a id="character-orchestration"></a>
+
+## Character delegation and execution allowances
+
+A character provider's `RUNTIME.md` can be as small as:
+
+```yaml
+---
+schedule:
+  subagentOnly: true
+io:
+  output:
+    contract: character-actor@1
+---
+Play the selected character using the supplied profile and witnessed history.
+```
+
+Omitting `function` selects an agent; `subagentOnly` derives manual triggering and visibility defaults to system. Omit the output schema to use the framework schema, or explicitly write `schema: contract:character-actor@1`. A file schema can narrow output but cannot bypass canonical validation. Packages cannot publish a different schema under the reserved ID.
+
+```ts
+const reply = await ctx.agents.run({
+  target: { contract: "character-actor@1" },
+  characterId: selected.id,
+  brief: "Respond to the visitor at the gate.",
+  instruction: "Keep the reply short.",
+});
+```
+
+`characterId` is private code routing; `instruction` is optional additional briefing. Resolving the actor through a same-package `runtimeId` applies identical checks. Actor requests reject `data`; other contracts reject these two actor-only fields. The character must exist in the caller's current `ctx.world`. Bad requests consume no admission.
+
+The child model receives only the chosen character's name/aliases/description/fields, [witnessed stories](./world-model.md#witnessed-history), caller brief and instruction, plus the provider prompt and framework completion contract. The assembled brief is bounded to 40,000 characters, removing oldest history first and oversized profile fields if necessary. An oversized caller brief is rejected. Session content locale and the provider's own model override remain in force. Declared read tools and write services remain available and may supply additional knowledge; this is not a server-code sandbox.
+
+Actor output uses the normal validation and repair loop. Invalid output after repair returns `internal` / `stopReason: invalid-output` and discards child operations. Success returns to the orchestrator without an independent story commit unit. The orchestrator combines successful segments in policy order and supplies speaker names; `intent` is private to the current orchestration and is not automatically stored in story or memory. Missing policies, missing actors, failures and exhausted allowances require a valid narrator fallback in the plugin. A player stop still cancels the whole execution.
+
+<!-- prettier-ignore -->
+| Allowance | Default | Range |
+| --- | --- | --- |
+| `maxActors` | 4 | Integer 0–16; distinct character IDs admitted by one root execution |
+| `maxSubagentCalls` | 16 | Integer 0–64; all admitted sub-agent invocations |
+| Concurrency / depth | 8 / 1 | Fixed; excess calls immediately return `unavailable`, without queuing |
+
+Zero disables the corresponding capability. Provider resolution, validation and character lookup precede synchronous admission. Failure or cancellation does not refund admitted calls; repeating a character consumes no additional actor slot. Recursive calls share the root budget. Suspension saves `{scopeId, limits, calls, actorIds, historySnapshot?}` and private-call provenance. Resumed and re-suspended legs keep it; sibling suspensions receive the latest state. A failed resume retains spent calls after its claim is released. A fork retains counts under an isolated root identity. New submissions, fresh scoped retries and advance executions get new budgets. Counters are neither session preferences nor trace-derived.
+
+Functions and guards expose `ctx.historyFor(characterId, {limit?})`; plugin tools have the same capability returning `CharacterHistory`, with the session binding, cancellation and revocation of adjacent reads. Edit settings in the session plugin panel or [orchestration API](./api.md#orchestration-settings); they apply next execution.
+
+Development data: discard unresolved suspensions that already delegated before budget snapshots existed, and snapshots/checkpoints containing those continuations. Ordinary sessions and stories need no reset. There is no old-counter reconstruction or dual-format compatibility.
+
+## Stories requesting advancement
+
+The host reads only committed top-level stories with `io.visibility: story` and `io.output.contract: narrative-engine@2`. Exactly one such story must still have `yield: continue` after commit Hooks to request another round. No story, multiple stories or an omitted `yield` returns control to the player. Sub-agent and recursive outputs do not decide advancement. A failed attached operation does not undo the saved story or independently prevent advancement.
+
+Each new round uses normal scheduling, tools, proposal validation and commit; inline post-turn work runs each round. `ctx.playerActions` contains one textless `advance` with source `system`; the input digest retains it too. Story imports can remain optional and execution proceeds without a provider. Players can stop advancement; see [session advancement settings](./api.md#auto-advance) for limits and blocking conditions.
+
+## Optional planning and committed story exports
+
+The bundled dialogue example composes a pre-turn function, plan, with one story agent, narrate. The function projects names and calls a policy once; the story consumes its optional same-package input and owns actor delegation. The complete public story exports as recordAs: latest-story; the planner reads the prior committed value through a same-package scope: committed input, without a dependency back to the current narrative stage. Policies and actors remain replaceable and optional, outside story requires or contract needs. Actor declarations use the framework schema above rather than copying it into a package.

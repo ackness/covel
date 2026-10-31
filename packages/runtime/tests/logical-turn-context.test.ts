@@ -4,53 +4,70 @@ import type { RuntimeManifest } from "@covel/shared";
 import { runTurnPipeline } from "../src/turn-executor/turn-executor.js";
 
 describe("logical turn in handler context", () => {
-  it("gives function handlers the scheduler's logical turn", async () => {
-    const store = createMemoryStore();
-    const now = "2026-10-02T00:00:00.000Z";
-    await store.createSession({
-      id: "s",
-      status: "active",
-      phase: "playing",
-      completedPlayerTurns: 4,
-      setupRuntimes: {},
-      seats: [
-        { id: "main", controller: "human", role: "player", characters: "auto" },
-      ],
-      locale: "en-US",
-      activePlugins: ["probe"],
-      createdAt: now,
-      updatedAt: now,
-    });
-    const manifest = {
-      name: "probe/run",
-      pluginId: "probe",
-      description: "probe",
-      stage: "pre-turn",
-      runtimeType: "function",
-      handler: "./handler.js",
-      trigger: { type: "auto" },
-    } as RuntimeManifest;
-    let seen: unknown;
-    await runTurnPipeline(
-      { origin: "player", sessionId: "s", turnId: "t", playerMessage: "go" },
-      [manifest],
-      {
-        store,
-        llm: {
-          generate: async () => {
-            throw new Error("function runtimes do not use the LLM");
+  it.each([undefined, 3])(
+    "gives function handlers the frozen logical turn (%s)",
+    async (logicalTurn) => {
+      const store = createMemoryStore();
+      const now = "2026-10-02T00:00:00.000Z";
+      await store.createSession({
+        id: "s",
+        status: "active",
+        phase: "playing",
+        completedPlayerTurns: 4,
+        setupRuntimes: {},
+        seats: [
+          {
+            id: "main",
+            controller: "human",
+            role: "player",
+            characters: "auto",
           },
+        ],
+        locale: "en-US",
+        activePlugins: ["probe"],
+        createdAt: now,
+        updatedAt: now,
+      });
+      const manifest = {
+        name: "probe/run",
+        pluginId: "probe",
+        description: "probe",
+        stage: "pre-turn",
+        runtimeType: "function",
+        handler: "./handler.js",
+        trigger: {
+          type: "auto",
+          ...(logicalTurn === 3 ? { every: 3, startTurn: 2 } : {}),
         },
-        loadRuntime: async () => ({
-          manifest,
-          promptTemplate: "",
-          handler: async (ctx) => {
-            seen = ctx.logicalTurn;
-            return { outcome: "success", value: {} };
+      } as RuntimeManifest;
+      let seen: unknown;
+      await runTurnPipeline(
+        {
+          origin: "player",
+          sessionId: "s",
+          turnId: "t",
+          playerMessage: "go",
+          logicalTurn,
+        },
+        [manifest],
+        {
+          store,
+          llm: {
+            generate: async () => {
+              throw new Error("function runtimes do not use the LLM");
+            },
           },
-        }),
-      },
-    );
-    expect(seen).toBe(5);
-  });
+          loadRuntime: async () => ({
+            manifest,
+            promptTemplate: "",
+            handler: async (ctx) => {
+              seen = ctx.logicalTurn;
+              return { outcome: "success", value: {} };
+            },
+          }),
+        },
+      );
+      expect(seen).toBe(logicalTurn ?? 5);
+    },
+  );
 });

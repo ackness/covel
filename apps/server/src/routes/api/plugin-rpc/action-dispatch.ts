@@ -1,4 +1,8 @@
 import {
+  capturePluginDatasetPolicy,
+  emptyDatasetPolicy,
+} from "../../../lib/plugin-dataset-policy.js";
+import {
   approvalVerdictResponse,
   hasServerCodeGrant,
 } from "../approval-verdict.js";
@@ -297,14 +301,23 @@ export async function dispatchPluginAction(
             resolveModel: c.get("resolveModel"),
           })
         : undefined;
+      const ownerEntry = c.get("pluginRegistry")?.get(pluginId);
+      const datasetPolicy =
+        pluginId === FRAMEWORK_PLUGIN_ID
+          ? emptyDatasetPolicy
+          : capturePluginDatasetPolicy(ownerEntry ? [ownerEntry] : []);
       const dispatch = () => {
         // Every action handler, builtin or community, receives only the
         // documented immediate-write RPC capability bound to this session and
         // plugin.
-        const rpcStore = createRpcHandlerStoreView(store, {
-          sessionId,
-          pluginId,
-        });
+        const rpcStore = createRpcHandlerStoreView(
+          store,
+          {
+            sessionId,
+            pluginId,
+          },
+          { datasetPolicy },
+        );
         // The plugin's own translations, in the session's language. A
         // framework action has no plugin entry and reads none.
         const messages = pluginMessagesFor(

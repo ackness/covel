@@ -78,6 +78,39 @@ export async function seedAppSettings(page: Page) {
   });
 }
 
+/** Open the studio rail through the same toolbar menu a player uses. */
+export async function openStudioConfiguration(page: Page) {
+  const more = page.getByRole("button", { name: /^(更多|More)$/, exact: true });
+  await more.click();
+  const studio = page.getByRole("button", {
+    name: /^(工作室配置|Studio Config)$/,
+    exact: true,
+  });
+  if ((await studio.getAttribute("aria-pressed")) !== "true")
+    await studio.click();
+  else await more.click();
+  await expect(
+    page.getByRole("heading", { name: /^(工作室配置|Studio Config)$/ }),
+  ).toBeVisible();
+}
+
+/** Close the studio rail through its toolbar toggle and return to the composer. */
+export async function closeStudioConfiguration(page: Page) {
+  const more = page.getByRole("button", { name: /^(更多|More)$/, exact: true });
+  await more.click();
+  const studio = page.getByRole("button", {
+    name: /^(工作室配置|Studio Config)$/,
+    exact: true,
+  });
+  if ((await studio.getAttribute("aria-pressed")) === "true")
+    await studio.click();
+  else await more.click();
+  await expect(
+    page.getByRole("heading", { name: /^(工作室配置|Studio Config)$/ }),
+  ).toBeHidden();
+  await expect(composer(page)).toBeVisible();
+}
+
 /**
  * Exercise file-backed worlds even when the clean E2E server advertises its
  * memory store as browser-authoritative. Read the real health once before

@@ -177,6 +177,8 @@ crownfire:
 
 function / guard 的 `ctx.world.dimensions` 在这份底本上叠加已完成上游和当前 runtime 自己的合法维度 proposal，供后续计算。例如 `dimension-clock` 能在 tracker 的提案之上计算时钟字段。这只是执行内的投影视图，不表示已经保存。提交之后，接口和界面才得到新的权威值（Sₙ₊₁），见 [World Model](./world-model.md)。
 
+维度读取不记录角色/schema 的读取依赖；即使视图里有这些领域的上游写入，只读取维度也不会依赖它们。显式维度提案的计算投影仍保留，见 [World Model](./world-model.md)。
+
 **两个只读的内置工具**，所有插件都可以用：
 
 - `world-dimension-list`：列出 ID、名称、类型和版本。

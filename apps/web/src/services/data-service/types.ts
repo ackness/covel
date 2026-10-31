@@ -14,7 +14,7 @@ export interface GeneratedWorldSaveOptions {
 }
 
 export type SessionPatch = Partial<
-  Pick<SessionRecord, "status" | "runtimeModelOverrides">
+  Pick<SessionRecord, "status" | "runtimeModelOverrides" | "autoAdvanceLimit">
 >;
 
 /** Captured session identity; remote caches must not infer it after awaiting I/O. */
@@ -63,6 +63,8 @@ export interface DataService {
     locale?: string,
     loreOverride?: string,
     excludedPlugins?: string[],
+    autoAdvanceLimit?: number,
+    seatRole?: import("@covel/shared").SeatRole,
   ): Promise<SessionRecord>;
   updateSession(
     sessionId: string,

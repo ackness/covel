@@ -746,6 +746,56 @@ export function registerPersistenceStoreSuites(
     });
   });
 
+  describe("continuation claim guard", () => {
+    it("updates delegation JSON only for the current claim without releasing it", async () => {
+      const row = makeSuspension({ sessionId: "continuation-session" });
+      await store.saveSuspension(row);
+      const claim = (await store.claimSuspension(row.id))!;
+      const continuation = {
+        ...row.pendingContinuation,
+        delegation: {
+          scopeId: "root",
+          limits: { maxActors: 4, maxSubagentCalls: 16 },
+          calls: 3,
+          actorIds: ["actor"],
+        },
+      };
+      expect(
+        await store.updateSuspensionContinuation(row.id, continuation),
+      ).toBe(false);
+      expect(
+        await store.updateSuspensionContinuation(
+          row.id,
+          continuation,
+          "claimed:stale",
+        ),
+      ).toBe(false);
+      await expect(
+        store.withTransaction(async (tx) => {
+          expect(
+            await tx.updateSuspensionContinuation(row.id, continuation, claim),
+          ).toBe(true);
+          throw new Error("Rollback continuation update");
+        }),
+      ).rejects.toThrow("Rollback continuation update");
+      expect(
+        (await store.getSuspension(row.id))?.pendingContinuation.delegation,
+      ).toBeUndefined();
+      expect(
+        await store.updateSuspensionContinuation(row.id, continuation, claim),
+      ).toBe(true);
+      expect(await store.getSuspension(row.id)).toMatchObject({
+        resolvedAt: claim,
+        pendingContinuation: JSON.parse(JSON.stringify(continuation)),
+      });
+      await store.releaseSuspensionClaim(row.id, claim);
+      expect(
+        (await store.getSuspension(row.id))?.pendingContinuation.delegation
+          ?.calls,
+      ).toBe(3);
+    });
+  });
+
   describe("claimSuspension", () => {
     it("returns the claim marker on first claim and atomically sets resolvedAt", async () => {
       const suspension = makeSuspension({ sessionId: "sess-claim-ok" });

@@ -179,14 +179,14 @@ stateDiagram-v2
 
 `completedPlayerTurns` 只统计已提交的玩家回合。每次执行都在 `turn_results` 里有自己的一行，`origin` 是下面之一：
 
-| `origin`       | 是什么                      | 计入回合数 |
-| -------------- | --------------------------- | ---------- |
-| `player`       | 玩家发消息触发的回合        | 是         |
-| `continuation` | 准备完成后的开场接力        | 否         |
-| `manual`       | 插件 RPC 点名运行的 runtime | 否         |
-| `background`   | 后台执行                    | 否         |
-| `recursive`    | 嵌套的 `recursiveCall`      | 否         |
-| `resume`       | 挂起后的恢复                | 否         |
+| `origin`       | 是什么                                         | 计入回合数 |
+| -------------- | ---------------------------------------------- | ---------- |
+| `player`       | 玩家发消息触发的回合                           | 是         |
+| `continuation` | 准备完成后的开场接力，或同一次输入内的自动推进 | 否         |
+| `manual`       | 插件 RPC 点名运行的 runtime                    | 否         |
+| `background`   | 后台执行                                       | 否         |
+| `recursive`    | 嵌套的 `recursiveCall`                         | 否         |
+| `resume`       | 挂起后的恢复                                   | 否         |
 
 多次执行共用一个逻辑回合时，只计一次。
 
@@ -218,6 +218,8 @@ stateDiagram-v2
 - 自动快照在全部提案提交后才拍，保证对话位置、角色、状态和插件数据属于同一个已提交的回合。
 - `execution.completed.committed` 是客户端的终态信号：前端据此确认或撤回它先显示出来的内容。
 - 提交之后的事件发布逐个独立进行，任何一个失败都不回滚已经写入的数据。失败时宿主记一条 `commit.fanout.failed` trace，让该会话的订阅流收到 `system.reset`（`reason: "publish-failed"`）后完整重读，并在 `execution.completed` 上带 `resync: true`。
+
+成功、写入后跳过的 guard 和真正挂起的结果，在内核私有符号下携带读取依赖。执行在复制提交计划前收集它们；普通公开结果与 continuation 不存图。提交也检查持有挂起项但没有领域提案的单元，丢弃依赖已拒绝生产者的辅助挂起项，复用作业与时钟结算。恢复读当前已提交世界和自己的保存缓冲，源生产者已经结算，所以恢复计划没有历史生产者 ID。
 
 #### 把事件送到客户端不拖住回合
 
@@ -672,6 +674,8 @@ io:
 
 **runtime 读到的数据是哪一刻的。**
 
+世界提案的可见集合在每次调用开始、DAG 层之间取定，按递归子先于父的提交顺序复制并重绑身份；只收录可提交结果，排除无效 effects 和重试/detached 种子整棵子树。角色/schema 读取把真实生产者的 run ID 写入同一个调用记录器。宿主构造、物化和隔离复制都不记录；工具与服务的实际属性读取才记录。扩展提供者的冻结视图不变，详见 [World Model](../reference/world-model.md)。
+
 - 领域读视图包含三部分：已提交的 CharacterSchema 和 Characters、已校验的上游提案、本 runtime 待提交的写入。所以工具写完之后马上读，读到的是刚写的内容。
 - 插件数据也是这样：runtime 读自己插件的数据时，读到已提交的值，加上同插件已完成的上游 runtime 会提交的写入（按提交顺序），再加上自己的缓冲。可见的写入在 runtime 开始时取定，同一层的兄弟互相看不到；重试和后台作业带来的上游结果不算。读到上游写入的 runtime 依赖它：上游在提交时被丢弃，辅助 runtime 一起丢弃，story 和 setup 照常提交并记 trace。规则见[执行内的插件数据可见性](../reference/plugins.md#执行内的插件数据可见性)。
 - 扩展提供者看到的 world 和 plugin-data，在这次执行创建时冻结。这样同一个扩展在并行的 runtime 里不会看到不同的内容。服务的读取边界不同：它可以看到提供方插件已完成、可提交的上游写入，见[服务上下文](../reference/plugin-extensions.md#服务能拿到什么不能拿到什么)。
@@ -729,7 +733,7 @@ io:
 子 agent 由另一个 runtime 在自己的执行里运行：函数用 `ctx.agents.run`，agent 用 `delegate` 工具。
 
 - **同一次执行**：子 agent 没有自己的调度、执行或提交。它用的是调用方这次执行的 trace、取消信号和会话快照；trace 事件带 `parentCallId`，调试页能看出调用树。
-- **不形成提交单位**：它只交回输出、结束原因和用量。工具只剩只读的，没有 proposal 和事件；万一出现也被丢弃，并记一条 `subagent.writes-dropped`。调用方的提交单位只含调用方自己的写入。
+- **不形成提交单位**：它交回输出、结束原因和用量。直接写工具和事件不开放，越界写记 `subagent.writes-dropped`；成功子调用通过写服务暂存的操作加入调用方提交单元，失败子调用撤回自己的操作。
 - **上限**：每次顶层执行一个 runner（`executeTurn` / `resumeSuspendedRuntime` 在入口冻结激活和暂停的提供方集合并创建，`runTurnPipeline` 只提供缺省 runner，嵌套执行共用），同时最多 8 个子 agent，深度 1。满了立刻拒绝，不排队，所以调用方不会等自己的名额。
 - **取消**：调用方的 `executionSignal`、运行时限和收尾时的撤销都传到子 agent；玩家的中止也一样。
 - **循环**：子 agent 走同一个 `runAgentToolLoop` 和收尾步骤，`allowSuspend: false`，默认 `actor` profile，没有会话历史。`PreRuntime` / `PostRuntime` 不触发，循环内的 Hook 照常触发。
@@ -1212,3 +1216,25 @@ sequenceDiagram
 宿主共享的 `recordExecutionFaults` 负责归因和发布熔断事件。`commitExecution` 在玩家、手动、恢复和后台提交之后调用它；恢复的 runtime 失败、尚未进入提交时，恢复路由也在返回错误前调用它，不提交缓冲写入或解决挂起项。子 agent 的已结算结果通过提交计划的 `subagentRuns` 交给 `recordExecutionFaults`，与顶层结果一起归因；runner 结算时不修改 latch。Hook 管线在 handler 完成时单独报告所属插件的故障。内存里的 latch 按会话和插件计数，以 `logicalTurnId ?? turnId` 合并同一输入。详细计数、豁免和事件见[协议](../reference/protocol.md#插件故障熔断)。
 
 `executeTurn` 在执行入口过滤已暂停插件的 runtime 和 Hook 启用集合，恢复入口和服务准入也检查暂停状态。注册表快照不在运行中修改；服务捕获同一执行的暂停集合。重启、会话结束和删除只清内存，不写入领域数据或快照。
+
+## 组合角色与持久执行名额
+
+一个故事 runtime 可先调用策略服务，再委托角色，最后只提交一份普通故事。成功子调用的写服务操作仍属于调用方的提交单元。策略建议不构成新调度阶段，也不自动启用插件。
+
+settle 屏障后冻结策略绑定与执行预算。函数、agent、递归和直接 pipeline 入口共享一个根预算，原子准入在加载提供方前完成。display-message 的 presence 尾页按执行懒捕获；挂起保存前冻结该边界并等待子调用排空。恢复持有会话锁，在入口捕获当前 claim，从同根挂起项读取最新预算；结算时必须仍是该 claim。只有预算、私有调用来源或历史快照发生变化时才打开 continuation 事务，以条件更新同步尚未解决的兄弟，并保留原 claim。失败恢复同样记录已经消耗的次数，但没有变化的失败恢复不写 continuation、不提交领域写入，也不解决挂起项。完成或放弃不留下永久会话计数。
+
+`metadata.orchestration` 属于可分叉的会话设置，由 snapshot builder 显式捕获，BrowserVault/checkpoint 也保存。预算、私有调用来源和历史快照属于框架 continuation；分叉隔离 scopeId，保留消耗量。详见[执行名额](../reference/plugins.md#character-orchestration)。
+
+## 输入内的自动推进
+
+根输入冻结 `logicalTurnId`、`logicalTurn = completedPlayerTurns + 1` 和会话推进上限。每轮都有独立的执行、turn 和 run 身份；生成的轮使用 `origin: continuation`，不计玩家回合。开场推进保持回合号 1、计数 0；第一条正式玩家输入仍是回合号 1，但有新的输入身份。
+
+提交完成后，宿主根据[已提交故事](../reference/plugins.md#故事请求自动推进)决定是否推进。每轮重新取得 settled session lock，再读取会话、注册表、设置和当前权限；上一轮的 settle 任务先完成。锁外等待和发布期间仍保留请求的 Stop 控制，但事件转发仅在该轮持锁时启用。新的输入撤销旧请求的后续资格，生成轮在锁内再次检查。
+
+同一输入的函数、工具、Hook、递归调用、调度判断与维度结算读取冻结的逻辑号。每轮内联 post-turn 正常运行；detached 任务携带自己的来源执行、该轮动作和冻结逻辑号，即使之后才执行也不会采用新回合的输入。它们不加入前台故障组。前台故障立即累计，干净结果延迟到请求关闭；身份与修订检查保护较新的结果。
+
+每轮持久化一次完成状态；请求只发一个最终完成事件。重试/恢复是一次性执行，历史 yield 不创建任务队列。停止或进程结束后没有可恢复的自动循环。控制仍是当前宿主进程内的能力；断开 SSE 不取消已接受的工作，模型消耗由上限和显式 Stop 限制。
+
+## 内置对话的组合
+
+对话叙事在回合前用只读函数请求一次策略，输出只有安全名字的可选计划；故事 agent 在自己的工具循环里逐个委托并组合台词。规划器不写状态、不拥有演员操作；委托操作属于故事的提交单元。策略的顺序与继续建议是插件玩法，不改变内核阶段、屏障或推进调度。

@@ -1,3 +1,13 @@
+import { snapshotWorldModelView } from "./function-runtime/world-model-view.js";
+import {
+  TURN_POLICY_CONTRACT,
+  CHARACTER_ACTOR_CONTRACT,
+  turnPolicyRequestSchema,
+  turnPolicyInputSchema,
+  validateTurnPolicyOutput,
+  turnPolicyModelInputSchema,
+} from "@covel/shared";
+import { DelegationBudget } from "./orchestration/delegation-budget.js";
 import {
   compareText,
   pluginMessagesFor,
@@ -172,6 +182,7 @@ function providerVerdict(
 }
 
 interface Caller {
+  readonly delegation?: DelegationBudget;
   /** Kernel-only execution collector; inherited by nested service clients. */
   readonly onSettled?: (outcome: ServiceCallOutcome) => void;
   /** Host-owned trace destination; never exposed in the plugin context. */
@@ -654,6 +665,14 @@ export class PluginServiceRegistry {
     const access = (definition as { access?: unknown }).access ?? "read";
     if (access !== "read" && access !== "write")
       throw new TypeError('Service access must be "read" or "write"');
+    if (
+      definition.contract === CHARACTER_ACTOR_CONTRACT ||
+      (definition.contract === TURN_POLICY_CONTRACT &&
+        (access !== "read" || extension))
+    )
+      throw new TypeError(
+        "turn-policy@1 requires a read service; character-actor@1 requires an agent runtime",
+      );
     if (access === "write" && extension)
       throw new TypeError("An extension provider cannot be a write service");
     const modelFacing =
@@ -679,9 +698,15 @@ export class PluginServiceRegistry {
         const detached = structuredClone(input);
         let parsed: I;
         try {
+          const canonical =
+            definition.contract === TURN_POLICY_CONTRACT
+              ? turnPolicyInputSchema.parse(detached)
+              : detached;
           parsed = extension
-            ? (detached as I)
-            : definition.input.parse(detached);
+            ? (canonical as I)
+            : definition.input.parse(canonical);
+          if (definition.contract === TURN_POLICY_CONTRACT)
+            turnPolicyInputSchema.parse(parsed);
         } catch (cause) {
           throw new ServiceInputValidationError(cause);
         }
@@ -693,7 +718,20 @@ export class PluginServiceRegistry {
         const result = await handler(parsed, context);
         context.signal.throwIfAborted();
         try {
-          return structuredClone(definition.output.parse(result));
+          if (definition.contract === TURN_POLICY_CONTRACT)
+            validateTurnPolicyOutput(
+              turnPolicyInputSchema.parse(input),
+              result,
+            );
+          const output = definition.output.parse(result);
+          return structuredClone(
+            definition.contract === TURN_POLICY_CONTRACT
+              ? validateTurnPolicyOutput(
+                  turnPolicyInputSchema.parse(input),
+                  output,
+                )
+              : output,
+          );
         } catch {
           throw new ServiceOutputValidationError();
         }
@@ -711,50 +749,80 @@ export class PluginServiceRegistry {
    * approved, or paused: a paused provider still counts, so the import is
    * never silently bound to another one.
    */
-  async resolveImport(
-    caller: { readonly sessionId: string; readonly pluginId: string },
+  private async resolveSelection(
+    caller: Pick<Caller, "sessionId" | "pluginId" | "delegation">,
     contract: string,
-  ): Promise<ServiceImportResolution> {
+    model: boolean,
+  ): Promise<Entry | Exclude<ServiceImportResolution, { status: "ready" }>> {
     await this.admission.ensure(caller.sessionId, caller.pluginId);
     const admitted = new Set(await this.admission.list(caller.sessionId));
     const paused = new Set(
       (await this.admission.paused?.(caller.sessionId)) ?? [],
     );
-    const entries = [...this.readEntries().values()]
-      .filter(
-        (entry) =>
-          !entry.extension &&
-          entry.contract === contract &&
-          (admitted.has(entry.pluginId) || paused.has(entry.pluginId)),
-      )
-      .sort((a, b) =>
-        compareText(`${a.pluginId}/${a.name}`, `${b.pluginId}/${b.name}`),
-      );
-    const candidates = entries.filter((entry) => entry.modelFacing);
-    const [only] = candidates;
-    if (!only)
-      return entries.length
+    const entries = [...this.readEntries().values()].filter(
+      (entry) =>
+        !entry.extension &&
+        entry.contract === contract &&
+        (admitted.has(entry.pluginId) || paused.has(entry.pluginId)),
+    );
+    const selected =
+      contract === TURN_POLICY_CONTRACT
+        ? caller.delegation?.limits.turnPolicy
+        : undefined;
+    const eligible = selected
+      ? entries.filter(
+          (entry) =>
+            entry.pluginId === selected.pluginId &&
+            entry.name === selected.name,
+        )
+      : entries;
+    // An explicit choice precedes model visibility. Other contracts retain
+    // their model-facing-only automatic import resolution.
+    const candidates =
+      model && !selected && contract !== TURN_POLICY_CONTRACT
+        ? eligible.filter((entry) => entry.modelFacing)
+        : eligible;
+    if (!candidates.length)
+      return model && eligible.length
         ? {
             status: "not-model-facing",
-            providers: [...new Set(entries.map((entry) => entry.pluginId))],
+            providers: eligible.map((entry) => entry.pluginId),
           }
         : { status: "missing" };
     if (candidates.length > 1)
       return {
         status: "ambiguous",
-        providers: [...new Set(candidates.map((entry) => entry.pluginId))],
+        providers:
+          contract === TURN_POLICY_CONTRACT
+            ? candidates.map((entry) => `${entry.pluginId}/${entry.name}`)
+            : [...new Set(candidates.map((entry) => entry.pluginId))],
       };
+    const only = candidates[0]!;
     if (!admitted.has(only.pluginId))
       return { status: "paused", pluginId: only.pluginId };
+    if (model && !only.modelFacing)
+      return { status: "not-model-facing", providers: [only.pluginId] };
+    return only;
+  }
+
+  async resolveImport(
+    caller: Pick<Caller, "sessionId" | "pluginId" | "delegation">,
+    contract: string,
+  ): Promise<ServiceImportResolution> {
+    const selected = await this.resolveSelection(caller, contract, true);
+    if ("status" in selected) return selected;
+    const policy = contract === TURN_POLICY_CONTRACT;
     return {
       status: "ready",
-      pluginId: only.pluginId,
-      name: only.name,
-      contract: only.contract,
-      access: only.access,
-      description: only.description ?? "",
-      jsonSchema: only.modelFacing!.jsonSchema,
-      input: only.modelFacing!.input,
+      pluginId: selected.pluginId,
+      name: selected.name,
+      contract,
+      access: selected.access,
+      description: selected.description ?? "",
+      jsonSchema: policy
+        ? toolParametersJsonSchema(turnPolicyModelInputSchema)
+        : selected.modelFacing!.jsonSchema,
+      input: policy ? turnPolicyModelInputSchema : selected.modelFacing!.input,
     };
   }
 
@@ -772,6 +840,12 @@ export class PluginServiceRegistry {
     parentState?: CallState,
     kernel?: KernelServiceCaller,
   ): PluginServiceClient {
+    caller = {
+      ...caller,
+      delegation:
+        caller.delegation ??
+        new DelegationBudget({ sessionId: caller.sessionId }),
+    };
     return {
       discover: async (contract) => {
         caller.signal.throwIfAborted();
@@ -819,12 +893,36 @@ export class PluginServiceRegistry {
         let staged:
           Omit<StagedOperation, "id" | "seq" | "invokedBy"> | undefined;
         try {
-          const { pluginId, name, contract, input } = request;
+          const { contract } = request;
+          let { pluginId, name, input } = request;
           const output = await runCall(
             caller.signal,
             options,
             async (signal) => {
               signal.throwIfAborted();
+              if ((pluginId === undefined) !== (name === undefined))
+                throw new ToolError(
+                  "invalid-input",
+                  "Specify both service pluginId and name, or neither",
+                );
+              if (pluginId === undefined || name === undefined) {
+                errorCode = "unavailable";
+                const selection = await this.resolveSelection(
+                  caller,
+                  contract,
+                  false,
+                );
+                signal.throwIfAborted();
+                if ("status" in selection)
+                  throw new ToolError(
+                    "unavailable",
+                    selection.status === "ambiguous"
+                      ? "More than one service provides this contract"
+                      : "The selected service is unavailable",
+                  );
+                pluginId = selection.pluginId;
+                name = selection.name;
+              }
               const key = `${pluginId}/${name}`;
               // Only registered identities may enter diagnostics before host
               // admission. A malformed or unavailable request can contain
@@ -892,6 +990,32 @@ export class PluginServiceRegistry {
                 name: entry.name,
                 contract: entry.contract,
               };
+              if (contract === TURN_POLICY_CONTRACT) {
+                errorCode = "invocation-error";
+                try {
+                  const request = turnPolicyRequestSchema.parse(input);
+                  const available = caller.delegation?.remaining() ?? {
+                    maxActors: 4,
+                    maxSubagentCalls: 16,
+                  };
+                  input = turnPolicyInputSchema.parse({
+                    ...request,
+                    limits: {
+                      maxActors: Math.min(
+                        request.limits?.maxActors ?? available.maxActors,
+                        available.maxActors,
+                      ),
+                      maxSubagentCalls: Math.min(
+                        request.limits?.maxSubagentCalls ??
+                          available.maxSubagentCalls,
+                        available.maxSubagentCalls,
+                      ),
+                    },
+                  });
+                } catch (cause) {
+                  throw new ServiceInputValidationError(cause);
+                }
+              }
               const stage = caller.operations;
               if (entry.access === "write") {
                 if (caller.nestedIn)
@@ -975,15 +1099,18 @@ export class PluginServiceRegistry {
                 : undefined;
               errorCode = "invocation-error";
               let providerWorld: PluginServiceContext["world"] | undefined;
-              const world = () =>
-                (providerWorld ??= structuredClone(
+              const world = () => {
+                signal.throwIfAborted();
+                return (providerWorld ??= snapshotWorldModelView(
                   caller.reads?.world ?? {
                     characterSchema: null,
                     characters: [],
                     dimensions: {},
                     seats: [],
                   },
+                  () => signal.throwIfAborted(),
                 ));
+              };
               const stagedWrites = stage
                 ? () => stage.stagedWrites(entry.pluginId)
                 : undefined;
@@ -1074,6 +1201,11 @@ export class PluginServiceRegistry {
                 return result;
               }
               const context: PluginServiceContext = {
+                random: createPluginRandom({
+                  sessionId: caller.sessionId,
+                  pluginId: entry.pluginId,
+                  stream: `service:${entry.name}`,
+                }),
                 callerPluginId: caller.pluginId,
                 sessionId: caller.sessionId,
                 locale: caller.reads?.locale,
@@ -1115,7 +1247,16 @@ export class PluginServiceRegistry {
                     kernel.extensionContext(pluginId, signal),
                   ),
                 );
-              return entry.invoke(input, context);
+              const result = await entry.invoke(input, context);
+              return contract === TURN_POLICY_CONTRACT
+                ? caller.delegation!.clamp(
+                    validateTurnPolicyOutput(
+                      turnPolicyInputSchema.parse(input),
+                      result,
+                    ),
+                    turnPolicyInputSchema.parse(input).limits,
+                  )
+                : result;
             },
             state,
             parentState,

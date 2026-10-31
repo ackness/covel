@@ -6,6 +6,18 @@ import { LocalDataService } from "@/services/data-service/local.js";
 import { BrowserVault } from "@/services/storage/browser-vault.js";
 import { fakeSessionServer } from "@/services/__tests__/support/fake-session-server.js";
 import { createSessionWorkspace } from "@/services/data-service/workspace.js";
+import {
+  BASE_ACTION_KINDS,
+  BASE_ACTION_KIND_RULES,
+  baseActionKindRoles,
+  ROLE_ACTION_KINDS,
+} from "@covel/shared";
+import { deriveComposerModes } from "@/components/session/game-view/composer-modes.js";
+import { initialState, reducer } from "../reducer.js";
+import { createSseEventHandler } from "../sse-handler.js";
+import { resyncSessionRecord, runActionStream } from "../runtime-rpc.js";
+import { refreshSessionActionKinds } from "../action-kinds-refresh.js";
+import type { SessionAction } from "../types.js";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const api = vi.hoisted(() => ({
@@ -21,6 +33,8 @@ const api = vi.hoisted(() => ({
   updateWorld: vi.fn(),
   uploadBrowserCheckpoint: vi.fn(),
   fetchBrowserCommit: vi.fn(),
+  sendAction: vi.fn<typeof import("@/services/api/actions.js").sendAction>(),
+  getSessionActionKinds: vi.fn(),
 }));
 const hydration = vi.hoisted(() => ({
   hydratePluginDataForUiSpecs: vi.fn(),
@@ -39,6 +53,7 @@ const session: SessionRecord = {
   worldId: "world-1",
   status: "active",
   phase: "setup",
+  autoAdvanceLimit: 3,
   completedPlayerTurns: 0,
   setupRuntimes: {},
   seats: [
@@ -95,6 +110,198 @@ beforeEach(() => {
 });
 
 describe("startGameSession bootstrap order", () => {
+  it.each([
+    ["player", ["say", "act"]],
+    ["host", ["narrate", "direct", "advance"]],
+    ["spectator", ["advance"]],
+  ] as const)(
+    "preserves the %s seat and composer actions through local bootstrap and opening",
+    async (seatRole, expectedModes) => {
+      const vault = new BrowserVault({
+        dbName: `role-bootstrap-${crypto.randomUUID()}`,
+      });
+      try {
+        await vault.upsertWorld({
+          id: world.id,
+          name: "World",
+          description: "",
+          createdAt: world.createdAt,
+        });
+        const ds = new LocalDataService(vault);
+        const workspace = createSessionWorkspace(ds, "local");
+        let opened = false;
+        const story = {
+          id: "opening-story",
+          role: "assistant" as const,
+          kind: "story" as const,
+          turnId: "opening",
+          content: "The hall opens.",
+          createdAt: session.createdAt,
+        };
+        const server = fakeSessionServer({
+          vault: () => vault,
+          initialize: () => ({ phase: "setup" }),
+          patch: (checkpoint) =>
+            opened
+              ? {
+                  session: { ...checkpoint.session, phase: "playing" },
+                  messages: [{ ...story, sessionId: checkpoint.sessionId }],
+                }
+              : undefined,
+        });
+        api.getWorld.mockResolvedValue(world);
+        api.updateWorld.mockResolvedValue(world);
+        api.createSession.mockImplementation(server.createSession);
+        api.fetchBrowserCommit.mockImplementation(server.fetchBrowserCommit);
+        api.uploadBrowserCheckpoint.mockImplementation(
+          async (_id, checkpoint) => ({
+            ok: true,
+            revision: checkpoint.revision,
+          }),
+        );
+        api.getSession.mockImplementation((id) => ds.getSession(id));
+        const stateRef = { current: initialState };
+        const sessionIdRef = { current: null as string | null };
+        const dispatch = vi.fn((action: SessionAction) => {
+          stateRef.current = reducer(stateRef.current, action);
+        });
+        const expectedSeats = [
+          {
+            id: "main",
+            controller: "human",
+            role: seatRole,
+            characters: seatRole === "player" ? "auto" : [],
+          },
+        ];
+        const assertSeats = async () => {
+          const id = sessionIdRef.current!;
+          expect(stateRef.current.session?.seats).toEqual(expectedSeats);
+          expect((await ds.getSession(id))?.seats).toEqual(expectedSeats);
+          expect((await vault.getLatestCheckpoint(id))?.session.seats).toEqual(
+            expectedSeats,
+          );
+          for (const [, checkpoint] of api.uploadBrowserCheckpoint.mock.calls)
+            expect(checkpoint.session.seats).toEqual(expectedSeats);
+        };
+        await startGameSession({
+          ds,
+          workspace,
+          dispatch,
+          sessionIdRef,
+          sessionGenerationRef,
+          world,
+          seatRole,
+        });
+        const id = sessionIdRef.current!;
+        expect(server.created.get(id)?.session.seats).toEqual(expectedSeats);
+        expect(api.createSession.mock.calls[0]?.[7]).toBe(seatRole);
+        expect(stateRef.current.session?.phase).toBe("setup");
+        expect(stateRef.current.session?.runtimeModelOverrides).toEqual({
+          narrator: "fast",
+        });
+        await assertSeats();
+
+        api.getSessionActionKinds.mockImplementation(async () => {
+          const checkpoint = await vault.getLatestCheckpoint(id);
+          return {
+            kinds: BASE_ACTION_KINDS.map((kind) => ({
+              ...BASE_ACTION_KIND_RULES[kind],
+              kind,
+              roles: baseActionKindRoles(kind),
+              source: "framework",
+              display: { label: kind },
+            })),
+            seats: checkpoint!.session.seats.map((seat) => ({
+              seatId: seat.id,
+              role: seat.role,
+              controller: seat.controller,
+              allowed: ROLE_ACTION_KINDS[seat.role],
+            })),
+          };
+        });
+        const assertActions = async () => {
+          await refreshSessionActionKinds(dispatch, id, () => true);
+          expect(
+            deriveComposerModes({
+              catalogue: stateRef.current.sessionActionKinds,
+              seats: stateRef.current.session!.seats,
+              language: "en-US",
+              baseLabel: (kind) => kind,
+            }).map((mode) => mode.kind),
+          ).toEqual(expectedModes);
+        };
+        await assertActions();
+        api.sendAction.mockImplementation(
+          (request, onEvent, _onError, onDone) => {
+            expect(request.type).toBe("start_session");
+            expect(request.sessionId).toBe(id);
+            opened = true;
+            const emit = (
+              type: import("@/services/api.js").SseEnvelope["type"],
+              payload: Record<string, unknown>,
+            ) =>
+              onEvent({
+                type,
+                payload,
+                sessionId: id,
+                turnId: story.turnId,
+                requestId: request.requestId,
+                traceId: "opening-trace",
+                flowId: "opening-flow",
+                seq: 1,
+                timestamp: story.createdAt,
+              });
+            emit("execution.started", {});
+            emit("narrative.completed", {
+              ...story,
+              messageId: story.id,
+              runtimeId: "story/main",
+            });
+            emit("execution.completed", { committed: true });
+            onDone?.();
+            return new AbortController();
+          },
+        );
+        const requestId = crypto.randomUUID();
+        await workspace.run(id, requestId, () =>
+          runActionStream(
+            { requestId, type: "start_session", sessionId: id, payload: {} },
+            createSseEventHandler({
+              ds,
+              dispatch,
+              stateRef,
+              sessionIdRef,
+              deltaBufferRef: { current: new Map() },
+              deltaRafRef: { current: null },
+              lastBackfilledTurnIdRef: { current: null },
+            }),
+            dispatch,
+            { sessionIdRef },
+          ),
+        );
+        await resyncSessionRecord(
+          id,
+          sessionIdRef,
+          dispatch,
+          sessionGenerationRef,
+        );
+        expect(api.sendAction).toHaveBeenCalledOnce();
+        expect(stateRef.current.session?.phase).toBe("playing");
+        expect(stateRef.current.session?.completedPlayerTurns).toBe(0);
+        expect(stateRef.current.messages).toContainEqual(
+          expect.objectContaining({ content: story.content }),
+        );
+        expect(await ds.listMessages(id)).toContainEqual(
+          expect.objectContaining({ content: story.content }),
+        );
+        await workspace.hydrate(id);
+        await assertSeats();
+        await assertActions();
+      } finally {
+        await vault.deleteDatabase();
+      }
+    },
+  );
   it.each(["Current draft", ""])(
     "persists the selected lore with the session (%j)",
     async (loreOverride) => {

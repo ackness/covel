@@ -390,20 +390,23 @@ Who calls it:
 
 **Downstream commits only if upstream really commits.** Commit units are committed in execution order. The hard dependents of a dropped runtime are dropped with it (`commit/commit-dependencies.ts`). Dependencies are checked only between top-level runtimes: a nested result depends only on results of its own nested execution, which sit in the same unit and commit or drop with it.
 
-| Relationship                                                                             | When the upstream is dropped                               |
-| ---------------------------------------------------------------------------------------- | ---------------------------------------------------------- |
-| The target of a turn-scoped `needs`                                                      | Downstream is dropped with it                              |
-| The source of a required `inputs`                                                        | Downstream is dropped with it                              |
-| An event subscriber, when all emitters of the event that triggered it are dropped        | The subscriber is dropped with it                          |
-| `after`, and inputs with `required: false`                                               | No cascade. They only express order or a best-effort read  |
-| A `cardinality: one` capability dependency, when another provider committed successfully | Still satisfied                                            |
-| The hard upstream of a story or setup runtime                                            | The whole turn is rolled back                              |
-| Read its uncommitted plugin data (auxiliary unit)                                        | The downstream runtime is dropped too                      |
-| Read its uncommitted plugin data (story or setup unit)                                   | Commits as usual; the trace records `read-dependency.kept` |
-| Read a write-service operation that did not commit (auxiliary unit)                      | The downstream runtime is dropped too                      |
-| Read a write-service operation that did not commit (story or setup unit)                 | Commits as usual; the trace records `read-dependency.kept` |
+<!-- prettier-ignore -->
+| Relationship | When the upstream is dropped |
+| --- | --- |
+| The target of a turn-scoped `needs` | Downstream is dropped with it |
+| The source of a required `inputs` | Downstream is dropped with it |
+| An event subscriber, when all emitters of the event that triggered it are dropped | The subscriber is dropped with it |
+| `after`, and inputs with `required: false` | No cascade. They only express order or a best-effort read |
+| A `cardinality: one` capability dependency, when another provider committed successfully | Still satisfied |
+| The hard upstream of a story or setup runtime | The whole turn is rolled back |
+| Read its uncommitted plugin data, characters or character schema (auxiliary unit) | The downstream runtime is dropped too |
+| Read its uncommitted plugin data, characters or character schema (story or setup unit) | Commits as usual; the trace records `read-dependency.kept` |
+| Read a write-service operation that did not commit (auxiliary unit) | The downstream runtime is dropped too |
+| Read a write-service operation that did not commit (story or setup unit) | Commits as usual; the trace records `read-dependency.kept` |
 
 **Read dependencies.** Within one execution, a runtime that reads its own plugin's data sees the uncommitted writes of upstream runtimes of the same plugin (see [In-execution plugin-data visibility](./plugins.md#in-execution-plugin-data-visibility)). Each read records which upstream writes it actually saw (`read-dependencies.ts`), and the execution carries these dependencies into its commit plan.
+
+Character and character-schema property reads use the same recorder, retaining producers across plugins. Tool and service reads belong to the calling runtime; host copying does not count. See [World Model](./world-model.md) for granularity. The recorder travels only in the kernel's execution commit plan, never in public results or suspension payloads.
 
 - `get` depends only on the upstream writes that still shape the returned value. When the runtime first wrote the whole key itself (`set`, a delete, or an operation list containing either) and then read it, there is no dependency.
 - `list` depends on every upstream that wrote that namespace. A list without a namespace depends on every upstream that wrote plugin data.
@@ -412,6 +415,8 @@ Who calls it:
 - A story or setup unit is never dropped for a read dependency. For each dropped upstream it writes one `read-dependency.kept` trace row in the same transaction, with the payload `runtimeId`, `runId`, `producerRuntimeId`, `producerRunId` and `reason`.
 - A producer always precedes its reader. A dependency on a run later in commit order is a kernel bug; it is logged as a warning and ignored.
 - Write-service operations are producers too: when a provider's runtime reads writes an operation staged, or any runtime reads an operation through the kernel input `operations@1`, the dependency names the operation's ID. An operation takes its caller unit's position, and counts as not committed when it failed, was taken back or its caller's unit was dropped. An auxiliary reader is dropped with it, with the error `read data of <contract> that did not commit`; a story or setup reader commits, and its `read-dependency.kept` payload carries `producerOperationId` and `producerContract` instead of the two run fields.
+
+Suspensions are checked for read dependencies at their source execution's commit, even without domain writes. When a producer drops, an auxiliary reader's continuation is neither saved nor emitted as a resumable `turn.suspended`; its buffered and nested writes cannot survive for resume. Progress jobs, held detached jobs and turn counting use the existing discard settlement. Story/setup protection and kept traces still apply. A saved continuation carries no dependency graph: its source producers have already settled by resume.
 
 #### Write-service operations
 
@@ -584,7 +589,7 @@ A write-service operation's `plugin.data.update` that fails here reports `confli
 
 A missing namespace or key, and an empty or invalid operation list, are rejected by the payload check before the handler runs, with `code` `proposal-invalid`. Rejections for a reserved namespace and the size limit happen in the handler and carry `error` without a `code`.
 
-**Dataset checks.** When a plugin declares a namespace in `contributes.datasets`, **every** plugin-data proposal of that plugin into the namespace is checked:
+**Dataset checks.** When a plugin declares a namespace in `contributes.datasets`, every plugin-data proposal, action / command RPC scoped-store write, and world data import or sync uses the same [destination dataset rules](./plugins.md#datasets-contributesdatasets). Proposal checks are:
 
 - Each operation kind of a `plugin.data.update` must be in the dataset's `ops`. A whole-value write (`plugin.data` and each item of `plugin.data.batch`) counts as `set`, and `plugin.data.delete` counts as `delete`.
 - When the result is present, the written value is validated against the dataset's record schema, and the first 3 errors are reported.
@@ -600,6 +605,10 @@ A missing namespace or key, and an empty or invalid operation list, are rejected
 `FailedProposal.code: "hook-failed"` means `PreStateCommit` failed because a handler threw, timed out or returned an invalid result, rather than deliberately vetoing. Only the Hook owner's fault counts; the proposal owner is not blamed for a deliberate rejection. `dimension-version-conflict`, `conflict` and `suspension-data-changed` also do not count toward the [latch](./protocol.md#plugin-fault-latch).
 
 ## World Data import
+
+An import plan captures registered packages' destination policies, and apply retains that declaration generation. Alongside source validation, seeding and replacement require `set`. After media transformation and before any semantic write, including dimension CAS and binding, the final value is checked against its schema and the 256 KiB limit. Refusal rolls back the session, character schema, plugin data, characters, lorebook and import ledger together, releasing only this attempt's temporary media references.
+
+A true sync deletion of an existing managed record requires `delete`; a physical delete followed by replacement requires only `set`. Dry-run and apply both check true removals, and `force` cannot bypass dataset rules. Refusal prevents all semantic changes in that sync; an already-absent target needs only stale-ledger cleanup. Invalid optional projection outputs still preserve old data under the [output deferral rules](./world-data.md#companion-plugin-data).
 
 Planning also validates the receiver's declared [dimension references and candidate values](./world-data.md). Any such error rejects the whole import plan, including otherwise valid records. Sync follows the same rule.
 
@@ -741,3 +750,7 @@ Per backend: PostgreSQL holds the parent session row with `FOR KEY SHARE`. SQLit
 - An older scan cannot overwrite vectors that are owned by a newer progress value.
 - An optional cross-process ingestion lock can reduce duplicate embedding work, but correctness does not depend on it.
 - Calls to the embedding provider never run inside the index commit transaction, and never inside the business-data transaction.
+
+### Commit boundaries during advancement
+
+One input can produce multiple independent executions, each using proposal validation and a transaction. Cancellation, failure or stopping in a later round never undoes earlier committed stories and state. Attached operations retain their isolation; an operation failure alone does not veto the story's `yield: continue`. The next round reads prior committed state and operation notices, never tentative future results. Failed post-commit publication requires client resynchronization without changing the durable commit verdict.

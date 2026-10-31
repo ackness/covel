@@ -14,6 +14,7 @@ interface WorkspaceRunOptions {
  * FIFO job so two operations never export from the same revision.
  */
 export interface SessionWorkspace {
+  settle?(sessionId: string): Promise<void>;
   hydrate(
     sessionId: string,
     options?: Pick<WorkspaceRunOptions, "isCurrent">,
@@ -202,7 +203,28 @@ export function createSessionWorkspace(
   dataService: DataService,
   mode: "local" | "remote",
 ): SessionWorkspace {
-  return mode === "local"
-    ? new LocalSessionWorkspace(dataService)
-    : new RemoteSessionWorkspace();
+  const workspace =
+    mode === "local"
+      ? new LocalSessionWorkspace(dataService)
+      : new RemoteSessionWorkspace();
+  const running = new Map<string, Promise<unknown>>();
+  return {
+    hydrate: workspace.hydrate.bind(workspace),
+    checkpoint: workspace.checkpoint.bind(workspace),
+    settle: async (sessionId) => {
+      await running.get(sessionId);
+    },
+    run: (sessionId, actionId, mutate, options) => {
+      const result = workspace.run(sessionId, actionId, mutate, options);
+      running.set(sessionId, result);
+      // Retain a rejected result: a new input must not upload a stale checkpoint.
+      void result.then(
+        () => {
+          if (running.get(sessionId) === result) running.delete(sessionId);
+        },
+        () => {},
+      );
+      return result;
+    },
+  };
 }

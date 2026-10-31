@@ -29,10 +29,15 @@ describe(`${PLUGIN_ID} package`, () => {
     const discoveries = await discoverPlugins(path.dirname(PLUGIN_DIR));
     const discovery = discoveries.find((item) => item.id === PLUGIN_ID);
     definition = await loadPluginDefinition(discovery);
-    manifest = definition.manifests[0].manifest;
+    manifest = definition.manifests.find(
+      ({ manifest }) => manifest.outputKind === "story",
+    ).manifest;
     english = (await loadRuntime(discovery, manifest.name)).promptTemplate;
     // The variant holds only translated text: its body follows the frontmatter.
-    chinese = readFileSync(path.join(PLUGIN_DIR, "PLUGIN.zh.md"), "utf8")
+    chinese = readFileSync(
+      path.join(PLUGIN_DIR, "runtimes/narrate/RUNTIME.zh.md"),
+      "utf8",
+    )
       .split(/^---$/m)
       .slice(2)
       .join("---");
@@ -40,7 +45,7 @@ describe(`${PLUGIN_ID} package`, () => {
 
   it("is the story runtime of the narrative stage and provides the narrative engine", () => {
     expect(manifest).toMatchObject({
-      name: PLUGIN_ID,
+      name: `${PLUGIN_ID}/narrate`,
       runtimeType: "agent",
       stage: "narrative",
       outputKind: "story",
@@ -59,6 +64,17 @@ describe(`${PLUGIN_ID} package`, () => {
   it("asks for story segments through its output schema", () => {
     expect(manifest.outputContract).toBe("narrative-engine@2");
     expect(manifest.output?.schema).toBe("contract:narrative-engine@2");
+    expect(manifest.output?.recordAs).toBe("latest-story");
+    const planner = definition.manifests.find(
+      ({ manifest }) => manifest.name === `${PLUGIN_ID}/plan`,
+    ).manifest;
+    expect(planner.input.inject).toContainEqual({
+      kind: "runtime-export",
+      name: "previous",
+      from: { runtime: manifest.name },
+      recordAs: "latest-story",
+      required: false,
+    });
     const schema = JSON.parse(
       readFileSync(
         path.join(PLUGIN_DIR, "schemas/narrative-engine.schema.json"),
@@ -85,7 +101,7 @@ describe(`${PLUGIN_ID} package`, () => {
     expect(placeholders(english)).toContain("userSettings.perspective");
     expect(placeholders(chinese)).toContain("userSettings.perspective");
     // The stage reads nameplates from segments, not from an ID map.
-    for (const file of ["PLUGIN.md", "PLUGIN.zh.md"])
+    for (const file of ["PLUGIN.md", "runtimes/narrate/RUNTIME.zh.md"])
       expect(readFileSync(path.join(PLUGIN_DIR, file), "utf8")).not.toMatch(
         /paragraph[S]peakers|narrative[P]erson/,
       );
@@ -149,8 +165,9 @@ describe(`${PLUGIN_ID} package`, () => {
 
   it("guides correctable lookups, staged changes and changed scene cues in both languages", () => {
     const source = (file) => readFileSync(path.join(PLUGIN_DIR, file), "utf8");
-    const en = source("PLUGIN.md");
-    const zh = source("PLUGIN.zh.md");
+    const en = source("runtimes/narrate/RUNTIME.md") + source("PLUGIN.md");
+    const zh =
+      source("runtimes/narrate/RUNTIME.zh.md") + source("PLUGIN.zh.md");
     expect(en).toContain("not-found error that lists the closest names");
     expect(zh).toContain("「未找到」错误并列出最接近的名字");
     expect(en).not.toContain("candidate names");
@@ -177,62 +194,38 @@ describe(`${PLUGIN_ID} package`, () => {
   });
 
   it("preserves the declared runtime inputs, tools and scheduling", () => {
-    expect(definition.packageManifest.plugin.runtime).toEqual({
-      schedule: { stage: "narrative" },
-      io: {
-        inputs: {
-          worldTime: {
-            from: { contract: "world-time-context@1" },
-            required: false,
-          },
-          storyEvent: {
-            from: { contract: "story-event-cue@1" },
-            select: "/cueContext",
-            required: false,
-          },
-          tabletopCheck: {
-            from: { contract: "tabletop-check@1" },
-            select: "/checkContext",
-            required: false,
-          },
-          "active-cast": {
-            from: { contract: "scene-cast@1" },
-            select: "/activeCastContext",
-            required: false,
-          },
-          "npc-relationships": {
-            from: { contract: "graph-rag@1" },
-            select: "/npcContext",
-            required: false,
-          },
-          "check-results": {
-            from: { contract: "action-check@1" },
-            select: "/checkContext",
-            required: false,
-          },
-        },
-        output: {
-          contract: "narrative-engine@2",
-          schema: "contract:narrative-engine@2",
-        },
-        visibility: "story",
-      },
-      agent: {
-        tools: {
-          services: [
-            { contract: "inventory.bag@1", as: "check-bag" },
-            { contract: "inventory.change@1", as: "change-inventory" },
-          ],
-          builtin: [
-            "list-characters",
-            "get-character",
-            "memory-search",
-            "emit-event",
-          ],
-        },
-        advertiseEvents: true,
-      },
-    });
+    expect(definition.packageManifest.plugin.runtime).toBeUndefined();
+    expect(
+      definition.manifests.map(({ manifest }) => manifest.name).sort(),
+    ).toEqual([`${PLUGIN_ID}/narrate`, `${PLUGIN_ID}/plan`]);
+    expect(
+      definition.manifests.filter(
+        ({ manifest }) => manifest.outputKind === "story",
+      ),
+    ).toHaveLength(1);
+    expect(manifest.inputs.plan).toMatchObject({ required: false });
+    expect(Object.keys(manifest.inputs).sort()).toEqual(
+      [
+        "active-cast",
+        "check-results",
+        "npc-relationships",
+        "plan",
+        "storyEvent",
+        "tabletopCheck",
+        "worldTime",
+      ].sort(),
+    );
+    expect(manifest.tools.builtin).toEqual([
+      "list-characters",
+      "get-character",
+      "memory-search",
+      "emit-event",
+      "delegate",
+    ]);
+    expect(english).toContain('target: { contract: "character-actor@1" }');
+    expect(chinese).toContain('target: { contract: "character-actor@1" }');
+    expect(english).toContain("runtime-inputs.active-cast");
+    expect(chinese).toContain("runtime-inputs.active-cast");
     expect(definition.packageManifest.plugin.imports ?? []).toEqual([]);
   });
 });

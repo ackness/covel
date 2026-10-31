@@ -32,11 +32,39 @@ describe("fork checkpoint scope", () => {
         metadata: { sessionIncarnationNonce: crypto.randomUUID() },
       }),
     );
-    const parentSuspension = makeSuspension({ sessionId: parentId });
+    const orchestration = {
+      turnPolicy: { pluginId: "missing-policy", name: "ensemble" },
+      maxActors: 2,
+      maxSubagentCalls: 3,
+    };
+    const parentSuspension = makeSuspension({
+      sessionId: parentId,
+      pendingContinuation: {
+        ...makeSuspension().pendingContinuation,
+        delegation: {
+          scopeId: "parent-root",
+          limits: orchestration,
+          calls: 1,
+          actorIds: ["actor"],
+          historySnapshot: {
+            messages: [
+              {
+                presentCharacterIds: ["actor"],
+                segments: [
+                  { kind: "narration", text: "At the snapshot boundary." },
+                ],
+              },
+            ],
+            truncated: false,
+          },
+        },
+      },
+    });
     await store.saveSuspension(parentSuspension);
     const sourceSnapshot = makeSnapshot({
       sessionId: parentId,
       payload: makeSnapshotPayload({
+        session: { ...makeSnapshotPayload().session!, orchestration },
         characters: [makeCharacter({ sessionId: parentId })],
         pluginData: [
           {
@@ -75,6 +103,24 @@ describe("fork checkpoint scope", () => {
       forkSnapshotId: string;
     };
     const childSnapshot = await store.getSnapshot(body.forkSnapshotId);
+    expect(
+      (await store.getSession(body.sessionId))?.metadata?.orchestration,
+    ).toEqual(orchestration);
+    expect(childSnapshot?.payload.session?.orchestration).toEqual(
+      orchestration,
+    );
+    expect(
+      childSnapshot?.payload.suspensions[0]?.pendingContinuation.delegation,
+    ).toMatchObject({
+      calls: 1,
+      actorIds: ["actor"],
+      historySnapshot:
+        parentSuspension.pendingContinuation.delegation?.historySnapshot,
+    });
+    expect(
+      childSnapshot?.payload.suspensions[0]?.pendingContinuation.delegation
+        ?.scopeId,
+    ).not.toBe("parent-root");
     expect(childSnapshot?.payload.characters[0]?.sessionId).toBe(
       body.sessionId,
     );
@@ -113,6 +159,9 @@ describe("fork checkpoint scope", () => {
       body.sessionId,
     );
     await replaceSessionFromCheckpoint(store, exported);
+    expect(
+      (await store.getSession(body.sessionId))?.metadata?.orchestration,
+    ).toEqual(orchestration);
     for (const suspension of exported.snapshots[0]!.payload.suspensions) {
       await store.saveSuspension(suspension);
     }

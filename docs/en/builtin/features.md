@@ -93,3 +93,17 @@ When importing, choose the file first. In the preview, tick the items you want t
 
 - [Stage and Sound](./stage.md)
 - [Built-in Plugins and Features](./index.md)
+
+## Session orchestration settings
+
+Open “More” → “Studio Config” in the game toolbar, then find “Orchestration” under “Loaded Plugins”. A sole policy provider resolves automatically: its name and settings link appear without a provider selector or Save button. Multiple providers show the “Turn policy” selector, offering “Automatic selection” or an exact authorized service. A saved paused or unavailable selection stays visible and never switches automatically; clear the selection to resolve automatically again. “Distinct characters (0–16)” and “Child calls (0–64)” bound delegation per execution, defaulting to 4 and 16; zero disables the corresponding capability. Changes start next execution and survive reloads and forks.
+
+These generic controls install no new policy, character plugin or play pack. Plugins use them only when they offer the corresponding capabilities. Authors can read the [orchestration contracts](../reference/plugin-extensions.md#orchestration-contracts).
+
+### Creation roles and independent saves
+
+Play as defaults to Player on preparation, with Game master and Spectator choices. It applies only to new sessions and grants no server administration rights. Plugin selection controls stay disabled while the plugin plan loads. Edit them after the default composition appears so loading cannot overwrite your choices. Host/spectator recipes omit player creation; disable it during preparation when choosing Game master in the ensemble recipe.
+
+Orchestration groups Turn policy, distinct characters, sub-agent calls and Automatic rounds. Save each field independently. Policy/caps use the orchestration route; Automatic rounds uses ordinary session PATCH. A failed field retains its draft/error while successful fields remain saved, followed by authoritative reloads; there is no joint rollback. The provider-settings link opens its own strategy fields. Multiple providers require an exact choice. Paused/stale selections remain visible and clearable without activation or approval.
+
+Actor/call caps apply per execution; Automatic rounds counts additional executions per input. Zero disables the respective capability. Changes apply to the next applicable execution/input, leaving a running chain’s frozen limit intact. Every game view retains progress and Stop advancement; new input also ends the old automatic chain.

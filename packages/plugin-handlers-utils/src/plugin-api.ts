@@ -41,6 +41,8 @@ export interface PluginHookContext {
   readonly turnId: string;
   /** The session's content locale; a session host always supplies it. */
   readonly locale?: string;
+  /** Frozen logical number of the originating input; absent outside execution. */
+  readonly logicalTurn?: number;
   /**
    * Plugin of the runtime the event is about, not the plugin that registered
    * the handler. Set together with `runtimeId` for every event that concerns
@@ -168,6 +170,9 @@ export type PluginProposal = {
 }[PluginProposalType];
 export type PluginToolStore = FunctionStoreView;
 export interface PluginToolContext {
+  readonly historyFor?: import("./function-runtime.js").PluginFunctionContext["historyFor"];
+  /** Resolved current actions; supplied by the host. */
+  readonly playerActions?: readonly import("./actions.js").TurnAction[];
   readonly sessionId: string;
   readonly turnId: string;
   readonly pluginId: string;
@@ -297,18 +302,26 @@ export interface PluginServiceClient {
     }[]
   >;
   call(
-    request: {
-      readonly pluginId: string;
-      readonly name: string;
-      readonly contract: string;
-      readonly input: unknown;
-    },
+    request:
+      | {
+          readonly pluginId: string;
+          readonly name: string;
+          readonly contract: string;
+          readonly input: unknown;
+        }
+      | {
+          readonly pluginId?: never;
+          readonly name?: never;
+          readonly contract: string;
+          readonly input: unknown;
+        },
     options?: { readonly signal?: AbortSignal; readonly timeoutMs?: number },
   ): Promise<unknown>;
 }
 /** What a read service's handler receives. */
 export interface PluginServiceContext {
   readonly callerPluginId: string;
+  readonly random: import("./function-runtime.js").PluginRandom;
   readonly sessionId: string;
   readonly locale?: string;
   /** The provider's session translations and labels in every shipped language. */

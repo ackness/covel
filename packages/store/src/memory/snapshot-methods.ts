@@ -32,6 +32,20 @@ export function createSuspensionMethods(
       );
     },
 
+    async updateSuspensionContinuation(
+      id,
+      pendingContinuation,
+      expectedResolution,
+    ) {
+      const existing = state.suspensions.get(id);
+      if (!existing || existing.resolvedAt !== expectedResolution) return false;
+      state.suspensions.set(id, {
+        ...existing,
+        pendingContinuation: structuredClone(pendingContinuation),
+      });
+      return true;
+    },
+
     async getSuspension(id) {
       return state.suspensions.get(id) ?? null;
     },

@@ -64,7 +64,7 @@ The story is written in segments: each one is narration, dialogue or action, and
 
 ### The character you play
 
-The character sheet the Narrator gives the model is the character **you are currently playing**, and the person check is anchored on it too (the omniscient and game-master perspectives do not centre on the player character). When a session has several player characters (you play more than one), the other player characters are listed with the supporting cast in the character profiles, tagged `[player]`. With one player character nothing changes. For how the current character is chosen and switched, see [Seats](../reference/world-model.md#seats); the play screen has no switch control yet.
+The character sheet the Narrator gives the model is the character **you are currently playing**, and the person check is anchored on it too (the omniscient and game-master perspectives do not centre on the player character). When a session has several player characters (you play more than one), the other player characters are listed with the supporting cast in the character profiles, tagged `[player]`. With one player character nothing changes. When a seat binds two or more characters, a current-character selector appears above the composer, or above free input in stage mode. For how the current character is chosen and switched, see [Seats](../reference/world-model.md#seats).
 
 ## Dialogue Narrator (`chat-mode-narrator`)
 
@@ -182,3 +182,35 @@ It is a core plugin (`kind: core`). No gameplay pack needs to list it. Compactio
 - Change the model for a task: [Connect a model](../start/models.md)
 - Preset data for a world: [Starting content](../recipes/starting-content.md)
 - Back to the overview: [Built-in Plugins and Features](./index.md)
+
+The story interface also provides the host’s [advancement and Stop controls](../start/first-session.md#while-the-story-advances-automatically). The story provider decides whether to request another round. The ensemble composition below can recommend continuation through its selected strategy; the host follows advice from the committed story.
+
+## Ensemble dialogue and character actors
+
+Dialogue Narrator remains playable alone. With optional Character Actor (`character-agent`) and Turn Policy (`turn-policy`), a pre-turn function prepares the cast and the story agent delegates each character in plan order, combining accepted speech/actions and connective narration into one story. This consumer runs sequentially even for parallel advice; each actor adds a model call and director adds another. A failed actor loses its contribution. An empty, unavailable or entirely failed plan returns narrator-only play and user yield. Scripted tests establish transport and settlement, not real-model prose quality or semantic obedience.
+
+Turn Policy offers one service; choose the algorithm in its own Strategy setting. It resolves automatically when it is the only provider. With other providers, choose a service in [Orchestration](./features.md#session-orchestration-settings).
+
+| Strategy | Behaviour                                                                                                                                                                                                  |
+| -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| mention  | Present characters named in current actions or the last segment, in presence order; yields user.                                                                                                           |
+| list     | Configured newline-separated names/aliases first, skipping known absent characters, then remaining names in stable order; empty configuration preserves presence order.                                    |
+| random   | Samples present characters without replacement, excluding current action actors; previous segment speakers remain eligible.                                                                                |
+| manual   | In Choose actors, enter one exact name/alias per line in actors, at most 32 submitted names in total; deduplicates in submission order, with optional direction in action text.                            |
+| director | Borrows the planner's text slot, including browser request bindings, for one structured plan; without a gateway or usable slot, uses mention with a reason; a failed model call yields narrator-only play. |
+
+List/random may continue after a host direction or host/spectator/system advance. Ordinary player speech/actions yield user. Manual never replays an earlier selection. Unknown, ambiguous, raw-ID or absent names invalidate the whole batch; narration asks for corrected names and yields. Spectators cannot choose actors. Limits are in [settings](./features.md#session-orchestration-settings).
+
+Actors receive only the selected public profile, bounded witnessed stories and deliberately supplied current observations. Missing history does not license invented conversations. Intent stays out of story, exports and cues. Silence or failure is not departure. The bundled actor has no inventory tool; replacement actors retain [staged-operation semantics](../reference/tools.md#delegate).
+
+The shared brief contains only current speech/actions and deliberately established scene narration. It does not replay a previous scene's private exchanges or omniscient narration. Policy selection keeps history; the runner supplies each actor's witnessed history separately. Stage presence informs both the planner's selection and the narrator's descriptions without being copied into actor briefs.
+
+The existing Narrator already supports the game-master perspective. In a world file:
+
+```yaml
+pluginSettings:
+  narrator:
+    perspective: dm
+```
+
+The player's Perspective setting overrides this world default for subsequent narration while preserving player agency. Narrator perspective and the human seat's role are independent choices.

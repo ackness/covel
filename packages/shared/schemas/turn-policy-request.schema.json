@@ -1,0 +1,168 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "properties": {
+    "actions": {
+      "maxItems": 8,
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "seatId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "kind": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "actorId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "text": {
+            "type": "string",
+            "maxLength": 100000
+          },
+          "fields": {
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {
+              "$ref": "#/definitions/__schema0"
+            }
+          },
+          "interaction": {
+            "type": "object",
+            "properties": {
+              "turnId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 256
+              },
+              "interactionId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 256
+              },
+              "type": {
+                "type": "string",
+                "enum": ["form", "choice", "confirmation"]
+              }
+            },
+            "required": ["turnId", "interactionId", "type"],
+            "additionalProperties": false
+          },
+          "source": {
+            "type": "string",
+            "enum": ["player", "system"]
+          }
+        },
+        "required": ["seatId", "kind", "source"],
+        "additionalProperties": false
+      }
+    },
+    "present": {
+      "maxItems": 32,
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "characterId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80
+          }
+        },
+        "required": ["characterId", "name"],
+        "additionalProperties": false
+      }
+    },
+    "recentSegments": {
+      "maxItems": 60,
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": ["narration", "dialogue", "action"],
+            "description": "narration: scene and description; dialogue: one character's spoken lines; action: what one character does."
+          },
+          "speaker": {
+            "description": "Who speaks or acts, by the name used in the character profiles. Required for dialogue. Names only, never IDs.",
+            "type": "string",
+            "maxLength": 80
+          },
+          "text": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 4000,
+            "description": "Complete prose for this segment, with no blank line inside. Start a new segment when the speaker changes."
+          }
+        },
+        "required": ["kind", "text"],
+        "additionalProperties": false
+      }
+    },
+    "limits": {
+      "type": "object",
+      "properties": {
+        "maxActors": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 16
+        },
+        "maxSubagentCalls": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 64
+        }
+      },
+      "required": ["maxActors", "maxSubagentCalls"],
+      "additionalProperties": false
+    }
+  },
+  "required": ["actions", "present", "recentSegments"],
+  "additionalProperties": false,
+  "definitions": {
+    "__schema0": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "null"
+        },
+        {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/__schema0"
+          }
+        },
+        {
+          "type": "object",
+          "propertyNames": {
+            "type": "string"
+          },
+          "additionalProperties": {
+            "$ref": "#/definitions/__schema0"
+          }
+        }
+      ]
+    }
+  }
+}

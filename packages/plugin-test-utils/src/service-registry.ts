@@ -94,12 +94,9 @@ export async function callTestService(options: {
     readonly turnId?: string;
     readonly locale?: string;
   };
-  readonly request: {
-    readonly pluginId: string;
-    readonly name: string;
-    readonly contract: string;
-    readonly input: unknown;
-  };
+  readonly request: Parameters<
+    import("@covel/shared/plugin-runtime").PluginServiceClient["call"]
+  >[0];
   readonly store?: Pick<DataStore, "getPluginData" | "listPluginData">;
   readonly signal?: AbortSignal;
 }): Promise<{

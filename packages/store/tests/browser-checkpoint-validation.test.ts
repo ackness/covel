@@ -94,6 +94,32 @@ const checkpoint: BrowserCheckpoint = JSON.parse(
 ) as BrowserCheckpoint;
 
 describe("checkpoint record validation", () => {
+  it.each([-1, 11, 1.5, "3", null])(
+    "rejects invalid advancement limits at both checkpoint boundaries (%s)",
+    (autoAdvanceLimit) => {
+      expect(() =>
+        validateBrowserCheckpoint({
+          ...checkpoint,
+          session: { ...checkpoint.session, metadata: { autoAdvanceLimit } },
+        }),
+      ).toThrow(BrowserSyncValidationError);
+      const snapshot = checkpoint.snapshots[0]!;
+      expect(() =>
+        validateBrowserCheckpoint({
+          ...checkpoint,
+          snapshots: [
+            {
+              ...snapshot,
+              payload: {
+                ...snapshot.payload,
+                session: { ...snapshot.payload.session, autoAdvanceLimit },
+              },
+            },
+          ],
+        }),
+      ).toThrow(BrowserSyncValidationError);
+    },
+  );
   it("rejects duplicate message IDs at their exact path before any replacement side effect", async () => {
     const store = createMemoryStore();
     await store.createSession(checkpoint.session);
@@ -525,5 +551,74 @@ describe("checkpoint record validation", () => {
     expect(await store.listPluginDataSessionScope(otherSession.id)).toEqual([
       otherData,
     ]);
+  });
+});
+
+describe("orchestration checkpoint boundaries", () => {
+  it("keeps settings and consumed delegation state and rejects invalid limits", () => {
+    const delegation = {
+      scopeId: "root",
+      limits: { maxActors: 1, maxSubagentCalls: 2 },
+      calls: 1,
+      actorIds: ["mara"],
+      historySnapshot: {
+        messages: [
+          {
+            presentCharacterIds: ["mara"],
+            segments: [{ kind: "narration", text: "Witnessed." }],
+          },
+        ],
+        truncated: false,
+      },
+    };
+    const value = {
+      ...checkpoint,
+      session: {
+        ...checkpoint.session,
+        metadata: {
+          ...checkpoint.session.metadata,
+          orchestration: {
+            turnPolicy: { pluginId: "removed", name: "draw" },
+            maxActors: 0,
+          },
+        },
+      },
+      suspensions: [
+        {
+          ...checkpoint.suspensions[0]!,
+          pendingContinuation: {
+            ...checkpoint.suspensions[0]!.pendingContinuation,
+            delegation,
+          },
+        },
+      ],
+    };
+    expect(
+      validateBrowserCheckpoint(value).suspensions[0]?.pendingContinuation
+        .delegation,
+    ).toEqual(delegation);
+    expect(() =>
+      validateBrowserCheckpoint({
+        ...value,
+        session: {
+          ...value.session,
+          metadata: { orchestration: { maxActors: 17 } },
+        },
+      }),
+    ).toThrow();
+    expect(() =>
+      validateBrowserCheckpoint({
+        ...value,
+        suspensions: [
+          {
+            ...value.suspensions[0],
+            pendingContinuation: {
+              ...value.suspensions[0]!.pendingContinuation,
+              delegation: { ...delegation, calls: 3 },
+            },
+          },
+        ],
+      }),
+    ).toThrow();
   });
 });

@@ -1,3 +1,4 @@
+import { orchestrationSettingsSchema } from "@covel/shared";
 /**
  * Snapshot payload builder.
  *
@@ -19,6 +20,7 @@
  * to travel with the snapshot.
  */
 
+import { resolveAutoAdvanceLimit } from "@covel/shared";
 import type {
   DataStore,
   SnapshotPayload,
@@ -130,6 +132,9 @@ export async function buildSnapshotPayload(
     turnId,
     session: {
       status: session.status,
+      autoAdvanceLimit: resolveAutoAdvanceLimit(
+        session.metadata?.autoAdvanceLimit,
+      ),
       locale: session.locale,
       activePlugins: session.activePlugins,
       runtimeModelOverrides: session.runtimeModelOverrides,
@@ -137,6 +142,13 @@ export async function buildSnapshotPayload(
       completedPlayerTurns: session.completedPlayerTurns,
       setupRuntimes: session.setupRuntimes,
       seats: session.seats,
+      ...(session.metadata?.orchestration !== undefined
+        ? {
+            orchestration: orchestrationSettingsSchema.parse(
+              session.metadata.orchestration,
+            ),
+          }
+        : {}),
       ...(typeof session.metadata?.loreOverride === "string"
         ? { loreOverride: session.metadata.loreOverride }
         : {}),

@@ -562,7 +562,16 @@
     "viewConsentTitle": "Allow “{{label}}” to read this session?",
     "viewConsentDescription": "{{plugin}} requests access to story messages, streaming text, pending interactions, public characters and visible UI slots. Approval applies to this view content on this device. You can revoke it from the view menu.",
     "viewConsentDecline": "Use default view",
-    "viewConsentAllow": "Allow session reading"
+    "viewConsentAllow": "Allow session reading",
+    "autoAdvanceLimit": "Automatic rounds",
+    "autoAdvanceOff": "Off",
+    "autoAdvanceNextInput": "Applies to your next input",
+    "autoAdvanceProgress": "Advancing {{round}} / {{limit}}",
+    "autoAdvanceStop": "Stop advancement",
+    "playAs": "Play as",
+    "rolePlayer": "Player",
+    "roleHost": "Game master",
+    "roleSpectator": "Spectator"
   },
   "blocks": {
     "actionPlaceholder": "Or type your own action...",
@@ -2772,5 +2781,26 @@
     "localRelay": "This address is on your computer or local network, so your browser relays the model requests: keep the page open while you play, and let the model server accept {{origin}} through CORS (for Ollama, set OLLAMA_ORIGINS={{origin}}). Your browser may ask whether this site may access your device or local network.",
     "localHttp": "Browsers do not let this HTTPS page reach a plain-http address on your local network. Serve the model over HTTPS on your network, or forward it on this computer through 127.0.0.1 or localhost.",
     "keyAdvice": "Create a temporary API key just for this trial, ideally with a spending limit. We do our best to protect your data, but please delete or rotate the key at your provider when you finish."
+  },
+  "orchestration": {
+    "clearPolicy": "Clear selection",
+    "title": "Orchestration",
+    "policy": "Turn policy",
+    "automatic": "Automatic selection",
+    "maxActors": "Distinct characters (0–16)",
+    "maxSubagentCalls": "Child calls (0–64)",
+    "selected": "Selected policy",
+    "unique": "One policy available",
+    "missing": "No available policy",
+    "ambiguous": "Choose a policy to resolve ambiguity",
+    "paused": "Paused",
+    "unavailable": "Unavailable",
+    "error": "Could not load or save orchestration settings",
+    "save": "Save",
+    "saving": "Saving…",
+    "saveField": "Save {{field}}",
+    "fieldError": "Could not save this field. Check its value and try again.",
+    "providerSettings": "Settings for {{provider}}",
+    "capScope": "Actor and sub-agent call caps apply per execution. Each additional round gets fresh caps; zero disables that capability."
   }
 }

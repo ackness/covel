@@ -1,5 +1,5 @@
 ---
-version: 0.0.41
+version: 0.0.42
 displayName: Affinity
 description: >-
   Tracks numeric player-to-NPC affinity, with scores, tiers, and recent changes
@@ -19,7 +19,7 @@ contributes:
     affinity:
       schema: ./schemas/affinity.schema.json
       key: id
-      ops: [set, merge, inc]
+      ops: [set, merge, inc, delete]
   data:
     affinity:
       schema: ./schemas/affinity.schema.json

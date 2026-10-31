@@ -168,7 +168,7 @@ This lets stage animations react while the narrative is still being generated, a
 | `runtime.deferred`      | S→C  | A staged runtime was committed with the original turn and moved to the background                                              | `{ runtimeId, pluginId, jobId, sourceTurnId }`                                                                          |
 | `runtime.completed`     | S→C  | One runtime completes                                                                                                          | `{ runtimeId, pluginId, turnId, runId, status, durationMs, stopReason? }`                                               |
 | `runtime.failed`        | S→C  | One runtime fails                                                                                                              | `{ runtimeId, pluginId, turnId, runId, status, durationMs, error, errorKind?, failureTarget?, stopReason? }`            |
-| `execution.completed`   | S→C  | The final state of a turn execution                                                                                            | `{ runtimeCount, resultCount, durationMs, committed, error?, abortReason?, resync? }`, each field explained below       |
+| `execution.completed`   | S→C  | The terminal state of the action request                                                                                       | `{ runtimeCount, resultCount, durationMs, committed, error?, abortReason?, resync? }`, each field explained below       |
 
 `runtime.started.resumed` appears only on a run resumed from a suspended state, and its value is `true`. Each run of one logical runtime has its own `runtime.started` and terminal event; the run that suspends ends with `status: "suspended"`.
 
@@ -176,15 +176,15 @@ This lets stage animations react while the narrative is still being generated, a
 
 Fields of `execution.completed`:
 
-| Field         | Meaning                                                                                                                                                                                                                                                                         |
-| ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `committed`   | `true`: the proposals, the execution journal, and the session clock are all saved. `false`: nothing was saved, and the client removes the streamed content that was shown early for this turn                                                                                   |
-| `error`       | Present when `committed: false`. It holds the proposal error or a general transaction error                                                                                                                                                                                     |
-| `abortReason` | Appears only when the turn was stopped. When the player stops it, the value is `"aborted-by-player"`                                                                                                                                                                            |
-| `resync`      | `true` only when `committed: true` and some events from this turn were not sent after the commit. The data is saved, so the client should read the saved state and not wait for those events. The subscription stream also gets `system.reset`, with `reason: "publish-failed"` |
+| Field         | Meaning                                                                                                                                                                                                                                                           |
+| ------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `committed`   | Describes the final actual execution: `true` means its proposals, journal and clock are saved; `false` removes only its uncommitted streamed content. Earlier committed rounds remain saved                                                                       |
+| `error`       | Present when `committed: false`. It holds the proposal error or a general transaction error                                                                                                                                                                       |
+| `abortReason` | Appears only when the turn was stopped. When the player stops it, the value is `"aborted-by-player"`                                                                                                                                                              |
+| `resync`      | `true` when events from any committed round in this request could not be published. The data is saved, so the client should read the saved state and not wait for those events. The subscription stream also gets `system.reset`, with `reason: "publish-failed"` |
 
 > [!NOTE]
-> **Opening handoff.** When a player action completes the last setup runtime, the same SSE stream of `POST /api/actions` automatically goes on to run one main-loop turn (see [api.md § POST /api/actions](./api.md)). In this case the stream shows **two** rounds of `execution.started` and runtime lifecycle events, and their outer `turnId` values differ (the setup turn and the handoff turn). But only **one** `execution.completed` closes the stream. The frontend uses it to end the "running" state, and it handles the early content according to `committed`. If the setup commit fails, no handoff starts, and the stream ends directly with `committed: false`. If the player stops before the handoff starts, it does not start, and `execution.completed` carries the handoff turn's `turnId` and `abortReason: "aborted-by-player"`.
+> **Opening handoff.** When a player action completes the last setup runtime, the same SSE stream of `POST /api/actions` automatically goes on to run one main-loop turn (see [api.md § POST /api/actions](./api.md)). In this case the stream shows at least **two** rounds of `execution.started` and runtime lifecycle events, and their outer `turnId` values differ (the setup turn and the handoff turn). But only **one** `execution.completed` closes the stream. The frontend uses it to end the "running" state, and it handles the early content according to `committed`. If the setup commit fails, no handoff starts, and the stream ends directly with `committed: false`. If the player stops before the handoff starts, it does not start, and `execution.completed` carries the handoff turn's `turnId` and `abortReason: "aborted-by-player"`.
 
 `runtime.failed.errorKind` is an optional model failure category; see [failure categories](./slots.md#connection-tests-and-failure-reasons). `missing_key` means a built-in remote provider was missing its key before a request was sent. The turn's failure notice uses the same remedies as the connection test and keeps the provider's message in expandable details. An unclassified exception uses `unknown`; failures without a model exception may omit the field. `io.concealed` still replaces error details with fixed text, but keeps the category because it contains no hidden content.
 
@@ -1010,6 +1010,8 @@ The optional `notice` field of a form interaction is shown above the fields.
 
 ### Plugin RPC
 
+Action and plugin-command scoped-store writes reuse the [dataset rules](./plugins.md#datasets-contributesdatasets): each record is checked before persistence, refused records stay unchanged, and earlier successful calls remain persisted. Uncaught refusals retain the existing `handler-threw` and production-safe `500` response. There are no new event or status shapes, player turns or story-attached operation notices. Existing fixed notices for isolated operation failures and concealed-error rules remain unchanged.
+
 This is the single channel for sending "structured instructions" to a plugin. It carries three kinds of calls: action-level, runtime-level, and command-level.
 
 - Action-level and command-level calls return one JSON answer.
@@ -1481,3 +1483,32 @@ How snapshots are saved:
 ## Plugin view read-only port
 
 Plugin views reuse the sandbox MessagePort. Full `{ type: "state", value }` messages carry the projection in `value.session`; streaming messages are `{ type: "stream", seq, append }`. This adds no HTTP or SSE endpoint. Reading requires player consent before mounting, bound to the plugin ID and the content hash of the spec plus HTML. Revocation closes the page. Existing page action handlers are unchanged. See [Plugin views](./ui-panels.md#plugin-views) for projection, throttling and consent rules.
+
+<a id="auto-advance-events"></a>
+
+### Advancement events
+
+When the web client submits new input, it stops the old request and waits for the browser checkpoint before sending the accepted input. A further submission during that wait shows a session-busy notice and preserves the new text, fields and queued selections. The composer must retain its draft when the submission call reports that it was not accepted.
+
+| Event                       | Payload                                                                                                                                                                         | Client handling                                                                        |
+| --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
+| `execution.round.completed` | `requestId`, `rootId`, `turnId`, `round`, `limit`, plus completion fields `runtimeCount`, `resultCount`, `durationMs`, `committed`, `error?`, `abortReason?`, `resyncRequired?` | Settle only the named execution's messages, steps and deltas; keep the request running |
+| `execution.advance`         | `requestId`, `rootId`, `phase: waiting \| running \| stopped`, `round`, `limit`, `turnId?`; also `reason` when stopped                                                          | Show or clear progress; generate no story text                                         |
+
+The root, setup and opening each emit their own round completion. Automatic rounds start at `round: 1`. Ordering is: root started → round completed → advance waiting → next round started → advance running → runtime/story events → round completed; repeat as permitted, then advance stopped → one request-terminal `execution.completed`. The opening handoff retains its existing stopped-before-start marker. Infrastructure failures retain `error.occurred`; started requests still terminate. Rejections before execution create no round event.
+
+Stop reasons form a finite enum: `yielded-to-player`, `no-eligible-story`, `ambiguous-story`, `limit`, `disabled`, `player-stop`, `new-input`, `pending-input`, `session-unavailable`, `execution-failed`, `prerequisite-unavailable`. Reasons contain no model content. Reaching the cap or yielding to the player is a normal end. A later failure discards only that round's uncommitted content; terminal `resync: true` aggregates post-commit publication failures from any round.
+
+Recovery's optional `advance` uses the same payload; `unknown` does not establish completion. Clients handle events under request ownership and ignore old request cleanup and regressive progress. New events contain no prompts, tool arguments, operation summaries or concealed content. Foreground rounds share one fault identity: faults count immediately once, while clean verdicts reset only when the group closes; a newer background verdict survives old group cleanup. Setup is excluded and background jobs retain separate accounting.
+
+## Private delegation projections
+
+Actor `intent` stays in the orchestrator's live in-memory conversation. The kernel records provenance from the resolved provider and tool-call ID, projecting child model traces, parent delegate arguments/results, persisted tool records and transcript copies in later parent `llm.calling` events. `/turns`, action streams and trace APIs read projected values. Concealed providers' complete delegated content receives the same protection. The live model transcript retains paired tool calls and results. When a completing tool becomes output directly, an ordinary actor supplies only public segments; a concealed delegate supplies no content. Arbitrary business JSON keys named `intent` do not determine provenance.
+
+Once an execution records private delegation, public request copies also omit each message's native continuation state (`providerContinuation`) and reasoning (`reasoningContent`), which can repeat arguments or private results. When the context budget condenses tool steps into a digest, the kernel retains each line's call provenance and replaces only private-call lines with a fixed marker in public copies. Native continuations, reasoning and condensed digests sent to the model remain unchanged.
+
+Actor failures and cap refusals use `subagent.failed`, without a new actor event family or `runtime.failed`/execution errors for isolated failures. The story may commit. Rejected independent operations still produce only the existing fixed `operation.failed` notice. Deliberately rewriting private data into story prose is outside this structured projection guarantee.
+
+## Creation role and existing actions
+
+Optional seatRole selects only the new human seat; see [creation API](./api.md#creation-role) for validation/defaults. Hosts can direct/narrate/advance; spectators can only advance. The server still assigns action source and uses the existing round settlement, advancement and single request-terminal events. This choice adds no event or scheduler.

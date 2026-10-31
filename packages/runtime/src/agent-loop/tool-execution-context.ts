@@ -1,3 +1,5 @@
+import { snapshotWorldModelView } from "../function-runtime/world-model-view.js";
+import { CharacterHistoryReader } from "../orchestration/character-history.js";
 import type { DataStore } from "@covel/store";
 import type { ToolExecutionContext } from "@covel/tools";
 import type { FunctionStoreView } from "@covel/shared/plugin-runtime";
@@ -79,11 +81,15 @@ export function createToolExecutionContext(
       ) => read(() => reads.readTurnMessages(options)),
     });
   }
+  const worldSnapshot = caller.world
+    ? snapshotWorldModelView(caller.world, assertLive)
+    : undefined;
   let services: ToolExecutionContext["services"];
   if (caller.services) {
     // The tool's plugin and runtime are the caller, with the same read scope
     // and recorder as the tool's own store reads.
     const client = caller.services.createClient({
+      delegation: caller.delegation,
       onSettled: caller.services.executionObserver(),
       ...(caller.emitter ? { emitter: caller.emitter } : {}),
       ...identity,
@@ -94,7 +100,7 @@ export function createToolExecutionContext(
         combineAbortSignals(signal, invocation.signal) ?? invocation.signal,
       reads: {
         ...(caller.locale !== undefined ? { locale: caller.locale } : {}),
-        ...(caller.world ? { world: caller.world } : {}),
+        ...(worldSnapshot ? { world: worldSnapshot } : {}),
         ...(store ? { store } : {}),
         ...(caller.pluginDataVisibility
           ? { visibility: caller.pluginDataVisibility }
@@ -110,7 +116,13 @@ export function createToolExecutionContext(
       ) => read(() => client.call(request, options)),
     });
   }
+  const history =
+    caller.delegation?.history ??
+    new CharacterHistoryReader(store, caller.sessionId);
   const context: ToolExecutionContext = Object.freeze({
+    historyFor: (characterId: string, options?: { readonly limit?: number }) =>
+      read(() => history.read(characterId, caller.world, options)),
+    playerActions: structuredClone(caller.playerActions),
     ...identity,
     ...(caller.locale !== undefined ? { locale: caller.locale } : {}),
     // Frozen by the host and shared across calls; nothing to copy.
@@ -130,7 +142,9 @@ export function createToolExecutionContext(
       : undefined,
     pendingProposals: structuredClone(pending),
     upstreamProposals: structuredClone(caller.upstreamProposals),
-    world: structuredClone(caller.world),
+    world: worldSnapshot
+      ? snapshotWorldModelView(worldSnapshot, assertLive)
+      : undefined,
     emittedEventTopics: structuredClone(caller.emittedEventTopics),
     ...(caller.turnNumber !== undefined
       ? { turnNumber: caller.turnNumber }

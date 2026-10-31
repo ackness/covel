@@ -736,14 +736,16 @@ JSON Schema 只能检查字段的形状，检查不了“这个结果和骰子�
 
 agent runtime 用它把一件事交给[子 agent](./plugins.md#子-agent)：另一个 agent runtime 在这次执行里拿着简报运行，交回输出。在 `agent.tools.builtin` 里列出 `delegate` 才能调用。
 
-| 参数     | 类型   | 必需 | 描述                                                                             |
-| -------- | ------ | ---- | -------------------------------------------------------------------------------- |
-| target   | object | ✓    | `{ contract }`（契约的提供方，任何包）或 `{ runtimeId }`（本包），只能写其中一个 |
-| brief    | string | ✓    | 任务说明，子 agent 只看到它和 `data`。1 到 20 000 个字符                         |
-| data     | object | —    | 子 agent 需要的事实，JSON 对象，最多 32 KB                                       |
-| maxSteps | number | —    | 子 agent 的步数上限，只能比提供方自己的更低                                      |
+| 参数        | 类型   | 必需 | 描述                                                                             |
+| ----------- | ------ | ---- | -------------------------------------------------------------------------------- |
+| target      | object | ✓    | `{ contract }`（契约的提供方，任何包）或 `{ runtimeId }`（本包），只能写其中一个 |
+| brief       | string | ✓    | 任务简报，1 到 20 000 个字符；角色 agent 还会获得自己的资料与在场历史            |
+| data        | object | —    | 普通子 agent 的事实，JSON 对象，最多 32 KB；角色 agent 不接受                    |
+| character   | string | —    | 角色名字或别名，最多 80 字符；角色 agent 必需                                    |
+| instruction | string | —    | 角色指示，最多 2,000 字符；仅角色目标接受                                        |
+| maxSteps    | number | —    | 子 agent 的步数上限，只能比提供方自己的更低                                      |
 
-**输出**：成功时，模型收到 `{data: output}`；本次委托暂存了操作时还带 `staged: {count, kinds, notice}`，只统计这次委托的操作，说明仍需等回合提交、可能被拒绝。其中 output 经过 `modelFacingJson`，不含簿记字段；代码仍读取原始输出；`stopReason` 和用量只记在 `subagent.completed` 里。`delegate` 列在 `completeAfterTools` 里时，这份输出直接作为调用方的输出接受校验。失败时收到 `{error:{code,message,hint?}}`，`code` 是 `ctx.agents.run` 的错误码之一。除 `invalid-input` 外的失败不算这个 runtime 的工具失败，模型可以换个办法继续。
+**输出**：成功时，模型收到 `{data: output}`；本次委托暂存了操作时还带 `staged: {count, kinds, notice}`，只统计这次委托的操作，说明仍需等回合提交、可能被拒绝。其中 output 经过 `modelFacingJson`，不含簿记字段；代码仍读取原始输出；`stopReason` 和用量只记在 `subagent.completed` 里。`delegate` 列在 `completeAfterTools` 里时，输出先经过私密投影，再作为调用方的输出接受校验：角色 agent 只传 segments，concealed 提供方不传内容。失败时收到 `{error:{code,message,hint?}}`，`code` 是 `ctx.agents.run` 的错误码之一。除 `invalid-input` 外的失败不算这个 runtime 的工具失败，模型可以换个办法继续。
 
 **注意事项**：
 
@@ -910,6 +912,8 @@ Character "苏婉" (npc) already exists as char-abc123. No new record created. U
 #### 读到的是哪一份数据
 
 默认值填充和角色写入校验都读会话的 World Model。这份视图按执行顺序合并三样东西：已提交的记录、成功的上游 runtime 的领域 proposal、本 runtime 待提交的 proposal。无效的 schema 或角色写入不会进入这份视图。角色记录不镜像到插件私有数据。
+
+运行时角色工具通过带读取记录的 `context.world` 访问角色和 schema；插件工具、函数 `ctx.tools.call` 和服务导入也保留同一调用的记录器。宿主为隔离工具而复制快照不算读取；工具实际访问属性才记录，详见 [World Model](./world-model.md)。公共维度工具仍读冻结快照，不产生这类依赖。读后挂起的辅助运行会在源提交检查依赖，见[事务](./transactions.md)。
 
 读取时按 proposal 的顺序应用更新，用的是和提交相同的 `materializeCharacterUpsert`：
 
@@ -1207,6 +1211,8 @@ text.normalize("NFKC").trim().replace(/\s+/gu, " ").toLowerCase();
 - 函数 runtime 和 agent guard 的 `ctx.pluginData`
 - RPC handler 的 store view。所有插件的 RPC action（包括内置插件的）都通过 `createRpcHandlerStoreView()` 得到一个绑定了会话和插件的即时写入能力
 
+RPC scoped store 的 `setPluginData` 也使用[数据集规则](./plugins.md#数据集contributesdatasets)，按绑定的所属插件和实际命名空间检查 `set` 与记录 schema。拒绝不改变该记录；先前成功的调用仍然保留。管理 REST 写入仍是运维覆盖。
+
 两类插件句柄都不暴露宿主的事务、会话生命周期或关闭存储的方法。框架自己的特权写入者（后台任务运行器、runtime 日志）直接调用 store，不走这些入口。
 
 <a id="单个值的大小上限"></a>
@@ -1230,6 +1236,8 @@ text.normalize("NFKC").trim().replace(/\s+/gu, " ").toLowerCase();
 | `ctx.pluginData.set` / `ctx.pluginData.update`、RPC handler 的 store view | 写入失败                                                                      |
 | REST `PUT /api/sessions/:id/plugin-data/...`                              | 返回 `413`                                                                    |
 | 世界包导入                                                                | 该记录得到一条 error 诊断，导入失败、不截断。`pnpm validate:world` 同样报告。 |
+
+世界导入和同步还在媒体物化、选择要写的记录之后，再按实际存储的最终 JSON 检查同一上限；只读预检不物化媒体。
 
 作为参照，内置世界里最大的一条种子记录约 7 KB。要存更多内容时，拆成多个 key，或只保留之后的回合会读的部分。
 
@@ -1539,7 +1547,7 @@ agent:
 
 - **名字**：默认是去掉版本号、`.` 换成 `-` 的契约名（`inventory.items@1` → `inventory-items`），`as` 另起名字。名字只能有字母、数字、`_` 和 `-`，最长 64；推导出来的名字太长时要写 `as`。名字不能和框架工具、这个 runtime 的 `tools.builtin` / `tools.plugin`、本包的 `contributes.tools` 或另一个导入重名；同一个契约只能导入一次。重名时清单校验报错。
 - **说明和参数**：说明是提供方注册时的 `description`。参数的 JSON Schema 来自提供方的 Zod 输入（不带 `$schema`），或提供方显式给的 `inputSchema`。输入是 Zod 时（显式给了 `inputSchema` 也一样），参数先在工具这一侧校验，错误照常写明字段，写成 JSON 文本的数组或对象会被修复；提供方收到的是模型发来的参数（或修复后的参数），由它自己解析一次后交给处理函数，所以 `transform` 只作用一次。输入不是 Zod 时，参数只由提供方校验。
-- **注解**：读服务是 `{ readOnly: true, stagesWrites: false, idempotent: true, concurrencySafe: true }`，可以和其他只读工具一起并发。写服务见[写服务的导入](#写服务的导入)。子 agent 保留导入，写服务的导入也保留。
+- **注解**：除下文角色策略契约的特殊注解外，读服务是 `{ readOnly: true, stagesWrites: false, idempotent: true, concurrencySafe: true }`，可以和其他只读工具一起并发。写服务见[写服务的导入](#写服务的导入)。子 agent 保留导入，写服务的导入也保留。
 - **结果**：和其他工具一样回给模型 `{ "data": … }`，ID、UUID 和时间戳由 `modelFacingJson` 去掉。审批、`PreToolUse` / `PostToolUse`、`tool_calls` 记录和 `tool.*` trace 都照常；审批来源按 `local` 算。
 - **时限**：一次调用最多等提供方 15 秒，超时回答 `timeout`。
 - **延迟加载**：`tools.defer: true`，或在 `defer` 列表里写导入的名字，导入就和其他工具一样延迟，用 `search-tools` 找到。
@@ -2058,3 +2066,15 @@ payload 是 `{entries:[{id,keys,content,strategy,position?,insertionOrder?,enabl
 - 世界导入写 world 属主，玩家管理 API 写 player 属主。
 - 相同的 id 在不同属主下是各自独立的词条。
 - 更新自己的词条时保留 `createdAt`。
+
+### 角色委托与策略导入
+
+`delegate` 还有两个可选参数：`character`（最多 80 字符的角色名字/别名）与 `instruction`（最多 2,000 字符）。找到 `character-actor@1` 提供方后 character 必需，宿主私下解析 ID；原始 UUID 或语义 ID 不能当名字使用。这个契约拒绝 `data`，其他契约拒绝角色专用参数。同包 runtimeId 也不能绕过这些规则。
+
+角色提供方的输出为不带 speaker 的 dialogue/action segments 和可选 intent；父方组合故事时填写 speaker。模型仍可读取 intent，但持久工具记录、trace 与玩家投影不会保留私密委托内容。若 delegate 直接完成 runtime，普通角色只传递 segments，concealed 结果不传递内容。每次委托的暂存通知、写服务权限与串行屏障不变。累计名额见[角色委托](./plugins.md#character-orchestration)。
+
+`turn-policy@1` 导入覆盖普通服务的参数、结果及重复/并发注解：模型输入 `{present: string[], recentSegments}`，输出 `actors[].character` 名字，宿主添加当前行动与限制。它是只读工具，但 `idempotent: false`、`concurrencySafe: false`。选择、不可用与名字解析见[编排契约](./plugin-extensions.md#orchestration-contracts)。插件工具也可用会话绑定的 `context.historyFor(characterId, {limit?})` 读取[亲历故事](./world-model.md#witnessed-history)。
+
+## 故事内的演员委托
+
+故事 agent 可调用 `delegate`，传 `target: {contract: "character-actor@1"}`、`character: "Mara"`、简短的 `brief` 和可选 `instruction`；不传 characterId 或 data。名字解析、档案与亲历历史由框架负责。内置对话叙事按计划顺序逐个调用，只组合成功的公开段落，丢弃 intent；失败演员的暂存操作不提交。操作在最终提交被拒时，按现有规则只损失该操作并显示固定通知。

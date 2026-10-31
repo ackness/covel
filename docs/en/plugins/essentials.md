@@ -366,3 +366,7 @@ An auxiliary plugin that repeatedly fails in one session because of its own exce
 - Share with others: [verify and distribute](../ship/index.md)
 
 Use the current declared input and data shapes. A projected narrative input is a string, dice receipts carry a `checks` array, and `pluginData.get()` returns the stored value directly. See the [plugin contract](../reference/plugins.md#contract-version-policy) for version changes; do not add wrappers or fallbacks to retain development data.
+
+### Letting the story continue
+
+A top-level story implementing `narrative-engine@2` can return `yield: continue`. The host decides whether to run another round after committing the story; ordinary post-turn work runs each round too. Functions use `ctx.playerActions` and the input digest to distinguish system advancement from player input, with the logical turn unchanged. A sub-agent's yield does not control the host. See [stories requesting advancement](../reference/plugins.md#stories-requesting-advancement) for the full rules and optional imports.

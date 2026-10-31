@@ -15,6 +15,8 @@ export interface PluginFaultState {
 }
 interface Entry {
   state: PluginFaultState;
+  revision: number;
+  owner: number;
   readonly faultKeys: Set<string>;
   hookClean?: { readonly logicalKey: string; readonly previousFaults: number };
 }
@@ -26,6 +28,17 @@ export function createPluginFaultLatch({
   if (!Number.isInteger(threshold) || threshold < 1)
     throw new RangeError("Invalid plugin fault threshold");
   const sessions = new Map<string, Map<string, Entry>>();
+  let ownership = 0;
+  const groups = new Map<
+    string,
+    Map<
+      string,
+      {
+        owner: number;
+        candidates: Map<string, { entry: Entry; revision: number }>;
+      }
+    >
+  >();
   const entry = (sessionId: string, pluginId: string): Entry => {
     let session = sessions.get(sessionId);
     if (!session) sessions.set(sessionId, (session = new Map()));
@@ -35,6 +48,8 @@ export function createPluginFaultLatch({
         pluginId,
         (value = {
           state: { pluginId, consecutiveFaults: 0, latched: false },
+          revision: 0,
+          owner: 0,
           faultKeys: new Set(),
         }),
       );
@@ -50,6 +65,11 @@ export function createPluginFaultLatch({
     const value = entry(sessionId, pluginId);
     if (value.state.latched || value.faultKeys.has(logicalKey)) return [];
     value.faultKeys.add(logicalKey);
+    value.owner = Math.max(
+      value.owner,
+      groups.get(sessionId)?.get(logicalKey)?.owner ?? ++ownership,
+    );
+    value.revision += 1;
     // An earlier successful hook in this same input cannot hide a later
     // failing handler. Restore the streak it provisionally cleared.
     const consecutiveFaults =
@@ -77,7 +97,21 @@ export function createPluginFaultLatch({
     pluginId: string,
     logicalKey?: string,
   ): FaultTransition[] => {
-    const value = sessions.get(sessionId)?.get(pluginId);
+    const value = entry(sessionId, pluginId);
+    const group =
+      logicalKey === undefined
+        ? undefined
+        : groups.get(sessionId)?.get(logicalKey);
+    if (group && value.owner > group.owner) return [];
+    value.owner = group?.owner ?? ++ownership;
+    value.revision += 1;
+    if (group) {
+      group.candidates.set(pluginId, {
+        entry: value,
+        revision: value.revision,
+      });
+      return [];
+    }
     if (
       !value ||
       value.state.latched ||
@@ -94,6 +128,33 @@ export function createPluginFaultLatch({
     ];
   };
   return {
+    /** Delay clean verdicts until every foreground execution has settled. */
+    beginGroup(sessionId: string, logicalKey: string): () => FaultTransition[] {
+      let session = groups.get(sessionId);
+      if (!session) groups.set(sessionId, (session = new Map()));
+      if (session.has(logicalKey)) throw new Error("Fault group already open");
+      const group = {
+        owner: ++ownership,
+        candidates: new Map<string, { entry: Entry; revision: number }>(),
+      };
+      session.set(logicalKey, group);
+      return () => {
+        if (groups.get(sessionId)?.get(logicalKey) !== group) return [];
+        session.delete(logicalKey);
+        if (session.size === 0) groups.delete(sessionId);
+        const transitions: FaultTransition[] = [];
+        for (const [pluginId, candidate] of group.candidates) {
+          // A newer input/background verdict or explicit reset owns the state.
+          const current = sessions.get(sessionId)?.get(pluginId);
+          if (
+            current === candidate.entry &&
+            current.revision === candidate.revision
+          )
+            transitions.push(...clean(sessionId, pluginId, logicalKey));
+        }
+        return transitions;
+      };
+    },
     recordExecution(input: {
       readonly sessionId: string;
       readonly logicalKey: string;
@@ -172,6 +233,7 @@ export function createPluginFaultLatch({
     },
     forgetSession(sessionId: string): void {
       sessions.delete(sessionId);
+      groups.delete(sessionId);
     },
   };
 }

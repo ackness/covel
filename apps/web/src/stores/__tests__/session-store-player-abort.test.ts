@@ -124,7 +124,7 @@ describe("sse-handler execution.completed abort terminal state", () => {
       error: "budget-cap-exceeded",
     });
     const types = dispatch.mock.calls.map(([a]) => a.type);
-    expect(types).not.toContain("DISCARD_TURN_STREAMS");
+    expect(types).toContain("DISCARD_TURN_STREAMS");
   });
 
   it("commit failure discards uncommitted streams and surfaces the terminal error", () => {
@@ -158,6 +158,7 @@ describe("sse-handler execution.completed abort terminal state", () => {
     expect(dispatch).toHaveBeenCalledWith({
       type: "SET_EXECUTION_ERROR",
       error: "injected commit veto",
+      turnId: "turn-1",
     });
     expect(dispatch).toHaveBeenCalledWith({
       type: "SET_EXECUTING",

@@ -271,7 +271,7 @@ describe("inventory dataset schema", () => {
       namespace: "items",
       schema: "./schemas/items.schema.json",
       key: "id",
-      ops: ["set", "merge", "inc"],
+      ops: ["set", "merge", "inc", "delete"],
       tools: ["get", "list", "upsert", "update"],
     });
     expect(loaded.datasetSchemas.items).toEqual(schema);
@@ -312,7 +312,7 @@ describe("inventory dataset commits through the real ledger", () => {
     const { store, ledger, recorded, run, commit } = await fixture();
     expect(ledger.manifest.datasets.items).toMatchObject({
       key: "id",
-      ops: ["set", "merge", "inc"],
+      ops: ["set", "merge", "inc", "delete"],
     });
     expect(ledger.datasetSchemas.items).toEqual(schema);
     const execution = await run();

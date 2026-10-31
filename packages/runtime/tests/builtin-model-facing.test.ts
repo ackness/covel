@@ -154,6 +154,7 @@ describe("builtin model-facing results", () => {
     // sub-agent here returns a stored value with its bookkeeping.
     const runner: SubagentRunner = {
       inFlight: 0,
+      privateTargetKind: () => undefined,
       run: async () => ({ ok: true, output: value, stopReason: "completed" }),
     };
     const input: TurnInput = {

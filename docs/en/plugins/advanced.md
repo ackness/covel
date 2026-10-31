@@ -557,3 +557,188 @@ Every advanced field is in [Plugin reference · Advanced fields](../reference/pl
 - [Package and try install](../ship/package.md), [Publish and update](../ship/publish.md)
 - Publish a plugin together with a world: [Collections](../ship/collections.md)
 - All fields: [Plugin fields reference](../reference/plugins.md)
+
+<a id="orchestration-example"></a>
+
+## Compose one story from optional actors
+
+This community package combines two optional policies and a reusable character agent using only the public SDK. Create `~/.covel/plugins/conversation/`. Root `PLUGIN.md`:
+
+Two registrations require two matching service declarations, even when they share a contract.
+
+<!-- orchestration-package -->
+
+```yaml
+---
+version: 0.1.0
+description: Compose a conversation with optional character contributions.
+contributes:
+  services:
+    - { contract: turn-policy@1, modelFacing: true }
+    - { contract: turn-policy@1, modelFacing: true }
+---
+```
+
+`server/index.js`:
+
+<!-- orchestration-entry -->
+
+```js
+import {
+  TURN_POLICY_CONTRACT,
+  turnPolicyInputSchema,
+  turnPolicyOutputSchema,
+} from "@covel/plugin-handlers-utils";
+
+export default function register(covel) {
+  for (const name of ["ensemble", "draw"]) {
+    covel.registerService({
+      name,
+      contract: TURN_POLICY_CONTRACT,
+      modelFacing: true,
+      description:
+        name === "ensemble"
+          ? "Invite everyone present"
+          : "Invite one character",
+      input: turnPolicyInputSchema,
+      output: turnPolicyOutputSchema,
+      handler: (input, ctx) => ({
+        actors: (name === "ensemble"
+          ? input.present
+          : input.present.length
+            ? [input.present[ctx.random.int(0, input.present.length)]]
+            : []
+        ).map(({ characterId }) => ({ characterId })),
+        order: "parallel",
+        narrator: "after",
+        yieldHint: "user",
+      }),
+    });
+  }
+}
+```
+
+`runtimes/actor/RUNTIME.md`:
+
+<!-- orchestration-actor -->
+
+```yaml
+---
+schedule:
+  subagentOnly: true
+io:
+  output:
+    contract: character-actor@1
+---
+Play only the supplied character. Return dialogue/action segments and optional private intent.
+```
+
+`runtimes/story/RUNTIME.md`:
+
+<!-- orchestration-story -->
+
+```yaml
+---
+schedule:
+  stage: narrative
+io:
+  visibility: story
+  output:
+    contract: narrative-engine@2
+function: {}
+---
+```
+
+`runtimes/story/handler.js`:
+
+<!-- orchestration-handler -->
+
+```js
+import {
+  TURN_POLICY_CONTRACT,
+  CHARACTER_ACTOR_CONTRACT,
+  turnPolicyOutputSchema,
+  characterActorOutputSchema,
+} from "@covel/plugin-handlers-utils";
+
+export default async function compose(ctx) {
+  const present = ctx.world.characters.map(({ id, name }) => ({
+    characterId: id,
+    name,
+  }));
+  const fallback = {
+    kind: "narration",
+    text: "The conversation continues in the quiet room.",
+  };
+  let plan;
+  try {
+    plan = turnPolicyOutputSchema.parse(
+      await ctx.services.call({
+        contract: TURN_POLICY_CONTRACT,
+        input: { actions: ctx.playerActions, present, recentSegments: [] },
+      }),
+    );
+  } catch {
+    ctx.signal.throwIfAborted();
+    return { outcome: "success", value: { segments: [fallback] } };
+  }
+  const run = async (actor) => {
+    const reply = await ctx.agents.run({
+      target: { contract: CHARACTER_ACTOR_CONTRACT },
+      characterId: actor.characterId,
+      brief: "Respond to the conversation in the room.",
+      instruction: actor.instruction,
+    });
+    ctx.signal.throwIfAborted();
+    if (!reply.ok) return [];
+    const answer = characterActorOutputSchema.parse(reply.output);
+    const speaker = present.find(
+      (person) => person.characterId === actor.characterId,
+    ).name;
+    return answer.segments.map((segment) => ({ ...segment, speaker }));
+  };
+  const replies = [];
+  if (plan.order === "parallel")
+    replies.push(...(await Promise.all(plan.actors.map(run))));
+  else for (const actor of plan.actors) replies.push(await run(actor));
+  const segments = replies.flat();
+  if (plan.narrator === "before") segments.unshift(fallback);
+  if (plan.narrator === "after" || segments.length === 0)
+    segments.push(fallback);
+  return { outcome: "success", value: { segments, yield: "user" } };
+}
+```
+
+Alternatively replace the story RUNTIME.md with this agent version; do not install two story runtimes together. Delegate remains sequential:
+
+<!-- orchestration-agent -->
+
+```yaml
+---
+schedule:
+  stage: narrative
+io:
+  visibility: story
+  output:
+    contract: narrative-engine@2
+agent:
+  tools:
+    builtin: [delegate]
+    services:
+      - { contract: turn-policy@1, as: choose-speakers }
+---
+Call choose-speakers with present character names and recent story segments.
+Delegate each planned reply with target contract character-actor@1 and character name.
+Combine successful segments in policy order, supply speaker names, and add narration.
+Keep intent private. If a policy or actor is unavailable, continue with a valid narrator fallback.
+```
+
+Choose a policy in the session's “Orchestration” controls. `Promise.all` preserves plan order even when actors finish in another order. Missing policy means narration; missing or failed actors contribute no reply, and total actor failure still returns a nonempty story. `yieldHint` is advice; this example always yields to the player. Both entry paths share limits and cancellation, and intent is never copied into the final story.
+
+Use the commands in [plugin testing](./testing.md). Framework regressions extract these declarations and code from this page and load them. See the authoritative [contracts, bounds and model name adapter](../reference/plugin-extensions.md#orchestration-contracts). A director can check `ctx.gateway` and throw `ToolError("unavailable", ...)` when it is absent; do not lend extra model credentials to tool paths.
+
+## Adopting the bundled composition
+
+Dialogue uses the public contracts above with a read-only policy call in a pre-turn function and delegate retained inside the sole story agent's tool loop. The function reads current characters/seats through ctx.world and projects names to an optional same-package input. Director borrows a gateway only through a function caller; a model import cannot bypass code-only visibility. Either provider can be absent or replaced by a community package. See [ensemble behaviour](../builtin/story.md#ensemble-dialogue-and-character-actors).
+
+Historical segments inform policy selection without automatically entering the shared actor brief; the runner supplies witnessed history per character. The planner reads the structured cast from `scene-cast@1`, while the story agent receives its optional `activeCastContext` input.

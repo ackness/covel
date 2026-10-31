@@ -178,14 +178,14 @@ Condition: `status === 'active' && phase === 'playing'`. Each `POST /api/actions
 
 `completedPlayerTurns` counts only committed player turns. Each execution has its own row in `turn_results`. Its `origin` is one of the following:
 
-| `origin`       | What it is                                    | Counted as a turn |
-| -------------- | --------------------------------------------- | ----------------- |
-| `player`       | A turn started by a player message            | Yes               |
-| `continuation` | The opening follow-up after setup is complete | No                |
-| `manual`       | A runtime run by name through a plugin RPC    | No                |
-| `background`   | Background execution                          | No                |
-| `recursive`    | A nested `recursiveCall`                      | No                |
-| `resume`       | Recovery after a suspension                   | No                |
+| `origin`       | What it is                                                         | Counted as a turn |
+| -------------- | ------------------------------------------------------------------ | ----------------- |
+| `player`       | A turn started by a player message                                 | Yes               |
+| `continuation` | The opening after setup, or automatic advancement within one input | No                |
+| `manual`       | A runtime run by name through a plugin RPC                         | No                |
+| `background`   | Background execution                                               | No                |
+| `recursive`    | A nested `recursiveCall`                                           | No                |
+| `resume`       | Recovery after a suspension                                        | No                |
 
 When several executions share one logical turn, it is counted only once.
 
@@ -217,6 +217,8 @@ Details to remember:
 - The automatic snapshot is taken after all proposals are committed. This makes sure the conversation position, characters, state, and plugin data all belong to the same committed turn.
 - `execution.completed.committed` is the final signal to the client. The frontend uses it to confirm or take back what it showed first.
 - Event publishing after a commit runs one event at a time, and one failure does not roll back data that was already written. On failure, the host records a `commit.fanout.failed` trace. The session's subscribed stream receives `system.reset` (`reason: "publish-failed"`) and reads everything again. The `execution.completed` event carries `resync: true`.
+
+Successful results, guards skipped after writes, and actual suspensions carry read dependencies under a private kernel symbol. Execution collects them before cloning the commit plan; public results and continuations store no graph. Commit also checks continuation-owning units with no domain proposals, discarding auxiliary continuations that depend on dropped producers through existing job and clock settlement. Resume reads current committed world data and its own saved buffer; its source producers have settled, so the resume plan has no historical producer IDs.
 
 #### Sending events to the client does not hold up the turn
 
@@ -671,6 +673,8 @@ io:
 
 **When the data a runtime reads was taken.**
 
+Each invocation takes its visible world proposals between DAG levels, copying them in recursive child-before-parent commit order and rebinding identity. Only committable results contribute; malformed effects and entire retry/detached seed subtrees are excluded. Character/schema reads add the real producer run IDs to the shared invocation recorder. Host construction, materialization and isolation copies are inert; actual tool and service property reads record observations. Extension providers keep their frozen views. See [World Model](../reference/world-model.md).
+
 - The domain read view has three parts: the committed CharacterSchema and Characters, the validated upstream proposals, and the writes this runtime is about to commit. So if a tool writes something and reads it right after, it gets what was just written.
 - Plugin data works the same way: a runtime that reads its own plugin's data reads the committed value, plus the writes that completed upstream runtimes of the same plugin will commit (in commit order), plus its own buffer. The visible writes are taken when the runtime starts, so siblings of one level do not see each other; upstream results brought by a retry or a background job do not count. A runtime that read an upstream write depends on it: when the upstream is dropped at commit, an auxiliary runtime is dropped with it, while a story or setup runtime commits and the trace records it. Rules: [In-execution plugin-data visibility](../reference/plugins.md#in-execution-plugin-data-visibility).
 - The world and plugin-data that extension providers see are frozen when this execution is created. This way the same extension sees the same content in runtimes that run in parallel. Service reads have a different boundary: they can include completed, commit-eligible upstream writes from the provider's plugin. See [Service context](../reference/plugin-extensions.md#what-a-service-can-and-cannot-access).
@@ -730,7 +734,7 @@ A `schedule.subagentOnly` runtime is not in this tree: neither the automatic pat
 Another runtime runs a sub-agent inside its own execution: a function with `ctx.agents.run`, an agent with the `delegate` tool.
 
 - **Same execution**: a sub-agent has no scheduling, execution or commit of its own. It uses the caller's trace, cancellation signal and session snapshot; its trace events carry `parentCallId`, so the debug page can show the call tree.
-- **No commit unit**: it returns output, the stop reason and usage only. It keeps read-only tools only, so it has no proposals or events; any that appear anyway are dropped and recorded as `subagent.writes-dropped`. The caller's commit unit holds the caller's own writes only.
+- **No commit unit**: it returns output, stop reason and usage. Direct write tools and events are unavailable; attempted writes produce `subagent.writes-dropped`. Successful child write-service operations join the caller's commit unit, while failed children discard their own operations.
 - **Caps**: one runner per top-level execution (`executeTurn` / `resumeSuspendedRuntime` create it at entry with frozen active and paused provider sets; `runTurnPipeline` supplies only a fallback; nested executions share it), at most 8 sub-agents at a time, depth 1. A full pool refuses at once and nothing queues, so a caller never waits for its own slot.
 - **Cancellation**: the caller's `executionSignal`, its time limit and the revocation at its end reach the sub-agent, and so does the player's abort.
 - **Loop**: a sub-agent runs the same `runAgentToolLoop` and settle step, with `allowSuspend: false`, the `actor` profile by default and no session history. `PreRuntime` / `PostRuntime` do not fire; the in-loop hooks do.
@@ -1213,3 +1217,25 @@ For why it is designed this way, see [design principles](./design-principles.md)
 The host's shared `recordExecutionFaults` helper attributes faults and publishes latch events. `commitExecution` calls it after player, manual, resumed and background commits. When a resumed runtime fails before commit, the resume route also calls it before returning the error, without committing buffered writes or resolving the suspension. Settled sub-agent outcomes travel in the commit plan’s `subagentRuns` to `recordExecutionFaults` for attribution alongside top-level results; settling a runner does not mutate the latch. The Hook pipeline separately reports handler outcomes against the registering plugin. The in-memory latch counts per session and plugin, deduping one input by `logicalTurnId ?? turnId`. See the [protocol](../reference/protocol.md#plugin-fault-latch) for counting, exemptions and events.
 
 `executeTurn` filters paused plugins' runtimes and Hook admission sets at entry; resume and service admission also check pauses. A running registry snapshot stays unchanged; services capture the same execution's pause set. Restart, session end and deletion clear memory without writing domain data or snapshots.
+
+## Character composition and durable execution allowances
+
+One story runtime can ask a policy, delegate actors and commit one ordinary story. Successful child write-service operations still belong to its commit unit. Policy advice adds no scheduler stage and activates no package.
+
+After the settle barrier, freeze policy binding and execution budget. Function, agent, recursive and direct pipeline entries share a root budget, with atomic admission before provider loading. A presence-bearing display-message tail is lazily captured per execution; suspension freezes that boundary and drains children before saving. Under the session lock, resume captures the live claim at entry and loads the newest budget for the root; settlement must still hold that exact claim. Only changed budget, private-call provenance or history state opens a continuation transaction, conditionally synchronizing unresolved siblings without releasing claims. Failed resumes retain spent calls; an unchanged failed resume writes no continuation, commits no domain writes and leaves the suspension unresolved. Completion and abandonment leave no permanent session counter.
+
+`metadata.orchestration` is forkable session preference state, explicitly captured by the snapshot builder and retained by BrowserVault/checkpoint. Budgets, private-call provenance and history snapshots belong to framework continuations. Forks isolate scopeId while keeping spent counts. See [execution allowances](../reference/plugins.md#character-orchestration).
+
+## Advancement within one input
+
+The root input freezes `logicalTurnId`, `logicalTurn = completedPlayerTurns + 1` and the session's advancement limit. Every round has distinct execution, turn and run identities. Generated rounds use `origin: continuation` and do not count as player turns. Opening advancement keeps logical number 1 and counter 0; the first ordinary player input also uses number 1, with a new input identity.
+
+After commit, the host decides whether to advance from the [committed story](../reference/plugins.md#stories-requesting-advancement). Every round reacquires the settled session lock and rereads session, registry, settings and authorization; previous settle jobs finish first. Request Stop control survives waiting and publication outside the lock, while event forwarding is enabled only during that round's lock ownership. A new input revokes the old request's future eligibility, checked again inside the generated round's lock.
+
+Functions, tools, Hooks, recursive calls, scheduling guards and dimension settlement use the frozen logical number. Inline post-turn work runs each round. Detached jobs retain their own source execution, that round's actions and frozen number even when executed later, and do not join the foreground fault group. Foreground faults count immediately; clean verdicts wait until request closure, with identity and revision checks protecting newer outcomes.
+
+Each round persists its outcome once; the request emits one final completion. Retry/resume is a single execution and historical yield creates no work queue. No automatic loop resumes after stopping or process exit. Control remains local to the current host process. Disconnecting SSE does not cancel accepted work; the cap and explicit Stop bound model usage.
+
+## Bundled dialogue composition
+
+Dialogue uses one read-only pre-turn policy call to prepare an optional name-only plan. The story agent delegates and composes inside its own tool loop. Planning writes no state and owns no actor operations; those settle with the story. Policy order and continuation advice are plugin behaviour, leaving kernel stages, barriers and advancement scheduling unchanged.

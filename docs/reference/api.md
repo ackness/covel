@@ -1313,7 +1313,7 @@ GitHub 插件安装和更新预览始终返回 `capabilities` 与 `trustedSource
 ### 插件数据（Plugin Data）
 
 > [!NOTE]
-> 内置 Web 界面只用这里的 GET 端点读取插件数据（右侧面板、消息区界面、插件数据缓存）。PUT / DELETE 是给管理工具和 API 客户端的写入口。插件 runtime 自己写数据时，推荐用 plugin-data 工具、插件 RPC 或 proposal。
+> 内置 Web 界面只用这里的 GET 端点读取插件数据（右侧面板、消息区界面、插件数据缓存）。PUT / DELETE 是给管理工具和 API 客户端的运维覆盖入口，不检查数据集 schema 或 `ops`；仍需通过会话授权、插件启用、保留命名空间与大小检查。插件 runtime 自己写数据时，推荐用 plugin-data 工具、插件 RPC 或 proposal。
 
 | 方法   | 路径                                                      | 描述                                    |
 | ------ | --------------------------------------------------------- | --------------------------------------- |
@@ -2100,7 +2100,7 @@ SSE。先发一个 `ready` 事件，之后每 15 秒发一行注释保持连接�
 
 预检也检查接收插件声明的[维度引用和候选值](./world-data.md)，错误诊断使用 `dimension-reference`，并带文件和记录位置。正式导入与同步使用同一检查。
 
-只读地预检一次 worldData 导入：告诉你会导入多少条、写到哪里，但什么都不写。
+只读地预检一次 worldData 导入：告诉你会导入多少条、写到哪里，但什么都不写。目的数据集违反 schema 或 `set` 规则时返回带 `sourceId` 和可用记录位置的 error 诊断。媒体占位值只检查 `set` 准入，实际索引记录的 schema 与最终大小在 apply 时检查；预检不物化媒体。
 
 请求有两种写法：
 
@@ -2160,6 +2160,8 @@ SSE。先发一个 `ready` 事件，之后每 15 秒发一行注释保持连接�
 | `sessionId` | string  | 是   | 要同步的会话，必须属于这个世界                                  |
 | `dryRun`    | boolean | 否   | 默认 `true`。`false` 才写入                                     |
 | `force`     | boolean | 否   | 覆盖普通导入 row 的 `modified` / `missing` 冲突。不绕过维度保护 |
+
+真正移除托管记录需要目的数据集的 `delete`；替换只需要 `set`。dry-run 和 apply 都报告拒绝，整次同步不做语义变化；`force` 不能绕过数据集 schema、`ops` 或大小规则。可选投影的无效输出则 warning 并推迟，保留旧记录和账本。
 
 **同步哪些数据:**
 
@@ -2425,13 +2427,15 @@ SSE。先发一个 `ready` 事件，之后每 15 秒发一行注释保持连接�
 }
 ```
 
-| 字段           | 类型     | 必填 | 说明                                                                                   |
-| -------------- | -------- | ---- | -------------------------------------------------------------------------------------- |
-| `worldId`      | string   | 否   | 已存在、且没有在删除中的世界 ID（校验：`/^[a-z0-9_-]{1,64}$/i`）。省略时创建无世界会话 |
-| `locale`       | string   | 否   | 玩家想用的内容语言，默认 `zh-CN`。见下方“内容语言”                                     |
-| `plugins`      | string[] | 否   | 要激活的插件 ID 列表                                                                   |
-| `id`           | string   | 否   | 客户端自定义的会话 ID。不提供时自动生成 `{worldId}-{uuid8}`                            |
-| `loreOverride` | string   | 否   | 本次会话使用的世界背景文本。见下方“世界背景”                                           |
+| 字段               | 类型     | 必填 | 说明                                                                                   |
+| ------------------ | -------- | ---- | -------------------------------------------------------------------------------------- |
+| `worldId`          | string   | 否   | 已存在、且没有在删除中的世界 ID（校验：`/^[a-z0-9_-]{1,64}$/i`）。省略时创建无世界会话 |
+| `locale`           | string   | 否   | 玩家想用的内容语言，默认 `zh-CN`。见下方“内容语言”                                     |
+| `plugins`          | string[] | 否   | 要激活的插件 ID 列表                                                                   |
+| `id`               | string   | 否   | 客户端自定义的会话 ID。不提供时自动生成 `{worldId}-{uuid8}`                            |
+| `loreOverride`     | string   | 否   | 本次会话使用的世界背景文本。见下方“世界背景”                                           |
+| `autoAdvanceLimit` | number   | 否   | 自动推进上限，见[会话推进设置](#auto-advance)                                          |
+| `seatRole`         | string   | 否   | 新会话的游戏身份：`player`（默认）、`host` 或 `spectator`；后两者没有角色绑定          |
 
 **内容语言（`locale`）:**
 
@@ -2619,7 +2623,7 @@ SSE。先发一个 `ready` 事件，之后每 15 秒发一行注释保持连接�
 
 #### `PATCH /api/sessions/:id`
 
-更新会话字段。目前可以改 `status` 与 `runtimeModelOverrides`。
+更新会话字段。可以改 `status`、`runtimeModelOverrides` 与 [`autoAdvanceLimit`](#auto-advance)。
 
 **参数:**
 
@@ -2643,6 +2647,7 @@ SSE。先发一个 `ready` 事件，之后每 15 秒发一行注释保持连接�
 
 | 字段                    | 类型                              | 必填 | 说明                                              |
 | ----------------------- | --------------------------------- | ---- | ------------------------------------------------- |
+| `autoAdvanceLimit`      | number                            | 否   | 推进上限，见[会话自动推进设置](#auto-advance)     |
 | `status`                | `'active' \| 'paused' \| 'ended'` | 否   | 会话生命周期状态                                  |
 | `runtimeModelOverrides` | object                            | 否   | 给单个 runtime 指定模型槽位：`runtimeId → 槽位名` |
 
@@ -3151,6 +3156,8 @@ SSE。先发一个 `ready` 事件，之后每 15 秒发一行注释保持连接�
 | `event`   | `{ kind, pluginId, topic, payload }`     | 插件界面发出一个本插件声明的事件 | `eventId` 和排入的后台任务   |
 
 ##### action 级
+
+action 与插件支持的 command 的 scoped store 按[数据集规则](./plugins.md#数据集contributesdatasets)检查每条 `setPluginData`：被拒记录不变，之前成功的调用保留。handler 可以捕获拒绝并返回自己的结果；未捕获时沿用生产安全的 `500`，不返回原始记录、schema 或文件路径。它不新增玩家回合或操作失败事件。
 
 调用插件在 `entry` 里用 `covel.registerRpc` 注册的 handler，或者框架默认 handler（如 `slash-debug`）。
 
@@ -3937,7 +3944,8 @@ runtime 报告失败时，它的原始错误保留在 `result.runtimeResults` �
 
 - 操作式写入有两条路径：function runtime 的 `function-ctx.pluginData.update`，以及插件本地工具通过 `withPendingProposals` 提交的 `plugin.data.update`。两者都产生 `plugin.data.update` proposal，在提交事务里对当前存的值应用操作。见[事务 · 操作式写入](./transactions.md#操作式写入plugindataupdate)。
 - 产生 proposal 的路径（内置工具、`function-output:pluginData[]`、`function-ctx.pluginData.*`、本地工具的 `withPendingProposals`）在提交时按插件声明的[数据集](./plugins.md#数据集contributesdatasets)检查操作种类和记录 schema，违反时以 `code: "dataset-violation"` 拒绝。
-- `plugin-rpc:context.store.setPluginData` 和 `management-api:PUT …` 是不经过提交流水线的直接写入，不做数据集检查，也不读当前值；世界数据导入同样不受数据集检查（见 [World Data · 配套插件数据](./world-data.md#配套插件数据)）。
+- `plugin-rpc:context.store.setPluginData` 在立即写入前检查目的数据集的 `set` 和记录 schema；世界导入与同步也执行[目的数据集检查](./world-data.md#配套插件数据)，并在媒体转换后检查最终记录大小。
+- `management-api:PUT …` / DELETE 仍是运维覆盖，不受数据集 schema / `ops` 限制，保留授权、启用状态、命名空间和大小检查。
 
 #### `GET /api/plugins`
 
@@ -6738,3 +6746,41 @@ STORE_BACKEND=memory pnpm dev:server  # 临时 Memory 后端（重启即丢失�
 
 - 翻译嵌套的对象列表时，世界数据的语言覆盖遵守每个 source 的 `localeArrayKeys`。
 - preflight、导入、同步和翻译端点共用这套按 key 匹配的规则。主列表重新排序，不会把带 key 的翻译配给别的条目。
+
+<a id="auto-advance"></a>
+
+### 自动推进与会话设置
+
+`POST /api/sessions` 和 `PATCH /api/sessions/:id` 接受可选的 `autoAdvanceLimit`。GET、创建与 PATCH 响应都返回生效的数值。
+
+| 字段               | 默认值 | 可接受值                | 生效时机         |
+| ------------------ | ------ | ----------------------- | ---------------- |
+| `autoAdvanceLimit` | `3`    | 整数 `0`–`10`；`0` 关闭 | 下一次接受的输入 |
+
+负数、小数、超限值、字符串和 `null` 返回 400。值保存在会话 metadata；PATCH 只合并这项设置，保留身份、权限和其他设置。快照、分支与浏览器 checkpoint 保存它，不保存正在推进的次数或剩余额度。
+
+一次 `/actions` 输入可包含根执行和若干自动执行；开场也可以请求推进，setup 本身不能。每个执行独立提交。新的输入只有在通过只读准入校验、鉴权和批准预检后，才撤销旧请求的后续推进资格；正在运行的普通根执行继续，正在等待或执行的自动轮会停止。自动轮遇到未回答的表单、选择、确认、挂起，或会话失效、权限/插件批准不足时交还玩家。重复的已提交 `inputMessageId`、无效或已回答的交互提交会被拒绝，不影响正在推进的请求。输入和回答仍在会话锁内重新校验。
+
+Stop 作用于整个请求，包含两轮之间的等待。未开始的自动轮不产生失败回合；已经提交的故事保留。`GET /api/sessions/:id/execution` 在轮间等待仍返回 `running`，可带[协议中的 `advance`](./protocol.md#auto-advance-events)。刷新只观察，不根据历史 `continue` 重启。全轮重试、runtime 重试和挂起恢复只执行一次，保留系统动作、逻辑回合号和输入身份；它们没有新的自动预算。客户端仍不能提交 `source: system`。
+
+<a id="orchestration-settings"></a>
+
+## 会话编排设置
+
+`GET /api/sessions/:id/orchestration` 返回 `{settings, policies, status}`。settings 是规范化的 `metadata.orchestration`；`turnPolicy?: {pluginId, name}`，`maxActors` 默认 4，`maxSubagentCalls` 默认 16。policies 是 `{pluginId, name, label, status: available|paused|unavailable}[]`；只枚举本会话已授权、启用的已注册服务，不运行服务或导入未批准代码。保存但失效的选择作为 unavailable 保留。总状态为 `selected`、`unique`、`missing`、`ambiguous` 或 `paused`。
+
+`PATCH /api/sessions/:id/orchestration` 只接受这三个设置字段；`turnPolicy: null` 清除选择，省略字段不变。`maxActors` 必须为 0–16 整数，`maxSubagentCalls` 为 0–64 整数。未知字段、无效数字或新选择不属于会话已知提供方时返回 400，完全不修改。只改名额时保留失效选择。选择不激活、不批准插件。
+
+两个路由使用现有 host-profile / session-owner 守卫。PATCH 经 settle 屏障和会话锁，在锁内逐字段合并子树，保留其他 metadata。编辑影响下一次执行。设置随正常存储、snapshot/fork 和 BrowserVault/checkpoint 保存；运行中的累计计数属于 continuation，不属于设置。
+
+```json
+{
+  "turnPolicy": { "pluginId": "conversation", "name": "ensemble" },
+  "maxActors": 2,
+  "maxSubagentCalls": 8
+}
+```
+
+## 创建身份
+
+`POST /api/sessions` 接受可选的 `seatRole: player | host | spectator`，可与 autoAdvanceLimit 一起提交。省略保持原玩家座位；另两种身份从空角色绑定开始。未知值、非字符串和 null 返回 400，不创建会话。仍先经过 session.create 的 host-profile 授权以及世界/内容语言校验。此字段只影响新会话的游戏动作，不授予 owner/operator 权限，不接受任意 seats 数组或 system 来源。主持人和观众通过动作 API 提交时，须带创建响应中返回的座位 ID；省略 seatId 仍只查找人类玩家主座位。普通客户端会自动携带。

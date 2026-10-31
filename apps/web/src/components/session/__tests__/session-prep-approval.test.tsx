@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { PluginSummary } from "@covel/shared";
+import type { PluginSummary, WorldPluginPlan } from "@covel/shared";
 import i18n from "@/i18n/index.js";
 import * as api from "@/services/api.js";
 import {
@@ -96,24 +96,83 @@ beforeEach(() => {
 });
 
 describe("session prep approval preflight", () => {
+  it("waits for plugin defaults before accepting edits and submits a core exclusion", async () => {
+    await i18n.changeLanguage("en-US");
+    let resolvePlan!: (plan: WorldPluginPlan) => void;
+    const pendingPlan = new Promise<WorldPluginPlan>((resolve) => {
+      resolvePlan = resolve;
+    });
+    vi.mocked(api.getWorldPluginPlan).mockReturnValueOnce(pendingPlan);
+    const catalogue = plugins.map((plugin) => ({
+      ...plugin,
+      source: "builtin" as const,
+      kind: plugin.id === "builtin" ? ("core" as const) : ("plugin" as const),
+    }));
+    const onStart = vi.fn();
+    render(
+      <SessionPrepScreen
+        world={world}
+        plugins={catalogue}
+        presets={[]}
+        onBack={vi.fn()}
+        onStart={onStart}
+        onResume={vi.fn()}
+        onDeleteSession={vi.fn()}
+        settingsOpen={false}
+        onSettingsOpenChange={vi.fn()}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: /^Loaded Plugins/ }));
+    const toggle = screen.getByRole("switch", { name: "Notes", hidden: true });
+    expect(toggle.getAttribute("aria-checked")).toBe("true");
+    expect(toggle.matches(":disabled")).toBe(true);
+    resolvePlan({
+      worldId: world.id,
+      packs: [],
+      policy: { plus: [], requires: [] },
+      defaultPluginIds: catalogue.map((plugin) => plugin.id),
+      missing: [],
+    });
+    await waitFor(() => expect(toggle.matches(":disabled")).toBe(false));
+    fireEvent.click(toggle);
+    expect(toggle.getAttribute("aria-checked")).toBe("false");
+    const start = screen.getAllByRole("button", {
+      name: "Start Game",
+    })[0]!;
+    await waitFor(() => expect(start).toHaveProperty("disabled", false));
+    fireEvent.click(start);
+    await waitFor(() =>
+      expect(onStart).toHaveBeenCalledWith(
+        ["community"],
+        undefined,
+        ["builtin"],
+        "player",
+      ),
+    );
+    expect(toggle.getAttribute("aria-checked")).toBe("false");
+  });
   it.each([
     {
       locale: "en-US",
+      role: "host",
       title: "Needs approval",
       hint: "imported once",
       summary: "1/2 plugins enabled · 1 runtimes",
     },
     {
       locale: "zh-CN",
+      role: "spectator",
       title: "需要批准",
       hint: "导入一次",
       summary: "已启用 1/2 个插件 · 共 1 个运行任务",
     },
   ])(
-    "keeps pending requests separate and lets the game start ($locale)",
-    async ({ locale, title, hint, summary }) => {
+    "keeps pending requests separate and lets the game start ($locale, $role)",
+    async ({ locale, role, title, hint, summary }) => {
       await i18n.changeLanguage(locale);
-      const onStart = vi.fn();
+      const onStart = vi
+        .fn()
+        .mockRejectedValueOnce(new Error("Creation refused"));
       render(
         <SessionPrepScreen
           world={world}
@@ -128,6 +187,13 @@ describe("session prep approval preflight", () => {
         />,
       );
 
+      expect(
+        (screen.getByLabelText(i18n.t("session.playAs")) as HTMLSelectElement)
+          .value,
+      ).toBe("player");
+      fireEvent.change(screen.getByLabelText(i18n.t("session.playAs")), {
+        target: { value: role },
+      });
       const pending = await screen.findByTestId("pending-approval-plugins");
       expect(pending.textContent).toContain(title);
       expect(pending.textContent).toContain("Community Story");
@@ -173,8 +239,13 @@ describe("session prep approval preflight", () => {
           ["builtin", "community"],
           undefined,
           [],
+          role,
         ),
       );
+      expect(
+        (screen.getByLabelText(i18n.t("session.playAs")) as HTMLSelectElement)
+          .value,
+      ).toBe(role);
     },
   );
 });

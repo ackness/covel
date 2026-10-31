@@ -294,12 +294,8 @@ async function initializeServer(): Promise<void> {
     // Function-runtime gateway facade — shares the same preset/provider
     // registry and env apiKeys as the agent-runtime LLM adapter. Plugins
     // that need generateImage / generateText / generateObject reach it via
-    // `FunctionHandlerContext.gateway`. `toZodSchema` is left off at
-    // startup: the framework's agent runtimes already cover structured
-    // output via responseFormat, and plugin-data calls use tool schemas —
-    // exposing `generateObject` would require importing zod into the
-    // app.ts composition root. A future PR can supply a converter if a
-    // plugin genuinely needs it.
+    // `FunctionHandlerContext.gateway`. The facade supplies the default
+    // JSON Schema converter for structured output.
     const pluginGateway = createPluginRuntimeGateway(ai.gateway, {
       envApiKeys: apiKeys,
     });

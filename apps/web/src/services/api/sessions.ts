@@ -260,6 +260,8 @@ export async function createSession(
   locale?: string,
   loreOverride?: string,
   excludedPlugins?: string[],
+  autoAdvanceLimit?: number,
+  seatRole?: import("@covel/shared").SeatRole,
 ): Promise<SessionRecord> {
   // Open credential storage before creating server state, and capture any
   // previous authority before the HTTP request can overlap another creation.
@@ -274,6 +276,8 @@ export async function createSession(
         ...(plugins ? { plugins } : {}),
         ...(excludedPlugins ? { excludedPlugins } : {}),
         ...(locale ? { locale } : {}),
+        ...(autoAdvanceLimit !== undefined ? { autoAdvanceLimit } : {}),
+        ...(seatRole !== undefined ? { seatRole } : {}),
         ...(loreOverride !== undefined ? { loreOverride } : {}),
       }),
     });
@@ -310,6 +314,7 @@ export async function updateSession(
      *   entries: <= 64
      */
     runtimeModelOverrides?: Record<string, string>;
+    autoAdvanceLimit?: number;
   },
 ): Promise<SessionRecord> {
   return request<SessionRecord>(
@@ -509,5 +514,26 @@ export function resumeSessionPluginFault(
   return request<SessionPluginsResponse>(
     `/api/sessions/${encodeURIComponent(sessionId)}/plugins/${encodeURIComponent(pluginId)}/resume-fault`,
     { method: "POST" },
+  );
+}
+
+export async function getOrchestration(
+  sessionId: string,
+): Promise<import("@covel/shared").OrchestrationResponse> {
+  return request(
+    `/api/sessions/${encodeURIComponent(sessionId)}/orchestration`,
+  );
+}
+export async function patchOrchestration(
+  sessionId: string,
+  patch: {
+    turnPolicy?: { pluginId: string; name: string } | null;
+    maxActors?: number;
+    maxSubagentCalls?: number;
+  },
+): Promise<import("@covel/shared").OrchestrationResponse> {
+  return request(
+    `/api/sessions/${encodeURIComponent(sessionId)}/orchestration`,
+    { method: "PATCH", body: JSON.stringify(patch) },
   );
 }

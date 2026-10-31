@@ -632,7 +632,7 @@ Cascade delete is not one database transaction that covers all sessions:
 | GET    | `/api/sessions`                          | List all sessions (optional `?worldId=` filter)                                           |
 | POST   | `/api/sessions`                          | Create a new session                                                                      |
 | GET    | `/api/sessions/:id`                      | Get session information                                                                   |
-| PATCH  | `/api/sessions/:id`                      | Update session fields (`status` / `runtimeModelOverrides`)                                |
+| PATCH  | `/api/sessions/:id`                      | Update session fields (`status` / `runtimeModelOverrides` / `autoAdvanceLimit`)           |
 | DELETE | `/api/sessions/:id`                      | Delete a session                                                                          |
 | GET    | `/api/sessions/:id/memory-index`         | The vector model of the memory index, and whether it is still configured                  |
 | POST   | `/api/sessions/:id/memory-index/rebuild` | Rebuild the memory index with the configured vector model                                 |
@@ -1313,7 +1313,7 @@ Query parameters:
 ### Plugin data (Plugin Data)
 
 > [!NOTE]
-> The built-in web interface reads plugin data only through the GET endpoints here (the right panel, the message-area interface, and the plugin data cache). PUT and DELETE are the write entry points for admin tools and API clients. When a plugin runtime writes its own data, the recommended route is the plugin-data tool, plugin RPC, or a proposal.
+> The built-in web interface reads plugin data only through the GET endpoints here (the right panel, the message-area interface, and the plugin data cache). PUT and DELETE are operator override entry points for admin tools and API clients. They skip dataset schema and `ops` checks while retaining session authorization, plugin activation, reserved-namespace and size checks. When a plugin runtime writes its own data, the recommended route is the plugin-data tool, plugin RPC, or a proposal.
 
 | Method | Path                                                      | Description                                                               |
 | ------ | --------------------------------------------------------- | ------------------------------------------------------------------------- |
@@ -2100,7 +2100,7 @@ Each dimension is handled by the rules below:
 
 Preflight also checks receivers' declared [dimension references and candidate values](./world-data.md), reporting `dimension-reference` with the file and record location. Import and sync use the same check.
 
-Does a read-only preflight of one worldData import. It tells you how many entries will be imported and where they will go, but it writes nothing.
+Does a read-only preflight of one worldData import. It tells you how many entries will be imported and where they will go, but it writes nothing. Destination dataset schema or `set` violations return error diagnostics with `sourceId` and available record locations. Media placeholders check `set` admission only; the actual index record schema and final size are checked at apply. Preflight does not materialize media.
 
 The request can be written in two ways:
 
@@ -2160,6 +2160,8 @@ Updating a world package, hot-reloading files, enabling a plugin or approving it
 | `sessionId` | string  | Yes      | The session to sync. It must belong to this world                                                            |
 | `dryRun`    | boolean | No       | Default `true`. Only `false` writes                                                                          |
 | `force`     | boolean | No       | Overwrites `modified` / `missing` conflicts on ordinary import rows. It does not bypass dimension protection |
+
+A true managed removal requires the destination dataset's `delete`; replacement requires only `set`. Dry-run and apply both report refusal with no semantic changes to that sync. `force` cannot bypass dataset schema, `ops` or size rules. Invalid optional projection outputs instead get a warning and are deferred, preserving their old records and ledger.
 
 **What gets synced:**
 
@@ -2425,13 +2427,15 @@ Creates a new game session.
 }
 ```
 
-| Field          | Type     | Required | Description                                                                                                                                     |
-| -------------- | -------- | -------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
-| `worldId`      | string   | No       | The ID of a world that exists and is not being deleted (validated with `/^[a-z0-9_-]{1,64}$/i`). If omitted, a session with no world is created |
-| `locale`       | string   | No       | The content language the player wants. Default `zh-CN`. See "Content language" below                                                            |
-| `plugins`      | string[] | No       | A list of plugin IDs to activate                                                                                                                |
-| `id`           | string   | No       | A session ID chosen by the client. If not given, it is generated as `{worldId}-{uuid8}`                                                         |
-| `loreOverride` | string   | No       | The world background text used for this session. See "World background" below                                                                   |
+| Field              | Type     | Required | Description                                                                                                                                     |
+| ------------------ | -------- | -------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| `worldId`          | string   | No       | The ID of a world that exists and is not being deleted (validated with `/^[a-z0-9_-]{1,64}$/i`). If omitted, a session with no world is created |
+| `locale`           | string   | No       | The content language the player wants. Default `zh-CN`. See "Content language" below                                                            |
+| `plugins`          | string[] | No       | A list of plugin IDs to activate                                                                                                                |
+| `id`               | string   | No       | A session ID chosen by the client. If not given, it is generated as `{worldId}-{uuid8}`                                                         |
+| `loreOverride`     | string   | No       | The world background text used for this session. See "World background" below                                                                   |
+| `autoAdvanceLimit` | number   | No       | Advancement limit; see [session advancement settings](#auto-advance)                                                                            |
+| `seatRole`         | string   | No       | New session's game role: `player` (default), `host` or `spectator`; the latter two start without character bindings                             |
 
 **Content language (`locale`):**
 
@@ -2619,7 +2623,7 @@ Browser-private mode uses the same snapshot shape. It saves the current values, 
 
 #### `PATCH /api/sessions/:id`
 
-Updates session fields. Right now you can change `status` and `runtimeModelOverrides`.
+Updates session fields. You can change `status`, `runtimeModelOverrides`, and `autoAdvanceLimit`.
 
 **Parameters:**
 
@@ -2641,10 +2645,11 @@ Updates session fields. Right now you can change `status` and `runtimeModelOverr
 
 **Field notes:**
 
-| Field                   | Type                              | Required | Description                                                     |
-| ----------------------- | --------------------------------- | -------- | --------------------------------------------------------------- |
-| `status`                | `'active' \| 'paused' \| 'ended'` | No       | The session lifecycle status                                    |
-| `runtimeModelOverrides` | object                            | No       | Sets a model slot for a single runtime: `runtimeId → slot name` |
+| Field                   | Type                              | Required | Description                                                        |
+| ----------------------- | --------------------------------- | -------- | ------------------------------------------------------------------ |
+| `autoAdvanceLimit`      | number                            | No       | Advancement cap; see [session advancement settings](#auto-advance) |
+| `status`                | `'active' \| 'paused' \| 'ended'` | No       | The session lifecycle status                                       |
+| `runtimeModelOverrides` | object                            | No       | Sets a model slot for a single runtime: `runtimeId → slot name`    |
 
 `status`:
 
@@ -3151,6 +3156,8 @@ Sends a structured command to a plugin in a session. It does not go through chat
 | `event`   | `{ kind, pluginId, topic, payload }`     | The plugin's UI sends an event that this plugin declared | `eventId` and the background jobs queued |
 
 ##### Action level
+
+Action and plugin-backed command scoped stores check each `setPluginData` against the [dataset rules](./plugins.md#datasets-contributesdatasets): a refused record stays unchanged, and earlier successful calls remain persisted. A handler can catch the refusal and return its own result; an uncaught refusal retains the production-safe `500`, without raw records, schemas or filesystem paths. It creates no player turn or operation-failure event.
 
 Calls the handler that the plugin registers in `entry` with `covel.registerRpc`, or a default framework handler (such as `slash-debug`).
 
@@ -3937,7 +3944,8 @@ Returns an index of the framework's capabilities. Third-party developers, extern
 
 - Operation-based writes have two paths: `function-ctx.pluginData.update` in a function runtime, and `plugin.data.update` submitted by a plugin's local tool through `withPendingProposals`. Both produce a `plugin.data.update` proposal, which applies its operations to the stored value inside the commit transaction. See [Transactions · Operation-based writes](./transactions.md#operation-based-writes-plugindataupdate).
 - Paths that produce proposals (builtin tools, `function-output:pluginData[]`, `function-ctx.pluginData.*`, a local tool's `withPendingProposals`) are checked at commit against the plugin's declared [datasets](./plugins.md#datasets-contributesdatasets): operation kinds and the record schema. A violation is refused with `code: "dataset-violation"`.
-- `plugin-rpc:context.store.setPluginData` and `management-api:PUT …` are direct writes outside the commit pipeline. They skip the dataset checks and do not read the current value. World data import skips the dataset checks too (see [World Data · Companion plugin data](./world-data.md#companion-plugin-data)).
+- `plugin-rpc:context.store.setPluginData` checks the destination dataset's `set` and record schema before immediate persistence. World import and sync also apply [destination dataset checks](./world-data.md#companion-plugin-data), and check final record size after media transformation.
+- `management-api:PUT …` / DELETE remain operator overrides without dataset schema / `ops` checks, retaining authorization, activation, namespace and size checks.
 
 #### `GET /api/plugins`
 
@@ -6740,3 +6748,41 @@ Each snapshot is `{ slot, key?, value, revision }`:
 
 - When translating nested object lists, the locale overrides of world data follow each source's `localeArrayKeys`.
 - The preflight, import, sync, and translation endpoints all share this key-matching rule. Reordering the main list does not give a keyed translation to a different entry.
+
+<a id="auto-advance"></a>
+
+### Automatic advancement and session settings
+
+`POST /api/sessions` and `PATCH /api/sessions/:id` accept optional `autoAdvanceLimit`. GET, creation and PATCH responses return its effective number.
+
+| Field              | Default | Accepted values                            | Takes effect        |
+| ------------------ | ------- | ------------------------------------------ | ------------------- |
+| `autoAdvanceLimit` | `3`     | Integer `0`–`10`; `0` disables advancement | Next accepted input |
+
+Negative, fractional, over-limit, string and `null` values return 400. The value lives in session metadata; PATCH merges this setting while preserving identity, authorization and other settings. Snapshots, forks and browser checkpoints retain it, without active round counts or unused budgets.
+
+One `/actions` input can contain a root execution and automatic executions; the opening can request advancement, but setup itself cannot. Each execution commits independently. New input revokes the older request's future advancement only after read-only admission validation, authorization and approval preflight. An ordinary root already running continues; a waiting or running automatic round stops. Unanswered forms, choices, confirmations, suspensions, an unavailable session, or missing authorization/plugin approval return control to the player. A duplicate committed `inputMessageId`, invalid interaction answer or already answered interaction is rejected without affecting the advancing request. Inputs and answers are still revalidated under the session lock.
+
+Stop applies to the whole request, including waits between rounds. An automatic round that never started creates no failed turn; committed stories remain saved. `GET /api/sessions/:id/execution` still reports `running` between rounds and may include the protocol's [advance state](./protocol.md#auto-advance-events). Refresh observes without restarting from historical `continue`. Full retries, runtime retries and suspension resumes run once, retaining the system action, logical number and input identity; they receive no new automatic budget. Clients still cannot submit `source: system`.
+
+<a id="orchestration-settings"></a>
+
+## Session orchestration settings
+
+`GET /api/sessions/:id/orchestration` returns `{settings, policies, status}`. Settings normalize `metadata.orchestration`: optional `turnPolicy: {pluginId, name}`, `maxActors` default 4 and `maxSubagentCalls` default 16. Policies are `{pluginId, name, label, status: available|paused|unavailable}[]`. Enumeration reads registered metadata for enabled, authorized providers without running services or importing unapproved code. A saved stale choice remains as unavailable. Overall status is `selected`, `unique`, `missing`, `ambiguous` or `paused`.
+
+`PATCH /api/sessions/:id/orchestration` accepts only these three fields. `turnPolicy: null` clears selection; omitted fields stay unchanged. `maxActors` must be an integer from 0–16 and `maxSubagentCalls` from 0–64. Unknown fields, invalid numbers or a new choice outside the session's known providers return 400 without mutation. Cap-only edits retain stale choices. Selection neither activates nor approves packages.
+
+Both routes use existing host-profile/session-owner guards. PATCH uses the settle barrier and session lock, merging the subtree by field under the lock while preserving other metadata. Edits apply next execution. Normal persistence, snapshot/fork and BrowserVault/checkpoint retain settings; spent execution counts belong to continuations, not preferences.
+
+```json
+{
+  "turnPolicy": { "pluginId": "conversation", "name": "ensemble" },
+  "maxActors": 2,
+  "maxSubagentCalls": 8
+}
+```
+
+## Creation role
+
+`POST /api/sessions` accepts optional `seatRole: player | host | spectator` alongside autoAdvanceLimit. Omission keeps the existing player seat; other roles begin unbound. Unknown, non-string and null values return 400 without creating a session. Existing session.create host-profile authorization and world/content-locale validation apply. This creation-only game role grants no owner/operator privilege and accepts neither arbitrary seats nor system-source input. Host and spectator action API requests must include the seat ID returned at creation; omitting seatId still looks up the primary human player seat. The ordinary client includes it automatically.

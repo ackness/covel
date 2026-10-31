@@ -17,6 +17,9 @@ export interface SubagentRequest {
   readonly target: SubagentTarget;
   /** The task, as the sub-agent's only user message (1–20 000 characters). */
   readonly brief: string;
+  /** Private routing identity for a character actor. */
+  readonly characterId?: string;
+  readonly instruction?: string;
   /** Structured context appended to the brief as JSON (at most 32 KB). */
   readonly data?: Readonly<Record<string, unknown>>;
   /** Narrows the provider's own limits; it never raises them. */

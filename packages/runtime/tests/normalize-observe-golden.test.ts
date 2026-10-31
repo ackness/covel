@@ -252,7 +252,9 @@ describe("normalize golden (bundled plugin set)", () => {
 
     const narrator = requireSpec(specs, "narrator");
     expect(narrator.stage).toBe("narrative");
-    expect(requireSpec(specs, "chat-mode-narrator").stage).toBe("narrative");
+    expect(requireSpec(specs, "chat-mode-narrator/narrate").stage).toBe(
+      "narrative",
+    );
 
     // Raw-text post-turn consumers still bind directly to the narrative
     // engine. They remain independent of the structured extraction branch.
@@ -352,7 +354,13 @@ describe("normalize golden (bundled plugin set)", () => {
     for (const manifest of manifests) {
       const spec = normalizeRuntimeManifest(manifest);
       expect(spec.bindings).toEqual(manifest.inputs ?? {});
-      expect(spec.exportBindings).toEqual({});
+      expect(spec.exportBindings).toEqual(
+        Object.fromEntries(
+          (manifest.input?.inject ?? []).flatMap((binding) =>
+            binding.kind === "runtime-export" ? [[binding.name, binding]] : [],
+          ),
+        ),
+      );
       expect(spec.backgroundWhenDetached).toBe(
         manifest.execution === "background",
       );

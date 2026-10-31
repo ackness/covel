@@ -103,8 +103,12 @@ export async function runAttributionTurn(
     withPlugins: pluginIds.slice(1),
     store,
   });
+  const storyRuntime = bundle.manifests.find(
+    (manifest) =>
+      manifest.pluginId === providerPackage && manifest.outputKind === "story",
+  )!.name;
   const selected = new Set([
-    providerPackage,
+    storyRuntime,
     "world-ir",
     "char-creator/character-tracker",
     "world-init/dimension-tracker",
@@ -113,7 +117,7 @@ export async function runAttributionTurn(
   const manifests = bundle.manifests
     .filter((m) => selected.has(m.name))
     .map((m) =>
-      m.name === providerPackage
+      m.name === storyRuntime
         ? {
             ...m,
             name: providerName,
@@ -191,7 +195,7 @@ export async function runAttributionTurn(
     loadRuntime: async (m) =>
       m.name === providerName
         ? {
-            ...bundle.loadedCache.get(providerPackage)!,
+            ...bundle.loadedCache.get(storyRuntime)!,
             manifest: m,
             handler: async () => ({ outcome: "success", value: story }),
           }

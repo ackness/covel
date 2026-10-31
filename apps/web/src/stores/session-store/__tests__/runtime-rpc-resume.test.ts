@@ -38,6 +38,7 @@ const session: SessionRecord = {
   locale: "en-US",
   status: "active",
   phase: "playing",
+  autoAdvanceLimit: 3,
   completedPlayerTurns: 1,
   setupRuntimes: {},
   activePlugins: ["external"],

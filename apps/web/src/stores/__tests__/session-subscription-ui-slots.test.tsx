@@ -101,6 +101,7 @@ function setup() {
             characters: "auto",
           },
         ] as const,
+        autoAdvanceLimit: 3,
         completedPlayerTurns: 0,
         createdAt: "now",
         updatedAt: "now",

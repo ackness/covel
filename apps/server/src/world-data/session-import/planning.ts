@@ -1,3 +1,5 @@
+import type { DatasetPolicyResolver } from "@covel/runtime";
+import { capturePluginDatasetPolicy } from "../../lib/plugin-dataset-policy.js";
 import { isRecord } from "../../lib/is-record.js";
 import {
   resolveWorldDataTargets,
@@ -118,6 +120,7 @@ interface CharacterBlocks {
  * reported and left out; the character is imported either way.
  */
 async function appendCharacterBlocks(options: {
+  datasetPolicy: DatasetPolicyResolver;
   writes: PlannedWrite[];
   diagnostics: WorldDataDiagnostic[];
   source: OrderedWorldDataSource;
@@ -166,6 +169,7 @@ async function appendCharacterBlocks(options: {
     for (const target of route.targets) {
       const error = await validatePluginDataValue({
         target,
+        datasetPolicy: options.datasetPolicy,
         source,
         value: block,
         deps: options.deps,
@@ -209,6 +213,7 @@ async function appendCharacterBlocks(options: {
 }
 
 async function appendStructuredPlans(options: {
+  datasetPolicy: DatasetPolicyResolver;
   writes: PlannedWrite[];
   diagnostics: WorldDataDiagnostic[];
   source: OrderedWorldDataSource;
@@ -318,6 +323,11 @@ async function appendStructuredPlans(options: {
       const pluginValue = value;
       const validationError = await validatePluginDataValue({
         target,
+        datasetPolicy: options.datasetPolicy,
+        storedNamespace:
+          source.descriptor.visibility === "hidden"
+            ? hiddenPluginDataNamespace(target.namespace)
+            : target.namespace,
         source,
         value: pluginValue,
         schema: options.schema,
@@ -397,6 +407,7 @@ async function appendStructuredPlans(options: {
       });
       if (isRecord(value))
         await appendCharacterBlocks({
+          datasetPolicy: options.datasetPolicy,
           writes: options.writes,
           diagnostics: options.diagnostics,
           source,
@@ -517,6 +528,9 @@ export async function buildImportPlan(options: {
   characterSchema?: unknown;
   dimensions?: unknown;
 }): Promise<ImportPlan> {
+  const datasetPolicy = capturePluginDatasetPolicy(
+    options.deps?.registry?.getAll().values() ?? [],
+  );
   // Dimension declaration errors are reported by appendDimensionPlan.
   const dimensions = worldDimensionsSchema.safeParse(options.dimensions ?? {});
   const writes: PlannedWrite[] = [];
@@ -531,6 +545,7 @@ export async function buildImportPlan(options: {
     );
     if (!parsed.success) {
       return {
+        datasetPolicy,
         writes: [],
         mergeEvents: [],
         deferredProjectionOutputs: [],
@@ -739,6 +754,8 @@ export async function buildImportPlan(options: {
           };
           const validationError = await validatePluginDataValue({
             target: indexTarget,
+            datasetPolicy,
+            mediaPlaceholder: true,
             source,
             value,
             schema: null,
@@ -765,6 +782,7 @@ export async function buildImportPlan(options: {
 
     for (const target of targets) {
       await appendStructuredPlans({
+        datasetPolicy,
         writes,
         diagnostics,
         source,
@@ -787,6 +805,7 @@ export async function buildImportPlan(options: {
     // would republish hidden data; hidden sources skip them entirely.
     if (source.descriptor.visibility === "hidden") continue;
     const projections = await executeWorldProjections({
+      datasetPolicy,
       source,
       sourceDigest,
       value: read.value,
@@ -917,6 +936,7 @@ export async function buildImportPlan(options: {
   }
 
   return {
+    datasetPolicy,
     writes: merged,
     diagnostics,
     mergeEvents,

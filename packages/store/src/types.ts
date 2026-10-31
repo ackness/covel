@@ -717,6 +717,12 @@ export interface SessionSummaryStore {
 
 /** Runtime suspension records. Part of `sql-snapshot-records`. */
 export interface SuspensionStore {
+  /** Update only continuation JSON while the exact unresolved/claim marker still matches. */
+  updateSuspensionContinuation(
+    id: string,
+    continuation: SuspensionRecord["pendingContinuation"],
+    expectedResolution?: string,
+  ): Promise<boolean>;
   saveSuspension(record: SuspensionRecord): Promise<void>;
   getSuspension(id: string): Promise<SuspensionRecord | null>;
   /**

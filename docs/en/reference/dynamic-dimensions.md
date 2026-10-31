@@ -177,6 +177,8 @@ For the full sync rules, see [Preflight and Sync](./world-data.md#preflight-and-
 
 For functions and guards, `ctx.world.dimensions` overlays valid proposals from completed upstream runtimes and the current runtime onto that base. This lets `dimension-clock`, for example, calculate clock fields on top of the tracker’s proposed values. The view is a projection within the execution, not persisted state. After commit, the API and UI read the new authoritative values (Sₙ₊₁). See [World Model](./world-model.md).
 
+Dimension reads record no character/schema read dependencies, even when those domains have upstream writes in the view. Computational projection of explicit dimension proposals is preserved. See [World Model](./world-model.md).
+
 **Two read-only built-in tools** that every plugin can use:
 
 - `world-dimension-list`: lists the ID, name, type, and version.

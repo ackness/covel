@@ -104,13 +104,15 @@ async function finalize(
     irStatus?: RuntimeStatus;
     records?: Record<string, DimensionRecord>;
     eventBus?: EventBus;
+    continuationLogicalTurn?: number;
   } = {},
 ) {
   await store.saveTurnResult({
     id: "artifact",
     sessionId: "s",
     turnId: "t",
-    origin: "player",
+    origin:
+      options.continuationLogicalTurn === undefined ? "player" : "continuation",
     runtimeResults: [],
     commitStatus: "pending",
     durationMs: 1,
@@ -136,9 +138,16 @@ async function finalize(
     turnIds: ["t"],
     executionContext: {
       executionId: "execution",
-      origin: "player",
-      countPolicy: "complete-player-turn",
+      origin:
+        options.continuationLogicalTurn === undefined
+          ? "player"
+          : "continuation",
+      countPolicy:
+        options.continuationLogicalTurn === undefined
+          ? "complete-player-turn"
+          : "none",
       logicalTurnId: "logical",
+      logicalTurn: options.continuationLogicalTurn,
     },
     runtimes: [
       ...runtimes,
@@ -203,6 +212,18 @@ for (const [backend, create] of [
   ["sqlite", () => createSqliteStore(":memory:")],
 ] as const) {
   describe(`dimension finalization: ${backend}`, () => {
+    it("settles an automatic story using its originating input's frozen number", async () => {
+      const store = await setup(create);
+      await store.updateSession("s", { completedPlayerTurns: 5 });
+      const result = await finalize(store, undefined, {
+        continuationLogicalTurn: 5,
+      });
+      expect(result.status).toBe("committed");
+      expect(await receipt(store)).toMatchObject({
+        source: { resultId: "narrative-result", turnNumber: 5 },
+      });
+      expect((await store.getSession("s"))?.completedPlayerTurns).toBe(5);
+    });
     it("commits story, values, frozen definitions and receipt together; source retries are deduplicated", async () => {
       const store = await setup(create);
       expect((await finalize(store, tracked(5))).status).toBe("committed");

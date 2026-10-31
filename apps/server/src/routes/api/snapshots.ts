@@ -419,6 +419,12 @@ snapshotRoutes.post("/:id/fork", rateLimiter({ max: 10 }), async (c) => {
               activePlugins: childActivePlugins,
               runtimeModelOverrides: snapshotSession.runtimeModelOverrides,
               metadata: {
+                ...(snapshotSession.orchestration !== undefined
+                  ? { orchestration: snapshotSession.orchestration }
+                  : {}),
+                ...(snapshotSession.autoAdvanceLimit !== undefined
+                  ? { autoAdvanceLimit: snapshotSession.autoAdvanceLimit }
+                  : {}),
                 ...(snapshotSession.loreOverride !== undefined
                   ? { loreOverride: snapshotSession.loreOverride }
                   : {}),
@@ -466,11 +472,15 @@ snapshotRoutes.post("/:id/fork", rateLimiter({ max: 10 }), async (c) => {
 
             // Copy unresolved suspensions (audit 2026-04-20 finding 7.3). Each
             // record is rebound to the child session with a fresh id so the parent
-            // copy remains untouched. `pendingContinuation` is preserved verbatim —
+            // copy remains untouched. Delegation keeps its consumed allowance
+            // under a new root scope; the rest of the continuation is preserved.
             // POST /suspensions/:suspensionId/resume on the child uses the new id
             // to re-enter the tool loop.
             const childSuspensions: SuspensionRecord[] = [];
-            for (const susp of snapshot.payload.suspensions) {
+            for (const susp of rebindSnapshotPayloadSession(
+              snapshot.payload,
+              childSessionId,
+            ).suspensions) {
               const record: SuspensionRecord = {
                 ...susp,
                 id: randomUUID(),

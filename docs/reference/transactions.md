@@ -390,20 +390,23 @@ SqliteStore、MemoryStore 和 PgStore（都在 Node 上）用同一种办法：
 
 **只有上游真正提交，下游才提交。** 提交单元按执行顺序提交。被丢弃 runtime 的硬依赖方一起丢弃（`commit/commit-dependencies.ts`）。依赖只在顶层 runtime 之间检查：嵌套结果只依赖同一次嵌套执行里的结果，它们在同一个单元里，随单元一起提交或丢弃。
 
-| 关系                                              | 上游被丢弃时                              |
-| ------------------------------------------------- | ----------------------------------------- |
-| turn 作用域的 `needs` 目标                        | 下游一起丢弃                              |
-| 必填 `inputs` 的来源                              | 下游一起丢弃                              |
-| 事件订阅者，触发它的事件的全部发出者都被丢弃      | 订阅者一起丢弃                            |
-| `after`、`required: false` 的输入                 | 不级联，它们只表达顺序或尽力读取          |
-| `cardinality: one` 的能力依赖，另有提供者提交成功 | 仍然满足                                  |
-| story 或 setup runtime 的硬上游                   | 整回合回滚                                |
-| 读取了它未提交的插件数据（辅助单元）              | 下游一起丢弃                              |
-| 读取了它未提交的插件数据（story 或 setup 单元）   | 照常提交，trace 记 `read-dependency.kept` |
-| 读取了没有提交的写服务操作（辅助单元）            | 下游一起丢弃                              |
+<!-- prettier-ignore -->
+| 关系 | 上游被丢弃时 |
+| --- | --- |
+| turn 作用域的 `needs` 目标 | 下游一起丢弃 |
+| 必填 `inputs` 的来源 | 下游一起丢弃 |
+| 事件订阅者，触发它的事件的全部发出者都被丢弃 | 订阅者一起丢弃 |
+| `after`、`required: false` 的输入 | 不级联，它们只表达顺序或尽力读取 |
+| `cardinality: one` 的能力依赖，另有提供者提交成功 | 仍然满足 |
+| story 或 setup runtime 的硬上游 | 整回合回滚 |
+| 读取了它未提交的插件数据、角色或角色 schema（辅助单元） | 下游一起丢弃 |
+| 读取了它未提交的插件数据、角色或角色 schema（story 或 setup 单元） | 照常提交，trace 记 `read-dependency.kept` |
+| 读取了没有提交的写服务操作（辅助单元） | 下游一起丢弃 |
 | 读取了没有提交的写服务操作（story 或 setup 单元） | 照常提交，trace 记 `read-dependency.kept` |
 
 **读取依赖。** 同一次执行里，runtime 读自己插件的数据时能看到同插件上游 runtime 还没提交的写入（见[执行内的插件数据可见性](./plugins.md#执行内的插件数据可见性)）。每次读取记下它实际看到了哪些上游的写入（`read-dependencies.ts`），执行把这些依赖带进提交计划。
+
+角色和角色 schema 的属性读取也使用同一个记录器，跨插件保留生产者身份。工具和服务的读取归调用 runtime；宿主复制不算读取。粒度见 [World Model](./world-model.md)。记录器只在内核的执行提交计划中传递，不写进公开结果或挂起载荷。
 
 - `get` 只依赖还影响返回值的上游。runtime 自己先整体写了这个键（`set`、删除，或含有其中之一的操作列表）再读，就没有依赖。
 - `list` 依赖写过这个 namespace 的全部上游。不带 namespace 的列表依赖写过插件数据的全部上游。
@@ -412,6 +415,8 @@ SqliteStore、MemoryStore 和 PgStore（都在 Node 上）用同一种办法：
 - story 或 setup 单元不因读取依赖丢弃。每个被丢弃的上游在同一个事务里写一条 `read-dependency.kept` trace，载荷是 `runtimeId`、`runId`、`producerRuntimeId`、`producerRunId` 和 `reason`。
 - 生产者总是排在读者前面。依赖指向提交顺序更靠后的 run 是内核错误，只记警告并忽略。
 - 写服务的操作也是生产者：提供者的 runtime 读到某个操作暂存的写入时，或任何 runtime 通过内核输入 `operations@1` 读到某个操作时，依赖记的是操作的 ID。操作排在它的调用方单元的位置；它失败、被撤回或调用方单元被丢弃时算作没有提交。辅助读者一起丢弃，错误是 `read data of <契约> that did not commit`；story 或 setup 读者照常提交，`read-dependency.kept` 的载荷用 `producerOperationId` 和 `producerContract` 代替 run 的两个字段。
+
+挂起也在源执行的提交时检查读取依赖，即使没有领域写入。生产者被丢弃时，辅助读者的 continuation 不保存、不发出可恢复的 `turn.suspended`；缓冲和嵌套写入不能留待恢复。它的进度作业、扣住的 detached 作业和回合计数走已有的丢弃结算。story/setup 的保护与 trace 规则照常适用。保存下来的 continuation 不带依赖图，恢复时源生产者已经结算。
 
 #### 写服务的操作
 
@@ -584,7 +589,7 @@ await store.withTransaction(async (tx) => {
 
 缺少 namespace / key、空的或不合法的操作列表在处理器之前就被载荷检查拒绝，`code` 是 `proposal-invalid`。保留命名空间和超过大小上限的拒绝发生在处理器里，没有 `code`，只有 `error`。
 
-**数据集检查。** 插件在 `contributes.datasets` 里声明了某个命名空间时，这个插件写入该命名空间的**每一种**插件数据 proposal 都要检查：
+**数据集检查。** 插件在 `contributes.datasets` 里声明了某个命名空间时，每一种插件数据 proposal、action / command RPC 的 scoped store 写入，以及世界数据导入和同步，都使用同一套[目的数据集规则](./plugins.md#数据集contributesdatasets)。proposal 的检查如下：
 
 - `plugin.data.update` 里每个操作的种类都必须在数据集的 `ops` 里。整值写入（`plugin.data` 和 `plugin.data.batch` 的每一项）算作 `set`，`plugin.data.delete` 算作 `delete`。
 - 结果存在时，按数据集的记录 schema 校验写入后的值，最多报告前 3 条错误。
@@ -600,6 +605,10 @@ await store.withTransaction(async (tx) => {
 `FailedProposal.code: "hook-failed"` 表示 `PreStateCommit` 因 handler 抛错、超时或无效结果而失败，不是主动否决。只计 Hook 所属插件的故障，不能把 proposal 所属插件算成被主动拒绝。`dimension-version-conflict`、`conflict` 和 `suspension-data-changed` 也不计入[熔断](./protocol.md#插件故障熔断)。
 
 ## World Data import
+
+导入计划捕获注册包的目的数据集策略，apply 沿用这一代声明。来源校验之外，导入预置和替换记录都需要 `set`；媒体转换完成后，在任何语义写入（包括维度 CAS 与绑定）之前，再检查最终值的 schema 和 256 KiB 上限。拒绝时会话、角色 schema、插件数据、角色、资料库和导入账本一起回滚，只释放这次尝试的临时媒体引用。
+
+同步真正删除仍存在的托管记录时需要 `delete`；内部先删后写的替换只需要 `set`。dry-run 与 apply 都检查真正删除，`force` 不能绕过数据集规则。拒绝会阻止这次同步的全部语义变化；目标已不存在时只清理旧账本。可选投影的无效输出仍按[输出推迟规则](./world-data.md#配套插件数据)保留旧数据。
 
 规划阶段也校验接收插件声明的[维度引用和候选值](./world-data.md)。任何这类错误都会拒绝整份导入计划，不写入其他合法记录；同步遵守相同规则。
 
@@ -741,3 +750,7 @@ await store.withTransaction(async (tx) => {
 - 较旧的一趟扫描不能覆盖由较新的进度值拥有的向量。
 - 可选的跨进程摄取锁可以减少重复的 embedding 工作，但正确性不依赖它。
 - 对 embedding 服务商的调用从不在索引提交事务里运行，也不在业务数据事务里运行。
+
+### 自动推进的提交边界
+
+一次输入可以产生多个独立执行，每轮仍通过 proposal 校验与事务提交。后续轮取消、失败或停止都不会撤销先前已提交的故事与状态。附带操作仍按原规则隔离；操作失败本身不否决故事的 `yield: continue`。下一轮只读取前面已提交的状态和操作失败提示，不读取未提交的未来结果。提交后的通知失败要求客户端重新同步，不改变持久化的提交结论。

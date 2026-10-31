@@ -22,6 +22,25 @@ World Model 是一局游戏里由内核保管的那部分世界数据：世界�
 
 字段和各部分归谁管见[插件契约](./plugins.md#world-model-与数据边界)。
 
+**读取与提交。** 可见的上游在每次 runtime 调用开始时取定，同层并行的兄弟互不可见。角色和 schema 是共享领域数据，不按插件过滤。上游按提交顺序叠加，递归子调用先于父调用，并保留各自的运行身份。只接受可提交的结果：带输出的成功结果，或带缓冲写入的 skipped guard；失败、挂起、无输出的成功结果和无效 effects 不贡献写入。重试与 detached 作业携带的种子结果及其后代不重放，它们已经由源执行提交或丢弃。
+
+只有成功访问属性才记录读取依赖。只拿到 `ctx.world` 不算读取；宿主构造、校验、复制和缓存视图也不算。作者主动展开、序列化或使用平台的结构化克隆功能复制 `ctx.world`，会访问其中的可枚举属性。
+
+<!-- prettier-ignore -->
+| 读取 | 记录的上游 |
+| --- | --- |
+| `characters`（包括 `find`、过滤和空结果判断） | 当前视图中所有 `character.upsert` 的生产者 |
+| `characterSchema` | 当前视图中所有 `character.schema.set` 的生产者 |
+| `dimensions`、`worldRecord`、`seats`、`dimensionProviderPluginId` | 不记录读取依赖 |
+
+这是按整个属性记录的保守依赖。后写覆盖前写也保留前面的生产者；自己的写入不能抹去已发生的读取。只读角色不会隐式记录 schema 的生产者，反过来也一样。已提交数据和自己的缓冲不产生跨运行依赖，重复读取会去重。
+
+函数、跳过模型的 guard、agent 工具，以及直接、导入和嵌套服务都使用同一次调用的记录器，与插件数据和操作输入的依赖合并。让模型继续运行的 guard 不把自己的依赖交给 agent。函数视图保持冻结；工具和服务拿到独立快照，局部修改不影响调用方或另一调用。调用结束或取消后，视图不能继续读取。
+
+提交时，生产者被丢弃，读过它的辅助单元连同写入、操作和待保存的挂起项一起丢弃。story 或 setup 单元（包括含有嵌套 story/setup 的单元）保留，每个丢失的生产者只记一条 `read-dependency.kept` trace。它们自己的提案被拒仍按原规则失败，见[事务](./transactions.md#回合级单事务)。此机制跟踪丢弃，不保证 Hook 改写后值仍等价，也不检查执行外的读基线。
+
+嵌套执行仍只看自己的上游，不继承父执行的上游；子 agent 仍只读已提交世界。父调用读取角色来构造子 agent 简报时，依赖记在父调用上。恢复执行从当前已提交世界和自己的已保存缓冲开始，不携带历史生产者身份。数据库和会话格式不变；测试此保证时应放弃并重建旧的待恢复挂起项，它们不会被补录读取来源。
+
 ## 角色与角色 schema
 
 世界包可以在 `world.yaml` 里声明 `characterSchema`，创建会话时它被复制进会话。
@@ -324,3 +343,23 @@ type DimensionSnapshot = Readonly<Record<string, DimensionSnapshotEntry>>;
 
 > [!NOTE]
 > 只有 `plugin_id` 一列、没有所有者的旧资料库表不会自动升级。开发环境的处理办法见[迁移说明](./env-registry.md#plugin-extension-development-data)。
+
+### 自动推进的座位与结算
+
+内核生成的 `advance` 不经过人类动作种类的角色门槛，仍使用 `source: system` 和已有的人类座位：优先原输入座位，否则按持久化顺序选择第一个人类座位。它不指定角色、文本或字段；找不到人类座位就停止。公开请求不能伪造这个来源，人类角色表保持不变。维度结算上下文使用根输入冻结的逻辑回合号，每次实际执行仍独立记录结算义务。
+
+<a id="witnessed-history"></a>
+
+## 角色亲历的故事
+
+`await ctx.historyFor(characterId, {limit: 20})` 返回 `{messages: [{role: "assistant", content, segments}], truncated}`。函数、guard 和插件工具都可读取；角色委托自动使用它。`segments` 只有 `{kind, speaker?, text}`，content 用同一故事文本渲染器生成，没有存储 ID、时间戳、附件或原始 metadata。
+
+一次执行懒加载并冻结最近 200 条 display messages，并发调用共享一次读取。只匹配已提交的 assistant story，且 metadata 的 `presentCharacterIds` 合法并精确包含角色 ID。一个消息匹配后保留该消息所有段落；不按发言者再删段。缺失、空、错误的 presence 不推断；未知或歧义的原始名字也不会凭空增加 ID。玩家行动、direct/system/tool 消息、压缩摘要、重写后的历史和当前未提交故事都不在来源里。规范历史压缩不删除 display-message 来源。
+
+先匹配再取最近的消息，按时间顺序返回。limit 默认 20，必须是 1–50 的整数；总文本最多 16,000 字符，只保留最近的完整消息/段落，不切 JSON 或代理对。扫描满 200 条、消息数或文本被裁减时 `truncated: true`。不存在于当前 World Model 的 ID 返回 `not-found`；已知角色但没有记录通常得到空数组。
+
+恢复沿用源执行的历史快照，不看到期间提交的新场景；新的根执行重新捕获。分叉只包含快照边界以前复制的消息。这个 API 只规定宿主提供哪段历史，不能保证任意简报、字段、已批准工具或服务不会透露其他知识。
+
+## 创建时选择身份
+
+创建请求的可选 `seatRole` 选择一个人类座位的身份。省略或 player 保留原有 auto 绑定；host 和 spectator 的 characters 为空，且没有 currentCharacterId。只能创建时选择，不迁移已有座位；快照、分叉、checkpoint 保留原有座位。主持人是游戏内身份，不授予服务器 owner/operator 权限。动作权限表保持不变。

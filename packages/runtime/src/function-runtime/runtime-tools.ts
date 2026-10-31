@@ -129,6 +129,7 @@ export function createRuntimeTools(options: {
               : {}),
             upstreamProposals: options.upstreamProposals,
             world: options.world,
+            delegation: deps.delegation,
             inputSlots: options.inputs,
             emittedEventTopics: events.map((event) => event.topic),
             emitter: deps.emitter,

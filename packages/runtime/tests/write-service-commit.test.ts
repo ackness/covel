@@ -982,6 +982,42 @@ describe("provider datasets", () => {
     expect(await gold()).toBe(100);
   });
 
+  it("keeps a story but drops the schema-invalid provider operation and its auxiliary reader", async () => {
+    const narrator = story();
+    const reader = fn("bank", "reader");
+    const { outcome, store, gold, items } = await run({
+      runtimes: [narrator, reader],
+      datasets: {
+        ...datasets,
+        schemas: {
+          wallet: { type: "object", properties: { amount: { minimum: 99 } } },
+        },
+      },
+      handlers: {
+        [narrator.name]: async (ctx) => {
+          await trade(ctx, "a", 5);
+          return ok({ narrativeOutput: "You shop." });
+        },
+        [reader.name]: async (ctx) => {
+          const value = await ctx.pluginData!.get("wallet", "gold");
+          await ctx.pluginData!.set("log", "last", value as JsonValue);
+          return ok();
+        },
+      },
+    });
+    expect(outcome.status).toBe("committed");
+    expect(outcome.failedProposals).toEqual([
+      expect.objectContaining({ code: "dataset-violation" }),
+    ]);
+    expect(settled(outcome.operations)).toEqual(["failed/rejected"]);
+    expect(outcome.isolatedRuntimes).toEqual([
+      expect.objectContaining({ runtimeId: reader.name, cause: "read" }),
+    ]);
+    expect(await gold()).toBe(100);
+    expect(await items()).toEqual([]);
+    expect(await store.listPluginData(SESSION, "bank", "log")).toEqual([]);
+  });
+
   it("fails the call before the handler when the provider's datasets cannot be loaded", async () => {
     let answer: unknown;
     const { outcome, items } = await run({

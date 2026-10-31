@@ -89,6 +89,7 @@ export type SqlSnapshotRecords = Pick<
   | "listSnapshotsPage"
   | "pruneAutoSnapshots"
   | "saveSuspension"
+  | "updateSuspensionContinuation"
   | "getSuspension"
   | "markSuspensionResolved"
   | "claimSuspension"
@@ -214,6 +215,33 @@ export function createSqlSnapshotRecords(
           record.id,
         ),
       });
+    },
+
+    async updateSuspensionContinuation(
+      id: string,
+      continuation: SuspensionRecord["pendingContinuation"],
+      expectedResolution?: string,
+    ): Promise<boolean> {
+      const row = await runner.selectFirst<SuspensionRow>(suspensions, {
+        where: eq(suspensions.id, id),
+      });
+      if (!row) return false;
+      const record = toSuspensionRecord(row, json);
+      const { pendingContinuation } = values.suspensionUpdate({
+        ...record,
+        pendingContinuation: continuation,
+      });
+      const affected = await runner.updateReturningCount(
+        suspensions,
+        { pendingContinuation },
+        and(
+          eq(suspensions.id, id),
+          expectedResolution === undefined
+            ? isNull(suspensions.resolvedAt)
+            : eq(suspensions.resolvedAt, expectedResolution),
+        ),
+      );
+      return affected === 1;
     },
 
     async getSuspension(id: string): Promise<SuspensionRecord | null> {

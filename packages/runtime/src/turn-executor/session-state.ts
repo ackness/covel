@@ -144,7 +144,9 @@ export async function loadTurnSessionState(args: {
       deps.store.listUncompactedTurnMessages(input.sessionId),
       deps.store.getTurnMessageStats(input.sessionId),
       readRuntimeTriggerLedger(deps.store, input.sessionId),
-      deps.store.getSession(input.sessionId),
+      deps.delegation?.sessionAtAdmission !== undefined
+        ? deps.delegation.sessionAtAdmission
+        : deps.store.getSession(input.sessionId),
       deps.store.listCharacters(input.sessionId),
       input.detachedStage
         ? lastPlayerInput
@@ -223,7 +225,9 @@ export async function loadTurnSessionState(args: {
       failedOperationSummaries,
       turnNumber,
       logicalTurn:
-        input.detachedStage?.sourceLogicalTurn ?? completedPlayerTurns + 1,
+        input.detachedStage?.sourceLogicalTurn ??
+        input.logicalTurn ??
+        completedPlayerTurns + 1,
       characters: sessionCharacters,
       ...currentCharacterField(session?.seats ?? [], sessionCharacters),
       lastPlayerInput,

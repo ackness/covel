@@ -308,3 +308,7 @@ Which key belongs to what:
 - Connectivity tests and their cache also distinguish local models, server presets, and roles.
 
 **Changing and resetting a role.** Changing or resetting a model role saves the binding and the cleanup of its related reasoning parameters in one `setMany`. Actions on the role cards are paused while saving. On success the confirmed selection is updated; on failure the previous configuration is kept and the save error is shown.
+
+### Session advancement settings
+
+“Automatic rounds” lives in session metadata as `autoAdvanceLimit`, rather than in SettingsStore user preferences. Read and change it through the [session API](./api.md#auto-advance); snapshots, forks and browser checkpoints retain it. A saved change applies to the next input; the running request keeps its original limit.

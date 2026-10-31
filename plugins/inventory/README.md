@@ -64,6 +64,8 @@ sources:
 
 条目形状：`{ id, name, quantity, description?, tags?, equipped? }`。
 
+世界预置和同步替换按数据集的 `set` 校验；权威来源移除预置记录时允许 `delete`。同步仍受 schema 与大小限制，`force` 不绕过这些规则。
+
 ## 开发
 
 修改 WorldIR 映射、台账逻辑或 UI spec 后，运行本包测试。

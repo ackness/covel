@@ -38,3 +38,29 @@ Build with `pnpm --filter @covel/plugin-handlers-utils build`. Create a local ar
 Covel's plugin installer does not install npm dependencies. The host provides this SDK and `zod` to every plugin: an import of `@covel/plugin-handlers-utils` (or a subpath) or `zod` from plugin code resolves to the host's copy, so a plugin does not bundle them. Bundle any other library the plugin uses. No network publication is part of the build or validation workflow.
 
 Workspace installation runs `prepare` to build `dist` before local development. Turbo build, test, and lint also build dependency artifacts. Published archives already include `dist`; consumers do not need the workspace or TypeScript compiler.
+
+## Character orchestration
+
+Import `TURN_POLICY_CONTRACT`, `CHARACTER_ACTOR_CONTRACT`, the canonical
+`turnPolicyRequestSchema` / `turnPolicyInputSchema` / `turnPolicyOutputSchema`,
+`characterActorInputSchema` / `characterActorOutputSchema`, their matching
+`…JsonSchema()` functions and inferred types from the public package.
+`validateTurnPolicyOutput(input, output)` checks unique present actors.
+
+`ctx.services.call({contract, input}, options?)` resolves a unique provider,
+including the session's exact policy choice. The existing explicit
+`{pluginId, name, contract, input}` shape remains available; partial targets do
+not. Read services now receive provider-scoped `ctx.random`.
+
+`ctx.agents.run({target, brief, characterId?, instruction?, data?, budget?})`
+requires `characterId` for a resolved character actor and rejects its `data`.
+Generic providers reject actor-only fields. Model `delegate` uses a name/alias
+`character`, never an ID. `ctx.historyFor(characterId, {limit?})` returns
+`CharacterHistory` from bounded, committed witnessed stories in functions,
+guards and plugin tools. Stateful test hosts supply the same capability.
+
+Contracts and limits: [plugin communication](../../docs/en/reference/plugin-extensions.md#orchestration-contracts),
+[actors](../../docs/en/reference/plugins.md#character-orchestration),
+[history](../../docs/en/reference/world-model.md#witnessed-history).
+The [composition example](../../docs/en/plugins/advanced.md#orchestration-example)
+shows narrator fallbacks and private intent handling.

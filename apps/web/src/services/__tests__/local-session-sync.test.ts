@@ -108,6 +108,37 @@ afterEach(async () => {
 });
 
 describe("LocalDataService browser-authoritative sync", () => {
+  it.each(["player", "host", "spectator"] as const)(
+    "preserves an explicit %s role in the server mirror and browser checkpoint",
+    async (seatRole) => {
+      const service = await serviceWithWorld();
+      const session = await service.createSession(
+        "world-1",
+        "role-session",
+        [],
+        "en-US",
+        undefined,
+        [],
+        0,
+        seatRole,
+      );
+      const seats = [
+        {
+          id: "main",
+          role: seatRole,
+          controller: "human",
+          characters: seatRole === "player" ? "auto" : [],
+        },
+      ];
+      expect(session.seats).toEqual(seats);
+      expect(session.autoAdvanceLimit).toBe(0);
+      expect(server.created.get(session.id)?.session.seats).toEqual(seats);
+      expect(
+        (await vault.getLatestCheckpoint(session.id))?.session.seats,
+      ).toEqual(seats);
+      expect((await service.getSession(session.id))?.seats).toEqual(seats);
+    },
+  );
   function serverMirror() {
     let checkpoint: BrowserCheckpoint;
     let revision = 0;
@@ -683,6 +714,31 @@ describe("LocalDataService browser-authoritative sync", () => {
     );
     expect((await vault.getLatestCheckpoint("sess-1"))?.revision).toBe(1);
   });
+
+  it.each([0, 7])(
+    "passes an explicitly chosen advancement limit (%s) to session creation",
+    async (autoAdvanceLimit) => {
+      const service = await serviceWithWorld();
+      await service.createSession(
+        "world-1",
+        "sess-1",
+        [],
+        "en-US",
+        undefined,
+        [],
+        autoAdvanceLimit,
+      );
+      expect(api.createSession).toHaveBeenCalledExactlyOnceWith(
+        "world-1",
+        "sess-1",
+        [],
+        "en-US",
+        undefined,
+        [],
+        autoAdvanceLimit,
+      );
+    },
+  );
 
   it("removes the server session when the first save cannot be stored", async () => {
     const service = await serviceWithWorld();

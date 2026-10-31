@@ -1,3 +1,9 @@
+import {
+  captureSuspensionClaim,
+  latestDelegationSnapshot,
+  persistDelegationSnapshot,
+} from "./orchestration/delegation-continuation.js";
+import { createDelegationBudget } from "./orchestration/delegation-budget.js";
 import type {
   DeferredRuntimeJob,
   RuntimeManifest,
@@ -216,10 +222,22 @@ export async function executeTurn(
     deps.services
       ? deps.services.withExecutionObserver(serviceOutcomes, run)
       : run();
+  const delegation =
+    deps.delegation ??
+    (await createDelegationBudget(input.sessionId, deps.store));
+  deps = {
+    ...deps,
+    delegation,
+    emitter: delegation.privacy.emitter(deps.emitter, [
+      ...runtimes,
+      ...pausedRuntimes,
+    ]),
+  };
   const subagentRuns: SubagentSettledEvent[] = [];
   const subagents =
     deps.subagents ??
     createSubagentRunner({
+      delegation,
       activeRuntimes: runtimes,
       pausedRuntimes,
       onSettled: (event) => subagentRuns.push(event),
@@ -232,6 +250,7 @@ export async function executeTurn(
   const userSettings = snapshotUserSettings(input.userSettings);
   const hookScope = {
     logicalKey: input.logicalTurnId ?? input.turnId,
+    logicalTurn: input.logicalTurn,
     activePluginIds: new Set(
       [
         ...(deps.hookScope?.activePluginIds ??
@@ -273,6 +292,7 @@ export async function executeTurn(
   const suspended = results.some((result) => result.status === "suspended");
   const journalMessages = collectExecutionJournal(turn);
   const executionSuspensions = collectExecutionSuspensions(turn);
+  if (executionSuspensions.length > 0) await delegation.history.freeze();
   // A suspension records what it was taken under: the player turns in the
   // history once this execution commits, and its plugin's version. A resume
   // that finds either changed is voided.
@@ -348,6 +368,7 @@ export async function executeTurn(
             ...record,
             pendingContinuation: {
               ...record.pendingContinuation,
+              delegation: delegation.snapshot(),
               takenUnder: {
                 ...record.pendingContinuation.takenUnder,
                 playerTurns,
@@ -400,6 +421,10 @@ export async function resumeSuspendedRuntime(
 ): Promise<ExecutedRuntime> {
   if (deps.pluginFaults?.isLatched(suspension.sessionId, manifest.pluginId))
     throw new Error("Plugin is unavailable in this session");
+  suspension = {
+    ...suspension,
+    resolvedAt: await captureSuspensionClaim(deps.store, suspension),
+  };
   const activeRuntimes = options?.activeRuntimes ?? [manifest];
   const paused = new Set(
     [
@@ -418,10 +443,23 @@ export async function resumeSuspendedRuntime(
     deps.services
       ? deps.services.withExecutionObserver(serviceOutcomes, run)
       : run();
+  const delegation =
+    deps.delegation ??
+    (await createDelegationBudget(
+      suspension.sessionId,
+      deps.store,
+      await latestDelegationSnapshot(deps.store, suspension),
+    ));
+  deps = {
+    ...deps,
+    delegation,
+    emitter: delegation.privacy.emitter(deps.emitter, activeRuntimes),
+  };
   const subagentRuns: SubagentSettledEvent[] = [];
   const subagents =
     deps.subagents ??
     createSubagentRunner({
+      delegation,
       activeRuntimes: activeRuntimes.filter(
         (runtime) => !paused.has(runtime.pluginId),
       ),
@@ -433,6 +471,7 @@ export async function resumeSuspendedRuntime(
   const captured = captureSchemas(deps);
   const userSettings = snapshotUserSettings(options?.userSettings);
   const hookScope = {
+    logicalTurn: suspension.pendingContinuation.logicalTurn,
     logicalKey:
       suspension.pendingContinuation.executionContext.logicalTurnId ??
       suspension.turnId,
@@ -446,17 +485,28 @@ export async function resumeSuspendedRuntime(
       : buildHookSettings([manifest], userSettings),
     locale: deps.hookScope?.locale ?? suspension.pendingContinuation.locale,
   };
-  const result = await observeServices(() =>
-    runWithHookScope(hookScope, () =>
-      resumeRuntimePipeline(
-        suspension,
-        resumeData,
-        manifest,
-        { ...captured.deps, hookScope, subagents, serviceOutcomes },
-        { ...options, userSettings },
+  const initialDelegation = delegation.snapshot();
+  let result: RuntimeResult;
+  try {
+    result = await observeServices(() =>
+      runWithHookScope(hookScope, () =>
+        resumeRuntimePipeline(
+          suspension,
+          resumeData,
+          manifest,
+          { ...captured.deps, hookScope, subagents, serviceOutcomes },
+          { ...options, userSettings },
+        ),
       ),
-    ),
-  );
+    );
+  } finally {
+    await persistDelegationSnapshot(
+      deps.store,
+      suspension,
+      delegation.snapshot(),
+      initialDelegation,
+    );
+  }
   const inherited = suspension.pendingContinuation.executionContext;
   // The scope its tasks report under, which a nested child's suspension
   // keeps apart from its execution identity.
@@ -510,6 +560,7 @@ export async function resumeSuspendedRuntime(
       ...record,
       pendingContinuation: {
         ...continuation,
+        delegation: delegation.snapshot(),
         executionContext: inherited,
         ...(progressScopeId !== inherited.executionId
           ? { progressScopeId }

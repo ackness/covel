@@ -557,3 +557,7 @@ When you change a character tool, check it against the real character field defi
 - [Verify with a real model](../ship/real-model.md)
 - [Package and trial-install](../ship/package.md)
 - A test template for AI assistants: [`.claude/skills/create-plugin/references/plugin-testing.md`](../../../.claude/skills/create-plugin/references/plugin-testing.md)
+
+## Deterministic ensemble verification
+
+Load real manifests/entries and script the model through actual delegate calls, with one actor succeeding and another failing. Check committed named segments, user yield, private-intent projections and the full event order. Give actors disjoint witnessed secrets and inspect public traces of the parent's later requests; the final story alone cannot prove privacy. Replacement write-service actors still need failed-child rollback, commit rejection and next-invocation notices. Scripted models establish interfaces and settlement, not real-model prose quality.

@@ -29,6 +29,7 @@ const session = {
   worldId: "world-a",
   status: "active",
   phase: "setup",
+  autoAdvanceLimit: 3,
   completedPlayerTurns: 0,
   setupRuntimes: {},
   seats: [

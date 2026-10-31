@@ -738,14 +738,16 @@ The contract is declared in `packages/tools/src/builtin/tool-search.ts`, and the
 
 An agent runtime uses it to hand a job to a [sub-agent](./plugins.md#sub-agents): another agent runtime runs with the brief inside this execution and returns its output. List `delegate` in `agent.tools.builtin` to call it.
 
-| Parameter | Type   | Required | Description                                                                                        |
-| --------- | ------ | -------- | -------------------------------------------------------------------------------------------------- |
-| target    | object | ✓        | `{ contract }` (the contract's provider, any package) or `{ runtimeId }` (own package), never both |
-| brief     | string | ✓        | The task; the sub-agent sees only this and `data`. 1 to 20 000 characters                          |
-| data      | object | —        | Facts the sub-agent needs, as a JSON object, at most 32 KB                                         |
-| maxSteps  | number | —        | The sub-agent's step limit; it can only be lower than the provider's own                           |
+| Parameter   | Type   | Required | Description                                                                                           |
+| ----------- | ------ | -------- | ----------------------------------------------------------------------------------------------------- |
+| target      | object | ✓        | `{ contract }` (the contract's provider, any package) or `{ runtimeId }` (own package), never both    |
+| brief       | string | ✓        | Task brief, 1 to 20 000 characters; character actors also receive their profile and witnessed history |
+| data        | object | —        | Generic sub-agent facts, JSON object, at most 32 KB; rejected for character actors                    |
+| character   | string | —        | Character name or alias, at most 80 characters; required for character actors                         |
+| instruction | string | —        | Character direction, at most 2,000 characters; actor targets only                                     |
+| maxSteps    | number | —        | The sub-agent's step limit; it can only be lower than the provider's own                              |
 
-**Output**: on success the model receives `{data: output}`. If this delegation staged operations, it also receives `staged: {count, kinds, notice}`, counting only this invocation and explaining that the writes await commit and may be rejected. Output is projected through `modelFacingJson`; code still reads the original output. `stopReason` and usage stay on `subagent.completed`. A completing `delegate` passes the original output to the caller's output gate. Failure uses `{error:{code,message,hint?}}`, with the same codes in `tool.failed`. All failures except `invalid-input` retain the `refused` accounting flag.
+**Output**: on success the model receives `{data: output}`. If this delegation staged operations, it also receives `staged: {count, kinds, notice}`, counting only this invocation and explaining that the writes await commit and may be rejected. Output is projected through `modelFacingJson`; code still reads the original output. `stopReason` and usage stay on `subagent.completed`. A completing `delegate` passes the output to the caller's output gate after private projection: only segments for a character actor, no content for a concealed provider. Failure uses `{error:{code,message,hint?}}`, with the same codes in `tool.failed`. All failures except `invalid-input` retain the `refused` accounting flag.
 
 **Notes**:
 
@@ -912,6 +914,8 @@ Plugins can use the same rules: `mergeSchemaDefaults` and `assertCharacterFields
 #### Which data is read
 
 Default value filling and character write validation all read the session's World Model. This view merges three things in execution order: the committed records, the domain proposals of upstream runtimes that succeeded, and the pending proposals of this runtime. An invalid schema or an invalid character write does not enter this view. Character records are not mirrored into plugin private data.
+
+Runtime character tools read characters and schema through the tracked `context.world`. Plugin tools, function `ctx.tools.call` and service imports retain the same invocation recorder. Host copying for tool isolation does not count as a read; actual property access does. See [World Model](./world-model.md). Public dimension tools keep reading the frozen snapshot without these dependencies. Auxiliary runs that suspend after reading are checked at source commit; see [Transactions](./transactions.md).
 
 When reading, updates are applied in proposal order, using `materializeCharacterUpsert`, the same function the commit uses:
 
@@ -1209,6 +1213,8 @@ This rule is enforced in one place, by `reservedPluginDataNamespaceError()` (`pa
 - `ctx.pluginData` in a function runtime or an agent guard
 - The store view of an RPC handler. Every plugin's RPC action, including those of bundled plugins, gets an immediate write capability bound to the session and the plugin through `createRpcHandlerStoreView()`
 
+RPC scoped-store `setPluginData` also uses the [dataset rules](./plugins.md#datasets-contributesdatasets), checking `set` and the record schema for the bound owning plugin and physical namespace. Refusal leaves that record unchanged; earlier successful calls remain persisted. Management REST writes remain operator overrides.
+
 Neither kind of plugin handle exposes the host's transaction, session lifecycle, or store-closing methods. The framework's own privileged writers (the background job runner and the runtime log) call the store directly and do not use these entry points.
 
 <a id="size-limit-for-one-value"></a>
@@ -1232,6 +1238,8 @@ The same limit applies at every write entry point:
 | `ctx.pluginData.set` / `ctx.pluginData.update`, the store view of an RPC handler | The write fails                                                                                                   |
 | REST `PUT /api/sessions/:id/plugin-data/...`                                     | Returns `413`                                                                                                     |
 | World package import                                                             | The record gets an error diagnostic. The import fails and is not truncated. `pnpm validate:world` reports it too. |
+
+Import and sync also check the same limit on the final stored JSON after selecting records and materializing media; read-only preflight does not materialize media.
 
 For reference, the largest seed record in the bundled worlds is about 7 KB. To store more, split it into several keys, or keep only the part that later turns will read.
 
@@ -1541,7 +1549,7 @@ agent:
 
 - **Name**: by default the contract without its version, dots as dashes (`inventory.items@1` → `inventory-items`); `as` names it otherwise. A name has only letters, digits, `_` and `-`, at most 64; a derived name that is too long needs `as`. A name cannot repeat a framework tool, the runtime's `tools.builtin` / `tools.plugin`, the package's `contributes.tools` or another import, and one contract is imported once. Manifest validation reports a clash.
 - **Description and parameters**: the description is the provider's registered `description`. The parameters' JSON Schema comes from the provider's Zod input (without `$schema`), or from the provider's explicit `inputSchema`. A Zod input (also one shown through an explicit `inputSchema`) is checked on the tool side first, with the usual field-by-field errors and repair of arrays or objects sent as JSON text. The provider receives the arguments the model sent, or their repair, and parses them once for its handler, so a `transform` applies once. An input that is not a Zod schema is checked by the provider only.
-- **Annotations**: a read service gets `{ readOnly: true, stagesWrites: false, idempotent: true, concurrencySafe: true }` and can run together with other read-only tools. Write services are in [Imported write services](#imported-write-services). A sub-agent keeps its imports, write-service imports included.
+- **Annotations**: except for the character-policy contract described below, a read service gets `{ readOnly: true, stagesWrites: false, idempotent: true, concurrencySafe: true }` and can run together with other read-only tools. Write services are in [Imported write services](#imported-write-services). A sub-agent keeps its imports, write-service imports included.
 - **Result**: the model gets `{ "data": … }` like any other tool, with IDs, UUIDs and timestamps removed by `modelFacingJson`. Approval, `PreToolUse` / `PostToolUse`, `tool_calls` records and `tool.*` traces work as usual; approval counts the source as `local`.
 - **Time limit**: a call waits at most 15 seconds for the provider and answers `timeout` after that.
 - **Deferred loading**: with `tools.defer: true`, or with an import's name in the `defer` list, the import is deferred like other tools and found through `search-tools`.
@@ -2060,3 +2068,15 @@ The payload is `{entries:[{id,keys,content,strategy,position?,insertionOrder?,en
 - A world import writes the world owner. The player management API writes the player owner.
 - The same id under different owners is a separate entry for each owner.
 - When an entry is updated, its `createdAt` is kept.
+
+### Character delegation and policy imports
+
+`delegate` adds optional `character` (a name/alias up to 80 characters) and `instruction` (up to 2,000 characters). After resolving a `character-actor@1` provider, character is required and the host resolves its ID privately. Neither a UUID nor a semantic ID is accepted as a name. This contract rejects `data`; other contracts reject actor-only parameters. Same-package runtimeId targeting cannot bypass these rules.
+
+Actor output contains dialogue/action segments without a speaker, plus optional intent. The parent supplies speaker names when composing a story. The live model can still read intent, but persisted tool records, traces and player projections exclude private delegation content. If delegate directly completes a runtime, an ordinary actor passes only segments and a concealed result passes no content. Per-call staged notices, write-service permissions and the sequential barrier remain unchanged. See [aggregate allowances](./plugins.md#character-orchestration).
+
+`turn-policy@1` imports override ordinary service parameters, results and repeatability/concurrency annotations. Model input is `{present: string[], recentSegments}`; output uses `actors[].character` names. The host adds current actions and limits. It is read-only with `idempotent: false` and `concurrencySafe: false`. See [selection, absence and name resolution](./plugin-extensions.md#orchestration-contracts). Plugin tools can also call session-bound `context.historyFor(characterId, {limit?})` for [witnessed stories](./world-model.md#witnessed-history).
+
+## Delegating actors inside a story
+
+A story agent calls delegate with target: {contract: "character-actor@1"}, character: "Mara", a short brief and optional instruction, without characterId or data. The host resolves names and supplies profile/history. The bundled narrator calls once per actor in plan order, combines successful public segments and discards intent. Failed actors lose staged operations. An operation rejected at final commit loses only that operation with the existing fixed notice.

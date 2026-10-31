@@ -1,3 +1,5 @@
+import { characterByName } from "../orchestration/policy-tools.js";
+import { ToolError } from "@covel/shared";
 /**
  * The `delegate` tool of agent runtimes: a tool-executor wrapper that answers
  * `delegate` calls by running a sub-agent, and forwards every other call.
@@ -85,6 +87,19 @@ async function runDelegate(
       },
     });
   }
+  const privateTarget = delegateParametersSchema.shape.target.safeParse(
+    args && typeof args === "object"
+      ? (args as { target?: unknown }).target
+      : undefined,
+  );
+  if (privateTarget.success) {
+    const privateKind = runner.privateTargetKind(
+      { target: privateTarget.data, brief: "Private delegation" },
+      scope.caller,
+    );
+    if (privateKind)
+      scope.deps.delegation?.privacy.mark(call.toolCallId, privateKind);
+  }
   const parsed = delegateParametersSchema.safeParse(args);
   if (!parsed.success) {
     const issue = parsed.error.issues[0];
@@ -96,6 +111,21 @@ async function runDelegate(
         message: `Invalid delegate arguments${at}: ${issue?.message ?? "unknown problem"}`,
       },
     });
+  }
+  let characterId: string | undefined;
+  if (parsed.data.character !== undefined) {
+    try {
+      characterId = characterByName(context.world, parsed.data.character).id;
+    } catch (error) {
+      if (!(error instanceof ToolError)) throw error;
+      return failed(call, context, startTime, {
+        ok: false,
+        error: {
+          code: error.code === "ambiguous" ? "ambiguous" : "not-found",
+          message: error.message,
+        },
+      });
+    }
   }
   await emitToolEvent(context, call, "tool.calling", {
     arguments: call.arguments,
@@ -111,10 +141,15 @@ async function runDelegate(
       request: {
         target,
         brief,
+        ...(characterId !== undefined ? { characterId } : {}),
+        ...(parsed.data.instruction !== undefined
+          ? { instruction: parsed.data.instruction }
+          : {}),
         ...(data !== undefined ? { data } : {}),
         ...(maxSteps !== undefined ? { budget: { maxSteps } } : {}),
       },
       input: scope.input,
+      world: context.world,
       deps: scope.deps,
       executionContext: scope.executionContext,
       ...(operations ? { operations } : {}),

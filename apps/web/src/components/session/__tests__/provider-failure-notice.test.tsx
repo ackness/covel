@@ -135,6 +135,7 @@ describe("provider failure scope", () => {
         worldId: "world",
         status: "active",
         phase: "setup",
+        autoAdvanceLimit: 3,
         completedPlayerTurns: 0,
         activePlugins: [],
         locale: "en-US",

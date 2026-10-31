@@ -21,8 +21,12 @@ export default function (covel) {
       }),
   });
   const review = createNarrativeReview(covel.pluginId);
-  covel.on("PostContextAssembly", review.context);
-  covel.on("PreLLMCall", review.prepare);
-  covel.on("PostLLMResponse", review.review);
+  const storyOnly = (handler) => (ctx, payload) =>
+    ctx.runtimeId === `${covel.pluginId}/narrate`
+      ? handler(ctx, payload)
+      : { action: "continue" };
+  covel.on("PostContextAssembly", storyOnly(review.context));
+  covel.on("PreLLMCall", storyOnly(review.prepare));
+  covel.on("PostLLMResponse", storyOnly(review.review));
   covel.on("TurnStop", review.cleanup);
 }

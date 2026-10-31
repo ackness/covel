@@ -32,6 +32,7 @@ const session: SessionRecord = {
   worldId: "world-1",
   status: "active",
   phase: "setup",
+  autoAdvanceLimit: 3,
   completedPlayerTurns: 0,
   setupRuntimes: {},
   seats: [
@@ -192,6 +193,7 @@ describe("restoreSessionState workspace ordering", () => {
     api.getSession.mockResolvedValue({
       ...session,
       phase: "playing",
+      autoAdvanceLimit: 3,
       completedPlayerTurns: 1,
     });
     api.getSessionView.mockResolvedValue({
@@ -225,6 +227,7 @@ describe("restoreSessionState workspace ordering", () => {
     expect(dispatch).toHaveBeenCalledWith({
       type: "SET_SESSION",
       session: expect.objectContaining({
+        autoAdvanceLimit: 3,
         completedPlayerTurns: 1,
         phase: "playing",
       }),

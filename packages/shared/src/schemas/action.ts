@@ -6,7 +6,7 @@
  */
 
 import { z } from "zod";
-import type { SeatRole, TurnAction } from "@covel/plugin-handlers-utils";
+import type { SeatRole } from "@covel/plugin-handlers-utils";
 import { i18nTextSchema } from "./world.js";
 import type {
   ActionKindRule,
@@ -14,14 +14,17 @@ import type {
   BaseActionKind,
 } from "../types/action.js";
 
-/**
- * The longest text one submission may carry, in characters, summed over its
- * actions. A form answer becomes such a text, so it is held to the same limit.
- */
-export const MAX_PLAYER_MESSAGE_CHARS = 100_000;
-
-/** The most actions one submission may carry. */
-export const MAX_ACTIONS_PER_SUBMISSION = 8;
+import {
+  MAX_PLAYER_MESSAGE_CHARS,
+  MAX_ACTIONS_PER_SUBMISSION,
+  turnActionRequestSchema,
+} from "@covel/plugin-handlers-utils";
+export {
+  MAX_PLAYER_MESSAGE_CHARS,
+  MAX_ACTIONS_PER_SUBMISSION,
+  turnActionRequestSchema,
+  turnActionSchema,
+} from "@covel/plugin-handlers-utils";
 
 /** The kernel's own action kinds. A bare kind name always means one of these. */
 export const BASE_ACTION_KINDS: readonly BaseActionKind[] = Object.freeze([
@@ -147,33 +150,6 @@ export const actionKindDeclarationSchema = z.strictObject({
     })
     .describe("How the composer shows the kind."),
 });
-
-const interactionRefSchema = z.strictObject({
-  turnId: z.string().min(1).max(256),
-  interactionId: z.string().min(1).max(256),
-  type: z.enum(["form", "choice", "confirmation"]),
-});
-
-/**
- * One action as a client submits it. The server sets `source` and fills a
- * missing `seatId` (the primary seat) and `actorId` (the seat's current
- * character, for kinds taken as a character).
- */
-export const turnActionRequestSchema = z.strictObject({
-  seatId: z.string().trim().min(1).max(128).optional(),
-  kind: z.string().min(1).max(200),
-  actorId: z.string().min(1).max(256).optional(),
-  text: z.string().max(MAX_PLAYER_MESSAGE_CHARS).optional(),
-  fields: z.record(z.string(), z.json()).optional(),
-  interaction: interactionRefSchema.optional(),
-});
-
-/** One resolved action: `seatId` and `source` always set. */
-export const turnActionSchema: z.ZodType<TurnAction> =
-  turnActionRequestSchema.extend({
-    seatId: z.string().min(1),
-    source: z.enum(["player", "system"]),
-  });
 
 /** The actions of one submission: 1 to 8, their text within the limit together. */
 export const turnActionRequestsSchema = z

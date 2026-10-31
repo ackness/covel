@@ -516,7 +516,16 @@
     "viewConsentTitle": "允许“{{label}}”读取此会话？",
     "viewConsentDescription": "{{plugin}} 请求读取故事消息、流式文本、待答交互、公开角色和可见界面槽位。授权只适用于本设备上的此版本视图，可在视图菜单中撤销。",
     "viewConsentDecline": "使用默认视图",
-    "viewConsentAllow": "允许读取会话"
+    "viewConsentAllow": "允许读取会话",
+    "autoAdvanceLimit": "自动推进轮数",
+    "autoAdvanceOff": "关闭",
+    "autoAdvanceNextInput": "从下一次输入开始生效",
+    "autoAdvanceProgress": "正在推进 {{round}} / {{limit}}",
+    "autoAdvanceStop": "停止推进",
+    "playAs": "游玩身份",
+    "rolePlayer": "玩家",
+    "roleHost": "主持人",
+    "roleSpectator": "旁观者"
   },
   "blocks": {
     "actionPlaceholder": "或输入自定义行动...",
@@ -2665,5 +2674,26 @@
     "localRelay": "这个地址在你的电脑或局域网上，模型请求会由你的浏览器转发：游玩时请保持页面打开，并让模型服务允许 {{origin}} 跨域访问（例如 Ollama 设置 OLLAMA_ORIGINS={{origin}}）。浏览器可能会询问是否允许这个网站访问本机或局域网。",
     "localHttp": "浏览器不允许这个 HTTPS 页面访问局域网里的普通 http 地址。请给局域网里的模型服务配上 HTTPS，或者在这台电脑上用 127.0.0.1 / localhost 转发它。",
     "keyAdvice": "请专门为体验创建一个临时 API 密钥，最好设好消费上限。我们已尽力保护你的数据，但仍建议体验结束后到服务商后台删除或轮换这个密钥。"
+  },
+  "orchestration": {
+    "clearPolicy": "清除选择",
+    "title": "编排",
+    "policy": "回合策略",
+    "automatic": "自动选择",
+    "maxActors": "不同角色数（0–16）",
+    "maxSubagentCalls": "子调用数（0–64）",
+    "selected": "已选择策略",
+    "unique": "只有一个可用策略",
+    "missing": "没有可用策略",
+    "ambiguous": "请选择策略以消除歧义",
+    "paused": "已暂停",
+    "unavailable": "不可用",
+    "error": "无法读取或保存编排设置",
+    "save": "保存",
+    "saving": "正在保存…",
+    "saveField": "保存{{field}}",
+    "fieldError": "此项未能保存，请检查数值后重试。",
+    "providerSettings": "{{provider}}的设置",
+    "capScope": "角色和子调用名额按单次执行计算，每个额外节拍重新获得名额；零关闭相应能力。"
   }
 }

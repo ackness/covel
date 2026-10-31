@@ -1,3 +1,15 @@
+import {
+  CHARACTER_ACTOR_CONTRACT,
+  characterActorInputSchema,
+  characterActorOutputJsonSchema,
+  characterActorOutputSchema,
+  type WorldModelView,
+} from "@covel/shared";
+import {
+  createDelegationBudget,
+  type DelegationBudget,
+} from "../orchestration/delegation-budget.js";
+import { buildCharacterBrief } from "../orchestration/character-brief.js";
 /**
  * Sub-agents: an agent runtime that another runtime runs inside its own
  * execution, through `ctx.agents.run` (function runtimes) or the `delegate`
@@ -71,6 +83,7 @@ export interface SubagentCaller {
 
 export interface SubagentRunArgs {
   readonly caller: SubagentCaller;
+  readonly world?: WorldModelView;
   /** The request as the plugin or the model wrote it; validated here. */
   readonly request: unknown;
   /** The caller's turn input. */
@@ -106,6 +119,10 @@ export interface SubagentSettledEvent {
 }
 
 export interface SubagentRunner {
+  privateTargetKind(
+    request: unknown,
+    caller: SubagentCaller,
+  ): "actor" | "concealed" | undefined;
   /** Never throws for a sub-agent failure: it resolves with `ok: false`. */
   run(args: SubagentRunArgs): Promise<SubagentResult>;
   /** Sub-agents of this execution now in flight. */
@@ -113,6 +130,7 @@ export interface SubagentRunner {
 }
 
 export interface CreateSubagentRunnerOptions {
+  readonly delegation?: DelegationBudget;
   /** The execution's active runtimes, after provider resolution. */
   readonly activeRuntimes: readonly RuntimeManifest[];
   /** Paused providers still participate in target resolution and ambiguity. */
@@ -131,6 +149,8 @@ const requestSchema = z.strictObject({
   ]),
   brief: z.string().min(1).max(SUBAGENT_BRIEF_MAX_CHARS),
   data: z.record(z.string(), z.unknown()).optional(),
+  characterId: z.string().min(1).optional(),
+  instruction: z.string().max(2_000).optional(),
   budget: z
     .strictObject({
       maxSteps: z.number().int().positive().optional(),
@@ -144,15 +164,34 @@ const MESSAGES = {
   timeout: "The sub-agent ran out of time before it answered",
   cancelled: "The sub-agent was cancelled with its caller",
   internal: "The sub-agent failed without producing output",
-  depth: "A sub-agent cannot start another sub-agent",
-  pool: `This execution already runs ${SUBAGENT_POOL_PER_EXECUTION} sub-agents; try again after one finishes`,
+  depth:
+    "The delegation depth limit is reached; finish without further children",
+  pool: "The concurrent delegation limit is reached; finish without further children",
 } as const;
 
 export function createSubagentRunner(
   options: CreateSubagentRunnerOptions,
 ): SubagentRunner {
   let inFlight = 0;
+  let budget = options.delegation;
+  let loadingBudget: Promise<DelegationBudget> | undefined;
   const runner: SubagentRunner = {
+    privateTargetKind(request, caller) {
+      const parsed = parseRequest(request);
+      if (typeof parsed === "string") return undefined;
+      const target = resolveTarget(
+        options.activeRuntimes,
+        options.pausedRuntimes ?? [],
+        parsed.target,
+        caller,
+      );
+      const provider = target.provider;
+      return provider?.concealed
+        ? "concealed"
+        : provider?.outputContract === CHARACTER_ACTOR_CONTRACT
+          ? "actor"
+          : undefined;
+    },
     get inFlight() {
       return inFlight;
     },
@@ -185,14 +224,6 @@ export function createSubagentRunner(
 
       const parsed = parseRequest(args.request);
       if (typeof parsed === "string") return refuse("invalid-input", parsed);
-      // Caps are checked synchronously, before any await, so concurrent
-      // calls count exactly. A full pool refuses; nothing queues.
-      if (args.caller.depth + 1 > SUBAGENT_MAX_DEPTH)
-        return refuse("unavailable", MESSAGES.depth);
-      if (inFlight >= SUBAGENT_POOL_PER_EXECUTION)
-        return refuse("unavailable", MESSAGES.pool);
-      if (args.parentSignal?.aborted)
-        return refuse("cancelled", MESSAGES.cancelled);
       const target = resolveTarget(
         options.activeRuntimes,
         options.pausedRuntimes ?? [],
@@ -202,11 +233,90 @@ export function createSubagentRunner(
       if ("code" in target)
         return refuse(target.code, target.message, target.provider);
 
+      const actor = target.provider.outputContract === CHARACTER_ACTOR_CONTRACT;
+      if (actor) {
+        if (
+          parsed.data !== undefined ||
+          !characterActorInputSchema.safeParse({
+            characterId: parsed.characterId,
+            brief: parsed.brief,
+            ...(parsed.instruction !== undefined
+              ? { instruction: parsed.instruction }
+              : {}),
+          }).success
+        )
+          return refuse(
+            "invalid-input",
+            "Character actors require characterId and brief; use instruction instead of data",
+          );
+      } else if (
+        parsed.characterId !== undefined ||
+        parsed.instruction !== undefined
+      ) {
+        return refuse(
+          "invalid-input",
+          "Character fields are only accepted by character actors",
+        );
+      }
+      const world =
+        args.world ??
+        (actor && args.deps.store
+          ? await createWorldModelView(
+              args.deps.worldModelReads ?? args.deps.store,
+              args.input.sessionId,
+              [],
+              [],
+              () => {},
+              args.deps.dimensionContext,
+            )
+          : undefined);
+      const character = actor
+        ? world?.characters.find(
+            (character) => character.id === parsed.characterId,
+          )
+        : undefined;
+      if (actor && !character)
+        return refuse(
+          "not-found",
+          "The character is not in the current world view",
+        );
+      budget ??= await (loadingBudget ??= createDelegationBudget(
+        args.input.sessionId,
+        args.deps.store,
+      ));
+      const delegation = budget;
+      // No await between the last cancellation/pool check and admission.
+      if (
+        args.parentSignal?.aborted ||
+        args.deps.turnControl?.executionSignal?.aborted ||
+        args.deps.turnControl?.signal?.aborted
+      )
+        return refuse("cancelled", MESSAGES.cancelled);
+      if (args.caller.depth + 1 > SUBAGENT_MAX_DEPTH)
+        return refuse("unavailable", MESSAGES.depth);
+      if (inFlight >= SUBAGENT_POOL_PER_EXECUTION)
+        return refuse("unavailable", MESSAGES.pool);
+      if (budget.claim(actor ? parsed.characterId : undefined))
+        return refuse(
+          "unavailable",
+          "The execution's delegation allowance is exhausted; finish without further children",
+        );
       inFlight++;
       try {
         const { fault, ...result } = await withServiceOrigin(args, () =>
           runProvider({
-            args,
+            args: {
+              ...args,
+              world,
+              deps: {
+                ...args.deps,
+                delegation,
+                emitter: delegation.privacy.emitter(
+                  args.deps.emitter,
+                  options.activeRuntimes,
+                ),
+              },
+            },
             request: parsed,
             provider: target.provider,
             subagentCallId,
@@ -594,12 +704,42 @@ async function runProvider({
   };
 
   try {
-    const loaded = await deps.loadRuntime(
+    const providerLoaded = await deps.loadRuntime(
       provider,
       input.locale,
       input.sessionId,
     );
-    if (!loaded) return fail("internal", MESSAGES.internal);
+    if (!providerLoaded) return fail("internal", MESSAGES.internal);
+    const actor = provider.outputContract === CHARACTER_ACTOR_CONTRACT;
+    const canonical = actor ? characterActorOutputJsonSchema() : undefined;
+    const loaded = canonical
+      ? {
+          ...providerLoaded,
+          outputSchema: providerLoaded.outputSchema
+            ? { allOf: [canonical, providerLoaded.outputSchema] }
+            : canonical,
+          outputContractSchema: canonical,
+        }
+      : providerLoaded;
+    if (actor) {
+      const character = args.world?.characters.find(
+        (candidate) => candidate.id === request.characterId,
+      );
+      if (!character || !deps.delegation)
+        return fail("internal", MESSAGES.internal);
+      const history = await deps.delegation.history.read(
+        character.id,
+        args.world,
+      );
+      (input as { playerMessage: string }).playerMessage =
+        await buildCharacterBrief(
+          character,
+          history,
+          request.brief,
+          request.instruction,
+          input.locale,
+        );
+    }
 
     // The provider's own prompt with no session history: the context
     // builder's framework frame and completion contract, then the brief.
@@ -620,6 +760,8 @@ async function runProvider({
       { role: "system", content: assembled.systemPrompt },
       ...assembled.messages,
     ];
+    // The caller's world only resolves the actor's profile and brief; the
+    // sub-agent's own reads stay on committed data, like every child run.
     const worldBase = deps.store
       ? await createWorldModelView(
           deps.worldModelReads ?? deps.store,
@@ -685,6 +827,8 @@ async function runProvider({
       );
     }
     const output = (settled.result.output ?? {}) as Record<string, unknown>;
+    if (actor && !characterActorOutputSchema.safeParse(output).success)
+      return fail("internal", MESSAGES.internal, { reason: "invalid-output" });
     if (provider.outputContract && loaded.outputContractSchema) {
       let valid = false;
       try {

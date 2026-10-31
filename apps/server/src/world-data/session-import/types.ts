@@ -1,3 +1,4 @@
+import type { DatasetPolicyResolver } from "@covel/runtime";
 import type {
   CharacterRecord,
   DataStore,
@@ -75,6 +76,8 @@ export interface DeferredProjectionOutput {
 }
 
 export interface ImportPlan {
+  /** Private captured package generation; never returned or persisted. */
+  readonly datasetPolicy: DatasetPolicyResolver;
   readonly writes: readonly PlannedWrite[];
   readonly diagnostics: readonly WorldDataDiagnostic[];
   readonly mergeEvents: readonly MergeEvent[];

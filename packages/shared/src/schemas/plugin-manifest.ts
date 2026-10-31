@@ -1,4 +1,8 @@
 import {
+  TURN_POLICY_CONTRACT,
+  CHARACTER_ACTOR_CONTRACT,
+} from "@covel/plugin-handlers-utils";
+import {
   isKernelExtensionContract,
   INVALID_KERNEL_CONFLICT,
   kernelConflictMessage,
@@ -284,28 +288,43 @@ export const pluginIdSchema = z
  * whether agents may import the service as a tool and whether it changes the
  * provider's data.
  */
-export const serviceContributionSchema = z.union([
-  contractIdSchema,
-  z
-    .object({
-      contract: contractIdSchema.describe(
-        "The contract ID the service is registered under.",
-      ),
-      access: z
-        .enum(["read", "write"])
-        .describe(
-          "`write` lets the service change its own plugin's data for the caller: its writes commit with the caller's work. `read` (the default) only reads. The registration must say the same.",
-        )
-        .optional(),
-      modelFacing: z
-        .boolean()
-        .describe(
-          "`true` lets agents import the service as a tool with `agent.tools.services`. The registration must say the same and give a description and an input that exports JSON Schema.",
-        )
-        .optional(),
-    })
-    .strict(),
-]);
+export const serviceContributionSchema = z
+  .union([
+    contractIdSchema,
+    z
+      .object({
+        contract: contractIdSchema.describe(
+          "The contract ID the service is registered under.",
+        ),
+        access: z
+          .enum(["read", "write"])
+          .describe(
+            "`write` lets the service change its own plugin's data for the caller: its writes commit with the caller's work. `read` (the default) only reads. The registration must say the same.",
+          )
+          .optional(),
+        modelFacing: z
+          .boolean()
+          .describe(
+            "`true` lets agents import the service as a tool with `agent.tools.services`. The registration must say the same and give a description and an input that exports JSON Schema.",
+          )
+          .optional(),
+      })
+      .strict(),
+  ])
+  .superRefine((entry, ctx) => {
+    const contract = typeof entry === "string" ? entry : entry.contract;
+    if (
+      contract === CHARACTER_ACTOR_CONTRACT ||
+      (contract === TURN_POLICY_CONTRACT &&
+        typeof entry !== "string" &&
+        entry.access === "write")
+    )
+      ctx.addIssue({
+        code: "custom",
+        message:
+          "turn-policy@1 is a read service; character-actor@1 is a runtime output",
+      });
+  });
 export type ServiceContribution = z.infer<typeof serviceContributionSchema>;
 
 /** The contract of a `contributes.services` entry. */

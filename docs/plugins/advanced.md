@@ -557,3 +557,188 @@ pnpm check
 - [打包并试装](../ship/package.md)、[发布与更新](../ship/publish.md)
 - 把插件和世界一起发布：[合集](../ship/collections.md)
 - 全部字段：[插件字段参考](../reference/plugins.md)
+
+<a id="orchestration-example"></a>
+
+## 用可选角色拼成一个故事
+
+这个社区包用两个可选策略和一个通用角色 agent 组合故事，只导入公共 SDK。先建 `~/.covel/plugins/conversation/`。根 `PLUGIN.md`：
+
+两个注册需要两条对应的服务声明，即使它们使用同一契约。
+
+<!-- orchestration-package -->
+
+```yaml
+---
+version: 0.1.0
+description: Compose a conversation with optional character contributions.
+contributes:
+  services:
+    - { contract: turn-policy@1, modelFacing: true }
+    - { contract: turn-policy@1, modelFacing: true }
+---
+```
+
+`server/index.js`：
+
+<!-- orchestration-entry -->
+
+```js
+import {
+  TURN_POLICY_CONTRACT,
+  turnPolicyInputSchema,
+  turnPolicyOutputSchema,
+} from "@covel/plugin-handlers-utils";
+
+export default function register(covel) {
+  for (const name of ["ensemble", "draw"]) {
+    covel.registerService({
+      name,
+      contract: TURN_POLICY_CONTRACT,
+      modelFacing: true,
+      description:
+        name === "ensemble"
+          ? "Invite everyone present"
+          : "Invite one character",
+      input: turnPolicyInputSchema,
+      output: turnPolicyOutputSchema,
+      handler: (input, ctx) => ({
+        actors: (name === "ensemble"
+          ? input.present
+          : input.present.length
+            ? [input.present[ctx.random.int(0, input.present.length)]]
+            : []
+        ).map(({ characterId }) => ({ characterId })),
+        order: "parallel",
+        narrator: "after",
+        yieldHint: "user",
+      }),
+    });
+  }
+}
+```
+
+`runtimes/actor/RUNTIME.md`：
+
+<!-- orchestration-actor -->
+
+```yaml
+---
+schedule:
+  subagentOnly: true
+io:
+  output:
+    contract: character-actor@1
+---
+Play only the supplied character. Return dialogue/action segments and optional private intent.
+```
+
+`runtimes/story/RUNTIME.md`：
+
+<!-- orchestration-story -->
+
+```yaml
+---
+schedule:
+  stage: narrative
+io:
+  visibility: story
+  output:
+    contract: narrative-engine@2
+function: {}
+---
+```
+
+`runtimes/story/handler.js`：
+
+<!-- orchestration-handler -->
+
+```js
+import {
+  TURN_POLICY_CONTRACT,
+  CHARACTER_ACTOR_CONTRACT,
+  turnPolicyOutputSchema,
+  characterActorOutputSchema,
+} from "@covel/plugin-handlers-utils";
+
+export default async function compose(ctx) {
+  const present = ctx.world.characters.map(({ id, name }) => ({
+    characterId: id,
+    name,
+  }));
+  const fallback = {
+    kind: "narration",
+    text: "The conversation continues in the quiet room.",
+  };
+  let plan;
+  try {
+    plan = turnPolicyOutputSchema.parse(
+      await ctx.services.call({
+        contract: TURN_POLICY_CONTRACT,
+        input: { actions: ctx.playerActions, present, recentSegments: [] },
+      }),
+    );
+  } catch {
+    ctx.signal.throwIfAborted();
+    return { outcome: "success", value: { segments: [fallback] } };
+  }
+  const run = async (actor) => {
+    const reply = await ctx.agents.run({
+      target: { contract: CHARACTER_ACTOR_CONTRACT },
+      characterId: actor.characterId,
+      brief: "Respond to the conversation in the room.",
+      instruction: actor.instruction,
+    });
+    ctx.signal.throwIfAborted();
+    if (!reply.ok) return [];
+    const answer = characterActorOutputSchema.parse(reply.output);
+    const speaker = present.find(
+      (person) => person.characterId === actor.characterId,
+    ).name;
+    return answer.segments.map((segment) => ({ ...segment, speaker }));
+  };
+  const replies = [];
+  if (plan.order === "parallel")
+    replies.push(...(await Promise.all(plan.actors.map(run))));
+  else for (const actor of plan.actors) replies.push(await run(actor));
+  const segments = replies.flat();
+  if (plan.narrator === "before") segments.unshift(fallback);
+  if (plan.narrator === "after" || segments.length === 0)
+    segments.push(fallback);
+  return { outcome: "success", value: { segments, yield: "user" } };
+}
+```
+
+也可把 story 的 RUNTIME.md 换成下面的 agent 版本；不要同时安装两个故事 runtime。delegate 仍逐个执行：
+
+<!-- orchestration-agent -->
+
+```yaml
+---
+schedule:
+  stage: narrative
+io:
+  visibility: story
+  output:
+    contract: narrative-engine@2
+agent:
+  tools:
+    builtin: [delegate]
+    services:
+      - { contract: turn-policy@1, as: choose-speakers }
+---
+Call choose-speakers with present character names and recent story segments.
+Delegate each planned reply with target contract character-actor@1 and character name.
+Combine successful segments in policy order, supply speaker names, and add narration.
+Keep intent private. If a policy or actor is unavailable, continue with a valid narrator fallback.
+```
+
+在会话“编排”里选择一个策略。`Promise.all` 保留计划顺序，即使角色完成顺序不同。策略缺失时直接叙述；角色缺失或失败时跳过那份回复，所有角色都失败也返回非空故事。`yieldHint` 是建议，本例固定交回玩家。两种入口共用名额与取消规则，intent 从不复制到最终故事。
+
+验证命令沿用[插件测试](./testing.md)。框架回归从本页读取声明和代码并实际加载。契约、限制和模型名字适配的权威说明在[编排契约](../reference/plugin-extensions.md#orchestration-contracts)。导演策略可以检查 `ctx.gateway`，缺失时抛 `ToolError("unavailable", ...)`；不要给工具路径额外借用模型凭据。
+
+## 采用内置组合
+
+对话叙事采用上面的公开契约，但把只读策略调用放在 pre-turn 函数，把 delegate 保留在唯一故事 agent 的工具循环中。函数读取 ctx.world 的当前角色/座位，输出安全名字；故事消费可选的同包输入。director 只有函数调用路径能借到 gateway；模型导入不能绕过代码专用设置。演员/策略都可缺失或由社区包替换。完整玩家行为见[群像对话](../builtin/story.md#群像对话与角色演员)。
+
+历史段落只供策略选人，不自动加入共享演员简报；运行器按角色提供亲历历史。`scene-cast@1` 的结构化名单供规划器读取，`activeCastContext` 则作为可选输入供故事 agent 使用。

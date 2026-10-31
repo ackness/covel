@@ -6,7 +6,9 @@ This page explains how to declare and register a provider, how the kernel combin
 
 For requests or follow-up work between packages, choose a service or event from the [communication guide](./plugin-extensions.md#choose-a-way-to-communicate); [nested calls with `ctx.recursiveCall`](./plugins.md#nested-calls-ctxrecursivecall) stay within one package. Function runtimes and tools call services, and an agent can import a model-facing service as a tool; see [How tools and agents use services](./plugin-extensions.md#how-tools-and-agents-use-services).
 
-To have another agent answer a brief, no extension point is needed: the provider is an agent runtime that declares `schedule.subagentOnly` and `io.output.contract`, and the caller runs it as a [sub-agent](./plugins.md#sub-agents) with `ctx.agents.run` or the `delegate` tool. A sub-agent runs inside the caller's execution, can be found by contract in another package, and returns output only, with no writes.
+To have another agent answer a brief, no extension point is needed: the provider is an agent runtime that declares `schedule.subagentOnly` and `io.output.contract`, and the caller runs it as a [sub-agent](./plugins.md#sub-agents) with `ctx.agents.run` or the `delegate` tool. A sub-agent runs inside the caller's execution, can be found by contract in another package, and returns output; when allowed, it can stage write-service operations that commit with the caller.
+
+Framework schema ownership does not imply a kernel extension point. [`turn-policy@1` and `character-actor@1`](./plugin-extensions.md#orchestration-contracts) are optional service/runtime contracts, without the extension-point exemption for story dependencies.
 
 ## Declaring and registering
 
@@ -233,3 +235,7 @@ Plugin code depends only on the SDK (`@covel/plugin-handlers-utils`). It does no
 | Load the plugin's own prompt templates (Node) | `createPromptLoader(root)` from `@covel/plugin-handlers-utils/prompts`, which reads only the English `<name>.md` and the Simplified Chinese `<name>.zh.md`. This sub-entry point is not part of the root module used in the browser. |
 
 For the return rules of hooks, see [Hooks](./hooks.md#how-an-event-runs). No return value means continue. On an event that can be intercepted, a handler that fails counts as a rejection. On other events, a handler that fails is skipped, and rewrites that succeeded before it are kept.
+
+## Character composition example
+
+turn-policy@1 and character-actor@1 are optional service/runtime contracts, not kernel extension points. The bundled dialogue planner and story agent compose them through [ordinary communication APIs](./plugin-extensions.md#orchestration-contracts).

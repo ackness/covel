@@ -1,5 +1,14 @@
+import {
+  orchestrationSettingsSchema,
+  delegationSnapshotSchema,
+} from "@covel/shared";
 import { z } from "zod";
-import { characterSchemaRecordSchema, seatsSchema } from "@covel/shared";
+import {
+  turnActionSchema,
+  autoAdvanceLimitSchema,
+  characterSchemaRecordSchema,
+  seatsSchema,
+} from "@covel/shared";
 import {
   characters,
   createdRow,
@@ -67,14 +76,27 @@ const sessionState = z.looseObject({
   runtimeModelOverrides: z.record(z.string(), z.string()).optional(),
 });
 const snapshotSession = sessionState.extend({
+  autoAdvanceLimit: autoAdvanceLimitSchema.optional(),
   loreOverride: z.string().optional(),
+  orchestration: orchestrationSettingsSchema.optional(),
 });
 export const session = sessionState.extend({
   id: nonEmptyString,
   worldId: z.string().optional(),
   createdAt: timestamp,
   updatedAt: timestamp,
-  metadata: jsonObject.optional(),
+  metadata: jsonObject
+    .superRefine((metadata, ctx) => {
+      if (metadata.orchestration === undefined) return;
+      const parsed = orchestrationSettingsSchema.safeParse(
+        metadata.orchestration,
+      );
+      if (!parsed.success)
+        for (const issue of parsed.error.issues)
+          ctx.addIssue({ ...issue, path: ["orchestration", ...issue.path] });
+    })
+    .and(z.object({ autoAdvanceLimit: autoAdvanceLimitSchema.optional() }))
+    .optional(),
   embeddingModelId: z.number().nullable().optional(),
   embeddingLockedAt: timestamp.nullable().optional(),
 });
@@ -132,6 +154,7 @@ const suspensions = createdRow.extend({
   reason: z.string(),
   resumeSchema: jsonValue,
   pendingContinuation: z.looseObject({
+    delegation: delegationSnapshotSchema.optional(),
     messages: z.array(jsonValue),
     partialContent: z.string().optional(),
     toolCallsSoFar: z.array(jsonValue),
@@ -158,6 +181,7 @@ const suspensions = createdRow.extend({
       executionId: nonEmptyString,
       origin: executionOrigin,
       logicalTurnId: z.string().optional(),
+      logicalTurn: z.number().int().positive().optional(),
       sourceTurnId: z.string().optional(),
       countPolicy: z.enum(["none", "complete-player-turn"]),
     }),
@@ -169,6 +193,7 @@ const suspensions = createdRow.extend({
     }),
     locale: z.string().optional(),
     logicalTurn: z.number().int().optional(),
+    actions: z.array(turnActionSchema).optional(),
     turnNumber: z.number().int().optional(),
     currentTurnUserMessages: z.number().int().positive().optional(),
     emittedEvents: z.array(jsonValue).optional(),

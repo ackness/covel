@@ -1,3 +1,4 @@
+import type { UpstreamWorldWrite } from "./upstream-world-model.js";
 import { toJsonValueOrDiagnostic } from "@covel/shared";
 import { reportRuntimeStarted } from "../trace/runtime-telemetry.js";
 import type {
@@ -51,6 +52,7 @@ export interface ExecuteFunctionRuntimeOptions {
     import("@covel/shared").PlayerInputSubmission | null;
   /** The scheduler's logical turn for this execution. */
   readonly logicalTurn?: number;
+  readonly upstreamWorld?: readonly UpstreamWorldWrite[];
   readonly upstreamProposals?: readonly import("@covel/shared").Proposal[];
   /** Writes of completed upstream runtimes of this plugin that reads include. */
   readonly upstreamPluginData?: readonly UpstreamPluginDataWrite[];
@@ -119,6 +121,7 @@ export async function executeFunctionRuntime({
   lastPlayerInput = null,
   logicalTurn,
   upstreamProposals = [],
+  upstreamWorld = [],
   upstreamPluginData = [],
   upstreamOf,
   manifest,
@@ -191,6 +194,7 @@ export async function executeFunctionRuntime({
     lastPlayerInput,
     ...(logicalTurn !== undefined ? { logicalTurn } : {}),
     upstreamProposals,
+    upstreamWorld,
     ...(activation ? { activation } : {}),
     ...(inputs ? { inputs } : {}),
     ...(exportSlots ? { exports: exportSlots } : {}),
@@ -318,6 +322,7 @@ export async function executeFunctionRuntime({
         ...(activation ? { activation: structuredClone(activation) } : {}),
         emittedEvents: [],
         executionContext,
+        ...(input.actions ? { actions: structuredClone(input.actions) } : {}),
         // A nested call reports progress under the root execution's scope.
         ...(executionId !== undefined &&
         executionId !== executionContext.executionId
@@ -331,10 +336,13 @@ export async function executeFunctionRuntime({
       },
       createdAt: new Date().toISOString(),
     };
-    return finalizeSuspension({ ...deps, hookPipeline }, run, {
+    const suspended = await finalizeSuspension({ ...deps, hookPipeline }, run, {
       record: suspension,
       toolCalls: [],
     });
+    if (suspended.status === "suspended")
+      attachReadDependencies(suspended, runtimeContext.readDependencies());
+    return suspended;
   }
 
   // `output.schema` validates the canonical success value. A mismatch fails
