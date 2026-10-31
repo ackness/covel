@@ -821,7 +821,7 @@ Agent 循环怎么跑由一个 profile 决定：文字是否流式显示给玩�
 | `steering` | 每步之前、以及写完正文之后，把玩家排队的插话并入对话 |
 | `truncation` | `accept`：在输出上限处被截断的正文保留；`reject`：判为失败 |
 | `fallback` | 模型反复调用同一个工具时：`answer-without-tools` 关掉工具、要答案；`fail` 以 `loop-detected` 失败 |
-| `finalizer.maxSteps` | 到步数上限时，关掉工具再要一次最终答案。`false` 时步数上限总是失败 |
+| `finalizer.maxSteps` | 到步数上限或请求不再装得进模型上下文时，在满足收尾条件后关闭工具再要一次最终答案。超限收尾要求已有完整工具步骤，并压缩所有工具组。`false` 关闭这两种收尾 |
 | `finalizer.deadlineReserveMs` | 离时限只剩这么多毫秒时不再开始新的一步，关掉工具要最终答案。`0` 关闭 |
 | `corrections.toolUse` | 缺少必需的工具工作或显式完成时的纠正次数。整数 0–3，默认 1 |
 | `corrections.review` | `PostLLMResponse` 退回草稿后的纠正次数。整数 0–5，默认 2 |

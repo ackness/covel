@@ -75,8 +75,8 @@ export type StopReason =
 export interface LoopStop {
   readonly reason: StopReason;
   /**
-   * A final answer without tools produced the output after the step limit
-   * or the deadline reserve.
+   * A final answer without tools produced the output at the step limit,
+   * at the deadline reserve, or after a context overflow.
    */
   readonly finalizer?: true;
   /** A repair request produced a replacement answer before output validation. */

@@ -234,6 +234,11 @@ describe("self-caused runtime attribution", () => {
       stop: { reason: "context-overflow" },
       expected: "runtime",
     },
+    {
+      name: "rescued context overflow",
+      stop: { reason: "context-overflow", finalizer: true },
+      extra: { status: "success", error: undefined },
+    },
     ...(["player", "parent", "hook", "host"] as const).map((cancelledBy) => ({
       name: `cancelled by ${cancelledBy}`,
       cause: new RuntimeTimeoutError("cancel"),

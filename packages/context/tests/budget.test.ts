@@ -1,5 +1,9 @@
 import { describe, it, expect } from "vitest";
-import { applyBudget, estimateTokens } from "@covel/context";
+import {
+  applyBudget,
+  estimateTokens,
+  estimateMessageTokens,
+} from "@covel/context";
 import type { TokenEstimator } from "@covel/context";
 
 describe("estimateTokens", () => {
@@ -464,5 +468,24 @@ describe("applyBudget — assistant↔tool pair integrity", () => {
 
     expect(result.messages).toEqual(messages);
     expect(result.prunedMessageCount).toBe(0);
+  });
+});
+
+describe("estimateMessageTokens export", () => {
+  it("counts content, tool calls and image parts with the shared budget estimator", () => {
+    const message = {
+      role: "assistant",
+      content: "text",
+      toolCalls: [{ id: "call", name: "read", arguments: "{}" }],
+    };
+    expect(estimateMessageTokens(message, (text) => text.length)).toBe(
+      4 + JSON.stringify({ toolCalls: message.toolCalls }).length,
+    );
+    expect(
+      estimateMessageTokens(
+        { role: "user", content: [{ type: "image" as const, image: "test" }] },
+        (text) => text.length,
+      ),
+    ).toBe(1_500 + "[image]".length);
   });
 });

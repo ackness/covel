@@ -116,9 +116,9 @@ export function settleAgentLoop(args: {
       stop: failedStop,
     },
   });
-  // A step limit or a deadline is never a success by itself, whatever text
-  // the model wrote beside its tool calls. Only a finalizer that produced the
-  // answer turns a step limit or the deadline reserve into a completion.
+  // Budget stops are never successes by themselves, whatever text the model
+  // wrote beside its tool calls. Only a finalizer that produced the answer
+  // turns a step limit, deadline reserve or context overflow into a completion.
   switch (stop.reason) {
     case "max-steps":
       if (stop.finalizer) break;
@@ -136,6 +136,16 @@ export function settleAgentLoop(args: {
         formatToolLoopFailure({
           runtimeId: manifest.name,
           reason: "timeout",
+          failedToolCalls,
+        }),
+      );
+    case "context-overflow":
+      if (stop.finalizer) break;
+      return fail(
+        formatToolLoopFailure({
+          runtimeId: manifest.name,
+          reason: "context_overflow",
+          ...(toolLoop.stopMessage ? { message: toolLoop.stopMessage } : {}),
           failedToolCalls,
         }),
       );

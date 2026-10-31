@@ -1,6 +1,10 @@
+import { createLoopContextPolicy } from "../src/agent-loop/loop-context-policy.js";
 import { describe, expect, it } from "vitest";
-import { applyPerCallBudget } from "../src/agent-loop/request-context-budget.js";
-import type { LLMAdapter } from "@covel/shared";
+import {
+  ContextOverflowError,
+  applyPerCallBudget,
+} from "../src/agent-loop/request-context-budget.js";
+import type { LLMAdapter, LLMMessage } from "@covel/shared";
 import { buildRetryPolicy } from "../src/retry/retry-common.js";
 
 describe("pre-request budget errors", () => {
@@ -127,5 +131,137 @@ describe("markers of a cut request", () => {
       expect(toolResult(locale)).toContain(
         "[tool result truncated; query a narrower scope if needed]",
       );
+  });
+});
+
+describe("typed context limits", () => {
+  const params = {
+    runtimeId: "test-runtime",
+    llm: {
+      generate: async () => {
+        throw new Error("unreached provider");
+      },
+      resolveTarget: () => ({
+        provider: "custom-provider",
+        model: "custom-model",
+      }),
+    },
+    slot: "custom-slot",
+    tools: undefined,
+    responseFormat: undefined,
+    retryPolicy: buildRetryPolicy({ runtimeTimeoutMs: 120_000, maxRetries: 0 }),
+    estimator: (text: string) => text.length,
+    contextBudget: { maxInputTokens: 100, reservedForResponse: 40 },
+  };
+
+  it("preserves the exact overflow text, fields, identity prefix and cause", () => {
+    let caught: unknown;
+    try {
+      applyPerCallBudget({
+        ...params,
+        messages: [{ role: "user", content: "x".repeat(200) }],
+      });
+    } catch (error) {
+      caught = error;
+    }
+    expect(caught).toBeInstanceOf(RangeError);
+    expect(caught).toBeInstanceOf(ContextOverflowError);
+    expect(caught).toMatchObject({
+      kind: "over-limit",
+      estimatedTokens: 200,
+      limitTokens: 60,
+      message:
+        '[provider: custom-provider, model: custom-model, slot: custom-slot] Context budget exceeded before LLM call for runtime "test-runtime": estimated 200 input tokens, limit 60 (fixed=0, system=0, tools=0, responseFormat=0, messages=200, toolResultSaved=0, summarySaved=0)',
+      cause: expect.objectContaining({
+        kind: "over-limit",
+        estimatedTokens: 200,
+        limitTokens: 60,
+      }),
+      breakdown: {
+        estimatedTokens: 200,
+        limitTokens: 60,
+        fixedInputTokens: 0,
+        systemTokens: 0,
+        toolDefinitionTokens: 0,
+        responseFormatTokens: 0,
+        messageTokens: 200,
+        toolResultSaved: 0,
+        summarySaved: 0,
+      },
+    });
+  });
+
+  it("distinguishes invalid limits without losing the original RangeError", () => {
+    let caught: unknown;
+    try {
+      applyPerCallBudget({
+        ...params,
+        messages: [],
+        llm: {
+          ...params.llm,
+          resolveBudget: () => ({
+            contextWindow: 100,
+            requestedMaxOutputTokens: 100,
+          }),
+        },
+      });
+    } catch (error) {
+      caught = error;
+    }
+    expect(caught).toBeInstanceOf(RangeError);
+    expect(caught).toBeInstanceOf(ContextOverflowError);
+    expect(caught).toMatchObject({
+      kind: "invalid-limits",
+      cause: expect.any(RangeError),
+    });
+    expect(String(caught)).toContain(
+      "[provider: custom-provider, model: custom-model, slot: custom-slot]",
+    );
+    expect(caught).not.toHaveProperty("estimatedTokens", expect.any(Number));
+  });
+
+  it("fits oversized arguments with an emergency policy and reports cumulative counts", () => {
+    const messages: LLMMessage[] = [
+      { role: "user", content: "go" },
+      {
+        role: "assistant",
+        content: "",
+        toolCalls: [
+          {
+            id: "call",
+            name: "read",
+            arguments: JSON.stringify({ query: "q".repeat(3_000) }),
+          },
+        ],
+      },
+      {
+        role: "tool",
+        toolCallId: "call",
+        content: JSON.stringify({ summary: "found", data: "data" }),
+      },
+    ];
+    const budget = {
+      ...params,
+      messages,
+      contextBudget: { maxInputTokens: 1_000, reservedForResponse: 100 },
+    };
+    expect(() => applyPerCallBudget(budget)).toThrow(ContextOverflowError);
+    const policy = createLoopContextPolicy({});
+    const result = applyPerCallBudget({
+      ...budget,
+      loopPolicy: policy,
+      trim: "emergency",
+    });
+    expect(result).toMatchObject({
+      elidedToolResultCount: 1,
+      collapsedStepCount: 1,
+      truncatedToolResultCount: 0,
+      prunedMessageCount: 0,
+    });
+    expect(applyPerCallBudget({ ...budget, loopPolicy: policy })).toEqual(
+      result,
+    );
+    expect(messages).toHaveLength(3);
+    expect(messages[1]!.toolCalls![0]!.arguments).toContain("q".repeat(3_000));
   });
 });

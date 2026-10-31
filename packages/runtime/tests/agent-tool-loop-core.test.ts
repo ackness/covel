@@ -108,14 +108,20 @@ function toolCall(
   };
 }
 
-function recordingEmitter(): { emitter: TurnEmitter; types: string[] } {
+function recordingEmitter(): {
+  emitter: TurnEmitter;
+  types: string[];
+  payloads: Record<string, unknown>[];
+} {
+  const payloads: Record<string, unknown>[] = [];
   const types: string[] = [];
   const emitter = {
-    emit: async (type: string) => {
+    emit: async (type: string, payload: Record<string, unknown>) => {
       types.push(type);
+      payloads.push(payload);
     },
   } as unknown as TurnEmitter;
-  return { emitter, types };
+  return { emitter, types, payloads };
 }
 
 async function run(opts: {
@@ -274,22 +280,25 @@ describe("runAgentToolLoop core", () => {
       prose("must not be reached"),
     ]);
 
-    await expect(
-      run({
-        llm,
-        maxSteps: 3,
-        estimator: (text) => text.length,
-        contextBudget: {
-          maxInputTokens: 1_000,
-          reservedForResponse: 100,
-          protectLastUserTurns: 1,
-        },
-        messages: [
-          { role: "system", content: "sys" },
-          { role: "user", content: "go" },
-        ],
-      }),
-    ).rejects.toThrow(/Context budget exceeded before LLM call/);
+    const result = await run({
+      llm,
+      manifest: manifest({ loopProfile: { finalizer: { maxSteps: false } } }),
+      maxSteps: 3,
+      estimator: (text) => text.length,
+      contextBudget: {
+        maxInputTokens: 1_000,
+        reservedForResponse: 100,
+        protectLastUserTurns: 1,
+      },
+      messages: [
+        { role: "system", content: "sys" },
+        { role: "user", content: "go" },
+      ],
+    });
+    expect(result.stop).toEqual({ reason: "context-overflow" });
+    expect(result.stopMessage).toMatch(
+      /Context budget exceeded before LLM call/,
+    );
     expect(llm.calls).toBe(1);
     expect(llm.requests[0]?.maxOutputTokens).toBe(100);
   });
@@ -328,7 +337,7 @@ describe("runAgentToolLoop core", () => {
       toolCall("large-read", {}),
       prose("after compacted result"),
     ]);
-    const { emitter, types } = recordingEmitter();
+    const { emitter, types, payloads } = recordingEmitter();
 
     const result = await run({
       llm,
@@ -353,11 +362,15 @@ describe("runAgentToolLoop core", () => {
     expect(followUpToolMessage?.content).toContain("tool result truncated");
     expect(String(followUpToolMessage?.content).length).toBeLessThan(3_000);
     expect(types).toContain("context.pruned");
+    expect(payloads[types.indexOf("context.pruned")]).toMatchObject({
+      elidedToolResultCount: 0,
+      collapsedStepCount: 0,
+    });
   });
 
   it("temporarily truncates a durable summary when fixed per-call input leaves no other pruneable history", async () => {
     const llm = new ScriptedLLM([prose("summary fallback worked")]);
-    const { emitter, types } = recordingEmitter();
+    const { emitter, types, payloads } = recordingEmitter();
     const durableSummary =
       `<compacted_history>\n${"older-fact ".repeat(80)}\n</compacted_history>\n` +
       "The block above is durable reference data.";
@@ -387,6 +400,10 @@ describe("runAgentToolLoop core", () => {
       durableSummary.length,
     );
     expect(types).toContain("context.pruned");
+    expect(payloads[types.indexOf("context.pruned")]).toMatchObject({
+      elidedToolResultCount: 0,
+      collapsedStepCount: 0,
+    });
   });
 
   it("completeAfterTools avoids a follow-up LLM call after a completing tool", async () => {
@@ -943,26 +960,28 @@ describe("runAgentToolLoop core", () => {
     // fails instead.
     const queue = ["等等，回头"];
     const llm = new ScriptedLLM([prose("must not be reached")]);
-    await expect(
-      run({
-        llm,
-        manifest: manifest({
-          name: "plug/story",
-          outputKind: "story",
-          tools: {},
-        }),
-        deps: {
-          toolExecutor: undefined,
-          turnControl: { drainSteering: () => queue.splice(0) },
-        },
-        estimator: (text) => text.length,
-        contextBudget: { maxInputTokens: 600, reservedForResponse: 100 },
-        messages: [
-          { role: "system", content: "sys" },
-          { role: "user", content: `走进森林。${"x".repeat(600)}` },
-        ],
+    const result = await run({
+      llm,
+      manifest: manifest({
+        name: "plug/story",
+        outputKind: "story",
+        tools: {},
       }),
-    ).rejects.toThrow(/Context budget exceeded before LLM call/);
+      deps: {
+        toolExecutor: undefined,
+        turnControl: { drainSteering: () => queue.splice(0) },
+      },
+      estimator: (text) => text.length,
+      contextBudget: { maxInputTokens: 600, reservedForResponse: 100 },
+      messages: [
+        { role: "system", content: "sys" },
+        { role: "user", content: `走进森林。${"x".repeat(600)}` },
+      ],
+    });
+    expect(result.stop).toEqual({ reason: "context-overflow" });
+    expect(result.stopMessage).toMatch(
+      /Context budget exceeded before LLM call/,
+    );
     expect(llm.calls).toBe(0);
   });
 

@@ -467,7 +467,7 @@ export const runtimeAuthoringManifestSchema = z
                 maxSteps: z
                   .boolean()
                   .describe(
-                    "At the step limit, ask once for the answer with tools off. `false` makes the step limit always fail. Defaults to true.",
+                    "At the step limit or when the request no longer fits the model's context, ask once for the answer with tools off. `false` makes these stops always fail. Defaults to true.",
                   )
                   .optional(),
                 deadlineReserveMs: z
