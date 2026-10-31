@@ -794,6 +794,9 @@ importers:
       '@covel/plugin-handlers-utils':
         specifier: workspace:*
         version: link:../plugin-handlers-utils
+      css-tree:
+        specifier: ^3.2.1
+        version: 3.2.1
       smol-toml:
         specifier: ^1.9.1
         version: 1.9.1
@@ -801,6 +804,9 @@ importers:
         specifier: ^4.6.7
         version: 4.6.7
     devDependencies:
+      '@types/css-tree':
+        specifier: ^3.2.0
+        version: 3.2.0
       ajv:
         specifier: ^8.20.0
         version: 8.20.0
@@ -3249,6 +3255,9 @@ packages:
 
   '@types/chai@5.2.3':
     resolution: {integrity: sha512-Mw558oeA9fFbv65/y4mHtXDs9bPnFMZAL/jxdPFUpOHHIXX91mcgEHbS5Lahr+pwZFR8A7GQleRWeI6cGFC2UA==}
+
+  '@types/css-tree@3.2.0':
+    resolution: {integrity: sha512-J5KXmk6BFIepOT7280FdFyNs4c5fh0Uee0otjKEvzchrRs38Ii9qminqc4ds0L19X8Zd/rT+brR9jkBthygjWw==}
 
   '@types/culori@2.1.1':
     resolution: {integrity: sha512-NzLYD0vNHLxTdPp8+RlvGbR2NfOZkwxcYGFwxNtm+WH2NuUNV8785zv1h0sulFQ5aFQ9n/jNDUuJeo3Bh7+oFA==}
@@ -8072,6 +8081,8 @@ snapshots:
     dependencies:
       '@types/deep-eql': 4.0.2
       assertion-error: 2.0.1
+
+  '@types/css-tree@3.2.0': {}
 
   '@types/culori@2.1.1': {}
 

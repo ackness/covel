@@ -877,3 +877,7 @@ const plan = await ctx.services.call({
 ## 呈现与通信
 
 呈现函数只从公开故事投影和自己的明确素材 / 展示 namespace 取输入；services、tools、递归和子 agent 在入口拒绝，包括读服务。界面槽位提供方继续从已提交的自有展示状态绘制，不因为呈现策略获得私有数据权限。完整规则见[呈现 runtime](./plugins.md#presentation-runtimes)。
+
+## 静态主题发现
+
+`contributes.ui.theme` 是宿主从文件读取的静态声明，不注册 `ui.slot@1`、服务或可执行扩展点，也不授予会话能力。发现走现有 `/api/ui-specs` 的独立 `theme` 数组，见[插件主题](./theme-packages.md#插件提供的受限主题)。

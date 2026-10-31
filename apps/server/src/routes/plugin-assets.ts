@@ -76,17 +76,25 @@ export function createPluginAssetRoutes(registry: PluginRegistry): Hono {
     }
     const root = await findPluginAssetRoot(registry, pluginId, digest);
     if (!root) return missing();
-    const bridge = relativePath === BRIDGE_PATH;
+    const bridge = root.purpose === "page" && relativePath === BRIDGE_PATH;
     const metadata = root.files.get(relativePath);
     if (!bridge && !metadata) return missing();
     let handle: Awaited<ReturnType<typeof fs.open>> | undefined;
     let body: Buffer | undefined;
-    const entry = relativePath === root.entry;
+    const entry = root.purpose === "page" && relativePath === root.entry;
     let size = Buffer.byteLength(PLUGIN_BRIDGE_SCRIPT);
     if (bridge) body = Buffer.from(PLUGIN_BRIDGE_SCRIPT);
     else {
       try {
         const file = path.join(root.rootDir, relativePath);
+        if (root.purpose === "theme") {
+          let current = root.rootDir;
+          for (const segment of relativePath.split("/")) {
+            current = path.join(current, segment);
+            if ((await fs.lstat(current)).isSymbolicLink())
+              throw new Error("linked bitmap path");
+          }
+        }
         handle = await fs.open(file, constants.O_RDONLY | constants.O_NOFOLLOW);
         const stat = await handle.stat();
         const [realRoot, realFile] = await Promise.all([
@@ -117,7 +125,7 @@ export function createPluginAssetRoutes(registry: PluginRegistry): Hono {
         )
           throw new Error("changed file");
         if (entry)
-          body = Buffer.from(injectBridge(body.toString("utf8"), root.entry));
+          body = Buffer.from(injectBridge(body.toString("utf8"), root.entry!));
         size = body.byteLength;
         await handle.close();
         handle = undefined;

@@ -1,3 +1,10 @@
+import { compilePluginTheme, PluginThemeError } from "./plugin-themes.js";
+import { diskPluginThemeFiles } from "./theme-files.js";
+import {
+  MAX_PLUGIN_THEMES,
+  pluginThemePathSchema,
+  type ResolvedPluginTheme,
+} from "@covel/shared";
 import { scanPluginAssetRoot, type PluginAssetRoot } from "./ui-assets.js";
 import { isPathInside } from "./path-containment.js";
 import {
@@ -42,7 +49,7 @@ export async function loadPluginUiSpec(
   root: string,
   file: string,
   ownerPluginId: string,
-  slot?: PluginUiSlot,
+  slot?: PluginUiSpecSlot,
   assets?: PluginAssetRoot[],
 ): Promise<Record<string, unknown>> {
   const specPath = await containedFile(root, file);
@@ -74,6 +81,7 @@ export async function loadPluginUiSpec(
     if (scanned.issues.length)
       throw new PluginUiSpecError(scanned.issues, specId);
     assets?.push({
+      purpose: "page",
       pluginId: ownerPluginId,
       digest: scanned.digest,
       rootDir,
@@ -107,15 +115,17 @@ export async function loadPluginUiSpec(
   return spec;
 }
 
-export type PluginUiSlot = PluginUiSpecSlot;
+export type PluginUiSlot = PluginUiSpecSlot | "theme";
 
-/** Every `contributes.ui` key, in the order specs are loaded. */
-export const PLUGIN_UI_SLOTS = [
+/** Placements using panel, webview or paragraph-template schemas. */
+export const PLUGIN_UI_SPEC_SLOTS = [
   "right",
   "message",
   "view",
   "segment",
-] as const satisfies readonly PluginUiSlot[];
+] as const satisfies readonly PluginUiSpecSlot[];
+/** All static UI placements, including the separate restricted theme schema. */
+export const PLUGIN_UI_SLOTS = [...PLUGIN_UI_SPEC_SLOTS, "theme"] as const;
 
 /** One declared UI spec the host does not show. */
 export interface PluginUiSpecDiagnostic {
@@ -130,6 +140,7 @@ export interface PluginUiSpecDiagnostic {
 }
 
 export interface PluginUiSpecs {
+  readonly themes: readonly ResolvedPluginTheme[];
   readonly slots: Partial<
     Record<PluginUiSlot, readonly Readonly<Record<string, unknown>>[]>
   >;
@@ -147,6 +158,7 @@ export async function loadPluginUiSpecs(
   root: string,
   pluginId: string,
   ui: Partial<Record<PluginUiSlot, readonly string[]>> | undefined,
+  themeState = { ids: new Set<string>(), count: 0 },
 ): Promise<PluginUiSpecs> {
   const slots: Partial<
     Record<PluginUiSlot, Readonly<Record<string, unknown>>[]>
@@ -154,9 +166,48 @@ export async function loadPluginUiSpecs(
   const diagnostics: PluginUiSpecDiagnostic[] = [];
   const assets: PluginAssetRoot[] = [];
   const viewIds = new Set<string>();
+  const themes: ResolvedPluginTheme[] = [];
   for (const slot of PLUGIN_UI_SLOTS)
     for (const [specIndex, declaredPath] of (ui?.[slot] ?? []).entries()) {
       try {
+        if (slot === "theme") {
+          if (++themeState.count > MAX_PLUGIN_THEMES)
+            throw new PluginThemeError([
+              {
+                path: "(root)",
+                message: "package exceeds 8 theme declarations",
+              },
+            ]);
+          if (!pluginThemePathSchema.safeParse(declaredPath).success)
+            throw new PluginThemeError([
+              {
+                path: "(root)",
+                message: "invalid package-relative descriptor path",
+              },
+            ]);
+          const compiled = compilePluginTheme({
+            pluginId,
+            declaredPath,
+            files: diskPluginThemeFiles(root),
+            catalogs: await readMessageCatalogs(root),
+          });
+          if (themeState.ids.has(compiled.theme.id))
+            throw new PluginThemeError(
+              [{ path: "id", message: "duplicate theme id" }],
+              compiled.theme.id,
+            );
+          themeState.ids.add(compiled.theme.id);
+          themes.push(compiled.theme);
+          if (compiled.asset && compiled.assetRoot)
+            assets.push({
+              ...compiled.asset,
+              rootDir: path.resolve(
+                await fs.realpath(root),
+                compiled.assetRoot,
+              ),
+            });
+          continue;
+        }
         if (!declaredPath.endsWith(".json"))
           throw new PluginUiSpecError([
             {
@@ -188,17 +239,28 @@ export async function loadPluginUiSpecs(
           slot,
           specIndex,
           declaredPath,
-          ...(error instanceof PluginUiSpecError && error.specId
+          ...((error instanceof PluginUiSpecError ||
+            error instanceof PluginThemeError) &&
+          error.specId
             ? { specId: error.specId }
             : {}),
           issues:
-            error instanceof PluginUiSpecError
+            error instanceof PluginUiSpecError ||
+            error instanceof PluginThemeError
               ? error.issues
-              : [{ path: "(root)", message: readProblem(error, declaredPath) }],
+              : [
+                  {
+                    path: "(root)",
+                    message:
+                      slot === "theme"
+                        ? "cannot read theme files or translations"
+                        : readProblem(error, declaredPath),
+                  },
+                ],
         });
       }
     }
-  return { slots, diagnostics, assets };
+  return { slots, themes, diagnostics, assets };
 }
 
 /** Why a spec could not be read, without the host's directories in it. */

@@ -392,7 +392,7 @@ export type { HookEventName, HookEnforce, HookDeclaration } from "./hooks.js";
  * - `view`: Full-column pages replacing the story column
  * - `segment`: Display-only templates for committed story paragraphs
  */
-export type UISlotType = "right" | "message" | "view" | "segment";
+export type UISlotType = "right" | "message" | "view" | "segment" | "theme";
 
 /**
  * UI contribution spec — declares which JSON files a plugin contributes
@@ -402,6 +402,8 @@ export type UISlotType = "right" | "message" | "view" | "segment";
  * Each JSON spec declares a catalog view or a sandboxed HTML webview.
  */
 export interface UISpec {
+  /** Restricted static theme descriptors, separate from views and webviews. */
+  readonly theme?: readonly string[];
   /** Right sidebar panel specs. */
   readonly right?: readonly string[];
   /** Message area block specs. */

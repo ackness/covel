@@ -2,6 +2,7 @@ export {
   loadPluginUiSpec,
   loadPluginUiSpecs,
   PLUGIN_UI_SLOTS,
+  PLUGIN_UI_SPEC_SLOTS,
 } from "./ui-spec.js";
 export type {
   PluginUiSlot,
@@ -54,7 +55,10 @@ export {
   validatePluginLabels,
 } from "./locale-labels.js";
 export { parseLocaleFile } from "./locale-files.js";
-export { readMessageCatalogs } from "./locale-messages.js";
+export {
+  readMessageCatalogs,
+  compileMessageCatalogs,
+} from "./locale-messages.js";
 export {
   lockPluginLabels,
   pluginLabelUnits,
@@ -187,3 +191,10 @@ export {
   PackageInventoryError,
 } from "./package-inventory.js";
 export type { PackageFile } from "./package-inventory.js";
+
+export {
+  compilePluginTheme,
+  PluginThemeError,
+  isPluginThemeBitmap,
+} from "./plugin-themes.js";
+export { diskPluginThemeFiles, type PluginThemeFiles } from "./theme-files.js";

@@ -729,3 +729,7 @@ contributes:
 ```
 
 启用此社区包后，从“插件视图”选择 Session desk。它使用宿主当前身份的真实输入框和公开渲染；没有在场角色提供方也可以继续行动。组件属性、唯一性、重复节点诊断和不可用位置见[组件契约](../reference/ui-components.md#实时会话视图组件)。验证用 `pnpm validate:plugin <plugin-dir>`；不要把这些组件放进 `ui.message` 或行模板。
+
+## 发布静态主题
+
+配色和受限样式放在 `contributes.ui.theme` 的独立 JSON 中，无须添加 runtime、虚假面板或 entry。描述文件、CSS 和素材根相对包目录，CSS 图片相对素材根；完整例子与校验限制见[插件主题](../reference/theme-packages.md#插件提供的受限主题)。目前可静态验证和通过 API 发现，尚不挂载到玩家界面。

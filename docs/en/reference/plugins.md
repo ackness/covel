@@ -1502,3 +1502,7 @@ Each settled invocation records [`presentation.completed`](./protocol.md#present
 ## Packages that only provide session views
 
 A package may contain only `contributes.ui.view`, with no `entry` or runtime. Such declarative packages make no model calls and gain no permission from providing a view. The bundled `dm-console` is one example; community packages compose the same [SessionMessages / SessionComposer](./ui-components.md#live-session-view-components). Codex and Relationship Graph can declare both right panels and dedicated pages over the same committed owner data. Ordinary declarative diagnostics omit invalid specs without losing other panels or runtimes. See the [authoring example](../plugins/ui.md#declarative-session-console).
+
+## Static theme declarations
+
+`contributes.ui.theme: [./ui/reading-theme.json]` declares restricted static themes, including in packages without runtimes or entries. It is separate from view/webview. CLI, in-app validation, ZIP admission and discovery share one compiler; discovery removes only the broken theme and reports `slot: "theme"`. See the [plugin theme contract](./theme-packages.md#restricted-themes-supplied-by-plugins) for fields, resources and safety limits. Authoring and API support are available; player enablement is not yet available.

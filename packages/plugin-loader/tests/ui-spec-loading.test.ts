@@ -174,6 +174,7 @@ Prompt.
 
     expect(await loadUi(discovery)).toEqual({
       slots: {},
+      themes: [],
       diagnostics: [],
       assets: [],
     });

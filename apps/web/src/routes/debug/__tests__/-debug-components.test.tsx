@@ -186,6 +186,7 @@ describe("debug route components", () => {
           worldProjections: {},
           declaredPluginDataNamespaces: [],
           ui: {
+            theme: [],
             view: [],
             right: [{ runtimeId: "story/runtime", path: "ui.json" }],
             message: [],

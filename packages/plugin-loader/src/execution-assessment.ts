@@ -2,7 +2,7 @@ import path from "node:path";
 import { pluginUiSpecIssues } from "@covel/shared";
 import { readPlainYamlFrontmatter } from "./plain-yaml-frontmatter.js";
 import { planPluginAssetRoot } from "./ui-assets.js";
-import { PLUGIN_UI_SLOTS } from "./ui-spec.js";
+import { PLUGIN_UI_SPEC_SLOTS } from "./ui-spec.js";
 import type { PackageFile } from "./package-inventory.js";
 import type { ParsedPluginMd, ParsedRuntimeMd } from "./types.js";
 
@@ -148,7 +148,7 @@ export function assessPluginExecution({
   }
   const browserFiles = new Set<string>();
   const viewIds = new Set<string>();
-  for (const slot of PLUGIN_UI_SLOTS)
+  for (const slot of PLUGIN_UI_SPEC_SLOTS)
     for (const reference of root.plugin.contributes?.ui?.[slot] ?? []) {
       try {
         const specPath = localPath("", reference);

@@ -7,6 +7,7 @@
 import type { UiSlotName } from "./shared.js";
 
 export interface UiSpecIssue {
+  readonly file?: string;
   readonly path: string;
   readonly message: string;
   readonly code: string;

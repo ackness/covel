@@ -1,0 +1,12 @@
+.story,
+.dialogue {
+  color: var(--story-color);
+  background-color: var(--surface-story);
+  font-family: serif;
+  line-height: 1.8;
+}
+.surface {
+  background-image: url(paper.png);
+  background-size: cover;
+  background-repeat: no-repeat;
+}

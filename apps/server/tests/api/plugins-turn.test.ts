@@ -335,6 +335,7 @@ describe("Plugin Routes", () => {
         "message",
         "view",
         "segment",
+        "theme",
       ]);
       expect(body.framework.scheduling.effectsPolicy).toBe(
         process.env.COVEL_EFFECTS_POLICY === "strict" ? "strict" : "warn",

@@ -193,3 +193,7 @@ The web app reads theme and color scheme preferences from SettingsStore, resolve
 ## Optional ensemble providers
 
 plugins/character-agent supplies a reusable actor and plugins/turn-policy one optional policy read service. They compose with dialogue through public SDK contracts, without a framework dependency or privileged host path.
+
+## Theme compilation dependencies
+
+`shared` owns pure theme schemas, CSS policy and the direct `css-tree` dependency, without filesystem access or a dependency on Web. Layout IDs are a low-level shared enum. `plugin-loader` owns file/archive adapters, bitmap checks and content identity; server caches and publishes safe DTOs/resources; web owns appearance application. See the [theme contract](../reference/theme-packages.md#restricted-themes-supplied-by-plugins).

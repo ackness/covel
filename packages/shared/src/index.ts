@@ -785,3 +785,7 @@ export {
   proposalReadPreconditionSchema,
   proposalReadScopesSchema,
 } from "./schemas/proposal-read-scopes.js";
+
+export * from "./schemas/plugin-theme.js";
+export * from "./plugin-theme-css.js";
+export * from "./plugin-theme.js";

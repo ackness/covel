@@ -729,3 +729,7 @@ contributes:
 ```
 
 Enable this community package and choose Session desk from Plugin views. It uses the host's real current-role input and public rendering; actions remain available without a cast provider. See the [component contract](../reference/ui-components.md#live-session-view-components) for props, singleton limits, repeat diagnostics and unavailable placements. Validate with `pnpm validate:plugin <plugin-dir>`; do not place these widgets in `ui.message` or row templates.
+
+## Publishing static themes
+
+Put palettes and restricted styles in separate JSON files under `contributes.ui.theme`, without a runtime, dummy panel or entry. Descriptor, CSS and asset-root paths are package-relative; CSS image paths are asset-root-relative. See [plugin themes](../reference/theme-packages.md#restricted-themes-supplied-by-plugins) for the example and validation limits. Static validation and API discovery are available; the player interface does not yet mount them.

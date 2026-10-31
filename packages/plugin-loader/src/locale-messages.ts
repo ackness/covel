@@ -2,7 +2,7 @@ import { compareText } from "@covel/shared";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { isLocaleMap } from "@covel/shared";
-import { readLocaleFiles } from "./locale-files.js";
+import { type LocaleFile, readLocaleFiles } from "./locale-files.js";
 
 /** Language of a plugin's main files: manifests, prompts and UI specs. */
 export const PLUGIN_BASE_LOCALE = "en";
@@ -154,8 +154,15 @@ function uiTexts(value: unknown): { property: string; text: string }[] {
 export async function readMessageCatalogs(
   pluginRoot: string,
 ): Promise<readonly MessageCatalog[]> {
+  return compileMessageCatalogs(await readLocaleFiles(pluginRoot));
+}
+
+/** Compile the same package catalogs from disk or archive locale documents. */
+export function compileMessageCatalogs(
+  files: readonly Pick<LocaleFile, "locale" | "file" | "document">[],
+): readonly MessageCatalog[] {
   const catalogs = new Map<string, MessageCatalog>();
-  for (const { locale, file, document } of await readLocaleFiles(pluginRoot)) {
+  for (const { locale, file, document } of files) {
     const section = document[MESSAGES_SECTION];
     if (section === null || typeof section !== "object") continue;
     const messages: Record<string, string> = {

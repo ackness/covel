@@ -1502,3 +1502,7 @@ runtime:
 ## 仅提供会话视图的包
 
 包可以只有 `contributes.ui.view`，不声明 `entry` 或 runtime。这样的声明式包不调用模型，也不因提供视图而增加权限。内置 `dm-console` 就是这种包；社区包可组合相同的 [SessionMessages / SessionComposer](./ui-components.md#实时会话视图组件)。图鉴和关系图谱也可同时声明右侧面板与独立页面，两者读取同一份自有已提交数据。普通声明式加载诊断只移除无效 spec，不影响其他面板和运行时。示例见[插件界面](../plugins/ui.md#声明式会话控制台)。
+
+## 静态主题声明
+
+`contributes.ui.theme: [./ui/reading-theme.json]` 声明受限静态主题。它可单独存在于无 runtime、无 entry 的包中，不是 view/webview。CLI、应用内校验、ZIP 安装和发现共用同一编译器；坏主题只在发现响应中被移除并返回 `slot: "theme"` 诊断。字段、安全边界与资源限制见[插件主题契约](./theme-packages.md#插件提供的受限主题)。当前只提供作者与 API 支持，尚无玩家启用入口。

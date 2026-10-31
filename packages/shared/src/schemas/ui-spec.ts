@@ -329,6 +329,8 @@ const SEGMENT_TEMPLATE_COMPONENTS: ReadonlySet<string> = new Set(
 );
 
 export interface PluginUiSpecIssue {
+  /** Optional package-relative source for static theme compilation. */
+  readonly file?: string;
   /** JSON path inside the spec, such as `view.children[0].component`, or `(root)`. */
   readonly path: string;
   readonly message: string;

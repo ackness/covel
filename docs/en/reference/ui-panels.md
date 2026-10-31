@@ -218,7 +218,7 @@ contributes:
       - ./ui/my-panel.json
 ```
 
-When this page says `ui.right`, `ui.message`, `ui.view` or `ui.segment`, it means these keys under `contributes.ui`. These are the four supported placements; a right panel can also select the stage decision area with `surfaces`, and story paragraph templates are described in [Segment templates](#segment-templates). Other placements, including the removed `left`, are ignored with a log message at load and reported as unknown fields by `pnpm validate:plugin`.
+When this page says `ui.right`, `ui.message`, `ui.view` or `ui.segment`, it means these keys under `contributes.ui`. These four placements use panel/template schemas; `ui.theme` uses the [separate theme schema](./theme-packages.md#restricted-themes-supplied-by-plugins); a right panel can also select the stage decision area with `surfaces`, and story paragraph templates are described in [Segment templates](#segment-templates). Other placements, including the removed `left`, are ignored with a log message at load and reported as unknown fields by `pnpm validate:plugin`.
 
 ### JSON Spec Format
 
@@ -1285,3 +1285,7 @@ Turn Policy declares Choose actors through the generic action catalogue in both 
 ## Presentation data and slot degradation
 
 UI slots consume committed owned presentation state. Missing public story, assets or allowance, and generation failures leave story and composer usable, degrading only the display. Presentation cannot publish UI proposals and adds no components or provider-selection controls. See [presentation runtimes](./plugins.md#presentation-runtimes).
+
+## Separate theme placement
+
+`contributes.ui.theme` has its own strict schema. It executes no view/webview, reads no session and requests no bridge. Bitmap roots have no HTML entry and remain separate from page listings. A broken theme produces only its own diagnostic; valid panels and themes remain discoverable. Compilation and discovery are available; styles are not yet mounted. See [plugin themes](./theme-packages.md#restricted-themes-supplied-by-plugins).

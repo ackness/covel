@@ -1672,11 +1672,12 @@ A webview spec returns `webview: { html, height? }` for a single file or `webvie
   "message": [...],
   "view": [...],
   "segment": [...],
+  "theme": [...],
   "diagnostics": []
 }
 ```
 
-Each slot is an array. Its elements are `{ pluginId, specs[] }`. Each item in `specs` is a json-render spec, loaded from the plugin's `ui/*.json` files.
+Each slot is an array. Its elements are `{ pluginId, specs[] }`. `theme` uses a separate resolved-theme type; other placements load panel, view or template specs from the plugin's `ui/*.json` files.
 
 **Validation and `specVersion`**:
 
@@ -1689,6 +1690,8 @@ Each slot is an array. Its elements are `{ pluginId, specs[] }`. Each item in `s
 `view` is always an array (possibly empty) of `{ pluginId, specs }`. With a session, it lists only active plugins. The first view ID within a plugin wins; later duplicates produce `slot: "view"` diagnostics. Loading reads UI JSON, HTML and published assets without importing plugin code or requiring server-code approval. The browser separately gates mounting on player consent for session reading; see [Plugin views](./ui-panels.md#plugin-views).
 
 `segment` is always an array (possibly empty) of `{ pluginId, specs }`: the story paragraph templates of `contributes.ui.segment`, filtered by session like `message`. Plugin order is the tie-break order between templates of the same specificity. A template without `match`, with `webview`, `dataSource` or another panel field, or with an `on` / `watch` binding gets a `slot: "segment"` diagnostic, and the plugin's other templates are still returned. See [Segment templates](./ui-panels.md#segment-templates). Valid speaker-scoped `CharacterAvatar` templates use the same validation, per-template diagnostics and prose fallback; response fields do not change.
+
+`theme` is a required array of `{ pluginId, specs: ResolvedPluginTheme[] }`, using the same session owner guard and runnable-plugin filter as views. It returns localized text maps, validated tokens/layout, generated `cssText`, full SHA-256 `contentHash`, and optional `assets: { digest, files: [{ path, mime, size }] }`. It exposes no raw CSS, disk roots, session data or capabilities. Diagnostics use `slot: "theme"`; CSS issues may include a package-relative `file`. Bitmap-only assets use the existing credential-free `/plugin-assets/<pluginId>/<digest>/<path>` route with GET/HEAD, ETag, immutable caching and `nosniff`, without HTML entry or bridge behavior. Old/unlisted/changed files return the same 404; page rules remain unchanged. See [plugin themes](./theme-packages.md#restricted-themes-supplied-by-plugins) for the authoritative compiler and identity contract. This API support does not yet enable themes in the player interface.
 
 **Development hot reload**: `POST /api/plugins/:id/reload` reloads one community plugin.
 
@@ -3904,7 +3907,7 @@ Returns an index of the framework's capabilities. Third-party developers, extern
         "runtime-export",
         "kernel"
       ],
-      "uiSlots": ["right", "message", "view", "segment"]
+      "uiSlots": ["right", "message", "view", "segment", "theme"]
     },
     "scheduling": {
       "effectsPolicy": "warn"

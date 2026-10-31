@@ -1672,11 +1672,12 @@ fork 和社区插件的授权：
   "message": [...],
   "view": [...],
   "segment": [...],
+  "theme": [...],
   "diagnostics": []
 }
 ```
 
-每个 slot 是一个数组，元素为 `{ pluginId, specs[] }`。`specs` 里的每一项是一个 json-render spec，从插件的 `ui/*.json` 文件加载。
+每个 slot 是一个数组，元素为 `{ pluginId, specs[] }`。`theme` 使用独立的已解析主题类型；其他位置从插件的 `ui/*.json` 加载面板、视图或模板 spec。
 
 **校验与 `specVersion`**：
 
@@ -1689,6 +1690,8 @@ fork 和社区插件的授权：
 `view` 始终为数组（可以为空），项为 `{ pluginId, specs }`。仅列出当前会话活跃插件的视图；同一插件重复的视图 ID 保留第一份，其余报告 `slot: "view"` 诊断。这里只读取 UI JSON、HTML 和已发布资源，不导入插件代码，不需要服务端代码审批。读取会话的玩家授权在浏览器挂载前单独处理，见[插件视图](./ui-panels.md#插件视图)。
 
 `segment` 始终为数组（可以为空），项为 `{ pluginId, specs }`，是 `contributes.ui.segment` 的段落模板，按与 `message` 相同的会话筛选，插件的顺序就是模板同级时的先后。缺少 `match`、写了 `webview` / `dataSource` 等面板字段或带 `on` / `watch` 的模板报 `slot: "segment"` 诊断，同一插件的其他模板照常返回。见[段落模板](./ui-panels.md#段落模板)。合法的说话人头像模板 `CharacterAvatar` 走相同校验、逐项诊断与正文回退路径，响应字段不变。
+
+`theme` 必须为 `{ pluginId, specs: ResolvedPluginTheme[] }` 数组，与视图使用相同的会话 owner 门禁和可运行插件筛选。返回完整本地化文本映射、校验后的 tokens/layout、生成的 `cssText`、完整 SHA-256 `contentHash` 和可选 `assets: { digest, files: [{ path, mime, size }] }`；不暴露源 CSS、磁盘根目录、会话数据或能力。诊断使用 `slot: "theme"`，CSS 问题可含包内 `file`。位图通过既有无凭据 `/plugin-assets/<pluginId>/<digest>/<path>` 路由提供 GET/HEAD、ETag、不可变缓存和 `nosniff`，没有 HTML 入口或 bridge。过期、未列出或被替换文件统一 404，页面规则不变。编译和身份规则以[插件主题](./theme-packages.md#插件提供的受限主题)为准；此 API 支持尚不提供玩家启用入口。
 
 **开发热重载**：`POST /api/plugins/:id/reload` 重新加载一个社区插件。
 
@@ -3904,7 +3907,7 @@ runtime 报告失败时，它的原始错误保留在 `result.runtimeResults` �
         "runtime-export",
         "kernel"
       ],
-      "uiSlots": ["right", "message", "view", "segment"]
+      "uiSlots": ["right", "message", "view", "segment", "theme"]
     },
     "scheduling": {
       "effectsPolicy": "warn"

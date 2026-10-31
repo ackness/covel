@@ -259,3 +259,24 @@ it("retains each exact file hash and changes the root digest on a same-size edit
     before.listed.get("app.js")?.sha256,
   );
 });
+
+it("keeps bitmap-only publication separate from page entry and MIME permissions", () => {
+  const files = [
+    "paper.png",
+    "index.html",
+    "app.js",
+    "icon.svg",
+    "font.woff2",
+  ].map((name) => file(name));
+  const theme = plan(files, { purpose: "theme" });
+  expect(theme.issues).toEqual([]);
+  expect([...theme.listed.keys()]).toEqual(["paper.png"]);
+  const page = plan(files, "index.html");
+  expect(page.issues).toEqual([]);
+  expect([...page.listed.keys()]).toEqual(
+    files.map((file) => file.relativePath),
+  );
+  expect(plan([file("paper.png")], "index.html").issues).toContainEqual(
+    expect.objectContaining({ path: "webview.entry" }),
+  );
+});
