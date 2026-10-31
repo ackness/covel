@@ -49,41 +49,51 @@ export function worldDataRequirementNotices(
   unmet: readonly UnmetWorldRequirement[],
   diagnostics: readonly WorldDataDiagnostic[] = [],
 ): WorldDataImportNotice[] {
-  const notices = inventory.sources.flatMap(
-    (source): WorldDataImportNotice[] => {
-      const missing = unmet.filter((item) =>
-        source.contracts.includes(item.contract),
-      );
-      if (!missing.length) return [];
-      const code = missing.some((item) => item.code === "approval-required")
-        ? "receiver-approval-required"
-        : missing.some((item) => item.code === "ambiguous-provider")
-          ? "receiver-ambiguous"
-          : missing.every((item) => item.code === "excluded")
-            ? "receiver-excluded"
-            : "receiver-missing";
-      return [
-        {
-          level: "warning",
-          code,
-          message: `This data has no plugin to receive it. ${code === "receiver-approval-required" ? "A receiver needs approval." : code === "receiver-ambiguous" ? "Choose a receiving plugin." : code === "receiver-excluded" ? "Receiving plugins are disabled." : "No receiving plugin is available."}`,
-        },
-      ];
-    },
-  );
-  return unique([
+  const notices = [
+    ...new Map(
+      inventory.sources.map((source) => [source.sourceId, source]),
+    ).values(),
+  ].flatMap((source): WorldDataImportNotice[] => {
+    const missing = unmet.filter((item) =>
+      source.contracts.includes(item.contract),
+    );
+    if (
+      !missing.length &&
+      !diagnostics.some(
+        (item) =>
+          item.code === "receiver-missing" && item.sourceId === source.sourceId,
+      )
+    )
+      return [];
+    const code = missing.some((item) => item.code === "approval-required")
+      ? "receiver-approval-required"
+      : missing.some((item) => item.code === "ambiguous-provider")
+        ? "receiver-ambiguous"
+        : missing.length > 0 &&
+            missing.every((item) => item.code === "excluded")
+          ? "receiver-excluded"
+          : "receiver-missing";
+    return [
+      {
+        level: "warning",
+        code,
+        ...(!source.hidden && source.publicLabel
+          ? { publicLabel: source.publicLabel }
+          : {}),
+        message: `This data has no plugin to receive it. ${code === "receiver-approval-required" ? "A receiver needs approval." : code === "receiver-ambiguous" ? "Choose a receiving plugin." : code === "receiver-excluded" ? "Receiving plugins are disabled." : "No receiving plugin is available."}`,
+      },
+    ];
+  });
+  return [
     ...notices,
     ...worldDataImportNotices(
       [...inventory.diagnostics, ...diagnostics].filter(
         (item) =>
           item.code !== "receiver-missing" ||
-          (notices.length === 0 &&
-            inventory.sources.some(
-              (source) =>
-                source.sourceId === item.sourceId &&
-                source.contracts.length > 0,
-            )),
+          !inventory.sources.some(
+            (source) => source.sourceId === item.sourceId,
+          ),
       ),
     ),
-  ]);
+  ];
 }

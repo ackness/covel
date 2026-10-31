@@ -380,6 +380,7 @@ export const worldPluginPlanSchema: z.ZodType<WorldPluginPlan> = z
           .object({
             level: z.enum(["warning", "error"]),
             sourceId: z.string().optional(),
+            publicLabel: z.string().optional(),
             code: z.string().optional(),
             message: z.string(),
           })

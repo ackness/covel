@@ -1,3 +1,7 @@
+import {
+  DEPENDENCY_CASES,
+  worldDataDependencyScenario,
+} from "../helpers/world-data-dependency-scenario.js";
 import { afterAll, describe, it } from "vitest";
 import { createPgStore } from "@covel/store/postgres";
 import {
@@ -5,6 +9,10 @@ import {
   type IsolatedPgDatabase,
 } from "./pg-test-db.js";
 import { worldDataSelectionScenario } from "../helpers/world-data-selection-scenario.js";
+import {
+  COLLISION_CASES,
+  worldDataCollisionScenario,
+} from "../helpers/world-data-collision-scenario.js";
 
 let database: IsolatedPgDatabase | undefined;
 try {
@@ -21,6 +29,29 @@ try {
 }
 afterAll(() => database?.cleanup(), 90_000);
 describe.skipIf(!database)("inferred world data on PostgreSQL", () => {
+  it.each(DEPENDENCY_CASES)(
+    "$endpoint defers receivers with a $failure transitive dependency",
+    async (scenario) => {
+      const store = await createPgStore(database!.url, { freshSchema: true });
+      try {
+        await worldDataDependencyScenario(store, scenario);
+      } finally {
+        await store.close();
+      }
+    },
+  );
+
+  it.each(COLLISION_CASES)(
+    "preserves imported content on a %s collision",
+    async (kind) => {
+      const store = await createPgStore(database!.url, { freshSchema: true });
+      try {
+        await worldDataCollisionScenario(store, kind);
+      } finally {
+        await store.close();
+      }
+    },
+  );
   it.each([false, true])(
     "preserves activation, deferral, retry and transactions for portable content: %s",
     async (portable) => {

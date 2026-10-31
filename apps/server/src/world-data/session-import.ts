@@ -22,6 +22,7 @@ import {
   conventionCollisionDiagnostics,
   conventionCollisions,
   conventionsOfPlugins,
+  deferredConventionSourceIds,
   worldHasData,
   type ConventionalSource,
 } from "./conventions.js";
@@ -235,8 +236,23 @@ export async function prepareWorldDataImportForSession(
     now: options.now,
     locale: options.locale,
   });
+  const deferredIds =
+    options.inventory?.deferredSourceIds ??
+    (options.preflight?.registry
+      ? await deferredConventionSourceIds(
+          worldRoot,
+          conventionCollisions(options.preflight.registry),
+          descriptor,
+        )
+      : []);
   const plan = appendDimensionPlan(
-    basePlan,
+    {
+      ...basePlan,
+      deferredSources: [
+        ...(basePlan.deferredSources ?? []),
+        ...deferredIds.map((sourceId) => ({ sourceId, scope: "all" as const })),
+      ],
+    },
     record.dimensions,
     options.preflight,
     options.locale,
@@ -572,8 +588,21 @@ export async function prepareWorldDataSyncForSession(
     now: options.now,
     locale: options.locale ?? session?.locale,
   });
+  const deferredIds = options.preflight?.registry
+    ? await deferredConventionSourceIds(
+        worldRoot,
+        conventionCollisions(options.preflight.registry),
+        descriptor,
+      )
+    : [];
   const plan = appendDimensionPlan(
-    basePlan,
+    {
+      ...basePlan,
+      deferredSources: [
+        ...(basePlan.deferredSources ?? []),
+        ...deferredIds.map((sourceId) => ({ sourceId, scope: "all" as const })),
+      ],
+    },
     record.dimensions,
     {
       ...options.preflight,

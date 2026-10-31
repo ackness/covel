@@ -53,21 +53,33 @@ export function WorldDataNotices({
 export function WorldDataNoticeText({
   notice,
 }: {
-  readonly notice: Pick<WorldDataImportNotice, "code" | "sourceId" | "message">;
+  readonly notice: Pick<
+    WorldDataImportNotice,
+    "code" | "sourceId" | "publicLabel" | "message"
+  >;
 }) {
   const { t } = useTranslation();
   const source = notice.sourceId ?? "";
+  const omission = (message: string) =>
+    notice.publicLabel
+      ? t("session.worldDataNotices.labeled", {
+          source: notice.publicLabel,
+          message,
+        })
+      : message;
   switch (notice.code) {
     case "dimension-provider-missing":
       return <>{t("session.worldDataNotices.dimensionsMissing")}</>;
     case "receiver-ambiguous":
-      return <>{t("session.worldDataNotices.receiverAmbiguous")}</>;
+      return <>{omission(t("session.worldDataNotices.receiverAmbiguous"))}</>;
     case "receiver-excluded":
-      return <>{t("session.worldDataNotices.receiverExcluded")}</>;
+      return <>{omission(t("session.worldDataNotices.receiverExcluded"))}</>;
     case "receiver-approval-required":
-      return <>{t("session.worldDataNotices.receiverApprovalRequired")}</>;
+      return (
+        <>{omission(t("session.worldDataNotices.receiverApprovalRequired"))}</>
+      );
     case "receiver-missing":
-      return <>{t("session.worldDataNotices.receiverMissing", { source })}</>;
+      return <>{omission(t("session.worldDataNotices.receiverMissing"))}</>;
     default:
       return (
         <details className="inline">

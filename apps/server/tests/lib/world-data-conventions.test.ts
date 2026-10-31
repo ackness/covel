@@ -378,7 +378,10 @@ describe("world data conventions", () => {
     expect(paths(conventionsOfPlugins(crowded))).not.toContain(
       "data/quests.yaml",
     );
-    expect(conventionCollisions(crowded)).toEqual([
+    const collisions = conventionCollisions(crowded);
+    expect(
+      collisions.map(({ sources: _sources, ...collision }) => collision),
+    ).toEqual([
       {
         path: "data/quests.yaml",
         claimants: [
@@ -389,6 +392,12 @@ describe("world data conventions", () => {
           },
         ],
       },
+    ]);
+    expect(collisions[0]?.sources.map((source) => source.id)).toEqual([
+      "quests",
+      "core-quest-quests",
+      "records",
+      "rival-log-records",
     ]);
     // An explicitly restricted author catalogue can omit the rival.
     const active = [...crowded.getAll().keys()].filter(

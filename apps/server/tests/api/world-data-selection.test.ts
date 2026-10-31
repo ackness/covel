@@ -1,3 +1,7 @@
+import {
+  DEPENDENCY_CASES,
+  worldDataDependencyScenario,
+} from "../helpers/world-data-dependency-scenario.js";
 import { describe, expect, it } from "vitest";
 import { Hono } from "hono";
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
@@ -802,3 +806,46 @@ it("keeps conventional data deferred when a valid receiver declaration cannot ex
     await f.close();
   }
 });
+
+it("loads both browser receiver fixtures as real runtime-less data packages", async () => {
+  const discoveries = await discoverPlugins(
+    path.resolve(
+      import.meta.dirname,
+      "../../../../tests/fixtures/world-data-receivers",
+    ),
+  );
+  expect(discoveries.map((entry) => entry.id).sort()).toEqual([
+    "test-data-receiver-one",
+    "test-data-receiver-two",
+  ]);
+  for (const discovery of discoveries) {
+    const definition = await loadPluginDefinition(discovery);
+    expect(definition.manifests).toEqual([]);
+    expect(
+      definition.packageManifest.plugin.contributes?.data?.notes?.accepts,
+    ).toContain("test.receiver-notes@1");
+    expect(
+      definition.packageManifest.plugin.contributes?.datasets?.notes,
+    ).toEqual({
+      schema: "./notes.schema.json",
+      key: "id",
+      ops: ["set", "delete"],
+    });
+  }
+});
+
+for (const [backend, create] of [
+  ["memory", createMemoryStore],
+  ["sqlite", () => createSqliteStore(":memory:")],
+] as const)
+  it.each(DEPENDENCY_CASES)(
+    `${backend} $endpoint defers a receiver when its transitive dependency is $failure`,
+    async (scenario) => {
+      const store = create();
+      try {
+        await worldDataDependencyScenario(store, scenario);
+      } finally {
+        await store.close();
+      }
+    },
+  );

@@ -106,6 +106,7 @@ interface CharacterBlockTargets extends CharacterBlockRoute {
 /** What a character source needs to hand the plugin data its records carry. */
 interface CharacterBlocks {
   readonly routes: readonly CharacterBlockTargets[];
+  readonly deferredContracts?: readonly string[];
   /** Fields that more than one contract names: read for none of them. */
   readonly colliding: readonly string[];
   /** Report a field no plugin reads: an authoring check of every plugin. */
@@ -513,6 +514,7 @@ function resolveCharacterBlocks(
       return { ...route, targets };
     }),
     colliding: collisions.map((collision) => collision.field),
+    deferredContracts: collisions.flatMap((collision) => collision.contracts),
     // Only a check of the whole catalogue knows that no plugin reads a field.
     reportUnread: deps.activePlugins === undefined,
   };
@@ -681,9 +683,12 @@ export async function buildImportPlan(options: {
       options.deps,
       diagnostics,
     );
-    const deferredContracts = characterBlocks.routes
-      .filter((route) => route.targets.length === 0)
-      .map((route) => route.contract);
+    const deferredContracts = [
+      ...(characterBlocks.deferredContracts ?? []),
+      ...characterBlocks.routes
+        .filter((route) => route.targets.length === 0)
+        .map((route) => route.contract),
+    ];
     if (deferredContracts.length)
       deferredCharacterSources.push({
         sourceId: source.id,

@@ -299,6 +299,7 @@
       "hint": "插件已关闭或正在等待你批准时，分配给它的数据会在启用后导入。",
       "hide": "隐藏",
       "dimensionsMissing": "世界维度（如关系、资源）：没有启用的插件保存它们，这局不记录。",
+      "labeled": "{{source}}: {{message}}",
       "receiverMissing": "这些数据没有插件接收。",
       "sourceNotImported": "“{{source}}”的数据没有导入（详情）",
       "notImported": "有一部分数据没有导入（详情）",

@@ -54,6 +54,8 @@ export interface WorldDataDescriptorFile {
 export interface WorldDataImportNotice {
   readonly level: "warning" | "error";
   readonly sourceId?: string;
+  /** Explicitly public declaration title; hidden content always omits it. */
+  readonly publicLabel?: string;
   readonly code?: string;
   readonly message: string;
 }

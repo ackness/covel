@@ -5,12 +5,14 @@ import type { PluginRegistry } from "@covel/plugin-loader";
 import {
   parseWorldDataTarget,
   isReservedWorldPackagePath,
+  resolveI18nText,
 } from "@covel/shared";
 import {
   characterBlockRoutes,
   conventionCollisionDiagnostics,
   conventionCollisions,
   conventionsOfPlugins,
+  deferredConventionSourceIds,
 } from "./conventions.js";
 import {
   descriptorSourcePaths,
@@ -41,11 +43,14 @@ export interface WorldDataRequirementSource {
   readonly sourceId: string;
   readonly path: string;
   readonly hidden: boolean;
+  /** A declaration title for public content, never a path or source identity. */
+  readonly publicLabel?: string;
   readonly contracts: readonly string[];
 }
 
 /** Static facts only: no module loading, schema execution, media claims or writes. */
 export interface WorldDataRequirements {
+  readonly deferredSourceIds?: readonly string[];
   readonly requiredContracts: readonly string[];
   readonly requiredDataContracts: readonly string[];
   readonly sources: readonly WorldDataRequirementSource[];
@@ -180,6 +185,24 @@ export async function inventoryWorldData(options: {
   readonly locale?: string;
 }): Promise<WorldDataRequirements> {
   const entries = new Map(options.registry.getAll());
+  const publicTitles = new Map<string, Set<string>>();
+  for (const plugin of entries.values())
+    for (const data of Object.values(
+      plugin.packageManifest?.plugin.contributes?.data ?? {},
+    )) {
+      if (!data.authoring || data.authoring.source?.visibility === "hidden")
+        continue;
+      const title = resolveI18nText(
+        data.authoring.title,
+        options.locale ?? "en-US",
+      );
+      if (!title) continue;
+      for (const contract of data.accepts ?? []) {
+        const titles = publicTitles.get(contract) ?? new Set<string>();
+        titles.add(title);
+        publicTitles.set(contract, titles);
+      }
+    }
   const catalogue = {
     get: (id: string) => entries.get(id),
     getAll: () => entries,
@@ -200,6 +223,7 @@ export async function inventoryWorldData(options: {
   const diagnostics: WorldDataDiagnostic[] = [];
   let sources: readonly OrderedWorldDataSource[];
   let descriptor: WorldDataRequirements["descriptor"];
+  let deferredSourceIds: readonly string[] = [];
   if (worldRoot) {
     const manifest = await readWorldManifest(worldRoot);
     if (!options.world) dimensions = manifest.dimensions;
@@ -210,6 +234,11 @@ export async function inventoryWorldData(options: {
       covelHome: options.covelHome,
       conventions: conventionsOfPlugins(catalogue),
     });
+    deferredSourceIds = await deferredConventionSourceIds(
+      worldRoot,
+      conventionCollisions(catalogue),
+      descriptor,
+    );
     sources =
       !manifest.worldData && descriptor.sources.length === 0
         ? [
@@ -298,6 +327,18 @@ export async function inventoryWorldData(options: {
       sourceId: source.id,
       path: entry.path,
       hidden: entry.visibility === "hidden",
+      ...(entry.visibility !== "hidden"
+        ? {
+            publicLabel:
+              [
+                ...new Set(
+                  [...contracts].flatMap((contract) => [
+                    ...(publicTitles.get(contract) ?? []),
+                  ]),
+                ),
+              ].join(", ") || undefined,
+          }
+        : {}),
       contracts: [...contracts],
     });
   }
@@ -305,6 +346,7 @@ export async function inventoryWorldData(options: {
     requiredContracts: [...requiredContracts],
     requiredDataContracts: [...new Set(facts.flatMap((f) => f.contracts))],
     sources: facts,
+    deferredSourceIds,
     diagnostics,
     ...(worldRoot ? { worldRoot, revision, overrideRoot } : {}),
     ...(descriptor ? { descriptor } : {}),

@@ -95,3 +95,38 @@ it.each([
     }
   },
 );
+
+it.each([
+  "receiver-missing",
+  "receiver-ambiguous",
+  "receiver-excluded",
+  "receiver-approval-required",
+])(
+  "renders the safe public label for %s through the interface language",
+  async (code) => {
+    await i18n.changeLanguage("zh-CN");
+    const { container, unmount } = render(
+      <WorldDataNotices
+        notices={[
+          {
+            level: "warning",
+            code,
+            publicLabel: "公开笔记",
+            sourceId: "SECRET_SOURCE",
+            message: "SECRET_ERROR",
+          },
+          { level: "warning", code, message: "SECRET_ERROR" },
+        ]}
+      />,
+    );
+    try {
+      const items = container.querySelectorAll("li");
+      expect(items).toHaveLength(2);
+      expect(items[0]?.textContent).toContain("公开笔记");
+      expect(items[1]?.textContent).not.toContain("公开笔记");
+      expect(container.textContent).not.toMatch(/SECRET|This data/);
+    } finally {
+      unmount();
+    }
+  },
+);
