@@ -701,6 +701,7 @@ Gemini 原生的思考强度、`providerOptions.google.thinkingConfig`、`cached
 - `apps/web/src/services/subscription.ts` 默认订阅 `runtime / state / game / plugin / session / system`，不含 `store`。session store 为了恢复后台任务，另外明确订阅 `job`。
 - 客户端按 `event.topic` 分发。新增 topic 或事件时，**必须同时更新这个文件**。
 - `/api/actions` 的回合内事件（`narrative.delta` / `narrative.completed` / `interaction.requested` / `plugin-data.changed` 等）由 `sendAction` 的回调处理，不经过 `subscription.ts`。
+- `game` 的 `turn.completed` 表示回合已提交。旁观该会话的网页端收到后重读会话快照，更新消息和回合数；即使回合没有角色或维度写入也会刷新。复用现有的恢复代次和执行所有权检查，保留正在进行的本地 action 流。
 
 **鉴权**
 
