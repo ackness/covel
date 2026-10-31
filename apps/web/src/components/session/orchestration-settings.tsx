@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   autoAdvanceLimitSchema,
@@ -60,20 +60,33 @@ export function OrchestrationSettings({
   const savedRef = useRef(saved),
     pendingRef = useRef(pending);
   owner.current = sessionId;
-  savedRef.current = saved;
-  pendingRef.current = pending;
   useEffect(() => {
-    const current = ++generation.current;
+    generation.current++;
     revisions.current = {};
     setValue(undefined);
     setDraft({});
+    savedRef.current = {};
     setSaved({});
     setErrors({});
+    pendingRef.current = {};
     setPending({});
     setLoadError(false);
     setSettingsOpen(false);
-    void loadResources(sessionId).then(([orchestration, session]) => {
-      if (generation.current !== current || owner.current !== sessionId) return;
+    return () => {
+      generation.current++;
+    };
+  }, [sessionId]);
+  const refreshResources = useCallback(
+    async (settledField?: Field) => {
+      const current = generation.current,
+        sequence = ++refresh.current;
+      const [orchestration, session] = await loadResources(sessionId);
+      if (
+        generation.current !== current ||
+        owner.current !== sessionId ||
+        refresh.current !== sequence
+      )
+        return;
       const fields: Fields<string> = {};
       if (orchestration.status === "fulfilled" && orchestration.value) {
         setValue(orchestration.value);
@@ -84,17 +97,38 @@ export function OrchestrationSettings({
         fields.maxSubagentCalls = String(
           orchestration.value.settings.maxSubagentCalls,
         );
-      } else setLoadError(true);
+      }
       if (session.status === "fulfilled" && session.value)
         fields.autoAdvanceLimit = String(session.value.autoAdvanceLimit);
-      else setLoadError(true);
-      setSaved(fields);
-      setDraft(fields);
-    });
+      const previousSaved = savedRef.current;
+      setDraft((previous) => {
+        const next = { ...previous };
+        for (const key of Object.keys(fields) as Field[]) {
+          if (
+            previous[key] === previousSaved[key] &&
+            (!pendingRef.current[key] || key === settledField)
+          )
+            next[key] = fields[key];
+        }
+        return next;
+      });
+      savedRef.current = { ...previousSaved, ...fields };
+      setSaved(savedRef.current);
+      setLoadError(
+        orchestration.status !== "fulfilled" ||
+          !orchestration.value ||
+          session.status !== "fulfilled" ||
+          !session.value,
+      );
+    },
+    [sessionId],
+  );
+  useEffect(() => {
+    void refreshResources();
     return () => {
-      generation.current++;
+      refresh.current++;
     };
-  }, [sessionId, refreshKey]);
+  }, [refreshResources, refreshKey]);
   const label = (field: Field) =>
     t(
       field === "autoAdvanceLimit"
@@ -120,7 +154,10 @@ export function OrchestrationSettings({
       setErrors((previous) => ({ ...previous, [field]: true }));
       return;
     }
-    setPending((previous) => ({ ...previous, [field]: true }));
+    // Reads begun before this write must not restore its old saved value.
+    refresh.current++;
+    pendingRef.current = { ...pendingRef.current, [field]: true };
+    setPending(pendingRef.current);
     setErrors((previous) => ({ ...previous, [field]: false }));
     try {
       let confirmed: string;
@@ -154,7 +191,8 @@ export function OrchestrationSettings({
               );
       }
       if (!live()) return;
-      setSaved((previous) => ({ ...previous, [field]: confirmed }));
+      savedRef.current = { ...savedRef.current, [field]: confirmed };
+      setSaved(savedRef.current);
       if ((revisions.current[field] ?? 0) === revision)
         setDraft((previous) => ({ ...previous, [field]: confirmed }));
     } catch {
@@ -162,45 +200,10 @@ export function OrchestrationSettings({
     }
     if (live()) {
       // Refresh both saved resources even after a failure; preserve every unsaved draft.
-      const sequence = ++refresh.current;
-      const [orchestration, session] = await loadResources(sessionId);
+      await refreshResources(field);
       if (live()) {
-        if (sequence === refresh.current) {
-          const authoritative: Fields<string> = {};
-          if (orchestration.status === "fulfilled" && orchestration.value) {
-            setValue(orchestration.value);
-            authoritative.turnPolicy = selectionValue(
-              orchestration.value.settings.turnPolicy,
-            );
-            authoritative.maxActors = String(
-              orchestration.value.settings.maxActors,
-            );
-            authoritative.maxSubagentCalls = String(
-              orchestration.value.settings.maxSubagentCalls,
-            );
-          }
-          if (session.status === "fulfilled" && session.value)
-            authoritative.autoAdvanceLimit = String(
-              session.value.autoAdvanceLimit,
-            );
-          const previousSaved = savedRef.current;
-          setDraft((previous) => {
-            const next = { ...previous };
-            for (const key of Object.keys(authoritative) as Field[]) {
-              if (
-                previous[key] === previousSaved[key] &&
-                (!pendingRef.current[key] || key === field)
-              )
-                next[key] = authoritative[key];
-            }
-            return next;
-          });
-          setSaved((previous) => ({ ...previous, ...authoritative }));
-        }
-        setLoadError(
-          orchestration.status === "rejected" || session.status === "rejected",
-        );
-        setPending((previous) => ({ ...previous, [field]: false }));
+        pendingRef.current = { ...pendingRef.current, [field]: false };
+        setPending(pendingRef.current);
       }
     }
   };

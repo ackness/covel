@@ -61,7 +61,124 @@ const base: OrchestrationResponse = {
     { pluginId: "sample", name: "draw", label: "Draw", status: "available" },
   ],
 };
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((complete) => {
+    resolve = complete;
+  });
+  return { promise, resolve };
+}
 describe("orchestration controls", () => {
+  it.each(["before", "during"] as const)(
+    "preserves drafts edited %s a plugin refresh and updates untouched fields",
+    async (timing) => {
+      data.getSession.mockResolvedValue({ autoAdvanceLimit: 3 });
+      vi.mocked(getOrchestration).mockResolvedValue(base);
+      const view = render(
+        <OrchestrationSettings sessionId="scene" refreshKey={[]} />,
+      );
+      const policy = (await screen.findByLabelText(
+        "orchestration.policy",
+      )) as HTMLSelectElement;
+      const actors = screen.getByLabelText(
+        "orchestration.maxActors",
+      ) as HTMLInputElement;
+      const advance = screen.getByLabelText(
+        "session.autoAdvanceLimit",
+      ) as HTMLInputElement;
+      const choice = JSON.stringify({ pluginId: "sample", name: "draw" });
+      const editDrafts = () => {
+        fireEvent.change(policy, { target: { value: choice } });
+        fireEvent.change(actors, { target: { value: "0" } });
+        fireEvent.change(advance, { target: { value: "0" } });
+      };
+      if (timing === "before") editDrafts();
+      const response = deferred<OrchestrationResponse>();
+      vi.mocked(getOrchestration).mockReturnValueOnce(response.promise);
+      view.rerender(
+        <OrchestrationSettings sessionId="scene" refreshKey={[]} />,
+      );
+      await waitFor(() => expect(getOrchestration).toHaveBeenCalledTimes(2));
+      if (timing === "during") editDrafts();
+      await act(async () =>
+        response.resolve({
+          ...base,
+          settings: { ...base.settings, maxSubagentCalls: 8 },
+        }),
+      );
+      expect(screen.getByLabelText("orchestration.policy")).toBe(policy);
+      expect(policy.value).toBe(choice);
+      expect(actors.value).toBe("0");
+      expect(advance.value).toBe("0");
+      expect(
+        (
+          screen.getByLabelText(
+            "orchestration.maxSubagentCalls",
+          ) as HTMLInputElement
+        ).value,
+      ).toBe("8");
+      for (const field of [
+        "orchestration.policy",
+        "orchestration.maxActors",
+        "session.autoAdvanceLimit",
+      ]) {
+        expect(
+          (
+            screen.getByRole("button", {
+              name: `save-${field}`,
+            }) as HTMLButtonElement
+          ).disabled,
+        ).toBe(false);
+      }
+    },
+  );
+  it.each(["before", "during"] as const)(
+    "ignores a plugin read started %s a save when it returns after confirmation",
+    async (timing) => {
+      data.getSession.mockResolvedValue({ autoAdvanceLimit: 3 });
+      vi.mocked(getOrchestration).mockResolvedValue(base);
+      const write = deferred<OrchestrationResponse>();
+      vi.mocked(patchOrchestration).mockReturnValueOnce(write.promise);
+      const view = render(
+        <OrchestrationSettings sessionId="scene" refreshKey={[]} />,
+      );
+      const actors = (await screen.findByLabelText(
+        "orchestration.maxActors",
+      )) as HTMLInputElement;
+      const button = () =>
+        screen.getByRole("button", {
+          name: "save-orchestration.maxActors",
+        }) as HTMLButtonElement;
+      fireEvent.change(actors, { target: { value: "0" } });
+      const response = deferred<OrchestrationResponse>();
+      vi.mocked(getOrchestration).mockReturnValueOnce(response.promise);
+      const refreshPlugins = async () => {
+        view.rerender(
+          <OrchestrationSettings sessionId="scene" refreshKey={[]} />,
+        );
+        await waitFor(() => expect(getOrchestration).toHaveBeenCalledTimes(2));
+      };
+      if (timing === "before") await refreshPlugins();
+      fireEvent.click(button());
+      if (timing === "during") await refreshPlugins();
+      expect(button().disabled).toBe(true);
+      expect(screen.getByLabelText("orchestration.maxActors")).toBe(actors);
+      expect(actors.value).toBe("0");
+      const confirmed = {
+        ...base,
+        settings: { ...base.settings, maxActors: 0 },
+      };
+      vi.mocked(getOrchestration).mockResolvedValue(confirmed);
+      await act(async () => write.resolve(confirmed));
+      await waitFor(() => expect(actors.disabled).toBe(false));
+      await act(async () => response.resolve(base));
+      expect(actors.value).toBe("0");
+      expect(button().disabled).toBe(true);
+      expect(patchOrchestration).toHaveBeenCalledExactlyOnceWith("scene", {
+        maxActors: 0,
+      });
+    },
+  );
   it.each(["unique", "selected", "paused"] as const)(
     "shows a sole %s provider without a selection form",
     async (status) => {

@@ -106,4 +106,6 @@ Play as defaults to Player on preparation, with Game master and Spectator choice
 
 Orchestration groups Turn policy, distinct characters, sub-agent calls and Automatic rounds. Save each field independently. Policy/caps use the orchestration route; Automatic rounds uses ordinary session PATCH. A failed field retains its draft/error while successful fields remain saved, followed by authoritative reloads; there is no joint rollback. The provider-settings link opens its own strategy fields. Multiple providers require an exact choice. Paused/stale selections remain visible and clearable without activation or approval.
 
+Refreshing the plugin list preserves unsaved drafts, errors and saves in progress. Untouched fields update to the latest saved values; earlier reads cannot overwrite a later confirmed save.
+
 Actor/call caps apply per execution; Automatic rounds counts additional executions per input. Zero disables the respective capability. Changes apply to the next applicable execution/input, leaving a running chain’s frozen limit intact. Every game view retains progress and Stop advancement; new input also ends the old automatic chain.
