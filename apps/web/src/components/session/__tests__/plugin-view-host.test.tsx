@@ -4,10 +4,13 @@ import { PluginViewHost } from "../plugin-view-host.js";
 import { projection, viewEntry } from "./plugin-view-fixtures.js";
 import i18n from "@/i18n/index.js";
 const mocks = vi.hoisted(() => ({ panel: vi.fn(), throws: false }));
-vi.mock("../use-session-bridge.js", () => ({
-  useSessionBridge: () => ({
+vi.mock("../use-session-bridge-actions.js", () => ({
+  useSessionBridgeActions: () => ({
     projection,
     stream: { subscribe: () => () => {}, read: () => null },
+    handlers: {},
+    isCurrent: () => true,
+    retire: () => {},
   }),
 }));
 vi.mock("../plugin-panel.js", () => ({
@@ -72,10 +75,7 @@ it("omits the notice and the projection for a view without a bridge", () => {
     />,
   );
   expect(screen.queryByText(i18n.t("session.viewReadsStory"))).toBeNull();
-  expect(mocks.panel.mock.lastCall?.[0]).toHaveProperty(
-    "sessionBridge",
-    undefined,
-  );
+  expect(mocks.panel.mock.lastCall?.[0]).not.toHaveProperty("sessionBridge");
 });
 it("falls back on a child error while keeping the host back button", () => {
   vi.spyOn(console, "error").mockImplementation(() => {});

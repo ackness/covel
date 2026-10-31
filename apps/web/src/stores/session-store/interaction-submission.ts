@@ -85,10 +85,15 @@ export async function submitInteractionBlock(
   deps: SubmissionDependencies,
   submission: Parameters<SessionActions["submitInteraction"]>,
 ): Promise<InteractionSubmitResult> {
-  const [blockId, turnId, interactionId, type, values] = submission;
+  const [blockId, turnId, interactionId, type, values, options] = submission;
   const { dispatch, sessionIdRef, inFlight } = deps;
   const sid = sessionIdRef.current;
-  if (!sid || !canRunSessionAction(deps.stateRef.current)) return;
+  if (
+    !sid ||
+    !(options?.isCurrent?.() ?? true) ||
+    !canRunSessionAction(deps.stateRef.current)
+  )
+    return;
   const key = `${sid}:${blockId}`;
   if (inFlight.has(key)) return;
   inFlight.add(key);
@@ -171,7 +176,7 @@ export async function submitInteractionBlock(
       sid,
       owner.requestId,
       () => {
-        if (!owner.isCurrent())
+        if (!owner.isCurrent() || !(options?.isCurrent?.() ?? true))
           throw new Error("Action was superseded before submission");
         return runActionStream(
           {
@@ -184,7 +189,11 @@ export async function submitInteractionBlock(
           },
           onEvent,
           dispatch,
-          { sessionIdRef, isCurrentAction: owner.isCurrent },
+          {
+            sessionIdRef,
+            isCurrentAction: owner.isCurrent,
+            canDispatch: options?.isCurrent,
+          },
         );
       },
       { isCurrent: owner.isCurrent },
@@ -210,7 +219,7 @@ export async function submitInteractionBlock(
         read: () => api.getSessionView(sid),
         apply: (snapshot) => publishSubmittedInteractions(dispatch, snapshot),
       }).catch(() => {});
-      return;
+      return { rejected: [], status: "already-answered" };
     }
     if (!stored) return;
     try {
@@ -231,6 +240,7 @@ export async function submitInteractionBlock(
     } catch {
       // Reconnect will reconcile the character schema if this refresh fails.
     }
+    return { rejected: [], status: "accepted" };
   } catch (error) {
     // The stream runner already reported a failed request and handed an
     // unfinished turn to the recovery poll.

@@ -1,4 +1,5 @@
 import type { SessionProjection } from "./session-bridge.js";
+import type { PluginBridgeHandler } from "./plugin-bridge.js";
 import type { StreamFeed } from "./session-bridge-stream.js";
 /**
  * PluginPanel — renders a single plugin panel from a json-render spec.
@@ -68,7 +69,12 @@ export interface PluginPanelProps {
   /** The panel is shown in the large dialog, not the side column. */
   expanded?: boolean;
   fill?: boolean;
-  sessionBridge?: { projection: SessionProjection; stream: StreamFeed };
+  sessionBridge?: {
+    projection: SessionProjection;
+    stream: StreamFeed;
+    handlers?: Readonly<Record<string, PluginBridgeHandler>>;
+    isCurrent?: () => boolean;
+  };
   onRenderError?: () => void;
   onRetry?: () => void;
 }
@@ -81,10 +87,39 @@ const EMPTY_SOURCES: Record<string, Record<string, unknown>> = {};
 const EMPTY_JOBS: ReturnType<typeof usePluginJobs> = [];
 
 export function PluginPanel(props: PluginPanelProps) {
+  if (props.spec.bridge === "session") return <SessionPluginPanel {...props} />;
   return props.stateOverride !== undefined ? (
     <SnapshotPluginPanel {...props} />
   ) : (
     <LivePluginPanel {...props} />
+  );
+}
+
+/** Session pages have no access to the ordinary panel data or handler map. */
+function SessionPluginPanel(props: PluginPanelProps) {
+  const { i18n } = useTranslation();
+  const webview = props.spec.webview as
+    { html?: string; url?: string; height?: number } | undefined;
+  const session = props.sessionBridge;
+  if (!webview || !session) return null;
+  return (
+    <PluginWebview
+      title={
+        resolveEmptyMessage(props.spec.label, i18n.language) || props.pluginId
+      }
+      html={webview.html}
+      src={webview.url}
+      height={webview.height}
+      expanded={props.expanded}
+      fill={props.fill}
+      onRetry={props.onRetry}
+      stream={session.stream}
+      sessionPage
+      isCurrent={session.isCurrent}
+      locked={false}
+      handlers={session.handlers ?? {}}
+      state={{ locale: i18n.language, session: session.projection }}
+    />
   );
 }
 
@@ -170,7 +205,6 @@ function PluginPanelView({
   enableDevtools = false,
   expanded = false,
   fill = false,
-  sessionBridge,
   onRenderError,
   onRetry,
   data,
@@ -532,7 +566,6 @@ function PluginPanelView({
           height={webview.height}
           expanded={expanded}
           fill={fill}
-          stream={spec.bridge === "session" ? sessionBridge?.stream : undefined}
           locked={interactionLocked}
           handlers={allowed}
           state={{
@@ -541,9 +574,6 @@ function PluginPanelView({
             locked: interactionLocked,
             context: surfaceContext ?? {},
             uiState,
-            ...(spec.bridge === "session" && sessionBridge
-              ? { session: sessionBridge.projection }
-              : {}),
           }}
         />
       );

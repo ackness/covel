@@ -1,0 +1,13 @@
+{
+  "id": "reader",
+  "label": "Bridge reader",
+  "bridge": "session",
+  "capabilities": [
+    "submitAction",
+    "submitInteraction",
+    "invokeRuntime",
+    "abortExecution",
+    "openPanel"
+  ],
+  "webview": { "root": "./ui/app", "entry": "index.html" }
+}

@@ -692,3 +692,7 @@ messages:
 ## 用呈现函数更新展示状态
 
 需要跟随故事的背景或配乐时，用[呈现选择器](./advanced.md#呈现选择器)更新自有展示 namespace，再让原有界面槽位读取它。呈现不能读取完整 World Model 或调用槽位服务来绕开限制；它失败时不挡故事和下一次输入。规范见[呈现 runtime](../reference/plugins.md#presentation-runtimes)。
+
+## 从会话页面请求玩家行动
+
+查看 [sandbox-surface-probe](../../tests/third-party/sandbox-surface-probe/README.md) 的两个普通视图和共享页面。它读取公开故事和输入信息，用句柄回答交互，用所属插件的手动函数 runtime 保存数据集记录。为 spec 添加 `capabilities` 后，玩家会看到每项能力的单独说明；服务端代码审批与页面授权互不替代。页面只在结果为 `accepted` 时清除行动草稿，拒绝时保留。普通视图布局不变，主区域/输入框替换和心跳恢复尚不支持。完整字段与限制见[页面请求](../reference/ui-panels.md#页面请求与安全结果)。

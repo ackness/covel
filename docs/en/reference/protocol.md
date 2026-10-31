@@ -1544,3 +1544,7 @@ Each settled presentation records one trace terminal, without forwarding to `/ap
 ```
 
 The event contains no raw input, free-text reason, asset path, reply or credential. Dispatch and cache hits use existing `gateway.calling` / `gateway.responded`, recording method and cache status only; provider error text stays outside presentation diagnostics.
+
+## Sandbox session page protocol
+
+Ordinary session webviews use one MessagePort and public projection version 2. `pending[].interaction` and opaque per-frame handles replace raw blocks; `input` exposes human seats and currently permitted actions. Independently consented methods request player actions, interaction answers, own manual runtimes, abort and own-panel navigation. Replies contain only fixed safe outcomes, without execution internals. The authoritative field tables, limits, replay budget and retirement rules are in the [session bridge](./ui-panels.md#sessionprojection-version-2). Normal HTTP/SSE authorization and proposal commit retain their existing boundaries.

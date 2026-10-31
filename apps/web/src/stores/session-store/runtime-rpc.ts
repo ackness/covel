@@ -244,6 +244,7 @@ export function runActionStream(
     toastOnError?: boolean;
     sessionIdRef?: MutableRef<string | null>;
     isCurrentAction?: () => boolean;
+    canDispatch?: () => boolean;
   },
 ): Promise<void> {
   return new Promise<void>((resolve, reject) => {
@@ -362,7 +363,8 @@ export function runActionStream(
             t: (key, options) => i18n.t(key, options) as string,
             confirm: requestConfirm,
           }));
-        const proceed = allowed && isCurrent();
+        const proceed =
+          allowed && isCurrent() && (opts?.canDispatch?.() ?? true);
         await api.resolveApproval(
           approval.approvalId,
           proceed ? "allow" : "deny",
@@ -376,6 +378,7 @@ export function runActionStream(
         }
         return proceed;
       },
+      opts?.canDispatch,
     );
   });
 }
@@ -390,12 +393,14 @@ export async function runSingleSessionAction({
   dispatch,
   handleSseEvent,
   sessionIdRef,
+  canDispatch,
 }: {
   actions: readonly TurnActionRequest[];
   /** The actions as the server will resolve them, kept on the echoed message. */
   echoActions?: readonly TurnAction[];
   echoUserMessage: boolean;
   owner: SessionActionOwner;
+  canDispatch?: () => boolean;
   session: api.SessionRecord;
   workspace: SessionWorkspace;
   dispatch: SessionDispatch;
@@ -439,12 +444,15 @@ export async function runSingleSessionAction({
   }
   if (!owner.isCurrent()) return;
   let started = false;
+  let dispatched = false;
+  const admissionCurrent = () =>
+    owner.isCurrent() && (dispatched || (canDispatch?.() ?? true));
   try {
     await workspace.run(
       session.id,
       owner.requestId,
       () => {
-        if (!owner.isCurrent())
+        if (!owner.isCurrent() || (canDispatch && !canDispatch()))
           throw new Error("Action was superseded before execution");
         const base = {
           requestId: owner.requestId,
@@ -460,6 +468,7 @@ export async function runSingleSessionAction({
             ...(inputMessageId ? { inputMessageId } : {}),
           },
         };
+        dispatched = true;
         return runActionStream(
           action,
           (event) => {
@@ -471,10 +480,11 @@ export async function runSingleSessionAction({
             toastOnError: true,
             sessionIdRef,
             isCurrentAction: owner.isCurrent,
+            canDispatch,
           },
         );
       },
-      { input, isCurrent: owner.isCurrent },
+      { input, isCurrent: admissionCurrent },
     );
   } catch (error) {
     if (owner.isCurrent()) {

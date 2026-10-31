@@ -31,12 +31,15 @@ export interface PluginAssetFile {
   readonly mime: string;
   readonly size: number;
 }
+export interface IndexedPluginAssetFile extends PluginAssetFile {
+  readonly sha256: string;
+}
 export interface PluginAssetRoot {
   readonly pluginId: string;
   readonly digest: string;
   readonly rootDir: string;
   readonly entry: string;
-  readonly files: ReadonlyMap<string, PluginAssetFile>;
+  readonly files: ReadonlyMap<string, IndexedPluginAssetFile>;
 }
 
 /** Root-relative regular files, plus markers for reserved directory names. */
@@ -142,6 +145,7 @@ export async function scanPluginAssetRoot(realRoot: string, entry: string) {
     entry,
   );
   const hash = createHash("sha256");
+  const listed = new Map<string, IndexedPluginAssetFile>();
   if (!plan.issues.length) {
     for (const [relativePath, metadata] of [...plan.listed].sort(([a], [b]) =>
       a < b ? -1 : a > b ? 1 : 0,
@@ -154,9 +158,19 @@ export async function scanPluginAssetRoot(realRoot: string, entry: string) {
         const stat = await handle.stat();
         if (!stat.isFile() || stat.size !== metadata.size)
           throw new Error("UI asset changed while indexing");
+        const bytes = Buffer.alloc(metadata.size + 1);
+        let length = 0;
+        while (length < bytes.length) {
+          const read = await handle.read(bytes, length, bytes.length - length);
+          if (!read.bytesRead) break;
+          length += read.bytesRead;
+        }
+        if (length !== metadata.size)
+          throw new Error("UI asset changed while indexing");
         const contentHash = createHash("sha256")
-          .update(await handle.readFile())
+          .update(bytes.subarray(0, length))
           .digest("hex");
+        listed.set(relativePath, { ...metadata, sha256: contentHash });
         hash.update(
           JSON.stringify([relativePath, metadata.size, contentHash]) + "\n",
         );
@@ -165,5 +179,14 @@ export async function scanPluginAssetRoot(realRoot: string, entry: string) {
       }
     }
   }
-  return { ...plan, digest: hash.digest("hex").slice(0, 32) };
+  return {
+    ...plan,
+    listed: new Map(
+      [...plan.listed.keys()].flatMap((key) => {
+        const file = listed.get(key);
+        return file ? [[key, file] as const] : [];
+      }),
+    ),
+    digest: hash.digest("hex").slice(0, 32),
+  };
 }

@@ -1,4 +1,5 @@
-import { useCallback } from "react";
+import type { SessionBridgeGrant } from "@covel/shared";
+import { useCallback, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { ShieldOff } from "lucide-react";
 import { Button } from "@/components/ui/button.js";
@@ -7,13 +8,18 @@ import { emitToast } from "@/lib/toast-channel.js";
 import { HeaderMenu, MenuItem } from "./game-view/game-view-header.js";
 import type { PluginViewEntry } from "./game-view/use-plugin-views.js";
 import { PluginPanel } from "./plugin-panel.js";
-import { useSessionBridge } from "./use-session-bridge.js";
+import { useSessionBridgeActions } from "./use-session-bridge-actions.js";
+import {
+  pluginViewContent,
+  requestedViewGrants,
+} from "./plugin-view-consent.js";
 
 export function PluginViewHost({
   entry,
   sessionId,
   onFallback,
   sessionBridgeAllowed = false,
+  isCurrent = () => true,
   onRevoke,
   onRetry,
 }: {
@@ -22,14 +28,21 @@ export function PluginViewHost({
   onFallback: (reason?: "render-error") => void;
   /** Granted for this exact plugin + content hash by the host consent gate. */
   sessionBridgeAllowed?: boolean;
-  onRevoke?: () => void;
+  isCurrent?: () => boolean;
+  onRevoke?: (capability?: SessionBridgeGrant) => void;
   onRetry?: () => void;
 }) {
   const { t } = useTranslation();
-  const bridge = useSessionBridge(sessionId);
+  const [attempt, setAttempt] = useState(0);
+  const retire = useRef<(() => void) | undefined>(undefined);
+  const fallback = () => {
+    retire.current?.();
+    onFallback();
+  };
   const readsSession = entry.spec.bridge === "session";
   const failed = useCallback(() => {
     emitToast("error", t("session.viewFailed", { label: entry.label }));
+    retire.current?.();
     onFallback("render-error");
   }, [entry.label, onFallback, t]);
   return (
@@ -50,7 +63,7 @@ export function PluginViewHost({
           variant="ghost"
           size="sm"
           className="ml-auto"
-          onClick={() => onFallback()}
+          onClick={fallback}
           aria-label={t("session.backToDefaultView")}
         >
           {t("session.backToDefaultView")}
@@ -60,8 +73,24 @@ export function PluginViewHost({
             <MenuItem
               icon={ShieldOff}
               label={t("session.revokeViewConsent")}
-              onSelect={onRevoke}
+              onSelect={() => {
+                retire.current?.();
+                onRevoke();
+              }}
             />
+            {requestedViewGrants(entry).map((capability) => (
+              <MenuItem
+                key={capability}
+                icon={ShieldOff}
+                label={t("session.revokeViewCapability", {
+                  capability: t(`session.viewCapability.${capability}`),
+                })}
+                onSelect={() => {
+                  retire.current?.();
+                  onRevoke(capability);
+                }}
+              />
+            ))}
           </HeaderMenu>
         )}
       </div>
@@ -75,23 +104,88 @@ export function PluginViewHost({
             surfaceLabel={entry.label}
             onError={failed}
           >
-            <PluginPanel
-              pluginId={entry.pluginId}
-              panelId={entry.viewId}
-              spec={{ ...entry.spec }}
-              expanded
-              fill
-              onRenderError={failed}
-              onRetry={onRetry}
-              sessionBridge={
-                readsSession && sessionBridgeAllowed && bridge.projection
-                  ? { projection: bridge.projection, stream: bridge.stream }
-                  : undefined
-              }
-            />
+            {readsSession ? (
+              <ConsentedView
+                key={JSON.stringify([
+                  sessionId,
+                  pluginViewContent(entry.spec),
+                  attempt,
+                ])}
+                entry={entry}
+                sessionId={sessionId}
+                isCurrent={isCurrent}
+                retire={retire}
+                failed={failed}
+                openInteraction={fallback}
+                onRetry={() => {
+                  retire.current?.();
+                  setAttempt((value) => value + 1);
+                  onRetry?.();
+                }}
+              />
+            ) : (
+              <PluginPanel
+                pluginId={entry.pluginId}
+                panelId={entry.viewId}
+                spec={{ ...entry.spec }}
+                expanded
+                fill
+                onRenderError={failed}
+                onRetry={onRetry}
+              />
+            )}
           </PluginSurfaceBoundary>
         )}
       </div>
     </section>
+  );
+}
+
+function ConsentedView({
+  entry,
+  sessionId,
+  isCurrent,
+  retire,
+  failed,
+  onRetry,
+  openInteraction,
+}: {
+  entry: PluginViewEntry;
+  sessionId: string;
+  isCurrent: () => boolean;
+  retire: { current: (() => void) | undefined };
+  failed: () => void;
+  onRetry: () => void;
+  openInteraction: () => void;
+}) {
+  const bridge = useSessionBridgeActions(entry, sessionId, isCurrent);
+  const { t } = useTranslation();
+  retire.current = bridge.retire;
+  if (!bridge.projection) return null;
+  return (
+    <>
+      {bridge.projection.pending.some(
+        (item) => item.interaction.type === "unavailable",
+      ) && (
+        <Button onClick={openInteraction}>
+          {t("session.viewOpenInteraction")}
+        </Button>
+      )}
+      <PluginPanel
+        pluginId={entry.pluginId}
+        panelId={entry.viewId}
+        spec={{ ...entry.spec }}
+        expanded
+        fill
+        onRenderError={failed}
+        onRetry={onRetry}
+        sessionBridge={{
+          projection: bridge.projection,
+          stream: bridge.stream,
+          handlers: bridge.handlers,
+          isCurrent: bridge.isCurrent,
+        }}
+      />
+    </>
   );
 }

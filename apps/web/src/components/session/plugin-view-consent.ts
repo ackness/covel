@@ -1,11 +1,13 @@
 import {
   useCallback,
   useEffect,
-  useMemo,
+  useLayoutEffect,
   useState,
+  useRef,
   useSyncExternalStore,
 } from "react";
-import { z } from "zod";
+import type { SessionBridgeGrant } from "@covel/shared";
+import type { SettingsStoreApi } from "@covel/settings";
 import { useSettingsStore } from "@/settings/use-settings.js";
 import type { UISlotSpec } from "@/services/api.js";
 import type { PluginViewEntry } from "./game-view/use-plugin-views.js";
@@ -34,30 +36,49 @@ export async function hashPluginViewContent(content: string): Promise<string> {
     byte.toString(16).padStart(2, "0"),
   ).join("");
 }
-export const sessionViewConsentKey = (pluginId: string, hash: string) =>
-  `ui.pluginViewConsent.${pluginId}.${hash}.session`;
+export const sessionViewConsentKey = (
+  pluginId: string,
+  hash: string,
+  capability: SessionBridgeGrant = "session",
+) => `ui.pluginViewConsent.${pluginId}.${hash}.${capability}`;
 
-export function usePluginViewConsent(views: readonly PluginViewEntry[]) {
+export function requestedViewGrants(
+  entry: PluginViewEntry,
+): SessionBridgeGrant[] {
+  return ["session", ...(entry.spec.capabilities ?? [])];
+}
+
+// Track unfinished writes across mounts: optimistic SettingsStore notifications
+// must never authorize a frame before persistence has succeeded.
+const writes = new WeakMap<SettingsStoreApi, Map<string, symbol>>();
+const denied = new WeakMap<SettingsStoreApi, Set<string>>();
+const listeners = new Set<() => void>();
+let revision = 0;
+function changed() {
+  revision++;
+  for (const listener of listeners) listener();
+}
+
+export function usePluginViewConsent(
+  views: readonly PluginViewEntry[],
+  scope = "",
+) {
   const store = useSettingsStore();
-  const contents = useMemo(
-    () =>
-      new Map(
-        views
-          .filter((entry) => entry.spec.bridge === "session")
-          .map((entry) => [
-            entry.mode,
-            { spec: entry.spec, content: pluginViewContent(entry.spec) },
-          ]),
-      ),
-    [views],
-  );
+  const pending = writes.get(store) ?? new Map<string, symbol>();
+  writes.set(store, pending);
+  const blocked = denied.get(store) ?? new Set<string>();
+  denied.set(store, blocked);
   const contentKey = JSON.stringify(
-    [...contents].map(([mode, value]) => [mode, value.content]),
+    views
+      .filter((entry) => entry.spec.bridge === "session")
+      .map((entry) => [entry.mode, pluginViewContent(entry.spec)]),
   );
+  const owner = useRef({ contentKey, scope });
+  if (owner.current.contentKey !== contentKey || owner.current.scope !== scope)
+    owner.current = { contentKey, scope };
   const [hashes, setHashes] = useState<
     ReadonlyMap<string, { content: string; hash: string }>
   >(new Map());
-  const [blocked, setBlocked] = useState<ReadonlySet<string>>(new Set());
   useEffect(() => {
     let cancelled = false;
     const entries = JSON.parse(contentKey) as [string, string][];
@@ -75,60 +96,125 @@ export function usePluginViewConsent(views: readonly PluginViewEntry[]) {
       })
       .catch(() => {
         if (!cancelled) setHashes(new Map());
-      }); // Fail closed if hashing is unavailable.
+      });
     return () => {
       cancelled = true;
     };
   }, [contentKey]);
-  const keyFor = (entry: PluginViewEntry) => {
+  useLayoutEffect(
+    () => () => {
+      owner.current = { contentKey: "", scope: "" };
+    },
+    [],
+  );
+  const keyFor = (
+    entry: PluginViewEntry,
+    capability: SessionBridgeGrant = "session",
+  ) => {
     const value = hashes.get(entry.mode);
-    const current = contents.get(entry.mode);
     return value &&
-      current?.spec === entry.spec &&
-      value.content === current.content
-      ? sessionViewConsentKey(entry.pluginId, value.hash)
+      value.content === pluginViewContent(entry.spec) &&
+      views.some((item) => item === entry) &&
+      /^[a-f0-9]{64}$/.test(value.hash)
+      ? sessionViewConsentKey(entry.pluginId, value.hash, capability)
       : undefined;
   };
   const subscribe = useCallback(
-    (listener: () => void) => store.subscribeAll(listener),
+    (listener: () => void) => {
+      listeners.add(listener);
+      const stop = store.subscribeAll(listener);
+      return () => {
+        listeners.delete(listener);
+        stop();
+      };
+    },
     [store],
   );
-  // A scalar snapshot also handles SettingsStore's optimistic update/rollback.
   useSyncExternalStore(
     subscribe,
     () =>
-      JSON.stringify(
-        views.map((entry) => {
-          const key = keyFor(entry);
-          return key ? store.get<unknown>(key) === true : false;
-        }),
-      ),
+      JSON.stringify([
+        revision,
+        views.map((entry) =>
+          requestedViewGrants(entry).map((capability) => {
+            const key = keyFor(entry, capability);
+            return key ? store.get<unknown>(key) === true : false;
+          }),
+        ),
+      ]),
     () => "[]",
   );
+  const allows = (entry: PluginViewEntry, capability: SessionBridgeGrant) => {
+    const key = keyFor(entry, capability);
+    return Boolean(
+      key &&
+      !pending.has(key) &&
+      !blocked.has(key) &&
+      store.get<unknown>(key) === true,
+    );
+  };
   return {
     ready: (entry: PluginViewEntry) => Boolean(keyFor(entry)),
-    isAllowed: (entry: PluginViewEntry) => {
-      if (entry.spec.bridge !== "session") return true;
-      const key = keyFor(entry);
-      return Boolean(
-        key &&
-        !blocked.has(key) &&
-        z.literal(true).safeParse(store.get<unknown>(key)).success,
-      );
+    isGranted: allows,
+    isAllowed: (entry: PluginViewEntry) =>
+      entry.spec.bridge !== "session" ||
+      requestedViewGrants(entry).every((capability) =>
+        allows(entry, capability),
+      ),
+    // Read again at every async boundary; this closure checks the current store.
+    isCurrent: (entry: PluginViewEntry) => {
+      const captured = owner.current;
+      return () =>
+        owner.current === captured &&
+        requestedViewGrants(entry).every((capability) =>
+          allows(entry, capability),
+        );
     },
-    async grant(entry: PluginViewEntry) {
-      const key = keyFor(entry);
-      if (!key) return;
-      await store.set(key, true);
-      setBlocked(
-        (previous) => new Set([...previous].filter((item) => item !== key)),
+    async grant(entry: PluginViewEntry, isCurrentDialog?: () => boolean) {
+      const captured = owner.current;
+      const keys = requestedViewGrants(entry).map((capability) =>
+        keyFor(entry, capability),
       );
+      if (keys.some((key) => !key)) return;
+      const valid = keys as string[];
+      const token = Symbol("consent-save");
+      for (const key of valid) {
+        pending.set(key, token);
+        blocked.add(key);
+      }
+      changed();
+      try {
+        await store.setMany(
+          Object.fromEntries(valid.map((key) => [key, true])),
+        );
+        if (
+          owner.current !== captured ||
+          !(isCurrentDialog?.() ?? true) ||
+          valid.some((key) => pending.get(key) !== token)
+        ) {
+          // A closed dialog or revoked grant cannot become a later visit's consent.
+          for (const key of valid)
+            if (pending.get(key) === token || !pending.has(key))
+              await store.clear(key);
+          return;
+        }
+        for (const key of valid) blocked.delete(key);
+      } finally {
+        for (const key of valid)
+          if (pending.get(key) === token) pending.delete(key);
+        changed();
+      }
     },
-    async revoke(entry: PluginViewEntry) {
-      const key = keyFor(entry);
-      if (!key) return;
-      setBlocked((previous) => new Set([...previous, key]));
-      await store.clear(key);
+    async revoke(entry: PluginViewEntry, capability?: SessionBridgeGrant) {
+      const keys = (capability ? [capability] : requestedViewGrants(entry))
+        .map((item) => keyFor(entry, item))
+        .filter((key): key is string => Boolean(key));
+      for (const key of keys) {
+        blocked.add(key);
+        pending.delete(key);
+      }
+      changed();
+      await Promise.all(keys.map((key) => store.clear(key)));
     },
   };
 }

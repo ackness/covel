@@ -1,0 +1,12 @@
+{
+  "id": "notes",
+  "label": "Bridge notes",
+  "alwaysRender": true,
+  "dataSource": { "namespace": "notes" },
+  "view": {
+    "component": "Stack",
+    "children": [
+      { "component": "Text", "props": { "text": { "$state": "/bridge/text" } } }
+    ]
+  }
+}

@@ -6,6 +6,7 @@
  * is not dropped in the game.
  */
 import { z } from "zod";
+import { sessionBridgeCapabilitySchema } from "./session-bridge.js";
 import { PLUGIN_VIEW_ID_PATTERN } from "./view-mode.js";
 import {
   PLUGIN_UI_COMPONENT_NAMES,
@@ -140,6 +141,13 @@ export const pluginUiSpecSchema = z
     shortLabel: i18nTextSchema.optional(),
     description: i18nTextSchema.optional(),
     bridge: z.literal("session").optional(),
+    capabilities: z
+      .array(sessionBridgeCapabilitySchema)
+      .max(5)
+      .refine((values) => new Set(values).size === values.length, {
+        message: "capabilities must be unique",
+      })
+      .optional(),
     icon: z.string().optional(),
     group: z.string().optional(),
     groupLabel: i18nTextSchema.optional(),
@@ -223,6 +231,21 @@ export const pluginUiSpecSchema = z
     }
     const hasView = spec.view !== undefined && spec.view !== null;
     const hasWebview = spec.webview !== undefined && spec.webview !== null;
+    if (Object.hasOwn(spec, "surface"))
+      ctx.addIssue({
+        code: "custom",
+        path: ["surface"],
+        message: "unknown UI spec field",
+      });
+    if (
+      spec.capabilities !== undefined &&
+      (!hasWebview || spec.bridge !== "session")
+    )
+      ctx.addIssue({
+        code: "custom",
+        path: ["capabilities"],
+        message: "capabilities require a webview with bridge: session",
+      });
     if (spec.bridge && !hasWebview)
       ctx.addIssue({
         code: "custom",
@@ -360,6 +383,11 @@ export function pluginUiSpecIssues(
         message: "bridge is only valid in contributes.ui.view",
       });
     }
+    if (slot !== "view" && record.capabilities !== undefined)
+      issues.push({
+        path: "capabilities",
+        message: "capabilities are only valid in contributes.ui.view",
+      });
     if (slot === "segment") issues.push(...segmentTemplateIssues(record));
   }
   walkSpec(spec, [], (at, key, value) => {

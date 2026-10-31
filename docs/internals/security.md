@@ -19,7 +19,7 @@
 
 静态提示段和 UI 不需要导入插件代码。浏览器例外严格复用已校验的资源路径、类型、大小限制；服务器引用覆盖该例外。新增代码时旧的静态激活不会变成授权，未批准的重载移除旧注册并发布待批准元数据。声明式状态不进入持久化 runtime 清单，也不写入 approval gate。
 
-声明式 runtime 只写自己的数据集和经过验证的角色记录；其他插件数据由其写服务在自己的身份下修改。最终工具名在 hook/override 改写后仍受 `authorizedToolNames` 约束。服务、子 agent、恢复与重试保留更窄的上下文限制。免代码审批不免模型工具审批，也不免沙箱 `bridge: session` 的当前内容授权；不增加桥接写能力。
+声明式 runtime 只写自己的数据集和经过验证的角色记录；其他插件数据由其写服务在自己的身份下修改。最终工具名在 hook/override 改写后仍受 `authorizedToolNames` 约束。服务、子 agent、恢复与重试保留更窄的上下文限制。免代码审批不免模型工具审批，也不免沙箱 `bridge: session` 的当前内容授权；页面写能力仍需另外同意。
 
 整批刷新会有界重试扫描期间被其他包激活重新发布的条目，不能把短暂失效的旧缓存当成当前列表状态。
 
@@ -463,7 +463,7 @@ default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-sr
 | --- | --- |
 | 读取应用存储、cookie 或 preload API | 不透明源，没有 `allow-same-origin`；不向 frame 提供 Electron IPC 或供应商凭据 |
 | 网络、子框架、表单、base 修改和内联代码 | 响应 CSP 阻止连接、框架、表单、base、object、内联脚本和 eval；可加载同源经典脚本、样式和图片；自定义字体使用内嵌 data: URI，相对字体 URL 因不透明源和无 CORS 允许头而加载失败 |
-| 读取包文件或逃出根目录 | 索引时 realpath 边界检查，lstat 排除链接和 junction；路由只读清单文件，再检查 O_NOFOLLOW、普通文件、索引大小和真实路径 |
+| 读取包文件或逃出根目录 | 索引时 realpath 边界检查，lstat 排除链接和 junction；路由只读清单文件，再检查 O_NOFOLLOW、普通文件、索引大小、SHA-256 和真实路径 |
 | 直接打开 SVG 执行脚本 | 非入口响应使用 `Content-Security-Policy: sandbox` |
 | 不透明文档访问 API | 所有 `/api` 方法在 CORS 前拒绝 `Origin: null`，代码为 `foreign_request_refused` |
 | 不带 Origin 的 API 自导航 | `/api` 拒绝 `Sec-Fetch-Dest: iframe`、`frame`、`embed`、`object`；不使用 Sec-Fetch-Site 推断 |
@@ -471,7 +471,7 @@ default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-sr
 | 内容变化和会话读取 | URL 摘要覆盖全部发布文件；授权仍经 SettingsStore 绑定插件 ID、能力和完整 spec 哈希 |
 | 页面缺失、过期或加载失败 | 8 秒 ready 握手、不带凭据的 HEAD 探测和重试覆盖层；宿主返回按钮始终可用 |
 
-`script-src 'self'` 有意采用浏览器看到的源，不采用绝对路径来源：服务端无法从 Vite 或反向代理背后推断这个源。页面可以加载其他同源公开静态文件，包括其他插件的资源和应用脚本，但不能读取应用存储、调用 API 或建立连接。作者不能把密钥或服务端代码放进发布根目录。公开资源不需要 cookie、令牌、第二个源或媒体令牌特例。资源路由不发 CORP，以便不透明源页面加载自己的经典子资源。它也不发 CORS 允许头；字体请求需要 CORS，所以自定义字体必须以内嵌 `data:` URI 加载。入口 HTML 每次重用都重新验证，ETag 包含宿主桥摘要；宿主升级可刷新注入的桥脚本地址。桥接代码与单文件视图共享，由宿主注入，不增加写能力。
+`script-src 'self'` 有意采用浏览器看到的源，不采用绝对路径来源：服务端无法从 Vite 或反向代理背后推断这个源。页面可以加载其他同源公开静态文件，包括其他插件的资源和应用脚本，但不能读取应用存储、调用 API 或建立连接。作者不能把密钥或服务端代码放进发布根目录。公开资源不需要 cookie、令牌、第二个源或媒体令牌特例。资源路由不发 CORP，以便不透明源页面加载自己的经典子资源。它也不发 CORS 允许头；字体请求需要 CORS，所以自定义字体必须以内嵌 `data:` URI 加载。入口 HTML 每次重用都重新验证，ETag 包含宿主桥摘要；宿主升级可刷新注入的桥脚本地址。桥接代码与单文件视图共享，由宿主注入；脚本自身不授予写权限。
 
 ## Other server guards
 
@@ -523,7 +523,7 @@ default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-sr
 - 原因都记在服务端日志里。
 - 这些改动并不表示所有 trace、游戏内容或日志输出面都做了清理。
 
-`contributes.ui.view` 的 `bridge: session` 另可读取经过校验、裁剪和去除隐藏键的会话投影。挂载前必须逐项取得玩家同意，绑定插件 ID 与 spec + HTML 的内容哈希，所有来源一视同仁；世界默认视图不能绕过。授权通过本设备 SettingsStore 保存，视图栏菜单可撤销。这个只读能力不增加页面写入接口；范围与限制见[插件视图](../reference/ui-panels.md#插件视图)。
+`contributes.ui.view` 的 `bridge: session` 另可读取经过校验、裁剪和去除隐藏键的会话投影。挂载前必须逐项取得玩家同意，绑定插件 ID 与 spec + HTML 的内容哈希，所有来源一视同仁；世界默认视图不能绕过。授权通过本设备 SettingsStore 保存，视图栏菜单可撤销。这个读取授权不隐含写入授权；范围与限制见[插件视图](../reference/ui-panels.md#插件视图)。
 
 ## 导入第三方内容：只做数据转换
 
@@ -542,3 +542,5 @@ SillyTavern 内容导入使用有上限的 PNG 块遍历（读数据前先检查
 ## 呈现投影与内核记账
 
 呈现上下文使用独立构造路径，只复制公开 `segments` / `cues`、精简角色身份和明确允许的自有数据。concealed / 失败 / 非故事结果、隐藏 namespace、原始 digest 和服务入口不进入它。`_presentation_budget` 属于 `__kernel:presentation` 的控制面，只保存来源与计数；插件、RPC、数据工具和可移植视图不可见，snapshot / fork / 浏览器 checkpoint 排除它。额度保留到会话删除；restore / reset 改变代次，旧作业不能接到新会话。函数 JS 本身仍非沙箱，原有代码批准不变。见[呈现 runtime](../reference/plugins.md#presentation-runtimes)。
+
+普通 session 页面只接收版本 2 的公开 DTO，不继承右侧面板的 KV、context、jobs 或 action/command/event 处理器。所有修改通过认证宿主进入普通玩家行动/交互或所属插件的手动 runtime 提案通道；opaque iframe 仍不能请求 `/api`、读取存储、密钥或 Electron IPC。会话/内容/授权/页面尝试变化会使租约失效，等待中的审批不能重试旧调用。回复只含安全状态；失败和成功都不发送嵌套执行输出。资源路由在 HEAD/304 判断前也核对实际内容哈希，避免旧摘要执行同长度新内容。沙箱不防护恶意操作系统所有者；旧不可变缓存仍是旧的已同意内容。不提供整块替换或心跳恢复。详见[会话页面契约](../reference/ui-panels.md#读取会话前的授权)。

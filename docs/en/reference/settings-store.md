@@ -312,3 +312,7 @@ Which key belongs to what:
 ### Session advancement settings
 
 “Automatic rounds” lives in session metadata as `autoAdvanceLimit`, rather than in SettingsStore user preferences. Read and change it through the [session API](./api.md#auto-advance); snapshots, forks and browser checkpoints retain it. A saved change applies to the next input; the running request keeps its original limit.
+
+### Session page capability consent
+
+Ordinary session webviews reuse device-local SettingsStore preferences, without session, snapshot or database grants. Each capability gets a key bound to the complete content hash; the existing `.session` read grant adds no write authority. Mount waits for the whole save to succeed; optimistic notifications and rollback do not grant access. Revocation first stops the page synchronously, then persists the removal; refresh from another window also closes access. See [consent before reading a session](./ui-panels.md#consent-before-reading-a-session) for keys and retirement conditions.

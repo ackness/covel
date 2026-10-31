@@ -434,3 +434,36 @@ describe("multi-file view loading", () => {
     });
   });
 });
+
+it("preserves valid bridge capabilities while reporting only the invalid sibling feature", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "bridge-ui-"));
+  try {
+    await fs.writeFile(path.join(root, "page.html"), "<p>Public page</p>");
+    const valid = {
+      id: "reader",
+      label: "Reader",
+      bridge: "session",
+      capabilities: ["submitAction"],
+      webview: { entry: "./page.html" },
+    };
+    await fs.writeFile(path.join(root, "good.json"), JSON.stringify(valid));
+    await fs.writeFile(
+      path.join(root, "bad.json"),
+      JSON.stringify({
+        ...valid,
+        id: "broken",
+        capabilities: ["invokeCommand"],
+      }),
+    );
+    const ui = await loadPluginUiSpecs(root, "owner", {
+      view: ["./good.json", "./bad.json"],
+    });
+    expect(ui.slots.view).toMatchObject([
+      { id: "reader", capabilities: ["submitAction"] },
+    ]);
+    expect(ui.diagnostics).toHaveLength(1);
+    expect(ui.diagnostics[0]?.issues[0]?.path).toContain("capabilities");
+  } finally {
+    await fs.rm(root, { recursive: true, force: true });
+  }
+});

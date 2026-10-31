@@ -16,7 +16,12 @@ import {
 import type { StreamFeed } from "./session-bridge-stream.js";
 
 const EMPTY_CHARACTERS: readonly unknown[] = [];
-export function useSessionBridge(sessionId: string) {
+export function useSessionBridge(
+  sessionId: string,
+  interactionHandle?: (
+    message: import("@/stores/session-store.js").StreamMessage,
+  ) => string | undefined,
+) {
   const { state } = useSession();
   const { session, messages, executing, submittedBlockIds } = state;
   const characters = Array.isArray(state.gameState.characters)
@@ -81,6 +86,9 @@ export function useSessionBridge(sessionId: string) {
     const result = sessionProjectionSchema.safeParse(
       buildSessionProjection({
         session,
+        actionKinds: state.sessionActionKinds,
+        locale: session.locale,
+        interactionHandle,
         executing,
         messages,
         messageSeqs,
@@ -102,6 +110,8 @@ export function useSessionBridge(sessionId: string) {
     return undefined;
   }, [
     session,
+    state.sessionActionKinds,
+    interactionHandle,
     sessionId,
     executing,
     messages,

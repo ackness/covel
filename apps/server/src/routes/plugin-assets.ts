@@ -2,7 +2,6 @@ import { createHash } from "node:crypto";
 import { constants } from "node:fs";
 import fs from "node:fs/promises";
 import path from "node:path";
-import { Readable } from "node:stream";
 import { Hono } from "hono";
 import {
   PLUGIN_ASSETS_PATH,
@@ -101,17 +100,27 @@ export function createPluginAssetRoutes(registry: PluginRegistry): Hono {
           !isPathInside(realRoot, realFile)
         )
           throw new Error("changed file");
-        size = stat.size;
-        if (entry) {
-          if (size > MAX_PAGE_ENTRY_BYTES)
-            throw new Error("entry exceeds 2 MiB");
-          body = Buffer.from(
-            injectBridge(await handle.readFile("utf8"), root.entry),
-          );
-          size = body.byteLength;
-          await handle.close();
-          handle = undefined;
+        if (!metadata || (entry && stat.size > MAX_PAGE_ENTRY_BYTES))
+          throw new Error("asset exceeds serving limit");
+        // Read once with a fixed bound, then serve only these verified bytes.
+        const bytes = Buffer.alloc(metadata.size + 1);
+        let length = 0;
+        while (length < bytes.length) {
+          const read = await handle.read(bytes, length, bytes.length - length);
+          if (!read.bytesRead) break;
+          length += read.bytesRead;
         }
+        body = bytes.subarray(0, length);
+        if (
+          length !== metadata.size ||
+          createHash("sha256").update(body).digest("hex") !== metadata.sha256
+        )
+          throw new Error("changed file");
+        if (entry)
+          body = Buffer.from(injectBridge(body.toString("utf8"), root.entry));
+        size = body.byteLength;
+        await handle.close();
+        handle = undefined;
       } catch {
         await handle?.close();
         console.warn(
@@ -145,11 +154,7 @@ export function createPluginAssetRoutes(registry: PluginRegistry): Hono {
     }
     if (body)
       return new Response(new Uint8Array(body), { headers: c.res.headers });
-    if (!handle) return missing();
-    return new Response(
-      Readable.toWeb(handle.createReadStream()) as ReadableStream,
-      { headers: c.res.headers },
-    );
+    return missing();
   });
   return app;
 }

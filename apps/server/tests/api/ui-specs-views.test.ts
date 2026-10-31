@@ -1,4 +1,4 @@
-import { cp, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -60,6 +60,24 @@ describe("GET /api/ui-specs plugin views", () => {
     expect(result.view[0]?.specs[0]).toMatchObject({
       bridge: "session",
       webview: { html: expect.stringContaining("covel.subscribe") },
+    });
+    expect(result.diagnostics).toEqual([]);
+  });
+  it("preserves requested capabilities in the existing view response", async () => {
+    const file = path.join(root, "session-view-probe/ui/story-view.json");
+    const spec = JSON.parse(await readFile(file, "utf8"));
+    await writeFile(
+      file,
+      JSON.stringify({
+        ...spec,
+        capabilities: ["submitAction", "abortExecution"],
+      }),
+    );
+    await registerTestPlugins(registry, [root]);
+    const result = await read();
+    expect(result.view[0]?.specs[0]).toMatchObject({
+      bridge: "session",
+      capabilities: ["submitAction", "abortExecution"],
     });
     expect(result.diagnostics).toEqual([]);
   });

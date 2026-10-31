@@ -246,3 +246,16 @@ it("does not publish special files even when their extension is allowlisted", as
     "index.html",
   ]);
 });
+
+it("retains each exact file hash and changes the root digest on a same-size edit", async () => {
+  const root = await fixture();
+  await writeFile(path.join(root, "app.js"), "aaaa");
+  const before = await scan(root, "index.html");
+  expect(before.listed.get("app.js")?.sha256).toMatch(/^[a-f0-9]{64}$/);
+  await writeFile(path.join(root, "app.js"), "bbbb");
+  const after = await scan(root, "index.html");
+  expect(after.digest).not.toBe(before.digest);
+  expect(after.listed.get("app.js")?.sha256).not.toBe(
+    before.listed.get("app.js")?.sha256,
+  );
+});

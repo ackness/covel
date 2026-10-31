@@ -105,3 +105,26 @@ it("invalidates the old append baseline when reset text overtakes it before the 
   expect(resync).toHaveBeenCalledOnce();
   expect(send).not.toHaveBeenCalled();
 });
+
+it("drops an already queued timer callback after the page lease is retired", () => {
+  let queued!: () => void;
+  const send = vi.fn();
+  const resync = vi.fn();
+  const pump = createStreamPump({
+    read: () => ({ seq: 1, text: "Public tail" }),
+    send,
+    resync,
+    intervalMs: 100,
+    setTimer: (callback) => {
+      queued = callback;
+      return 1;
+    },
+    clearTimer: vi.fn(),
+  });
+  pump.baseline(1, 0);
+  pump.notify();
+  pump.dispose();
+  queued();
+  expect(send).not.toHaveBeenCalled();
+  expect(resync).not.toHaveBeenCalled();
+});

@@ -142,18 +142,24 @@ export async function postPluginRpcWithApproval(params: {
   readonly actionLabel: string;
   readonly confirm: ConfirmPluginRpcApproval;
   readonly t: Translate;
+  readonly isCurrent?: () => boolean;
 }): Promise<PluginRpcResponse | null> {
   const postPluginRpc = () =>
     getSessionWorkspace().run(
       params.sessionId,
       `plugin-rpc:${crypto.randomUUID()}`,
-      async () =>
-        requestPluginRpc(
-          params.sessionId,
+      async () => {
+        if (params.isCurrent && !params.isCurrent())
+          throw new Error("RPC owner retired");
+        const request =
           typeof params.request === "function"
             ? await params.request()
-            : params.request,
-        ),
+            : params.request;
+        if (params.isCurrent && !params.isCurrent())
+          throw new Error("RPC owner retired");
+        return requestPluginRpc(params.sessionId, request);
+      },
+      { isCurrent: params.isCurrent },
     );
   const first = await postPluginRpc();
   return resolvePluginRpcApprovalResponse({
@@ -164,6 +170,7 @@ export async function postPluginRpcWithApproval(params: {
     actionLabel: params.actionLabel,
     confirm: params.confirm,
     t: params.t,
+    isCurrent: params.isCurrent,
   });
 }
 
@@ -176,10 +183,12 @@ export async function resolvePluginRpcApprovalResponse(params: {
   readonly confirm: ConfirmPluginRpcApproval;
   readonly t: Translate;
   readonly submitApproval?: typeof resolveApproval;
+  readonly isCurrent?: () => boolean;
 }): Promise<PluginRpcResponse | null> {
   let response = params.response;
   const requested = new Set<string>();
   while (response.status === "approval-required") {
+    if (params.isCurrent && !params.isCurrent()) return null;
     const pending =
       response.pending && typeof response.pending === "object"
         ? (response.pending as Record<string, unknown>)
@@ -202,11 +211,12 @@ export async function resolvePluginRpcApprovalResponse(params: {
       break;
     requested.add(key);
 
-    const proceed = await confirmPluginApproval(
+    const allowed = await confirmPluginApproval(
       { pluginId: approvedPluginId, action: approvedAction },
       { t: params.t, confirm: params.confirm },
     );
 
+    const proceed = allowed && (params.isCurrent?.() ?? true);
     try {
       await (params.submitApproval ?? resolveApproval)(
         response.approvalId,
@@ -236,6 +246,7 @@ export async function resolvePluginRpcApprovalResponse(params: {
       return null;
     }
 
+    if (params.isCurrent && !params.isCurrent()) return null;
     response = await params.retry();
   }
 
