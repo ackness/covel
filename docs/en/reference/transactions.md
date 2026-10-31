@@ -2,6 +2,8 @@
 
 This page explains how Covel makes sure that "a batch of writes either all takes effect, or none of it does". It is for developers who change a storage backend, change the turn commit flow, or track down "why this write was not saved". Writing a plugin does not require this page. A plugin's writes all go through proposals, and the kernel commits them.
 
+See [world data receivers](./world-data.md#data-receivers) for static discovery, inferred selection and omission notices. Data acceptance does not satisfy service or runtime capability dependencies.
+
 There are three key points:
 
 - The storage interface `DataStore` has only one kind of transaction: `withTransaction(fn)`. Every backend must implement it.

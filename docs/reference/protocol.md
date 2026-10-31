@@ -1,5 +1,7 @@
 # SSE 协议
 
+准备计划的两类需求分开冻结在会话 metadata 中：`requiredContracts` 对应能力，`requiredDataContracts` 对应数据 `accepts`；缺失数据通过安全的 `dataNotices` / `worldDataNotices` 告知玩家。见[接收规则](./world-data.md#data-receivers)。
+
 世界准备通过公开计划的 `selection` 读取 `plugins` 引用。创建请求提交明确的插件 ID 与排除项；服务端独立冻结世界的 `contract:` 引用。缺少功能只产生提示，不阻止游玩。
 
 这一页讲客户端和 Covel 服务端之间怎样通讯：客户端发什么请求，服务端推什么事件，每个事件带什么数据，断线之后怎样恢复。

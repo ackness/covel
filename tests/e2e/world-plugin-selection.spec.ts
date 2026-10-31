@@ -12,17 +12,40 @@ test("local world selection survives preparation, hydration, the first turn and 
   page,
 }) => {
   const provider = await startFakeLlmProvider();
-  provider.reply = () => ({
-    text: JSON.stringify({
-      segments: [
-        {
-          kind: "narration",
-          text: "The relay lamp holds against the long night.",
-        },
-      ],
-      cues: { present: [] },
-    }),
-  });
+  provider.reply = (request) =>
+    request.tools.some((tool) => tool.function.name === "submit-world-facts")
+      ? {
+          text: "",
+          toolCalls: [
+            {
+              id: "facts",
+              type: "function",
+              function: {
+                name: "submit-world-facts",
+                arguments: JSON.stringify({
+                  schemaVersion: 1,
+                  summary: "The lamp holds.",
+                  entities: [],
+                  relations: [],
+                  events: [],
+                  statements: [],
+                  objectiveAssessments: [],
+                }),
+              },
+            },
+          ],
+        }
+      : {
+          text: JSON.stringify({
+            segments: [
+              {
+                kind: "narration",
+                text: "The relay lamp holds against the long night.",
+              },
+            ],
+            cues: { present: [] },
+          }),
+        };
   await seedBrowserSettings(page, {
     "ui.onboardedVersion": ONBOARDING_VERSION,
     "ui.locale": "en-US",
@@ -71,7 +94,21 @@ test("local world selection survives preparation, hydration, the first turn and 
         locale: "en-US",
         lore: "One relay, one lamp, one long night.",
         tags: ["frontier"],
-        metadata: { plugins },
+        metadata: {
+          plugins,
+          contractData: [
+            {
+              contract: "quests@1",
+              key: "relay",
+              value: {
+                id: "relay",
+                name: "Keep the lamp",
+                description: "Keep the relay alive.",
+                status: "active",
+              },
+            },
+          ],
+        },
       });
       return world.id as string;
     },
@@ -101,6 +138,9 @@ test("local world selection survives preparation, hydration, the first turn and 
       .locator('[data-plugin-id="dice-check"]')
       .getByRole("switch");
     await expect(dice).toHaveAttribute("aria-checked", "true");
+    await expect(
+      advanced.locator('[data-plugin-id="core-quest"]').getByRole("switch"),
+    ).toHaveAttribute("aria-checked", "true");
     await dice.click();
     await initial.click();
     await expect(dice).toHaveAttribute("aria-checked", "false");
@@ -147,6 +187,9 @@ test("local world selection survives preparation, hydration, the first turn and 
           worldMetadata: world?.metadata,
           active: session.activePlugins as string[],
           selection: session.metadata?.pluginSelection,
+          data: await (
+            await import(apiPath)
+          ).listPluginData(sessionId, "core-quest", "quests"),
         };
       },
       { sessionId, worldId },
@@ -156,8 +199,13 @@ test("local world selection survives preparation, hydration, the first turn and 
     expect(saved.selection).toMatchObject({
       excluded: expect.arrayContaining(["dice-check"]),
       requiredContracts: ["missing-check@1"],
+      requiredDataContracts: ["quests@1"],
     });
     expect(saved.active).toContain("narrator");
+    expect(saved.active).toContain("core-quest");
+    expect(saved.data).toEqual(
+      expect.arrayContaining([expect.objectContaining({ key: "relay" })]),
+    );
     expect(saved.active).not.toContain("dice-check");
   } finally {
     await page.evaluate(async (id) => {

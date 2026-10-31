@@ -2,6 +2,8 @@
 
 This page explains how plugins get into Covel from GitHub or a ZIP file: the flow the player sees, which links can be pasted, the HTTP interfaces for installing and updating, and the limits. For step-by-step instructions for players, see [Install plugins and world packs](../start/packages.md). For authors, see [Publishing](../ship/publish.md). Read this page when you deploy, troubleshoot an installation problem, or connect to the installation interfaces.
 
+See [world data receivers](./world-data.md#data-receivers) for static discovery, inferred selection and omission notices. Data acceptance does not satisfy service or runtime capability dependencies.
+
 The official catalogue is [covel-ai/covel-plugins](https://github.com/covel-ai/covel-plugins). Each plugin in the catalogue is one JSON entry, and the table in the README is generated from these entries. A third-party plugin's source stays in its author's own repository. Official extensions and examples can live in separate subdirectories of the catalogue repository.
 
 ## Declarative plugins

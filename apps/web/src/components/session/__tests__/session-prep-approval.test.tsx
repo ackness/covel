@@ -212,6 +212,8 @@ describe("session prep approval preflight", () => {
       await waitFor(() =>
         expect(api.preflightWorldData).toHaveBeenLastCalledWith(world.id, {
           plugins: ["builtin"],
+          excludedPlugins: [],
+          locale,
         }),
       );
       expect(

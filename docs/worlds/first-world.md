@@ -4,6 +4,8 @@
 
 全程约二十分钟。不需要写代码。
 
+预置数据按[接收规则](../reference/world-data.md#data-receivers)自动选择唯一合格接收者。只有没有种子内容的玩法或有意消除歧义时才需要额外的 `plugin:` 引用。
+
 ## 开始之前
 
 - 已经完成[第一局游戏](../start/first-session.md)，知道一局游戏是怎样进行的。

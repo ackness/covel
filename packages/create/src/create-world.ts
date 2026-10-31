@@ -138,7 +138,6 @@ function checkManifest(
   const briefResult = applyCreationBriefToManifest(
     yamlData,
     options.brief,
-    options.dataContracts,
     options.packs,
   );
   const errors = briefResult.errors;

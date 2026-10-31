@@ -13,6 +13,26 @@ Some terms used throughout this page:
 
 SillyTavern character cards and lorebooks can be [converted into this same ordinary package](../worlds/import-sillytavern.md). Conversion reports unmappable fields and creates only fixed content files, without executing extensions or scripts.
 
+<a id="data-receivers"></a>
+
+## Selecting receivers from content
+
+A world selects gameplay only through `plugins`. The host first merges conventions, the descriptor and user overrides from all valid static declarations, then inventories sources that exist and are enabled. Discovery imports no plugin code, executes no projections, reads no image bytes and grants no permission. An existing empty structured file still requires a receiver so sync can remove old records; absent files, empty wildcard directories, disabled sources and absent character extension fields do not. Media uses `indexTo`, character extensions use declared `characterField` routes, and portable worlds use `metadata.contractData` and `embeddedCharacters`.
+
+Capability and data requirements are separate. Authored `contract:` gameplay references and actual dimension content use `requiredContracts`; destination `to` / `indexTo` contracts use `requiredDataContracts`, satisfied only by `contributes.data.*.accepts`. Publishing a schema, output or service does not declare a receiver. A standalone `schema: contract:…` is only a validator. Ordinary characters and lorebook content need no plugin; dimensions require `world.dimensions@1`.
+
+Already selected eligible receivers satisfy the requirement, retaining intentional fanout when players select several. Otherwise only a unique eligible receiver joins automatically. Several receivers require a player choice; capability `default` flags do not choose one. A package with no runtimes can receive data. Exclusions, dependencies, conflicts, approval and faults retain their normal admission rules. Inference never installs or approves code, and optional projections do not join merely because compatible sources exist. A unique receiver awaiting approval uses the existing consent flow. A package with presentation runtimes must be selected by a gameplay pack or the player; seed data and assets alone cannot activate it. Once selected, it still receives matching data.
+
+Several declarations share a path only when their target, kind, key, visibility, locale array keys, lorebook and media index behavior agree. Different contracts or hidden/public disagreement remain collisions until an explicit descriptor identifies the destination. Toggling plugins cannot change an identified source's meaning or identity.
+
+An unclaimed structured file under `data/` produces a nonfatal `unclaimed-data-source` warning. Scanning has entry and depth limits, follows no symlinks and never guesses a contract from a basename. Recognized translations, disabled sources, referenced schemas and known infrastructure do not receive duplicate warnings. Authors should install the declaring plugin for validation or add a descriptor with an explicit destination. Arbitrary assets outside the content area do not trigger this warning.
+
+Preparation, creation and session notices use one safe projection, distinguishing missing, ambiguous, disabled and approval-required receivers. All player notices use fixed text without raw source IDs, filenames, record keys or exception details. Notices with the same omission reason are grouped. Author validation retains package-relative locations and remedies. Missing data never prevents starting or storytelling.
+
+Creation independently recomputes and freezes both requirement lists; an older client plan is advisory. Changes to files, the world record, catalogue generation or authorization during preparation reject stale creation. Newly installed receivers never join a frozen session automatically. Checkpoints, forks and resume retain session metadata; explicit toggles preserve existing inferred receivers without silently selecting replacements. Newly installed core defaults and world capability providers also stay out during unrelated toggles; explicitly selected plugins can still resolve their ordinary dependencies. Unreceived conventional sources still reach import planning. Sync defers them and preserves previous rows, ledgers and media references instead of treating them as empty. Re-enabling seeds only data not yet received. Normal sync still enforces dataset schemas, operation permissions, final-value validation and transactions.
+
+Recreate development sessions and recordings that assume the inferred set, and reimport modified world copies. No database schema reset, automatic rewrite of older sessions or deletion of player data is required.
+
 ## Declarative data receivers
 
 An active [declarative plugin](./plugin-installation.md#declarative-plugins) can receive contract-matched world data through `contributes.data` without code approval or import handlers. Data remains owned by the receiver. Declared dataset schemas, keys and `ops` still apply to runtime writes and formal import/sync; import cannot remove data beyond those permissions. Declaring `worldProjections` makes the package code, and projections still need independent server execution authorization. Classification does not change receiver selection or contract matching.
@@ -334,7 +354,7 @@ The "AI create world" feature in the app and a world package written by hand use
 
 **Plugin content** is specified by the `contracts` in the creation brief:
 
-- The generator makes records only for the data contracts that are chosen. The schema, the writing prompt and the example of each contract come from the `authoring` declaration of the receiving plugin (it must declare `generate`). When the receiving plugin is not in the chosen pack, it is added to `plugins`; a `kind: core` plugin is not added.
+- The generator makes records only for the data contracts that are chosen. The schema, the writing prompt and the example of each contract come from the `authoring` declaration of the receiving plugin (it must declare `generate`). Receivers are inferred from actual generated content rather than added as redundant `plugins` references.
 - A contract that is not chosen does not go into the prompt. If the model outputs records for a contract that was not chosen, or leaves out a contract that was chosen, that attempt counts as a failure and is retried.
 - The records of a contract are written to the file that the receiving plugin declares (the `path` and `kind` of `authoring.source`, for example `data/memory-blocks.json` or `data/time.yaml`). One record is the file content. Several records are written as an array.
 - In the two cases below, the records are rewritten to `data/contract-<n>.json`, and the descriptor `data/world.data.yaml` adds these files as sources. Every other file is at a convention path and is not in the descriptor:
@@ -414,7 +434,7 @@ pluginPitch:
 
 Each `pluginPitch` field is optional: `label`, `description` and `reason` default independently to the public world name, summary and tags. Tags use the fixed translated UI label “World tags”; no tags means no derived reason. Authored fields and their translations win, using `resolveI18nText` at display time and its shared fallback for unsupported UI languages. Presentation never reads lore, hidden events or model prompts, never calls a model, and is never written back as derived YAML or metadata. Locale overlay paths are `pluginPitch.label`, `pluginPitch.description` and `pluginPitch.reason`.
 
-`GET /api/worlds/:id/plugin-plan` returns `selection: { requestedPluginIds, requiredContracts }`, ordered `packs`, optional `selectedPackId`, `defaultPluginIds` and bounded `diagnostics`. Missing plugin IDs stay out of requests submitted to creation; `missing-plugin` diagnostics retain `pluginId`, field `path` and optional `packId`. `unknown-pack` also retains the reference location. Session creation takes the player's explicit requests and exclusions without selecting a pack for direct callers. The server independently reads and freezes world contracts into the session; resolving its fixed set never adds a newly installed plugin.
+`GET /api/worlds/:id/plugin-plan` returns `selection: { requestedPluginIds, requiredContracts, requiredDataContracts }`, ordered `packs`, optional `selectedPackId`, `defaultPluginIds` and bounded `diagnostics`. Missing plugin IDs stay out of requests submitted to creation; `missing-plugin` diagnostics retain `pluginId`, field `path` and optional `packId`. `unknown-pack` also retains the reference location. Session creation takes the player's explicit requests and exclusions without selecting a pack for direct callers. The server independently reads and freezes world contracts into the session; resolving its fixed set never adds a newly installed plugin.
 
 The former `pluginPolicy` and its `preset`, `plus`, `packs` and `requires` fields are removed, with no compatibility reads. Strict author validation rejects them. Player loading reports and ignores unknown root fields; an invalid optional selection or pitch is omitted while the rest of the world and lore remain usable. Recreate development worlds and sessions.
 
@@ -620,9 +640,9 @@ Rules:
 
 - The import order is: dimensions, then media, then the other contract data, and last `characters`.
 - All four built-in worlds are read this way: they have no descriptor, and every source comes from a convention path.
-- The conventions of the plugins **enabled** in this session are used. A plugin that is not enabled, or that failed to load, does not affect what is read.
+- Discovery uses every valid static declaration; admission separately limits receivers and execution. See [receiver rules](#data-receivers). Temporarily disabling a plugin does not change source identity.
 - Each conventional source has an ID, which a descriptor's `after` and an override use to name it: for the kernel, `dimensions`, `lorebook` and `characters`; for a plugin, its namespace, or `<plugin ID>-<namespace>` when two plugins use the same namespace; for a file in a folder, `<convention ID>-<file name>`, for example `rules-tide-mystery` for `data/rules/tide-mystery.yaml`.
-- When two contracts enabled in the same session declare the same path, that path is not a convention, the file is not imported, and the world package must use a descriptor to say which one it is for. The session still starts. The server log records a `[sessions]` warning, the world data preflight returns a `convention-collision` warning, and `pnpm validate:world` reports it too (see [Static validation](#static-validation-pnpm-validateworld)).
+- Incompatible declarations of one path remove its convention. The file is not imported until a descriptor disambiguates it. Identical declarations are discovered once; disabling a claimant cannot change source visibility. The session still starts. The server log records a `[sessions]` warning, the world data preflight returns a `convention-collision` warning, and `pnpm validate:world` reports it too (see [Static validation](#static-validation-pnpm-validateworld)).
 
 For plugin authors: `path` is a path relative to the world package root. It can contain only ASCII letters, digits, `_`, `.`, `/` and `-`. It cannot start with `/`, and it cannot contain `..`. Its last segment can be `*.<extension>`, meaning every file of that kind in the folder (not for a media source, which is a folder already). It also cannot be a path the kernel or the world package owns: `world.yaml`, `WORLD.md`, `data/world.data.yaml`, `data/dimensions.yaml`, `data/lorebook.yaml`, `characters/characters.json`, `media/gallery.json`, `media/portraits.json`, `media/scenes.json`, the `media/gallery/` folder, or a language version of one (such as `world.zh-CN.yaml`), compared without regard to case. A language version names a two-letter language code (`.fr`, `.zh-CN`) or a three-letter one with a region (`.yue-HK`); a suffix such as `.bak` or `.min` is part of the file name, so `characters/characters.bak.json` is allowed. A plugin manifest that does not follow this fails validation when it loads.
 
@@ -633,7 +653,7 @@ For plugin authors: `path` is a path relative to the world package root. It can 
 - You need to set the order with `after`.
 - You want to turn off a conventional source, or change one of its fields (for example `visibility` or `merge`).
 
-**Unused files.** `pnpm validate:world` checks whether any file in `data/`, `characters/` and `media/` (including subfolders) is not used by any source or framework feature. If one is not, it gives a `data-file-unused` reminder. Both import methods are checked. Language files of a source that already exists, local schemas, dimension files, theme music and gallery images are not reported by mistake. A README is author documentation and is not checked.
+**Unused files.** `pnpm validate:world` and preparation share the bounded scan in [receiver rules](#data-receivers). It reports only unclaimed YAML / JSON under `data/`; arbitrary images, media folders and author documentation are outside this scan.
 
 ## Descriptor
 
@@ -860,6 +880,8 @@ For plugin authors: the merge rule is `applyLocaleOverlay` in `@covel/shared`. P
 ### Receivers that join after the game starts
 
 The prep screen lists selected non-declarative community plugins whose server code is not yet approved under “Needs approval.” They stay checked, but do not count toward enabled plugins, runtimes, narrative checks or receivers in the world-data preflight. Players can still start the game. The world data those plugins receive is imported after approval and enablement.
+
+A receiver inferred only from data stays in the pending-approval list without becoming an explicit plugin request. Plugins already selected by the world or player retain the existing approval flow. The server independently infers receiver requirements during session creation.
 
 A plugin that is not enabled when the session is created gets no world data, for example a community plugin approved after the game starts. When a plugin is enabled in the game (`PUT /api/sessions/:id/plugins/:pluginId`), Covel imports once for the plugins that just joined:
 
@@ -1497,8 +1519,8 @@ Three built-in RPG plugins accept data preset by a world package. For a step-by-
 POST /api/worlds/<world-id>/world-data/preflight
 ```
 
-- When `plugins` is passed, preflight uses that plugin selection.
-- When `sessionId` is passed, preflight uses the plugins enabled in that existing session.
+- With `plugins`, preflight resolves new-session requests together with `excludedPlugins` and actual data requirements. Optional `locale` previews a world-supported content edition.
+- With `sessionId`, preflight uses only the existing session's fixed, admitted, authorized and unpaused set and its content locale. Request fields cannot replace them.
 - The built-in interface calls it automatically before the game starts. It shows what will be written, a summary of the targets, and the diagnostics.
 
 **Sync (sync):** an HTTP API for authors and tools that applies later data changes in a world package to one specified existing session. The app currently has no sync control for players.
@@ -1650,8 +1672,8 @@ Output when it passes:
 | `invalid-setting` | error | A value in `pluginSettings` does not match the type, range or options the setting declares |
 | `unprovided-contract` | error or warning | A contract in `contract:` references has no provider |
 | `unresolved-contract` | error or warning | A data contract used by a source has no receiving plugin among the scanned plugins |
-| `unrequested-receiver` | warning | No plugin a new session enables by default receives this source. The source is not imported until the player turns a receiving plugin on. |
-| `convention-collision` | error or warning | More than one plugin declares the path of one of the world's files, and the descriptor does not say which one it is for. A session that enables those plugins together does not import it. |
+| `unrequested-receiver` | warning | Receivers are ambiguous or cannot activate. Authors can select a receiver explicitly; players can still start. |
+| `convention-collision` | error or warning | Incompatible declarations claim a file's path and no descriptor disambiguates it. Sessions leave the file unimported. |
 | `world-data` | same as preflight | The descriptor, source order, file reading, targets, hidden-data rules, and each record checked against its contract schema |
 | `locale-file-name` | error | A language file's name gives only the language (`.en.`) and not the locale of the world's edition (`.en-US.`). This file is not read. |
 | `locale-overlay` | warning | A translation in a language file has no place to go (the main file has no such key or ID, or it changed a value that is not text). That entry is ignored. |
@@ -1659,7 +1681,7 @@ Output when it passes:
 | `locale-script` | warning | A language file for a language other than Chinese, Japanese or Korean still contains CJK characters: untranslated text, or a trigger word copied from the main file. |
 | `edition-incomplete` | warning | The world has an edition in a language, but that edition is missing some translations. A session in that language reads the world's original default-language text. |
 | `inline-locale-map` | error | The main file writes text as a multi-language map. The main file should have one language, and the translations go in language files. |
-| `data-file-unused` | warning | A file in `data/`, `characters/` or `media/` is not used by any source or framework feature |
+| `unclaimed-data-source` | warning | A structured file under `data/` has no source declaration; install its declaring plugin or add an explicit descriptor target |
 | `attribute-reference` | error | A value in a record that names a character attribute (declared by the receiving plugin's `authoring.references`) is missing from the world's `characterSchema`, has the wrong type or is out of range |
 | `dimension-reference` | error | A declared dimension reference is missing, the path beside it is not allowed by the dimension's `schema`, or a candidate declared in `values` does not satisfy the schema at that path |
 | `model-hidden-field` | warning | A record has a field that no model reads: a name ending in `At` or `timestamp` with an ISO time, or `id` / a name ending in `Id` or `Ids` with a UUID |
@@ -1669,7 +1691,7 @@ Output when it passes:
 
 For `unknown-plugin`, `unprovided-contract` and `unresolved-contract`: a spelling close to a known ID is an error, and it suggests "Did you mean". Otherwise the default is a warning, because the provider may be a community plugin that was not scanned. With `--strict`, all of them are errors. `pnpm release:preflight` uses `--strict` for the built-in worlds.
 
-**The plugins a new session enables by default** are the ones the session preparation screen ticks by default: the `requested` list of the initially selected pack and `plugins`, plus the core plugins and providers of explicit world contract references. Scanned community plugins count as approved. `unrequested-receiver` and `convention-collision` are judged against this set: `convention-collision` is an error when two of its declarers are in the set, and a warning otherwise. Records are still checked against the schemas of every scanned plugin, so the data of a plugin the player turns on by hand is checked too.
+**The plugins a new session enables by default** are the ones the session preparation screen ticks by default: the `requested` list of the initially selected pack and `plugins`, plus core plugins, capability providers and unique eligible receivers of actual content. Scanned community plugins count as approved. `unrequested-receiver` and `convention-collision` are judged against this set: `convention-collision` is an error when two of its declarers are in the set, and a warning otherwise. Records are still checked against the schemas of every scanned plugin, so the data of a plugin the player turns on by hand is checked too.
 
 **The three cases of `prompt-size`.** None of them stops the world from being used:
 

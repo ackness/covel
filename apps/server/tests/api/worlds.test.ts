@@ -163,6 +163,7 @@ async function registryWithDataPlugin(
   registry.register({
     id,
     rootPath,
+    source: "builtin",
     summary: {
       id,
       name: id,
@@ -398,7 +399,7 @@ describe("world routes", () => {
   it("sync-dimensions adopts protected records and never rewrites lorebook/plugin data", async () => {
     const now = new Date().toISOString();
     const registry = createPluginRegistry();
-    await registerDimensionProvider(registry);
+    await registerDimensionProvider(registry, "builtin");
     app = createTestApp(store, registry);
     await store.upsertWorld({
       id: "world-2",

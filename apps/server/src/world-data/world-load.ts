@@ -200,6 +200,7 @@ export async function loadWorldDataSummary(options: {
   worldRoot: string;
   worldId: string;
   worldDataPath?: string;
+  conventions?: readonly import("./conventions.js").ConventionalSource[];
   /** Locale of the package's main files. */
   defaultLocale?: string;
   covelHome?: string;
@@ -213,7 +214,13 @@ export async function loadWorldDataSummary(options: {
   diagnostics: readonly WorldDataDiagnostic[];
 }> {
   const metadata = { ...options.metadata };
-  if (!(await worldHasData(options.worldRoot, options.worldDataPath))) {
+  if (
+    !(await worldHasData(
+      options.worldRoot,
+      options.worldDataPath,
+      options.conventions,
+    ))
+  ) {
     return { metadata, diagnostics: [] };
   }
 
@@ -221,6 +228,7 @@ export async function loadWorldDataSummary(options: {
     worldRoot: options.worldRoot,
     worldId: options.worldId,
     worldDataPath: options.worldDataPath,
+    conventions: options.conventions,
     covelHome:
       options.includeOverrides === false
         ? undefined

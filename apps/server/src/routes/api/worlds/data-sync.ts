@@ -1,3 +1,17 @@
+import { DEFAULT_LOCALE } from "@covel/shared";
+import {
+  inventoryWorldData,
+  worldDataRequirementNotices,
+} from "../../../world-data/requirements.js";
+import { worldDataImportNotices } from "../../../world-data/receiver-import.js";
+import {
+  authorizedSessionPluginIds,
+  readSessionPluginSelection,
+  resolveSessionPluginSet,
+  worldRequiredContracts,
+} from "../session/plugins.js";
+import { sessionContentLocale, resolveSessionPlugins } from "@covel/shared";
+import { pluginContractFacts } from "../../../lib/plugin-descriptor.js";
 import { hasServerCodeGrant } from "../approval-verdict.js";
 /**
  * World data-sync routes — import-plan preflight, session worldData sync, and
@@ -75,21 +89,99 @@ worldDataSyncRoutes.post("/:id/world-data/preflight", async (c) => {
         )
       : [];
 
+  const world = await store.getWorld(worldId);
+  await c.get("trustedSources")?.verifyAll();
+  const entries = new Map(pluginRegistry.getAll());
+  const catalogue = {
+    get: (id: string) => entries.get(id),
+    getAll: () => entries,
+  };
+  const paused = new Set(
+    session
+      ? c
+          .get("pluginFaults")
+          ?.latched(sessionId)
+          .map((fault) => fault.pluginId)
+      : [],
+  );
+  const inventory = await inventoryWorldData({
+    world,
+    worldId,
+    worldsDirs,
+    covelHome,
+    registry: catalogue,
+    locale:
+      session?.locale ??
+      sessionContentLocale(
+        world ?? undefined,
+        typeof body.locale === "string" ? body.locale : DEFAULT_LOCALE,
+      ).locale,
+  });
+  const excluded = session
+    ? readSessionPluginSelection(session).excluded
+    : Array.isArray(body.excludedPlugins)
+      ? body.excludedPlugins.filter(
+          (id): id is string => typeof id === "string",
+        )
+      : [];
+  const authorized = authorizedSessionPluginIds(
+    pluginRegistry,
+    c.get("rpcApprovalGate"),
+    session ?? undefined,
+    c.get("trustedSources"),
+  );
+  const selection = session
+    ? readSessionPluginSelection(session)
+    : {
+        requiredContracts: [
+          ...new Set([
+            ...worldRequiredContracts(world),
+            ...inventory.requiredContracts,
+          ]),
+        ],
+        requiredDataContracts: inventory.requiredDataContracts,
+      };
+  const resolution = resolveSessionPlugins({
+    requested: plugins,
+    excluded,
+    fixed: Boolean(session),
+    requiredContracts: selection.requiredContracts,
+    requiredDataContracts: selection.requiredDataContracts,
+    plugins: [...entries.values()]
+      .filter((entry) => entry.status !== "error" && !paused.has(entry.id))
+      .map((entry) => ({
+        ...pluginContractFacts(entry),
+        authorized: authorized.includes(entry.id),
+      })),
+  });
   const result = await preflightWorldDataForSession({
-    world: await store.getWorld(worldId),
+    world,
+    inventory,
     sessionId,
     worldId,
     worldsDirs,
     covelHome,
     now: new Date().toISOString(),
-    locale: session?.locale,
+    locale:
+      session?.locale ??
+      sessionContentLocale(
+        world ?? undefined,
+        typeof body.locale === "string" ? body.locale : DEFAULT_LOCALE,
+      ).locale,
     preflight: {
-      activePlugins: plugins,
-      registry: pluginRegistry,
+      activePlugins: resolution.active,
+      registry: catalogue,
     },
   });
 
-  return c.json(result);
+  return c.json({
+    ...result,
+    diagnostics: worldDataRequirementNotices(
+      inventory,
+      resolution.unmetData,
+      result.diagnostics,
+    ),
+  });
 });
 
 // POST /worlds/:id/sync-data — reconcile a session's importer-managed
@@ -121,6 +213,27 @@ worldDataSyncRoutes.post("/:id/sync-data", async (c) => {
 
   const dryRun = body.dryRun !== false;
   const now = new Date().toISOString();
+  const admittedIds = (liveSession: typeof session) => {
+    const authorized = new Set(
+      authorizedSessionPluginIds(
+        pluginRegistry,
+        c.get("rpcApprovalGate"),
+        liveSession,
+        c.get("trustedSources"),
+      ),
+    );
+    const paused = new Set(
+      c
+        .get("pluginFaults")
+        ?.latched(sessionId)
+        .map((fault) => fault.pluginId) ?? [],
+    );
+    return resolveSessionPluginSet(
+      liveSession.activePlugins,
+      pluginRegistry.getAll(),
+    ).active.filter((id) => authorized.has(id) && !paused.has(id));
+  };
+  const plannedActive = admittedIds(session);
   const syncOptions = (liveSession: typeof session) => ({
     store,
     mediaStore,
@@ -134,7 +247,7 @@ worldDataSyncRoutes.post("/:id/sync-data", async (c) => {
     deferMediaFinalize: true,
     locale: liveSession.locale,
     preflight: {
-      activePlugins: liveSession.activePlugins,
+      activePlugins: admittedIds(liveSession),
       registry: pluginRegistry,
       canExecuteProjection: (pluginId: string) =>
         hasServerCodeGrant(c.get("rpcApprovalGate"), liveSession, pluginId),
@@ -158,7 +271,7 @@ worldDataSyncRoutes.post("/:id/sync-data", async (c) => {
     ok: true as const,
     imported: result.imported,
     dryRun: result.dryRun,
-    diagnostics: result.diagnostics,
+    diagnostics: worldDataImportNotices(result.diagnostics),
     planned: result.planned,
     upserted: result.upserted,
     deleted: result.deleted,
@@ -207,6 +320,8 @@ worldDataSyncRoutes.post("/:id/sync-data", async (c) => {
             sessionApprovalScope(session, pluginId),
         );
         if (
+          JSON.stringify(admittedIds(liveSession)) !==
+            JSON.stringify(plannedActive) ||
           liveSession.locale !== session.locale ||
           !activePluginsUnchanged ||
           !approvalScopesUnchanged
@@ -276,6 +391,21 @@ worldDataSyncRoutes.post("/:id/sync-dimensions", async (c) => {
   // the app is what the session syncs to. The ledger compares each resolved
   // definition, so a record loaded from unchanged files matches what the
   // session imported from them.
+  const admittedIds = (liveSession: typeof session) => {
+    const authorized = new Set(
+      authorizedSessionPluginIds(
+        pluginRegistry,
+        c.get("rpcApprovalGate"),
+        liveSession,
+        c.get("trustedSources"),
+      ),
+    );
+    return resolveSessionPluginSet(
+      liveSession.activePlugins,
+      pluginRegistry.getAll(),
+    ).active.filter((id) => authorized.has(id));
+  };
+  const plannedActive = admittedIds(session);
   const syncOptions = (liveSession: typeof session) => ({
     store,
     sessionId,
@@ -287,7 +417,7 @@ worldDataSyncRoutes.post("/:id/sync-dimensions", async (c) => {
     dimensionOnly: true,
     locale: liveSession.locale,
     preflight: {
-      activePlugins: liveSession.activePlugins,
+      activePlugins: admittedIds(liveSession),
       registry: pluginRegistry,
       canExecuteProjection: (pluginId: string) =>
         hasServerCodeGrant(c.get("rpcApprovalGate"), liveSession, pluginId),
@@ -306,6 +436,16 @@ worldDataSyncRoutes.post("/:id/sync-dimensions", async (c) => {
   ): Promise<Response | undefined> => {
     if (liveSession.worldId !== id)
       return c.json(errorBody("Session not found or world mismatch"), 404);
+    if (
+      JSON.stringify(admittedIds(liveSession)) !== JSON.stringify(plannedActive)
+    )
+      return c.json(
+        errorBody(
+          "Plugin authorization changed during world-data preparation",
+          { code: "world_data_sync_plan_stale" },
+        ),
+        409,
+      );
     report = await syncWorldDataForSession({
       ...syncOptions(liveSession),
       prepared,

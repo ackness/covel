@@ -227,12 +227,16 @@ describe.each(backends)("dimension providers of a session (%s)", (_, open) => {
   });
 
   it("imports the world's dimensions when their provider is turned on later", async () => {
-    const created = await create({ excludedPlugins: ["world-init"] });
+    const created = await create({ excludedPlugins: ["world-init", RIVAL] });
     expect(created.status).toBe(201);
     expect(await created.json()).toMatchObject({
       ignoredDimensions: ["stamina"],
     });
     expect(await stamina()).toBeUndefined();
+    expect((await store.getSession("s"))?.activePlugins).toEqual([]);
+    expect(
+      (await store.getSession("s"))?.metadata?.pluginSelection,
+    ).toMatchObject({ excluded: ["world-init", RIVAL] });
 
     const res = await toggle("world-init", "PUT");
     expect(res.status).toBe(200);

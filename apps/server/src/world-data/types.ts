@@ -20,7 +20,8 @@ export interface WorldDataDiagnostic {
     | "convention-collision"
     | "dimension-provider-missing"
     | "dimension-reference"
-    | "receiver-missing";
+    | "receiver-missing"
+    | "unclaimed-data-source";
   /** Set when a locale file's entry was ignored; `path` is that file. */
   readonly localeOverlay?: true;
 }
@@ -53,6 +54,7 @@ export interface OrderedWorldDataSource extends MergedWorldDataSource {
 }
 
 export interface LoadedWorldDataDescriptor {
+  readonly disabledPaths?: readonly string[];
   readonly sources: readonly OrderedWorldDataSource[];
   readonly diagnostics: readonly WorldDataDiagnostic[];
 }
@@ -60,4 +62,8 @@ export interface LoadedWorldDataDescriptor {
 export interface DigestResult {
   readonly digest: string;
   readonly size: number;
+}
+/** Author diagnostics remain in logs; player error responses use fixed text. */
+export class WorldDataImportError extends Error {
+  readonly code = "world_data_import_failed";
 }

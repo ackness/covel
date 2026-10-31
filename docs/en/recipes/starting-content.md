@@ -8,7 +8,7 @@ It uses the world 潮灯镇 (Tidelamp) from the [first world](../worlds/first-wo
 
 Each of quests, items, and affinity is handled by one plugin. You need to do two things:
 
-1. Tell the world in `world.yaml` to enable these three plugins.
+1. Choose a gameplay pack in `world.yaml`.
 2. Give each plugin a data file, placed where it expects it.
 
 | What to preset | Plugin that handles it | Data file            |
@@ -19,17 +19,12 @@ Each of quests, items, and affinity is handled by one plugin. You need to do two
 
 ## 1. Enable the plugins
 
-Open `world.yaml`, and add `plus` under `plugins`:
+Keep the chosen gameplay pack. The actual quest, item and affinity files below automatically select their unique eligible receivers. Several candidates require a player choice; exclusions and approval still apply. Undeclared files do not acquire contracts from their basenames. See [receiver rules](../reference/world-data.md#data-receivers).
 
 ```yaml
 plugins:
   - pack:traditional-story
-  - plugin:core-quest
-  - plugin:inventory
-  - plugin:affinity
 ```
-
-`preset` chooses a base set of plugins (a built-in pack), and `plus` adds to it. When the player switches packs, the plugins in `plus` stay.
 
 ## 2. Write a starting quest
 
@@ -120,11 +115,11 @@ Restart Covel, start a new session in 潮灯镇, and then look at the right pane
 
 ## When it does not work as expected
 
-| Symptom                                             | Cause and fix                                                                                                  |
-| --------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
-| The panel shows none of the preset content          | You are looking at an old save. Start a new session                                                            |
-| Validation passes, but one kind does not appear     | That plugin is not enabled. Check that it is in `plus`, and that the session-prep screen has not turned it off |
-| Character names in the story do not match the panel | Several files write the same person's name differently. Use the same name as in `WORLD.md`                     |
+| Symptom                                             | Cause and fix                                                                                                        |
+| --------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
+| The panel shows none of the preset content          | You are looking at an old save. Start a new session                                                                  |
+| Validation passes, but one kind does not appear     | Check preparation notices: the receiver may be excluded, need approval, or require a choice among several candidates |
+| Character names in the story do not match the panel | Several files write the same person's name differently. Use the same name as in `WORLD.md`                           |
 
 > [!NOTE]
 > If you have written the data file but the matching plugin is not enabled, validation does not report an error, and the data is simply not used. So step 1 cannot be skipped.

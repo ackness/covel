@@ -261,7 +261,11 @@ export async function descriptorSourcePaths(
   if (!worldDataPath) return [];
   const read = await readDescriptorFile(worldRoot, worldDataPath);
   return Object.values(read.descriptor?.sources ?? {})
-    .filter((entry) => entry.kind !== undefined && entry.to !== undefined)
+    .filter(
+      (entry) =>
+        entry.enabled === false ||
+        (entry.kind !== undefined && entry.to !== undefined),
+    )
     .map((entry) => entry.path);
 }
 
@@ -380,6 +384,14 @@ export async function loadWorldDataDescriptor(options: {
     .map(withDefaultSchema);
   const ordered = orderSources(enabled);
   return {
+    disabledPaths: [
+      ...Object.values(written?.descriptor?.sources ?? {})
+        .filter((source) => source.enabled === false)
+        .map((source) => source.path),
+      ...[...merged.values()]
+        .filter((source) => source.descriptor.enabled === false)
+        .map((source) => source.descriptor.path),
+    ],
     sources: ordered.sources,
     diagnostics: [...diagnostics, ...ordered.diagnostics],
   };

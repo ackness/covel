@@ -18,13 +18,7 @@ cover: media/gallery/lantern-barrow-hero.webp
 accentColor: "oklch(72% 0.12 75)"
 plugins:
   - pack:traditional-story
-  - plugin:tabletop-rules
   - plugin:dice-check
-  - plugin:core-quest
-  - plugin:inventory
-  - plugin:affinity
-  - plugin:character-blueprint
-  - plugin:story-events
   - contract:action-check@1
 pluginPitch:
   label: 经典跑团

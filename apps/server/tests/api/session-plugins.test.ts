@@ -126,6 +126,7 @@ describe("Session plugin routes (real sessionRoutes)", () => {
     expect(session.metadata?.pluginSelection).toEqual({
       requested: ["optional-plugin"],
       excluded: [],
+      requiredDataContracts: [],
     });
     expect(activated).not.toHaveBeenCalled();
     const list = async () =>
@@ -917,6 +918,7 @@ describe("Session plugin routes (real sessionRoutes)", () => {
         requested: [],
         excluded: [],
         requiredContracts: ["action-check@1"],
+        requiredDataContracts: [],
       });
 
       // Turning the provider off is the player's choice; the requirement stays
@@ -1328,7 +1330,11 @@ describe("Session plugin routes (real sessionRoutes)", () => {
       expect(res.status).toBe(200);
       expect(
         (await store.getSession(SESSION_ID))?.metadata?.pluginSelection,
-      ).toEqual({ requested: ["optional-plugin"], excluded: ["narrator"] });
+      ).toEqual({
+        requested: ["optional-plugin"],
+        excluded: ["narrator"],
+        requiredDataContracts: [],
+      });
     });
 
     it("refuses to disable the plugin that holds the session's dimensions", async () => {
@@ -1430,7 +1436,12 @@ describe("Session plugin routes (real sessionRoutes)", () => {
         }),
       );
       await store.updateSession(SESSION_ID, {
-        activePlugins: ["narrator", "optional-plugin", "forged-core"],
+        activePlugins: [
+          "narrator",
+          "pregame",
+          "optional-plugin",
+          "forged-core",
+        ],
         updatedAt: new Date().toISOString(),
       });
 

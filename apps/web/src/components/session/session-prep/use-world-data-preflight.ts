@@ -37,6 +37,8 @@ export function useWorldDataPreflight(
   worldId: string,
   enabledPluginIds: string[],
   prepareWorldForServer: () => Promise<void>,
+  excludedPluginIds?: string[],
+  locale?: string,
 ): UseWorldDataPreflightResult {
   const [worldDataPreflight, setWorldDataPreflight] =
     useState<api.WorldDataPreflightResponse | null>(null);
@@ -50,6 +52,7 @@ export function useWorldDataPreflight(
   >(null);
 
   const sequence = useRef(0);
+  const excludedKey = JSON.stringify(excludedPluginIds);
 
   const runWorldDataPreflight = useCallback(async () => {
     const run = ++sequence.current;
@@ -61,6 +64,10 @@ export function useWorldDataPreflight(
       if (run !== sequence.current) return;
       const result = await api.preflightWorldData(worldId, {
         plugins: enabledPluginIds,
+        ...(locale ? { locale } : {}),
+        ...(excludedKey
+          ? { excludedPlugins: JSON.parse(excludedKey) as string[] }
+          : {}),
       });
       if (run !== sequence.current) return;
       setWorldDataPreflight(result);
@@ -75,7 +82,7 @@ export function useWorldDataPreflight(
       );
       setWorldDataPreflightStatus("error");
     }
-  }, [worldId, enabledPluginIds, prepareWorldForServer]);
+  }, [worldId, enabledPluginIds, prepareWorldForServer, excludedKey, locale]);
 
   useEffect(() => {
     setWorldDataPreflight(null);

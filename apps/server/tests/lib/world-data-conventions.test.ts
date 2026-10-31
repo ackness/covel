@@ -250,7 +250,7 @@ describe("world data conventions", () => {
     });
     expect(
       diagnostics
-        .filter((item) => item.code === "data-file-unused")
+        .filter((item) => item.code === "unclaimed-data-source")
         .map((item) => item.file),
     ).toEqual(["data/journal.yaml"]);
     expect(diagnostics.filter((item) => item.level === "error")).toEqual([]);
@@ -372,9 +372,9 @@ describe("world data conventions", () => {
   const paths = (sources: ReturnType<typeof conventionsOfPlugins>) =>
     sources.map((source) => source.entry.path);
 
-  it("lets only the session's loaded plugins decide a conventional path", async () => {
+  it("keeps valid static path claims independent of execution state", async () => {
     const crowded = await crowdedCatalogue();
-    // Both plugins in play: the path is a convention for neither.
+    // Both static declarations claim the path, so neither supplies its convention.
     expect(paths(conventionsOfPlugins(crowded))).not.toContain(
       "data/quests.yaml",
     );
@@ -390,7 +390,7 @@ describe("world data conventions", () => {
         ],
       },
     ]);
-    // A session without the rival reads the file for the quest log.
+    // An explicitly restricted author catalogue can omit the rival.
     const active = [...crowded.getAll().keys()].filter(
       (id) => id !== "rival-log",
     );
@@ -398,10 +398,10 @@ describe("world data conventions", () => {
       "data/quests.yaml",
     );
     expect(conventionCollisions(crowded, active)).toEqual([]);
-    // A plugin that failed to load names nothing.
+    // Execution failure cannot change the meaning or visibility of a source.
     expect(
       paths(conventionsOfPlugins(await crowdedCatalogue("error"))),
-    ).toContain("data/quests.yaml");
+    ).not.toContain("data/quests.yaml");
   });
 
   it("starts a session without a file its plugins both name, and says why", async () => {
@@ -437,10 +437,10 @@ describe("world data conventions", () => {
     const one = await prepare(["core-quest"]);
     expect(
       one.diagnostics.some((item) => item.code === "convention-collision"),
-    ).toBe(false);
+    ).toBe(true);
     expect(
       one.imported && one.plan.writes.map((write) => write.source.id),
-    ).toContain("quests");
+    ).not.toContain("quests");
   });
 
   it("checks a package against the plugins a new session starts with", async () => {
@@ -458,7 +458,7 @@ describe("world data conventions", () => {
           [
             "unrequested-receiver",
             "convention-collision",
-            "data-file-unused",
+            "unclaimed-data-source",
           ].includes(item.code),
         )
         .map((item) => [item.level, item.code, item.file]);
@@ -466,10 +466,8 @@ describe("world data conventions", () => {
     const manifest =
       "id: small\nname: Small\nsummary: A small world.\ndefaultLocale: en-US\n";
 
-    // The quest log is not among the plugins a session starts with.
-    expect(await codes(manifest)).toEqual([
-      ["warning", "unrequested-receiver", "data/quests.yaml"],
-    ]);
+    // The actual quest source selects its unique eligible receiver.
+    expect(await codes(manifest)).toEqual([]);
     const requested = `${manifest}plugins:\n  - plugin:core-quest\n`;
     expect(await codes(requested)).toEqual([]);
 
@@ -481,7 +479,7 @@ describe("world data conventions", () => {
       await mkdir(path.dirname(full), { recursive: true });
       await writeFile(full, content);
     }
-    // Only a player who turns the rival on loses the file.
+    // Discovery keeps the collision independent of player selection.
     expect(await codes(requested, [rivalDir, PLUGINS])).toEqual([
       ["warning", "convention-collision", "data/quests.yaml"],
     ]);

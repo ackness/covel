@@ -57,6 +57,10 @@ Covel 的服务器对外只有一套 HTTP JSON 接口。网页和桌面应用用
 - 审批决定先检查 `decision` 和 `scope` 是不是合法取值，通过了才会消耗那条待决审批。
 - 事件注入先检查各个标识符是字符串、`payload` 是对象，然后才发布。
 
+插件摘要新增 `acceptsWorldData`；世界计划新增 `selection.requiredDataContracts` 和安全的 `dataNotices`。创建由服务端推导需求并写入 `metadata.pluginSelection.requiredDataContracts`，不信任客户端提示；准备接口接收 `excludedPlugins`。过期创建返回 `409 world_data_create_plan_stale`。详见[接收规则](./world-data.md#data-receivers)。
+
+世界数据导入失败返回固定说明与 `world_data_import_failed`，开发模式也不返回作者诊断；详细原因只记服务端日志。
+
 ## 声明式插件的 API 状态
 
 插件摘要（列表、详情和会话列表）必含 `executionMode: declarative | code | unknown`。`executionDiagnostics` 可选，只有包内文件、字段和原因；不公开宿主证明、绝对路径或提示词。GitHub 预览也带分类，`hasServerCode` 对 `code` 和 `unknown` 均为真。静态校验的 `summary` 带 `executionMode` 与 `executionDiagnostics`。
@@ -1581,7 +1585,7 @@ fork 和社区插件的授权：
 各端点的补充说明：
 
 - `GET /api/plugins`：数据来自 registry 快照。加载失败的插件也会返回，是一条 `status: "error"` 的 item。它的 `error` 文字里，插件目录的服务器绝对路径写成 `<plugin>`（例如 `<plugin>/PLUGIN.md: …`）；完整原文只写进服务器日志。
-- `GET /api/worlds/:id/plugin-plan`：返回 `selection: { requestedPluginIds, requiredContracts }`、按世界偏好排序的全部 `packs`、可选 `selectedPackId`、`defaultPluginIds` 和最多 256 条 `diagnostics`。
+- `GET /api/worlds/:id/plugin-plan`：返回 `selection: { requestedPluginIds, requiredContracts, requiredDataContracts }`、按世界偏好排序的全部 `packs`、可选 `selectedPackId`、`defaultPluginIds` 和最多 256 条 `diagnostics`。
   - 只有第一个玩法包引用决定初始包。未知首包报告 `unknown-pack`，不自动选别的包；备选包不展开为默认请求。
   - 独立插件请求与选中包的请求构成 `defaultPluginIds`。提交的 ID 都已安装；`missing-plugin` 诊断带 `pluginId`、`path` 和可选 `packId`。其他诊断码为 `invalid-reference`、`redundant-reference`、`unknown-pack`，可带 `reference`。
   - 初始包使用公开世界名称、简介与标签，`pluginPitch` 逐字段覆盖；派生介绍不保存，见[插件选择](./world-data.md#插件选择pluginpolicy)。
@@ -2106,18 +2110,18 @@ SSE。先发一个 `ready` 事件，之后每 15 秒发一行注释保持连接�
 
 #### `POST /api/worlds/:id/world-data/preflight`
 
-预检也检查接收插件声明的[维度引用和候选值](./world-data.md)，错误诊断使用 `dimension-reference`，并带文件和记录位置。正式导入与同步使用同一检查。
+预检也检查接收插件声明的[维度引用和候选值](./world-data.md)，错误诊断使用 `dimension-reference`。玩家响应只返回安全说明；文件和记录位置保留在作者校验里。正式导入与同步使用同一检查。
 
-只读地预检一次 worldData 导入：告诉你会导入多少条、写到哪里，但什么都不写。目的数据集违反 schema 或 `set` 规则时返回带 `sourceId` 和可用记录位置的 error 诊断。媒体占位值只检查 `set` 准入，实际索引记录的 schema 与最终大小在 apply 时检查；预检不物化媒体。
+只读地预检一次 worldData 导入：告诉你会导入多少条、写到哪里，但什么都不写。目的数据集违反 schema 或 `set` 规则时返回安全的 error 诊断；来源位置和记录详情只在作者校验中提供。媒体占位值只检查 `set` 准入，实际索引记录的 schema 与最终大小在 apply 时检查；预检不物化媒体。
 
 请求有两种写法：
 
-- 传 `sessionId`：使用这个会话**已保存的 `activePlugins`**。这时请求里的 `plugins` 会被忽略。
-- 只传 `plugins`：在创建会话之前，预检某一组插件选择。
+- 传 `sessionId`：使用这个会话固定集合中当前已授权且未熔断的插件，以及会话内容语言。请求里的 `plugins`、`excludedPlugins` 和 `locale` 会被忽略。
+- 只传 `plugins`：作为新会话请求，与实际数据需求及 `excludedPlugins` 一起解析；可用 `locale` 预览世界支持的内容版本。
 
 维度和角色 schema 读世界记录，和创建会话一样；其他数据读世界包的 `data/`。
 
-预检不会加载也不会执行 `worldProjections` handler，所以 projection 的输出不计入 `planned` / `targets`。响应会带一条 warning，说明这部分推迟到真正导入或同步时执行。
+预检不会加载也不会执行 `worldProjections` handler，所以 projection 的输出不计入 `planned` / `targets`。响应会带安全的 warning；这部分推迟到真正导入或同步时执行。
 
 世界声明了维度，而这组插件里没有提供 `world.dimensions@1` 的，响应带一条 `code: "dimension-provider-missing"` 的 warning：这些维度不会导入。准备页据此提示玩家。
 

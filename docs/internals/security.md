@@ -2,6 +2,8 @@
 
 这一页说明 Covel 服务端有哪些安全边界，以及每条边界为什么画在那里。它写给要改服务端、部署托管实例，或者想知道“批准一个社区插件意味着什么”的人。
 
+世界数据的静态发现、接收者推导与缺失提示见[接收规则](../reference/world-data.md#data-receivers)。接收声明不满足服务或 runtime 能力依赖。
+
 相关内容在别的页面：
 
 - 每条路由的鉴权约定：[`../reference/api.md`](../reference/api.md#鉴权session-owner-token)

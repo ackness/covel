@@ -54,16 +54,15 @@ it("accepts records only for contracts the brief requests, and requires each req
   ]);
 });
 
-it("adds the receiving plugin of every selected contract", () => {
+it("keeps gameplay requests independent of generated data receivers", () => {
   const manifest: Record<string, unknown> = {
     plugins: ["plugin:narrator"],
   };
-  expect(
-    applyCreationBriefToManifest(manifest, brief, [
-      { ...contract, pluginId: "custom-plugin" },
-    ]),
-  ).toEqual({ errors: [], warnings: [] });
-  expect(manifest.plugins).toEqual(["plugin:narrator", "plugin:custom-plugin"]);
+  expect(applyCreationBriefToManifest(manifest, brief)).toEqual({
+    errors: [],
+    warnings: [],
+  });
+  expect(manifest.plugins).toEqual(["plugin:narrator"]);
 });
 
 it("writes portable contract records as validated contract-targeted world sources", async () => {

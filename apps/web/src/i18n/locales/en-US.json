@@ -299,9 +299,12 @@
       "hint": "Data for a plugin that is off or waiting for approval is imported when you turn it on.",
       "hide": "Hide",
       "dimensionsMissing": "World dimensions (such as relationships and resources): no enabled plugin keeps them, so this game does not track them.",
-      "receiverMissing": "\"{{source}}\": no enabled plugin receives this data.",
+      "receiverMissing": "This data has no plugin to receive it.",
       "sourceNotImported": "The data in \"{{source}}\" was not imported (details)",
-      "notImported": "Some data was not imported (details)"
+      "notImported": "Some data was not imported (details)",
+      "receiverAmbiguous": "This data has no plugin to receive it. Choose a receiving plugin.",
+      "receiverExcluded": "This data has no plugin to receive it. Receiving plugins are disabled.",
+      "receiverApprovalRequired": "This data has no plugin to receive it. A receiver needs approval."
     },
     "pendingApproval": {
       "title": "Needs approval",

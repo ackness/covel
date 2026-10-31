@@ -2,6 +2,8 @@
 
 Preparation keeps independent world requests and manual exclusions when switching packs. Missing references reduce only their features. The first pack card uses public world text unless `pluginPitch` overrides it.
 
+See [world data receivers](../reference/world-data.md#data-receivers) for static discovery, inferred selection and omission notices. Data acceptance does not satisfy service or runtime capability dependencies.
+
 This page covers the start of a game and the world itself: what happens when a game begins, how the player character is created, and how the people, rules, time and new discoveries in the world are recorded.
 
 This page introduces the plugins in the order you encounter them in a game. First come the four that run at the start, then the five that keep updating as the story goes on.

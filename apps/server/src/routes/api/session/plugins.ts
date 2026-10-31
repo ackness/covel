@@ -31,11 +31,13 @@ export interface SessionPluginSelection {
   requested: string[];
   excluded: string[];
   requiredContracts: string[];
+  requiredDataContracts: string[];
 }
 
 /** The shape persisted under `session.metadata.pluginSelection`. */
 export function storedPluginSelection(selection: SessionPluginSelection) {
   return {
+    requiredDataContracts: selection.requiredDataContracts,
     requested: selection.requested,
     excluded: selection.excluded,
     ...(selection.requiredContracts.length > 0
@@ -58,6 +60,7 @@ export function readSessionPluginSelection(
     requested: strings(selection.requested),
     excluded: strings(selection.excluded),
     requiredContracts: strings(selection.requiredContracts),
+    requiredDataContracts: strings(selection.requiredDataContracts),
   };
 }
 export function authorizedSessionPluginIds(
@@ -82,6 +85,8 @@ export function resolveSessionPluginPlan(
     excluded?: readonly string[];
     authorized?: readonly string[];
     requiredContracts?: readonly string[];
+    requiredDataContracts?: readonly string[];
+    automaticPluginIds?: readonly string[];
   } = {},
 ): SessionPluginResolution {
   const authorized = new Set(
@@ -91,6 +96,8 @@ export function resolveSessionPluginPlan(
     requested,
     excluded: options.excluded,
     requiredContracts: options.requiredContracts,
+    requiredDataContracts: options.requiredDataContracts,
+    automaticPluginIds: options.automaticPluginIds,
     plugins: resolvablePlugins(registry.getAll().values()).map((facts) => ({
       ...facts,
       authorized: authorized.has(facts.id),
@@ -133,11 +140,13 @@ export function resolveSessionPluginSet(
   confirmed: readonly string[],
   entries: ReadonlyMap<string, PluginRegistryEntry>,
   requiredContracts?: readonly string[],
+  requiredDataContracts?: readonly string[],
 ): SessionPluginResolution {
   const set = resolveConfirmedSessionPlugins({
     confirmed,
     plugins: resolvablePlugins(entries.values()),
     ...(requiredContracts ? { requiredContracts } : {}),
+    requiredDataContracts,
   });
   return {
     ...set,
@@ -282,6 +291,7 @@ export function buildSessionPluginView(
     session.activePlugins ?? [],
     registry.getAll(),
     selection.requiredContracts,
+    selection.requiredDataContracts,
   );
   const authorized = new Set(options.authorized);
   const awaitingApproval = [

@@ -1,3 +1,8 @@
+import {
+  inventoryWorldData,
+  worldDataRequirementNotices,
+  worldDataRevision,
+} from "../../world-data/requirements.js";
 import { authorizedSessionPluginIds } from "./session/plugins.js";
 import { registerOrchestrationRoutes } from "./orchestration.js";
 import { resolveAutoAdvanceLimit } from "@covel/shared";
@@ -305,14 +310,36 @@ sessionRoutes.post("/", async (c) => {
 
   // The world is a requirer too. Its contracts are read once here and kept
   // with the session, so later resolutions need no world lookup.
-  const requiredContracts = rawWorldId ? worldRequiredContracts(world) : [];
   await c.get("trustedSources")?.verifyAll();
+  const entries = new Map(pluginRegistry.getAll());
+  const catalogue = {
+    get: (id: string) => entries.get(id),
+    getAll: () => entries,
+  };
+  const inventory = rawWorldId
+    ? await inventoryWorldData({
+        world,
+        worldId: rawWorldId,
+        worldsDirs,
+        covelHome,
+        registry: catalogue,
+        locale: contentLocale.locale,
+      })
+    : undefined;
+  const requiredContracts = [
+    ...new Set([
+      ...(rawWorldId ? worldRequiredContracts(world) : []),
+      ...(inventory?.requiredContracts ?? []),
+    ]),
+  ];
+  const requiredDataContracts = [...(inventory?.requiredDataContracts ?? [])];
   const selection = resolveSessionPluginPlan(
     parsedCreate.requestedPlugins,
     pluginRegistry,
     {
       excluded: parsedCreate.excludedPlugins,
       requiredContracts,
+      requiredDataContracts,
       authorized: authorizedSessionPluginIds(
         pluginRegistry,
         undefined,
@@ -407,9 +434,17 @@ sessionRoutes.post("/", async (c) => {
         ? { autoAdvanceLimit: parsedCreate.autoAdvanceLimit }
         : {}),
       pluginSelection: storedPluginSelection({
-        requested: parsedCreate.requestedPlugins,
+        requested: [
+          ...new Set([
+            ...parsedCreate.requestedPlugins,
+            ...selection.rejected
+              .filter((item) => item.code === "approval-required")
+              .map((item) => item.pluginId),
+          ]),
+        ],
         excluded: parsedCreate.excludedPlugins,
         requiredContracts,
+        requiredDataContracts,
       }),
       ...(parsedCreate.loreOverride !== undefined
         ? { loreOverride: parsedCreate.loreOverride }
@@ -433,6 +468,7 @@ sessionRoutes.post("/", async (c) => {
   // prepared plan is immutable input to the atomic write phase below.
   const preparedWorldData = await prepareWorldDataImportForSession({
     world,
+    inventory,
     sessionId: id,
     worldId: rawWorldId,
     worldsDirs,
@@ -443,7 +479,7 @@ sessionRoutes.post("/", async (c) => {
     // Only plugins that run take part: a projection is plugin code.
     preflight: {
       activePlugins: selection.active,
-      registry: pluginRegistry,
+      registry: catalogue,
     },
   });
   // A file that several active plugins name is left out, and the session
@@ -466,6 +502,40 @@ sessionRoutes.post("/", async (c) => {
   // acquire the session lock without deadlocking.
   let creationCommitted = false;
   const commitCreation = async () => {
+    await c.get("trustedSources")?.verifyAll();
+    const currentWorld = rawWorldId
+      ? await store.getWorld(rawWorldId)
+      : undefined;
+    const allowed = new Set(
+      authorizedSessionPluginIds(
+        pluginRegistry,
+        undefined,
+        undefined,
+        c.get("trustedSources"),
+      ),
+    );
+    const currentRevision = inventory?.worldRoot
+      ? await worldDataRevision(
+          inventory.worldRoot,
+          inventory.overrideRoot,
+        ).catch(() => undefined)
+      : undefined;
+    if (
+      JSON.stringify(currentWorld) !== JSON.stringify(world) ||
+      entries.size !== pluginRegistry.getAll().size ||
+      [...entries].some(([id, entry]) => pluginRegistry.get(id) !== entry) ||
+      selection.active.some((id) => !allowed.has(id)) ||
+      (inventory?.worldRoot && currentRevision !== inventory.revision)
+    ) {
+      return c.json(
+        errorBody(
+          "World content or plugin authorization changed during session preparation",
+          { code: "world_data_create_plan_stale" },
+        ),
+        409,
+      );
+    }
+
     // Scoped transaction: createSession and the world-data import (the
     // characters among it) commit atomically. Writes flow through the tx-bound view (`tx`),
     // so a mid-import failure auto-rolls-back the session row — and on
@@ -641,9 +711,13 @@ sessionRoutes.post("/", async (c) => {
   // World data the session started without, such as what only a community
   // plugin still waiting for approval receives. The player is told; the
   // data arrives when the plugin is enabled.
-  const worldDataNotices = worldDataImportNotices(
-    preparedWorldData.diagnostics,
-  );
+  const worldDataNotices = inventory
+    ? worldDataRequirementNotices(
+        inventory,
+        selection.unmetData,
+        preparedWorldData.diagnostics,
+      )
+    : worldDataImportNotices(preparedWorldData.diagnostics);
 
   // `ownerToken` is returned exactly once — it is never readable again
   // (only its hash is stored). Clients on hosted tiers must persist it.

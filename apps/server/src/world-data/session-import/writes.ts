@@ -1,3 +1,4 @@
+import { WorldDataImportError } from "../types.js";
 import { isRecord } from "../../lib/is-record.js";
 import {
   DIMENSION_DATA_NAMESPACE,
@@ -151,7 +152,7 @@ export async function writeImportPlan(options: {
   if (
     options.plan.diagnostics.some((diagnostic) => diagnostic.level === "error")
   ) {
-    throw new Error(
+    throw new WorldDataImportError(
       `invalid worldData import plan for "${options.worldId}": ${options.plan.diagnostics
         .filter((diagnostic) => diagnostic.level === "error")
         .map((diagnostic) => diagnostic.message)

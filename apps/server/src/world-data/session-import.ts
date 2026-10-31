@@ -43,6 +43,7 @@ import {
   syncConflictForLedger,
 } from "./session-import/ledger.js";
 import { readWorldManifest, resolveWorldRoot } from "./session-import/utils.js";
+import { WorldDataImportError } from "./types.js";
 import { writeImportPlan } from "./session-import/writes.js";
 import {
   pluginDataIdentity,
@@ -78,15 +79,13 @@ function deferredProjectionLedgerKey(
 
 /**
  * The conventions of the plugins this import runs with. A caller that gives
- * a registry gets the paths of its plugins, only the session's active ones
- * when it names them; without a registry the list of the process applies.
+ * a registry discovers all declared paths. Admission is checked separately;
+ * without a registry the list of the process applies.
  */
 function conventionsFor(
   deps: WorldDataImportPreflightDeps | undefined,
 ): readonly ConventionalSource[] | undefined {
-  return deps?.registry
-    ? conventionsOfPlugins(deps.registry, deps.activePlugins)
-    : undefined;
+  return deps?.registry ? conventionsOfPlugins(deps.registry) : undefined;
 }
 
 /**
@@ -102,7 +101,7 @@ async function collisionsFor(
   if (!deps?.registry) return [];
   return conventionCollisionDiagnostics(
     worldRoot,
-    conventionCollisions(deps.registry, deps.activePlugins),
+    conventionCollisions(deps.registry),
     await descriptorSourcePaths(worldRoot, manifest.worldData),
   );
 }
@@ -145,22 +144,40 @@ export async function prepareWorldDataImportForSession(
   // not this world declares dimensions: every turn would stop on them.
   activeDimensionProvider(options.preflight);
   const record = recordContent(options.world);
-  const worldRoot = options.worldsDirs?.length
-    ? await resolveWorldRoot(options.worldId, options.worldsDirs)
-    : null;
+  const worldRoot =
+    options.inventory?.worldRoot ??
+    (options.worldsDirs?.length
+      ? await resolveWorldRoot(options.worldId, options.worldsDirs)
+      : null);
   const manifest = worldRoot ? await readWorldManifest(worldRoot) : null;
   const collisions =
     worldRoot && manifest
       ? await collisionsFor(worldRoot, manifest, options.preflight)
       : [];
+  const descriptor =
+    options.inventory?.descriptor ??
+    (worldRoot && manifest
+      ? await loadWorldDataDescriptor({
+          worldRoot,
+          worldId: options.worldId,
+          worldDataPath: manifest.worldData,
+          covelHome: options.covelHome,
+          conventions: conventionsFor(options.preflight),
+        })
+      : undefined);
   if (
     !worldRoot ||
     !manifest ||
-    !(await worldHasData(
-      worldRoot,
-      manifest.worldData,
-      conventionsFor(options.preflight),
-    ))
+    !descriptor ||
+    !(
+      descriptor.sources.length ||
+      descriptor.diagnostics.some((item) => item.level === "error") ||
+      (await worldHasData(
+        worldRoot,
+        manifest.worldData,
+        conventionsFor(options.preflight),
+      ))
+    )
   ) {
     const sources = [
       ...portableContractSources(record.contractData),
@@ -197,18 +214,11 @@ export async function prepareWorldDataImportForSession(
     };
   }
 
-  const descriptor = await loadWorldDataDescriptor({
-    worldRoot,
-    worldId: options.worldId,
-    worldDataPath: manifest.worldData,
-    covelHome: options.covelHome,
-    conventions: conventionsFor(options.preflight),
-  });
   const descriptorErrors = descriptor.diagnostics.filter(
     (diagnostic) => diagnostic.level === "error",
   );
   if (descriptorErrors.length > 0) {
-    throw new Error(
+    throw new WorldDataImportError(
       `invalid worldData descriptor for "${options.worldId}": ${descriptorErrors
         .map((diagnostic) => diagnostic.message)
         .join("; ")}`,
@@ -330,7 +340,9 @@ export async function preflightWorldDataForSession(
   if (!options.worldId || !options.worldsDirs?.length) {
     return preflightWithoutWorldData(options);
   }
-  const worldRoot = await resolveWorldRoot(options.worldId, options.worldsDirs);
+  const worldRoot =
+    options.inventory?.worldRoot ??
+    (await resolveWorldRoot(options.worldId, options.worldsDirs));
   if (!worldRoot) {
     return preflightWithoutWorldData(options);
   }
@@ -340,23 +352,27 @@ export async function preflightWorldDataForSession(
     manifest,
     options.preflight,
   );
-  if (
-    !(await worldHasData(
+  const descriptor =
+    options.inventory?.descriptor ??
+    (await loadWorldDataDescriptor({
+      worldRoot,
+      worldId: options.worldId,
+      worldDataPath: manifest.worldData,
+      covelHome: options.covelHome,
+      conventions: conventionsFor(options.preflight),
+    }));
+  if (!(
+    descriptor.sources.length ||
+    descriptor.diagnostics.some((item) => item.level === "error") ||
+    (await worldHasData(
       worldRoot,
       manifest.worldData,
       conventionsFor(options.preflight),
     ))
-  ) {
+  )) {
     return preflightWithoutWorldData(options, collisions);
   }
 
-  const descriptor = await loadWorldDataDescriptor({
-    worldRoot,
-    worldId: options.worldId,
-    worldDataPath: manifest.worldData,
-    covelHome: options.covelHome,
-    conventions: conventionsFor(options.preflight),
-  });
   if (
     descriptor.diagnostics.some((diagnostic) => diagnostic.level === "error")
   ) {
@@ -409,21 +425,23 @@ function preflightPlanResult(
     imported: true,
     diagnostics,
     planned: plan.writes.length,
-    targets: plan.writes.map((write) => ({
-      kind: write.kind,
-      target: write.target,
-      sourceId: write.source.id,
-      ...((write.kind === "plugin-data" || write.kind === "media-index") && {
-        pluginId: write.pluginId,
-        namespace: write.namespace,
-        key: write.key,
-      }),
-      ...(write.kind === "lorebook" && {
-        pluginId: write.pluginId,
-        key: write.id,
-      }),
-      ...(write.kind === "character" && { key: write.key }),
-    })),
+    targets: plan.writes
+      .filter((write) => write.source.descriptor.visibility !== "hidden")
+      .map((write) => ({
+        kind: write.kind,
+        target: write.target,
+        sourceId: write.source.id,
+        ...((write.kind === "plugin-data" || write.kind === "media-index") && {
+          pluginId: write.pluginId,
+          namespace: write.namespace,
+          key: write.key,
+        }),
+        ...(write.kind === "lorebook" && {
+          pluginId: write.pluginId,
+          key: write.id,
+        }),
+        ...(write.kind === "character" && { key: write.key }),
+      })),
   };
 }
 
@@ -498,18 +516,6 @@ export async function prepareWorldDataSyncForSession(
   // The world's dimensions and character schema are the record's: a sync
   // brings a session to the world as the player has it, edits included.
   const record = recordContent(await options.store.getWorld(options.worldId));
-  if (
-    !(await worldHasData(
-      worldRoot,
-      manifest.worldData,
-      conventionsFor(options.preflight),
-    ))
-  ) {
-    // There is no descriptor for other domains: do not treat their old ledger
-    // rows as removed merely because inline dimensions are now synchronizable.
-    return dimensionOnlyPlan(options, record, collisions);
-  }
-
   const descriptor = await loadWorldDataDescriptor({
     worldRoot,
     worldId: options.worldId,
@@ -517,6 +523,20 @@ export async function prepareWorldDataSyncForSession(
     covelHome: options.covelHome,
     conventions: conventionsFor(options.preflight),
   });
+  if (!(
+    descriptor.sources.length ||
+    descriptor.diagnostics.some((item) => item.level === "error") ||
+    (await worldHasData(
+      worldRoot,
+      manifest.worldData,
+      conventionsFor(options.preflight),
+    ))
+  )) {
+    // There is no descriptor for other domains: do not treat their old ledger
+    // rows as removed merely because inline dimensions are now synchronizable.
+    return dimensionOnlyPlan(options, record, collisions);
+  }
+
   if (
     descriptor.diagnostics.some((diagnostic) => diagnostic.level === "error")
   ) {
@@ -724,6 +744,18 @@ export async function syncWorldDataForSession(
     const deferredKey = deferredProjectionLedgerKey(ledger);
     const deferredSourceScope = deferredSources.get(ledger.sourceId);
     if (
+      (ledger.pluginId &&
+        plan.activePlugins &&
+        !plan.activePlugins.includes(ledger.pluginId)) ||
+      plan.deferredCharacterSources?.some(
+        (source) =>
+          source.sourceId === ledger.sourceId &&
+          source.contracts.some(
+            (contract) =>
+              ledger.target === `contract:${contract}` ||
+              ledger.target === `contract:${contract}+lorebook`,
+          ),
+      ) ||
       deferredSourceScope === "all" ||
       (deferredSourceScope === "primary" && !deferredKey) ||
       (deferredKey && deferredProjectionKeys.has(deferredKey))

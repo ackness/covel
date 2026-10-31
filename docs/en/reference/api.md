@@ -57,6 +57,10 @@ This page lists every endpoint, request field, response, and error code. Use it 
 - An approval decision first checks that `decision` and `scope` are valid values. Only then is the pending approval used up.
 - An event injection first checks that each identifier is a string and that `payload` is an object. Only then is the event published.
 
+Plugin summaries expose `acceptsWorldData`; world plans add `selection.requiredDataContracts` and safe `dataNotices`. Creation derives requirements on the server and stores `metadata.pluginSelection.requiredDataContracts`, independent of client hints. Preflight accepts `excludedPlugins`. Stale creation returns `409 world_data_create_plan_stale`. See [receiver rules](./world-data.md#data-receivers).
+
+World-data import failures return fixed text and `world_data_import_failed`, including in development. Author diagnostics remain in server logs.
+
 ## Declarative plugin API state
 
 Plugin summaries in lists, details and session lists require `executionMode: declarative | code | unknown`. Optional `executionDiagnostics` contains only package-relative files, fields and reasons, never host proof, absolute paths or prompts. GitHub previews also carry the mode; `hasServerCode` is true for both `code` and `unknown`. Static validation includes `executionMode` and `executionDiagnostics` in `summary`.
@@ -1581,7 +1585,7 @@ In the table below, "hosted deployment" means `DEPLOYMENT_TIER` is `demo` or `co
 Notes on each endpoint:
 
 - `GET /api/plugins`: the data comes from a snapshot of the registry. Plugins that failed to load are also returned, as an item with `status: "error"`. In that `error` text the server's absolute plugin-directory path is written as `<plugin>` (for example `<plugin>/PLUGIN.md: …`); the full original message goes only to the server log.
-- `GET /api/worlds/:id/plugin-plan`: returns `selection: { requestedPluginIds, requiredContracts }`, all `packs` in world preference order, optional `selectedPackId`, `defaultPluginIds` and up to 256 `diagnostics`.
+- `GET /api/worlds/:id/plugin-plan`: returns `selection: { requestedPluginIds, requiredContracts, requiredDataContracts }`, all `packs` in world preference order, optional `selectedPackId`, `defaultPluginIds` and up to 256 `diagnostics`.
   - Only the first pack reference selects the initial pack. An unknown first pack reports `unknown-pack` and selects none. Alternatives do not expand into the defaults.
   - Independent plugin requests and the selected pack's requests form `defaultPluginIds`. Every submitted ID is installed; `diagnostics` reports `missing-plugin` with `pluginId`, `path` and optional `packId`. Other codes are `invalid-reference`, `redundant-reference` and `unknown-pack`, with optional `reference`.
   - The initial pack uses the world's public name, summary and tags, with independent `pluginPitch` overrides. Derived presentation is never persisted; see [plugin selection](./world-data.md#plugin-selection-pluginpolicy).
@@ -2106,18 +2110,18 @@ Each dimension is handled by the rules below:
 
 #### `POST /api/worlds/:id/world-data/preflight`
 
-Preflight also checks receivers' declared [dimension references and candidate values](./world-data.md), reporting `dimension-reference` with the file and record location. Import and sync use the same check.
+Preflight also checks receivers' declared [dimension references and candidate values](./world-data.md), reporting `dimension-reference` with safe player text. File and record locations remain on the author validation surface. Import and sync use the same check.
 
-Does a read-only preflight of one worldData import. It tells you how many entries will be imported and where they will go, but it writes nothing. Destination dataset schema or `set` violations return error diagnostics with `sourceId` and available record locations. Media placeholders check `set` admission only; the actual index record schema and final size are checked at apply. Preflight does not materialize media.
+Does a read-only preflight of one worldData import. It tells you how many entries will be imported and where they will go, but it writes nothing. Destination dataset schema or `set` violations return safe error diagnostics. Source locations and record details remain on the author validation surface. Media placeholders check `set` admission only; the actual index record schema and final size are checked at apply. Preflight does not materialize media.
 
 The request can be written in two ways:
 
-- Pass `sessionId`: this uses the session's **saved `activePlugins`**. In this case, any `plugins` in the request is ignored.
-- Pass only `plugins`: preflights a certain set of plugin choices before a session is created.
+- Pass `sessionId`: uses currently authorized, unpaused members of the session's fixed set and its content locale. Request `plugins`, `excludedPlugins` and `locale` are ignored.
+- Pass `plugins`: resolves new-session requests with actual data requirements and `excludedPlugins`. Optional `locale` previews a world-supported content edition.
 
 Dimensions and the character schema are read from the world record, as for a new session; other data is read from `data/` of the world package.
 
-Preflight does not load or run the `worldProjections` handlers. So the output of a projection is not counted in `planned` / `targets`. The response carries a warning that says this part is deferred until the real import or sync runs.
+Preflight does not load or run the `worldProjections` handlers. So the output of a projection is not counted in `planned` / `targets`. The response carries a safe warning; this part is deferred until the real import or sync runs.
 
 When the world declares dimensions and none of these plugins provides `world.dimensions@1`, the response carries a warning with `code: "dimension-provider-missing"`: these dimensions will not be imported. The session-prep screen uses it to tell the player.
 

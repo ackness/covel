@@ -2,6 +2,8 @@
 
 This page explains which security boundaries the Covel server has, and why each boundary is drawn where it is. It is written for people who change the server, run a hosted instance, or want to know "what it means to approve a community plugin".
 
+See [world data receivers](../reference/world-data.md#data-receivers) for static discovery, inferred selection and omission notices. Data acceptance does not satisfy service or runtime capability dependencies.
+
 Related material is on other pages:
 
 - Authentication rules for each route: [`../reference/api.md`](../reference/api.md#authentication-session-owner-token)

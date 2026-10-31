@@ -2,6 +2,8 @@
 
 This page lists every declaration a plugin package can make: the fields of the root `PLUGIN.md`, the fields of a runtime, the rules for inputs and outputs, and the built-in plugins that ship with Covel. Come here when you write, change, or review a plugin. If this is your first plugin, read [Your First Plugin](../plugins/first-plugin.md) and [Plugin Essentials](../plugins/essentials.md) first.
 
+See [world data receivers](./world-data.md#data-receivers) for static discovery, inferred selection and omission notices. Data acceptance does not satisfy service or runtime capability dependencies.
+
 A plugin package does three things:
 
 - In the root `PLUGIN.md`, it says who it is, which contracts it provides and needs, and what it contributes (tools, data, UI, and so on).

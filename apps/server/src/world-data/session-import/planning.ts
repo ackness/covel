@@ -140,7 +140,7 @@ async function appendCharacterBlocks(options: {
   });
   for (const route of blocks.routes) {
     const block = options.value[route.field];
-    if (block === undefined) continue;
+    if (block === undefined || route.targets.length === 0) continue;
     const where = at(route.field);
     const catalogue = options.deps?.registry;
     const findings =
@@ -470,29 +470,36 @@ function hiddenSourceError(
  * registry no plugin is known and the records are characters only.
  */
 function resolveCharacterBlocks(
-  sources: readonly OrderedWorldDataSource[],
+  characterSource: OrderedWorldDataSource,
+  value: unknown,
   deps: WorldDataImportPreflightDeps | undefined,
   diagnostics: WorldDataDiagnostic[],
 ): CharacterBlocks {
-  const characterSource = sources.find(
-    (source) =>
-      parseWorldDataTarget(source.descriptor.to)?.kind === "characters",
-  );
-  if (!characterSource || !deps?.registry)
+  if (
+    parseWorldDataTarget(characterSource.descriptor.to)?.kind !==
+      "characters" ||
+    !deps?.registry
+  )
     return { routes: [], colliding: [], reportUnread: false };
-  const { routes, collisions } = characterBlockRoutes(
-    deps.registry,
-    deps.activePlugins,
+  const { routes, collisions } = characterBlockRoutes(deps.registry);
+  const presentRoutes = routes.filter((route) =>
+    sourceItems(value).some(
+      (record) => isRecord(record) && Object.hasOwn(record, route.field),
+    ),
   );
-  for (const collision of collisions)
+  for (const collision of collisions.filter((collision) =>
+    sourceItems(value).some(
+      (record) => isRecord(record) && Object.hasOwn(record, collision.field),
+    ),
+  ))
     diagnostics.push({
       level: "warning",
       sourceId: characterSource.id,
       message: `the "${collision.field}" field of character records is not imported: more than one plugin names it for its data (${collision.claimants.join(", ")})`,
-      hint: "Turn off all but one of these plugins.",
+      hint: "Use distinct character fields for different data contracts.",
     });
   return {
-    routes: routes.map((route) => {
+    routes: presentRoutes.map((route) => {
       const targets = resolveWorldDataTargets(
         { kind: "contract-data", contract: route.contract, lorebook: false },
         deps,
@@ -570,11 +577,9 @@ export async function buildImportPlan(options: {
   }
   const deferredProjectionOutputs: ImportPlan["deferredProjectionOutputs"][number][] =
     [];
-  const characterBlocks = resolveCharacterBlocks(
-    options.sources,
-    options.deps,
-    diagnostics,
-  );
+  const deferredCharacterSources: NonNullable<
+    ImportPlan["deferredCharacterSources"]
+  >[number][] = [];
 
   for (const source of options.sources) {
     const parsedTarget = parseWorldDataTarget(source.descriptor.to);
@@ -669,6 +674,21 @@ export async function buildImportPlan(options: {
       continue;
     }
     if (!read.path && source.inlineValue === undefined) continue;
+
+    const characterBlocks = resolveCharacterBlocks(
+      source,
+      read.value,
+      options.deps,
+      diagnostics,
+    );
+    const deferredContracts = characterBlocks.routes
+      .filter((route) => route.targets.length === 0)
+      .map((route) => route.contract);
+    if (deferredContracts.length)
+      deferredCharacterSources.push({
+        sourceId: source.id,
+        contracts: deferredContracts,
+      });
 
     const mediaFiles =
       source.descriptor.kind === "media"
@@ -942,5 +962,9 @@ export async function buildImportPlan(options: {
     mergeEvents,
     deferredProjectionOutputs,
     deferredSources,
+    activePlugins: options.deps?.activePlugins
+      ? [...options.deps.activePlugins]
+      : undefined,
+    deferredCharacterSources,
   };
 }

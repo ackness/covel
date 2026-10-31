@@ -116,3 +116,37 @@ describe("preflight request ownership", () => {
     expect(result.current.worldDataPreflightStatus).not.toBe("success");
   });
 });
+
+it("sends explicit exclusions and never publishes a delayed warning after a world switch", async () => {
+  const old = deferred();
+  const ids: string[] = [];
+  vi.mocked(api.preflightWorldData)
+    .mockReturnValueOnce(old.promise)
+    .mockResolvedValueOnce(resultFor(0));
+  const { result, rerender } = renderHook(
+    ({ worldId, excluded }) =>
+      useWorldDataPreflight(worldId, ids, prepare, excluded, "fr-FR"),
+    { initialProps: { worldId: "first", excluded: ["receiver"] } },
+  );
+  await act(async () => vi.advanceTimersByTimeAsync(250));
+  expect(api.preflightWorldData).toHaveBeenCalledWith("first", {
+    plugins: [],
+    excludedPlugins: ["receiver"],
+    locale: "fr-FR",
+  });
+  rerender({ worldId: "second", excluded: [] });
+  await act(async () => vi.advanceTimersByTimeAsync(250));
+  await act(async () =>
+    old.resolve({
+      ...resultFor(0),
+      diagnostics: [
+        {
+          level: "warning",
+          code: "receiver-excluded",
+          message: "Old world warning",
+        },
+      ],
+    }),
+  );
+  expect(result.current.worldDataPreflight?.diagnostics).toEqual([]);
+});

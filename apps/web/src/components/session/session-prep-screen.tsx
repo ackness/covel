@@ -83,6 +83,7 @@ export function SessionPrepScreen({
   settingsInitialKey,
 }: SessionPrepScreenProps) {
   const { t, i18n } = useTranslation();
+  const playLocale = worldPlayLocale(world, i18n.language) ?? i18n.language;
   const [seatRole, setSeatRole] =
     useState<import("@covel/shared").SeatRole>("player");
   useEffect(() => setSeatRole("player"), [world.id]);
@@ -182,7 +183,13 @@ export function SessionPrepScreen({
     worldDataPreflightError,
     dimensionProviderConflict,
     runWorldDataPreflight,
-  } = useWorldDataPreflight(world.id, enabledPluginIds, prepareWorldForServer);
+  } = useWorldDataPreflight(
+    world.id,
+    enabledPluginIds,
+    prepareWorldForServer,
+    excludedPluginIds,
+    playLocale,
+  );
 
   const pluginPlanUnavailable =
     pluginPlanLoading || pluginPlanError !== null || pluginPlan === null;
@@ -236,7 +243,6 @@ export function SessionPrepScreen({
   } = useSessionHistory(world.id);
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
-  const playLocale = worldPlayLocale(world, i18n.language) ?? i18n.language;
   const displayText = worldDisplayText(world, playLocale);
 
   const handleRequestDelete = useCallback(
