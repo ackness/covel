@@ -58,11 +58,8 @@ export function StageSprites({
             : undefined;
         return (
           <div
-            key={
-              generation === undefined
-                ? slot.characterId
-                : `${slot.characterId}:exit:${generation}`
-            }
+            // Keep Media mounted across departure; generations guard cleanup.
+            key={slot.characterId}
             data-character-id={slot.characterId}
             onAnimationEnd={(event) => {
               if (
@@ -100,7 +97,7 @@ export function StageSprites({
             >
               {slot.ref ? (
                 <div
-                  key={`${slot.variantId ?? slot.ref.id}:${slot.transition ?? "fade"}`}
+                  key={slot.variantId ?? slot.ref.id}
                   className="ui-stage-visual flex h-full w-full items-end justify-center"
                   style={{
                     animation: slot.exiting ? "none" : undefined,
