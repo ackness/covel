@@ -3,6 +3,8 @@ import {
   worldDataRequirementNotices,
   worldDataRevision,
 } from "../../world-data/requirements.js";
+import { canonicalJson } from "../../world-data/digest.js";
+import { captureCreatePluginScope } from "./session/create-plugin-scope.js";
 import { authorizedSessionPluginIds } from "./session/plugins.js";
 import { registerOrchestrationRoutes } from "./orchestration.js";
 import { resolveAutoAdvanceLimit } from "@covel/shared";
@@ -45,7 +47,7 @@ import {
   pluginRuntimeManifests,
   type PluginRegistry,
 } from "@covel/plugin-loader";
-import type { SessionRecord } from "@covel/store";
+import type { SessionRecord, WorldRecord } from "@covel/store";
 import { SessionAlreadyExistsError } from "@covel/store/errors";
 import {
   restartSessionRandom,
@@ -193,7 +195,7 @@ registerSessionActionKindRoutes(sessionRoutes);
  */
 function sessionHasSetupRuntime(
   pluginIds: readonly string[],
-  registry: PluginRegistry,
+  registry: Pick<PluginRegistry, "get">,
 ): boolean {
   for (const pluginId of pluginIds) {
     const entry = registry.get(pluginId);
@@ -206,6 +208,17 @@ function sessionHasSetupRuntime(
     }
   }
   return false;
+}
+
+/** Package-edit provenance controls later reloads, not the content being imported. */
+function worldCreationContent(world: WorldRecord | null | undefined): string {
+  return canonicalJson({
+    ...world,
+    updatedAt: undefined,
+    metadata: world?.metadata
+      ? { ...world.metadata, packageModified: undefined }
+      : undefined,
+  });
 }
 
 /**
@@ -303,6 +316,9 @@ sessionRoutes.post("/", async (c) => {
   // response says so; the UI language is not affected.
   const requestedLocale = normalizeLocale(body.locale);
   const world = rawWorldId ? await store.getWorld(rawWorldId) : undefined;
+  // A concurrent browser sync may update timestamps and package provenance
+  // without changing this world's authored content.
+  const worldContent = worldCreationContent(world);
   const contentLocale = sessionContentLocale(
     world ?? undefined,
     requestedLocale,
@@ -316,6 +332,14 @@ sessionRoutes.post("/", async (c) => {
     get: (id: string) => entries.get(id),
     getAll: () => entries,
   };
+  const authorized = new Set(
+    authorizedSessionPluginIds(
+      catalogue,
+      undefined,
+      undefined,
+      c.get("trustedSources"),
+    ),
+  );
   const inventory = rawWorldId
     ? await inventoryWorldData({
         world,
@@ -335,17 +359,12 @@ sessionRoutes.post("/", async (c) => {
   const requiredDataContracts = [...(inventory?.requiredDataContracts ?? [])];
   const selection = resolveSessionPluginPlan(
     parsedCreate.requestedPlugins,
-    pluginRegistry,
+    catalogue,
     {
       excluded: parsedCreate.excludedPlugins,
       requiredContracts,
       requiredDataContracts,
-      authorized: authorizedSessionPluginIds(
-        pluginRegistry,
-        undefined,
-        undefined,
-        c.get("trustedSources"),
-      ),
+      authorized: [...authorized],
     },
   );
   // A plugin whose dependency is missing is turned off, not a reason to
@@ -360,8 +379,7 @@ sessionRoutes.post("/", async (c) => {
       ) &&
       !isDependencyRejection(item) &&
       (parsedCreate.requestedPlugins.includes(item.pluginId) ||
-        pluginRegistry.get(item.pluginId)?.packageManifest?.plugin?.kind ===
-          "core"),
+        catalogue.get(item.pluginId)?.packageManifest?.plugin?.kind === "core"),
   );
   if (failure)
     return c.json(
@@ -381,8 +399,34 @@ sessionRoutes.post("/", async (c) => {
   const plugins = confirmedPluginIds(
     selection,
     parsedCreate.requestedPlugins,
-    pluginRegistry,
+    catalogue,
   );
+  const pluginScope = captureCreatePluginScope({
+    entries,
+    selected: [
+      ...plugins,
+      ...parsedCreate.requestedPlugins,
+      ...selection.rejected.flatMap((item) => [
+        item.pluginId,
+        ...(item.candidates ?? []),
+      ]),
+      ...[...selection.unmet, ...selection.unmetData].flatMap(
+        (item) => item.candidates ?? [],
+      ),
+    ],
+    requiredContracts,
+    requiredDataContracts,
+    schemaContracts: (inventory?.descriptor?.sources ?? []).flatMap(
+      (source) => {
+        const schema = source.descriptor.schema;
+        return source.descriptor.enabled !== false &&
+          schema?.startsWith("contract:")
+          ? [schema.slice("contract:".length)]
+          : [];
+      },
+    ),
+    authorized,
+  });
 
   if (rawWorldId) {
     const worldAccess = await withWritableWorld(
@@ -402,7 +446,7 @@ sessionRoutes.post("/", async (c) => {
   // otherwise it goes straight to `playing`.
   const phase: "setup" | "playing" = sessionHasSetupRuntime(
     selection.active,
-    pluginRegistry,
+    catalogue,
   )
     ? "setup"
     : "playing";
@@ -458,7 +502,7 @@ sessionRoutes.post("/", async (c) => {
 
   const startScope = await loadSessionHookScope({
     store,
-    pluginRegistry,
+    pluginRegistry: catalogue,
     session: { ...session, activePlugins: plugins },
     userSettings: decodedUserSettings.settings,
   });
@@ -502,35 +546,59 @@ sessionRoutes.post("/", async (c) => {
   // acquire the session lock without deadlocking.
   let creationCommitted = false;
   const commitCreation = async () => {
-    await c.get("trustedSources")?.verifyAll();
+    await Promise.all(
+      [...pluginScope.keys()].map((id) =>
+        c.get("trustedSources")?.ensureFresh(id),
+      ),
+    );
     const currentWorld = rawWorldId
       ? await store.getWorld(rawWorldId)
       : undefined;
-    const allowed = new Set(
-      authorizedSessionPluginIds(
-        pluginRegistry,
-        undefined,
-        undefined,
-        c.get("trustedSources"),
-      ),
-    );
     const currentRevision = inventory?.worldRoot
       ? await worldDataRevision(
           inventory.worldRoot,
           inventory.overrideRoot,
         ).catch(() => undefined)
       : undefined;
-    if (
-      JSON.stringify(currentWorld) !== JSON.stringify(world) ||
-      entries.size !== pluginRegistry.getAll().size ||
-      [...entries].some(([id, entry]) => pluginRegistry.get(id) !== entry) ||
-      selection.active.some((id) => !allowed.has(id)) ||
-      (inventory?.worldRoot && currentRevision !== inventory.revision)
-    ) {
+    const currentEntries = new Map(
+      [...pluginScope.keys()].flatMap((id) => {
+        const entry = pluginRegistry.getCurrent(id);
+        return entry ? [[id, entry] as const] : [];
+      }),
+    );
+    const allowed = new Set(
+      authorizedSessionPluginIds(
+        { getAll: () => currentEntries },
+        undefined,
+        undefined,
+        c.get("trustedSources"),
+      ),
+    );
+    let staleReason: string | undefined;
+    if (worldCreationContent(currentWorld) !== worldContent)
+      staleReason = "world_content_changed";
+    else if (inventory?.worldRoot && currentRevision !== inventory.revision)
+      staleReason = "world_files_changed";
+    else if (
+      [...pluginScope].some(
+        ([id, captured]) => currentEntries.get(id) !== captured.entry,
+      )
+    )
+      staleReason = "plugin_manifest_changed";
+    else if (
+      [...pluginScope].some(
+        ([id, captured]) => allowed.has(id) !== captured.authorized,
+      )
+    )
+      staleReason = "plugin_authorization_changed";
+    if (staleReason) {
       return c.json(
         errorBody(
           "World content or plugin authorization changed during session preparation",
-          { code: "world_data_create_plan_stale" },
+          {
+            code: "world_data_create_plan_stale",
+            details: { reason: staleReason },
+          },
         ),
         409,
       );

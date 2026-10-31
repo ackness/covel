@@ -8,7 +8,7 @@ import { runnablePluginIds } from "./plugins.js";
 /** Resolve before mutating: a settings read failure must not follow a durable write. */
 export async function loadSessionHookScope(args: {
   readonly store: DataStore;
-  readonly pluginRegistry: PluginRegistry | undefined;
+  readonly pluginRegistry: Pick<PluginRegistry, "get" | "getAll"> | undefined;
   readonly session: Pick<SessionRecord, "activePlugins" | "worldId" | "locale">;
   readonly userSettings?: TurnInput["userSettings"];
 }): Promise<HookScope> {
@@ -29,7 +29,7 @@ export async function loadSessionHookScope(args: {
  * plugins with no runtimes; `activePluginIds` is the confirmed set.
  */
 export function buildSessionHookScope(args: {
-  readonly pluginRegistry?: PluginRegistry;
+  readonly pluginRegistry?: Pick<PluginRegistry, "get" | "getAll">;
   readonly activePluginIds: Iterable<string>;
   readonly userSettings?: TurnInput["userSettings"];
   /** The session's content locale; a turn falls back to its input's locale. */

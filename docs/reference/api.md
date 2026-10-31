@@ -57,7 +57,7 @@ Covel 的服务器对外只有一套 HTTP JSON 接口。网页和桌面应用用
 - 审批决定先检查 `decision` 和 `scope` 是不是合法取值，通过了才会消耗那条待决审批。
 - 事件注入先检查各个标识符是字符串、`payload` 是对象，然后才发布。
 
-插件摘要新增 `acceptsWorldData`；世界计划新增 `selection.requiredDataContracts` 和安全的 `dataNotices`。创建由服务端推导需求并写入 `metadata.pluginSelection.requiredDataContracts`，不信任客户端提示；准备接口接收 `excludedPlugins`。过期创建返回 `409 world_data_create_plan_stale`。详见[接收规则](./world-data.md#data-receivers)。
+插件摘要新增 `acceptsWorldData`；世界计划新增 `selection.requiredDataContracts` 和安全的 `dataNotices`。创建由服务端推导需求并写入 `metadata.pluginSelection.requiredDataContracts`，不信任客户端提示；准备接口接收 `excludedPlugins`。过期创建返回 `409 world_data_create_plan_stale`，`details.reason` 为 `world_content_changed`、`world_files_changed`、`plugin_manifest_changed` 或 `plugin_authorization_changed`，分别指本世界记录内容、包文件、计划所用插件的注册身份或授权变化；诊断不带世界或插件 ID。详见[接收规则](./world-data.md#data-receivers)。
 
 世界数据导入失败返回固定说明与 `world_data_import_failed`，开发模式也不返回作者诊断；详细原因只记服务端日志。
 

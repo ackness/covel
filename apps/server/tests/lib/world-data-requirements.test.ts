@@ -1,4 +1,4 @@
-import { mkdir, rm, symlink, writeFile } from "node:fs/promises";
+import { mkdir, rm, stat, symlink, utimes, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import {
@@ -11,6 +11,38 @@ import {
   conventionCollisions,
 } from "../../src/world-data/conventions.js";
 import { datasetWriteFixture } from "../helpers/dataset-write-fixture.js";
+
+it("keeps parallel package revisions deterministic and detects same-size edits with restored mtime", async () => {
+  const f = await datasetWriteFixture();
+  try {
+    await Promise.all(
+      Array.from({ length: 40 }, async (_, index) => {
+        const dir = path.join(f.worldRoot, "data", `group-${index}`);
+        await mkdir(dir);
+        await writeFile(path.join(dir, "record.json"), "[]");
+      }),
+    );
+    const revision = await worldDataRevision(f.worldRoot);
+    expect(
+      await Promise.all(
+        Array.from({ length: 3 }, () => worldDataRevision(f.worldRoot)),
+      ),
+    ).toEqual([revision, revision, revision]);
+    const file = path.join(f.worldRoot, "data/group-0/record.json");
+    const before = await stat(file);
+    await writeFile(file, "{}");
+    await utimes(file, before.atime, before.mtime);
+    expect(await worldDataRevision(f.worldRoot)).not.toBe(revision);
+
+    await mkdir(
+      path.join(f.worldRoot, ...Array.from({ length: 13 }, () => "nested")),
+      { recursive: true },
+    );
+    await expect(worldDataRevision(f.worldRoot)).rejects.toThrow("scan limit");
+  } finally {
+    await f.cleanup();
+  }
+});
 
 describe("effective world data requirements", () => {
   it("requires an existing empty source, but neither an absent nor a disabled source", async () => {

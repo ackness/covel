@@ -107,6 +107,7 @@ The return value of `executeTurn` is the `{ result, commit }` shown above, not `
 
 ### A few rules for concurrency
 
+- Session creation freezes the preparation plan for its own world. Changes to other worlds or unrelated plugins do not invalidate it. See the [API](./api.md) for stale-plan diagnostics and [world data receiver rules](./world-data.md#data-receivers) for the comparison scope.
 - When a form is submitted during an execution, the mutual-exclusion check runs first, and only then does it try to take ownership of the stream. So it cannot take over the action stream that is in progress.
 - An interjection that arrives after narration has ended is not accepted, because the model no longer has a chance to read it. The record saved for an interjection and the live message use the same identity.
 - The SSE operations for generate, revise, and translate use a "only one running at a time" flag. The flag stays set until the stream callback finishes, including the cleanup phase.

@@ -2,13 +2,17 @@ import {
   DEPENDENCY_CASES,
   worldDataDependencyScenario,
 } from "../helpers/world-data-dependency-scenario.js";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { Hono } from "hono";
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { createRpcApprovalGate } from "@covel/approval";
 import { createMemoryMediaStore, createMemoryStore } from "@covel/store/memory";
-import { discoverPlugins, loadPluginDefinition } from "@covel/plugin-loader";
+import {
+  discoverPlugins,
+  loadPluginDefinition,
+  type PluginRegistryEntry,
+} from "@covel/plugin-loader";
 import { createSqliteStore } from "@covel/store/sqlite";
 import {
   worldDataSelectionScenario,
@@ -24,14 +28,18 @@ import { closeTestApi } from "../helpers/close-api.js";
 import { sessionRoutes } from "../../src/routes/api/session.js";
 import { worldPluginPlanRoutes } from "../../src/routes/api/worlds/plugin-plan.js";
 import { worldDataSyncRoutes } from "../../src/routes/api/worlds/data-sync.js";
+import { worldCrudRoutes } from "../../src/routes/api/worlds/crud.js";
+import { canonicalJson } from "../../src/world-data/digest.js";
 import { createInProcessSessionLock } from "../../src/lib/session-lock.js";
 import { validateWorldPackage } from "../../src/world-data/validate-world-package.js";
 import { sessionApprovalScope } from "../../src/routes/api/session/session-guard.js";
 import { loadSingleWorld } from "../../src/world-seed-loader.js";
 import { inventoryWorldData } from "../../src/world-data/requirements.js";
-import type { WorldPluginPlan } from "@covel/shared";
+import * as worldDataDescriptor from "../../src/world-data/descriptor.js";
+import type { PluginManifest, WorldPluginPlan } from "@covel/shared";
+import type { TrustedSourceService } from "../../src/trust/trusted-source-service.js";
 
-async function fixture() {
+async function fixture(trustedSources?: TrustedSourceService) {
   const f = await datasetWriteFixture();
   const store = createMemoryStore();
   const gate = createRpcApprovalGate();
@@ -54,6 +62,7 @@ async function fixture() {
     c.set("covelHome", f.root);
     c.set("rpcApprovalGate", gate);
     c.set("activatePluginServerCode", async () => {});
+    if (trustedSources) c.set("trustedSources", trustedSources);
     c.set("sessionLock", {
       ...lock,
       withLock: async (id, run) => {
@@ -65,6 +74,7 @@ async function fixture() {
   });
   app.route("/api/worlds", worldPluginPlanRoutes);
   app.route("/api/worlds", worldDataSyncRoutes);
+  app.route("/api/worlds", worldCrudRoutes);
   app.route("/api/sessions", sessionRoutes);
   const post = (url: string, body: unknown) =>
     app.request(url, {
@@ -94,7 +104,330 @@ async function fixture() {
   };
 }
 
+function declarationTrust(approved: ReadonlySet<string>): TrustedSourceService {
+  return {
+    policy: () => [],
+    verifyAll: async () => {},
+    ensureFresh: async () => {},
+    implicitGrant: () => false,
+    executionMode: (id) => (approved.has(id) ? "declarative" : "unknown"),
+    executionDiagnostics: () => [],
+    isDeclarative: (id) => approved.has(id),
+    summary: () => ({
+      source: null,
+      trustedSource: false,
+      integrity: "unreadable",
+      autoApproved: false,
+    }),
+    recordSnapshot: async () => {},
+  };
+}
+
+function declarationEntry(
+  base: PluginRegistryEntry,
+  id: string,
+  plugin: Partial<PluginManifest> = {},
+): PluginRegistryEntry {
+  return {
+    id,
+    source: "community",
+    packageManifest: {
+      ...base.packageManifest!,
+      manifest: { ...base.packageManifest!.manifest, name: id, pluginId: id },
+      plugin: {
+        id,
+        kind: "plugin",
+        version: "0.1.0",
+        description: "Fixture package",
+        ...plugin,
+      },
+    },
+    summary: { ...base.summary, id, name: id },
+    loadedRuntimes: new Map(),
+    status: "registered",
+  };
+}
+
 describe("inferred world data through host admission", () => {
+  it("allows creation while a browser synchronizes the same package world and marks its provenance edited", async () => {
+    const f = await fixture();
+    try {
+      const loaded = await loadSingleWorld(f.worldRoot);
+      expect(loaded).not.toBeNull();
+      await f.store.upsertWorld(loaded!);
+      const before = (await f.store.getWorld(f.options.worldId))!;
+      const {
+        id: _id,
+        createdAt: _createdAt,
+        updatedAt: _updatedAt,
+        ...patch
+      } = before;
+      let synchronized = false;
+      f.atLock(async () => {
+        if (synchronized) return;
+        synchronized = true;
+        const updated = await f.app.request(
+          `/api/worlds/${f.options.worldId}`,
+          {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(patch),
+          },
+        );
+        expect(
+          updated.status,
+          updated.status === 200 ? undefined : await updated.text(),
+        ).toBe(200);
+        const after = (await f.store.getWorld(f.options.worldId))!;
+        expect(after.metadata?.packageModified).toBe(true);
+        // The browser sync adds host bookkeeping; no authored content changed.
+        expect(
+          canonicalJson({
+            ...after,
+            updatedAt: before.updatedAt,
+            metadata: { ...after.metadata, packageModified: undefined },
+          }),
+        ).toBe(canonicalJson(before));
+      });
+      const response = await f.create();
+      expect(
+        response.status,
+        response.status === 201 ? undefined : await response.text(),
+      ).toBe(201);
+      expect(await f.store.getSession("s")).not.toBeNull();
+    } finally {
+      await f.close();
+    }
+  });
+
+  it.each(["install", "approve", "rewrite"])(
+    "allows an unrelated plugin %s and changes to another world during preparation, but rejects a selected publication change",
+    async (change) => {
+      const approved = new Set<string>();
+      const trust = {
+        ...declarationTrust(approved),
+        verifyAll: vi.fn(async () => {}),
+        ensureFresh: vi.fn(async (_id: string) => {}),
+      };
+      const f = await fixture(trust);
+      try {
+        const unrelated = declarationEntry(
+          f.registry.get("probe")!,
+          "unrelated",
+          {
+            contributes: {
+              data: {
+                other: {
+                  schema: "./schemas/other.json",
+                  version: 1,
+                  accepts: ["other.notes@1"],
+                  authoring: {
+                    title: "Other notes",
+                    source: { path: "data/other.json" },
+                  },
+                },
+              },
+            },
+          },
+        );
+        if (change !== "install") f.registry.register(unrelated);
+        const otherRoot = path.join(f.options.worldsDirs[0]!, "other-world");
+        await mkdir(otherRoot);
+        await writeFile(
+          path.join(otherRoot, "world.yaml"),
+          "id: other-world\nname: Other\n",
+        );
+        await f.store.createWorld({
+          id: "other-world",
+          name: "Other",
+          description: "Other world",
+          createdAt: f.options.now,
+        });
+        let changed = false;
+        f.atLock(async () => {
+          if (changed) return;
+          changed = true;
+          if (change !== "approve") f.registry.register(unrelated);
+          approved.add("unrelated");
+          await f.store.upsertWorld({
+            id: "other-world",
+            name: "Changed",
+            description: "Changed world",
+            createdAt: f.options.now,
+          });
+          await writeFile(
+            path.join(otherRoot, "world.yaml"),
+            "id: other-world\nname: Changed\n",
+          );
+        });
+        const response = await f.create();
+        expect(
+          response.status,
+          response.status === 201 ? undefined : await response.text(),
+        ).toBe(201);
+        expect((await f.store.getSession("s"))?.activePlugins).toEqual([
+          "probe",
+        ]);
+        expect(trust.ensureFresh).not.toHaveBeenCalledWith("unrelated");
+
+        f.atLock(async () => {
+          f.registry.register({ ...f.registry.get("probe")! });
+        });
+        const stale = await f.post("/api/sessions", {
+          id: "selected-changed",
+          worldId: f.options.worldId,
+          plugins: [],
+        });
+        expect(stale.status).toBe(409);
+        expect(await stale.json()).toMatchObject({
+          code: "world_data_create_plan_stale",
+          details: { reason: "plugin_manifest_changed" },
+        });
+        expect(await f.store.getSession("selected-changed")).toBeNull();
+      } finally {
+        await f.close();
+      }
+    },
+  );
+
+  it("rejects a relevant receiver's authorization changing during preparation", async () => {
+    const approved = new Set(["probe"]);
+    const f = await fixture(declarationTrust(approved));
+    try {
+      f.registry.register({ ...f.registry.get("probe")!, source: "community" });
+      f.atLock(async () => {
+        approved.delete("probe");
+      });
+      const response = await f.create();
+      expect(response.status).toBe(409);
+      expect(await response.json()).toMatchObject({
+        code: "world_data_create_plan_stale",
+        details: { reason: "plugin_authorization_changed" },
+      });
+      expect(await f.store.getSession("s")).toBeNull();
+    } finally {
+      await f.close();
+    }
+  });
+
+  it.each([true, false])(
+    "rejects changes to a receiver's contract provider (receiver authorized=%s)",
+    async (authorized) => {
+      const f = await fixture();
+      try {
+        const receiver = f.registry.get("probe")!;
+        f.registry.register({
+          ...receiver,
+          source: authorized ? "builtin" : "community",
+          packageManifest: {
+            ...receiver.packageManifest!,
+            plugin: {
+              ...receiver.packageManifest!.plugin,
+              requires: ["probe.support@1"],
+            },
+          },
+        });
+        f.registry.register({
+          ...declarationEntry(receiver, "support", {
+            provides: ["probe.support@1"],
+          }),
+          source: "builtin",
+        });
+        f.atLock(async () => {
+          f.registry.register({ ...f.registry.get("support")! });
+        });
+        const response = await f.create();
+        expect(response.status).toBe(409);
+        expect(await response.json()).toMatchObject({
+          code: "world_data_create_plan_stale",
+          details: { reason: "plugin_manifest_changed" },
+        });
+        expect(await f.store.getSession("s")).toBeNull();
+      } finally {
+        await f.close();
+      }
+    },
+  );
+
+  it("rejects a contract schema provider changing during preparation", async () => {
+    const f = await fixture();
+    try {
+      const receiver = f.registry.get("probe")!;
+      f.registry.register({
+        ...declarationEntry(receiver, "schema-source", {
+          contracts: receiver.packageManifest!.plugin.contracts,
+        }),
+        rootPath: f.pluginRoot,
+      });
+      f.atLock(async () => {
+        f.registry.register({ ...f.registry.get("schema-source")! });
+      });
+      const response = await f.create();
+      expect(response.status).toBe(409);
+      expect(await response.json()).toMatchObject({
+        code: "world_data_create_plan_stale",
+        details: { reason: "plugin_manifest_changed" },
+      });
+      expect(await f.store.getSession("s")).toBeNull();
+    } finally {
+      await f.close();
+    }
+  });
+
+  it("reuses static inventory across plan and concurrent creates until world content or plugin declarations change", async () => {
+    const f = await fixture();
+    const loadDescriptor = vi.spyOn(
+      worldDataDescriptor,
+      "loadWorldDataDescriptor",
+    );
+    const plan = () =>
+      f.app.request(`/api/worlds/${f.options.worldId}/plugin-plan`);
+    const create = (id: string) =>
+      f.post("/api/sessions", { id, worldId: f.options.worldId, plugins: [] });
+    try {
+      await f.records([{ id: "note", text: "before" }]);
+      const plans = await Promise.all([plan(), plan()]);
+      expect(plans.map((response) => response.status)).toEqual([200, 200]);
+      expect(loadDescriptor).toHaveBeenCalledTimes(1);
+      const sessions = Array.from(
+        { length: 8 },
+        (_, index) => `session-${index}`,
+      );
+      const created = await Promise.all(sessions.map(create));
+      expect(created.map((response) => response.status)).toEqual(
+        sessions.map(() => 201),
+      );
+      expect(loadDescriptor).toHaveBeenCalledTimes(1);
+      for (const id of sessions)
+        expect(
+          await f.store.listPluginData(id, "probe", "notes"),
+        ).toMatchObject([
+          { key: "note", value: { id: "note", text: "before" } },
+        ]);
+
+      await f.records([{ id: "new", text: "after disk edit" }]);
+      expect((await plan()).status).toBe(200);
+      expect((await create("edited")).status).toBe(201);
+      expect(loadDescriptor).toHaveBeenCalledTimes(2);
+      expect(
+        await f.store.listPluginData("edited", "probe", "notes"),
+      ).toMatchObject([
+        { key: "new", value: { id: "new", text: "after disk edit" } },
+      ]);
+
+      f.registry.register({ ...f.registry.get("probe")!, status: "error" });
+      expect((await plan()).status).toBe(200);
+      expect((await create("unavailable")).status).toBe(201);
+      expect(loadDescriptor).toHaveBeenCalledTimes(3);
+      expect(
+        await f.store.listPluginData("unavailable", "probe", "notes"),
+      ).toEqual([]);
+    } finally {
+      loadDescriptor.mockRestore();
+      await f.close();
+    }
+  });
+
   it.each([
     ["memory", createMemoryStore],
     ["sqlite", () => createSqliteStore(":memory:")],
@@ -213,7 +546,15 @@ describe("inferred world data through host admission", () => {
     }
   });
 
-  it.each(["file", "catalogue", "world record", "override", "package removal"])(
+  it.each([
+    "file",
+    "catalogue",
+    "world record",
+    "world lore",
+    "world metadata",
+    "override",
+    "package removal",
+  ])(
     "rejects creation when its captured %s changes before application",
     async (change) => {
       const f = await fixture();
@@ -229,6 +570,16 @@ describe("inferred world data through host admission", () => {
             await f.store.upsertWorld({
               ...(await f.store.getWorld(f.options.worldId))!,
               name: "Updated world",
+            });
+          else if (change === "world lore")
+            await f.store.upsertWorld({
+              ...(await f.store.getWorld(f.options.worldId))!,
+              lore: "Updated authored lore",
+            });
+          else if (change === "world metadata")
+            await f.store.upsertWorld({
+              ...(await f.store.getWorld(f.options.worldId))!,
+              metadata: { pluginSettings: { probe: { tone: "changed" } } },
             });
           else {
             const overrideRoot = path.join(
@@ -247,6 +598,16 @@ describe("inferred world data through host admission", () => {
         expect(response.status).toBe(409);
         expect(await response.json()).toMatchObject({
           code: "world_data_create_plan_stale",
+          details: {
+            reason:
+              change === "catalogue"
+                ? "plugin_manifest_changed"
+                : ["world record", "world lore", "world metadata"].includes(
+                      change,
+                    )
+                  ? "world_content_changed"
+                  : "world_files_changed",
+          },
         });
         expect(await f.store.getSession("s")).toBeNull();
         expect(await f.store.listWorldDataImportLedger("s")).toEqual([]);
@@ -255,6 +616,40 @@ describe("inferred world data through host admission", () => {
       }
     },
   );
+
+  it("allows concurrent creates while unchanged world content is synchronized again", async () => {
+    const f = await fixture();
+    try {
+      const world = (await f.store.getWorld(f.options.worldId))!;
+      await f.store.upsertWorld({
+        ...world,
+        metadata: { credits: { author: "Author", license: "CC0" } },
+      });
+      f.atLock(async () => {
+        await f.store.upsertWorld({
+          ...world,
+          metadata: { credits: { license: "CC0", author: "Author" } },
+          updatedAt: "2026-11-01T00:00:00.000Z",
+        });
+      });
+      const responses = await Promise.all(
+        Array.from({ length: 8 }, (_, index) =>
+          f.post("/api/sessions", {
+            id: `parallel-${index}`,
+            worldId: f.options.worldId,
+            plugins: [],
+          }),
+        ),
+      );
+      for (const response of responses)
+        expect(
+          response.status,
+          response.status === 201 ? undefined : await response.text(),
+        ).toBe(201);
+    } finally {
+      await f.close();
+    }
+  });
 
   it.each(["mistport", "haruka-academy", "emberback", "lantern-barrow"])(
     "imports %s content using real declarations after redundant requests are removed",

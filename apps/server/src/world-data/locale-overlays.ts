@@ -7,10 +7,11 @@ import {
   localeLanguage,
   type LocaleOverlayIssue,
 } from "@covel/shared";
-import { readFile, readdir } from "node:fs/promises";
+import { lstat, readdir, realpath } from "node:fs/promises";
 import path from "node:path";
-import { parse as parseYaml } from "yaml";
 import { resolveContainedPath } from "./safe-path.js";
+import { createRevisionCache } from "./revision-cache.js";
+import { readStructuredFile } from "./structured-file.js";
 
 /** An overlay entry that was ignored, with the file it came from. */
 export interface LocaleOverlayFileIssue extends LocaleOverlayIssue {
@@ -24,10 +25,6 @@ export interface LocaleOverlayFile {
   readonly path: string;
   /** Path relative to the root. */
   readonly file: string;
-}
-
-function parseStructured(file: string, text: string): unknown {
-  return file.endsWith(".json") ? JSON.parse(text) : parseYaml(text);
 }
 
 /**
@@ -210,9 +207,9 @@ export async function compileLocaleOverlays(args: {
   for (const overlay of overlays) {
     let parsed: unknown;
     try {
-      parsed = parseStructured(
+      parsed = await readStructuredFile(
         overlay.path,
-        await readFile(overlay.path, "utf-8"),
+        overlay.path.endsWith(".json") ? "json" : "yaml",
       );
     } catch (error) {
       issues.push({
@@ -279,13 +276,7 @@ async function worldEditionLocales(
   ];
 }
 
-/**
- * Read `world.yaml` with every `world.<locale>.yaml` overlay compiled in. The
- * main file is written in the world's default locale; the result has locale
- * maps wherever an overlay translates a text. A manifest without `id` gets
- * the name of its directory, which is the world's ID then.
- */
-export async function readWorldManifestSource(worldDir: string): Promise<{
+interface WorldManifestSource {
   /** `world.yaml` with its overlays compiled in. */
   raw: unknown;
   /** `world.yaml` alone, as written. */
@@ -294,9 +285,50 @@ export async function readWorldManifestSource(worldDir: string): Promise<{
   issues: LocaleOverlayFileIssue[];
   /** The world's editions (`worldEditionLocales`). */
   editions: readonly string[];
-}> {
-  const base: unknown = parseYaml(
-    await readFile(path.join(worldDir, "world.yaml"), "utf-8"),
+}
+
+const readCachedManifest = createRevisionCache<WorldManifestSource>(64);
+
+/**
+ * Read `world.yaml` with every `world.<locale>.yaml` overlay compiled in. The
+ * main file is written in the world's default locale; the result has locale
+ * maps wherever an overlay translates a text. A manifest without `id` gets
+ * the name of its directory, which is the world's ID then.
+ */
+export async function readWorldManifestSource(
+  worldDir: string,
+): Promise<WorldManifestSource> {
+  // Directory names determine editions, while file identities and nanosecond
+  // timestamps catch edits and atomic replacements without waiting for a watcher.
+  const root = await realpath(worldDir);
+  const names = (await readdir(root))
+    .filter((name) => name === "world.yaml" || EDITION_FILE.test(name))
+    .sort(compareText);
+  const files = await Promise.all(
+    names.map(async (name) => {
+      const info = await lstat(path.join(root, name), { bigint: true });
+      return [
+        name,
+        info.dev.toString(),
+        info.ino.toString(),
+        info.mode.toString(),
+        info.size.toString(),
+        info.mtimeNs.toString(),
+        info.ctimeNs.toString(),
+      ];
+    }),
+  );
+  return readCachedManifest(worldDir, JSON.stringify([root, files]), () =>
+    readManifestSource(worldDir),
+  );
+}
+
+async function readManifestSource(
+  worldDir: string,
+): Promise<WorldManifestSource> {
+  const base = await readStructuredFile(
+    path.join(worldDir, "world.yaml"),
+    "yaml",
   );
   const baseLocale =
     base !== null &&
