@@ -13,6 +13,12 @@ The source of the built-in plugins is in [plugins/](../../../plugins/). Optional
 > [!IMPORTANT]
 > Covel supports only the format described on this page. A flat old-style manifest, a `PLUGIN.md` in a subdirectory, role mirrors, and old checkpoint development data cannot be read. You must regenerate them. There is no migration read path and no dual write.
 
+## Declarative package fields
+
+For features that need no server functions, start with [declarative plugins](./plugin-installation.md#declarative-plugins): combine agent prompts, own datasets/generated tools, settings/data receivers, static prompts, UI and service imports. An output contract describes an agent result; `contributes.services`, executable extensions and registrations are server code. There is no authored `executionMode` field.
+
+Declarative runtimes write only their own datasets and character records validated by `sync-characters`; other plugins' data changes only through their write services. The central framework tool capability table and final tool allowlist enforce this boundary; author validation reports unsupported tools. Narrower sub-agent, resume and retry rules still apply. Executable distribution files outside valid browser asset lists restore code approval, including tests and build files. Static validation reads files and reports classification reasons without executing them.
+
 ## Package and Runtime Files
 
 ```text

@@ -57,6 +57,14 @@ This page lists every endpoint, request field, response, and error code. Use it 
 - An approval decision first checks that `decision` and `scope` are valid values. Only then is the pending approval used up.
 - An event injection first checks that each identifier is a string and that `payload` is an object. Only then is the event published.
 
+## Declarative plugin API state
+
+Plugin summaries in lists, details and session lists require `executionMode: declarative | code | unknown`. Optional `executionDiagnostics` contains only package-relative files, fields and reasons, never host proof, absolute paths or prompts. GitHub previews also carry the mode; `hasServerCode` is true for both `code` and `unknown`. Static validation includes `executionMode` and `executionDiagnostics` in `summary`.
+
+Fresh `declarative` packages skip code/runtime approval for creation, enable, ordinary/manual/event execution, resume and delegation. Hosted sessions retain owner checks without the operator permission specific to community code. `approvalRequired: false` means no code approval is blocking the selection. `serverCodeApproved` means an actual explicit or source grant, never declarative eligibility; without such a grant there is no `serverCodeApprovedBy`. Independent action/event approvals remain.
+
+Code additions or failed inspection immediately remove the exemption; without independent valid grants, normal `202 approval-required` or the applicable denial returns. Development reload retains installation authorization and may publish pending metadata without importing code. An obsolete code/runtime approval for a now-declarative package returns `409 approval_obsolete`, consuming the pending request without a grant; refresh and retry. No database migration or session deletion is needed. Current clients and recorded summaries must include the new field. See [installation](./plugin-installation.md#declarative-plugins) for classification rules.
+
 ## Overview
 
 - **Base URL**: `http://localhost:3001/api/`
@@ -1436,11 +1444,11 @@ When an automatic snapshot is refreshed:
 
 Fork and community plugin grants:
 
-- A fork does not inherit the server-code grant of a community plugin. The matching plugin in the child stays inactive. The operator must enable it again in the new session and approve it.
+- A fork does not inherit the server-code grant of a community plugin. Code packages in the child stay inactive and must be enabled and approved in the new session. Packages whose current files still prove declarative retain their selection and data without inheriting or creating grants.
 - When the dimension provider bound in a snapshot is a community plugin, the child cannot enable it when it is created:
   - If the snapshot has dimension data or settlement receipts for that provider: fork returns `409 { "code": "dimension_provider_required" }`, and no child session is created.
   - If the snapshot has no dimension data: the child session is created normally, but without this binding.
-- After a process restart, volatile grants are not restored either. `GET /api/sessions/:id/plugins` shows a community plugin that lacks its current grant as inactive (`approvalRequired: true`). It keeps the plugin selection saved in the session, so it can be authorized again later.
+- After a process restart, volatile grants are not restored either. `GET /api/sessions/:id/plugins` shows a non-declarative community plugin that lacks its current grant as inactive (`approvalRequired: true`). It keeps the plugin selection saved in the session, so it can be authorized again later.
 
 ### Character data
 
@@ -3199,7 +3207,7 @@ The plugin's own interface (JSON-RENDER, or `emitEvent` from a `webview`) sends 
 - After validation and approval pass, every runtime in the session that subscribes to this topic (`trigger: { type: event, topic }`, which may belong to any enabled plugin) is queued as an event job in the same transaction: `_runtime_jobs`, with `origin.activation: "event"`. The `origin.sourceTurnId` is the `eventId` of this emission. The background worker runs them with `ctx.triggerEvent`, and each one commits on its own.
 - The request itself does not run any runtime. It returns `200 { status: "ok", eventId, topic, deferredJobs: [{ jobId, runtimeId }] }`. If there are no subscribers, `deferredJobs` is an empty array.
 - As with running a runtime by hand, the click is the trigger decision. The subscriber's `startTurn`, `maxTriggerCount`, and `cooldownTurns` are not part of the decision.
-- A community plugin goes through approval for `event:<topic>`. A community runtime among the subscribers also needs each of the same two grants as a manual run: the server code and `runtime:<name>`. Otherwise the runtime loader refuses to run it. Each request returns only the first missing grant (`202 approval-required`). The client approves and retries, until everything is in place and the job is queued.
+- A community plugin goes through approval for `event:<topic>`. A non-declarative community runtime among the subscribers also needs each of the same two grants as a manual run: the server code and `runtime:<name>`. Otherwise the runtime loader refuses to run it. Each request returns only the first missing grant (`202 approval-required`). The client approves and retries, until everything is in place and the job is queued.
 - Background jobs run only when the session has usable model credentials (the same as other background jobs). Otherwise they stay `queued`.
 
 ##### When writes take effect
@@ -4490,7 +4498,7 @@ Resume a suspended runtime with the data the player submitted.
 | ------ | ------ | -------- | ---------------------------------------------------------------------------- |
 | `data` | object | Yes      | Data the player submitted. It must match the suspended item's `resumeSchema` |
 
-- If a community plugin lacks execution grants, the server first returns `202 approval-required`, asking for `covel:plugin-server-code` and then `runtime:<runtimeId>`. Only the resumed runtime and the session's sub-agent providers need approval; the server rechecks the grants under the session lock. The client approves each request and retries the original submission. Denying approval leaves the suspension pending. Hosted deployments also require an operator credential.
+- If a non-declarative community plugin lacks execution grants, the server first returns `202 approval-required`, asking for `covel:plugin-server-code` and then `runtime:<runtimeId>`. Only the resumed runtime and the session's sub-agent providers need approval; the server rechecks the grants under the session lock. The client approves each request and retries the original submission. Denying approval leaves the suspension pending. Hosted deployments also require an operator credential.
 - The server checks `data` against `resumeSchema` with full JSON Schema validation (Ajv). This covers `enum`, nested objects, `min` / `max`, `minLength` / `maxLength`, `pattern`, array `items`, `oneOf` / `anyOf`, and more. If the data does not match, the server returns `400 resume_data_invalid`. If the schema is not an object or cannot compile, it returns `400 resume_schema_invalid` without claiming the suspension or running the plugin. The author must correct the schema produced by the plugin and create a new suspension. The player can abandon the original item.
 - A browser client can send an `X-Provider-Keys` header to give model keys for this request. The desktop app and self-hosted clients can leave it out, and the server then uses the keys it was started with. The server never returns keys through this endpoint.
 
@@ -5205,7 +5213,7 @@ How a client should use it:
 
 ##### Community plugin approval
 
-If a community plugin in the session has not been approved yet, the server returns HTTP `202` and a JSON body **before** it starts SSE or writes the turn:
+If a non-declarative community plugin in the session has not been approved yet, the server returns HTTP `202` and a JSON body **before** it starts SSE or writes the turn:
 
 ```json
 { "status": "approval-required", "approvalId": "...", "pending": { ... } }

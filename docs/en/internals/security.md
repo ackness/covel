@@ -13,6 +13,16 @@ Related material is on other pages:
 
 Below, the "deployment tier" (`DEPLOYMENT_TIER`) comes up many times. `self` is the default. It means the desktop app, and instances that a person deploys for their own use. `demo` is the tier for public web instances, meant for the official web app, which is not supported yet. `commercial` is the strictest tier, reserved for a possible future commercial edition. There are no accounts, tenant isolation, or quotas, and this repository does not maintain it. `demo` and `commercial` both require tokens. Together they are called the hosted tiers.
 
+## Declarative execution boundary
+
+[Declarative classification](../reference/plugin-installation.md#declarative-plugins) requires a complete, bounded inventory that does not follow links and a content digest matching the loaded definition. Changed before/after signatures, registry replacement and failed reads cannot retain an old positive proof. Authorization reads live publication; execution snapshots freeze artifacts, not authority. Code-era runtime, tool and service snapshots cannot borrow a newer declarative exemption; cached code runtimes and actual module imports still require real code/runtime grants.
+
+Static prompts and UI need no plugin import. Browser exceptions reuse validated asset paths, types and size limits; server references override them. Adding code never turns an old static activation into a grant. Unapproved reload removes old registrations and publishes pending metadata. Declarative status is neither persisted on runtime manifests nor written into the approval gate.
+
+Declarative runtimes write only their own datasets and validated character records; other plugins' data is modified by their write services under provider identity. `authorizedToolNames` still checks the final name after hook/override rewrites. Services, sub-agents, resume and retry retain narrower context restrictions. Code exemption grants neither tool approval nor current-content `bridge: session` consent and adds no bridge write capability.
+
+Whole-list refresh retries entries republished by another package’s awaited activation, within a fixed limit, so earlier cache invalidation is checked before producing the list.
+
 ## Host profile
 
 The server decides once, at startup: it combines the deployment tier, the storage it actually uses and a few switches into a host profile (`apps/server/src/host-profile.ts`) and puts it in every request. Route permission checks, the media routes, the server settings, a request's own model settings and the trace retention all ask it, and no longer read environment variables themselves. `@covel/ai-provider` receives its own part at startup (`configureProviderHostPolicy`). The desktop app always passes `DEPLOYMENT_TIER=self` when it starts the server.

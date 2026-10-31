@@ -18,6 +18,7 @@ const plugin = {
   description: "Memory plugin",
   kind: "plugin",
   source: "builtin",
+  executionMode: "code" as const,
   hostState: "loaded",
   runtimeCount: 1,
   provides: ["memory@1"],
@@ -287,3 +288,19 @@ it.each([
     code,
   );
 });
+
+it.each(["declarative", "code", "unknown"])(
+  "requires the host execution mode and accepts %s",
+  (executionMode) => {
+    const summary = { ...plugin, executionMode };
+    expect(pluginSummarySchema.parse(summary).executionMode).toBe(
+      executionMode,
+    );
+    const { executionMode: _mode, ...missing } = summary;
+    expect(pluginSummarySchema.safeParse(missing).success).toBe(false);
+    expect(
+      pluginSummarySchema.safeParse({ ...summary, executionMode: "trusted" })
+        .success,
+    ).toBe(false);
+  },
+);

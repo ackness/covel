@@ -20,6 +20,7 @@ const plugin = (
   description: id,
   active: true,
   locked: false,
+  executionMode: "code" as const,
   hostState: "loaded",
   kind: "plugin",
   source: "builtin",

@@ -208,3 +208,56 @@ it("binds page consent to every published file through the URL digest", async ()
   await waitFor(() => expect(result.current.ready(changed)).toBe(true));
   expect(result.current.isAllowed(changed)).toBe(false);
 });
+
+it("ignores a stale digest promise and an old view while current content is being authorized", async () => {
+  let resolveOld!: (value: ArrayBuffer) => void;
+  let resolveNew!: (value: ArrayBuffer) => void;
+  const oldHash = new Promise<ArrayBuffer>((resolve) => {
+    resolveOld = resolve;
+  });
+  const newHash = new Promise<ArrayBuffer>((resolve) => {
+    resolveNew = resolve;
+  });
+  const digest = vi
+    .spyOn(webcrypto.subtle, "digest")
+    .mockReturnValueOnce(oldHash)
+    .mockReturnValueOnce(newHash);
+  try {
+    const changed = {
+      ...pageViewEntry,
+      spec: {
+        ...pageViewEntry.spec,
+        webview: { url: `/plugin-assets/p/${"b".repeat(32)}/index.html` },
+      },
+    };
+    const { result, rerender } = renderHook(
+      ({ entry }) => usePluginViewConsent([entry]),
+      { initialProps: { entry: pageViewEntry } },
+    );
+    rerender({ entry: changed });
+    await act(async () => {
+      await result.current.grant(pageViewEntry);
+    });
+    expect(result.current.isAllowed(changed)).toBe(false);
+    expect(result.current.isAllowed(pageViewEntry)).toBe(false);
+    await act(async () => {
+      resolveNew(new Uint8Array(32).fill(2).buffer);
+    });
+    await waitFor(() => expect(result.current.ready(changed)).toBe(true));
+    await act(async () => {
+      await result.current.grant(changed);
+    });
+    expect(result.current.isAllowed(changed)).toBe(true);
+    await act(async () => {
+      resolveOld(new Uint8Array(32).fill(1).buffer);
+    });
+    expect(result.current.isAllowed(changed)).toBe(true);
+    expect(result.current.isAllowed(pageViewEntry)).toBe(false);
+    await act(async () => {
+      await result.current.revoke(changed);
+    });
+    expect(result.current.isAllowed(changed)).toBe(false);
+  } finally {
+    digest.mockRestore();
+  }
+});

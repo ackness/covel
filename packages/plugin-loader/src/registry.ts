@@ -148,6 +148,8 @@ export interface PluginRegistry {
 
   /** Get a plugin by ID. */
   get(id: string): PluginRegistryEntry | undefined;
+  /** Live publication for authorization; execution snapshots never preserve authority. */
+  getCurrent(id: string): PluginRegistryEntry | undefined;
 
   /** Get active runtimes sorted by (stage, name). */
   getActiveRuntimes(sessionId: string): readonly RuntimeManifest[];
@@ -323,6 +325,9 @@ export function createPluginRegistry(
       return new Map(readableEntries());
     },
 
+    getCurrent(id: string): PluginRegistryEntry | undefined {
+      return entries.get(id);
+    },
     get(id: string): PluginRegistryEntry | undefined {
       return readableEntries().get(id);
     },

@@ -6,6 +6,8 @@ import {
   packageModuleTypeProblem,
   computePluginCapabilities,
   packageHasServerCode,
+  assessPluginExecution,
+  type PluginExecutionAssessment,
   type ParsedPluginMd,
   readPlainYamlFrontmatter,
   runtimeDirectoryDiagnostics,
@@ -40,6 +42,7 @@ export function readPluginFrontmatter(
 }
 
 interface PluginManifestSummary {
+  readonly executionMode: PluginExecutionAssessment["mode"];
   readonly pluginId: string;
   /** The root manifest with its derived entry, contracts and tags. */
   readonly manifest: ParsedPluginMd;
@@ -333,26 +336,24 @@ export function validatePluginBundle(
         );
       }
     }
+    const assessment = assessPluginExecution({
+      files: entries,
+      root,
+      runtimes: declarations,
+    });
     return {
       pluginId,
+      executionMode: assessment.mode,
       manifest: root,
       version: root.plugin.version ?? null,
       // The resolved entry counts: `server/index.js` is the entry of a
       // package that names none.
       declarations,
-      hasServerCode: packageHasServerCode(
-        entries.map((entry) => entry.relativePath),
-        root,
-        declarations,
-      ),
+      hasServerCode: packageHasServerCode(assessment),
       capabilities: computePluginCapabilities({
         root,
         runtimes: declarations,
-        hasServerCode: packageHasServerCode(
-          entries.map((entry) => entry.relativePath),
-          root,
-          declarations,
-        ),
+        hasServerCode: packageHasServerCode(assessment),
       }),
     };
   } catch (error) {

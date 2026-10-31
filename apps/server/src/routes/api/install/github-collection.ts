@@ -359,7 +359,9 @@ githubCollectionRoutes.post("/github/preview", async (c) => {
         member.location.repo,
         member.directory,
       );
-      let summary: Awaited<ReturnType<typeof inspectWorldBundle>>;
+      let summary:
+        | Awaited<ReturnType<typeof inspectWorldBundle>>
+        | ReturnType<typeof inspectBundle>;
       try {
         summary =
           member.kind === "world"

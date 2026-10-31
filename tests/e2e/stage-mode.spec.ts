@@ -275,6 +275,7 @@ test.describe("Stage view mode", () => {
                 active: true,
                 locked: false,
                 source: "community",
+                executionMode: "code" as const,
                 hostState: "loaded",
                 sessionState: "active",
                 runtimeCount: 0,

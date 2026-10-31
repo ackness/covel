@@ -36,6 +36,7 @@ function sessionPlugin(id: string, active: boolean): api.SessionPlugin {
     description: "",
     kind: "plugin",
     source: "builtin",
+    executionMode: "code" as const,
     hostState: "loaded",
     runtimeCount: 0,
     provides: [],

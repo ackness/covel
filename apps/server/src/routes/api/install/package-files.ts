@@ -1,5 +1,10 @@
+import {
+  PackageInventoryError,
+  readPackageInventory,
+  type PackageFile,
+} from "@covel/plugin-loader";
 import { constants } from "node:fs";
-import { lstat, open, readdir } from "node:fs/promises";
+import { lstat, open } from "node:fs/promises";
 import path from "node:path";
 import { z } from "zod";
 import {
@@ -99,39 +104,23 @@ export async function readReceipt(directory: string): Promise<PackageReceipt> {
 // Read without importing modules. Detect local edits, extra data, links, and
 // deleted files before an update can replace any package directory.
 async function readPackageFiles(directory: string): Promise<ExtractedEntry[]> {
-  await assertPackageDirectory(directory);
-  const entries: ExtractedEntry[] = [];
-  let bytes = 0;
-  let count = 0;
-  const visit = async (relative: string): Promise<void> => {
-    for (const entry of await readdir(path.join(directory, relative), {
-      withFileTypes: true,
-    })) {
-      if (++count > LIMITS.maxEntries)
-        throw httpError(409, "Package contains too many local files");
-      const name = relative ? `${relative}/${entry.name}` : entry.name;
-      if (name === INSTALL_RECEIPT_FILE) continue;
-      const absolute = path.join(directory, name);
-      if (entry.isDirectory()) {
-        await assertPackageDirectory(absolute);
-        await visit(name);
-      } else {
-        if (!entry.isFile())
-          throw httpError(
-            409,
-            "Package contains linked or unsupported local files",
-          );
-        const content = await readRegularFile(
-          absolute,
-          LIMITS.maxUncompressedBytes - bytes,
-        );
-        bytes += content.length;
-        entries.push({ relativePath: name, content });
-      }
-    }
-  };
-  await visit("");
-  return entries;
+  try {
+    const { files } = await readPackageInventory(directory);
+    return files.map((file) => ({
+      relativePath: file.relativePath,
+      content: Buffer.from(file.content),
+    }));
+  } catch (error) {
+    if (
+      error instanceof PackageInventoryError ||
+      (error as NodeJS.ErrnoException).code === "ELOOP"
+    )
+      throw httpError(
+        409,
+        "Package contents are unsupported, exceed limits, or changed during inspection",
+      );
+    throw error;
+  }
 }
 
 export async function readUnmodifiedPackage(
@@ -158,6 +147,7 @@ export interface PackageIntegrityResult {
 /** Receipt metadata is excluded from the content digest, just as at install. */
 export async function checkPackageIntegrity(
   directory: string,
+  inspected?: readonly PackageFile[],
 ): Promise<PackageIntegrityResult> {
   let receipt: PackageReceipt;
   try {
@@ -174,7 +164,12 @@ export async function checkPackageIntegrity(
     return { status: "unreadable" };
   }
   try {
-    const entries = await readPackageFiles(directory);
+    const entries = inspected
+      ? inspected.map((file) => ({
+          relativePath: file.relativePath,
+          content: Buffer.from(file.content),
+        }))
+      : await readPackageFiles(directory);
     return {
       status:
         digestEntries(entries) === receipt.source.digest

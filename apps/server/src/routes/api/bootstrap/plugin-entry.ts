@@ -1,3 +1,4 @@
+import { hasFreshDeclarativeProof } from "../../../trust/plugin-admission.js";
 import { enforcePluginRegistrationContract } from "@covel/runtime";
 /**
  * Unified plugin server entry — the `entry` PLUGIN.md frontmatter field.
@@ -82,6 +83,10 @@ export interface BootstrapPluginEntriesParams {
   /** Fail-closed session authorization for community server code. */
   readonly isCommunityServerCodeApproved?: (
     sessionId: string | undefined,
+    pluginId: string,
+  ) => boolean | Promise<boolean>;
+  /** Fresh static eligibility; does not authorize importing any module. */
+  readonly isDeclarativePackage?: (
     pluginId: string,
   ) => boolean | Promise<boolean>;
   /** Narrower grant used for lifecycle hook execution after import. */
@@ -257,10 +262,19 @@ export async function createBootstrapPluginEntries(
     }
   }
 
+  const canActivate = async (
+    pluginId: string,
+    sessionId?: string,
+  ): Promise<boolean> =>
+    getPluginTrustInfo(pluginId, discoveryMap.get(pluginId)?.source).autoLoad ||
+    Boolean(await params.isDeclarativePackage?.(pluginId)) ||
+    Boolean(await isCommunityServerCodeApproved?.(sessionId, pluginId));
+
   const prepareEntry = async (
     pluginId: string,
     definition: PluginEntryDefinition,
     generation?: string,
+    sessionId?: string,
   ): Promise<PluginEntryScope> => {
     const batch = new PluginEntryScope();
     scopes.add(batch);
@@ -301,6 +315,15 @@ export async function createBootstrapPluginEntries(
           if (!fsSync.existsSync(fullPath)) {
             throw new Error(`entry file not found: ${entryPath}`);
           }
+          if (
+            !getPluginTrustInfo(pluginId, discoveryMap.get(pluginId)?.source)
+              .autoLoad &&
+            !(await isCommunityServerCodeApproved?.(sessionId, pluginId))
+          )
+            throw new Error(
+              "Plugin module import requires server-code authorization",
+            );
+          batch.signal.throwIfAborted();
           provideHostModules(definition.pluginRoot);
           const url = pathToFileURL(fullPath);
           if (generation) url.searchParams.set("generation", generation);
@@ -380,14 +403,18 @@ export async function createBootstrapPluginEntries(
   ): Promise<void> => {
     const definition = entryDefinitions.get(pluginId);
     if (!definition) return;
-    const batch = await prepareEntry(pluginId, definition);
+    const batch = await prepareEntry(
+      pluginId,
+      definition,
+      undefined,
+      sessionId,
+    );
     try {
       await serialize(async () => {
         if (closed) throw new Error("plugin entries are closed");
         if (
-          !getPluginTrustInfo(pluginId, discoveryMap.get(pluginId)?.source)
-            .autoLoad &&
-          !(await isCommunityServerCodeApproved?.(sessionId, pluginId))
+          entryDefinitions.get(pluginId) !== definition ||
+          !(await canActivate(pluginId, sessionId))
         )
           throw new Error(
             "Plugin entry approval was revoked before publication",
@@ -448,11 +475,7 @@ export async function createBootstrapPluginEntries(
   ): Promise<void> => {
     const discovery = discoveryMap.get(pluginId);
     if (!discovery) return;
-    const trust = getPluginTrustInfo(pluginId, discovery.source);
-    if (
-      !trust.autoLoad &&
-      !(await isCommunityServerCodeApproved?.(sessionId, pluginId))
-    ) {
+    if (!(await canActivate(pluginId, sessionId))) {
       throw new Error(
         `[plugin-entry] ${pluginId}: community server code requires explicit approval for session ${sessionId ?? "<missing>"}`,
       );
@@ -469,10 +492,7 @@ export async function createBootstrapPluginEntries(
     const result = serializePlugin(pluginId, async () => {
       try {
         if (closed) throw new Error("plugin entries are closed");
-        if (
-          !trust.autoLoad &&
-          !(await isCommunityServerCodeApproved?.(sessionId, pluginId))
-        )
+        if (!(await canActivate(pluginId, sessionId)))
           throw new Error(
             "Plugin entry approval was revoked before activation",
           );
@@ -520,8 +540,6 @@ export async function createBootstrapPluginEntries(
       if (closed) throw new Error("plugin entries are closed");
       if (!development)
         throw new Error("Plugin reload is available only in development mode");
-      const quarantined =
-        !discoveryMap.has(pluginId) && params.failedDiscoveryMap?.has(pluginId);
       const discovery =
         discoveryMap.get(pluginId) ?? params.failedDiscoveryMap?.get(pluginId);
       if (!discovery) throw new Error("Plugin not found");
@@ -536,32 +554,76 @@ export async function createBootstrapPluginEntries(
           approvedSession = candidate;
           break;
         }
-      if (!approvedSession && !quarantined)
-        throw new Error("Plugin reload requires a live server-code approval");
       const next = await preparePluginReload(discovery, [
         ...(params.pluginRegistry?.getAll().values() ?? []),
       ]);
       await params.prepareDeclarations?.(next.entry);
       const generation = crypto.randomUUID();
       if (!approvedSession) {
-        // Only startup quarantine may recover without executing server code.
-        // Static loading validates identity, schemas and declarations; entry,
-        // handler and guard imports remain behind the normal approval gate.
+        // Publish unapproved definitions as metadata. Old registrations must
+        // disappear when a formerly declarative package gains server code.
+        const previousScope = activeScopes.get(pluginId);
+        const publishGeneration = await params.runtimeLoader?.prepareGeneration(
+          {
+            discovery: next.discovery,
+            definition: next.definition,
+            generation,
+            sessionIds: [],
+          },
+        );
         await serialize(async () => {
           if (closed) throw new Error("plugin entries are closed");
-          if (
-            discoveryMap.has(pluginId) ||
-            activeScopes.has(pluginId) ||
-            invokedPluginIds.has(pluginId)
-          )
-            throw new Error("Static recovery requires a quarantined plugin");
-          params.pluginRegistry?.register(next.entry);
+          params.tools.replacePlugin(pluginId, () =>
+            params.hookPipeline.replacePlugin(pluginId, () =>
+              params.rpcRegistry.replacePlugin(pluginId, () =>
+                replacePluginWires(pluginId, () => {
+                  const publish = () =>
+                    params.pluginRegistry?.register(next.entry);
+                  if (params.services)
+                    params.services.replacePlugin(pluginId, publish);
+                  else publish();
+                }),
+              ),
+            ),
+          );
           discoveryMap.set(pluginId, next.discovery);
           manifestCache.set(pluginId, next.definition.manifests);
           entryDefinitions.set(pluginId, next.entryDefinition);
           params.failedDiscoveryMap?.delete(pluginId);
+          publishGeneration?.();
+          activeScopes.delete(pluginId);
+          invokedPluginIds.delete(pluginId);
+          failedAt.delete(pluginId);
           artifactRevision += 1;
         });
+        if (previousScope) {
+          const completion = previousScope.drain();
+          draining.add(completion);
+          void completion.then(
+            () => {
+              scopes.delete(previousScope);
+              draining.delete(completion);
+            },
+            (error) => {
+              draining.delete(completion);
+              console.warn("[plugin-entry] draining cleanup failed", {
+                pluginId,
+                error,
+              });
+            },
+          );
+        }
+        // No code imports occur here. A newly declarative package can publish
+        // its static contributions immediately using the new proof.
+        if (
+          await hasFreshDeclarativeProof(
+            next.discovery.rootPath,
+            next.definition.executionAssessment,
+          )
+        ) {
+          await invokeEntryForPlugin(pluginId, requestedSessionId);
+          invokedPluginIds.add(pluginId);
+        }
         try {
           await params.onReload?.(pluginId);
         } catch (error) {
@@ -579,6 +641,7 @@ export async function createBootstrapPluginEntries(
         pluginId,
         next.entryDefinition,
         generation,
+        approvedSession,
       );
       const previousEntry = params.pluginRegistry?.get(pluginId);
       const previousScope = activeScopes.get(pluginId);

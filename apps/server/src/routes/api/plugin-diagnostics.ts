@@ -119,6 +119,9 @@ interface PluginDiagnosticsDeps {
   readonly services: PluginServiceRegistry;
   readonly extensions?: import("@covel/runtime").PluginExtensionHost;
   readonly calls: RecentPluginServiceCalls;
+  readonly getTrustedSources?: () =>
+    | import("../../trust/trusted-source-service.js").TrustedSourceService
+    | undefined;
   readonly isEntryPublished: (pluginId: string) => boolean;
   readonly isServerCodeApproved: (
     session: SessionRecord,
@@ -145,10 +148,13 @@ export function createPluginDiagnostics(deps: PluginDiagnosticsDeps) {
   ): PluginDiagnosticsSnapshot => {
     const view = buildSessionPluginView(session, deps.registry, {
       isEntryPublished: deps.isEntryPublished,
+      trustedSources: deps.getTrustedSources?.(),
+      isServerCodeApproved: (id) => deps.isServerCodeApproved(session, id),
       authorized: [...deps.registry.getAll().values()]
         .filter(
           (entry) =>
             getPluginTrustInfo(entry.id, entry.source).autoLoad ||
+            deps.getTrustedSources?.()?.isDeclarative(entry.id) ||
             deps.isServerCodeApproved(session, entry.id),
         )
         .map((entry) => entry.id),
@@ -164,7 +170,8 @@ export function createPluginDiagnostics(deps: PluginDiagnosticsDeps) {
         const plugin = sessionPlugins.get(entry.id)!;
         const available =
           plugin.active &&
-          plugin.serverCodeApproved &&
+          (plugin.serverCodeApproved ||
+            plugin.executionMode === "declarative") &&
           plugin.hostState !== "error";
         const ownActions = available
           ? actions
@@ -175,6 +182,7 @@ export function createPluginDiagnostics(deps: PluginDiagnosticsDeps) {
         return {
           pluginId: entry.id,
           source: plugin.source,
+          executionMode: plugin.executionMode,
           active: plugin.active,
           hostState: plugin.hostState,
           sessionState: plugin.sessionState,
@@ -323,6 +331,7 @@ export function createPluginDiagnostics(deps: PluginDiagnosticsDeps) {
       const { pluginId } = parsed.data;
       if (pluginId && !deps.registry.get(pluginId))
         return c.json(errorBody("Unknown plugin"), 404);
+      await deps.getTrustedSources?.()?.verifyAll();
       c.header("Cache-Control", "no-store");
       return c.json(snapshot(guard.session, pluginId));
     },

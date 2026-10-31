@@ -9,6 +9,7 @@ const plugin: SessionPlugin = {
   description: "",
   source: "community",
   kind: "plugin",
+  executionMode: "code" as const,
   hostState: "loaded",
   runtimeCount: 0,
   provides: [],
@@ -40,3 +41,24 @@ it.each(["trusted-source", "session"] as const)(
     );
   },
 );
+
+it("shows declarative status without claiming trusted-source or code authorization", () => {
+  render(
+    <SessionPluginItem
+      plugin={{
+        ...plugin,
+        executionMode: "declarative",
+        serverCodeApproved: false,
+        approvalRequired: false,
+      }}
+    />,
+  );
+  expect(
+    screen.getByText(
+      "No plugin server code · no code or runtime approval needed",
+    ),
+  ).toBeTruthy();
+  expect(screen.queryByText("auto-approved: trusted source")).toBeNull();
+  expect(screen.queryByTestId("plugin-model-notice")).toBeNull();
+  expect(screen.queryByRole("status")).toBeNull();
+});

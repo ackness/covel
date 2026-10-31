@@ -199,6 +199,9 @@ async function fixture() {
     toolExecutor,
     llm,
     loadRuntime: async (manifest: RuntimeManifest) => ({
+      executionMode: manifest.tools?.plugin?.length
+        ? ("code" as const)
+        : ("declarative" as const),
       manifest,
       promptTemplate: manifest.subagentOnly
         ? `${HELPER_MARK} You help.`

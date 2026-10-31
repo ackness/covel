@@ -63,11 +63,13 @@ export function authorizedSessionPluginIds(
   registry: Pick<PluginRegistry, "getAll">,
   gate?: RpcApprovalGate,
   session?: SessionRecord,
+  trustedSources?: import("../../../trust/trusted-source-service.js").TrustedSourceService,
 ): string[] {
   return [...registry.getAll().values()]
     .filter(
       (entry) =>
         getPluginTrustInfo(entry.id, entry.source).autoLoad ||
+        Boolean(trustedSources?.isDeclarative(entry.id)) ||
         Boolean(session && gate && hasServerCodeGrant(gate, session, entry.id)),
     )
     .map((entry) => entry.id);
@@ -210,6 +212,7 @@ export function buildAvailablePluginList(
     authorized?: readonly string[];
     trustedSources?: import("../../../trust/trusted-source-service.js").TrustedSourceService;
     isEntryPublished?: (pluginId: string) => boolean;
+    isServerCodeApproved?: (pluginId: string) => boolean;
   } = {},
 ): SessionPlugin[] {
   const authorized = new Set(
@@ -218,14 +221,20 @@ export function buildAvailablePluginList(
   return [...registry.getAll().values()].map((entry) => {
     const rejection = plan?.rejected.find((item) => item.pluginId === entry.id);
     const isActive = active.includes(entry.id);
+    const declarative =
+      options.trustedSources?.isDeclarative(entry.id) ?? false;
+    const codeApproved =
+      entry.source === "builtin" ||
+      (options.isServerCodeApproved?.(entry.id) ??
+        (!declarative && authorized.has(entry.id)));
     return {
       ...buildPluginSummary(
         entry,
         options.isEntryPublished,
         options.trustedSources,
       ),
-      serverCodeApproved: authorized.has(entry.id),
-      ...(authorized.has(entry.id) && entry.source !== "builtin"
+      serverCodeApproved: codeApproved,
+      ...(codeApproved && entry.source !== "builtin"
         ? {
             serverCodeApprovedBy: options.trustedSources?.implicitGrant({
               pluginId: entry.id,
@@ -245,9 +254,7 @@ export function buildAvailablePluginList(
             : "inactive",
       ...(plan?.autoAdded.includes(entry.id) ? { autoAdded: true } : {}),
       ...(rejection ? { rejection } : {}),
-      ...(rejection?.code === "approval-required"
-        ? { approvalRequired: true }
-        : {}),
+      approvalRequired: !declarative && rejection?.code === "approval-required",
     };
   });
 }
@@ -266,6 +273,7 @@ export function buildSessionPluginView(
     paused?: readonly import("@covel/runtime").PluginFaultState[];
     trustedSources?: import("../../../trust/trusted-source-service.js").TrustedSourceService;
     isEntryPublished?: (pluginId: string) => boolean;
+    isServerCodeApproved?: (pluginId: string) => boolean;
   },
 ): {
   items: SessionPlugin[];

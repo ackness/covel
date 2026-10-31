@@ -23,6 +23,7 @@ const plugin: SessionPlugin = {
   description: "Probe",
   kind: "plugin",
   source: "builtin",
+  executionMode: "code" as const,
   hostState: "loaded",
   runtimeCount: 0,
   provides: [],

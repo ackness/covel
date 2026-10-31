@@ -4,6 +4,8 @@
 
 读这一页之前，先做完[第一个插件](./first-plugin.md)。那一页带你跑通一遍；这一页解释跑通之后要守的规矩。
 
+不需要函数时，用[提示词、数据集与 UI](./prompt-only.md)组合成声明式包，不必生成入口或执行提取。代码审批取决于当前文件，规则见[安装参考](../reference/plugin-installation.md#声明式插件)。
+
 ## 接下来读哪一页
 
 | 你要做的事                             | 读这一页                             |
@@ -78,7 +80,7 @@ Write one observation grounded in runtime-inputs.narrative.value.
 
 `pnpm create-plugin` 的每种模式都把 `PLUGIN.md` 的版本设为 `0.1.0`。发布新版本时改这一处，再用 `pnpm validate:plugin <插件目录>` 检查。
 
-校验通过后，在游戏的准备页选中插件并授权，它才会运行，见[第一个插件](./first-plugin.md)的最后一步。打包和安装见[打包并试装](../ship/package.md)。
+校验通过后，在游戏的准备页选中插件；声明式包直接运行，代码包按提示授权，见[第一个插件](./first-plugin.md)的最后一步。打包和安装见[打包并试装](../ship/package.md)。
 
 ## 我注册的东西要在哪里声明
 

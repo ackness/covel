@@ -6,17 +6,12 @@ import {
   type PluginCapabilities,
 } from "@covel/shared";
 import type { ParsedPluginMd, ParsedRuntimeMd } from "./types.js";
-import { pluginImportReferences } from "./static-validation.js";
+import type { PluginExecutionAssessment } from "./execution-assessment.js";
 
 export function packageHasServerCode(
-  files: readonly string[],
-  root: ParsedPluginMd,
-  runtimes: readonly ParsedRuntimeMd[],
+  assessment: PluginExecutionAssessment,
 ): boolean {
-  return (
-    pluginImportReferences(root, runtimes).length > 0 ||
-    files.some((file) => /\.(?:[cm]?[jt]s|tsx|node|wasm)$/i.test(file))
-  );
+  return assessment.mode !== "declarative";
 }
 export function computePluginCapabilities({
   root,

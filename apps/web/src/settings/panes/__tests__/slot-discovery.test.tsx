@@ -88,6 +88,7 @@ beforeEach(async () => {
       description: "Fixture",
       kind: "plugin",
       source: "builtin",
+      executionMode: "code" as const,
       hostState: "loaded",
       runtimeCount: 1,
       provides: [],

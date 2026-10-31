@@ -6,6 +6,12 @@
 
 类型定义在 `packages/shared/src/types/protocol.ts`。
 
+## 声明式授权语义
+
+插件摘要必须提供宿主推导的 `executionMode`。新鲜的 `declarative` 状态使创建、启用和 runtime 调用免去代码与 runtime 提示，但不产生授权记录；`serverCodeApproved` 仍只报告真实授权，`approvalRequired` 不再把这些包列为待批准。`code` 和 `unknown` 恢复普通路径。过期审批返回 `409 approval_obsolete`，浏览器把这个响应视为请求已消费，不保存授权；允许操作的调用方保留会话导航检查，再按当前策略重试原始启用或运行。字段定义见[API 状态](./api.md#声明式插件的-api-状态)。
+
+没有新增 SSE 事件或 RPC 通配授权。逐操作、工具、服务提供者和内容绑定的沙箱会话读取授权独立。模型用量提示是启用前的信息，不是 runtime 授权或费用确认。
+
 ## 架构总览
 
 所有通讯分成三类：

@@ -1,3 +1,4 @@
+import { PluginModelNotice } from "../plugin-model-notice.js";
 import { Cpu, Wrench } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { pluginTagLabel } from "@/lib/session-plugin-selection.js";
@@ -140,6 +141,15 @@ export function PluginPackageRow({
           {description}
         </p>
       )}
+      {pkg.executionMode === "declarative" && (
+        <p className="mt-1.5 ml-9 text-xs text-muted-foreground">
+          {t("plugin.declarative")}
+        </p>
+      )}
+      <PluginModelNotice
+        runtimes={pkg.runtimes}
+        className="mt-1.5 ml-9 text-xs text-muted-foreground"
+      />
       <PluginLoadWarnings diagnostics={pkg} />
       <PackageCredits
         info={pluginPackageInfo(pkg)}

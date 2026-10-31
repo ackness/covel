@@ -324,9 +324,10 @@ describe("plugin layout reload recovery", () => {
       await expect(manager.ensurePluginEntry(id, "session")).rejects.toThrow(
         "requires explicit approval",
       );
-      await expect(manager.reload(id)).rejects.toThrow(
-        "requires a live server-code approval",
-      );
+      await expect(manager.reload(id)).resolves.toMatchObject({ pluginId: id });
+      const republishedEntry = discovered.registry.get(id)!;
+      const republishedDiscovery = discovered.discoveryMap.get(id)!;
+      expect(onReload).toHaveBeenCalledTimes(2);
       expect(state).toEqual({
         entryImports: 0,
         activations: 0,
@@ -344,11 +345,11 @@ describe("plugin layout reload recovery", () => {
       await expect(manager.reload(id, "session")).rejects.toThrow(
         "id must match plugin directory",
       );
-      expect(discovered.registry.get(id)).toBe(entry);
-      expect(discovered.discoveryMap.get(id)).toBe(discovery);
-      expect(discovered.manifestCache.get(id)).toBe(entry.manifests);
+      expect(discovered.registry.get(id)).toBe(republishedEntry);
+      expect(discovered.discoveryMap.get(id)).toBe(republishedDiscovery);
+      expect(discovered.manifestCache.get(id)).toBe(republishedEntry.manifests);
       expect(discovered.failedDiscoveryMap.has(id)).toBe(false);
-      expect(onReload).toHaveBeenCalledTimes(1);
+      expect(onReload).toHaveBeenCalledTimes(2);
       expect(state).toEqual({
         entryImports: 0,
         activations: 0,
@@ -382,6 +383,7 @@ describe("plugin generation reload", () => {
     expect(
       buildPluginSummary(f.registry.get(f.id)!, f.manager.isEntryPublished),
     ).toMatchObject({
+      executionMode: "unknown" as const,
       hostState: "error",
       registrationError: {
         code: "plugin_registration_invalid",
@@ -409,6 +411,7 @@ describe("plugin generation reload", () => {
       "failed to activate",
     );
     expect(summary()).toMatchObject({
+      executionMode: "unknown" as const,
       hostState: "loaded",
       error: expect.any(String),
     });
@@ -748,7 +751,7 @@ describe("plugin generation reload", () => {
     await Promise.resolve();
     expect(f.disposed).toEqual([1]);
   });
-  it("rolls back a failed factory and refuses reload after live approval is revoked", async () => {
+  it("rolls back a failed factory and quarantines reload after live approval is revoked", async () => {
     const f = await fixture();
     await fs.writeFile(path.join(f.root, "entry.mjs"), f.source(2, true));
     await expect(f.manager.reload(f.id, "session")).rejects.toThrow(
@@ -764,7 +767,11 @@ describe("plugin generation reload", () => {
     ).toBe(1);
     expect(f.disposed).toEqual([2]);
     f.revoke();
-    await expect(f.manager.reload(f.id, "session")).rejects.toThrow("approval");
+    await expect(f.manager.reload(f.id, "session")).resolves.toMatchObject({
+      pluginId: f.id,
+    });
+    expect(f.manager.isEntryPublished(f.id)).toBe(false);
+    expect(f.tools.find("value", f.id)).toBeUndefined();
   });
   it("keeps locale prose in its captured generation even when the caller locale differs from the session", async () => {
     const f = await fixture(true);

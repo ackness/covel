@@ -1,0 +1,6 @@
+{
+  "id": "notebook-page",
+  "label": "Notebook page",
+  "webview": { "root": "./ui/page", "entry": "index.html" },
+  "bridge": "session"
+}

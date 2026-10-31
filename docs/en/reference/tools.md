@@ -16,6 +16,12 @@ There are five kinds of tool:
 > [!NOTE]
 > The DashScope and OpenAI image generation tools in the table come from the [official community plugin repository](https://github.com/covel-ai/covel-plugins). The matching tools and UI are registered only after you install the plugin and authorize it in a session.
 
+## Tools for declarative runtimes
+
+[Declarative plugins](./plugin-installation.md#declarative-plugins) can use declared read, UI, completion/control tools and `sync-characters` for validated character records. The central capability table lives in `packages/plugin-handlers-utils/src/framework-tool-names.ts`; a new framework tool needs explicit capability review, never approval by name prefix.
+
+Dataset tools write only datasets declared by the caller's package. Arguments strictly match the tool schema: extra `pluginId` or `namespace` fields are errors and cannot change ownership. Generated tools and imported services use exact names, checked by the final executor's `authorizedToolNames` after hook rewrites. Other plugins' data changes only through their independently admitted write services. Code/runtime exemption replaces neither per-tool approval nor proposal validation/commit and does not widen sub-agent, resume or retry write permissions.
+
 ## Overview
 
 <!-- prettier-ignore -->

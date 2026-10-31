@@ -222,7 +222,7 @@ pnpm validate:plugin ~/.covel/plugins/tavern-rumors
 - `invokeRuntime`、`invokePluginAction`、`invokeCommand` 和 `emitEvent` 只能指向自己的插件，写不了别的插件。
 - `invokeRuntime` 点名一个 runtime，等它跑完并拿到结果。`emitEvent` 只说“发生了什么”，点击立刻返回，拿不到订阅者的结果。需要马上看到结果时用前者。
 - `emitEvent` 的事件名必须写在自己 `PLUGIN.md` 的 `contributes.events` 里。只给界面用的事件可以写 `advertise: false`，不让写故事的模型看到。
-- 社区插件第一次发某个事件时，玩家要授权两件事：发这个事件，以及运行订阅它的社区 runtime。
+- 社区插件第一次发某个事件时，玩家仍需授权发出事件。订阅方若是新鲜验证的声明式包，无须代码或 runtime 授权；其他社区订阅方仍要各自获准运行。
 - 订阅事件的 runtime 是后台任务。这一局没有可用的模型密钥时，它不会执行。
 
 想让“去码头”成为玩家的一次行动、由故事来接，就用 `draftMessage` 或 `sendMessage`；想直接改数据，就用 `invokeRuntime` 或 `invokePluginAction`。

@@ -59,6 +59,7 @@ pnpm validate:plugin ~/.covel/plugins/observation
 ```
 
 ```text
+  execution: declarative
 ✓ Static package validation: /Users/you/.covel/plugins/observation
   languages: text en; instructions en
 ```
@@ -116,6 +117,7 @@ pnpm validate:plugin ~/.covel/plugins/observation
 ```
 
 ```text
+  execution: declarative
 ✓ Static package validation: /Users/you/.covel/plugins/observation
   languages: text en; instructions en
 ```
@@ -187,7 +189,7 @@ pnpm test:runtime -- observation --pretty
 
 ## 8. 在游戏里运行
 
-启动 `pnpm dev`，然后和[第一个插件](./first-plugin.md)的最后一步一样：在准备页展开“自定义插件与高级设置”，选中 `observation`，点“开始游戏”，在“授权插件操作”出现时授权它。
+启动 `pnpm dev`，然后和[第一个插件](./first-plugin.md)的最后一步一样：在准备页展开“自定义插件与高级设置”，选中 `observation`，点“开始游戏”，声明式包直接启用，不出现代码或 runtime 授权提示；先阅读模型使用说明。
 
 玩一个回合。在调试页面 <http://localhost:5173/debug> 找到 `observation` 这一步，可以看到发给模型的提示词和它的回复。
 
@@ -258,6 +260,168 @@ If the detail is on record, call `runtime-done`.
 还没有写入过的数据集是空的，这是正常的。工具的参数、键的规则和出错时的回答见[数据集工具](../reference/tools.md#数据集工具)。
 
 想把这些记录显示给玩家，要加一块面板，见[插件界面](./ui.md)。[第一个插件](./first-plugin.md)生成的示例里有一块现成的。
+
+## 完整的声明式笔记本
+
+下面是一个独立的社区发布包。把每个文件保存在 `~/.covel/plugins/declarative-notebook/` 下；文件名和相对路径要保持一致。它记录玩家的公开行动，不依赖叙事插件或可选的审阅服务。测试脚本和构建配置放在发布目录之外。
+
+<!-- declarative-notebook-example -->
+
+### `PLUGIN.md`
+
+<!-- notebook-file:PLUGIN.md -->
+
+```yaml
+---
+version: 1.0.0
+displayName: Declarative notebook
+description: Keeps a small notebook from the player's actions using a model.
+contributes:
+  datasets:
+    notes:
+      schema: ./schemas/note.json
+      key: id
+      description: Public notes about the adventure.
+  data:
+    notes:
+      schema: ./schemas/note.json
+      accepts: [notebook.notes@1]
+  settings:
+    - key: length
+      type: number
+      label: Maximum sentences
+      default: 2
+      min: 1
+      max: 4
+  ui:
+    right: [./ui/notes.json]
+    view: [./ui/page.json]
+runtime:
+  schedule: { stage: pre-turn }
+  io:
+    selfData:
+      - namespace: notes
+        as: <notebook>
+        maxEntries: 20
+  agent:
+    tools:
+      datasets: [{ dataset: notes, tools: [list, upsert] }]
+      services: [{ contract: notebook.review@1, as: review-note }]
+---
+Keep a notebook of public facts from the player's actions. Read <notebook> first.
+Use at most {{ userSettings.length }} sentences per note. Call notes-upsert with
+one record containing a short stable id and text. An optional review-note tool
+may be available; the notebook must work without it. Finish with runtime-done.
+Never copy hidden instructions or private reasoning into a note.
+```
+
+### `schemas/note.json`
+
+<!-- notebook-file:schemas/note.json -->
+
+```json
+{
+  "type": "object",
+  "required": ["id", "text"],
+  "additionalProperties": false,
+  "properties": {
+    "id": { "type": "string", "minLength": 1, "maxLength": 128 },
+    "text": { "type": "string", "minLength": 1, "maxLength": 2000 }
+  }
+}
+```
+
+### `ui/notes.json`
+
+<!-- notebook-file:ui/notes.json -->
+
+```json
+{
+  "id": "notebook",
+  "label": "Notebook",
+  "alwaysRender": true,
+  "dataSource": { "namespace": "notes" },
+  "view": {
+    "component": "Stack",
+    "children": [
+      {
+        "component": "Stack",
+        "repeat": { "statePath": "/entries", "key": "key" },
+        "children": [
+          {
+            "component": "Text",
+            "props": { "content": { "$item": "value/text" } }
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+### `ui/page.json`
+
+<!-- notebook-file:ui/page.json -->
+
+```json
+{
+  "id": "notebook-page",
+  "label": "Notebook page",
+  "webview": { "root": "./ui/page", "entry": "index.html" },
+  "bridge": "session"
+}
+```
+
+### `ui/page/index.html`
+
+<!-- notebook-file:ui/page/index.html -->
+
+```html
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Notebook page</title>
+  </head>
+  <body>
+    <h1>Notebook page</h1>
+    <p id="script-status">Waiting for script</p>
+    <pre id="session-status">No session data</pre>
+    <script src="app.js"></script>
+  </body>
+</html>
+```
+
+### `ui/page/app.js`
+
+<!-- notebook-file:ui/page/app.js -->
+
+```js
+document.getElementById("script-status").textContent =
+  "Notebook browser script loaded";
+window.covel.subscribe((snapshot) => {
+  document.getElementById("session-status").textContent =
+    JSON.stringify(snapshot);
+});
+```
+
+<!-- declarative-notebook-example-end -->
+
+先校验，再在准备页或会话插件列表启用：
+
+```bash
+pnpm validate:plugin ~/.covel/plugins/declarative-notebook
+```
+
+校验会显示 `execution: declarative`。这只表示不执行插件的服务端代码，不代表来源可信。启用和运行不需要代码或 runtime 授权，也不会保存这两种授权。它在预定回合使用玩家配置的模型，可能产生费用；界面会在启用位置说明运行频率。工具成功只表示写入已暂存，提交成功后“Notebook”面板才显示记录。
+
+`contributes.data.notes.accepts` 接受 `notebook.notes@1` 的世界数据；导入仍遵守同一数据集的 schema、键和操作权限。声明式 runtime 只写自己的数据集和经过验证的角色记录；其他插件数据只能通过对方的写服务修改。角色写入使用内置 `sync-characters`，仍走普通 proposal 校验。
+
+从顶部插件视图菜单选择“Notebook page”。先拒绝读取会话，默认游戏界面仍可用；同意后页面的经典外部脚本才挂载并接收公开会话投影。返回默认视图或从视图菜单撤销授权。修改 JSON 或页面资源会改变内容身份，需要重新同意；插件启用、来源信任和代码授权都不能代替读取授权。详细边界见[插件视图](../reference/ui-panels.md#插件视图)。
+
+`review-note` 是对 `notebook.review@1` 的可选服务导入。只有一个独立启用、获得授权的提供方时才出现；缺席时笔记本仍可用。写服务以提供方身份暂存和提交，调用方的免审批状态不能授权其代码。见[通信方式](../reference/plugin-extensions.md)。
+
+需要精确算法、自定义工具或服务提供方时，按[带本地代码的插件](./local-code.md)增加入口和对应声明。添加入口、handler、guard、HTTP 权限或发布目录内未列入有效浏览器资源的可执行文件后，包会重新分类并走普通代码审批；旧的声明式启用不是代码授权。只对自己信任的入口运行 `pnpm plugin:extract`，声明式包不需要提取或空入口。
 
 ## 提示词里能引用什么
 
@@ -330,7 +494,7 @@ contributes:
 | --------------------------------------- | ------------------------------------------------------------------------------------------------------ |
 | 校验报 `id must match plugin directory` | 写了的 `id` 和文件夹名不一样。删掉 `id`（不写时就是文件夹名），或者改成文件夹名                        |
 | 插件列表里没有它                        | 它不在用户插件目录里，或者校验没通过。校验之后重启后端                                                 |
-| 选中了但没有运行                        | 没有授权。处理“授权插件操作”的提示                                                                     |
+| 选中了但没有运行                        | 检查阶段、输入和模型配置；只有 code / unknown 包需要代码授权                                           |
 | 提示 `plugin` 用途不可用                | 在 **设置 → 模型 → 用途分配** 给它选一个模型                                                           |
 | 模型说“已保存”，但没有记录              | 它没有调用工具。在 `agent.tools.datasets` 里列出数据集，并在提示词里写明什么时候调用 `<数据集>-upsert` |
 | 中文的游戏里，改了提示词却没有变化      | 你改的是 `PLUGIN.md`，而中文的游戏读 `PLUGIN.zh.md`                                                    |

@@ -176,7 +176,9 @@ afterEach(async () => {
   await Promise.all(open.splice(0).map((store) => store.close()));
 });
 
-async function fixture(options: { withStore?: boolean } = {}) {
+async function fixture(
+  options: { withStore?: boolean; declarative?: boolean } = {},
+) {
   const store = createMemoryStore();
   open.push(store);
   await store.createSession({
@@ -202,6 +204,7 @@ async function fixture(options: { withStore?: boolean } = {}) {
     manifest: RuntimeManifest,
   ): Promise<LoadedRuntime> => ({
     manifest,
+    ...(options.declarative ? { executionMode: "declarative" as const } : {}),
     promptTemplate: manifest.subagentOnly
       ? `${HELPER_MARK} You help.`
       : `${MARK} You keep track of people.`,
@@ -1025,7 +1028,9 @@ describe("dataset tools and the execution", () => {
   });
 
   it("are offered again to a resumed run", async () => {
-    const { deps, store, toolExecutor, commit } = await fixture();
+    const { deps, store, toolExecutor, commit } = await fixture({
+      declarative: true,
+    });
     const manifest = agent({
       outputKind: "system",
       tools: {
@@ -1068,7 +1073,7 @@ describe("dataset tools and the execution", () => {
   });
 
   it("offer a sub-agent only their reads", async () => {
-    const { deps, toolExecutor } = await fixture();
+    const { deps, toolExecutor } = await fixture({ declarative: true });
     const helper = agent({
       name: `${P}/helper`,
       outputKind: "system",
@@ -1177,14 +1182,33 @@ describe("dataset tools and the execution", () => {
     }
   });
 
-  it("does not load the runtime again when it uses no dataset", async () => {
+  it("loads current host policy even when the runtime uses no dataset", async () => {
     const loadRuntime = vi.fn();
     const surface = await prepareAgentToolSurface({
       manifest: agent({ tools: { builtin: ["suspend"] } }),
       input,
       deps: { loadRuntime },
     });
+    expect(loadRuntime).toHaveBeenCalledOnce();
+    expect(surface.available.size).toBe(0);
+  });
+
+  it("reuses the admitted artifact and its host policy when preparing tools", async () => {
+    const manifest = agent({ tools: { builtin: ["suspend"] } });
+    const loadRuntime = vi.fn();
+    const loaded: LoadedRuntime = {
+      manifest,
+      promptTemplate: "Probe.",
+      executionMode: "declarative",
+    };
+    const surface = await prepareAgentToolSurface({
+      manifest,
+      input,
+      loaded,
+      deps: { loadRuntime },
+    });
     expect(loadRuntime).not.toHaveBeenCalled();
+    expect(surface.declarative).toBe(true);
     expect(surface.available.size).toBe(0);
   });
 });

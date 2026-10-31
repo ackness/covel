@@ -24,7 +24,24 @@ change requires new ones.
 
 ### 2. Scaffold
 
-Start from a maintained template rather than a copied historic manifest:
+Choose declarative authoring first when prompts, own datasets, settings,
+world-data receivers, declarative UI and optional service imports meet the need.
+Use the complete, validated example in `docs/plugins/prompt-only.md` and the clean
+distribution in `tests/third-party/declarative-notebook/`. Write `PLUGIN.md` and
+its referenced data/UI files directly; no entry, extraction or dummy function is
+needed. Keep test scripts and build configuration outside the distribution.
+
+The loader derives `declarative`, `code` or `unknown` from actual declarations
+and files, never an authored mode flag. Only exact files in a validated browser
+asset list are exempt from executable-file detection. Declarative runtimes write
+only their own datasets and validated character records through `sync-characters`;
+other plugins' data changes only through their independently admitted write
+services. Normal proposal validation and narrower resume/sub-agent rules apply.
+Explain model use and cadence before enable; there is no cost-consent grant.
+Session-reading sandbox views still need separate consent bound to current
+content, including multi-file asset digests. See `docs/reference/plugin-installation.md`.
+
+When server code is necessary, start from a maintained template:
 
 ```bash
 node scripts/create-plugin.js <id> -t ./plugins                 # multi-runtime workbench
@@ -106,8 +123,9 @@ proposals or handler effects.
 
 ### 5. Package standalone plugins
 
-Standalone packages need the root manifest, executable ESM JavaScript, a README,
-and an authorized license. A `package.json` is optional; when present it says
+Standalone packages need the root manifest, referenced files, a README,
+and an authorized license. Code packages also include their executable ESM
+JavaScript. A `package.json` is optional; when present it says
 `"type": "module"` and carries no `version`. Without an `id` in `PLUGIN.md`, an
 installed package takes the name of its folder (the archive's top-level folder or
 the repository directory), then the `package.json` name. The installer does
@@ -119,7 +137,11 @@ workspace dependencies or sibling-plugin imports.
 
 ### 6. Validate
 
-Sync your own entry's declarations with `pnpm plugin:extract plugins/<id>` (executes code with your permissions); use `--check` for CI, and maintain `extensions` / `commands` metadata yourself. See [local code](../../../docs/plugins/local-code.md#4-写入口文件).
+For declarative packages, run static validation and inspect classification and
+diagnostics; never create an entry just for extraction. Adding server code,
+executable registrations or HTTP permissions restores ordinary code/runtime
+approval. An earlier declarative enable is no code grant. For code packages,
+sync your own entry's declarations with `pnpm plugin:extract plugins/<id>` (executes code with your permissions); use `--check` for CI, and maintain `extensions` / `commands` metadata yourself. See [local code](../../../docs/plugins/local-code.md#4-写入口文件).
 
 ```bash
 pnpm validate:plugin plugins/<id>       # manifest + cross-runtime checks

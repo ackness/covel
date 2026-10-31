@@ -1,3 +1,4 @@
+import { assessPluginExecution } from "../src/execution-assessment.js";
 import { describe, expect, it } from "vitest";
 import {
   computePluginCapabilities,
@@ -13,6 +14,22 @@ const parse = (value: object) =>
   parsePluginMd(
     md({ id: "probe", description: "Probe", ...value }),
     "probe/PLUGIN.md",
+  );
+const hasCode = (names: string[], root: ReturnType<typeof parse>) =>
+  packageHasServerCode(
+    assessPluginExecution({
+      files: [
+        {
+          relativePath: "PLUGIN.md",
+          content: Buffer.from(md(root.rawFrontmatter)),
+        },
+        ...names
+          .filter((name) => name !== "PLUGIN.md")
+          .map((relativePath) => ({ relativePath, content: Buffer.from("") })),
+      ],
+      root,
+      runtimes: [],
+    }),
   );
 describe("package capability snapshots", () => {
   it("keeps a prompt-only package empty", () => {
@@ -120,19 +137,22 @@ describe("package capability snapshots", () => {
       }),
     );
   });
-  it.each(["js", "mjs", "cjs", "ts", "mts", "cts", "tsx", "wasm", "node"])(
-    "recognizes .%s code files",
-    (extension) =>
-      expect(packageHasServerCode([`unused.${extension}`], parse({}), [])).toBe(
-        true,
-      ),
+  it.each([
+    "js",
+    "mjs",
+    "cjs",
+    "ts",
+    "mts",
+    "cts",
+    "tsx",
+    "jsx",
+    "wasm",
+    "node",
+  ])("recognizes .%s code files", (extension) =>
+    expect(hasCode([`unused.${extension}`], parse({}))).toBe(true),
   );
   it("also recognizes imports and leaves data files alone", () => {
-    expect(
-      packageHasServerCode(["PLUGIN.md", "data.json"], parse({}), []),
-    ).toBe(false);
-    expect(packageHasServerCode([], parse({ entry: "./server.js" }), [])).toBe(
-      true,
-    );
+    expect(hasCode(["PLUGIN.md", "data.json"], parse({}))).toBe(false);
+    expect(hasCode([], parse({ entry: "./server.js" }))).toBe(true);
   });
 });

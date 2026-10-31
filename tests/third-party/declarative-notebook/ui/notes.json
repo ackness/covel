@@ -1,0 +1,21 @@
+{
+  "id": "notebook",
+  "label": "Notebook",
+  "alwaysRender": true,
+  "dataSource": { "namespace": "notes" },
+  "view": {
+    "component": "Stack",
+    "children": [
+      {
+        "component": "Stack",
+        "repeat": { "statePath": "/entries", "key": "key" },
+        "children": [
+          {
+            "component": "Text",
+            "props": { "content": { "$item": "value/text" } }
+          }
+        ]
+      }
+    ]
+  }
+}

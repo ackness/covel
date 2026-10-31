@@ -4,6 +4,8 @@ This page collects the rules that every plugin author runs into: what you must d
 
 Before you read this page, finish [your first plugin](./first-plugin.md). That page walks you through a complete run. This page explains the rules to follow after that run works.
 
+When functions are unnecessary, combine [prompts, datasets and UI](./prompt-only.md) in a declarative package without an entry or extraction. Code approval depends on current files; see [installation](../reference/plugin-installation.md#declarative-plugins).
+
 ## Where to read next
 
 | What you want to do                                         | Read this page                             |

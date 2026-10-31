@@ -244,6 +244,18 @@ const pluginRuntimeSummarySchema: z.ZodType<PluginRuntimeSummary> = z
 export const pluginSummarySchema: z.ZodType<PluginSummary> = z
   .object({
     id: z.string().min(1),
+    executionMode: z.enum(["declarative", "code", "unknown"]),
+    executionDiagnostics: z
+      .array(
+        z
+          .object({
+            file: z.string(),
+            field: z.string().optional(),
+            message: z.string(),
+          })
+          .strict(),
+      )
+      .optional(),
     displayName: i18nTextSchema,
     description: i18nTextSchema,
     kind: z.enum(["core", "plugin"]),

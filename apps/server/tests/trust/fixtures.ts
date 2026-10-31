@@ -8,6 +8,8 @@ import {
   compileInlineRuntime,
   computePluginCapabilities,
   packageHasServerCode,
+  assessPluginExecution,
+  readPackageInventory,
   parsePluginMd,
   type PluginRegistryEntry,
 } from "@covel/plugin-loader";
@@ -51,13 +53,20 @@ export async function packageFixture(
   const capabilities = computePluginCapabilities({
     root: parsed,
     runtimes,
-    hasServerCode: packageHasServerCode(Object.keys(files), parsed, runtimes),
+    hasServerCode: packageHasServerCode(
+      assessPluginExecution({ files: entries, root: parsed, runtimes }),
+    ),
   });
   const preview: GithubPluginPreview = {
     id,
     description: "Probe",
     author: null,
     version: null,
+    executionMode: assessPluginExecution({
+      files: entries,
+      root: parsed,
+      runtimes,
+    }).mode,
     hasServerCode: capabilities.serverCode,
     capabilities: options.snapshot ?? capabilities,
     trustedSource: options.snapshot !== null && options.trusted !== false,
@@ -77,7 +86,13 @@ export async function packageFixture(
     await mkdir(path.dirname(filename), { recursive: true });
     await writeFile(filename, entry.content);
   }
+  const inventory = await readPackageInventory(directory);
   const entry: PluginRegistryEntry = {
+    executionAssessment: {
+      ...assessPluginExecution({ files: entries, root: parsed, runtimes }),
+      signature: inventory.signature,
+      digest: inventory.digest,
+    },
     id,
     rootPath: directory,
     source: options.source ?? "community",

@@ -4,6 +4,8 @@ import type { PluginMessageCatalog } from "../utils/plugin-messages.js";
 
 /** Level 2: fully loaded runtime ready for execution. */
 export interface LoadedRuntime {
+  /** Loader-owned policy, never part of an authored or persisted runtime manifest. */
+  readonly executionMode?: "declarative" | "code" | "unknown";
   readonly manifest: RuntimeManifest;
   readonly promptTemplate: string;
   readonly outputSchema?: Readonly<Record<string, unknown>>;

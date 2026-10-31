@@ -3,7 +3,15 @@ import os from "node:os";
 import path from "node:path";
 import { expect, it } from "vitest";
 import { Document, parseDocument } from "yaml";
-import { parsePluginMd, parseRuntimeMd } from "../src/index.js";
+import {
+  discoverPluginAt,
+  loadPluginDefinition,
+  loadPluginUiSpecs,
+  loadRuntime,
+  parsePluginMd,
+  parseRuntimeMd,
+  validatePluginPackage,
+} from "../src/index.js";
 import { readPlainYamlFrontmatter } from "../src/plain-yaml-frontmatter.js";
 import { validateRuntimeDeclarations } from "../src/static-validation.js";
 import { runValidateManifest } from "../scripts/run-validate-manifest.js";
@@ -24,7 +32,9 @@ it.each([
   async ({ guide, id, multiRuntime }) => {
     const document = await readFile(path.join(guidesRoot, guide), "utf8");
     const manifests = [
-      ...document.matchAll(/```yaml\n(---\n[\s\S]*?)\n```/g),
+      ...document
+        .split("<!-- declarative-notebook-example -->")[0]!
+        .matchAll(/```yaml\n(---\n[\s\S]*?)\n```/g),
     ].map((match) => match[1]!);
     expect(manifests.length).toBeGreaterThanOrEqual(multiRuntime ? 3 : 1);
     const temporary = await mkdtemp(
@@ -224,3 +234,74 @@ it("imports plugin helper examples from the author SDK", async () => {
   )?.[1];
   expect(origin).toBe("@covel/plugin-handlers-utils");
 });
+
+it.each(["", "en/"])(
+  "loads the exact documented declarative distribution (%s)",
+  async (edition) => {
+    const document = await readFile(
+      path.join(guidesRoot, `../${edition}plugins/prompt-only.md`),
+      "utf8",
+    );
+    const temporary = await mkdtemp(
+      path.join(os.tmpdir(), "covel-notebook-guide-"),
+    );
+    const root = path.join(temporary, "declarative-notebook");
+    const files = [
+      ...document.matchAll(
+        /<!-- notebook-file:([^ ]+) -->\s+```[^\n]+\n([\s\S]*?)\n```/g,
+      ),
+    ];
+    expect(files).toHaveLength(6);
+    try {
+      for (const [, name, content] of files) {
+        const target = path.join(root, name!);
+        await mkdir(path.dirname(target), { recursive: true });
+        await writeFile(target, content!);
+        const fixture = await readFile(
+          path.resolve(
+            guidesRoot,
+            "../../tests/third-party/declarative-notebook",
+            name!,
+          ),
+          "utf8",
+        );
+        if (name === "PLUGIN.md") {
+          const documented = readPlainYamlFrontmatter(content!);
+          const distributed = readPlainYamlFrontmatter(fixture);
+          expect(documented.data).toEqual(distributed.data);
+          expect(documented.body.trim()).toBe(distributed.body.trim());
+        } else expect(content!.trim(), name).toBe(fixture.trim());
+      }
+      const report = await validatePluginPackage(root);
+      expect(report.ok, JSON.stringify(report.issues)).toBe(true);
+      const discovery = (await discoverPluginAt(root))!;
+      const definition = await loadPluginDefinition(discovery);
+      expect(definition.executionAssessment?.mode).toBe("declarative");
+      const loaded = await loadRuntime(
+        discovery,
+        "declarative-notebook",
+        "en",
+        definition,
+      );
+      expect(loaded.handler).toBeUndefined();
+      expect(loaded.datasetSchemas?.notes).toMatchObject({
+        type: "object",
+        required: ["id", "text"],
+      });
+      expect(loaded.manifest.tools?.datasets).toEqual([
+        { dataset: "notes", tools: ["list", "upsert"] },
+      ]);
+      expect(
+        (
+          await loadPluginUiSpecs(
+            root,
+            "declarative-notebook",
+            definition.packageManifest.plugin.contributes?.ui,
+          )
+        ).diagnostics,
+      ).toEqual([]);
+    } finally {
+      await rm(temporary, { recursive: true, force: true });
+    }
+  },
+);

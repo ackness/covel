@@ -47,6 +47,7 @@ const plugins: PluginSummary[] = ["builtin", "community"].map((id) => ({
   kind: "plugin",
   source: id === "builtin" ? "builtin" : "community",
   // Loading an entry for another session never grants this new one approval.
+  executionMode: "code" as const,
   hostState: "loaded",
   runtimeCount: 1,
   provides: [],
