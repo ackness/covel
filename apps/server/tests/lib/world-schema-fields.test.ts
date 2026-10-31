@@ -1,8 +1,11 @@
 // @vitest-environment node
-import { mkdtemp, mkdir, writeFile } from "node:fs/promises";
+import { spawnSync } from "node:child_process";
+import { mkdtemp, mkdir, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
+import { parse as parseYaml } from "yaml";
+import { validateWorldManifest } from "@covel/shared";
 import { loadSingleWorld } from "../../src/world-seed-loader.js";
 import { loadWorldDataDescriptor } from "../../src/world-data/descriptor.js";
 import { validateWorldPackage } from "../../src/world-data/validate-world-package.js";
@@ -46,6 +49,85 @@ async function makeWorld(withUnknownFields: boolean): Promise<string> {
 }
 
 describe("world package format fields", () => {
+  it("documents a valid prefixed world selection in the collection scaffold", async () => {
+    const parent = await mkdtemp(path.join(tmpdir(), "covel-scaffold-"));
+    const collection = path.join(parent, "watch");
+    const scaffold = spawnSync(
+      process.execPath,
+      [
+        path.resolve(
+          import.meta.dirname,
+          "../../../../scripts/create-collection.js",
+        ),
+        "watch",
+        collection,
+      ],
+      { encoding: "utf8" },
+    );
+    expect(scaffold.status, scaffold.error?.message ?? scaffold.stderr).toBe(0);
+    const readme = await readFile(path.join(collection, "README.md"), "utf8");
+    const example = /```yaml\n([\s\S]*?)\n```/.exec(readme)?.[1];
+    expect(example).toBeDefined();
+    const selection = parseYaml(example ?? "");
+    expect(selection).toEqual({
+      plugins: [
+        "pack:traditional-story",
+        "plugin:my-checker",
+        "contract:action-check@1",
+      ],
+    });
+    const validation = validateWorldManifest({
+      name: "Watch",
+      summary: "Keep watch.",
+      defaultLocale: "en-US",
+      ...selection,
+    });
+    expect(validation.errors).toBeUndefined();
+    expect(validation.valid).toBe(true);
+  });
+
+  it.each([
+    ["en-US", "Edited watch"],
+    ["ja-JP", "編集した見張り"],
+  ])(
+    "resolves edited revision pitch in content locale %s",
+    async (locale, label) => {
+      const worldDir = await makeWorld(false);
+      await writeFile(
+        path.join(worldDir, "world.yaml"),
+        `${manifest}pluginPitch:\n  label: Original\n  reason: Original reason\n`,
+      );
+      const world = (await loadSingleWorld(worldDir))!;
+      const edited = {
+        ...world,
+        locale,
+        metadata: {
+          ...world.metadata,
+          pluginPitch: {
+            label: { "en-US": "Edited watch", "ja-JP": "編集した見張り" },
+            description: "Edited description",
+          },
+        },
+      };
+      for (const directory of [undefined, worldDir]) {
+        const sections = await worldSectionsOf(edited, directory);
+        expect(parseYaml(sections.yaml).pluginPitch).toEqual({
+          label,
+          description: "Edited description",
+        });
+        const removed = await worldSectionsOf(
+          { ...edited, metadata: { ...edited.metadata, pluginPitch: null } },
+          directory,
+        );
+        expect(parseYaml(removed.yaml)).not.toHaveProperty("pluginPitch");
+      }
+      expect(edited.metadata.pluginPitch.label).toEqual({
+        "en-US": "Edited watch",
+        "ja-JP": "編集した見張り",
+      });
+    },
+  );
+
   it.each([false, true])(
     "loads data and reports only ignored root fields (old fields=%s)",
     async (withUnknownFields) => {

@@ -14,4 +14,4 @@
 - **World content selects its data receivers automatically.** Enabled files, character extensions and portable records request accepted data contracts independently of gameplay capabilities. A unique eligible receiver joins automatically; ambiguity, exclusions and approval remain player choices. Unknown structured files receive an actionable author warning.
 - **Players see safe explanations for omitted world data.** Hidden source identities and errors stay private, and unreceived conventional sources preserve their managed records during sync.
 
-- **World introductions default to public name, summary and tags.** Optional `pluginPitch` fields override each value independently, with locale resolution at display time. Derived text never reads private lore and is never saved as authored data.
+- **World introductions default to public name, summary and tags.** Optional `pluginPitch` fields override each value independently, with locale resolution at display time. Revisions preserve edits and removals, resolving translated pitch to the world's content language before writing authored YAML. Derived text never reads private lore and is never saved as authored data.

@@ -21,10 +21,14 @@ Each of quests, items, and affinity is handled by one plugin. You need to do two
 
 Keep the chosen gameplay pack. The actual quest, item and affinity files below automatically select their unique eligible receivers. Several candidates require a player choice; exclusions and approval still apply. Undeclared files do not acquire contracts from their basenames. See [receiver rules](../reference/world-data.md#data-receivers).
 
+Open `world.yaml`, and check that the `plugins` list uses prefixed references:
+
 ```yaml
 plugins:
   - pack:traditional-story
 ```
+
+`pack:` selects a base gameplay pack; `plugin:` requests a plugin independently. Independent requests survive pack changes even when the previous pack also included that plugin. Plugins the player explicitly excludes stay off. To request a capability without naming a plugin, use a `contract:` reference, such as `contract:action-check@1`. See [plugin selection](../reference/world-data.md#plugin-selection-pluginpolicy) for the full rules.
 
 ## 2. Write a starting quest
 
@@ -122,7 +126,7 @@ Restart Covel, start a new session in 潮灯镇, and then look at the right pane
 | Character names in the story do not match the panel | Several files write the same person's name differently. Use the same name as in `WORLD.md`                           |
 
 > [!NOTE]
-> If you have written the data file but the matching plugin is not enabled, validation does not report an error, and the data is simply not used. So step 1 cannot be skipped.
+> When a requested plugin is missing, validation and preparation show a notice. Play can start, but the corresponding data is not imported. If the plugin is installed but the player turns it off, its content is also absent; independent requests do not override player exclusions.
 
 ## What else you can preset
 

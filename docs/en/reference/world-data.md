@@ -440,7 +440,7 @@ The former `pluginPolicy` and its `preset`, `plus`, `packs` and `requires` field
 
 ### World records and world packages
 
-Revisions preserve the record's edited `plugins` and explicit `pluginPitch`, including removal of either field. Restoring a package deliberately reloads its authored values. Derived pitch never enters either transport.
+Revisions preserve the record's edited `plugins` and explicit `pluginPitch`, including removal of either field. Translated pitch fields resolve to strings in the world's content locale when building revision input. A revision writes only that language, keeping runtime locale maps out of authored YAML. Restoring a package deliberately reloads its authored values. Derived pitch never enters either transport.
 
 Covel plays the **world record** in the database. The files of a world package are only the format for installing, importing and exporting a world:
 

@@ -69,9 +69,21 @@ what you want, and confirm once.
 - \`plugins/<id>/\` holds each plugin: a \`PLUGIN.md\`, and a \`package.json\` only when the plugin needs one.
 - \`worlds/<id>/\` holds each world (\`world.yaml\` and \`WORLD.md\`).
 
-A world states the capabilities it needs in \`plugins\`, as
-contract IDs such as \`action-check@1\`. Ship a plugin that provides each one,
-or rely on a plugin bundled with Covel.
+A world selects gameplay through prefixed references in \`plugins\`:
+
+\`\`\`yaml
+plugins:
+  - pack:traditional-story
+  - plugin:my-checker
+  - contract:action-check@1
+\`\`\`
+
+The first \`pack:\` reference selects the initial pack; later packs are
+alternatives. Independent \`plugin:\` requests survive pack changes, even
+when the previous pack also included them. Player exclusions still win.
+Ship a provider for each \`contract:\` reference, or rely on one bundled
+with Covel. Missing plugins and unknown packs produce located diagnostics;
+missing capabilities reduce gameplay without preventing play.
 
 ## Check
 

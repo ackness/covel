@@ -1832,10 +1832,10 @@ SSE。先发一个 `ready` 事件，之后每 15 秒发一行注释保持连接�
 
 - 没有 `lore` 和 `dimensions`。
 - 顶层可选的 `updateAvailable` 比较包文件与记录导入时保存的摘要：不同为 `true`，相同为 `false`。没有包、没有已保存摘要，或包当前不可读时省略。每次读取重新检查，不写世界记录，也不查询 GitHub。
-- `metadata` 只保留这些键：`source`、`storage`、`packageManaged`、`generated`、`cover`、`accentColor`、`supportedLocales`、`packageInfo`、`defaultViewMode`、`pluginSettings`，以及 `localizedText` 里的 `name` / `description`。
+- `metadata` 只保留这些键：`source`、`storage`、`packageManaged`、`generated`、`cover`、`accentColor`、`supportedLocales`、`packageInfo`、`defaultViewMode`、`pluginSettings`、`plugins`、`pluginPitch`，以及 `localizedText` 里的 `name` / `description`。
 - 各语言的设定正文 `localizedText.lore` 不在摘要里。
-- 其余键（`dimensions`、`embeddedCharacters`、`embeddedLorebook`、`characterSchema`、`plugins`、`worldData` 等）要用 `GET /api/worlds/:id` 读完整记录。
-- 世界的插件策略解析结果见 `GET /api/worlds/:id/plugin-plan`。
+- 其余键（`dimensions`、`embeddedCharacters`、`embeddedLorebook`、`characterSchema`、`worldData` 等）要用 `GET /api/worlds/:id` 读完整记录。
+- 世界的插件选择解析结果见 `GET /api/worlds/:id/plugin-plan`。
 
 内置四个世界的列表约 3.9 KB。
 
