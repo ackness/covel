@@ -166,9 +166,9 @@ const ruleSchema = z.strictObject({
   /** Protocols the rule applies to; `""` is "no protocol stated". */
   protocols: z.array(z.string()).optional(),
   /**
-   * Patterns the lower-cased provider name of the slot must match: a rule
-   * about one vendor's own endpoint, which a relay of the same models may not
-   * share. Absent: any provider.
+   * Patterns the lower-cased provider name of the slot must match. Only for
+   * differences in the provider's endpoint API; model/protocol constraints
+   * also apply through relays and must not use this filter. Absent: any provider.
    */
   providers: z.array(pattern).optional(),
   /** Applies only to a model whose thinking is always on. */
