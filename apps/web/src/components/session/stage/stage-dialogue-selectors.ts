@@ -1,13 +1,5 @@
 import type { StreamMessage } from "@/stores/session-store/types.js";
 
-/** The speaker contract and the typewriter must use identical boundaries. */
-export function splitStageParagraphs(text: string): string[] {
-  return text
-    .replace(/\r\n/g, "\n")
-    .replace(/\n{3,}/g, "\n\n")
-    .split("\n\n");
-}
-
 /**
  * The nameplate of each paragraph of a committed story: one entry per
  * segment (a story's text is its segments joined by blank lines), `null` for
@@ -33,17 +25,4 @@ export function lastStorySpeaker(
         ...(segment.speakerId ? { characterId: segment.speakerId } : {}),
       }
     : undefined;
-}
-
-export function stageParagraphSpeakerName(
-  segmentSpeakers: readonly (string | null)[] | undefined,
-  text: string,
-  paragraphIndex: number,
-): string | undefined {
-  if (!segmentSpeakers) return undefined;
-  const count = splitStageParagraphs(text).length;
-  if (count !== segmentSpeakers.length) {
-    return undefined;
-  }
-  return segmentSpeakers[paragraphIndex] ?? undefined;
 }

@@ -256,3 +256,85 @@ test("full cast updates preserve newcomers and explicit none and reduced motion 
     await closeHost(page, host);
   }
 });
+
+test("committed segment reveal supports keyboard Show all, reduced motion and instant reload", async ({
+  page,
+}) => {
+  let submission = 0;
+  const host = await startStageRenderHost({
+    llmAdapter: {
+      async generate() {
+        const index = ++submission;
+        return {
+          content: "",
+          toolCalls: [
+            {
+              id: `submission-${index}`,
+              name: "submit-output",
+              arguments: JSON.stringify({
+                segments: [
+                  {
+                    kind: "dialogue",
+                    speaker: "Unknown visitor",
+                    text: `Public dialogue ${index}.`,
+                  },
+                  {
+                    kind: "dialogue",
+                    speaker: "Unknown visitor",
+                    text: `Complete second paragraph ${index}.`,
+                  },
+                  {
+                    kind: "dialogue",
+                    speaker: "Unknown visitor",
+                    text: `Complete third paragraph ${index}.`,
+                  },
+                ],
+                cues: { scene: "Library", present: ["Mira"] },
+                yield: "user",
+              }),
+            },
+          ],
+          finishReason: "tool_calls",
+          usage: { inputTokens: 1, outputTokens: 1 },
+        };
+      },
+    },
+  });
+  try {
+    await openSession(page, host);
+    await page.clock.install();
+    await page.clock.pauseAt(new Date());
+    await composerInput(page).fill("Continue with a complete story");
+    await composerInput(page).press("Enter");
+    await expect(page.getByTestId("story-segments").last()).toContainText(
+      "Public dialogue 2.",
+    );
+    await expect(page.locator('[data-reveal-hidden="true"]')).toHaveCount(2);
+    await expect(composerInput(page)).toBeEnabled();
+    const showAll = page.getByRole("button", { name: "显示全部", exact: true });
+    await showAll.focus();
+    await showAll.press("Enter");
+    await expect(page.locator('[data-reveal-hidden="true"]')).toHaveCount(0);
+    await expect(
+      page.getByText("Complete third paragraph 2.", { exact: true }),
+    ).toBeVisible();
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await composerInput(page).fill("Read the next story instantly");
+    await composerInput(page).press("Enter");
+    await expect(
+      page.getByText("Public dialogue 3.", { exact: true }),
+    ).toBeVisible();
+    await expect(page.locator('[data-reveal-hidden="true"]')).toHaveCount(0);
+    await expect(showAll).toHaveCount(0);
+    await page.reload();
+    await expect(
+      page.getByText("Complete third paragraph 3.", { exact: true }),
+    ).toBeVisible();
+    await expect(page.locator('[data-reveal-hidden="true"]')).toHaveCount(0);
+    await expect(composerInput(page)).toBeEnabled();
+  } finally {
+    await page.goto("about:blank");
+    await page.unrouteAll({ behavior: "wait" });
+    await host.close();
+  }
+});

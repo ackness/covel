@@ -331,3 +331,7 @@ Ordinary device-settings export/import can carry the identity; session exports, 
 ## Sandbox selection and consent
 
 Main/composer selection lasts only for the current mount/session visit, without SettingsStore, session metadata or snapshot writes. Both reuse the content/capability consent keys above; `surface` participates in the whole-spec hash. Only persisted true grants allow mounting. Revocation or cross-window refresh retires access immediately, even if saving fails. See [sandbox main view and composer](./ui-panels.md#sandbox-main-view-and-composer).
+
+### Instant text
+
+Settings → General → **Instant text** stores the device-local boolean `ui.instantText`, default `false`. Turning it on overrides any plugin segment-reveal policy and immediately finishes an active reveal. Turning it off permits future opted-in content; it does not replay existing text. Ordinary SettingsStore validation, persistence, export and revision handling apply. This preference does not enter session metadata, snapshots or proposals; individual reveal timers and visibility never enter settings. Without an authored reveal policy, rendering is instant regardless of the preference.

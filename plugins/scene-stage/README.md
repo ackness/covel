@@ -57,3 +57,5 @@ start any runtime. **Use default appearance** stays in host controls, including
 immersive stage mode, and preserves the player's base theme and overrides.
 Settings, approvals and page bars keep their host appearance. See the
 [theme contract](../../docs/en/reference/theme-packages.md#restricted-themes-supplied-by-plugins).
+
+对白模板通过 `reveal: {mode: "segments"}` 选择通用的提交后分段显示，默认间隔与上限见 [Reveal](../../docs/reference/ui-components.md#完整内容的分段显示)。聊天和舞台使用同一策略；减少动态效果、立即显示文字、显示全部、历史恢复与重新挂载都会立即显示完整正文，不影响输入与回合推进。此更新只改变显示，不需要重建会话。

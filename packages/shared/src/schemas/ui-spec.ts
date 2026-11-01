@@ -17,6 +17,8 @@ import {
   sessionMessagesPropsSchema,
   sessionComposerPropsSchema,
   exitTransitionSchema,
+  revealPolicySchema,
+  revealPropsSchema,
 } from "./catalog.js";
 
 /** The newest `specVersion` this host understands. */
@@ -91,6 +93,23 @@ const uiViewNodeSchema: z.ZodType = z.lazy(() =>
     })
     .superRefine((node, ctx) => {
       const name = node.component ?? node.type;
+      if (name === "Reveal") {
+        const props = revealPropsSchema
+          .extend({
+            revealKey: z.union([z.string().min(1).max(256), filterItemsSchema]),
+          })
+          .safeParse(node.props ?? {});
+        if (!props.success)
+          for (const issue of props.error.issues)
+            ctx.addIssue({ ...issue, path: ["props", ...issue.path] });
+        for (const field of ["on", "watch"] as const)
+          if (node[field] !== undefined)
+            ctx.addIssue({
+              code: "custom",
+              path: [field],
+              message: "Reveal is display-only; remove the action",
+            });
+      }
       if (name === "EntryList") {
         const policy = exitTransitionSchema
           .optional()
@@ -212,6 +231,7 @@ export const pluginUiSpecSchema = z
         height: z.number().int().min(80).max(800).optional(),
       })
       .optional(),
+    reveal: revealPolicySchema.optional(),
     view: uiViewNodeSchema.optional(),
   })
   .superRefine((spec, ctx) => {

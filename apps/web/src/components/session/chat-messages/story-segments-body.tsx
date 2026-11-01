@@ -1,3 +1,5 @@
+import { Reveal } from "@/lib/reveal/Reveal.js";
+import { useStoryReveal } from "@/lib/reveal/story-reveal-context.js";
 /**
  * The body of a committed story in the chat view, drawn through the plugin
  * segment templates (`contributes.ui.segment`) that match its segments.
@@ -28,6 +30,7 @@ import {
   compileSegmentTemplates,
   planSegmentTemplates,
   segmentTemplateState,
+  segmentRevealPolicy,
   type SegmentTemplate,
   type SegmentTemplateState,
 } from "@/lib/segment-templates.js";
@@ -44,9 +47,10 @@ export function StoryMessageBody({
   message,
   sessionId,
 }: {
-  readonly message: Pick<StreamMessage, "content" | "segments">;
+  readonly message: Pick<StreamMessage, "id" | "content" | "segments">;
   readonly sessionId: string | undefined;
 }) {
+  const admission = useStoryReveal(message);
   const state = useContext(SessionStateContext);
   const entries = state?.segmentUiSpecs;
   const templates = useMemo(
@@ -70,6 +74,8 @@ export function StoryMessageBody({
   const characters = state?.gameState.characters;
   return (
     <TemplatedStory
+      admission={admission}
+      messageId={message.id}
       segments={segments}
       plan={plan}
       characters={Array.isArray(characters) ? characters : NO_CHARACTERS}
@@ -79,11 +85,15 @@ export function StoryMessageBody({
 }
 
 const TemplatedStory = memo(function TemplatedStory({
+  admission,
+  messageId,
   segments,
   plan,
   characters,
   sessionId,
 }: {
+  readonly admission: ReturnType<typeof useStoryReveal>;
+  readonly messageId: string;
   readonly segments: NonNullable<StreamMessage["segments"]>;
   readonly plan: readonly (SegmentTemplate | undefined)[];
   readonly characters: readonly SnapshotCharacter[];
@@ -104,31 +114,37 @@ const TemplatedStory = memo(function TemplatedStory({
       data-testid="story-segments"
       className="ui-message-assistant ui-narrative prose prose-sm max-w-none border-0 p-0 text-sm wrap-break-word w-full"
     >
-      {segments.map((segment, index) => {
-        const template = plan[index];
-        const fallback = (
-          <Markdown themeSessionId={sessionId}>{segment.text}</Markdown>
-        );
-        if (!template) return <div key={index}>{fallback}</div>;
-        return (
-          <div key={index} data-segment-template={template.pluginId}>
-            <SegmentTemplateBoundary fallback={fallback}>
-              <div className="not-prose">
-                <SegmentTemplateView
-                  sessionId={sessionId}
-                  view={template.spec.view}
-                  state={segmentTemplateState(
-                    segment,
-                    index,
-                    characters,
-                    visuals,
-                  )}
-                />
-              </div>
-            </SegmentTemplateBoundary>
-          </div>
-        );
-      })}
+      <Reveal
+        revealKey={messageId}
+        {...admission}
+        {...segmentRevealPolicy(plan)}
+      >
+        {segments.map((segment, index) => {
+          const template = plan[index];
+          const fallback = (
+            <Markdown themeSessionId={sessionId}>{segment.text}</Markdown>
+          );
+          if (!template) return <div key={index}>{fallback}</div>;
+          return (
+            <div key={index} data-segment-template={template.pluginId}>
+              <SegmentTemplateBoundary fallback={fallback}>
+                <div className="not-prose">
+                  <SegmentTemplateView
+                    sessionId={sessionId}
+                    view={template.spec.view}
+                    state={segmentTemplateState(
+                      segment,
+                      index,
+                      characters,
+                      visuals,
+                    )}
+                  />
+                </div>
+              </SegmentTemplateBoundary>
+            </div>
+          );
+        })}
+      </Reveal>
     </div>
   );
 });

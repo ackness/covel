@@ -565,7 +565,8 @@
       "draftUnavailable": "此选择不可用，请选择当前主题。",
       "saving": "正在保存…"
     },
-    "revisingResponse": "正在修改回复"
+    "revisingResponse": "正在修改回复",
+    "showAll": "显示全部"
   },
   "blocks": {
     "actionPlaceholder": "或输入自定义行动...",
@@ -1004,6 +1005,10 @@
       "musicVolume": {
         "label": "音乐音量",
         "description": "0 到 100。播放旁白语音时音乐会自动压低。"
+      },
+      "instantText": {
+        "label": "立即显示文字",
+        "description": "立即显示完整故事，覆盖插件的分段显示设置。"
       }
     },
     "operatorAccessTitle": "托管服务运维访问",
@@ -2394,7 +2399,9 @@
     "decisionFromScene": "围绕「{{scene}}」，你准备怎么回应？",
     "sendLabel": "发送回应",
     "thinkingLabel": "叙事生成中…",
-    "advanceLabel": "点击继续对话"
+    "previousParagraph": "上一段",
+    "nextParagraph": "下一段",
+    "readAgain": "重新阅读"
   },
   "common": {
     "preview": "预览",

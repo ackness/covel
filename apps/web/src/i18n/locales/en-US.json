@@ -611,7 +611,8 @@
       "draftUnavailable": "Selection unavailable. Choose a current theme.",
       "saving": "Saving…"
     },
-    "revisingResponse": "Revising response"
+    "revisingResponse": "Revising response",
+    "showAll": "Show all"
   },
   "blocks": {
     "actionPlaceholder": "Or type your own action...",
@@ -1050,6 +1051,10 @@
       "musicVolume": {
         "label": "Music volume",
         "description": "From 0 to 100. The music lowers itself while a narrated line plays."
+      },
+      "instantText": {
+        "label": "Instant text",
+        "description": "Show complete stories immediately, even when a plugin requests segment reveal."
       }
     },
     "operatorAccessTitle": "Hosted operator access",
@@ -2462,7 +2467,9 @@
     "decisionFromScene": "How will you respond to “{{scene}}”?",
     "sendLabel": "Send response",
     "thinkingLabel": "Weaving the scene…",
-    "advanceLabel": "Continue the dialogue"
+    "previousParagraph": "Previous paragraph",
+    "nextParagraph": "Next paragraph",
+    "readAgain": "Read again"
   },
   "common": {
     "preview": "Preview",

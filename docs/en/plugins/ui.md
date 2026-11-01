@@ -383,6 +383,8 @@ contributes:
 
 `match` is required: `kind` matches segment kinds, `speaker` matches a character ID or name. A template only displays, with no authored action buttons or data source. The avatar above uses only the resolved speaker’s public portrait and supports host-local enlargement; missing imagery leaves the nameplate and prose readable. Paragraphs no template matches look as before. See [Segment templates](../reference/ui-panels.md#segment-templates) for the state it reads and how a template is chosen.
 
+The optional top-level `reveal: { "mode": "segments" }` requests local display of complete committed segments. It grants no actions or execution capability. The host chooses one policy for the whole story; see [segment templates](../reference/ui-panels.md#segment-templates) and [Reveal](../reference/ui-components.md#complete-content-reveal).
+
 ## 5. Give the player choices
 
 There is only one correct way to offer the player choices: put several `Choice` components inside a `ChoiceList`.

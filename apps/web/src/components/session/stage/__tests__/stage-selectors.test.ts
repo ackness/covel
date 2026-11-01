@@ -10,7 +10,6 @@ import {
   extractPendingFormMessages,
   filterStalePrompts,
   hasSubmittedForm,
-  initialStageReadStoryKey,
   mergeChoices,
   resolveBackdrop,
   stageStoryKey,
@@ -34,12 +33,6 @@ describe("stage story identity", () => {
     expect(stageStoryKey({ id: "message-2", turnId: "turn-1" })).toBe(
       "message-2",
     );
-  });
-  it("treats restored complete history as already read", () => {
-    expect(
-      initialStageReadStoryKey({ id: "message-1", turnId: "turn-1" }),
-    ).toBe("message-1");
-    expect(initialStageReadStoryKey(undefined)).toBeUndefined();
   });
 });
 

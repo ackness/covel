@@ -195,23 +195,36 @@ it("keeps stage narration and its sibling advance control separate and retains h
     <>
       <StageDialog
         sessionId="session-one"
-        storyText={"First paragraph.\n\nNext paragraph."}
+        message={{
+          id: "story",
+          content: "First paragraph.\n\nNext paragraph.",
+          segments: [
+            { kind: "narration", text: "First paragraph." },
+            { kind: "narration", text: "Next paragraph." },
+          ],
+        }}
 
         autoPlay={false}
         reducedMotion
-        onAllRead={() => {}}
       />
       <SessionRecoveryControls theme={theme} />
     </>,
   );
   const prose = screen.getByText(/First paragraph/);
-  expect(prose.getAttribute("data-covel-theme-part")).toBe("dialogue");
-  const advance = screen.getByRole("button", { name: "点击继续对话" });
+  expect(
+    prose
+      .closest("[data-covel-theme-part]")
+      ?.getAttribute("data-covel-theme-part"),
+  ).toBe("dialogue");
+  const advance = screen.getByRole("button", { name: "下一段" });
   expect(advance.closest("[data-covel-theme-part]")).toBeNull();
   expect(advance.querySelector("[data-covel-theme-part]")).toBeNull();
   fireEvent.click(advance);
   expect(
-    screen.getByText("Next paragraph.").getAttribute("data-covel-theme-part"),
+    screen
+      .getByText("Next paragraph.")
+      .closest("[data-covel-theme-part]")
+      ?.getAttribute("data-covel-theme-part"),
   ).toBe("dialogue");
   const reset = screen.getByRole("button", { name: "使用默认外观" });
   expect(reset.closest("[data-covel-theme-part]")).toBeNull();
@@ -281,7 +294,7 @@ it.each([false, true])(
     } satisfies StageViewProps;
     const stage = (immersive: boolean) => (
       <>
-        <StageView {...stageProps} immersive={immersive} replayStoryOnEnter />
+        <StageView {...stageProps} immersive={immersive} />
         <SessionRecoveryControls theme={theme} />
       </>
     );
@@ -292,7 +305,12 @@ it.each([false, true])(
       (screen.getByTestId("stage-decision-input") as HTMLTextAreaElement)
         .disabled,
     ).toBe(false);
-    const dialogue = screen.getByTestId("stage-dialog").querySelector("p");
+    const reader = screen.getByTestId("stage-dialog").querySelector("article");
+    const dialogue =
+      screen
+        .getByTestId("stage-dialog")
+        .querySelector("[data-covel-theme-part=dialogue]") ??
+      screen.getByTestId("stage-dialog").querySelector("p,span");
     expect(dialogue).not.toBeNull();
     expect(dialogue?.textContent).toContain("Current narration.");
     expect(dialogue?.getAttribute("data-covel-theme-part")).toBe(
@@ -304,10 +322,13 @@ it.each([false, true])(
       );
     view.rerender(stage(true));
     expectHostNotice();
-    expect(screen.getByTestId("stage-dialog").querySelector("p")).toBe(
-      dialogue,
-    );
-    const advance = screen.getByRole("button", { name: "点击继续对话" });
+    expect(
+      screen
+        .getByTestId("stage-dialog")
+        .querySelector("[data-covel-theme-part=dialogue]") ??
+        screen.getByTestId("stage-dialog").querySelector("p,span"),
+    ).toBe(dialogue);
+    const advance = screen.getByTestId("stage-decision-input");
     expect(advance.closest("[data-covel-theme-part]")).toBeNull();
     if (selected) {
       const reset = screen.getByRole("button", { name: "使用默认外观" });
@@ -318,9 +339,10 @@ it.each([false, true])(
       expect(
         document.querySelector("style[data-plugin-theme-style]"),
       ).toBeNull();
-      expect(screen.getByTestId("stage-dialog").querySelector("p")).toBe(
-        dialogue,
+      expect(screen.getByTestId("stage-dialog").querySelector("article")).toBe(
+        reader,
       );
+      expect(screen.getByText("Current narration.")).toBeDefined();
     }
     expect(stageProps.onSendMessage).not.toHaveBeenCalled();
   },

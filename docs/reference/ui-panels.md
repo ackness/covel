@@ -698,9 +698,10 @@ contributes:
 - **说话人怎样比较。** 先和段落的 `speakerId` 比，再和去掉首尾空白的 `speaker` 名字比。世界角色有稳定的 ID，按 ID 写能对准某个世界的角色；不知道 ID 的插件可以按名字写。
 - **选哪个模板。** 每个段落在所有匹配的模板里选最具体的：`kind + speaker` 优先于只写 `speaker`，只写 `speaker` 优先于只写 `kind`；同一级里按 ID 匹配的优先于按名字匹配的。还相同时，按 `/api/ui-specs?sessionId=` 返回的插件顺序，再按声明顺序。只有在会话里可运行的插件提供模板，与 `ui.message` 的筛选相同。
 - **模板读到的状态。** `/segment` 是已提交的段落 `{ kind, text, speaker?, speakerId? }`；`/index` 是段落位置（从 0 开始）；`/character` 是 `speakerId` 指向会话角色时的 `{ id, name, type }`；`/visual` 是这个角色已有的 `character.visual@1` 槽位值。没有插件数据、设置和别的 ID。
+- **显示策略。** 模板可在顶层添加 `reveal: { mode: "segments", intervalMs?: number }`，使用[通用 Reveal 策略](./ui-components.md#完整内容的分段显示)。先按原有规则为每段选择模板，再按故事顺序取第一个显式声明 `reveal` 的匹配模板，决定整条消息的策略；显式 `instant` 同样生效。没有显式策略时立即显示。宿主提供持久消息与内容版本标识，只有新提交的实时消息可以逐段显示。舞台对完整已提交段落使用同一策略，仍由宿主渲染。
 - **哪里用。** 只在聊天视图的 `parsed` 和 `detailed` 模式、只对带 `segments` 的已提交故事使用。有段落命中模板时，整条故事按段落依次显示：命中的段落用模板，其余段落用默认正文。一个段落都没命中时，消息和以前完全一样。舞台对话框和 `raw` 视图不用模板（`raw` 的 JSON 里能看到 `segments`）。
-- **宿主的操作失败提示。** 故事的持久提示在段落模板外绘制，解析和详细聊天都显示，插件缺失或模板替换正文也不会隐藏它。舞台在当前故事读完、选择和输入重新出现后仍显示提示，历史使用普通聊天页脚；提示不会挡住输入或重启打字。插件主题的隔离规则见[主题包](./theme-packages.md#在会话中选择)。原始模式只显示经过校验的结构化计数。文字按当前界面语言解析，故事正文和会话内容语言不变；没有关闭、重试或详情控件。完整自定义沙箱视图仍在宿主聊天外，不因此增加 bridge 字段或能力。字段见[消息 API](./api.md#get-apisessionsidmessages)。
-- **能用哪些组件。** 可用的显示组件为：`Stack`、`Row`、`Grid`、`Separator`、`Text`、`Badge`、`Icon`、`TagList`、`Source`、`Image`、`CharacterAvatar`、`Media`、`AudioPlayer`、`Card`、`CardList`、`EntryCard`、`StatBar`、`Progress`、`Accordion`、`Section`、`JsonView`、`EntryList`、`Prose`、`PlayerMessage`、`Alert`。会发消息、调用运行时、接收输入或读取会话数据的组件（如 `CandidateList`、`Button`、`Choice`、表单与输入组件、`SceneCastList`、`CharacterFieldsView`、各类画廊）都不能用。媒体总在当前会话里解析，`sessionId` prop 不生效。
+- **宿主的操作失败提示。** 故事的持久提示在段落模板外绘制，解析和详细聊天都显示，插件缺失或模板替换正文也不会隐藏它。舞台在故事显示期间和选择、输入可用时仍显示提示，历史使用普通聊天页脚；提示不会挡住输入或重启正文显示。插件主题的隔离规则见[主题包](./theme-packages.md#在会话中选择)。原始模式只显示经过校验的结构化计数。文字按当前界面语言解析，故事正文和会话内容语言不变；没有关闭、重试或详情控件。完整自定义沙箱视图仍在宿主聊天外，不因此增加 bridge 字段或能力。字段见[消息 API](./api.md#get-apisessionsidmessages)。
+- **能用哪些组件。** 可用的显示组件为：`Reveal`、`Stack`、`Row`、`Grid`、`Separator`、`Text`、`Badge`、`Icon`、`TagList`、`Source`、`Image`、`CharacterAvatar`、`Media`、`AudioPlayer`、`Card`、`CardList`、`EntryCard`、`StatBar`、`Progress`、`Accordion`、`Section`、`JsonView`、`EntryList`、`Prose`、`PlayerMessage`、`Alert`。会发消息、调用运行时、接收输入或读取会话数据的组件（如 `CandidateList`、`Button`、`Choice`、表单与输入组件、`SceneCastList`、`CharacterFieldsView`、各类画廊）都不能用。媒体总在当前会话里解析，`sessionId` prop 不生效。
 - **模板头像。** `CharacterAvatar` 的 `characterId` 必须等于已解析的 `/character/id`，通常绑定 `{ "$state": "/character/id" }`；相同的字面 ID 也合法。它只使用该说话人已投影的 `/visual/avatar`，不查槽位、会话、插件数据或服务。未解析的说话人、缺少 ID 或头像时不显示头像，正文仍可读。其他角色 ID 不会显示头像；`sessionId`、`ref`、`visual` 等 props 不能改换来源。缩略图和放大预览都使用宿主明确提供的当前会话。宿主的本地点击放大与关闭属于显示交互；插件 `on` / `watch`、RPC、输入、上传和发送消息仍不允许。切换会话、说话人或头像会关闭旧预览。
 - **出错怎么办。** 某个模板渲染失败时，只有这一段退回默认正文。模板写错时（缺少或空的 `match`、写了 `webview`、`dataSource`、`surfaces`、`group*`、`shortLabel`、`navTarget`、`alwaysRender`、`bridge`，view 里有 `on` / `watch`，或用了上面列表以外的组件），`pnpm validate:plugin` 和安装报错；加载时这一项给出带声明路径的诊断，同一个插件的其他模板照常使用。
 - `ui.segment` 不派生能力（与 `ui.view` 相同）：模板不运行代码，也不读数据。
@@ -723,7 +724,7 @@ contributes:
 
 ## 舞台模式（Stage View）
 
-舞台模式是视觉小说式的画面：场景背景、角色立绘和逐字出现的对话框。
+舞台模式是视觉小说式的画面：场景背景、角色立绘和完整已提交故事的阅读区。
 
 它是第四种呈现方式，`viewMode: "stage"`，和 `parsed` / `detailed` / `raw` 并列，在头部的 `GameViewHeader` 里切换。进入舞台后，消息区的三件东西（`ChatMessages`、`PendingDraftsBar`、`MessageComposer`）整个换成全屏舞台，`GameViewHeader` 保留。
 
@@ -741,20 +742,16 @@ contributes:
 | **Backdrop** | `stage.backdrop@1`                                     | 展示背景、场景名称和状态；缺图时使用世界视觉回退   |
 | **Sprites**  | `stage.cast@1` 与按角色 ID 索引的 `character.visual@1` | 站位、高亮、立绘与无图时的占位                     |
 | **Hud**      | `stage.backdrop@1`                                     | 展示名称、变体和来源状态                           |
-| **Dialog**   | 最新 story 正文与它的 `segments`                       | 打字、段落切分和逐段署名                           |
+| **Dialog**   | 最新 story 正文与它的 `segments`                       | 完整段落显示、阅读导航和逐段署名                   |
 | **Choices**  | `stage.choices@1` 与待提交 interaction choice block    | 情境回顾、决策问题、选项（`.ui-choice`）与自由输入 |
 
-**打字与决策面板的切换。**
+**阅读与决策面板。**
 
-- 对话框只读取完整的已提交故事和段落元数据；模型回复和工具输出不会形成临时故事。
-- 新叙事由 `StageDialog` 逐字显示，每一段停下来等玩家点击。最后一段读完同样停一次，等收尾的点击。自动播放按停顿时间自动往下走；正文末尾的空段落不产生空白的停顿。
-- 正文独立于“点击继续对话”按钮，读屏可以读取。逐字显示时暂停实时朗读，段落显示完再朗读；Tab 可聚焦推进按钮，Enter 或空格继续。
-- 完整正文播放完时，不会自动跳到决策面板。
-- 读完，并且回合执行结束后，同一个位置换成统一的决策面板。它依次显示：场景、“当前信息”摘要、“现在需要决定”的问题、分组的选项、行内的自由输入（和输入框共用模式、字段和角色选择，见[输入框模式](#输入框模式)）。
-- 提交后立刻隐藏整个旧的决策面板，包括插件扩展的区域。等新叙事时保留上一条已提交故事并显示“生成中”，不重播旧叙事。
-- 恢复会话，或从别的视图切进舞台时，挂载之前就存在的最新叙事算已读，不会重新打字。
-- `stage.choices@1` 的 `recap` 可省略；省略或为空时不显示“当前信息”，也不从叙事里截取摘要。`decision` 省略时，用 `scene` 或通用问题引导自由输入。没有建议提供者也能阅读叙事、提交自由输入。
-- `turnId` 可省略，表示不按回合限制的选项。有 `turnId` 的选项只在它匹配当前 story 回合时显示；当前回合未知时不显示。已提交的重试可通过回合解析器匹配源故事。提供者应为随回合过期的选项填写 `turnId`，不要依赖框架猜测旧数据。
+- 阅读区保留完整已提交故事。没有匹配模板显式启用时，正文立即显示；可选的逐段呈现使用通用 [Reveal](./ui-components.md#完整内容的分段显示)。原有逐字打字和最后一次点击的门槛已经移除。
+- 执行允许后立即显示选项与输入框。阅读位置、“显示全部”和自动播放都不延迟行动。执行中保留上一条已提交故事、进度与停止控件。
+- “上一段”“下一段”“重新阅读”只移动阅读区的位置，不改变焦点。自动播放移动阅读位置，不推进服务端回合。Markdown 块始终完整，包括带空行的代码块；名牌来自已提交段落的说话人。
+- 恢复历史、重载和切换视图时完整正文立即显示。回应区保留场景、上下文、决策、建议、自由输入和插件扩展。
+- 可选回顾与回合选项沿用原有槽位规则：不从故事猜测回顾，当前回合未知或选项过期时不显示回合选项；已提交重试解析到源回合。
 
 **槽位的预览与缓存。**
 
@@ -769,7 +766,6 @@ contributes:
 
 - 名牌来自已提交故事消息的 `segments`（见 [`narrative-engine@2` 的故事输出](./plugins.md#故事输出)）：每个段落就是一段，名牌是这一段的 `speaker`。内核在提交时把能解析的说话人换成角色的当前名字。没有插件需要为名牌提供数据。
 - 名牌来自已提交 `narrative.completed` 的解析后 `segments`。客户端自己不解析名字。
-- 打字机和署名校验共用 `splitStageParagraphs`：CRLF 转成 LF，三个以上的换行算一个空行分隔。正文结束后，分段的数量必须和段落数一致。
 - 以下情况不显示人物名牌：旁白、没有说话人的段落、没有 `segments` 的旧消息或纯文本故事。演员的焦点不参与署名。
 
 **尺寸与立绘。**
@@ -794,7 +790,7 @@ contributes:
 - **履历抽屉**：Hud 上的履历按钮打开一个 Radix `Dialog`。里面是用 `flex h-[80vh] flex-col` 包住的完整 `<ChatMessages viewMode="parsed">`，所以在舞台下仍然可以回看、滚动全部解析后的消息。
 - **表单模态**：舞台的对话框只接选项和自由文本。所以消息里出现还没提交的 **form 类** interaction block 时（`extractPendingFormMessages`），舞台弹出一个 `Dialog`，用 `MessageBlockRenderer` 让玩家填写。提交后自动关闭。
 
-实现位置：`apps/web/src/components/session/stage/`（`StageView.tsx` 负责组装，另有 `Stage{Backdrop,Sprites,Hud,Dialog,Choices}.tsx`、`stage-selectors.ts` 和 `use-typewriter.ts`）。
+实现位置：`apps/web/src/components/session/stage/`（`StageView.tsx` 负责组装，另有 `Stage{Backdrop,Sprites,Hud,Dialog,Choices}.tsx`、`stage-selectors.ts` 和通用的 `lib/reveal/` 渲染器）。
 
 ## 插件视图
 

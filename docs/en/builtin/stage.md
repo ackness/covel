@@ -17,7 +17,7 @@ You will see:
 
 - Background: a picture of the current scene. It can differ between day and night.
 - Portraits: the characters on stage stand in front of the background. The character who is speaking is highlighted.
-- Dialogue box: the story text is shown one paragraph at a time, with the speaker's name beside it (taken from the story's segments, shown once the story is complete). Click the screen to go to the next paragraph.
+- Reader: complete committed stories retain their paragraph speakers. Previous/Next paragraph and Read again navigate locally; choices and input never wait for a reading click.
 - Choices: when you need to decide, possible responses appear below the dialogue box. You can also click "✎ Write your own…" and write your own words.
 
 The name of the current scene is shown on the screen. A row of small buttons lets you open "History" (to look back at the conversation), turn "Auto-play" on or off, or enter "Fullscreen stage". To go back to the text view, click "Exit stage".
@@ -156,3 +156,5 @@ Scene Stage and Soundtrack `story-cues` use zero-budget presentation functions, 
 ### Optional reading appearance
 
 Scene Stage offers **Stage reading**. Enable the plugin, open **Session theme** in the session toolbar, choose it and click **Apply**. It starts off and changes only narrative/dialogue colors, typography and session layout options, without starting a story or selecting stage/plugin views. Immersive stage keeps the host **Use default appearance** button. Settings, approvals and host bars keep their appearance; player colors and narrative typography adjustments win. See [plugin themes](../reference/theme-packages.md#selecting-in-a-session).
+
+Scene Stage opts its dialogue template into the shared [segment reveal](../reference/ui-components.md#complete-content-reveal). Only newly committed live stories use it. History, reload and reduced motion are instant; **Show all** and the **Instant text** setting finish immediately. This changes presentation after commit and does not speed generation.

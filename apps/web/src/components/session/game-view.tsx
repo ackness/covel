@@ -1,3 +1,4 @@
+import { StoryRevealProvider } from "@/lib/reveal/story-reveal-context.js";
 import { ExecutionTimeline } from "./execution-timeline.js";
 import { usePluginThemes } from "./game-view/use-plugin-themes.js";
 import { SessionThemeSettings } from "./session-theme-settings.js";
@@ -304,7 +305,6 @@ export function GameView({
   // Full-screen stage: collapse both studio rails + hide the session header so
   // the stage fills the viewport. Session-memory only (no persistence).
   const [immersive, setImmersive] = useState(false);
-  const [replayStageStory, setReplayStageStory] = useState(false);
   // Warm the media cache with known stage art (sprites + scene backdrops)
   // during pre-game, so the opening turn paints them without a download stall.
   useStageMediaPreload(session.id);
@@ -463,7 +463,6 @@ export function GameView({
     retryOwner.current.main++;
     setFailures((previous) => ({ ...previous, main: undefined }));
     if (mode !== "stage") setImmersive(false);
-    setReplayStageStory(mode === "stage");
     setViewMode(mode);
   };
 
@@ -1097,7 +1096,6 @@ export function GameView({
             </>
           ) : stageActive ? (
             <StageView
-              replayStoryOnEnter={replayStageStory}
               composerReplaced={Boolean(activeComposer)}
               advancing={!!state.advance && state.advance.phase !== "stopped"}
               recoveryTurnId={recoveryTurnId}
@@ -1109,10 +1107,6 @@ export function GameView({
               world={world}
               messages={messages}
               executing={executing}
-              restoring={Boolean(
-                state.executionRecovery?.hydrating ||
-                state.executionRecovery?.checking,
-              )}
               executionError={executionError}
               executionSteps={executionSteps}
               plugins={plugins}
@@ -1183,7 +1177,9 @@ export function GameView({
         session.runtimeModelOverrides,
       )}
     >
-      {content}
+      <StoryRevealProvider sessionId={session.id} messages={messages}>
+        {content}
+      </StoryRevealProvider>
     </SessionModelUsesContext.Provider>
   );
 }

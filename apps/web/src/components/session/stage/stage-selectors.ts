@@ -36,13 +36,6 @@ export function stageStoryKey(
   return message?.id;
 }
 
-/** History already present at mount has been read elsewhere. */
-export function initialStageReadStoryKey(
-  message: Pick<StreamMessage, "id" | "turnId"> | undefined,
-): string | undefined {
-  return stageStoryKey(message);
-}
-
 // ── Backdrop (stage.backdrop@1) ──────────────────────
 
 export type StageBackdropKind = "scene" | "hero" | "gradient";

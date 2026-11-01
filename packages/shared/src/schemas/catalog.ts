@@ -5,6 +5,18 @@ import { i18nTextSchema } from "./world.js";
 export const exitTransitionSchema = z.enum(["none", "fade"]);
 export type ExitTransition = z.infer<typeof exitTransitionSchema>;
 
+/** Local display policy; never schedules execution or changes canonical content. */
+export const revealPolicySchema = z.strictObject({
+  mode: z.enum(["instant", "segments"]).default("instant"),
+  intervalMs: z.number().int().min(0).max(500).default(120),
+});
+export type RevealPolicy = z.infer<typeof revealPolicySchema>;
+export type RevealPolicyInput = z.input<typeof revealPolicySchema>;
+
+export const revealPropsSchema = revealPolicySchema.extend({
+  revealKey: z.string().min(1).max(256),
+});
+
 /** Live declarative views use host rendering, never author-selected session data. */
 export const sessionMessagesPropsSchema = z.strictObject({
   content: z.enum(["story", "pending"]).default("story"),

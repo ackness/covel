@@ -6,6 +6,7 @@
  * discovery only to fail later because its component is not renderable.
  */
 export const PLUGIN_UI_COMPONENT_NAMES = [
+  "Reveal",
   "Stack",
   "Row",
   "Grid",
@@ -71,6 +72,7 @@ export type PluginUiComponentName = (typeof PLUGIN_UI_COMPONENT_NAMES)[number];
  * host-projected speaker visual; its local portrait preview reads no extra data.
  */
 export const SEGMENT_TEMPLATE_COMPONENT_NAMES = [
+  "Reveal",
   "Stack",
   "Row",
   "Grid",

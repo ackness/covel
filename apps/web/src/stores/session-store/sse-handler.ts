@@ -1,3 +1,4 @@
+import { admitCommittedStory } from "@/lib/reveal/committed-stories.js";
 import { readExecutionProgress } from "./execution-progress.js";
 import { handlePluginFaultNotice } from "./fault-notices.js";
 import i18n from "i18next";
@@ -238,6 +239,7 @@ export function createSseEventHandler(
               runtimeId: runtimeId !== "unknown" ? runtimeId : undefined,
               ...(segments.success ? { segments: segments.data } : {}),
             };
+            admitCommittedStory(envelope.sessionId, msg);
             deps.dispatch({
               type: "COMPLETE_MESSAGE",
               turnId: turnId ?? "unknown",

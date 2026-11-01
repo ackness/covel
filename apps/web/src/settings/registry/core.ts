@@ -66,6 +66,17 @@ export function registerCoreSettings(store: SettingsStoreApi): void {
   });
 
   store.register({
+    key: "ui.instantText",
+    schema: z.boolean(),
+    default: false,
+    group: "general",
+    widget: "toggle",
+    label: "Instant text",
+    description:
+      "Show complete stories immediately, even when a plugin requests segment reveal.",
+  });
+
+  store.register({
     key: "ui.chatMessageWindow",
     schema: z.number().int().min(200).max(20000),
     default: 2000,

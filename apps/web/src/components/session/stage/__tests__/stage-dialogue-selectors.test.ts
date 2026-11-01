@@ -2,8 +2,6 @@
 import { describe, expect, it } from "vitest";
 import {
   lastStorySpeaker,
-  splitStageParagraphs,
-  stageParagraphSpeakerName,
   storyParagraphSpeakers,
 } from "../stage-dialogue-selectors.js";
 
@@ -39,32 +37,5 @@ describe("story segment speakers", () => {
     ).toEqual({ name: "阿雅", characterId: "char-aya" });
     expect(lastStorySpeaker({ id: "msg-1", segments: [] })).toBeUndefined();
     expect(lastStorySpeaker(undefined)).toBeUndefined();
-  });
-});
-
-describe("stage paragraph presentation", () => {
-  it("attributes complete paragraphs only when segment boundaries match", () => {
-    const names = ["Mio", "Rin", null];
-    expect(stageParagraphSpeakerName(names, "First", 0)).toBeUndefined();
-    expect(
-      stageParagraphSpeakerName(names, "First\n\nSecond\n\nNarration", 1),
-    ).toBe("Rin");
-    expect(
-      stageParagraphSpeakerName(names, "First\n\nSecond\n\nNarration", 2),
-    ).toBeUndefined();
-    expect(
-      stageParagraphSpeakerName(names, "First\n\nSecond", 0),
-    ).toBeUndefined();
-    expect(
-      stageParagraphSpeakerName(names, "First\n\nSecond\n\nThird\n\nFourth", 0),
-    ).toBeUndefined();
-  });
-
-  it("uses the same CRLF and repeated-newline boundaries as the typewriter", () => {
-    expect(splitStageParagraphs("First\r\n\r\nSecond\n\n\nNarration")).toEqual([
-      "First",
-      "Second",
-      "Narration",
-    ]);
   });
 });
