@@ -102,8 +102,9 @@
         "$TURBO_DEFAULT$",
         "$TURBO_ROOT$/vitest.base.ts",
         "$TURBO_ROOT$/packs/builtin.yaml",
-        "$TURBO_ROOT$/worlds/*/world.yaml",
-        "$TURBO_ROOT$/plugins/*/PLUGIN.md"
+        "$TURBO_ROOT$/worlds/**",
+        "$TURBO_ROOT$/plugins/*/PLUGIN.md",
+        "$TURBO_ROOT$/plugins/*/runtimes/*/RUNTIME.md"
       ]
     },
     "@covel/desktop#lint": {

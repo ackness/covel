@@ -53,6 +53,7 @@ test("a file a suite reads from outside its package selects that suite alone", (
   ]);
   assert.deepEqual(select("worlds/mistport/WORLD.md").filters, [
     "@covel/server",
+    "@covel/site",
   ]);
   assert.deepEqual(select("scripts/create-plugin.js").filters, [
     "@covel/test-runtime",
