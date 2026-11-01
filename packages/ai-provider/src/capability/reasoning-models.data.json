@@ -7,6 +7,7 @@
       "known": ["deepseek-(?:v4|flash|chat|reasoner|r1)"],
       "tableFlag": true,
       "format": "thinking-type",
+      "reasoningContentRequired": true,
       "sampling": { "ignoredWhileThinking": true },
       "rules": [{ "default": "high", "levels": ["disabled", "high", "max"] }]
     },
