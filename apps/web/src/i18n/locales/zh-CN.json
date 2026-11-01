@@ -1474,6 +1474,7 @@
     "description": "调整外观、模型、扩展包和本地数据。",
     "desktopRefreshFailed": "无法刷新桌面信息，请重试。",
     "providerImportSucceeded": "已导入服务商和模型。",
+    "providerRolesAssigned": "已分配模型用途：{{roles}}",
     "numberExample": "例如 {{value}}",
     "pricePerImageValue": "{{price}}/张",
     "pricePerMillionValue": "{{price}}/百万 token",

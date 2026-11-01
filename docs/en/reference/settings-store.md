@@ -296,6 +296,7 @@ Which key belongs to what:
 **Timing in the UI.**
 
 - When a connection or a model is added, the dialog closes only after the save succeeds. Repeat submissions are disabled while saving. On failure the input is kept for a retry.
+- When the first provider is added, [automatically assigned roles](./slots.md#provider-and-model-ids) are saved together with the model. The assignment result is reported only after the save succeeds.
 - The endpoint of an existing connection and a model name also update their confirmed values only after the save succeeds. Blur trims surrounding whitespace, so this save is not mistaken for another window's edit. A failed save keeps the draft editable.
 - An import read has its own request ownership: choosing a new file invalidates the older read, and a result is no longer applied after the pane unmounts.
 - Unrelated connection edits made during the read are merged. When the same connection conflicts, the current edit is kept and the player is asked to choose the file again.

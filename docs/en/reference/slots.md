@@ -437,6 +437,7 @@ The settings screen stores connection info and model IDs separately:
 **Adding the first provider**
 
 - The first time you create a provider and a model by hand, if `story` and `plugin` have no explicit assignment, the settings page binds both roles to this model. This way, story and plugin tasks can run right away.
+- When no valid `llm.toml` is loaded, a built-in default role without server credentials also counts as unassigned. Existing local choices, roles from `llm.toml`, and built-in defaults with usable server credentials keep their assignments. After saving, the page reports which roles were assigned.
 - When you add a provider, you can pick one of the [built-in providers](#built-in-providers-and-protocols) from the list. The dialog fills in its ID and official address, and it uses that provider's own protocol. Choose "Custom provider" to fill in everything by hand.
 - A built-in provider uses the framework's built-in official address and protocol even if you leave `baseUrl` empty. An address that the user fills in always takes priority.
 

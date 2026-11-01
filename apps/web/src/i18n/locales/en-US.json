@@ -1524,6 +1524,7 @@
     "description": "Adjust appearance, models, packages, and local data.",
     "desktopRefreshFailed": "Could not refresh desktop information. Try again.",
     "providerImportSucceeded": "Providers and models imported.",
+    "providerRolesAssigned": "Model roles assigned: {{roles}}",
     "numberExample": "e.g. {{value}}",
     "pricePerImageValue": "{{price}}/img",
     "pricePerMillionValue": "{{price}}/M",
