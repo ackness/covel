@@ -256,7 +256,9 @@ describe("committed input CLI batches", () => {
         .filter((line) => line.includes(source))
         .join("\n");
       expect.soft(diagnostic, source).toContain(field);
-      expect.soft(result.stdout).not.toContain(root);
+      expect
+        .soft(result.stdout)
+        .not.toContain(`✓ Static package validation: ${root}`);
       await expect.soft(access(path.join(root, "executed"))).rejects.toThrow();
     }
   });

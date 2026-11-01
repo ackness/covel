@@ -44,9 +44,9 @@ export async function runValidateManifest(
           `✓ Static package validation: ${report.rootPath}\n`,
         );
         output.stdout.write(`  languages: ${report.languages}\n`);
-        for (const warning of report.cliWarnings)
-          output.stdout.write(`${warning}\n`);
       }
+      for (const warning of report.cliWarnings)
+        output.stdout.write(`${warning}\n`);
     } catch (error) {
       output.stderr.write(
         `✗ ${error instanceof Error ? error.message : String(error)}\n`,

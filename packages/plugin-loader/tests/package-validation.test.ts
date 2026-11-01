@@ -68,8 +68,9 @@ async function parity(root: string) {
       ? ""
       : execution) +
       (report.ok
-        ? `✓ Static package validation: ${report.rootPath}\n  languages: ${report.languages}\n${report.cliWarnings.map((line) => `${line}\n`).join("")}`
-        : ""),
+        ? `✓ Static package validation: ${report.rootPath}\n  languages: ${report.languages}\n`
+        : "") +
+      report.cliWarnings.map((line) => `${line}\n`).join(""),
   );
   return report;
 }
@@ -281,6 +282,69 @@ describe("static package validation", () => {
     expect(result.issues.map((issue) => issue.code)).toEqual(
       expect.arrayContaining(["authoring-warning", "llm-toml-ignored"]),
     );
+  });
+  it("retains available CLI warning findings after an independent error", async () => {
+    const root = await fixture(
+      { version: "1.0.0", entry: "./entry.js" },
+      {
+        "entry.js": "throw new Error('must never run');",
+        "package.json": '{"type":"commonjs"}',
+        "llm.toml": "# Dummy validation fixture; no credentials.\n",
+      },
+    );
+    const result = await validatePluginPackage(root);
+    expect(result.ok).toBe(false);
+    expect(result.issues.filter((issue) => issue.severity === "error")).toEqual(
+      [
+        {
+          severity: "error",
+          code: "package-module-type",
+          file: "package.json",
+          message:
+            'package.json must declare "type": "module" (found "commonjs"); a plugin package is ESM',
+        },
+      ],
+    );
+    const warnings = [
+      {
+        file: "PLUGIN.md",
+        field: "id",
+        message: '"probe" is the default value; remove it',
+      },
+      {
+        file: "PLUGIN.md",
+        field: "kind",
+        message: '"plugin" is the default value; remove it',
+      },
+      {
+        file: "llm.toml",
+        message:
+          "llm.toml is ignored: a plugin cannot choose a model or an endpoint. Name the role with agent.model / function.model; the player's model settings bind it.",
+      },
+    ];
+    expect(
+      result.issues.filter((issue) => issue.severity === "warning"),
+    ).toEqual(
+      warnings.map((warning) => ({
+        severity: "warning",
+        code:
+          warning.file === "llm.toml"
+            ? "llm-toml-ignored"
+            : "authoring-warning",
+        ...warning,
+      })),
+    );
+    expect(
+      result.cliWarnings.map((warning) => {
+        expect(warning).toMatch(/^  warning: /);
+        return parseIssueLocation(warning.slice("  warning: ".length), root);
+      }),
+    ).toEqual(
+      warnings.map(({ file, ...warning }) =>
+        file === "llm.toml" ? warning : { file, ...warning },
+      ),
+    );
+    expect(result.cliWarnings[0]).toContain(`${root}/PLUGIN.md`);
   });
   it("collects independent unknown fields, bad labels, missing handlers and module type", async () => {
     const result = await parity(

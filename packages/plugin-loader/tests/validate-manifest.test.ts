@@ -54,7 +54,91 @@ const runtime = {
   function: { handler: "./handler.js", timeoutMs: 90_000 },
   schedule: { trigger: { type: "manual" } },
 };
+async function warningFixture(invalid: boolean) {
+  const root = await fixture({ version: "1.0.0", entry: "./entry.js" });
+  await writeFile(
+    path.join(root, "entry.js"),
+    "throw new Error('must never run');",
+  );
+  await writeFile(
+    path.join(root, "package.json"),
+    JSON.stringify({ type: invalid ? "commonjs" : "module" }),
+  );
+  await writeFile(
+    path.join(root, "llm.toml"),
+    "# Dummy validation fixture; no credentials.\n",
+  );
+  return {
+    root,
+    warnings: [
+      `  warning: ${root}/PLUGIN.md: id: "probe" is the default value; remove it`,
+      `  warning: ${root}/PLUGIN.md: kind: "plugin" is the default value; remove it`,
+      "  warning: llm.toml is ignored: a plugin cannot choose a model or an endpoint. Name the role with agent.model / function.model; the player's model settings bind it.",
+    ],
+    failure: `✗ ${root}: package.json must declare "type": "module" (found "commonjs"); a plugin package is ESM\n`,
+  };
+}
 describe("manifest authoring CLI", () => {
+  it.each([true, false])(
+    "prints available warnings once for invalid=%s packages with overlapping paths",
+    async (invalid) => {
+      const { root, warnings, failure } = await warningFixture(invalid);
+      const result = await validate(root, path.join(root, "PLUGIN.md"), root);
+      expect(result.status).toBe(invalid ? 1 : 0);
+      expect(result.stderr).toBe(invalid ? failure : "");
+      expect(result.stdout).toContain("  execution: code\n");
+      expect(result.stdout).toContain(
+        "  PLUGIN.md: entry: entry requires server-code authorization.\n",
+      );
+      expect(
+        result.stdout
+          .split("\n")
+          .filter((line) => line.startsWith("  warning: ")),
+      ).toEqual(warnings);
+      if (invalid) {
+        expect(result.stdout).not.toContain("✓");
+        expect(result.stdout).not.toContain("  languages:");
+      } else {
+        expect(result.stdout).toContain(
+          `✓ Static package validation: ${root}\n  languages: text en; instructions en\n`,
+        );
+      }
+    },
+  );
+  it.each([true, false])(
+    "keeps a failing invocation and package warning order with invalid first=%s",
+    async (invalidFirst) => {
+      const invalid = await warningFixture(true);
+      const valid = await warningFixture(false);
+      const ordered = invalidFirst ? [invalid, valid] : [valid, invalid];
+      const result = await validate(
+        ...ordered.flatMap(({ root }) => [root, path.join(root, "PLUGIN.md")]),
+      );
+      expect(result.status).toBe(1);
+      expect(result.stderr).toBe(invalid.failure);
+      expect(
+        result.stdout
+          .split("\n")
+          .filter((line) => line.startsWith("  warning: ")),
+      ).toEqual(ordered.flatMap(({ warnings }) => warnings));
+      expect(result.stdout.match(/✓/g)).toHaveLength(1);
+      expect(result.stdout).toContain(
+        `✓ Static package validation: ${valid.root}\n`,
+      );
+    },
+  );
+  it("does not manufacture warnings after a manifest load failure", async () => {
+    const { root } = await warningFixture(true);
+    await writeFile(path.join(root, "PLUGIN.md"), "---\nid: [\n---\n");
+    const result = await validate(root);
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain(
+      "✗ [plugin-loader] invalid manifest frontmatter",
+    );
+    expect(result.stdout).not.toContain("warning:");
+    expect(result.stdout).not.toContain("✓");
+    expect(result.stdout).not.toContain("  languages:");
+  });
   it("ignores runtime symlinks in both discovery and locale validation", async () => {
     const root = await fixture();
     const target = path.join(root, "lib/linked");
@@ -380,7 +464,13 @@ describe("manifest authoring CLI", () => {
   });
   it("reports missing paths and unsupported flags", async () => {
     expect((await validate("/missing/covel/plugin")).status).toBe(1);
-    expect((await validate("--legacy")).status).toBe(2);
+    for (const args of [[], ["--legacy"]])
+      expect(await validate(...args)).toEqual({
+        status: 2,
+        stdout: "",
+        stderr:
+          "Usage: pnpm validate:plugin <PLUGIN.md | RUNTIME.md | plugin-dir>...\n",
+      });
   });
   // `pnpm check` runs the script file and reads its exit status, so one check
   // starts it as a process. The child has no time limit of its own: the
