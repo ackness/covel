@@ -980,7 +980,7 @@ When a session is stuck in the setup phase, sending `start_session` again means 
 - Saved form submissions are still read as usual.
 - If the player submits a form, closes the page before the next action is sent, and comes back, this is also how they continue.
 
-The web app shows a notice and a button when these three conditions are all true: the session is in setup, no form is waiting on the screen, and no execution is running. When a runtime has recorded a `lastError`, the notice shows a failure and displays the error.
+The web app shows a notice and a button after setup has been attempted when the session is still in setup, no interaction awaits an answer, and no execution is running, even if the attempt produced no messages. Players can continue setup or disable the plugin whose step is waiting in Loaded Plugins. When a runtime has recorded a `lastError`, the notice shows a failure and displays the error. A session that has never run still shows Begin Adventure. Data inference cannot add preparation to a composition without setup; see [receiver selection](./world-data.md#data-receivers).
 
 When a setup runtime keeps failing and uses up its retry budget (`maxTriggerCount`), it moves to `blocked`:
 

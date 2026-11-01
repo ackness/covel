@@ -946,6 +946,8 @@ export function GameView({
           <SetupProgressNotice
             progress={setupProgress({
               session,
+              plugins,
+              locale: i18n.language,
               messages,
               submittedBlockIds,
               executing,

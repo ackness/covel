@@ -980,7 +980,7 @@ curl -X DELETE http://localhost:3001/api/sessions/<sessionId>
 - 已保存的表单提交照常被读取。
 - 玩家提交表单之后、后续动作发出之前关掉了页面，回来后也用它继续。
 
-Web 在这三个条件同时成立时显示提示和按钮：会话处于 setup、屏幕上没有待填的表单、没有执行在跑。有 runtime 记录了 `lastError` 时，提示为失败并显示错误。
+Web 在准备已尝试、会话仍处于 setup、屏幕上没有待答交互且没有执行在跑时显示提示和按钮，即使尝试没有生成任何消息也会显示。玩家可继续准备，或在「已加载插件」中关闭仍在等待的步骤所属插件。有 runtime 记录了 `lastError` 时，提示为失败并显示错误。未执行过的会话仍显示「开始冒险」。数据推导不会给没有 setup 的组合增加准备步骤，见[数据接收规则](./world-data.md#data-receivers)。
 
 setup runtime 反复失败、用完重试预算（`maxTriggerCount`）后进入 `blocked`：
 

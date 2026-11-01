@@ -1526,6 +1526,8 @@ runtime 的终态：
 
 停止原因是有限枚举：`yielded-to-player`、`no-eligible-story`、`ambiguous-story`、`limit`、`disabled`、`player-stop`、`new-input`、`pending-input`、`session-unavailable`、`execution-failed`、`prerequisite-unavailable`。原因不携带模型内容。到达上限或交还玩家是正常结束。后续失败只丢弃该轮未提交内容；终态 `resync: true` 汇总任意一轮的提交后发布失败。
 
+setup 执行后的 `no-eligible-story` 不证明准备完成。客户端仍检查会话时钟；已尝试但未完成且没有待答交互时，即使消息列表为空，也显示[准备提示](./api.md#setup-runtime-控制重试--跳过)。
+
 恢复状态的可选 `advance` 使用同一载荷；`unknown` 不证明完成。客户端按请求所有权处理事件，忽略旧请求收尾和倒退的进度。新事件不包含提示词、工具参数、操作摘要或 concealed 内容。前台所有轮共用一个故障计数身份：故障立即去重计数，干净结果等组关闭才清零；较新的后台结果不会被旧组清零。setup 不参与，后台任务继续独立计数。
 
 ## 委托的私有投影
