@@ -34,7 +34,7 @@ How to choose:
 >
 > Either narrator can run on its own. Scene Stage adds the stage presentation and Action Suggestions adds suggested actions; the story still works without them.
 
-When [Inventory](./rpg.md#inventory-inventory) is active, both narrators can use `check-bag` to look up carried items and `change-inventory` to settle purchases, trades, gifts or consumption before writing prose, with payment first. A refused call means the exchange does not happen. Without Inventory, the tools are absent and narration continues as usual.
+When [Inventory](./rpg.md#inventory-inventory) is active, both narrators can use `check-bag` to look up carried items. `change-inventory` stages purchases, trades, gifts or consumption before writing prose, with payment first. A refused call means the exchange does not happen. Without Inventory, the tools are absent and narration continues as usual.
 
 ## Narrator (`narrator`)
 

@@ -1233,6 +1233,7 @@ These checks do not run plugin code, and they cannot replace the registration co
 
 - For a built-in plugin, the prompts the model reads (agent bodies and fixed sections) must have a Chinese variant. The body of a function runtime is documentation, so it is written only in English. A community plugin needs only English.
 - Both languages must mention the same set of tools, injected blocks, and `runtime-inputs.<name>`. `pnpm check:prompts` checks this. It also uses `plugins/prompt-variants.lock.json` to catch the case where the English text changed but the Chinese was not updated. After you update both, run `pnpm prompts:lock`.
+- See [prompt style](../plugins/prompt-style.md) for splitting instructions and reviewing translations. Style warnings do not prevent a plugin from passing the check.
 - For the full rules, see [i18n](./i18n.md#built-in-languages-and-the-extension-boundary).
 
 The language versions of static prompts and runtime bodies are all captured when the definition (definition / generation) is loaded. At execution time, the body is picked from this snapshot using the effective locale. It does not reread files that are being hot-reloaded. A language choice cannot change the permissions or the execution contract of the main manifest.
