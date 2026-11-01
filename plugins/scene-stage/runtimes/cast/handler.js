@@ -319,7 +319,7 @@ function normalizeCharacters(rows) {
       type: String(row.type ?? "npc"),
       ...(Array.isArray(row.aliases) ? { aliases: row.aliases } : {}),
       description: typeof row.description === "string" ? row.description : "",
-      fields: row.fields,
+      fields: row.fields ?? {},
     }))
     .filter((row) => row.id.length > 0 && row.name.length > 0);
 }

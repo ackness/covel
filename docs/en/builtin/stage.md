@@ -53,6 +53,8 @@ Lets the stage know where things are, whether it is day or night, and who is pre
 - The story's `cues.scene`, written when the location changes, selects the location and non-empty `cues.present` selects who is on stage. Updates commit with the story. Continuing actors keep their position and visual; new actors fade into free positions from left to right, and absent actors leave the current cast immediately at commit while their previously displayed image fades out. Outgoing images do not occupy the four current actor slots. Focus follows the last resolved dialogue or action speaker on stage.
 - The current viewpoint character stays off stage; other characters bound to the same player seat can appear. A location change clears old actors before applying the new presence list. Day/night changes at the same location keep the actors. Without a presence list, existing actors remain unless the scene changes; cast selection applies until an actor record exists.
 
+Characters without stored attributes can still be selected; they do not need attributes before joining the scene.
+
 ### When it is on
 
 Optional. The built-in "Dialogue Mode" gameplay pack includes it. The "Campus Romance · Visual Novel" pack for Harukaze Academy also includes it.

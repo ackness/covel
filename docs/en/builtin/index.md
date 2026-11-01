@@ -103,10 +103,10 @@ Character, fact, and dimension tracking retain each narrative segment’s speake
 
 ### Stage and sound
 
-| Plugin                                  | What it does                                                         | On by default |
-| --------------------------------------- | -------------------------------------------------------------------- | ------------- |
-| [Scene Stage](./stage.md) `scene-stage` | Updates scenes and cast; dialogue opts into committed segment reveal |               |
-| [Soundtrack](./stage.md) `soundtrack`   | Plays the world's own music for each scene                           |               |
+| Plugin                                  | What it does                                                                                             | On by default |
+| --------------------------------------- | -------------------------------------------------------------------------------------------------------- | ------------- |
+| [Scene Stage](./stage.md) `scene-stage` | Updates scenes and cast, with optional character attributes; dialogue opts into committed segment reveal |               |
+| [Soundtrack](./stage.md) `soundtrack`   | Plays the world's own music for each scene                                                               |               |
 
 ## The four built-in worlds
 
