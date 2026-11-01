@@ -65,6 +65,7 @@ import {
   withoutPictureAttachments,
 } from "./picture-attachments.js";
 import { handleSuspension } from "../resume/suspend-resume-handler.js";
+import { markPrivateDelegation } from "./subagent-delegate.js";
 import { createCorrectionPolicy } from "./correction-policy.js";
 import { guardAgainstToolLoop } from "./loop-detection.js";
 import {
@@ -95,6 +96,7 @@ import {
 import type { AgentLoopDeps } from "../turn-executor/turn-executor-types.js";
 import {
   hasBusinessWork,
+  isBusinessTool,
   captureBusinessCalls,
   unresolvedToolFailures,
   type BusinessCalls,
@@ -389,6 +391,15 @@ async function runAgentToolLoopWithinBudget(
   };
   const projectToolRecord = (record: import("@covel/shared").ToolCallRecord) =>
     deps.delegation?.privacy.record(record) ?? record;
+  const learnPrivateCall = (call: LLMToolCall) => {
+    if (deps.subagents && deps.delegation)
+      markPrivateDelegation(
+        { ...call, toolCallId: call.id },
+        deps.subagents,
+        manifest,
+        deps.delegation.privacy,
+      );
+  };
   const toolCallContext = (): ToolCallContext => ({
     delegation: deps.delegation,
     playerActions: input.actions ?? [],
@@ -728,6 +739,7 @@ async function runAgentToolLoopWithinBudget(
     submissionOnly: boolean,
   ): Promise<RuntimeResult | undefined> => {
     rejection = undefined;
+    for (const call of rawResponse.toolCalls) learnPrivateCall(call);
     const assistantMessageIndex = messages.length;
     // Store the actual provider message, never a synthesized content-only review.
     messages.push(buildAssistantToolCallMessage(rawResponse));
@@ -769,7 +781,42 @@ async function runAgentToolLoopWithinBudget(
       if (preOutcomes.has(index)) return;
       budget.assertLive();
       const call = response.toolCalls[index]!;
-      const outcome = await runPreToolUseHook(hookOpts, call);
+      learnPrivateCall(call);
+      // Rewrites can introduce a private target. Classify the final call before
+      // delivering even the hook's own rewrite trace, which may preview arguments.
+      const traces: Parameters<NonNullable<typeof deps.emitter>["emit"]>[] = [];
+      let outcome: Awaited<ReturnType<typeof runPreToolUseHook>>;
+      try {
+        outcome = await runPreToolUseHook(
+          {
+            ...hookOpts,
+            ...(hookOpts.emitter
+              ? {
+                  emitter: {
+                    ...hookOpts.emitter,
+                    emit: async (
+                      ...args: Parameters<
+                        NonNullable<typeof deps.emitter>["emit"]
+                      >
+                    ) => {
+                      traces.push(args);
+                    },
+                  },
+                }
+              : {}),
+          },
+          call,
+        );
+        if (!outcome.skipped) learnPrivateCall(outcome.toolCall);
+      } finally {
+        for (const [type, payload] of traces) {
+          try {
+            await hookOpts.emitter?.emit(type, payload);
+          } catch {
+            console.warn("[agent-loop] tool hook trace delivery failed");
+          }
+        }
+      }
       preOutcomes.set(index, outcome);
       effectiveCalls.set(index, outcome.skipped ? null : outcome.toolCall);
       if (outcome.skipped) {
@@ -1232,11 +1279,20 @@ async function runAgentToolLoopWithinBudget(
       ? toolDefs.filter((tool) => tool.name === output.toolName)
       : activeToolDefs;
     const toolNames = (offered ?? []).map((tool) => tool.name);
+    const authoredChoice = manifest.llm?.toolChoice;
+    const namedBusinessWorkMet =
+      typeof authoredChoice === "object" &&
+      isBusinessTool(authoredChoice.name) &&
+      executedToolCalls.some(
+        (call) =>
+          call.name === authoredChoice.name && call.success && !call.refused,
+      );
     const submissionRequested =
       submissionOnly ||
       (toolCallRequested && rejection?.correction !== "toolUse") ||
       (requiredWorkMet() &&
         (requireToolUse ||
+          namedBusinessWorkMet ||
           toolNames.every((name) => name === output.toolName)));
     const loopToolChoice: StepToolChoice = submissionOnly
       ? { name: output.toolName }
@@ -1244,7 +1300,9 @@ async function runAgentToolLoopWithinBudget(
         ? rejection?.correction === "toolUse"
           ? "required"
           : { name: output.toolName }
-        : (manifest.llm?.toolChoice ?? "auto");
+        : namedBusinessWorkMet
+          ? "auto"
+          : (authoredChoice ?? "auto");
     const preStep = await runPreStepHook(hookOpts, {
       step: loop.steps,
       stepsRemaining: stepLimit - loop.steps + 1,

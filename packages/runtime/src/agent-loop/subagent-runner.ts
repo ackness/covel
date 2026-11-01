@@ -136,7 +136,7 @@ export interface SubagentRunner {
   availableTargets(caller: SubagentCaller): readonly SubagentTarget[];
   privateTargetKind(
     request: unknown,
-    caller: SubagentCaller,
+    caller: Pick<SubagentCaller, "pluginId">,
   ): "actor" | "concealed" | undefined;
   /** Never throws for a sub-agent failure: it resolves with `ok: false`. */
   run(args: SubagentRunArgs): Promise<SubagentResult>;

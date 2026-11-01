@@ -125,6 +125,28 @@ describe("agent output boundary", () => {
     });
   });
 
+  it("keeps tool-result event order ahead of the explicit event channel", () => {
+    const first = { topic: "changed", data: { value: 1 } };
+    const second = { topic: "changed", data: { value: 2 } };
+    const explicit = { topic: "changed", data: { value: 3 } };
+    const finalized = finalizeAgentOutput({
+      manifest,
+      acceptedOutput: {},
+      executedToolCalls: [first, second].map((event, index) => ({
+        name: `work-${index}`,
+        arguments: "{}",
+        success: true,
+        result: { events: [event] },
+      })),
+      pendingProposals: [],
+      emittedEvents: [explicit],
+    });
+    expect(finalized).toMatchObject({
+      kind: "ok",
+      effects: { events: [first, second, explicit] },
+    });
+  });
+
   it("preserves a WorldIR events array without a topic as business output", () => {
     const events = [{ id: "birth", description: "a world fact" }];
     const finalized = finalizeAgentOutput({

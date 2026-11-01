@@ -108,6 +108,61 @@ function withoutLoop(record: SuspensionRecord): SuspensionRecord {
 const toolNames = (request: GenerateParams | undefined) =>
   (request?.tools ?? []).map((definition) => definition.name);
 
+it("restores fulfilled named business work without completion prerequisites or a finalizer", async () => {
+  const rt = runtime({
+    llm: { toolChoice: { name: "lookup" } },
+    tools: { plugin: ["lookup"], builtin: ["suspend"] },
+    loopProfile: { finalizer: { maxSteps: false } },
+  });
+  const hooks = createHookPipeline();
+  hooks.register({
+    id: "allow-initial-batch",
+    event: "PreStep",
+    handler: async () => ({
+      action: "continue",
+      replace: { toolChoice: "auto" },
+    }),
+  });
+  // The initial auto step may batch the named business work with suspension.
+  const initial = scriptedLLM((request) => {
+    expect(request.defaults?.toolChoice).toBeUndefined();
+    return {
+      ...toolCall("lookup", {}, "lookup"),
+      toolCalls: [
+        ...toolCall("lookup", {}, "lookup").toolCalls,
+        ...toolCall("suspend", ASK, "suspend").toolCalls,
+      ],
+    };
+  });
+  const record = await suspend(rt, deps(initial, { hookPipeline: hooks }));
+  expect(record.pendingContinuation.businessCalls).toContainEqual(
+    expect.objectContaining({ name: "lookup", success: true }),
+  );
+  const llm = scriptedLLM((request) => {
+    const choice = request.defaults?.toolChoice;
+    const name = typeof choice === "object" ? choice.name : "submit-output";
+    return name === "lookup" ? toolCall(name, {}) : submitted("done");
+  });
+  const work = vi.fn(lookupTool.execute);
+  const result = await resumeRuntimePipeline(
+    record,
+    {},
+    rt,
+    deps(llm, {
+      toolExecutor: makeExecutor([
+        { ...lookupTool, execute: work },
+        suspendTool,
+      ]),
+    }),
+  );
+  expect(result.status).toBe("success");
+  expect(llm.requests).toHaveLength(1);
+  expect(llm.requests[0]?.defaults?.toolChoice).toEqual({
+    name: "submit-output",
+  });
+  expect(work).not.toHaveBeenCalled();
+});
+
 describe("corrections survive a suspension", () => {
   const rt = runtime({ requireToolUse: true });
 
