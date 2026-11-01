@@ -100,7 +100,9 @@ The tag in square brackets says which rule it is:
 | `repeated`        | The same sentence appears twice                                   |
 | `output-language` | An output language is set                                         |
 
-These are **reminders, and they do not make the check fail**. The rules are the default way to write. A single sentence can have a good reason to break one: for example, a step that must list every enum value in full will go over 20 words. Text in quotation marks and identifiers in backticks are not checked.
+These are **reminders, and they do not make the check fail**. The rules are the default way to write. A single sentence can have a good reason to break one: for example, a step that must list every enum value in full will go over 20 words. The sentence-length check counts an identifier in backticks as one word. Text in quotation marks still counts toward sentence length.
+
+Reported line numbers start at the body after frontmatter is removed. A successful command can still report style warnings, so read the output. When splitting a sentence, preserve the scope of conditions, negation, quantities and execution order. Several short sentences can stay in the same list item. Compare the English and Chinese meanings sentence by sentence before updating the lock. Matching fingerprints cannot prove that a translation preserves meaning.
 
 > [!NOTE]
 > This command does not check plugins in the user plugin directory. When you write a community plugin, go through it yourself against the table above.

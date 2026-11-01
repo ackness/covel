@@ -36,4 +36,4 @@ runtime:
 
 ## 本轮工具操作
 
-`runtime.io.inputs.operations` 绑定内核输入 `operations@1`。非空时，hook 在 `vocabulary` 之后、`narrative` 之前加入 `operations: [{ contract, request, result }]`，不携带操作身份或提交信息；空列表不加入消息。操作是工具本轮已经作出的变化，正文呈现其中一项时，提取使用请求里相同的物品名和数量记录事件。正文没有呈现的操作不凭空生成事件。行囊可以据此避免重复记账，其他 WorldIR 消费者仍能读取同一事件，公开事实结构保持不变。
+`runtime.io.inputs.operations` 绑定内核输入 `operations@1`。非空时，hook 在 `vocabulary` 之后、`narrative` 之前加入 `operations: [{ contract, request, result }]`，不携带操作身份或提交信息；空列表不加入消息。操作是工具本轮已经作出的变化。正文呈现其中一项时，提取记录对应事件。物品名和数量沿用工具请求原文。正文没有呈现的操作不凭空生成事件。行囊可以据此避免重复记账，其他 WorldIR 消费者仍能读取同一事件，公开事实结构保持不变。

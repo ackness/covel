@@ -1233,6 +1233,7 @@ namespace 声明 `search` 之后，它的记录进入框架的记忆检索（[`m
 
 - 内置插件里模型会读的提示词（agent 正文和固定段）必须有中文变体。function runtime 的正文是说明文档，只写 English。社区插件只需要 English。
 - 两种语言必须提到同一组工具、注入块和 `runtime-inputs.<name>`。`pnpm check:prompts` 检查这一点，并用 `plugins/prompt-variants.lock.json` 发现“英文改了、中文没跟”的情况。两边都更新后运行 `pnpm prompts:lock`。
+- 提示词拆句与译文核对见[提示词写法](../plugins/prompt-style.md)。文风提醒不阻止插件通过检查。
 - 完整规则见 [i18n](./i18n.md#内置语言与扩展边界)。
 
 静态提示词和 runtime 正文的各语言版本，都在加载定义（definition / generation）时捕获。执行时按有效的 locale 从这份快照里选正文，不重新读取正在热更新的文件。语言选择不能改变主清单的权限或执行合同。
