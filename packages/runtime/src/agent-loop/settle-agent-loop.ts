@@ -11,6 +11,7 @@ import { finalizeAgentOutput } from "./finalize-agent-output.js";
 import { completionContractError } from "./runtime-completion.js";
 import { createAgentSchemaGate } from "./runtime-output-validator.js";
 import { schemaAsksForSegments } from "./story-output.js";
+import { outputFormatProblems } from "./output-format-diagnostics.js";
 import type { AgentToolLoopCompleted } from "./turn-agent-tool-loop.js";
 
 interface AgentOutputArgs {
@@ -30,6 +31,7 @@ interface AgentOutputArgs {
   >;
   readonly outputSchema?: Record<string, unknown>;
   readonly priorToolCalls?: readonly ToolCallRecord[];
+  readonly finalResponseHasToolCalls?: boolean;
 }
 
 /** One output gate for settlement and the silent pre-settlement repair check. */
@@ -82,15 +84,31 @@ function evaluateAgentOutput(args: AgentOutputArgs, silent = false) {
 }
 
 /** Test the output gates only; tool failures and completion contracts settle separately. */
-export function checkAgentOutput(
+export async function checkAgentOutput(
   args: AgentOutputArgs,
-):
+): Promise<
   | { readonly ok: true }
-  | { readonly ok: false; readonly errors: readonly string[] } {
+  | { readonly ok: false; readonly errors: readonly string[] }
+> {
   const { finalized, errors } = evaluateAgentOutput(args, true);
   return finalized.kind === "invalid-output" ||
     finalized.kind === "short-circuit"
-    ? { ok: false, errors }
+    ? {
+        ok: false,
+        errors: await outputFormatProblems({
+          content: args.toolLoop.finalContent,
+          responseFormat:
+            args.outputSchema && !args.toolLoop.finalToolOutput
+              ? { type: "json_schema", schema: args.outputSchema }
+              : undefined,
+          hasToolCalls:
+            args.finalResponseHasToolCalls ??
+            (!args.toolLoop.finalContent &&
+              args.toolLoop.executedToolCalls.length > 0),
+          locale: args.input.locale,
+          problems: errors,
+        }),
+      }
     : { ok: true };
 }
 

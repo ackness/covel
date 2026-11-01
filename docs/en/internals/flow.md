@@ -584,6 +584,8 @@ The loop's behaviour comes from the runtime's loop profile (`resolveLoopProfile`
 
 Each loop run creates one correction policy (`agent-loop/correction-policy.ts`), reading separate budgets for tool use, response review, loop perturbation and output repair from the profile's `corrections`. After the loop and any finalizer, before entering `stopped`, a silent output check shared with `settleAgentLoop` decides whether repair is needed. By default, when budget and remaining time allow, one more request with tools off sends the validation errors to the model and completely replaces the invalid answer. An answer that still fails its schema or a story whose text is still empty fails with `invalid-output`. Repair skips `PreStep` but passes through `PreLLMCall` and `PostLLMResponse`. Conditions and values are in [the loop profile](../reference/plugins.md#loop-profile-agentloopprofile).
 
+When JSON is required, existing correction requests include concrete [format diagnostics](../reference/slots.md#structured-output): an empty answer explains that no JSON object was returned, and syntax errors retain the parser's location and expectation rather than only reporting fields missing after extraction. A draft already rejected by `PostLLMResponse` also gets this explanation after the plugin's correction, diagnosing the response after hook rewrites and using the review budget; output repair after the loop uses its own budget. Diagnostics add no rejection condition and preserve existing tolerant parsing and story prose fallback rules.
+
 The order within each step:
 
 1. Check for cancellation; when the profile has `steering`, add the player's interjections to the conversation.

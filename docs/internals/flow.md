@@ -585,6 +585,8 @@ deciding → finalizing → stopped        running-tools → suspended
 
 循环每次运行创建一个纠正策略（`agent-loop/correction-policy.ts`），从 profile 的 `corrections` 分别读取工具使用、回复审查、循环扰动和输出修复的预算。循环及收尾步骤之后、进入 `stopped` 之前，用与 `settleAgentLoop` 相同的无副作用输出检查决定是否需要修复。默认在预算和剩余时间允许时关闭工具再请求一次，把校验错误发给模型，完整替换无效答案；仍不符合 schema 或故事正文仍为空时以 `invalid-output` 失败。修复步骤不触发 `PreStep`，但照常经过 `PreLLMCall` 和 `PostLLMResponse`。条件和取值见[循环 profile](../reference/plugins.md#循环-profileagentloopprofile)。
 
+要求 JSON 时，已有的纠正请求会补充具体的[格式诊断](../reference/slots.md#结构化输出)：空答案会说明未返回 JSON 对象，语法错误会保留解析器提供的位置和预期，而不只报告提取后缺少字段。`PostLLMResponse` 已退回的草稿也会在插件原有纠正要求后追加说明，按 hook 改写后的回复诊断，仍使用审查预算；循环结束后的输出修复使用自己的预算。诊断不会新增拒绝条件，也不改变已有的宽容解析和故事正文回退规则。
+
 每一步的先后：
 
 1. 检查取消；profile 开了 `steering` 时，把玩家插话并入对话。

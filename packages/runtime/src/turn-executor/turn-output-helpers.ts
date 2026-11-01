@@ -73,14 +73,19 @@ export function __testOnly_parseFinalOutputEnvelope(
   return parseFinalOutputEnvelope(finalContent);
 }
 
+/** Normalized text shared by envelope parsing and private format feedback. */
+export function normalizeFinalOutputJsonText(finalContent: string): string {
+  return finalContent
+    .replace(/^```(?:json)?\s*\n?/i, "")
+    .replace(/\n?```\s*$/i, "")
+    .trim();
+}
+
 export function parseFinalOutputEnvelope(finalContent: string): {
   readonly output: Record<string, unknown>;
   readonly parsedAsJson: boolean;
 } {
-  const stripped = finalContent
-    .replace(/^```(?:json)?\s*\n?/i, "")
-    .replace(/\n?```\s*$/i, "")
-    .trim();
+  const stripped = normalizeFinalOutputJsonText(finalContent);
 
   try {
     const direct = JSON.parse(stripped);
