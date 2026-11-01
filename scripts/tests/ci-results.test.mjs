@@ -289,8 +289,8 @@ test("full browser matrix results fail closed on full and release paths", () => 
 });
 
 test("each full browser shard blocks the gate across Checks API pages", () => {
-  for (const shard of [1, 2, 3, 4]) {
-    const name = `Full browser suite (${shard}/4)`;
+  for (const shard of [1, 2, 3, 4, 5, 6, 7, 8]) {
+    const name = `Full browser suite (${shard}/8)`;
     for (const conclusion of ["failure", "cancelled", "timed_out"]) {
       assert.equal(
         checkRunsState([

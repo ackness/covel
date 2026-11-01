@@ -62,10 +62,10 @@ if (
 ) {
   const full = collect();
   const shards = [];
-  for (let index = 1; index <= 4; index++) {
-    const shard = collect([`--shard=${index}/4`]);
+  for (let index = 1; index <= 8; index++) {
+    const shard = collect([`--shard=${index}/8`]);
     shards.push(shard.ids);
-    console.log(`Browser shard ${index}/4: ${shard.ids.length} tests`);
+    console.log(`Browser shard ${index}/8: ${shard.ids.length} tests`);
   }
   verifyShardCoverage(full.ids, shards);
   const extensions = collect([

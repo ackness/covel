@@ -325,7 +325,7 @@ headings in that directory's README. Never edit `docs/CHANGELOG.md` directly.
 - Web Vitest defaults to jsdom; pure tests may use the Node environment.
   Desktop and script tests use `node --test`. Playwright uses production builds;
   specs importing `/src/` need the slower `chromium-dev` project. See
-  [E2E testing](docs/internals/e2e-testing.md). Full-scope CI requires four
+  [E2E testing](docs/internals/e2e-testing.md). Full-scope CI requires eight
   isolated one-worker shards across both default projects plus smoke and all
   extensions, constrained to at most two allowed CPUs. Nightly/manual runs also repeat
   timing-sensitive sandbox acceptance without retries. Serialize local browser

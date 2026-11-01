@@ -424,7 +424,7 @@ jobs:
         run: pnpm test:pg
 
   e2e:
-    name: Full browser suite (${{ matrix.shard }}/4)
+    name: Full browser suite (${{ matrix.shard }}/8)
     needs: scope
     if: ${{ !cancelled() && (needs.scope.outputs.scope != 'docs' || inputs.release) }}
     runs-on: ubuntu-latest
@@ -433,7 +433,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3, 4]
+        shard: [1, 2, 3, 4, 5, 6, 7, 8]
 
     steps:
       - name: Checkout
@@ -492,7 +492,7 @@ jobs:
           echo "cpus=$cpus" >> "$GITHUB_OUTPUT"
 
       - name: Test full browser shard
-        run: taskset -c "${{ steps.setup.outputs.cpus }}" pnpm e2e --shard=${{ matrix.shard }}/4 --workers=1
+        run: taskset -c "${{ steps.setup.outputs.cpus }}" pnpm e2e --shard=${{ matrix.shard }}/8 --workers=1
 
       - name: Upload full browser failure artifacts
         if: ${{ failure() }}
@@ -513,11 +513,16 @@ jobs:
           key: ${{ steps.chromium-cache.outputs.cache-primary-key }}
 
   browser:
-    name: Browser smoke and community plugins
+    name: Browser ${{ matrix.suite }}
     needs: scope
     if: ${{ !cancelled() && (needs.scope.outputs.scope != 'docs' || inputs.release) }}
     runs-on: ubuntu-latest
     timeout-minutes: 25
+
+    strategy:
+      fail-fast: false
+      matrix:
+        suite: [smoke, extensions]
 
     steps:
       - name: Checkout
@@ -576,14 +581,15 @@ jobs:
           echo "cpus=$cpus" >> "$GITHUB_OUTPUT"
 
       - name: Test browser smoke
+        if: ${{ matrix.suite == 'smoke' }}
         run: taskset -c "${{ steps.setup.outputs.cpus }}" pnpm e2e:smoke
 
       - name: Test community plugin acceptance
-        if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
+        if: ${{ !cancelled() && steps.setup.outcome == 'success' && matrix.suite == 'extensions' }}
         run: taskset -c "${{ steps.setup.outputs.cpus }}" pnpm e2e:extensions
 
       - name: Repeat timing-sensitive sandbox acceptance
-        if: ${{ !cancelled() && steps.setup.outcome == 'success' && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') }}
+        if: ${{ !cancelled() && steps.setup.outcome == 'success' && matrix.suite == 'extensions' && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') }}
         env:
           PLAYWRIGHT_HTML_OUTPUT_DIR: tests/e2e/report/extensions-stress
         run: >-
@@ -597,7 +603,7 @@ jobs:
         if: ${{ failure() }}
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: covel-browser-failure-${{ github.run_id }}-attempt-${{ github.run_attempt }}
+          name: covel-browser-${{ matrix.suite }}-failure-${{ github.run_id }}-attempt-${{ github.run_attempt }}
           path: |
             tests/e2e/artifacts/ci-smoke
             tests/e2e/report/ci-smoke

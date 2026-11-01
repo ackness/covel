@@ -241,13 +241,13 @@ pnpm docker:pg:down
 
 `ci.yml` 的每个完整范围都必须执行两个默认 project：非纯文档 PR、main 源码或混合推送、未知范围、显式 commit 和发布。纯文档 PR/main 只保留文档验证与 Site，跳过源码 CI。每日 UTC 03:17 的 `schedule`（默认分支）和 `workflow_dispatch`（所选 ref，无命令或路径输入）始终全量；定时工作流合入默认分支后才能运行。两者只构建 Site，不发布 Pages，部署仍限 main 的 push。
 
-`e2e` 的四个 shard 各有独立 runner、检出、安装、构建和临时用户目录，运行 `pnpm e2e --shard=<n>/4 --workers=1`，不限定 project 或 grep，且不会因另一 shard 失败而取消。`browser` 另行运行一次 smoke 和全部扩展验收，包括声明式笔记、可点击地图、社区舞台和沙箱区域；默认 e2e 不包含 `*.acceptance.ts`。准备成功且未取消时，smoke 失败仍尝试扩展；任一失败都会阻止 `Verification`，所有 shard 也都是必需的。`All checks pass` 要求汇总成功并保留其他检查的失败。
+`e2e` 的八个 shard 各有独立 runner、检出、安装、构建和临时用户目录，运行 `pnpm e2e --shard=<n>/8 --workers=1`，不限定 project 或 grep，且不会因另一 shard 失败而取消。`browser` 矩阵用两个独立 runner，分别运行一次 smoke 和全部扩展验收，包括声明式笔记、可点击地图、社区舞台和沙箱区域；默认 e2e 不包含 `*.acceptance.ts`。两者不互相等待，失败也不取消另一项；任一失败都会阻止 `Verification`，所有 shard 也都是必需的。`All checks pass` 要求汇总成功并保留其他检查的失败。
 
-`node scripts/check-e2e-shards.mjs` 在静态检查 runner 集中校验完整清单、四片 ID 并集和所有扩展文件。浏览器 runner 随实际执行收集测试，不再在执行前额外启动一次 `--list`；测试数和名称仍保留在运行日志中。
+`node scripts/check-e2e-shards.mjs` 在静态检查 runner 集中校验完整清单、八片 ID 并集和所有扩展文件。浏览器 runner 随实际执行收集测试，不再在执行前额外启动一次 `--list`；测试数和名称仍保留在运行日志中。
 
-分片由 `scripts/e2e-sharding.mjs` 使用 Playwright 的公开 `preprocess` / `skipSharding` / `exclude` API 分配。文件保持完整，serial suite 和文件级 hook 不拆开；以 `tests/e2e/shard-durations.json` 保存最近四次成功完整运行的每文件耗时中位数，按当前测试数缩放；新文件按测试数估算，开发 project 默认三倍权重。最长文件优先分到当前负载最小的 runner，避免慢的开发用例集中到最后一片。所有分片使用同一确定性顺序，不设置额外 skip、grep 或重试；用 `--list` 的完整 ID 并集确认无重复、无遗漏。
+分片由 `scripts/e2e-sharding.mjs` 使用 Playwright 的公开 `preprocess` / `skipSharding` / `exclude` API 分配。文件保持完整，serial suite 和文件级 hook 不拆开；以 `tests/e2e/shard-durations.json` 保存本次采样的四次成功完整运行的每文件耗时中位数，按当前测试数缩放；新文件按测试数估算，开发 project 默认三倍权重。最长文件优先分到当前负载最小的 runner，避免慢的开发用例集中到最后一片。所有分片使用同一确定性顺序，不设置额外 skip、grep 或重试；用 `--list` 的完整 ID 并集确认无重复、无遗漏。
 
-生产测试包由 `@covel/web#build:e2e` 通过 Turbo 缓存到 `dist/web-e2e`。每次启动仍校验源码、Vite 配置、根环境文件和 `VITE_*` 输入，不能按目录存在跳过；smoke、扩展和压力验证在同一 runner 上复用相同内容。依赖用 Turbo transit 任务参与 hash，但不在 Vite 开发服务运行时重新构建 SDK，避免读取写入中的模块；SDK 仍由安装和服务端启动准备。预览 API 端口只影响启动时代理，不进入 bundle 内容，3101/3102 可以复用；runner 之间仍隔离构建和临时用户目录。
+生产测试包由 `@covel/web#build:e2e` 通过 Turbo 缓存到 `dist/web-e2e`。每次启动仍校验源码、Vite 配置、根环境文件和 `VITE_*` 输入，不能按目录存在跳过；同一 runner 上重复预览会复用相同内容；smoke 与扩展使用独立 runner，扩展与其后压力验证共享构建缓存。依赖用 Turbo transit 任务参与 hash，但不在 Vite 开发服务运行时重新构建 SDK，避免读取写入中的模块；SDK 仍由安装和服务端启动准备。预览 API 端口只影响启动时代理，不进入 bundle 内容，3101/3102 可以复用；runner 之间仍隔离构建和临时用户目录。
 
 所有浏览器执行都用 `scripts/e2e-cpu-list.mjs` 读取 Linux `Cpus_allowed_list`，通过 `taskset -c` 使用前两个允许的逻辑 CPU，子服务和 Chromium 继承限制。CPU 编号不假设从零开始，只有一个时记录限制，无法解析时失败。普通扩展验收的私有包目录会被测试修改，因此始终一个 worker、零重试。
 
@@ -265,21 +265,21 @@ pnpm docker:pg:down
 
 spec 显式设置的期限保持不变。首次运行要记录真实耗时、重试与 CPU 限制；发现竞争条件时提供复现并修复原因，不用新增重试或延长断言掩盖。
 
-失败时在 Actions 运行页的 **Artifacts** 下载 `covel-e2e-shard-<n>-failure-<run>-attempt-<attempt>` 或 `covel-browser-failure-<run>-attempt-<attempt>`，保留七天。完整 shard 上传 `tests/e2e/artifacts` 与 `tests/e2e/report`。browser 在这两个根目录下分别保存 `ci-smoke`、`extensions`、`extensions-stress`；后续命令不覆盖前一个失败的证据。两套配置均保留失败尝试的 trace 和截图，HTML 不自动打开。下载后用 `pnpm exec playwright show-report <report-dir>` 或 `pnpm exec playwright show-trace <trace.zip>` 查看。
+失败时在 Actions 运行页的 **Artifacts** 下载 `covel-e2e-shard-<n>-failure-<run>-attempt-<attempt>` 或 `covel-browser-<suite>-failure-<run>-attempt-<attempt>`，保留七天。完整 shard 上传 `tests/e2e/artifacts` 与 `tests/e2e/report`。browser 在这两个根目录下分别保存 `ci-smoke`、`extensions`、`extensions-stress`；后续命令不覆盖前一个失败的证据。两套配置均保留失败尝试的 trace 和截图，HTML 不自动打开。下载后用 `pnpm exec playwright show-report <report-dir>` 或 `pnpm exec playwright show-trace <trace.zip>` 查看。
 
 本地共用固定端口、构建输出和验收 fixture，所有 Playwright 命令都需 `flock /tmp/covel-e2e.lock` 串行执行，不可在同一检出并发跑 shard。Linux 上复现 CI 的命令：
 
 ```bash
 cpus="$(node scripts/e2e-cpu-list.mjs)"
-for shard in 1 2 3 4; do
-  CI=true flock /tmp/covel-e2e.lock taskset -c "$cpus" pnpm e2e --shard="$shard/4" --workers=1 || exit "$?"
+for shard in 1 2 3 4 5 6 7 8; do
+  CI=true flock /tmp/covel-e2e.lock taskset -c "$cpus" pnpm e2e --shard="$shard/8" --workers=1 || exit "$?"
 done
 CI=true flock /tmp/covel-e2e.lock taskset -c "$cpus" pnpm e2e:smoke
 CI=true flock /tmp/covel-e2e.lock taskset -c "$cpus" pnpm e2e:extensions
 CI=true PLAYWRIGHT_HTML_OUTPUT_DIR=tests/e2e/report/extensions-stress flock /tmp/covel-e2e.lock taskset -c "$cpus" pnpm e2e:extensions tests/e2e/sandbox-surfaces.acceptance.ts --grep 'a delayed runtime approval|independent sandbox regions' --repeat-each=3 --workers=1 --retries=0 --output=tests/e2e/artifacts/extensions-stress
 ```
 
-收集时先比较不分片列表与四个 `--shard=<n>/4 --list` 的测试 ID 并集，确认两个 project 无重复、无遗漏，再检查扩展列表包含全部验收文件。不要固定历史测试总数；真实模型 opt-in 与已有条件性跳过要分别记录。
+收集时先比较不分片列表与八个 `--shard=<n>/8 --list` 的测试 ID 并集，确认两个 project 无重复、无遗漏，再检查扩展列表包含全部验收文件。不要固定历史测试总数；真实模型 opt-in 与已有条件性跳过要分别记录。
 
 ## 发版前的玩家流程验收
 
