@@ -32,6 +32,8 @@ The SDK for plugin authors and the implementation for the host are kept apart:
 
 For details, see the [plugin contract](../reference/plugins.md) and [tools](../reference/tools.md).
 
+Web `build:e2e` is a separate Turbo task caching production preview output in `dist/web-e2e` for browser tests. It does not replace normal Web or desktop builds. Source, Vite configuration, root environment files and `VITE_*` participate in the content hash; preview ports affect only the startup proxy.
+
 ## What each package is actually responsible for
 
 | Package                 | Who needs to know it                                                                    | Reason to keep this boundary                                                                                                                                                                                                                                                                                                                                                                                               |

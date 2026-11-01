@@ -102,10 +102,10 @@ test("scope CLI requires full suites for malformed or missing nightly/manual eve
   }
 });
 
-test("every full scope requires all four isolated browser shards and the native aggregate", () => {
+test("every full scope requires all eight isolated browser shards and the native aggregate", () => {
   const job = ci.jobs.e2e;
   assert.equal(job.needs, "scope");
-  assert.deepEqual(job.strategy.matrix.shard, [1, 2, 3, 4]);
+  assert.deepEqual(job.strategy.matrix.shard, [1, 2, 3, 4, 5, 6, 7, 8]);
   assert.equal(job.strategy["fail-fast"], false);
   assert.equal(job["timeout-minutes"], 40);
   assert.equal(ci.jobs.browser["timeout-minutes"], 25);
@@ -133,16 +133,15 @@ test("every full scope requires all four isolated browser shards and the native 
   const run = stepWith(job, "--workers=1").run;
   assert.equal(
     run,
-    'taskset -c "${{ steps.setup.outputs.cpus }}" pnpm e2e --shard=${{ matrix.shard }}/4 --workers=1',
+    'taskset -c "${{ steps.setup.outputs.cpus }}" pnpm e2e --shard=${{ matrix.shard }}/8 --workers=1',
   );
   assert.doesNotMatch(
     run,
     /--project|--grep|--pass-with-no-tests|E2E_BASE_URL/,
   );
-  assert.match(
-    stepWith(job, "--list").run,
-    /pnpm e2e --shard=\$\{\{ matrix.shard \}\}\/4 --list/,
-  );
+  assert.equal(stepWith(job, "--list"), undefined);
+  assert.equal(stepWith(ci.jobs.browser, "--list"), undefined);
+  assert.ok(stepWith(ci.jobs.verify, "node scripts/check-e2e-shards.mjs"));
   for (const lane of [job, ci.jobs.browser]) {
     assert.equal(lane["continue-on-error"], undefined);
     assert.ok(
@@ -175,7 +174,7 @@ test("every full scope requires all four isolated browser shards and the native 
   }
 });
 
-test("acceptance survives smoke failures and stress repeats only nightly or manually", () => {
+test("smoke and acceptance run independently and stress repeats only nightly or manually", () => {
   const job = ci.jobs.browser;
   const smoke = stepWith(job, "pnpm e2e:smoke");
   const ordinary = job.steps.find(
@@ -186,6 +185,8 @@ test("acceptance survives smoke failures and stress repeats only nightly or manu
   const stress = stepWith(job, "--repeat-each=3");
   assert.ok(smoke && ordinary && stress);
   assert.match(smoke.run, /^taskset -c/);
+  assert.deepEqual(job.strategy.matrix.suite, ["smoke", "extensions"]);
+  assert.equal(job.strategy["fail-fast"], false);
   assert.ok(job.steps.indexOf(smoke) < job.steps.indexOf(ordinary));
   assert.ok(job.steps.indexOf(ordinary) < job.steps.indexOf(stress));
   assert.equal(
@@ -211,23 +212,52 @@ test("acceptance survives smoke failures and stress repeats only nightly or manu
   ]) {
     for (const outcome of ["success", "failure", "skipped"]) {
       for (const failedTest of [false, true]) {
-        for (const cancelled of [false, true]) {
-          const context = {
-            github: { event_name: event },
-            steps: { setup: { outcome } },
-            cancelled: () => cancelled,
-            success: () => !failedTest,
-          };
-          const ready = !cancelled && outcome === "success";
-          assert.equal(selected(ordinary.if, context), ready);
-          assert.equal(
-            selected(stress.if, context),
-            ready && ["schedule", "workflow_dispatch"].includes(event),
-          );
+        for (const suite of ["smoke", "extensions"]) {
+          for (const cancelled of [false, true]) {
+            const context = {
+              github: { event_name: event },
+              matrix: { suite },
+              steps: { setup: { outcome } },
+              cancelled: () => cancelled,
+              success: () => !failedTest,
+            };
+            assert.equal(
+              selected(smoke.if, context),
+              !failedTest && suite === "smoke",
+            );
+            const ready =
+              !cancelled && outcome === "success" && suite === "extensions";
+            assert.equal(selected(ordinary.if, context), ready);
+            assert.equal(
+              selected(stress.if, context),
+              ready && ["schedule", "workflow_dispatch"].includes(event),
+            );
+          }
         }
       }
     }
   }
+});
+
+test("server shards and runtime coverage have independent runners and all block Verification", () => {
+  assert.deepEqual(ci.jobs.server.strategy.matrix.shard, [1, 2]);
+  assert.equal(ci.jobs.server.strategy["fail-fast"], false);
+  assert.match(
+    stepWith(ci.jobs.server, "--shard=").run,
+    /--shard=\$\{\{ matrix.shard \}\}\/2$/,
+  );
+  assert.equal(
+    stepWith(ci.jobs.runtime, "pnpm test:coverage:runtime").run,
+    "pnpm test:coverage:runtime",
+  );
+  for (const id of ["server", "runtime"]) {
+    assert.equal(ci.jobs[id].needs, "scope");
+    assert.ok(ci.jobs.result.needs.includes(id));
+  }
+  assert.equal(
+    stepWith(ci.jobs.server, "pnpm test:coverage:runtime"),
+    undefined,
+  );
 });
 
 test("failure uploads retain each lane and shard with unique attempt names", () => {
@@ -246,6 +276,7 @@ test("failure uploads retain each lane and shard with unique attempt names", () 
       assert.match(upload.with.name, /matrix.shard/);
       assert.deepEqual(paths, ["tests/e2e/artifacts", "tests/e2e/report"]);
     } else {
+      assert.match(upload.with.name, /matrix.suite/);
       for (const lane of ["ci-smoke", "extensions", "extensions-stress"])
         for (const root of ["artifacts", "report"])
           assert.ok(paths.includes(`tests/e2e/${root}/${lane}`));

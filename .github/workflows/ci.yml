@@ -11,8 +11,10 @@ name: CI
 # to different concurrency groups, so neither cancels the other. The PR run
 # covers dev branches; this push trigger is the post-merge guard on main.
 #
-# All changes run the complete static gate. Scope selection only changes which
-# tests and builds run; unknown changes and releases always take the full path.
+# Source changes run the complete static gate. Documentation-only changes run
+# documentation checks and Site; unknown changes and releases take the full path.
+# Keep the workflow unfiltered: its required Verification check must always exist.
+# Job-level path selection also avoids GitHub trigger filters' 300-file diff limit.
 on:
   pull_request:
   push:
@@ -113,6 +115,7 @@ jobs:
 
       # Keep the version in sync with mise.toml, which provides it locally.
       - name: Install actionlint
+        if: ${{ needs.scope.outputs.scope != 'docs' || inputs.release }}
         shell: bash
         run: |
           set -euo pipefail
@@ -138,6 +141,7 @@ jobs:
       # Separate namespaces prevent parallel jobs from racing to save one key.
       - name: Restore CI task cache
         id: turbo-cache
+        if: ${{ needs.scope.outputs.scope != 'docs' || inputs.release || inputs.commit != '' }}
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: .turbo/cache
@@ -147,18 +151,25 @@ jobs:
             turbo-check-${{ runner.os }}-
 
       - name: Check
+        if: ${{ needs.scope.outputs.scope != 'docs' || inputs.release }}
         run: pnpm check
+
+      # Validate coverage once, away from the browser critical path. Browser
+      # jobs collect again as part of execution, without a redundant --list.
+      - name: Verify browser shard coverage
+        if: ${{ needs.scope.outputs.scope != 'docs' || inputs.release }}
+        run: node scripts/check-e2e-shards.mjs
 
       - name: Test documentation examples
         if: ${{ needs.scope.outputs.scope == 'docs' && !inputs.release }}
-        run: pnpm test:docs:packages
+        run: pnpm check:schemas && pnpm check:changelog && pnpm test:docs
 
       - name: Release preflight
         if: ${{ inputs.release }}
         run: pnpm release:preflight
 
       - name: Save CI task cache
-        if: ${{ success() && !inputs.release && inputs.commit == '' && steps.turbo-cache.outputs.cache-hit != 'true' }}
+        if: ${{ success() && !inputs.release && inputs.commit == '' && needs.scope.outputs.scope != 'docs' && steps.turbo-cache.outputs.cache-hit != 'true' }}
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: .turbo/cache
@@ -294,7 +305,45 @@ jobs:
           key: ${{ steps.turbo-cache.outputs.cache-primary-key }}
 
   server:
-    name: Server tests, runtime coverage
+    name: Server unit tests (${{ matrix.shard }}/2)
+    needs: scope
+    if: ${{ !cancelled() && (needs.scope.outputs.scope != 'docs' || inputs.release) }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.commit || github.sha }}
+          persist-credentials: false
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "26.12.1"
+          cache: ${{ !inputs.release && inputs.commit == '' && 'pnpm' || '' }}
+          package-manager-cache: false
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # Both shards execute directly; database/external state is not cached.
+      - name: Test server
+        env:
+          VITEST_MAX_WORKERS: "4"
+        run: pnpm --filter @covel/server test --shard=${{ matrix.shard }}/2
+
+  runtime:
+    name: Runtime coverage floor
     needs: scope
     if: ${{ !cancelled() && (needs.scope.outputs.scope != 'docs' || inputs.release) }}
     runs-on: ubuntu-latest
@@ -320,17 +369,7 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      # The server suite is never replayed from the Turbo cache and is the
-      # longest in the workspace. Alone on a runner it gets every core.
-      - name: Test server
-        env:
-          VITEST_MAX_WORKERS: "4"
-        run: pnpm test --filter=@covel/server
-
-      # The kernel's coverage must not fall under the floor in
-      # packages/runtime/vitest.config.ts. This is the only run of the runtime
-      # suite (`verify` leaves @covel/runtime out), and it sits in this job,
-      # which finishes before `verify` does.
+      # This is the only runtime run; coverage thresholds remain enforced.
       - name: Runtime coverage floor
         env:
           VITEST_MAX_WORKERS: "4"
@@ -385,7 +424,7 @@ jobs:
         run: pnpm test:pg
 
   e2e:
-    name: Full browser suite (${{ matrix.shard }}/4)
+    name: Full browser suite (${{ matrix.shard }}/8)
     needs: scope
     if: ${{ !cancelled() && (needs.scope.outputs.scope != 'docs' || inputs.release) }}
     runs-on: ubuntu-latest
@@ -394,7 +433,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3, 4]
+        shard: [1, 2, 3, 4, 5, 6, 7, 8]
 
     steps:
       - name: Checkout
@@ -415,11 +454,6 @@ jobs:
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
-
-      - name: Collect shard tests
-        run: |
-          echo "Full browser shard ${{ matrix.shard }}/4 (both default projects)"
-          pnpm e2e --shard=${{ matrix.shard }}/4 --list
 
       # The browser download is cached by Playwright version (from the
       # lockfile) and runner image (ImageOS, e.g. ubuntu24), because Playwright
@@ -458,7 +492,7 @@ jobs:
           echo "cpus=$cpus" >> "$GITHUB_OUTPUT"
 
       - name: Test full browser shard
-        run: taskset -c "${{ steps.setup.outputs.cpus }}" pnpm e2e --shard=${{ matrix.shard }}/4 --workers=1
+        run: taskset -c "${{ steps.setup.outputs.cpus }}" pnpm e2e --shard=${{ matrix.shard }}/8 --workers=1
 
       - name: Upload full browser failure artifacts
         if: ${{ failure() }}
@@ -479,11 +513,16 @@ jobs:
           key: ${{ steps.chromium-cache.outputs.cache-primary-key }}
 
   browser:
-    name: Browser smoke and community plugins
+    name: Browser ${{ matrix.suite }}
     needs: scope
     if: ${{ !cancelled() && (needs.scope.outputs.scope != 'docs' || inputs.release) }}
     runs-on: ubuntu-latest
     timeout-minutes: 25
+
+    strategy:
+      fail-fast: false
+      matrix:
+        suite: [smoke, extensions]
 
     steps:
       - name: Checkout
@@ -504,11 +543,6 @@ jobs:
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
-
-      - name: Collect browser tests
-        run: |
-          pnpm e2e --list
-          pnpm e2e:extensions --list
 
       # The browser download is cached by Playwright version (from the
       # lockfile) and runner image (ImageOS, e.g. ubuntu24), because Playwright
@@ -547,14 +581,15 @@ jobs:
           echo "cpus=$cpus" >> "$GITHUB_OUTPUT"
 
       - name: Test browser smoke
+        if: ${{ matrix.suite == 'smoke' }}
         run: taskset -c "${{ steps.setup.outputs.cpus }}" pnpm e2e:smoke
 
       - name: Test community plugin acceptance
-        if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
+        if: ${{ !cancelled() && steps.setup.outcome == 'success' && matrix.suite == 'extensions' }}
         run: taskset -c "${{ steps.setup.outputs.cpus }}" pnpm e2e:extensions
 
       - name: Repeat timing-sensitive sandbox acceptance
-        if: ${{ !cancelled() && steps.setup.outcome == 'success' && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') }}
+        if: ${{ !cancelled() && steps.setup.outcome == 'success' && matrix.suite == 'extensions' && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') }}
         env:
           PLAYWRIGHT_HTML_OUTPUT_DIR: tests/e2e/report/extensions-stress
         run: >-
@@ -568,7 +603,7 @@ jobs:
         if: ${{ failure() }}
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: covel-browser-failure-${{ github.run_id }}-attempt-${{ github.run_attempt }}
+          name: covel-browser-${{ matrix.suite }}-failure-${{ github.run_id }}-attempt-${{ github.run_attempt }}
           path: |
             tests/e2e/artifacts/ci-smoke
             tests/e2e/report/ci-smoke
@@ -588,7 +623,8 @@ jobs:
 
   result:
     name: Verification
-    needs: [scope, verify, tests, site, web, server, postgres, browser, e2e]
+    needs:
+      [scope, verify, tests, site, web, server, runtime, postgres, browser, e2e]
     if: ${{ always() }}
     runs-on: ubuntu-latest
     timeout-minutes: 5

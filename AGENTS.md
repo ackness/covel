@@ -63,6 +63,8 @@ store/database changes and `pnpm e2e` plus `pnpm e2e:extensions` for UI flows. D
 `pnpm check` + `pnpm test:docs:packages`. `pnpm check:push` covers the static gate
 and changed packages with dependents plus E2E collection in a clean checkout;
 full browser, smoke and extension execution belongs to full-scope CI.
+Documentation-only CI skips source checks but retains documentation verification
+and Site; required aggregates always run, using job-level path selection.
 
 The real-model harness accepts `--plugins <ids>` for initial package selection.
 For read-only sanitized submission metrics, see `node scripts/submission-report.mjs --help`
@@ -327,7 +329,7 @@ headings in that directory's README. Never edit `docs/CHANGELOG.md` directly.
 - Web Vitest defaults to jsdom; pure tests may use the Node environment.
   Desktop and script tests use `node --test`. Playwright uses production builds;
   specs importing `/src/` need the slower `chromium-dev` project. See
-  [E2E testing](docs/internals/e2e-testing.md). Full-scope CI requires four
+  [E2E testing](docs/internals/e2e-testing.md). Full-scope CI requires eight
   isolated one-worker shards across both default projects plus smoke and all
   extensions, constrained to at most two allowed CPUs. Nightly/manual runs also repeat
   timing-sensitive sandbox acceptance without retries. Serialize local browser

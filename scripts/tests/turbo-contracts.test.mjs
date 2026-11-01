@@ -74,6 +74,49 @@ function writeFixtureFile(workspace, relativePath, contents) {
   return target;
 }
 
+test("E2E bundles reuse content across preview ports and invalidate source, config and environment", () => {
+  const { parent, workspace } = makeFixture();
+  try {
+    const args = ["build:e2e", "--filter=@covel/web"];
+    const id = "@covel/web#build:e2e";
+    const original = task(
+      dry(workspace, args, { ...process.env, RUNTIME_PORT: "3101" }),
+      id,
+    );
+    const graph = dry(workspace, args);
+    assert.equal(
+      graph.has("@covel/plugin-handlers-utils#build"),
+      false,
+      "preview builds must not rewrite the SDK while the dev server is serving it",
+    );
+    assert.deepEqual(original.outputs, ["../../dist/web-e2e/**"]);
+    assert.equal(
+      task(dry(workspace, args, { ...process.env, RUNTIME_PORT: "3102" }), id)
+        .hash,
+      original.hash,
+    );
+    let previous = original.hash;
+    for (const file of [
+      "apps/web/src/main.tsx",
+      "apps/web/vite.config.ts",
+      ".env.production",
+      "packages/plugin-handlers-utils/src/index.ts",
+    ]) {
+      writeFixtureFile(workspace, file, "changed\n");
+      const next = task(dry(workspace, args), id).hash;
+      assert.notEqual(next, previous, file);
+      previous = next;
+    }
+    assert.notEqual(
+      task(dry(workspace, args, { ...process.env, VITE_TEST: "changed" }), id)
+        .hash,
+      previous,
+    );
+  } finally {
+    rmSync(parent, { recursive: true, force: true });
+  }
+});
+
 test("Turbo hashes root config, prompts, and shared source into their consumers", () => {
   const { parent, workspace } = makeFixture();
   try {

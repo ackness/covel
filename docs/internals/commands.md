@@ -201,17 +201,17 @@ pnpm release:preflight  # static pre-tag gate: lockfile, imports, plugin/world/p
 
 ### 拉取请求上
 
-CI（`.github/workflows/ci.yml`）统一处理文档、源码和混合改动，始终运行完整的 `pnpm check`。纯文档另跑文档测试；源码、无法确定范围的改动和发布运行全部测试。完整路径的静态检查与其余包测试、构建分别在 `verify` 和 `tests` 中并行运行，各用独立缓存键，两者都属于必需任务。Web 单元测试、带 runtime 覆盖率下限的服务端测试、PostgreSQL 集成、四个完整浏览器 shard 以及 smoke/全部扩展验收独立并行运行。每次非发布 CI 调用 Site 构建官网和文档站一次；完整检查的其余构建排除这两个目标，独立的 `pnpm build` 不变。发布跳过 Site，运行 release preflight，并由平台打包任务构建。详见 [`CONTRIBUTING.md`](../CONTRIBUTING.md)。
+CI（`.github/workflows/ci.yml`）按路径选择源码或纯文档验证。源码、混合改动、未知范围和发布运行完整静态检查及全部套件；纯文档跳过源码检查，保留文档验证和 Site。路径过滤发生在 job 层，工作流与必需 `Verification` 始终存在，避免 PR 门禁 Pending，也避免 GitHub 路径触发器的 300 文件限制漏掉源码改动。静态、其余包测试与构建、Web、两个 server 分片、runtime 覆盖率、PostgreSQL、八个完整浏览器分片及 smoke/扩展验收并行。runtime 只运行一次，下限不变。每次非发布 CI 调用 Site 一次；完整检查的其余构建排除官网和文档站。发布跳过 Site，运行 preflight，再由平台打包任务构建。详见 [`CONTRIBUTING.md`](../CONTRIBUTING.md)。
 
-Site 用上面的 Turbo 命令并行运行两个独立构建；输入相同时直接恢复 `dist/`，必需任务仍要成功。输入包括站点配置、`docs/**`、`SITE_BASE`、构建环境文件、lockfile 和工具链；复制文档输出到官网的步骤在缓存之后进行。各任务只恢复一次缓存；普通 PR/main 运行在任务成功且精确键未命中时，用恢复步骤返回的原始键保存，PR 缓存保持 GitHub 的 ref 隔离。发布和显式 commit 请求的 Turbo、Electron 和 Chromium 缓存仅恢复，setup-node 的 pnpm 缓存关闭；显式 commit 的 Site 构建也遵守这一规则。桌面后端使用随包 Electron RunAsNode，不再下载或缓存独立 Node。Electron 缓存按 OS、架构和 lockfile 区分；发布未命中时重新下载且不保存。范围选择对发布和显式 commit 请求使用浅检出，因为它们不需要 diff；PR/main 保留比较所需的完整提交与树历史。控制脚本任务使用稀疏检出和 blob 过滤，不展开无关工作树内容。
+Site 用上面的 Turbo 命令并行运行两个独立构建；输入相同时直接恢复 `dist/`，必需任务仍要成功。输入包括站点配置、`docs/**`、`SITE_BASE`、构建环境文件、lockfile 和工具链；复制文档输出到官网的步骤在缓存之后进行。各任务只恢复一次缓存；Site 的 Actions 缓存键由两个构建任务的输入 hash 生成，相同内容不会按提交重复保存，快照目录限制为 128MB；普通 PR/main 运行在任务成功且精确键未命中时，用恢复步骤返回的原始键保存，PR 缓存保持 GitHub 的 ref 隔离。发布和显式 commit 请求的 Turbo、Electron 和 Chromium 缓存仅恢复，setup-node 的 pnpm 缓存关闭；显式 commit 的 Site 构建也遵守这一规则。桌面后端使用随包 Electron RunAsNode，不再下载或缓存独立 Node。Electron 缓存按 OS、架构和 lockfile 区分；发布未命中时重新下载且不保存。范围选择对发布和显式 commit 请求使用浅检出，因为它们不需要 diff；PR/main 保留比较所需的完整提交与树历史。控制脚本任务使用稀疏检出和 blob 过滤，不展开无关工作树内容。
 
 `main` 只接受拉取请求（`Protect main` 规则集：不能直接推送、强制推送或删除）。CI 的 `Verification` 汇总所选任务，包括非发布 CI 的 Site；必需任务缺失、跳过、失败或取消都不能通过。`.github/workflows/gate.yml` 提供每个拉取请求都有的 `All checks pass`：它要求 `Verification` 成功，也保留其他检查的失败。重跑失败检查之后，也要重跑这一项。
 
-混合改动、显式 commit、每日 UTC 03:17 的定时运行及所有手动运行也走完整范围，后两者即使位于纯文档提交也不缩减。手动运行使用所选 ref；定时和手动 CI 不发布 Pages。四个单 worker shard 覆盖两个默认 project，每个最多使用两个允许的 CPU。普通扩展验收始终必需，只有定时和手动运行会把时间敏感沙箱用例重复三次，零重试。每个 shard 上限 40 分钟，smoke/扩展任务 25 分钟，`All checks pass` 65 分钟。具体时限、七天失败产物和本地串行复现见[浏览器测试](./e2e-testing.md#ci-执行与失败证据)。
+混合改动、显式 commit、每日 UTC 03:17 的定时运行及所有手动运行也走完整范围，后两者即使位于纯文档提交也不缩减。手动运行使用所选 ref；定时和手动 CI 不发布 Pages。八个单 worker shard 覆盖两个默认 project，每个最多使用两个允许的 CPU。普通扩展验收始终必需，只有定时和手动运行会把时间敏感沙箱用例重复三次，零重试。每个 shard 上限 40 分钟，smoke/扩展任务 25 分钟，`All checks pass` 65 分钟。具体时限、七天失败产物和本地串行复现见[浏览器测试](./e2e-testing.md#ci-执行与失败证据)。
 
 ### Documentation-only changes
 
-纯文档改动走短路径：推送钩子和 `ci.yml` 都运行 `pnpm check`，再运行 `pnpm test:docs:packages`；CI 还通过 Site 构建官网和文档站。文档引用与技术债台账的脚本测试已在 `check:scripts` 中运行，不再重复。文档测试按包合并文件参数，同一包只启动一次测试 runner；包括 SDK README 与声明的 Zod peer 版本和导出子路径的同步检查，以及声明式示例的公共执行路径与信任验证。独立运行 `pnpm test:docs` 仍包含包测试和这两组脚本测试。检查历史提交时，推送钩子使用该提交实际提供的命令。
+纯文档改动走短路径：本地推送钩子仍运行 `pnpm check` 和 `pnpm test:docs:packages`。CI 不运行源码 lint 或源码套件，只运行 `pnpm check:schemas`、`pnpm check:changelog`、`pnpm test:docs` 和 Site 构建。文档引用与技术债台账脚本测试在 CI 的 `test:docs` 内各执行一次，本地完整静态门禁已包含它们，因此钩子只补包测试。文档测试按包合并参数，覆盖 SDK README、Zod peer 与导出子路径，以及声明式示例的执行与信任验证。检查历史提交时，推送钩子使用该提交实际提供的命令。
 
 算作文档的文件（规则在 `scripts/lib/change-scope.mjs`）：
 

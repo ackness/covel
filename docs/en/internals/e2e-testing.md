@@ -200,14 +200,14 @@ For the arguments and the details of recording, see [Recording and replay](../sh
 
 ## Environment Variables
 
-| Variable                | Default                                                                              | Notes                                                                                                             |
-| ----------------------- | ------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------- |
-| `E2E_BASE_URL`          | For `chromium`, `http://127.0.0.1:5183`; for `chromium-dev`, `http://127.0.0.1:5181` | The address Playwright navigates pages to. When set, it means you use an external environment you manage yourself |
-| `E2E_MODEL_SLOT`        | Not set (follows the configured model routing)                                       | The slot that `pnpm e2e:verify` makes story runtimes use. Same as `--slot`                                        |
-| `LIVE_LLM_ENABLED`      | `false`                                                                              | Explicitly turns on Playwright/Vitest flows that access a real model service                                      |
-| `COVEL_STORY_BASE_URL`  | Not read by any code                                                                 | Does not override a slot; the proxy address is written directly into `llm.toml`                                   |
-| `COVEL_PLUGIN_BASE_URL` | Not read by any code                                                                 | Does not override a slot; the proxy address is written directly into `llm.toml`                                   |
-| `CI`                    | `false`                                                                              | Full-suite CI uses two retries and one worker; extensions always use zero retries and one worker. Both forbid `test.only` in CI                               |
+| Variable                | Default                                                                              | Notes                                                                                                                           |
+| ----------------------- | ------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------- |
+| `E2E_BASE_URL`          | For `chromium`, `http://127.0.0.1:5183`; for `chromium-dev`, `http://127.0.0.1:5181` | The address Playwright navigates pages to. When set, it means you use an external environment you manage yourself               |
+| `E2E_MODEL_SLOT`        | Not set (follows the configured model routing)                                       | The slot that `pnpm e2e:verify` makes story runtimes use. Same as `--slot`                                                      |
+| `LIVE_LLM_ENABLED`      | `false`                                                                              | Explicitly turns on Playwright/Vitest flows that access a real model service                                                    |
+| `COVEL_STORY_BASE_URL`  | Not read by any code                                                                 | Does not override a slot; the proxy address is written directly into `llm.toml`                                                 |
+| `COVEL_PLUGIN_BASE_URL` | Not read by any code                                                                 | Does not override a slot; the proxy address is written directly into `llm.toml`                                                 |
+| `CI`                    | `false`                                                                              | Full-suite CI uses two retries and one worker; extensions always use zero retries and one worker. Both forbid `test.only` in CI |
 
 ## PostgreSQL Mode
 
@@ -239,9 +239,15 @@ These directories are excluded in `.dockerignore`, so they do not enter the prod
 
 ### CI execution and failure evidence
 
-Every full scope in `ci.yml` must execute both default projects: non-doc PRs, main source/mixed pushes, unknown scope, explicit commits and releases. Docs-only PR/main runs retain static checks, documentation tests and Site. Daily `schedule` at 03:17 UTC (default branch) and `workflow_dispatch` (selected ref, no command or path inputs) always run full scope. Scheduling becomes available after the workflow reaches the default branch. Both build Site without publishing Pages; deployment still requires a main push.
+Every full scope in `ci.yml` must execute both default projects: non-doc PRs, main source/mixed pushes, unknown scope, explicit commits and releases. Docs-only PR/main runs retain documentation verification and Site, skipping source CI. Daily `schedule` at 03:17 UTC (default branch) and `workflow_dispatch` (selected ref, no command or path inputs) always run full scope. Scheduling becomes available after the workflow reaches the default branch. Both build Site without publishing Pages; deployment still requires a main push.
 
-Each of the four `e2e` shards owns its runner, checkout, install, build and temporary user home, running `pnpm e2e --shard=<n>/4 --workers=1` without a project or grep filter. A failed shard does not cancel the others. `browser` separately runs smoke and all extension acceptance once, including declarative notebook, clickable map, community stage and sandbox surfaces. Default e2e excludes `*.acceptance.ts`. If setup succeeded and the job was not cancelled, extensions still run after a smoke failure. Either failure blocks `Verification`, and every full shard is required too. `All checks pass` requires the successful aggregate and preserves other check failures.
+Each of the eight `e2e` shards owns its runner, checkout, install, build and temporary user home, running `pnpm e2e --shard=<n>/8 --workers=1` without a project or grep filter. A failed shard does not cancel the others. The `browser` matrix uses two independent runners for smoke and all extension acceptance once each, including declarative notebook, clickable map, community stage and sandbox surfaces. Default e2e excludes `*.acceptance.ts`. Neither job waits for the other, and either failure leaves the other running. Either failure blocks `Verification`, and every full shard is required too. `All checks pass` requires the successful aggregate and preserves other check failures.
+
+`node scripts/check-e2e-shards.mjs` centrally validates the full collection, the eight-shard ID union and all extension files on the static-check runner. Browser runners collect tests during actual execution instead of starting another `--list` process first; execution logs still record test counts and names.
+
+The public Playwright `preprocess`, `skipSharding` and `exclude` APIs in `scripts/e2e-sharding.mjs` assign complete files, preserving serial suites and file hooks. `tests/e2e/shard-durations.json` records median file durations from four sampled successful full runs, scaled by the current test count. New files use estimated cost per test, with development tests weighted three times higher. Longest files go to the lightest runner, spreading slow development tests across all shards. Every shard uses the same deterministic order without extra skips, grep or retries. Compare complete `--list` test IDs to prove an exact, disjoint union.
+
+The production test bundle is cached by `@covel/web#build:e2e` in `dist/web-e2e`. Each startup still validates source, Vite configuration, root environment files and `VITE_*` inputs; directory existence never establishes freshness. Repeated previews reuse identical content on the same runner. Smoke and extensions have separate runners; extensions and their subsequent stress run share the build cache. Turbo transit tasks hash dependencies without rebuilding the SDK while Vite serves development modules, preventing reads of partially written files. Installation and server startup still prepare the SDK. Preview API ports affect only the startup proxy, allowing 3101/3102 to reuse the bundle. Builds and temporary user homes remain isolated across runners.
 
 All browser execution uses `scripts/e2e-cpu-list.mjs` to read Linux `Cpus_allowed_list`, then `taskset -c` selects its first two allowed logical CPUs. Child servers and Chromium inherit the constraint. CPU IDs need not start at zero; a single available CPU is recorded and parsing failures fail closed. Extension tests modify a private package tree, so ordinary acceptance always uses one worker and zero retries.
 
@@ -259,21 +265,21 @@ Only scheduled/manual runs repeat the positive/negative delayed-approval pair an
 
 Explicit spec deadlines remain unchanged. Record actual first-run durations, retries and CPU constraints. Reproduce and fix demonstrated races rather than masking them with more retries or assertion time.
 
-On failure, download `covel-e2e-shard-<n>-failure-<run>-attempt-<attempt>` or `covel-browser-failure-<run>-attempt-<attempt>` from the Actions run's **Artifacts** section within seven days. Full shards upload `tests/e2e/artifacts` and `tests/e2e/report`. Browser output uses separate `ci-smoke`, `extensions` and `extensions-stress` folders under both roots, so later commands preserve earlier failure evidence. Both configs retain failed-attempt traces and screenshots, and HTML never opens automatically. After downloading, use `pnpm exec playwright show-report <report-dir>` or `pnpm exec playwright show-trace <trace.zip>`.
+On failure, download `covel-e2e-shard-<n>-failure-<run>-attempt-<attempt>` or `covel-browser-<suite>-failure-<run>-attempt-<attempt>` from the Actions run's **Artifacts** section within seven days. Full shards upload `tests/e2e/artifacts` and `tests/e2e/report`. Browser output uses separate `ci-smoke`, `extensions` and `extensions-stress` folders under both roots, so later commands preserve earlier failure evidence. Both configs retain failed-attempt traces and screenshots, and HTML never opens automatically. After downloading, use `pnpm exec playwright show-report <report-dir>` or `pnpm exec playwright show-trace <trace.zip>`.
 
 Local runs share fixed ports, build output and acceptance fixtures. Serialize every Playwright command with `flock /tmp/covel-e2e.lock`; never run shards concurrently in one checkout. Reproduce CI on Linux with:
 
 ```bash
 cpus="$(node scripts/e2e-cpu-list.mjs)"
-for shard in 1 2 3 4; do
-  CI=true flock /tmp/covel-e2e.lock taskset -c "$cpus" pnpm e2e --shard="$shard/4" --workers=1 || exit "$?"
+for shard in 1 2 3 4 5 6 7 8; do
+  CI=true flock /tmp/covel-e2e.lock taskset -c "$cpus" pnpm e2e --shard="$shard/8" --workers=1 || exit "$?"
 done
 CI=true flock /tmp/covel-e2e.lock taskset -c "$cpus" pnpm e2e:smoke
 CI=true flock /tmp/covel-e2e.lock taskset -c "$cpus" pnpm e2e:extensions
 CI=true PLAYWRIGHT_HTML_OUTPUT_DIR=tests/e2e/report/extensions-stress flock /tmp/covel-e2e.lock taskset -c "$cpus" pnpm e2e:extensions tests/e2e/sandbox-surfaces.acceptance.ts --grep 'a delayed runtime approval|independent sandbox regions' --repeat-each=3 --workers=1 --retries=0 --output=tests/e2e/artifacts/extensions-stress
 ```
 
-Compare the unsharded collection with the union of all four `--shard=<n>/4 --list` test IDs: both projects must appear exactly once, with no omissions. Check that extension collection includes every acceptance file. Do not freeze historical test totals; record paid-model opt-ins and existing conditional skips separately.
+Compare the unsharded collection with the union of all eight `--shard=<n>/8 --list` test IDs: both projects must appear exactly once, with no omissions. Check that extension collection includes every acceptance file. Do not freeze historical test totals; record paid-model opt-ins and existing conditional skips separately.
 
 ## Player-Flow Acceptance Before a Release
 
@@ -360,7 +366,7 @@ Record the capture's commit, scene, turn, theme, and viewport. If an image inclu
 | Port already in use, or the page does not open           | The default test Vite is `5181`, the built page is `5183`, and the API is `3101`. Vite has `strictPort` enabled, so it will not quietly switch to another port. Stop the process that holds the port and try again. To use a page you started yourself, set `E2E_BASE_URL`, and make sure the backend type matches the target spec.        |
 | Waiting for the API health check times out               | The default run checks `http://127.0.0.1:3101/api/health`. For an external environment, check the server address it actually uses. For the PostgreSQL flow, run `pnpm db:up` and `pnpm dev:pg` first, then point `E2E_BASE_URL` at the matching page, and exclude the specs that support only MemoryStore.                                 |
 | A model call or character creation fails                 | The real-model specs in the browser use the model roles configured in the app, such as `story` and `plugin`. `pnpm e2e:verify` also routes by configuration, and it switches to a specified slot only when `--slot` is passed or `E2E_MODEL_SLOT` is set. Confirm that the slots you need exist, and that `.env.llm` has the matching key. |
-| You need to locate an asynchronous failure               | On failure, Playwright keeps screenshots and first-attempt failure traces. Full-suite videos are still kept on the first retry. Open the HTML report with `pnpm exec playwright show-report tests/e2e/report`.                                                                                                                                                               |
+| You need to locate an asynchronous failure               | On failure, Playwright keeps screenshots and first-attempt failure traces. Full-suite videos are still kept on the first retry. Open the HTML report with `pnpm exec playwright show-report tests/e2e/report`.                                                                                                                             |
 | Cannot find the output of the plugin verification script | The script writes to `debugs/e2e-logs/` by default. Pass `--no-log` if you only want to see it in the terminal, and `--keep` to keep sessions and snapshots.                                                                                                                                                                               |
 
 ## Sandbox surface acceptance
