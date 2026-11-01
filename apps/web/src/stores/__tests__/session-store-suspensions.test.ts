@@ -8,6 +8,7 @@
 import { describe, expect, it } from "vitest";
 import type { SseEnvelope } from "@/services/api";
 import { initialState, reducer } from "../session-store/reducer.js";
+import { projectExecutionTurns } from "../session-store/execution-projection.js";
 import {
   applyResumeEvents,
   createSseEventHandler,
@@ -386,6 +387,13 @@ describe("session-store — suspensions", () => {
   it("replays resumed events through the production handler and resolves the suspended runtime", () => {
     const harness = createHarness();
     harness.handle(
+      makeEnvelope("runtime.started", {
+        runtimeId: RUNTIME_ID,
+        pluginId: PLUGIN_ID,
+        runId: "original",
+      }),
+    );
+    harness.handle(
       makeEnvelope("turn.suspended", {
         suspensionId: "img-1",
         runtimeId: RUNTIME_ID,
@@ -396,12 +404,39 @@ describe("session-store — suspensions", () => {
       makeEnvelope("runtime.completed", {
         runtimeId: RUNTIME_ID,
         pluginId: PLUGIN_ID,
+        runId: "original",
         status: "suspended",
       }),
     );
 
     applyResumeEvents(
       [
+        {
+          id: "event-resume-started",
+          type: "runtime.started",
+          sessionId: SESSION_ID,
+          turnId: TURN_ID,
+          timestamp: "2026-04-22T10:00:00.000Z",
+          source: { pluginId: PLUGIN_ID, runtimeId: RUNTIME_ID },
+          payload: {
+            runId: "continuation",
+            resumed: true,
+            resumeSourceRunId: "original",
+          },
+        },
+        {
+          id: "event-resume-completed",
+          type: "runtime.completed",
+          sessionId: SESSION_ID,
+          turnId: TURN_ID,
+          timestamp: "2026-04-22T10:00:00.084Z",
+          source: { pluginId: PLUGIN_ID, runtimeId: RUNTIME_ID },
+          payload: {
+            runId: "continuation",
+            status: "success",
+            durationMs: 84,
+          },
+        },
         {
           id: "event-narrative",
           type: "narrative.completed",
@@ -441,8 +476,8 @@ describe("session-store — suspensions", () => {
             suspensionId: "img-1",
             runtimeId: RUNTIME_ID,
             pluginId: PLUGIN_ID,
-            status: "success",
-            durationMs: 84,
+            runId: "continuation",
+            resumeSourceRunId: "original",
           },
         },
       ],
@@ -451,7 +486,15 @@ describe("session-store — suspensions", () => {
 
     expect(harness.state().suspensions).toEqual([]);
     expect(harness.state().executionSteps).toEqual([
+      expect.objectContaining({ runId: "original", status: "suspended" }),
+      expect.objectContaining({ runId: "continuation", status: "completed" }),
+    ]);
+    expect(
+      projectExecutionTurns([], harness.state().executionSteps).turns[0]?.steps,
+    ).toEqual([
       expect.objectContaining({
+        runId: "continuation",
+        resumeSourceRunId: "original",
         runtimeId: RUNTIME_ID,
         pluginId: PLUGIN_ID,
         status: "completed",
