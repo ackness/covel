@@ -124,8 +124,11 @@ export function selfDataBaselineSuite(
                   .join("\n");
                 // Script the model's calculation from the delivered value. An
                 // ids-only window supplies no score, so use the fixture's plan.
+                // PostgreSQL jsonb reorders keys, so do not assume key order.
                 const score = Number(
-                  prompt.match(/- record(?: \||:) \{"score":(\d+)/)?.[1] ?? 10,
+                  prompt.match(
+                    /- record(?: \||:) \{[^\n]*?"score":(\d+)/,
+                  )?.[1] ?? 10,
                 );
                 if (options.rebuildAfterCompaction) expect(score).toBe(20);
                 await duringRequest?.();
