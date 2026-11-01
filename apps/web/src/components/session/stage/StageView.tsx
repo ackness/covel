@@ -1,3 +1,5 @@
+import { StoryOperationFailureNotice } from "../chat-messages/story-operation-failure-notice.js";
+import { projectStoryOperationFailures } from "@covel/shared";
 /**
  * Full-screen visual-novel stage (viewMode: "stage"). Composes the five stage
  * layers over kernel UI projections and owns the small amount of
@@ -360,6 +362,14 @@ export function StageView(props: StageViewProps): ReactElement {
 
         <StageExecutionStatus {...props} />
       </div>
+
+      {storyMsg &&
+        projectStoryOperationFailures(storyMsg).operationFailures &&
+        !storyMsg.id.startsWith("stream_") && (
+          <div className="shrink-0 border-t border-border bg-background px-4 py-2">
+            <StoryOperationFailureNotice message={storyMsg} />
+          </div>
+        )}
 
       {/* History drawer — the full parsed chat, needs a bounded flex column
           for its internal scroll viewport (flex-1 min-h-0). Retain execution

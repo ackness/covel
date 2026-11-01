@@ -464,6 +464,12 @@ SqliteStore、MemoryStore 和 PgStore（都在 Node 上）用同一种办法：
 - 被拒操作的 proposal 列在 `failedProposals` 里，和被丢弃单元的一样。
 - 提供者的数据集在调用时由 `TurnExecutorDeps.loadPluginDatasets` 载入，随提交计划（`providerDatasets`）进入提交，没有 runtime 在本次执行里运行的提供者也一样检查。载入不了时，这次调用在 handler 运行前就以 `unavailable` 失败。
 
+故事消息的 `metadata.operationFailures: { count }` 在同一个事务中定稿。内核暂存一个提交单元正常接受的显示消息，先按原有 savepoint 顺序结算操作，再按原插入顺序一次性写入消息。事务视图的读取包含暂存消息，savepoint 回滚同时丢弃该层暂存；消息在后续单元、结算读取、额外事务写入、导出和快照捕获前已落入事务。存储错误回滚整个执行，不会留下故事与提示只保存一半的情况。
+
+每个含故事的受保护单元，按承载结果统计最终 `failed` 的操作，每个操作只计一次（包括 `rejected`、`conflict`、`store-unsupported`）。已提交、仍暂存、已丢弃、暂存前拒绝和辅助单元的失败不增加故事计数。只标记该单元根结果最后一条已接受的公开故事，否则选成员结果最后一条公开故事；没有目标就不写提示。身份来自捕获的宿主清单和实际消息 ID，按 run / unit 归属，不能按共享 turn 或被委托子 agent 的 `invokedBy` 猜测。concealed runtime 的消息不能作为目标。
+
+这是一条不可变的历史说明，不是当前状态或修复标记。重试和后续成功不改写它；正文、prompt journal、操作状态、读取依赖和 savepoint 规则都不变。玩家、续写、恢复和产出故事的手动提交共用这条边界；无故事的执行不标记旧消息。对外字段见[消息 API](./api.md#get-apisessionsidmessages)。
+
 #### 操作记录
 
 每个操作在调用方 run 的结果上留下一条 `OperationRecord`（`runtimeResults[].operations`），随 `turn_results` 保存，不需要改表：

@@ -666,8 +666,12 @@ Gemini 原生的思考强度、`providerOptions.google.thinkingConfig`、`cached
 | `dimensions.settlement.changed` | 回执提交               | `{providerPluginId, source, sourceTurnId, version, status, error?}`                                                                     |
 | `plugin-data.changed`           | 所属插件数据提交       | pluginId、namespace 和受影响 key                                                                                                        |
 | `proposal.failed`               | proposal 提交失败      | `{proposalId,proposalType,runtimeId,pluginId,error}`                                                                                    |
-| `operation.failed`              | 已提交回合有操作未生效 | `{sessionId,turnId,count}`                                                                                                              |
+| `operation.failed`              | 已提交回合有操作未生效 | `{sessionId,turnId,count,messages: readonly {messageId,count}[]}`                                                                       |
 | `context.compacted`             | 压缩摘要保存           | `{summaryId,summaryIds,messagesCompacted,tokenSavings,focusSections,summariesMerged,summaryTokens,totalSummaryTokens,summaryTruncated}` |
+
+`operation.failed.messages` 是必填的安全回执列表，只含已保存提示的故事消息 ID 和正的安全整数计数。事件在事务成功、对应的 `narrative.completed` 发布之后发送，每次已提交执行仍只发一次并显示一个即时通知；直接 action 路由规则和 `forwardToActionStream: false` 不变。`count` 保持整次执行的失败操作总数，辅助单元失败或没有公开故事时 `messages` 可以为空，各消息计数之和也可以小于总数。自动推进每轮用自己的 turn 和消息回执。
+
+客户端按会话、turn 和持久消息 ID 设置或替换计数；重复回执不累加，不猜测最新故事，不标记流式占位。未知或未加载的 ID 等普通历史恢复。丢失事件时通过[保存的消息字段](./api.md#get-apisessionsidmessages)恢复提示，不重跑操作。非 action 提交沿用会话视图和订阅恢复，不重开流。服务端和 Web 必须一起更新，不接收旧事件形状。
 
 提交失败会扣住“执行完成”这一步，客户端把错误显示成执行失败。故事附带的写服务操作只因自身写入被拒而丢弃时不算执行失败：action 流不发它的 `proposal.failed`，只发一次 `operation.failed`，回合照常提交。后台的结果不能重新打开已经结束的 action 流，重连时用保存下来的会话状态恢复。 读取基线的 `conflict` 沿用这些提案和操作边界，不新增事件或客户端指纹参数，见[事务](./transactions.md#read-baselines)。
 
@@ -897,6 +901,8 @@ data: {
 | `session.delete`  | DELETE | `/api/sessions/:id`      | JSON: `{ deleted }`     |
 
 `SessionSnapshot.messages` 的每一项是 `SnapshotMessage`。玩家消息带 `actions`：这条消息提交的解析后行动（存储里 `metadata.actions`，形状同 `GET /messages` 的 `actions`），故事消息带 `segments`。其他消息没有这两个字段。
+
+故事消息还可带经过校验的 `operationFailures: { count }`，与消息历史使用相同投影；同 ID 的恢复可补齐提示。完整字段规则见[消息历史](./api.md#get-apisessionsidmessages)。
 
 `SessionSnapshot` 顶层的 `dimensions` 是[当前值的公开快照](./world-model.md#动态维度快照)。可选的 `dimensionSettlements` 是回执摘要。provider 和 recovery 的元数据由宿主绑定并校验。
 

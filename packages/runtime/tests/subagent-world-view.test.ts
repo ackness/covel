@@ -853,70 +853,101 @@ describe("sub-agent world snapshots", () => {
       ).toBe(false);
     }
   });
-  it("keeps story text when a successful child's attached service operation is refused", async () => {
-    const registry = services();
-    let serviceCalls = 0;
-    registry.register("service", {
-      name: "write",
-      contract: "test.write@1",
-      access: "write",
-      modelFacing: true,
-      description: "Stage a world observation",
-      input: z.object({}),
-      output: z.object({ observed: z.string() }),
-      handler: async (_args, ctx) => {
-        serviceCalls++;
-        const observed = ctx.world.characters.find(
-          (c) => c.id === "source",
-        )?.description;
-        expect(observed).toBe("staged");
-        await ctx.pluginData.set("notes", "child", observed!);
-        return { observed: observed! };
-      },
-    });
-    let modelCalls = 0;
-    const f = await fixture({
-      deps: {
-        services: registry,
-        llm: {
-          generate: async () =>
-            modelCalls++ === 0 ? toolCall("record", {}) : prose("Complete"),
-        },
-      },
-    });
-    const actor = {
-      ...child,
-      outputContract: target.contract,
-      tools: { services: [{ contract: "test.write@1", name: "record" }] },
-    };
-    const r = await f.execute([producer, story, actor], {
-      [producer.name]: async () => writes(character()),
-      [story.name]: async (ctx) => {
-        expect(
-          (await ctx.agents!.run({ target, brief: "Constant safe brief" })).ok,
-        ).toBe(true);
-        return tell(ctx);
-      },
-    });
-    expect(serviceCalls).toBe(1);
-    expect(modelCalls).toBe(2);
-    expect(r.edges(story)).toEqual([r.resultOf(producer).runId]);
-    const outcome = await r.commit((p) =>
-      p.source.pluginId === "service" ? "operation refused" : undefined,
-    );
-    expect(outcome.status).toBe("committed");
-    expect(await f.notes("service")).toEqual({});
-    expect(
-      (await f.store.listMessages(SESSION)).map((m) => m.content),
-    ).toContain("The story continues.");
-    expect(outcome.operations).toEqual([
-      expect.objectContaining({
+  it.each([false, true])(
+    "keeps story text and a safe notice when a successful child's operation is refused (concealed=%s)",
+    async (concealed) => {
+      const registry = services();
+      let serviceCalls = 0;
+      registry.register("service", {
+        name: "write",
         contract: "test.write@1",
-        status: "failed",
-        reason: "rejected",
-      }),
-    ]);
-  });
+        access: "write",
+        modelFacing: true,
+        description: "Stage a world observation",
+        input: z.object({ secret: z.string() }),
+        output: z.object({ observed: z.string(), secret: z.string() }),
+        handler: async (_args, ctx) => {
+          serviceCalls++;
+          const observed = ctx.world.characters.find(
+            (c) => c.id === "source",
+          )?.description;
+          expect(observed).toBe("staged");
+          await ctx.pluginData.set("notes", "child", observed!);
+          return { observed: observed!, secret: "PRIVATE-SERVICE-RESULT" };
+        },
+      });
+      let modelCalls = 0;
+      const f = await fixture({
+        deps: {
+          services: registry,
+          llm: {
+            generate: async () =>
+              modelCalls++ === 0
+                ? toolCall("record", { secret: "PRIVATE-SERVICE-REQUEST" })
+                : prose("Complete"),
+          },
+        },
+      });
+      const actor = {
+        ...child,
+        concealed,
+        outputContract: target.contract,
+        tools: { services: [{ contract: "test.write@1", name: "record" }] },
+      };
+      const r = await f.execute([producer, story, actor], {
+        [producer.name]: async () => writes(character()),
+        [story.name]: async (ctx) => {
+          expect(
+            (await ctx.agents!.run({ target, brief: "Constant safe brief" }))
+              .ok,
+          ).toBe(true);
+          return tell(ctx);
+        },
+      });
+      expect(serviceCalls).toBe(1);
+      expect(modelCalls).toBe(2);
+      expect(r.edges(story)).toEqual([r.resultOf(producer).runId]);
+      const outcome = await r.commit((p) =>
+        p.source.pluginId === "service" ? "PRIVATE-SERVICE-ERROR" : undefined,
+      );
+      expect(outcome.status).toBe("committed");
+      expect(await f.notes("service")).toEqual({});
+      const savedStories = await f.store.listMessages(SESSION);
+      expect(
+        savedStories.find(
+          (message) => message.content === "The story continues.",
+        )?.metadata,
+      ).toMatchObject({ operationFailures: { count: 1 } });
+      expect(outcome.operationFailureMessages).toEqual([
+        {
+          messageId: savedStories.find(
+            (message) => message.content === "The story continues.",
+          )!.id,
+          count: 1,
+        },
+      ]);
+      expect(
+        (await f.store.listMessages(SESSION)).map((m) => m.content),
+      ).toContain("The story continues.");
+      const publicArtifacts = JSON.stringify([
+        savedStories.map((message) => message.metadata),
+        outcome.operationFailureMessages,
+      ]);
+      for (const secret of [
+        "PRIVATE-SERVICE-REQUEST",
+        "PRIVATE-SERVICE-RESULT",
+        "PRIVATE-SERVICE-ERROR",
+      ])
+        expect(publicArtifacts).not.toContain(secret);
+      expect(outcome.operations).toEqual([
+        expect.objectContaining({
+          contract: "test.write@1",
+          status: "failed",
+          reason: "rejected",
+        }),
+      ]);
+    },
+  );
   it("discards a saved auxiliary suspension whose only world read came from a successful child", async () => {
     let calls = 0;
     const f = await fixture({

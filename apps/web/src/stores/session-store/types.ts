@@ -25,6 +25,7 @@ export interface StreamMessage {
   kind?: string;
   /** For UI blocks (choice_set, etc.) */
   block?: Record<string, unknown>;
+  operationFailures?: import("@covel/shared").StoryOperationFailures;
   /** A committed story's segments, with resolved speakers. */
   segments?: readonly StoryMessageSegment[];
   /** On a player's message: the resolved actions it carried. */
@@ -319,6 +320,12 @@ export interface ExecutionRecovery {
 }
 
 export type SessionAction =
+  | {
+      type: "SET_OPERATION_FAILURES";
+      sessionId: string;
+      turnId: string;
+      messages: readonly { messageId: string; count: number }[];
+    }
   | { type: "SET_ADVANCE"; advance: ExecutionAdvancePayload | null }
   | {
       type: "RESTORE_ACTION_DRAFT";

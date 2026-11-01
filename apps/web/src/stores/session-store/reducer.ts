@@ -2,6 +2,7 @@ import { appendReasoningStep } from "./reasoning.js";
 import type { AssetGenerateView } from "@covel/shared";
 import {
   encodePageCursor,
+  projectStoryOperationFailures,
   executionMayBeRunning,
   summarizeWorld,
 } from "@covel/shared";
@@ -229,6 +230,28 @@ export function reducer(
   action: SessionAction,
 ): SessionState {
   switch (action.type) {
+    case "SET_OPERATION_FAILURES": {
+      if (state.session?.id !== action.sessionId) return state;
+      const targets = new Map(
+        action.messages.map((item) => [item.messageId, item.count]),
+      );
+      return {
+        ...state,
+        messages: state.messages.map((message) => {
+          if (
+            message.turnId !== action.turnId ||
+            message.id.startsWith(STREAM_ID_PREFIX) ||
+            !targets.has(message.id)
+          )
+            return message;
+          const notice = projectStoryOperationFailures({
+            ...message,
+            operationFailures: { count: targets.get(message.id) },
+          });
+          return notice.operationFailures ? { ...message, ...notice } : message;
+        }),
+      };
+    }
     case "SET_ADVANCE": {
       const previous = state.advance,
         next = action.advance;
@@ -545,9 +568,14 @@ export function reducer(
       // 仅补入尚未出现的历史条目（按 id 去重）。整体覆盖会丢失历史。
       const existingIds = new Set(state.messages.map((m) => m.id));
       const older = action.messages.filter((m) => !existingIds.has(m.id));
+      const messages = mergeRecoveredMessages(
+        state.messages,
+        action.messages.filter((m) => existingIds.has(m.id)),
+        state.executing,
+      );
       if (older.length === 0) {
-        // 没有新增历史，只推进游标即可（引用不变的 messages 避免多余重渲染）。
-        return { ...state, olderMessagesCursor: action.cursor };
+        // 没有新增历史，补齐同 ID 的已提交字段并推进游标。
+        return { ...state, messages, olderMessagesCursor: action.cursor };
       }
       // `older` 来自 listMessagesPage(before = 当前最旧一条的游标)，按契约**严格早于**
       // 所有 existing、且自身已按 (createdAt,id) 正序，故直接拼到前部即可。不能再按
@@ -555,7 +583,7 @@ export function reducer(
       // 与它混排会在客户端时钟偏移时把历史顺序打乱（desktop 无 NTP 保证）。
       return {
         ...state,
-        messages: [...older, ...state.messages],
+        messages: [...older, ...messages],
         olderMessagesCursor: action.cursor,
       };
     }

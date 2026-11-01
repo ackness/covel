@@ -1,3 +1,4 @@
+import { projectStoryOperationFailures } from "@covel/shared";
 import type { MutableRef } from "./runtime-refs.js";
 import * as api from "@/services/api";
 import type { DataService, SessionWorkspace } from "@/services/data-service.js";
@@ -61,6 +62,7 @@ export function toStreamMessages(
       : {}),
     ...(message.segments ? { segments: message.segments } : {}),
     ...(message.actions ? { actions: message.actions } : {}),
+    ...projectStoryOperationFailures(message),
   }));
 }
 

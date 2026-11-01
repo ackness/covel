@@ -1,6 +1,9 @@
 // @vitest-environment node
 import "fake-indexeddb/auto";
 import Dexie from "dexie";
+import { subscribeToast, type ToastEvent } from "@/lib/toast-channel.js";
+import { toFrontendMessage } from "@/services/data-service/mappers.js";
+import { toStreamMessages } from "@/stores/session-store/restore-session.js";
 
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { BROWSER_CHECKPOINT_SCHEMA_VERSION } from "@covel/store/browser-sync";
@@ -417,4 +420,52 @@ describe("BrowserVault isolation and lifecycle", () => {
     await vault.clear();
     await expect(vault.listWorlds()).resolves.toEqual([]);
   });
+});
+
+it("retains an immutable story notice through vault reopen and workspace hydration without replaying a toast", async () => {
+  const notices: ToastEvent[] = [];
+  const unsubscribe = subscribeToast((event) => notices.push(event));
+  const memory = createMemoryStore();
+  try {
+    const saved = checkpoint("session-a", 1, "story-with-notice", {
+      messages: [
+        {
+          id: "story",
+          sessionId: "session-a",
+          role: "assistant",
+          content: "An unchanged story.",
+          metadata: {
+            kind: "story",
+            turnId: "turn",
+            operationFailures: { count: 2 },
+          },
+          createdAt: "2026-08-25T00:00:01.000Z",
+        },
+      ],
+    });
+    await vault.applySessionCommit(commit(saved));
+    vault.close();
+    vault = new BrowserVault({
+      dbName: `covel-browser-vault-test-${databaseNumber}`,
+    });
+    const restored = await vault.getLatestCheckpoint("session-a");
+    expect(restored?.messages).toEqual(saved.messages);
+    await replaceSessionFromCheckpoint(memory, restored!);
+    const messages = toStreamMessages(
+      (await memory.listMessages("session-a")).map(toFrontendMessage),
+    );
+    expect(messages).toMatchObject([
+      {
+        id: "story",
+        content: "An unchanged story.",
+        operationFailures: { count: 2 },
+      },
+    ]);
+    expect(notices).toEqual([]);
+    await vault.deleteSession("session-a");
+    expect(await vault.getLatestCheckpoint("session-a")).toBeNull();
+  } finally {
+    unsubscribe();
+    await memory.close();
+  }
 });

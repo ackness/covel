@@ -12,7 +12,7 @@ import {
   type SnapshotRecord,
 } from "@covel/store";
 import { createMemoryStore, createMemoryMediaStore } from "@covel/store/memory";
-import { buildSessionSnapshot } from "@covel/runtime";
+import { buildSessionSnapshot, finalizeExecution } from "@covel/runtime";
 
 import { snapshotRoutes } from "../../src/routes/api/snapshots.js";
 import {
@@ -300,3 +300,102 @@ it.each(["chat", "state", "export"])(
     expect(await mediaStore.isReferencedBy(ref.id, child.sessionId)).toBe(true);
   },
 );
+
+it("forks only the captured immutable story notice and preserves it through a checkpoint", async () => {
+  await add("before-story");
+  const before = await capture();
+  const operation = {
+    id: "operation",
+    contract: "change@1",
+    service: "change",
+    providerPluginId: "provider",
+    invokedBy: { pluginId: "teller", runtimeId: "teller/story" },
+    seq: 1,
+    status: "staged" as const,
+    summary: "PRIVATE-SUMMARY",
+  };
+  const outcome = await finalizeExecution({
+    store,
+    sessionId: "parent",
+    executionContext: {
+      executionId: "execution",
+      origin: "player",
+      countPolicy: "none",
+    },
+    turnIds: [],
+    runtimes: [
+      {
+        name: "teller/story",
+        pluginId: "teller",
+        description: "Story",
+        stage: "narrative",
+        outputKind: "story",
+      },
+    ],
+    results: [
+      {
+        pluginId: "teller",
+        runtimeId: "teller/story",
+        runId: "run",
+        turnId: "turn",
+        status: "success",
+        output: { narrativeOutput: "The purchase was described." },
+        operations: [operation],
+        operationWrites: {
+          operation: [
+            {
+              id: "write",
+              sessionId: "parent",
+              turnId: "turn",
+              type: "plugin.data",
+              source: { pluginId: "provider", runtimeId: "service:change" },
+              payload: { namespace: "values", key: "stock", value: 1 },
+              timestamp: at,
+            },
+          ],
+        },
+      },
+    ],
+    proposalGuard: (proposal) =>
+      proposal.source.pluginId === "provider" ? "refused" : undefined,
+  });
+  expect(outcome.status).toBe("committed");
+  const sourceId = outcome.operationFailureMessages![0]!.messageId;
+  const source = await store.getMessage("parent", sourceId);
+  const after = await capture();
+  expect(after.payload).not.toHaveProperty("messages");
+  await add("later-tie", source!.createdAt);
+  const checkpoint = await exportSessionCheckpoint(store, "parent", {
+    revision: 1,
+    actionId: "export",
+  });
+  const transferred = createMemoryStore();
+  await replaceSessionFromCheckpoint(
+    transferred,
+    JSON.parse(JSON.stringify(checkpoint)),
+  );
+  store = transferred;
+  await store.updateSession("parent", { activePlugins: [] });
+  const early = await successfulFork(before);
+  expect(
+    (await requireSnapshot(store, early.sessionId)).messages.every(
+      (row) => !row.operationFailures,
+    ),
+  ).toBe(true);
+  const late = await successfulFork(after);
+  const rows = (await requireSnapshot(store, late.sessionId)).messages;
+  const marked = rows.filter((row) => row.operationFailures);
+  expect(marked).toHaveLength(1);
+  expect(marked[0]?.id).not.toBe(sourceId);
+  expect(marked[0]?.operationFailures).toEqual({ count: 1 });
+  expect(marked[0]?.content).toBe(source!.content);
+  expect(rows.map((row) => row.content)).not.toContain("later-tie");
+  expect(
+    JSON.stringify(
+      (await store.getMessage(late.sessionId, marked[0]!.id))?.metadata,
+    ),
+  ).not.toContain(sourceId);
+  expect((await store.getMessage("parent", sourceId))?.metadata).toEqual(
+    source?.metadata,
+  );
+});

@@ -1476,6 +1476,7 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
                   sessionId,
                   turnId: result.turnId,
                   count: failedOperations,
+                  messages: outcome.operationFailureMessages ?? [],
                 };
                 await emitter.emit("operation.failed", payload);
                 await writeEvent("operation.failed", payload);

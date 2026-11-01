@@ -9,6 +9,7 @@ import {
   PLAYER_ABORT_REASON,
   stageSchema,
   storyMessageSegmentSchema,
+  storyOperationFailuresSchema,
   type CovelEventType,
   type ExecutionAdvancePayload,
 } from "@covel/shared";
@@ -720,6 +721,32 @@ export function createSseEventHandler(
         break;
       }
       case "operation.failed": {
+        if (
+          payload.sessionId !== deps.sessionIdRef.current ||
+          payload.sessionId !== envelope.sessionId ||
+          payload.turnId !== envelope.turnId ||
+          typeof payload.turnId !== "string" ||
+          !storyOperationFailuresSchema.safeParse({ count: payload.count })
+            .success ||
+          !Array.isArray(payload.messages)
+        )
+          return;
+        const messages = payload.messages.flatMap((item: unknown) => {
+          if (!item || typeof item !== "object") return [];
+          const row = item as Record<string, unknown>;
+          const parsed = storyOperationFailuresSchema.safeParse({
+            count: row.count,
+          });
+          return typeof row.messageId === "string" && parsed.success
+            ? [{ messageId: row.messageId, count: parsed.data.count }]
+            : [];
+        });
+        deps.dispatch({
+          type: "SET_OPERATION_FAILURES",
+          sessionId: payload.sessionId as string,
+          turnId: payload.turnId,
+          messages,
+        });
         emitToast(
           "info",
           i18n.t("session.operationFailedNotice", {

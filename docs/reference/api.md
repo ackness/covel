@@ -4252,6 +4252,10 @@ runtime 报告失败时，它的原始错误保留在 `result.runtimeResults` �
 
 故事消息还带 `segments`：提交时记下的故事段落 `{ kind, speaker?, speakerId?, text }`。解析成角色的段落有 `speakerId`，`speaker` 是角色的当前名字；没解析的名字原样保留，旁白没有 `speaker`。`content` 是各段正文用空行连接的结果。纯文本故事的每个段落是一段 `narration`；这个改动之前创建的消息没有 `segments`。规则见[故事输出](./plugins.md#故事输出)。`/messages/page` 和 `/view` 的 `messages` 用同样的形状。
 
+故事消息还可带 `operationFailures: { count: number }`，对应存储里的 `metadata.operationFailures`。它只用于 `assistant` 的 `kind: "story"` 消息，`count` 必须是正的安全整数，对象不能带其他字段；非法值和其他种类的消息不投影这个字段。完整历史、`/messages/page` 和 `/view` 用同一校验规则，只返回这个计数，不返回操作记录或任意 metadata。没有该字段表示没有记录提示，旧消息不会补写。
+
+提示描述这条故事提交时未生效的附带操作；之后成功的操作或重试不会清除它。物化快照仍只捕获显示消息的边界，分叉只复制边界内的消息及其提示，并分配新消息 ID。完整 checkpoint 的导出、校验与替换保留 metadata；恢复不会重播操作或通知。重连合并同 ID 消息时补齐缺失的提示，保留实时正文和已加载的历史；较旧响应缺少字段不会清掉已有提示。完整状态替换按恢复内容替换消息。提示不进入模型对话日志。归属和计数见[事务](./transactions.md#写服务的操作)，实时传递见[协议](./protocol.md)。
+
 ```json
 {
   "id": "msg-002",
@@ -4341,6 +4345,7 @@ runtime 报告失败时，它的原始错误保留在 `result.runtimeResults` �
 
 规则：
 
+- `operationFailures`、`kind` 和任意 `metadata` 不属于客户端同步输入，发送这些字段会被忽略；此端点不能写入或覆盖宿主提示。完整 checkpoint 恢复继续遵守原有的所有者和校验规则。
 - 同一个会话里，重复提交相同的 `id` 会被跳过。所以恢复存档或网络重试不会把整段历史再追加一遍。
 - 不带 `id` 的消息每次都会得到新 ID，重复提交就会重复追加。
 - 整批写入在会话锁和一个存储事务内执行。任何一条新消息写入失败，整批回滚。

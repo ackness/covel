@@ -1,3 +1,4 @@
+import { createDisplayMessageBuffer } from "./display-message-buffer.js";
 import {
   checkPendingReadBaselines,
   stampReadPreconditions,
@@ -339,6 +340,11 @@ export interface FinalizedOperation {
 }
 
 export interface FinalizeExecutionOutcome {
+  /** Safe receipts authored with display rows, returned only after commit. */
+  readonly operationFailureMessages?: readonly {
+    readonly messageId: string;
+    readonly count: number;
+  }[];
   /** Internal provenance receipt; only committed top-level narrative messages. */
   readonly topLevelNarrativeMessageIds?: readonly string[];
   readonly status: "committed" | "failed";
@@ -1167,6 +1173,7 @@ export async function finalizeExecution(
     // Externally-visible fan-out is buffered while the transaction is open and
     // flushed only after it commits. A rollback discards the buffer.
     const postCommit: Array<() => Promise<void>> = [];
+    const operationFailureMessages: { messageId: string; count: number }[] = [];
     let committedEvents: readonly SessionEvent[] = [];
     const topLevelNarrativeMessageIds = new Set<string>();
     const isolatedFailures: FailedProposal[] = [];
@@ -1492,6 +1499,7 @@ export async function finalizeExecution(
         // A unit's results commit children first, then the parent; units
         // arrive in execution order, so every upstream settles before the
         // runtimes that depend on it.
+        const narrativeOwners = new Map<string, FinalizableResult>();
         const commitUnit = async (
           unit: CommitUnit,
           sink: StoreTransaction,
@@ -1502,6 +1510,21 @@ export async function finalizeExecution(
             args.signal?.throwIfAborted();
             const memberEvents = await commitResult(member, sink, defer);
             committed.push(...memberEvents);
+            const manifest = runtimes.find(
+              (runtime) =>
+                runtime.name === member.runtimeId &&
+                runtime.pluginId === member.pluginId,
+            );
+            if (manifest?.outputKind === "story" && !manifest.concealed) {
+              for (const event of memberEvents) {
+                if (
+                  event.type === "narrative.completed" &&
+                  event.payload.kind === "story" &&
+                  typeof event.payload.messageId === "string"
+                )
+                  narrativeOwners.set(event.payload.messageId, member);
+              }
+            }
             if (
               member === unit.root &&
               runtimes.some(
@@ -1632,8 +1655,11 @@ export async function finalizeExecution(
           // A unit with a story or setup run stays all-or-nothing with the
           // execution; any other unit gets one savepoint next to a story.
           if (!isolates(unit) || !tx.savepoint) {
+            const display = createDisplayMessageBuffer(tx);
             events.push(
-              ...(await commitUnit(unit, tx, (fn) => postCommit.push(fn))),
+              ...(await commitUnit(unit, display.store, (fn) =>
+                postCommit.push(fn),
+              )),
             );
             // Story-attached operations: each one stands or drops alone,
             // and the story stands either way.
@@ -1643,7 +1669,7 @@ export async function finalizeExecution(
               if (!alone) {
                 // Without a story the execution is all-or-nothing.
                 events.push(
-                  ...(await commitOperation(entry, tx, (fn) =>
+                  ...(await commitOperation(entry, display.store, (fn) =>
                     postCommit.push(fn),
                   )),
                 );
@@ -1665,7 +1691,7 @@ export async function finalizeExecution(
               const buffered: Array<() => Promise<void>> = [];
               try {
                 events.push(
-                  ...(await tx.savepoint((sp) =>
+                  ...(await display.store.savepoint!((sp) =>
                     commitOperation(entry, sp, (fn) => buffered.push(fn)),
                   )),
                 );
@@ -1676,6 +1702,28 @@ export async function finalizeExecution(
                 failOperation(entry, err.failedProposals);
               }
             }
+            // Count by carrying result/unit, never by invokedBy (a child may
+            // have made the call). Prefer the root's last accepted public story.
+            const members = new Set(unit.members);
+            const candidates = [...narrativeOwners].filter(([, owner]) =>
+              members.has(owner),
+            );
+            const target =
+              candidates.filter(([, owner]) => owner === unit.root).at(-1) ??
+              candidates.at(-1);
+            const count = new Set(
+              operations
+                .filter(
+                  (entry) =>
+                    members.has(entry.member) &&
+                    operationState.get(entry.record.id)?.status === "failed",
+                )
+                .map((entry) => entry.record.id),
+            ).size;
+            const notice =
+              target && count > 0 ? { messageId: target[0], count } : undefined;
+            await display.flush(notice);
+            if (notice) operationFailureMessages.push(notice);
             continue;
           }
           const buffered: Array<() => Promise<void>> = [];
@@ -1858,6 +1906,7 @@ export async function finalizeExecution(
       ),
       failedProposals: isolatedFailures,
       operations: finalizedOperations(),
+      operationFailureMessages,
       ...(fanOutFailed ? { fanOutFailed } : {}),
       ...(isolated.size > 0
         ? { isolatedRuntimes: isolatedRuntimesOf(isolated) }

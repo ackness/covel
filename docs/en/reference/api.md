@@ -4252,6 +4252,10 @@ The rate limit is the same as for `/page`: the same client can make at most 120 
 
 A story message also has `segments`: the story segments recorded at commit, `{ kind, speaker?, speakerId?, text }`. A segment resolved to a character has `speakerId`, and its `speaker` is the character's current name. An unresolved name is kept as written; narration has no `speaker`. `content` is the segment texts joined by blank lines. A prose story has one `narration` segment per paragraph; messages created before this change have no `segments`. Rules: [Story output](./plugins.md#story-output). `/messages/page` and the `messages` of `/view` use the same shape.
 
+A story message may also carry `operationFailures: { count: number }`, from `metadata.operationFailures` in storage. Only `assistant` messages with `kind: "story"` qualify. `count` must be a positive safe integer and the object must have no other fields; invalid values and other message kinds omit the field. Full history, `/messages/page` and `/view` use the same validation and return only this count, never operation records or arbitrary metadata. Absence means no recorded notice; old messages are not backfilled.
+
+The notice describes attached operations that did not apply when this story committed. Later successes or retries never clear it. Materialized snapshots still capture only a display-message boundary; forks copy the bounded messages and their notices with fresh message IDs. Whole-checkpoint export, validation and replacement preserve metadata without replaying operations or toasts. Reconnect merges fill a missing notice on the same ID while preserving live text and loaded history; an older response without the field never erases a learned notice. A complete state replacement replaces messages with the restored content. The notice does not enter the model conversation journal. Ownership and counts: [Transactions](./transactions.md#write-service-operations); live delivery: [Protocol](./protocol.md).
+
 ```json
 {
   "id": "msg-002",
@@ -4341,6 +4345,7 @@ Appends a batch of messages to the server session. The built-in Web client does 
 
 Rules:
 
+- `operationFailures`, `kind` and arbitrary `metadata` are outside the client sync input and are ignored. This endpoint cannot author or overwrite host notices. Whole-checkpoint restore keeps its existing owner and validation rules.
 - In the same session, sending an `id` that was already submitted is skipped. So restoring a saved game or retrying a network request does not append the whole history again.
 - A message without an `id` gets a new ID every time, so sending it again appends it again.
 - The whole batch is written inside the session lock and one storage transaction. If any new message fails to write, the whole batch is rolled back.

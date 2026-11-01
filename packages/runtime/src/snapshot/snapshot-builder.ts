@@ -14,6 +14,7 @@ import {
   dimensionSettlementReceiptSchema,
   dimensionSnapshotFromRecords,
   encodePageCursor,
+  projectStoryOperationFailures,
   type SessionSnapshot,
   type SnapshotCharacter,
   type SnapshotMessage,
@@ -153,6 +154,11 @@ export async function buildSessionSnapshot(
       ...(Array.isArray(meta.actions)
         ? { actions: meta.actions as TurnAction[] }
         : {}),
+      ...projectStoryOperationFailures({
+        role: m.role,
+        kind: meta.kind,
+        operationFailures: meta.operationFailures,
+      }),
       createdAt: m.createdAt,
     };
   });
