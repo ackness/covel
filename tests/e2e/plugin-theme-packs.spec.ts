@@ -1149,9 +1149,7 @@ test("theme toggles preserve streamed public stories and an explicit failed-oper
       await sandbox
         .getByRole("button", { name: "Submit action", exact: true })
         .click();
-      await expect(sandbox.locator("#story")).toContainText(
-        "Public streaming ",
-      );
+      await expect(sandbox.locator("#story")).toContainText("Public streaming");
       await expect
         .poll(() =>
           frame!.evaluate(() => {
@@ -1164,7 +1162,8 @@ test("theme toggles preserve streamed public stories and an explicit failed-oper
         .toMatchObject({
           executing: true,
           turn,
-          streaming: { text: "Public streaming " },
+          // Segment streaming holds trailing whitespace until the next word.
+          streaming: { text: "Public streaming" },
         });
       // A real second delta follows the full-state baseline on the same port.
       const envelopes = (await portMessages(frame!)).length;
@@ -1233,7 +1232,7 @@ test("theme toggles preserve streamed public stories and an explicit failed-oper
       ).toBe(turn + 1);
       const values = await host.store.queryPluginData({
         sessionId: host.sessionId,
-        pluginId: "theme-story-probe",
+        pluginId: "theme-change-probe",
         namespace: "values",
       });
       if (turn === 0) {

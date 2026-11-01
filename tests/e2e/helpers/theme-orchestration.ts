@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { cp, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { createHookPipeline } from "../../../packages/runtime/src/index.js";
@@ -27,12 +27,30 @@ export const streamingThemeStory = "Public streaming theme story.";
 export async function startThemeOrchestrationHost() {
   const root = await mkdtemp(join(tmpdir(), "theme-orchestration-"));
   const plugin = join(root, "theme-story-probe");
+  const provider = join(root, "theme-change-probe");
+  await mkdir(provider);
   for (const id of ["story", "secret"])
     await mkdir(join(plugin, "runtimes", id), { recursive: true });
+  await cp(
+    resolve(
+      import.meta.dirname,
+      "../../../plugins/narrator/schemas/narrative-engine.schema.json",
+    ),
+    join(plugin, "narrative-engine.schema.json"),
+  );
   await writeFile(
     join(plugin, "PLUGIN.md"),
     `---
 description: Scripted story with private planning and a write operation
+contracts:
+  narrative-engine@2: { schema: ./narrative-engine.schema.json }
+---
+`,
+  );
+  await writeFile(
+    join(provider, "PLUGIN.md"),
+    `---
+description: Scripted write-service provider
 entry: ./entry.mjs
 contributes:
   services: [{ contract: theme-change@1, access: write, modelFacing: true }]
@@ -40,7 +58,7 @@ contributes:
 `,
   );
   await writeFile(
-    join(plugin, "entry.mjs"),
+    join(provider, "entry.mjs"),
     `export default function(api) {
   const z = api.toolkit.z;
   api.registerService({
@@ -83,7 +101,7 @@ Private theme planning.
   let rejectChange = true;
   hooks.register<{ proposal: Proposal }>({
     id: "reject-theme-change",
-    pluginId: "theme-story-probe",
+    pluginId: "theme-change-probe",
     event: "PreStateCommit",
     handler: async (_ctx, { proposal }) =>
       rejectChange &&
@@ -205,7 +223,7 @@ Private theme planning.
   try {
     const host = await startStageRenderHost({
       plugins: ["character-agent"],
-      fixturePlugins: [sandboxThemeFixture, plugin],
+      fixturePlugins: [sandboxThemeFixture, plugin, provider],
       llmAdapter,
       perRequestMiddleware: [
         async (c, next) => {
