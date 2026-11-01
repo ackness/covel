@@ -71,3 +71,5 @@ pnpm test:runtime -- {{pluginName}} --pretty
 默认 analyst 示例在 `post-turn` 自动运行，读取本回合叙事绑定；note 示例保留手动函数入口。记录 ID 来自 `ctx.random`，时间戳由代码或存储写入，agent 只提交稳定的事实 key 和内容。
 
 `tests/runtime-cases.json` 带编辑器用的 `$schema`。用例必须写 `name` 和 `runtimeId`；未知字段（包括拼错的 `expect`）会在执行前报错。
+
+Agent runtimes finish with a separate `submit-output` call. After successful work, or on a no-change turn, submit `{}`. This host-generated tool is not contributed by the plugin. Function runtimes keep returning their output directly.

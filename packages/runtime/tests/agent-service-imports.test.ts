@@ -1,3 +1,4 @@
+import { toolCall } from "./_helpers/agent-loop-fixture.js";
 /**
  * An agent imports another plugin's model-facing service as a tool
  * (`tools.services`). At run start the kernel binds the import to the one
@@ -106,9 +107,15 @@ type Reply = (index: number, request: Request) => LLMResponse;
 
 function text(content: string): LLMResponse {
   return {
-    content,
-    toolCalls: [],
-    finishReason: "stop",
+    content: null,
+    toolCalls: [
+      {
+        id: "final",
+        name: "submit-output",
+        arguments: JSON.stringify({ narrativeOutput: content }),
+      },
+    ],
+    finishReason: "tool_calls" as const,
     usage: { inputTokens: 1, outputTokens: 1 },
   };
 }
@@ -116,7 +123,7 @@ function call(name: string, args: object, id = `call-${name}`): LLMResponse {
   return {
     content: null,
     toolCalls: [{ id, name, arguments: JSON.stringify(args) }],
-    finishReason: "tool_calls",
+    finishReason: "tool_calls" as const,
     usage: { inputTokens: 1, outputTokens: 1 },
   };
 }
@@ -476,6 +483,7 @@ describe("an imported service tool", () => {
         const { toolCall } = payload as {
           toolCall: { id: string; name: string; arguments: string };
         };
+        if (toolCall.name === "submit-output") return { action: "continue" };
         seen.push({ event: "PreToolUse", ...toolCall });
         if (toolCall.id === "call-blocked")
           return { action: "abort", reason: "No peeking." };
@@ -494,7 +502,8 @@ describe("an imported service tool", () => {
         const { toolCall } = payload as {
           toolCall: { id: string; name: string; arguments: string };
         };
-        seen.push({ event: "PostToolUse", ...toolCall });
+        if (toolCall.name !== "submit-output")
+          seen.push({ event: "PostToolUse", ...toolCall });
         return { action: "continue" };
       },
     });
@@ -933,7 +942,7 @@ describe("imports in every agent entry", () => {
             fields: [{ type: "text", name: "bag", label: "Bag" }],
           }),
           call("inventory-items", { bag: "leather" }),
-          text(JSON.stringify({ done: true })),
+          toolCall("submit-output", { done: true }),
         ][index]!,
     });
     try {
@@ -998,7 +1007,7 @@ describe("imports in every agent entry", () => {
       [HELPER_MARK]: (index) =>
         index === 0
           ? call("inventory-items", { bag: "leather" })
-          : text(JSON.stringify({ line: "A sword." })),
+          : toolCall("submit-output", { line: "A sword." }),
     });
     try {
       await executeTurn(input, [main, helper], {

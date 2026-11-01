@@ -29,7 +29,11 @@ agent:
     plugin:
       - dimension-rule-get
       - update-dimensions
-  finishWith: update-dimensions
+  toolChoice: required
+  completion:
+    require: tool-use
+    afterTools:
+      - update-dimensions
 guard: ./guard.js
 ---
 
@@ -49,6 +53,6 @@ Update only dimensions that have a non-empty rule. Do not invent events, do not 
 
 Merge all changes of this turn into one `update-dimensions` call. Prefer `changes: [{ path, value }]`, which writes only the changed fields or new entries; `path` is a dot path inside the dimension value, such as `"torn-letter.status"`. Send a complete `value` only when the whole value must be replaced.
 
-When nothing changed and the clock gave no dimension a new value, you must still call `update-dimensions` with `updates: []`. `runtime-done` does not count as settlement.
+When nothing changed and the clock gave no dimension a new value, you must still call `update-dimensions` with `updates: []`. After success submit `{}` through `submit-output`; submission alone does not count as settlement.
 
 A type or range error can be corrected and submitted again. A version conflict must not be overwritten with the old plan. Stop as soon as the call succeeds.

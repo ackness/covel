@@ -1,3 +1,4 @@
+import { suspendedLoopState } from "./_helpers/agent-loop-fixture.js";
 import { describe, expect, it, vi } from "vitest";
 import { AiProviderError } from "@covel/ai-provider";
 import { createEventBus } from "@covel/events";
@@ -84,7 +85,7 @@ describe.each(["agent", "function"] as const)(
                     toolCalls: [
                       { id: "call", name: "suspend", arguments: "{}" },
                     ],
-                    finishReason: "tool_calls",
+                    finishReason: "tool_calls" as const,
                     usage: { inputTokens: 1, outputTokens: 1 },
                   };
                 },
@@ -328,7 +329,10 @@ describe.each(["turn", "resume"] as const)("%s terminal contract", (entry) => {
               if (type === "message.completed")
                 throw new Error("trace unavailable");
             });
-          const shouldThrow = scenario === "throw" || scenario === "recover";
+          const shouldThrow =
+            scenario === "throw" ||
+            scenario === "recover" ||
+            (runtimeType === "agent" && scenario === "returned failure");
           const deps: TurnExecutorDeps = {
             eventBus,
             hookPipeline,
@@ -339,9 +343,17 @@ describe.each(["turn", "resume"] as const)("%s terminal contract", (entry) => {
               async generate() {
                 if (shouldThrow) throw new Error("synthetic failure");
                 return {
-                  content: "Original story",
-                  toolCalls: [],
-                  finishReason: "stop",
+                  content: null,
+                  toolCalls: [
+                    {
+                      id: "final",
+                      name: "submit-output",
+                      arguments: JSON.stringify({
+                        narrativeOutput: "Original story",
+                      }),
+                    },
+                  ],
+                  finishReason: "tool_calls" as const,
                   usage: { inputTokens: 1, outputTokens: 1 },
                 };
               },
@@ -389,6 +401,9 @@ describe.each(["turn", "resume"] as const)("%s terminal contract", (entry) => {
                       resumeSchema: {},
                       createdAt: new Date().toISOString(),
                       pendingContinuation: {
+                        ...(manifest.runtimeType === "function"
+                          ? {}
+                          : { loop: suspendedLoopState(manifest) }),
                         lifecycle: {
                           runId: "suspended-run",
                           progressRunId: "suspended-run",
@@ -396,7 +411,7 @@ describe.each(["turn", "resume"] as const)("%s terminal contract", (entry) => {
                         readScopes: [],
                         takenUnder: {
                           playerTurns: 0,
-                          pluginVersion: "1.0.0",
+                          pluginVersion: "0.0.0",
                           writes: [],
                         },
                         executionContext: {
@@ -415,13 +430,13 @@ describe.each(["turn", "resume"] as const)("%s terminal contract", (entry) => {
                   );
             const status =
               scenario === "success" ||
-              scenario === "recover" ||
+              (scenario === "recover" && runtimeType === "function") ||
               scenario === "trace failure" ||
               scenario === "invalid Hook return" ||
               scenario in failingHookTrace
                 ? "success"
                 : "failed";
-            expect(result.status).toBe(status);
+            expect(result.status, result?.error).toBe(status);
             if (scenario === "hook rewritten trace failure")
               expect(result.output).toMatchObject({
                 narrativeOutput: "Rewritten story",

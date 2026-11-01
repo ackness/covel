@@ -8,10 +8,7 @@ import type {
 import i18n from "@/i18n";
 import { subscribeToast } from "@/lib/toast-channel.js";
 import { initialState, reducer } from "../reducer.js";
-import {
-  createSseEventHandler,
-  type SseEventHandlerDeps,
-} from "../sse-handler.js";
+import { createSseEventHandler } from "../sse-handler.js";
 
 // Mirrors the ordered settlement events asserted by the server's
 // tests/api/bundled-actor-settlement.test.ts; model/step/hook traces are omitted.

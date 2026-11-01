@@ -62,3 +62,5 @@ list/random 可在主持人指示和推进后建议继续，由宿主按已提�
 ## 开发存档
 
 runtime ID 变为 `chat-mode-narrator/plan` 与 `chat-mode-narrator/narrate`。重新选择指向原内联 runtime 的模型覆盖与准备绑定；丢弃针对原 runtime 的待恢复挂起项、重试任务及包含这些工作的 checkpoint，或重建受影响测试会话。旧故事仍可读，新的 latest-story 导出从下一次提交开始，不回填。普通叙事器会话和整个数据库无需重建；改变游玩身份要创建新会话。
+
+叙事通过 `submit-output` 提交 `segments`、可选的 `cues` 和 `yield`；已接受的演员台词仍按原顺序组合。`ReviewAgentOutput` 审核最终段落，`plan` 仍是直接返回计划的函数。

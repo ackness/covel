@@ -24,6 +24,7 @@ import { isDeepStrictEqual } from "node:util";
 import type { EventBus } from "@covel/events";
 import type {
   InputSlot,
+  ReviewAgentOutputPayload,
   RuntimeManifest,
   RuntimeResult,
   TurnAction,
@@ -657,11 +658,11 @@ export async function runPostLLMResponseHook(
 
 // ── ReviewAgentOutput ─────────────────────────────────────────────
 
-export type { ReviewAgentOutputPayload } from "@covel/plugin-handlers-utils";
+export type { ReviewAgentOutputPayload } from "@covel/shared";
 
 export async function runReviewAgentOutputHook(
   opts: BaseOpts & { readonly pluginId: string; readonly runtimeId: string },
-  payload: import("@covel/plugin-handlers-utils").ReviewAgentOutputPayload,
+  payload: ReviewAgentOutputPayload,
 ): Promise<string | undefined> {
   const result = await runHook(opts, "ReviewAgentOutput", payload, {
     pluginId: opts.pluginId,

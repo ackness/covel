@@ -37,3 +37,5 @@
 - [docs/reference/plugins.md](../../docs/reference/plugins.md) —— `PLUGIN.md` / `RUNTIME.md` 字段全表
 - [docs/reference/tools.md](../../docs/reference/tools.md) —— 工具契约与审批策略
 - [docs/plugins/testing.md](../../docs/plugins/testing.md) —— 插件测试
+
+Agent runtimes finish with a separate `submit-output` call. After successful work, or on a no-change turn, submit `{}`. This host-generated tool is not contributed by the plugin. Function runtimes keep returning their output directly.

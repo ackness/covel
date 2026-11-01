@@ -42,3 +42,5 @@
 ## 行囊工具
 
 可选导入 `inventory.bag@1` 为 `check-bag`、`inventory.change@1` 为 `change-inventory`。行囊启用时，叙事可查询携带物品。本幕获得、支付、交出或用尽物品时，先调用变更工具，再写正文，付款排在前面。调用被拒绝时叙述交易未发生。成功回答只代表暂存，提交失败仍保留故事并显示提示。未启用行囊时两个工具不出现，不增加必需插件或输入。
+
+叙事通过 `submit-output` 提交 `segments`、可选的 `cues` 和 `yield`，保持 `narrative-engine@2` 不变。`ReviewAgentOutput` 直接审核段落视角与内部标签；准备说明不进入故事。

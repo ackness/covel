@@ -685,7 +685,7 @@ describe("world tool model views", () => {
     ["en-US", "World initialized: 15 attributes, 1 dimensions."],
     ["zh-CN", "世界已初始化：15 个属性，1 个维度。"],
   ])(
-    "keeps initialization contract content and exposes only a summary in %s",
+    "exposes canonical initialization content for final submission in %s",
     async (locale, summary) => {
       const result = await initializeWorld({ tool, z }).execute(
         { attributes, definitions: { reputation: definition } },
@@ -698,7 +698,10 @@ describe("world tool model views", () => {
         dimensionCount: 1,
         worldSchema: { types: ["npc", "companion"], attributes },
       });
-      expect(getModelView(result)).toEqual({ summary });
+      expect(getModelView(result)).toEqual({
+        data: getToolContent(result),
+        summary,
+      });
     },
   );
 

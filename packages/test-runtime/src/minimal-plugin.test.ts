@@ -98,16 +98,14 @@ description: Adds a short observation after each turn.
 runtime:
   schedule: { stage: post-turn }
 ---
-Write one short observation grounded in the latest narrative.
+Submit one short observation grounded in the latest narrative through submit-output.
 `,
   );
   const llm = new MockLLM({
     defaultResponse: {
       content: null,
-      finishReason: "tool_calls",
-      toolCalls: [
-        { id: "done", name: "runtime-done", arguments: '{"reason":"noted"}' },
-      ],
+      finishReason: "tool_calls" as const,
+      toolCalls: [{ id: "done", name: "submit-output", arguments: "{}" }],
       usage: { inputTokens: 1, outputTokens: 1 },
     },
   });
@@ -115,7 +113,7 @@ Write one short observation grounded in the latest narrative.
     expect.objectContaining({ runtimeId: "observer", status: "success" }),
   ]);
   expect(JSON.stringify(llm.calls[0]?.messages)).toContain(
-    "Write one short observation",
+    "Submit one short observation",
   );
 });
 

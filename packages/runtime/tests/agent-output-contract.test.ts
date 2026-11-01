@@ -49,9 +49,9 @@ function policy(loaded: LoadedRuntime) {
 }
 
 describe("generated output contract", () => {
-  it("advertises the same loaded schema for story and system without a business registry", () => {
+  it("advertises the same loaded schema for story and system without a business registry", async () => {
     for (const outputKind of ["story", "system"] as const) {
-      const result = policy({
+      const result = await policy({
         manifest: { ...manifest, outputKind },
         promptTemplate: "",
         outputSchema: schema,
@@ -113,20 +113,20 @@ describe("generated output contract", () => {
     expect(surfaces[0]?.output).not.toBe(surfaces[1]?.output);
   });
 
-  it("keeps submission active when all business tools are deferred", () => {
+  it("keeps submission active when all business tools are deferred", async () => {
     const loaded = {
       manifest: { ...manifest, tools: { defer: true as const } },
       promptTemplate: "",
     };
-    const result = policy(loaded);
+    const result = await policy(loaded);
     expect(result.toolDefs?.map((tool) => tool.name)).toEqual([
       "submit-output",
     ]);
     expect(result.deferredToolNames.has("submit-output")).toBe(false);
   });
 
-  it("does not make host control calls into business work", () => {
-    const result = policy({
+  it("does not make host control calls into business work", async () => {
+    const result = await policy({
       manifest: { ...manifest, requireToolUse: true },
       promptTemplate: "",
     });
@@ -139,20 +139,20 @@ describe("generated output contract", () => {
 
   it.each([{ type: "array" }, { type: "string" }, {}])(
     "rejects non-object schema admission: %j",
-    (outputSchema) => {
-      expect(() =>
+    async (outputSchema) => {
+      await expect(
         policy({ manifest, promptTemplate: "", outputSchema }),
-      ).toThrow(/parameters must describe an object/);
+      ).rejects.toThrow(/parameters must describe an object/);
     },
   );
 
-  it("uses a frozen loaded schema and validator without copying it into the prompt contract", () => {
+  it("uses a frozen loaded schema and validator without copying it into the prompt contract", async () => {
     const loaded = {
       manifest,
       promptTemplate: "",
       outputSchema: structuredClone(schema),
     };
-    const result = policy(loaded);
+    const result = await policy(loaded);
     loaded.outputSchema.properties.answer.type = "number";
     expect(result.output.validate({ answer: "yes" }).valid).toBe(true);
     expect(result.output.validate({ answer: 1 }).valid).toBe(false);
@@ -170,7 +170,7 @@ describe("generated output contract", () => {
     { defer: ["submit-output"] },
   ])("rejects programmatic tool collisions: %j", async (tools) => {
     const loaded = { manifest: { ...manifest, tools }, promptTemplate: "" };
-    expect(() => policy(loaded)).toThrow(/submit-output.*reserved/);
+    await expect(policy(loaded)).rejects.toThrow(/submit-output.*reserved/);
     await expect(
       prepareAgentToolSurface({
         manifest: loaded.manifest,

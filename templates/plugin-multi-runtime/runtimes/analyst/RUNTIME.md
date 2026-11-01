@@ -35,10 +35,10 @@ Replace this section with the real goal. Examples: track player promises, record
 
 ## Decision Rules
 
-- If `runtime-inputs.narrator-output.value` is empty, call `runtime-done` and stop.
-- If there is no new information relevant to the plugin goal, call `runtime-done` and stop.
-- If existing notes already cover the same fact, call `runtime-done` and stop.
-- If there is useful new information, call `notes-upsert` once to save it, then immediately call `runtime-done`.
+- If `runtime-inputs.narrator-output.value` is empty, submit `{}` through `submit-output` and stop.
+- If there is no new information relevant to the plugin goal, submit `{}` through `submit-output` and stop.
+- If existing notes already cover the same fact, submit `{}` through `submit-output` and stop.
+- If there is useful new information, call `notes-upsert` once to save it, then immediately submit `{}` through `submit-output`.
 
 ## Write Shape
 

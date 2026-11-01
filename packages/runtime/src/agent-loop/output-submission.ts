@@ -1,14 +1,16 @@
-import {
-  instructionLocaleFor,
-  type LLMToolCall,
-  type RuntimeManifest,
-  type ToolCallRecord,
+import type {
+  LLMToolCall,
+  RuntimeManifest,
+  ToolCallRecord,
 } from "@covel/shared";
 import { runReviewAgentOutputHook } from "../hooks/wire-helpers.js";
 import { isRecord } from "../utils/is-record.js";
 import type { AgentOutputContract } from "./agent-output-contract.js";
 import type { CorrectionKind } from "./correction-policy.js";
-import { submissionSyntaxProblems } from "./output-format-diagnostics.js";
+import {
+  loadOutputText,
+  submissionSyntaxProblems,
+} from "./output-format-diagnostics.js";
 import { schemaAsksForSegments, storyOutputProblems } from "./story-output.js";
 
 export interface OutputRejection {
@@ -66,7 +68,6 @@ export async function evaluateSubmission(args: {
   | { readonly candidate: Readonly<Record<string, unknown>> }
   | { readonly rejection: OutputRejection }
 > {
-  const zh = instructionLocaleFor(args.locale) === "zh";
   let candidate: unknown;
   try {
     candidate = JSON.parse(args.call.arguments);
@@ -82,9 +83,7 @@ export async function evaluateSubmission(args: {
     return {
       rejection: rejectOutput(
         "invalid-output",
-        zh
-          ? "参数必须是一个完整 JSON 对象。"
-          : "Arguments must be one complete JSON object.",
+        (await loadOutputText(args.locale))("object-required"),
       ),
     };
   const validation = args.contract.validate(candidate);
@@ -111,9 +110,10 @@ export async function evaluateSubmission(args: {
     return {
       rejection: rejectOutput(
         "required-work",
-        zh
-          ? `请先成功完成必需的业务工具工作${tools ? `（${tools}）` : ""}，并解决失败的业务调用，然后重新提交。不要重复已成功的写入。`
-          : `Complete required business tool work${tools ? ` (${tools})` : ""} successfully and resolve failed business calls before submitting. Do not repeat successful writes.`,
+        (await loadOutputText(args.locale))(
+          tools ? "required-work-tools" : "required-work",
+          { tools },
+        ),
       ),
     };
   }

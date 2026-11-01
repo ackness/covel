@@ -1,9 +1,6 @@
 // @vitest-environment node
 import { describe, expect, it } from "vitest";
-import {
-  createSseEventHandler,
-  type SseEventHandlerDeps,
-} from "../sse-handler.js";
+import { createSseEventHandler } from "../sse-handler.js";
 import { initialState, reducer } from "../reducer.js";
 import { reconcileExecutionSteps } from "../snapshot-execution-steps.js";
 import type { SessionState } from "../types.js";

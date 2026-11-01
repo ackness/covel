@@ -9,7 +9,7 @@ import { createToolExecutor } from "../src/agent-loop/tool-executor.js";
 import { createExecutionContext } from "../src/turn-executor/execution-context.js";
 import { PluginServiceRegistry } from "../src/plugin-services.js";
 import { createHookPipeline } from "../src/hooks/pipeline.js";
-import { prose, toolCall, latch } from "./_helpers/agent-loop-fixture.js";
+import { submitted, toolCall, latch } from "./_helpers/agent-loop-fixture.js";
 import {
   fixture,
   fn,
@@ -110,10 +110,10 @@ describe("sub-agent world snapshots", () => {
                   expectedVersion: 2,
                 });
               default:
-                return prose("Parent complete");
+                return submitted("Parent complete");
             }
           }
-          if (childOutcome === "idle") return prose("Child complete");
+          if (childOutcome === "idle") return submitted("Child complete");
           if (childCalls++ === 0)
             return toolCall("get-character", { id: "source" });
           childEvidence = JSON.stringify(
@@ -121,7 +121,7 @@ describe("sub-agent world snapshots", () => {
           );
           if (childOutcome === "failure")
             throw new Error("child failed after reading");
-          return prose("Child complete");
+          return submitted("Child complete");
         },
       };
       const actor = {
@@ -254,7 +254,7 @@ describe("sub-agent world snapshots", () => {
           modelEvidence = JSON.stringify(
             request.messages.filter((m) => m.role === "tool"),
           );
-          return prose("Child complete");
+          return submitted("Child complete");
         },
       };
       const actor = {
@@ -354,11 +354,9 @@ describe("sub-agent world snapshots", () => {
           if (modelCalls++ === 0) return toolCall("record-world", {});
           if (outcome === "model-failure")
             throw new Error("child failed after staging an operation");
-          return prose(
-            outcome === "invalid-output"
-              ? "malformed output"
-              : '{"answer":"accepted"}',
-          );
+          return outcome === "invalid-output"
+            ? submitted("malformed output")
+            : toolCall("submit-output", { answer: "accepted" });
         },
       };
       const actor = {
@@ -436,7 +434,7 @@ describe("sub-agent world snapshots", () => {
             generate: async () =>
               modelCalls++ === 0
                 ? toolCall("get-character", { id: "source" })
-                : prose("Complete"),
+                : submitted("Complete"),
           },
         },
       });
@@ -492,7 +490,7 @@ describe("sub-agent world snapshots", () => {
             generate: async () =>
               calls++ % 2 === 0
                 ? toolCall("list-characters", {})
-                : prose("Complete"),
+                : submitted("Complete"),
           },
         },
       });
@@ -595,7 +593,9 @@ describe("sub-agent world snapshots", () => {
         deps: {
           llm: {
             generate: async () =>
-              calls++ === 0 ? toolCall("child-read", {}) : prose("Complete"),
+              calls++ === 0
+                ? toolCall("child-read", {})
+                : submitted("Complete"),
           },
         },
       });
@@ -705,7 +705,9 @@ describe("sub-agent world snapshots", () => {
         deps: {
           llm: {
             generate: async () =>
-              modelCalls++ === 0 ? toolCall(peek.name, {}) : prose("Complete"),
+              modelCalls++ === 0
+                ? toolCall(peek.name, {})
+                : submitted("Complete"),
           },
           toolExecutor: createToolExecutor({
             findTool: (name) => (name === peek.name ? peek : undefined),
@@ -786,7 +788,7 @@ describe("sub-agent world snapshots", () => {
                   brief === "failed schema" ? "characterSchema" : "characters",
               });
             if (brief === "failed schema") throw new Error("failed sibling");
-            return prose("Complete");
+            return submitted("Complete");
           },
         },
       },
@@ -897,13 +899,13 @@ describe("sub-agent world snapshots", () => {
             generate: async (request) => {
               if (request.tools?.some((t) => t.name === "delegate-batch"))
                 return request.messages.some((m) => m.role === "tool")
-                  ? prose("The story continues.")
+                  ? submitted("The story continues.")
                   : toolCall("delegate-batch", {
                       requests: [{ target, brief: "Constant safe brief" }],
                     });
               return modelCalls++ === 0
                 ? toolCall("record", { secret: "PRIVATE-SERVICE-REQUEST" })
-                : prose("Complete");
+                : submitted("Complete");
             },
           },
         },
@@ -984,7 +986,7 @@ describe("sub-agent world snapshots", () => {
           generate: async () =>
             calls++ === 0
               ? toolCall("get-character", { id: "source" })
-              : prose("Complete"),
+              : submitted("Complete"),
         },
       },
     });

@@ -32,7 +32,7 @@ import {
   createToolExecutor,
   createTurnEmitter,
 } from "../src/index.js";
-import { prose, toolCall, latch } from "./_helpers/agent-loop-fixture.js";
+import { toolCall, latch } from "./_helpers/agent-loop-fixture.js";
 import { createPluginRuntimeGateway } from "../src/function-runtime/plugin-runtime-gateway.js";
 
 const root = path.resolve(import.meta.dirname, "../../../plugins");
@@ -343,12 +343,10 @@ describe("bundled orchestration", () => {
                 name === "Ivo")
             )
               throw new Error("Actor model unavailable");
-            return prose(
-              JSON.stringify({
-                segments: [{ kind: "dialogue", text: `${name} answers.` }],
-                intent: `PRIVATE-INTENT-${name}`,
-              }),
-            );
+            return toolCall("submit-output", {
+              segments: [{ kind: "dialogue", text: `${name} answers.` }],
+              intent: `PRIVATE-INTENT-${name}`,
+            });
           }
           parentRequests.push(text);
           parentToolNames.push((request.tools ?? []).map((tool) => tool.name));
@@ -452,22 +450,20 @@ describe("bundled orchestration", () => {
               }));
             },
           );
-          return prose(
-            JSON.stringify({
-              segments: [
-                ...segments,
-                {
-                  kind: "narration",
-                  text:
-                    plan?.status === "invalid-selection"
-                      ? "The bell falls silent. Correct the actor names."
-                      : "The bell falls silent.",
-                },
-              ],
-              cues: { present: plan?.cast ?? [] },
-              yield: segments.length ? (plan?.yieldHint ?? "user") : "user",
-            }),
-          );
+          return toolCall("submit-output", {
+            segments: [
+              ...segments,
+              {
+                kind: "narration",
+                text:
+                  plan?.status === "invalid-selection"
+                    ? "The bell falls silent. Correct the actor names."
+                    : "The bell falls silent.",
+              },
+            ],
+            cues: { present: plan?.cast ?? [] },
+            yield: segments.length ? (plan?.yieldHint ?? "user") : "user",
+          });
         },
       };
       const builtin = createDefaultToolRegistry({

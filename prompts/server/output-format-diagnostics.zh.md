@@ -1,9 +1,13 @@
 <!--
 用于现有结构化输出纠正请求的模型指令片段。
 与 action-labels.md 相同，每行一个 key: value 条目。
-模板只插入规范化的解析错误原因和数字位置。
+模板提供提交指导以及规范化的解析错误原因。
 -->
 
+tool-description: 在完成必需的工具工作后，提交本 runtime 的最终结果。参数必须符合此 schema。若提交被拒绝，请修正报告的问题并再次调用此工具。提交成功会结束 runtime，但不代表更改已经保存。
+object-required: 参数必须是一个完整 JSON 对象。
+required-work: 请先成功完成必需的业务工具工作，并解决失败的业务调用，然后重新提交。不要重复已成功的写入。
+required-work-tools: 请先成功完成必需的业务工具工作（{{ tools }}），并解决失败的业务调用，然后重新提交。不要重复已成功的写入。
 after-root-object: 根对象已闭合后仍有内容；此处应为输入结束
 unexpected-end: JSON 输入意外结束；需要完整的 JSON 值
 unterminated-string: JSON 字符串未闭合；需要结束双引号

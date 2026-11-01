@@ -313,7 +313,7 @@ async function runAgentToolLoopWithinBudget(
     requireToolUse,
     profile,
     authorizedToolNames,
-  } = buildAgentLoopPolicy({
+  } = await buildAgentLoopPolicy({
     manifest,
     input,
     loaded,

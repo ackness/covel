@@ -1,3 +1,4 @@
+import { toolCall } from "./_helpers/agent-loop-fixture.js";
 /**
  * An agent imports another plugin's write service as a tool. A call stages
  * one operation and answers with the staged notice; the operation counts
@@ -107,9 +108,15 @@ type Reply = (index: number, request: Request) => LLMResponse;
 
 function text(content: string): LLMResponse {
   return {
-    content,
-    toolCalls: [],
-    finishReason: "stop",
+    content: null,
+    toolCalls: [
+      {
+        id: "final",
+        name: "submit-output",
+        arguments: JSON.stringify({ narrativeOutput: content }),
+      },
+    ],
+    finishReason: "tool_calls" as const,
     usage: { inputTokens: 1, outputTokens: 1 },
   };
 }
@@ -117,7 +124,7 @@ function call(name: string, args: object, id = `call-${name}`): LLMResponse {
   return {
     content: null,
     toolCalls: [{ id, name, arguments: JSON.stringify(args) }],
-    finishReason: "tool_calls",
+    finishReason: "tool_calls" as const,
     usage: { inputTokens: 1, outputTokens: 1 },
   };
 }
@@ -340,7 +347,7 @@ describe("an imported write service", () => {
       [AGENT_MARK]: (index) =>
         index === 0
           ? call("bank-pay", { amount: 3 })
-          : text(JSON.stringify({ done: true })),
+          : toolCall("submit-output", { done: true }),
     });
     try {
       await executeTurn(
@@ -390,7 +397,7 @@ describe("an imported write service", () => {
             fields: [{ type: "text", name: "answer", label: "Answer" }],
           }),
           call("bank-pay", { amount: 3 }),
-          text(JSON.stringify({ done: true })),
+          toolCall("submit-output", { done: true }),
         ][index]!,
     });
     try {
@@ -476,7 +483,7 @@ describe("an imported write service", () => {
         [HELPER_MARK]: (index) => {
           if (index === 0) return call("bank-pay", { amount: 4 });
           if (failure) throw new Error("The helper failed after paying");
-          return text(JSON.stringify({ line: "Paid." }));
+          return toolCall("submit-output", { line: "Paid." });
         },
       });
       try {
@@ -587,7 +594,7 @@ describe("an imported write service", () => {
       [HELPER_MARK]: (index) =>
         index === 0
           ? call("bank-pay", { amount: 4 })
-          : text(JSON.stringify({ line: "Paid." })),
+          : toolCall("submit-output", { line: "Paid." }),
     });
     try {
       const execution = await executeTurn(input, [main, helper], {
@@ -775,23 +782,22 @@ describe("character actor operation ownership", () => {
           );
         if (mode === "provider-failure")
           throw new Error("Actor failed after staging");
-        return text(
-          JSON.stringify(
-            mode === "invalid-output"
-              ? {
-                  segments: [
-                    {
-                      kind: "narration",
-                      speaker: "Someone else",
-                      text: "Invalid.",
-                    },
-                  ],
-                }
-              : {
-                  segments: [{ kind: "dialogue", text: "Paid." }],
-                  intent: "PRIVATE-ACTOR-OPERATION",
-                },
-          ),
+        return toolCall(
+          "submit-output",
+          mode === "invalid-output"
+            ? {
+                segments: [
+                  {
+                    kind: "narration",
+                    speaker: "Someone else",
+                    text: "Invalid.",
+                  },
+                ],
+              }
+            : {
+                segments: [{ kind: "dialogue", text: "Paid." }],
+                intent: "PRIVATE-ACTOR-OPERATION",
+              },
         );
       },
     });

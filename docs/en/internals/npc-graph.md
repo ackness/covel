@@ -44,7 +44,7 @@ The retriever reads all the nodes and edges before it traverses, and adjacency i
 
 - **What it reads.** The required input `worldIR`, from the contract `world-ir-provider@1`. That is structured facts that another plugin has already organized from this turn's story text, so the extractor does not have to reread the whole story text.
 - **What it already knows.** The existing nodes and relationships are placed into its prompt before the model is called (`<existing-npcs>` and `<existing-relations>`, up to 60 each).
-- **What counts as finished.** `toolChoice: required` makes the model actually call a tool. The completion condition is `completion.require: explicit`: either one successful `upsert-npc-graph`, or an explicit call to `runtime-done` when nothing changed.
+- **What counts as finished.** `toolChoice: required` makes the model actually call a tool. The completion condition is `completion.require: explicit`: either one successful `upsert-npc-graph`, or an explicit call to `submit-output` when nothing changed.
 - **What does not count.** Claiming "updated" in text or JSON does not change the graph at all.
 - **When it becomes visible.** The actual writes are committed first, together with the turn's transaction. Only after that does the UI receive the data event.
 

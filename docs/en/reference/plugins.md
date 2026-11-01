@@ -456,6 +456,10 @@ agent:
 
 Business tools still validate domain constraints such as coverage. Valid JSON alone does not prove a complete task. See the [submission tool](./tools.md#submit-output).
 
+Narrator and Dialogue Narrator keep the `narrative-engine@2` `segments/cues/yield` payload and deliver it through final submission. Register `createNarrativeReview` on `ReviewAgentOutput`. It checks validated segments or default `narrativeOutput` and returns correction only; it cannot rewrite a response or add effects. Preparation chatter never becomes story content.
+
+Suggestions, fact extraction, event planning, time advancement and world initialization first complete their required business tool, then submit its canonical result. Their own output reviewers reject changes to that result. Correct only the submission, without repeating successful writes. Affinity, codex and graph agents may submit `{}` without writing on no-change turns; character tracking still syncs an empty batch and dimension tracking still settles `updates: []`. World initialization explicitly submits `preGameDone: true`; character form preparation submits `preGameDone: false` while waiting for the player to fill the form.
+
 ### Tool choice and reasoning (`agent.toolChoice`, `agent.reasoning`)
 
 - `agent.toolChoice: required` makes the model call a tool on every step; the model chooses which one. `{name: <tool>}` selects one tool. When omitted, the model chooses.

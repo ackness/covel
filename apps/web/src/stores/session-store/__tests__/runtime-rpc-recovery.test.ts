@@ -5,10 +5,7 @@ import type { MessageRecord, SessionRecord } from "@/services/api.js";
 import type { SessionWorkspace } from "@/services/data-service.js";
 import { ApiError } from "@/services/api/request.js";
 import { initialState, reducer } from "../reducer.js";
-import {
-  createSseEventHandler,
-  type SseEventHandlerDeps,
-} from "../sse-handler.js";
+import { createSseEventHandler } from "../sse-handler.js";
 import type { SessionAction, SessionState } from "../types.js";
 import { claimSessionAction } from "../runtime-refs.js";
 import { textActions } from "../composer-actions.js";

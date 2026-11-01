@@ -51,7 +51,6 @@ const cases: Record<string, Record<string, unknown>> = {
   "sync-characters": { creates: [{ name: "Wren", type: "npc" }] },
   "list-characters": {},
   "get-character": { name: "Ada" },
-  "runtime-done": {},
 };
 const expectedUI: Record<string, unknown> = {
   "render-ui": {
@@ -126,7 +125,13 @@ const expectedUI: Record<string, unknown> = {
   },
 };
 // Suspend is consumed before model rendering; delegate and search-tools have dedicated executor paths.
-const excluded = ["suspend", "delegate", "delegate-batch", "search-tools"];
+const excluded = [
+  "suspend",
+  "delegate",
+  "delegate-batch",
+  "search-tools",
+  "submit-output",
+];
 
 describe("builtin tool envelopes", () => {
   it("covers every reserved builtin", () => {

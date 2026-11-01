@@ -153,7 +153,7 @@ export default function ({ tool, z, shortIdBatch }) {
       withGraphNodesOnly,
       // A call with no node and no edge is the answer "nothing changed". It
       // succeeds and writes nothing: a refusal here cannot be put right,
-      // because `runtime-done` does not settle a failed call.
+      // because `submit-output` does not settle a failed call.
       z.object({
         nodes: z
           .array(nodeInputSchema)

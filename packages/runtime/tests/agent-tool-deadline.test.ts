@@ -366,7 +366,22 @@ describe("agent tool deadline", () => {
     setLLMSlotCapForTests(1);
     const holder = await acquireLLMSlot();
     const generate = vi.fn(async () => submitted("done"));
-    const opts = options({ llm: throughGateway({ generate }) });
+    const gateway = throughGateway({ generate });
+    const queued = Promise.withResolvers<void>();
+    const opts = options({
+      llm: {
+        ...gateway,
+        generate: (params) =>
+          gateway.generate({
+            ...params,
+            onQueueStart: () => {
+              const onAcquired = params.onQueueStart?.();
+              queued.resolve();
+              return (waitedMs) => onAcquired?.(waitedMs);
+            },
+          }),
+      },
+    });
     const manifest = {
       ...opts.manifest,
       tools: undefined,
@@ -382,6 +397,8 @@ describe("agent tool deadline", () => {
       failure = error;
     });
     try {
+      // Prompt loading precedes admission; advance only the model-slot wait.
+      await queued.promise;
       await vi.advanceTimersByTimeAsync(300);
       expect(generate).not.toHaveBeenCalled();
       expect(failure).toBeUndefined();

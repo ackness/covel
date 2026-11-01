@@ -14,6 +14,7 @@ const RUNTIME_EVENTS = [
   "PreStep",
   "PreLLMCall",
   "PostLLMResponse",
+  "ReviewAgentOutput",
   "PreToolUse",
   "PostToolUse",
   "PostRuntime",
@@ -89,9 +90,15 @@ it("gives every hook the session locale, and the runtime identity in the context
       usage: { inputTokens: 0, outputTokens: 0 },
     },
     {
-      content: "The door opens.",
-      toolCalls: [],
-      finishReason: "stop" as const,
+      content: null,
+      toolCalls: [
+        {
+          id: "final",
+          name: "submit-output",
+          arguments: JSON.stringify({ narrativeOutput: "The door opens." }),
+        },
+      ],
+      finishReason: "tool_calls" as const,
       usage: { inputTokens: 0, outputTokens: 0 },
     },
   ];
@@ -176,6 +183,6 @@ it("gives every hook the session locale, and the runtime identity in the context
   const identities = (event: string) =>
     seen.filter((entry) => entry.event === event).map((e) => e.runtimeId);
   expect(identities("PreLLMCall")).toEqual(["teller/story", "teller/story"]);
-  expect(identities("PreToolUse")).toEqual(["teller/story"]);
+  expect(identities("PreToolUse")).toEqual(["teller/story", "teller/story"]);
   expect(identities("PreStateCommit")).toContain("ledger/write");
 });

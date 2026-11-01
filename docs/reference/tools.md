@@ -764,7 +764,7 @@ agent runtime 用它把一件事交给[子 agent](./plugins.md#子-agent)：另�
 | instruction | string | —    | 角色指示，最多 2,000 字符；仅角色目标接受                                        |
 | maxSteps    | number | —    | 子 agent 的步数上限，只能比提供方自己的更低                                      |
 
-**输出**：成功时，模型收到 `{data: output}`；本次委托暂存了操作时还带 `staged: {count, kinds, notice}`，只统计这次委托的操作，说明仍需等回合提交、可能被拒绝。其中 output 经过 `modelFacingJson`，不含簿记字段；代码仍读取原始输出；`stopReason` 和用量只记在 `subagent.completed` 里。`delegate` 列在 `completeAfterTools` 里时，输出先经过私密投影，再作为调用方的输出接受校验：角色 agent 只传 segments，concealed 提供方不传内容。失败时收到 `{error:{code,message,hint?}}`，`code` 是 `ctx.agents.run` 的错误码之一。除 `invalid-input` 外的失败不算这个 runtime 的工具失败，模型可以换个办法继续。
+**输出**：成功时，模型收到 `{data: output}`；本次委托暂存了操作时还带 `staged: {count, kinds, notice}`，只统计这次委托的操作，说明仍需等回合提交、可能被拒绝。其中 output 经过 `modelFacingJson`，不含簿记字段；代码仍读取原始输出；`stopReason` 和用量只记在 `subagent.completed` 里。委托不会自动成为调用方输出，也不满足必需业务工作。父 agent 读取已接受的子输出后，仍单独提交自己的最终结果；角色演员的私密投影只传 segments，concealed 提供方不传内容。失败时收到 `{error:{code,message,hint?}}`，`code` 是 `ctx.agents.run` 的错误码之一。除 `invalid-input` 外的失败不算这个 runtime 的工具失败，模型可以换个办法继续。
 
 **注意事项**：
 
@@ -785,7 +785,7 @@ agent runtime 用它把一件事交给[子 agent](./plugins.md#子-agent)：另�
 
 成功读取、基线和写服务操作仍须等外层工具成功且有效后才接受。失败子项不贡献证据；外层取消时，已成功子项的证据和操作也丢弃。原有的调用方/提供方服务锁和操作序号仍有效，计划顺序不保证服务效果顺序。两个委托工具都保持 `readOnly:false`、`stagesWrites:true`、`idempotent:false`、`concurrencySafe:false`，子 agent 和呈现上下文都不能调用。
 
-任一项解析到私密演员或 concealed 提供方时，整个 batch 参数和结果都从持久化/公开副本中隐去，包括已知目标的无效项。获授权的实时父模型仍能使用已接受输出。`completeAfterTools` 在输出校验前把私密 batch 投影为 `{}`。参见 [trace 关联与隐私](./protocol.md#子-agent-事件)。
+任一项解析到私密演员或 concealed 提供方时，整个 batch 参数和结果都从持久化/公开副本中隐去，包括已知目标的无效项。获授权的实时父模型仍能使用已接受输出。子输出只供父调用方编排；父 agent 单独提交自己的输出。参见 [trace 关联与隐私](./protocol.md#子-agent-事件)。
 
 ## Character 管理工具
 
@@ -875,10 +875,10 @@ agent 通过本工具的会话版本获得类型 enum 和精简字段约束；�
 
 写组合工具的宿主开发者要注意：宿主提供了 `context.world` 时，组合工具只把本批新增的 proposal 叠加到这份快照上。快照里已经包含的外层上游 proposal 和待提交 proposal 不能再叠加一遍，否则版本会被多推进一次，或覆盖更新的字段。
 
-**使用者**: `char-creator/character-tracker`。它把 `sync-characters` 放进 `completeAfterTools`：工具成功后立即结束，不再请求模型收尾。这个 tracker 的配置：
+**使用者**: `char-creator/character-tracker`。它用 `completion.afterTools: [sync-characters]` 要求成功同步，然后用 `submit-output` 提交 `{}`。这个 tracker 的配置：
 
 - 声明 `toolChoice: required`，每次回复都必须调用工具。没有变化时提交空批次。
-- 使用默认的 20 步工具循环预算，所以它可以先读取角色，也可以修正失败的批次。成功同步后立即结束。
+- 使用默认的 20 步工具循环预算，所以它可以先读取角色，也可以修正失败的批次。成功同步后单独提交最终输出。
 - 每个批次的上限仍是 5 个新角色和 10 个已有角色更新。
 - 它自己才看得到的 `<existing-characters>` 名册列出每个角色的 id、姓名、别名（有才出现）、类型和 description。这一段只在角色新增或改写时才变。
 - `<character-fields>` 每行一个 id，在 12000 字符的预算内带上该角色当前的 `fields`，每回合更新。通常一次模型调用就能完成同步。超出预算的角色那一行写 `fieldsOmitted`，再用 `get-character` 读取。
@@ -1325,7 +1325,7 @@ RPC scoped store 的 `setPluginData` 也使用[数据集规则](./plugins.md#数
 | valueType    | enum           |      | `map` 的值类型（`string` / `number` / `boolean`）                     |
 | description  | I18nText       |      | 属性说明（字符串或 locale → string 记录）                             |
 
-**正文输出**: `{success:true, attributeCount, dimensionCount, worldSchema, preGameDone:true}`。代码和 `world-data-provider@1` 继续读取这份完整内容。模型只看到 `summary`（例如 `World initialized: 15 attributes, 2 dimensions.`），没有 `data`；摘要按指令语言选择 English 或简体中文。暂存的改动仍附带 `staged` 提示。
+**正文输出**: `{success:true, attributeCount, dimensionCount, worldSchema, preGameDone:true}`。代码和 `world-data-provider@1` 继续读取这份完整内容。模型同时看到 `data` 中的这份规范结果与 `summary`（例如 `World initialized: 15 attributes, 2 dimensions.`），以便通过 `submit-output` 原样提交并显式携带 `preGameDone: true`；摘要按指令语言选择 English 或简体中文。暂存的改动仍附带 `staged` 提示。
 
 生成的 `defaultValue` 是每个新玩家和 NPC 的起始值，不是某个设定人物的示例。姓名、身份、背景等字段归入 `bio`，使用中性或空值。工具会把生成的 `bio` 字符串默认值清为空字符串，数组清为空数组，对象和 map 清为空对象，枚举则移除默认值；嵌套的个人信息采用同样的规则。数值和布尔默认值保留。世界作者提供的 schema 由 guard 原样采用，不经过这一步处理。
 
@@ -1457,7 +1457,7 @@ schema 里带 `x-derive` 的字段由 `world-init/dimension-clock` 按时钟计�
 
 工具声明 `{stagesWrites:false, idempotent:true}`。补全后的引用校验失败报 `invalid-input`，提示在 `entities` 中声明每个引用的 id 后重试。
 
-工具移除评估字段后返回补全并校验的事实，不产生持久化 proposal。`world-ir` 声明了 `completeAfterTools: [submit-world-facts]`：框架把成功的结果直接作为 runtime 的类型化输出，再用 `contract:world-ir@1` 的输出 schema 检查一次。
+工具移除评估字段后返回补全并校验的事实，不产生持久化 proposal。公共模型视图的 `data.facts` 是最终提交的规范事实；`data.entityReferences` 索引事实实体的业务身份，让普通模型投影保留必要的语义 ID，即使实体还没有入边。索引不属于最终输出，也不包含存储行元数据。`completion.afterTools: [submit-world-facts]` 要求先成功抽取，再通过 `submit-output` 提交 `data.facts`。插件的 `ReviewAgentOutput` 审核阻止改写规范结果；修正最终提交不重复抽取，`contract:world-ir@1` 的业务形状保持不变。
 
 #### 逐目标评估
 

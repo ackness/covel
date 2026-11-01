@@ -9,7 +9,7 @@ import {
 } from "@covel/tools";
 import { z } from "zod";
 import { createHookPipeline } from "../src/hooks/pipeline.js";
-import { settleAgentLoop } from "../src/agent-loop/settle-agent-loop.js";
+
 import { stopOf } from "../src/agent-loop/stop-reason.js";
 import { TurnAbortedError } from "../src/turn-executor/turn-control.js";
 import { collectExecutionSuspensions } from "../src/suspension-artifact.js";
@@ -22,7 +22,6 @@ import {
   latch,
   makeExecutor,
   manifest,
-  prose,
   submitted,
   queuedLLM,
   runLoop,

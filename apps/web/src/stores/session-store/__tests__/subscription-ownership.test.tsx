@@ -1,6 +1,6 @@
 import { act, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import type { DataService, SessionWorkspace } from "@/services/data-service.js";
+import type { SessionWorkspace } from "@/services/data-service.js";
 import type {
   ConnectionState,
   SessionSubscriptionOptions,

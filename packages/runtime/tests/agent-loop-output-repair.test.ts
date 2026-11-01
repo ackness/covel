@@ -1,18 +1,13 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { LLMResponse, RuntimeManifest } from "@covel/shared";
+import type { LLMResponse } from "@covel/shared";
 import { createHookPipeline } from "../src/hooks/pipeline.js";
 import type { ReviewAgentOutputPayload } from "../src/hooks/wire-helpers.js";
-import { createTurnEmitter } from "../src/trace/turn-emitter.js";
-import { createEventBus } from "@covel/events";
+
 import {
   manifest,
-  prose,
   queuedLLM,
   runLoop,
-  runRuntime,
   toolCall,
-  input,
-  scriptedLLM,
 } from "./_helpers/agent-loop-fixture.js";
 
 const schema = {

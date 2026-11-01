@@ -1,5 +1,5 @@
 ---
-version: 0.0.40
+version: 0.0.41
 displayName: Relationship Graph
 description: >-
   Tracks relationships between characters so the story stays consistent when

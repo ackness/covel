@@ -200,3 +200,5 @@ World fact extraction assesses each open objective of tracked quests and checks 
 - [First world](../worlds/first-world.md)
 - [Preset quests, items and affinity for a world](../recipes/starting-content.md)
 - [World data reference](../reference/world-data.md)
+
+When extending these bundled agents, follow the [output submission contract](../reference/plugins.md#agent-output-submission). Function runtimes continue returning their business value directly.

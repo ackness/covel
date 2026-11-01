@@ -250,7 +250,7 @@ describe("the step limit (E5)", () => {
               { id: "tc-save", name: "save", arguments: "{}" },
               { id: "tc-bad", name: "mark", arguments: "{}" },
             ],
-            finishReason: "tool_calls",
+            finishReason: "tool_calls" as const,
             usage: { inputTokens: 1, outputTokens: 1 },
           }
         : submitted("never"),
@@ -556,7 +556,7 @@ describe("suspension (E12) and settle failures (E13, E14)", () => {
 
   it("E13: a schema-gate failure is invalid-output", async () => {
     const result = await runRuntime({
-      llm: queuedLLM([submitted(JSON.stringify({ count: "many" }))]),
+      llm: queuedLLM([toolCall("submit-output", { count: "many" })]),
       deps: {
         loadRuntime: async (runtime) => ({
           manifest: runtime,

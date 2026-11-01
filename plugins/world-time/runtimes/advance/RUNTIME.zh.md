@@ -15,4 +15,4 @@
 - 时长请求的 bidirectional：根据叙事证据和作者 prompt 选择 direction。
 - random：只提交 reason，不提交 amount、unit、direction 或 target；工具通过 ctx.random 在作者定义的范围内抽样；同一执行的重复调用复用已暂存或提交的结果。
 - 单位：只使用 `currentTime.value.units` 中列出的单位。按阶段计时的世界没有分钟和小时。事件仍在当前阶段内时，提交 amount 0。
-- 工具校验失败时依据错误修正，成功后框架自动结束。
+- 工具校验失败时依据错误修正，成功后读取工具的规范结果，用 `submit-output` 提交；修正最终提交时不要重复业务调用。

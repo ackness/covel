@@ -16,9 +16,15 @@ export const input: TurnInput = {
   locale: "en-US",
 };
 export const answer = (content = "The story continues."): LLMResponse => ({
-  content,
-  toolCalls: [],
-  finishReason: "stop",
+  content: null,
+  toolCalls: [
+    {
+      id: "final",
+      name: "submit-output",
+      arguments: JSON.stringify({ narrativeOutput: content }),
+    },
+  ],
+  finishReason: "tool_calls" as const,
   usage: { inputTokens: 1, outputTokens: 1 },
 });
 export function runtime(

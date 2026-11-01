@@ -307,3 +307,5 @@ The three general gameplay packs (Traditional Story, Dialogue Mode, Low Cost) do
 - [Starting content](../recipes/starting-content.md): preset quests, items and affinity for a world
 - [World data](../reference/world-data.md): how data files go into a world package
 - [Built-in plugin overview](./index.md)
+
+When extending these bundled agents, follow the [output submission contract](../reference/plugins.md#agent-output-submission). Function runtimes continue returning their business value directly.

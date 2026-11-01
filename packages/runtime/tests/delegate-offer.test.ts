@@ -8,7 +8,7 @@ import {
   tell,
   input,
 } from "./_helpers/world-read-fixture.js";
-import { prose } from "./_helpers/agent-loop-fixture.js";
+import { submitted } from "./_helpers/agent-loop-fixture.js";
 import { createSubagentRunner } from "../src/agent-loop/subagent-runner.js";
 import { withSubagentDelegate } from "../src/agent-loop/subagent-delegate.js";
 import { createExecutionContext } from "../src/turn-executor/execution-context.js";
@@ -47,7 +47,7 @@ describe("delegation tool offers", () => {
           llm: {
             generate: async (r) => {
               offered = r.tools ?? [];
-              return prose("Done");
+              return submitted("Done");
             },
           },
         },

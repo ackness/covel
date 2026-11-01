@@ -781,7 +781,7 @@ describe("affinity plugin manifest", () => {
   it("declares the update-affinity plugin tool via the entry module", () => {
     expect(manifest.tools?.plugin).toEqual(["update-affinity"]);
     expect(packageManifest.entry).toBe("./server/index.js");
-    expect(manifest.completeAfterTools).toEqual(["update-affinity"]);
+    expect(manifest.completeAfterTools).toBeUndefined();
     expect(manifest.maxSteps).toBeUndefined(); // Inherit the framework budget.
     expect(manifest.maxRetries).toBe(3);
   });

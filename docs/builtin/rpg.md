@@ -307,3 +307,5 @@ d20 加上属性修正，达到目标值就成功。自然 20 是大成功，自
 - [预置开局内容](../recipes/starting-content.md)：给世界预置任务、物品和好感
 - [世界数据](../reference/world-data.md)：数据文件怎么进世界包
 - [内置插件总览](./index.md)
+
+扩展这些内置 agent 时，遵循[输出提交约定](../reference/plugins.md#agent-output-submission)。函数 runtime 仍直接返回业务值。

@@ -88,7 +88,10 @@ export {
   ToolError,
   isToolError,
 } from "@covel/plugin-handlers-utils";
-export type { ToolModelView } from "@covel/plugin-handlers-utils";
+export type {
+  ReviewAgentOutputPayload,
+  ToolModelView,
+} from "@covel/plugin-handlers-utils";
 export * from "./types/llm-diagnostics.js";
 export * from "./llm-request-budget.js";
 export * from "./llm-slots.js";

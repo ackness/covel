@@ -79,7 +79,7 @@ describe("bounded batch delegation", () => {
       { [story.name]: tell },
     );
     expect(result.resultOf(parent).status).toBe("success");
-    expect(started).toEqual(["first", "second"]);
+    expect([...started].sort()).toEqual(["first", "second"]);
   });
 });
 
@@ -296,7 +296,10 @@ describe("batch admission and lifetime", () => {
     expect(results(result)[8]).toMatchObject({
       error: { code: "unavailable" },
     });
-    expect(started).toEqual(Array.from({ length: 8 }, (_, i) => String(i)));
+    // Parallel prompt loading may reach the provider in any order.
+    expect([...started].sort()).toEqual(
+      Array.from({ length: 8 }, (_, i) => String(i)),
+    );
     expect(f.delegation.snapshot().calls).toBe(8);
     expect(f.runner.inFlight).toBe(0);
   });

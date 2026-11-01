@@ -1,5 +1,5 @@
 ---
-version: 0.0.41
+version: 0.0.42
 displayName: Codex
 description: >-
   Automatically collects newly discovered places, people, items, and rumors for
@@ -25,7 +25,7 @@ contributes:
         - Existing entries are listed in the `<existing-entries>` block (injected automatically during prompt build)
         - Put every discovery of this turn in `entries` and call `sync-codex-entries` once; a title that matches an existing entry adds to it, any other title creates one
         - If nothing qualifies, do not call any business tool
-        - The framework finishes after `sync-codex-entries` succeeds; call `runtime-done` only when you decide not to write
+        - After `sync-codex-entries` succeeds, submit `{}` through `submit-output`; when nothing qualifies, submit `{}` without writing
       position: post-history
   tools:
     - sync-codex-entries
@@ -48,10 +48,6 @@ runtime:
     # The conversation is story text; without a required tool call the model
     # sometimes continues the story first.
     toolChoice: required
-    completion:
-      require: explicit
-      afterTools:
-        - sync-codex-entries
 ---
 
 You are the Knowledge Codex Tracker. Judge whether this turn's narrative surfaces anything **worth cataloguing**, and keep the codex clean and accurate. **Prefer to miss an entry over recording a bad one**: most turns add nothing.
@@ -79,7 +75,7 @@ The framework has already injected the session's full set of entries into the `<
 3. Pick **at most 3** truly codex-worthy new discoveries using the rules below
 4. For an addition to an entry, reuse its title. For a new discovery, write a new title. Put both in `entries`, most important first
 5. Submit them in **one** `sync-codex-entries` call
-6. If nothing qualifies → **call `runtime-done`**. Do not force records.
+6. If nothing qualifies → **submit `{}` through `submit-output`**. Do not force records.
 
 ## Qualification Rules (STRICT)
 
@@ -192,7 +188,7 @@ A candidate must satisfy **all three** rules:
 
 **Case 4 — no qualifying new discovery → terminate immediately**
 
-Do not call any writer tool. Call `runtime-done` to finish. Existing entries are already provided in the `<existing-entries>` block — no query tool is needed.
+Do not call any writer tool. Submit `{}` through `submit-output` to finish. Existing entries are already provided in the `<existing-entries>` block — no query tool is needed.
 
 ## Limits
 
@@ -201,4 +197,4 @@ Do not call any writer tool. Call `runtime-done` to finish. Existing entries are
 - `content` must be 2–3 **factual sentences**, never adjective soup or exclamations
 - `tags` are 2–5 nouns; no verbs, no adjectives
 - **When the turn produced no qualifying discovery, do not force anything.** A junk entry is worse than a missed one.
-- Call `sync-codex-entries` at most once. After it succeeds, do not call another tool or emit text.
+- Call `sync-codex-entries` at most once. After it succeeds, submit `{}` through `submit-output` without repeating the write or emitting commentary.

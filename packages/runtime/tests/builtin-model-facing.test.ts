@@ -72,7 +72,6 @@ const inputs: Record<string, Record<string, unknown>> = {
     reason: "Choose a route",
     fields: [{ type: "text", name: "answer", label: "Answer" }],
   },
-  "runtime-done": { reason: "Finished" },
   "emit-event": { topic: "gate.opened", data: value },
   "sync-characters": {
     creates: [{ name: "Mira", type: "npc" }],
@@ -214,9 +213,9 @@ describe("builtin model-facing results", () => {
     expect([...registry.builtinTools.keys()].sort()).toEqual(
       Object.keys(inputs).sort(),
     );
-    expect([...registry.builtinTools.keys(), "search-tools"].sort()).toEqual(
-      [...FRAMEWORK_TOOL_NAMES].sort(),
-    );
+    expect(
+      [...registry.builtinTools.keys(), "search-tools", "submit-output"].sort(),
+    ).toEqual([...FRAMEWORK_TOOL_NAMES].sort());
   });
 
   it.each(Object.entries(inputs))(

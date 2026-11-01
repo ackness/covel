@@ -79,6 +79,6 @@ A scripted LLM supplies prose drift, native tool calls, and explicit no-change
 responses. The test checks actual committed data and turn accounting across
 single/batch retry, repeated failure, recovery, story advancement, and server
 rebootstrap. It also proves that a manual extractor cannot claim a write via
-JSON prose, while a real `runtime-done` no-op stays successful without writing.
+JSON prose, while a real `submit-output` no-op stays successful without writing.
 The scripted responses verify framework behavior, not a live provider's drift
 frequency or quality.

@@ -3,6 +3,8 @@ import {
   ToolError,
   getPendingProposals,
   getToolContent,
+  getModelView,
+  modelFacingJson,
 } from "@covel/plugin-handlers-utils";
 import makeSubmitWorldFacts from "../tools/submit-world-facts.js";
 
@@ -39,19 +41,23 @@ describe("submit-world-facts", () => {
       true,
     );
     await expect(
-      submitWorldFacts.execute(VALID_FACTS, {
-        sessionId: "session-world-ir",
-        turnId: "turn-world-ir",
-        pluginId: "world-ir",
-        runtimeId: "world-ir",
-      }),
+      submitWorldFacts
+        .execute(VALID_FACTS, {
+          sessionId: "session-world-ir",
+          turnId: "turn-world-ir",
+          pluginId: "world-ir",
+          runtimeId: "world-ir",
+        })
+        .then(getToolContent),
     ).resolves.toEqual(VALID_FACTS);
   });
 
   it("supplies the protocol version when omitted and rejects unsupported versions", async () => {
     const { schemaVersion: _version, ...withoutVersion } = VALID_FACTS;
     const parsed = submitWorldFacts.parameters.parse(withoutVersion);
-    expect(await submitWorldFacts.execute(parsed)).toEqual(VALID_FACTS);
+    expect(getToolContent(await submitWorldFacts.execute(parsed))).toEqual(
+      VALID_FACTS,
+    );
     expect(
       submitWorldFacts.parameters.safeParse({
         ...VALID_FACTS,
@@ -148,21 +154,25 @@ describe("submit-world-facts", () => {
       },
     });
 
-    expect(result.entities).toEqual([
+    expect(getToolContent(result).entities).toEqual([
       { id: "brass-key", type: "item", name: "Brass Key" },
       { id: "session-mira", type: "character", name: "Mira" },
       { id: "char-0b9d-ren", type: "character", name: "Ren" },
     ]);
-    expect(result.relations[0]).toMatchObject({
+    expect(getToolContent(result).relations[0]).toMatchObject({
       from: "session-mira",
       to: "char-0b9d-ren",
     });
-    expect(result.events[0].participantIds).toEqual([
+    expect(getToolContent(result).events[0].participantIds).toEqual([
       "session-mira",
       "char-0b9d-ren",
     ]);
-    expect(result.events[0].attributes.holder).toBe("char-0b9d-ren");
-    expect(result.statements[0].subjectIds).toEqual(["char-0b9d-ren"]);
+    expect(getToolContent(result).events[0].attributes.holder).toBe(
+      "char-0b9d-ren",
+    );
+    expect(getToolContent(result).statements[0].subjectIds).toEqual([
+      "char-0b9d-ren",
+    ]);
   });
 
   it("reads a handle whose hyphens are elsewhere, and a name, as that character", async () => {
@@ -188,7 +198,7 @@ describe("submit-world-facts", () => {
       },
     });
     // An id that an entity of the output has stays that entity.
-    expect(result.events[0].participantIds).toEqual([
+    expect(getToolContent(result).events[0].participantIds).toEqual([
       "c-1",
       "c-1",
       "c-2",
@@ -221,7 +231,10 @@ describe("submit-world-facts", () => {
         ],
       },
     });
-    expect(result.events[0].participantIds).toEqual(["c-1", "c-1"]);
+    expect(getToolContent(result).events[0].participantIds).toEqual([
+      "c-1",
+      "c-1",
+    ]);
   });
 
   it("does not guess between two characters with the same letters", async () => {
@@ -231,14 +244,16 @@ describe("submit-world-facts", () => {
       events: [{ id: "meet", type: "interaction", participantIds: ["annlee"] }],
     });
     await expect(
-      submitWorldFacts.execute(facts, {
-        world: {
-          characters: [
-            { id: "c-1", name: "Ann Lee", type: "npc" },
-            { id: "c-2", name: "Annlee", type: "npc" },
-          ],
-        },
-      }),
+      submitWorldFacts
+        .execute(facts, {
+          world: {
+            characters: [
+              { id: "c-1", name: "Ann Lee", type: "npc" },
+              { id: "c-2", name: "Annlee", type: "npc" },
+            ],
+          },
+        })
+        .then(getToolContent),
     ).resolves.toMatchObject({ events: [{ participantIds: ["c-2"] }] });
     await expect(
       submitWorldFacts.execute(
@@ -317,10 +332,11 @@ describe("submit-world-facts", () => {
       ],
     });
     const result = await submitWorldFacts.execute(facts);
-    expect(result.statements.map((statement) => statement.subjectIds)).toEqual([
-      ["brass-key"],
-      [],
-    ]);
+    expect(
+      getToolContent(result).statements.map(
+        (statement) => statement.subjectIds,
+      ),
+    ).toEqual([["brass-key"], []]);
     // A subject that names nothing in the output is still an error.
     await expect(
       submitWorldFacts.execute({
@@ -352,7 +368,7 @@ describe("submit-world-facts", () => {
       },
     });
 
-    expect(result.entities).toEqual([
+    expect(getToolContent(result).entities).toEqual([
       {
         id: "session-mira",
         type: "character",
@@ -412,8 +428,8 @@ describe("submit-world-facts", () => {
     const result = await submitWorldFacts.execute(facts, {
       world: { characters: [] },
     });
-    expect(result.relations[0].to).toBe("reed-voice");
-    expect(result.statements[0].subjectIds).toEqual([
+    expect(getToolContent(result).relations[0].to).toBe("reed-voice");
+    expect(getToolContent(result).statements[0].subjectIds).toEqual([
       "reed-voice",
       "player-ren",
     ]);
@@ -482,7 +498,9 @@ describe("submit-world-facts", () => {
       world: { characters: [] },
       inputSlots: { vocabulary },
     });
-    expect(result.entities.slice(VALID_FACTS.entities.length)).toEqual([
+    expect(
+      getToolContent(result).entities.slice(VALID_FACTS.entities.length),
+    ).toEqual([
       { id: "Brass Gear", type: "item", name: "Brass Gear" },
       { id: "Find the Keeper", type: "quest", name: "Find the Keeper" },
     ]);
@@ -685,4 +703,35 @@ describe("fact submission correction errors and annotations", () => {
       expect(params).toEqual(original);
     },
   );
+});
+
+// Standalone entity identities are business references even before an edge uses them.
+it("keeps an unlinked character identity available for final submission", async () => {
+  const instance = makeSubmitWorldFacts({ tool: (definition) => definition });
+  const id = "8d5f4cce-3194-4a8c-a7c7-056908e2e174";
+  const result = await instance.execute(
+    instance.parameters.parse({
+      schemaVersion: 1,
+      entities: [
+        {
+          id: "mira",
+          type: "character",
+          name: "Mira",
+          description: "A newly revealed title.",
+        },
+      ],
+      relations: [],
+      events: [],
+      statements: [],
+    }),
+    {
+      world: { characters: [{ id, name: "Mira", type: "npc" }] },
+      locale: "en-US",
+    },
+  );
+  const publicData = modelFacingJson(getModelView(result).data);
+  expect(publicData.facts.entities[0].id).toBe(id);
+  expect(publicData.entityReferences).toEqual([id]);
+  expect(publicData.facts).toEqual(getToolContent(result));
+  expect(getPendingProposals(result)).toEqual([]);
 });

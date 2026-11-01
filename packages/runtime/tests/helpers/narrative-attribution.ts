@@ -1,3 +1,4 @@
+import { latestToolOutput, toolCall } from "../_helpers/agent-loop-fixture.js";
 import assert from "node:assert/strict";
 import { isJsonValue } from "@covel/shared";
 import { createMemoryStore } from "@covel/store/memory";
@@ -137,6 +138,14 @@ export async function runAttributionTurn(
         "update-dimensions",
       ].find((n) => p.tools?.some((t) => t.name === n));
       assert.ok(tool, "only synthetic writer calls are allowed");
+      const canonical = latestToolOutput(p.messages, tool);
+      if (canonical)
+        return toolCall(
+          "submit-output",
+          tool === "submit-world-facts"
+            ? (canonical.facts as Record<string, unknown>)
+            : {},
+        );
       calls.push({ tool, messages: p.messages });
       if (tool === "submit-world-facts" && failWorldIR) {
         failWorldIR = false;
@@ -164,7 +173,7 @@ export async function runAttributionTurn(
             arguments: JSON.stringify(args),
           },
         ],
-        finishReason: "tool_calls",
+        finishReason: "tool_calls" as const,
         usage: { inputTokens: 1, outputTokens: 1 },
       };
     },

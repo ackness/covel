@@ -1,3 +1,4 @@
+import { latestToolOutput, toolCall } from "./_helpers/agent-loop-fixture.js";
 import { readFileSync } from "node:fs";
 import { describe, expect, it, vi } from "vitest";
 import type { LLMAdapter, RuntimeManifest } from "@covel/shared";
@@ -81,18 +82,25 @@ describe("schema-gen completion and public output contract", () => {
         updatedAt: now,
       });
       const initialize = initializeWorld({ tool, z });
-      const generate = vi.fn<LLMAdapter["generate"]>(async () => ({
-        content: "",
-        toolCalls: [
-          {
-            id: "initialize",
-            name: "initialize-world",
-            arguments: JSON.stringify({ attributes }),
-          },
-        ],
-        finishReason: "tool_calls",
-        usage: { inputTokens: 1, outputTokens: 1 },
-      }));
+      const generate = vi.fn<LLMAdapter["generate"]>(async (request) => {
+        const canonical = latestToolOutput(
+          request.messages,
+          "initialize-world",
+        );
+        if (canonical) return toolCall("submit-output", canonical);
+        return {
+          content: "",
+          toolCalls: [
+            {
+              id: "initialize",
+              name: "initialize-world",
+              arguments: JSON.stringify({ attributes }),
+            },
+          ],
+          finishReason: "tool_calls" as const,
+          usage: { inputTokens: 1, outputTokens: 1 },
+        };
+      });
       const turn = await runTurnPipeline(
         {
           sessionId: "session",
@@ -128,7 +136,7 @@ describe("schema-gen completion and public output contract", () => {
         dimensionCount: 0,
         worldSchema,
       });
-      expect(generate).toHaveBeenCalledTimes(authored ? 0 : 1);
+      expect(generate).toHaveBeenCalledTimes(authored ? 0 : 2);
       expect(Object.keys(turn.setupCompletion?.newlyDone ?? {})).toEqual([
         runtime.name,
       ]);

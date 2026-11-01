@@ -378,7 +378,7 @@ describe("codex plugin manifest", () => {
 
   it("should expose one atomic sync tool and no builtin tools", () => {
     expect(manifest.tools?.plugin).toEqual(["sync-codex-entries"]);
-    expect(manifest.completeAfterTools).toEqual(["sync-codex-entries"]);
+    expect(manifest.completeAfterTools).toBeUndefined();
     expect(manifest.maxSteps).toBeUndefined(); // Inherit the framework budget.
     expect(manifest.maxRetries).toBe(3);
     // Existing entries arrive via input.inject, not a list tool.

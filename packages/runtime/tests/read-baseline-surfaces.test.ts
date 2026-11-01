@@ -113,13 +113,21 @@ describe("automatic same-key guards", () => {
     const responses: LLMResponse[] = [failed.name, blind.name].map((name) => ({
       content: null,
       toolCalls: [{ id: name, name, arguments: "{}" }],
-      finishReason: "tool_calls",
+      finishReason: "tool_calls" as const,
       usage: { inputTokens: 1, outputTokens: 1 },
     }));
     responses.push({
-      content: "The story continues.",
-      toolCalls: [],
-      finishReason: "stop",
+      content: null,
+      toolCalls: [
+        {
+          id: "final",
+          name: "submit-output",
+          arguments: JSON.stringify({
+            narrativeOutput: "The story continues.",
+          }),
+        },
+      ],
+      finishReason: "tool_calls" as const,
       usage: { inputTokens: 1, outputTokens: 1 },
     });
     let step = 0;

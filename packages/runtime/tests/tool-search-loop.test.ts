@@ -66,15 +66,21 @@ function toolCallResponse(name: string, args: object): LLMResponse {
   return {
     content: null,
     toolCalls: [{ id: `tc-${name}`, name, arguments: JSON.stringify(args) }],
-    finishReason: "tool_calls",
+    finishReason: "tool_calls" as const,
     usage: { inputTokens: 10, outputTokens: 5 },
   };
 }
 
 const DONE: LLMResponse = {
-  content: "done.",
-  toolCalls: [],
-  finishReason: "stop",
+  content: null,
+  toolCalls: [
+    {
+      id: "final",
+      name: "submit-output",
+      arguments: JSON.stringify({ narrativeOutput: "done." }),
+    },
+  ],
+  finishReason: "tool_calls" as const,
   usage: { inputTokens: 10, outputTokens: 5 },
 };
 
@@ -206,27 +212,27 @@ describe("buildToolDefinitions defer shapes", () => {
 
   it.each([undefined, true, ["x"]] as const)(
     "rejects a missing plugin tool with defer %j",
-    (defer) => {
+    async (defer) => {
       const manifest = makeManifest({
         tools: { plugin: ["x"], ...(defer !== undefined ? { defer } : {}) },
       });
-      expect(() =>
+      await expect(
         buildToolDefinitions(
           manifest,
           toolExecutor,
           TOOL_CONTEXT,
           resolveAgentOutput({ manifest, promptTemplate: "" }),
         ),
-      ).toThrow(
+      ).rejects.toThrow(
         'runtime "mega/worker" declares plugin tool "x", but its plugin did not register it',
       );
     },
   );
 
-  it("drops a missing builtin host capability with a diagnostic", () => {
+  it("drops a missing builtin host capability with a diagnostic", async () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     try {
-      const definitions = buildToolDefinitions(
+      const definitions = await buildToolDefinitions(
         makeManifest({ tools: { builtin: ["memory-search"] } }),
         toolExecutor,
         TOOL_CONTEXT,
@@ -243,10 +249,10 @@ describe("buildToolDefinitions defer shapes", () => {
     }
   });
 
-  it("offers only model-facing fields for a registered plugin tool", () => {
+  it("offers only model-facing fields for a registered plugin tool", async () => {
     const module = TOOL_POOL[0];
     if (!module) throw new Error("tool pool is empty");
-    const definitions = buildToolDefinitions(
+    const definitions = await buildToolDefinitions(
       makeManifest({ tools: { plugin: [module.name] } }),
       toolExecutor,
       TOOL_CONTEXT,
@@ -261,7 +267,7 @@ describe("buildToolDefinitions defer shapes", () => {
     });
   });
 
-  it("defer: [subset] withholds only the listed names", () => {
+  it("defer: [subset] withholds only the listed names", async () => {
     const manifest = makeManifest({
       tools: {
         builtin: TOOL_POOL.map((t) => t.name),
@@ -269,12 +275,12 @@ describe("buildToolDefinitions defer shapes", () => {
       },
     });
     const names = (
-      buildToolDefinitions(
+      (await buildToolDefinitions(
         manifest,
         toolExecutor,
         TOOL_CONTEXT,
         resolveAgentOutput({ manifest, promptTemplate: "" }),
-      ) ?? []
+      )) ?? []
     ).map((d) => d.name);
     expect(names).toContain("roll-dice");
     expect(names).toContain(SEARCH_TOOLS_TOOL_NAME);
@@ -292,17 +298,17 @@ describe("buildToolDefinitions defer shapes", () => {
     expect(resolveDeferredToolNames(manifest)).toEqual(new Set(["roll-dice"]));
   });
 
-  it("no defer ⇒ byte-identical full advertisement, no search-tools", () => {
+  it("no defer ⇒ byte-identical full advertisement, no search-tools", async () => {
     const manifest = makeManifest({
       tools: { builtin: TOOL_POOL.map((t) => t.name) },
     });
     const names = (
-      buildToolDefinitions(
+      (await buildToolDefinitions(
         manifest,
         toolExecutor,
         TOOL_CONTEXT,
         resolveAgentOutput({ manifest, promptTemplate: "" }),
-      ) ?? []
+      )) ?? []
     ).map((d) => d.name);
     for (const t of TOOL_POOL) expect(names).toContain(t.name);
     expect(names).not.toContain(SEARCH_TOOLS_TOOL_NAME);

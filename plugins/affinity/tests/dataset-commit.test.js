@@ -180,18 +180,31 @@ async function fixture(invalidWrite) {
         getPluginSource: () => "builtin",
         loadRuntime: async (manifest) => loaded.get(manifest.name),
         llm: {
-          generate: async () => ({
-            content: null,
-            toolCalls: [
-              {
-                id: "update",
-                name: update.name,
-                arguments: JSON.stringify({ changes }),
-              },
-            ],
-            finishReason: "tool_calls",
-            usage: { inputTokens: 1, outputTokens: 1 },
-          }),
+          generate: async (request) =>
+            request.messages.some(
+              (message) =>
+                message.role === "tool" && JSON.parse(message.content).data,
+            )
+              ? {
+                  content: null,
+                  toolCalls: [
+                    { id: "final", name: "submit-output", arguments: "{}" },
+                  ],
+                  finishReason: "tool_calls",
+                  usage: { inputTokens: 1, outputTokens: 1 },
+                }
+              : {
+                  content: null,
+                  toolCalls: [
+                    {
+                      id: "update",
+                      name: update.name,
+                      arguments: JSON.stringify({ changes }),
+                    },
+                  ],
+                  finishReason: "tool_calls",
+                  usage: { inputTokens: 1, outputTokens: 1 },
+                },
         },
         toolExecutor: createToolExecutor({
           store,

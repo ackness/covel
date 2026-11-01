@@ -128,12 +128,12 @@ runtime:
     const llm = new MockLLM({
       defaultResponse: {
         content: null,
-        finishReason: "tool_calls",
+        finishReason: "tool_calls" as const,
         toolCalls: [
           {
             id: "done",
-            name: "runtime-done",
-            arguments: '{"reason":"observed"}',
+            name: "submit-output",
+            arguments: "{}",
           },
         ],
         usage: { inputTokens: 1, outputTokens: 1 },

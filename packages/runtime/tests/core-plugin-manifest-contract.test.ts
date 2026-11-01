@@ -270,12 +270,12 @@ describe("core plugin manifest contract", () => {
         handler: "./handler.js",
       });
     }
-    expect(requireRuntime(manifests, "affinity").completeAfterTools).toEqual([
-      "update-affinity",
-    ]);
-    expect(requireRuntime(manifests, "codex").completeAfterTools).toEqual([
-      "sync-codex-entries",
-    ]);
+    expect(
+      requireRuntime(manifests, "affinity").completeAfterTools,
+    ).toBeUndefined();
+    expect(
+      requireRuntime(manifests, "codex").completeAfterTools,
+    ).toBeUndefined();
     for (const id of [
       "npc-graph/extractor",
       "affinity",
@@ -284,7 +284,9 @@ describe("core plugin manifest contract", () => {
     ]) {
       const extractor = requireRuntime(manifests, id);
       expect(extractor).not.toHaveProperty("requireExplicitCompletion");
-      expect(extractor.requireToolUse).toBe(true);
+      expect(extractor.requireToolUse).toBe(
+        id === "char-creator/character-tracker" ? true : undefined,
+      );
       // Each reads a conversation of story text; a required tool call keeps
       // the model from continuing the story; final output is submitted separately.
       expect(extractor.llm?.toolChoice).toBe("required");

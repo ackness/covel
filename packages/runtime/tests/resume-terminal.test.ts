@@ -1,3 +1,4 @@
+import { suspendedLoopState } from "./_helpers/agent-loop-fixture.js";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createEventBus } from "@covel/events";
 import type {
@@ -34,7 +35,9 @@ it("enforces the public output contract when an agent resumes", async () => {
   expect(result).toMatchObject({
     status: "failed",
     output: null,
-    error: expect.stringContaining("contract-output-invalid"),
+    error: expect.stringContaining(
+      "Agent continuation contract is invalid or changed",
+    ),
   });
   expect(f.failedEvents()).toHaveLength(1);
 });
@@ -60,9 +63,12 @@ function fixture(runtimeType: "agent" | "function" = "agent", recover = false) {
     resumeSchema: {},
     createdAt: new Date().toISOString(),
     pendingContinuation: {
+      ...(manifest.runtimeType === "function"
+        ? {}
+        : { loop: suspendedLoopState(manifest) }),
       lifecycle: { runId: "suspended-run", progressRunId: "suspended-run" },
       readScopes: [],
-      takenUnder: { playerTurns: 0, pluginVersion: "1.0.0", writes: [] },
+      takenUnder: { playerTurns: 0, pluginVersion: "0.0.0", writes: [] },
       executionContext: {
         executionId: "previous-run",
         origin: "manual",
@@ -103,9 +109,15 @@ function fixture(runtimeType: "agent" | "function" = "agent", recover = false) {
     value: { text: "done" },
   }));
   const generate = vi.fn(async () => ({
-    content: "done",
-    toolCalls: [],
-    finishReason: "stop" as const,
+    content: null,
+    toolCalls: [
+      {
+        id: "final",
+        name: "submit-output",
+        arguments: JSON.stringify({ narrativeOutput: "done" }),
+      },
+    ],
+    finishReason: "tool_calls" as const,
     usage: { inputTokens: 1, outputTokens: 1 },
   }));
   const onRuntimeComplete = vi.fn(async () => {});
@@ -145,6 +157,7 @@ describe("resumed runtime terminal failures", () => {
     "finalizes thrown $kind failures exactly once (recover=$recover)",
     async ({ kind, recover }) => {
       const f = fixture(kind, recover);
+      const canRecover = recover && kind === "function";
       f.handler.mockRejectedValue(new Error("synthetic execution failure"));
       f.generate.mockRejectedValue(new Error("synthetic execution failure"));
       try {
@@ -158,8 +171,8 @@ describe("resumed runtime terminal failures", () => {
           pluginId: "probe",
           runtimeId: "probe/main",
           turnId: "turn",
-          status: recover ? "success" : "failed",
-          output: recover ? { recovered: true } : null,
+          status: canRecover ? "success" : "failed",
+          output: canRecover ? { recovered: true } : null,
         });
         expect(result.runId).not.toBe("previous-run");
         expect(f.observed).toHaveLength(1);
@@ -170,15 +183,15 @@ describe("resumed runtime terminal failures", () => {
         });
         expect(f.onRuntimeComplete).toHaveBeenCalledExactlyOnceWith(
           expect.objectContaining({
-            status: recover ? "success" : "failed",
-            ...(!recover
+            status: canRecover ? "success" : "failed",
+            ...(!canRecover
               ? {
                   error: expect.stringContaining("synthetic execution failure"),
                 }
               : {}),
           }),
         );
-        expect(f.failedEvents()).toHaveLength(recover ? 0 : 1);
+        expect(f.failedEvents()).toHaveLength(canRecover ? 0 : 1);
       } finally {
         await f.eventBus.close();
       }
@@ -204,7 +217,7 @@ describe("resumed runtime terminal failures", () => {
               : {}),
           },
         );
-        expect(result.status).toBe("failed");
+        expect(result.status, result?.error).toBe("failed");
         expect(f.observed).toHaveLength(1);
         expect(f.onRuntimeComplete).toHaveBeenCalledTimes(1);
         expect(f.failedEvents()).toHaveLength(1);
@@ -225,7 +238,7 @@ describe("resumed runtime terminal failures", () => {
           f.manifest,
           f.deps,
         );
-        expect(result.status).toBe("success");
+        expect(result.status, result?.error).toBe("success");
         expect(f.observed).toHaveLength(1);
         expect(f.failedEvents()).toHaveLength(0);
       } finally {

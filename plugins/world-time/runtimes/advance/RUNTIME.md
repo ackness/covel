@@ -24,7 +24,11 @@ agent:
   tools:
     plugin:
       - advance-world-time
-  finishWith: advance-world-time
+  toolChoice: required
+  completion:
+    require: tool-use
+    afterTools:
+      - advance-world-time
 guard: ./guard.js
 ---
 
@@ -42,4 +46,4 @@ When there is no destination time, estimate the duration of what actually happen
 - Duration requests, bidirectional: choose direction from the narrative and author prompt.
 - random: submit only reason. The tool samples the authored range through ctx.random. Repeated calls in the same execution reuse the staged or committed result.
 - Units: use only a unit in `currentTime.value.units`. A world that counts phases has no minutes or hours. When the events stay in the current phase, send amount 0.
-- Correct tool validation errors within the available budget. A successful tool call completes this runtime.
+- Correct tool validation errors within the available budget. After success, read the canonical result and submit it through `submit-output`. Do not repeat the business call to correct only the final submission.

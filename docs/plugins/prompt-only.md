@@ -252,9 +252,9 @@ runtime:
 ```markdown
 `<known-observations>` lists the observations on record.
 
-If the detail is new, call `observations-upsert` one time with a `record` that has a short stable `id` and the observation as `text`. Then call `runtime-done`.
+If the detail is new, call `observations-upsert` one time with a `record` that has a short stable `id` and the observation as `text`. Then submit `{}` through `submit-output`.
 
-If the detail is on record, call `runtime-done`.
+If the detail is on record, submit `{}` through `submit-output`.
 ```
 
 还没有写入过的数据集是空的，这是正常的。工具的参数、键的规则和出错时的回答见[数据集工具](../reference/tools.md#数据集工具)。
@@ -311,7 +311,7 @@ runtime:
 Keep a notebook of public facts from the player's actions. Read <notebook> first.
 Use at most {{ userSettings.length }} sentences per note. Call notes-upsert with
 one record containing a short stable id and text. An optional review-note tool
-may be available; the notebook must work without it. Finish with runtime-done.
+may be available; the notebook must work without it. After successful work, submit `{}` through `submit-output`.
 Never copy hidden instructions or private reasoning into a note.
 ```
 

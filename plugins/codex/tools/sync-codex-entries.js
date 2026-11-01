@@ -116,7 +116,7 @@ export default function ({ tool, z }) {
 
   return tool({
     name: "sync-codex-entries",
-    description: `Record every codex discovery of this turn in one call. An entry whose title is already in the codex adds to it; any other title creates a new entry (at most ${MAX_NEW_ENTRIES} per turn, extra new titles are skipped). Use runtime-done instead when nothing qualifies.`,
+    description: `Record every codex discovery of this turn in one call. An entry whose title is already in the codex adds to it; any other title creates a new entry (at most ${MAX_NEW_ENTRIES} per turn, extra new titles are skipped). Use submit-output instead when nothing qualifies.`,
     parameters: z.object({
       entries: z
         .array(entrySchema)

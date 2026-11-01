@@ -1,6 +1,6 @@
 ---
 kind: core
-version: 0.0.42
+version: 0.0.43
 displayName: Narrator
 description: >-
   Continues the story from your actions, describing scenes, reactions, and
@@ -64,7 +64,7 @@ contributes:
         - Write only 200-400 words of in-world story with scene, reactions, and
         a natural interaction beat; open directly when input is empty
 
-        - Return the story as segments (see Story Format); list the characters
+        - Submit the story through `submit-output` as segments (see Story Format); list the characters
         present in cues.present
 
         - No menus, numbered/bulleted choices, option headings, or meta lead-ins
@@ -81,7 +81,7 @@ contributes:
   hooks:
     - PostContextAssembly
     - PreLLMCall
-    - PostLLMResponse
+    - ReviewAgentOutput
     - TurnStop
 runtime:
   schedule:
@@ -178,7 +178,7 @@ Check `tabletopCheck.value` in `<runtime-inputs>`. If it contains `Settled table
 
 ## Story Format
 
-- Return the story as a JSON object whose `segments` array holds it in reading order.
+- Submit the story through `submit-output`, with `segments` in reading order and optional `cues` and `yield`.
 - `narration` segments carry scene and description. A `dialogue` segment carries one character's spoken lines, quotation marks included, with that character as `speaker`. An `action` segment carries what one character does, with that character as `speaker`.
 - Start a new segment whenever the speaker changes. Each segment text is complete prose with no blank line inside.
 - Write speakers by the name used in "Character Profiles" or the player character's sheet, never by ID. A character who has no profile yet is named as the story names them.

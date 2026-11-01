@@ -764,7 +764,7 @@ An agent runtime uses it to hand a job to a [sub-agent](./plugins.md#sub-agents)
 | instruction | string | —        | Character direction, at most 2,000 characters; actor targets only                                     |
 | maxSteps    | number | —        | The sub-agent's step limit; it can only be lower than the provider's own                              |
 
-**Output**: on success the model receives `{data: output}`. If this delegation staged operations, it also receives `staged: {count, kinds, notice}`, counting only this invocation and explaining that the writes await commit and may be rejected. Output is projected through `modelFacingJson`; code still reads the original output. `stopReason` and usage stay on `subagent.completed`. A completing `delegate` passes the output to the caller's output gate after private projection: only segments for a character actor, no content for a concealed provider. Failure uses `{error:{code,message,hint?}}`, with the same codes in `tool.failed`. All failures except `invalid-input` retain the `refused` accounting flag.
+**Output**: on success the model receives `{data: output}`. If this delegation staged operations, it also receives `staged: {count, kinds, notice}`, counting only this invocation and explaining that the writes await commit and may be rejected. Output is projected through `modelFacingJson`; code still reads the original output. `stopReason` and usage stay on `subagent.completed`. Delegation never becomes the caller's output automatically and does not satisfy required business work. The parent reads accepted child output, then separately submits its own final result. Private projection passes only segments for a character actor and no content for a concealed provider. Failure uses `{error:{code,message,hint?}}`, with the same codes in `tool.failed`. All failures except `invalid-input` retain the `refused` accounting flag.
 
 **Notes**:
 
@@ -785,7 +785,7 @@ The execution's existing runner claims requests in input order before starting p
 
 Successful reads, baselines and write-service operations remain speculative until the enclosing live tool succeeds. Failed children contribute none; a cancelled outer tool discards even successful children's evidence and operations. The existing per-caller/provider service lock and operation sequence still apply; plan order does not promise service effect order. Both delegation tools keep `readOnly:false`, `stagesWrites:true`, `idempotent:false`, `concurrencySafe:false`, and are unavailable to sub-agents and presentation contexts.
 
-If any entry resolves to a private actor or concealed provider, the whole batch's arguments and results are redacted from persisted/public copies, including malformed entries with known targets. The authorized live parent can use accepted outputs. `completeAfterTools` projects a private batch to `{}` before output validation. See [trace correlation and privacy](./protocol.md#sub-agent-events).
+If any entry resolves to a private actor or concealed provider, the whole batch's arguments and results are redacted from persisted/public copies, including malformed entries with known targets. The authorized live parent can use accepted outputs. Child output is available for parent composition; the parent agent separately submits its own output. See [trace correlation and privacy](./protocol.md#sub-agent-events).
 
 ## Character management tools
 
@@ -875,10 +875,10 @@ Rules:
 
 Host developers who write composite tools need to be careful here. When the host provides `context.world`, the composite tool adds only the proposals new in this batch on top of that snapshot. Outer upstream proposals and pending proposals that are already in the snapshot must not be added again. Otherwise the version would advance one extra time, or newer fields would be overwritten.
 
-**Used by**: `char-creator/character-tracker`. It puts `sync-characters` in `completeAfterTools`, so the run ends right away after the tool succeeds, and the model is not asked to write a closing message. The configuration of this tracker:
+**Used by**: `char-creator/character-tracker`. It uses `completion.afterTools: [sync-characters]` to require a successful sync, then submits `{}` through `submit-output`. The configuration of this tracker:
 
 - It declares `toolChoice: required`, so every reply must call a tool. When nothing has changed, it submits an empty batch.
-- It uses the default budget of 20 steps for the tool loop, so it can first read characters, and it can also fix a failed batch. It ends right after a successful sync.
+- It uses the default budget of 20 steps for the tool loop, so it can first read characters, and it can also fix a failed batch. It submits final output separately after a successful sync.
 - The limit for each batch is still 5 new characters and 10 updates to existing characters.
 - The `<existing-characters>` roster, which only this tracker sees, lists each character's id, name, aliases (only when there are any), type, and description. This section changes only when characters are added or rewritten.
 - `<character-fields>` has one line per id. Within a 12000-character budget, it includes each character's current `fields`, and it is updated every turn. Usually one model call is enough to finish the sync. For a character that is over the budget, its line says `fieldsOmitted`, and the full fields are read with `get-character`.
@@ -1325,7 +1325,7 @@ At the start of a game, it does two things at once: it sets the character attrib
 | valueType    | enum           |          | Value type of a `map` (`string` / `number` / `boolean`)               |
 | description  | I18nText       |          | Description of the attribute (a string, or a locale → string record)  |
 
-**Content output**: `{success:true, attributeCount, dimensionCount, worldSchema, preGameDone:true}`. Code and `world-data-provider@1` still read the complete content. The model sees only `summary` (for example, `World initialized: 15 attributes, 2 dimensions.`), with no `data`. The summary uses English or Simplified Chinese according to the instruction language. Staged changes still carry the `staged` notice.
+**Content output**: `{success:true, attributeCount, dimensionCount, worldSchema, preGameDone:true}`. Code and `world-data-provider@1` still read the complete content. The model sees this canonical result in `data` alongside `summary` (for example, `World initialized: 15 attributes, 2 dimensions.`), so it can submit it unchanged through `submit-output`, explicitly including `preGameDone: true`. The summary uses English or Simplified Chinese according to the instruction language. Staged changes still carry the `staged` notice.
 
 Generated `defaultValue`s are starting values for every new player and NPC, not examples of a person from the lore. Name, role, background, and other identity fields belong in `bio`, with neutral or empty values. The tool clears generated `bio` string defaults to empty strings, arrays to empty arrays, and objects and maps to empty objects; it removes enum defaults. Nested biography fields follow the same rules. Numeric and boolean defaults remain. The guard adopts author-provided schemas unchanged, without this normalization.
 
@@ -1457,7 +1457,7 @@ The argument schema extends `worldIRV1Schema` with tool-only assessments, and ru
 
 The tool declares `{stagesWrites:false, idempotent:true}`. Reference validation after completion returns `invalid-input` with a hint to declare every referenced id in `entities` and retry.
 
-The tool returns the filled-in and validated facts after removing assessments, and produces no persistent proposal. `world-ir` declares `completeAfterTools: [submit-world-facts]`. The framework takes the successful result directly as the runtime's typed output, and it checks it once more against the output schema of `contract:world-ir@1`.
+The tool returns filled-in, validated facts after removing assessments, without persistent proposals. The public model view exposes canonical facts in `data.facts`; `data.entityReferences` indexes semantic fact identities so ordinary projection retains required entity IDs even before an incoming edge exists. The index is not final output and contains no store row metadata. `completion.afterTools: [submit-world-facts]` requires successful extraction before submitting `data.facts` through `submit-output`. The plugin's `ReviewAgentOutput` rejects changes to the canonical result. Correcting final output does not repeat extraction, and the `contract:world-ir@1` business shape stays unchanged.
 
 #### Per-objective assessment
 
@@ -1560,7 +1560,7 @@ Arguments:
 
 The tool does two things: it writes the normalized `{ prompt, promptMode, composition }` into `plugin_data[prompts]`, and it emits the plugin's own fixed topic through `withEmittedEvents`.
 
-The model does not have to write a `{ topic, data }` event envelope itself, so it cannot leave out the topic or write an empty one. The runtime's output schema checks only the trusted result that the tool produces.
+The business tool produces the event envelope; the runtime output schema validates the model's separate final submission.
 
 Both prompt generators are manual background agents. Their `agent.completion.afterTools` requires the matching business tool, followed by `submit-output`. The image generator continues in the background.
 

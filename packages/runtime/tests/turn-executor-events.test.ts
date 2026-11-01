@@ -10,7 +10,11 @@ import type {
   TurnInput,
   SubscriptionEvent,
 } from "@covel/shared";
-import { discoverPlugins, loadPluginManifest } from "@covel/plugin-loader";
+import {
+  discoverPlugins,
+  loadPluginManifest,
+  loadRuntime,
+} from "@covel/plugin-loader";
 import type { LoadedRuntime } from "@covel/plugin-loader";
 import { createMemoryStore } from "@covel/store/memory";
 import type { DataStore } from "@covel/store";
@@ -41,9 +45,17 @@ async function createMainLoopStore(sessionId: string): Promise<DataStore> {
 
 class MockLLM implements LLMAdapter {
   response: LLMResponse = {
-    content: "Test narrative output.",
-    toolCalls: [],
-    finishReason: "stop",
+    content: null,
+    toolCalls: [
+      {
+        id: "final",
+        name: "submit-output",
+        arguments: JSON.stringify({
+          segments: [{ kind: "narration", text: "Test narrative output." }],
+        }),
+      },
+    ],
+    finishReason: "tool_calls" as const,
     usage: { inputTokens: 10, outputTokens: 5 },
   };
 
@@ -85,8 +97,7 @@ describe("TurnExecutor EventBus Bridge", () => {
     const manifests = await loadPluginManifest(narratorDiscovery!);
     narratorManifest = manifests[0]!.manifest;
     narratorLoaded = {
-      manifest: narratorManifest,
-      promptTemplate: manifests[0]!.promptTemplate,
+      ...(await loadRuntime(narratorDiscovery!, narratorManifest.name)),
     };
   });
 

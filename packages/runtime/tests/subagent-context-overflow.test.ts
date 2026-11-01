@@ -11,7 +11,7 @@ import type { PreLLMCallRequest } from "../src/hooks/wire-helpers.js";
 import {
   input,
   makeExecutor,
-  prose,
+  submitted,
   queuedLLM,
   toolCall,
 } from "./_helpers/agent-loop-fixture.js";
@@ -48,7 +48,7 @@ describe("sub-agent context overflow settlement", () => {
       });
       const llm = queuedLLM([
         toolCall("read", { query: "q".repeat(3_000) }),
-        prose('{"answer":"sub-agent answer"}'),
+        submitted('{"answer":"sub-agent answer"}'),
       ]);
       const hookPipeline = createHookPipeline();
       hookPipeline.register<PreLLMCallRequest>({

@@ -140,7 +140,7 @@ export function toolCall(
   return {
     content,
     toolCalls: [{ id, name, arguments: JSON.stringify(args) }],
-    finishReason: "tool_calls",
+    finishReason: "tool_calls" as const,
     usage: { inputTokens: 3, outputTokens: 2 },
   };
 }
@@ -288,6 +288,7 @@ export function latch(participants: number): () => Promise<void> {
 export function suspendedLoopState(
   runtime: RuntimeManifest,
   outputSchema?: Record<string, unknown>,
+  outputContractSchema?: Record<string, unknown>,
 ): SuspendedLoopState {
   return {
     steps: 1,
@@ -298,6 +299,38 @@ export function suspendedLoopState(
       manifest: runtime,
       promptTemplate: "",
       ...(outputSchema ? { outputSchema } : {}),
+      ...(outputContractSchema ? { outputContractSchema } : {}),
     }),
   };
+}
+
+/** Canonical public business data supplied to a scripted model after its own call. */
+export function latestToolOutput(
+  messages: readonly LLMMessage[],
+  toolName: string,
+): Record<string, unknown> | undefined {
+  const names = new Map<string, string>();
+  let output: Record<string, unknown> | undefined;
+  for (const message of messages) {
+    for (const call of message.toolCalls ?? []) names.set(call.id, call.name);
+    if (
+      message.role !== "tool" ||
+      !message.toolCallId ||
+      names.get(message.toolCallId) !== toolName ||
+      typeof message.content !== "string"
+    )
+      continue;
+    const envelope: unknown = JSON.parse(message.content);
+    if (!envelope || typeof envelope !== "object") continue;
+    if ("error" in envelope) {
+      output = undefined;
+      continue;
+    }
+    const data = "data" in envelope ? envelope.data : undefined;
+    output =
+      data && typeof data === "object" && !Array.isArray(data)
+        ? (data as Record<string, unknown>)
+        : {};
+  }
+  return output;
 }

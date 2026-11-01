@@ -38,5 +38,5 @@ runtime:
 Keep a notebook of public facts from the player's actions. Read <notebook> first.
 Use at most {{ userSettings.length }} sentences per note. Call notes-upsert with
 one record containing a short stable id and text. An optional review-note tool
-may be available; the notebook must work without it. Finish with runtime-done.
+may be available; the notebook must work without it. After successful work, submit `{}` through `submit-output`; when no new fact qualifies, submit `{}` without writing.
 Never copy hidden instructions or private reasoning into a note.

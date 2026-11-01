@@ -48,3 +48,5 @@
 ## 开发
 
 修改计分规则、工具 schema 或 UI spec 后，运行本包测试。
+
+有明确互动时，先成功调用 `update-affinity`，再用 `submit-output` 提交 `{}`；无变化时直接提交 `{}`，不产生写入。

@@ -92,7 +92,12 @@ async function runFromRead(firstRead, secondResponse, ...corrections) {
     store,
   });
   const llm = new MockLLM({
-    responses: [firstRead, secondResponse, ...corrections],
+    responses: [
+      firstRead,
+      secondResponse,
+      ...corrections,
+      response("submit-output", {}),
+    ],
   });
   const tools = new Map(
     [...createCharacterTools(store, {}), runtimeDoneTool].map((tool) => [
@@ -175,7 +180,7 @@ async function runFromRead(firstRead, secondResponse, ...corrections) {
     (item) => item.runtimeId === runtimeId,
   );
   expect(llm.calls.length).toBeGreaterThanOrEqual(2);
-  expect(llm.calls.length).toBeLessThanOrEqual(20);
+  expect(llm.calls.length).toBeLessThanOrEqual(21);
   expect(llm.calls[0].toolNames).toContain("get-character");
   const missed =
     JSON.parse(firstRead.toolCalls[0].arguments).id !== characterId;
@@ -193,7 +198,7 @@ async function runFromRead(firstRead, secondResponse, ...corrections) {
   } else {
     expect(llm.calls[1].toolNames).not.toContain("get-character");
     expect(llm.calls[1].toolNames).toContain("sync-characters");
-    expect(llm.calls[1].toolNames).toContain("runtime-done");
+    expect(llm.calls[1].toolNames).toContain("submit-output");
     expect(toolResults[0]).toMatchObject({
       name: "get-character",
       success: true,
@@ -216,7 +221,7 @@ describe("character tracker correction budget", () => {
         updates: [{ id: characterId, fields: { systems: 3 } }],
       }),
     );
-    expect(llm.calls).toHaveLength(20);
+    expect(llm.calls).toHaveLength(21);
     expect(toolResults.slice(1, 19).every((result) => !result.success)).toBe(
       true,
     );
@@ -236,7 +241,7 @@ describe("character tracker correction budget", () => {
         updates: [{ id: characterId, fields: { systems: 3 } }],
       }),
     );
-    expect(llm.calls).toHaveLength(3);
+    expect(llm.calls).toHaveLength(4);
     expect(llm.calls[2].toolNames).not.toContain("get-character");
     expect(toolResults[1].success).toBe(false);
     expect(toolResults[2].success).toBe(true);
@@ -276,6 +281,7 @@ describe("character tracker correction budget", () => {
     expect(tracker.toolCalls.map((call) => call.toolName)).toEqual([
       "get-character",
       "sync-characters",
+      "submit-output",
     ]);
     expect((await store.listCharacters(sessionId))[0].fields).toEqual({
       systems: 3,
@@ -284,7 +290,7 @@ describe("character tracker correction budget", () => {
 
   it("reads details then explicitly finishes without changes", async () => {
     const { store, tracker } = await run(
-      response("runtime-done", { reason: "No confirmed changes." }),
+      response("sync-characters", { creates: [], updates: [] }),
     );
     expect(tracker.status).toBe("success");
     expect(getPendingProposals(tracker.output) ?? []).toEqual([]);
@@ -296,9 +302,7 @@ describe("character tracker correction budget", () => {
       response("get-character", { id: characterId }),
     );
     expect(tracker.status).toBe("failed");
-    expect(tracker.error).toMatch(
-      /exhausted the tool loop|requireExplicitCompletion/,
-    );
+    expect(tracker.error).toMatch(/exhausted the tool loop|required-work/);
     expect(getPendingProposals(tracker.output) ?? []).toEqual([]);
     expect((await store.listCharacters(sessionId))[0].version).toBe(1);
   });

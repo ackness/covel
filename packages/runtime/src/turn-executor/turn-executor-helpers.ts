@@ -61,12 +61,12 @@ export function retainPreGameRuntimes(
  * The required context lets the executor surface session-specific tool
  * variants and enforce plugin scoping while resolving schemas.
  */
-export function buildToolDefinitions(
+export async function buildToolDefinitions(
   manifest: RuntimeManifest,
   toolExecutor: ToolExecutor | undefined,
   context: ToolCallContext,
   output: EffectiveAgentOutput,
-): LLMToolDefinition[] {
+): Promise<LLMToolDefinition[]> {
   for (const name of [
     ...(manifest.tools?.builtin ?? []),
     ...(manifest.tools?.plugin ?? []),
@@ -130,7 +130,7 @@ export function buildToolDefinitions(
     defs.push(buildSearchToolsDefinition(deferred.size, manifest.pluginId));
   }
 
-  defs.push(outputToolDefinition(output, context.locale));
+  defs.push(await outputToolDefinition(output, context.locale));
   return defs;
 }
 

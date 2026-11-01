@@ -66,3 +66,15 @@ Contracts and limits: [plugin communication](../../docs/en/reference/plugin-exte
 [history](../../docs/en/reference/world-model.md#witnessed-history).
 The [composition example](../../docs/en/plugins/advanced.md#orchestration-example)
 shows narrator fallbacks and private intent handling.
+
+`createNarrativeReview(pluginId)` supplies plugin-owned narration policy:
+
+```js
+const review = createNarrativeReview(covel.pluginId);
+covel.on("PostContextAssembly", review.context);
+covel.on("PreLLMCall", review.prepare);
+covel.on("ReviewAgentOutput", review.review);
+covel.on("TurnStop", review.cleanup);
+```
+
+Declare these hooks in `PLUGIN.md`. Final review reads validated `output.segments` or host-default `output.narrativeOutput`; it returns correction only. Perspective settings, quoted dialogue and session-local player context remain supported. Agents submit through the host-generated `submit-output` tool after optional business work. Do not contribute or allowlist that tool. Function runtimes return output directly.

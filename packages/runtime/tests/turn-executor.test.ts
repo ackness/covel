@@ -1,3 +1,4 @@
+import { toolCall, latestToolOutput } from "./_helpers/agent-loop-fixture.js";
 /**
  * E2E integration test: TurnExecutor with Mock LLM.
  *
@@ -27,10 +28,24 @@ import { z } from "zod";
 class MockLLM implements LLMAdapter {
   calls: Array<{ messages: readonly LLMMessage[] }> = [];
   response: LLMResponse = {
-    content:
-      "你踏入了黑暗的森林，空气中弥漫着腐叶和泥土的气息。远处传来一声低沉的吼叫，你的手不自觉地握紧了腰间的短剑。",
-    toolCalls: [],
-    finishReason: "stop",
+    content: null,
+    toolCalls: [
+      {
+        id: "final",
+        name: "submit-output",
+        arguments: JSON.stringify({
+          narrativeOutput:
+            "你踏入了黑暗的森林，空气中弥漫着腐叶和泥土的气息。远处传来一声低沉的吼叫，你的手不自觉地握紧了腰间的短剑。",
+          segments: [
+            {
+              kind: "narration",
+              text: "你踏入了黑暗的森林，空气中弥漫着腐叶和泥土的气息。远处传来一声低沉的吼叫，你的手不自觉地握紧了腰间的短剑。",
+            },
+          ],
+        }),
+      },
+    ],
+    finishReason: "tool_calls" as const,
     usage: { inputTokens: 100, outputTokens: 50 },
   };
 
@@ -97,8 +112,7 @@ describe("TurnExecutor E2E", () => {
 
     narratorManifest = manifests[0]!.manifest;
     narratorLoaded = {
-      manifest: narratorManifest,
-      promptTemplate: manifests[0]!.promptTemplate,
+      ...(await loadRuntime(narratorDiscovery!, narratorManifest.name)),
     };
   });
 
@@ -168,12 +182,25 @@ describe("TurnExecutor E2E", () => {
     expect(await store.listTurnMessages("sess-1")).toHaveLength(2);
   });
 
-  it("should trim trailing meta choice prompts from story output", async () => {
+  it("projects accepted story segments without adding choice prompts", async () => {
     mockLLM.response = {
-      content:
-        "你望向雾中的栈桥，听见远处传来钟声。\n\n**现在，你需要做出决定。**",
-      toolCalls: [],
-      finishReason: "stop",
+      content: null,
+      toolCalls: [
+        {
+          id: "final",
+          name: "submit-output",
+          arguments: JSON.stringify({
+            narrativeOutput: "你望向雾中的栈桥，听见远处传来钟声。",
+            segments: [
+              {
+                kind: "narration",
+                text: "你望向雾中的栈桥，听见远处传来钟声。",
+              },
+            ],
+          }),
+        },
+      ],
+      finishReason: "tool_calls" as const,
       usage: { inputTokens: 100, outputTokens: 50 },
     };
 
@@ -337,7 +364,7 @@ describe("TurnExecutor E2E", () => {
     ]);
   });
 
-  it("sends repaired history before a provider can reject malformed tool-call arguments", async () => {
+  it("preserves provider arguments while parsing a repairable business call", async () => {
     const store = await createMainLoopStore("sess-1");
     const { createToolExecutor } =
       await import("../src/agent-loop/tool-executor.js");
@@ -394,20 +421,18 @@ describe("TurnExecutor E2E", () => {
                 arguments: '{"topic":"探查前准备"}]}',
               },
             ],
-            finishReason: "tool_calls",
+            finishReason: "tool_calls" as const,
             usage: { inputTokens: 10, outputTokens: 10 },
           };
         }
         const args = params.messages.find(
           (message) => message.toolCalls?.length,
         )?.toolCalls?.[0]?.arguments;
-        expect(JSON.parse(args!)).toEqual({ topic: "探查前准备" });
-        return {
-          content: null,
-          toolCalls: [],
-          finishReason: "stop",
-          usage: { inputTokens: 10, outputTokens: 5 },
-        };
+        expect(args).toBe('{"topic":"探查前准备"}]}');
+        return toolCall("submit-output", {
+          topic: "探查前准备",
+          categories: [],
+        });
       },
     };
 
@@ -426,7 +451,10 @@ describe("TurnExecutor E2E", () => {
       maxSteps: 2,
     });
     expect(callCount).toBe(2);
-    expect(result.runtimeResults[0]?.status).toBe("success");
+    expect(
+      result.runtimeResults[0]?.status,
+      result.runtimeResults[0]?.error,
+    ).toBe("success");
   });
 
   it("should handle LLM failure gracefully", async () => {
@@ -520,7 +548,7 @@ describe("TurnExecutor E2E", () => {
     expect(runtimeMsg!.content).toContain("黑暗的森林");
   });
 
-  it("should promote presentable tool output when a runtime stops without final text", async () => {
+  it("submits the canonical business result after its tool succeeds", async () => {
     const store = await createMainLoopStore("sess-1");
     const presentableTool = tool({
       name: "generate-guide",
@@ -569,7 +597,7 @@ describe("TurnExecutor E2E", () => {
 
     let llmCallCount = 0;
     const guideLLM: LLMAdapter = {
-      async generate() {
+      async generate(request) {
         llmCallCount++;
         if (llmCallCount === 1) {
           return {
@@ -581,16 +609,14 @@ describe("TurnExecutor E2E", () => {
                 arguments: JSON.stringify({ topic: "探查百灵沼泽入口" }),
               },
             ],
-            finishReason: "tool_calls",
+            finishReason: "tool_calls" as const,
             usage: { inputTokens: 10, outputTokens: 10 },
           };
         }
-        return {
-          content: null,
-          toolCalls: [],
-          finishReason: "stop",
-          usage: { inputTokens: 10, outputTokens: 5 },
-        };
+        return toolCall(
+          "submit-output",
+          latestToolOutput(request.messages, "generate-guide")!,
+        );
       },
     };
 
@@ -641,7 +667,7 @@ describe("TurnExecutor E2E", () => {
     ).toBeUndefined();
   });
 
-  it("should suppress plain-language final text after tool calls for system runtimes", async () => {
+  it("keeps reply commentary out of explicitly submitted system output", async () => {
     const store = await createMainLoopStore("sess-1");
     const presentableTool = tool({
       name: "generate-guide",
@@ -670,7 +696,7 @@ describe("TurnExecutor E2E", () => {
 
     let llmCallCount = 0;
     const llm: LLMAdapter = {
-      async generate() {
+      async generate(request) {
         llmCallCount++;
         if (llmCallCount === 1) {
           return {
@@ -682,15 +708,16 @@ describe("TurnExecutor E2E", () => {
                 arguments: JSON.stringify({ topic: "探查百灵沼泽入口" }),
               },
             ],
-            finishReason: "tool_calls",
+            finishReason: "tool_calls" as const,
             usage: { inputTokens: 10, outputTokens: 10 },
           };
         }
         return {
+          ...toolCall(
+            "submit-output",
+            latestToolOutput(request.messages, "generate-guide")!,
+          ),
           content: "先给玩家解释局势，再补一组建议。",
-          toolCalls: [],
-          finishReason: "stop",
-          usage: { inputTokens: 10, outputTokens: 5 },
         };
       },
     };
@@ -757,7 +784,7 @@ describe("TurnExecutor E2E", () => {
               arguments: JSON.stringify({ dimension: "geography" }),
             },
           ],
-          finishReason: "tool_calls",
+          finishReason: "tool_calls" as const,
           usage: { inputTokens: 10, outputTokens: 10 },
         };
       },
@@ -789,7 +816,11 @@ describe("TurnExecutor E2E", () => {
     expect(runtimeResult.error).toContain(
       "exhausted the tool loop after 3 steps",
     );
-    expect(runtimeResult.toolCalls).toHaveLength(3);
+    expect(
+      runtimeResult.toolCalls.filter(
+        (call) => call.toolName !== "submit-output",
+      ),
+    ).toHaveLength(4);
   });
 
   it("should fail when tool validation errors end without any final output", async () => {
@@ -843,7 +874,7 @@ describe("TurnExecutor E2E", () => {
               }),
             },
           ],
-          finishReason: "tool_calls",
+          finishReason: "tool_calls" as const,
           usage: { inputTokens: 5, outputTokens: 5 },
         };
       },
@@ -863,12 +894,12 @@ describe("TurnExecutor E2E", () => {
     const result = await runTurnPipeline(makeTurnInput(), [manifest], deps);
     const runtimeResult = result.runtimeResults[0]!;
 
-    expect(llmCallCount).toBe(2);
+    expect(llmCallCount).toBe(3);
     expect(runtimeResult.status).toBe("failed");
-    expect(runtimeResult.error).toContain(
-      "stopped without final output after a tool failure",
+    expect(runtimeResult.error).toContain("missing-submission");
+    expect(runtimeResult.toolCalls.map((call) => call.toolName)).toContain(
+      "generate-guide",
     );
-    expect(runtimeResult.error).toContain("generate-guide");
   });
 
   it("should pass message history to context builder", async () => {
@@ -994,9 +1025,15 @@ describe("TurnExecutor _interaction protocol", () => {
           data: { filledNarrative: "Welcome Alex. You enter the village." },
         });
         return {
-          content: '{"preGameDone":false}',
-          toolCalls: [],
-          finishReason: "stop",
+          content: null,
+          toolCalls: [
+            {
+              id: "final",
+              name: "submit-output",
+              arguments: '{"preGameDone":false}',
+            },
+          ],
+          finishReason: "tool_calls" as const,
           usage: { inputTokens: 50, outputTokens: 10 },
         };
       }
@@ -1039,7 +1076,7 @@ describe("TurnExecutor _interaction protocol", () => {
             }),
           },
         ],
-        finishReason: "tool_calls",
+        finishReason: "tool_calls" as const,
         usage: { inputTokens: 100, outputTokens: 50 },
       };
     };

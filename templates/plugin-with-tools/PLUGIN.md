@@ -37,6 +37,6 @@ When the narrative has information that a later runtime, the UI, or the player c
 
 ## Completion
 
-- If there is no relevant new information, call `runtime-done` and stop.
-- After you write one record, call `runtime-done` immediately.
+- If there is no relevant new information, submit `{}` through `submit-output` and stop.
+- After you write one record, submit `{}` through `submit-output` immediately.
 - Do not write explanations, do not repeat the story, and do not call the same tool twice in a row.

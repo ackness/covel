@@ -1,10 +1,11 @@
-import { instructionLocaleFor, type LLMToolDefinition } from "@covel/shared";
+import type { LLMToolDefinition } from "@covel/shared";
 import {
   resolveAgentOutput,
   type EffectiveAgentOutput,
   type LoadedRuntime,
 } from "@covel/shared/plugin-runtime";
 import { validateOutput, type ValidationResult } from "@covel/tools";
+import { loadOutputText } from "./output-format-diagnostics.js";
 
 /** Run-local control contract; the loop owns acceptance, never a business tool module. */
 export interface AgentOutputContract extends EffectiveAgentOutput {
@@ -36,16 +37,14 @@ export function agentOutputContract(
   return contract;
 }
 
-export function outputToolDefinition(
+export async function outputToolDefinition(
   output: EffectiveAgentOutput,
   locale?: string,
-): LLMToolDefinition {
+): Promise<LLMToolDefinition> {
+  const text = await loadOutputText(locale);
   return {
     name: output.toolName,
-    description:
-      instructionLocaleFor(locale) === "zh"
-        ? "在完成必需的工具工作后，提交本 runtime 的最终结果。参数必须符合此 schema。若提交被拒绝，请修正报告的问题并再次调用此工具。提交成功会结束 runtime，但不代表更改已经保存。"
-        : "Submit the final result for this runtime after required tool work is complete. Arguments must match this schema. If the submission is rejected, correct the reported problems and call this tool again. A successful submission ends the runtime; it does not confirm that changes have been saved.",
+    description: text("tool-description"),
     parameters: output.schema,
     strict: "auto",
   };

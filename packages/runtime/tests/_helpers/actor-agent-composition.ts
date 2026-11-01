@@ -25,11 +25,7 @@ import {
 } from "../../src/index.js";
 import { PluginServiceRegistry } from "../../src/plugin-services.js";
 import { policies } from "./orchestration-fixture.js";
-import {
-  submitted,
-  toolCall,
-  expectMatchedToolCalls,
-} from "./agent-loop-fixture.js";
+import { toolCall, expectMatchedToolCalls } from "./agent-loop-fixture.js";
 
 export const compositionScenarios = [
   "plain",

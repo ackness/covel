@@ -105,18 +105,36 @@ async function fixture({
     advanceResults.push(result);
     return result;
   };
-  const generate = vi.fn(async () => ({
-    content: null,
-    toolCalls: [
-      {
-        id: "advance",
-        name: advance.name,
-        arguments: JSON.stringify(request),
-      },
-    ],
-    finishReason: "tool_calls",
-    usage: { inputTokens: 1, outputTokens: 1 },
-  }));
+  const generate = vi.fn(async (params) => {
+    const latest = params.messages.findLast(
+      (message) => message.role === "tool" && JSON.parse(message.content).data,
+    );
+    if (latest)
+      return {
+        content: null,
+        toolCalls: [
+          {
+            id: "final",
+            name: "submit-output",
+            arguments: JSON.stringify(JSON.parse(latest.content).data),
+          },
+        ],
+        finishReason: "tool_calls",
+        usage: { inputTokens: 1, outputTokens: 1 },
+      };
+    return {
+      content: null,
+      toolCalls: [
+        {
+          id: "advance",
+          name: advance.name,
+          arguments: JSON.stringify(request),
+        },
+      ],
+      finishReason: "tool_calls",
+      usage: { inputTokens: 1, outputTokens: 1 },
+    };
+  });
   // A post-turn runtime of another plugin that reads the settled time.
   const readerHandler = vi.fn(async () => ({ outcome: "success", value: {} }));
   if (withReader)
@@ -260,7 +278,7 @@ describe("world-time pipeline", () => {
     expect(storyHandler.mock.calls[0][0].inputs.worldTime.value.tick).toBe(
       initialTick(DEFAULT_TIME),
     );
-    expect(generate).toHaveBeenCalledOnce();
+    expect(generate).toHaveBeenCalledTimes(2);
     expect(
       await store.getPluginData("s", "world-time", "clock", "current"),
     ).toBeNull();

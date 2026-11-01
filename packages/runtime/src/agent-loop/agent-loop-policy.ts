@@ -98,16 +98,16 @@ export interface BuildAgentLoopPolicyOptions {
   readonly timeoutMs: number;
 }
 
-export function buildAgentLoopPolicy({
+export async function buildAgentLoopPolicy({
   manifest,
   input,
   loaded,
   deps,
   maxSteps,
   timeoutMs,
-}: BuildAgentLoopPolicyOptions): AgentLoopPolicy {
+}: BuildAgentLoopPolicyOptions): Promise<AgentLoopPolicy> {
   const output = agentOutputContract(loaded);
-  const toolDefs = buildToolDefinitions(
+  const toolDefs = await buildToolDefinitions(
     manifest,
     deps.toolExecutor,
     {

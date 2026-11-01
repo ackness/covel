@@ -52,7 +52,7 @@ Prefer `<same-turn-world-schema>` at the end of the prompt; when absent, fall ba
 
 1. Using `runtime-inputs.pregame-opening.value`, write a second-person character-arrival narrative of roughly 80-130 English words (or 150-250 Chinese characters).
 2. Call `create-character-form` and read its `filledNarrative`. This is the opening message with defaults inserted. A name without a default stays blank.
-3. Read each filled sentence as a whole. Fix awkward wording, repetition, or undecided choices in the defaults or `narrativeTemplate`. Then call the tool again. After a successful, natural preview, finish with `{"preGameDone": false}` and no extra prose. Only the last successful form is shown.
+3. Read each filled sentence as a whole. Fix awkward wording, repetition, or undecided choices in the defaults or `narrativeTemplate`. Then call the tool again. After a successful, natural preview, submit `{"preGameDone": false}` through `submit-output` and no extra prose. Only the last successful form is shown.
 
 Form rules:
 
@@ -62,7 +62,7 @@ Form rules:
 - Map `enum` to `select` with option values copied exactly from the schema options. Prefer `text` for `string`; `textarea` or `select` with string-valued suggestions also works.
 - When options need explanations, use `{ value, label }` and keep `value` short enough for narrative interpolation. Each optional field referenced by `narrativeTemplate` needs a short `defaultValue` phrase fitting that exact slot. A select default must equal one option value. Do not repeat words already supplied by the template. A default `calling` must be a real calling from the world, never "undecided" or "an undecided adventurer".
 - Pass `formId: "char-creation"` and `submitBehavior: { "echoFilledNarrative": true }`, plus a fitting title, submit label, fields, and `narrativeTemplate` with field placeholders.
-- Use at most 4 fields total. Correct any tool error and reread the returned preview before finishing; do not call `runtime-done`.
+- Use at most 4 fields total. Correct any tool error and reread the returned preview before finishing; submit `{"preGameDone": false}` through `submit-output`.
 - Include a double-curly-brace placeholder named after every collected field, including `characterName`. Keep these placeholders when revising the prose; never replace them with literal defaults, because the player can edit every answer.
 
 Runtime workflow:

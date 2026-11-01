@@ -5,6 +5,16 @@ import {
   perspectiveError,
 } from "../src/narrative-review.js";
 import type { LLMResponse } from "@covel/shared";
+import type { ReviewAgentOutputPayload } from "../src/plugin-api.js";
+function submission(
+  output: string | Record<string, unknown>,
+): ReviewAgentOutputPayload {
+  return {
+    output: typeof output === "string" ? { narrativeOutput: output } : output,
+    toolCall: { id: "final", name: "submit-output" },
+    toolResults: [],
+  };
+}
 
 const possessiveDialogue = [
   "‘The guards’ keys are mine,’ she said.",
@@ -16,11 +26,11 @@ const ambiguousDialogue = [
   "‘These are mine’ she said.",
   "'These are mine' she said.",
 ];
-const reviewDrafts = (text: string): string[] => [
-  text,
-  ...["narration", "dialogue", "action"].map((kind) =>
-    JSON.stringify({ segments: [{ kind, text }] }),
-  ),
+const reviewDrafts = (text: string): Record<string, unknown>[] => [
+  { narrativeOutput: text },
+  ...["narration", "dialogue", "action"].map((kind) => ({
+    segments: [{ kind, text }],
+  })),
 ];
 
 describe("narrative perspective review", () => {
@@ -175,13 +185,12 @@ describe("narrative perspective review", () => {
         getOwnSettings: () => ({ perspective: "character-second" }),
       };
       for (const content of reviewDrafts(text)) {
-        const response = { content, toolCalls: [] };
+        const payload = submission(content);
         for (let attempt = 0; attempt < 3; attempt++)
-          expect(
-            review.review(ctx, { messages: [], response }),
-            content,
-          ).toEqual({ action: "continue" });
-        expect(response.content).toBe(content);
+          expect(review.review(ctx, payload), JSON.stringify(content)).toEqual({
+            action: "continue",
+          });
+        expect(payload.output).toBe(content);
       }
       const stories = [`I wait. ${text}`];
       if (possessiveDialogue.includes(text))
@@ -189,11 +198,8 @@ describe("narrative perspective review", () => {
       for (const story of stories)
         for (const content of reviewDrafts(story))
           expect(
-            review.review(ctx, {
-              messages: [],
-              response: { content, toolCalls: [] },
-            }).replace?.correction,
-            content,
+            review.review(ctx, submission(content)).replace?.correction,
+            JSON.stringify(content),
           ).toContain("violates second-person perspective");
     },
   );
@@ -208,13 +214,7 @@ describe("narrative perspective review", () => {
         expect(
           review.review(
             { pluginId: "story" },
-            {
-              messages: [],
-              response: {
-                content: JSON.stringify({ segments: [{ kind, text }] }),
-                toolCalls: [],
-              },
-            },
+            submission({ segments: [{ kind, text }] }),
           ).replace?.correction,
         ).toContain("violates second-person perspective");
   });
@@ -251,7 +251,7 @@ describe("narrative perspective review", () => {
     expect(
       review.prepare({ ...ctx, pluginId: "another-plugin" }, { messages: [] }),
     ).toEqual({ action: "continue" });
-    expect(review.review(ctx, { messages: [], response })).toEqual({
+    expect(review.review(ctx, submission(response.content ?? ""))).toEqual({
       action: "continue",
     });
     const prepared = review.prepare(ctx, { messages: [] });
@@ -273,20 +273,13 @@ describe("narrative perspective review", () => {
       characters: [{ id: "lin", name: "林潮", type: "player" }],
       currentCharacterId: "lin",
     });
-    const reply = (content: string): LLMResponse => ({
-      content,
-      toolCalls: [],
-      finishReason: "stop",
-      usage: { inputTokens: 1, outputTokens: 1 },
-    });
     // The session's content locale decides which prompt body is read. A
     // locale with no instruction set of its own reads the English one.
     const added = (locale: string) => {
       const localized = { ...ctx, locale };
       const messages: never[] = [];
       const correction = (content: string) =>
-        review.review(localized, { messages, response: reply(content) }).replace
-          ?.correction ?? "";
+        review.review(localized, submission(content)).replace?.correction ?? "";
       return [
         String(
           review.prepare(localized, { messages }).replace?.messages.at(-1)
@@ -300,7 +293,7 @@ describe("narrative perspective review", () => {
 
     const chinese = added("zh-CN");
     expect(chinese[0]).toContain('玩家角色："林潮"。');
-    expect(chinese[1]).toContain("写出正文之前不要调用 `runtime-done`");
+    expect(chinese[1]).toContain("用 `submit-output` 提交");
     expect(chinese[2]).toContain("只输出游戏内的故事正文");
     expect(chinese[3]).toContain("违反了第二人称视角：我推开门。");
     // A tool name in backticks is a marker.
@@ -310,29 +303,47 @@ describe("narrative perspective review", () => {
     expect(added("ja")).toEqual(added("en"));
     const english = added("en");
     expect(english[0]).toContain('Player character: "林潮". ');
-    expect(english[1]).toContain(
-      "Do not call `runtime-done` before the story text is written.",
-    );
+    expect(english[1]).toContain("through `submit-output`");
     expect(english[2]).toContain("Output only the in-world story");
     expect(english[3]).toContain("violates second-person perspective");
     review.cleanup(ctx);
   });
 
-  it("discards lookup chatter without discarding actual tool calls", () => {
+  it("reviews final output without inspecting or rewriting business results", () => {
     const review = createNarrativeReview("community-story");
-    const response: LLMResponse = {
-      content: "我先核对档案。",
-      toolCalls: [
-        { id: "lookup", name: "get-character", arguments: '{"name":"周陌"}' },
-      ],
-      finishReason: "tool_calls",
-      usage: { inputTokens: 1, outputTokens: 1 },
-    };
+    const payload = submission("She looks at you.");
     const result = review.review(
       { pluginId: "community-story" },
-      { messages: [], response },
+      {
+        ...payload,
+        toolResults: [
+          {
+            toolCallId: "lookup",
+            toolName: "get-character",
+            output: { notes: "我先核对档案。" },
+          },
+        ],
+      },
     );
-    expect(result.replace?.response).toEqual({ ...response, content: null });
+    expect(result).toEqual({ action: "continue" });
+    expect(payload.output).toEqual({ narrativeOutput: "She looks at you." });
+    expect(review.review({ pluginId: "other" }, submission("I wait."))).toEqual(
+      { action: "continue" },
+    );
+    expect(
+      review.review(
+        { pluginId: "community-story" },
+        { ...payload, correction: "Preserve earlier review" },
+      ).replace?.correction,
+    ).toBe("Preserve earlier review");
+    expect(
+      review.review(
+        { pluginId: "community-story" },
+        submission({
+          segments: [{ kind: "dialogue", text: "<thinking>plan</thinking>" }],
+        }),
+      ).replace?.correction,
+    ).toContain("in-world story");
   });
 
   it("keeps player context isolated between concurrent sessions and clears it after the turn", () => {
@@ -438,20 +449,12 @@ describe("narrative perspective review", () => {
       locale: "zh-CN",
       getOwnSettings: () => ({ perspective: "dm" }),
     };
-    const reply = (content: string): LLMResponse => ({
-      content,
-      toolCalls: [],
-      finishReason: "stop",
-      usage: { inputTokens: 1, outputTokens: 1 },
+    expect(review.review(ctx, submission("你们推开了门。"))).toEqual({
+      action: "continue",
     });
     expect(
-      review.review(ctx, { messages: [], response: reply("你们推开了门。") }),
-    ).toEqual({ action: "continue" });
-    expect(
-      review.review(ctx, {
-        messages: [],
-        response: reply("<system>x</system>你们推开了门。"),
-      }).replace?.correction,
+      review.review(ctx, submission("<system>x</system>你们推开了门。")).replace
+        ?.correction,
     ).toContain("只输出游戏内的故事正文");
   });
 
@@ -462,23 +465,17 @@ describe("narrative perspective review", () => {
       locale: "zh-CN",
       getOwnSettings: () => ({ perspective: "character-second" }),
     };
-    const reply = (story: unknown): LLMResponse => ({
-      content: JSON.stringify(story),
-      toolCalls: [],
-      finishReason: "stop",
-      usage: { inputTokens: 1, outputTokens: 1 },
-    });
-    const bad = review.review(ctx, {
-      messages: [],
-      response: reply({
+    const bad = review.review(
+      ctx,
+      submission({
         segments: [{ kind: "narration", text: "我推开门，雨停了。" }],
       }),
-    });
+    );
     expect(bad.replace?.correction).toContain("违反了第二人称视角");
     expect(
-      review.review(ctx, {
-        messages: [],
-        response: reply({
+      review.review(
+        ctx,
+        submission({
           segments: [
             { kind: "narration", text: "雨停了，她看着你。" },
             { kind: "dialogue", speaker: "阿雅", text: "「我等你很久了。」" },
@@ -486,7 +483,7 @@ describe("narrative perspective review", () => {
           ],
           cues: { present: ["阿雅"] },
         }),
-      }),
+      ),
     ).toEqual({ action: "continue" });
     // Apostrophes in contractions and possessives do not mark speech.
     const english = { ...ctx, locale: "en" };
@@ -498,26 +495,26 @@ describe("narrative perspective review", () => {
       "I’m taking the guards’ keys.",
     ])
       expect(
-        review.review(english, {
-          messages: [],
-          response: reply({
+        review.review(
+          english,
+          submission({
             segments: [
               { kind: "narration", text: "She looks at you." },
               { kind: "dialogue", speaker: "Aya", text },
             ],
           }),
-        }),
+        ),
         text,
       ).toEqual({ action: "continue" });
     expect(
-      review.review(english, {
-        messages: [],
-        response: reply({
+      review.review(
+        english,
+        submission({
           segments: [
             { kind: "dialogue", speaker: "Aya", text: '"I\'m ready," I say.' },
           ],
         }),
-      }).replace?.correction,
+      ).replace?.correction,
     ).toContain("violates second-person perspective");
     // Narration beside quoted speech is still checked, possessives included.
     for (const text of [
@@ -526,24 +523,24 @@ describe("narrative perspective review", () => {
       "‘Take the guards’ keys,’ I say.",
     ])
       expect(
-        review.review(english, {
-          messages: [],
-          response: reply({
+        review.review(
+          english,
+          submission({
             segments: [{ kind: "dialogue", speaker: "Aya", text }],
           }),
-        }).replace?.correction,
+        ).replace?.correction,
         text,
       ).toContain("violates second-person perspective");
     // Narration beside a quote inside a dialogue segment is still checked.
     expect(
-      review.review(ctx, {
-        messages: [],
-        response: reply({
+      review.review(
+        ctx,
+        submission({
           segments: [
             { kind: "dialogue", speaker: "阿雅", text: "「走吧。」我说。" },
           ],
         }),
-      }).replace?.correction,
+      ).replace?.correction,
     ).toContain("违反了第二人称视角");
   });
 
@@ -558,15 +555,7 @@ describe("narrative perspective review", () => {
     expect(
       review.review(
         { pluginId: "story", getOwnSettings: () => ({ perspective: "bogus" }) },
-        {
-          messages: [],
-          response: {
-            content: "I open the door.",
-            toolCalls: [],
-            finishReason: "stop",
-            usage: { inputTokens: 1, outputTokens: 1 },
-          },
-        },
+        submission("I open the door."),
       ).replace?.correction,
     ).toContain("second-person");
   });

@@ -1,3 +1,4 @@
+import reviewOutput from "./review-output.js";
 import { appendSummaryEntries, labelText } from "@covel/plugin-handlers-utils";
 import createAdvanceWorldTime from "../tools/advance-world-time.js";
 import time from "../rpc/time.js";
@@ -6,6 +7,7 @@ import { describeTime } from "../clock.js";
 import advanceContext from "./advance-context.js";
 
 export default function register(covel) {
+  covel.on("ReviewAgentOutput", reviewOutput);
   covel.registerTool(createAdvanceWorldTime(covel.toolkit));
   covel.on("PostContextAssembly", advanceContext);
   covel.registerRpc("time", time, {

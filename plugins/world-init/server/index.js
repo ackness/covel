@@ -1,3 +1,4 @@
+import reviewOutput from "./review-output.js";
 import { resolveI18nText } from "@covel/plugin-handlers-utils";
 import { resolveI18nDeep } from "@covel/plugin-handlers-utils";
 import { pickLocaleText } from "@covel/plugin-handlers-utils";
@@ -149,7 +150,7 @@ export default function (covel) {
         .filter(({ rule }) => rule);
       if (!rules.length) return [];
       // Give the tracker every rule, schema, and frozen value it needs in one
-      // prompt so a typical settlement is a single model call. Only what does
+      // prompt so typical settlement needs one business tool call, followed by final submission. Only what does
       // not fit falls back to paged tool reads.
       //
       // Rules and schemas hold for the session; values change with the turn.
@@ -215,6 +216,7 @@ export default function (covel) {
     },
   });
   covel.on("PreLLMCall", trackerTools);
+  covel.on("ReviewAgentOutput", reviewOutput);
   covel.registerTool(makeDimensionRuleGet(covel.toolkit));
   covel.registerTool(makeInitializeWorld(covel.toolkit));
   covel.registerTool(makeUpdateDimensions(covel.toolkit));

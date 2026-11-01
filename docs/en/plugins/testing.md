@@ -357,7 +357,7 @@ Fields of a case:
 | `userSettings`              | Overrides this plugin's settings. If left out, the declared defaults are used                                       |
 | `llmResponses`              | The fake model's replies. Each model call uses up one                                                               |
 | `llmResponse`               | A shorthand for when there is only one reply                                                                        |
-| `llmContent` / `llmObject`  | Shorter shorthands: the reply is a piece of text, or a JSON object                                                  |
+| `llmContent` / `llmObject`  | `llmContent` returns reply content for rejection tests; `llmObject` constructs a final tool submission              |
 | `withPlugins`               | Other plugins loaded along with this one. See [test together with other plugins](#test-together-with-other-plugins) |
 | `ignoreUpstreams`           | Ignores this runtime's dependencies on upstream runtimes. Only for debugging this one by itself                     |
 | `expectsBackgroundFollower` | Expects this run to queue a background task. If none is queued, the case fails                                      |
@@ -573,3 +573,5 @@ Load real manifests/entries and script the model through actual delegate calls, 
 ## Testing presentation refusals
 
 Load real manifests, execute handlers through restricted contexts, and inspect committed rows plus `presentation.completed`, rather than testing only selection helpers. Prove an allowed write through the same entry before checking absent / ambiguous story, hidden inputs, forbidden writes, hook rewrites, zero allowance, cache hits, retry persistence and commit-time supersession. Use fake gateways and exact dispatch counts, without paid models. See the [advanced guide](./advanced.md#presentation-selectors) and [contract](../reference/plugins.md#presentation-runtimes).
+
+Scripted agent success responses call `submit-output` alone. Keep business calls in earlier responses; a final submission correction must not repeat a successful write. CLI `llmObject` constructs a submission, while `llmContent` deliberately returns reply content for rejection tests. See the [completion contract](../reference/plugins.md#agent-output-submission).

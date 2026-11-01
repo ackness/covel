@@ -1,9 +1,13 @@
 <!--
 Model-facing fragments for existing structured-output corrections.
 One key: value entry per line, as in action-labels.md.
-Only normalized parser reasons and numeric locations fill these templates.
+Submission guidance and normalized parser reasons use these templates.
 -->
 
+tool-description: Submit the final result for this runtime after required tool work is complete. Arguments must match this schema. If the submission is rejected, correct the reported problems and call this tool again. A successful submission ends the runtime; it does not confirm that changes have been saved.
+object-required: Arguments must be one complete JSON object.
+required-work: Complete required business tool work successfully and resolve failed business calls before submitting. Do not repeat successful writes.
+required-work-tools: Complete required business tool work ({{ tools }}) successfully and resolve failed business calls before submitting. Do not repeat successful writes.
 after-root-object: unexpected content after a closed root object; expected end-of-input
 unexpected-end: unexpected end of JSON input; expected a complete JSON value
 unterminated-string: unterminated JSON string; expected a closing double quote

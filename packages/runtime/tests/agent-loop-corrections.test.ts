@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { runtimeDoneTool } from "@covel/tools";
+
 import { createCorrectionPolicy } from "../src/agent-loop/correction-policy.js";
 import {
   LOOP_PRESETS,
@@ -9,9 +9,7 @@ import { stopOf } from "../src/agent-loop/stop-reason.js";
 import { createHookPipeline } from "../src/hooks/pipeline.js";
 import { makeEmitterSpy } from "./_helpers/emitter-spy.js";
 import {
-  makeExecutor,
   manifest,
-  markTool,
   prose,
   queuedLLM,
   runLoop,

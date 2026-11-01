@@ -348,22 +348,22 @@ pnpm test:runtime -- my-plugin/note --payload '{"title":"Gate"}' --pretty
 
 一个用例的字段：
 
-| 字段                        | 意思                                                             |
-| --------------------------- | ---------------------------------------------------------------- |
-| `name`                      | 用例的名字。`--case <name>` 只运行它                             |
-| `runtimeId`                 | 要运行哪个 runtime。只有一个 runtime 的插件，它的名字就是插件 ID |
-| `message`                   | 玩家这一回合的输入                                               |
-| `payload`                   | 手动触发时传给 runtime 的数据，函数里是 `ctx.manualPayload`      |
-| `userSettings`              | 覆盖这个插件的设置项。不写时用声明的默认值                       |
-| `llmResponses`              | 假模型的回复，一次模型调用用掉一个                               |
-| `llmResponse`               | 只有一个回复时的简写                                             |
-| `llmContent` / `llmObject`  | 更短的简写：回复是一段文字，或者一个 JSON 对象                   |
-| `withPlugins`               | 一起加载的其他插件，见[和别的插件一起测](#和别的插件一起测)      |
-| `ignoreUpstreams`           | 忽略这个 runtime 对上游的依赖，只为了单独调试它                  |
-| `expectsBackgroundFollower` | 期望这次运行会排出一个后台任务。没有排出就算失败                 |
-| `mode`                      | `mock`、`live` 或 `both`（默认）。这个用例在哪种模式下运行       |
-| `expect`                    | 运行之后应该成立的事                                             |
-| `artifacts.saveImages`      | 把生成的图片存到一个目录，方便人看                               |
+| 字段                        | 意思                                                                    |
+| --------------------------- | ----------------------------------------------------------------------- |
+| `name`                      | 用例的名字。`--case <name>` 只运行它                                    |
+| `runtimeId`                 | 要运行哪个 runtime。只有一个 runtime 的插件，它的名字就是插件 ID        |
+| `message`                   | 玩家这一回合的输入                                                      |
+| `payload`                   | 手动触发时传给 runtime 的数据，函数里是 `ctx.manualPayload`             |
+| `userSettings`              | 覆盖这个插件的设置项。不写时用声明的默认值                              |
+| `llmResponses`              | 假模型的回复，一次模型调用用掉一个                                      |
+| `llmResponse`               | 只有一个回复时的简写                                                    |
+| `llmContent` / `llmObject`  | `llmContent` 返回回复文本（用于拒绝测试）；`llmObject` 构造最终工具提交 |
+| `withPlugins`               | 一起加载的其他插件，见[和别的插件一起测](#和别的插件一起测)             |
+| `ignoreUpstreams`           | 忽略这个 runtime 对上游的依赖，只为了单独调试它                         |
+| `expectsBackgroundFollower` | 期望这次运行会排出一个后台任务。没有排出就算失败                        |
+| `mode`                      | `mock`、`live` 或 `both`（默认）。这个用例在哪种模式下运行              |
+| `expect`                    | 运行之后应该成立的事                                                    |
+| `artifacts.saveImages`      | 把生成的图片存到一个目录，方便人看                                      |
 
 > [!NOTE]
 > 用例里的 runtime 是被直接触发的，它的上游并没有运行。所以它声明的输入（例如这一回合的故事正文）是空的，`message` 只是玩家输入。要测“读到上游结果之后做什么”，在测试里[组装完整的回合](#在测试里跑完整的一个回合)。`withPlugins` 只加载其他插件，不会自动运行它们的上游 runtime。
@@ -573,3 +573,5 @@ pnpm test:plugin-lifecycle
 ## 验证呈现的拒绝路径
 
 测试应加载真实清单，通过受限上下文执行 handler，再检查提交行和 `presentation.completed`，不能只测选图函数。先证明同一入口能提交合法自有状态，再测试缺少 / 歧义故事、隐藏输入、非法写入、Hook 改写、零额度、缓存命中、重试不补额度和提交时较新覆盖。使用假 gateway，断言实际派发次数；不需要付费模型。示例和契约见[进阶指南](./advanced.md#呈现选择器)与[呈现 runtime](../reference/plugins.md#presentation-runtimes)。
+
+脚本中的 agent 成功回复应单独调用 `submit-output`，业务工具放在先前的回复里；修正最终提交时不要重复成功的写入。CLI 的 `llmObject` 构造最终提交，`llmContent` 刻意返回回复内容，用于拒绝测试。见[完成约定](../reference/plugins.md#agent-output-submission)。

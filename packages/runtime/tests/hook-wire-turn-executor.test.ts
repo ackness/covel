@@ -75,9 +75,15 @@ class SimpleMockLLM implements LLMAdapter {
     this.calls.push(params);
     return (
       this.responseQueue.shift() ?? {
-        content: "default response",
-        toolCalls: [],
-        finishReason: "stop",
+        content: null,
+        toolCalls: [
+          {
+            id: "final",
+            name: "submit-output",
+            arguments: JSON.stringify({ narrativeOutput: "default response" }),
+          },
+        ],
+        finishReason: "tool_calls" as const,
         usage: { inputTokens: 0, outputTokens: 0 },
       }
     );
@@ -269,13 +275,19 @@ describe("Turn executor hook wire-in", () => {
       llm.nextResponse({
         content: null,
         toolCalls: [{ id: "tc-1", name: "my-tool", arguments: "{}" }],
-        finishReason: "tool_calls",
+        finishReason: "tool_calls" as const,
         usage: { inputTokens: 0, outputTokens: 0 },
       });
       llm.nextResponse({
-        content: "done",
-        toolCalls: [],
-        finishReason: "stop",
+        content: null,
+        toolCalls: [
+          {
+            id: "final",
+            name: "submit-output",
+            arguments: JSON.stringify({ narrativeOutput: "done" }),
+          },
+        ],
+        finishReason: "tool_calls" as const,
         usage: { inputTokens: 0, outputTokens: 0 },
       });
 
@@ -308,7 +320,11 @@ describe("Turn executor hook wire-in", () => {
         event: "PreToolUse",
         handler: vi
           .fn()
-          .mockResolvedValue({ action: "abort", reason: "tool blocked" }),
+          .mockImplementation(async (_ctx, payload) =>
+            payload.toolCall.name === "submit-output"
+              ? { action: "continue" }
+              : { action: "abort", reason: "tool blocked" },
+          ),
       });
 
       const manifest = makeManifest({
@@ -406,9 +422,15 @@ describe("Turn executor hook wire-in", () => {
       const run = async (rewritten: Record<string, unknown>) => {
         const llm = new SimpleMockLLM();
         llm.nextResponse({
-          content: '{"prompt":"a portrait"}',
-          toolCalls: [],
-          finishReason: "stop",
+          content: null,
+          toolCalls: [
+            {
+              id: "final",
+              name: "submit-output",
+              arguments: '{"prompt":"a portrait"}',
+            },
+          ],
+          finishReason: "tool_calls" as const,
           usage: { inputTokens: 0, outputTokens: 0 },
         });
         const pipeline = createHookPipeline();
@@ -495,13 +517,19 @@ describe("Turn executor hook wire-in", () => {
             arguments: '{"name":"original"}',
           },
         ],
-        finishReason: "tool_calls",
+        finishReason: "tool_calls" as const,
         usage: { inputTokens: 0, outputTokens: 0 },
       });
       llm.nextResponse({
-        content: "all done",
-        toolCalls: [],
-        finishReason: "stop",
+        content: null,
+        toolCalls: [
+          {
+            id: "final",
+            name: "submit-output",
+            arguments: JSON.stringify({ narrativeOutput: "all done" }),
+          },
+        ],
+        finishReason: "tool_calls" as const,
         usage: { inputTokens: 0, outputTokens: 0 },
       });
 
@@ -1130,12 +1158,18 @@ describe("Turn executor hook wire-in", () => {
   });
 
   describe("PostLLMResponse hook", () => {
-    it("patches the response content before it becomes the runtime output", async () => {
+    it("rewrites submitted arguments on the actual response before validation", async () => {
       const llm = new SimpleMockLLM();
       llm.nextResponse({
-        content: "raw model text",
-        toolCalls: [],
-        finishReason: "stop",
+        content: null,
+        toolCalls: [
+          {
+            id: "final",
+            name: "submit-output",
+            arguments: JSON.stringify({ narrativeOutput: "raw model text" }),
+          },
+        ],
+        finishReason: "tool_calls" as const,
         usage: { inputTokens: 0, outputTokens: 0 },
       });
 
@@ -1149,7 +1183,15 @@ describe("Turn executor hook wire-in", () => {
             async (_ctx, payload: { response: LLMResponse }) => ({
               action: "continue",
               replace: {
-                response: { ...payload.response, content: "patched by hook" },
+                response: {
+                  ...payload.response,
+                  toolCalls: payload.response.toolCalls.map((call) => ({
+                    ...call,
+                    arguments: JSON.stringify({
+                      narrativeOutput: "patched by hook",
+                    }),
+                  })),
+                },
               },
             }),
           ),
@@ -1169,20 +1211,20 @@ describe("Turn executor hook wire-in", () => {
   });
 
   describe("PostToolUse terminate", () => {
-    it("ends the tool loop after the result when a hook returns terminate", async () => {
+    it("stops without accepting output when a business hook returns terminate", async () => {
       const llm = new SimpleMockLLM();
       // Step 1: ask for a tool. If the loop did NOT terminate, step 2 would be
       // consumed and the tool would be requested again.
       llm.nextResponse({
         content: null,
         toolCalls: [{ id: "tc-1", name: "my-tool", arguments: "{}" }],
-        finishReason: "tool_calls",
+        finishReason: "tool_calls" as const,
         usage: { inputTokens: 0, outputTokens: 0 },
       });
       llm.nextResponse({
         content: null,
         toolCalls: [{ id: "tc-2", name: "my-tool", arguments: "{}" }],
-        finishReason: "tool_calls",
+        finishReason: "tool_calls" as const,
         usage: { inputTokens: 0, outputTokens: 0 },
       });
 
@@ -1233,10 +1275,11 @@ describe("Turn executor hook wire-in", () => {
       // call happened, the second queued response was never consumed.
       expect(toolExecutor.execute).toHaveBeenCalledOnce();
       expect(llm.calls).toHaveLength(1);
-      expect(result.runtimeResults[0]!.status).toBe("success");
+      expect(result.runtimeResults[0]!.status).toBe("failed");
+      expect(result.runtimeResults[0]!.output).toBeNull();
     });
 
-    it("still strips runtime-done from output when a hook terminates in the same response", async () => {
+    it("records the removed terminator as an unavailable call when a business hook terminates", async () => {
       const llm = new SimpleMockLLM();
       // Same response: runtime-done is processed first, then a business tool
       // whose PostToolUse hook terminates. The runtime-done sentinel must still
@@ -1247,7 +1290,7 @@ describe("Turn executor hook wire-in", () => {
           { id: "tc-done", name: "runtime-done", arguments: "{}" },
           { id: "tc-biz", name: "my-tool", arguments: "{}" },
         ],
-        finishReason: "tool_calls",
+        finishReason: "tool_calls" as const,
         usage: { inputTokens: 0, outputTokens: 0 },
       });
 
@@ -1311,8 +1354,9 @@ describe("Turn executor hook wire-in", () => {
         (t) => t.toolName,
       );
 
-      // runtime-done stripped despite the terminate; loop stopped after 1 call.
-      expect(toolNames).not.toContain("runtime-done");
+      // An unknown tool is recorded truthfully; termination cannot create accepted output.
+      expect(toolNames).toContain("runtime-done");
+      expect(result.runtimeResults[0]!.status).toBe("failed");
       expect(toolNames).toContain("my-tool");
       expect(llm.calls).toHaveLength(1);
     });

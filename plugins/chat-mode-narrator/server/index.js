@@ -27,6 +27,6 @@ export default function (covel) {
       : { action: "continue" };
   covel.on("PostContextAssembly", storyOnly(review.context));
   covel.on("PreLLMCall", storyOnly(review.prepare));
-  covel.on("PostLLMResponse", storyOnly(review.review));
+  covel.on("ReviewAgentOutput", storyOnly(review.review));
   covel.on("TurnStop", review.cleanup);
 }

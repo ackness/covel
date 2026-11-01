@@ -1,3 +1,4 @@
+import { suspendedLoopState } from "./_helpers/agent-loop-fixture.js";
 /**
  * The `PreStep` hook: what it sees, how it narrows a step's tools, changes
  * the tool choice, lowers the steps left or ends the loop, and what it cannot
@@ -20,7 +21,6 @@ import {
   makeExecutor,
   manifest,
   markTool,
-  prose,
   submitted,
   queuedLLM,
   runLoop,
@@ -397,9 +397,10 @@ describe("PreStep", () => {
         resumeSchema: {},
         createdAt: new Date().toISOString(),
         pendingContinuation: {
+          loop: suspendedLoopState(runtime),
           lifecycle: { runId: "suspended-run", progressRunId: "suspended-run" },
           readScopes: [],
-          takenUnder: { playerTurns: 0, pluginVersion: "1.0.0", writes: [] },
+          takenUnder: { playerTurns: 0, pluginVersion: "0.0.0", writes: [] },
           executionContext: {
             executionId: "prior-run",
             origin: "manual",
@@ -424,6 +425,6 @@ describe("PreStep", () => {
       },
     );
     expect(result.status).toBe("success");
-    expect(seen.map((entry) => entry.payload.step)).toEqual([1, 2]);
+    expect(seen.map((entry) => entry.payload.step)).toEqual([2, 3]);
   });
 });

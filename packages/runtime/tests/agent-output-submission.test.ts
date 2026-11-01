@@ -9,8 +9,6 @@ import {
   runLoop,
   runRuntime,
   toolCall,
-  makeExecutor,
-  markTool,
   type GenerateParams,
 } from "./_helpers/agent-loop-fixture.js";
 import type { LLMAdapter, LLMResponse } from "@covel/shared";
@@ -317,7 +315,7 @@ describe("submission hooks and batches", () => {
     pipeline.register<ReviewAgentOutputPayload>({
       id: "mutate",
       event: "ReviewAgentOutput",
-      handler: async (_ctx, payload) => ({
+      handler: async (_ctx, _payload) => ({
         action: "continue",
         replace: { output: { forged: true }, toolResults: [] },
       }),

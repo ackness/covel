@@ -33,9 +33,15 @@ class RecordingLLM implements LLMAdapter {
   async generate(params: Call): Promise<LLMResponse> {
     this.calls.push(params);
     return {
-      content: "The story goes on.",
-      toolCalls: [],
-      finishReason: "stop",
+      content: null,
+      toolCalls: [
+        {
+          id: "final",
+          name: "submit-output",
+          arguments: JSON.stringify({ narrativeOutput: "The story goes on." }),
+        },
+      ],
+      finishReason: "tool_calls" as const,
       usage: { inputTokens: 1, outputTokens: 1 },
     };
   }

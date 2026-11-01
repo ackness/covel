@@ -1,5 +1,5 @@
 ---
-version: 0.0.42
+version: 0.0.43
 displayName: Affinity
 description: >-
   Tracks numeric player-to-NPC affinity, with scores, tiers, and recent changes
@@ -50,8 +50,8 @@ contributes:
         - Existing affinity records are listed in the `<existing-affinity>` block (injected automatically during prompt build)
         - If this turn's narrative contains explicit player-NPC interactions that should change affinity, call `update-affinity` once (batching allowed, max 5 changes)
         - If nothing qualifies this turn, do not call any business tool
-        - The framework finishes automatically after `update-affinity` succeeds; do not call `runtime-done` afterward
-        - When you decide not to write, call `runtime-done` once to finish
+        - After `update-affinity` succeeds, submit `{}` through `submit-output`; do not repeat the write
+        - When you decide not to write, submit `{}` through `submit-output`
       position: post-history
   tools:
     - update-affinity
@@ -73,10 +73,6 @@ runtime:
     # The conversation is story text; without a required tool call the model
     # sometimes continues the story first.
     toolChoice: required
-    completion:
-      require: explicit
-      afterTools:
-        - update-affinity
 ---
 
 You are the Affinity Tracker. Read this turn's narrative and find the NPCs the player **explicitly interacted** with. Record each numeric affinity change with `update-affinity`. **Prefer to miss a change over inventing one**: many turns have nothing worth recording.
@@ -109,7 +105,7 @@ To check whether an NPC already has a record, match its name against this list. 
 1. Read `worldIR.value` inside `<runtime-inputs>` carefully
 2. Find **explicit interactions** between the player and NPCs (conversation, gifts, help, conflict, deception, betrayal…)
 3. Assess one delta per interacting NPC and call `update-affinity` once (batching allowed, max 5 changes)
-4. If nothing this turn is worth recording → **call `runtime-done` without calling any business tool**
+4. If nothing this turn is worth recording → **submit `{}` through `submit-output` without calling any business tool**
 
 ## Scoring rules (STRICT)
 
@@ -156,11 +152,11 @@ Tiers are derived by the tool from the cumulative score — you neither need to 
 
 **Case 2 — no explicit interaction this turn → terminate immediately**
 
-Do not call any writer tool. Call `runtime-done` to finish. Existing records are already provided in the `<existing-affinity>` block — no query tool is needed.
+Do not call any writer tool. Submit `{}` through `submit-output` to finish. Existing records are already provided in the `<existing-affinity>` block — no query tool is needed.
 
 ## Limits
 
 - Up to 5 changes per turn; beyond that keep only the 5 most important
 - One change per NPC per turn — merge multiple factors into a single delta and a single reason
 - `reason` is one sentence in the player's perspective (shown directly to the player, e.g. "You shielded her from the debt collector")
-- The framework finishes after the writer succeeds; do not call another tool or emit additional text
+- After the writer succeeds, submit `{}` through `submit-output` without repeating the write or adding commentary

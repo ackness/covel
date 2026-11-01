@@ -71,6 +71,7 @@ describe("lossless strict tool schemas", () => {
     },
     {
       ...closedSchema,
+      // oxlint-disable-next-line unicorn/no-thenable -- This is a JSON Schema conditional keyword.
       properties: { ok: { if: { const: true }, then: { type: "boolean" } } },
     },
     { ...closedSchema, patternProperties: { ".*": { type: "string" } } },

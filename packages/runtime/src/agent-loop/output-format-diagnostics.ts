@@ -33,7 +33,7 @@ const syntaxReasons = [
 ] as const;
 
 /** Keyed fragments follow the framework action-labels template format. */
-async function loadDiagnosticText(locale: string | undefined) {
+export async function loadOutputText(locale: string | undefined) {
   const source = await loadPrompt(
     "server",
     "output-format-diagnostics",
@@ -57,7 +57,7 @@ async function loadDiagnosticText(locale: string | undefined) {
 
 function syntaxProblems(
   error: unknown,
-  text: Awaited<ReturnType<typeof loadDiagnosticText>>,
+  text: Awaited<ReturnType<typeof loadOutputText>>,
 ): string[] {
   const message = error instanceof SyntaxError ? error.message : "";
   const located = message.match(
@@ -87,5 +87,5 @@ export async function submissionSyntaxProblems(
   error: unknown,
   locale?: string,
 ): Promise<readonly string[]> {
-  return syntaxProblems(error, await loadDiagnosticText(locale));
+  return syntaxProblems(error, await loadOutputText(locale));
 }

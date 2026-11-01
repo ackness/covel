@@ -397,9 +397,6 @@ export async function rehydrateSessionSideState(
           ),
         apply: (snapshot) => {
           const state = executionObservation?.stateRef.current;
-          const sameOwner =
-            !!executionObservation &&
-            initialExecutionOwner === executionOwner(executionObservation);
           const ownsStream = !!state?.executing && !state.executionRecovery;
           const execution = snapshot.execution;
           const interruptedCurrentStream =

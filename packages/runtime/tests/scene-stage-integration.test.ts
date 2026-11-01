@@ -63,14 +63,20 @@ class SceneSetLLM implements LLMAdapter {
             arguments: JSON.stringify({ topic: "scene.set", data: this.data }),
           },
         ],
-        finishReason: "tool_calls",
+        finishReason: "tool_calls" as const,
         usage: { inputTokens: 10, outputTokens: 5 },
       };
     }
     return {
-      content: "scene noted.",
-      toolCalls: [],
-      finishReason: "stop",
+      content: null,
+      toolCalls: [
+        {
+          id: "final",
+          name: "submit-output",
+          arguments: JSON.stringify({ narrativeOutput: "scene noted." }),
+        },
+      ],
+      finishReason: "tool_calls" as const,
       usage: { inputTokens: 10, outputTokens: 5 },
     };
   }

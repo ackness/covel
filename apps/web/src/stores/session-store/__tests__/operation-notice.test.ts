@@ -7,10 +7,7 @@ import { subscribeToast } from "@/lib/toast-channel.js";
 import type { SseEnvelope } from "@/services/api.js";
 import { initialState, reducer } from "../reducer.js";
 import type { SessionAction } from "../types.js";
-import {
-  createSseEventHandler,
-  type SseEventHandlerDeps,
-} from "../sse-handler.js";
+import { createSseEventHandler } from "../sse-handler.js";
 
 describe("operation failure notice", () => {
   it.each([

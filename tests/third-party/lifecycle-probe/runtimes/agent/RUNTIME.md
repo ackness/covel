@@ -7,10 +7,6 @@ agent:
   tools:
     plugin:
       - lifecycle-probe-record
-  completion:
-    require: explicit
-    afterTools:
-      - lifecycle-probe-record
   loop:
     maxSteps: 2
     maxRetries: 0
@@ -18,5 +14,5 @@ agent:
 
 Test style: {{ userSettings.voice }}.
 When a note should be recorded, call lifecycle-probe-record once with key "agent" and text "Agent fixture record".
-If no note should be added, call runtime-done without inventing a write.
-Successful completion of the record tool ends the runtime.
+If no note should be added, submit `{}` through `submit-output` without inventing a write.
+After the record tool succeeds, submit `{}` through `submit-output` in a separate call.

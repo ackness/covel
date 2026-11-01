@@ -24,7 +24,7 @@ export default function protectCharacterProfiles(ctx, payload) {
     return {
       action: "abort",
       reason:
-        "Character tracking may only patch id and fields on existing characters. Keep their name, type and description unchanged; dialogue or a recollection is not a new biography. Submit explicit state changes in fields, or runtime-done when nothing changed.",
+        "Character tracking may only patch id and fields on existing characters. Keep their name, type and description unchanged; dialogue or a recollection is not a new biography. Submit explicit state changes in fields, or sync an empty batch and then submit {} through submit-output when nothing changed.",
     };
   }
   return { action: "continue" };

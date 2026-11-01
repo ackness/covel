@@ -48,13 +48,23 @@ function normalizeLlmResponse(options: RunRuntimeDebugOptions): LLMResponse {
   if (raw) {
     return normalizeRawLlmResponse(raw);
   }
-  const content = options.llmObject
-    ? JSON.stringify(options.llmObject)
-    : (options.llmContent ?? '{"ok":true}');
+  if (options.llmContent !== undefined)
+    return {
+      content: options.llmContent,
+      toolCalls: [],
+      finishReason: "stop",
+      usage: { inputTokens: 1, outputTokens: 1 },
+    };
   return {
-    content,
-    toolCalls: [],
-    finishReason: "stop",
+    content: null,
+    toolCalls: [
+      {
+        id: "final",
+        name: "submit-output",
+        arguments: JSON.stringify(options.llmObject ?? { ok: true }),
+      },
+    ],
+    finishReason: "tool_calls" as const,
     usage: { inputTokens: 1, outputTokens: 1 },
   };
 }

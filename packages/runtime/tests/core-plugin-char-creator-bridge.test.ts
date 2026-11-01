@@ -20,9 +20,15 @@ class CapturingLLM implements LLMAdapter {
       this.systemPrompts.push(system.content);
     }
     return {
-      content: '{"narrativeOutput":"角色信息已进入叙事上下文。"}',
-      toolCalls: [],
-      finishReason: "stop",
+      content: null,
+      toolCalls: [
+        {
+          id: "final",
+          name: "submit-output",
+          arguments: '{"narrativeOutput":"角色信息已进入叙事上下文。"}',
+        },
+      ],
+      finishReason: "tool_calls" as const,
       usage: { inputTokens: 10, outputTokens: 8 },
     };
   }

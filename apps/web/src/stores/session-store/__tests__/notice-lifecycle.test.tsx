@@ -15,11 +15,7 @@ import type {
 } from "@/services/subscription.js";
 import { StoryOperationFailureNotice } from "@/components/session/chat-messages/story-operation-failure-notice.js";
 import { initialState, reducer } from "../reducer.js";
-import {
-  applyResumeEvents,
-  createSseEventHandler,
-  type SseEventHandlerDeps,
-} from "../sse-handler.js";
+import { applyResumeEvents, createSseEventHandler } from "../sse-handler.js";
 import type { SessionAction, SessionState } from "../types.js";
 import { suspendedStory } from "./helpers/suspended-story.js";
 

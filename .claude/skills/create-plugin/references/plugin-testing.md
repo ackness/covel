@@ -209,7 +209,7 @@ pnpm test:runtime -- my-plugin \
 | `--config <json>`                | `getConfig()` 返回值                                                    |
 | `--user-settings <json>`         | 当前插件的 `ctx.userSettings` bucket                                    |
 | `--llm-content <text>`           | mock agent runtime 的最终文本                                           |
-| `--llm-object <json>`            | 自动 stringify 的 mock JSON 文本                                        |
+| `--llm-object <json>`            | 把对象作为 `submit-output` 参数的假模型提交                                        |
 | `--llm-response <json>`          | 完整 mock LLM response                                                  |
 | `--llm-responses <json>`         | 多次 LLM 调用脚本，按顺序消费                                           |
 | `--mock-preset-id <id>`          | mock `resolveSlot()` 暴露的 synthetic preset id                         |
@@ -241,26 +241,22 @@ pnpm test:runtime -- my-plugin \
       "userSettings": {
         "enabled": true
       },
-      "llmResponses": [
-        {
-          "content": null,
-          "finishReason": "tool_calls",
-          "toolCalls": [
-            {
-              "id": "tc-runtime-done",
-              "name": "runtime-done",
-              "arguments": "{\"reason\":\"recorded\"}"
-            }
-          ],
-          "usage": { "inputTokens": 1, "outputTokens": 1 }
-        }
-      ],
       "expect": {
         "runtimeResults": [
-          { "runtimeId": "my-plugin/note", "status": "success" }
+          {
+            "runtimeId": "my-plugin/note",
+            "status": "success"
+          }
         ],
-        "pluginData": [{ "namespace": "notes", "field": "title" }],
-        "logs": ["note.recorded"]
+        "pluginData": [
+          {
+            "namespace": "notes",
+            "field": "title"
+          }
+        ],
+        "logs": [
+          "note.recorded"
+        ]
       }
     }
   ]
@@ -285,7 +281,9 @@ mock 模式也可以验证明确的失败结果。下面的 `errorIncludes` 必�
 {
   "name": "invalid-base-url-is-visible",
   "runtimeId": "my-plugin/image-generator",
-  "payload": { "prompt": "a harbor" },
+  "payload": {
+    "prompt": "a harbor"
+  },
   "expect": {
     "runtimeResults": [
       {
@@ -307,7 +305,9 @@ mock 模式也可以验证明确的失败结果。下面的 `errorIncludes` 必�
   "name": "image-live",
   "runtimeId": "my-plugin/image-generator",
   "mode": "live",
-  "payload": { "prompt": "a harbor" },
+  "payload": {
+    "prompt": "a harbor"
+  },
   "artifacts": {
     "saveImages": {
       "namespace": "images",
@@ -316,7 +316,12 @@ mock 模式也可以验证明确的失败结果。下面的 `errorIncludes` 必�
     }
   },
   "expect": {
-    "assetGenerations": [{ "modality": "image", "field": "ref" }]
+    "assetGenerations": [
+      {
+        "modality": "image",
+        "field": "ref"
+      }
+    ]
   }
 }
 ```

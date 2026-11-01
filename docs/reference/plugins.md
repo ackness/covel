@@ -456,6 +456,10 @@ agent:
 
 业务工具仍负责覆盖条件等领域校验。仅有合法 JSON 不证明任务完整。输出提交规则见[工具](./tools.md#submit-output)。
 
+内置叙事器与群像叙事器保持 `narrative-engine@2` 的 `segments/cues/yield` 形状，通过最终提交交付。`createNarrativeReview` 注册到 `ReviewAgentOutput`，直接检查已校验的段落或默认 `narrativeOutput`，只返回 correction；不会改写回复或添加 effects。工具的准备说明不会进入故事。
+
+建议、事实抽取、隐藏事件规划、时间推进和世界初始化先成功完成必需的业务工具，再提交工具的规范结果。它们自己的输出审核阻止模型改写规范结果；只纠正最终提交，不重复成功的写入。好感、图鉴和关系图谱无变化时可直接提交 `{}`；角色追踪仍先同步空批次，维度追踪仍先结算 `updates: []`。世界初始化最终提交必须包含 `preGameDone: true`，角色表单准备提交 `preGameDone: false`，等待玩家完成表单。
+
 ### 工具选择和思考（`agent.toolChoice`、`agent.reasoning`）
 
 - `agent.toolChoice: required` 要求模型每一步都调用一个工具，调用哪个由模型选。`{name: <工具>}` 要求调用这一个工具。不写时由模型自己决定。

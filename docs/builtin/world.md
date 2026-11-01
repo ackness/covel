@@ -200,3 +200,5 @@
 - [第一个世界](../worlds/first-world.md)
 - [给世界预置任务、物品和好感](../recipes/starting-content.md)
 - [世界数据参考](../reference/world-data.md)
+
+扩展这些内置 agent 时，遵循[输出提交约定](../reference/plugins.md#agent-output-submission)。函数 runtime 仍直接返回业务值。

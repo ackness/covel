@@ -47,15 +47,9 @@ describe(`${PLUGIN_ID} package`, () => {
       );
       expect(
         review.review(ctx, {
-          messages: [],
-          response: {
-            content: JSON.stringify({
-              segments: [{ kind: "narration", text }],
-            }),
-            toolCalls: [],
-            finishReason: "stop",
-            usage: { inputTokens: 1, outputTokens: 1 },
-          },
+          output: { segments: [{ kind: "narration", text }] },
+          toolCall: { id: "final", name: "submit-output" },
+          toolResults: [],
         }),
       ).toEqual({ action: "continue" });
     },
