@@ -666,8 +666,12 @@ A committed `interaction.requested` and `ui.rendered` are also pushed through th
 | `dimensions.settlement.changed` | Receipt commit                                     | `{providerPluginId, source, sourceTurnId, version, status, error?}`                                                                     |
 | `plugin-data.changed`           | Commit of the owning plugin's data                 | pluginId, namespace, and the affected keys                                                                                              |
 | `proposal.failed`               | Proposal commit failure                            | `{proposalId,proposalType,runtimeId,pluginId,error}`                                                                                    |
-| `operation.failed`              | Operations did not take effect in a committed turn | `{sessionId,turnId,count}`                                                                                                              |
+| `operation.failed`              | Operations did not take effect in a committed turn | `{sessionId,turnId,count,messages: readonly {messageId,count}[]}`                                                                       |
 | `context.compacted`             | Compaction summary saved                           | `{summaryId,summaryIds,messagesCompacted,tokenSavings,focusSections,summariesMerged,summaryTokens,totalSummaryTokens,summaryTruncated}` |
+
+`operation.failed.messages` is a required safe receipt list containing only the IDs of saved, annotated story messages and positive safe integer counts. The event follows the successful transaction and the corresponding `narrative.completed` publications. Each committed execution still emits one event and one immediate toast; direct action routing and `forwardToActionStream: false` are unchanged. `count` retains its execution-wide failure total. Auxiliary unit failures or the absence of a public story can leave `messages` empty, and targeted counts may sum to less than the total. Each auto-advance round uses its own turn and message receipts.
+
+Clients set or replace counts by session, turn and durable message ID. Duplicate receipts never add counts; clients neither guess the latest story nor annotate streaming placeholders. Unknown or unloaded IDs wait for ordinary history recovery. A lost event recovers through the [persisted message field](./api.md#get-apisessionsidmessages), without rerunning operations. Non-action commits retain their existing session-view and subscription recovery and never reopen a stream. Server and Web must update together; the old event shape is not accepted.
 
 A failed commit holds back the "execution completed" step, and the client shows the error as an execution failure. A story-attached write-service operation dropped only because its own writes were rejected is not an execution failure: the action stream sends no `proposal.failed` for it, only one `operation.failed`, and the turn commits. A background result cannot reopen an action stream that has already ended. On reconnect, the client restores from the saved session state. Read-baseline `conflict` uses these same proposal and operation boundaries, with no new event or client fingerprint argument; see [Transactions](./transactions.md#read-baselines).
 
@@ -897,6 +901,8 @@ The names in the "Command" column of the tables below (`session.create`, `turn.s
 | `session.delete`  | DELETE | `/api/sessions/:id`      | JSON: `{ deleted }`     |
 
 Each item of `SessionSnapshot.messages` is a `SnapshotMessage`. A player message carries `actions`: the resolved actions it submitted (`metadata.actions` in storage, in the same shape as `actions` on `GET /messages`), and a story message carries `segments`. Other messages have neither field.
+
+A story message may also carry validated `operationFailures: { count }`, projected identically to message history; same-ID recovery fills a missing notice. Full field rules: [Message history](./api.md#get-apisessionsidmessages).
 
 The top-level `dimensions` of `SessionSnapshot` is the [public snapshot of current values](./world-model.md#dynamic-dimension-snapshot). The optional `dimensionSettlements` is a summary of receipts. The provider and recovery metadata is bound and validated by the host.
 

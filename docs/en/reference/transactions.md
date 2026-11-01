@@ -464,6 +464,12 @@ At commit, a unit's operations commit **after all its members' own writes**, in 
 - The proposals of a rejected operation are listed in `failedProposals`, as for a dropped unit.
 - A provider's datasets are loaded at call time through `TurnExecutorDeps.loadPluginDatasets` and reach the commit in the commit plan (`providerDatasets`), so they are checked even when none of the provider's runtimes ran. When they cannot be loaded, the call fails `unavailable` before the handler runs.
 
+A story's `metadata.operationFailures: { count }` is finalized in this same transaction. The kernel buffers the display messages normally accepted in a commit unit, settles operations in their existing savepoint order, then inserts messages once in their original insertion order. Reads through the transaction view include buffered messages; savepoint rollback discards that level's buffer too. Messages are flushed before later units, settlement readers, extra transaction writes, exports and snapshot capture. A store error rolls back the execution, leaving neither a partial story nor a partial notice.
+
+For each protected unit containing a story, count final `failed` operations by their carrying results, once per operation (`rejected`, `conflict` and `store-unsupported` included). Committed, staged, discarded, refused-before-staging and auxiliary-unit failures do not increase a story's count. Annotate only the root result's last accepted public story, otherwise the last public story of a member; without a target, write no notice. Identity comes from captured host manifests and actual message IDs, using run/unit membership rather than a shared turn or the delegated child's `invokedBy`. Concealed runtimes cannot supply targets.
+
+This is an immutable historical annotation, not current state or a repair flag. Later successes and retries never rewrite it. Story text, the prompt journal, operation status, read dependencies and savepoint rules remain unchanged. Player, continuation, resume and story-producing manual commits share this boundary; a storyless execution never annotates an older message. Public field: [Message API](./api.md#get-apisessionsidmessages).
+
 #### Operation records
 
 Each operation leaves one `OperationRecord` on the calling run's result (`runtimeResults[].operations`), saved with `turn_results` without a schema change:

@@ -375,6 +375,13 @@ for (const [backend, create] of BACKENDS) {
         "failed/conflict",
         "committed",
       ]);
+      const messages = await r.store.listMessages(SESSION);
+      expect(messages[0]?.metadata).toMatchObject({
+        operationFailures: { count: 1 },
+      });
+      expect(r.outcome.operationFailureMessages).toEqual([
+        { messageId: messages[0]!.id, count: 1 },
+      ]);
       const faults = classifyExecutionFaults(
         r.execution.commit.results,
         r.outcome,
@@ -384,6 +391,27 @@ for (const [backend, create] of BACKENDS) {
       );
       expect(faults.get("bank")?.kind).not.toBe("fault");
       expect(faults.get(narrator.pluginId)?.kind).not.toBe("fault");
+    });
+
+    it("saves a story without a marker when the service refuses before staging", async () => {
+      const narrator = story();
+      const { outcome, items, store } = await run({
+        create,
+        runtimes: [narrator],
+        handlers: {
+          [narrator.name]: async (ctx) => {
+            await expect(trade(ctx, "unaffordable", 1000)).rejects.toThrow();
+            return ok({ narrativeOutput: "You leave without buying." });
+          },
+        },
+      });
+      expect(outcome.status).toBe("committed");
+      expect(outcome.operations).toEqual([]);
+      expect(outcome.operationFailureMessages).toEqual([]);
+      expect(await items()).toEqual([]);
+      expect(
+        (await store.listMessages(SESSION))[0]?.metadata,
+      ).not.toHaveProperty("operationFailures");
     });
 
     it("overlays a recursive unit's own writes before its operations in call order", async () => {
@@ -536,7 +564,15 @@ for (const [backend, create] of BACKENDS) {
         (await store.getPluginData(SESSION, "narrator", "notes", "told"))
           ?.value,
       ).toBe("yes");
-      expect(await store.listMessages(SESSION)).not.toHaveLength(0);
+      const messages = await store.listMessages(SESSION);
+      expect(messages).toHaveLength(1);
+      expect(messages[0]?.content).toBe("You shop.");
+      expect(messages[0]?.metadata).toMatchObject({
+        operationFailures: { count: 1 },
+      });
+      expect(outcome.operationFailureMessages).toEqual([
+        { messageId: messages[0]!.id, count: 1 },
+      ]);
       expect(outcome.failedProposals).toEqual([
         expect.objectContaining({ code: "conflict" }),
       ]);
@@ -561,7 +597,7 @@ for (const [backend, create] of BACKENDS) {
     });
 
     it("drops a vetoed story-attached operation alone", async () => {
-      const { outcome, items, gold } = await run({
+      const { outcome, items, gold, store } = await run({
         ...buyThree(),
         create,
         veto: (proposal) => (proposal.payload as { key?: string }).key === "b",
@@ -579,6 +615,13 @@ for (const [backend, create] of BACKENDS) {
       ]);
       expect(await items()).toEqual(["a", "c"]);
       expect(await gold()).toBe(94);
+      const messages = await store.listMessages(SESSION);
+      expect(messages[0]?.metadata).toMatchObject({
+        operationFailures: { count: 1 },
+      });
+      expect(outcome.operationFailureMessages).toEqual([
+        { messageId: messages[0]!.id, count: 1 },
+      ]);
     });
 
     it("drops an auxiliary caller with its writes and all its operations when one is rejected", async () => {
@@ -668,7 +711,7 @@ for (const [backend, create] of BACKENDS) {
     });
 
     it("does not attempt a story's operations when the store cannot isolate them", async () => {
-      const { outcome, items, gold } = await run({
+      const { outcome, items, gold, store } = await run({
         ...buyThree(),
         create,
         withoutSavepoints: true,
@@ -677,6 +720,13 @@ for (const [backend, create] of BACKENDS) {
       expect(settled(outcome.operations)).toEqual(
         Array(3).fill("failed/store-unsupported"),
       );
+      const messages = await store.listMessages(SESSION);
+      expect(messages[0]?.metadata).toMatchObject({
+        operationFailures: { count: 3 },
+      });
+      expect(outcome.operationFailureMessages).toEqual([
+        { messageId: messages[0]!.id, count: 3 },
+      ]);
       expect(await items()).toEqual([]);
       expect(await gold()).toBe(100);
     });

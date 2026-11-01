@@ -376,3 +376,36 @@ describe("stage decision lifecycle", () => {
     expect(screen.queryByTestId("stage-dialog")).toBeNull();
   });
 });
+
+it("keeps the current story notice visible after reading without gating input or restarting the dialog", () => {
+  const props = {
+    ...fixture(),
+    messages: [{ ...previousStory, operationFailures: { count: 1 } }],
+    replayStoryOnEnter: true,
+  };
+  const { rerender } = render(<StageView {...props} />);
+  expect(
+    screen.getByTestId("story-operation-failure-notice").textContent,
+  ).toContain("1");
+  expect(screen.getByTestId("stage-dialog")).toBeDefined();
+  fireEvent.click(screen.getByRole("button", { name: "点击继续对话" }));
+  expect(screen.queryByTestId("stage-dialog")).toBeNull();
+  expect(screen.getByTestId("story-operation-failure-notice")).toBeDefined();
+  const input = screen.getByTestId(
+    "stage-decision-input",
+  ) as HTMLTextAreaElement;
+  expect(input.disabled).toBe(false);
+  fireEvent.change(input, { target: { value: "Continue" } });
+  fireEvent.keyDown(input, { key: "Enter" });
+  expect(props.onSendMessage).toHaveBeenCalledWith("Continue");
+  rerender(
+    <StageView
+      {...props}
+      messages={[{ ...props.messages[0]!, operationFailures: { count: 2 } }]}
+    />,
+  );
+  expect(screen.queryByTestId("stage-dialog")).toBeNull();
+  expect(
+    screen.getByTestId("story-operation-failure-notice").textContent,
+  ).toContain("2");
+});

@@ -4,6 +4,7 @@
 
 import { Hono } from "hono";
 import { z } from "zod";
+import { projectStoryOperationFailures } from "@covel/shared";
 import type { DataStore } from "@covel/store";
 import { rateLimiter } from "../../middleware/rate-limit.js";
 import { resolveSessionParam } from "./session/session-guard.js";
@@ -59,6 +60,11 @@ function flattenMessage(m: {
     ...(Array.isArray(meta.actions) ? { actions: meta.actions } : {}),
     // A story message keeps its segments with resolved speakers.
     ...(Array.isArray(meta.segments) ? { segments: meta.segments } : {}),
+    ...projectStoryOperationFailures({
+      role: m.role,
+      kind: meta.kind,
+      operationFailures: meta.operationFailures,
+    }),
     createdAt: m.createdAt,
   };
 }

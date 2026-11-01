@@ -419,7 +419,7 @@ flowchart LR
 
 内核输入还包括 `operations@1`：绑定时冻结本次执行已完成上游的暂存操作，不增加调度依赖，但读者在提交时依赖它读到的暂存操作，也不能用于 detached runtime。重试或恢复失败 runtime 时，输入还包含来源回合及已提交重试的种子结果中 `committed` 的操作，供下游识别已处理的变化。这些操作只读，不重复提交写入，也不建立本次执行的提交依赖；失败、丢弃或仍暂存的种子操作不提供给下游。字段和可见性见[插件输入](../reference/plugins.md#内核输入-operations1)。
 
-提交成功但有操作失败时，action 流发出一次 `operation.failed`，玩家立即看到数量提示。只因自身失败而被丢弃的故事附带操作不再发 `proposal.failed`，回合不显示执行失败。agent 的下一次玩家或续行执行读取最新一条已提交的 `player` / `continuation` 回合记录；只给 `invokedBy.runtimeId` 对应的 agent 显示 `operations-not-applied`，位于输入和导出块之后，最多十条摘要。子 agent 发起的操作记的是子 agent 的 runtime ID，这个子 agent 下次被调用时在自己的上下文里收到通知。定向重试不显示。读取随会话状态每次执行只做一次，不增加持久状态。
+提交成功但有操作失败时，action 流发出一次 `operation.failed`，玩家立即看到数量提示。只因自身失败而被丢弃的故事附带操作不再发 `proposal.failed`，回合不显示执行失败。agent 的下一次玩家或续行执行读取最新一条已提交的 `player` / `continuation` 回合记录；只给 `invokedBy.runtimeId` 对应的 agent 显示 `operations-not-applied`，位于输入和导出块之后，最多十条摘要。子 agent 发起的操作记的是子 agent 的 runtime ID，这个子 agent 下次被调用时在自己的上下文里收到通知。定向重试不显示。模型提示的读取随会话状态每次执行只做一次，不另存通知状态。 对应故事另有持久的宿主提示，刷新与历史恢复后仍可见；它在操作结算事务中定稿，只存在显示消息 metadata，不改变正文、prompt journal 或上述 `operations-not-applied` 模型上下文。见[消息 API](../reference/api.md#get-apisessionsidmessages)与[事务](../reference/transactions.md#写服务的操作)。
 
 如果后续尝试没有提交，最新的已提交记录没有改变，下次尝试仍显示同一通知。任意更晚的玩家或续行执行一旦提交，旧通知便消失。通知放在每回合变化的上下文段，不改变缓存前缀。
 

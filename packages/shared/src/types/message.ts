@@ -110,6 +110,8 @@ export interface Message {
    * by blank lines.
    */
   readonly segments?: readonly import("@covel/plugin-handlers-utils").StoryMessageSegment[];
+  /** Immutable notice about attached operations at this story's commit. */
+  readonly operationFailures?: import("../schemas/story-operation-failures.js").StoryOperationFailures;
   readonly metadata?: unknown;
   readonly createdAt: string;
 }

@@ -155,7 +155,12 @@ function settlementEvents(
   if (mode === "commit-rejection")
     sequence.push({
       type: "operation.failed",
-      payload: { sessionId: "scene", turnId: "turn", count: 1 },
+      payload: {
+        sessionId: "scene",
+        turnId: "turn",
+        count: 1,
+        messages: [{ messageId: "story", count: 1 }],
+      },
     });
   sequence.push(
     { type: "ui.slot.cleared", payload: { turnId: "turn" } },
@@ -174,7 +179,13 @@ describe("bundled dialogue actor settlement notices", () => {
     "keeps the committed story without an execution error after %s",
     async (mode) => {
       await i18n.changeLanguage("en-US");
-      const stateRef = { current: { ...initialState, executing: true } };
+      const stateRef: { current: typeof initialState } = {
+        current: {
+          ...initialState,
+          session: { id: "scene" } as NonNullable<typeof initialState.session>,
+          executing: true,
+        },
+      };
       const handle = createSseEventHandler({
         dispatch: (action) => {
           stateRef.current = reducer(stateRef.current, action);
@@ -211,6 +222,10 @@ describe("bundled dialogue actor settlement notices", () => {
             }),
           );
         else expect(toast).not.toHaveBeenCalled();
+        expect(
+          stateRef.current.messages.find((message) => message.id === "story")
+            ?.operationFailures,
+        ).toEqual(mode === "commit-rejection" ? { count: 1 } : undefined);
         expect(stateRef.current.executionError).toBeNull();
         expect(stateRef.current.executing).toBe(false);
         expect(

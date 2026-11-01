@@ -444,3 +444,40 @@ describe("session checkpoint transfer", () => {
     expect(await target.getSession(session.id)).toEqual(session);
   });
 });
+
+it.each(["memory", "sqlite"])(
+  "preserves host story annotations through JSON checkpoint validation and replacement on %s",
+  async (backend) => {
+    const store =
+      backend === "memory"
+        ? createMemoryStore()
+        : createSqliteStore(":memory:");
+    try {
+      const session = makeSession();
+      await store.createSession(session);
+      const message = makeMessage({
+        id: "story-with-notice",
+        sessionId: session.id,
+        role: "assistant",
+        metadata: { kind: "story", operationFailures: { count: 2 } },
+      });
+      await store.addMessage(message);
+      const checkpoint = await exportSessionCheckpoint(store, session.id, {
+        revision: 1,
+        actionId: "notice-export",
+      });
+      await store.addMessage(
+        makeMessage({ id: "later-message", sessionId: session.id }),
+      );
+      await replaceSessionFromCheckpoint(
+        store,
+        JSON.parse(JSON.stringify(checkpoint)),
+      );
+      expect(await store.listMessages(session.id)).toEqual([message]);
+      await store.deleteSession(session.id);
+      expect(await store.listMessages(session.id)).toEqual([]);
+    } finally {
+      await store.close();
+    }
+  },
+);
