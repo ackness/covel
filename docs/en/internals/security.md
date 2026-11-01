@@ -504,6 +504,8 @@ A multi-file view loads directly from `/plugin-assets/<pluginId>/<digest>/<entry
 
 **Subscription content.** An SSE connection admits events only from the session incarnation that passed owner authorization. Replay state is allocated only after that authorization. Producers capture the incarnation before async work; deletion controls bypass topic filters, and cross-origin reordering cannot deliver another incarnation to the old connection. See the [protocol](../reference/protocol.md) for handshake and reconnect rules.
 
+**Progress ownership.** `ctx.progress.report` removes plugin-supplied `data._covel` and writes kernel-captured invocation identity and settlement provenance. Resume and abandon use that ownership to select their tasks without settling independent calls of the same runtime. This is not a sandbox for approved server-side JavaScript. See the [progress protocol](../reference/protocol.md#job-progress-events-job-status-experimental).
+
 **Plugin data management.** Whether a plugin is enabled by default is not a data ownership boundary. Admin tools and scripts follow the same [plugin data write rules](../reference/api.md#plugin-data) for every plugin; `kind: core` provides no extra protection.
 
 **Reading execution state.** `GET /api/sessions/:id/execution` binds the session incarnation that passed owner authorization to the existing read barrier on the response side.

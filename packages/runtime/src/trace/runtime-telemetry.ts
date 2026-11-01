@@ -1,4 +1,4 @@
-/** Runtime lifecycle notifications describe finalized execution, not commit. */
+/** Initial lifecycle notifications describe computation; settlement can correct them. */
 
 import {
   getRuntimeSpec,

@@ -217,6 +217,9 @@ stateDiagram-v2
 - `turn.suspended` 只在提交之后发出。
 - 保存挂起记录时，同一个 runtime 还在等待的旧挂起项在同一个事务里作废。恢复的提交事务先核对挂起时记下的记录内容，有变化就什么都不写。
 - 恢复的 runtime 可以再次挂起。这次提交先把旧挂起项标为已处理，再保存新的；新挂起项接着同一次执行，不算放弃旧的。规则见[再次挂起](../reference/api.md#再次挂起)。
+- function 挂起时，成功的递归子调用及其所有后代随 continuation 保存。它们的计算结果保持成功，领域写入、日志、trigger 和输出导出暂不提交；最后一次恢复成功时按子先父后的顺序提交同一个原子单元，不重跑保存的 handler 或 Hook。再次挂起只转移保存的工作。
+- 子调用先前发出的成功是计算结果。保存挂起项之后，内核按原来的 `(turnId, runtimeId, runId)` 追加 `suspended` 生命周期修正，并让这些调用自己的任务等待。恢复失败或提交回滚时追加失败；之后重试提交成功可修正为成功，再次挂起则恢复等待，放弃、过期或作废则取消。原有 trace 保留为历史。独立调用即使 runtime 相同，也不跟着改变状态。
+- continuation 保存当前挂起的 run 和整条链的任务所有者。进度记录的内核元数据保留调用身份及收尾来源，插件不能伪造；因此恢复可以修正内核上一次写下的失败，而不会复活插件明确报告的失败或取消。任务的公共去重身份和根进度范围不变。
 - 自动快照在全部提案提交后才拍，保证对话位置、角色、状态和插件数据属于同一个已提交的回合。
 - `execution.completed.committed` 是客户端的终态信号：前端据此确认或撤回它先显示出来的内容。
 - 提交之后的事件发布逐个独立进行，任何一个失败都不回滚已经写入的数据。失败时宿主记一条 `commit.fanout.failed` trace，让该会话的订阅流收到 `system.reset`（`reason: "publish-failed"`）后完整重读，并在 `execution.completed` 上带 `resync: true`。
@@ -1072,7 +1075,7 @@ turn_messages (canonical 追加式执行日志):
 - `block.emitted`
 - `hook.fired` / `hook.rewrote` / `hook.aborted`
 
-runtime 的生命周期事件（`turn.started`、`turn.completed`、`runtime.started`、`runtime.completed`、`runtime.failed`）仍由 `TraceRecorder` 写入，两套机制并存。
+runtime 的生命周期事件由 `TraceRecorder` 写入，恢复入口也记录开始和终态。保存的递归工作在提交或退出挂起之后追加同一 run 的有效状态修正，先持久化，再送到订阅客户端和发起动作的流，每条流只转发一次。修正不重新提交提案、不执行 Hook，也不增加子调用的插件故障计数。
 
 流式的叙事增量不保存。每个 runtime 只保存最终的那条 `message.completed`，这样表不会膨胀。
 

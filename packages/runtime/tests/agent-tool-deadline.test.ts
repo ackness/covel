@@ -300,6 +300,10 @@ describe("agent tool deadline", () => {
                 resumeSchema: {},
                 createdAt: new Date().toISOString(),
                 pendingContinuation: {
+                  lifecycle: {
+                    runId: "suspended-run",
+                    progressRunId: "suspended-run",
+                  },
                   readScopes: [],
                   takenUnder: {
                     playerTurns: 0,

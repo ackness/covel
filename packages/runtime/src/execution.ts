@@ -59,6 +59,7 @@ import { collectSetupRan } from "./turn-executor/setup-run.js";
 import {
   countPlayerTurns,
   hasPendingSibling,
+  settleFailedResumeJobs,
 } from "./resume/suspension-settlement.js";
 import { suspensionProgressScopeId } from "./resume/suspension-progress-scope.js";
 import type { ServiceCallOutcome } from "./plugin-services.js";
@@ -95,6 +96,8 @@ export interface ExecutionCommitPlan extends Pick<
   | "readBaselines"
   | "presentationStates"
   | "progressScopeId"
+  | "progressAttemptId"
+  | "resumedSuspension"
 > {
   readonly outputSchemas: Readonly<Record<string, Schema>>;
   readonly subagentRuns?: readonly SubagentRunOutcome[];
@@ -367,6 +370,8 @@ export async function executeTurn(
         // A resume has no upstream in its execution, so it carries none.
         readDependencies: collectExecutionReadDependencies(turn),
         readBaselines: collectReadBaselines(results),
+        progressAttemptId:
+          deps.progressAttemptId ?? turn.executionContext.executionId,
         suspensionRuns: collectExecutionSuspensionRuns(turn),
         runtimeTriggers: collectExecutionTriggers(turn),
         runtimeTriggerRuns: collectExecutionTriggerRuns(turn),
@@ -499,6 +504,7 @@ export async function resumeSuspendedRuntime(
     locale: deps.hookScope?.locale ?? suspension.pendingContinuation.locale,
   };
   const initialDelegation = delegation.snapshot();
+  const progressAttemptId = crypto.randomUUID();
   let result: RuntimeResult;
   try {
     result = await observeServices(() =>
@@ -507,11 +513,20 @@ export async function resumeSuspendedRuntime(
           suspension,
           resumeData,
           manifest,
-          { ...captured.deps, hookScope, subagents, serviceOutcomes },
+          {
+            ...captured.deps,
+            hookScope,
+            subagents,
+            serviceOutcomes,
+            progressAttemptId,
+          },
           { ...options, userSettings },
         ),
       ),
     );
+  } catch (error) {
+    await settleFailedResumeJobs(deps, suspension, progressAttemptId);
+    throw error;
   } finally {
     await persistDelegationSnapshot(
       deps.store,
@@ -520,6 +535,8 @@ export async function resumeSuspendedRuntime(
       initialDelegation,
     );
   }
+  if (result.status !== "success" && result.status !== "suspended")
+    await settleFailedResumeJobs(deps, suspension, progressAttemptId);
   const inherited = suspension.pendingContinuation.executionContext;
   // The scope its tasks report under, which a nested child's suspension
   // keeps apart from its execution identity.
@@ -574,6 +591,10 @@ export async function resumeSuspendedRuntime(
       pendingContinuation: {
         ...continuation,
         delegation: delegation.snapshot(),
+        lifecycle: {
+          ...continuation.lifecycle,
+          progressRunId: suspension.pendingContinuation.lifecycle.progressRunId,
+        },
         executionContext: inherited,
         ...(progressScopeId !== inherited.executionId
           ? { progressScopeId }
@@ -661,6 +682,8 @@ export async function resumeSuspendedRuntime(
         },
         ...(setup.setupRan ? { setupRan: setup.setupRan } : {}),
         resolvedSuspensionId: suspension.id,
+        resumedSuspension: suspension,
+        progressAttemptId,
         writeBaseline: suspension.pendingContinuation.takenUnder.writes,
         // Every leg reports progress under the suspended execution; this
         // leg's own identity stays in `executionContext`.

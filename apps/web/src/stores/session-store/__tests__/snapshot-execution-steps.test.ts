@@ -309,3 +309,33 @@ it.each([
     ).toEqual(shown);
   },
 );
+
+it.each(["success", "failed", "skipped"])(
+  "recovers a saved child's %s correction without changing its independent twin",
+  (status) => {
+    const original = buildSnapshotExecutionSteps([
+      event("runtime.completed", { runId: "child", status: "success" }),
+      event("runtime.completed", { runId: "top", status: "success" }),
+    ]);
+    const held = reconcileExecutionSteps(original, [
+      event("runtime.completed", { runId: "child", status: "suspended" }),
+    ]);
+    const correction = event(
+      status === "failed"
+        ? "runtime.failed"
+        : status === "skipped"
+          ? "runtime.skipped"
+          : "runtime.completed",
+      { runId: "child", status, reason: "suspension-abandoned" },
+    );
+    const recovered = reconcileExecutionSteps(held, [correction]);
+    expect(recovered).toEqual([
+      expect.objectContaining({
+        runId: "child",
+        status: status === "success" ? "completed" : status,
+      }),
+      expect.objectContaining({ runId: "top", status: "completed" }),
+    ]);
+    expect(reconcileExecutionSteps(recovered, [correction])).toEqual(recovered);
+  },
+);

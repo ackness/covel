@@ -118,6 +118,7 @@ export interface PluginRuntimeContextOptions {
    * has no `agents`.
    */
   readonly runId?: string;
+  readonly progressRunId?: string;
   /** Domain writes collect here and commit with the execution. */
   readonly writeBuffer: ExecutionWriteBuffer;
   /**
@@ -184,6 +185,7 @@ async function createOrdinaryPluginRuntimeContext({
   pluginDataVisibility,
   recursionDepth,
   runId,
+  progressRunId,
   operations,
 }: PluginRuntimeContextOptions): Promise<PluginRuntimeContext> {
   const helperCtx: HandlerHelperContext = {
@@ -252,6 +254,10 @@ async function createOrdinaryPluginRuntimeContext({
         progressScopeId: executionId ?? input.turnId,
         pluginId: manifest.pluginId,
         runtimeId: manifest.name,
+        ownership: {
+          runId: progressRunId ?? runId ?? executionContext.executionId,
+          attemptId: deps.progressAttemptId ?? executionContext.executionId,
+        },
         // Canonicalize + ownership-check MediaRefs in job `data` reports.
         ...(deps.mediaStore ? { mediaStore: deps.mediaStore } : {}),
       })

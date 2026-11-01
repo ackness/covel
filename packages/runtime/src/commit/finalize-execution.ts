@@ -135,7 +135,13 @@ import {
   registerDimensionSettlements,
 } from "./dimension-finalization.js";
 import { droppedUpstream, settleDroppedInputs } from "./commit-dependencies.js";
-import { nestedRuntimesOf } from "../resume/suspended-nested-results.js";
+import { jobOwnership } from "../job-status/job-ownership.js";
+import {
+  correctSavedLifecycle,
+  correctRuntimeLifecycle,
+  savedMembers,
+  type SavedLifecycleDeps,
+} from "../resume/suspended-lifecycle.js";
 import { flushPostCommit } from "./post-commit-fanout.js";
 import {
   datasetPolicyResolver,
@@ -170,10 +176,13 @@ export interface FinalizeExecutionArgs {
    * The progress scope this execution's jobs were reported under, when it is
    * not `executionContext.executionId`: a resume continues the suspended
    * execution's scope. Only the jobs of runtimes in `results` are settled
-   * there, and a rolled-back commit leaves them waiting for input, since the
-   * suspension stays open for a retry.
+   * there. A failed attempt fails its owned tasks while retaining the
+   * suspension and buffered writes for retry.
    */
   readonly progressScopeId?: string;
+  readonly progressAttemptId?: string;
+  readonly resumedSuspension?: SuspensionRecord;
+  readonly onRuntimeCorrection?: SavedLifecycleDeps["onRuntimeCorrection"];
   /**
    * Manifests for every runtime that may appear in `results`, used to resolve
    * each result's `outputKind` / `capabilities` and (by default) the hook
@@ -604,8 +613,8 @@ function emitCommittedSuspension(
  * reporting runtime with no result at all (a child whose parent failed) is
  * cancelled.
  * In a continued scope (a resume) only the jobs of the runtimes this
- * execution ran are settled, and a rollback returns them, including a
- * claimed success whose writes did not land, to waiting for input.
+ * execution owns are settled. A rollback fails them, including claimed
+ * successes, and a later retry can correct framework-owned failures.
  * Job-status is append-only and non-transactional by design, so a failure here
  * is logged and never re-opens the domain outcome.
  */
@@ -622,74 +631,76 @@ async function terminalizeExecutionJobs(
       progressScopeId: scopeId,
     });
     if (reported.length === 0) return;
-    // Jobs name a runtime, not a run. When a runtime ran both nested and at
-    // top level, its top-level run decides.
     const settled = applyIsolatedRuntimes(
       args.results,
       outcome.isolatedRuntimes,
     );
-    const roots = new Set(
-      commitUnitsOf(args.results, args.commitUnits).map((unit) => unit.root),
-    );
-    const statusByRuntime = new Map<string, string>();
-    for (const preferRoot of [false, true])
-      args.results.forEach((result, index) => {
-        if (roots.has(result) === preferRoot)
-          statusByRuntime.set(result.runtimeId, settled[index]!.status);
-      });
-    // A suspended runtime's `ctx.recursiveCall` children are not among the
-    // results: their saved results wait inside its suspension. Their tasks
-    // follow the runtime that holds them, its own entry staying first.
+    const outcomes = new Map<string, ExecutionJobOutcome>();
+    const key = (pluginId: string, runtimeId: string, runId: string) =>
+      JSON.stringify([pluginId, runtimeId, runId]);
+    for (const result of settled)
+      outcomes.set(
+        key(result.pluginId, result.runtimeId, result.runId),
+        jobOutcomeForResult(result.status),
+      );
+    const root = settled.at(-1);
+    if (args.resumedSuspension && root) {
+      for (const member of savedMembers(args.resumedSuspension))
+        outcomes.set(
+          key(member.pluginId, member.runtimeId, member.progressRunId),
+          jobOutcomeForResult(root.status),
+        );
+    }
     for (const suspension of args.suspensions ?? []) {
-      const holder = statusByRuntime.get(suspension.runtimeId);
-      if (holder === undefined) continue;
-      for (const { runtimeId } of nestedRuntimesOf(suspension))
-        if (!statusByRuntime.has(runtimeId))
-          statusByRuntime.set(runtimeId, holder);
+      const holder = settled.find(
+        (result) =>
+          result.runId === suspension.pendingContinuation.lifecycle.runId,
+      );
+      if (!holder) continue;
+      for (const member of savedMembers(suspension))
+        outcomes.set(
+          key(member.pluginId, member.runtimeId, member.progressRunId),
+          jobOutcomeForResult(holder.status),
+        );
     }
-    const groups = new Map<
-      string,
-      { pluginId: string; runtimeId: string; jobIds: Set<string> }
-    >();
-    for (const record of reported) {
-      const key = `${record.pluginId}\u0000${record.runtimeId}`;
-      const group = groups.get(key) ?? {
-        pluginId: record.pluginId,
-        runtimeId: record.runtimeId,
-        jobIds: new Set<string>(),
-      };
-      group.jobIds.add(record.jobId);
-      groups.set(key, group);
-    }
-    for (const group of groups.values()) {
-      // A continued scope also holds jobs of runtimes that ran in the
-      // suspended execution and were settled by its own commit.
-      if (continued && !statusByRuntime.has(group.runtimeId)) continue;
+    const latest = new Map<string, (typeof reported)[number]>();
+    for (const row of reported)
+      latest.set(JSON.stringify([row.pluginId, row.runtimeId, row.jobId]), row);
+    for (const row of latest.values()) {
+      const owner = jobOwnership(row);
+      // Direct kernel reporters without invocation correlation retain their
+      // explicit runtime identity. Plugin contexts always provide ownership.
+      const memberOutcome = owner
+        ? outcomes.get(key(row.pluginId, row.runtimeId, owner.runId))
+        : settled.find(
+            (result) =>
+              result.pluginId === row.pluginId &&
+              result.runtimeId === row.runtimeId,
+          )?.status;
+      if (
+        continued &&
+        memberOutcome === undefined &&
+        owner?.attemptId !== args.progressAttemptId
+      )
+        continue;
       const rolledBack = status === "failed";
-      // A runtime that reported jobs and has no result here was a
-      // `ctx.recursiveCall` child of a parent that did not succeed: its work
-      // was not committed and nobody failed it, so a success it claimed is
-      // taken back too.
-      const discarded = !rolledBack && !statusByRuntime.has(group.runtimeId);
-      const outcome: ExecutionJobOutcome = rolledBack
-        ? continued
-          ? "suspended"
-          : "failed"
-        : statusByRuntime.has(group.runtimeId)
-          ? jobOutcomeForResult(statusByRuntime.get(group.runtimeId))
-          : "skipped";
+      const discarded = memberOutcome === undefined;
       await finalizeJobStatuses(
         {
           store: args.store,
-          ...(args.eventBus ? { eventBus: args.eventBus } : {}),
+          eventBus: args.eventBus,
           sessionId: args.sessionId,
           progressScopeId: scopeId,
-          pluginId: group.pluginId,
-          runtimeId: group.runtimeId,
+          pluginId: row.pluginId,
+          runtimeId: row.runtimeId,
         },
         {
-          outcome,
-          reportedJobs: [...group.jobIds],
+          outcome: rolledBack
+            ? "failed"
+            : discarded
+              ? "skipped"
+              : jobOutcomeForResult(memberOutcome),
+          reportedJobs: [row.jobId],
           rolledBack: rolledBack || discarded,
         },
       );
@@ -907,7 +918,11 @@ export async function finalizeExecution(
     for (const older of voided) {
       deferPostCommit(async () => {
         await settleAbandonedSuspensionJobs(
-          { store, ...(eventBus ? { eventBus } : {}) },
+          {
+            store,
+            ...(eventBus ? { eventBus } : {}),
+            onRuntimeCorrection: args.onRuntimeCorrection,
+          },
           older,
         );
         await settleAbandonedSetupAttempt(
@@ -1137,6 +1152,59 @@ export async function finalizeExecution(
       );
     }
     await terminalizeExecutionJobs(args, outcome);
+    const lifecycleCorrections: (() => Promise<void>)[] = [];
+    if (args.resumedSuspension) {
+      const resumed = applyIsolatedRuntimes(
+        args.results,
+        outcome.isolatedRuntimes,
+      ).at(-1);
+      const effectiveStatus =
+        outcome.status === "failed"
+          ? "failed"
+          : jobOutcomeForResult(resumed?.status);
+      const suspension = args.resumedSuspension;
+      lifecycleCorrections.push(() =>
+        correctSavedLifecycle(args, suspension, effectiveStatus),
+      );
+      const invocation = args.results.at(-1);
+      if (invocation && invocation.status !== effectiveStatus)
+        lifecycleCorrections.push(() =>
+          correctRuntimeLifecycle(
+            args,
+            args.sessionId,
+            invocation,
+            effectiveStatus,
+          ),
+        );
+    }
+    for (const suspension of args.suspensions ?? []) {
+      const holder = applyIsolatedRuntimes(
+        args.results,
+        outcome.isolatedRuntimes,
+      ).find(
+        (result) =>
+          result.runId === suspension.pendingContinuation.lifecycle.runId,
+      );
+      lifecycleCorrections.push(() =>
+        correctSavedLifecycle(
+          args,
+          suspension,
+          outcome.status === "failed"
+            ? "failed"
+            : jobOutcomeForResult(holder?.status),
+          outcome.status === "failed" || holder?.status !== "suspended",
+        ),
+      );
+    }
+    if (
+      await flushPostCommit(lifecycleCorrections, {
+        sessionId,
+        label: "saved-lifecycle",
+        eventBus: args.eventBus,
+        emitter,
+      })
+    )
+      outcome = { ...outcome, fanOutFailed: true };
     if (args.setupRan && args.setupRan.length > 0) {
       try {
         await settleSetupRuntimes({

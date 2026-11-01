@@ -632,6 +632,7 @@ describe("suspension terminal", () => {
         reason: "input",
         resumeSchema: { type: "object" },
         pendingContinuation: {
+          lifecycle: { runId: result.runId, progressRunId: result.runId },
           readScopes: [],
           messages: [],
           toolCallsSoFar: [],
@@ -647,6 +648,7 @@ describe("suspension terminal", () => {
         createdAt: expect.any(String),
       });
       expect(Object.keys(record!.pendingContinuation)).toEqual([
+        "lifecycle",
         "readScopes",
         "messages",
         "toolCallsSoFar",
@@ -702,6 +704,7 @@ describe("suspension terminal", () => {
         reason: "input",
         resumeSchema: {},
         pendingContinuation: {
+          lifecycle: { runId: result.runId, progressRunId: result.runId },
           readScopes: [],
           messages: [
             { role: "system", content: expect.any(String) },
@@ -736,6 +739,7 @@ describe("suspension terminal", () => {
       });
       // `partialContent` is present as undefined when the model sent none.
       expect(Object.keys(record!.pendingContinuation)).toEqual([
+        "lifecycle",
         "readScopes",
         "messages",
         "partialContent",
@@ -809,6 +813,7 @@ describe("resume terminals", () => {
       resumeSchema: {},
       createdAt: new Date().toISOString(),
       pendingContinuation: {
+        lifecycle: { runId: "suspended-run", progressRunId: "suspended-run" },
         readScopes: [],
         takenUnder: { playerTurns: 0, pluginVersion: "1.0.0", writes: [] },
         executionContext: {

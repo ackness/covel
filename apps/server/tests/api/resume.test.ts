@@ -162,6 +162,7 @@ async function createSuspension(
       required: ["name"],
     },
     pendingContinuation: {
+      lifecycle: { runId: "suspended-run", progressRunId: "suspended-run" },
       readScopes: [],
       takenUnder: overrides?.takenUnder ?? {
         playerTurns: 0,
@@ -1377,7 +1378,7 @@ describe("Resume Routes", () => {
           body: JSON.stringify({ data: { name: "Alice" } }),
         });
 
-      it("waits for input after the handler fails, and the retry settles it", async () => {
+      it("fails progress after the handler fails, and the retry settles it", async () => {
         vi.spyOn(console, "error").mockImplementation(() => {});
         await createSuspension(store, { executionContext: scope });
         const app = appWith(async () => {
@@ -1391,8 +1392,8 @@ describe("Resume Routes", () => {
           (await store.getSuspension("susp-1"))?.resolvedAt,
         ).toBeUndefined();
         expect(await latestStates()).toEqual({
-          working: "waiting-input",
-          claimed: "waiting-input",
+          working: "failed",
+          claimed: "failed",
         });
 
         expect((await resume(app)).status).toBe(200);
@@ -1402,7 +1403,7 @@ describe("Resume Routes", () => {
         });
       });
 
-      it("waits for input after the handler times out, and an abandon cancels it", async () => {
+      it("fails progress after the handler times out, and an abandon cancels it", async () => {
         vi.spyOn(console, "error").mockImplementation(() => {});
         await createSuspension(store, { executionContext: scope });
         const app = appWith(() => new Promise<never>(() => {}));
@@ -1414,8 +1415,8 @@ describe("Resume Routes", () => {
           (await store.getSuspension("susp-1"))?.resolvedAt,
         ).toBeUndefined();
         expect(await latestStates()).toEqual({
-          working: "waiting-input",
-          claimed: "waiting-input",
+          working: "failed",
+          claimed: "failed",
         });
 
         const abandoned = await app.request(

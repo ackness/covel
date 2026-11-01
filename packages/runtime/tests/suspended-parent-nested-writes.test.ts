@@ -618,7 +618,7 @@ describe("progress of a suspended parent's nested calls", () => {
     expect((await states(f, "child-job")).at(-1)).toBe("failed");
   });
 
-  it("stay waiting for input when a resume fails and the suspension stays open", async () => {
+  it("fail with an unsuccessful resume while the suspension stays open", async () => {
     const f = await fixture({ child: reportingChild() });
     expect(await f.store.claimSuspension(f.suspension!.id)).not.toBeNull();
     const failing = {
@@ -641,7 +641,15 @@ describe("progress of a suspended parent's nested calls", () => {
       { activeRuntimes: f.runtimes },
     );
     expect(resumed.result.status).toBe("failed");
-    expect(await states(f, "child-job")).toEqual(["running", "waiting-input"]);
+    expect(await states(f, "child-job")).toEqual([
+      "running",
+      "waiting-input",
+      "failed",
+    ]);
+    const claim = (await f.store.getSuspension(f.suspension!.id))!.resolvedAt!;
+    await f.store.releaseSuspensionClaim(f.suspension!.id, claim);
+    expect((await resumeAndCommit(f)).outcome.status).toBe("committed");
+    expect((await states(f, "child-job")).at(-1)).toBe("succeeded");
   });
 
   it("end failed, and the child's suspension is never saved, when the parent's unit is dropped at commit", async () => {

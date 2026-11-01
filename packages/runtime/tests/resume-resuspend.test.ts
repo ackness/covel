@@ -469,21 +469,41 @@ describe("a function that suspends again on resume", () => {
       expect(await f.store.listPluginData(SESSION, "probe", "notes")).toEqual(
         [],
       );
-      // The suspension stays open, so its jobs wait for the retry.
+      // The failed attempt withdraws success, while the suspension stays open
+      // so a later committed retry can correct the framework-owned failure.
       expect((await pending(f)).map((record) => record.id)).toEqual([
         first!.id,
       ]);
       let states = await finalStates(f, executionId);
-      expect(states.get("asked")?.at(-1)).toBe("waiting-input");
-      expect(states.get("answered")).toEqual(["succeeded", "waiting-input"]);
+      expect(states.get("asked")).toEqual([
+        "running",
+        "waiting-input",
+        "failed",
+      ]);
+      expect(states.get("answered")).toEqual(["succeeded", "failed"]);
 
       const retried = await resumeSuspendedRuntime(first!, {}, asker, deps(), {
         activeRuntimes: [asker],
       });
       expect((await commitResume(f, retried, first!)).status).toBe("committed");
       states = await finalStates(f, executionId);
-      expect(states.get("asked")?.at(-1)).toBe("succeeded");
-      expect(states.get("answered")?.at(-1)).toBe("succeeded");
+      expect(states.get("asked")).toEqual([
+        "running",
+        "waiting-input",
+        "failed",
+        "succeeded",
+      ]);
+      expect(states.get("answered")).toEqual([
+        "succeeded",
+        "failed",
+        "succeeded",
+      ]);
+      expect(await pending(f)).toEqual([]);
+      expect(
+        (await f.store.listPluginData(SESSION, "probe", "notes")).map(
+          ({ key, value }) => ({ key, value }),
+        ),
+      ).toEqual([{ key: "answer", value: "saved" }]);
     });
 
     /**

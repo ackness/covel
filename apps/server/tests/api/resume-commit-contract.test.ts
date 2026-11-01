@@ -89,6 +89,7 @@ describe("resume commit composition", () => {
         resumeSchema: {},
         createdAt: now,
         pendingContinuation: {
+          lifecycle: { runId: "suspended-run", progressRunId: "suspended-run" },
           readScopes: [],
           takenUnder: { playerTurns: 0, pluginVersion: "1.0.0", writes: [] },
           executionContext: {
@@ -288,6 +289,7 @@ describe("resume commit composition", () => {
         resumeSchema: {},
         createdAt: now,
         pendingContinuation: {
+          lifecycle: { runId: "suspended-run", progressRunId: "suspended-run" },
           readScopes: [],
           takenUnder: { playerTurns: 0, pluginVersion: "1.0.0", writes: [] },
           executionContext: {

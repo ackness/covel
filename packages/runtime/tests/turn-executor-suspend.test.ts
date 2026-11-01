@@ -967,6 +967,7 @@ describe("resumeRuntimePipeline", () => {
         required: ["name"],
       },
       pendingContinuation: {
+        lifecycle: { runId: "suspended-run", progressRunId: "suspended-run" },
         readScopes: [],
         takenUnder: { playerTurns: 0, pluginVersion: "1.0.0", writes: [] },
         executionContext: {
@@ -1304,6 +1305,7 @@ describe("resumeRuntimePipeline", () => {
     // The transcript of a runtime that ran after this turn's story: the
     // player's message and the cue after the story are both of this turn.
     const continuation = (currentTurnUserMessages?: number) => ({
+      lifecycle: { runId: "suspended-run", progressRunId: "suspended-run" },
       readScopes: [],
       takenUnder: { playerTurns: 0, pluginVersion: "1.0.0", writes: [] },
       executionContext: {
@@ -1681,6 +1683,7 @@ describe("resumeRuntimePipeline", () => {
       reason: "Function suspend",
       resumeSchema: {},
       pendingContinuation: {
+        lifecycle: { runId: "suspended-run", progressRunId: "suspended-run" },
         readScopes: [],
         takenUnder: { playerTurns: 0, pluginVersion: "1.0.0", writes: [] },
         messages: [{ role: "system", content: "system prompt" }],

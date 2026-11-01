@@ -185,6 +185,7 @@ export function settledSuspensionContinuation(
   const { executionContext, takenUnder, locale, logicalTurn, turnNumber } =
     continuation;
   return {
+    lifecycle: continuation.lifecycle,
     messages: [],
     toolCallsSoFar: [],
     pendingProposals: [],
@@ -293,6 +294,11 @@ export interface SuspensionRecord {
    * {@link settledSuspensionContinuation} keeps.
    */
   readonly pendingContinuation: {
+    /** Original suspended run and the task owner retained across resume attempts. */
+    readonly lifecycle: {
+      readonly runId: string;
+      readonly progressRunId: string;
+    };
     readonly delegation?: import("@covel/shared").DelegationSnapshot;
     /** Full LLMMessage[] up to the suspend point. */
     readonly messages: readonly unknown[];

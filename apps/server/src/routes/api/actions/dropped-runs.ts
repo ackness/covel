@@ -19,10 +19,8 @@ export type DroppedRunPayload = {
 
 /**
  * Corrections for runs already streamed as completed whose writes were
- * dropped at commit, top-level or nested. The client keeps one step per
- * runtime in a turn, so a dropped nested run is not reported while a
- * top-level run of the same runtime committed: its correction would mark
- * the run that did commit as failed.
+ * dropped at commit, top-level or nested. Corrections address the original
+ * run, including when an independent invocation of that runtime committed.
  */
 export function droppedRunPayloads(
   result: {
@@ -38,18 +36,9 @@ export function droppedRunPayloads(
     item.runId !== undefined
       ? run.runId === item.runId
       : run.runtimeId === item.runtimeId;
-  const droppedRuns = new Set(
-    runs.filter((run) => isolated.some((item) => matches(run, item))),
-  );
   return isolated.flatMap((item) => {
     const dropped = runs.find((run) => matches(run, item));
     if (!dropped) return [];
-    const shadowsCommittedRun =
-      !topLevel.includes(dropped) &&
-      topLevel.some(
-        (run) => run.runtimeId === dropped.runtimeId && !droppedRuns.has(run),
-      );
-    if (shadowsCommittedRun) return [];
     const payload: DroppedRunPayload = {
       runtimeId: dropped.runtimeId,
       pluginId: dropped.pluginId,

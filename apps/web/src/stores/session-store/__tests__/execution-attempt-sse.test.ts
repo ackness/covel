@@ -460,3 +460,72 @@ it("still reports a failed nested run of the runtime after a later resume succee
     )?.steps,
   ).toEqual([expect.objectContaining({ runId: "nested", status: "failed" })]);
 });
+
+it.each([
+  ["success", "completed"],
+  ["failed", "failed"],
+  ["skipped", "skipped"],
+] as const)(
+  "corrects one held child to %s while preserving its independent twin",
+  (status, expected) => {
+    const h = harness(false);
+    h.send("runtime.started", { runId: "top" });
+    h.send("runtime.started", { runId: "saved-child" });
+    h.send("runtime.completed", { runId: "top", status: "success" });
+    h.send("runtime.completed", { runId: "saved-child", status: "success" });
+    h.send("runtime.completed", { runId: "saved-child", status: "suspended" });
+    const event =
+      status === "failed"
+        ? "runtime.failed"
+        : status === "skipped"
+          ? "runtime.skipped"
+          : "runtime.completed";
+    const payload = {
+      runId: "saved-child",
+      status,
+      ...(status === "failed" ? { error: "Saved work could not commit" } : {}),
+      ...(status === "skipped" ? { reason: "suspension-abandoned" } : {}),
+    };
+    h.send(event, payload);
+    h.send(event, payload);
+    expect(
+      h.getState().executionSteps.filter((step) => step.turnId === "attempt"),
+    ).toEqual([
+      expect.objectContaining({ runId: "top", status: "completed" }),
+      expect.objectContaining({ runId: "saved-child", status: expected }),
+    ]);
+    const steps = projectExecutionTurns(
+      [],
+      h.getState().executionSteps,
+    ).turns.find((turn) => turn.turnId === "attempt")?.steps;
+    expect(steps).toHaveLength(1);
+    expect(steps?.[0]?.status).toBe(
+      status === "skipped" ? "completed" : expected,
+    );
+  },
+);
+
+it("applies a dropped nested run correction despite a committed same-runtime top-level run", () => {
+  const h = harness(false);
+  h.send("runtime.started", { runId: "top" });
+  h.send("runtime.started", { runId: "child" });
+  h.send("runtime.completed", { runId: "child", status: "success" });
+  h.send("runtime.completed", { runId: "top", status: "success" });
+  for (let i = 0; i < 2; i++)
+    h.send("runtime.failed", {
+      runId: "child",
+      status: "failed",
+      error: "Commit rejected",
+    });
+  expect(
+    h.getState().executionSteps.filter((step) => step.turnId === "attempt"),
+  ).toEqual([
+    expect.objectContaining({ runId: "top", status: "completed" }),
+    expect.objectContaining({ runId: "child", status: "failed" }),
+  ]);
+  expect(
+    projectExecutionTurns([], h.getState().executionSteps).turns.find(
+      (turn) => turn.turnId === "attempt",
+    )?.steps,
+  ).toEqual([expect.objectContaining({ runId: "child", status: "failed" })]);
+});
