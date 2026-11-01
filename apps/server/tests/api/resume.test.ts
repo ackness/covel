@@ -1,3 +1,4 @@
+import { submittedOutput } from "../helpers/output-submission.js";
 /**
  * Tests for the suspend/resume API routes.
  *
@@ -47,6 +48,7 @@ import {
   sessionApprovalScope,
 } from "../../src/routes/api/session/session-guard.js";
 import { setSessionWorld } from "../helpers/session-world.js";
+import { suspendedAgentLoop } from "../helpers/agent-continuation.js";
 
 // ── Helpers ──────────────────────────────────────────────────────────
 
@@ -162,6 +164,10 @@ async function createSuspension(
       required: ["name"],
     },
     pendingContinuation: {
+      loop: suspendedAgentLoop({
+        manifest: TEST_MANIFEST,
+        promptTemplate: "Test prompt",
+      }),
       lifecycle: { runId: "suspended-run", progressRunId: "suspended-run" },
       readScopes: [],
       takenUnder: overrides?.takenUnder ?? {
@@ -177,6 +183,11 @@ async function createSuspension(
       },
       messages: [
         { role: "system", content: "You are a test agent." },
+        {
+          role: "assistant",
+          content: "",
+          toolCalls: [{ id: "tc-suspend-1", name: "suspend", arguments: "{}" }],
+        },
         {
           role: "tool",
           content: JSON.stringify({ suspended: true }),
@@ -203,12 +214,11 @@ async function createSuspension(
 // Default LLM that returns a simple narrative on resume
 function makeDefaultLLM() {
   return {
-    generate: async () => ({
-      content: '{"narrativeOutput": "Resume complete."}',
-      toolCalls: [],
-      finishReason: "stop",
-      usage: { inputTokens: 5, outputTokens: 5 },
-    }),
+    generate: async () =>
+      submittedOutput(
+        { narrativeOutput: "Resume complete." },
+        { inputTokens: 5, outputTokens: 5 },
+      ),
   };
 }
 
@@ -768,12 +778,10 @@ describe("Resume Routes", () => {
               usage: { inputTokens: 1, outputTokens: 1 },
             };
           }
-          return {
-            content: '{"narrativeOutput": "done"}',
-            toolCalls: [],
-            finishReason: "stop",
-            usage: { inputTokens: 1, outputTokens: 1 },
-          };
+          return submittedOutput(
+            { narrativeOutput: "done" },
+            { inputTokens: 1, outputTokens: 1 },
+          );
         },
       };
 
@@ -797,8 +805,11 @@ describe("Resume Routes", () => {
       );
 
       expect(res.status).toBe(200);
-      // The resumed plugin's own PreToolUse hook fired — it was in hook scope.
-      expect(preToolUse).toHaveBeenCalledTimes(1);
+      // The resumed plugin's own hook sees the business call and the submission.
+      expect(preToolUse).toHaveBeenCalledTimes(2);
+      expect(
+        preToolUse.mock.calls.map(([, payload]) => payload.toolCall.name),
+      ).toEqual(["noop", "submit-output"]);
     });
 
     it("does not reactivate a plugin disabled after suspension", async () => {
@@ -1180,12 +1191,10 @@ describe("Resume Routes", () => {
                       finishReason: "tool_calls",
                       usage: { inputTokens: 5, outputTokens: 5 },
                     }
-                  : {
-                      content: '{"narrativeOutput": "Resume complete."}',
-                      toolCalls: [],
-                      finishReason: "stop",
-                      usage: { inputTokens: 5, outputTokens: 5 },
-                    },
+                  : submittedOutput(
+                      { narrativeOutput: "Resume complete." },
+                      { inputTokens: 5, outputTokens: 5 },
+                    ),
             },
             // The real executor, so the builtin suspend tool runs as usual.
             toolExecutor: createToolExecutor({
@@ -2054,12 +2063,10 @@ describe("Resume Routes", () => {
         await suspensionWritingStage();
         const generate = vi.fn(async () => {
           await store.setPluginData(row("stage", { step: "manual" }));
-          return {
-            content: '{"narrativeOutput": "Resume complete."}',
-            toolCalls: [],
-            finishReason: "stop",
-            usage: { inputTokens: 5, outputTokens: 5 },
-          };
+          return submittedOutput(
+            { narrativeOutput: "Resume complete." },
+            { inputTokens: 5, outputTokens: 5 },
+          );
         });
         const app = createTestApp(
           makeDefaultDeps(store, { llmAdapter: { generate } as never }),

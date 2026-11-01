@@ -1,3 +1,7 @@
+import {
+  submittedOutput,
+  completedBusinessOutput,
+} from "../helpers/output-submission.js";
 import { DIMENSION_SETTLEMENT_NAMESPACE } from "@covel/shared";
 /**
  * E2E test: Complete narrator game flow through the API.
@@ -107,7 +111,11 @@ class MockNarratorLLM implements LLMAdapter {
     const updateTool = params.tools?.find(
       (tool) => tool.name.includes("update") && tool.name.includes("dimension"),
     );
-    if (updateTool && this.dimensionUpdates)
+    if (
+      updateTool &&
+      this.dimensionUpdates &&
+      !completedBusinessOutput(params.messages, updateTool.name)
+    )
       return {
         content: null,
         toolCalls: [
@@ -127,12 +135,17 @@ class MockNarratorLLM implements LLMAdapter {
     const userMsg = userMsgs[userMsgs.length - 1];
     const playerAction = userMsg?.content ?? "未知操作";
 
-    return {
-      content: `你${playerAction}。空气中弥漫着潮湿的泥土气息，远处传来隐约的脚步声。你紧握手中的武器，警惕地环顾四周。一道微弱的光芒从前方的裂缝中透出，似乎在引导你前行。`,
-      toolCalls: [],
-      finishReason: "stop",
-      usage: { inputTokens: 200, outputTokens: 80 },
-    };
+    return submittedOutput(
+      {
+        segments: [
+          {
+            kind: "narration",
+            text: `你${playerAction}。空气中弥漫着潮湿的泥土气息，远处传来隐约的脚步声。你紧握手中的武器，警惕地环顾四周。一道微弱的光芒从前方的裂缝中透出，似乎在引导你前行。`,
+          },
+        ],
+      },
+      { inputTokens: 200, outputTokens: 80 },
+    );
   }
 }
 

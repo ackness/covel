@@ -1,3 +1,4 @@
+import { submittedOutput } from "../helpers/output-submission.js";
 /**
  * Write-service operations at commit on real PostgreSQL.
  *
@@ -465,15 +466,14 @@ describe.skipIf(!isolatedUrl)("write-service operations on real PG", () => {
     subagentOnly: true,
     outputContract: "character-actor@1",
   };
-  const actorAnswer = () => ({
-    content: JSON.stringify({
-      segments: [{ kind: "dialogue", text: "I will pay." }],
-      intent: "PRIVATE-ACTOR-INTENT",
-    }),
-    toolCalls: [],
-    finishReason: "stop" as const,
-    usage: { inputTokens: 1, outputTokens: 1 },
-  });
+  const actorAnswer = () =>
+    submittedOutput(
+      {
+        segments: [{ kind: "dialogue", text: "I will pay." }],
+        intent: "PRIVATE-ACTOR-INTENT",
+      },
+      { inputTokens: 1, outputTokens: 1 },
+    );
 
   it("settles a rejected character operation independently of its committed story", async () => {
     const session = "actor-operation";

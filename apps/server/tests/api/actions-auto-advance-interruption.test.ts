@@ -1,3 +1,4 @@
+import { submittedOutput } from "../helpers/output-submission.js";
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { DataStore } from "@covel/store";
@@ -520,17 +521,16 @@ it.each(["retry_runtime", "retry_failed_runtimes"])(
   async (type) => {
     const f = await advanceFixture({
       limit: 1,
-      onGenerate: async (index) => ({
-        content:
-          index % 2 === 0
-            ? null
-            : JSON.stringify({
-                segments: [{ kind: "narration", text: `Story ${index}.` }],
-                yield: "continue",
-              }),
-        toolCalls:
-          index % 2 === 0
-            ? [
+      onGenerate: async (index) =>
+        index % 2 !== 0
+          ? submittedOutput({
+              narrativeOutput: `Story ${index}.`,
+              segments: [{ kind: "narration", text: `Story ${index}.` }],
+              yield: "continue",
+            })
+          : {
+              content: null,
+              toolCalls: [
                 {
                   id: `change-${index}`,
                   name: "change",
@@ -538,11 +538,10 @@ it.each(["retry_runtime", "retry_failed_runtimes"])(
                     key: index === 0 ? "root" : "automatic",
                   }),
                 },
-              ]
-            : [],
-        finishReason: index % 2 === 0 ? "tool_calls" : "stop",
-        usage: { inputTokens: 1, outputTokens: 1 },
-      }),
+              ],
+              finishReason: "tool_calls",
+              usage: { inputTokens: 1, outputTokens: 1 },
+            },
       prepare: async (builtin, store, sessionId) => {
         await writeFile(
           join(builtin, "story", "PLUGIN.md"),

@@ -1,6 +1,9 @@
 import type { LLMMessage, LLMResponse } from "@covel/shared";
 
-export function submittedOutput(output: Record<string, unknown>): LLMResponse {
+export function submittedOutput(
+  output: Record<string, unknown>,
+  usage: LLMResponse["usage"] = { inputTokens: 10, outputTokens: 10 },
+): LLMResponse {
   return {
     content: null,
     toolCalls: [
@@ -11,7 +14,7 @@ export function submittedOutput(output: Record<string, unknown>): LLMResponse {
       },
     ],
     finishReason: "tool_calls",
-    usage: { inputTokens: 10, outputTokens: 10 },
+    usage,
   };
 }
 

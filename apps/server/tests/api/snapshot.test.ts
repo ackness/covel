@@ -1,3 +1,4 @@
+import { suspendedAgentLoop } from "../helpers/agent-continuation.js";
 /**
  * Tests for the snapshot / fork API routes.
  *
@@ -1409,6 +1410,17 @@ describe("Snapshot routes", () => {
           required: ["answer"],
         },
         pendingContinuation: {
+          loop: suspendedAgentLoop({
+            manifest: {
+              name: "test-plugin",
+              pluginId: "test-plugin",
+              description: "Snapshot fixture",
+              stage: "narrative",
+              trigger: { type: "auto" },
+              outputKind: "story",
+            },
+            promptTemplate: "sys",
+          }),
           lifecycle: { runId: "suspended-run", progressRunId: "suspended-run" },
           readScopes: [],
           takenUnder: { playerTurns: 0, pluginVersion: "0.0.0", writes: [] },
@@ -1420,6 +1432,11 @@ describe("Snapshot routes", () => {
           },
           messages: [
             { role: "system", content: "sys" },
+            {
+              role: "assistant",
+              content: "",
+              toolCalls: [{ id: "tc-1", name: "suspend", arguments: "{}" }],
+            },
             {
               role: "tool",
               content: JSON.stringify({ suspended: true }),

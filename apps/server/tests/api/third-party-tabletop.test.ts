@@ -1,3 +1,4 @@
+import { submittedOutput } from "../helpers/output-submission.js";
 import { importWorldDataForSession } from "../helpers/world-data-import.js";
 import { closeTestApi } from "../helpers/close-api.js";
 import { mkdtemp, mkdir, readFile, writeFile, cp, rm } from "node:fs/promises";
@@ -46,12 +47,12 @@ describe("tabletop package installed as a third-party ZIP", () => {
   let root: string;
   let boot: ApiBootstrapResult;
   let store: DataStore;
-  const generate = vi.fn<LLMAdapter["generate"]>(async () => ({
-    content: "The scene continues.",
-    toolCalls: [],
-    finishReason: "stop",
-    usage: { inputTokens: 1, outputTokens: 1 },
-  }));
+  const generate = vi.fn<LLMAdapter["generate"]>(async () =>
+    submittedOutput(
+      { segments: [{ kind: "narration", text: "The scene continues." }] },
+      { inputTokens: 1, outputTokens: 1 },
+    ),
+  );
 
   async function restart() {
     await closeTestApi(boot);
@@ -738,12 +739,10 @@ export default async function (ctx) {
     let expectTabletopReceipt = true;
     generate.mockImplementation(async (request) => {
       if (!request.tools?.some((tool) => tool.name === "emit-event") || !emit) {
-        return {
-          content: "The receiver responds.",
-          toolCalls: [],
-          finishReason: "stop",
-          usage: { inputTokens: 1, outputTokens: 1 },
-        };
+        return submittedOutput(
+          { segments: [{ kind: "narration", text: "The receiver responds." }] },
+          { inputTokens: 1, outputTokens: 1 },
+        );
       }
       const prompt = request.messages
         .map((message) =>
