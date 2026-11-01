@@ -15,7 +15,6 @@ import {
   useState,
   type ComponentProps,
   type ReactElement,
-  type ReactNode,
 } from "react";
 import { useTranslation } from "react-i18next";
 import { Loader2 } from "lucide-react";
@@ -68,7 +67,7 @@ import {
 } from "./stage-selectors.js";
 
 export interface StageViewProps {
-  readonly composerRegion?: ReactNode;
+  readonly composerReplaced?: boolean;
   readonly composerDraft?: { value: string; onChange: (value: string) => void };
   /** The composer's modes and character switcher, shared with the free input. */
   readonly composerModes?: ComposerModes;
@@ -316,7 +315,7 @@ export function StageView(props: StageViewProps): ReactElement {
           onAllRead={() => setReadStoryKey(storyKey)}
         />
         <StageChoices
-          hideInput={Boolean(props.composerRegion)}
+          hideInput={props.composerReplaced}
           storyReview={
             allRead && !executing && storyKey === reviewStoryKey ? (
               <LiveStageDialog
@@ -361,7 +360,6 @@ export function StageView(props: StageViewProps): ReactElement {
 
         <StageExecutionStatus {...props} />
       </div>
-      {props.composerRegion}
 
       {/* History drawer — the full parsed chat, needs a bounded flex column
           for its internal scroll viewport (flex-1 min-h-0). Retain execution

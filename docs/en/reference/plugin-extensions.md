@@ -219,6 +219,8 @@ Both ways have the same conditions:
 
 If preparation fails, the old version is kept.
 
+Without valid server-code authorization, reload publishes pending declarations and removes old registrations without importing code. It retains that reload's module generation. First activation after approval imports the entry and its relative dependencies inside the package with that generation, so an unchanged path cannot reuse an earlier module cache.
+
 Executions that are already running keep using the old version, and later executions use the new one. The old version no longer accepts new lookups. Its `onDispose()` is called only after every execution using it has finished, and after any provider promise still pending past the timeout has been released. A snapshot does not store authorization. Calls and commits still check whether authorization has been revoked.
 
 ### Sessions after a reload

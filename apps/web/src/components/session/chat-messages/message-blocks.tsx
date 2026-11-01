@@ -193,6 +193,9 @@ export function MessageBlockRenderer({
   // What the server refused on the last submit, shown under the fields.
   const [issues, setIssues] = useState<readonly FormIssue[]>([]);
   const effectiveSubmitted = submitted;
+  const blockData = (block.data ?? block) as Record<string, unknown>;
+  const isChoice =
+    block.type === "interactive_choice" || blockData.type === "choice";
 
   const initialFormState = useMemo(
     () => buildInitialFormState(block, effectiveSubmitted, submittedValues),
@@ -319,18 +322,19 @@ export function MessageBlockRenderer({
         const { turnId, interactionId } = readBlockMeta();
         const label = params.label as string;
         if (!label) return;
-        upsertInteractionDraft({
-          id: `${turnId || "choice"}:${interactionId}`,
-          turnId: turnId || "choice",
+        if (!onSubmitInteraction || !turnId) {
+          emitToast("error", t("form.missingInteraction"));
+          return;
+        }
+        setIssues([]);
+        const result = await onSubmitInteraction(
+          msg.id,
+          turnId,
           interactionId,
-          type: "choice",
-          label,
-          values: {
-            selectedId: params.choiceId,
-            selectedLabel: label,
-          },
-          sourceBlockId: msg.id,
-        });
+          "choice",
+          { selectedId: params.choiceId, selectedLabel: label },
+        );
+        if (result) setIssues(result.rejected);
       },
       selectSuggestion: async (params: Record<string, unknown>) => {
         const text = params.text as string;
@@ -401,6 +405,13 @@ export function MessageBlockRenderer({
       >
         <Renderer spec={spec} registry={covelRegistry} />
       </JSONUIProvider>
+      {isChoice && issues.length > 0 && (
+        <div role="alert" className="text-sm text-destructive">
+          {issues.map((issue, index) => (
+            <p key={index}>{issue.message}</p>
+          ))}
+        </div>
+      )}
     </fieldset>
   );
 }

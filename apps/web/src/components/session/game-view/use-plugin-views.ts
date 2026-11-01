@@ -36,10 +36,11 @@ export function usePluginViews(
     .sort()
     .join("\u001f");
   const [loaded, setLoaded] = useState<{
+    sessionId: string;
     key: string;
     entries: readonly { pluginId: string; specs: UISlotSpec[] }[];
     status: PluginViews["status"];
-  }>({ key: "", entries: [], status: "loading" });
+  }>({ sessionId: "", key: "", entries: [], status: "loading" });
   const key = JSON.stringify([sessionId, activePluginKey, language]);
   const visit = useRef(key);
   visit.current = key;
@@ -48,14 +49,24 @@ export function usePluginViews(
     async (refresh: boolean) => {
       const generation = ++request.current;
       if (!refresh)
-        setLoaded((previous) => ({ ...previous, key, status: "loading" }));
+        setLoaded((previous) => ({
+          sessionId,
+          key,
+          entries: previous.sessionId === sessionId ? previous.entries : [],
+          status: "loading",
+        }));
       try {
         const response = await fetchUiSpecs(sessionId, activePluginKey);
         if (visit.current === key && request.current === generation)
-          setLoaded({ key, entries: response.view ?? [], status: "ready" });
+          setLoaded({
+            sessionId,
+            key,
+            entries: response.view ?? [],
+            status: "ready",
+          });
       } catch (error) {
         if (!refresh && visit.current === key && request.current === generation)
-          setLoaded({ key, entries: [], status: "error" });
+          setLoaded((previous) => ({ ...previous, status: "error" }));
         if (refresh) throw error;
       }
     },
@@ -71,6 +82,7 @@ export function usePluginViews(
   const views = useMemo(
     () =>
       loaded.entries.flatMap((entry) => {
+        if (loaded.sessionId !== sessionId) return [];
         const plugin = sessionPlugins.find(
           (plugin) => plugin.id === entry.pluginId && plugin.active,
         );
@@ -95,7 +107,7 @@ export function usePluginViews(
           ];
         });
       }),
-    [loaded.entries, sessionPlugins, language],
+    [loaded.entries, loaded.sessionId, sessionId, sessionPlugins, language],
   );
   return {
     views: views.filter((entry) => entry.spec.surface !== "composer"),

@@ -185,6 +185,9 @@ async function fixture(withRuntime = false, activateEntry = true) {
     client,
     disposed,
     store,
+    approve: () => {
+      approved = true;
+    },
     revoke: () => {
       approved = false;
     },
@@ -772,6 +775,50 @@ describe("plugin generation reload", () => {
     });
     expect(f.manager.isEntryPublished(f.id)).toBe(false);
     expect(f.tools.find("value", f.id)).toBeUndefined();
+  });
+  it("loads the published module generation after deferred approval", async () => {
+    const f = await fixture();
+    const evaluations: number[] = [];
+    f.globals[f.id] = { disposed: f.disposed, evaluations };
+    const expected: number[] = [];
+    const root = await fs.realpath(f.root);
+    for (const version of [2, 3]) {
+      f.revoke();
+      await fs.writeFile(
+        path.join(f.root, "entry.mjs"),
+        `globalThis[${JSON.stringify(f.id)}].evaluations.push(${version});\n${f.source(version)}`,
+      );
+      const { generation } = await f.manager.reload(f.id, "session");
+      expect(f.manager.isEntryPublished(f.id)).toBe(false);
+      expect(f.tools.find("value", f.id)).toBeUndefined();
+      expect(evaluations).toEqual(expected);
+      await expect(
+        f.manager.ensurePluginEntry(f.id, "session"),
+      ).rejects.toThrow("requires explicit approval");
+      expect(evaluations).toEqual(expected);
+
+      f.approve();
+      await f.manager.ensurePluginEntry(f.id, "session");
+      expected.push(version);
+      expect(evaluations).toEqual(expected);
+      expect(
+        await f.client().call({
+          pluginId: f.id,
+          name: "value",
+          contract: "fixture.value@1",
+          input: null,
+        }),
+      ).toBe(version);
+
+      const entry = pathToFileURL(path.join(root, "entry.mjs"));
+      entry.searchParams.set("generation", generation);
+      const dependency = pathToFileURL(path.join(root, "lib/shared.mjs"));
+      const versioned = new URL(dependency.href);
+      versioned.searchParams.set("generation", generation);
+      expect(
+        reloadGenerationUrl("./lib/shared.mjs", entry.href, dependency.href),
+      ).toBe(versioned.href);
+    }
   });
   it("keeps locale prose in its captured generation even when the caller locale differs from the session", async () => {
     const f = await fixture(true);

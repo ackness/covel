@@ -226,64 +226,63 @@ const ChatMessagesContent = memo(function ChatMessagesContent({
     ],
   );
 
-  const renderedRows = useMessageGrouping({
+  const renderPublicMessage = (msg: StreamMessage, index: number) => {
+    if (
+      msg.role === "system" ||
+      (msg.role !== "user" &&
+        msg.kind &&
+        !["story", "plugin-message", "plugin"].includes(msg.kind))
+    )
+      return null;
+    if (
+      msg.block &&
+      ![
+        "plugin_message",
+        "ui.render",
+        "interactive_form",
+        "interactive_choice",
+        "interactive_confirmation",
+        "form",
+        "choice",
+        "confirmation",
+        "notification",
+      ].includes(String(msg.block.type))
+    )
+      return null;
+    const pending = isPendingInteractionMessage(
+      msg,
+      messages,
+      submittedBlockIds,
+    );
+    if (content === "pending")
+      return pending ? renderMessage(msg, index) : null;
+    // Only public parsed content. Message-only grouping below omits reasoning,
+    // execution details and asset administration while preserving turn rows.
+    if (pending) return null;
+    if (
+      !msg.block &&
+      msg.role !== "user" &&
+      msg.kind !== "story" &&
+      msg.kind !== "plugin-message"
+    )
+      return null;
+    return renderMessage(msg, index);
+  };
+
+  const publicRows = useMessageGrouping({
     recoveryTurnId,
-    messages: content ? [] : messages,
-    executionSteps: content ? [] : executionSteps,
+    messages,
+    executionSteps,
     showExecutionTimeline,
     executing,
     plugins,
     onRetryRuntime,
-    renderMessage,
+    renderMessage: content ? renderPublicMessage : renderMessage,
+    messagesOnly: Boolean(content),
     foldUpdates: viewMode === "parsed",
     expandUpdates: expandUpdates === true,
     expandLatestUpdates: turnNotes === "inline",
   });
-
-  const publicRows = content
-    ? messages.flatMap((msg, index) => {
-        if (
-          msg.role === "system" ||
-          (msg.role !== "user" &&
-            msg.kind &&
-            !["story", "plugin-message", "plugin"].includes(msg.kind))
-        )
-          return [];
-        if (
-          msg.block &&
-          ![
-            "plugin_message",
-            "ui.render",
-            "interactive_form",
-            "interactive_choice",
-            "interactive_confirmation",
-            "form",
-            "choice",
-            "confirmation",
-            "notification",
-          ].includes(String(msg.block.type))
-        )
-          return [];
-        const pending = isPendingInteractionMessage(
-          msg,
-          messages,
-          submittedBlockIds,
-        );
-        if (content === "pending")
-          return pending ? [renderMessage(msg, index)] : [];
-        // Only the host's parsed public messages; never execution grouping,
-        // which also draws reasoning, traces and asset administration.
-        if (pending) return [];
-        if (
-          !msg.block &&
-          msg.role !== "user" &&
-          msg.kind !== "story" &&
-          msg.kind !== "plugin-message"
-        )
-          return [];
-        return [renderMessage(msg, index)];
-      })
-    : renderedRows;
 
   return (
     <>

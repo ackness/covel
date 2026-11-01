@@ -109,25 +109,21 @@ describe("stage decision lifecycle", () => {
     expect(screen.queryByTestId("stage-dialog")).toBeNull();
     expect(screen.queryByTestId("stage-choices")).toBeNull();
   });
-  it("keeps explicit story review and extensions while an independent composer replaces stage input", () => {
-    const props = {
+  it("keeps explicit story review and extensions when the host replaces stage input", () => {
+    const props: StageViewProps = {
       ...fixture(),
       replayStoryOnEnter: true,
-      composerRegion: <textarea aria-label="Selected sandbox composer" />,
+      composerReplaced: true,
     };
     const { rerender } = render(<StageView {...props} />);
     expect(screen.getByTestId("stage-dialog")).toBeDefined();
     expect(screen.getByTestId("plugin-extension")).toBeDefined();
     expect(screen.queryByTestId("stage-decision-input")).toBeNull();
-    expect(
-      screen.getAllByRole("textbox", { name: "Selected sandbox composer" }),
-    ).toHaveLength(1);
+    expect(screen.queryByRole("textbox")).toBeNull();
     rerender(<StageView {...props} executing />);
     expect(screen.queryByTestId("stage-dialog")).toBeNull();
     expect(screen.queryByTestId("stage-choices")).toBeNull();
-    expect(
-      screen.getByRole("textbox", { name: "Selected sandbox composer" }),
-    ).toBeDefined();
+    expect(screen.queryByRole("textbox")).toBeNull();
   });
   it.each([undefined, { choices: [] }, { recap: "", choices: [] }] satisfies (
     StageChoicesModel | undefined

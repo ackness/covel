@@ -140,6 +140,7 @@ export async function createBootstrapPluginEntries(
 ): Promise<BootstrapPluginEntries> {
   const { discoveryMap, manifestCache, isCommunityServerCodeApproved } = params;
   const entryDefinitions = new Map<string, PluginEntryDefinition>();
+  const entryGenerations = new WeakMap<PluginEntryDefinition, string>();
   const scopes = new Set<PluginEntryScope>();
   const activeScopes = new Map<string, PluginEntryScope>();
   const snapshotSessions = new AsyncLocalStorage<string>();
@@ -403,10 +404,12 @@ export async function createBootstrapPluginEntries(
   ): Promise<void> => {
     const definition = entryDefinitions.get(pluginId);
     if (!definition) return;
+    const generation = entryGenerations.get(definition);
+    if (generation) trackReloadGeneration(generation, definition.pluginRoot);
     const batch = await prepareEntry(
       pluginId,
       definition,
-      undefined,
+      generation,
       sessionId,
     );
     try {
@@ -559,6 +562,8 @@ export async function createBootstrapPluginEntries(
       ]);
       await params.prepareDeclarations?.(next.entry);
       const generation = crypto.randomUUID();
+      // Deferred approval must import the same fresh graph as an approved reload.
+      entryGenerations.set(next.entryDefinition, generation);
       if (!approvedSession) {
         // Publish unapproved definitions as metadata. Old registrations must
         // disappear when a formerly declarative package gains server code.

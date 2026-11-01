@@ -25,7 +25,12 @@ test("a declarative community notebook commits without grants, retains content c
     throw new Error("Use the private community acceptance configuration");
   const script = path.join(root, "ui/page/app.js");
   const original = await readFile(script, "utf8");
-  const sentinel = path.join(path.dirname(root), "notebook-imported.txt");
+  const sentinel = path.join(
+    path.dirname(root),
+    `notebook-imported-${crypto.randomUUID()}.txt`,
+  );
+  await expect(access(path.join(root, "server"))).rejects.toThrow();
+  await expect(access(sentinel)).rejects.toThrow();
   const provider = await startFakeLlmProvider();
   provider.reply = (model) => ({
     text: "",
@@ -52,10 +57,7 @@ test("a declarative community notebook commits without grants, retains content c
       "ui.onboardedVersion": ONBOARDING_VERSION,
       "ui.locale": "en-US",
     });
-    // Cleanup removes an imported module, so watch mode may still be restarting.
-    await expect(async () => {
-      await useServerWorlds(page);
-    }).toPass({ timeout: 60_000 });
+    await useServerWorlds(page);
     const discovery = await request.get("/api/plugins");
     const { items } = await discovery.json();
     expect(items).toContainEqual(
@@ -278,11 +280,25 @@ test("a declarative community notebook commits without grants, retains content c
       expect.objectContaining({ action: `runtime:${pluginId}` }),
     );
   } finally {
-    await page.goto("about:blank");
-    if (sessionId) await request.delete(`/api/sessions/${sessionId}`);
-    await rm(path.join(root, "server"), { recursive: true, force: true });
-    await rm(sentinel, { force: true });
-    await writeFile(script, original);
-    await provider.close();
+    try {
+      if (!page.isClosed()) await page.goto("about:blank");
+      if (sessionId) await request.delete(`/api/sessions/${sessionId}`);
+    } finally {
+      try {
+        await rm(path.join(root, "server"), { recursive: true, force: true });
+        await rm(sentinel, { force: true });
+        await writeFile(script, original);
+        // Publish the restored package in the same API process before another
+        // test discovers it; file restoration alone leaves the code upgrade live.
+        const restored = await request.post(`/api/plugins/${pluginId}/reload`);
+        expect(restored.ok(), await restored.text()).toBe(true);
+        const directory = await (await request.get("/api/plugins")).json();
+        expect(
+          directory.items.find((item: { id: string }) => item.id === pluginId),
+        ).toMatchObject({ executionMode: "declarative" });
+      } finally {
+        await provider.close();
+      }
+    }
   }
 });

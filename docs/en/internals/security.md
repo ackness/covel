@@ -23,6 +23,8 @@ Plugin file references follow the [declaration-directory rules](../reference/plu
 
 Static prompts and UI need no plugin import. Browser exceptions reuse validated asset paths, types and size limits; server references override them. Adding code never turns an old static activation into a grant. Unapproved reload removes old registrations and publishes pending metadata. Declarative status is neither persisted on runtime manifests nor written into the approval gate.
 
+After a pending reload is approved, first activation uses its published module generation rather than cached code from an earlier generation. Actual import and publication still recheck authorization. See [Single-plugin hot reload during development](../reference/plugin-extensions.md#single-plugin-hot-reload-during-development).
+
 Declarative runtimes write only their own datasets and validated character records; other plugins' data is modified by their write services under provider identity. `authorizedToolNames` still checks the final name after hook/override rewrites. Services, sub-agents, resume and retry retain narrower context restrictions. Code exemption grants neither tool approval nor current-content `bridge: session` consent and adds no bridge write capability.
 
 Whole-list refresh retries entries republished by another package’s awaited activation, within a fixed limit, so earlier cache invalidation is checked before producing the list.

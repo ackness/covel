@@ -55,7 +55,7 @@ it("waits for the plugin list, preserves the chosen view and recovers from error
       useGameViewMode(world, {
         status,
         reload: () => {},
-        views: status === "error" ? [] : [entry],
+        views: status === "ready" ? [entry] : [],
       }),
     { initialProps: { status: "loading" as "loading" | "ready" | "error" } },
   );

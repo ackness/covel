@@ -4,15 +4,279 @@ import {
   expect,
   test,
   type APIRequestContext,
+  type Frame,
+  type FrameLocator,
   type Page,
 } from "@playwright/test";
 import {
   ONBOARDING_VERSION,
+  openStudioConfiguration,
   seedBrowserSettings,
   useServerWorlds,
 } from "./helpers/player.js";
+import { PAGE_CSP } from "../../apps/web/src/lib/page-csp.js";
+import { watchPolicyViolations } from "./helpers/page-policy.js";
 
 const pluginId = "sandbox-surface-probe";
+const policyViolations = new WeakMap<Page, string[]>();
+test.beforeEach(async ({ page }) => {
+  const violations = await watchPolicyViolations(page);
+  policyViolations.set(page, violations);
+});
+test.afterEach(async ({ page }, info) => {
+  if (info.annotations.some((item) => item.type === "policy-denial")) return;
+  expect(policyViolations.get(page)).toEqual([]);
+});
+
+for (const delivery of ["url", "inline"] as const) {
+  test(
+    `strict host policy denies sandbox access for ${delivery} pages`,
+    {
+      annotation: {
+        type: "policy-denial",
+        description: "Deliberate frame connect-src violations",
+      },
+    },
+    async ({ page, request }, info) => {
+      test.setTimeout(90_000);
+      const root: unknown = info.config.metadata.sandboxProbeRoot;
+      if (typeof root !== "string")
+        throw new Error("Use the private community acceptance configuration");
+      const specPath = path.join(root, "ui/input.json");
+      const original = await readFile(specPath, "utf8");
+      const inlinePath = path.join(root, "ui/inline-denial.html");
+      let sessionId: string | undefined;
+      try {
+        await seedBrowserSettings(page, {
+          "ui.onboardedVersion": ONBOARDING_VERSION,
+          "ui.locale": "en-US",
+        });
+        await useServerWorlds(page);
+        const directory = await (await request.get("/api/plugins")).json();
+        const created = await request.post("/api/sessions", {
+          data: {
+            locale: "en-US",
+            plugins: [],
+            excludedPlugins: directory.items
+              .filter((item: { source: string }) => item.source === "builtin")
+              .map((item: { id: string }) => item.id),
+          },
+        });
+        expect(created.status(), await created.text()).toBe(201);
+        const createdId: string = (await created.json()).id;
+        sessionId = createdId;
+        expect(
+          (
+            await approved(
+              request,
+              `/api/sessions/${sessionId}/plugins/${pluginId}`,
+              "put",
+            )
+          ).ok(),
+        ).toBe(true);
+        if (delivery === "inline") {
+          const html = await readFile(
+            path.join(root, "ui/app/index.html"),
+            "utf8",
+          );
+          const js = await readFile(path.join(root, "ui/app/app.js"), "utf8");
+          const css = await readFile(path.join(root, "ui/app/app.css"), "utf8");
+          const image = await readFile(path.join(root, "ui/app/probe.svg"));
+          await writeFile(
+            inlinePath,
+            html
+              .replace(
+                '<link rel="stylesheet" href="app.css" />',
+                `<style>${css}</style>`,
+              )
+              .replace('<script defer src="app.js"></script>', "")
+              .replace("</body>", `<script>${js}</script></body>`)
+              .replace(
+                'src="probe.svg"',
+                `src="data:image/svg+xml;base64,${image.toString("base64")}"`,
+              ),
+          );
+          await writeFile(
+            specPath,
+            JSON.stringify({
+              ...JSON.parse(original),
+              webview: { entry: "./inline-denial.html" },
+            }),
+          );
+          await reloadProbe(request, createdId);
+        }
+        await page.goto(`/session?sid=${sessionId}`);
+        await expectHostPolicy(page);
+        await expect(page.getByTestId("session-header")).toBeVisible();
+        await page
+          .getByRole("combobox", { name: "Composer", exact: true })
+          .selectOption(`plugin:${pluginId}:input`);
+        await page
+          .getByRole("button", {
+            name: "Allow requested capabilities",
+            exact: true,
+          })
+          .click();
+        const outer = page
+          .getByTestId("sandbox-composer")
+          .frameLocator("iframe");
+        const inner =
+          delivery === "inline" ? outer.frameLocator("iframe") : outer;
+        await expect(inner.locator("#draft")).toBeVisible();
+        // Establish successful loading under the strict policy before deliberate denials.
+        expect(policyViolations.get(page)).toEqual([]);
+        if (delivery === "inline") await expectInlineIsolation(inner);
+        else {
+          await expectUrlIsolation(inner);
+          const frame = page
+            .frames()
+            .find((frame) =>
+              frame.url().includes(`/plugin-assets/${pluginId}/`),
+            );
+          if (!frame) throw new Error("The URL sandbox must be loaded");
+          await expectApiDenied(frame);
+        }
+        await expect
+          .poll(() => policyViolations.get(page)?.join("\n"))
+          .toContain("connect-src");
+        const hostUrl = page.url().split("#")[0];
+        expect(
+          policyViolations
+            .get(page)
+            ?.filter((entry) => entry.includes(`"document":"${hostUrl}"`)),
+        ).toEqual([]);
+        await expect(
+          page.getByTestId("sandbox-surface-controls"),
+        ).toBeVisible();
+      } finally {
+        if (!page.isClosed()) await page.goto("about:blank");
+        if (delivery === "inline") {
+          await writeFile(specPath, original);
+          await rm(inlinePath, { force: true });
+          if (sessionId) await reloadProbe(request, sessionId);
+        }
+        if (sessionId) await request.delete(`/api/sessions/${sessionId}`);
+      }
+    },
+  );
+}
+
+async function expectApiDenied(frame: Frame) {
+  expect(
+    await frame.evaluate(async () => {
+      try {
+        await fetch("/api/sessions");
+        return "allowed";
+      } catch {
+        return "blocked";
+      }
+    }),
+  ).toBe("blocked");
+}
+
+async function expectUrlIsolation(inputPage: FrameLocator) {
+  const isolation = await inputPage.locator("body").evaluate(async () => {
+    const host = window as Window & {
+      covelIpc?: unknown;
+      require?: unknown;
+    };
+    let storage = false,
+      parentDom = false,
+      topNavigation = false,
+      cookies = false;
+    try {
+      localStorage.getItem("probe");
+      storage = true;
+    } catch {}
+    try {
+      void parent.document.body;
+      parentDom = true;
+    } catch {}
+    try {
+      top!.location.href = "about:blank";
+      topNavigation = true;
+    } catch {}
+    try {
+      void document.cookie;
+      cookies = true;
+    } catch {}
+    const api = await fetch("/api/health").then(
+      () => true,
+      () => false,
+    );
+    return {
+      storage,
+      parentDom,
+      topNavigation,
+      cookies,
+      api,
+      ipc: typeof host.covelIpc,
+      node: typeof host.require,
+      sandbox: location.origin,
+    };
+  });
+  expect(isolation.storage).toBe(false);
+  expect(isolation.parentDom).toBe(false);
+  expect(isolation.topNavigation).toBe(false);
+  expect(isolation.cookies).toBe(false);
+  expect(isolation.api).toBe(false);
+  expect(isolation.ipc).toBe("undefined");
+  expect(isolation.node).toBe("undefined");
+}
+
+async function expectInlineIsolation(inner: FrameLocator) {
+  const isolated = await inner.locator("body").evaluate(async () => {
+    const host = window as Window & { require?: unknown; covelIpc?: unknown };
+    let storage = false,
+      parentDom = false,
+      topNavigation = false,
+      cookies = false;
+    try {
+      localStorage.getItem("probe");
+      storage = true;
+    } catch {}
+    try {
+      void parent.document.body;
+      parentDom = true;
+    } catch {}
+    try {
+      top!.location.href = "about:blank";
+      topNavigation = true;
+    } catch {}
+    try {
+      void document.cookie;
+      cookies = true;
+    } catch {}
+    const api = await fetch("/api/health").then(
+      () => true,
+      () => false,
+    );
+    return {
+      storage,
+      parentDom,
+      topNavigation,
+      cookies,
+      api,
+      node: typeof host.require,
+      ipc: typeof host.covelIpc,
+    };
+  });
+  expect(isolated).toEqual({
+    storage: false,
+    parentDom: false,
+    topNavigation: false,
+    cookies: false,
+    api: false,
+    node: "undefined",
+    ipc: "undefined",
+  });
+}
+
+async function expectHostPolicy(page: Page) {
+  await expect(
+    page.locator('meta[http-equiv="Content-Security-Policy"]'),
+  ).toHaveAttribute("content", PAGE_CSP);
+}
 async function approved(
   request: APIRequestContext,
   url: string,
@@ -174,7 +438,8 @@ test("session pages commit actions, interactions and own runtime writes with con
       },
     });
     expect(created.status(), await created.text()).toBe(201);
-    sessionId = (await created.json()).id;
+    const createdId: string = (await created.json()).id;
+    sessionId = createdId;
     const url = `/api/sessions/${sessionId}`;
     const enabled = await approved(
       request,
@@ -197,6 +462,7 @@ test("session pages commit actions, interactions and own runtime writes with con
     expect(opening.ok(), await opening.text()).toBe(true);
     expect(await opening.text()).toContain('"committed":true');
     await page.goto(`/session?sid=${sessionId}`);
+    await expectHostPolicy(page);
     const choose = () => selectMainView(page);
     await choose();
     const dialog = page.getByRole("dialog", { name: /Allow.*Bridge reader/ });
@@ -303,16 +569,6 @@ test("session pages commit actions, interactions and own runtime writes with con
         .getByRole("img", { name: "Local resource loaded" })
         .evaluate((element) => (element as HTMLImageElement).naturalWidth),
     ).toBeGreaterThan(0);
-    expect(
-      await frame!.evaluate(async () => {
-        try {
-          await fetch("/api/sessions");
-          return "allowed";
-        } catch {
-          return "blocked";
-        }
-      }),
-    ).toBe("blocked");
     expect(
       await frame!.evaluate(() => {
         try {
@@ -427,105 +683,189 @@ test("session pages commit actions, interactions and own runtime writes with con
   }
 });
 
-test("a delayed runtime approval from a retired session page cannot dispatch in a new visit", async ({
-  page,
-  request,
-}) => {
-  test.setTimeout(90_000);
-  const sessions: string[] = [];
-  let release!: () => void;
-  let reached!: () => void;
-  let settled!: () => void;
-  const gate = new Promise<void>((resolve) => {
-    release = resolve;
-  });
-  const ready = new Promise<void>((resolve) => {
-    reached = resolve;
-  });
-  const done = new Promise<void>((resolve) => {
-    settled = resolve;
-  });
-  try {
-    await seedBrowserSettings(page, {
-      "ui.onboardedVersion": ONBOARDING_VERSION,
-      "ui.locale": "en-US",
+for (const retire of [true, false]) {
+  test(`a delayed runtime approval ${retire ? "from a retired session cannot affect the new visit" : "from the current session can commit"}`, async ({
+    page,
+    request,
+  }) => {
+    test.setTimeout(90_000);
+    const sessions: string[] = [];
+    const worldId = `approval-navigation-${crypto.randomUUID()}`;
+    let release!: () => void;
+    let reached!: () => void;
+    let settled!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
     });
-    await useServerWorlds(page);
-    const directory = await (await request.get("/api/plugins")).json();
-    for (let index = 0; index < 2; index++) {
-      const created = await request.post("/api/sessions", {
-        data: {
-          locale: "en-US",
-          plugins: [],
-          excludedPlugins: directory.items
-            .filter((item: { source: string }) => item.source === "builtin")
-            .map((item: { id: string }) => item.id),
-        },
+    const ready = new Promise<void>((resolve) => {
+      reached = resolve;
+    });
+    const done = new Promise<void>((resolve) => {
+      settled = resolve;
+    });
+    try {
+      await seedBrowserSettings(page, {
+        "ui.onboardedVersion": ONBOARDING_VERSION,
+        "ui.locale": "en-US",
       });
-      expect(created.status()).toBe(201);
-      const id: string = (await created.json()).id;
-      sessions.push(id);
-      expect(
-        (
-          await approved(
-            request,
-            `/api/sessions/${id}/plugins/${pluginId}`,
-            "put",
-          )
-        ).ok(),
-      ).toBe(true);
-    }
-    const [source, destination] = sessions;
-    await page.goto(`/session?sid=${source}`);
-    await selectMainView(page);
-    await page
-      .getByRole("button", {
-        name: "Allow requested capabilities",
-        exact: true,
-      })
-      .click();
-    await expect(
-      page.getByTestId("plugin-view-container").locator("[data-page-status]"),
-    ).toHaveAttribute("data-page-status", "ready");
-    const mask = `**/api/sessions/${source}/plugin-rpc`;
-    await page.route(mask, async (route) => {
-      try {
-        const response = await route.fetch();
-        expect(response.status()).toBe(202);
-        reached();
-        await gate;
-        await route.fulfill({ response }).catch(() => {});
-      } finally {
-        settled();
+      await useServerWorlds(page);
+      const world = await request.post("/api/worlds", {
+        data: { id: worldId, name: "Approval navigation", locale: "en-US" },
+      });
+      expect(world.ok(), await world.text()).toBe(true);
+      const directory = await (await request.get("/api/plugins")).json();
+      for (let index = 0; index < 2; index++) {
+        const created = await request.post("/api/sessions", {
+          data: {
+            worldId,
+            locale: "en-US",
+            plugins: [],
+            excludedPlugins: directory.items
+              .filter((item: { source: string }) => item.source === "builtin")
+              .map((item: { id: string }) => item.id),
+          },
+        });
+        expect(created.status()).toBe(201);
+        const id: string = (await created.json()).id;
+        sessions.push(id);
+        expect(
+          (
+            await approved(
+              request,
+              `/api/sessions/${id}/plugins/${pluginId}`,
+              "put",
+            )
+          ).ok(),
+        ).toBe(true);
       }
-    });
-    await page
-      .getByTestId("plugin-view-container")
-      .frameLocator("iframe")
-      .getByRole("button", { name: "Write note", exact: true })
-      .click();
-    await ready;
-    await page.goto(`/session?sid=${destination}`);
-    release();
-    await done;
-    await page.unroute(mask);
-    await expect(page.getByRole("dialog", { name: /Authorize/ })).toHaveCount(
-      0,
-    );
-    for (const id of sessions) {
-      const notes = await (
-        await request.get(`/api/sessions/${id}/plugin-data/${pluginId}/notes`)
-      ).json();
-      expect(notes.items).toEqual([]);
+      const [source, destination] = sessions;
+      if (!source || !destination)
+        throw new Error("Both navigation sessions must exist");
+      await page.goto(`/session?sid=${source}`);
+      await expectHostPolicy(page);
+      const documentId = await page.evaluate(() => {
+        document.documentElement.dataset.navigationProbe = crypto.randomUUID();
+        return document.documentElement.dataset.navigationProbe;
+      });
+      await selectMainView(page);
+      await page
+        .getByRole("button", {
+          name: "Allow requested capabilities",
+          exact: true,
+        })
+        .click();
+      await expect(
+        page.getByTestId("plugin-view-container").locator("[data-page-status]"),
+      ).toHaveAttribute("data-page-status", "ready");
+      const mask = `**/api/sessions/${source}/plugin-rpc`;
+      await page.evaluate((path) => {
+        const fetch = window.fetch;
+        window.fetch = async (...args) => {
+          const response = await fetch(...args);
+          if (response.url.endsWith(path) && response.status === 202) {
+            const json = response.json.bind(response);
+            response.json = async () => {
+              const body: unknown = await json();
+              // The next task observes the host's response continuation, even after navigation.
+              setTimeout(() => {
+                document.documentElement.dataset.rpcResponseConsumed = "true";
+              }, 0);
+              return body;
+            };
+          }
+          return response;
+        };
+      }, `/api/sessions/${source}/plugin-rpc`);
+      let rpcRequests = 0;
+      let decisions = 0;
+      page.on("request", (request) => {
+        if (/\/api\/approvals\/[^/]+\/decision$/.test(request.url()))
+          decisions++;
+      });
+      await page.route(mask, async (route) => {
+        rpcRequests++;
+        if (rpcRequests > 1) return route.continue();
+        try {
+          const response = await route.fetch();
+          expect(response.status()).toBe(202);
+          reached();
+          await gate;
+          await route.fulfill({ response }).catch(() => {});
+        } finally {
+          settled();
+        }
+      });
+      await page
+        .getByTestId("plugin-view-container")
+        .frameLocator("iframe")
+        .getByRole("button", { name: "Write note", exact: true })
+        .click();
+      await ready;
+      if (retire) {
+        await openStudioConfiguration(page);
+        await page.getByTitle("Switch session", { exact: true }).click();
+        await page
+          .getByRole("button", { name: new RegExp(`^${destination}\\b`) })
+          .click();
+        await expect(page).toHaveURL(new RegExp(`sid=${destination}`));
+        expect(
+          await page.evaluate(
+            () => document.documentElement.dataset.navigationProbe,
+          ),
+        ).toBe(documentId);
+      }
+      const delivered = page.waitForResponse((response) =>
+        response.url().endsWith(`/api/sessions/${source}/plugin-rpc`),
+      );
+      release();
+      await done;
+      await (await delivered).finished();
+      await expect(page.locator("html")).toHaveAttribute(
+        "data-rpc-response-consumed",
+        "true",
+      );
+      if (retire) {
+        await expect(
+          page.getByRole("dialog", { name: /Authorize/ }),
+        ).toHaveCount(0);
+        expect(rpcRequests).toBe(1);
+        expect(decisions).toBe(0);
+      } else {
+        const approval = page.getByRole("dialog", { name: /Authorize/ });
+        await expect(approval).toBeVisible();
+        await approval.getByRole("button", { name: /Allow|Authorize/ }).click();
+        await expect(
+          page
+            .getByTestId("plugin-view-container")
+            .frameLocator("iframe")
+            .locator("#outcome"),
+        ).toContainText('"status":"committed"');
+        expect(rpcRequests).toBe(2);
+        expect(decisions).toBe(1);
+      }
+      await page.unroute(mask);
+      for (const id of sessions) {
+        const notes = await (
+          await request.get(`/api/sessions/${id}/plugin-data/${pluginId}/notes`)
+        ).json();
+        if (!retire && id === source) {
+          expect(notes.items).toContainEqual(
+            expect.objectContaining({
+              value: { id: "bridge", text: "Written from the sandbox" },
+            }),
+          );
+        } else expect(notes.items).toEqual([]);
+      }
+    } finally {
+      release();
+      if (!page.isClosed()) {
+        await page.unrouteAll({ behavior: "wait" });
+        for (const id of sessions) await request.delete(`/api/sessions/${id}`);
+        await request.delete(`/api/worlds/${worldId}`);
+      }
     }
-  } finally {
-    release();
-    if (!page.isClosed()) {
-      await page.unrouteAll({ behavior: "wait" });
-      for (const id of sessions) await request.delete(`/api/sessions/${id}`);
-    }
-  }
-});
+  });
+}
 
 for (const width of [1280, 360]) {
   test(`independent sandbox regions preserve host hit targets and recover at ${width}px`, async ({
@@ -671,53 +1011,6 @@ for (const width of [1280, 360]) {
       expect(mainBox!.y).toBeGreaterThanOrEqual(stripBox!.y + stripBox!.height);
       expect(inputBox!.y).toBeGreaterThanOrEqual(mainBox!.y + mainBox!.height);
       await assertHitTarget(back);
-      const isolation = await inputPage.locator("body").evaluate(async () => {
-        const host = window as Window & {
-          covelIpc?: unknown;
-          require?: unknown;
-        };
-        let storage = false,
-          parentDom = false,
-          topNavigation = false,
-          cookies = false;
-        try {
-          localStorage.getItem("probe");
-          storage = true;
-        } catch {}
-        try {
-          void parent.document.body;
-          parentDom = true;
-        } catch {}
-        try {
-          top!.location.href = "about:blank";
-          topNavigation = true;
-        } catch {}
-        try {
-          void document.cookie;
-          cookies = true;
-        } catch {}
-        const api = await fetch("/api/health").then(
-          () => true,
-          () => false,
-        );
-        return {
-          storage,
-          parentDom,
-          topNavigation,
-          cookies,
-          api,
-          ipc: typeof host.covelIpc,
-          node: typeof host.require,
-          sandbox: location.origin,
-        };
-      });
-      expect(isolation.storage).toBe(false);
-      expect(isolation.parentDom).toBe(false);
-      expect(isolation.topNavigation).toBe(false);
-      expect(isolation.cookies).toBe(false);
-      expect(isolation.api).toBe(false);
-      expect(isolation.ipc).toBe("undefined");
-      expect(isolation.node).toBe("undefined");
       await expect(input.locator("iframe")).toHaveAttribute(
         "sandbox",
         "allow-scripts",
@@ -946,7 +1239,8 @@ test("inline composer uses the same ready, error and opaque-origin recovery cont
       },
     });
     expect(created.status(), await created.text()).toBe(201);
-    sessionId = (await created.json()).id;
+    const createdId: string = (await created.json()).id;
+    sessionId = createdId;
     const url = `/api/sessions/${sessionId}`;
     expect(
       (await approved(request, `${url}/plugins/${pluginId}`, "put")).ok(),
@@ -1006,51 +1300,6 @@ test("inline composer uses the same ready, error and opaque-origin recovery cont
       .frameLocator("iframe");
     await expect(inner.locator("#draft")).toBeVisible();
     await expect(outer).toHaveAttribute("sandbox", "allow-scripts");
-    const isolated = await inner.locator("body").evaluate(async () => {
-      const host = window as Window & { require?: unknown; covelIpc?: unknown };
-      let storage = false,
-        parentDom = false,
-        topNavigation = false,
-        cookies = false;
-      try {
-        localStorage.getItem("probe");
-        storage = true;
-      } catch {}
-      try {
-        void parent.document.body;
-        parentDom = true;
-      } catch {}
-      try {
-        top!.location.href = "about:blank";
-        topNavigation = true;
-      } catch {}
-      try {
-        void document.cookie;
-        cookies = true;
-      } catch {}
-      const api = await fetch("/api/health").then(
-        () => true,
-        () => false,
-      );
-      return {
-        storage,
-        parentDom,
-        topNavigation,
-        cookies,
-        api,
-        node: typeof host.require,
-        ipc: typeof host.covelIpc,
-      };
-    });
-    expect(isolated).toEqual({
-      storage: false,
-      parentDom: false,
-      topNavigation: false,
-      cookies: false,
-      api: false,
-      node: "undefined",
-      ipc: "undefined",
-    });
     await inner
       .getByRole("button", { name: "Rejected promise", exact: true })
       .click();
