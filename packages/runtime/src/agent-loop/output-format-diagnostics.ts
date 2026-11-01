@@ -125,7 +125,9 @@ export async function outputFormatProblems(args: {
   } else if (/^[{["]/.test(candidate)) {
     diagnostic = syntaxProblems(syntaxError, text, candidate.startsWith("{"));
   } else {
-    return bounded([text("prose", { complete })]);
+    // Prose corrections still need the output gate's schema guidance,
+    // including required fields.
+    return bounded([text("prose", { complete }), ...problems]);
   }
   // The gate may have validated a salvaged fragment. Its field/segment errors
   // do not describe the original malformed candidate; diagnose syntax alone.

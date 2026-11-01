@@ -128,6 +128,16 @@ describe("output repair", () => {
     });
   });
 
+  it("keeps required-field diagnostics when repairing valid JSON", async () => {
+    const llm = queuedLLM([prose("{}"), prose(valid)]);
+    const { result } = await run({ llm });
+    expect(result.status).toBe("success");
+    expect(llm.requests).toHaveLength(2);
+    const message = String(llm.requests[1]?.messages.at(-1)?.content);
+    expect(message).toMatch(/required property.*answer/);
+    expect(message).not.toMatch(/JSON syntax|plain prose/);
+  });
+
   it.each([false, true])(
     "replays continuation data through repeated repairs (after finalizer: %s)",
     async (afterFinalizer) => {
@@ -611,7 +621,7 @@ describe("output gate agreement", () => {
     },
   );
 
-  it("puts bounded syntax diagnostics before structural symptoms without echoing private content", async () => {
+  it("reports bounded syntax diagnostics without salvaged structural symptoms or private content", async () => {
     const secret = "PRIVATE_DRAFT_SENTINEL";
     const prefix = JSON.stringify({ answer: `${secret} 😀` });
     const properties = Object.fromEntries(
@@ -633,13 +643,13 @@ describe("output gate agreement", () => {
     if (!checked.ok) {
       expect(checked.errors[0]).toMatch(/JSON syntax.*after.*root/i);
       expect(checked.errors.join(" ")).toContain(`offset ${prefix.length}`);
-      expect(checked.errors).toHaveLength(5);
+      expect(checked.errors).toHaveLength(2);
       expect(checked.errors.every((error) => error.length <= 200)).toBe(true);
       expect(checked.errors.join(" ")).toContain(
         "UTF-16 code units after fence normalization",
       );
       expect(checked.errors.join(" ")).toMatch(/line 1, column \d+/);
-      expect(checked.errors.join(" ")).toContain("/field0 must be string");
+      expect(checked.errors.join(" ")).not.toMatch(/\/field\d|must be string/);
       expect(checked.errors.join(" ")).not.toMatch(
         /PRIVATE_|SyntaxError|\bat .*\(|run-loop|plug\/loop/,
       );
@@ -654,6 +664,11 @@ describe("output gate agreement", () => {
       expect(chinese.errors[0]).toContain("根对象已闭合");
       expect(chinese.errors[0]).toContain("输入结束");
       expect(chinese.errors.join(" ")).toContain(`偏移 ${prefix.length}`);
+      expect(chinese.errors).toHaveLength(2);
+      expect(chinese.errors.every((error) => error.length <= 200)).toBe(true);
+      expect(chinese.errors.join(" ")).not.toMatch(
+        /\/field\d|must be string|PRIVATE_/,
+      );
     }
   });
 
