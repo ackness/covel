@@ -135,7 +135,7 @@ describe("reasoning effort profiles", () => {
     ).toEqual({ enable_thinking: true });
   });
 
-  it("gives GPT-6 its levels without a model-database entry", () => {
+  it("uses GPT-6 Chat levels behind a custom provider", () => {
     // A model behind a proxy, under a provider name of the user's choice.
     expect(
       resolveReasoningEffortProfile(
@@ -143,7 +143,7 @@ describe("reasoning effort profiles", () => {
         "local",
         "openai-chat-v1",
       )?.options.map((option) => option.value),
-    ).toEqual(["none", "low", "medium", "high", "xhigh", "max"]);
+    ).toEqual(["none", "low", "medium", "high", "xhigh"]);
     const sent = (reasoningEffort: string) =>
       extractReasoningRequestFields(
         { reasoningEffort },
@@ -156,13 +156,13 @@ describe("reasoning effort profiles", () => {
         "codex/gpt-6-luna",
       );
     expect(sent("low")).toEqual({ reasoning_effort: "low" });
-    expect(sent("max")).toEqual({ reasoning_effort: "max" });
+    expect(sent("max")).toEqual({});
     // A bookkeeping runtime's default of no reasoning arrives here as `none`.
     expect(sent("none")).toEqual({ reasoning_effort: "none" });
   });
 
-  it("turns reasoning off for tools on OpenAI's own Chat endpoint only", () => {
-    // OpenAI's Chat API answers function tools with reasoning on with a 400
+  it("turns reasoning off for GPT-6 Chat tools regardless of provider name", () => {
+    // The Chat API answers function tools with reasoning on with a 400
     // for GPT-6 models; the level absent means the model default, which is on.
     const sent = (
       provider: string,
@@ -192,15 +192,17 @@ describe("reasoning effort profiles", () => {
       reasoning_effort: "high",
     });
     expect(sent("openai", "openai-chat-v1", undefined, false)).toEqual({});
-    // Responses keeps reasoning with tools; a relay is not narrowed.
+    // Responses keeps reasoning with tools, including through a relay.
     expect(sent("openai", "openai-responses-v1", "high", true)).toEqual({
       reasoning: { effort: "high" },
     });
     expect(sent("relay", "openai-chat-v1", "high", true)).toEqual({
-      reasoning_effort: "high",
+      reasoning_effort: "none",
     });
-    expect(sent("relay", "openai-chat-v1", undefined, true)).toEqual({});
-    // OpenAI's Chat endpoint stops at xhigh.
+    expect(sent("relay", "openai-chat-v1", undefined, true)).toEqual({
+      reasoning_effort: "none",
+    });
+    // GPT-6 Chat stops at xhigh.
     expect(
       resolveReasoningEffortProfile(
         "gpt-6.1-terra",
@@ -243,6 +245,13 @@ describe("reasoning effort profiles", () => {
       {
         slot: "story",
         provider: "openai",
+        model: "gpt-6-luna",
+        protocol: "openai-chat-v1",
+        withTools: ["none"],
+      },
+      {
+        slot: "relay",
+        provider: "relay",
         model: "gpt-6-luna",
         protocol: "openai-chat-v1",
         withTools: ["none"],

@@ -466,7 +466,7 @@ When Covel looks up model capabilities, it tries these matches in order. A match
 
 ## Thinking strength
 
-The thinking levels on the "Generation" page come from the [models.dev](https://models.dev) catalog and Covel's vendor rules (see [Level data](#level-data)). How a request turns thinking on and off follows the upstream vendor name in the model ID: if the provider is `openai` and the model ID is `deepseek/deepseek-v4-flash`, thinking is still switched the DeepSeek way. The options depend on the model's capabilities. The page does not assume that every vendor's strength levels are equivalent.
+The thinking levels on the "Generation" page come from the [models.dev](https://models.dev) catalog and Covel's vendor rules (see [Level data](#level-data)). How a request turns thinking on and off follows the upstream vendor name in the model ID and the protocol: if the provider is `openai` and the model ID is `deepseek/deepseek-v4-flash`, thinking is still switched the DeepSeek way. Vendor rules for the same model and protocol also apply to custom providers, `default`, and gateways, regardless of the connection's name. The options depend on the model's capabilities. The page does not assume that every vendor's strength levels are equivalent.
 
 In `llm.toml`, use `reasoningEffort` to set the default level of a model:
 
@@ -539,14 +539,14 @@ Some models reject certain parameters while they think. Covel adjusts the reques
 
 The models.dev catalog gives the levels per provider endpoint, so the same model can differ between relays. The table shows the part Covel maintains itself:
 
-| Vendor    | Levels                                                                                    |
-| --------- | ----------------------------------------------------------------------------------------- |
-| OpenAI    | GPT-5 / o series by model; on OpenAI's own Chat endpoint GPT-6 must use `none` with tools |
-| Anthropic | `low/medium/high/xhigh/max`, depending on the model                                       |
-| Gemini    | A subset limited by model and protocol, see above                                         |
-| xAI       | `low/medium/high`; Grok 4.20 / multi-agent adds `xhigh`                                   |
-| DeepSeek  | off / `high/max`, plus the catalog's levels (such as `low`) for models it lists           |
-| Qwen      | off / on, native levels, or budget presets                                                |
+| Vendor    | Levels                                                                           |
+| --------- | -------------------------------------------------------------------------------- |
+| OpenAI    | GPT-5 / o series by model; GPT-6 with tools on the Chat protocol must use `none` |
+| Anthropic | `low/medium/high/xhigh/max`, depending on the model                              |
+| Gemini    | A subset limited by model and protocol, see above                                |
+| xAI       | `low/medium/high`; Grok 4.20 / multi-agent adds `xhigh`                          |
+| DeepSeek  | off / `high/max`, plus the catalog's levels (such as `low`) for models it lists  |
+| Qwen      | off / on, native levels, or budget presets                                       |
 
 The interface lists only the subset that the target model is known to support. A model that is not recognized keeps the provider's default behavior. The Gemini levels follow [Google's thinking guide](https://ai.google.dev/gemini-api/docs/generate-content/thinking) and the [OpenAI compatibility mapping](https://ai.google.dev/gemini-api/docs/openai).
 
@@ -595,8 +595,8 @@ Families and rules can both carry these behaviour fields; the rule's value wins:
 - An item in `levels` is a level name, or `{ "value", "budget", "protocols" }`. `budget` means this level is sent as a thinking token budget. `protocols` means it is offered only on these protocols.
 - `parameterStyle` picks one of several styles in a family: Anthropic's `adaptive` (also sends `thinking.type: "adaptive"`) and `effort` (sends `reasoning_effort` beside the switch). Rules read from the catalog that list levels use `effort`.
 - `whenUnlisted` limits a rule to models the catalog has no levels for: it covers new models the catalog has not listed yet without overriding the catalog's data. The bundled data uses it to give unlisted GPT-6 and later models `none` to `max`.
-- `providers` makes a rule apply only to one provider's own endpoint. When the same model goes through a relay, the relay's limits may differ. So such rules are told apart by the provider ID the slot declares, not by model name.
-- `withTools` lists the only levels this target accepts on a request that carries function tools, with the first one preferred. If a request with tools picks another level, or picks no level (then the provider uses the model's default level), the first one is sent. For example, OpenAI's own Chat endpoint requires `reasoning_effort` to be `none` when GPT-6 models get function tools, so the bundled data gives GPT-6 with `provider` `openai` and protocol `openai-chat-v1` `"withTools": ["none"]`. To keep reasoning with tools, use `openai-responses-v1` for OpenAI slots. When the server loads `llm.toml`, it logs a warning for each slot such a rule affects.
+- `providers` is only for differences in a provider's endpoint API, matched by the provider ID the slot declares. Model and protocol constraints should not use it, or renaming a connection would skip the rule. No bundled rule currently uses this filter.
+- `withTools` lists the only levels this target accepts on a request that carries function tools, with the first one preferred. If a request with tools picks another level, or picks no level (then the provider uses the model's default level), the first one is sent. For example, GPT-6 requests with function tools over `openai-chat-v1` send `reasoning_effort: "none"`. The bundled rule matches the model and protocol without filtering provider IDs, so it applies to `openai`, custom relays, `default`, OpenRouter, and Vercel alike. Requests without tools keep the chosen level. To keep reasoning with tools, use `openai-responses-v1` if the provider supports it. When the server loads `llm.toml`, it logs a warning for each slot such a rule affects.
 
 **Refreshing the catalog**
 

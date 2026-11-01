@@ -178,7 +178,6 @@
         {
           "match": "gpt-[6-9]",
           "protocols": ["openai-chat-v1"],
-          "providers": ["^openai$"],
           "levels": ["none", "low", "medium", "high", "xhigh"],
           "withTools": ["none"]
         },

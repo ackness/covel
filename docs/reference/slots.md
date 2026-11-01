@@ -466,7 +466,7 @@ Function runtime 不读取 `runtimeModelOverrides`。`ctx.gateway.generateText` 
 
 ## 思考强度
 
-“生成参数”页面列出的思考档位来自 [models.dev](https://models.dev) 目录和 Covel 的厂商规则（见[档位数据](#档位数据)）。请求方式按模型 ID 里的上游厂商名判断：例如服务商是 `openai`、模型 ID 是 `deepseek/deepseek-v4-flash` 时，仍然按 DeepSeek 的方式开关思考。选项由模型能力决定，不假定各家的强度是等价的。
+“生成参数”页面列出的思考档位来自 [models.dev](https://models.dev) 目录和 Covel 的厂商规则（见[档位数据](#档位数据)）。请求方式按模型 ID 里的上游厂商名和所用协议判断：例如服务商是 `openai`、模型 ID 是 `deepseek/deepseek-v4-flash` 时，仍然按 DeepSeek 的方式开关思考。同一模型和协议的厂商规则同样适用于自定义服务商、`default` 和聚合网关，不依赖连接的名称。选项由模型能力决定，不假定各家的强度是等价的。
 
 TOML 里用 `reasoningEffort` 设置模型的默认档位：
 
@@ -539,14 +539,14 @@ reasoningEffort = "disabled"
 
 档位由 models.dev 目录按“哪家服务商的接口”给出，同一个模型在不同中转上可以不同。下表是 Covel 自己维护的部分：
 
-| 厂商      | 档位                                                                          |
-| --------- | ----------------------------------------------------------------------------- |
-| OpenAI    | GPT-5 / o 系列按型号；OpenAI 自己的 Chat 接口上的 GPT-6 带工具时只能是 `none` |
-| Anthropic | `low/medium/high/xhigh/max`，具体取决于模型                                   |
-| Gemini    | 按型号和协议限定的子集，见上                                                  |
-| xAI       | `low/medium/high`，Grok 4.20 / multi-agent 另有 `xhigh`                       |
-| DeepSeek  | 关闭 / `high/max`，目录里有的型号加上目录给出的档位（如 `low`）               |
-| Qwen      | 关闭 / 开启、原生档位，或预算预设                                             |
+| 厂商      | 档位                                                              |
+| --------- | ----------------------------------------------------------------- |
+| OpenAI    | GPT-5 / o 系列按型号；GPT-6 使用 Chat 协议并带工具时只能是 `none` |
+| Anthropic | `low/medium/high/xhigh/max`，具体取决于模型                       |
+| Gemini    | 按型号和协议限定的子集，见上                                      |
+| xAI       | `low/medium/high`，Grok 4.20 / multi-agent 另有 `xhigh`           |
+| DeepSeek  | 关闭 / `high/max`，目录里有的型号加上目录给出的档位（如 `low`）   |
+| Qwen      | 关闭 / 开启、原生档位，或预算预设                                 |
 
 界面只列出目标模型已知支持的子集。没有识别的模型沿用服务商的默认行为。Gemini 的档位依据 [Google thinking 说明](https://ai.google.dev/gemini-api/docs/generate-content/thinking)和 [OpenAI 兼容映射](https://ai.google.dev/gemini-api/docs/openai)。
 
@@ -595,8 +595,8 @@ reasoningEffort = "disabled"
 - `levels` 的一项是档位名，或者 `{ "value", "budget", "protocols" }`。`budget` 表示这一档按思考 token 预算发送，`protocols` 表示只在这些协议上提供。
 - `parameterStyle` 在一个系列有多种写法时选其中一种：Anthropic 的 `adaptive`（同时发送 `thinking.type: "adaptive"`）和 `effort`（开关之外同时发送 `reasoning_effort`）。从目录读出、列了档位的规则都是 `effort`。
 - `whenUnlisted` 让规则只用于目录里没有档位的模型：给目录还没收录的新型号兜底，又不覆盖目录已有的数据。例如内置数据用它给未收录的 GPT-6 及之后型号提供 `none` 到 `max`。
-- `providers` 让规则只对某个服务商自己的接口生效。同一个模型经过中转时，中转的限制可能不同，所以这类规则按槽位声明的服务商 ID 区分，而不是按模型名。
-- `withTools` 是请求带函数工具时这个目标唯一接受的档位，第一个优先。带工具的请求选了别的档位、或者没选档位（这时服务商按模型默认档位处理）时，发送第一个。例如 OpenAI 自己的 Chat 接口对 GPT-6 模型规定：带函数工具时 `reasoning_effort` 只能是 `none`，所以内置数据给 `provider` 为 `openai`、协议为 `openai-chat-v1` 的 GPT-6 写了 `"withTools": ["none"]`。要在带工具时保留推理，OpenAI 的槽位请用 `openai-responses-v1`。服务端加载 `llm.toml` 时，对受这类规则影响的槽位记一条警告。
+- `providers` 只用于某个服务商接口本身的差异，按槽位声明的服务商 ID 区分。模型和协议的限制不应使用它，否则改一个连接名称就会漏掉规则。当前内置规则都不使用这个筛选。
+- `withTools` 是请求带函数工具时这个目标唯一接受的档位，第一个优先。带工具的请求选了别的档位、或者没选档位（这时服务商按模型默认档位处理）时，发送第一个。例如 GPT-6 使用 `openai-chat-v1` 并带函数工具时，发送 `reasoning_effort: "none"`；内置规则按模型和协议匹配，不筛选服务商 ID，所以 `openai`、自定义中转、`default`、OpenRouter 和 Vercel 都适用。没有工具时保留所选档位。要在带工具时保留推理，请改用 `openai-responses-v1`，前提是服务商支持。服务端加载 `llm.toml` 时，对受这类规则影响的槽位记一条警告。
 
 **刷新目录**
 
