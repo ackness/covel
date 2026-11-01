@@ -50,7 +50,8 @@ pnpm test:docs:packages        # docs, SDK README and declarative admission, aft
 pnpm plugin:extract <dir>      # execute your own entry and sync declarations; --check for CI
 pnpm test:pg                   # live-PG store contracts + server integration
 pnpm e2e:smoke                 # deterministic Chromium smoke suite
-pnpm e2e                       # all Playwright suites
+pnpm e2e                       # all default Playwright specs (both projects)
+pnpm e2e:extensions             # separate community acceptance suite
 pnpm schemas:generate          # after author-facing Zod schema changes
 pnpm check:push                # verify committed HEAD in a clean checkout
 pnpm changelog:preview         # preview pending release entries
@@ -58,9 +59,10 @@ pnpm changelog:preview         # preview pending release entries
 
 Before pushing, run `pnpm check` and tests for changed packages; `pnpm lint`
 alone is insufficient and git hooks omit source suites. Add `pnpm test:pg` for
-store/database changes and `pnpm e2e:smoke` / `pnpm e2e` for UI flows. Docs-only:
+store/database changes and `pnpm e2e` plus `pnpm e2e:extensions` for UI flows. Docs-only:
 `pnpm check` + `pnpm test:docs:packages`. `pnpm check:push` covers the static gate
-and changed packages with dependents in a clean checkout.
+and changed packages with dependents plus E2E collection in a clean checkout;
+full browser, smoke and extension execution belongs to full-scope CI.
 
 In source development, changing bundled plugin manifests, handlers or locales
 restarts the server.
@@ -318,7 +320,11 @@ headings in that directory's README. Never edit `docs/CHANGELOG.md` directly.
 - Web Vitest defaults to jsdom; pure tests may use the Node environment.
   Desktop and script tests use `node --test`. Playwright uses production builds;
   specs importing `/src/` need the slower `chromium-dev` project. See
-  [E2E testing](docs/internals/e2e-testing.md).
+  [E2E testing](docs/internals/e2e-testing.md). Full-scope CI requires four
+  isolated one-worker shards across both default projects plus smoke and all
+  extensions, constrained to at most two allowed CPUs. Nightly/manual runs also repeat
+  timing-sensitive sandbox acceptance without retries. Serialize local browser
+  commands with `flock /tmp/covel-e2e.lock`.
 
 ## Commits & Pull Requests
 

@@ -29,7 +29,14 @@
      `pnpm check:push` adds affected suites for source changes. Full requests/main/tags override docs-only;
      affected results are reused only for the same commit and comparison base; cache eviction must use
      the same coverage rule and retain unrelated bases/docs results. CI owns all verification:
-     docs-only runs documentation tests after check; source, unknown scope and releases run all suites.
+     docs-only PR/main runs documentation tests after check; every full scope requires all suites.
+     Full browser CI uses four isolated shards, both default projects, one worker and at most two
+     allowed CPUs; smoke and all extensions also remain required. Daily/manual runs always select
+     full scope and add three sandbox approval/region repetitions with zero retries and separate outputs.
+     Local push checks only collect E2E; they never execute browsers or install Chromium.
+     Record shard coverage, CPU affinity, durations and retries; job budgets are 40/25/65 minutes
+     for full shard/browser/merge gate. Failure traces, screenshots and HTML artifacts last seven days.
+     Browser CI does not establish real-model or packaged Windows/macOS coverage.
      Non-release CI also requires one Site/docs build, including on docs-only changes;
      the other build excludes those targets. Site uses parallel Turbo tasks with content-addressed
      outputs; cache changes need hit/miss and input-invalidation evidence (docs, SITE_BASE, config).
@@ -46,7 +53,12 @@
      纯文档另跑 `pnpm test:docs:packages`；`pnpm check:push` 为源码改动加上受影响的套件。
      显式全量检查及 main/tag 推送优先于纯文档短路径；受影响测试结果只在提交和比较基准相同时复用。
      缓存淘汰使用同一覆盖规则，保留不同基线及互不覆盖的文档结果。
-     CI 统一负责验证：纯文档跑静态与文档检查，源码、未知范围和发布跑完整套件。
+     CI 统一负责验证：纯文档 PR/main 跑静态与文档检查，每个完整范围必须执行全部套件。
+     完整浏览器 CI 使用四个独立 shard、两个默认 project、一个 worker 和最多两个允许的 CPU；
+     smoke 和全部扩展验收仍是必需项。每日和手动运行始终全量，另加三次沙箱审批/区域重复，
+     零重试、独立输出。本地推送检查只收集 E2E，不执行浏览器或安装 Chromium。
+     记录分片覆盖、CPU 限制、耗时和重试；完整 shard/browser/合并门禁上限为 40/25/65 分钟，
+     失败 trace、截图及 HTML 产物保留七天。浏览器 CI 不能证明真实模型或 Windows/macOS 安装包已验证。
      非发布 CI（纯文档也包括）必须通过一次官网/文档站构建，其余构建排除这两个目标；
      Site 用 Turbo 并行构建并按内容复用产物；缓存改动需记录命中、未命中及输入失效验证（文档、SITE_BASE、配置）。
      PR 缓存隔离保持不变。发布和显式 commit 只恢复缓存，并关闭 setup-node 的 pnpm 缓存，
@@ -60,7 +72,9 @@
 - [ ] Tests of the changed packages (`pnpm check:push`, or `pnpm --filter <pkg> test`) / 改动包的测试
 - [ ] `pnpm test` <!-- every suite; CI runs it / 全部测试，CI 会运行 -->
 - [ ] `pnpm test:pg` <!-- store or database changes / 改动存储或数据库时 -->
-- [ ] `pnpm e2e:smoke` / `pnpm e2e:extensions` / `pnpm e2e` <!-- UI or end-to-end flow changes / 改动界面或端到端流程时 -->
+- [ ] `pnpm e2e` across all four shards and both projects / 四个 shard、两个 project 的完整浏览器套件 <!-- full scope in CI; serialize local runs with flock / CI 完整范围必需，本地用 flock 串行 -->
+- [ ] `pnpm e2e:smoke` and all `pnpm e2e:extensions` / smoke 与全部扩展验收 <!-- required on full scope, extensions use zero retries / 完整范围必需，扩展零重试 -->
+- [ ] Scheduled/manual sandbox stress: three repeats, one worker, zero retries; record durations and failure artifact retrieval / 定时或手动沙箱压力验证：三次重复、一个 worker、零重试；记录耗时与失败产物下载
 - [ ] `pnpm validate:plugin` / `pnpm validate:world` <!-- plugin or world package changes / 改动插件或世界包时 -->
 - [ ] `pnpm e2e:verify` <!-- prompt, model-routing, or runtime behavior changes; needs .env.llm / 改动提示词、模型路由或 runtime 行为时 -->
 - [ ] Packaged desktop runtime and lifecycle / 安装包自己的 Electron RunAsNode、SQLite、插件加载、设置读写、恢复与退出 <!-- runtime/packaging changes; record actual OS/arch / 运行时或打包改动，注明实际验证的平台和架构 -->
@@ -84,5 +98,6 @@
 - [ ] Guides and both READMEs updated; pages with an `.en.md` sibling changed together / 已更新相关指南和中英文 README；有 `.en.md` 的页面两份同步修改
 - [ ] A changelog fragment `docs/changelog.d/<slug>.md` for user-visible changes; `docs/CHANGELOG.md` is not edited / 用户可见的改动已新增 `docs/changelog.d/<slug>.md`，不直接改 `docs/CHANGELOG.md`
 - [ ] `AGENTS.md` updated if packages, root scripts, or conventions changed / 包结构、根脚本或约定有变化时已更新 `AGENTS.md`
+- [ ] CI/hooks/pre-push changes sync both CONTRIBUTING files, both command/E2E internals editions and this template, per AGENTS.md / CI、hook 或 pre-push 改动按 AGENTS.md 同步中英文 CONTRIBUTING、命令/E2E 内部页及本模板
 
 <!-- New assets: 3 MiB per file; the README demo GIF: 6 MiB; worlds/*/media/gallery/*.png originals: 4 MiB, each with a WebP of the same name. Portraits and scenes are WebP only. -->

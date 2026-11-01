@@ -4,6 +4,7 @@ import path from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 import { selectTests } from "../lib/push-scope.mjs";
+import { isDocsOnly } from "../lib/change-scope.mjs";
 
 const repoRoot = fileURLToPath(new URL("../../", import.meta.url));
 
@@ -137,4 +138,22 @@ test("documentation asks for the tests that read it, except the changelog", () =
     filters: ["@covel/plugin-loader"],
     docs: true,
   });
+});
+
+test("browser controls need local static and collection checks, and full source CI", () => {
+  for (const file of [
+    ".github/workflows/ci.yml",
+    ".github/workflows/gate.yml",
+    "playwright.config.ts",
+    "tests/e2e/third-party-stage.config.ts",
+    "tests/e2e/sandbox-surfaces.acceptance.ts",
+    "scripts/e2e-cpu-list.mjs",
+  ]) {
+    assert.deepEqual(
+      select(file),
+      { full: false, filters: [], docs: false },
+      file,
+    );
+    assert.equal(isDocsOnly([file]), false, file);
+  }
 });

@@ -42,12 +42,24 @@ export default defineConfig({
   testDir: import.meta.dirname,
   testMatch: "**/*.acceptance.ts",
   outputDir: resolve(import.meta.dirname, "artifacts/extensions"),
+  forbidOnly: !!process.env.CI,
+  timeout: process.env.CI ? 60_000 : 30_000,
+  expect: { timeout: process.env.CI ? 10_000 : 5_000 },
   workers: 1,
   retries: 0,
-  reporter: [["list"]],
+  reporter: [
+    ["list"],
+    [
+      "html",
+      {
+        outputFolder: resolve(import.meta.dirname, "report/extensions"),
+        open: "never",
+      },
+    ],
+  ],
   use: {
     baseURL: webOrigin,
-    trace: "on-first-retry",
+    trace: "retain-on-failure",
     screenshot: "only-on-failure",
   },
   projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
@@ -74,7 +86,7 @@ export default defineConfig({
       url: `${serverOrigin}/api/health`,
       reuseExistingServer: false,
       gracefulShutdown: { signal: "SIGTERM", timeout: 5_000 },
-      timeout: 60_000,
+      timeout: process.env.CI ? 120_000 : 60_000,
     },
     {
       command:
@@ -83,7 +95,7 @@ export default defineConfig({
       url: webOrigin,
       reuseExistingServer: false,
       gracefulShutdown: { signal: "SIGTERM", timeout: 5_000 },
-      timeout: 120_000,
+      timeout: process.env.CI ? 180_000 : 120_000,
     },
   ],
 });

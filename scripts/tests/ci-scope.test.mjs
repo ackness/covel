@@ -460,13 +460,13 @@ test("shared caches restore once and save only authorized successful exact misse
         ],
       };
     }),
-    {
-      steps: ci.jobs.browser.steps,
+    ...["browser", "e2e"].map((job) => ({
+      steps: ci.jobs[job].steps,
       id: "chromium-cache",
       path: "~/.cache/ms-playwright",
       key: "playwright-${{ runner.os }}-${{ steps.playwright.outputs.image }}-${{ steps.playwright.outputs.version }}",
       prefixes: [],
-    },
+    })),
     {
       steps: site.jobs.build.steps,
       id: "site-cache",
@@ -698,4 +698,39 @@ test("the workflow command consumes real event payloads and fails closed on unre
   rmSync(payload);
   assert.equal(run().stdout.trim(), "scope=full\nsite_deploy=true");
   assert.equal(run("true").stdout.trim(), "scope=full\nsite_deploy=false");
+});
+
+test("nightly and manual runs require full suites even at a docs-only tip", (t) => {
+  const repo = repository(t);
+  const head = repo.commit({ "docs/guide.md": "guide\n" });
+  for (const eventName of ["schedule", "workflow_dispatch"]) {
+    assert.deepEqual(repo.push(head, repo.base, { eventName }), {
+      scope: "full",
+      site_deploy: true,
+    });
+  }
+});
+
+test("source manifest additions, deletions and moves into docs always require full suites", (t) => {
+  const repo = repository(t);
+  let before = repo.base;
+  for (const file of [
+    "plugins/a/PLUGIN.md",
+    "plugins/a/runtimes/story/RUNTIME.md",
+    "worlds/a/WORLD.md",
+    "prompts/server/turn.md",
+  ]) {
+    const added = repo.commit({ [file]: "manifest\n" });
+    assert.equal(repo.push(added, before).scope, "full", `added ${file}`);
+    const destination = path.join(repo.cwd, "docs/moved.md");
+    mkdirSync(path.dirname(destination), { recursive: true });
+    renameSync(path.join(repo.cwd, file), destination);
+    const moved = repo.commit({});
+    assert.equal(repo.push(moved, added).scope, "full", `moved ${file}`);
+    const restored = repo.commit({ [file]: "manifest\n" });
+    rmSync(path.join(repo.cwd, file));
+    const deleted = repo.commit({});
+    assert.equal(repo.push(deleted, restored).scope, "full", `deleted ${file}`);
+    before = deleted;
+  }
 });

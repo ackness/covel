@@ -7,7 +7,7 @@ import { parse } from "yaml";
 import { checkRunsState, verificationFailures } from "../ci-results.mjs";
 
 const command = fileURLToPath(new URL("../ci-results.mjs", import.meta.url));
-const fullJobs = ["tests", "web", "server", "postgres", "browser"];
+const fullJobs = ["tests", "web", "server", "postgres", "browser", "e2e"];
 
 function results(scope = "full") {
   return {
@@ -85,6 +85,7 @@ test("failure, cancellation, unknown, skipped and missing required jobs never pa
         "cancelled",
         "skipped",
         "unknown",
+        "timed_out",
         undefined,
       ]) {
         const needs = results(scope);
@@ -254,4 +255,50 @@ test("workflow entrypoints reject failed native results and consume API payloads
     "success",
   );
   assert.equal(poll("not JSON").status, 1);
+});
+
+test("full browser matrix results fail closed on full and release paths", () => {
+  for (const release of [false, true]) {
+    for (const scope of ["full", "docs"]) {
+      if (scope === "docs" && !release) continue;
+      for (const result of [
+        "failure",
+        "cancelled",
+        "skipped",
+        "timed_out",
+        undefined,
+      ]) {
+        const needs = results();
+        needs.scope.outputs.scope = scope;
+        if (result === undefined) delete needs.e2e;
+        else needs.e2e.result = result;
+        assert.ok(
+          verificationFailures(needs, release).includes("e2e did not succeed"),
+        );
+      }
+    }
+  }
+});
+
+test("each full browser shard blocks the gate across Checks API pages", () => {
+  for (const shard of [1, 2, 3, 4]) {
+    const name = `Full browser suite (${shard}/4)`;
+    for (const conclusion of ["failure", "cancelled", "timed_out"]) {
+      assert.equal(
+        checkRunsState([
+          ...pages(check("Verification")),
+          ...pages(check(name, conclusion)),
+        ]),
+        "failure",
+      );
+    }
+    assert.equal(
+      checkRunsState([
+        ...pages(check("Verification")),
+        ...pages(check(name, null, "in_progress")),
+      ]),
+      "pending",
+    );
+    assert.equal(checkRunsState(pages(check(name))), "pending");
+  }
 });
