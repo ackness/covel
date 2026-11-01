@@ -91,13 +91,13 @@ return { result: execution.result, committed: outcome.status === "committed" };
 - 恢复时使用这些冻结的快照。还没提交的命令仍然可以被这次运行读到，并在恢复成功时一起原子提交。
 - 恢复失败会丢弃这些域写入。
 - function handler 挂起前用 `ctx.recursiveCall` 调用的子 runtime，结果连同它们的写入一起保存在 continuation 里，恢复成功时先于 handler 提交。自己也挂起了的子 runtime 不保存，trace 里记一条 `recursive.failed`，`code` 是 `nested-suspension-dropped`。
-- agent runtime 挂起时，continuation 还保存工具循环的状态：用掉的纠正次数、激活过的延迟工具、并入的玩家插话写出的正文、已经成功的完成工具的输出，以及这一回合的提示词片段。恢复时循环接着这些状态走，不重新组装上下文。
+- agent runtime 挂起时，continuation 保存已用普通步数、当前步数上限、各类纠正的用量和上限、拒绝次数、激活的延迟工具、准入时的输出 schema 和必需工作规则，以及提示词片段。执行器持有的业务工具结果单独保存，用来恢复必需工作证据和 effects。恢复不会提高已保存的步数或纠正上限，也不重新组装上下文；普通回复、被拒绝的候选和公开工具记录都不能证明输出已接受。
 - continuation 还记下挂起时历史里的玩家回合数和插件版本。恢复时任一项变了，挂起项就被作废，不再运行，见[过时的挂起项](./api.md#过时的挂起项)。
 - 恢复的运行可以再次挂起。新挂起项接着同一次执行，原执行的身份、逻辑回合和扣下的后台作业都转给它，见[再次挂起](./api.md#再次挂起)。
 - 恢复的运行照常发出 `runtime.started`，带 `resumed: true`。`PreRuntime` 和 `PostContextAssembly` 不再触发；`PostRuntime` 在挂起时不触发，到真正结束时触发一次，见 [Hook](./hooks.md#postruntime)。
 
 > [!WARNING]
-> continuation 的格式更新之后，已有的开发期暂停记录需要重建。
+> 此格式变更要求重建活跃的开发期 agent continuation，以及包含它们的快照和 checkpoint。已提交的故事历史保持有效。旧的完成工具输出和插话正文不再单独保存，也不做格式迁移。
 
 ### 工具产生的命令
 
@@ -228,6 +228,8 @@ agent runtime 的工具循环每一种结束方式都对应一个结束原因（
 | `suspended` | 挂起 | 调用了 `suspend` 工具，等待玩家输入 | 挂起 |
 
 **收尾步骤。** 步数耗尽、进入已配置的时限预留或上下文超限时，最多追加一个仅提供 `submit-output` 的收尾请求。请求沿用冻结的工具定义和同一接受条件，步号加 1，不触发 `PreStep`；`PreLLMCall` 不能恢复业务工具。只有必需工作已成功、没有未解决的必需业务失败且截止时间至少还剩 3 秒才尝试。上下文超限还要求至少一个完整工具步骤；按[提示词预算](./prompt-structure.md#预算)省略结果或生成摘要，最新一组也可处理。接受成功保留原来的界限原因并设置 `finalizer: true`；拒绝后没有第二轮修复：校验/审查计数已用尽时以 `invalid-output` 失败，否则保留阻止重试的界限原因。真实取消、供应商拒绝或请求错误保留自己的归因；收尾请求仍超限时保留原超限错误。
+
+恢复的步号继续原循环。提交与 `suspend` 混在一个响应中会整批拒绝；已接受提交立即结束，因此不会随后挂起。计算完成仍可被 `PostRuntime`、proposal 校验或事务回滚拒绝；只有提交收据允许发布故事完成。
 
 **循环内纠正。** JSON/schema/故事形状、缺少提交或混合批次使用 `outputRepair`（默认 1）；`PostLLMResponse` 与 `ReviewAgentOutput` 共用 `review`（默认 2）；未完成必需工作使用 `toolUse`（默认 1）。一次拒绝只归入一个类别，在还能调度下一请求时扣一次，使用普通步骤和截止时间。`step.completed.notes` 中的 `output-rejected` 只带安全的 `reason` 类别和从 1 开始的 `attempt`，不带审查文字或参数；没有循环后的 `repair` 步骤或 `repaired` 成功。
 

@@ -562,6 +562,8 @@ Acceptance stores a candidate in private kernel state and ends computation. `Pos
 
 Rejection returns a correlated tool error and a content-free `output-rejected` step note. Format, review and required work have independent budgets while consuming ordinary steps; see [loop profiles](../reference/plugins.md#loop-profile-agentloopprofile). Resubmission never repeats an already successful business write.
 
+Suspension saves the admitted output schema, required-work rules, plugin version, ordinary steps used, and correction counts and ceilings. Resume checks the same contract and continues step numbering and budgets, including a ceiling lowered by `PreStep`. Required work and effects come from executor-owned results, not hook-rewritten public tool records or assistant content. Rejected candidates remain in the private transcript and cannot become accepted resumed output. Delegated children use the same submission gate without an independent story commit unit.
+
 **A step limit is not a success.** With required work complete, at least 3 seconds left and the profile enabled, a step limit, deadline reserve or context overflow may use one submission-only finalizer. Overflow also requires a complete tool step. The finalizer uses the same validation/review, skips `PreStep`, and has no subsequent repair loop. Refusal, cancellation and real timeout cannot become success from earlier text. The complete [stop reasons](../reference/protocol.md#stop-reasons) remain on runtime and step events.
 
 ## 4. Plugin design

@@ -285,9 +285,26 @@ export function makeSuspension(
       lifecycle: { runId: "suspended-run", progressRunId: "suspended-run" },
       readScopes: [],
       messages: [{ role: "system", content: "You are a test assistant." }],
-      partialContent: undefined,
       toolCallsSoFar: [],
       pendingProposals: [],
+      loop: {
+        steps: 1,
+        maxSteps: 20,
+        rejectionAttempts: 0,
+        correctionLimits: {
+          toolUse: 1,
+          review: 2,
+          loopPerturbation: 1,
+          outputRepair: 1,
+        },
+        outputContract: {
+          toolName: "submit-output",
+          schema: { type: "object" },
+          schemaSource: "loaded",
+          provenance: "model-authored",
+          requiredWork: { required: false, toolNames: [] },
+        },
+      },
       executionContext: {
         executionId: "execution-1",
         origin: "player",

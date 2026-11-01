@@ -24,7 +24,7 @@ import {
 import type { ExecutionDeps } from "../src/execution.js";
 import {
   makeExecutor,
-  prose,
+  submitted,
   queuedLLM,
   toolCall,
 } from "./_helpers/agent-loop-fixture.js";
@@ -108,7 +108,7 @@ describe.each(["agent", "function"] as const)(
         onRuntimeComplete: completed,
         llm: queuedLLM(
           leg === 2
-            ? [prose("All answered.")]
+            ? [submitted("All answered.")]
             : [toolCall("suspend", ASK, `call-${leg}`)],
         ),
         toolExecutor: makeExecutor([suspendTool]),

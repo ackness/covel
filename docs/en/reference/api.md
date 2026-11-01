@@ -4508,6 +4508,8 @@ Resume a suspended runtime with the data the player submitted.
 - The time limit is the one of the original dispatch: the runtime manifest's `timeoutMs` when it sets one, otherwise the framework default.
 - A resumed runtime can suspend again; see [Suspending again](#suspending-again) below.
 
+Agent resume retains spent steps, correction counts and admitted ceilings; reply text is not a submission. A changed output schema or required-work rule, or a continuation missing the current contract, fails before a model request and leaves the suspension available to abandon. Recreate active old agent continuations and snapshots/checkpoints containing them; committed stories need not be deleted.
+
 **Request**
 
 ```json
@@ -6790,6 +6792,8 @@ Each snapshot is `{ slot, key?, value, revision }`:
 <a id="auto-advance"></a>
 
 ### Automatic advancement and session settings
+
+For agents, advancement reads only `yield` accepted through `submit-output`, processed by commit hooks and actually saved. Rejected `continue`, cancellation, failed commits and child output schedule no round. Frontend text reveal neither starts nor delays advancement.
 
 `POST /api/sessions` and `PATCH /api/sessions/:id` accept optional `autoAdvanceLimit`. GET, creation and PATCH responses return its effective number.
 

@@ -1,3 +1,6 @@
+import { resolveAgentOutput } from "@covel/shared/plugin-runtime";
+import type { SuspendedLoopState } from "@covel/store";
+import { resolveLoopProfile } from "../../src/agent-loop/loop-profile.js";
 import { makeProposal } from "@covel/plugin-handlers-utils";
 /**
  * Minimal fixture for the agent tool loop: a scripted model, one recording
@@ -278,5 +281,23 @@ export function latch(participants: number): () => Promise<void> {
   return () => {
     if (--remaining === 0) ready.resolve();
     return ready.promise;
+  };
+}
+
+/** Current admitted continuation state for tests that construct a saved agent directly. */
+export function suspendedLoopState(
+  runtime: RuntimeManifest,
+  outputSchema?: Record<string, unknown>,
+): SuspendedLoopState {
+  return {
+    steps: 1,
+    maxSteps: 100,
+    rejectionAttempts: 0,
+    correctionLimits: resolveLoopProfile(runtime).corrections,
+    outputContract: resolveAgentOutput({
+      manifest: runtime,
+      promptTemplate: "",
+      ...(outputSchema ? { outputSchema } : {}),
+    }),
   };
 }

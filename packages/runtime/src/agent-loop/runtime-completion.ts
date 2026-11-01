@@ -1,3 +1,4 @@
+import { toJsonValueOrDiagnostic } from "@covel/shared";
 import type {
   LLMTargetIdentity,
   RuntimeManifest,
@@ -6,54 +7,30 @@ import type {
 import type { SuspensionRecord } from "@covel/store";
 import type { ExecutedToolCallState } from "../turn-executor/turn-output-helpers.js";
 
-export type CompletionCalls = NonNullable<
-  SuspensionRecord["pendingContinuation"]["completionCalls"]
+export type BusinessCalls = NonNullable<
+  SuspensionRecord["pendingContinuation"]["businessCalls"]
 >;
 
-export function captureCompletionCalls(
+export function captureBusinessCalls(
   calls: readonly ExecutedToolCallState[],
-  prior: CompletionCalls = [],
-): CompletionCalls {
-  return [
-    ...prior,
-    // A refused call is neither work done nor a failure left to resolve.
-    ...calls
-      .filter((call) => !call.refused && isBusinessTool(call.name))
-      .map((call) => ({
-        name: call.name,
-        success: call.success,
-        done: false,
-      })),
-  ];
+): BusinessCalls {
+  // A refused call is neither work done nor a failure left to resolve.
+  return calls
+    .filter((call) => !call.refused && isBusinessTool(call.name))
+    .map((call) => ({
+      name: call.name,
+      success: call.success,
+      result: toJsonValueOrDiagnostic(call.result ?? null, "business result"),
+    }));
 }
 
-/**
- * Whether the calls recorded before a suspension include business work. Only a
- * call that succeeded counts: a failed call also leaves a name in the
- * transcript, and host controls do not count.
- */
-export function hasCompletedBusinessWork(
-  manifest: RuntimeManifest,
-  prior: CompletionCalls = [],
-): boolean {
-  return prior.some((call) => countsAsBusinessWork(manifest, call));
-}
-
-/**
- * Whether this loop has business work to show: a call that succeeded here, or
- * one that succeeded before the suspension it resumed from. A call in the
- * transcript proves nothing, since a failed call is recorded there as well.
- * The loop judges `requireToolUse` with this where it returns, so the answer
- * is the same however the loop ended.
- */
+/** Successful executor-owned calls, including calls restored from a continuation. */
 export function hasBusinessWork(
   manifest: RuntimeManifest,
   calls: readonly ExecutedToolCallState[],
-  seededBusinessWork: boolean,
 ): boolean {
-  return (
-    seededBusinessWork ||
-    calls.some((call) => countsAsBusinessWork(manifest, call))
+  return calls.some(
+    (call) => !call.refused && countsAsBusinessWork(manifest, call),
   );
 }
 
@@ -71,11 +48,11 @@ function countsAsBusinessWork(
 
 /** Tools whose last attempt before a suspension failed, in first-failure order. */
 export function unresolvedToolFailures(
-  prior: CompletionCalls = [],
+  prior: readonly { name: string; success: boolean; refused?: boolean }[] = [],
 ): readonly string[] {
   const failures = new Set<string>();
   for (const call of prior) {
-    if (!isBusinessTool(call.name)) continue;
+    if (call.refused || !isBusinessTool(call.name)) continue;
     if (call.success) failures.delete(call.name);
     else failures.add(call.name);
   }

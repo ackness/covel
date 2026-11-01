@@ -1,3 +1,6 @@
+import { isDeepStrictEqual } from "node:util";
+import { agentOutputContract } from "../agent-loop/agent-output-contract.js";
+import { suspensionBasis } from "./suspension-settlement.js";
 import {
   attachReadScopes,
   readScopesOf,
@@ -164,8 +167,8 @@ async function executeResumedRuntime(
   },
 ): Promise<RuntimeResult> {
   const { startTime, runId, input, options } = execution;
-  // Each leg of a logical runtime gets the step budget and the deadline a
-  // dispatch would give it: the manifest's own values beat the caller's.
+  // Waiting for player input does not consume the next leg's deadline.
+  // Ordinary step usage and correction ceilings continue the admitted loop.
   const maxSteps = options?.maxSteps ?? DEFAULT_MAX_TOOL_STEPS;
   const resumeTimeoutMs = resolveRuntimeTimeoutMs(
     manifest,
@@ -179,7 +182,9 @@ async function executeResumedRuntime(
     lastTarget,
     deltaCount,
     outputContractSchema: loaded?.outputContractSchema,
-    ...(loaded?.outputSchema ? { agentOutputSchema: loaded.outputSchema } : {}),
+    ...(loaded && manifest.runtimeType !== "function"
+      ? { agentOutputSchema: agentOutputContract(loaded).schema }
+      : {}),
   });
   const finalizeWithPostRuntime = (
     result: RuntimeResult,
@@ -289,6 +294,46 @@ async function executeResumedRuntime(
     { turnId: input.turnId, runId },
     pendingContinuation.lifecycle.progressRunId,
   );
+
+  const savedLoop = pendingContinuation.loop;
+  const output = agentOutputContract(loaded);
+  const identity = {
+    toolName: output.toolName,
+    schema: output.schema,
+    schemaSource: output.schemaSource,
+    provenance: output.provenance,
+    requiredWork: output.requiredWork,
+  };
+  const correctionKinds = [
+    "toolUse",
+    "review",
+    "loopPerturbation",
+    "outputRepair",
+  ] as const;
+  const isCount = (value: unknown): value is number =>
+    typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
+  if (
+    !savedLoop ||
+    !isCount(savedLoop.rejectionAttempts) ||
+    correctionKinds.some(
+      (kind) =>
+        !isCount(savedLoop.correctionLimits?.[kind]) ||
+        !isCount(savedLoop.corrections?.[kind] ?? 0),
+    ) ||
+    !Number.isSafeInteger(savedLoop.steps) ||
+    savedLoop.steps < 0 ||
+    !Number.isSafeInteger(savedLoop.maxSteps) ||
+    savedLoop.maxSteps < 1 ||
+    savedLoop.steps > savedLoop.maxSteps ||
+    !savedLoop.correctionLimits ||
+    !isDeepStrictEqual(savedLoop.outputContract, identity) ||
+    pendingContinuation.takenUnder.pluginVersion !==
+      suspensionBasis(manifest, 0).pluginVersion
+  ) {
+    throw new Error(
+      "Agent continuation contract is invalid or changed; recreate this suspended runtime.",
+    );
+  }
 
   // Rebuild the mid-turn transcript from the suspension and append the resume
   // payload: a tool result for the suspend tool (agent runtimes) or a user
@@ -418,10 +463,9 @@ async function executeResumedRuntime(
     runId,
     executionContext: resumeExecutionContext,
     initialState: {
-      finalContent: pendingContinuation.partialContent ?? null,
       collectedToolCalls:
         pendingContinuation.toolCallsSoFar as ToolCallRecord[],
-      completionCalls: pendingContinuation.completionCalls,
+      businessCalls: pendingContinuation.businessCalls,
       pendingProposals: pendingContinuation.pendingProposals as Proposal[],
       emittedEvents:
         (pendingContinuation.emittedEvents as EmittedEvent[] | undefined) ?? [],
@@ -445,7 +489,6 @@ async function executeResumedRuntime(
     startTime,
     toolLoop,
     outputSchema: loaded.outputSchema,
-    priorToolCalls: pendingContinuation.toolCallsSoFar as ToolCallRecord[],
   });
   // The runtime NO LONGER resolves the suspension or appends the
   // assistant turn message here. Those writes belong to the commit-owning

@@ -162,9 +162,15 @@ function streamingLLM(routes: Record<string, Reply>) {
 
 function json(value: unknown): LLMResponse {
   return {
-    content: JSON.stringify(value),
-    toolCalls: [],
-    finishReason: "stop",
+    content: null,
+    toolCalls: [
+      {
+        id: "submission",
+        name: "submit-output",
+        arguments: JSON.stringify(value),
+      },
+    ],
+    finishReason: "tool_calls",
     usage: { inputTokens: 7, outputTokens: 3 },
   };
 }
@@ -410,6 +416,7 @@ describe("ctx.agents.run", () => {
     expect(requests[0]?.tools?.map((t) => t.name).sort()).toEqual([
       "get-character",
       "peek",
+      "submit-output",
     ]);
     const refusal = eventsOf(emitter, "tool.failed").find(
       (e) => e.payload.toolName === "poke",
@@ -596,7 +603,7 @@ describe("ctx.agents.run", () => {
       // The model repeats the same read until the loop takes its tools away.
       const { llm } = routedLLM({
         [ACTOR_MARK]: (params) =>
-          params.tools
+          params.tools?.some((tool) => tool.name === "peek")
             ? toolCalls({ name: "peek", args: { key: "same" }, id: `t${i++}` })
             : json({ line: "Fine, pass." }),
       });
@@ -701,7 +708,9 @@ describe("delegate", () => {
     ]);
     // A sub-agent at the depth cap is not offered `delegate`.
     const actorRequest = requests.find((r) => r.mark === ACTOR_MARK);
-    expect(actorRequest?.tools ?? []).toEqual([]);
+    expect(actorRequest?.tools?.map((tool) => tool.name)).toEqual([
+      "submit-output",
+    ]);
 
     const calling = eventsOf(emitter, "tool.calling");
     const delegateCalling = calling.find(
@@ -757,19 +766,19 @@ describe("delegate", () => {
     });
   });
 
-  it("hands a completing delegate's output to the caller's output gate", async () => {
+  it("requires the parent to submit its own output after delegation", async () => {
     const lead: RuntimeManifest = {
       ...director({ builtin: ["delegate"] }),
-      completeAfterTools: ["delegate"],
-      requireToolUse: true,
     };
     const { llm, requests } = routedLLM({
-      [PARENT_MARK]: () =>
-        toolCalls({
-          name: "delegate",
-          args: { target: { contract: CONTRACT }, brief: "Speak for me." },
-          id: "tc-finish",
-        }),
+      [PARENT_MARK]: (_params, index) =>
+        index === 0
+          ? toolCalls({
+              name: "delegate",
+              args: { target: { contract: CONTRACT }, brief: "Speak for me." },
+              id: "tc-finish",
+            })
+          : json({ line: "The guard answered." }),
       [ACTOR_MARK]: () => json({ line: "Who goes there?" }),
     });
     const result = await runTurnPipeline(
@@ -782,13 +791,13 @@ describe("delegate", () => {
     );
     const [leadResult] = result.runtimeResults;
     expect(leadResult?.status).toBe("success");
-    // The schema `{ line }` holds the sub-agent's output, not an envelope.
-    expect(leadResult?.output).toEqual({ line: "Who goes there?" });
-    expect(leadResult?.stop).toEqual({ reason: "tool-finished" });
+    // Child output is evidence; the parent owns its separate accepted output.
+    expect(leadResult?.output).toEqual({ line: "The guard answered." });
+    expect(leadResult?.stop).toEqual({ reason: "completed" });
     expect(leadResult?.toolCalls[0]?.output).toEqual({
       line: "Who goes there?",
     });
-    expect(requests.filter((r) => r.mark === PARENT_MARK)).toHaveLength(1);
+    expect(requests.filter((r) => r.mark === PARENT_MARK)).toHaveLength(2);
   });
 
   it("streams the caller's text to the player and none of the sub-agent's", async () => {
@@ -808,8 +817,11 @@ describe("delegate", () => {
                 args: { target: { contract: CONTRACT }, brief: "Speak." },
                 id: "tc-stream",
               })
-            : json({ line: "LEAD-LINE" }),
-        [ACTOR_MARK]: () => json({ line: "GUARD-LINE" }),
+            : { ...json({ line: "LEAD-LINE" }), content: "LEAD-LINE" },
+        [ACTOR_MARK]: () => ({
+          ...json({ line: "GUARD-LINE" }),
+          content: "GUARD-LINE",
+        }),
       });
       const emitter = makeEmitterSpy();
       const result = await runTurnPipeline(

@@ -48,9 +48,11 @@ const input = {
   locale: "en-US",
 };
 const response = (value: unknown): LLMResponse => ({
-  content: JSON.stringify(value),
-  toolCalls: [],
-  finishReason: "stop",
+  content: null,
+  toolCalls: [
+    { id: "submit", name: "submit-output", arguments: JSON.stringify(value) },
+  ],
+  finishReason: "tool_calls",
   usage: { inputTokens: 1, outputTokens: 1 },
 });
 async function storeFixture() {

@@ -91,13 +91,13 @@ return { result: execution.result, committed: outcome.status === "committed" };
 - A resume uses these frozen snapshots. Commands not yet committed can still be read by the resumed run, and they are committed together, atomically, if the resume succeeds.
 - A failed resume discards these domain writes.
 - The results of child runtimes a function handler called with `ctx.recursiveCall` before it suspended are saved in the continuation together with their writes, and they commit ahead of the handler when the resume succeeds. A child that suspended itself is not saved; the trace records a `recursive.failed` with `code` `nested-suspension-dropped`.
-- When an agent runtime suspends, the continuation also saves the state of the tool loop: the corrections spent, the deferred tools activated, the prose written from merged player interjections, the output of a completing tool that already succeeded, and this turn's prompt segments. The resumed loop continues from that state and does not assemble its context again.
+- An agent continuation saves ordinary steps used, the current step ceiling, correction counts and ceilings, rejection count, activated deferred tools, the admitted output schema and required-work rules, and prompt segments. Executor-owned business results are saved separately to restore required-work evidence and effects. Resume cannot raise the saved step or correction ceilings and does not assemble context again. Reply text, rejected candidates and public tool records do not prove acceptance.
 - The continuation also records the number of player turns in the history and the plugin version at the moment of the suspension. If either has changed at resume time, the suspended item is voided and does not run; see [Out-of-date suspended items](./api.md#out-of-date-suspended-items).
 - A resumed run can suspend again. The new suspended item continues the same execution, and the original execution's identity, logical turn and held-back background jobs move to it; see [Suspending again](./api.md#suspending-again).
 - A resumed run sends `runtime.started` as usual, with `resumed: true`. `PreRuntime` and `PostContextAssembly` do not fire again; `PostRuntime` does not fire on a suspension and fires once at the real end; see [Hooks](./hooks.md#postruntime).
 
 > [!WARNING]
-> After the continuation format changes, existing development-time suspension records must be rebuilt.
+> This format change requires recreating active development agent continuations and snapshots/checkpoints containing them. Committed story history remains valid. Saved completing-tool output and steered prose are removed without a migration.
 
 ### Commands produced by tools
 
@@ -228,6 +228,8 @@ Every way an agent runtime's tool loop can end maps to one stop reason (`StopRea
 | `suspended` | Suspended | The `suspend` tool was called; the loop waits for the player's input | Suspended |
 
 **The finalizer step.** At the step limit, configured deadline reserve or context overflow, at most one reserve request offers only `submit-output`. It uses the frozen tool definition and the same acceptance gate, advances the step number and skips `PreStep`; `PreLLMCall` cannot restore business tools. Required work must have succeeded, required business failures must be resolved, and at least 3 seconds must remain. Context overflow also requires one complete tool step; [prompt budgeting](./prompt-structure.md#budget) can elide results or create digests, including the newest group. Acceptance preserves the original boundary reason with `finalizer: true`. Rejection has no second repair loop: exhausted validation/review counters report `invalid-output`; otherwise the bound that prevented another attempt remains the reason. Actual cancellation, provider refusal and request errors retain their own attribution; another overflow keeps the original overflow error.
+
+Resumed step numbers continue the original loop. A response mixing submission with `suspend` is rejected as a batch; acceptance ends the loop immediately, so it cannot subsequently suspend. `PostRuntime`, proposal validation or transaction rollback can still reject completed computation. Only the commit receipt permits story completion to be published.
 
 **In-loop corrections.** JSON/schema/story shape, missing submission and mixed batches use `outputRepair` (default 1); `PostLLMResponse` and `ReviewAgentOutput` share `review` (default 2); unmet required work uses `toolUse` (default 1). Each rejection has one classification and spends one counter only when another request can be scheduled, within ordinary steps and the deadline. The `output-rejected` note in `step.completed.notes` carries only a safe `reason` category and a one-based `attempt`, never review text or arguments. There is no post-loop `repair` step or `repaired` success.
 

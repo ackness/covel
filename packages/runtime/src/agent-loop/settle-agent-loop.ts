@@ -2,7 +2,6 @@ import type {
   LoopStop,
   RuntimeManifest,
   RuntimeResult,
-  ToolCallRecord,
   TurnInput,
 } from "@covel/shared";
 import { makeFailedResult } from "../turn-executor/turn-executor-helpers.js";
@@ -19,7 +18,6 @@ export function settleAgentLoop(args: {
   readonly startTime: number;
   readonly toolLoop: AgentToolLoopCompleted;
   readonly outputSchema?: Record<string, unknown>;
-  readonly priorToolCalls?: readonly ToolCallRecord[];
 }): { readonly kind: "failed" | "success"; readonly result: RuntimeResult } {
   const { manifest, input, runId, startTime, toolLoop } = args;
   const { collectedToolCalls, failedToolCalls, stop, effectiveMaxSteps } =
@@ -100,7 +98,6 @@ export function settleAgentLoop(args: {
     manifest,
     acceptedOutput: toolLoop.acceptedOutput,
     executedToolCalls: toolLoop.executedToolCalls,
-    priorToolCalls: args.priorToolCalls,
     pendingProposals: toolLoop.pendingProposals,
     emittedEvents: toolLoop.emittedEvents,
     dedupeInteractions: true,

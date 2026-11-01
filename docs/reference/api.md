@@ -4508,6 +4508,8 @@ runtime 可以中途停下来等玩家提供数据，这叫挂起。本节的端
 - 时限和最初派发时相同：runtime 清单写了 `timeoutMs` 就用它，没写时用框架的默认时限。
 - 恢复的 runtime 可以再次挂起，见下面的[再次挂起](#再次挂起)。
 
+agent 恢复沿用已用步数、纠正计数及其准入上限，不把答案正文当作提交。输出 schema 或必需工作规则已变化、或 continuation 缺少当前契约时，在模型请求前失败，保留原挂起项供放弃。重建活跃的旧 agent continuation 及包含它们的快照/checkpoint；不需要删除已提交故事。
+
 **请求**
 
 ```json
@@ -6788,6 +6790,8 @@ STORE_BACKEND=memory pnpm dev:server  # 临时 Memory 后端（重启即丢失�
 <a id="auto-advance"></a>
 
 ### 自动推进与会话设置
+
+对 agent，只读取通过 `submit-output` 接受、经过提交 Hook 并实际保存的 `yield`。被拒绝的 `continue`、取消、失败提交和子 agent 的输出都不安排下一轮。前端正文逐段显示不启动也不延迟自动推进。
 
 `POST /api/sessions` 和 `PATCH /api/sessions/:id` 接受可选的 `autoAdvanceLimit`。GET、创建与 PATCH 响应都返回生效的数值。
 

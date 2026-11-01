@@ -67,7 +67,7 @@ export interface RequestLLMResponseOptions {
    * leaving the choice to a model that already answered in prose.
    */
   readonly requireToolCall?: boolean;
-  /** Prerequisites are satisfied and this request should prefer final submission. */
+  /** The loop requests submission: due output, resubmission or its sole reserve. */
   readonly submissionRequested?: boolean;
   /**
    * This step's tool choice from a PreStep hook. It replaces the manifest's

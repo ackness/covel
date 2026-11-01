@@ -5,7 +5,6 @@ import type {
   Proposal,
   RuntimeEffects,
   RuntimeManifest,
-  ToolCallRecord,
 } from "@covel/shared";
 import { normalizeStoryOutput, STORY_EMPTY_ERROR } from "./story-output.js";
 import type { EmittedEvent } from "@covel/tools";
@@ -17,8 +16,6 @@ export interface FinalizeAgentOutputParams {
   /** Validated model-authored submission; its fields cannot produce effects. */
   readonly acceptedOutput: Readonly<Record<string, unknown>>;
   readonly executedToolCalls: readonly ExecutedToolCallState[];
-  /** Tool results persisted before a suspension, unavailable in executedToolCalls. */
-  readonly priorToolCalls?: readonly ToolCallRecord[];
   readonly pendingProposals: readonly Proposal[];
   /** Events emitted via `emit-event` tool calls — appended to `effects.events`. */
   readonly emittedEvents?: readonly EmittedEvent[];
@@ -47,7 +44,6 @@ export function finalizeAgentOutput(
     manifest,
     acceptedOutput,
     executedToolCalls,
-    priorToolCalls = [],
     pendingProposals,
     emittedEvents = [],
     dedupeInteractions = false,
@@ -57,24 +53,8 @@ export function finalizeAgentOutput(
   const effects: Record<string, unknown> = {};
   if (emittedEvents.length) effects.events = [...emittedEvents];
 
-  // A resumed loop starts its executedToolCalls afresh; earlier successful
-  // tool outputs survive only as ToolCallRecords. Failed calls have null or
-  // diagnostic-string outputs, so only record-shaped results can supply UI.
-  const priorToolResults = priorToolCalls
-    .filter(
-      (call) =>
-        isBusinessTool(call.toolName) &&
-        call.output !== null &&
-        typeof call.output === "object" &&
-        !Array.isArray(call.output),
-    )
-    .map((call) => ({
-      name: call.toolName,
-      result: call.output,
-      success: true,
-    }));
-  const toolResults = [...priorToolResults, ...executedToolCalls].filter(
-    (call) => isBusinessTool(call.name),
+  const toolResults = executedToolCalls.filter((call) =>
+    isBusinessTool(call.name),
   );
   const toolInteractions = extractInteractions(toolResults, dedupeInteractions);
   if (toolInteractions.length) effects.interactions = toolInteractions;

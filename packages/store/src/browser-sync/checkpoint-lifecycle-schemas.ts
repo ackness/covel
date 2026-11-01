@@ -1,3 +1,4 @@
+import { assertAgentOutputObjectSchema } from "@covel/shared/plugin-runtime";
 import { proposalReadScopesSchema } from "@covel/shared";
 import {
   orchestrationSettingsSchema,
@@ -124,6 +125,34 @@ const inputSlots = z.record(
 
 const correctionCount = z.number().int().nonnegative();
 const suspendedLoopState = z.strictObject({
+  steps: correctionCount,
+  maxSteps: z.number().int().positive(),
+  rejectionAttempts: correctionCount,
+  correctionLimits: z.strictObject({
+    toolUse: correctionCount,
+    review: correctionCount,
+    loopPerturbation: correctionCount,
+    outputRepair: correctionCount,
+  }),
+  outputContract: z.strictObject({
+    toolName: z.literal("submit-output"),
+    schema: jsonObject.superRefine((schema, ctx) => {
+      try {
+        assertAgentOutputObjectSchema(schema);
+      } catch {
+        ctx.addIssue({
+          code: "custom",
+          message: "Agent output schema requires an object root",
+        });
+      }
+    }),
+    schemaSource: z.enum(["loaded", "host-story", "host-system"]),
+    provenance: z.literal("model-authored"),
+    requiredWork: z.strictObject({
+      required: z.boolean(),
+      toolNames: z.array(nonEmptyString),
+    }),
+  }),
   corrections: z
     .strictObject({
       toolUse: correctionCount.optional(),
@@ -133,8 +162,6 @@ const suspendedLoopState = z.strictObject({
     })
     .optional(),
   activatedTools: z.array(nonEmptyString).optional(),
-  steeredProse: z.array(z.string()).optional(),
-  completingToolOutput: jsonObject.optional(),
 });
 const jobOwnership = z.strictObject({
   runId: nonEmptyString,
@@ -176,62 +203,81 @@ const suspensions = createdRow.extend({
   pluginId: z.string(),
   reason: z.string(),
   resumeSchema: jsonValue,
-  pendingContinuation: z.looseObject({
-    lifecycle: z.strictObject({
-      runId: nonEmptyString,
-      progressRunId: nonEmptyString,
-    }),
-    delegation: delegationSnapshotSchema.optional(),
-    messages: z.array(jsonValue),
-    partialContent: z.string().optional(),
-    toolCallsSoFar: z.array(jsonValue),
-    completionCalls: z
-      .array(
-        z.object({
-          name: nonEmptyString,
-          success: z.boolean(),
-          done: z.boolean(),
-        }),
+  pendingContinuation: z
+    .strictObject({
+      lifecycle: z.strictObject({
+        runId: nonEmptyString,
+        progressRunId: nonEmptyString,
+      }),
+      delegation: delegationSnapshotSchema.optional(),
+      messages: z.array(jsonValue),
+      toolCallsSoFar: z.array(jsonValue),
+      businessCalls: z
+        .array(
+          z.strictObject({
+            name: nonEmptyString,
+            success: z.boolean(),
+            result: jsonValue,
+          }),
+        )
+        .optional(),
+      pendingProposals: z.array(jsonValue),
+      readScopes: proposalReadScopesSchema,
+      inputSlots: inputSlots.optional(),
+      exportSlots: inputSlots.optional(),
+      activation: z
+        .object({
+          source: z.enum(["stage", "event", "manual"]),
+          detached: z.boolean(),
+          payload: jsonValue,
+        })
+        .optional(),
+      executionContext: z.looseObject({
+        executionId: nonEmptyString,
+        origin: executionOrigin,
+        logicalTurnId: z.string().optional(),
+        logicalTurn: z.number().int().positive().optional(),
+        sourceTurnId: z.string().optional(),
+        countPolicy: z.enum(["none", "complete-player-turn"]),
+      }),
+      progressScopeId: nonEmptyString.optional(),
+      takenUnder: z.object({
+        playerTurns: z.number().int().nonnegative(),
+        pluginVersion: z.string(),
+        writes: z.array(suspensionWriteBaseline),
+      }),
+      locale: z.string().optional(),
+      logicalTurn: z.number().int().optional(),
+      actions: z.array(turnActionSchema).optional(),
+      turnNumber: z.number().int().optional(),
+      currentTurnUserMessages: z.number().int().positive().optional(),
+      emittedEvents: z.array(jsonValue).optional(),
+      suspendToolCallId: z.string().optional(),
+      loop: suspendedLoopState.optional(),
+      withheldRuntimeJobs: z.array(jsonValue).optional(),
+      promptSegments: z
+        .array(z.strictObject({ pluginId: z.string(), id: z.string() }))
+        .optional(),
+      nestedResults: z.array(suspendedNestedResult).optional(),
+    })
+    .superRefine((continuation, ctx) => {
+      if (continuation.suspendToolCallId && !continuation.loop)
+        ctx.addIssue({
+          code: "custom",
+          path: ["loop"],
+          message:
+            "Active agent continuation requires its admitted output contract and budget",
+        });
+      if (
+        continuation.loop &&
+        continuation.loop.steps > continuation.loop.maxSteps
       )
-      .optional(),
-    pendingProposals: z.array(jsonValue),
-    readScopes: proposalReadScopesSchema,
-    inputSlots: inputSlots.optional(),
-    exportSlots: inputSlots.optional(),
-    activation: z
-      .object({
-        source: z.enum(["stage", "event", "manual"]),
-        detached: z.boolean(),
-        payload: jsonValue,
-      })
-      .optional(),
-    executionContext: z.looseObject({
-      executionId: nonEmptyString,
-      origin: executionOrigin,
-      logicalTurnId: z.string().optional(),
-      logicalTurn: z.number().int().positive().optional(),
-      sourceTurnId: z.string().optional(),
-      countPolicy: z.enum(["none", "complete-player-turn"]),
+        ctx.addIssue({
+          code: "custom",
+          path: ["loop", "steps"],
+          message: "Spent steps exceed the admitted limit",
+        });
     }),
-    progressScopeId: nonEmptyString.optional(),
-    takenUnder: z.object({
-      playerTurns: z.number().int().nonnegative(),
-      pluginVersion: z.string(),
-      writes: z.array(suspensionWriteBaseline),
-    }),
-    locale: z.string().optional(),
-    logicalTurn: z.number().int().optional(),
-    actions: z.array(turnActionSchema).optional(),
-    turnNumber: z.number().int().optional(),
-    currentTurnUserMessages: z.number().int().positive().optional(),
-    emittedEvents: z.array(jsonValue).optional(),
-    suspendToolCallId: z.string().optional(),
-    loop: suspendedLoopState.optional(),
-    promptSegments: z
-      .array(z.strictObject({ pluginId: z.string(), id: z.string() }))
-      .optional(),
-    nestedResults: z.array(suspendedNestedResult).optional(),
-  }),
   // All backends use a timestamp-prefixed claim marker while resume is active.
   resolvedAt: z
     .union([

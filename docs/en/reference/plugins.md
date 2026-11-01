@@ -343,6 +343,8 @@ A provider that already succeeded in an earlier stage or event layer can also sa
 
 ### Notes on setup runtimes
 
+Setup agents must submit completion fields through `submit-output` too. Acceptance alone does not complete setup: only a committed result updates setup state. Suspension, rejection and rollback cannot complete it early; setup and opening still do not increment player turns.
+
 Opening character templates must include a placeholder for every collected field. Template/default errors are correctable `invalid-input` failures; see [character tools](./tools.md#opening-character-form).
 
 A package-level `requires` makes sure the contract's provider is activated. It does not require the provider to produce output again on every execution.
@@ -707,11 +709,12 @@ Rules at run time:
 
 - **Own transcript**: the sub-agent's prompt is the provider's own body, the framework's completion instructions, then the brief. It does not see the caller's conversation. Generic sub-agents have no session history; the actor contract adds framework-filtered witnessed history (see [character delegation](#character-orchestration)).
 - **Read-only tools**: tools in the provider's `agent.tools` without the `readOnly` annotation (plugin tools, write tools such as a dataset's `-upsert` / `-update`), `suspend` and `delegate` are taken away. A declared plugin tool that is not registered still fails the run as it always does. Of the dataset tools, only `-get` / `-list` stay. Imported service tools stay, write-service imports included: the sub-agent calls as itself, and the operations it stages ride on the run that delegated to it and are taken back when the sub-agent fails.
+- **Submission tool**: after read-only filtering, the host generates `submit-output` from the provider’s effective output schema, granting no domain writes. Children return only output accepted by schema, required-work and `ReviewAgentOutput` checks. A delegated result cannot substitute for the parent agent’s own submission. Children cannot suspend.
 - **Loop profile**: without `agent.loop.profile` it runs `actor`: no streaming, no player interjections.
 - **Model**: it uses the model role the provider declares. The session's `runtimeModelOverrides` apply by the provider's runtimeId, also in a run resumed after suspension; the caller's override and the request's story model override do not.
 - **Caps**: one execution runs at most 8 sub-agents at a time, nested executions included, and a sub-agent cannot call another one (depth cap 1). Session settings also bound cumulative actors and calls; see [execution allowances](#character-orchestration). A call over a cap gets `unavailable` at once; nothing queues.
 - **Cancellation**: when the caller is cancelled, times out or ends, the sub-agent stops with it, with `cancelled`. A sub-agent the handler did not await is waited for before the runtime finishes.
-- **Output only**: the output is checked against the provider's `io.output.schema` and contract schema; a failure is `internal`. The `PreRuntime`, `PostRuntime` and `PostContextAssembly` hooks do not fire for a sub-agent; the in-loop `PreLLMCall`, `PreStep`, `PreToolUse` and `PostToolUse` fire as usual, with the sub-agent's `ctx.runtimeId`.
+- **Output only**: the output is checked against the provider's `io.output.schema` and contract schema; a failure is `internal`. The `PreRuntime`, `PostRuntime` and `PostContextAssembly` hooks do not fire for a sub-agent; the in-loop `PreLLMCall`, `PostLLMResponse`, `PreStep`, `PreToolUse`, `PostToolUse` and `ReviewAgentOutput` fire as usual, with the sub-agent's `ctx.runtimeId`.
 - **Trace**: every event of the sub-agent carries `subagentCallId`, `parentCallId` and `parentRuntimeId`, plus `subagent.started` / `completed` / `failed` (see [protocol](./protocol.md#sub-agent-events)). An `io.concealed` provider has its content hidden as a top-level run does.
 - **Fault latch**: a sub-agent’s own faults count against its provider. Only the provider’s own tightest time limit (winning ties) counts as its timeout; model errors and cancellations do not count. Faults count even if the parent execution fails or rolls back; clearing requires a committed execution. Calls from setup runtimes neither count nor clear faults. Paused providers return `unavailable` and still count toward ambiguity. See the [protocol fault latch](./protocol.md#plugin-fault-latch).
 
@@ -889,6 +892,8 @@ The loop profile controls steering, repeated-tool fallback, finalization and cor
 `profile: story`, `stream: true` and `steering: true` require story visibility. The reserve must be a nonnegative integer below the runtime timeout.
 
 **Correction budgets and output repair.** A rejection by the real response's `PostLLMResponse` runs first. Otherwise, classify in order: batch, JSON/schema/story shape, required work, output review. Each rejection consumes at most one category. The four counters are independent and spent only when scheduling another attempt. Corrections consume ordinary steps and the same deadline, without extra network retries or repeated successful business writes. Exhausting one category is terminal even when another has room. Valid JSON in reply content is also missing submission. Function and gateway structured-output APIs are unchanged.
+
+Suspension and re-suspension retain these counts, ordinary steps used and admitted ceilings; resume is not a new loop. If the saved output schema, required-work rules or plugin version differ from the loaded artifact, resume fails: recreate that agent continuation and checkpoints containing it. Successful business work need not run again, but resume still requires a new submission; no accepted answer is saved. Waiting for the player does not consume the next leg’s deadline.
 
 **Finishing before the time limit (`deadlineReserveMs`).** With required work complete and at least 3 seconds left, a step limit, deadline reserve or context overflow can admit one request offering only `submit-output`; overflow also requires a complete tool step. It uses the same validation and review, and `PreLLMCall` cannot restore business tools. Success keeps the original stop reason with `stop.finalizer: true`. It does not invoke `PreStep`, and rejection never starts another repair request. Real timeout, cancellation and model errors retain their causes; an oversized finalizer preserves the original overflow. See [stop reasons](./protocol.md#stop-reasons).
 
@@ -1450,6 +1455,8 @@ Functions and guards expose `ctx.historyFor(characterId, {limit?})`; plugin tool
 Development data: discard unresolved suspensions that already delegated before budget snapshots existed, and snapshots/checkpoints containing those continuations. Ordinary sessions and stories need no reset. There is no old-counter reconstruction or dual-format compatibility.
 
 ## Stories requesting advancement
+
+An agent’s `yield: continue` must come from accepted, committed output. Rejection, cancellation, failed commit and child output cannot start another round. Local text reveal does not participate in execution decisions.
 
 The host reads only committed top-level stories with `io.visibility: story` and `io.output.contract: narrative-engine@2`. Exactly one such story must still have `yield: continue` after commit Hooks to request another round. No story, multiple stories or an omitted `yield` returns control to the player. Sub-agent and recursive outputs do not decide advancement. A failed attached operation does not undo the saved story or independently prevent advancement.
 

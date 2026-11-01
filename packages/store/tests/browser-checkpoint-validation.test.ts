@@ -310,18 +310,45 @@ describe("checkpoint record validation", () => {
         },
       ],
     });
-    const valid = withLoop({
+    const savedLoop = {
+      steps: 3,
+      maxSteps: 8,
+      rejectionAttempts: 1,
+      correctionLimits: {
+        toolUse: 1,
+        review: 2,
+        loopPerturbation: 1,
+        outputRepair: 1,
+      },
+      outputContract: {
+        toolName: "submit-output",
+        schema: { type: "object" },
+        schemaSource: "loaded",
+        provenance: "model-authored",
+        requiredWork: { required: true, toolNames: ["save"] },
+      },
       corrections: { toolUse: 1, review: 0 },
       activatedTools: ["lookup"],
-      steeredProse: ["Before."],
-      completingToolOutput: { saved: true },
-    });
+    };
+    const valid = withLoop(savedLoop);
     expect(validateBrowserCheckpoint(valid).suspensions[0]).toEqual(
       valid.suspensions[0],
     );
+    for (const obsolete of ["steeredProse", "completingToolOutput"])
+      expect(() =>
+        validateBrowserCheckpoint(withLoop({ ...savedLoop, [obsolete]: {} })),
+      ).toThrow();
+    expect(() =>
+      validateBrowserCheckpoint(withLoop({ corrections: {} })),
+    ).toThrow();
+    expect(() =>
+      validateBrowserCheckpoint(withLoop({ ...savedLoop, steps: 9 })),
+    ).toThrow();
     for (const count of [-1, 1.5])
       expect(() =>
-        validateBrowserCheckpoint(withLoop({ corrections: { review: count } })),
+        validateBrowserCheckpoint(
+          withLoop({ ...savedLoop, corrections: { review: count } }),
+        ),
       ).toThrow("suspensions[0].pendingContinuation.loop.corrections.review");
   });
 

@@ -145,15 +145,12 @@ describe("agent output boundary", () => {
       acceptedOutput: {
         interactions: [{ interactionId: "same", type: "form" }],
       },
-      priorToolCalls: [
+      executedToolCalls: [
         {
-          toolCallId: "before-suspend",
-          toolName: "form-tool",
-          pluginId: "probe",
-          runtimeId: "probe/agent",
-          turnId: "turn",
-          input: {},
-          output: {
+          name: "form-tool",
+          arguments: "{}",
+          success: true,
+          result: {
             interaction: {
               interactionId: "same",
               type: "form",
@@ -167,12 +164,7 @@ describe("agent output boundary", () => {
               },
             ],
           },
-          durationMs: 1,
-          approvalStatus: "auto-allowed",
-          timestamp: "2026-01-01T00:00:00Z",
         },
-      ],
-      executedToolCalls: [
         {
           name: "form-tool",
           arguments: "{}",

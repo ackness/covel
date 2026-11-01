@@ -343,6 +343,8 @@ runtime 的 `schedule.needs[].contract` 和 `io.inputs.*.from.contract` 引用�
 
 ### setup runtime 的注意事项
 
+setup agent 也必须通过 `submit-output` 提交完成字段。接受不等于 setup 已完成：只有成功提交的结果才能更新 setup 状态。挂起、拒绝或回滚不会提前完成；setup 和开场仍不增加玩家回合数。
+
 开场角色模板须包含每个收集字段的占位符。模板和默认值错误属于可修正的 `invalid-input`，见[角色工具](./tools.md#开场角色表单)。
 
 包级的 `requires` 保证契约的提供者被激活，但不要求提供者每次执行都重新产出。
@@ -707,11 +709,12 @@ const result = await ctx.agents?.run({
 
 - **独立的对话**：子 agent 的提示词是提供方自己的正文，加上框架的完成说明，再加简报。看不到调用方的对话；通用子 agent 没有会话历史，角色契约由框架加入亲历历史（见[角色委托](#character-orchestration)）。
 - **只读工具**：提供方 `agent.tools` 里没有 `readOnly` 注解的工具（插件工具、数据集的 `-upsert` / `-update` 这类写入工具）、`suspend` 和 `delegate` 都被拿掉。声明了却没注册的插件工具仍按原规则让这次运行失败。数据集工具只保留 `-get` / `-list`。导入的服务工具保留，写服务的导入也保留：子 agent 以自己的身份调用，暂存的操作挂在委托它的 run 上，子 agent 失败时撤回。
+- **提交工具**：只读筛选之后，宿主按提供方实际输出 schema 生成 `submit-output`，不授予领域写权限。子 agent 只能交回通过 schema、必需工作和 `ReviewAgentOutput` 的结果；委托结果不会代替父 agent 自己的提交。子 agent 不可挂起。
 - **循环 profile**：没写 `agent.loop.profile` 时用 `actor`，不流式显示，也不读玩家插话。
 - **模型**：用提供方自己声明的模型用途。会话的 `runtimeModelOverrides` 按提供方的 runtimeId 生效，挂起后恢复的运行里也一样；调用方的覆盖和请求里的故事模型覆盖都不生效。
 - **上限**：一次执行最多同时运行 8 个子 agent，嵌套执行也算在内；子 agent 不能再调用子 agent（深度上限 1）。另有会话设置的累计角色与调用上限，见[执行名额](#character-orchestration)。超过上限的调用立刻得到 `unavailable`，不排队。
 - **取消**：调用方被取消、超时或运行结束，子 agent 跟着停下，结果是 `cancelled`。handler 没有等待的子 agent，runtime 收尾前会等它结束。
-- **只交回输出**：输出按提供方的 `io.output.schema` 和契约 schema 检查，没通过算 `internal`。Hook 中的 `PreRuntime`、`PostRuntime` 和 `PostContextAssembly` 不为子 agent 触发；循环里的 `PreLLMCall`、`PreStep`、`PreToolUse` 和 `PostToolUse` 照常触发，`ctx.runtimeId` 是子 agent 的。
+- **只交回输出**：输出按提供方的 `io.output.schema` 和契约 schema 检查，没通过算 `internal`。Hook 中的 `PreRuntime`、`PostRuntime` 和 `PostContextAssembly` 不为子 agent 触发；循环里的 `PreLLMCall`、`PostLLMResponse`、`PreStep`、`PreToolUse`、`PostToolUse` 和 `ReviewAgentOutput` 照常触发，`ctx.runtimeId` 是子 agent 的。
 - **trace**：子 agent 的每个事件都带 `subagentCallId`、`parentCallId` 和 `parentRuntimeId`，另有 `subagent.started` / `completed` / `failed`（见[协议](./protocol.md#子-agent-事件)）。`io.concealed` 的提供方和顶层运行一样隐去内容。
 - **熔断**：子 agent 自身的失败计在提供方；只有提供方自己的时限最紧（相同时提供方优先）才算它的超时，模型错误和取消不计。父执行失败或回滚仍计故障，清零则必须真正提交；setup runtime 发起的调用既不计数也不清零。暂停的提供方返回 `unavailable`，仍参与歧义检查。详见[协议 · 故障熔断](./protocol.md#插件故障熔断)。
 
@@ -889,6 +892,8 @@ const result = await ctx.agents?.run({
 `profile: story`、`stream: true` 和 `steering: true` 要求 story visibility。预留必须是非负整数且小于 runtime 时限。
 
 **纠正预算与输出修复。** 先处理真实响应的 `PostLLMResponse` 拒绝；没有拒绝时，依次检查批次、JSON/schema/故事格式、必需工作和输出审查。每次只归入一种纠正预算。四个计数互相独立，仅在安排下一次尝试时消耗；纠正使用普通步数和同一截止时间，不增加网络重试，也不重复已成功的业务写入。同类预算用尽就失败，不能借用其他预算。有效 JSON 回复正文也不算提交。函数和 gateway 的结构化输出 API 不受影响。
+
+挂起和再次挂起保留这些计数、已用普通步数及准入上限；恢复不是新循环。保存的输出 schema、必需工作规则或插件版本与当前加载结果不一致时，恢复失败，须重建该 agent continuation 及包含它的 checkpoint。成功的业务工作无需重跑，但恢复后仍须提交新候选；没有保存的已接受答案。等待玩家不消耗下一段运行的时限。
 
 **时限前的收尾（`deadlineReserveMs`）。** 必需工作已完成且至少还有 3 秒时，可在步数上限、时限预留或上下文超限处安排一次只提供 `submit-output` 的收尾请求；上下文超限还要求已有完整工具步骤。它经过同一校验和审查，`PreLLMCall` 不能恢复业务工具。成功时保留原结束原因并设 `stop.finalizer: true`。收尾不触发 `PreStep`，拒绝后不再发修复请求。真正的超时、取消和模型错误保持自身原因；收尾也装不下时保留原超限原因。细节见[结束原因](./protocol.md#stop-reasons)。
 
@@ -1450,6 +1455,8 @@ const reply = await ctx.agents.run({
 开发数据：丢弃在预算快照机制之前已经委托过子 agent 的未解决挂起项，以及包含它们的快照/checkpoint。普通会话和故事无需重建；不做旧计数推算或双格式兼容。
 
 ## 故事请求自动推进
+
+agent 的 `yield: continue` 必须来自已接受且已提交的输出。拒绝、取消、提交失败和子 agent 输出不能启动下一轮；显示正文的本地动画不参与执行决定。
 
 宿主只读取已提交的顶层 `io.visibility: story`、`io.output.contract: narrative-engine@2` 故事。恰好一条这样的故事在提交 Hook 处理后仍为 `yield: continue`，才会请求下一轮。没有故事、多个故事或省略 `yield` 都会交还玩家；子 agent 和递归调用的输出不决定推进。附带操作失败不会撤销已保存的故事，也不会单独阻止推进。
 

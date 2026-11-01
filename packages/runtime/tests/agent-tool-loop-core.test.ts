@@ -701,7 +701,7 @@ describe("runAgentToolLoop core", () => {
           tools: { plugin: ["mark", "submit"] },
         }),
         initialState: {
-          completionCalls: [{ name, success: true, done: false }],
+          businessCalls: [{ name, success: true, result: {} }],
         },
         deps: {
           toolExecutor: createToolExecutor({

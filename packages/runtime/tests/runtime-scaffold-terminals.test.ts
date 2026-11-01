@@ -1,3 +1,4 @@
+import { suspendedLoopState, toolCall } from "./_helpers/agent-loop-fixture.js";
 /**
  * Characterization of the execution scaffold shared by function handlers,
  * agent guards, the dispatcher and resume (`runtime-scaffold.ts`): event
@@ -59,12 +60,8 @@ function manifest(extra: Partial<RuntimeManifest> = {}): RuntimeManifest {
   } as RuntimeManifest;
 }
 
-const stop = (content: string) => ({
-  content,
-  toolCalls: [],
-  finishReason: "stop" as const,
-  usage: { inputTokens: 1, outputTokens: 1 },
-});
+const stop = (content: string) =>
+  toolCall("submit-output", JSON.parse(content));
 
 const suspendCall = (id = "call-suspend") => ({
   content: null,
@@ -725,7 +722,7 @@ describe("suspension terminal", () => {
             },
           ],
           toolCallsSoFar: [],
-          completionCalls: [],
+          businessCalls: [],
           pendingProposals: [],
           inputSlots: {},
           executionContext: expect.objectContaining({ origin: "player" }),
@@ -734,17 +731,22 @@ describe("suspension terminal", () => {
           turnNumber: 0,
           currentTurnUserMessages: 1,
           suspendToolCallId: "call-suspend",
+          loop: expect.objectContaining({
+            steps: 1,
+            outputContract: expect.objectContaining({
+              toolName: "submit-output",
+            }),
+          }),
         },
         createdAt: expect.any(String),
       });
-      // `partialContent` is present as undefined when the model sent none.
+      // Only unsettled work and the admitted loop contract are saved.
       expect(Object.keys(record!.pendingContinuation)).toEqual([
         "lifecycle",
         "readScopes",
         "messages",
-        "partialContent",
         "toolCallsSoFar",
-        "completionCalls",
+        "businessCalls",
         "pendingProposals",
         "inputSlots",
         "executionContext",
@@ -753,6 +755,7 @@ describe("suspension terminal", () => {
         "turnNumber",
         "currentTurnUserMessages",
         "suspendToolCallId",
+        "loop",
       ]);
       expect(collectExecutionSuspensionRuns(turn)).toEqual({
         [record!.id]: result.runId,
@@ -815,7 +818,10 @@ describe("resume terminals", () => {
       pendingContinuation: {
         lifecycle: { runId: "suspended-run", progressRunId: "suspended-run" },
         readScopes: [],
-        takenUnder: { playerTurns: 0, pluginVersion: "1.0.0", writes: [] },
+        takenUnder: { playerTurns: 0, pluginVersion: "0.0.0", writes: [] },
+        ...(runtime.runtimeType === "function"
+          ? {}
+          : { loop: suspendedLoopState(runtime) }),
         executionContext: {
           executionId: "previous-run",
           origin: "manual",
@@ -995,9 +1001,7 @@ describe("resume terminals", () => {
 
   it("finalizes 'Runtime not found on resume' once with the PostRuntime options of the agent path", async () => {
     const h = harness();
-    // A hook recovers the failure. Recovery reloads the output schema only
-    // because no schema key is passed, and skips the contract reload because
-    // the `outputContractSchema` key is present (as undefined).
+    // A hook cannot manufacture acceptance when the agent never submitted.
     h.hookPipeline.register({
       id: "recover-missing",
       event: "PostRuntime",
@@ -1030,10 +1034,10 @@ describe("resume terminals", () => {
         }),
       ]);
       expect(h.posted[0]).not.toHaveProperty("failureTarget");
-      expect(result).toMatchObject({ status: "success", output: { ok: true } });
+      expect(result).toMatchObject({ status: "failed", output: null });
       expect(result).not.toHaveProperty("failureTarget");
-      expect(loadRuntime).toHaveBeenCalledTimes(2);
-      expect(h.count("runtime.completed")).toBe(1);
+      expect(loadRuntime).toHaveBeenCalledTimes(1);
+      expect(h.count("runtime.failed")).toBe(1);
     } finally {
       await h.close();
     }

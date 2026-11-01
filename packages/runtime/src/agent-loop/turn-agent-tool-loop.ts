@@ -96,10 +96,9 @@ import {
 import type { AgentLoopDeps } from "../turn-executor/turn-executor-types.js";
 import {
   hasBusinessWork,
-  hasCompletedBusinessWork,
-  captureCompletionCalls,
+  captureBusinessCalls,
   unresolvedToolFailures,
-  type CompletionCalls,
+  type BusinessCalls,
 } from "./runtime-completion.js";
 import {
   DEFAULT_PROTECT_LAST_USER_TURNS,
@@ -133,12 +132,11 @@ export type AgentToolLoopResult = AgentToolLoopCompleted | RuntimeResult;
 
 /** Mid-loop state restored from a suspension; omitted for a fresh loop. */
 export interface AgentToolLoopInitialState {
-  readonly completionCalls?: CompletionCalls;
-  readonly finalContent?: string | null;
+  readonly businessCalls?: BusinessCalls;
   readonly collectedToolCalls?: readonly ToolCallRecord[];
   readonly pendingProposals?: readonly Proposal[];
   readonly emittedEvents?: readonly EmittedEvent[];
-  /** Corrections, activated tools, steered prose and completing-tool output. */
+  /** Admitted output contract, spent budgets and activated tools. */
   readonly loop?: SuspendedLoopState;
 }
 
@@ -271,20 +269,18 @@ async function runAgentToolLoopWithinBudget(
   const collectedToolCalls: ToolCallRecord[] = [
     ...(initialState?.collectedToolCalls ?? []),
   ];
-  const executedToolCalls: ExecutedToolCallState[] = [];
-  // `executedToolCalls` always starts empty, so the requireToolUse gate below
-  // reads work done before a suspension from the persisted execution evidence;
-  // otherwise a resumed runtime that already called its tool would be judged
-  // as having done nothing. The transcript is not evidence: a failed call
-  // leaves a tool name there too.
-  const seededBusinessWork = hasCompletedBusinessWork(
-    manifest,
-    initialState?.completionCalls,
-  );
+  const executedToolCalls: ExecutedToolCallState[] = (
+    initialState?.businessCalls ?? []
+  ).map((call) => ({
+    name: call.name,
+    arguments: "",
+    success: call.success,
+    result: structuredClone(call.result),
+  }));
   // A failure still unresolved at the suspension stays visible to the
   // finalizer, as it would have without the suspension.
   const failedToolCalls: FailedToolCallState[] = unresolvedToolFailures(
-    initialState?.completionCalls,
+    initialState?.businessCalls,
   ).map((toolName) => ({ toolName }));
   const pendingProposals: Proposal[] = [
     ...(initialState?.pendingProposals ?? []),
@@ -314,7 +310,7 @@ async function runAgentToolLoopWithinBudget(
     responseFormat,
     runtimeModelOverride,
     useStreaming,
-    effectiveMaxSteps,
+    effectiveMaxSteps: configuredMaxSteps,
     retryPolicy,
     requireToolUse,
     profile,
@@ -329,12 +325,26 @@ async function runAgentToolLoopWithinBudget(
   });
   // Corrections bound one logical runtime, so a resumed loop keeps the
   // counts it spent before its suspension.
+  const correctionLimits = { ...profile.corrections };
+  for (const kind of Object.keys(
+    correctionLimits,
+  ) as (keyof typeof correctionLimits)[]) {
+    correctionLimits[kind] = Math.min(
+      correctionLimits[kind],
+      initialState?.loop?.correctionLimits[kind] ?? correctionLimits[kind],
+    );
+  }
   const policy = createCorrectionPolicy(
-    profile.corrections,
+    correctionLimits,
     initialState?.loop?.corrections,
   );
   // The step limit in force. A PreStep hook may lower it, never raise it.
+  const effectiveMaxSteps = Math.min(
+    configuredMaxSteps,
+    initialState?.loop?.maxSteps ?? configuredMaxSteps,
+  );
   let stepLimit = effectiveMaxSteps;
+  loop.steps = initialState?.loop?.steps ?? 0;
 
   // search-tools can activate deferred tools for subsequent steps. A resumed
   // loop starts with the ones it had activated before its suspension.
@@ -420,16 +430,11 @@ async function runAgentToolLoopWithinBudget(
   let toolCallRequested = false;
   let submissionOnly = false;
   let rejection: OutputRejection | undefined;
-  let rejectionAttempts = 0;
+  let rejectionAttempts = initialState?.loop?.rejectionAttempts ?? 0;
   const requiredWorkMet = (): boolean =>
     !requireToolUse ||
-    (hasBusinessWork(manifest, executedToolCalls, seededBusinessWork) &&
-      unresolvedToolFailures(
-        captureCompletionCalls(
-          executedToolCalls,
-          initialState?.completionCalls,
-        ),
-      ).length === 0);
+    (hasBusinessWork(manifest, executedToolCalls) &&
+      unresolvedToolFailures(executedToolCalls).length === 0);
 
   /**
    * One model request: PreLLMCall, pictures, the context budget, then the
@@ -439,6 +444,7 @@ async function runAgentToolLoopWithinBudget(
     readonly tools: readonly LLMToolDefinition[] | undefined;
     readonly toolChoice?: StepToolChoice;
     readonly requireToolCall: boolean;
+    readonly submissionRequested: boolean;
     readonly submissionOnly?: boolean;
     readonly trim?: "normal" | "emergency";
   }) => {
@@ -545,6 +551,7 @@ async function runAgentToolLoopWithinBudget(
           deliversDeltas: profile.stream,
           allowTruncatedText: false,
           requireToolCall: step.requireToolCall,
+          submissionRequested: step.submissionRequested,
           ...(step.toolChoice ? { toolChoice: step.toolChoice } : {}),
         }),
       );
@@ -1066,12 +1073,8 @@ async function runAgentToolLoopWithinBudget(
                 deps,
                 hookPipeline,
                 messages,
-                finalContent: null,
                 collectedToolCalls,
-                completionCalls: captureCompletionCalls(
-                  executedToolCalls,
-                  initialState?.completionCalls,
-                ),
+                businessCalls: captureBusinessCalls(executedToolCalls),
                 pendingProposals,
                 emittedEvents,
                 executionContext,
@@ -1090,8 +1093,17 @@ async function runAgentToolLoopWithinBudget(
                       (name) =>
                         !toolDefs?.some((initial) => initial.name === name),
                     ),
-                  steeredProse: [],
-                  completingToolOutput: null,
+                  steps: loop.steps,
+                  maxSteps: stepLimit,
+                  rejectionAttempts,
+                  correctionLimits,
+                  outputContract: {
+                    toolName: output.toolName,
+                    schema: output.schema,
+                    schemaSource: output.schemaSource,
+                    provenance: output.provenance,
+                    requiredWork: output.requiredWork,
+                  },
                 },
                 ...(promptSegments ? { promptSegments } : {}),
               });
@@ -1102,8 +1114,8 @@ async function runAgentToolLoopWithinBudget(
             name: effectiveTc.name,
             arguments: effectiveTc.arguments,
             result: result.parsedResult,
-            success: toolResult.success,
-            ...(toolResult.refused ? { refused: true as const } : {}),
+            success: result.success,
+            ...(result.refused ? { refused: true as const } : {}),
           });
           stepEvents.toolCall(effectiveTc.name, toolResult.success);
 
@@ -1234,6 +1246,12 @@ async function runAgentToolLoopWithinBudget(
       ? toolDefs.filter((tool) => tool.name === output.toolName)
       : activeToolDefs;
     const toolNames = (offered ?? []).map((tool) => tool.name);
+    const submissionRequested =
+      submissionOnly ||
+      (toolCallRequested && rejection?.correction !== "toolUse") ||
+      (requiredWorkMet() &&
+        (requireToolUse ||
+          toolNames.every((name) => name === output.toolName)));
     const loopToolChoice: StepToolChoice = submissionOnly
       ? { name: output.toolName }
       : toolCallRequested
@@ -1283,6 +1301,7 @@ async function runAgentToolLoopWithinBudget(
         tools: stepTools,
         toolChoice,
         requireToolCall: toolCallRequested || submissionOnly,
+        submissionRequested,
         submissionOnly,
       });
     } catch (error) {
@@ -1372,6 +1391,7 @@ async function runAgentToolLoopWithinBudget(
         tools,
         toolChoice: { name: output.toolName },
         requireToolCall: true,
+        submissionRequested: true,
         submissionOnly: true,
         trim: "emergency",
       });

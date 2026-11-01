@@ -189,11 +189,9 @@ describe("generated output contract", () => {
     "delegate-batch",
   ])("never counts %s as successful business work", (name) => {
     expect(
-      hasBusinessWork(
-        manifest,
-        [{ name, arguments: "{}", result: {}, success: true }],
-        false,
-      ),
+      hasBusinessWork(manifest, [
+        { name, arguments: "{}", result: {}, success: true },
+      ]),
     ).toBe(false);
   });
 
@@ -204,25 +202,19 @@ describe("generated output contract", () => {
       completeAfterTools: ["save"],
     };
     expect(
-      hasBusinessWork(
-        required,
-        [{ name: "read", arguments: "{}", result: {}, success: true }],
-        false,
-      ),
+      hasBusinessWork(required, [
+        { name: "read", arguments: "{}", result: {}, success: true },
+      ]),
     ).toBe(false);
     expect(
-      hasBusinessWork(
-        required,
-        [{ name: "save", arguments: "{}", result: {}, success: false }],
-        false,
-      ),
+      hasBusinessWork(required, [
+        { name: "save", arguments: "{}", result: {}, success: false },
+      ]),
     ).toBe(false);
     expect(
-      hasBusinessWork(
-        required,
-        [{ name: "save", arguments: "{}", result: {}, success: true }],
-        false,
-      ),
+      hasBusinessWork(required, [
+        { name: "save", arguments: "{}", result: {}, success: true },
+      ]),
     ).toBe(true);
   });
 
